@@ -316,4 +316,25 @@ describe('the customer display state (AGL-3608)', () => {
       sanitizePosDisplayState({ mode: 'idle', cart: { lines: [{ name: 'x' }] } }, 1),
     ).toEqual({ mode: 'idle', updatedAtMs: 1 })
   })
+
+  it('keeps another plugin’s screen only as the checker shapes it, with a prompt (AGL-4042)', () => {
+    const screen = { pluginId: 'acme-forms', path: '/display-fill', params: { grant: 'g' } }
+    const checker = (raw: unknown) => ((raw as { pluginId?: string })?.pluginId === 'acme-forms' ? screen : null)
+    expect(
+      sanitizePosDisplayState({ mode: 'screen', promptId: 's1', screen: { ...screen, extra: 1 } }, 1, { screen: checker }),
+    ).toEqual({ mode: 'screen', updatedAtMs: 1, promptId: 's1', screen })
+    // No checker, a refused screen, or no prompt: nothing opens.
+    expect(sanitizePosDisplayState({ mode: 'screen', promptId: 's1', screen }, 1).mode).toBe('idle')
+    expect(
+      sanitizePosDisplayState({ mode: 'screen', promptId: 's1', screen: { pluginId: 'other' } }, 1, { screen: checker }),
+    ).toEqual({ mode: 'idle', updatedAtMs: 1, promptId: 's1' })
+    expect(sanitizePosDisplayState({ mode: 'screen', screen }, 1, { screen: checker }).mode).toBe('idle')
+  })
+
+  it('keeps a screen on the display until staff close it: no timer (AGL-4042)', () => {
+    const state = { mode: 'screen' as const, updatedAtMs: 0, promptId: 's1', screen: { pluginId: 'a', path: '/b', params: {} } }
+    expect(posDisplayPublicState(state, 60_000).mode).toBe('screen')
+    expect(posDisplayPublicState(state, 31 * 60 * 1000).mode).toBe('screen')
+    expect(posDisplayPublicState(state, 24 * 60 * 60 * 1000).mode).toBe('screen')
+  })
 })

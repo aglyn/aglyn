@@ -59,7 +59,7 @@ import { AI_JOB_LOGIC_INSTRUCTIONS } from '../jobs/ai-job-logic-step'
 import { aiJobEditInstructions } from '../jobs/ai-job-edit-step'
 import { assistEditTool } from '../server/assist-edit'
 import { aiLogicFunctionTool, aiLogicVariableTool } from '../tools/ai-logic-tool'
-import { AI_JOB_INSIGHT_SYSTEM } from '../jobs/ai-job-insight-step'
+import { AI_JOB_INSIGHT_SYSTEM, aiInsightTools } from '../jobs/ai-job-insight-step'
 import { AI_JOB_LAYOUT_INSTRUCTIONS } from '../jobs/ai-job-layout-step'
 import { AI_JOB_PAGE_INSTRUCTIONS, AI_PAGE_SECTION_TOOL } from '../jobs/ai-job-page-sections'
 import { AI_JOB_PLAN_INSTRUCTIONS } from '../jobs/ai-job-plan-step'
@@ -89,7 +89,6 @@ import {
 } from '../model/ai-site-context'
 import { aiComponentTool } from '../tools/ai-component-tool'
 import { aiExperimentExplainTool, aiExperimentVariantsTool } from '../tools/ai-experiment-tool'
-import { aiInsightAnswerTool, aiInsightReadTool } from '../tools/ai-insight-tool'
 import { AI_CRM_EMAIL_TOOL, AI_CRM_MAPPING_TOOL, aiCrmRecordTool } from '../tools/ai-crm-tool'
 import { AI_INVENTORY_LOOKUP_TOOL_NAME, aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
 import { AI_SEO_FIELDS_INSTRUCTIONS, aiSeoFieldsInstructions } from './seo-fields'
@@ -613,14 +612,15 @@ const REQUESTS: Record<string, Composed> = {
     blocks: () => aiDoctrineSystemBlocks(undefined, { instructions: AI_EVAL_GRADER_INSTRUCTIONS }),
     tools: () => [AI_EVAL_RUBRIC_TOOL],
   },
-  // An insight's two calls (AGL-2915): the same system block, each with its
-  // own tool. The readers' catalog, the question and the tables are the user
-  // turn, so no workspace's byte is in either prefix.
+  // An insight's two calls (AGL-2915): the same system block and, since
+  // AGL-4076, the same two tools, so the answer call reads the prefix the
+  // read call wrote. The readers' catalog, the question and the tables are
+  // the user turn, so no workspace's byte is in either prefix.
   'insight-read': {
     door: 'jobs/ai-job-insight-step.ts',
     step: 'job.insight',
     blocks: () => [...AI_JOB_INSIGHT_SYSTEM],
-    tools: () => [aiInsightReadTool()],
+    tools: () => aiInsightTools(),
   },
   'experiment-variants': {
     door: 'jobs/ai-job-experiment-step.ts',
@@ -692,7 +692,7 @@ const REQUESTS: Record<string, Composed> = {
     door: 'jobs/ai-job-insight-step.ts',
     step: 'job.insight',
     blocks: () => [...AI_JOB_INSIGHT_SYSTEM],
-    tools: () => [aiInsightAnswerTool()],
+    tools: () => aiInsightTools(),
   },
   text: {
     door: 'jobs/ai-job-text-step.ts',
@@ -968,8 +968,10 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // state comes only from its Site status table, never from its traffic.
       // Both up 25 at AGL-3834: so does which pages are published, never the
       // pages a views table lists.
-      'insight-read': { prefixTokens: 969, minimum: 512, caches: true, toolsStable: true },
-      'insight-answer': { prefixTokens: 1_008, minimum: 512, caches: true, toolsStable: true },
+      // Both 1,245 at AGL-4076: each now sends both tools, so the two
+      // requests open with one prefix and the answer call reads the read call's.
+      'insight-read': { prefixTokens: 1_245, minimum: 512, caches: true, toolsStable: true },
+      'insight-answer': { prefixTokens: 1_245, minimum: 512, caches: true, toolsStable: true },
       // A product's copy, a catalog, and categories with discounts (AGL-2916):
       // the whole doctrine, each generation's rules and its tool, which clear
       // the balanced tier's minimum, so a bulk job reads the prefix once a
@@ -977,12 +979,16 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       'product-copy': { prefixTokens: 2_424, minimum: 512, caches: true, toolsStable: true },
       // The catalog is up 132 at AGL-3733 (Zach, 2026-10-12): each product's
       // suggested price, its field and the rule that prices it by kind.
-      catalog: { prefixTokens: 2_582, minimum: 512, caches: true, toolsStable: true },
+      // Up 72 at AGL-4065: the rule that names each product as one thing a
+      // shopper buys, never a kind with "Item" or "Order" after it.
+      catalog: { prefixTokens: 2_654, minimum: 512, caches: true, toolsStable: true },
       categories: { prefixTokens: 2_349, minimum: 512, caches: true, toolsStable: true },
       // A site's first post (AGL-3676): the doctrine's fields block, its rules and its tool.
       'blog-post': { prefixTokens: 821, minimum: 512, caches: true, toolsStable: true },
       // A site's dataset (AGL-3616): the doctrine's fields block, its rules and its tool.
-      dataset: { prefixTokens: 1_030, minimum: 512, caches: true, toolsStable: true },
+      // Up 195 at AGL-4065: the rule that a list the brief gives no entries for
+      // starts with marked samples, and the tool's `sample` on each record.
+      dataset: { prefixTokens: 1_225, minimum: 512, caches: true, toolsStable: true },
       // CRM by AI (AGL-2917), on the fast tier: each prompt is only the field
       // rules, the kind's own and its tool, which no shape took past Claude
       // Haiku 4.5's minimum and every shape takes past Claude Haiku 5.5's

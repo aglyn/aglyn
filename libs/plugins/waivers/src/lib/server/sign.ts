@@ -23,9 +23,11 @@ import {
   waiverPaperPhotoPath,
   waiverSignatureImagePath,
 } from '../constants/bundle-common'
-import { dayKeyIn, isDayKey, validThroughDayKey, type WaiverTemplate } from '../model/waiver'
+import { dayKeyIn, isDayKey, validThroughDayKey, waiverAdultAge, type WaiverTemplate } from '../model/waiver'
 import {
   WAIVER_ESIGN_CONSENT,
+  waiverBusinessContact,
+  waiverEsignConsentText,
   nameSearchTokens,
   normalizeSignInput,
   waiverSignedText,
@@ -33,15 +35,32 @@ import {
   type WaiverMinor,
   type WaiverSignMethod,
 } from '../model/waiver-signature'
+import { waiverNameDobKeys } from '../model/waiver-match'
+import { waiverRetentionStamp } from '../model/waiver-retention'
 import { WaiverFileRefusedError, waiversFiles, waiversRefs } from './db'
 import { sendWaiverEmail, signedCopyEmail } from './emails'
+import { ensureSiteRetentionState, siteRetentionYears } from './retention'
 
 /*==========================================
  * WRITING A SIGNATURE (AGL-4042), whichever door it came through: a signer
  * online, a tablet staff handed over at the window, or a paper waiver staff
  * recorded. Each is keyed by the signing attempt the form minted, so a
- * retried press stores one signature and sends one email.
+ * retried press stores one signature and sends one email. Each is stamped
+ * with the day the store's retention period deletes it (`retention.ts`).
  *=========================================*/
+
+/**
+ * Stamps a new signature with its retention period as the site resolves it
+ * now, and records that the site has signatures stamped with it.
+ */
+async function withRetention(
+  context: SignContext,
+  signature: StoredWaiverSignature,
+): Promise<StoredWaiverSignature> {
+  const years = await siteRetentionYears(context.orgId, context.hostId)
+  await ensureSiteRetentionState(context.orgId, context.hostId, years, signature.signedAtMs)
+  return { ...signature, ...waiverRetentionStamp(signature, years) }
+}
 
 export type SignOutcome =
   | { ok: true; signature: StoredWaiverSignature; replayed: boolean }
@@ -161,7 +180,12 @@ async function afterSigning(
   }
   // A paper signer agreed to nothing electronic, so they get no email copy.
   const email = options.sendCopy
-    ? signedCopyEmail({ signature: stored, org: context.org, businessName: siteBusinessName(context.host) })
+    ? signedCopyEmail({
+        signature: stored,
+        org: context.org,
+        businessName: siteBusinessName(context.host),
+        contact: waiverBusinessContact(context.host as never),
+      })
     : null
   if (email) await sendWaiverEmail(email).catch(() => false)
   return stored
@@ -202,8 +226,14 @@ export async function recordSignature(
       }
     }
   }
-  const signedText = waiverSignedText(waiver, { consent: true })
-  const signature: StoredWaiverSignature = {
+  // The consent exactly as this site's signing page shows it (v2, AGL-4042):
+  // its business name and contact, worked out here again, never sent in.
+  const consentText = waiverEsignConsentText({
+    business: siteBusinessName(context.host),
+    contact: waiverBusinessContact(context.host as never),
+  })
+  const signedText = waiverSignedText(waiver, { consent: true, consentText })
+  const signature: StoredWaiverSignature = await withRetention(context, {
     id,
     orgId: context.orgId,
     hostId: context.hostId,
@@ -212,6 +242,7 @@ export async function recordSignature(
     version: waiver.version,
     signedText,
     signedTextSha256: sha256Hex(signedText),
+    adultAge: waiverAdultAge(waiver),
     signer: input.signer,
     minors: input.minors,
     guardianRelationship: input.guardianRelationship || null,
@@ -220,7 +251,7 @@ export async function recordSignature(
       input.signature.kind === 'drawn'
         ? { kind: 'drawn', strokes: input.signature.strokes, imagePath }
         : { kind: 'typed', text: input.signature.text },
-    consent: { agreed: true, text: WAIVER_ESIGN_CONSENT.text, version: WAIVER_ESIGN_CONSENT.version },
+    consent: { agreed: true, text: consentText, version: WAIVER_ESIGN_CONSENT.version },
     method: options.method,
     signedAtMs,
     dayKey,
@@ -232,10 +263,11 @@ export async function recordSignature(
     emailLower: input.signer.email.toLowerCase(),
     nameLower: input.signer.name.toLowerCase(),
     nameTokens: nameSearchTokens([input.signer.name, ...input.minors.map((minor) => minor.name)]),
+    nameDobKeys: waiverNameDobKeys({ signer: input.signer, minors: input.minors }),
     voidedAt: null,
     voidedBy: null,
     voidReason: null,
-  }
+  })
   try {
     await waiversRefs.signature(context.orgId, id).create(stripStrokesForFirestore(signature))
   } catch (error) {
@@ -326,7 +358,7 @@ export async function recordPaperSignature(
   }
   const signedText = waiverSignedText(waiver, { consent: false })
   const minors: WaiverMinor[] = checked.input.minors
-  const signature: StoredWaiverSignature = {
+  const signature: StoredWaiverSignature = await withRetention(context, {
     id,
     orgId: context.orgId,
     hostId: context.hostId,
@@ -335,6 +367,7 @@ export async function recordPaperSignature(
     version: waiver.version,
     signedText,
     signedTextSha256: sha256Hex(signedText),
+    adultAge: waiverAdultAge(waiver),
     signer: checked.input.signer,
     minors,
     guardianRelationship: checked.input.guardianRelationship || null,
@@ -352,10 +385,11 @@ export async function recordPaperSignature(
     emailLower: checked.input.signer.email.toLowerCase(),
     nameLower: checked.input.signer.name.toLowerCase(),
     nameTokens: nameSearchTokens([checked.input.signer.name, ...minors.map((minor) => minor.name)]),
+    nameDobKeys: waiverNameDobKeys({ signer: checked.input.signer, minors }),
     voidedAt: null,
     voidedBy: null,
     voidReason: null,
-  }
+  })
   await waiversRefs.signature(context.orgId, id).create(stripStrokesForFirestore(signature))
   return { ok: true, signature: await afterSigning(context, signature, { sendCopy: false }), replayed: false }
 }

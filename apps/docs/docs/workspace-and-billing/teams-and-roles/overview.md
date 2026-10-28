@@ -103,6 +103,13 @@ as they like. Someone with a publishing role reviews the draft and publishes it.
 This is enforced in the database itself, not just hidden in the console — an Author
 cannot publish through any route into Aglyn.
 
+Each site role is a starting point for four permissions: **Edit site content**,
+**Publish site content**, **See orders and webhooks** and **Manage site settings**. The
+table above is what each role holds by default, and a custom role, a member's own
+permissions or the site's **Permissions** dialog can grant or deny any of them, such as
+letting one trusted Author publish. See
+[Site permissions](custom-roles.md#site-permissions).
+
 #### A site's collaborators {#site-collaborators}
 
 A site's collaborators are listed in the **Users** card on that site's **Users** page,
@@ -119,21 +126,30 @@ of the address, because the list holds addresses rather than names. See
 ### AI access for collaborators {#collaborator-ai-access}
 
 A site collaborator's AI access is decided **per site**, on the site's **Users**
-card, with two boxes beside each collaborator: **Assist** (the assistant, copy
-rewrites, generating a section) and **Generate** (AI generation jobs and AI
+card: choose **Permissions** beside a collaborator to see every permission that is
+set per site, AI's two among them — **Use AI assistance** (the assistant, copy
+rewrites, generating a section) and **Generate with AI** (AI generation jobs and AI
 edits). The site role sets the default — Admin, Editor and Author get both,
-Viewer gets neither — and the boxes refine it for that person on that site. A
-collaborator on two sites can have AI on one and off on the other.
+Viewer gets neither — and each permission can be set to **Allow**, **Deny** or
+**Inherit** (the site role's default) for that person on that site. A collaborator
+on two sites can have AI on one and off on the other. Each row says whether the
+permission is allowed and whether that comes from the site role or was set for
+this site.
 
-The boxes are not a hide-the-button control: every AI request from the site
-names the site, and the request is refused when the box is unticked, whichever
-surface it came from. A collaborator whose request names no site at all is
-refused too. Changing a box is recorded in the site's activity feed, and the
-boxes become settable once a pending invite has been accepted.
+These are not a hide-the-button control: every AI request from the site names the
+site, and the request is refused when the permission is denied, whichever surface
+it came from. A collaborator whose request names no site at all is refused too.
+Every change is recorded in the site's activity feed, and a collaborator's
+permissions become settable once a pending invite has been accepted.
 
-Organization-wide members are not affected by these boxes; their AI access
-follows their org role, custom role and overrides — see
-[Custom roles & permissions](custom-roles.md#ai-permissions).
+Organization-wide members are not set here; their permissions follow their org
+role, custom role and per-member overrides, set on their Team page — see
+[Custom roles & permissions](custom-roles.md#per-member-overrides). The exception is
+an editor of the whole workspace you give **Viewer** or **Author** access to this
+site: that takes this site's register and waivers from them (unless their custom
+role or own permissions keep them), and **Permissions** beside them gives either back
+here — see
+[A site's access narrows its register and waivers](custom-roles.md#site-access-narrows).
 
 A site's **Users** card also shows what each collaborator drew from the workspace's AI
 credits **on that site** this month, so an agency can see which client site's people

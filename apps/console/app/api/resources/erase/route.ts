@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import {
   collectionDeleteDenial,
   collectionTemplateBindings,
@@ -33,26 +34,23 @@ import {
   firebaseAdmin,
   isImpersonationSession,
   lockdownRefusal,
+  memberHasOrgPermission,
+  permissionRefusal,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
-/** Roles allowed to delete org data — mirrors rules' canWriteOrgData(). */
-const ORG_WRITER_ROLES = new Set(['owner', 'admin', 'editor'])
-/** Roles allowed to delete host content — mirrors canWriteHostContent(). */
-const HOST_WRITER_ROLES = new Set(['admin', 'editor'])
-/**
+/*
  * Deleting a whole COLLECTION is a site-structural act, not a content edit
  * (AGL-1324): it removes the `/{slug}` and `/{slug}/{entry}` routes the site
  * publishes, which is the same grade of action as deleting the site — and
- * that has always been admin-only (`DeleteSiteCard`). Hosts have no `owner`
- * role; `admin` IS the top of the site role model, so this is the
- * "owner/admin only" gate the issue asks for.
+ * that has always been the site admin's (`DeleteSiteCard`), now "Manage site
+ * settings" (AGL-4047). Other site content needs "Publish site content",
+ * whose preset is the Admin and Editor this asked for before.
  *
  * This tightens the commerce catalog card too, which reached the same route
  * with the same kind as an `editor`. Deliberate: one resource, one gate.
  */
-const HOST_ADMIN_ROLES = new Set(['admin'])
 
 /**
  * The AGL-1324 dependency reads behind {@link collectionDeleteDenial}: how
@@ -173,10 +171,10 @@ async function handler(request: Request): Promise<Response> {
     if (!isStaff && scope === 'orgs') {
       const membership = await resolveOrgMembership(decoded.uid, scopeId)
       const member = membership?.member as any
-      if (!member || !ORG_WRITER_ROLES.has(String(member.role))) {
-        return Response.json({
-          error: 'Deleting org data requires the editor role',
-        }, { status: 403 })
+      // "Delete workspace records" (`org.eraseRecords`, AGL-4047), whose
+      // default is the owner, admin and editor this asked for.
+      if (!member || !(await memberHasOrgPermission(scopeId, member, 'org.eraseRecords'))) {
+        return permissionRefusal('org.eraseRecords')
       }
       // Lockdown verdict (AGL-1506): the `orgSuspended` member projection
       // stays the per-request org signal (no org-doc read on the happy
@@ -229,17 +227,15 @@ async function handler(request: Request): Promise<Response> {
       if (!hostSnapshot.exists) {
         return Response.json({ error: 'Unknown site' }, { status: 404 })
       }
-      const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
       // A collection delete takes published routes with it, so it needs the
-      // admin gate rather than the content-editor one (AGL-1324).
+      // site's settings key rather than the publishing one (AGL-1324). Each
+      // is a site key whose preset is the role this asked for (AGL-4047):
+      // "Manage site settings" (Admin), "Publish site content" (Admin,
+      // Editor), read as the rules read it.
       const isCollection = kind === 'collections'
-      const requiredRoles = isCollection ? HOST_ADMIN_ROLES : HOST_WRITER_ROLES
-      if (!requiredRoles.has(String(memberRole))) {
-        return Response.json({
-          error: isCollection
-            ? 'Deleting a collection requires the site admin role'
-            : 'Deleting site content requires the editor role',
-        }, { status: 403 })
+      const requiredKey = isCollection ? 'site.manage' : 'site.publish'
+      if (!holdsSiteKey(hostSnapshot, decoded.uid, requiredKey)) {
+        return Response.json({ error: siteKeyRefusal(requiredKey) }, { status: 403 })
       }
       const orgId = hostSnapshot.get('orgId') as string | undefined
       // Lockdown verdict (AGL-1506): replaces the ad-hoc `suspendedAt` 403

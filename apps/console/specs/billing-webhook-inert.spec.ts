@@ -603,7 +603,7 @@ describe('the webhook records a delivery that did nothing (AGL-1954)', () => {
     const post = loadWebhook()
     await post(
       signed(
-        event('evt_unasked', 'payment_intent.succeeded', {
+        event('evt_unasked', 'payment_intent.created', {
           id: 'pi_x',
           object: 'payment_intent',
         }),

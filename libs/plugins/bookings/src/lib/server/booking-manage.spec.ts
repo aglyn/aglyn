@@ -217,6 +217,28 @@ describe('bookings/check-in', () => {
     expect(ok.docs.get('hosts/h1/bookings/b1')?.['checkedInAtMs']).toBeUndefined()
   })
 
+  it('asks "Edit site content", so the site’s stamp decides either way (AGL-4047)', async () => {
+    const granted = store({
+      'hosts/h1': { memberRoles: { 'editor-1': 'viewer' }, memberPermissions: { 'editor-1': { 'site.edit': true } } },
+      'hosts/h1/services/s1': service as unknown as Doc,
+      'hosts/h1/bookings/b1': booking(MONDAY + 10 * HOUR),
+    })
+    const a = res()
+    await createBookingCheckInHandler(deps(granted.firestore).value)(req({ bookingId: 'b1' }), a as never)
+    expect(a.statusCode).toBe(200)
+
+    const refused = store({
+      'hosts/h1': { memberRoles: { 'editor-1': 'editor' }, memberPermissions: { 'editor-1': { 'site.edit': false } } },
+      'hosts/h1/services/s1': service as unknown as Doc,
+      'hosts/h1/bookings/b1': booking(MONDAY + 10 * HOUR),
+    })
+    const b = res()
+    await createBookingCheckInHandler(deps(refused.firestore).value)(req({ bookingId: 'b1' }), b as never)
+    expect(b.statusCode).toBe(403)
+    expect(b.body).toEqual({ error: 'Your role does not include "Edit site content" — ask an organization admin' })
+    expect(refused.docs.get('hosts/h1/bookings/b1')?.['checkedInAtMs']).toBeUndefined()
+  })
+
   it('answers 404 for a booking that does not exist', async () => {
     const { firestore } = base({})
     const out = res()

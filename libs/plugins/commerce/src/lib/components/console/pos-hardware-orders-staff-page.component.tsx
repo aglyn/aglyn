@@ -32,10 +32,14 @@ import {
   Dialog,
   DialogActions,
   DialogContent,
+  DialogContentText,
   DialogTitle,
+  FormControlLabel,
+  FormHelperText,
   Link,
   MenuItem,
   Stack,
+  Switch,
   TextField,
   Typography,
 } from '@mui/material'
@@ -55,13 +59,23 @@ import {
   PosHardwareRequestError,
   staffHardwareOrderAction,
   staffHardwareOrders,
+  type StaffHardwareFilter,
   type StaffHardwareOrderRow,
 } from './pos/pos-hardware-api'
 
 const WRITE_ROLES = ['super', 'billing'] as const
 
 const NOT_REFUNDABLE = 'Only an order that has not shipped can be canceled or refunded.'
+
+/** Dollars typed by staff as whole cents; empty is 0, anything else unreadable is null. */
+function centsOf(text: string): number | null {
+  const trimmed = text.trim().replace(/^\$/, '')
+  if (!trimmed) return 0
+  if (!/^\d+(\.\d{1,2})?$/.test(trimmed)) return null
+  return Math.round(Number(trimmed) * 100)
+}
 const CLOSED = 'A canceled or refunded order can no longer change.'
+const REFUNDED = 'This order is refunded in full.'
 
 /** A control disabled with its reason, or passed through when there is none. */
 function Guarded(props: { reason?: string; children: ReactElement<{ disabled?: boolean }> }) {
@@ -73,6 +87,27 @@ function Guarded(props: { reason?: string; children: ReactElement<{ disabled?: b
 }
 
 const when = (ms: number) => (ms ? new Date(ms).toLocaleString() : '—')
+
+/** How a register sale was paid, as staff read it (AGL-4038). */
+const TENDER_LABELS: Record<string, string> = {
+  cash: 'cash',
+  card_present: 'card on a reader',
+  card_keyed: 'typed card',
+  card_link: 'payment link',
+  gift_card: 'gift card',
+  folio: 'room charge',
+  credit: 'store credit',
+}
+
+/** Whose an in-person order is, in a line (AGL-4038). */
+function attachedTo(order: StaffHardwareOrderRow): string {
+  const attachment = order.attachment
+  if (!attachment) return '—'
+  if (attachment.state === 'attached') return `Workspace ${attachment.orgId ?? order.orgId}`
+  if (attachment.uid) return 'To attach: has an account, no workspace yet'
+  if (attachment.email) return `To attach: invited ${attachment.email}`
+  return 'To attach'
+}
 
 function shipTo(order: StaffHardwareOrderRow): string {
   const address = order.shipping?.address
@@ -107,7 +142,7 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-  const [status, setStatus] = useState<PosHardwareOrderStatus | ''>('paid')
+  const [status, setStatus] = useState<StaffHardwareFilter>('paid')
   const [orders, setOrders] = useState<StaffHardwareOrderRow[] | null>(null)
   // The cursor that opens each page: `cursors[page]` is the `after` its
   // request carries, so Previous re-reads a page rather than keeping every
@@ -120,6 +155,18 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
   const [open, setOpen] = useState<StaffHardwareOrderRow | null>(null)
   const [busy, setBusy] = useState(false)
   const [form, setForm] = useState({ stripeHardwareOrderId: '', carrier: '', number: '', url: '' })
+  /** The note for declining a return request, while its dialog is open. */
+  const [declineNote, setDeclineNote] = useState<string | null>(null)
+  /**
+   * The cancel or refund being confirmed, and whether to email the buyer
+   * about it (AGL-4038): on unless staff turn it off.
+   */
+  const [returning, setReturning] = useState<{
+    action: 'cancel' | 'refund' | 'refund-return'
+    notifyBuyer: boolean
+    /** An online return's restocking fee, in dollars as typed (AGL-4038). */
+    restockingFee?: string
+  } | null>(null)
   const gate = resolveStaffRoleGate(staffRole, WRITE_ROLES)
   const uid = user?.uid ?? ''
 
@@ -159,14 +206,14 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
 
   const act = async (
     body: Omit<Parameters<typeof staffHardwareOrderAction>[1], 'orgId' | 'orderId'>,
-    done: string,
+    done: string | ((answer: Awaited<ReturnType<typeof staffHardwareOrderAction>>) => string),
   ) => {
     if (!user || !open) return
     setBusy(true)
     try {
-      const { order } = await staffHardwareOrderAction(user, { ...body, orgId: open.orgId, orderId: open.id })
-      setOpen(order)
-      enqueueSnackbar(done, { variant: 'success', persist: false })
+      const answer = await staffHardwareOrderAction(user, { ...body, orgId: open.orgId, orderId: open.id })
+      setOpen(answer.order)
+      enqueueSnackbar(typeof done === 'string' ? done : done(answer), { variant: 'success', persist: false })
       await load(page, cursors[page] ?? null)
     } catch (caught) {
       enqueueSnackbar(
@@ -196,24 +243,61 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
     )
   }
 
-  const returnMoney = async (action: 'cancel' | 'refund') => {
+  const forgetBuyer = async () => {
     if (!open) return
     const confirmed = await confirm({
-      title: action === 'cancel' ? 'Cancel and refund this order?' : 'Refund this order?',
+      title: "Remove the buyer's details?",
       description:
-        `${formatPosHardwareCents(open.totalCents)} goes back to the card it was paid with. ` +
-        'Cancel the order in the Stripe Dashboard too if it was already placed there.',
-      confirmationText: action === 'cancel' ? 'Cancel and refund' : 'Refund',
+        'The address and account are taken off this order for good. The order, its amounts and where it was taxed stay.',
+      confirmationText: 'Remove',
       confirmationButtonProps: { color: 'error' },
     })
       .then(() => true)
       .catch(() => false)
-    if (confirmed) await act({ action }, action === 'cancel' ? 'Canceled and refunded' : 'Refunded')
+    if (confirmed) await act({ action: 'forget-buyer' }, "Buyer's details removed")
+  }
+
+  const declineReturn = async () => {
+    if (!open || declineNote === null) return
+    await act({ action: 'decline-return', note: declineNote.trim() }, 'Return request declined')
+    setDeclineNote(null)
+  }
+
+  /** Opens the confirm for a cancel or a refund, emailing the buyer by default. */
+  const returnMoney = (action: 'cancel' | 'refund' | 'refund-return') => {
+    if (open) setReturning({ action, notifyBuyer: true, ...(action === 'refund-return' ? { restockingFee: '' } : {}) })
+  }
+
+  const confirmReturn = async () => {
+    if (!open || !returning) return
+    const { action, notifyBuyer } = returning
+    const verb = action === 'cancel' && open.source !== 'in_person' ? 'Canceled and refunded' : 'Refunded'
+    const restockingFeeCents = action === 'refund-return' ? centsOf(returning.restockingFee ?? '') : undefined
+    if (restockingFeeCents === null) return
+    await act({ action, notifyBuyer, ...(restockingFeeCents ? { restockingFeeCents } : {}) }, ({ buyerEmail }) =>
+      buyerEmail === 'sent'
+        ? `${verb}. The buyer was emailed.`
+        : buyerEmail === 'already'
+          ? `${verb}. The buyer had already been emailed.`
+          : buyerEmail === 'skipped'
+            ? `${verb}. The buyer has no address to email.`
+            : buyerEmail === 'failed'
+              ? `${verb}. The email to the buyer did not send; press again to retry it.`
+              : `${verb}. The buyer was not emailed.`,
+    )
+    setReturning(null)
   }
 
   const columns = useMemo<GridColDef[]>(
     () => [
       { field: 'number', headerName: 'Order', minWidth: 110 },
+      {
+        field: 'source',
+        headerName: 'Sold',
+        minWidth: 110,
+        valueGetter: (_value: unknown, row: StaffHardwareOrderRow) =>
+          row.source === 'in_person' ? (row.attachment?.state === 'pending' ? 'In person · to attach' : 'In person') : 'Online',
+      },
       {
         field: 'createdAtMs',
         headerName: 'Placed',
@@ -288,9 +372,22 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
     [staffPaths],
   )
 
+  const inPerson = open?.source === 'in_person'
   const next = open ? nextPosHardwareStatus(open.status) : null
   const closed = open ? open.status === 'canceled' || open.status === 'refunded' : true
-  const refundable = open ? posHardwareRefundable(open.status) && !open.refundPending : false
+  // A reader sold in person refunds what is left of it, its own way, until
+  // it is refunded in full (AGL-4038).
+  const refundable = open
+    ? inPerson
+      ? open.status !== 'refunded' && open.status !== 'canceled' && open.refundedCents < open.totalCents
+      : posHardwareRefundable(open.status) && !open.refundPending
+    : false
+  const returnRequested = open?.returnRequest?.state === 'requested'
+  // An online order sent back after its return was requested (AGL-4038):
+  // refunded as a return, the items and their tax less any restocking fee.
+  const onlineReturn =
+    Boolean(open) && !inPerson && returnRequested && ['shipped', 'delivered', 'registered'].includes(String(open?.status))
+  const returnCents = open ? Math.max(0, open.totalCents - (open.shipping?.cents ?? 0)) : 0
   const writeReason = gate.blocked ? gate.reason : undefined
 
   return (
@@ -305,9 +402,11 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
             size="small"
             label="Status"
             value={status}
-            onChange={(event) => setStatus(event.target.value as PosHardwareOrderStatus | '')}
+            onChange={(event) => setStatus(event.target.value as StaffHardwareFilter)}
           >
             <MenuItem value="">{'All'}</MenuItem>
+            <MenuItem value="to-attach">{'Sold in person, to attach'}</MenuItem>
+            <MenuItem value="returns">{'Return requested'}</MenuItem>
             {POS_HARDWARE_ORDER_STATUSES.map((value) => (
               <MenuItem key={value} value={value}>
                 {POS_HARDWARE_STAFF_STATUS_LABELS[value]}
@@ -323,7 +422,13 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
         {error ? <Alert severity="error">{error}</Alert> : null}
         {orders && orders.length === 0 && !error ? (
           <Typography variant="body2" color="text.secondary">
-            {status ? `No orders are ${POS_HARDWARE_STAFF_STATUS_LABELS[status].toLowerCase()}.` : 'No hardware orders yet.'}
+            {status === 'to-attach'
+              ? 'Every card reader sold in person is attached to a workspace.'
+              : status === 'returns'
+                ? 'No return requests are waiting.'
+              : status
+                ? `No orders are ${POS_HARDWARE_STAFF_STATUS_LABELS[status].toLowerCase()}.`
+                : 'No hardware orders yet.'}
           </Typography>
         ) : (
           <ListTable
@@ -349,68 +454,145 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
         <DialogTitle>{open ? `Hardware order ${open.number}` : ''}</DialogTitle>
         {open ? (
           <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Stack spacing={0.5} sx={{ mt: 1 }}>
-              <Typography variant="subtitle2">{'Order in the Stripe hardware shop'}</Typography>
-              {open.lines.map((line) => (
-                <Typography key={line.sku} variant="body2">
-                  {`${line.quantity} × ${posHardwareSku(line.sku)?.stripeProductName ?? line.name}`}
+            {inPerson ? (
+              <Stack spacing={0.5} sx={{ mt: 1 }}>
+                <Typography variant="subtitle2">{'Sold in person'}</Typography>
+                {open.lines.map((line) => (
+                  <Typography key={line.sku} variant="body2">
+                    {`${line.quantity} × ${line.name}`}
+                  </Typography>
+                ))}
+                <Typography variant="body2" color="text.secondary">
+                  {[
+                    open.posSale?.number ? `Register sale #${open.posSale.number}` : 'Register sale',
+                    open.posSale?.kiosk ? 'at the kiosk' : null,
+                    open.posSale?.offline ? 'rung offline' : null,
+                    `paid ${formatPosHardwareCents(open.totalCents)}`,
+                    open.paidTo?.tenders.length
+                      ? `by ${open.paidTo.tenders.map((tender) => TENDER_LABELS[tender] ?? tender).join(' and ')}`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
                 </Typography>
-              ))}
-              <Typography variant="body2" color="text.secondary">
-                {`${open.shipping?.label ?? 'Shipping'} · paid ${formatPosHardwareCents(open.totalCents)}`}
-              </Typography>
-            </Stack>
-            <Stack spacing={0.5}>
-              <Typography variant="subtitle2">{'Ship to'}</Typography>
-              <Typography variant="body2" sx={{ whiteSpace: 'pre-line' }}>
-                {shipTo(open)}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {[open.shipping?.phone, open.contactEmail].filter(Boolean).join(' · ')}
-              </Typography>
-            </Stack>
-            <TextField
-              label="Stripe hardware order id"
-              value={form.stripeHardwareOrderId}
-              disabled={closed}
-              onChange={(event) => setForm({ ...form, stripeHardwareOrderId: event.target.value })}
-            />
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-              <TextField
-                label="Carrier"
-                value={form.carrier}
-                disabled={closed}
-                onChange={(event) => setForm({ ...form, carrier: event.target.value })}
-              />
-              <TextField
-                label="Tracking number"
-                value={form.number}
-                disabled={closed}
-                onChange={(event) => setForm({ ...form, number: event.target.value })}
-                sx={{ flex: 1 }}
-              />
-            </Stack>
-            <TextField
-              label="Tracking link (optional)"
-              helperText="Built from the carrier when left empty"
-              value={form.url}
-              disabled={closed}
-              onChange={(event) => setForm({ ...form, url: event.target.value })}
-            />
+                <Typography variant="body2" color="text.secondary">
+                  {`Into the store's own account${open.paidTo?.stripeAccountId ? ` (${open.paidTo.stripeAccountId})` : ''}, not the platform's.`}
+                </Typography>
+                <Typography variant="body2">{attachedTo(open)}</Typography>
+                {open.attachment?.state === 'pending' ? (
+                  <Typography variant="body2" color="text.secondary">
+                    {'Attach it from the selling store’s register, under To attach, with the buyer’s email, name or workspace.'}
+                  </Typography>
+                ) : null}
+                {open.refundedCents ? (
+                  <Typography variant="body2" color="text.secondary">
+                    {`Refunded ${formatPosHardwareCents(open.refundedCents)}${open.refunds.some((refund) => refund.via === 'register') ? ', partly as a return at the register' : ''}`}
+                  </Typography>
+                ) : null}
+                {open.returnRequest ? (
+                  <Alert severity={returnRequested ? 'warning' : 'info'}>
+                    {returnRequested
+                      ? `Return requested ${when(open.returnRequest.requestedAtMs)}: “${open.returnRequest.reason ?? ''}”. Refund it, or decline it with a note.`
+                      : `Return request ${open.returnRequest.state}${open.returnRequest.note ? `: ${open.returnRequest.note}` : ''}.`}
+                  </Alert>
+                ) : null}
+                {open.contactEmail ? (
+                  <Typography variant="body2" color="text.secondary">
+                    {open.contactEmail}
+                  </Typography>
+                ) : null}
+              </Stack>
+            ) : null}
+            {inPerson ? null : (
+              <>
+                <Stack spacing={0.5} sx={{ mt: 1 }}>
+                  <Typography variant="subtitle2">{'Order in the Stripe hardware shop'}</Typography>
+                  {open.lines.map((line) => (
+                    <Typography key={line.sku} variant="body2">
+                      {`${line.quantity} × ${posHardwareSku(line.sku)?.stripeProductName ?? line.name}`}
+                    </Typography>
+                  ))}
+                  <Typography variant="body2" color="text.secondary">
+                    {`${open.shipping?.label ?? 'Shipping'} · paid ${formatPosHardwareCents(open.totalCents)}`}
+                  </Typography>
+                </Stack>
+                <Stack spacing={0.5}>
+                  <Typography variant="subtitle2">{'Ship to'}</Typography>
+                  <Typography variant="body2" sx={{ whiteSpace: 'pre-line' }}>
+                    {shipTo(open)}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {[open.shipping?.phone, open.contactEmail].filter(Boolean).join(' · ')}
+                  </Typography>
+                </Stack>
+                <TextField
+                  label="Stripe hardware order id"
+                  value={form.stripeHardwareOrderId}
+                  disabled={closed}
+                  onChange={(event) => setForm({ ...form, stripeHardwareOrderId: event.target.value })}
+                />
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                  <TextField
+                    label="Carrier"
+                    value={form.carrier}
+                    disabled={closed}
+                    onChange={(event) => setForm({ ...form, carrier: event.target.value })}
+                  />
+                  <TextField
+                    label="Tracking number"
+                    value={form.number}
+                    disabled={closed}
+                    onChange={(event) => setForm({ ...form, number: event.target.value })}
+                    sx={{ flex: 1 }}
+                  />
+                </Stack>
+                <TextField
+                  label="Tracking link (optional)"
+                  helperText="Built from the carrier when left empty"
+                  value={form.url}
+                  disabled={closed}
+                  onChange={(event) => setForm({ ...form, url: event.target.value })}
+                />
+              </>
+            )}
             {open.refundPending ? <Alert severity="warning">{'A refund is in progress.'}</Alert> : null}
           </DialogContent>
         ) : null}
         <DialogActions sx={{ flexWrap: 'wrap', gap: 1 }}>
-          <Guarded reason={writeReason ?? (refundable ? undefined : NOT_REFUNDABLE)}>
-            <Button color="error" disabled={busy} onClick={() => void returnMoney('cancel')}>
-              {'Cancel and refund'}
-            </Button>
-          </Guarded>
-          <Guarded reason={writeReason ?? (refundable ? undefined : NOT_REFUNDABLE)}>
-            <Button color="error" disabled={busy} onClick={() => void returnMoney('refund')}>
-              {'Refund'}
-            </Button>
-          </Guarded>
+          {returnRequested ? (
+            <Guarded reason={writeReason}>
+              <Button disabled={busy} onClick={() => setDeclineNote('')}>
+                {'Decline return'}
+              </Button>
+            </Guarded>
+          ) : null}
+          {inPerson && (open?.contactEmail || open?.attachment?.email || open?.attachment?.uid) ? (
+            <Guarded reason={writeReason}>
+              <Button color="error" disabled={busy} onClick={() => void forgetBuyer()}>
+                {"Remove buyer's details"}
+              </Button>
+            </Guarded>
+          ) : null}
+          {inPerson ? null : (
+            <Guarded reason={writeReason ?? (refundable ? undefined : NOT_REFUNDABLE)}>
+              <Button color="error" disabled={busy} onClick={() => void returnMoney('cancel')}>
+                {'Cancel and refund'}
+              </Button>
+            </Guarded>
+          )}
+          {onlineReturn ? (
+            <Guarded reason={writeReason ?? (open?.refundPending ? 'A refund is in progress.' : undefined)}>
+              <Button color="error" disabled={busy} onClick={() => void returnMoney('refund-return')}>
+                {'Refund return'}
+              </Button>
+            </Guarded>
+          ) : (
+            <Guarded reason={writeReason ?? (refundable ? undefined : inPerson ? REFUNDED : NOT_REFUNDABLE)}>
+              <Button color="error" disabled={busy} onClick={() => void returnMoney('refund')}>
+                {'Refund'}
+              </Button>
+            </Guarded>
+          )}
           <Button onClick={() => setOpen(null)}>{'Close'}</Button>
           <Guarded reason={writeReason ?? (closed ? CLOSED : undefined)}>
             <Button disabled={busy} onClick={() => save()}>
@@ -429,6 +611,98 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
               </Button>
             </Guarded>
           ) : null}
+        </DialogActions>
+      </Dialog>
+
+      {/*
+        CANCEL OR REFUND, CONFIRMED (AGL-4038): what goes back and where, and
+        whether to email the buyer — on by default, off sends nothing. The
+        email is the same one a workspace or account closure sends, and the
+        buyer gets it once whichever sends it first.
+      */}
+      <Dialog open={returning !== null} onClose={() => setReturning(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>
+          {returning?.action === 'cancel' && open?.source !== 'in_person' ? 'Cancel and refund this order?' : 'Refund this order?'}
+        </DialogTitle>
+        <DialogContent>
+          <Stack spacing={2}>
+            <DialogContentText>
+              {returning?.action === 'refund-return' && open
+                ? `${formatPosHardwareCents(Math.max(0, returnCents - (centsOf(returning.restockingFee ?? '') ?? 0)))} goes back to the card it was paid with: the items and their tax. The original shipping is not refunded, and a restocking fee Stripe charged for the return comes off.`
+                : open?.source === 'in_person'
+                ? `${formatPosHardwareCents(open.totalCents - open.refundedCents)} goes back to the card the register sale was paid with, from the selling store's own account. Under the hardware terms of sale the buyer sends the reader back at their cost.`
+                : open
+                  ? `${formatPosHardwareCents(open.totalCents)} goes back to the card it was paid with. Cancel the order in the Stripe Dashboard too if it was already placed there.`
+                  : ''}
+            </DialogContentText>
+            {returning?.action === 'refund-return' ? (
+              <TextField
+                label="Restocking fee Stripe charged (optional)"
+                value={returning.restockingFee ?? ''}
+                onChange={(event) =>
+                  setReturning((current) => (current ? { ...current, restockingFee: event.target.value } : current))
+                }
+                error={centsOf(returning.restockingFee ?? '') === null}
+                helperText={centsOf(returning.restockingFee ?? '') === null ? 'Enter an amount like 15.00, or leave it empty.' : 'In dollars. Leave it empty when Stripe charged none.'}
+                slotProps={{ htmlInput: { inputMode: 'decimal' } }}
+              />
+            ) : null}
+            <Stack>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={returning?.notifyBuyer ?? true}
+                    onChange={(event) =>
+                      setReturning((current) => (current ? { ...current, notifyBuyer: event.target.checked } : current))
+                    }
+                  />
+                }
+                label="Email the buyer"
+              />
+              <FormHelperText>
+                {returning?.action === 'refund-return'
+                  ? 'Sends the buyer the return refund email with what came back and what did not.'
+                  : open?.source === 'in_person'
+                  ? 'Sends the buyer the refund email with what came back to their card.'
+                  : 'Sends the buyer the canceled-and-refunded email. They get it once, even if their workspace or account later closes.'}
+              </FormHelperText>
+            </Stack>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setReturning(null)}>{'Keep the order'}</Button>
+          <Button
+            color="error"
+            disabled={busy || (returning?.action === 'refund-return' && centsOf(returning.restockingFee ?? '') === null)}
+            onClick={() => void confirmReturn()}
+          >
+            {returning?.action === 'cancel' && open?.source !== 'in_person'
+              ? 'Cancel and refund'
+              : returning?.action === 'refund-return'
+                ? 'Refund return'
+                : 'Refund'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={declineNote !== null} onClose={() => setDeclineNote(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>{'Decline this return?'}</DialogTitle>
+        <DialogContent>
+          <TextField
+            label="Note for the buyer (optional)"
+            value={declineNote ?? ''}
+            onChange={(event) => setDeclineNote(event.target.value)}
+            multiline
+            minRows={2}
+            fullWidth
+            sx={{ mt: 1 }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeclineNote(null)}>{'Keep it open'}</Button>
+          <Button color="error" disabled={busy} onClick={() => void declineReturn()}>
+            {'Decline'}
+          </Button>
         </DialogActions>
       </Dialog>
     </CardDisplay>

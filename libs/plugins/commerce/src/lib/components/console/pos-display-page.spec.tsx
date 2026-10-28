@@ -23,7 +23,8 @@
  */
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import PosDisplayPage from './pos-display-page.component'
+import PosDisplayPage, { posDisplayNavigation } from './pos-display-page.component'
+import { customerDisplayCredential } from '@aglyn/aglyn/plugin-manager/plugin-customer-display'
 import { POS_DISPLAY_TOKEN_KEY } from './pos-display/pos-display-api'
 
 const TOKEN = 't'.repeat(43)
@@ -118,6 +119,8 @@ describe('the customer display (AGL-3608)', () => {
     expect(await screen.findByText('Thanks for stopping by')).toBeTruthy()
     expect(screen.getByText('Corner Cafe')).toBeTruthy()
     expect(window.localStorage.getItem(POS_DISPLAY_TOKEN_KEY)).toBe(TOKEN)
+    // Core keeps it too, for another plugin's screen on this display (AGL-4042).
+    expect(customerDisplayCredential()).toBe(TOKEN)
     expect(posts('pair').at(-1)?.body).toMatchObject({ action: 'pair', code: '123456' })
     // The pairing call carries no token; every poll after it carries the new one.
     expect(posts('pair').every((call) => call.token === null)).toBe(true)
@@ -294,6 +297,14 @@ describe('the customer display (AGL-3608)', () => {
     render(<PosDisplayPage pluginId="commerce" path="/pos-display" />)
     expect(await screen.findByLabelText('Pairing code')).toBeTruthy()
     expect(window.localStorage.getItem(POS_DISPLAY_TOKEN_KEY)).toBeNull()
+    expect(customerDisplayCredential()).toBeNull()
+  })
+
+  it('hands a display paired before core kept the credential over to core on load (AGL-4042)', async () => {
+    paired({ mode: 'idle' })
+    expect(customerDisplayCredential()).toBeNull()
+    render(<PosDisplayPage pluginId="commerce" path="/pos-display" />)
+    await waitFor(() => expect(customerDisplayCredential()).toBe(TOKEN))
   })
 
   it('unpairs from the tucked-away control after a confirmation', async () => {
@@ -308,5 +319,28 @@ describe('the customer display (AGL-3608)', () => {
     expect(posts('forget')).toHaveLength(1)
     expect(posts('forget')[0].token).toBe(TOKEN)
     expect(window.localStorage.getItem(POS_DISPLAY_TOKEN_KEY)).toBeNull()
+  })
+
+  it('opens another plugin’s screen once per prompt, and shows the store’s screen when it comes back (AGL-4042)', async () => {
+    window.sessionStorage.clear()
+    const open = jest.spyOn(posDisplayNavigation, 'open').mockImplementation(() => undefined)
+    paired({
+      mode: 'screen',
+      promptId: 'screen-1',
+      screen: { pluginId: 'acme-forms', path: '/display-fill', params: { grant: 'g.1' } },
+    })
+    const first = render(<PosDisplayPage pluginId="commerce" path="/pos-display" />)
+    await waitFor(() => expect(open).toHaveBeenCalledTimes(1))
+    const href = new URL(open.mock.calls[0][0], 'https://console.example.com')
+    expect(href.pathname).toBe('/kiosk/acme-forms/display-fill')
+    expect(Object.fromEntries(href.searchParams)).toEqual({ grant: 'g.1', return: '/kiosk/commerce/pos-display' })
+    first.unmount()
+    // Back from the plugin's page: the same prompt opens nothing again.
+    render(<PosDisplayPage pluginId="commerce" path="/pos-display" />)
+    expect(await screen.findByText('Thanks for stopping by')).toBeTruthy()
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    })
+    expect(open).toHaveBeenCalledTimes(1)
   })
 })

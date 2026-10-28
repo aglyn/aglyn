@@ -634,11 +634,39 @@
         "POS_DAY_REPORT_MAX_DAYS"
       ]
     },
+    "libs/plugins/commerce/src/lib/model/commerce-check-in-record.ts": {
+      "types": [
+        "HostCheckIn",
+        "CheckInRainCheck",
+        "CheckInWristband",
+        "CheckInStatus",
+        "CheckInCustomer",
+        "CheckInDayTotals"
+      ],
+      "values": [
+        "POS_CHECK_IN_ROUTE",
+        "CHECK_IN_BATCH_MAX",
+        "CHECK_IN_WRISTBAND_MAX",
+        "CHECK_IN_WRISTBAND_COLORS"
+      ]
+    },
+    "libs/plugins/commerce/src/lib/model/commerce-check-in-product.ts": {
+      "values": [
+        "CHECK_IN_MAX_HEADCOUNT",
+        "CHECK_IN_USE_DAY_MAX_AHEAD_DAYS"
+      ]
+    },
     "libs/plugins/commerce/src/lib/model/commerce-reservations.ts": {
+      "types": [
+        "StayCheckInMode"
+      ],
       "values": [
         "PENDING_RESERVATION_HOLD_MS",
         "MAX_RESOURCE_UNITS",
-        "FEW_UNITS_LEFT"
+        "FEW_UNITS_LEFT",
+        "MAX_RESERVATION_GUESTS",
+        "RESERVATION_GUESTS_ROUTE",
+        "STAY_CHECK_IN_MODES"
       ]
     },
     "libs/plugins/commerce/src/lib/model/commerce-returns.ts": {
@@ -997,6 +1025,7 @@
         "OrgPermissionLayer"
       ],
       "values": [
+        "CORE_SITE_ROLE_PRESETS",
         "ORG_ROLE_GRANTS",
         "ORG_ROLE_NAMES"
       ]
@@ -1078,6 +1107,9 @@
       "with": "assembleOrgRoleGrants",
       "collect": [
         "AI_ORG_PERMISSIONS",
+        "AI_WORKSPACE_PERMISSIONS",
+        "BOOKINGS_SITE_PERMISSIONS",
+        "COMMERCE_SITE_PERMISSIONS",
         "COMMERCE_PERMISSIONS",
         "OUTREACH_PERMISSIONS",
         "ACCOUNTING_PERMISSIONS",
@@ -1085,6 +1117,7 @@
       ],
       "parts": [
         "libs/plugins/ai/src/lib/model/ai-permissions.ts",
+        "libs/plugins/bookings/src/lib/model/bookings-permissions.ts",
         "libs/plugins/commerce/src/lib/model/plugin-permissions.ts",
         "libs/plugins/outreach/src/lib/constants/bundle-common.ts",
         "libs/plugins/accounting/src/lib/constants/bundle-common.ts",

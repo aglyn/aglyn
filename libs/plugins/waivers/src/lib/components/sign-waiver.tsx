@@ -20,33 +20,38 @@ import { mdiFileSign } from '@aglyn/shared-data-mdi'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import { forwardRef, useEffect, useState } from 'react'
-import { WAIVERS_PLUGIN_ID } from '../constants/bundle-common'
+import { WAIVERS_PICKER_ATTRIBUTE, WAIVERS_PLUGIN_ID, WAIVERS_SIGN_COMPONENT_ID } from '../constants/bundle-common'
 import { WaiverSignFlow } from './waiver-sign-flow.component'
 
 // Component ids are persisted in screen documents; never rename.
-export const ID: Aglyn.ComponentId = 'signWaiver'
+export const ID: Aglyn.ComponentId = WAIVERS_SIGN_COMPONENT_ID
 
 export interface SignWaiverProps {
+  /** The waiver this element signs, picked in the Besigner; empty lists the site's published waivers. */
+  waiverId?: string
   /** Heading over the list of waivers, when the site publishes more than one. */
   heading?: string
 }
 
 /**
  * Sign waiver (AGL-4042): the site's published waivers, signed on the page.
- * One published waiver opens straight to its form; several are listed to
- * choose from; a link to the page with `?waiver=` opens that one. Signs
+ * A waiver picked in the Besigner opens straight to its form; otherwise one
+ * published waiver opens straight away and several are listed to choose
+ * from. A link to the page with `?waiver=` opens that one whatever was
+ * picked, so a share link works on any page holding the element. Signs
  * through the site's own public door, so the signer's audit trail names the
  * site's address.
  */
 const SignWaiver = forwardRef<HTMLDivElement, SignWaiverProps>((props, ref) => {
   // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
-  const { heading, sx, ...rest } = props as SignWaiverProps & { sx?: unknown }
+  const { heading, waiverId: picked, sx, ...rest } = props as SignWaiverProps & { sx?: unknown }
   const nodeSx = (Array.isArray(sx) ? sx : [sx]) as never[]
   const { hostId } = Aglyn.useSite()
-  const [waiverId, setWaiverId] = useState<string | null>(null)
+  const [linked, setLinked] = useState<string | null>(null)
   useEffect(() => {
-    setWaiverId(new URLSearchParams(window.location.search).get('waiver'))
+    setLinked(new URLSearchParams(window.location.search).get('waiver'))
   }, [])
+  const waiverId = linked || picked || null
 
   if (!hostId) {
     return (
@@ -80,8 +85,17 @@ export const schema: Aglyn.ComponentSchema<SignWaiverProps> = {
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
   attributes: [
     {
+      name: 'waiverId',
+      description:
+        'The waiver this element signs. Leave it empty to list every waiver the site publishes. Write and publish waivers on the Waivers page.',
+      // The `waivers` entity picker (plugins.config.json) lists the site's
+      // waivers by title under this type and stores the chosen one's id.
+      component: WAIVERS_PICKER_ATTRIBUTE as Aglyn.FieldComponentType,
+      label: 'Waiver',
+    },
+    {
       name: 'heading',
-      description: 'Shown above the list when the site publishes more than one waiver.',
+      description: 'Shown above the list when no waiver is chosen and the site publishes more than one.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       label: 'Heading',
     },

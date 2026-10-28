@@ -73,6 +73,12 @@ function mockQuery(
         (data) => {
           const held = data[field]
           if (op === '==') return held === value
+          // A number ranges against a number (the hardware records' `…AtMs`).
+          if (typeof held === 'number' && typeof value === 'number') {
+            if (op === '>=') return held >= value
+            if (op === '<') return held < value
+            return false
+          }
           if (!(held instanceof Date)) return false
           if (op === '>=') return held >= (value as Date)
           if (op === '<') return held < (value as Date)
@@ -107,6 +113,7 @@ import {
 } from '../model/storefront-tax-summary'
 import {
   commerceTaxReturnSource,
+  readStorefrontTaxReturn,
   storefrontFacilitatedJurisdictionRows,
   storefrontFilingLines,
   storefrontPlatformLiableCents,
@@ -681,7 +688,7 @@ describe('the storefront’s tax return source', () => {
       ...AGLYN_LIABLE_ROW,
       paidAt: new Date('2026-11-01T00:00:00Z'),
     })
-    const answer = await commerceTaxReturnSource.read(REQUEST)
+    const answer = await readStorefrontTaxReturn(REQUEST)
     const summary = answer.summary as ReturnType<typeof storefrontTaxSummary>
     expect(summary.aglynLiable.taxCollectedCents).toBe(825)
     expect(summary.aglynLiable.taxableSalesCents).toBe(10000)
@@ -695,10 +702,121 @@ describe('the storefront’s tax return source', () => {
     mockDocs.set('storefrontTaxCollected/a', { ...AGLYN_LIABLE_ROW })
     mockDocs.set('storefrontTaxCollected/b', { ...AGLYN_LIABLE_ROW })
     mockDocs.set('storefrontTaxCollected/undated', { ...AGLYN_LIABLE_ROW, paidAt: null })
-    const answer = await commerceTaxReturnSource.read({ ...REQUEST, rowCap: 1 })
+    const answer = await readStorefrontTaxReturn({ ...REQUEST, rowCap: 1 })
     // Both are the platform's to BLOCK on; the source's job is to say so.
     expect(answer.truncated).toBe(true)
     expect(answer.rows).toHaveLength(1)
     expect(answer.undatedRows).toBe(1)
+  })
+
+  it('answers commerce as three sections, the storefront, the hardware shop and the own stores, each from its own records (AGL-4038)', async () => {
+    mockDocs.set('storefrontTaxCollected/cs_q3', { ...AGLYN_LIABLE_ROW, id: undefined })
+    mockDocs.set('posHardwareSales/hw_q3', {
+      orderId: 'hw_q3',
+      totalCents: 24_825,
+      taxCents: 1_705,
+      shipTo: { country: 'US', state: 'TX', postalCode: '78701' },
+      automaticTax: true,
+      taxLines: [{ amountCents: 1_705, taxableAmountCents: 23_120 }],
+      status: 'shipped',
+      livemode: true,
+      paidAtMs: Date.UTC(2026, 7, 20),
+    })
+    const answered = await commerceTaxReturnSource.read(REQUEST)
+    const sections = Array.isArray(answered) ? answered : [answered]
+    expect(sections.map((section) => section.id)).toEqual(['storefront', 'posHardware', 'ownStores'])
+    // The storefront never reads a hardware record, and the other way round.
+    expect(sections[0].rows).toHaveLength(1)
+    expect(sections[1].rows).toHaveLength(1)
+    expect((sections[1].summary as { totalSalesCents: number }).totalSalesCents).toBe(23_120)
+  })
+})
+
+/*==========================================
+ * A card reader the platform sells at its own store's register is on the
+ * return once (AGL-4038): in the hardware section, from its retained sale
+ * record. The register sale's payment link also filed a storefront row for
+ * the whole register sale, and the hardware's part of it comes out of the
+ * storefront section; a sale paid any other way filed no storefront row.
+ *=========================================*/
+describe('an in-person card reader sale is on the return once (AGL-4038)', () => {
+  const PERIOD: TaxReturnSourceRequest = { period: '2026-Q3', ...Q3_2026, filing: TEXAS, rowCap: 2000 }
+  const paidAt = new Date(Date.UTC(2026, 7, 15, 18))
+  const storefrontRow = (grossCents: number, taxCents: number) => ({
+    hostId: 'host-seller',
+    orgId: 'org-seller',
+    taxMode: 'manual',
+    taxLiability: 'merchant',
+    grossCents,
+    taxCents,
+    currency: 'usd',
+    customerAddress: { country: 'US', state: 'TX' },
+    taxLines: [],
+    paidAt,
+  })
+  const hardwareRecord = (fields: Record<string, unknown>) => ({
+    source: 'in_person',
+    status: 'delivered',
+    livemode: true,
+    currency: 'usd',
+    shipTo: { country: 'US', state: 'TX', postalCode: null },
+    automaticTax: false,
+    paidAtMs: paidAt.getTime(),
+    storefrontTaxRowId: null,
+    ...fields,
+  })
+
+  beforeEach(() => mockDocs.clear())
+
+  it('counts each sale in the hardware section and takes its part out of the storefront row', async () => {
+    // Paid by the register's payment link: a reader alone.
+    mockDocs.set('storefrontTaxCollected/cs_reader', storefrontRow(32_475, 2_475))
+    mockDocs.set(
+      'posHardwareSales/hw_link',
+      hardwareRecord({ storefrontTaxRowId: 'cs_reader', totalCents: 32_475, taxCents: 2_475, taxLines: [{ amountCents: 2_475, taxableAmountCents: 30_000 }] }),
+    )
+    // Paid by link: a reader and a T-shirt; the T-shirt stays a storefront sale.
+    mockDocs.set('storefrontTaxCollected/cs_mixed', storefrontRow(31_663, 2_413))
+    mockDocs.set(
+      'posHardwareSales/hw_mixed',
+      hardwareRecord({ storefrontTaxRowId: 'cs_mixed', totalCents: 29_227, taxCents: 2_227, taxLines: [{ amountCents: 2_227, taxableAmountCents: 27_000 }] }),
+    )
+    // Paid in cash: no storefront row was ever filed.
+    mockDocs.set(
+      'posHardwareSales/hw_cash',
+      hardwareRecord({ totalCents: 32_475, taxCents: 2_475, taxLines: [{ amountCents: 2_475, taxableAmountCents: 30_000 }] }),
+    )
+    // Somebody else's storefront sale is untouched.
+    mockDocs.set('storefrontTaxCollected/cs_other', { ...storefrontRow(10_825, 825), hostId: 'host-other' })
+
+    const answered = await commerceTaxReturnSource.read(PERIOD)
+    const [storefront, hardware] = Array.isArray(answered) ? answered : [answered]
+    const sold = storefront.summary as ReturnType<typeof storefrontTaxSummary>
+    expect(sold.merchantManual.transactionCount).toBe(2)
+    expect(sold.merchantManual.grossCents).toBe(10_825 + (31_663 - 29_227))
+    expect(sold.merchantManual.taxCollectedCents).toBe(825 + (2_413 - 2_227))
+    const hardwareSummary = hardware.summary as { orders: number; taxCollectedCents: number; totalSalesCents: number }
+    expect(hardwareSummary.orders).toBe(3)
+    expect(hardwareSummary.taxCollectedCents).toBe(2_475 + 2_227 + 2_475)
+    expect(hardwareSummary.totalSalesCents).toBe(30_000 + 27_000 + 30_000)
+  })
+
+  it('meets a storefront row across the edge of the period, and leaves a test sale in the one section it is in', async () => {
+    // The link session settled at the last instant of the quarter; the
+    // register recorded the sale a moment after it ended.
+    mockDocs.set('storefrontTaxCollected/cs_edge', { ...storefrontRow(32_475, 2_475), paidAt: new Date(Q3_2026.end.getTime() - 1) })
+    mockDocs.set(
+      'posHardwareSales/hw_edge',
+      hardwareRecord({ storefrontTaxRowId: 'cs_edge', totalCents: 32_475, taxCents: 2_475, paidAtMs: Q3_2026.end.getTime() + 500 }),
+    )
+    mockDocs.set('storefrontTaxCollected/cs_test', storefrontRow(32_475, 2_475))
+    mockDocs.set('posHardwareSales/hw_test', hardwareRecord({ storefrontTaxRowId: 'cs_test', totalCents: 32_475, taxCents: 2_475, livemode: false }))
+    const answered = await commerceTaxReturnSource.read(PERIOD)
+    const [storefront] = Array.isArray(answered) ? answered : [answered]
+    const sold = storefront.summary as ReturnType<typeof storefrontTaxSummary>
+    // The edge sale belongs to the next quarter's hardware section, never to
+    // this quarter's storefront; the test one is not in the hardware section,
+    // so it stays where it is.
+    expect(sold.merchantManual.transactionCount).toBe(1)
   })
 })

@@ -183,6 +183,42 @@ export interface PluginOrgPermissionDeclaration {
   group?: string
   /** The heading of a group of the plugin's own; absent: the plugin's catalog label. */
   groupLabel?: string
+  /**
+   * A broader key this one is a finer part of (AGL-4047): never granted
+   * without it, and following it where nothing sets this key. See
+   * `PluginPermission.refines`.
+   */
+  refines?: string
+  /**
+   * A key this one takes its verdict from where nothing sets it, without
+   * needing it (AGL-4047). See `PluginPermission.follows`.
+   */
+  follows?: string
+  /**
+   * A site can narrow this key, and the built-in roles' default for whether
+   * it does (AGL-4047). See `PluginPermission.narrowsPerSite`. Ignored on a
+   * key whose preset is the site role (`presetFromSiteRole`).
+   */
+  narrowsPerSite?: boolean | Partial<Record<OrgRole, boolean>>
+  /**
+   * The key's preset is the member's role ON THE SITE, for every member
+   * (AGL-4047), not only for a site collaborator: the owner and admins are
+   * admins of every site, a workspace-wide editor or viewer holds their
+   * workspace role on a site unless the site gives them other access there
+   * (narrower or wider), and a collaborator holds their site role. So the
+   * key reads `hostRoleDefaults` for whatever access the member has on the
+   * site a request names, exactly as a gate on that host role did, and a
+   * custom role, the member's own permissions and that site's toggle then
+   * grant or refuse it like any other key. Needs `hostRoleDefaults`, and
+   * `roleDefaults` that match them tier for tier (the owner and admins on
+   * Admin, editors on Editor, viewers on Viewer), which is the answer with
+   * no site named.
+   *
+   * For a key that replaces a gate on the site role (who may edit a site's
+   * stays, say), so the built-in roles keep exactly the access they had
+   * while the key becomes grantable and deniable like every other.
+   */
+  presetFromSiteRole?: boolean
 }
 
 /**
@@ -202,6 +238,17 @@ export interface PluginCatalogPermission {
   group: string
   groupLabel: string
   source: 'catalog' | 'tier'
+  /** The broader key this one refines, when it does. */
+  refines?: string
+  /** The key this one follows without needing it, when it does. */
+  follows?: string
+  /**
+   * Present when a site can narrow the key (AGL-4047): each built-in role's
+   * default for whether it does, normalized from the declaration.
+   */
+  narrowsPerSite?: Readonly<Record<OrgRole, boolean>>
+  /** The key's preset is the member's role on the site (AGL-4047); see the declaration's. */
+  presetFromSiteRole?: true
 }
 
 export interface PluginEntitlementRegistration {
@@ -376,6 +423,27 @@ function pluginLabel(pluginId: string): string {
 }
 
 /**
+ * A declaration's `narrowsPerSite`, normalized to each built-in role's
+ * default (AGL-4047): `true` or `false` names every role, a map names each,
+ * a role it leaves out keeps. Absent: the key is not one a site can narrow.
+ */
+function narrowingDefaultsOf(
+  declared: boolean | Partial<Record<OrgRole, boolean>> | undefined,
+): { narrowsPerSite?: Readonly<Record<OrgRole, boolean>> } {
+  if (declared === undefined || declared === null) return {}
+  const every = typeof declared === 'boolean' ? declared : undefined
+  const map = typeof declared === 'object' ? declared : {}
+  return {
+    narrowsPerSite: {
+      owner: every ?? map.owner === true,
+      admin: every ?? map.admin === true,
+      editor: every ?? map.editor === true,
+      viewer: every ?? map.viewer === true,
+    },
+  }
+}
+
+/**
  * Every key plugins contribute to the permission catalog, through EITHER
  * declaration API, in catalog order (AGL-4047): per plugin, its
  * `orgPermissions` declarations and then its `registerPluginPermissions`
@@ -420,6 +488,13 @@ export function listPluginCatalogPermissions(): PluginCatalogPermission[] {
       group: permission.group ?? permission.pluginId,
       groupLabel: permission.groupLabel ?? pluginLabel(permission.pluginId),
       source: 'catalog',
+      ...(permission.refines ? { refines: permission.refines } : {}),
+      ...(permission.follows ? { follows: permission.follows } : {}),
+      // A key whose preset is the site role follows every site's access
+      // already, so it offers no narrowing control (AGL-4047).
+      ...(permission.presetFromSiteRole && permission.hostRoleDefaults
+        ? { presetFromSiteRole: true as const }
+        : narrowingDefaultsOf(permission.narrowsPerSite)),
     })
   }
   for (const permission of listPluginPermissions()) {
@@ -432,6 +507,9 @@ export function listPluginCatalogPermissions(): PluginCatalogPermission[] {
       group: permission.group ?? permission.pluginId,
       groupLabel: permission.groupLabel ?? pluginLabel(permission.pluginId),
       source: 'tier',
+      ...(permission.refines ? { refines: permission.refines } : {}),
+      ...(permission.follows ? { follows: permission.follows } : {}),
+      ...narrowingDefaultsOf(permission.narrowsPerSite),
     })
   }
   return [...byPlugin.keys()]

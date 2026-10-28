@@ -469,6 +469,12 @@ export type PosDisplayMode =
   /** A card payment is waiting on the reader. */
   | 'processing'
   | 'thanks'
+  /**
+   * Another plugin's screen (AGL-4042), asked for through core's customer
+   * display seam (`plugin-customer-display`): the display opens that
+   * plugin's public page, which sends it back here when the customer is done.
+   */
+  | 'screen'
 
 export type PosReceiptChannel = 'email' | 'sms' | 'print' | 'none'
 
@@ -529,7 +535,28 @@ export interface PosDisplayState {
     offerMarketing: boolean
   }
   processing?: { message: string }
+  /** The plugin page a `screen` state opens, as core's seam shapes it. */
+  screen?: PosDisplayScreen
+  /**
+   * The staff member (uid) who put {@link screen} on the display (AGL-4042),
+   * stamped by the server from the session that pushed it, never taken from
+   * the register's body. Core's display verifier names them to the screen's
+   * plugin, whose record of what the customer did there names who showed it.
+   * Never sent to the display.
+   */
+  screenShownBy?: string
   response?: PosDisplayResponse
+}
+
+/**
+ * A plugin's screen on the display (AGL-4042): the shape of core's
+ * `CustomerDisplayScreen`, restated so this module imports nothing. The
+ * server checks it with core's own sanitizer before it is stored.
+ */
+export interface PosDisplayScreen {
+  pluginId: string
+  path: string
+  params: Record<string, string>
 }
 
 /** Most lines a display state carries; a longer basket shows its newest. */
@@ -565,13 +592,26 @@ export function posDisplayPhone(value: unknown): string {
 export function sanitizePosDisplayState(
   raw: unknown,
   nowMs: number,
+  options: {
+    /**
+     * Checks a `screen` state's plugin page (core's
+     * `sanitizeCustomerDisplayScreen`). Without it, or when it refuses, a
+     * `screen` state is idle: nothing opens on the display unchecked.
+     */
+    screen?: (raw: unknown) => PosDisplayScreen | null
+  } = {},
 ): PosDisplayState {
   const input = (raw && typeof raw === 'object' ? raw : {}) as Record<string, any>
-  const modes: PosDisplayMode[] = ['idle', 'cart', 'tip', 'receipt', 'processing', 'thanks']
-  const mode = modes.includes(input['mode']) ? (input['mode'] as PosDisplayMode) : 'idle'
-  const state: PosDisplayState = { mode, updatedAtMs: nowMs }
+  const modes: PosDisplayMode[] = ['idle', 'cart', 'tip', 'receipt', 'processing', 'thanks', 'screen']
+  const asked = modes.includes(input['mode']) ? (input['mode'] as PosDisplayMode) : 'idle'
   const promptId = String(input['promptId'] ?? '').slice(0, 64)
+  // A screen opens once per prompt, so one without a prompt, or one the
+  // checker refuses, opens nothing.
+  const screen = asked === 'screen' && promptId && options.screen ? options.screen(input['screen']) : null
+  const mode: PosDisplayMode = asked === 'screen' && !screen ? 'idle' : asked
+  const state: PosDisplayState = { mode, updatedAtMs: nowMs }
   if (promptId) state.promptId = promptId
+  if (mode === 'screen' && screen) state.screen = screen
   const cart = input['cart']
   if (cart && typeof cart === 'object' && mode !== 'idle') {
     const lines = (Array.isArray(cart.lines) ? cart.lines : [])
@@ -693,9 +733,10 @@ export function sanitizePosDisplayResponse(
 export function posDisplayPublicState(
   state: PosDisplayState | null | undefined,
   nowMs: number,
-): Omit<PosDisplayState, 'response'> & { answered: boolean } {
+): Omit<PosDisplayState, 'response' | 'screenShownBy'> & { answered: boolean } {
   if (!state) return { mode: 'idle', updatedAtMs: nowMs, answered: false }
-  const { response, ...rest } = state
+  // Who showed a plugin's screen is the server's to know, not the display's.
+  const { response, screenShownBy: _shownBy, ...rest } = state
   if (rest.mode === 'thanks' && nowMs - rest.updatedAtMs > POS_DISPLAY_THANKS_MS) {
     return { mode: 'idle', updatedAtMs: rest.updatedAtMs, answered: false }
   }

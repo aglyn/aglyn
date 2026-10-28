@@ -54,10 +54,15 @@
 
 import { escapeCsvCell } from '@aglyn/aglyn/app-utils/csv'
 import { centsToDollars } from '@aglyn/aglyn/app-utils/tax-jurisdiction-figures'
-import type {
-  TaxReturnFinding,
-  TaxReturnSection,
+import {
+  emptyTaxReturnOperatorFigures,
+  taxReturnOperatorSalesIn,
+  taxReturnOperatorSalesRows,
+  type TaxReturnFinding,
+  type TaxReturnOperatorFigures,
+  type TaxReturnSection,
 } from '@aglyn/aglyn/plugin-manager/plugin-tax-return-sources'
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import type {
   TaxReturnRowFinding,
   TaxReturnSummary,
@@ -897,6 +902,112 @@ function taxReturnSourceFilingLines(
 }
 
 /**
+ * THE OPERATOR'S OWN SALES OUTSIDE ITS INVOICES, in the filing jurisdiction
+ * (AGL-4038): what the sources stated as the operator's own — the device
+ * shop, the operator's own stores — summed. The filing figures ADD these to
+ * the invoices' own; the breakdown beside them shows each part.
+ */
+export function taxReturnOwnSalesInFiling(
+  payload: TaxReturnPayload | null,
+): TaxReturnOperatorFigures {
+  if (!payload) return emptyTaxReturnOperatorFigures()
+  return taxReturnOperatorSalesIn(payload.sources, taxReturnFilingJurisdiction(payload).code)
+}
+
+/** The labels of the parts folded in, for the notes on the filing lines. */
+function ownSalesLabels(payload: TaxReturnPayload | null): string[] {
+  const code = taxReturnFilingJurisdiction(payload).code
+  return [
+    ...new Set(
+      taxReturnOperatorSalesRows(payload?.sources)
+        .filter((row) => row.jurisdiction === code && (row.transactionCount > 0 || row.totalSalesCents > 0))
+        .map((row) => row.label),
+    ),
+  ]
+}
+
+/** The sentence a filing line adds when own sales were folded into it. */
+function ownSalesNote(payload: TaxReturnPayload | null, cents: number, what: string): string {
+  const labels = ownSalesLabels(payload)
+  if (!labels.length) return ''
+  return (
+    ` Includes $${centsToDollars(cents)} of ${what} from ${PLATFORM_BRAND_NAME}’s own sales ` +
+    `outside its invoices (${labels.join('; ')}), shown by source beside these figures.`
+  )
+}
+
+/** One row of the breakdown beside the filing figures. */
+export interface TaxReturnOwnSalesBreakdownRow {
+  key: string
+  /** The source: the invoices, or a part a plugin stated. */
+  source: string
+  jurisdiction: string
+  /** True for the rows the filing figures add up. */
+  inFigures: boolean
+  transactionCount: number
+  totalSalesDollars: string
+  taxableSalesDollars: string
+  taxCollectedDollars: string
+  /** Null for the invoices, whose refunds are stated on their own card. */
+  refundCount: number | null
+  refundedSalesDollars: string | null
+  refundedTaxDollars: string | null
+}
+
+/**
+ * WHAT THE FILING FIGURES ARE MADE OF (AGL-4038): one row per source and
+ * jurisdiction — the operator's invoices, then each kind of its own sales
+ * the sources stated — the filing jurisdiction's rows first. The filing
+ * jurisdiction's rows add up to the filing figures exactly; the rest are the
+ * record of the operator's own sales elsewhere.
+ */
+export function taxReturnOwnSalesBreakdown(
+  payload: TaxReturnPayload | null,
+): TaxReturnOwnSalesBreakdownRow[] {
+  if (!payload) return []
+  const code = taxReturnFilingJurisdiction(payload).code
+  const invoices = Object.entries(payload.summary?.byJurisdiction ?? {}).map(
+    ([jurisdiction, figures]): TaxReturnOwnSalesBreakdownRow => ({
+      key: `invoices:${jurisdiction}`,
+      source: `${PLATFORM_BRAND_NAME} invoices (subscriptions and add-ons)`,
+      jurisdiction,
+      inFigures: jurisdiction === code,
+      transactionCount: Number(figures?.transactionCount ?? 0),
+      totalSalesDollars: centsToDollars(figures?.totalSalesCents),
+      taxableSalesDollars: centsToDollars(figures?.taxableSalesCents),
+      taxCollectedDollars: centsToDollars(figures?.taxCollectedCents),
+      refundCount: null,
+      refundedSalesDollars: null,
+      refundedTaxDollars: null,
+    }),
+  )
+  const parts = taxReturnOperatorSalesRows(payload.sources).map(
+    (row): TaxReturnOwnSalesBreakdownRow => ({
+      key: `${row.pluginId}:${row.partId}:${row.jurisdiction}`,
+      source: row.label,
+      jurisdiction: row.jurisdiction,
+      inFigures: row.jurisdiction === code,
+      transactionCount: row.transactionCount,
+      totalSalesDollars: centsToDollars(row.totalSalesCents),
+      taxableSalesDollars: centsToDollars(row.taxableSalesCents),
+      taxCollectedDollars: centsToDollars(row.taxCollectedCents),
+      refundCount: row.refundCount,
+      refundedSalesDollars: centsToDollars(row.refundedSalesCents),
+      refundedTaxDollars: centsToDollars(row.refundedTaxCents),
+    }),
+  )
+  // The filing jurisdiction's rows first, in the order they are summed; the
+  // rest by jurisdiction, keeping the source order within one.
+  const rows = [...invoices, ...parts]
+  return [
+    ...rows.filter((row) => row.inFigures),
+    ...rows
+      .filter((row) => !row.inFigures)
+      .sort((a, b) => a.jurisdiction.localeCompare(b.jurisdiction)),
+  ]
+}
+
+/**
  * The Texas figures, in the order the Webfile form asks for them.
  *
  * Texas only — `byJurisdiction['US-TX']`, never the platform totals. Selling
@@ -914,33 +1025,43 @@ export function taxReturnWebfileLines(
   payload: TaxReturnPayload | null,
 ): TaxReturnWebfileLine[] {
   const tx = payload?.summary?.byJurisdiction?.[TX_JURISDICTION]
+  // The operator's own sales outside its invoices (AGL-4038), folded in.
+  const own = taxReturnOwnSalesInFiling(payload)
   const dollars = (cents: number | undefined) =>
     payload ? centsToDollars(cents ?? 0) : null
   return [
     {
       item: 'Item 1',
       label: 'Total Texas sales',
-      dollars: dollars(tx?.totalSalesCents),
-      note: 'Receipts excluding the tax itself, including the §151.351-exempt 20%.',
+      dollars: dollars(Number(tx?.totalSalesCents ?? 0) + own.totalSalesCents),
+      note:
+        'Receipts excluding the tax itself, including the §151.351-exempt 20%.' +
+        ownSalesNote(payload, own.totalSalesCents, 'receipts'),
     },
     {
       item: 'Item 2',
       label: 'Taxable sales',
-      dollars: dollars(tx?.taxableSalesCents),
-      note: "Stripe's taxable_amount summed — the 80% base under the data-processing position.",
+      dollars: dollars(Number(tx?.taxableSalesCents ?? 0) + own.taxableSalesCents),
+      note:
+        "Stripe's taxable_amount summed — the 80% base under the data-processing position." +
+        ownSalesNote(payload, own.taxableSalesCents, 'taxable sales'),
     },
     taxablePurchasesLine(payload),
     {
       item: '—',
       label: 'Tax collected (reconciliation)',
-      dollars: dollars(tx?.taxCollectedCents),
-      note: 'What was actually charged to Texas customers. Webfile computes tax due from Item 2; this is the figure to reconcile it against.',
+      dollars: dollars(Number(tx?.taxCollectedCents ?? 0) + own.taxCollectedCents),
+      note:
+        'What was actually charged to Texas customers. Webfile computes tax due from Item 2; this is the figure to reconcile it against.' +
+        ownSalesNote(payload, own.taxCollectedCents, 'tax'),
     },
     {
       item: '—',
       label: 'Texas transactions',
-      dollars: payload ? String(tx?.transactionCount ?? 0) : null,
-      note: 'Invoices in the period with a Texas billing address.',
+      dollars: payload ? String(Number(tx?.transactionCount ?? 0) + own.transactionCount) : null,
+      note: own.transactionCount
+        ? `Invoices in the period with a Texas billing address, and ${own.transactionCount} of ${PLATFORM_BRAND_NAME}’s own other sales sourced to Texas.`
+        : 'Invoices in the period with a Texas billing address.',
     },
     // Each facilitated-sales source's own lines, stated beside the form
     // items and never folded into one: this report does not decide how a
@@ -973,32 +1094,39 @@ export function taxReturnBreakdownLines(
 ): TaxReturnWebfileLine[] {
   const filing = taxReturnFilingJurisdiction(payload)
   const figures = payload?.summary?.byJurisdiction?.[filing.code]
+  const own = taxReturnOwnSalesInFiling(payload)
   const dollars = (cents: number | undefined) =>
     payload ? centsToDollars(cents ?? 0) : null
   return [
     {
       item: '—',
       label: `Total sales in ${filing.code}`,
-      dollars: dollars(figures?.totalSalesCents),
-      note: 'Receipts excluding the tax itself.',
+      dollars: dollars(Number(figures?.totalSalesCents ?? 0) + own.totalSalesCents),
+      note: 'Receipts excluding the tax itself.' + ownSalesNote(payload, own.totalSalesCents, 'receipts'),
     },
     {
       item: '—',
       label: 'Taxable sales',
-      dollars: dollars(figures?.taxableSalesCents),
-      note: "Stripe's taxable_amount summed — the base each rate was applied to.",
+      dollars: dollars(Number(figures?.taxableSalesCents ?? 0) + own.taxableSalesCents),
+      note:
+        "Stripe's taxable_amount summed — the base each rate was applied to." +
+        ownSalesNote(payload, own.taxableSalesCents, 'taxable sales'),
     },
     {
       item: '—',
       label: 'Tax collected',
-      dollars: dollars(figures?.taxCollectedCents),
-      note: 'What was actually charged to customers in this jurisdiction.',
+      dollars: dollars(Number(figures?.taxCollectedCents ?? 0) + own.taxCollectedCents),
+      note:
+        'What was actually charged to customers in this jurisdiction.' +
+        ownSalesNote(payload, own.taxCollectedCents, 'tax'),
     },
     {
       item: '—',
       label: 'Transactions',
-      dollars: payload ? String(figures?.transactionCount ?? 0) : null,
-      note: `Invoices in the period with a ${filing.code} billing address.`,
+      dollars: payload ? String(Number(figures?.transactionCount ?? 0) + own.transactionCount) : null,
+      note: own.transactionCount
+        ? `Invoices in the period with a ${filing.code} billing address, and ${own.transactionCount} of the operator’s own other sales sourced there.`
+        : `Invoices in the period with a ${filing.code} billing address.`,
     },
     ...taxReturnSourceFilingLines(payload),
   ]
@@ -1282,6 +1410,35 @@ export function taxReturnCsv(payload: TaxReturnPayload | null): string {
       line.label,
       line.dollars ?? 'NOT COMPUTED',
       line.note,
+    ]),
+    [],
+    // WHAT THE FIGURES ARE MADE OF (AGL-4038): the invoices and every kind
+    // of the operator's own sales the sources stated, by jurisdiction. The
+    // filing jurisdiction's rows sum to the figures above.
+    [`${texas ? 'Items 1–2' : 'The figures above'} by source and jurisdiction`],
+    [
+      'Source',
+      'Jurisdiction',
+      'In the figures above',
+      'Sales',
+      'Total sales (USD)',
+      'Taxable sales (USD)',
+      'Tax collected (USD)',
+      'Refunds in period',
+      'Refunded sales (USD)',
+      'Tax refunded (USD)',
+    ],
+    ...taxReturnOwnSalesBreakdown(payload).map((row) => [
+      row.source,
+      row.jurisdiction,
+      row.inFigures ? 'yes' : 'no',
+      String(row.transactionCount),
+      row.totalSalesDollars,
+      row.taxableSalesDollars,
+      row.taxCollectedDollars,
+      row.refundCount === null ? 'see refunds below' : String(row.refundCount),
+      row.refundedSalesDollars ?? '',
+      row.refundedTaxDollars ?? '',
     ]),
     [],
     ['Refunds recorded in period (stated, not netted)'],

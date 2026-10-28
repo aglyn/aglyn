@@ -84,6 +84,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
               doc: () => ({
                 get: async () => ({
                   exists: true,
+                  data: () => ({ role: state.role }),
                   get: (field: string) => (field === 'role' ? state.role : undefined),
                 }),
               }),
@@ -96,6 +97,15 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   emailUnverifiedResponse: () => Response.json({ error: 'unverified' }, { status: 403 }),
   isImpersonationSession: () => false,
   lockdownRefusal: async () => null,
+  // "Sending domains" (`org.sendingDomains`, AGL-4047), resolved by the real
+  // catalog from the member document the double reads.
+  memberHasOrgPermission: async (_orgId: string, member: unknown, permission: string) =>
+    jest.requireActual('@aglyn/aglyn').resolveOrgPermissions(member, null)[permission] === true,
+  permissionRefusal: (permission: string) =>
+    Response.json(
+      { error: jest.requireActual('@aglyn/aglyn').permissionRefusalText(permission), reason: 'permission', permission },
+      { status: 403 },
+    ),
   listSendingDomains: async () => Object.values(state.domains),
   readDmarcPolicy: async () => ({
     policy: 'reject',

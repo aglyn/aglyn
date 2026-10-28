@@ -660,7 +660,9 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
         <Typography variant="body2" color="text.secondary">
           {'Exact-path rules; 302 while testing, promote to 301 when ' +
             'sure (browsers cache 301 aggressively). Changes go live ' +
-            'within ~30 seconds.'}
+            'within ~30 seconds. A visitor’s query string is passed on: ' +
+            'its parameters are added to the destination’s, and the ' +
+            'destination’s own win.'}
         </Typography>
         {hits && totalHits > 0 ? (
           <Typography variant="caption" color="text.secondary">

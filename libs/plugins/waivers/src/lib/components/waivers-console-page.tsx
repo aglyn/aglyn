@@ -39,7 +39,7 @@ export function WaiversConsolePage(props: ConsolePluginPageProps) {
   const permissions = props.permissions ?? {}
   const canManage = permissions['manageWaivers'] === true
   const canCollect = permissions['collectWaivers'] === true || canManage
-  const { waivers, error, reload } = useSiteWaivers(hostId)
+  const { waivers, signPageOrigin, error, reload } = useSiteWaivers(hostId)
   const base = props.basePath ?? ''
   const [first, second] = props.segments ?? []
   const go = (path: string) => router.push(`${base}${path}`)
@@ -69,6 +69,7 @@ export function WaiversConsolePage(props: ConsolePluginPageProps) {
       <WaiversListCard
         hostId={hostId}
         waivers={waivers}
+        signPageOrigin={signPageOrigin}
         error={error}
         canManage={canManage}
         canCollect={canCollect}

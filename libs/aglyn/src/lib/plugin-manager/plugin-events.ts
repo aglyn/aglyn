@@ -182,6 +182,47 @@ export interface PluginEventPayloads {
     domain: string
     reason: 'detached' | 'site-deleted'
   }
+  /**
+   * A site collaborator's per-site toggles were written through the platform's
+   * own door (AGL-4047), with their verdict for every per-site key after it.
+   * `memberId` is their row on the site's collaborators roster
+   * (`hosts/{hostId}/members/{memberId}`), for a plugin that keeps a display
+   * copy of its own keys there.
+   */
+  'host.member.permissions.changed': {
+    orgId: string
+    hostId: string
+    memberId: string
+    uid: string
+    permissions: Record<string, boolean>
+  }
+  /**
+   * The workspace's own logo changed (AGL-4048): the logo or dark-mode logo
+   * on its organization profile, or the logo of its white-label brand.
+   * Raised once the save has answered, never in front of it, so a handler
+   * that redraws the logo somewhere of its own — a device's start-up
+   * screen, a generated image — does so now rather than on its next pass,
+   * and the person saving waits on none of it. `changed` names which logos
+   * moved; a handler that draws only some of them may ignore the rest.
+   */
+  'org.logo.changed': {
+    orgId: string
+    actor: PluginEventActor
+    changed: ReadonlyArray<'logo' | 'logoDark' | 'brandLogo' | 'brandLogoDark'>
+  }
+  /**
+   * A workspace was created for its owner, by either door that creates one
+   * (the new-workspace page, or an account's first site). Raised once the
+   * workspace exists and its welcome is sent, so a plugin holding something
+   * for that person until they had a workspace — a purchase made before they
+   * signed up — hands it over now. `emailVerified` says whether the owner's
+   * address is proven; a plugin that matches by address waits for it.
+   */
+  'org.created': {
+    orgId: string
+    owner: { uid: string; email: string | null; emailVerified: boolean }
+    via: 'workspace-page' | 'first-site'
+  }
   /** One permission key moved on a subject of the org. */
   'org.permissions.changed': {
     orgId: string

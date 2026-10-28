@@ -77,6 +77,26 @@ import {
   type StorefrontTaxReturnRowInput,
   type StorefrontTaxSummary,
 } from '../model/storefront-tax-summary'
+import { readPosHardwareTaxReturn } from './pos-hardware-tax-return-source'
+import { POS_HARDWARE_SALES_COLLECTION } from '../model/pos-hardware'
+import {
+  posHardwareStorefrontParts,
+  storefrontRowsWithoutInPersonHardware,
+} from '../model/pos-hardware-tax-summary'
+import { statedTaxableBase } from '../model/own-store-tax-summary'
+import {
+  ownStoreTaxReturnAnswer,
+  readOwnStoreOrders,
+  resolveOwnStores,
+  type OwnStores,
+} from './own-store-tax-return-source'
+
+/**
+ * How far either side of the period an in-person hardware record is read,
+ * to meet the storefront row its register sale filed: the two are written
+ * seconds apart, so a week is more than enough for either edge.
+ */
+const IN_PERSON_ROW_MARGIN_MS = 7 * 24 * 60 * 60 * 1000
 
 /** One row of the storefront listing, as the working papers carry it. */
 export interface StorefrontTaxRow {
@@ -547,6 +567,8 @@ export function storefrontTaxReturnAnswer(
     rows: readonly StorefrontTaxReturnRowInput[]
     truncated: boolean
     undatedRows: number
+    /** Rows of the operator's own stores, which their own card folds in instead (AGL-4038). */
+    ownStoreRows?: number
   },
   request: TaxReturnSourceRequest,
 ): TaxReturnSourceAnswer {
@@ -572,7 +594,15 @@ export function storefrontTaxReturnAnswer(
     findings: storefrontTaxFindings(summary, filing),
     filingLines: storefrontFilingLines(summary, filing),
     tables: storefrontTables(summary, filing),
-    figures: [],
+    figures: read.ownStoreRows
+      ? [
+          {
+            label: `Rows of ${brand}’s own stores`,
+            value: String(read.ownStoreRows),
+            note: `${brand}’s own sales, not a merchant’s: on the own stores card and folded into the filing figures, never here.`,
+          },
+        ]
+      : [],
     exports: storefrontExports(summary, filing),
     summary,
     rows: read.rows.map(projectRow),
@@ -580,8 +610,61 @@ export function storefrontTaxReturnAnswer(
 }
 
 /**
- * The storefront's source, registered on the console's API surface: the
- * staff return awaits that surface before it asks.
+ * Commerce's source, registered on the console's API surface: the staff
+ * return awaits that surface before it asks. It answers three sections, one
+ * per kind of sale commerce records apart:
+ *
+ *   - the storefront's FACILITATED sales — merchants' money (below);
+ *   - the POS hardware shop's, the operator's own
+ *     (`pos-hardware-tax-return-source.ts`, AGL-4038);
+ *   - the operator's own stores', its own too (`own-store-tax-return-source.ts`,
+ *     AGL-4038).
+ *
+ * The operator's own stores are resolved FIRST, because each of the others
+ * leaves their sales to the third: the storefront drops their tax rows (and
+ * hands their stated bases over), and the hardware section folds in no
+ * reader sold at their registers. So every sale is counted once. Any read
+ * failing refuses all three, so a half-read commerce never reads as a
+ * complete one.
+ */
+export const commerceTaxReturnSource: TaxReturnSource = {
+  async read(request) {
+    const own = await resolveOwnStores()
+    const ownHostIds = new Set(own.stores.map((store) => store.hostId))
+    const [storefrontRead, hardware, ownOrders] = await Promise.all([
+      readStorefrontTaxRows(request),
+      readPosHardwareTaxReturn(request, { ownHostIds }),
+      readOwnStoreOrders(request, own.stores),
+    ])
+    const isOwn = (row: StorefrontTaxReturnRowInput) => isOwnStoreRow(row, own)
+    const ownRows = storefrontRead.rows.filter(isOwn)
+    const storefront = storefrontTaxReturnAnswer(
+      { ...storefrontRead, rows: storefrontRead.rows.filter((row) => !isOwn(row)), ownStoreRows: ownRows.length },
+      request,
+    )
+    // The base Stripe stated on an own store's online sale, by its order id
+    // (an online order is keyed by its Checkout Session, as its row is).
+    const statedBases = new Map<string, number>()
+    for (const row of ownRows) {
+      const base = statedTaxableBase(Array.isArray(row.taxLines) ? row.taxLines : [])
+      if (base !== null) statedBases.set(row.id, base)
+    }
+    const ownStores = ownStoreTaxReturnAnswer({ own, read: ownOrders, statedBases }, request)
+    return [storefront, hardware, ownStores]
+  },
+}
+
+/** Whether a storefront tax row is one of the operator's own stores' (AGL-4038). */
+export function isOwnStoreRow(
+  row: Pick<StorefrontTaxReturnRowInput, 'hostId' | 'orgId'>,
+  own: OwnStores,
+): boolean {
+  if (typeof row.hostId === 'string' && own.stores.some((store) => store.hostId === row.hostId)) return true
+  return Boolean(own.orgId) && row.orgId === own.orgId
+}
+
+/**
+ * The storefront's section.
  *
  * Two queries, and the second is the honesty check: the period query ranges
  * on `paidAt`, and a Firestore range query CANNOT match a document whose
@@ -589,30 +672,49 @@ export function storefrontTaxReturnAnswer(
  * every period. The equality probe counts those rows, over all of them, and
  * the platform blocks the return on any.
  */
-export const commerceTaxReturnSource: TaxReturnSource = {
-  async read(request) {
-    const collection = firebaseAdmin.app().firestore().collection('storefrontTaxCollected')
-    const [inPeriod, undated] = await Promise.all([
-      collection
-        .where('paidAt', '>=', request.start)
-        .where('paidAt', '<', request.end)
-        .limit(request.rowCap + 1)
-        .get(),
-      collection.where('paidAt', '==', null).count().get(),
-    ])
-    const rows: StorefrontTaxReturnRowInput[] = inPeriod.docs
-      .slice(0, request.rowCap)
-      .map((doc) => ({
-        id: doc.id,
-        ...(doc.data() as Omit<StorefrontTaxReturnRowInput, 'id'>),
-      }))
-    return storefrontTaxReturnAnswer(
-      {
-        rows,
-        truncated: inPeriod.size > request.rowCap,
-        undatedRows: Number(undated.data().count ?? 0),
-      },
-      request,
-    )
-  },
+export async function readStorefrontTaxReturn(
+  request: TaxReturnSourceRequest,
+): Promise<TaxReturnSourceAnswer> {
+  return storefrontTaxReturnAnswer(await readStorefrontTaxRows(request), request)
+}
+
+/** The storefront's rows for the period, before any is set aside. See {@link readStorefrontTaxReturn}. */
+export async function readStorefrontTaxRows(request: TaxReturnSourceRequest): Promise<{
+  rows: StorefrontTaxReturnRowInput[]
+  truncated: boolean
+  undatedRows: number
+}> {
+  const firestore = firebaseAdmin.app().firestore()
+  const collection = firestore.collection('storefrontTaxCollected')
+  const [inPeriod, undated, inPerson] = await Promise.all([
+    collection
+      .where('paidAt', '>=', request.start)
+      .where('paidAt', '<', request.end)
+      .limit(request.rowCap + 1)
+      .get(),
+    collection.where('paidAt', '==', null).count().get(),
+    // The platform's own in-person hardware sales around the period
+    // (AGL-4038): the hardware section counts them, so their part of the
+    // register sale's storefront row comes out here (`posHardwareSales`
+    // `source, paidAtMs`).
+    firestore
+      .collection(POS_HARDWARE_SALES_COLLECTION)
+      .where('source', '==', 'in_person')
+      .where('paidAtMs', '>=', request.start.getTime() - IN_PERSON_ROW_MARGIN_MS)
+      .where('paidAtMs', '<', request.end.getTime() + IN_PERSON_ROW_MARGIN_MS)
+      .limit(request.rowCap)
+      .get(),
+  ])
+  const rows: StorefrontTaxReturnRowInput[] = storefrontRowsWithoutInPersonHardware(
+    inPeriod.docs.slice(0, request.rowCap).map((doc) => ({
+      id: doc.id,
+      ...(doc.data() as Omit<StorefrontTaxReturnRowInput, 'id'>),
+    })),
+    posHardwareStorefrontParts(inPerson.docs.map((doc) => doc.data())),
+  )
+  return {
+    rows,
+    truncated: inPeriod.size > request.rowCap,
+    undatedRows: Number(undated.data().count ?? 0),
+  }
 }

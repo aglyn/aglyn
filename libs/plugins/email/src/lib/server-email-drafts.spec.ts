@@ -302,7 +302,9 @@ describe('the email design writer', () => {
       'This site is at its limit of 3 email designs and template pages — delete some to make room',
     )
     const route = readFileSync(join(REPO_ROOT, 'apps/console/app/api/hosts/resources/route.ts'), 'utf8')
-    expect(route).toContain("'Editing requires the editor role'")
+    // Both refuse in the words of the key they ask (AGL-4047).
+    expect(route).toContain('siteKeyRefusal(roleKey)')
+    expect(EMAIL_DESIGN_ROLE_REFUSAL).toBe('Your role does not include "Edit site content" — ask an organization admin')
     expect(route).toContain('email designs and template pages — ')
     expect(route).toContain("'delete some to make room'")
   })

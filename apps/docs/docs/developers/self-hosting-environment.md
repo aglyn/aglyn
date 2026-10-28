@@ -426,6 +426,13 @@ which is drawn from the first when left empty). In the Stripe Dashboard, leave
 your platform account's **default** Terminal configuration without a splash
 screen: a Location without its own screen inherits it, so it would also show on
 white-label workspaces' readers.
+
+The screens are drawn with `sharp`. On Vercel only the console's
+`/api/plugin-images/…` function ships its native library, so
+the console's other functions and the tenant's scheduled jobs ask that function to
+draw, at `NEXT_PUBLIC_CONSOLE_URL`, signed with `TOKEN_SIGNING_SECRET`; set both on
+both projects. Anywhere else (one server holding every route) the screens are
+drawn where they are asked for, and nothing more is needed.
 :::
 
 #### Which events to subscribe {#stripe-webhook-events}
@@ -1175,21 +1182,108 @@ deployment on **Products → Point of sale** (the **Hardware** card). The sale i
 the operator's: Checkout runs on the platform Stripe account with no connected
 account, and a staff member places each paid order in the Stripe Dashboard's
 Terminal hardware shop, shipping to the merchant, then records Stripe's order id
-and the tracking on **Staff → Hardware orders**. Set these on the **console
-only**. The shop stays hidden until it is switched on, at least one reader has a
+and the tracking on **Staff → Hardware orders**. Canceling or refunding an order
+there asks whether to **Email the buyer** (on unless you turn it off): the buyer
+then gets the same canceled-and-refunded email a workspace or account closure
+sends, once whichever sends it first, and a reader sold in person gets the refund
+email with what came back. The choice is in the action's audit row. Set these on
+the **console only**. The shop stays hidden until it is switched on, at least one reader has a
 price, a shipping figure is set, and card readers are available (a test key, or
 `STRIPE_TERMINAL_LIVE_ENABLED`).
 
 | Variable | Need | When | Value |
 | --- | --- | --- | --- |
 | `POS_HARDWARE_SHOP_ENABLED` | Optional | Runtime, console | Exactly `true` opens the shop. Anything else keeps it hidden. |
-| `POS_HARDWARE_PRICES` | Optional | Runtime, console | JSON of Stripe's own price for each item, in cents, keyed by `stripe-reader-s710`, `stripe-reader-s700`, `bbpos-wisepos-e`, `stripe-reader-m2`, `stripe-reader-s700-dock`, `bbpos-wisepos-e-dock` or `stripe-reader-m2-mount`. An item with no price, or a malformed one, is not offered. |
+| `POS_HARDWARE_PRICES` | Optional | Runtime, console | JSON of Stripe's own price for each item, in cents, keyed by `stripe-reader-s710`, `stripe-reader-s700`, `stripe-reader-t600`, `bbpos-wisepos-e`, `stripe-reader-m2`, `stripe-reader-s700-dock`, `stripe-reader-hub`, `stripe-reader-s700-case`, `stripe-reader-s700-cable`, `stripe-reader-charger`, `stripe-reader-m2-dock`, `stripe-reader-m2-mount`, `bbpos-wisepos-e-dock` or `bbpos-wisepos-e-power-cable`. An item with no price, or a malformed one, is not offered. |
 | `POS_HARDWARE_MARKUP_BPS` | Optional | Runtime, console | The markup on Stripe's price as a whole number of basis points (hundredths of a percent). Unset is the default, `3000`. `0` sells at Stripe's price; a value that is not a whole number hides the shop. |
 | `POS_HARDWARE_SHIPPING` | Optional | Runtime, console | JSON of a flat shipping amount in cents for each speed offered: `standard`, `express`, `priority`. The merchant pays it. |
 | `POS_HARDWARE_AUTOMATIC_TAX` | Optional | Runtime, console | Exactly `true` turns on Stripe automatic tax for hardware checkouts, on the platform's own tax registrations. |
+| `POS_HARDWARE_IN_PERSON_ENABLED` | Optional | Runtime, console | Exactly `true` lets your own store's register sell readers in person (below). Anything else keeps it off. |
+| `POS_HARDWARE_SELLER_HOST_ID` | Optional | Runtime, console | The site id of your own store whose register sells readers in person. |
+| `POS_HARDWARE_SELLER_ORG_ID` | Optional | Runtime, console | The id of the workspace that owns that store. A store moved to another workspace stops selling hardware. |
+
+**Selling readers in person.** With the three variables above set, a product on
+that one store can say which reader or accessory it is (**Point of sale
+hardware** in the product editor, shown on that store only), and a sale of it at
+the store's register becomes a hardware order for the buyer's workspace. The
+store's own prices, sales tax and payment account apply, exactly as for anything
+else it sells; none of the shop's figures above are needed.
+
+At that store's register, anyone who may sell there:
+
+- has the buyer accept the terms of sale before they pay (your published Terms,
+  Sections 4.26–4.32, summed up with a link): **Show on display** puts them on the
+  register's customer display, and **Accept on this tablet** shows them on the
+  register for the buyer to accept. Each acceptance is recorded on the sale and its
+  hardware order with the Terms version, the time, the screen, the register user and
+  the device's address and browser. Every receipt of the sale prints which terms it
+  is made under, and **Print the booth sign** opens a sign saying the same, for when
+  no screen can be used;
+
+- on a sale with a reader, selects **Attach buyer** and finds the buyer by their
+  exact email address, their name or their workspace's name, then picks the
+  workspace and, if they know it, the store. Each lookup is rate-limited and
+  written to the staff audit log (the typed address masked there), and shows
+  only a name, the whole email address and each workspace's stores. Someone
+  with no account is invited by email and gets the reader in the workspace they
+  create;
+- may scan or type each reader's serial number, so the order is set up by itself
+  when the buyer adds the reader, or add the reader to the buyer's store there
+  and then with its pairing code. A store with no card reader address yet takes
+  its address there too, with the buyer; it is saved as the store's reader
+  address, exactly as the store's **POS devices** card saves it, and a store
+  that already has one keeps it;
+- finds every reader sold at the kiosk, while the register was offline or to
+  someone not yet attached under **To attach**.
+
+**Staff → Hardware orders** lists the same sales under **Sold in person, to
+attach**, buyers' return requests under **Return requested**, and refunds an
+in-person sale to the card it was paid with, from the store's own account. A
+sale paid in cash is refunded as a return at the store's register. On the staff
+sales tax return, each in-person sale counts once, in its store's register sales.
+
+`POS_HARDWARE_SELLER_ORG_ID` also names **your own stores** for the staff sales tax
+return, whether or not readers sell in person: everything sold from any site of that
+workspace, card readers, apparel or anything else, is your own sale and is folded into
+the return's filing figures, with a breakdown by store and state. Leave it unset and no
+store's sales are folded in.
 
 Paid orders arrive on the platform webhook as `checkout.session.completed`, which
 the endpoint already subscribes to; there is no new endpoint.
+
+### 4G for card readers {#pos-cellular}
+
+Stripe sells cellular service for the Stripe Reader S710 as a monthly
+subscription per reader, billed to the Stripe account the reader is registered
+to, which is your platform account. With these set, a store's **POS devices**
+card offers **Turn on 4G** wherever the store has an S710: it turns cellular on
+for every S710 at that store, on the store's reader configuration, and each
+workspace is charged once a month, in arrears, for each S710 that had 4G in the
+month just ended. The charge is Stripe's price plus what collecting it costs
+you, with no markup, on an invoice to the workspace's card. Set them on the
+**console and tenant** (the charge runs as a background job). Unset, nothing
+about 4G shows anywhere.
+
+Turning 4G on takes the workspace's **Manage billing** permission as well as
+**Registers and devices**; turning it off takes only **Registers and devices**.
+A charge that doesn't collect stays open on the workspace's Billing page and
+raises an operator alert, and the members who manage the workspace's billing
+are emailed once, that day, with the date 4G turns off unless it is paid. If it
+is still unpaid after the grace period, 4G is turned off at Stripe for all of
+the workspace's stores, those members are emailed again, and another operator
+alert is raised. Paying doesn't
+turn 4G back on: the merchant turns it on again once the charge is paid. When
+a workspace is erased, its erasure charges the month it is erased in (and the
+month before, if the monthly run has not charged it yet) before any data is
+deleted, then turns 4G off.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `POS_CELLULAR_MONTHLY_COST_CENTS` | Optional | Runtime, console and tenant | What Stripe charges you for one reader's cellular service a month, in whole cents. Unset, or not a whole number, keeps 4G hidden. |
+| `POS_CELLULAR_BILLING_COST_BPS` | Optional | Runtime, console and tenant | The card processing percentage on the monthly charge, in basis points. Unset is the platform's card rate. |
+| `POS_CELLULAR_BILLING_COST_FIXED_CENTS` | Optional | Runtime, console and tenant | The card processing fixed fee on the monthly charge, in cents. Unset is the platform's. |
+| `POS_CELLULAR_GRACE_DAYS` | Optional | Runtime, console and tenant | How many days a month's 4G charge can stay unpaid before 4G is turned off for the workspace's stores, as a whole number from 1 to 90. Unset is 14. Any other value keeps 4G hidden. |
+| `STRIPE_PRODUCT_POS_CELLULAR` | Optional | Runtime, console and tenant | The Stripe product the monthly charge is billed against; `setup-stripe.mjs` creates it and prints the id. It carries the tax code automatic tax computes the line from. Unset keeps 4G hidden. |
 
 ---
 

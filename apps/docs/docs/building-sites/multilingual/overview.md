@@ -45,6 +45,12 @@ added but not yet translated is never advertised as a translation that exists.
 
 Add a **language switcher** so visitors can move between locales themselves.
 
+## Text direction {#text-direction}
+
+Pages are laid out left to right in every language. Right-to-left sites, for
+languages such as Arabic, Hebrew, Persian and Urdu, are not supported yet: you can
+publish a page written in one of them, but its layout stays left to right.
+
 :::tip How-tos
 - [Add a locale](add-a-locale.md)
 - [Add a language switcher](language-switcher.md)

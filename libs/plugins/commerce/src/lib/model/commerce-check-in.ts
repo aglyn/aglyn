@@ -15,10 +15,11 @@
  * limitations under the License.
  */
 import {
-  CHECK_IN_MAX_HEADCOUNT,
+  addCheckInDays,
+  checkInDayLabel,
+  checkInUseDayProblem,
+  isCheckInDayKey,
   normalizeProductCheckIn,
-  productCheckInProblem,
-  type ProductCheckIn,
 } from './commerce-check-in-product'
 import { emailSearchTokens } from '@aglyn/aglyn/app-utils/email-search'
 import {
@@ -32,13 +33,42 @@ import {
   type HostOrder,
   type OrderChannel,
 } from './commerce-orders'
-import type { HostReservation } from './commerce-reservations'
+import { reservationGuests, type HostReservation } from './commerce-reservations'
 import { posCsvCell } from './commerce-pos-ops'
 import { orderLabelTokens } from './order-list-fields'
 
+// The record and its route live in a pure module the native contracts read.
+export {
+  CHECK_IN_BATCH_MAX,
+  CHECK_IN_WRISTBAND_COLORS,
+  CHECK_IN_WRISTBAND_MAX,
+  POS_CHECK_IN_ROUTE,
+  type CheckInCustomer,
+  type CheckInDayTotals,
+  type CheckInRainCheck,
+  type CheckInRow,
+  type CheckInStatus,
+  type CheckInWristband,
+  type HostCheckIn,
+} from './commerce-check-in-record'
+import {
+  CHECK_IN_WRISTBAND_MAX,
+  type CheckInCustomer,
+  type CheckInDayTotals,
+  type CheckInRow,
+  type CheckInStatus,
+  type CheckInWristband,
+  type HostCheckIn,
+} from './commerce-check-in-record'
+
 // The product setting lives in a pure module the native contracts read (AGL-4043).
 export {
+  addCheckInDays,
+  checkInDayLabel,
   CHECK_IN_MAX_HEADCOUNT,
+  CHECK_IN_USE_DAY_MAX_AHEAD_DAYS,
+  checkInUseDayProblem,
+  isCheckInDayKey,
   normalizeProductCheckIn,
   productCheckInProblem,
   type ProductCheckIn,
@@ -53,10 +83,16 @@ export {
  *
  * WHAT IS DUE ON A DAY
  *  - An order's lines whose product (or variant) "Needs check-in", on the
- *    day the order was placed, in the site's time zone. Products have no
- *    service date of their own, so the purchase day is the day the pass is
- *    for. A paid order only: `paid`, `partially_fulfilled`, `fulfilled` or
+ *    day the buyer chose for the line (`useDayKey`, when the product asks
+ *    for one), else on the day the order was placed, in the site's time
+ *    zone. A paid order only: `paid`, `partially_fulfilled`, `fulfilled` or
  *    `delivered`. A line refunded by name is not due.
+ *  - A RAIN CHECK moves one person's pass off its day (bad weather, a
+ *    closed track): to a later day staff pick, or OPEN, claimable on any
+ *    later day until it is used. The document keeps its id; its `dayKey`
+ *    moves with a dated rain check and stays put while one is open
+ *    (`rainCheckOpen`, which any later day's search also asks). Undo puts it
+ *    back on the day it was on.
  *  - Each unit is a person: quantity × the product's "people per item"
  *    (`headcount`, default 1), so three passes are three check-ins.
  *  - A reservation that is `confirmed` or `checked_in` and whose stay
@@ -70,10 +106,11 @@ export {
  *   POST /api/commerce/pos-check-in   { hostId, action, … }
  *   GET  /api/commerce/pos-check-in?hostId=…&day=YYYY-MM-DD[&format=csv]
  *
+ * Actions: `search`, `customer`, `check_in`, `undo`, `wristband`,
+ * `rain_check` and `undo_rain_check`.
+ *
  * The native register mirrors these types.
  *=========================================*/
-
-export const POS_CHECK_IN_ROUTE = '/api/commerce/pos-check-in'
 
 /** The most check-ins one order line makes, whatever its quantity. */
 export const CHECK_IN_MAX_UNITS_PER_LINE = 200
@@ -87,98 +124,11 @@ export const CHECK_IN_SEARCH_ROWS = 100
 /** The most customers one search answers. */
 export const CHECK_IN_SEARCH_CUSTOMERS = 20
 
-/** The most check-ins one tap records. */
-export const CHECK_IN_BATCH_MAX = 50
-
-/** A wristband's number or color, at most this many characters. */
-export const CHECK_IN_WRISTBAND_MAX = 24
-
-/** Colors offered as quick picks for a wristband. Any word is accepted. */
-export const CHECK_IN_WRISTBAND_COLORS = [
-  'Red',
-  'Orange',
-  'Yellow',
-  'Green',
-  'Blue',
-  'Purple',
-  'Pink',
-  'White',
-  'Black',
-] as const
-
 /** The order statuses whose check-in lines are due. */
 export const CHECK_IN_ORDER_STATUSES = ['paid', 'partially_fulfilled', 'fulfilled', 'delivered'] as const
 
 /** The stay statuses whose days are due. */
 export const CHECK_IN_RESERVATION_STATUSES = ['confirmed', 'checked_in'] as const
-
-export type CheckInStatus = 'expected' | 'checked_in'
-
-export interface CheckInWristband {
-  number: string | null
-  color: string | null
-}
-
-/** `hosts/{hostId}/checkIns/{id}`: one person due on one day. Server-written only. */
-export interface HostCheckIn {
-  source: 'order' | 'reservation'
-  orderId: string | null
-  /** The order's number as the console shows it (`#1042`), or null for a stay. */
-  orderLabel: string | null
-  /** Where the order was sold, or `reservation`. */
-  channel: OrderChannel | 'reservation'
-  reservationId: string | null
-  lineIndex: number | null
-  /** This person's place among the line's or stay's check-ins, from 0. */
-  unitIndex: number
-  /** How many check-ins the line or stay makes that day. */
-  unitCount: number
-  productId: string | null
-  variantId: string | null
-  itemName: string
-  variantLabel: string | null
-  /** The day, `YYYY-MM-DD` in the site's time zone. */
-  dayKey: string
-  /** Who the check-in is for, as one key: the address, else the contact, else the name, else the order. */
-  customerKey: string
-  customerName: string | null
-  customerEmail: string | null
-  customerEmailLower: string | null
-  customerPhone: string | null
-  /** The contact the register attached to the sale, when it was one. */
-  contactId: string | null
-  /** The name's, the address's, the phone's and the order number's search prefixes. */
-  searchTokens: string[]
-  status: CheckInStatus
-  checkedInAtMs: number | null
-  checkedInBy: string | null
-  checkedInByName: string | null
-  wristband: CheckInWristband | null
-  /** The attempt that checked this person in, so a retried tap is not "already checked in". */
-  checkInAttempt: string | null
-  /** The last undo, kept so a reversed check-in still says who reversed it. */
-  undoneAtMs: number | null
-  undoneBy: string | null
-  createdAtMs: number
-  updatedAtMs: number
-}
-
-/** One check-in as the routes answer it. */
-export type CheckInRow = HostCheckIn & { id: string }
-
-/** A customer with something due on a day, as the search lists them. */
-export interface CheckInCustomer {
-  customerKey: string
-  name: string | null
-  email: string | null
-  phone: string | null
-  contactId: string | null
-  /** Every check-in the customer has on the day. */
-  unitsDue: number
-  unitsCheckedIn: number
-  /** What the check-ins are for, item names once each. */
-  items: string[]
-}
 
 /*==========================================
  * THE PRODUCT SETTING
@@ -191,11 +141,19 @@ export interface CheckInCustomer {
 export function productCheckInFor(
   product: { checkIn?: unknown; variants?: ReadonlyArray<Pick<ProductVariant, 'id'> & { checkIn?: unknown }> } | null | undefined,
   variantId: string | null | undefined,
-): { headcount: number } | null {
+): { headcount: number; askUseDate: boolean } | null {
   if (!product) return null
   const variant = (product.variants ?? []).find((one) => one.id === (variantId || 'default'))
   const setting = normalizeProductCheckIn(variant?.checkIn) ?? normalizeProductCheckIn(product.checkIn)
-  return setting?.enabled ? { headcount: setting.headcount ?? 1 } : null
+  return setting?.enabled ? { headcount: setting.headcount ?? 1, askUseDate: setting.askUseDate === true } : null
+}
+
+/** Whether a product's variant asks the buyer which day they will use it. */
+export function productAsksUseDate(
+  product: Parameters<typeof productCheckInFor>[0],
+  variantId: string | null | undefined,
+): boolean {
+  return productCheckInFor(product, variantId)?.askUseDate === true
 }
 
 /** Whether any variant of a product needs check-in. */
@@ -300,8 +258,14 @@ export type DueCheckIn = Omit<
   | 'updatedAtMs'
 >
 
-/** The customer fields a due check-in copies from its source, which a later read may refresh. */
+/**
+ * The fields a due check-in copies from its source, which a later read may
+ * refresh: the customer's, and how many check-ins its line or stay makes that
+ * day (a stay checked in per guest changes it when its guests or the store's
+ * control change).
+ */
 export const CHECK_IN_CUSTOMER_FIELDS = [
+  'unitCount',
   'customerKey',
   'customerName',
   'customerEmail',
@@ -317,17 +281,21 @@ export function orderIsDueForCheckIn(order: Pick<HostOrder, 'status'> | null | u
 }
 
 /**
- * The check-ins an order makes on its day, keyed by document id. `products`
- * holds the products its lines name, as stored now: the setting is read at
- * the window, so turning it on covers passes already sold today.
+ * Every check-in an order makes, keyed by document id, each on its own day:
+ * the day the buyer chose for its line (`useDayKey`), else `purchaseDayKey`,
+ * the day the order was placed on the site's calendar. A caller working one
+ * day keeps the entries whose `dayKey` is that day; the rest are still owed,
+ * on theirs. `products` holds the products its lines name, as stored now:
+ * the setting is read at the window, so turning it on covers passes already
+ * sold today.
  */
 export function dueCheckInsForOrder(input: {
   orderId: string
   order: Partial<HostOrder>
   products: ReadonlyMap<string, Parameters<typeof productCheckInFor>[0]>
-  dayKey: string
+  purchaseDayKey: string
 }): Map<string, DueCheckIn> {
-  const { orderId, order, dayKey } = input
+  const { orderId, order, purchaseDayKey } = input
   const due = new Map<string, DueCheckIn>()
   if (!orderIsDueForCheckIn(order as HostOrder)) return due
   const refunded = new Set(Array.isArray(order.refundedLineItemIds) ? order.refundedLineItemIds : [])
@@ -345,6 +313,7 @@ export function dueCheckInsForOrder(input: {
     if (!setting) return
     const quantity = Math.max(0, Math.round(Number(line.quantity) || 0))
     const unitCount = Math.min(quantity * setting.headcount, CHECK_IN_MAX_UNITS_PER_LINE)
+    const dayKey = isCheckInDayKey(line.useDayKey) ? line.useDayKey : purchaseDayKey
     for (let unitIndex = 0; unitIndex < unitCount; unitIndex += 1) {
       due.set(orderCheckInId(orderId, lineIndex, unitIndex), {
         source: 'order',
@@ -382,12 +351,97 @@ export function checkInDayMs(dayKey: string): number | null {
   return check.getUTCDate() === Number(match[3]) && check.getUTCMonth() === Number(match[2]) - 1 ? ms : null
 }
 
-/** The check-in a stay makes on a day it covers; empty on any other day. */
+/** Where the store's stay check-in control lives (AGL-4043): `hosts/{hostId}/settings/checkIn.stays`. */
+export const STAY_CHECK_IN_SETTINGS_DOC = 'checkIn'
+
+/** One stay's stored check-in on one day, as far as how many it needs goes. */
+export interface StayCheckInSlot {
+  id: string
+  status: CheckInStatus
+  unitIndex: number
+}
+
+/**
+ * Which check-ins one stay keeps on one day when it needs `unitCount` of
+ * them (AGL-4043): when staff change a stay's guests, or the store switches
+ * between one check-in per stay and one per guest.
+ *
+ * A guest already checked in is never dropped, whatever their place: staff
+ * check a family in in any order, so the third guest may be in while the
+ * first is still on the way. The waiting ones fill what is left, lowest place
+ * first, and the rest are dropped; new places are the lowest free ones.
+ * `checkedIn` above `unitCount` is a count that cannot be honored without
+ * taking back a check-in: the guests route refuses it, and a reconcile keeps
+ * every checked-in guest and drops every waiting one.
+ */
+export function stayCheckInPlan(input: {
+  unitCount: number
+  existing: ReadonlyArray<StayCheckInSlot>
+}): {
+  /** Every place the stay is due under that day: the checked-in, the waiting kept, the new. */
+  unitIndexes: number[]
+  /** New places to write. */
+  create: number[]
+  /** Waiting check-ins it no longer needs. */
+  drop: string[]
+  /** How many of its guests are checked in that day. */
+  checkedIn: number
+} {
+  const wanted = Math.max(0, Math.floor(Number(input.unitCount) || 0))
+  const placeOf = (slot: StayCheckInSlot) => Math.max(0, Math.floor(Number(slot.unitIndex) || 0))
+  const checkedIn = input.existing.filter((slot) => slot.status === 'checked_in')
+  const waiting = input.existing
+    .filter((slot) => slot.status !== 'checked_in')
+    .sort((a, b) => placeOf(a) - placeOf(b) || a.id.localeCompare(b.id))
+  const room = Math.max(0, wanted - checkedIn.length)
+  const kept = waiting.slice(0, room)
+  const used = new Set(input.existing.map(placeOf))
+  const create: number[] = []
+  for (let place = 0; create.length < room - kept.length; place += 1) {
+    if (!used.has(place)) create.push(place)
+  }
+  return {
+    unitIndexes: [...checkedIn.map(placeOf), ...kept.map(placeOf), ...create].sort((a, b) => a - b),
+    create,
+    drop: waiting.slice(room).map((slot) => slot.id),
+    checkedIn: checkedIn.length,
+  }
+}
+
+/** Stored check-ins of stays grouped by stay, as {@link stayCheckInPlan} reads them. */
+export function storedStayCheckIns(
+  docs: ReadonlyArray<{ id: string; get(field: string): unknown }>,
+): Map<string, StayCheckInSlot[]> {
+  const byStay = new Map<string, StayCheckInSlot[]>()
+  for (const doc of docs) {
+    const reservationId = doc.get('reservationId')
+    if (doc.get('source') !== 'reservation' || typeof reservationId !== 'string' || !reservationId) continue
+    const slots = byStay.get(reservationId) ?? []
+    slots.push({
+      id: doc.id,
+      status: doc.get('status') === 'checked_in' ? 'checked_in' : 'expected',
+      unitIndex: Number(doc.get('unitIndex') ?? 0),
+    })
+    byStay.set(reservationId, slots)
+  }
+  return byStay
+}
+
+/**
+ * The check-ins a stay makes on a day it covers; empty on any other day. One
+ * per stay, or with `perGuest` one per guest (`guests`, at least one), each
+ * with its own wristband: the resource's setting under the store's control
+ * (`stayChecksInPerGuest`). Given the stay's check-ins already stored that
+ * day (`existing`), its places follow {@link stayCheckInPlan}, so a guest
+ * checked in is kept and a waiting one beyond the count is not due.
+ */
 export function dueCheckInsForReservation(input: {
   reservationId: string
   reservation: Partial<HostReservation>
   resourceName: string | null
   dayKey: string
+  perGuest?: boolean
+  existing?: ReadonlyArray<StayCheckInSlot>
 }): Map<string, DueCheckIn> {
   const { reservationId, reservation, dayKey } = input
   const due = new Map<string, DueCheckIn>()
@@ -401,28 +455,33 @@ export function dueCheckInsForReservation(input: {
   }
   const name = text(reservation.guestName) || null
   const email = text(reservation.guestEmail) || null
-  due.set(reservationCheckInId(reservationId, dayKey), {
-    source: 'reservation',
-    orderId: null,
-    orderLabel: null,
-    channel: 'reservation',
-    reservationId,
-    lineIndex: null,
-    unitIndex: 0,
-    unitCount: 1,
-    productId: null,
-    variantId: null,
-    itemName: text(input.resourceName) || 'Stay',
-    variantLabel: null,
-    dayKey,
-    customerKey: checkInCustomerKey({ email, name, fallback: `reservation:${reservationId}` }),
-    customerName: name,
-    customerEmail: email,
-    customerEmailLower: email ? email.toLowerCase() : null,
-    customerPhone: null,
-    contactId: null,
-    searchTokens: checkInSearchTokens({ name, email }),
-  })
+  const unitCount = input.perGuest ? reservationGuests(reservation) : 1
+  const customerKey = checkInCustomerKey({ email, name, fallback: `reservation:${reservationId}` })
+  const searchTokens = checkInSearchTokens({ name, email })
+  for (const unitIndex of stayCheckInPlan({ unitCount, existing: input.existing ?? [] }).unitIndexes) {
+    due.set(reservationCheckInId(reservationId, dayKey, unitIndex), {
+      source: 'reservation',
+      orderId: null,
+      orderLabel: null,
+      channel: 'reservation',
+      reservationId,
+      lineIndex: null,
+      unitIndex,
+      unitCount,
+      productId: null,
+      variantId: null,
+      itemName: text(input.resourceName) || 'Stay',
+      variantLabel: null,
+      dayKey,
+      customerKey,
+      customerName: name,
+      customerEmail: email,
+      customerEmailLower: email ? email.toLowerCase() : null,
+      customerPhone: null,
+      contactId: null,
+      searchTokens,
+    })
+  }
   return due
 }
 
@@ -536,16 +595,67 @@ export function sortCheckInRows<T extends Pick<CheckInRow, 'customerName' | 'cus
   )
 }
 
-export interface CheckInDayTotals {
-  expected: number
-  checkedIn: number
+/** Whether a check-in waits on an open rain check (not yet used). */
+export function checkInRainCheckIsOpen(row: Pick<HostCheckIn, 'status' | 'rainCheckOpen'>): boolean {
+  return row.rainCheckOpen === true && row.status === 'expected'
 }
 
-export function checkInDayTotals(rows: ReadonlyArray<Pick<CheckInRow, 'status'>>): CheckInDayTotals {
+export function checkInDayTotals(
+  rows: ReadonlyArray<Pick<CheckInRow, 'status' | 'rainCheckOpen'>>,
+): CheckInDayTotals {
+  const rainChecks = rows.filter((row) => checkInRainCheckIsOpen(row)).length
   return {
-    expected: rows.length,
+    expected: rows.length - rainChecks,
     checkedIn: rows.filter((row) => row.status === 'checked_in').length,
+    rainChecks,
   }
+}
+
+/*==========================================
+ * RAIN CHECKS
+ *=========================================*/
+
+/**
+ * Why a pass cannot be rain-checked as asked, or null. Only a pass bought as
+ * an order line (a stay's dates change on the Reservations card), only while
+ * nobody has used it, and a dated one only to a day after the one it is on
+ * that has not passed (`todayKey` on the store's calendar).
+ */
+export function rainCheckProblem(
+  row: Pick<HostCheckIn, 'source' | 'status' | 'dayKey'>,
+  ask: { kind: 'open' | 'date'; dayKey?: string | null },
+  todayKey: string,
+): string | null {
+  if (row.source !== 'order') {
+    return 'Only passes can be rain-checked. Change a stay’s dates on the Reservations card.'
+  }
+  if (row.status !== 'expected') return 'They are already checked in. Undo the check-in first.'
+  if (ask.kind === 'open') return null
+  const day = ask.dayKey
+  if (!isCheckInDayKey(day)) return 'Choose the new day as a date.'
+  if (day <= row.dayKey) return 'Choose a day after the one the pass is on.'
+  return checkInUseDayProblem(day, todayKey)
+}
+
+/** What the window says about a pass's rain check: "Rain check from Sat, Oct 25". */
+export function rainCheckLabel(row: Pick<HostCheckIn, 'rainCheck' | 'rainCheckOpen' | 'status'>): string {
+  const rainCheck = row.rainCheck
+  if (!rainCheck) return ''
+  const from = checkInDayLabel(rainCheck.fromDayKey)
+  if (rainCheck.kind === 'date') return `Rain check: moved from ${from} to ${checkInDayLabel(rainCheck.toDayKey)}`
+  if (rainCheck.claimedDayKey) return `Rain check from ${from}, used ${checkInDayLabel(rainCheck.claimedDayKey)}`
+  return `Rain check from ${from}: good on any later day`
+}
+
+/** The check-in's status in words: "Checked in", "Expected" or "Rain check". */
+export function checkInStatusLabel(row: Pick<HostCheckIn, 'status' | 'rainCheckOpen'>): string {
+  if (row.status === 'checked_in') return 'Checked in'
+  return checkInRainCheckIsOpen(row) ? 'Rain check' : 'Expected'
+}
+
+/** The day after `dayKey`: the first day an open rain check is good on. */
+export function checkInNextDay(dayKey: string): string {
+  return addCheckInDays(dayKey, 1)
 }
 
 /** A time on the site's clock: "9:14 AM". */
@@ -567,7 +677,11 @@ export function alreadyCheckedInLabel(row: Pick<CheckInRow, 'checkedInAtMs' | 'c
 /** One person's line, as the list and the spreadsheet name it: "Day pass · Adult (2 of 3)". */
 export function checkInItemLabel(row: Pick<CheckInRow, 'itemName' | 'variantLabel' | 'unitIndex' | 'unitCount'>): string {
   const item = row.variantLabel ? `${row.itemName} · ${row.variantLabel}` : row.itemName
-  return row.unitCount > 1 ? `${item} (${row.unitIndex + 1} of ${row.unitCount})` : item
+  // A guest checked in before their stay's count came down keeps their place,
+  // which can lie past the new count: no "4 of 2".
+  return row.unitCount > 1 && row.unitIndex < row.unitCount
+    ? `${item} (${row.unitIndex + 1} of ${row.unitCount})`
+    : item
 }
 
 /** The day's check-ins as a spreadsheet, one row per person. */
@@ -584,6 +698,7 @@ export function checkInDayCsv(rows: ReadonlyArray<CheckInRow>, timeZone: string)
     'Checked in by',
     'Wristband number',
     'Wristband color',
+    'Rain check',
   ]
   const lines = sortCheckInRows(rows).map((row) =>
     [
@@ -593,11 +708,12 @@ export function checkInDayCsv(rows: ReadonlyArray<CheckInRow>, timeZone: string)
       row.customerPhone ?? '',
       checkInItemLabel(row),
       row.orderLabel ?? (row.source === 'reservation' ? 'Stay' : ''),
-      row.status === 'checked_in' ? 'Checked in' : 'Expected',
+      checkInStatusLabel(row),
       checkInTimeLabel(row.checkedInAtMs, timeZone),
       row.checkedInByName ?? '',
       row.wristband?.number ?? '',
       row.wristband?.color ?? '',
+      rainCheckLabel(row),
     ]
       .map(posCsvCell)
       .join(','),

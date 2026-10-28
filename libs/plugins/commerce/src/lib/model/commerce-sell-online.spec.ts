@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { productListedOnline, productSellsOnline } from './commerce'
+import { productListedOnline, productReviewsOnline, productSellsOnline } from './commerce'
 
 /*
  * The "Sell online" switch (AGL-4060). Only an explicit `false` turns it off:
@@ -42,5 +42,30 @@ describe('productListedOnline', () => {
     expect(productListedOnline({ status: 'active', deletedAt: 5 })).toBe(false)
     expect(productListedOnline(null)).toBe(false)
     expect(productListedOnline(undefined)).toBe(false)
+  })
+})
+
+/*
+ * Reviews of a product sold in person only (AGL-4060): on the site by
+ * default, marked Sold in store; hidden when the store chooses; a product
+ * sold online is unchanged whatever the field says.
+ */
+describe('productReviewsOnline', () => {
+  it('lists an online product’s reviews, whatever the in-store choice says', () => {
+    expect(productReviewsOnline({ status: 'active' })).toBe('listed')
+    expect(productReviewsOnline({ status: 'active', sellOnline: true, inStoreReviews: 'hide' })).toBe('listed')
+  })
+
+  it('shows an in-person product’s reviews marked Sold in store by default, and hides them when chosen', () => {
+    expect(productReviewsOnline({ status: 'active', sellOnline: false })).toBe('sold-in-store')
+    expect(productReviewsOnline({ status: 'active', sellOnline: false, inStoreReviews: 'show' })).toBe('sold-in-store')
+    expect(productReviewsOnline({ status: 'active', sellOnline: false, inStoreReviews: 'hide' })).toBe('hidden')
+  })
+
+  it('keeps a hidden choice whatever the product’s status, and says nothing of a draft or a deleted product', () => {
+    expect(productReviewsOnline({ status: 'archived', sellOnline: false, inStoreReviews: 'hide' })).toBe('hidden')
+    expect(productReviewsOnline({ status: 'draft', sellOnline: false })).toBeNull()
+    expect(productReviewsOnline({ status: 'active', deletedAt: 5 })).toBeNull()
+    expect(productReviewsOnline(null)).toBeNull()
   })
 })

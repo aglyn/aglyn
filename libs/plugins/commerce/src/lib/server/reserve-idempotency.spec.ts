@@ -742,6 +742,31 @@ describe('reservation idempotency (AGL-1697)', () => {
  * merchant-side refusals ABOVE the claim (AGL-1697), so it never burns the
  * guest's attempt key.
  */
+describe('a guest count on the booking (AGL-4043)', () => {
+  beforeEach(() => {
+    docs.set('hosts/host-1/resources/room-1', { name: 'Garden cabin', nightlyRateUsd: 150, capacity: 4 })
+  })
+
+  it('holds the stay with its guests, up to what the cabin sleeps', async () => {
+    const result = await post({ guests: 3 }, { 'idempotency-key': 'guests-1' })
+    expect(result.status).toBe(200)
+    expect(holdDocs()).toEqual([expect.objectContaining({ guests: 3 })])
+  })
+
+  it('refuses more guests than the cabin sleeps, before Stripe and before any hold, keeping the key', async () => {
+    const result = await post({ guests: 5 }, { 'idempotency-key': 'guests-2' })
+    expect(result).toMatchObject({ status: 400, body: { error: 'Guests must be a whole number from 1 to 4' } })
+    expect(stripeCalls).toHaveLength(0)
+    expect(holdDocs()).toHaveLength(0)
+    expect(claimDocs()).toHaveLength(0)
+  })
+
+  it('books without a count, as before', async () => {
+    await post({}, { 'idempotency-key': 'guests-3' })
+    expect(holdDocs()[0]).not.toHaveProperty('guests')
+  })
+})
+
 describe('the commerce entitlement gates the reservation door (AGL-1873)', () => {
   afterEach(() => {
     mockOrg.org.plan = 'business'

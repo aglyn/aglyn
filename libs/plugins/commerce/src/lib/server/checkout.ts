@@ -33,6 +33,7 @@ import {
   type CarrierShippingPlan,
 } from './carrier-shipping'
 import { readActiveMemberSession } from './membership'
+import { readStoreDay } from './store-day'
 import { resolveManualTaxRateId } from './manual-tax-rate'
 import { taxEngineSessionMetadata } from '../model/commerce-tax-engine'
 import { quoteSaleTaxWithEngine } from './tax-engine-quote'
@@ -94,6 +95,9 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     1,
     Math.min(99, Math.round(Number(body.quantity ?? 1))),
   )
+  // The day the buyer chose to use a check-in item (AGL-4043); checked below
+  // against the product and the store's calendar.
+  const useDayKey = typeof body.useDayKey === 'string' ? body.useDayKey.trim() : ''
   const couponCode = String(body.couponCode ?? '')
     .trim()
     .toUpperCase()
@@ -156,14 +160,18 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     if (!product || product.deletedAt) {
       return res.status(404).json({ error: 'Unknown product' })
     }
-    // Sold in person only (AGL-4060): bought at the register, the kiosk or
-    // the POS apps, never through the site's Buy now.
-    if (!CommerceModel.productSellsOnline(product)) {
-      return res.status(404).json({ error: 'Unknown product' })
-    }
     // Variant pricing (AGL-292): the buyer's selection maps to a variant;
     // absent variantId keeps the legacy default-variant behavior.
     const lifted = CommerceModel.liftLegacyProduct(product)
+    // For sale online at all (AGL-4060): live, ACTIVE and sold online, the
+    // one check the cart's checkout makes of every line. A draft or archived
+    // product has no page, so Buy now answers it the 404 the product page
+    // does; a product sold in person only is bought at the register, the
+    // kiosk or the POS apps, never here. Asked of the LIFTED product, as the
+    // cart asks it, so a legacy document with no status still sells.
+    if (!CommerceModel.productListedOnline(lifted)) {
+      return res.status(404).json({ error: 'Unknown product' })
+    }
     const variant = variantId
       ? lifted.variants.find((item) => item.id === variantId)
       : lifted.variants[0]
@@ -192,6 +200,20 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     // Seller resolution rides the owning org (AGL-238): plan gate from
     // the org doc, Stripe account from the owner's marketplace profile.
     const ownerOrg = await getOrgForHost(hostId)
+    // A use day (AGL-4043): only on an item that asks for one, and a day
+    // that has not passed on the store's calendar. Refused before anything
+    // is held, so a wrong day costs the buyer nothing.
+    if (useDayKey) {
+      if (!CommerceModel.productAsksUseDate(lifted, variant.id)) {
+        return res.status(400).json({ error: 'This item has no day to choose.' })
+      }
+      const storeDay = await readStoreDay(hostRef, {
+        org: (ownerOrg?.org ?? null) as Record<string, unknown> | null,
+        host: (hostSnapshot.data() ?? null) as Record<string, unknown> | null,
+      })
+      const problem = CommerceModel.checkInUseDayProblem(useDayKey, storeDay.todayKey)
+      if (problem) return res.status(400).json({ error: problem })
+    }
     const ownerId = ownerOrg?.org?.ownerUid
     if (!ownerId) {
       return res.status(409).json({ error: 'This site cannot sell yet' })
@@ -1093,6 +1115,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       'metadata[hostId]': hostId,
       'metadata[productId]': productId,
       ...(variantId ? { 'metadata[variantId]': variantId } : {}),
+      ...(useDayKey ? { 'metadata[useDayKey]': useDayKey } : {}),
       'metadata[quantity]': String(quantity),
       'metadata[feeCents]': String(feeCents),
       // The postal code live carrier rates were quoted for (AGL-3612).

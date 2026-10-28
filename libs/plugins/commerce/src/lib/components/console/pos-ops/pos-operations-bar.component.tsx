@@ -17,6 +17,7 @@
 
 'use client'
 
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { Box, Button, Chip, Stack, Typography } from '@mui/material'
 import { useState } from 'react'
 import { PosCheckInDialog } from './pos-check-in-dialog.component'
@@ -32,6 +33,12 @@ export interface PosOperationsBarProps {
   cashier: PosCashierState
   /** Ring the exchange after a return: a new sale for the same customer. */
   onExchange?: (customer: { email: string | null; name: string | null }) => void
+  /**
+   * Why a control is not this member's (AGL-4047), by the register key it
+   * needs: returns (`posRefund`) and the shift and drawer (`posCashDrawer`).
+   * Each stays on screen, disabled with its reason. Absent: allowed.
+   */
+  blocked?: { returns?: string; shift?: string }
 }
 
 /**
@@ -64,9 +71,11 @@ export function PosOperationsBar(props: PosOperationsBarProps) {
         <Button size="small" variant="outlined" onClick={() => setCheckingIn(true)}>
           {'Check in'}
         </Button>
-        <Button size="small" variant="outlined" onClick={() => setReturning(true)} disabled={!registerId}>
-          {'Return'}
-        </Button>
+        <BlockedControl blocked={Boolean(props.blocked?.returns)} reason={props.blocked?.returns ?? ''}>
+          <Button size="small" variant="outlined" onClick={() => setReturning(true)} disabled={!registerId}>
+            {'Return'}
+          </Button>
+        </BlockedControl>
       </Stack>
       {registerId ? (
         <PosShiftPanel
@@ -74,6 +83,7 @@ export function PosOperationsBar(props: PosOperationsBarProps) {
           registerId={registerId}
           {...(props.registerName ? { registerName: props.registerName } : {})}
           {...(cashier.assertion ? { cashierAssertion: cashier.assertion } : {})}
+          {...(props.blocked?.shift ? { blocked: props.blocked.shift } : {})}
         />
       ) : null}
       <PosPinPad

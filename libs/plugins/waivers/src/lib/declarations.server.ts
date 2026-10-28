@@ -15,10 +15,9 @@
  * limitations under the License.
  */
 
-import { registerPluginContactSource } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
 import { registerPluginPermissions } from '@aglyn/aglyn/plugin-manager/plugin-permissions'
 import { registerPluginPersonEraser } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
-import { WAIVERS_CONTACT_SOURCE, WAIVERS_PLUGIN_ID } from './constants/bundle-common'
+import { WAIVERS_PLUGIN_ID } from './constants/bundle-common'
 import { WAIVERS_PERMISSION_DECLARATIONS } from './constants/permissions'
 
 /**
@@ -26,8 +25,10 @@ import { WAIVERS_PERMISSION_DECLARATIONS } from './constants/permissions'
  * before any handler runs:
  *
  * - its two permissions, so a route's `resolveOrgPermissions` carries them;
- * - its CRM capture door, `waiver`, so a contact's timeline names it;
  * - the person eraser, so erasing a customer erases what they signed.
+ *
+ * Its CRM capture door, `waiver`, is declared from `declarations`, which
+ * both servers load too, so the console's browser labels it as well.
  *
  * The eraser reaches its module through a dynamic import, so nothing here
  * loads the data layer in an app's boot.
@@ -35,10 +36,6 @@ import { WAIVERS_PERMISSION_DECLARATIONS } from './constants/permissions'
 export function registerWaiversServerDeclarations(): void {
   const owner = { pluginId: WAIVERS_PLUGIN_ID }
   registerPluginPermissions(WAIVERS_PERMISSION_DECLARATIONS)
-  registerPluginContactSource(
-    { source: WAIVERS_CONTACT_SOURCE, label: 'Waiver signed', openLabel: 'Open waiver' },
-    owner,
-  )
   registerPluginPersonEraser(async (request) => {
     const { eraseWaiversPerson } = await import('./server/person-eraser')
     return eraseWaiversPerson(request)

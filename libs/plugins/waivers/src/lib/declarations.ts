@@ -15,8 +15,12 @@
  * limitations under the License.
  */
 
+import { registerPluginConfigSchema } from '@aglyn/aglyn/plugin-manager/plugin-config'
+import { registerPluginContactSource } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
 import { registerPluginPermissions } from '@aglyn/aglyn/plugin-manager/plugin-permissions'
+import { WAIVERS_CONTACT_SOURCE_DECLARATION, WAIVERS_PLUGIN_ID } from './constants/bundle-common'
 import { WAIVERS_PERMISSION_DECLARATIONS } from './constants/permissions'
+import { WAIVERS_CONFIG_SCHEMA } from './constants/settings'
 
 let declared = false
 
@@ -27,11 +31,23 @@ let declared = false
  * the role editor and a member's Permissions section offer them before any
  * waivers page has loaded. Light by construction: nothing here reaches
  * Firestore or React.
+ *
+ * Also its CRM capture door, `waiver` (AGL-4042), so a contact a signature
+ * created reads "Waiver signed" in the CRM's lists, chips and reports rather
+ * than the raw word. Loaded in the console's browser and on both servers, so
+ * every surface that labels a source has it before it renders.
+ *
+ * And its settings schema (AGL-428): how many years every signed waiver is
+ * kept. The console's generic settings card draws it at workspace and site
+ * scope, and signing, the eraser and the retention job read it through
+ * `getPluginConfig`, so each needs it registered first.
  */
 export function registerWaiversDeclarations(): void {
   if (declared) return
   declared = true
   registerPluginPermissions(WAIVERS_PERMISSION_DECLARATIONS)
+  registerPluginContactSource(WAIVERS_CONTACT_SOURCE_DECLARATION, { pluginId: WAIVERS_PLUGIN_ID })
+  registerPluginConfigSchema(WAIVERS_CONFIG_SCHEMA)
 }
 
 registerWaiversDeclarations()

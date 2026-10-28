@@ -43,7 +43,11 @@ import { UpstreamServiceError } from '@aglyn/shared-util-errors'
  * A `tools` entry is sent strict, with additional properties forbidden on
  * its schema, so a tool call's `input` validates against the schema
  * exactly. Tool choice stays automatic — forced tool use is not portable
- * across models — and the caller's system text names the tool it wants. An
+ * across models — and the caller's own words name the tool it wants. A door
+ * that sends several tools may also name the one a call is for
+ * (`toolChoice`), which an adapter forces only on a model whose descriptor
+ * says it takes a forced choice (`forcedToolChoice`) and only with thinking
+ * off, and sends as automatic everywhere else (AGL-4076). An
  * adapter delivers `input` as an object; a stream assembles it from
  * fragments and parses the whole once, at the block's end. Nothing
  * string-matches the serialized form: models differ in how they escape it.
@@ -374,6 +378,18 @@ export interface AiRequestBase {
    * It changes no answer, so a replay key does not read it.
    */
   cacheConversation?: boolean
+  /**
+   * The tool this call is for, by name: one of `tools` (AGL-4076). A step
+   * whose calls each want a different tool sends every one of them on every
+   * call, so the tools that open the cached prefix are the same bytes each
+   * time and the later calls read the prefix the first one wrote; this names
+   * the one wanted now. A tool choice sits outside the cached prefix, so
+   * naming a different one costs no cache read. The adapter forces it only
+   * where the model's descriptor says `forcedToolChoice` and the request
+   * thinks with thinking off, which a forced choice requires; everywhere else
+   * the choice stays automatic and the door's own words name the tool.
+   */
+  toolChoice?: string
 }
 
 /** The request an adapter receives: the runtime has already validated it. */
@@ -636,6 +652,13 @@ export interface AiModelDescriptor {
      * sent an image it did not say it can read.
      */
     vision?: boolean
+    /**
+     * Whether the model takes a forced tool choice (AGL-4076): a request that
+     * names the one tool it must call. Absent reads as no, so a request that
+     * names its tool is sent an automatic choice instead. Claude Opus 5.5 and
+     * Claude Sonnet 5.5 refuse a forced choice outright.
+     */
+    forcedToolChoice?: boolean
   }
 }
 

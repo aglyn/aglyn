@@ -26,6 +26,11 @@ import {
   POS_MANAGER_ASSERTION_TTL_MS,
 } from '../model/commerce-pos-ops'
 import type { PrintReport } from '../model/commerce-printers'
+import {
+  holdsPosPermission,
+  posPermissionRefusal,
+  type PosPermission,
+} from '../model/plugin-permissions'
 import { posOpsSettings, type PosOpsSettings } from '../pos-ops-config'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 
@@ -33,10 +38,16 @@ import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refus
  * WHO MAY RUN THE REGISTER (AGL-3609), for the shift, PIN, customer and
  * return routes.
  *
- * The same two facts the sale route checks: the member's role ON THIS SITE
- * is `admin` or `editor` (the allowlist the Firestore rules enforce), and the
- * organization has not revoked `managePos` from them. Plus the plan's `pos`
- * entitlement, re-read every time because a downgrade happens between taps.
+ * The fact the sale route checks: `managePos`, as resolved for THIS site —
+ * the member's org role, custom role and overrides for an org-wide member,
+ * and the role they hold here and their overrides for a site collaborator.
+ * Plus the plan's `pos` entitlement, re-read every time because a downgrade
+ * happens between taps.
+ *
+ * THE KEYS DECIDE, NOT THE SITE ROLE (AGL-4047). This also asked for `admin`
+ * or `editor` in the site's `memberRoles`, exactly the set `managePos` is on
+ * for by default, so nobody who had the register loses it; a site viewer the
+ * workspace grants the register now works it.
  *
  * Every Firebase and Stripe touch goes through {@link PosOpsDeps}, so the
  * routes' specs run each money path against an in-memory store and a counted
@@ -46,8 +57,19 @@ import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refus
 export interface PosOpsMembership {
   orgWide: boolean
   hostRole: string | null
-  permissions: { managePos?: boolean }
+  /** `managePos`, and the register's finer keys (AGL-4047) as resolved. */
+  permissions: { managePos?: boolean } & Partial<Record<PosPermission, boolean>>
 }
+
+/** The register's finer keys a membership carries (AGL-4047). */
+const POS_PERMISSION_KEYS: readonly PosPermission[] = [
+  'posSell',
+  'posRefund',
+  'posDiscount',
+  'posCashDrawer',
+  'posDevices',
+  'posBuyHardware',
+]
 
 export interface PosOpsDeps {
   firestore(): FirebaseFirestore.Firestore
@@ -99,7 +121,16 @@ export function defaultPosOpsDeps(): PosOpsDeps {
       return {
         orgWide: resolved.orgWide === true,
         hostRole: resolved.hostRole ?? null,
-        permissions: { managePos: resolved.permissions?.managePos === true },
+        permissions: {
+          managePos: resolved.permissions?.managePos === true,
+          // Each finer key as resolved; absent when the map carries none,
+          // which `holdsPosPermission` reads as following `managePos`.
+          ...Object.fromEntries(
+            POS_PERMISSION_KEYS.filter(
+              (key) => typeof resolved.permissions?.[key] === 'boolean',
+            ).map((key) => [key, resolved.permissions[key] === true]),
+          ),
+        },
       }
     },
     orgForHost: async (hostId) => {
@@ -184,9 +215,13 @@ function cleanId(value: unknown): string {
 
 export { cleanId as posOpsCleanId }
 
-/** Whether a member may work this site's register, by role and permission. */
-export function mayWorkRegister(memberRole: unknown, membership: PosOpsMembership): boolean {
-  return (memberRole === 'admin' || memberRole === 'editor') && membership.permissions.managePos === true
+/**
+ * Whether a member may work this site's register: `managePos`, as resolved
+ * for the site (AGL-4047). A finer action also needs its own key:
+ * `holdsPosPermission`.
+ */
+export function mayWorkRegister(membership: PosOpsMembership): boolean {
+  return membership.permissions.managePos === true
 }
 
 /**
@@ -198,10 +233,16 @@ export function isPosManager(memberRole: unknown, membership: PosOpsMembership):
   return memberRole === 'admin' && membership.orgWide && membership.hostRole === 'admin'
 }
 
+/**
+ * The register's gate for one route. `permission` names the finer register
+ * key the action needs (AGL-4047) on top of working the register at all; a
+ * member without it is answered 403 naming it.
+ */
 export async function authorizePosOps(
   deps: PosOpsDeps,
   req: PluginApiRequest,
   rawHostId: unknown,
+  permission?: PosPermission,
 ): Promise<PosOpsGate> {
   const authorization = String(req.headers.authorization ?? '')
   const idToken = authorization.startsWith('Bearer ') ? authorization.slice('Bearer '.length) : ''
@@ -218,10 +259,15 @@ export async function authorizePosOps(
   const hostRef = deps.firestore().collection('hosts').doc(hostId)
   const hostSnapshot = await hostRef.get()
   if (!hostSnapshot.exists) return { ok: false, status: 404, error: 'Unknown site' }
+  // Still read: whether the member is a workspace admin and this site's
+  // admin decides who may approve above the cashier's limits.
   const memberRole = (hostSnapshot.get('memberRoles') ?? {})[uid]
   const membership = await deps.membership(uid, hostId)
-  if (!mayWorkRegister(memberRole, membership)) {
+  if (!mayWorkRegister(membership)) {
     return { ok: false, status: 403, error: 'Not permitted' }
+  }
+  if (permission && !holdsPosPermission(membership.permissions, permission)) {
+    return { ok: false, status: 403, error: posPermissionRefusal(permission) }
   }
   const owner = await deps.orgForHost(hostId)
   if (!deps.posEntitled(owner?.org ?? null)) {
@@ -267,7 +313,7 @@ export async function readPosRegister(
  * A PIN never signs anybody in. It mints a short-lived, signed statement
  * that one member of THIS site is at THIS register — `{hostId, registerId,
  * memberUid, purpose, expiry}` under an HMAC — and the routes that take one
- * re-check that member's role and `managePos` on every use, so a PIN never
+ * re-check that member's permissions on every use, so a PIN never
  * carries more than its member holds right now, and a revoked member's
  * assertion stops working on the next tap rather than at expiry.
  *=========================================*/
@@ -363,14 +409,11 @@ export async function resolvePosStaffAssertion(
 ): Promise<string | null> {
   const read = readPosAssertion(deps, token, expected)
   if (!read) return null
+  const membership = await deps.membership(read.memberUid, expected.hostId)
+  if (expected.purpose !== 'manager') return mayWorkRegister(membership) ? read.memberUid : null
   const host = await hostRef.get()
   const memberRole = (host.get('memberRoles') ?? {})[read.memberUid]
-  const membership = await deps.membership(read.memberUid, expected.hostId)
-  const allowed =
-    expected.purpose === 'manager'
-      ? isPosManager(memberRole, membership)
-      : mayWorkRegister(memberRole, membership)
-  return allowed ? read.memberUid : null
+  return isPosManager(memberRole, membership) ? read.memberUid : null
 }
 
 /**

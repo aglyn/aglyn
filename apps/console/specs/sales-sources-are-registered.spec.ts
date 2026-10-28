@@ -54,8 +54,14 @@ function mockQuery(
       mockQuery(name, [
         ...filters,
         (data) => {
-          const held = data[field]
+          const held = data[field] ?? null
           if (op === '==') return held === value
+          // The hardware records date themselves in epoch milliseconds.
+          if (typeof held === 'number' && typeof value === 'number') {
+            if (op === '>=') return held >= value
+            if (op === '<') return held < value
+            return false
+          }
           if (!(held instanceof Date)) return false
           if (op === '>=') return held >= (value as Date)
           if (op === '<') return held < (value as Date)
@@ -206,9 +212,11 @@ describe('the facilitated-sales sources, after this app’s loader has run', () 
 
   it('answers every declared source, none refused', async () => {
     const payload = await returnFor()
-    expect(payload.sources?.map((entry) => [entry.pluginId, entry.outcome])).toEqual([
-      ['commerce', 'answered'],
-      ['marketplace', 'answered'],
+    expect(payload.sources?.map((entry) => [entry.pluginId, entry.id, entry.outcome])).toEqual([
+      ['commerce', 'storefront', 'answered'],
+      ['commerce', 'posHardware', 'answered'],
+      ['commerce', 'ownStores', 'answered'],
+      ['marketplace', 'marketplace', 'answered'],
     ])
     expect(taxReturnAttention(payload).clean).toBe(true)
   })
@@ -310,6 +318,57 @@ describe('the facilitated-sales sources, after this app’s loader has run', () 
       taxReturnAttention(payload).items.find((item) => item.id === 'marketplaceTaxCollected'),
     ).toMatchObject({ severity: 'blocking', count: 907 })
     expect(taxReturnCsv(payload)).toContain('"Tax collected, net",$9.07,')
+  })
+
+  /**
+   * AGL-4038. The platform's OWN card reader sales: their own section, never
+   * in the operator's invoice summary or the storefront's, and folded into
+   * Items 1–2 by the platform exactly once.
+   */
+  it('serves the hardware shop’s sales as their own section, and folds them into Items 1–2 once', async () => {
+    seedInvoice()
+    mockDocs.set('posHardwareSales/hw_q3', {
+      orderId: 'hw_q3',
+      orgId: 'org-4',
+      totalCents: 25_027,
+      taxCents: 1_907,
+      currency: 'usd',
+      shipTo: { country: 'US', state: 'TX', postalCode: '78701' },
+      automaticTax: true,
+      taxLines: [{ amountCents: 1_907, taxableAmountCents: 23_120 }],
+      status: 'shipped',
+      livemode: true,
+      paidAtMs: Date.UTC(2026, 8, 10),
+      refundedCents: null,
+      refundedAtMs: null,
+      canceledAtMs: null,
+    })
+    const payload = await returnFor()
+    // Nothing moved in the operator's own figures, or in the storefront's.
+    expect(payload.summary.transactionCount).toBe(1)
+    expect(payload.summary.totalSalesCents).toBe(10000)
+    expect(payload.summary.taxCollectedCents).toBe(660)
+    expect(section(payload, 'storefront').summary.aglynLiable.transactionCount).toBe(0)
+    // …and the hardware sale is in its own.
+    expect(section(payload, 'posHardware').summary).toMatchObject({
+      orders: 1,
+      totalSalesCents: 23_120,
+      taxableSalesCents: 23_120,
+      taxCollectedCents: 1_907,
+    })
+    // …and folded into Items 1–2 once (AGL-4038): the invoice's $100.00 and
+    // $80.00 base, plus the reader's $231.20 sale and base.
+    const lines = Object.fromEntries(taxReturnFilingLines(payload).map((line) => [line.label, line.dollars]))
+    expect(lines['Total Texas sales']).toBe('331.20')
+    expect(lines['Taxable sales']).toBe('311.20')
+    expect(lines['Tax collected (reconciliation)']).toBe('25.67')
+    expect(lines['Texas transactions']).toBe('2')
+    expect(Object.keys(lines).some((label) => label.includes('NOT in Item 1'))).toBe(false)
+    expect(taxReturnAttention(payload).items.map((item) => item.id)).not.toContain('posHardwareSalesNotInFigures')
+    const csv = taxReturnCsv(payload)
+    expect(csv).toContain('Items 1–2 by source and jurisdiction')
+    expect(csv).toContain('Card reader shop (online),US-TX,yes,1,231.20,231.20,19.07,0,0.00,0.00')
+    expect(csv).toContain('hw_q3,')
   })
 
   it('answers the page’s fixture exactly as the fixture says', async () => {

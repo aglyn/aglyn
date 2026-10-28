@@ -16,6 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn/server'
+import { withPosHardwareReceiptNotice } from '../model/pos-hardware-terms'
 import { pluginSmsMessaging } from '@aglyn/aglyn/plugin-manager/plugin-sms-messaging'
 import { resolveSiteTimeZone } from '@aglyn/aglyn/app-utils/collection-entry-date'
 import {
@@ -754,7 +755,8 @@ export async function notifyOrderBuyer(
       ),
       currency: store.currency,
       statusUrl: statusLink(store, ref),
-      receiptFooter: String(store.settings['receiptFooter'] ?? ''),
+      // A sale of card reader hardware states the terms it is sold under (AGL-4038).
+      receiptFooter: withPosHardwareReceiptNotice(String(store.settings['receiptFooter'] ?? ''), order),
       downloadLinks:
         event === 'receipt' ? downloadLinksFor(store, ref, order) : undefined,
       options,
@@ -896,7 +898,8 @@ export async function sendOrderReceipt(
       ),
       currency: store.currency,
       statusUrl: statusLink(store, ref),
-      receiptFooter: String(store.settings['receiptFooter'] ?? ''),
+      // A sale of card reader hardware states the terms it is sold under (AGL-4038).
+      receiptFooter: withPosHardwareReceiptNotice(String(store.settings['receiptFooter'] ?? ''), order),
       downloadLinks: downloadLinksFor(store, ref, order),
     })
     if (!message) return { outcome: 'failed', error: 'Nothing to send' }

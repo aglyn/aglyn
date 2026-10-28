@@ -49,6 +49,15 @@ jest.mock('../entitlement-gate.component', () => ({
 jest.mock('./pos-shift-report.component', () => ({
   printPosDocument: (...args: unknown[]) => mockPrint(...args),
 }))
+// The guests dialog has its own spec; here it only answers as the route did.
+jest.mock('../reservation-guests-dialog.component', () => ({
+  __esModule: true,
+  default: (props: { reservationId: string; onDone: (answer: unknown) => void }) => (
+    <button onClick={() => props.onDone({ guests: 4, added: 1, removed: 0, unchanged: false })}>
+      {`Save guests of ${props.reservationId}`}
+    </button>
+  ),
+}))
 
 import { PosCheckInsCard } from './pos-check-ins-card.component'
 
@@ -102,6 +111,84 @@ describe("today's check-ins", () => {
     render(<PosCheckInsCard hostId="shop" />)
     expect(screen.getByText(/members who can use the register/)).toBeTruthy()
     await waitFor(() => expect(mockFetch).not.toHaveBeenCalled())
+  })
+
+  it('shows an open rain check apart, and takes one back (pass dates)', async () => {
+    const rainCheck = {
+      kind: 'open',
+      fromDayKey: '2027-01-15',
+      toDayKey: null,
+      claimedDayKey: null,
+      byUid: 'cashier',
+      byName: 'Cal',
+      atMs: 1,
+    }
+    const list = {
+      ...LIST,
+      totals: { expected: 1, checkedIn: 0, rainChecks: 1 },
+      checkIns: [row('a', { rainCheck, rainCheckOpen: true }), row('b', { customerName: 'Pat Lee' })],
+    }
+    mockFetch.mockImplementation(async (_user: unknown, url: string, init: RequestInit) =>
+      init.method === 'POST'
+        ? { ok: true, status: 200, json: async () => ({ checkIn: row('a', {}) }) }
+        : { ok: true, status: 200, json: async () => (url ? list : list) },
+    )
+    render(<PosCheckInsCard hostId="shop" canManagePos />)
+    expect(await screen.findByText('Rain checks')).toBeTruthy()
+    expect(screen.getByText('Rain check from Fri, Jan 15: good on any later day')).toBeTruthy()
+    // One pass has a rain check to take back; the other can be given one.
+    expect(screen.getByText('Rain check', { selector: 'button' })).toBeTruthy()
+    fireEvent.click(screen.getByText('Undo rain check'))
+    await waitFor(() =>
+      expect(
+        mockFetch.mock.calls.some(
+          (call) => (call[2] as RequestInit).method === 'POST' && JSON.parse(String((call[2] as RequestInit).body)).action === 'undo_rain_check',
+        ),
+      ).toBe(true),
+    )
+    const posted = mockFetch.mock.calls.find((call) => (call[2] as RequestInit).method === 'POST')!
+    expect(JSON.parse(String((posted[2] as RequestInit).body))).toEqual({ hostId: 'shop', action: 'undo_rain_check', id: 'a' })
+  })
+
+  it('opens the rain check dialog on a pass', async () => {
+    mockFetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({ ...LIST, totals: { expected: 2, checkedIn: 1, rainChecks: 0 } }) })
+    render(<PosCheckInsCard hostId="shop" canManagePos />)
+    await screen.findByText('Blue #214')
+    // A checked-in pass and a stay have nothing to rain-check.
+    expect(screen.queryByText('Rain check', { selector: 'button' })).toBeNull()
+  })
+
+  it('sets how stays are checked in from the screen, for the store (AGL-4043)', async () => {
+    mockFetch.mockImplementation(async (_user: unknown, _url: string, init: RequestInit) =>
+      init.method === 'POST'
+        ? { ok: true, status: 200, json: async () => ({ stayCheckIn: 'guest' }) }
+        : { ok: true, status: 200, json: async () => ({ ...LIST, stayCheckIn: 'resource' }) },
+    )
+    render(<PosCheckInsCard hostId="shop" canManagePos />)
+    await screen.findByText('Blue #214')
+    expect(screen.getByRole('button', { name: 'As each resource is set' }).getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: 'One per guest' }))
+    await waitFor(() =>
+      expect(mockFetch.mock.calls.some((call) => (call[2] as RequestInit).method === 'POST')).toBe(true),
+    )
+    const posted = mockFetch.mock.calls.find((call) => (call[2] as RequestInit).method === 'POST')!
+    expect(JSON.parse(String((posted[2] as RequestInit).body))).toEqual({ hostId: 'shop', action: 'stay_mode', mode: 'guest' })
+  })
+
+  it('changes a stay’s guests from its row, then reads the day again (AGL-4043)', async () => {
+    const list = {
+      ...LIST,
+      checkIns: [LIST.checkIns[0], row('r_family_2027-01-15_0', { source: 'reservation', reservationId: 'family', orderLabel: null, itemName: 'Cabin 3' })],
+    }
+    mockFetch.mockResolvedValue({ ok: true, status: 200, json: async () => list })
+    render(<PosCheckInsCard hostId="shop" canManagePos />)
+    await screen.findByText('Blue #214')
+    // A pass has no guest count; only the stay's row offers one.
+    expect(screen.getAllByRole('button', { name: 'Guests' })).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Guests' }))
+    fireEvent.click(await screen.findByText('Save guests of family'))
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2))
+    expect(screen.queryByText('Save guests of family')).toBeNull()
   })
 
   it('draws nothing for a store with no register', () => {

@@ -33,6 +33,7 @@ import {
   List,
   ListItem,
   ListItemText,
+  MenuItem,
   Radio,
   RadioGroup,
   Stack,
@@ -47,14 +48,16 @@ import dayjs from 'dayjs'
 import { useEffect, useState } from 'react'
 import { WAIVERS_API_ROUTES } from '../constants/bundle-common'
 import {
+  WAIVER_ADULT_AGE_RANGE,
+  WAIVER_DEFAULT_ADULT_AGE,
   WAIVER_LIMITS,
   WAIVER_STATUS_LABELS,
   normalizeWaiverDraft,
+  waiverAdultAge,
   type WaiverCheckbox,
   type WaiverTemplate,
   type WaiverValidity,
 } from '../model/waiver'
-import { WAIVER_ADULT_AGE } from '../model/waiver-signature'
 import { useWaiversFetch } from './waivers-api'
 
 export interface WaiverEditorProps {
@@ -75,6 +78,12 @@ interface VersionRow {
 const STARTER_BODY =
   'Write your waiver here in your own words: the activity, the risks a rider takes on, what they agree to, and anything they must tell you before they ride.'
 
+/** Every adult age a waiver may set, youngest first. */
+const ADULT_AGES = Array.from(
+  { length: WAIVER_ADULT_AGE_RANGE.max - WAIVER_ADULT_AGE_RANGE.min + 1 },
+  (_, index) => WAIVER_ADULT_AGE_RANGE.min + index,
+)
+
 const blankValidity = (kind: WaiverValidity['kind'], current: WaiverValidity): WaiverValidity => {
   if (kind === current.kind) return current
   if (kind === 'season') return { kind: 'season', endDayKey: dayjs().endOf('year').format('YYYY-MM-DD') }
@@ -85,9 +94,10 @@ const blankValidity = (kind: WaiverValidity['kind'], current: WaiverValidity): W
 /**
  * Writing a waiver (AGL-4042), in the merchant's own words with the
  * console's rich text editor — no code, no markup — plus the boxes a signer
- * must tick, whether a parent may sign for minors, and how long a signature
- * lasts. Saving a change to any of that starts a new version; signatures
- * already taken keep the version they signed.
+ * must tick, the age from which a signer is an adult, whether a parent may
+ * sign for minors, and how long a signature lasts. Saving a change to any of
+ * that starts a new version; signatures already taken keep the version they
+ * signed.
  */
 export function WaiverEditor(props: WaiverEditorProps) {
   const { hostId, waiverId, canManage } = props
@@ -98,6 +108,7 @@ export function WaiverEditor(props: WaiverEditorProps) {
   const [body, setBody] = useState('')
   const [checkboxes, setCheckboxes] = useState<WaiverCheckbox[]>([])
   const [allowMinors, setAllowMinors] = useState(true)
+  const [adultAge, setAdultAge] = useState<number>(WAIVER_DEFAULT_ADULT_AGE)
   const [validity, setValidity] = useState<WaiverValidity>({ kind: 'visit' })
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -109,6 +120,7 @@ export function WaiverEditor(props: WaiverEditorProps) {
     setBody(waiver.body)
     setCheckboxes(waiver.checkboxes)
     setAllowMinors(waiver.allowMinors)
+    setAdultAge(waiverAdultAge(waiver))
     setValidity(waiver.validity)
   }
 
@@ -136,7 +148,7 @@ export function WaiverEditor(props: WaiverEditorProps) {
     }
   }, [ready, request, hostId, waiverId])
 
-  const draft = { title, body, checkboxes, allowMinors, validity }
+  const draft = { title, body, checkboxes, allowMinors, validity, adultAge }
 
   const save = async () => {
     const checked = normalizeWaiverDraft(draft)
@@ -193,8 +205,14 @@ export function WaiverEditor(props: WaiverEditorProps) {
 
   const dirty =
     !loaded ||
-    JSON.stringify({ title: loaded.title, body: loaded.body, checkboxes: loaded.checkboxes, allowMinors: loaded.allowMinors, validity: loaded.validity }) !==
-      JSON.stringify(draft)
+    JSON.stringify({
+      title: loaded.title,
+      body: loaded.body,
+      checkboxes: loaded.checkboxes,
+      allowMinors: loaded.allowMinors,
+      validity: loaded.validity,
+      adultAge: waiverAdultAge(loaded),
+    }) !== JSON.stringify(draft)
   const blockedReason = 'Writing waivers needs the Manage waivers permission.'
 
   return (
@@ -296,11 +314,26 @@ export function WaiverEditor(props: WaiverEditorProps) {
                 </Box>
               ) : null}
             </Stack>
+            <TextField
+              select
+              label="Adult age"
+              value={adultAge}
+              disabled={!canManage}
+              onChange={(event) => setAdultAge(Number(event.target.value))}
+              helperText={`Signers under ${adultAge} need a parent or guardian to sign for them.`}
+              sx={{ maxWidth: (theme) => theme.breakpoints.values.sm }}
+            >
+              {ADULT_AGES.map((age) => (
+                <MenuItem key={age} value={age}>
+                  {String(age)}
+                </MenuItem>
+              ))}
+            </TextField>
             <FormControlLabel
               control={
                 <Switch checked={allowMinors} disabled={!canManage} onChange={(event) => setAllowMinors(event.target.checked)} />
               }
-              label={`A parent or guardian may sign for riders under ${WAIVER_ADULT_AGE}`}
+              label={`A parent or guardian may sign for riders under ${adultAge}`}
             />
             <FormControl disabled={!canManage}>
               <FormLabel>{'One signature is good for'}</FormLabel>

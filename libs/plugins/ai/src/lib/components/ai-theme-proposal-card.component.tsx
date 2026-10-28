@@ -100,7 +100,14 @@ type Verdict = 'checking' | 'ready' | 'hidden'
 
 const isTerminal = (job: AiJobSummary) => AI_JOB_TERMINAL_STATUSES.includes(job.status)
 
-/** The proposal a theme job produced, when it produced one. */
+/**
+ * The jobs whose theme proposals this card offers: a theme job's, and a
+ * build's from the chat that planned a theme change (AGL-4077), which the
+ * owner applies here like any other.
+ */
+const PROPOSING_KINDS: readonly AiJobSummary['kind'][] = ['theme', 'build']
+
+/** The proposal a theme job, or a build's theme change, produced, when it produced one. */
 function proposalOf(job: AiJobSummary | null): AiThemeProposal | null {
   const output = job?.outputs.find((entry) => entry.resource === 'theme')
   return output ? readAiThemeProposal(output.proposal) : null
@@ -208,7 +215,7 @@ export function AiThemeProposalCard(props: ConsoleHostThemeZoneProps) {
           const jobs = (payload?.jobs ?? []) as AiJobSummary[]
           setRecent(
             jobs
-              .filter((entry) => entry.kind === 'theme' && entry.hostId === hostId)
+              .filter((entry) => PROPOSING_KINDS.includes(entry.kind) && entry.hostId === hostId)
               .filter((entry) => proposalOf(entry) !== null)
               .slice(0, RECENT_PROPOSALS_SHOWN),
           )
@@ -306,7 +313,8 @@ export function AiThemeProposalCard(props: ConsoleHostThemeZoneProps) {
 
   if (verdict !== 'ready') return null
 
-  const running = Boolean(job && !isTerminal(job))
+  // Only a theme job of the card's own is followed here; a build goes on building its pages elsewhere.
+  const running = Boolean(job && job.kind === 'theme' && !isTerminal(job))
 
   return (
       <CardDisplay

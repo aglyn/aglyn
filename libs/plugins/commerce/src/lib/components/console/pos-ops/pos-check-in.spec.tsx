@@ -183,6 +183,7 @@ describe('the check-in dialog', () => {
       hostId: 'shop',
       action: 'check_in',
       checkIns: [{ id: 'o_o1_0_0', wristband: { number: '214', color: '' } }],
+      day: '2027-01-15',
       registerId: 'front',
       cashierAssertion: 'pin-token',
     })
@@ -216,6 +217,89 @@ describe('the check-in dialog', () => {
     fireEvent.click(await screen.findByText('Undo'))
     await waitFor(() => expect(screen.getByText('Check in')).toBeTruthy())
     expect(bodyOf(mockFetch.mock.calls[1])).toEqual({ hostId: 'shop', action: 'undo', id: 'o_o1_0_0' })
+  })
+})
+
+describe('rain checks at the window (pass dates)', () => {
+  const open = async (rows: unknown[]) => {
+    mockFetch.mockResolvedValueOnce(reply(200, { ...DAY, customer: CUSTOMER, checkIns: rows }))
+    render(
+      <PosCheckInDialog
+        open
+        hostId="shop"
+        registerId="front"
+        cashierAssertion="pin-token"
+        initialCustomer={{ customerKey: CUSTOMER.customerKey }}
+        onClose={jest.fn()}
+      />,
+    )
+    await screen.findByText('Day pass · Adult (1 of 2)')
+  }
+  const rainCheck = {
+    kind: 'open',
+    fromDayKey: '2027-01-15',
+    toDayKey: null,
+    claimedDayKey: null,
+    byUid: 'cashier',
+    byName: 'Cal',
+    atMs: 1,
+  }
+
+  it('gives an open rain check on a pass, as the PIN’s cashier, and says so on the row', async () => {
+    await open(ROWS)
+    fireEvent.click(screen.getAllByText('Rain check')[0]!)
+    expect(screen.getByLabelText('Open: good on any later day until it is used')).toBeTruthy()
+    mockFetch.mockResolvedValueOnce(
+      reply(200, { checkIn: { ...ROWS[0], rainCheck, rainCheckOpen: true } }),
+    )
+    fireEvent.click(screen.getByText('Give rain check'))
+    expect(await screen.findByText(/Rain check from Fri, Jan 15: good on any later day/)).toBeTruthy()
+    expect(bodyOf(mockFetch.mock.calls[1])).toEqual({
+      hostId: 'shop',
+      action: 'rain_check',
+      id: 'o_o1_0_0',
+      kind: 'open',
+      registerId: 'front',
+      cashierAssertion: 'pin-token',
+    })
+    // An open rain check is used one at a time: "Check in all" leaves it.
+    expect(screen.queryByText('Check in all 2')).toBeNull()
+    expect(screen.getByText('Undo rain check')).toBeTruthy()
+  })
+
+  it('asks for the new day before moving a pass', async () => {
+    await open(ROWS)
+    fireEvent.click(screen.getAllByText('Rain check')[0]!)
+    fireEvent.click(screen.getByLabelText('Move it to a day'))
+    expect(screen.getAllByLabelText('New day').length).toBeGreaterThan(0)
+    expect((screen.getByText('Give rain check').closest('button') as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('shows a pass moved to another day with only its undo, and takes the rain check back', async () => {
+    const moved = {
+      ...ROWS[0],
+      dayKey: '2027-01-17',
+      rainCheck: { ...rainCheck, kind: 'date', toDayKey: '2027-01-17' },
+      rainCheckOpen: false,
+    }
+    await open([moved, ROWS[1]])
+    expect(screen.getByText(/Rain check: moved from Fri, Jan 15 to Sun, Jan 17/)).toBeTruthy()
+    expect(screen.getAllByText('Check in')).toHaveLength(1)
+    mockFetch.mockResolvedValueOnce(reply(200, { checkIn: { ...ROWS[0], rainCheck: null } }))
+    fireEvent.click(screen.getByText('Undo rain check'))
+    await waitFor(() => expect(screen.getAllByText('Check in')).toHaveLength(2))
+    expect(bodyOf(mockFetch.mock.calls[1])).toEqual({
+      hostId: 'shop',
+      action: 'undo_rain_check',
+      id: 'o_o1_0_0',
+      registerId: 'front',
+      cashierAssertion: 'pin-token',
+    })
+  })
+
+  it('offers no rain check on a stay', async () => {
+    await open([{ ...ROWS[0], source: 'reservation', orderId: null, orderLabel: null }, ROWS[1]])
+    expect(screen.getAllByText('Rain check')).toHaveLength(1)
   })
 })
 

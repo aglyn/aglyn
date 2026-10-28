@@ -17,9 +17,9 @@
 
 import type { AglynOrgMember } from '@aglyn/aglyn/foundation/definitions/organization.types'
 import {
-  projectHostMemberPermissions,
-  resolveCollaboratorHostPermissions,
-  resolveMemberHostPermissions,
+  projectHostMemberPermissions as projectAllHostMemberPermissions,
+  resolveCollaboratorHostPermissions as resolveAllCollaboratorHostPermissions,
+  resolveMemberHostPermissions as resolveAllMemberHostPermissions,
 } from '@aglyn/aglyn/app-utils/host-permissions'
 import {
   DEFAULT_ROLE_PERMISSIONS,
@@ -38,6 +38,21 @@ import {
 
 const HOST = 'host-1'
 const OTHER_HOST = 'host-2'
+
+/*
+ * The per-site maps carry every per-site key since AGL-4047, the core's site
+ * keys among them; this spec is about the AI keys, so it reads those.
+ */
+const aiOnly = <T extends Record<string, boolean> | null>(map: T): T =>
+  (map && Object.fromEntries(Object.entries(map).filter(([key]) => (AI_PERMISSION_KEYS as readonly string[]).includes(key)))) as T
+const resolveMemberHostPermissions = (...args: Parameters<typeof resolveAllMemberHostPermissions>) =>
+  aiOnly(resolveAllMemberHostPermissions(...args))
+const resolveCollaboratorHostPermissions = (...args: Parameters<typeof resolveAllCollaboratorHostPermissions>) =>
+  aiOnly(resolveAllCollaboratorHostPermissions(...args))
+const projectHostMemberPermissions = (...args: Parameters<typeof projectAllHostMemberPermissions>) =>
+  Object.fromEntries(
+    Object.entries(projectAllHostMemberPermissions(...args)).map(([uid, map]) => [uid, aiOnly(map)]),
+  )
 
 /**
  * The AI keys on both membership axes (AGL-2927), as this plugin declares

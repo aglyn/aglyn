@@ -42,7 +42,9 @@ import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filt
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
+  Alert,
   Button,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
@@ -50,6 +52,7 @@ import {
   MenuItem,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import {
@@ -89,7 +92,7 @@ import {
 import { coerceDocumentValues, datasetIntegrityUpdate, datasetValueToInput, effectiveDatasetModel, formatDatasetValue, modelFromFieldEntries, validateDocument } from '../model/dataset-models'
 import { fillRecordAddresses } from '../record-pages/record-pages'
 import { planReferenceFixups, referencingFieldIds, restrictedDeleteMessage } from '../model/dataset-record-delete-plan'
-import { datasetDisplayName, parseDatasetFieldEntries } from '../model/datasets'
+import { DATASET_SAMPLE_RECORD_NOTE, datasetDisplayName, isSampleDatasetRecord, parseDatasetFieldEntries } from '../model/datasets'
 import { datasetTransferResourceKey } from '../transfer/dataset-transfer-key'
 
 export interface HostDatasetsCardProps {
@@ -842,6 +845,8 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     id: string | null
     values: Record<string, string>
     errors: Record<string, string>
+    /** A sample a site start seeded (AGL-4065): saving it makes it the owner's. */
+    sample?: boolean
   } | null>(null)
   const handleOpenRecord = useCallback(
     (record?: any) => () => {
@@ -873,7 +878,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       const errors = record
         ? validateDocument(model, record.values ?? {})
         : {}
-      setEditor({ id: record?.$id ?? null, values, errors })
+      setEditor({ id: record?.$id ?? null, values, errors, ...(isSampleDatasetRecord(record) ? { sample: true } : {}) })
     },
     [org, recordCount, model, enqueueSnackbar],
   )
@@ -911,10 +916,19 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             // (`datasetIntegrityUpdate`); the merging form, because clearing
             // the last reference has to REMOVE the field rather than omit it.
             ...datasetIntegrityUpdate(model, coerced, deleteField()),
+            // A sample saved is the owner's row now (AGL-4065).
+            ...(editor.sample ? { sample: deleteField() } : {}),
             updatedAt: Timestamp.now(),
           },
           {
-            mergeFields: ['values', 'referencedIds', 'filterKeys', 'filterValues', 'updatedAt'],
+            mergeFields: [
+              'values',
+              'referencedIds',
+              'filterKeys',
+              'filterValues',
+              'updatedAt',
+              ...(editor.sample ? ['sample'] : []),
+            ],
           },
         )
         await announceRecords(selected.$id)
@@ -1137,8 +1151,14 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     () =>
       listFilterGridColumns(
         [
-          ...fields.map((fieldId) => {
+          ...fields.map((fieldId, column) => {
             const field = model.fields[fieldId]
+            const shown = (row: any) =>
+              field?.type === 'reference'
+                ? referenceLabel(fieldId, row.values?.[fieldId]) || '--'
+                : field
+                  ? formatDatasetValue(field, row.values?.[fieldId]) || '--'
+                  : '--'
             return {
               field: recordColumn(fieldId),
               headerName: field?.name ?? fieldId,
@@ -1147,11 +1167,19 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
               flex: 1,
               minWidth: 140,
               renderCell: ({ row }: { row: any }) =>
-                field?.type === 'reference'
-                  ? referenceLabel(fieldId, row.values?.[fieldId]) || '--'
-                  : field
-                    ? formatDatasetValue(field, row.values?.[fieldId]) || '--'
-                    : '--',
+                // A sample a site start seeded says so beside its first value (AGL-4065).
+                column === 0 && isSampleDatasetRecord(row) ? (
+                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center', height: '100%', minWidth: 0 }}>
+                    <Typography variant="body2" noWrap>
+                      {shown(row)}
+                    </Typography>
+                    <Tooltip title={DATASET_SAMPLE_RECORD_NOTE}>
+                      <Chip label="Sample" size="small" variant="outlined" color="info" />
+                    </Tooltip>
+                  </Stack>
+                ) : (
+                  shown(row)
+                ),
             }
           }),
           listActionsColumn(
@@ -1481,6 +1509,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
         <DialogContent
           sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
         >
+          {editor?.sample ? <Alert severity="info">{DATASET_SAMPLE_RECORD_NOTE}</Alert> : null}
           <DatasetRecordSiteContext.Provider value={recordSite}>
           {fields.map((fieldId, index) => {
             const field = model.fields[fieldId]

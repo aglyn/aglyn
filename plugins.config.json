@@ -309,6 +309,7 @@
         "console": "registerBookingsConsole",
         "tenantApi": "registerBookingsApi",
         "consoleApi": "registerBookingsConsoleApi",
+        "declarations": "registerBookingsDeclarations",
         "consoleServerDeclarations": "registerBookingsConsoleServerDeclarations",
         "tenantEmails": "bookingsTenantEmails"
       },
@@ -485,6 +486,18 @@
         }
       },
       "requiredPersonEraser": true,
+      "orgKeyedCollections": [
+        {
+          "$comment": "Each Stripe Reader S710's 4G months, which the monthly 4G charge counts (AGL-4038). No person on it. Top level and closed to every client, so org erasure removes them by orgId, after the org eraser has turned 4G off at Stripe.",
+          "name": "posCellularReaders",
+          "orgField": "orgId"
+        },
+        {
+          "$comment": "Each workspace's monthly 4G charge and its invoice id (AGL-4038). The invoice itself is the billing record in Stripe. Top level and closed to every client, so org erasure removes them by orgId.",
+          "name": "posCellularCharges",
+          "orgField": "orgId"
+        }
+      ],
       "modules": {
         "site": "site"
       },
@@ -569,7 +582,13 @@
               "relatedProductIds",
               "giftCard",
               "lowStockThreshold",
+              "modifierGroups",
+              "posQuickKey",
               "sellOnline",
+              "inStoreReviews",
+              "offerOnKiosk",
+              "hardwareSku",
+              "checkIn",
               "shipping",
               "createdAtMs",
               "updatedAtMs",
@@ -1080,7 +1099,9 @@
           ],
           "publicRoutes": [
             "/pos-display",
-            "/pos-kiosk"
+            "/pos-kiosk",
+            "/hardware-terms",
+            "/hardware-terms-sign"
           ]
         }
       }
@@ -3286,6 +3307,7 @@
         "consoleApi": "registerWaiversConsoleApi",
         "declarations": "registerWaiversDeclarations",
         "serverDeclarations": "registerWaiversServerDeclarations",
+        "consoleServerDeclarations": "registerWaiversConsoleServerDeclarations",
         "tenantEmails": "waiversTenantEmails"
       },
       "modules": {
@@ -3295,6 +3317,31 @@
         "waivers"
       ],
       "requiredPersonEraser": true,
+      "hostCollections": [
+        {
+          "name": "waiverTitles",
+          "mediaScan": "none",
+          "mediaScanReason": "Each waiver's title, status, version and last change, mirrored from the org's waivers by the waivers routes (AGL-4042) so the Besigner's Sign waiver element can pick one. No content field: a waiver's words stay in the org's waivers, and nothing here can name a library asset."
+        }
+      ],
+      "entityPickers": [
+        {
+          "kind": "waivers",
+          "attribute": "waiver-select",
+          "scope": "host",
+          "collection": "waiverTitles",
+          "nameField": "title",
+          "where": [
+            {
+              "field": "pickable",
+              "equals": true
+            }
+          ],
+          "singular": "waiver",
+          "plural": "waivers",
+          "page": "the Waivers page"
+        }
+      ],
       "catalog": {
         "order": 41,
         "$comment": "Digital waivers (AGL-4042): the merchant writes a waiver in the console's rich text editor with required checkboxes, a minors section a parent or guardian signs, and how long a signature lasts (the visit by default, a season, or a number of days). Riders sign before they arrive at a share link and QR (the console's public page `/kiosk/waivers/sign`) or the site's Sign waiver element, or at the window on a tablet staff hand over; a paper waiver is recorded with a photo. Every signature keeps the exact text it agreed to and its SHA-256, the e-signature consent sentence, and an audit trail, in `orgs/{orgId}/waiverSignatures`, which no client reads; the drawn signature and the paper photo are private Storage objects under the org prefix. The signer gets a signed PDF by email. It never imports commerce: it rides the `commerce` entitlement by key, files the signer through core's contact-capture seam, and shows each customer's status for the day in commerce's `posCheckIn` zone by its id. No outside vendor and no env.",
@@ -3322,7 +3369,8 @@
             "posCheckIn"
           ],
           "publicRoutes": [
-            "/sign"
+            "/sign",
+            "/display-sign"
           ]
         }
       }

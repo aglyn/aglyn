@@ -19,7 +19,8 @@
 import type { ConsolePluginPageProps } from '@aglyn/aglyn'
 import { GridItems } from '@aglyn/shared-ui-jsx'
 import { HubSections } from '@aglyn/shared-ui-next'
-import type { ReactNode } from 'react'
+import { lazy, Suspense, type ReactNode } from 'react'
+import { Stack } from '@mui/material'
 import {
   COMMERCE_SETTINGS_PAGE_ZONES,
   type CommerceConsoleSectionId,
@@ -49,6 +50,13 @@ import RegistersCard from './console/registers-card.component'
 import RegisterHardwareCards from './console/register-hardware-card.component'
 import PosDevicesCard from './console/pos-devices-card.component'
 import PosHardwareCard from './console/pos-hardware-card.component'
+
+/**
+ * Card readers the workspace bought in person, waiting to be set up
+ * (AGL-4038): its own chunk, drawn only while there is one.
+ */
+const PosHardwareWaitingCard = lazy(() => import('./console/pos-hardware-waiting-card.component'))
+import { holdsPosPermission, posPermissionRefusal } from '../model/plugin-permissions'
 import ReservationsCard from './console/reservations-card.component'
 import ReturnSettingsCard from './console/return-settings-card.component'
 import ReturnsCard from './console/returns-card.component'
@@ -129,6 +137,14 @@ function sectionBody(
   section: CommerceConsoleSectionId,
   hostId: string,
   canManagePos: boolean,
+  /** The register's finer keys this page's cards ask (AGL-4047). */
+  pos: { canSetUpDevices: boolean; canBuyHardware: boolean; canCashDrawer: boolean } = {
+    canSetUpDevices: canManagePos,
+    canBuyHardware: canManagePos,
+    canCashDrawer: canManagePos,
+  },
+  /** The reservation keys this site decides for the member (AGL-4047). */
+  reservations: { canManage: boolean; canWalkIn: boolean } = { canManage: true, canWalkIn: true },
 ): ReactNode {
   switch (section) {
     case 'catalog':
@@ -222,7 +238,13 @@ function sectionBody(
         />
       )
     case 'reservations':
-      return <ReservationsCard hostId={hostId} />
+      return (
+        <ReservationsCard
+          hostId={hostId}
+          canManage={reservations.canManage}
+          canWalkIn={reservations.canWalkIn}
+        />
+      )
     /*
      * The store's settings, a page each (AGL-3713). They were one `settings`
      * section — every card below in one column — and its old address opens
@@ -269,15 +291,34 @@ function sectionBody(
       ])
     case 'pos':
       return settingsPage(section, hostId, [
-        <RegistersCard key="registers" hostId={hostId} />,
+        // A reader bought in person waits at the top until it is set up
+        // (AGL-4038), in the registers' own grid cell so an empty one
+        // leaves no gap.
+        <Stack key="registers" spacing={3}>
+          <Suspense fallback={null}>
+            <PosHardwareWaitingCard
+              hostId={hostId}
+              {...(pos.canSetUpDevices ? {} : { devicesBlockedReason: posPermissionRefusal('posDevices') })}
+            />
+          </Suspense>
+          <RegistersCard hostId={hostId} />
+        </Stack>,
         <PosStaffPinsCard key="pins" hostId={hostId} />,
         // A register's printers, cash drawer and status (AGL-3619), one card
         // per register, after the list that names them.
-        <RegisterHardwareCards key="hardware" hostId={hostId} />,
+        <RegisterHardwareCards
+          key="hardware"
+          hostId={hostId}
+          blocked={{
+            ...(pos.canSetUpDevices ? {} : { devices: posPermissionRefusal('posDevices') }),
+            ...(pos.canCashDrawer ? {} : { drawer: posPermissionRefusal('posCashDrawer') }),
+          }}
+        />,
         <PosDevicesCard
           key="devices"
           hostId={hostId}
           canManagePos={canManagePos}
+          canSetUpDevices={pos.canSetUpDevices}
         />,
         // Card readers bought from the platform (AGL-4038), after the card
         // that registers them. Draws nothing until the deployment opens the
@@ -286,6 +327,7 @@ function sectionBody(
           key="hardware-shop"
           hostId={hostId}
           canManagePos={canManagePos}
+          canBuyHardware={pos.canBuyHardware}
         />,
       ])
     case 'channels':
@@ -346,13 +388,30 @@ function sectionBody(
  * this page only has to say what each section contains.
  */
 export function CommerceConsolePage(props: ConsolePluginPageProps) {
-  const { hostId, section, sections, basePath, permissions, hostRole } = props
+  const { hostId, section, sections, basePath, permissions } = props
   /*
    * The register's own gate, for the devices card's Pair display (AGL-3712):
-   * `managePos` on a site role that may run it — what the server's
-   * `mayWorkRegister` asks. The server stays the enforcement point.
+   * `managePos` — what the server's `mayWorkRegister` asks. The key decides,
+   * not the site role (AGL-4047). The server stays the enforcement point.
    */
-  const canManagePos = permissions?.managePos === true && hostRole?.canPublish === true
+  const canManagePos = permissions?.managePos === true
+  // The register's finer keys (AGL-4047), each following `managePos` unless a
+  // role or the member sets it — what the devices and hardware routes ask.
+  // Buying hardware stands on its own: the Hardware card is this page's for a
+  // member who holds it without the register.
+  const pos = {
+    canSetUpDevices: canManagePos && holdsPosPermission(permissions, 'posDevices'),
+    canBuyHardware: holdsPosPermission(permissions, 'posBuyHardware'),
+    canCashDrawer: canManagePos && holdsPosPermission(permissions, 'posCashDrawer'),
+  }
+  // The reservation keys (AGL-4047), whose preset is the member's role on
+  // this site; the shell decides them for the site in view. A map that does
+  // not carry one (a shell that predates them) leaves the card as it was:
+  // the rules and the routes decide.
+  const reservations = {
+    canManage: permissions?.['commerce.reservations'] !== false,
+    canWalkIn: permissions?.['commerce.walkIns'] !== false,
+  }
 
   /*
    * Nothing, deliberately, while the redirect is in flight.
@@ -365,7 +424,7 @@ export function CommerceConsolePage(props: ConsolePluginPageProps) {
 
   return (
     <HubSections sections={sections}>
-      {sectionBody(section as CommerceConsoleSectionId, hostId, canManagePos)}
+      {sectionBody(section as CommerceConsoleSectionId, hostId, canManagePos, pos, reservations)}
     </HubSections>
   )
 }

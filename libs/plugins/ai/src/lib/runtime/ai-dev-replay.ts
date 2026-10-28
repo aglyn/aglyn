@@ -99,6 +99,7 @@ export interface AiReplayRequest {
   maxTokens: number
   thinking?: AiProviderRequest['thinking']
   effort?: AiProviderRequest['effort']
+  toolChoice?: AiProviderRequest['toolChoice']
 }
 
 /** The request's replay key: a SHA-256 of everything that decides the answer. */
@@ -117,6 +118,8 @@ export function aiDevReplayKey(providerId: string, stream: boolean, request: AiR
         maxTokens: request.maxTokens,
         thinking: request.thinking ?? null,
         effort: request.effort ?? null,
+        // A named tool can change the answer (AGL-4076); keyed only when named, so no older key moves.
+        ...(request.toolChoice ? { toolChoice: request.toolChoice } : {}),
       }),
     )
     .digest('hex')

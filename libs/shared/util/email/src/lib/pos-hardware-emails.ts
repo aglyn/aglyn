@@ -20,7 +20,13 @@
  *
  * The commerce plugin's POS hardware shop sends these to the person who
  * placed the order: the order received, the parcel shipped with its
- * tracking, and the parcel delivered with the way to set the reader up. The
+ * tracking, the parcel delivered with the way to set the reader up, and the
+ * order canceled and refunded before it shipped (by staff, or because the
+ * workspace was deleted or the buyer's account closed), a reader bought in
+ * person refunded by staff — and, for a reader bought in
+ * person at the platform's own store by someone with no account yet, the
+ * invitation to sign up with that address so the order joins their
+ * workspace on its own. The
  * platform is the seller, so they are SYSTEM emails in the platform's brand
  * (or the workspace's white label), not a store's own emails to its buyers.
  *
@@ -40,6 +46,10 @@ export const POS_HARDWARE_EMAIL_KEYS = {
   received: 'pos-hardware-order-received',
   shipped: 'pos-hardware-order-shipped',
   delivered: 'pos-hardware-order-delivered',
+  canceled: 'pos-hardware-order-canceled',
+  refunded: 'pos-hardware-order-refunded',
+  invited: 'pos-hardware-sign-up-invite',
+  returnRefunded: 'pos-hardware-return-refunded',
 } as const
 
 const SOURCE = 'libs/plugins/commerce/src/lib/server/pos-hardware-notify.ts'
@@ -84,6 +94,36 @@ function tokens(origin: string): Record<string, SystemEmailMergeToken> {
       name: 'order.setupUrl',
       description: 'The POS devices card, where a reader is added to a register',
       sample: `${origin}${SAMPLE_POS_PAGE}#pos-devices`,
+    },
+    refunded: {
+      name: 'order.refunded',
+      description: 'What was refunded to the card, shipping and tax included',
+      sample: '$123.45',
+    },
+    cancelReason: {
+      name: 'order.cancelReason',
+      description: 'Who canceled the order, and why, as a sentence',
+      sample: 'We canceled your order because the Test Org workspace was deleted.',
+    },
+    refundedNow: {
+      name: 'order.refundedNow',
+      description: 'What this refund returned to the card, tax included',
+      sample: '$324.75',
+    },
+    paid: {
+      name: 'order.total',
+      description: 'What was paid at the register, tax included',
+      sample: '$324.75',
+    },
+    kept: {
+      name: 'order.kept',
+      description: 'What a return did not refund: the original shipping and any restocking fee',
+      sample: '$25.00',
+    },
+    signUpUrl: {
+      name: 'order.signUpUrl',
+      description: 'Where to create an account with this address',
+      sample: `${origin}/signup`,
     },
   }
 }
@@ -164,6 +204,109 @@ export function posHardwareSystemEmailTemplates(
         { block: 'text', text: 'The M2 pairs by Bluetooth from the {{brand.productName}} POS app instead. If anything arrived damaged, contact support: {{brand.supportUrl}}', variant: 'caption' },
       ],
       footerReason: footer,
+      source: SOURCE,
+    },
+    {
+      key: POS_HARDWARE_EMAIL_KEYS.canceled,
+      name: 'Card reader order canceled and refunded',
+      description:
+        'Sent when a card reader order from the POS hardware shop is canceled ' +
+        'and refunded in full before it shipped: by the team from the staff ' +
+        'Hardware orders page when they choose to email the buyer, or because ' +
+        'the workspace that bought it was deleted or the account that placed ' +
+        'it was closed. Sent once per order.',
+      deliveredBy: 'resend',
+      defaultSubject: 'Your card reader order {{order.number}} was canceled and refunded',
+      mergeTokens: [t.org, t.site, t.number, t.items, t.refunded, t.cancelReason],
+      defaultBody: [
+        { block: 'text', text: '{{site.name}} · Order {{order.number}}', variant: 'eyebrow' },
+        { block: 'text', text: 'Your hardware order was canceled and refunded', variant: 'heading' },
+        { block: 'text', text: '{{order.cancelReason}} It had not shipped yet, so we refunded the full amount, shipping and tax included, to the card you paid with.', variant: 'body' },
+        { block: 'text', text: '{{order.items}}\nRefunded: {{order.refunded}}', variant: 'details' },
+        { block: 'text', text: 'What happens next', variant: 'subheading' },
+        { block: 'text', text: 'Nothing will ship, and there is nothing you need to do. Most banks show the refund on the card within 5 to 10 business days. If a parcel from this order arrives anyway, contact support before opening it and we will arrange its return.', variant: 'body' },
+        { block: 'button', label: 'Contact support', href: '{{brand.supportUrl}}' },
+        { block: 'text', text: 'Order {{order.number}} for {{org.name}}.', variant: 'caption' },
+      ],
+      footerReason: footer,
+      source: SOURCE,
+    },
+    {
+      key: POS_HARDWARE_EMAIL_KEYS.refunded,
+      name: 'Card reader bought in person: refunded',
+      description:
+        'Sent when the team refunds card reader hardware someone bought in ' +
+        'person at the platform’s own store, from the staff Hardware orders ' +
+        'page, when they choose to email the buyer. Sent once per refund.',
+      deliveredBy: 'resend',
+      defaultSubject: 'Your refund for card reader order {{order.number}}',
+      mergeTokens: [t.number, t.items, t.refundedNow, t.refunded, t.paid],
+      defaultBody: [
+        { block: 'text', text: 'Order {{order.number}}', variant: 'eyebrow' },
+        { block: 'text', text: 'We refunded your card reader purchase', variant: 'heading' },
+        { block: 'text', text: 'We refunded {{order.refundedNow}} for the card reader hardware you bought from {{brand.productName}} in person, to the card you paid with.', variant: 'body' },
+        { block: 'text', text: '{{order.items}}\nRefunded now: {{order.refundedNow}}\nRefunded in total: {{order.refunded}}\nPaid: {{order.total}}', variant: 'details' },
+        { block: 'text', text: 'What happens next', variant: 'subheading' },
+        { block: 'text', text: 'There is nothing you need to do. Most banks show the refund on the card within 5 to 10 business days. If the amount is not what you expected, contact support and quote the order number.', variant: 'body' },
+        { block: 'button', label: 'Contact support', href: '{{brand.supportUrl}}' },
+        { block: 'text', text: 'Order {{order.number}}, bought in person from {{brand.productName}}.', variant: 'caption' },
+      ],
+      footerReason:
+        'You’re receiving this because you bought card reader hardware from ' +
+        '{{brand.productName}} in person and a refund was made on it.',
+      source: SOURCE,
+    },
+    {
+      key: POS_HARDWARE_EMAIL_KEYS.returnRefunded,
+      name: 'Card reader order returned: refunded',
+      description:
+        'Sent when the team refunds a card reader order that was shipped to ' +
+        'the buyer and sent back after they asked to return it, from the staff ' +
+        'Hardware orders page, when they choose to email the buyer. Sent once ' +
+        'per refund.',
+      deliveredBy: 'resend',
+      defaultSubject: 'We refunded your returned card reader order {{order.number}}',
+      mergeTokens: [t.org, t.number, t.items, t.refundedNow, t.kept, t.total, t.ordersUrl],
+      defaultBody: [
+        { block: 'text', text: 'Order {{order.number}}', variant: 'eyebrow' },
+        { block: 'text', text: 'Your return is refunded', variant: 'heading' },
+        { block: 'text', text: 'We received the card reader hardware you sent back and refunded {{order.refundedNow}} to the card you paid with: the price of the items and the tax on them.', variant: 'body' },
+        { block: 'text', text: '{{order.items}}\nRefunded: {{order.refundedNow}}\nNot refunded: {{order.kept}}\nPaid: {{order.total}}', variant: 'details' },
+        { block: 'text', text: 'What was not refunded', variant: 'subheading' },
+        { block: 'text', text: 'The original shipping is not refunded on a return, and any restocking fee charged for the return comes off the refund, as the hardware terms of sale say.', variant: 'body' },
+        { block: 'text', text: 'What happens next', variant: 'subheading' },
+        { block: 'text', text: 'There is nothing you need to do. Most banks show the refund on the card within 5 to 10 business days. The order shows as Refunded on the Hardware card.', variant: 'body' },
+        { block: 'button', label: 'Open the Hardware card', href: '{{order.ordersUrl}}' },
+        { block: 'text', text: 'If the amount is not what you expected, contact support and quote order {{order.number}}.', variant: 'caption' },
+      ],
+      footerReason:
+        'You’re receiving this because you ordered card reader hardware from ' +
+        '{{brand.productName}} for {{org.name}} and returned it.',
+      source: SOURCE,
+    },
+    {
+      key: POS_HARDWARE_EMAIL_KEYS.invited,
+      name: 'Card reader bought in person: create your account',
+      description:
+        'Sent to someone who bought a card reader in person from the platform ' +
+        'with no account yet, inviting them to sign up with the same address ' +
+        'so the order shows up in their workspace on its own.',
+      deliveredBy: 'resend',
+      defaultSubject: 'Your card reader from {{brand.productName}} is waiting for your account',
+      mergeTokens: [t.number, t.items, t.paid, t.signUpUrl],
+      defaultBody: [
+        { block: 'text', text: 'Order {{order.number}}', variant: 'eyebrow' },
+        { block: 'text', text: 'Your card reader is ready for your account', variant: 'heading' },
+        { block: 'text', text: 'Thanks for buying from us in person. Create your {{brand.productName}} account with this email address and the order shows up in your workspace on its own, ready to set up. There is nothing to accept.', variant: 'body' },
+        { block: 'text', text: '{{order.items}}\nPaid: {{order.total}}', variant: 'details' },
+        { block: 'text', text: 'What happens next', variant: 'subheading' },
+        { block: 'text', text: '1. Create your account with this email address.\n2. Create your workspace and your store.\n3. Open Products → Point of sale, where the order is waiting, and add the reader to a register with the pairing code it shows.', variant: 'details' },
+        { block: 'button', label: 'Create your account', href: '{{order.signUpUrl}}' },
+        { block: 'text', text: 'Taking card payments at the register comes with a plan that includes the point of sale. If you did not buy a card reader from {{brand.productName}}, you can ignore this email.', variant: 'caption' },
+      ],
+      footerReason:
+        'You’re receiving this because you bought card reader hardware from ' +
+        '{{brand.productName}} in person and gave this address.',
       source: SOURCE,
     },
   ]

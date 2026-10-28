@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { holdsCommerceSiteKey } from './commerce-site-keys'
+import { commerceSitePermissionRefusal } from '../model/plugin-permissions'
 import * as Aglyn from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import * as CommerceModel from '../model'
@@ -86,8 +88,10 @@ export const ordersShippingPrepareHandler: Aglyn.PluginApiHandler = async (req, 
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
     const hostSnapshot = await firebaseAdmin.app().firestore().collection('hosts').doc(hostId).get()
     if (!hostSnapshot.exists) return res.status(404).json({ error: 'Unknown site' })
-    const role = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (role !== 'admin' && role !== 'editor') return res.status(403).json({ error: 'Not permitted' })
+    // "Manage orders" (`commerce.orders`, AGL-4047).
+    if (!holdsCommerceSiteKey(hostSnapshot, decoded.uid, 'commerce.orders')) {
+      return res.status(403).json({ error: commerceSitePermissionRefusal('commerce.orders') })
+    }
     const owner = await getOrgForHost(hostId)
     if (!Aglyn.checkEntitlement(owner?.org as never, 'commerce')) {
       return res.status(403).json({ error: 'Selling is not enabled' })

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import {
   ERROR_SCREEN_MAX_PER_HOST,
   HOST_ERROR_SCREEN_SLOTS,
@@ -43,7 +44,6 @@ import { revalidateEntireHost } from '../../../../utils/server/tenant-revalidate
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /** Roles allowed to write host content — mirrors canWriteHostContent(). */
-const HOST_WRITER_ROLES = new Set(['admin', 'editor'])
 
 /** What an ordinary page carries. Explicit, so a promotion is a WRITE and not
  * a field deletion the rules would have to reason about separately. */
@@ -433,11 +433,11 @@ async function handler(request: Request): Promise<Response> {
       if (!hostSnapshot.exists) {
         return Response.json({ error: 'Unknown site' }, { status: 404 })
       }
-      const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-      if (!HOST_WRITER_ROLES.has(String(memberRole))) {
-        return Response.json({
-          error: 'Editing pages requires the editor role',
-        }, { status: 403 })
+      // "Publish site content" (`site.publish`, AGL-4047): converting a page
+      // and setting the error screens change what the live site routes, which
+      // is why this asked the publishing roles (Admin, Editor) before.
+      if (!holdsSiteKey(hostSnapshot, decoded.uid, 'site.publish')) {
+        return Response.json({ error: siteKeyRefusal('site.publish') }, { status: 403 })
       }
       const orgId = hostSnapshot.get('orgId') as string | undefined
       if (orgId) {

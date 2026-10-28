@@ -18,10 +18,12 @@
 /**
  * POS hardware orders (AGL-4038): `orgs/{orgId}/hardwareOrders` is written by
  * the commerce plugin's webhook and staff route only, so NO client writes one —
- * not the owner, not an admin, not staff. Reads are open to staff and to an
- * org-wide member who may run the register; a site-scoped collaborator, a
- * viewer, an editor whose `managePos` is switched off, a member of another
- * workspace and a signed-out visitor are refused.
+ * not the owner, not an admin, not staff. Reads are open to staff, to an
+ * org-wide member who may run the register, and to an org-wide member granted
+ * "Buy point of sale hardware" without it (AGL-4047); a site-scoped
+ * collaborator (granted it or not), a viewer, an editor whose `managePos` is
+ * switched off, a member of another workspace and a signed-out visitor are
+ * refused.
  *
  * The retained sale records beside them, `posHardwareSales/{orderId}`, are
  * the platform's tax and accounting records and outlive the workspace: NO
@@ -42,7 +44,10 @@ const ADMIN = 'uid-hw-admin'
 const EDITOR = 'uid-hw-editor'
 const EDITOR_NO_POS = 'uid-hw-editor-no-pos'
 const VIEWER = 'uid-hw-viewer'
+const BUYER = 'uid-hw-buyer'
+const BUYER_OVERRIDE = 'uid-hw-buyer-override'
 const SCOPED = 'uid-hw-scoped'
+const SCOPED_BUYER = 'uid-hw-scoped-buyer'
 const OUTSIDER = 'uid-hw-outsider'
 const STAFF = 'uid-hw-staff'
 const ORDER = 'hw_0123456789abcdef0123'
@@ -101,10 +106,28 @@ await env.withSecurityRulesDisabled(async (context) => {
     permissions: { managePos: false },
   })
   await setDoc(doc(db, 'orgs', ORG, 'members', VIEWER), { role: 'viewer', allHosts: true })
+  // A bookkeeper: granted the hardware shop by a role, without the register.
+  await setDoc(doc(db, 'orgs', ORG, 'members', BUYER), {
+    role: 'viewer',
+    allHosts: true,
+    resolvedPermissions: { managePos: false, posBuyHardware: true },
+  })
+  // The same, by their own override, before the projection reached them.
+  await setDoc(doc(db, 'orgs', ORG, 'members', BUYER_OVERRIDE), {
+    role: 'viewer',
+    allHosts: true,
+    permissions: { posBuyHardware: true },
+  })
   await setDoc(doc(db, 'orgs', ORG, 'members', SCOPED), {
     role: 'editor',
     allHosts: false,
     hostAccess: { 'host-hw': 'editor' },
+  })
+  await setDoc(doc(db, 'orgs', ORG, 'members', SCOPED_BUYER), {
+    role: 'viewer',
+    allHosts: false,
+    hostAccess: { 'host-hw': 'viewer' },
+    resolvedPermissions: { posBuyHardware: true },
   })
   await setDoc(doc(db, 'orgs', OTHER_ORG, 'members', OUTSIDER), { role: 'owner', allHosts: true })
   await setDoc(orderRef(db), ORDER_DATA)
@@ -117,12 +140,15 @@ const mayRead = [
   ['the OWNER', () => as(OWNER)],
   ['an ADMIN', () => as(ADMIN)],
   ['an org-wide EDITOR', () => as(EDITOR)],
+  ['an org-wide member granted buying hardware without the register', () => as(BUYER)],
+  ['an org-wide member granted buying hardware by their own override', () => as(BUYER_OVERRIDE)],
   ['STAFF', () => as(STAFF, { staff: true })],
 ]
 const mayNotRead = [
   ['an editor whose managePos is off', () => as(EDITOR_NO_POS)],
   ['a VIEWER', () => as(VIEWER)],
   ['a site-scoped collaborator', () => as(SCOPED)],
+  ['a site-scoped collaborator granted buying hardware', () => as(SCOPED_BUYER)],
   ['a member of another workspace', () => as(OUTSIDER)],
   ['a signed-out visitor', () => env.unauthenticatedContext().firestore()],
 ]
@@ -159,6 +185,14 @@ for (const [who, db] of [...mayRead, ...mayNotRead]) {
   )
   await check(`${who} cannot change a sale record`, () => assertFails(updateDoc(saleRef(db()), { totalCents: 1 })))
   await check(`${who} cannot delete a sale record`, () => assertFails(deleteDoc(saleRef(db()))))
+  // 4G (AGL-4038): server-only, for every client.
+  for (const name of ['posCellularReaders', 'posCellularCharges']) {
+    await check(`${who} cannot read ${name}`, () => assertFails(getDoc(doc(db(), name, 'host-hw_tmr_1'))))
+    await check(`${who} cannot list ${name}`, () => assertFails(getDocs(collection(db(), name))))
+    await check(`${who} cannot write ${name}`, () =>
+      assertFails(setDoc(doc(db(), name, 'host-hw_tmr_2'), { orgId: ORG, enabled: true })),
+    )
+  }
 }
 // The record outlives the workspace: with the org and its roster gone, it
 // is still unreadable to the former owner.
@@ -173,7 +207,7 @@ await env.withSecurityRulesDisabled(async (context) => {
   const db = context.firestore()
   await deleteDoc(orderRef(db))
   await deleteDoc(saleRef(db))
-  for (const uid of [OWNER, ADMIN, EDITOR, EDITOR_NO_POS, VIEWER, SCOPED]) {
+  for (const uid of [OWNER, ADMIN, EDITOR, EDITOR_NO_POS, VIEWER, BUYER, BUYER_OVERRIDE, SCOPED, SCOPED_BUYER]) {
     await deleteDoc(doc(db, 'orgs', ORG, 'members', uid))
   }
   await deleteDoc(doc(db, 'orgs', OTHER_ORG, 'members', OUTSIDER))

@@ -59,6 +59,37 @@ describe('the check-in fields', () => {
     })
   })
 
+  it('asks the buyer which day only when turned on, keeping the people per item (pass dates)', () => {
+    const update = jest.fn()
+    const { rerender } = render(
+      <ProductCheckInFields checkIn={{ enabled: true, headcount: 2 }} variants={VARIANTS} update={update} />,
+    )
+    fireEvent.click(screen.getByLabelText('Ask the buyer which day'))
+    expect(update).toHaveBeenLastCalledWith({ checkIn: { enabled: true, headcount: 2, askUseDate: true } })
+    rerender(
+      <ProductCheckInFields
+        checkIn={{ enabled: true, headcount: 2, askUseDate: true }}
+        variants={VARIANTS}
+        update={update}
+      />,
+    )
+    // Typing the people per item keeps the ask.
+    fireEvent.change(screen.getByLabelText('People per item'), { target: { value: '3' } })
+    expect(update).toHaveBeenLastCalledWith({ checkIn: { enabled: true, headcount: 3, askUseDate: true } })
+    fireEvent.click(screen.getByLabelText('Ask the buyer which day'))
+    expect(update).toHaveBeenLastCalledWith({ checkIn: { enabled: true, headcount: 2 } })
+  })
+
+  it('lets a variant that needs check-in ask for its own day', () => {
+    const update = jest.fn()
+    const variants = [VARIANTS[0], { ...VARIANTS[1], checkIn: { enabled: true, headcount: 1 } }]
+    render(<ProductCheckInFields checkIn={{ enabled: false }} variants={variants} update={update} />)
+    fireEvent.click(screen.getByLabelText('Ask which day'))
+    expect(update.mock.calls[0][0]({ variants })).toEqual({
+      variants: [VARIANTS[0], { ...VARIANTS[1], checkIn: { enabled: true, headcount: 1, askUseDate: true } }],
+    })
+  })
+
   it('shows no per-variant choice for a product with one variant', () => {
     render(
       <ProductCheckInFields checkIn={{ enabled: true }} variants={[{ id: 'default' }]} update={jest.fn()} />,

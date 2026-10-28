@@ -89,7 +89,7 @@ describe('ShipStation card', () => {
       .mockResolvedValueOnce(json(200, { available: true, connected: true, username: 'aglyn-abc', createdAtMs: 1 }))
       .mockResolvedValueOnce(json(200, { available: true, connected: true, username: 'aglyn-abc', createdAtMs: 1, password: 'kept-sealed' }))
     render(<ShipStationCard hostId="host-1" />)
-    expect(await screen.findByText(/Only a site admin can show it/)).toBeTruthy()
+    expect(await screen.findByText(/Showing it takes the "Connect shipping apps" permission/)).toBeTruthy()
     expect(screen.queryByText('kept-sealed')).toBeNull()
     expect(screen.getByRole('button', { name: 'New password' })).toBeTruthy()
     await act(async () => {

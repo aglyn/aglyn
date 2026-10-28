@@ -32,6 +32,44 @@ Billing. If you downgrade below your register count, the
 extra registers (newest first) stop taking payments and show **Over plan
 limit** until you remove them or upgrade again — none are deleted.
 
+## Who can do what at the register {#who-can-do-what-at-the-register}
+
+Anyone with the **Use the point of sale** permission for the site can open the
+register. The permission decides on its own: owners, admins and editors hold it by
+default and viewers don't, and a site viewer you grant it in a custom role or for
+one member works the register too. Five finer permissions then decide which of its
+jobs are theirs:
+
+| Permission | What it covers |
+| --- | --- |
+| **Sell at the register** | Ringing up sales and taking payment, at the register, the kiosk and the Aglyn POS apps |
+| **Refunds and returns** | Refunding point of sale orders at the register, up to its refund limit, and taking returns and exchanges |
+| **Give discounts at the register** | The register's **Discount %**. A shopper's discount code and the store's own promotions apply without it |
+| **Cash drawer and shifts** | Opening and closing shifts, cash in and out, X and Z reports, and opening the drawer without a sale |
+| **Registers and devices** | Adding, changing and removing card readers, receipt printers and customer displays, and the reader start-up screen |
+
+Each one follows **Use the point of sale** until you set it, so everyone who could
+use the register keeps exactly what they had. To narrow one, for example a
+cashier who rings sales but does not refund, deny it in a
+[custom role](../../workspace-and-billing/teams-and-roles/custom-roles.md#point-of-sale-permissions)
+or for one member. A control someone does not hold stays on screen, disabled,
+with the reason. A cashier switched in with a PIN needs **Sell at the register**
+too.
+
+The register belongs to its site. An editor who works across the whole workspace
+but has **Viewer** or **Author** access to one site doesn't work that site's
+register, while keeping it on every other site. To let them sell there anyway,
+choose **Permissions** beside them on that site's **Users** card and allow **Sell at
+the register** (or **Use the point of sale** for the whole register). To let them
+keep the register on every such site, set the permission to **Keep this permission**
+on their custom role or their own **Permissions** — see
+[A site's access narrows its register and waivers](../../workspace-and-billing/teams-and-roles/custom-roles.md#site-access-narrows).
+**Buy point of sale hardware** is the workspace's, so it doesn't change.
+
+**Buy point of sale hardware** follows **Use the point of sale** the same way, and
+also stands on its own, so someone can order readers without working the register.
+See [Who can buy hardware](pos-hardware.md#who-can-buy-hardware).
+
 ## The register
 
 Open **`/{site}/pos`** in the console for a touch-first register. Pick which
@@ -166,9 +204,11 @@ your customer, so no money changes hands.
 A **split** sale charges the fee only on the part of the sale its card and
 room-charge payments paid: a $100 sale paid $60 by card and
 $40 in cash carries the fee on $60, deducted from that card's payout, and
-nothing on the cash. Sales you ring while the register is
-[offline](pos-operations.md#selling-while-offline) are cash, so they carry no
-fee either. **Tips** carry no platform fee. Stripe's own processing cost on a
+nothing on the cash. Cash sales you ring while the register is
+[offline](pos-operations.md#selling-while-offline) carry no fee either, and a
+card the Aglyn POS app
+[takes offline](pos-operations.md#cards-taken-offline-in-the-aglyn-pos-app)
+carries the card fee, as it would online. **Tips** carry no platform fee. Stripe's own processing cost on a
 card payment is passed through at cost, like any other card sale, and is
 worked out on the whole charge, tip included, because that is what Stripe
 charges on.
@@ -273,6 +313,9 @@ logo (or name) and a welcome line between sales, the basket with its total
 as you ring it up, and it lets the customer choose a tip and a receipt
 themselves.
 
+Other features can use it too. At check-in, [Waivers](waivers.md#on-the-customer-display)
+can open a waiver on the display for the rider to sign.
+
 To pair one, start from either place:
 
 - **On the register**, tap **Pair display** next to the **Register** heading.
@@ -327,6 +370,12 @@ browse your products by category, choose sizes and modifiers, review the
 total with tax, and pay — or send the order to the counter. It belongs to
 one register, and its orders are register sales: the same prices, tax,
 automatic promotions and stock as a sale you ring up.
+
+The kiosk offers your active products except subscription-only products, gift
+cards and digital downloads, which need more than a counter can hand over.
+You choose the rest: turn off **Offer on the kiosk** on a product, or clear
+one of its variants, to keep it off the kiosk (see
+[Offer on the kiosk](catalog.md#offer-on-the-kiosk)).
 
 To pair one:
 
@@ -403,9 +452,8 @@ screen locks for 15 minutes.
 Paired kiosks are listed with your customer displays under **Products →
 Point of sale → POS devices**, where **Sign out** unpairs one.
 
-Pairing from either place needs the same access as the register itself: an
-admin or editor on the site with the **Use the point of sale** permission, on a plan
-that includes POS. For anyone else the **POS devices** card shows why
+Pairing from either place needs the same access as the register itself: the
+**Use the point of sale** permission for the site, on a plan that includes POS. For anyone else the **POS devices** card shows why
 **Pair display** is unavailable.
 
 ## Reservations
@@ -424,6 +472,20 @@ For stays (cabins, rooms, rentals):
    (with a folio summary if the guest charged store purchases to the
    room), walk-ins, no-shows, and cancellations.
 
+**Guests.** The Reservation widget asks how many guests (optional), up to what
+the resource **Sleeps**, or 50 when that isn't set. A walk-in takes the same
+**Guests** field, and the **Reservations** card shows the count on each stay.
+At the check-in window, a resource set to **One check-in per guest** under
+**At check-in** gives each guest their own check-in and wristband; see
+[check-in at the window](pos-operations.md#check-in-at-the-window).
+
+To change the count after a stay is booked, choose **Guests** on the stay in
+the **Reservations** card, enter the new number and **Save**. It takes 1 up to
+what the resource **Sleeps**, while the stay is pending, confirmed or checked
+in. Changing it needs the **Book walk-ins and change guests** permission on the
+site, the same as booking a walk-in, and the change is recorded in the site's
+activity with who made it.
+
 ### Several identical units
 
 When you have several of the same thing, such as 12 RV hookups, 30 tent
@@ -436,7 +498,10 @@ take that many stays:
 - The **Reservations** card shows the units left on each of the next 14
   nights under the resource, for example "3 of 12 left".
 - When a stay's busiest night has three or fewer units left, the
-  Reservation widget tells the guest "Only 2 left".
+  Reservation widget tells the guest "Only 2 left". You choose when that
+  starts: in the resource's editor, **Show “Only N left” at** takes how many
+  free units or fewer bring the line up (it starts at 3). Set it to 0 to
+  never show it. The **Reservations** card marks the nights at or under it.
 - A walk-in takes any unit that is free on every night of the stay, and is
   refused only when some night has none left.
 - Blocking dates on a resource closes every unit on those dates.
@@ -447,6 +512,11 @@ take that many stays:
 - Two staff can't both hand out the last unit as walk-ins either, even from
   different devices: the second is told every unit is taken on at least one
   of those nights (or "Those dates are taken" for a single cabin).
+- Booking a walk-in needs the **Book walk-ins and change guests** permission on
+  the site, and a plan that includes reservations, the same as a guest booking
+  online. A member without it is told which permission they need, so they know
+  to ask an organization admin. See
+  [Reservation permissions](../../workspace-and-billing/teams-and-roles/custom-roles.md#reservation-permissions).
 
 **Sleeps** is separate: it is how many guests one unit sleeps, shown for
 information. It never limits how many stays a night can take. Leave

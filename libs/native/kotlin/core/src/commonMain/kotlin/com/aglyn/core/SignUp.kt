@@ -177,7 +177,8 @@ object WorkspaceName {
   val RESERVED = setOf(
     "www", "app", "api", "admin", "console", "mail", "demo", "staging", "dev", "test", "docs", "blog", "help",
     "support", "status", "cdn", "assets", "static", "ftp", "smtp", "ns1", "ns2", "aglyn", "billing", "account",
-    "login", "signup", "auth", "staff", "org", "orgs", "workspace", "kiosk",
+    "login", "signup", "auth", "accounts", "signin", "sso", "secure", "verify", "portal", "webmail", "imap", "mx",
+    "com", "net", "staff", "org", "orgs", "workspace", "kiosk",
   )
 
   /** `BLOCKED_FRAGMENTS`, refused as substrings. */

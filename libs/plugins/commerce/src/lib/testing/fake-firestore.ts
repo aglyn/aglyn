@@ -54,10 +54,17 @@ function resolveValue(existing: any, value: any): any {
   return value
 }
 
+type SetOptions = { merge?: boolean; mergeFields?: string[] }
+
+function setMode(options?: SetOptions): 'set' | 'merge' | 'fields' {
+  if (options?.mergeFields) return 'fields'
+  return options?.merge ? 'merge' : 'set'
+}
+
 function applyWrite(
   path: string,
   value: Record<string, any>,
-  mode: 'set' | 'merge' | 'update',
+  mode: 'set' | 'merge' | 'update' | 'fields',
 ) {
   const existing = fakeDocs.get(path)
   if (mode === 'update' && !existing) {
@@ -65,6 +72,8 @@ function applyWrite(
     error.code = 5
     throw error
   }
+  // `mergeFields`: each named top-level field is replaced whole, every
+  // other stored field stays (the callers name exactly the fields they send).
   const next: Record<string, any> = mode === 'set' ? {} : { ...(existing ?? {}) }
   for (const [key, raw] of Object.entries(value)) {
     if (raw && typeof raw === 'object' && DELETE in raw) {
@@ -114,8 +123,7 @@ export function docRef(path: string): any {
     id: path.split('/').pop() as string,
     path,
     get: async () => snapshotOf(path),
-    set: async (value: Record<string, any>, options?: { merge?: boolean }) =>
-      applyWrite(path, value, options?.merge ? 'merge' : 'set'),
+    set: async (value: Record<string, any>, options?: SetOptions) => applyWrite(path, value, setMode(options)),
     update: async (value: Record<string, any>) => applyWrite(path, value, 'update'),
     create: async (value: Record<string, any>) => {
       if (fakeDocs.has(path)) {
@@ -129,7 +137,36 @@ export function docRef(path: string): any {
       fakeDocs.delete(path)
     },
     collection: (name: string) => collectionRef(`${path}/${name}`),
+    /** The collection it is in, as a collection-group answer walks up. */
+    get parent() {
+      return collectionRef(path.split('/').slice(0, -1).join('/'))
+    },
   }
+}
+
+/** A field by its dotted path (`attachment.state`), as Firestore reads one. */
+function fieldAt(data: Record<string, any> | undefined, field: string): any {
+  return field.split('.').reduce((value: any, key) => (value == null ? undefined : value[key]), data)
+}
+
+/**
+ * One filter, as Firestore reads it: equality, `array-contains`, `in`, and
+ * the four ranges over two numbers or two dates (AGL-4038). A range never
+ * matches a missing or null field, which is why a period query cannot see
+ * an undated row.
+ */
+function matchesFilter(stored: any, op: string, value: any): boolean {
+  if (op === '==') return stored === value
+  if (op === 'array-contains') return Array.isArray(stored) && stored.includes(value)
+  if (op === 'in') return Array.isArray(value) && value.includes(stored)
+  const numbers = typeof stored === 'number' && typeof value === 'number'
+  const dates = stored instanceof Date && value instanceof Date
+  if (!numbers && !dates) return false
+  if (op === '>=') return stored >= value
+  if (op === '>') return stored > value
+  if (op === '<=') return stored <= value
+  if (op === '<') return stored < value
+  return false
 }
 
 function collectionRef(path: string, filters: Array<[string, string, any]> = []): any {
@@ -145,20 +182,28 @@ function collectionRef(path: string, filters: Array<[string, string, any]> = [])
     get: async () => {
       const docs = children()
         .filter((key) =>
-          filters.every(([field, op, value]) => {
-            const stored = fakeDocs.get(key)?.[field]
-            if (op === '==') return stored === value
-            if (op === 'array-contains') return Array.isArray(stored) && stored.includes(value)
-            return false
-          }),
+          filters.every(([field, op, value]) => matchesFilter(fieldAt(fakeDocs.get(key), field), op, value)),
         )
         .map(snapshotOf)
       return { docs, empty: docs.length === 0, size: docs.length }
     },
+    /** The aggregate count over the same filters. */
+    count: () => ({
+      get: async () => {
+        const { size } = await query.get()
+        return { data: () => ({ count: size }) }
+      },
+    }),
   }
   return {
     ...query,
     path,
+    id: path.split('/').pop() as string,
+    /** The document it is under; null for a top-level collection. */
+    get parent() {
+      const segments = path.split('/')
+      return segments.length > 1 ? docRef(segments.slice(0, -1).join('/')) : null
+    },
     doc: (id?: string) => docRef(`${path}/${id ?? `auto-${++autoId}`}`),
     add: async (value: Record<string, any>) => {
       const ref = docRef(`${path}/auto-${++autoId}`)
@@ -170,12 +215,12 @@ function collectionRef(path: string, filters: Array<[string, string, any]> = [])
 
 /**
  * Every document in a collection named `name` at any depth, filtered by
- * equality (AGL-4038). `orderBy` sorts on one field, ties broken by path as
+ * equality or `array-contains`, on dotted paths too (AGL-4038). `orderBy` sorts on one field, ties broken by path as
  * Firestore does, `startAfter` takes a document snapshot, and `limit` caps
  * the answer, so a cursor-paged staff list can be specced.
  */
 interface GroupShape {
-  filters: Array<[string, any]>
+  filters: Array<[string, any, string?]>
   order?: { field: string; desc: boolean }
   after?: string
   cap?: number
@@ -183,7 +228,7 @@ interface GroupShape {
 function collectionGroupRef(name: string, shape: GroupShape = { filters: [] }): any {
   const next = (patch: Partial<GroupShape>) => collectionGroupRef(name, { ...shape, ...patch })
   return {
-    where: (field: string, _op: string, value: any) => next({ filters: [...shape.filters, [field, value]] }),
+    where: (field: string, op: string, value: any) => next({ filters: [...shape.filters, [field, value, op]] }),
     orderBy: (field: string, direction?: string) => next({ order: { field, desc: direction === 'desc' } }),
     startAfter: (snapshot: { ref: { path: string } }) => next({ after: snapshot.ref.path }),
     limit: (cap: number) => next({ cap }),
@@ -193,7 +238,14 @@ function collectionGroupRef(name: string, shape: GroupShape = { filters: [] }): 
           const parts = key.split('/')
           return parts.length >= 2 && parts.length % 2 === 0 && parts[parts.length - 2] === name
         })
-        .filter((key) => shape.filters.every(([field, value]) => fakeDocs.get(key)?.[field] === value))
+        .filter((key) =>
+          shape.filters.every(([field, value, op]) => {
+            const stored = fieldAt(fakeDocs.get(key), field)
+            if (op === 'array-contains') return Array.isArray(stored) && stored.includes(value)
+            if (op === 'in') return Array.isArray(value) && value.includes(stored)
+            return stored === value
+          }),
+        )
       if (shape.order) {
         const { field, desc } = shape.order
         const sign = desc ? -1 : 1
@@ -223,8 +275,8 @@ export const fakeFirestore: any = {
     const writes: Array<() => void> = []
     const outcome = await fn({
       get: (ref: any) => ref.get(),
-      set: (ref: any, value: any, options?: { merge?: boolean }) => {
-        writes.push(() => applyWrite(ref.path, value, options?.merge ? 'merge' : 'set'))
+      set: (ref: any, value: any, options?: SetOptions) => {
+        writes.push(() => applyWrite(ref.path, value, setMode(options)))
       },
       update: (ref: any, value: any) => {
         writes.push(() => applyWrite(ref.path, value, 'update'))

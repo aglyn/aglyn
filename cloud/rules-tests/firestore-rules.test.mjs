@@ -1652,6 +1652,10 @@ describe('hosts', () => {
       // check a customer in, or take a check-in back, with nobody there.
       'checkIns',
       'checkInDays',
+      // Each waiver's title and status, mirrored for the Besigner's waiver
+      // picker (AGL-4042). Only the waivers routes write it; a client write
+      // would list a waiver that does not exist or hide one that does.
+      'waiverTitles',
     ]) {
       assert.ok(
         hostServerOnlySubcollections().includes(name),
@@ -6165,6 +6169,14 @@ describe('pre-release hardening guards', () => {
       { takenDown: false },
       // A locked publisher cannot put itself back in browse (AGL-3365).
       { workspaceLockedAt: null },
+      // A site starter's picker order, facets and source key (AGL-4049).
+      { official: true },
+      { starterKind: 'restaurant' },
+      { starterBase: 'bootstrap' },
+      { starterFonts: 'oswald' },
+      { starterPages: 1 },
+      { starterMode: 'ai' },
+      { sourceStarterHostId: 'another-site' },
     ]) {
       await assertFails(
         updateDoc(doc(authed(OWNER), 'marketplaceListings', LISTING), field),
@@ -14118,6 +14130,29 @@ describe('returns, order webhooks and the event outbox are the server’s (AGL-3
     for (const uid of [OWNER, EDITOR, AUTHOR, VIEWER, OUTSIDER]) {
       await assertFails(getDoc(doc(authed(uid), 'hosts', HOST, 'checkIns', 'o_o1_0_0')))
       await assertFails(updateDoc(doc(authed(uid), 'hosts', HOST, 'checkIns', 'o_o1_0_0'), { status: 'checked_in' }))
+    }
+  })
+
+  it('lets a site’s members read the waiver titles the Besigner picker lists, and nobody write one (AGL-4042)', async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'hosts', HOST, 'waiverTitles', 'w1'), {
+        title: 'Rider release',
+        status: 'published',
+        pickable: true,
+      })
+    })
+    for (const uid of [OWNER, EDITOR, AUTHOR, VIEWER]) {
+      await assertSucceeds(getDoc(doc(authed(uid), 'hosts', HOST, 'waiverTitles', 'w1')))
+      await assertSucceeds(
+        getDocs(query(collection(authed(uid), 'hosts', HOST, 'waiverTitles'), where('pickable', '==', true))),
+      )
+    }
+    await assertFails(getDoc(doc(authed(OUTSIDER), 'hosts', HOST, 'waiverTitles', 'w1')))
+    await assertFails(getDoc(doc(anon(), 'hosts', HOST, 'waiverTitles', 'w1')))
+    for (const uid of [OWNER, EDITOR]) {
+      await assertFails(setDoc(doc(authed(uid), 'hosts', HOST, 'waiverTitles', 'w2'), { title: 'Forged', pickable: true }))
+      await assertFails(updateDoc(doc(authed(uid), 'hosts', HOST, 'waiverTitles', 'w1'), { pickable: false }))
+      await assertFails(deleteDoc(doc(authed(uid), 'hosts', HOST, 'waiverTitles', 'w1')))
     }
   })
 

@@ -128,6 +128,33 @@ export type OrgCallerRequirement =
   | 'data.manage'
   /** A workspace owner or admin, org-wide. Staff acting alone do NOT pass. */
   | 'manage-org'
+  /**
+   * "Privacy requests" (`org.privacy`, AGL-4047), org-wide — who may file a
+   * person's erasure. On for owners and admins by default. Staff acting
+   * alone do NOT pass.
+   */
+  | 'org.privacy'
+
+/**
+ * Whether `uid` holds a catalog key in `orgId` as the catalog resolves it —
+ * their role, a custom role and per-member overrides — asked of
+ * `memberHasOrgPermission`. A lookup that fails answers `false`.
+ */
+export async function holdsOrgPermission(
+  orgId: string | null | undefined,
+  uid: string,
+  permission: 'org.privacy',
+): Promise<boolean> {
+  if (!orgId) return false
+  try {
+    const membership = await resolveOrgMembership(uid, orgId)
+    const member = membership?.member ?? null
+    if (!member) return false
+    return (await memberHasOrgPermission(orgId, member, permission)) === true
+  } catch {
+    return false
+  }
+}
 
 /**
  * A verified session, org-wide reach in `orgId`, and the requirement — in
@@ -135,9 +162,9 @@ export type OrgCallerRequirement =
  * every org variant needs for the plan and the consent groups.
  *
  * Staff are admitted to the `data.manage` requirement as every CRM route
- * admits them, and refused the `manage-org` one as the erasure route
- * refuses them: the workspace is the controller of its people's data and
- * the instruction to erase has to come from it.
+ * admits them, and refused the `manage-org` and `org.privacy` ones as the
+ * erasure route refuses them: the workspace is the controller of its
+ * people's data and the instruction to erase has to come from it.
  */
 export async function authorizeOrgCaller(
   req: PluginApiRequest,
@@ -168,7 +195,9 @@ export async function authorizeOrgCaller(
   const admitted =
     options.needs === 'data.manage'
       ? staff || (orgWide && (await holdsDataManage(orgId, decoded.uid)))
-      : orgWide && canManageOrg(membership?.role ?? null)
+      : options.needs === 'org.privacy'
+        ? orgWide && (await holdsOrgPermission(orgId, decoded.uid, 'org.privacy'))
+        : orgWide && canManageOrg(membership?.role ?? null)
   if (!admitted) return { ok: false, status: 403, error: options.refusal }
   const org = await getOrgDoc(orgId).catch(() => null)
   if (!org) return { ok: false, status: 404, error: 'Unknown organization' }

@@ -81,6 +81,8 @@ const ReservationWidget = forwardRef<HTMLDivElement, ReservationWidgetProps>(
     const [checkOut, setCheckOut] = useState('')
     const [guestName, setGuestName] = useState('')
     const [guestEmail, setGuestEmail] = useState('')
+    /** How many guests (AGL-4043), optional; '' sends none. */
+    const [guests, setGuests] = useState('')
     const [status, setStatus] = useState<'idle' | 'sending' | 'error'>('idle')
     const [message, setMessage] = useState('')
 
@@ -136,6 +138,8 @@ const ReservationWidget = forwardRef<HTMLDivElement, ReservationWidgetProps>(
         availability.fewLeft,
         checkInDayMs,
         checkOutDayMs,
+        // The store's own threshold for this resource; 0 never shows it.
+        CommerceModel.resourceFewLeftAt(availability.resource),
       )
     }, [availability, checkInDayMs, checkOutDayMs])
 
@@ -151,7 +155,13 @@ const ReservationWidget = forwardRef<HTMLDivElement, ReservationWidgetProps>(
     const attemptKey = useRef('')
     useEffect(() => {
       attemptKey.current = ''
-    }, [checkInDayMs, checkOutDayMs, resourceId, guestName, guestEmail])
+    }, [checkInDayMs, checkOutDayMs, resourceId, guestName, guestEmail, guests])
+
+    // At most what one unit sleeps; the server asks the same question.
+    const guestCeiling = availability ? CommerceModel.resourceGuestCeiling(availability.resource) : CommerceModel.MAX_RESERVATION_GUESTS
+    const guestsProblem = CommerceModel.reservationGuestsProblem(guests.trim() === '' ? undefined : Number(guests), {
+      capacity: guestCeiling,
+    })
 
     const handleReserve = async () => {
       if (!hostId || !resourceId || status === 'sending') return
@@ -176,6 +186,7 @@ const ReservationWidget = forwardRef<HTMLDivElement, ReservationWidgetProps>(
             checkOutDayMs,
             guestName,
             guestEmail,
+            ...(guests.trim() && !guestsProblem ? { guests: Number(guests) } : {}),
           }),
         })
         const payload = await response.json().catch(() => ({}))
@@ -357,6 +368,15 @@ const ReservationWidget = forwardRef<HTMLDivElement, ReservationWidgetProps>(
           onChange={(event) => setGuestEmail(event.target.value)}
           size="small"
         />
+        <TextField
+          label="Guests (optional)"
+          value={guests}
+          onChange={(event) => setGuests(event.target.value.replace(/\D/g, ''))}
+          error={Boolean(guestsProblem)}
+          helperText={guestsProblem ?? `Up to ${guestCeiling}`}
+          size="small"
+          slotProps={{ htmlInput: { inputMode: 'numeric' } }}
+        />
         {status === 'error' ? (
           <Alert severity="error">
             {message || 'Reservation is unavailable right now.'}
@@ -370,6 +390,7 @@ const ReservationWidget = forwardRef<HTMLDivElement, ReservationWidgetProps>(
             conflict ||
             !quote ||
             Boolean(quote.problem) ||
+            Boolean(guestsProblem) ||
             !guestEmail.trim()
           }
           onClick={handleReserve}

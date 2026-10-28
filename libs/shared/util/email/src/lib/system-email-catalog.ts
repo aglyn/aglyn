@@ -78,6 +78,7 @@ import { BRAND } from '@aglyn/shared-data-enums/aglyn'
 import { EMAIL_NODE_ROOT_ID } from './email-render'
 import { domainSystemEmailTemplates } from './domain-emails'
 import { posHardwareSystemEmailTemplates } from './pos-hardware-emails'
+import { posCellularSystemEmailTemplates } from './pos-cellular-emails'
 import { RISK_NOTICE_SYSTEM_EMAIL_TEMPLATES } from './risk-notice-emails'
 import { retentionSystemEmailTemplates } from './retention-emails'
 import { SITE_CARE_SYSTEM_EMAIL_TEMPLATES } from './site-care-emails'
@@ -1988,6 +1989,9 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
     // Card readers bought from the commerce plugin's POS hardware shop
     // (AGL-4038), whose keys and copy live in `pos-hardware-emails.ts`.
     ...posHardwareSystemEmailTemplates(SAMPLE_CONSOLE_ORIGIN),
+    // 4G for a workspace's card readers turned off for an unpaid month
+    // (AGL-4038), whose key and copy live in `pos-cellular-emails.ts`.
+    ...posCellularSystemEmailTemplates(SAMPLE_CONSOLE_ORIGIN),
   ].map((entry) => ({
     ...entry,
     mergeTokens: [...entry.mergeTokens, ...BRAND_MERGE_TOKENS],

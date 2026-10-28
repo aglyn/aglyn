@@ -357,3 +357,51 @@ describe('a paid buy-now pickup (AGL-3624)', () => {
     expect((docs.get('hosts/host-1/products/bread') as any).variants[0].inventoryByLocation).toEqual({ main: 1, back: 6 })
   })
 })
+
+/*
+ * A pass bought for a day the buyer chose (AGL-4043): the day rides from the
+ * cart line, or the buy-now session, onto the order line, and the order
+ * names its days so the window finds it on the day it is for.
+ */
+describe('a paid order for a pass on a chosen day (pass dates)', () => {
+  it('copies the cart line’s day onto the order line, and names it on the order', async () => {
+    docs.set('hosts/host-1/carts/cart-1', {
+      lines: [
+        { productId: 'bread', variantId: 'loaf', quantity: 1, useDayKey: '2027-01-20' },
+        { productId: 'bread', variantId: 'loaf', quantity: 1 },
+      ],
+    })
+    await deliver(session({}))
+    const order = docs.get('hosts/host-1/orders/cs_local') as any
+    expect(order.lineItems.map((line: any) => line.useDayKey ?? null)).toEqual(['2027-01-20', null])
+    expect(order.useDayKeys).toEqual(['2027-01-20'])
+  })
+
+  it('copies a buy-now session’s day the same way', async () => {
+    await deliver({
+      id: 'cs_pass',
+      payment_status: 'paid',
+      payment_intent: 'pi_pass',
+      amount_total: 1500,
+      customer_details: { email: 'buyer@example.com', name: 'Ada' },
+      total_details: { amount_tax: 0, amount_shipping: 0, amount_discount: 0 },
+      metadata: {
+        type: 'commerce-order',
+        hostId: 'host-1',
+        productId: 'bread',
+        variantId: 'loaf',
+        quantity: '1',
+        feeCents: '45',
+        useDayKey: '2027-01-21',
+      },
+    })
+    const order = docs.get('hosts/host-1/orders/cs_pass') as any
+    expect(order.lineItems[0].useDayKey).toBe('2027-01-21')
+    expect(order.useDayKeys).toEqual(['2027-01-21'])
+  })
+
+  it('names no day on an order whose lines chose none', async () => {
+    await deliver(session({}))
+    expect(docs.get('hosts/host-1/orders/cs_local') as any).not.toHaveProperty('useDayKeys')
+  })
+})

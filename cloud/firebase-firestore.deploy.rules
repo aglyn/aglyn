@@ -382,6 +382,25 @@ return isOrgMember() && orgMember().role in ['owner', 'admin'];
 
 
 
+function memberKeyOr(permission, presetRoles) {
+let stamped = orgMember().get('resolvedPermissions', {}).get(permission, null);
+return stamped is bool ? stamped == true : orgMember().get('role', '') in presetRoles;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 function isOrgWideMember() {
 return isOrgMember() &&
@@ -926,11 +945,19 @@ allow read, write: if false;
 
 
 
+
+
+
+
+
+
+
 match /hardwareOrders/{orderId} {
 allow read: if isStaff() ||
 (isOrgWideMember() && orgNotSuspended() &&
-orgMember().role in ['owner', 'admin', 'editor'] &&
-memberGrants('managePos'));
+((orgMember().role in ['owner', 'admin', 'editor'] &&
+memberGrants('managePos')) ||
+memberStamps('posBuyHardware')));
 allow write: if false;
 }
 
@@ -1018,6 +1045,10 @@ allow read, write: if false;
 match /waiverSignatures/{signatureId} {
 allow read, write: if false;
 }
+
+
+
+
 
 
 
@@ -1282,8 +1313,12 @@ allow write: if isStaff() ||
 
 match /businessProfile/{docId} {
 allow read: if isStaff() || isOrgMember();
+
+
 allow write: if isStaff() ||
-(docId == 'defaults' && canManageOrg() && isVerified() && orgNotSuspended());
+(docId == 'defaults' && isOrgMember() &&
+memberKeyOr('org.businessProfile', ['owner', 'admin']) &&
+isVerified() && orgNotSuspended());
 }
 
 
@@ -1490,6 +1525,16 @@ memberResolves('data.manage')));
 }
 function canWriteScopedOrgData() {
 return canWriteOrgData() && canReadScoped();
+}
+
+
+
+
+
+function canWriteOrgMedia() {
+return isOrgMember() && isVerified() &&
+memberKeyOr('org.media', ['owner', 'admin', 'editor']) &&
+orgNotSuspended();
 }
 
 
@@ -2217,24 +2262,27 @@ allow delete: if isStaff() ||
 
 
 
+
+
+
 match /media/{mediaId} {
 allow read: if isStaff() || canReadScoped();
 allow create: if isStaff() ||
-(canWriteOrgData() && canCreateScoped() && mediaObjectFieldsUnset());
+(canWriteOrgMedia() && canCreateScoped() && mediaObjectFieldsUnset());
 allow update: if isStaff() ||
-(canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()) &&
+(canWriteOrgMedia() && canReadScoped() && (isOrgWideMember() || scopeUnchanged()) &&
 mediaObjectFieldsUnchanged());
-allow delete: if isStaff() || canWriteScopedOrgData();
+allow delete: if isStaff() || (canWriteOrgMedia() && canReadScoped());
 }
 
 
 
 match /mediaFolders/{folderId} {
 allow read: if isStaff() || canReadScoped();
-allow create: if isStaff() || (canWriteOrgData() && canCreateScoped());
+allow create: if isStaff() || (canWriteOrgMedia() && canCreateScoped());
 allow update: if isStaff() ||
-(canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()));
-allow delete: if isStaff() || canWriteScopedOrgData();
+(canWriteOrgMedia() && canReadScoped() && (isOrgWideMember() || scopeUnchanged()));
+allow delete: if isStaff() || (canWriteOrgMedia() && canReadScoped());
 }
 
 match /counters/{counterId} {
@@ -2925,7 +2973,20 @@ allow read, write: if false;
 
 
 
+
 match /posHardwareSales/{orderId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+match /posCellularReaders/{recordId} {
+allow read, write: if false;
+}
+match /posCellularCharges/{chargeId} {
 allow read, write: if false;
 }
 
@@ -2977,10 +3038,19 @@ return isSignedIn() && hostMemberRole(hostId) != null;
 
 
 
+
+
+
+
+
 function canWriteHostContent(hostId) {
 return isVerified() &&
-hostMemberRole(hostId) in ['admin', 'editor', 'author'];
+hostSiteRoleKey(hostId, 'site.edit', ['admin', 'editor', 'author']);
 }
+
+
+
+
 
 
 
@@ -3020,7 +3090,7 @@ hostMemberRole(hostId) in ['admin', 'editor', 'author'];
 
 
 function canPublishHostContent(hostId) {
-return isVerified() && hostMemberRole(hostId) in ['admin', 'editor'];
+return isVerified() && hostSiteRoleKey(hostId, 'site.publish', ['admin', 'editor']);
 }
 
 
@@ -3051,8 +3121,102 @@ return r.size() == 0 || (r.size() == 1 &&
 
 
 
+
+
+
+
 function canReadHostSensitive(hostId) {
-return isSignedIn() && hostMemberRole(hostId) in ['admin', 'editor'];
+return isSignedIn() && hostSiteRoleKey(hostId, 'site.sensitive', ['admin', 'editor']);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function hostOrgMemberStamps(hostId, permission) {
+let host = get(/databases/$(database)/documents/hosts/$(hostId)).data;
+let orgId = host.get('orgId', '');
+let onSite = host.get('memberPermissions', {}).get(request.auth.uid, {});
+let member = get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data;
+return onSite.get(permission, null) is bool
+? onSite.get(permission, false) == true
+: !hostNarrowsMember(hostId, member) &&
+member.get('resolvedPermissions', member.get('permissions', {}))
+.get(permission, false) == true;
+}
+
+
+
+
+
+
+
+function hostNarrowsMember(hostId, member) {
+return member.get('allHosts', false) == true &&
+member.get('role', '') == 'editor' &&
+member.get('hostAccess', {}).get(hostId, '') in ['author', 'viewer'];
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function hostSiteRoleKey(hostId, permission, presetRoles) {
+let onSite = get(/databases/$(database)/documents/hosts/$(hostId)).data
+.get('memberPermissions', {}).get(request.auth.uid, {});
+return onSite.get(permission, null) is bool
+? onSite.get(permission, false) == true
+: hostMemberRole(hostId) in presetRoles;
+}
+
+
+
+
+
+function canReadRegisterSale(hostId) {
+return isSignedIn() && isHostMember(hostId) &&
+resource.data.get('channel', '') == 'pos' &&
+hostOrgMemberStamps(hostId, 'posSell');
 }
 
 
@@ -3401,7 +3565,9 @@ allow update: if isStaff() ||
 
 
 
-(hostMemberRole(hostId) == 'admin' ||
+
+
+(hostSiteRoleKey(hostId, 'site.manage', ['admin']) ||
 !request.resource.data.diff(resource.data).affectedKeys()
 .hasAny(['disabledPlugins', 'enabledPlugins', 'authScreens',
 'approvedImageHosts', 'approvedMediaHosts',
@@ -3424,7 +3590,7 @@ allow update: if isStaff() ||
 .hasAny(['screens', 'defaultHomeScreenId'])) &&
 routeRemovalAllowed());
 allow delete: if isStaff() ||
-(hostMemberRole(hostId) == 'admin' && isVerified() &&
+(isVerified() && hostSiteRoleKey(hostId, 'site.manage', ['admin']) &&
 !hostWritesFrozen(hostId));
 
 
@@ -3826,8 +3992,15 @@ allow read: if isStaff() || canReadHostSensitive(hostId);
 
 
 
+
+
+
+
+
+
 match /orders/{orderId} {
-allow read: if isStaff() || canReadHostSensitive(hostId);
+allow read: if isStaff() || canReadHostSensitive(hostId) ||
+canReadRegisterSale(hostId);
 allow update: if isStaff() ||
 (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
 request.resource.data.diff(resource.data)
@@ -3875,7 +4048,7 @@ request.resource.data.diff(resource.data)
 match /pluginSettings/{pluginId} {
 allow read: if isStaff() || isHostMember(hostId);
 allow write: if pluginId != 'live-chat' && (isStaff() ||
-(hostMemberRole(hostId) == 'admin' && isVerified() &&
+(isVerified() && hostSiteRoleKey(hostId, 'site.manage', ['admin']) &&
 !hostWritesFrozen(hostId)));
 }
 
@@ -4075,6 +4248,19 @@ subcollection != 'reviewTokens' &&
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
 allow create: if subcollection != 'siteMemberCredentials' &&
 subcollection != 'orderWebhookSecrets' &&
 subcollection != 'posStaffPins' &&
@@ -4098,7 +4284,8 @@ subcollection != 'reviewTokens' && (isStaff() ||
 'siteMemberCredentials', 'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers',
 'printJobs', 'returns', 'orderWebhooks',
 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults',
-'aiMemory', 'reviews', 'reviewTokens', 'checkIns', 'checkInDays']) &&
+'aiMemory', 'reviews', 'reviewTokens', 'checkIns', 'checkInDays',
+'waiverTitles', 'reservations', 'resources']) &&
 
 
 
@@ -4268,7 +4455,8 @@ subcollection != 'reviewTokens' && (isStaff() ||
 'siteMemberCredentials', 'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers',
 'printJobs', 'returns', 'orderWebhooks',
 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults',
-'aiMemory', 'reviews', 'reviewTokens', 'checkIns', 'checkInDays'])));
+'aiMemory', 'reviews', 'reviewTokens', 'checkIns', 'checkInDays',
+'waiverTitles', 'reservations', 'resources'])));
 
 
 
@@ -4327,7 +4515,7 @@ subcollection != 'reviewTokens' && (isStaff() ||
 'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers', 'printJobs', 'returns',
 'orderWebhooks',
 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults', 'reviews', 'reviewTokens',
-'checkIns', 'checkInDays'])));
+'checkIns', 'checkInDays', 'waiverTitles', 'reservations', 'resources'])));
 }
 
 
@@ -4399,6 +4587,35 @@ request.resource.data.diff(resource.data).affectedKeys()
 match /redirects/{redirectId} {
 allow update, delete: if isStaff() ||
 (canPublishHostContent(hostId) && !hostWritesFrozen(hostId));
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /reservations/{path=**} {
+allow create, update, delete: if isStaff() ||
+(isVerified() && !hostWritesFrozen(hostId) &&
+hostSiteRoleKey(hostId, 'commerce.reservations', ['admin', 'editor', 'author']));
+}
+match /resources/{path=**} {
+allow create, update, delete: if isStaff() ||
+(isVerified() && !hostWritesFrozen(hostId) &&
+hostSiteRoleKey(hostId, 'commerce.reservations', ['admin', 'editor', 'author']));
 }
 
 
@@ -5079,7 +5296,13 @@ allow update: if isStaff() ||
 'displayName', 'deletedAt', 'visibility',
 
 'description', 'readme', 'homepageUrl', 'repositoryUrl',
-'license', 'workspaceLockedAt']));
+'license', 'workspaceLockedAt',
+
+
+
+
+'official', 'starterKind', 'starterBase', 'starterFonts',
+'starterPages', 'starterMode', 'sourceStarterHostId']));
 allow delete: if isStaff() || listingManager();
 
 

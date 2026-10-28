@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import {
   COLLECTIONS_MAX_PER_HOST,
   createResourceUid,
@@ -60,7 +61,6 @@ import {
 // `author`'s — and what was missing was a CONTROL that wrote it. The console
 // now has one (the Publish date dialog on /content). Nothing here is looser
 // than it was.
-const HOST_WRITER_ROLES = new Set(['admin', 'editor', 'author'])
 
 /** Keys the client may set; everything else is dropped rather than trusted. */
 const CONTENT_KEYS = new Set(['displayName', 'slug'])
@@ -434,11 +434,9 @@ async function handler(request: Request): Promise<Response> {
       if (!hostSnapshot.exists) {
         return Response.json({ error: 'Unknown site' }, { status: 404 })
       }
-      const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-      if (!HOST_WRITER_ROLES.has(String(memberRole))) {
-        return Response.json({
-          error: 'Editing collections requires the editor role',
-        }, { status: 403 })
+      // "Edit site content" (`site.edit`, AGL-4047), read as the rules read it.
+      if (!holdsSiteKey(hostSnapshot, decoded.uid, 'site.edit')) {
+        return Response.json({ error: siteKeyRefusal('site.edit') }, { status: 403 })
       }
       const orgId = hostSnapshot.get('orgId') as string | undefined
       const orgData = orgId

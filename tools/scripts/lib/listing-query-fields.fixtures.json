@@ -393,6 +393,100 @@
         ],
         "takenDown": false
       }
+    },
+    {
+      "name": "a site starter waiting on review (AGL-4049)",
+      "listing": {
+        "displayName": "Bake Shop",
+        "profileId": "org5",
+        "artifactType": "siteStarter",
+        "reviewStatus": "submitted",
+        "deletedAt": null
+      },
+      "expected": {
+        "nameLower": "bake shop",
+        "nameTokens": [
+          "b",
+          "ba",
+          "bak",
+          "bake",
+          "s",
+          "sh",
+          "sho",
+          "shop"
+        ],
+        "nameReversed": "pohs ekab",
+        "browseAudience": [
+          "org5",
+          "org5|org5"
+        ],
+        "browseTokens": [
+          "org5~b",
+          "org5~ba",
+          "org5~bak",
+          "org5~bake",
+          "org5~s",
+          "org5~sh",
+          "org5~sho",
+          "org5~shop",
+          "org5|org5~b",
+          "org5|org5~ba",
+          "org5|org5~bak",
+          "org5|org5~bake",
+          "org5|org5~s",
+          "org5|org5~sh",
+          "org5|org5~sho",
+          "org5|org5~shop"
+        ],
+        "takenDown": false
+      }
+    },
+    {
+      "name": "a listed site starter (AGL-4049)",
+      "listing": {
+        "displayName": "Bake Shop",
+        "profileId": "org5",
+        "artifactType": "siteStarter",
+        "reviewStatus": "listed",
+        "deletedAt": null
+      },
+      "expected": {
+        "nameLower": "bake shop",
+        "nameTokens": [
+          "b",
+          "ba",
+          "bak",
+          "bake",
+          "s",
+          "sh",
+          "sho",
+          "shop"
+        ],
+        "nameReversed": "pohs ekab",
+        "browseAudience": [
+          "*",
+          "*|org5"
+        ],
+        "browseTokens": [
+          "*~b",
+          "*~ba",
+          "*~bak",
+          "*~bake",
+          "*~s",
+          "*~sh",
+          "*~sho",
+          "*~shop",
+          "*|org5~b",
+          "*|org5~ba",
+          "*|org5~bak",
+          "*|org5~bake",
+          "*|org5~s",
+          "*|org5~sh",
+          "*|org5~sho",
+          "*|org5~shop"
+        ],
+        "takenDown": false
+      }
     }
   ]
 }

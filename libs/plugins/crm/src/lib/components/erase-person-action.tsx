@@ -43,7 +43,7 @@ import {
 } from '@mui/material'
 import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
-import { useCanManageCrmSettings } from './settings-section'
+import { useCanErasePeople } from './use-can-erase-people'
 import { useCrmApi } from './use-crm-api'
 
 /** The record the action is offered on: which kind, its id, and its address. */
@@ -92,17 +92,19 @@ export interface ErasePersonAction {
  * action knows — who may, whether a request is already waiting, what the
  * dialog says, what the route answers — lives here.
  *
- * Offered to workspace admins and owners only, and the item is present but
- * disabled for everyone else with the reason as its tooltip: an absent item
- * and an inapplicable one look alike, and a site editor who cannot find
- * the action should learn who can rather than conclude it does not exist.
+ * Offered to whoever holds "Privacy requests" (`org.privacy`, AGL-4047) over
+ * the whole workspace — owners and admins by default — and the item is
+ * present but disabled for everyone else with the reason as its tooltip: an
+ * absent item and an inapplicable one look alike, and a site editor who
+ * cannot find the action should learn who can rather than conclude it does
+ * not exist.
  *
  * Takes the site from the page and the workspace from `useOrgDataScope`,
  * never a route, so an org-level mount can offer the same item.
  */
 export function useErasePersonAction(props: UseErasePersonActionProps): ErasePersonAction {
   const { hostId, orgId, subject, requestedAtMs } = props
-  const { canManage, ready } = useCanManageCrmSettings(orgId ?? undefined)
+  const { canErase, ready } = useCanErasePeople(orgId ?? undefined)
   const orgMount = useCrmOrgMount()
   // A site to file from, or the org to file as (AGL-2634).
   const canFile = Boolean(hostId) || Boolean(orgMount)
@@ -122,8 +124,8 @@ export function useErasePersonAction(props: UseErasePersonActionProps): ErasePer
           ? 'An erasure is already pending for this person'
           : !ready
             ? 'Checking your workspace role'
-            : !canManage
-              ? 'Only a workspace admin can erase a person'
+            : !canErase
+              ? 'Your role does not include "Privacy requests" — ask an organization admin'
               : undefined
     return [
       {
@@ -136,7 +138,7 @@ export function useErasePersonAction(props: UseErasePersonActionProps): ErasePer
         onClick: () => setOpen(true),
       },
     ]
-  }, [canManage, canFile, pendingSince, ready, subject])
+  }, [canErase, canFile, pendingSince, ready, subject])
 
   const banner = pendingSince ? <ErasurePendingBanner requestedAtMs={pendingSince} /> : null
   const dialog = subject && canFile ? (

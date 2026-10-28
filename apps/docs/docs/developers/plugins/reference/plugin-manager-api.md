@@ -194,6 +194,7 @@ a component the first did not still reaches the plugin.
 | `resolvePluginApiRequestSubject(path, request)` | What a dispatcher asks before its release gate when no `hostId` was named: the declared resolver's answer, read from a clone, or `null` for an undeclared route, a resolver that threw, or ids that are not plain path segments. |
 | `options.recipientLink` / `isPluginRecipientLinkRoute(path)` | A route that answers a link the platform mailed to somebody — an unsubscribe in a `List-Unsubscribe` header. Both dispatchers skip their per-site enablement and release gates for it and nothing else: lockdown and the rate limit still apply. An opt-out has to keep working after its plugin is paused for the workspace (CAN-SPAM holds it open for thirty days after the send), so the route authenticates the link itself, by a signature it verifies. |
 | `options.machine` / `isPluginMachineRoute(path)` | A route a machine calls — a scheduler's sweep on the cron secret, a provider's signed webhook — that names no site and no member. Both dispatchers skip their per-site enablement and release gates for it, and exempt it from their write limit and cross-origin check (`isMachinePluginApiPath` answers `true` for it); lockdown still applies. The flag grants nothing by itself: the route authenticates its caller, and judges the plugin's release and plan for each organization it resolves. |
+| `options.images` / `isPluginImagesRoute(path)` / `PLUGIN_IMAGES_API_PREFIX` | A machine's route (honored only beside `machine`) that draws images with `sharp` (AGL-4048). The console serves it only from the plugins' image function, `/api/plugin-images/{path}`, the one function that ships `sharp`'s 17 MB native library, so the plugin dispatcher's cold start does not carry it; the dispatcher answers 404 for it, and the image function serves nothing else and runs no member gate. A plugin's own doors, jobs and event handlers that need a picture drawn ask it over HTTP, signed, and the route verifies that signature itself. |
 | `options.portability` / `isPluginPortabilityRoute(path)` | A route that hands a workspace the records the plugin keeps for it — a data-portability export — which the workspace is owed whether or not the plugin is switched on or released for it now. Both dispatchers skip their per-site enablement and release gates for it and nothing else: lockdown, the email-verification gate and the write limit still apply. The flag grants nothing by itself: the route authenticates the member, and asks the plugin's release and plan itself of anything it serves beyond what the workspace is owed. |
 | `options.ownVisitorGates` / `isPluginOwnVisitorGatesRoute(path)` | A public visitor door that runs EVERY visitor gate itself, because its answers to them are a published contract — the forms plugin's `forms/submit`, whose "not accepting" notice, per-(site, address) limit, monthly ceiling and lockdown placement are its own, and which is judged by the switch of the plugin whose door a submission came through. The tenant dispatcher hands such a route the request untouched: no cross-origin check, no site read from the body, no enablement or release gate, no lockdown, no write limit, no card velocity. Declaring it takes all of those on, so it is honored only for a first-party plugin's registration under the loader's marker; anyone else's keeps the dispatcher's gates and the drop is logged. The console's dispatcher does not read it. |
 | `handler` as `(req, res)` or `{ web }` | The node shape takes `PluginApiRequest` / `PluginApiResponse`. The Web shape, `{ web: (request, { params }) => Response }`, takes the dispatcher's own `Request` and answers a `Response` — the form for a door that streams (server-sent events, a chat answer) or reads the raw body itself; `params` carries the path segments and every `:name` filled. |
@@ -420,6 +421,82 @@ tidy: the zone catalog is on the published page's static graph, so a
 declaration that put prop SHAPES there would make every published page carry
 the console's vocabulary. Import this module by its own subpath
 (`@aglyn/aglyn/plugin-manager/plugin-zones`); it is not in the barrel.
+
+## A screen on a paired customer display — `plugin-customer-display`
+
+A register can pair a screen that faces the customer. That screen belongs to
+the plugin that runs the register, so another plugin that needs the customer's
+own hands on a screen — a form to fill in, a document to sign — asks for it
+through core, and neither plugin names the other.
+
+The paired display is the authorization. Staff paired it to one store, so a
+screen's page needs no staff session and nothing minted for it: it sends its
+own server the display's credential, and that server asks core who the display
+is.
+
+```ts
+// the page running a register, while its display is connected
+useEffect(() => {
+  if (!connected) return undefined
+  return registerCustomerDisplayHost({ show: async (screen) => pushToDisplay(screen) })
+}, [connected])
+
+// ANOTHER plugin's console widget on that page
+const display = useSyncExternalStore(subscribeCustomerDisplayHost, customerDisplayHost, () => null)
+if (display) {
+  await display.show({ pluginId: 'acme-forms', path: '/display-fill', params: { host: hostId } })
+}
+
+// the display's own page, once paired (and with null once unpaired)
+rememberCustomerDisplayCredential(token)
+
+// the display, when its state names a screen it has not opened yet
+const href = customerDisplayScreenHref(screen, '/kiosk/acme-pos/display')
+
+// the plugin's public page: its credential for its own server, and the way back
+const credential = customerDisplayCredential()
+const back = customerDisplayReturnPath(window.location.search)
+
+// the plugin's server, acting for that page
+const display = await verifyCustomerDisplay(body.display)
+if (!display || display.hostId !== hostId) return refuse(401)
+if (!customerDisplayShows(display, { pluginId: 'acme-forms', path: '/display-fill', params: { host: hostId } })) {
+  return refuse(409) // the register shows something else now
+}
+```
+
+| API | Semantics |
+| --- | --- |
+| `CustomerDisplayScreen` | `{ pluginId, path, params }`: one of the asking plugin's own public console pages (`ConsolePublicPage`, at `/kiosk/{pluginId}{path}`), with up to eight short plain string parameters. Never a customer's details, and never the display's credential: they ride the display's state and its address bar. |
+| `sanitizeCustomerDisplayScreen(raw)` | The screen as a register may store it, or `null`. The display's host checks every screen with it before storing one. |
+| `customerDisplayScreenHref(screen, returnTo)` | Where the display opens the screen: the plugin's page, its parameters, and `return` set to the display's own `/kiosk/…` address. `null` for anything out of shape. |
+| `customerDisplayReturnPath(search)` | The `/kiosk/…` address the screen's page sends the display back to, or `null`. Nothing outside the console's public pages is ever returned. |
+| `registerCustomerDisplayHost(host)` | Offers `{ show(screen), close(pluginId) }` to every plugin on the page, replacing any other; answers the function that withdraws it, and only it. `close` takes the plugin's screen off the display when it is the one showing, back to the register's own screen. |
+| `customerDisplayHost()` / `subscribeCustomerDisplayHost(listener)` | The host on this page, or `null`, and a subscription to it arriving or leaving. |
+| `rememberCustomerDisplayCredential(credential)` / `customerDisplayCredential()` | The display's page keeps the credential its pairing gave it (or forgets it with `null`); a screen's page on the same display reads it, or `null` on a device that is not a paired display. |
+
+And on the server, from `@aglyn/aglyn/plugin-manager/plugin-customer-display-verifier`:
+
+| API | Semantics |
+| --- | --- |
+| `registerCustomerDisplayVerifier({ verify })` | The plugin that pairs displays registers the one verifier, from its `consoleServerDeclarations`. A second plugin's is refused. |
+| `verifyCustomerDisplay(credential)` | `{ hostId, orgId, screen, shownBy }`: the store the display is paired to, the workspace that owns it, the plugin screen it shows now (or `null`), and the uid of the staff member who put that screen there. `null` for a credential that opens no display, when no verifier is registered, or when it fails. |
+| `customerDisplayShows(display, screen)` | Whether that display shows a plugin's page now, with every parameter given. |
+
+A screen has no timer: it stays, however long the customer takes, until the
+register shows something else, the plugin calls `close`, or its page sends the
+display back once the customer is done. To follow the register, a screen's page
+asks its own server whether `customerDisplayShows` still holds, and goes back
+when it doesn't. A server acting for the page checks the same thing, so nothing
+is done for a screen the register already replaced.
+
+The display opens only a page the plugin **declared** public
+(`contributes.console.publicRoutes`): the console's public route refuses any
+other before the plugin loads. The client half is client-only and React-free;
+import each half by its own subpath
+(`@aglyn/aglyn/plugin-manager/plugin-customer-display`,
+`@aglyn/aglyn/plugin-manager/plugin-customer-display-verifier`), neither is in
+the barrel.
 
 ## Host subcollections — `plugin-host-collections`
 
@@ -1484,6 +1561,11 @@ registerTaxReturnSource({
     undatedRows: 0,        // rows no date range can reach
     findings: [{ id: 'ticketTaxHeld', severity: 'blocking', count: 825, label: '…', detail: '…' }],
     filingLines: [],       // lines beneath the filing figures, for request.filing.form
+    // The OPERATOR's own sales you hold, folded into the filing figures:
+    operatorSales: [{ id: 'tickets:box-office', label: 'Box office', byJurisdiction: {
+      'US-TX': { transactionCount: 1, totalSalesCents: 10000, taxableSalesCents: 10000,
+                 taxCollectedCents: 825, refundCount: 0, refundedSalesCents: 0, refundedTaxCents: 0 },
+    } }],
     tables: [], figures: [],
     exports: [{ placement: 'sections', rows: [['Ticket tax'], ['Held', '8.25']] }],
     summary, rows,         // your own figures and rows, carried whole for the audit
@@ -1499,18 +1581,57 @@ And declare it, in `plugins.config.json`:
 
 | API | Semantics |
 | --- | --- |
-| `registerTaxReturnSource(source, { pluginId? })` | One source per plugin; registering again replaces it. |
+| `registerTaxReturnSource(source, { pluginId? })` | One source per plugin; registering again replaces it. Its `read` answers one section, or a list of them — one per kind of sale the plugin records apart, each its own card. A list is all or nothing: an empty one, or one malformed section, refuses the plugin. |
 | `readTaxReturnSources(request)` | Every source's answer, declared sources first. **Never throws, never drops a declared source.** |
 | `PLUGIN_TAX_RETURN_SOURCES` | The plugins that declared `taxReturnSource`, compiled from the config. |
+| `operatorSales` (on an answer) | The operator's OWN sales the section holds — sales where the operator is the seller, not a merchant — by part and jurisdiction, in integer cents. The platform adds the filing jurisdiction's to its filing figures and lists every part and jurisdiction beside them. Leave it out for facilitated sales. A part id is unique on the return: a second source stating one already there is refused, so nothing folds in twice. |
+| `taxReturnOperatorSalesIn(sections, code)` / `taxReturnOperatorSalesRows(sections)` | The own sales in one jurisdiction summed over every part, and every part and jurisdiction as rows: what the platform folds in and what its breakdown lists. |
 
 **An unread source refuses the return.** A declared plugin that registered no
-source, a source that threw, and an answer with a malformed finding each come
+source, a source that threw, and an answer with a malformed finding or a figure
+of its own sales that is not a whole number each come
 back `outcome: 'refused'`, and the return raises a blocking "do not file"
 finding. So do a read that stopped at the cap and rows no period can reach,
 whatever the source's own findings say. The declaration is what makes a
 missing registration a refusal: a registry alone cannot tell "nothing
 registered" from "nothing sold". `sales-sources-are-registered.spec.ts`
 runs the real registrars through the console's manifest.
+
+## Before a closure — `plugin-closure-notices`
+
+When a workspace is deleted or an account is closed, a plugin finishes its share
+through `plugin-org-erasure` and `plugin-user-erasure`. If that share changes
+something the person paid for or relies on — an order canceled and refunded, a
+booking released — say so BEFORE they confirm: register a notice source, and the
+console's **Delete organization** card and **Close your account?** dialog print
+your notices above the confirm.
+
+```ts
+import { registerClosureNoticeSource } from '@aglyn/aglyn/plugin-manager/plugin-closure-notices'
+
+// from your consoleServerDeclarations, the import lazy
+registerClosureNoticeSource({
+  notices: async (subject) => {
+    // subject: { kind: 'workspace', orgId } | { kind: 'account', uid }
+    const held = await readWhatTheClosureWillCancel(subject)
+    if (!held.length) return []
+    return [{
+      id: 'tickets-refunded', severity: 'warning',
+      title: `${held.length} tickets will be refunded`,
+      body: 'When the workspace is deleted, each is refunded in full.',
+      items: held.map((ticket) => ({ id: ticket.id, primary: ticket.event, amount: ticket.price })),
+    }]
+  },
+}, { pluginId: 'tickets' })
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerClosureNoticeSource(source, { pluginId? })` | One source per plugin; registering again replaces it. |
+| `readClosureNotices(subject)` | Every source's notices, warnings first, each with its `pluginId`. **Never throws**: a source that threw, or answered a notice with no words, no severity or no items, is listed in `unavailable`, and the screens say some details could not be checked. With nothing registered, it runs the app's boot step once and asks again. |
+| `GET /api/closure-notices?subject=workspace&orgId=…` or `?subject=account` | The console's route the screens call: the workspace's owner (or staff), or the signed-in person for their own account. |
+
+A notice is information, never a gate: nothing it answers holds a closure back.
 
 ## Earnings on the operator's revenue report — `plugin-revenue-sources`
 
@@ -1697,6 +1818,7 @@ if (captured?.ok === false) log.warn(captured.reason, captured.error)
 | `capturePluginContact(request)` | `{ ok: true, record: 'contact', contactId, created }` or `{ ok: true, record: 'lead', leadId, created }` — `created: false` is a returning visit — or `{ ok: false, reason, error }`, or **`null` when no plugin keeps people**. `null` and a refusal are different answers: `null` is a workspace with no record system, where nothing has gone wrong. |
 | `registerPluginContactSource({ source, label, openLabel?, recordKind? }, { pluginId? })` | One source word has one owner. `openLabel` is what a link from a timeline entry says, and a door with nothing to open declares none. `recordKind` is the kind `plugin-record-routes` addresses the silo's own document by. |
 | `pluginContactCaptureWriter()` / `listPluginContactSources()` / `pluginContactSource(source)` | The writer with its owner, every declared door, and one by its word. |
+| `labelContactSource(source, fallback?)` | How a contact's source word reads on screen: the core's own label, else the `label` its plugin declared, else `fallback` (or the word itself). A plugin cannot relabel a core source. It answers from what this process registered, so declare a door from your `declarations` entry when the console's browser should label it. |
 
 **A refusal is returned, never thrown.** Each of these silos has already
 accepted the submission or taken the money, so a throw would cost it the thing
@@ -2352,6 +2474,8 @@ after, never a reference to the plugin.
 | --- | --- | --- |
 | `org.seatAddons.changed` | the add-on checkout and the billing webhook | `{ orgId, actor, before, after }` — the `org.seatAddons` maps |
 | `org.permissions.changed` | the member, role and host-member routes | `{ orgId, actor, subject: { type, id?, name? }, permission, granted }` |
+| `org.logo.changed` | the organization settings route, once a profile or white-label brand save has answered | `{ orgId, actor, changed }` — `changed` lists `logo`, `logoDark`, `brandLogo` and `brandLogoDark` as they moved |
+| `org.created` | both doors that create a workspace (the new-workspace page and an account's first site), once it exists and its welcome is sent | `{ orgId, owner: { uid, email, emailVerified }, via }` — `via` is `workspace-page` or `first-site` |
 | `host.records.removed` | the public API's deletes and a person's erasure, after the delete lands | `{ orgId, hostIds, collection, records: [{ id, data }] }` — each removed document as it stood |
 | `host.email.engaged` | the email delivery webhook, for a message tagged with a site, after the delivery log records it | `{ hostId, events: [{ to, type, at, firstOfType }] }` — opens and clicks only; `firstOfType` marks the first of its type for that message |
 | `billing.invoice.paid` | the billing webhook, once the invoice resolves to a workspace | `{ orgId, invoiceId, amountPaidCents, currency, paidOutOfBand, metadata }` |
@@ -3104,7 +3228,7 @@ model prices it, rather than pricing the meter at zero, and
 | `filterPluginsByReleaseFlags(ids, isFlagOn, {staffBypass})` | Subtracts release-flagged-off first-party plugins (AGL-422). |
 | `registerPluginConfigSchema(schema)` / `mergePluginConfig` / `resolvePluginConfig` / `pluginConfigOverrides` / `validatePluginConfigValues` | Per-plugin settings: declared once, generic form + typed reads everywhere, resolved across schema defaults → workspace → per-site override (AGL-428). Full contract: [Plugin configuration](./plugin-config.md). |
 | `registerCustomFieldType(fieldType)` / `validateCustomFieldValue` | Dataset field types riding existing storage types (AGL-434). |
-| `registerPluginPermissions(list)` | Role-resolved permission keys with per-tier defaults (AGL-435). They join the ONE permission catalog beside the `orgPermissions` keys (`listPluginCatalogPermissions`, AGL-4047): listed by the role editor, kept by custom roles and per-member overrides, and resolved with every layer by `resolveOrgPermissions`; the owner holds the admin tier's default. Register them from a `declarations` (or `consoleDeclarations`) entry so every process knows them at boot. `group` / `groupLabel` file a key under a heading. |
+| `registerPluginPermissions(list)` | Role-resolved permission keys with per-tier defaults (AGL-435). They join the ONE permission catalog beside the `orgPermissions` keys (`listPluginCatalogPermissions`, AGL-4047): listed by the role editor, kept by custom roles and per-member overrides, and resolved with every layer by `resolveOrgPermissions`; the owner holds the admin tier's default. Register them from a `declarations` (or `consoleDeclarations`) entry so every process knows them at boot. `group` / `groupLabel` file a key under a heading. `refines` names a broader key this one is a finer part of: it is never granted without that key, and follows it where no custom role or override sets it, so splitting a key leaves every member's access as it was (`refinePermissionMap`). `follows` names a key this one takes its verdict from where nothing sets it, WITHOUT needing it: granted on its own, it holds while that key is refused, so a key can stop refining one and be granted alone with no member's access moving. A key that refines does not also follow. `narrowsPerSite` marks a key a site can narrow: on a site where a workspace-wide member's access is narrower than their workspace role (an editor with Viewer or Author access there), a key that narrows is what that narrower access holds by default, never more than the workspace grants, unless the site grants it (`hostPermissions[hostId]`, set from the site's **Users** card). Declaring it offers a per-key control on custom roles and per-member permissions (`siteNarrowing`: `true` follows the site role, `false` keeps the permission), and its value is the built-in roles' default: `true` narrows for every role, `false` keeps for every role (the control is still offered), a map names each role's default. Absent, the key never narrows. `siteNarrowingChoices` resolves the three layers (member over custom role over built-in default), and `siteNarrowingFor` and `narrowPermissionsToSite` apply it; every resolver that answers for a site calls them. |
 | `registerPluginJob(job)` / `runPluginJobs(due?)` | Scheduled jobs run by the guarded `/api/plugins/run-jobs` route (AGL-435). `job.lockdown` is required; the runner injects a `PluginJobHostGate` into every handler (AGL-2495). |
 | `registerPluginJobHostLockdown(fn)` / `pluginJobHostGate()` | How the HOST APP supplies the per-host lockdown verdict the job beat asks, and how a manual cron door mints the same gate (AGL-2495). |
 | `registerPluginInstallPresetMapper(fn)` | Maps marketplace install docs to besigner drawer presets. |

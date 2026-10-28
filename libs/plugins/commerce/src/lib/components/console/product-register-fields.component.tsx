@@ -21,6 +21,7 @@ import {
   Button,
   FormControlLabel,
   IconButton,
+  MenuItem,
   Stack,
   Switch,
   TextField,
@@ -36,6 +37,8 @@ export interface ProductRegisterFieldsProps {
   posQuickKey: boolean
   /** `productSellsOnline` of the product: absent reads as on. */
   sellOnline: boolean
+  /** What the site does with the reviews of a product sold in person only (AGL-4060). */
+  inStoreReviews?: CommerceModel.HostProduct['inStoreReviews']
   modifierGroups: readonly CommerceModel.ProductModifierGroup[]
   update: (patch: Patch) => void
 }
@@ -52,8 +55,24 @@ function centsFromDollars(value: string): number {
 
 export interface ProductSellOnlineFieldProps {
   sellOnline: boolean
+  /** What the site does with its reviews while it sells in person only; absent reads as `show`. */
+  inStoreReviews?: CommerceModel.HostProduct['inStoreReviews']
   update: (patch: Patch) => void
 }
+
+/** The "Reviews on your site" choices, as the editor words them (AGL-4060). */
+const IN_STORE_REVIEWS_OPTIONS: ReadonlyArray<{ value: 'show' | 'hide'; label: string; help: string }> = [
+  {
+    value: 'show',
+    label: 'Show, marked Sold in store',
+    help: 'Its reviews appear in your site’s reviews and its average, marked “Sold in store”, with no link to a product page.',
+  },
+  {
+    value: 'hide',
+    label: 'Hide',
+    help: 'Its reviews appear nowhere on your site: not in the reviews list and not in its average. You still see them under Reviews here.',
+  },
+]
 
 /**
  * The product's "Sell online" switch (AGL-4060). On (the default, and what
@@ -65,8 +84,9 @@ export const ProductSellOnlineField = memo(function ProductSellOnlineField(
 ) {
   const { sellOnline, update } = props
   const helpId = useId()
+  const reviews = props.inStoreReviews === 'hide' ? 'hide' : 'show'
   return (
-    <Stack spacing={0.5}>
+    <Stack spacing={1}>
       <FormControlLabel
         control={
           <Switch
@@ -82,6 +102,28 @@ export const ProductSellOnlineField = memo(function ProductSellOnlineField(
           ? 'Sold on your site — its product page, product grids, search, the cart and checkout — and in any shopping feeds and marketplaces you connect, as well as in person.'
           : `In person only: sold at the register, the kiosk, the ${PLATFORM_BRAND_NAME} POS apps and on draft orders. It has no page on your site and is left out of product grids, search, the sitemap, the cart, checkout and every shopping feed.`}
       </Typography>
+      {/*
+        Its reviews, while it sells in person only (AGL-4060): shown on the
+        site marked "Sold in store" by default, or kept off it. Online, a
+        product's reviews are always on its own page, so the choice is not
+        offered.
+      */}
+      {sellOnline ? null : (
+        <TextField
+          select
+          size="small"
+          label="Reviews on your site"
+          value={reviews}
+          onChange={(event) => update({ inStoreReviews: event.target.value as 'show' | 'hide' })}
+          helperText={IN_STORE_REVIEWS_OPTIONS.find((option) => option.value === reviews)?.help}
+        >
+          {IN_STORE_REVIEWS_OPTIONS.map((option) => (
+            <MenuItem key={option.value} value={option.value}>
+              {option.label}
+            </MenuItem>
+          ))}
+        </TextField>
+      )}
     </Stack>
   )
 })
@@ -132,7 +174,7 @@ export const ProductRegisterFields = memo(function ProductRegisterFields(
         }
         label="Quick key at the register"
       />
-      <ProductSellOnlineField sellOnline={props.sellOnline} update={update} />
+      <ProductSellOnlineField sellOnline={props.sellOnline} inStoreReviews={props.inStoreReviews} update={update} />
       <Typography variant="body2" color="text.secondary">
         {'Modifiers are choices added as the item is rung up, such as a milk or an extra shot. ' +
           'Each can be free or add to the price.'}

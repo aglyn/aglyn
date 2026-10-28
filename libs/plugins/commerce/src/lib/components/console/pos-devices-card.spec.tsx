@@ -181,11 +181,100 @@ describe('the POS devices card', () => {
     expect(screen.getByText(/Only an admin or editor/)).toBeTruthy()
   })
 
+  it('disables setting devices up, with the reason, for someone without the devices key (AGL-4047)', async () => {
+    render(<PosDevicesCard hostId="host-1" canManagePos canSetUpDevices={false} />)
+    const pair = await screen.findByRole('button', { name: 'Pair display to Front counter' })
+    expect((pair as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getAllByText(/"Registers and devices" permission/).length).toBeGreaterThan(0)
+    await waitFor(() => expect(screen.getByText('Add card reader')).toBeTruthy())
+    expect((screen.getByRole('button', { name: 'Add card reader' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
   it('disables pairing with a reason on a plan without POS', async () => {
     orgPlan.org = { plan: 'free' }
     render(<PosDevicesCard hostId="host-1" canManagePos />)
     const pair = await screen.findByRole('button', { name: 'Pair display to Front counter' })
     expect((pair as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getByText(/Point of Sale is not on your plan/)).toBeTruthy()
+  })
+
+  describe('4G for the store’s S710s (AGL-4038)', () => {
+    const withCellular = (enabled: boolean, extra: Record<string, unknown> = {}) => {
+      readersAnswer = {
+        ...readersAnswer,
+        locationReady: true,
+        // Figures for the spec only.
+        cellular: { readerMonthlyCents: 1_061, enabled, readers: 2, ...extra },
+      }
+    }
+
+    it('is absent where the route offers no 4G', async () => {
+      render(<PosDevicesCard hostId="host-1" canManagePos />)
+      await waitFor(() => expect(screen.getByText('Counter reader')).toBeTruthy())
+      expect(screen.queryByText('4G (cellular)')).toBeNull()
+    })
+
+    it('says it is for every S710 at the store and charged for each, and turns on only with the agreement', async () => {
+      withCellular(false)
+      render(<PosDevicesCard hostId="host-1" canManagePos />)
+      fireEvent.click(await screen.findByRole('button', { name: 'Turn on 4G' }))
+      expect(screen.getByText(/Every Stripe Reader S710 at this store gets Stripe's 4G service/)).toBeTruthy()
+      expect(screen.getByText(/Each S710 is charged \$10\.61 a month/)).toBeTruthy()
+      const confirm = screen.getAllByRole('button', { name: 'Turn on 4G' }).pop() as HTMLButtonElement
+      expect(confirm.disabled).toBe(true)
+      fireEvent.click(screen.getByRole('checkbox'))
+      fireEvent.click(confirm)
+      await waitFor(() =>
+        expect(calls.find((call) => call.body?.action === 'cellular')?.body).toEqual({
+          action: 'cellular',
+          hostId: 'host-1',
+          enabled: true,
+          consent: true,
+        }),
+      )
+    })
+
+    it('turns off where it is on', async () => {
+      withCellular(true)
+      render(<PosDevicesCard hostId="host-1" canManagePos />)
+      expect(await screen.findByText(/On for every Stripe Reader S710 at this store/)).toBeTruthy()
+      fireEvent.click(screen.getByRole('button', { name: 'Turn off 4G' }))
+      fireEvent.click(screen.getAllByRole('button', { name: 'Turn off 4G' }).pop() as HTMLButtonElement)
+      await waitFor(() =>
+        expect(calls.find((call) => call.body?.action === 'cellular')?.body).toEqual({
+          action: 'cellular',
+          hostId: 'host-1',
+          enabled: false,
+        }),
+      )
+    })
+
+    it('says turning it on takes "Manage billing", and still lets that member turn it off', async () => {
+      const refusal = 'Your role does not include "Manage billing" — ask an organization admin. 4G is charged to the workspace.'
+      withCellular(false, { turnOnBlocked: refusal })
+      const { unmount } = render(<PosDevicesCard hostId="host-1" canManagePos />)
+      const on = (await screen.findByRole('button', { name: 'Turn on 4G' })) as HTMLButtonElement
+      expect(on.disabled).toBe(true)
+      unmount()
+      withCellular(true, { turnOnBlocked: refusal })
+      render(<PosDevicesCard hostId="host-1" canManagePos />)
+      const off = (await screen.findByRole('button', { name: 'Turn off 4G' })) as HTMLButtonElement
+      expect(off.disabled).toBe(false)
+    })
+
+    it('says which unpaid month turned it off, and how to turn it back on', async () => {
+      withCellular(false, { suspended: { month: 'October 2026', atMs: 1 } })
+      render(<PosDevicesCard hostId="host-1" canManagePos />)
+      expect(
+        await screen.findByText(/4G was turned off because the 4G charge for October 2026 wasn't paid\. Pay it on the Billing page/),
+      ).toBeTruthy()
+    })
+
+    it('is not offered to someone without the devices key', async () => {
+      withCellular(false)
+      render(<PosDevicesCard hostId="host-1" canManagePos canSetUpDevices={false} />)
+      const button = (await screen.findByRole('button', { name: 'Turn on 4G' })) as HTMLButtonElement
+      expect(button.disabled).toBe(true)
+    })
   })
 })

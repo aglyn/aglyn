@@ -25,6 +25,7 @@ import {
   taxReturnFilingLines,
   taxReturnFindingGroups,
   taxReturnJurisdictionRows,
+  taxReturnOwnSalesBreakdown,
   taxReturnPeriodOptions,
   taxReturnRegistration,
   type TaxReturnAttentionVerdict,
@@ -82,6 +83,17 @@ export const TAX_RETURN_COPY = {
     'here and out of the filing figures above, because a purchase the platform made from itself is not a sale to a ' +
     'state. It is stated rather than subtracted quietly so the figures can be checked. The mark is written when the ' +
     'purchase is made and cannot be added afterwards.',
+  breakdownHeader: (webfile: boolean) =>
+    webfile ? 'Items 1–2 by source and state' : 'The figures by source and jurisdiction',
+  breakdownIntro: (code: string) =>
+    `The filing figures add ${PLATFORM_BRAND_NAME}’s own sales outside its invoices — the card reader shop and ` +
+    `${PLATFORM_BRAND_NAME}’s own stores — to the invoices. The rows marked “In the figures” are ${code}, and ` +
+    'they add up to the figures exactly; the rest are the same sales elsewhere, for checking.',
+  breakdownEmpty: 'Nothing was sold in this period.',
+  breakdownFootnote:
+    'Each sale is counted once, under one source. A sale is in the period it was paid; a refund is in the period it ' +
+    'was made, stated here and never netted from the figures. Test-mode sales are in no row. A merchant’s own store ' +
+    'is never here: its sales are on the storefront card below.',
   sourceRefused: (reason: string) =>
     `${reason} None of its sales are in any figure on this page. Do not file from this.`,
   sourceTruncated: (name: string) =>
@@ -158,6 +170,28 @@ export interface TaxReturnView {
     blocked: boolean
     blockedNote: string
     lines: Array<{ item: string; label: string; note: string; value: string; entered: boolean }>
+    /**
+     * What the figures are made of (AGL-4038): the invoices and the
+     * operator's own sales outside them, one line per source and
+     * jurisdiction, the filing jurisdiction's first.
+     */
+    breakdown: {
+      header: string
+      intro: string
+      footnote: string
+      empty: string
+      rows: Array<{
+        key: string
+        source: string
+        jurisdiction: string
+        inFigures: boolean
+        sales: string
+        totalSales: string
+        taxableSales: string
+        taxCollected: string
+        refunded: string
+      }>
+    }
   }
   purchases: { applies: boolean; period: string }
   refunds: { note: string; lines: Array<{ label: string; value: string }> }
@@ -249,6 +283,23 @@ export function taxReturnView(payload: TaxReturnPayload, options: { now: Date; f
         value: line.dollars === null ? 'not computed' : line.dollars,
         entered: line.entered === true,
       })),
+      breakdown: {
+        header: TAX_RETURN_COPY.breakdownHeader(filing.form === 'tx-webfile'),
+        intro: TAX_RETURN_COPY.breakdownIntro(filing.code),
+        footnote: TAX_RETURN_COPY.breakdownFootnote,
+        empty: TAX_RETURN_COPY.breakdownEmpty,
+        rows: taxReturnOwnSalesBreakdown(payload).map((row) => ({
+          key: row.key,
+          source: row.source,
+          jurisdiction: row.jurisdiction === 'unknown' ? 'Not stated' : row.jurisdiction,
+          inFigures: row.inFigures,
+          sales: String(row.transactionCount),
+          totalSales: money(row.totalSalesDollars),
+          taxableSales: money(row.taxableSalesDollars),
+          taxCollected: money(row.taxCollectedDollars),
+          refunded: row.refundedSalesDollars === null ? 'On the refunds card' : money(row.refundedSalesDollars),
+        })),
+      },
     },
     purchases: { applies: filing.form === 'tx-webfile', period: payload.period },
     refunds: {

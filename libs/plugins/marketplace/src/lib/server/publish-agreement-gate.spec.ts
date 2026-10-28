@@ -180,7 +180,7 @@ describe('every publish door runs the shared gate (AGL-2282)', () => {
     .sort()
 
   it('finds every publish door the repo has', () => {
-    // Not vacuous: eight doors exist today. A directory read that returned
+    // Not vacuous: nine doors exist today. A directory read that returned
     // nothing, or a rename that made the discriminator stop matching, would
     // otherwise let this whole describe pass by finding zero files to check.
     expect(doors.map((file) => file.name).sort()).toEqual([
@@ -189,6 +189,7 @@ describe('every publish door runs the shared gate (AGL-2282)', () => {
       'publish-email-template.ts',
       'publish-layout.ts',
       'publish-plugin.ts',
+      'publish-starter.ts',
       'publish-template.ts',
       'publish-theme.ts',
       'publish.ts',

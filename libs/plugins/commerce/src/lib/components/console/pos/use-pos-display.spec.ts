@@ -15,7 +15,15 @@
  * limitations under the License.
  */
 
-import { posDisplayTipCents } from './use-pos-display'
+import { customerDisplayHost } from '@aglyn/aglyn/plugin-manager/plugin-customer-display'
+import { act, renderHook } from '@testing-library/react'
+import { posDisplayCall } from './pos-api'
+import { posDisplayTipCents, usePosDisplay } from './use-pos-display'
+
+jest.mock('./pos-api', () => ({
+  ...jest.requireActual('./pos-api'),
+  posDisplayCall: jest.fn(),
+}))
 
 describe('the tip the customer display shows (AGL-3608)', () => {
   const open = { status: 'pending', tipCents: 0 }
@@ -33,5 +41,47 @@ describe('the tip the customer display shows (AGL-3608)', () => {
   it('never shows a negative or fractional tip', () => {
     expect(posDisplayTipCents(open, -50)).toBe(0)
     expect(posDisplayTipCents(open, 99.6)).toBe(100)
+  })
+})
+
+describe('the register offers its display to other plugins (AGL-4042)', () => {
+  const call = posDisplayCall as jest.Mock
+  const user = { uid: 'uid-1' }
+
+  it('offers it through core’s seam while connected, and puts a plugin’s screen on it with a fresh prompt', async () => {
+    call.mockImplementation(async (_user: unknown, body: { action: string }) =>
+      body.action === 'state' ? { connected: true } : { ok: true },
+    )
+    const { unmount } = renderHook(() => usePosDisplay(user as never, 'host-1', 'reg-1'))
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    })
+    const host = customerDisplayHost()
+    expect(host).not.toBeNull()
+    const screen = { pluginId: 'acme-forms', path: '/display-fill', params: { grant: 'g.1' } }
+    expect(await host?.show(screen)).toBe(true)
+    const push = call.mock.calls.find(([, body]) => body.action === 'push')?.[1]
+    expect(push).toMatchObject({ action: 'push', hostId: 'host-1', registerId: 'reg-1', state: { mode: 'screen', screen } })
+    expect(push.state.promptId).toMatch(/\S{8,}/)
+    // Staff close it: the register is asked to take that plugin's screen off.
+    expect(await host?.close?.('acme-forms')).toBe(true)
+    expect(call.mock.calls.find(([, body]) => body.action === 'close-screen')?.[1]).toEqual({
+      action: 'close-screen',
+      hostId: 'host-1',
+      registerId: 'reg-1',
+      pluginId: 'acme-forms',
+    })
+    unmount()
+    expect(customerDisplayHost()).toBeNull()
+  })
+
+  it('offers nothing while no display is connected', async () => {
+    call.mockReset()
+    call.mockResolvedValue({ connected: false })
+    renderHook(() => usePosDisplay(user as never, 'host-1', 'reg-1'))
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    })
+    expect(customerDisplayHost()).toBeNull()
   })
 })

@@ -21,6 +21,7 @@ import {
   computePosDayReport,
   posDayReportCsv,
   posDayReportRange,
+  POS_ORDER_REFUNDS_COLLECTION,
   POS_DAY_REPORT_RETURNS_CEILING,
   POS_DAY_REPORT_SALES_CEILING,
   POS_DAY_REPORT_SHIFTS_CEILING,
@@ -50,6 +51,9 @@ import { POS_CURRENCY } from './pos-stripe'
  *
  *   orders   channel == 'pos', createdAtMs in range   (channel ASC, createdAtMs DESC)
  *   returns  per register, atMs in range               automatic single field
+ *   refunds  per register, atMs in range               automatic single field
+ *            (`orderRefunds`: a register sale refunded from the order dialog
+ *            or in Stripe, on the day it was given; AGL-4037)
  *   shifts   per register, openedAtMs in range         automatic single field
  *   shifts   per register, closedAtMs in range         automatic single field
  *   shifts   the open one and those a sale names       by id (`getAll`)
@@ -131,9 +135,18 @@ export async function readPosDayReport(
 
   const perRegister = await Promise.all(
     registers.map(async (register) => {
-      const [returnsSnapshot, openedSnapshot, closedSnapshot] = await Promise.all([
+      const [returnsSnapshot, refundsSnapshot, openedSnapshot, closedSnapshot] = await Promise.all([
         register.ref
           .collection('returns')
+          .where('atMs', '>=', startMs)
+          .where('atMs', '<', endMs)
+          .limit(POS_DAY_REPORT_RETURNS_CEILING + 1)
+          .get(),
+        // Every other refund of this register's sales, given in the range:
+        // from the order dialog or in Stripe (AGL-4037). Read as stored, its
+        // amount and tender written when the money went back.
+        register.ref
+          .collection(POS_ORDER_REFUNDS_COLLECTION)
           .where('atMs', '>=', startMs)
           .where('atMs', '<', endMs)
           .limit(POS_DAY_REPORT_RETURNS_CEILING + 1)
@@ -153,6 +166,7 @@ export async function readPosDayReport(
       ])
       if (
         returnsSnapshot.docs.length > POS_DAY_REPORT_RETURNS_CEILING ||
+        refundsSnapshot.docs.length > POS_DAY_REPORT_RETURNS_CEILING ||
         openedSnapshot.docs.length > POS_DAY_REPORT_SHIFTS_CEILING ||
         closedSnapshot.docs.length > POS_DAY_REPORT_SHIFTS_CEILING
       ) {
@@ -173,6 +187,20 @@ export async function readPosDayReport(
               .map((tender: any) => ({ method: tender.method, amountCents: Number(tender.amountCents ?? 0) })),
           }
         })
+      for (const doc of refundsSnapshot.docs.slice(0, POS_DAY_REPORT_RETURNS_CEILING)) {
+        const data = (doc.data() ?? {}) as Record<string, any>
+        const tenders = Array.isArray(data['tenders']) ? data['tenders'] : []
+        returns.push({
+          registerId: register.id,
+          // Who gave it back; a refund made in Stripe names nobody.
+          ...(data['cashierId'] ? { cashierId: String(data['cashierId']) } : {}),
+          refundedCents: Number(data['refundedCents'] ?? 0),
+          tenders: tenders.map((tender: any) => ({
+            method: tender.method,
+            amountCents: Number(tender.amountCents ?? 0),
+          })),
+        })
+      }
       return {
         register,
         returns,

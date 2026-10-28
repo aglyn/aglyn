@@ -17,6 +17,7 @@
 'use client'
 
 import * as CommerceModel from '../../model'
+import { productOfferedOnKiosk } from '../../model/commerce-kiosk-offer'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
@@ -42,7 +43,7 @@ import {
 import { collection, doc, getDoc } from 'firebase/firestore'
 import { ScanAdornment } from '../../barcode/scan-button.component'
 import { productCollectionFields } from './smart-collections'
-import { memo, useCallback, useMemo, useRef, useState } from 'react'
+import { lazy, memo, Suspense, useCallback, useMemo, useRef, useState } from 'react'
 import {
   ceilingedWindow,
   collectionCeiling,
@@ -83,6 +84,14 @@ import {
 } from './paid-media'
 import { ProductCheckInFields } from './product-check-in-fields.component'
 import { ProductRegisterFields, ProductSellOnlineField } from './product-register-fields.component'
+import { ProductKioskOfferField } from './product-kiosk-offer-field.component'
+
+/**
+ * The platform's own store's "Point of sale hardware" choice (AGL-4038),
+ * loaded only when the register section is drawn; it asks the server whether
+ * this store is the hardware seller and draws nothing anywhere else.
+ */
+const ProductHardwareSkuField = lazy(() => import('./product-hardware-sku-field.component'))
 
 /**
  * What each picker in this dialog will offer.
@@ -1335,6 +1344,15 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [checkInVariantsKey],
   )
+  // The kiosk choice's view of the variants (AGL-4038), kept apart the same way.
+  const kioskVariantsKey = JSON.stringify(
+    current.variants.map((variant) => [variant.id, variant.options ?? null, variant.offerOnKiosk ?? null]),
+  )
+  const kioskVariants = useMemo(
+    () => current.variants.map(({ id, options, offerOnKiosk }) => ({ id, options, offerOnKiosk })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [kioskVariantsKey],
+  )
   const setTags = useCallback(
     (tags: string[]) =>
       update({ tags: tags.map((tag) => String(tag).trim()).filter(Boolean) }),
@@ -1758,6 +1776,10 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle>{product ? 'Edit product' : 'Add product'}</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {/* A sample a guided start made, to replace with the merchant's own (AGL-4065). */}
+        {CommerceModel.productIsSample(current) ? (
+          <Alert severity="info">{CommerceModel.PRODUCT_SAMPLE_NOTE}</Alert>
+        ) : null}
         <ProductBasicsFields
           name={current.name}
           slug={current.slug}
@@ -1902,9 +1924,18 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
             <ProductRegisterFields
               posQuickKey={Boolean(current.posQuickKey)}
               sellOnline={CommerceModel.productSellsOnline(current)}
+              inStoreReviews={current.inStoreReviews}
               modifierGroups={current.modifierGroups ?? NO_MODIFIER_GROUPS}
               update={update}
             />
+            <ProductKioskOfferField
+              offerOnKiosk={productOfferedOnKiosk(current)}
+              variants={kioskVariants}
+              update={update}
+            />
+            <Suspense fallback={null}>
+              <ProductHardwareSkuField hostId={hostId} hardwareSku={current.hardwareSku} update={update} />
+            </Suspense>
             <ProductCheckInFields checkIn={current.checkIn} variants={checkInVariants} update={update} />
           </>
         ) : pos.ready ? (
@@ -1914,7 +1945,7 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
             </EntitlementUpsell>
             {/* A product already set to in person only (AGL-4060) can always be put back online. */}
             {!CommerceModel.productSellsOnline(current) ? (
-              <ProductSellOnlineField sellOnline={false} update={update} />
+              <ProductSellOnlineField sellOnline={false} inStoreReviews={current.inStoreReviews} update={update} />
             ) : null}
           </>
         ) : null}

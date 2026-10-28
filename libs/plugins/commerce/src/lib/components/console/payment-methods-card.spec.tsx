@@ -157,14 +157,14 @@ describe('the payment methods card (AGL-3629)', () => {
     expect(screen.getAllByRole('button', { name: 'Finish in Stripe' })).toHaveLength(1)
   })
 
-  it('is read-only for an editor, and hides Finish from anyone but the owner', async () => {
+  it('is read-only without "Manage payment methods", and hides Finish from anyone but the owner', async () => {
     fetchMock.mockReturnValueOnce(reply(answer({ canEdit: false, canFinish: false })))
     render(<PaymentMethodsCard hostId="host-1" />)
     await screen.findByTestId('payment-method-klarna')
     expect(screen.queryByRole('button', { name: 'Save' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Finish in Stripe' })).toBeNull()
     expect((screen.getByLabelText('Klarna') as HTMLInputElement).disabled).toBe(true)
-    expect(screen.getByText(/Only a site admin/)).toBeTruthy()
+    expect(screen.getByText(/takes the "Manage payment methods" permission/)).toBeTruthy()
   })
 
   it('says so when payments are not configured, and offers a retry on an error', async () => {

@@ -1,0 +1,209 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import type { PosHardwareSku, PosHardwareSkuId } from '../../../model/pos-hardware'
+import { sendPosHardwareRequest } from './pos-hardware-api'
+
+/*
+ * Selling a card reader in person (AGL-4038), the client half of
+ * `/api/commerce/pos-hardware-sale`, so no component builds a request by hand.
+ */
+
+type User = Parameters<typeof sendPosHardwareRequest>[0]
+
+const SALE = '/api/commerce/pos-hardware-sale'
+
+export type PosHardwareSaleStatus =
+  | { seller: false }
+  | { seller: true; items: Array<{ sku: PosHardwareSkuId; name: string; kind: PosHardwareSku['kind'] }> }
+
+/** Whether a store is the platform's own hardware seller, once per store per session. */
+const statusByHost = new Map<string, Promise<PosHardwareSaleStatus>>()
+
+export function posHardwareSaleStatus(user: User, hostId: string): Promise<PosHardwareSaleStatus> {
+  const cached = statusByHost.get(hostId)
+  if (cached) return cached
+  const asked = sendPosHardwareRequest<PosHardwareSaleStatus>(user, SALE, {
+    method: 'POST',
+    body: { action: 'status', hostId },
+  }).catch((error: unknown) => {
+    // A refusal is not remembered: the next editor that opens asks again.
+    statusByHost.delete(hostId)
+    throw error
+  })
+  statusByHost.set(hostId, asked)
+  return asked
+}
+
+/** A sale on the To attach list, as `pending` and `attach` answer it. */
+export interface ToAttachRow {
+  id: string
+  number: string
+  registerOrderId: string | null
+  registerNumber: number | null
+  kiosk: boolean
+  offline: boolean
+  lines: Array<{ sku: PosHardwareSkuId; name: string; quantity: number }>
+  totalCents: number
+  createdAtMs: number
+  contactEmail: string | null
+  attached: boolean
+  storeChosen: boolean
+  readers: number
+  serialsTaken: number
+  readersSetUp: number
+  awaitingWorkspace: boolean
+  invited: boolean
+}
+
+export interface BuyerStore {
+  hostId: string
+  name: string
+  hasLocation: boolean
+}
+
+export interface BuyerWorkspace {
+  orgId: string
+  name: string
+  posPlan: boolean
+  stores: BuyerStore[]
+}
+
+export interface BuyerPerson {
+  uid: string
+  name: string
+  email: string
+  workspaces: BuyerWorkspace[]
+}
+
+export interface BuyerFindResult {
+  kind: 'email' | 'name'
+  people: BuyerPerson[]
+  workspaces: Array<BuyerWorkspace & { owner: Omit<BuyerPerson, 'workspaces'> | null }>
+  noAccount: boolean
+}
+
+/** Who the register says the buyer is. */
+export type BuyerChoice = { uid: string; orgId?: string; hostId?: string } | { email: string }
+
+export function posHardwareToAttach(user: User, hostId: string) {
+  return sendPosHardwareRequest<{ orders: ToAttachRow[] }>(user, SALE, {
+    method: 'POST',
+    body: { action: 'pending', hostId },
+  })
+}
+
+export function posHardwareFindBuyer(user: User, hostId: string, query: string) {
+  return sendPosHardwareRequest<BuyerFindResult>(user, SALE, {
+    method: 'POST',
+    body: { action: 'find', hostId, query },
+  })
+}
+
+export function posHardwareAttach(
+  user: User,
+  attemptKey: string,
+  body: { hostId: string; buyer: BuyerChoice; registerOrderId?: string; orderId?: string },
+) {
+  return sendPosHardwareRequest<{ outcome: 'waiting' } | { outcome: 'attached' | 'pending'; order: ToAttachRow }>(
+    user,
+    SALE,
+    { method: 'POST', body: { ...body, action: 'attach' }, attemptKey },
+  )
+}
+
+/** Saves the serial numbers of a sale's readers, taken at the sale. */
+export function posHardwareSerials(
+  user: User,
+  body: { hostId: string; serials: string[]; registerOrderId?: string; orderId?: string },
+) {
+  return sendPosHardwareRequest<{ ok: true; serials: string[]; recorded: boolean }>(user, SALE, {
+    method: 'POST',
+    body: { ...body, action: 'serials' },
+  })
+}
+
+/** Registers a reader to the buyer's chosen store, by its code, at the booth. */
+/** The buyer's store address, typed at the booth for a store with no card reader location yet. */
+export interface BoothStoreAddress {
+  line1: string
+  city: string
+  state: string
+  postalCode: string
+  country: string
+}
+
+export function posHardwareRegisterAtBooth(
+  user: User,
+  attemptKey: string,
+  body: {
+    hostId: string
+    registrationCode: string
+    registerOrderId?: string
+    orderId?: string
+    address?: BoothStoreAddress
+  },
+) {
+  return sendPosHardwareRequest<{ ok: true; readerId: string; storeAddressSaved: boolean; order: ToAttachRow }>(user, SALE, {
+    method: 'POST',
+    body: { ...body, action: 'register-at-booth' },
+    attemptKey,
+  })
+}
+
+/** The terms of sale the buyer accepts before paying (AGL-4038). */
+export interface PosHardwareTermsView {
+  version: string
+  sections: string
+  url: string
+  summary: string[]
+}
+
+/** How and when the buyer accepted, as the route answers it. */
+export interface PosHardwareTermsAcceptanceView {
+  version: string
+  sections: string
+  method: 'tablet' | 'display' | 'notice'
+  atMs: number
+}
+
+export function posHardwareTerms(user: User, hostId: string) {
+  return sendPosHardwareRequest<PosHardwareTermsView>(user, SALE, { method: 'POST', body: { action: 'terms', hostId } })
+}
+
+export function posHardwareTermsStatus(user: User, hostId: string, registerOrderId: string) {
+  return sendPosHardwareRequest<{ acceptance: PosHardwareTermsAcceptanceView | null }>(user, SALE, {
+    method: 'POST',
+    body: { action: 'terms-status', hostId, registerOrderId },
+  })
+}
+
+/** Notes who is putting the terms on the display, before the register shows them there. */
+export function posHardwareTermsOnDisplay(user: User, hostId: string, registerOrderId: string) {
+  return sendPosHardwareRequest<{ ok: true }>(user, SALE, {
+    method: 'POST',
+    body: { action: 'terms-on-display', hostId, registerOrderId },
+  })
+}
+
+/** The buyer accepted on the register tablet handed to them. */
+export function posHardwareAcceptTerms(user: User, hostId: string, registerOrderId: string) {
+  return sendPosHardwareRequest<{ ok: true; acceptance: PosHardwareTermsAcceptanceView }>(user, SALE, {
+    method: 'POST',
+    body: { action: 'accept-terms', hostId, registerOrderId },
+  })
+}

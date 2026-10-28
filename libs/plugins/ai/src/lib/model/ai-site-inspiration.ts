@@ -26,8 +26,9 @@
  * (`jobs/ai-site-inspiration-signals.ts`). Never a word, a picture or a logo
  * of theirs: nothing a page says reaches a prompt.
  *
- * Behind `release_ai_site_inspiration`, off by default: with it off the
- * guided start asks for no site and a job's inspiration is never read.
+ * Behind `release_ai_site_inspiration`, on by default since 2026-10-28:
+ * turned off, the guided start asks for no site and a job's inspiration is
+ * never read.
  *
  * Pure and console-safe: the input's name, the limits and how an answer is
  * read. No network.

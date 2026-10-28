@@ -18,6 +18,7 @@
 
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
@@ -28,6 +29,10 @@ import {
   Card,
   CardContent,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Link,
   MenuItem,
   Stack,
@@ -50,6 +55,7 @@ import {
   posHardwareCatalog,
   posHardwareCheckout,
   posHardwareOrders,
+  posHardwareRequestReturn,
   PosHardwareRequestError,
   type PosHardwareCatalog,
   type PosHardwareOrderRow,
@@ -69,6 +75,13 @@ export const POS_HARDWARE_STATUS_COLOR: Record<
   refunded: 'default',
 }
 
+/** What the buyer reads of their return request. */
+const RETURN_LABELS: Record<string, string> = {
+  requested: 'Return requested',
+  declined: 'Return declined',
+  refunded: 'Returned',
+}
+
 const QUANTITIES = Array.from({ length: POS_HARDWARE_MAX_PER_LINE + 1 }, (_, index) => index)
 
 const placedOn = (ms: number) =>
@@ -77,12 +90,24 @@ const placedOn = (ms: number) =>
 export interface PosHardwareCardProps {
   hostId: string
   /**
-   * Whether the viewer may work this site's register — the same gate the
-   * shop's route asks (`managePos` on an admin or editor role). The shop is
-   * the register's hardware, so a viewer who may not run it is not shown it.
+   * Whether the viewer may work this site's register (`managePos`). The shop
+   * is the register's hardware, so whoever works it is shown the shop.
    */
   canManagePos?: boolean
+  /**
+   * Whether the viewer may start a checkout (AGL-4047): the "Buy point of
+   * sale hardware" key the route asks of a checkout. It stands on its own,
+   * so a member who holds it without the register is shown the shop and
+   * their orders too. Someone who works the register without it sees the
+   * shop with Check out disabled and the reason. Absent follows
+   * `canManagePos`.
+   */
+  canBuyHardware?: boolean
 }
+
+/** Why Check out is not offered to someone who works the register. */
+const BUY_KEY_REASON =
+  'Only a member with the "Buy point of sale hardware" permission can place an order. Ask an organization admin.'
 
 /**
  * The Hardware card (AGL-4038): Stripe card readers and accessories sold by
@@ -94,7 +119,11 @@ export interface PosHardwareCardProps {
  * on the workspace can take. The route answers `available: false` until
  * every price, the markup and the shipping figures are configured.
  */
-export function PosHardwareCard({ hostId, canManagePos = false }: PosHardwareCardProps) {
+export function PosHardwareCard({
+  hostId,
+  canManagePos = false,
+  canBuyHardware = canManagePos,
+}: PosHardwareCardProps) {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const [catalog, setCatalog] = useState<PosHardwareCatalog | null>(null)
@@ -104,9 +133,11 @@ export function PosHardwareCard({ hostId, canManagePos = false }: PosHardwareCar
   const [busy, setBusy] = useState(false)
   const [returned, setReturned] = useState<'placed' | 'canceled' | null>(null)
   const uid = user?.uid ?? ''
+  // The route's own door (AGL-4047): the register, or the key to buy.
+  const mayVisit = canManagePos || canBuyHardware
 
   useEffect(() => {
-    if (!user || !canManagePos) return
+    if (!user || !mayVisit) return
     let active = true
     void posHardwareCatalog(user, hostId)
       .then((answer) => {
@@ -120,7 +151,7 @@ export function PosHardwareCard({ hostId, canManagePos = false }: PosHardwareCar
     }
     // Keyed on the person, not the session object.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uid, hostId, canManagePos])
+  }, [uid, hostId, mayVisit])
 
   const available = catalog?.available === true
 
@@ -134,9 +165,33 @@ export function PosHardwareCard({ hostId, canManagePos = false }: PosHardwareCar
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid, hostId])
 
+  // The orders load whether or not the shop is open: a reader bought in
+  // person (AGL-4038) is the workspace's purchase history too.
   useEffect(() => {
-    if (available) void loadOrders()
-  }, [available, loadOrders])
+    if (mayVisit) void loadOrders()
+  }, [mayVisit, loadOrders])
+
+  /** The order whose return is being asked for, and why (AGL-4038). */
+  const [returning, setReturning] = useState<PosHardwareOrderRow | null>(null)
+  const [returnReason, setReturnReason] = useState('')
+  const requestReturn = async () => {
+    if (!user || !returning) return
+    setBusy(true)
+    try {
+      await posHardwareRequestReturn(user, hostId, returning.id, returnReason.trim())
+      enqueueSnackbar('Return requested. Our team arranges it with you.', { variant: 'success', persist: false })
+      setReturning(null)
+      setReturnReason('')
+      await loadOrders()
+    } catch (error) {
+      enqueueSnackbar(error instanceof PosHardwareRequestError ? error.message : 'The request did not go through', {
+        variant: 'warning',
+        persist: false,
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
 
   // The first shipping speed is the default once the catalog answers.
   useEffect(() => {
@@ -237,6 +292,30 @@ export function PosHardwareCard({ hostId, canManagePos = false }: PosHardwareCar
         ),
       },
       {
+        // A reader bought in person, or an order shipped to you once it has
+        // shipped (AGL-4038), can be asked back from here.
+        field: 'returnRequest',
+        headerName: 'Return',
+        minWidth: 170,
+        valueGetter: (_value: unknown, row: PosHardwareOrderRow) => RETURN_LABELS[row.returnRequest?.state ?? ''] ?? '',
+        renderCell: ({ row }: { row: PosHardwareOrderRow }) =>
+          row.returnRequest ? (
+            RETURN_LABELS[row.returnRequest.state]
+          ) : (row.status === 'delivered' || row.status === 'registered' || (row.source !== 'in_person' && row.status === 'shipped')) ? (
+            <Button
+              size="small"
+              onClick={(event) => {
+                event.stopPropagation()
+                setReturning(row)
+              }}
+            >
+              {'Request a return'}
+            </Button>
+          ) : (
+            '—'
+          ),
+      },
+      {
         field: 'tracking',
         headerName: 'Tracking',
         minWidth: 160,
@@ -254,7 +333,64 @@ export function PosHardwareCard({ hostId, canManagePos = false }: PosHardwareCar
     [],
   )
 
-  if (!available || !catalog?.available) return null
+  const ordersSection = (
+    <Stack spacing={1}>
+      <Typography variant="subtitle2">{'Your orders'}</Typography>
+      {orders && orders.length === 0 ? (
+        <Typography variant="body2" color="text.secondary">
+          {'No hardware orders yet.'}
+        </Typography>
+      ) : (
+        <ListTable
+          rows={(orders ?? []).map((order) => ({ ...order, $id: order.id }))}
+          columns={columns}
+          loading={orders === null}
+          hideFooter
+          quickFilter={false}
+        />
+      )}
+      <Dialog open={Boolean(returning)} onClose={() => setReturning(null)} maxWidth="sm" fullWidth>
+        <DialogTitle>{returning ? `Return ${returning.number}?` : ''}</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Typography variant="body2" color="text.secondary">
+            {'Tell us why. Our team gets your request and arranges the return with you. Returns follow the hardware terms of sale: the return shipping is yours to pay, the original shipping is not refunded, and any restocking fee charged for the return comes off the refund.'}
+          </Typography>
+          <TextField
+            label="Why are you returning it?"
+            value={returnReason}
+            onChange={(event) => setReturnReason(event.target.value)}
+            multiline
+            minRows={2}
+            fullWidth
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setReturning(null)}>{'Cancel'}</Button>
+          <Button variant="contained" disabled={busy || returnReason.trim().length < 3} onClick={() => void requestReturn()}>
+            {'Request return'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Stack>
+  )
+
+  // With the shop closed, the card is the purchase history alone, and only
+  // when there is one (AGL-4038): a reader bought in person.
+  if (!available || !catalog?.available) {
+    if (!orders?.length) return null
+    return (
+      <CardDisplay
+        id={POS_HARDWARE_ANCHOR}
+        header={'Hardware'}
+        subheader={'Your card reader orders'}
+        help={pluginDocsHelp('posHardware', { anchor: '#bought-from-us-in-person' })}
+        contentGutterX
+        contentGutterY
+      >
+        {ordersSection}
+      </CardDisplay>
+    )
+  }
 
   return (
     <CardDisplay
@@ -264,14 +400,16 @@ export function PosHardwareCard({ hostId, canManagePos = false }: PosHardwareCar
       help={pluginDocsHelp('posHardware', { anchor: '#buy-a-reader-from-aglyn' })}
       HeaderProps={{
         action: (
-          <Button
-            size="small"
-            variant="contained"
-            disabled={busy || !lines.length || !shipping}
-            onClick={() => void checkout()}
-          >
-            {'Check out'}
-          </Button>
+          <BlockedControl blocked={!canBuyHardware} reason={BUY_KEY_REASON}>
+            <Button
+              size="small"
+              variant="contained"
+              disabled={busy || !lines.length || !shipping}
+              onClick={() => void checkout()}
+            >
+              {'Check out'}
+            </Button>
+          </BlockedControl>
         ),
       }}
       contentGutterX
@@ -358,22 +496,7 @@ export function PosHardwareCard({ hostId, canManagePos = false }: PosHardwareCar
         <Typography variant="caption" color="text.secondary">
           {'Ships to street addresses in the United States. P.O. boxes and military addresses are not accepted.'}
         </Typography>
-        <Stack spacing={1}>
-          <Typography variant="subtitle2">{'Your orders'}</Typography>
-          {orders && orders.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              {'No hardware orders yet.'}
-            </Typography>
-          ) : (
-            <ListTable
-              rows={(orders ?? []).map((order) => ({ ...order, $id: order.id }))}
-              columns={columns}
-              loading={orders === null}
-              hideFooter
-              quickFilter={false}
-            />
-          )}
-        </Stack>
+        {ordersSection}
       </Stack>
     </CardDisplay>
   )

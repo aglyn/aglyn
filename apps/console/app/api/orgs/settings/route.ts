@@ -18,7 +18,7 @@
 import { after } from 'next/server'
 import { isBrandingImageUrl, isBrandingLinkUrl } from '../../_lib/branding-url'
 import { assessOwnershipTransferLockout } from '../../_lib/sso-transfer-lockout'
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { pluginRequestFromWeb, runPluginEventHandlers } from '@aglyn/aglyn/server'
 import {
   nameSearchKey,
   nameSearchReversed,
@@ -536,6 +536,24 @@ async function handler(request: Request): Promise<Response> {
         'Updated organization profile',
         { type: 'org', id: orgId },
       )
+      // A changed logo is news to whatever draws it elsewhere (AGL-4048), told
+      // once the save has answered: core names no plugin, and a plugin's
+      // redraw never holds the save up. The plugins' own beats stay the
+      // backstop for a handler that fails.
+      const previous = (org ?? {}) as { logoUrl?: unknown; logoDarkUrl?: unknown }
+      const logosChanged = [
+        ...(logoUrl !== String(previous.logoUrl ?? '') ? (['logo'] as const) : []),
+        ...(hasLogoDark && logoDarkUrl !== String(previous.logoDarkUrl ?? '') ? (['logoDark'] as const) : []),
+      ]
+      if (logosChanged.length) {
+        after(async () => {
+          await runPluginEventHandlers('org.logo.changed', {
+            orgId,
+            actor: { uid: decoded.uid, email: decoded.email ?? null },
+            changed: logosChanged,
+          })
+        })
+      }
       return Response.json({ ok: true }, { status: 200 })
     }
 
@@ -629,6 +647,8 @@ async function handler(request: Request): Promise<Response> {
       const previousConsoleDomain = String(
         (orgSnapshot.get('brandingProfile') ?? {}).customConsoleDomain ?? '',
       )
+      // The brand's logos as they stood before this save (AGL-4048).
+      const previousBrand = { ...(orgSnapshot.get('brandingProfile') ?? {}) } as Record<string, unknown>
       if (customConsoleDomain) {
         const { domain, error: domainError } =
           validateConsoleDomain(customConsoleDomain)
@@ -696,6 +716,21 @@ async function handler(request: Request): Promise<Response> {
         'Updated white-label brand settings',
         { type: 'org', id: orgId },
       )
+      // The brand's logo is the workspace's own where it has one (AGL-4048):
+      // told to the plugins once the save has answered, as the profile's is.
+      const brandLogosChanged = [
+        ...(logoUrl !== String(previousBrand['logoUrl'] ?? '') ? (['brandLogo'] as const) : []),
+        ...(logoDarkUrl !== String(previousBrand['logoDarkUrl'] ?? '') ? (['brandLogoDark'] as const) : []),
+      ]
+      if (brandLogosChanged.length) {
+        after(async () => {
+          await runPluginEventHandlers('org.logo.changed', {
+            orgId,
+            actor: { uid: decoded.uid, email: decoded.email ?? null },
+            changed: brandLogosChanged,
+          })
+        })
+      }
       return Response.json({ ok: true }, { status: 200 })
     }
 

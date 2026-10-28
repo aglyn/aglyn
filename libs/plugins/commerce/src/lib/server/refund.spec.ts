@@ -22,6 +22,7 @@ import type {
 import type { PluginPersonRefundRequest } from '@aglyn/aglyn/plugin-manager/plugin-person-records'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { refundHandler } from './refund'
+import { posOfflineCardOrderMoney } from './pos-offline-card-order'
 import {
   reportedRefundLedger,
   standInPersonRecords,
@@ -1536,6 +1537,49 @@ describe('who may refund (AGL-2372)', () => {
     expect(storedOrder().refundedCents ?? 0).toBe(0)
   })
 
+  it('admits register staff only while they hold the refunds key (AGL-4047)', async () => {
+    // An editor who works the register reaches the register's own refund
+    // rules — here refused as an online order — while the refunds key holds.
+    mockVerifyIdToken.mockResolvedValue({ uid: 'cashier-1' })
+    docs.set('hosts/host-1', { memberRoles: { 'cashier-1': 'editor' } })
+    const cashier = (permissions: Record<string, boolean>) =>
+      mockResolveOrgPermissions.mockResolvedValue({
+        orgId: 'org-1',
+        role: 'editor',
+        isOwner: false,
+        permissions,
+        orgWide: true,
+        hostRole: 'editor',
+      } as any)
+    cashier({ managePos: true })
+    const reached = await post({}, { 'idempotency-key': 'attempt-a' })
+    expect(reached.status).toBe(403)
+    expect(reached.body.error).toBe('Refunds of online orders require an admin of the whole workspace')
+    // Refused the refunds key, they are not register staff at all.
+    cashier({ managePos: true, posRefund: false })
+    const refused = await post({}, { 'idempotency-key': 'attempt-b' })
+    expect(refused.status).toBe(403)
+    expect(refused.body.error).toBe('Refunds require a site admin')
+    expect(refundCalls).toHaveLength(0)
+  })
+
+  it('reaches the register’s refund rules for a site viewer granted the register, by permission alone (AGL-4047)', async () => {
+    mockVerifyIdToken.mockResolvedValue({ uid: 'cashier-1' })
+    docs.set('hosts/host-1', { memberRoles: { 'cashier-1': 'viewer' } })
+    mockResolveOrgPermissions.mockResolvedValue({
+      orgId: 'org-1',
+      role: 'viewer',
+      isOwner: false,
+      permissions: { managePos: true },
+      orgWide: true,
+      hostRole: 'viewer',
+    } as any)
+    const reached = await post({}, { 'idempotency-key': 'attempt-a' })
+    expect(reached.status).toBe(403)
+    expect(reached.body.error).toBe('Refunds of online orders require an admin of the whole workspace')
+    expect(refundCalls).toHaveLength(0)
+  })
+
   it('still admits an org-wide admin — the control refuses, it does not block', async () => {
     // The other half of every allowlist: proof it did not simply close.
     const result = await post({}, { 'idempotency-key': 'attempt-a' })
@@ -1700,6 +1744,71 @@ describe('refund and the gift cards the order bought (AGL-3363)', () => {
  * refund: each refund comes off one card that can cover it, and a refund
  * larger than any one card is refused with the largest that fits.
  */
+describe('a register sale refunded from the order dialog counts in the day totals (AGL-4037)', () => {
+  const records = () =>
+    [...docs.entries()].filter(([path]) => path.startsWith('hosts/host-1/registers/front/orderRefunds/'))
+
+  beforeEach(() => {
+    docs.set('hosts/host-1/orders/order-1', {
+      status: 'paid',
+      channel: 'pos',
+      registerId: 'front',
+      paymentIntentId: 'pi_card_a',
+      lineItems: [{ productId: 'product-1', name: 'Chair', quantity: 1, unitAmountCents: 5000 }],
+      totals: { itemsCents: 5000, shippingCents: 0, taxCents: 0, discountCents: 0, feeCents: 0, totalCents: 5000 },
+      payments: [
+        { id: 'a', method: 'card_present', amountCents: 5000, status: 'succeeded', atMs: 1, paymentIntentId: 'pi_card_a' },
+      ],
+    })
+  })
+
+  it('records the refund under the register the sale was rung at, as given', async () => {
+    const before = Date.now()
+    const result = await post({ amountCents: 1200 }, { 'idempotency-key': 'day-1' })
+    expect(result.status).toBe(200)
+    expect(records()).toHaveLength(1)
+    const [path, record] = records()[0]!
+    expect(path).toBe('hosts/host-1/registers/front/orderRefunds/re_1')
+    expect(record).toEqual({
+      orderId: 'order-1',
+      registerId: 'front',
+      atMs: expect.any(Number),
+      refundedCents: 1200,
+      tenders: [{ method: 'card_present', amountCents: 1200 }],
+      cashierId: 'admin-1',
+      source: 'order_dialog',
+      stripeRefundId: 're_1',
+    })
+    expect(record['atMs']).toBeGreaterThanOrEqual(before)
+  })
+
+  it('records each refund once: a retried attempt replays, a second refund is its own', async () => {
+    await post({ amountCents: 1000 }, { 'idempotency-key': 'day-2' })
+    await post({ amountCents: 1000 }, { 'idempotency-key': 'day-2' })
+    expect(records()).toHaveLength(1)
+    await post({ amountCents: 500 }, { 'idempotency-key': 'day-3' })
+    expect(records().map(([, record]) => record['refundedCents'])).toEqual([1000, 500])
+  })
+
+  it('records nothing when Stripe refuses, because nothing was given', async () => {
+    nextRefundOutcome = 'rejected'
+    expectServerError()
+    const result = await post({ amountCents: 1000 }, { 'idempotency-key': 'day-4' })
+    expect(result.status).toBe(502)
+    expect(records()).toHaveLength(0)
+  })
+
+  it('leaves no record for an online order', async () => {
+    docs.set('hosts/host-1/orders/order-1', {
+      ...docs.get('hosts/host-1/orders/order-1'),
+      channel: 'online',
+      paymentIntentId: 'pi_live_1',
+    })
+    await post({ amountCents: 1000 }, { 'idempotency-key': 'day-5' })
+    expect([...docs.keys()].some((path) => path.includes('/orderRefunds/'))).toBe(false)
+  })
+})
+
 describe('refunding a split-tender register sale (AGL-3607)', () => {
   beforeEach(() => {
     docs.set('hosts/host-1/orders/order-1', {
@@ -1730,5 +1839,62 @@ describe('refunding a split-tender register sale (AGL-3607)', () => {
     expect(result.body.error).toContain('$25.00')
     expect(refundCalls).toHaveLength(0)
     expect(storedOrder().refundedCents ?? 0).toBe(0)
+  })
+})
+
+describe('a card taken offline on the app reader (AGL-4039)', () => {
+  const totals = { itemsCents: 5000, shippingCents: 0, taxCents: 0, discountCents: 0, feeCents: 0, totalCents: 5000 }
+  // The order exactly as the offline sync writes it for a captured card.
+  const money = posOfflineCardOrderMoney({
+    settled: {
+      kind: 'captured',
+      intentId: 'pi_offline_card',
+      amountCents: 5000,
+      feeCents: 275,
+      expectedFeeCents: 275,
+      takeShareCents: 100,
+      livemode: false,
+      brand: 'visa',
+      last4: '4242',
+    },
+    totals,
+    planTakeCents: 100,
+    soldAtMs: 1_000,
+    nowMs: 2_000,
+    cashierId: 'cashier-1',
+    feeOrgId: 'org-1',
+  })
+  const offlineOrder = {
+    status: money.status,
+    channel: 'pos',
+    registerId: 'front',
+    lineItems: [{ productId: 'product-1', name: 'Chair', quantity: 1, unitAmountCents: 5000 }],
+    totals: money.totals,
+    payments: [money.payment],
+    ...money.fields,
+    offline: { saleKey: 'order-1', soldAtMs: 1_000, syncedAtMs: 2_000, syncedBy: 'cashier-1', flags: [] },
+  }
+
+  it('refunds against the card’s own intent', async () => {
+    docs.set('hosts/host-1/orders/order-1', offlineOrder)
+    const result = await post({}, { 'idempotency-key': 'offline-1' })
+    expect(result.status).toBe(200)
+    expect(refundCalls).toHaveLength(1)
+    expect(refundCalls[0].paymentIntent).toBe('pi_offline_card')
+    expect(refundCalls[0].amount).toBe('5000')
+    expect(storedOrder().status).toBe('refunded')
+  })
+
+  it('had no payment to refund while the intent was kept only inside the payment (the defect)', async () => {
+    const withoutOrderIntent: Record<string, unknown> = { ...offlineOrder }
+    delete withoutOrderIntent['paymentIntentId']
+    delete withoutOrderIntent['paymentIntentIds']
+    docs.set('hosts/host-1/orders/order-1', withoutOrderIntent)
+    // The fallback reads a Checkout Session by the order id, which no
+    // register sale has: the double refuses that call, and nothing is refunded.
+    expectServerError()
+    const result = await post({}, { 'idempotency-key': 'offline-2' })
+    expect(result.status).not.toBe(200)
+    expect(refundCalls).toHaveLength(0)
   })
 })

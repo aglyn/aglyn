@@ -262,6 +262,22 @@ export interface AiBuildItem {
   credits?: number
 }
 
+/**
+ * Something a `build` plan's brief asks for that the plan does not build
+ * (AGL-4087): a page or a feature the site has no way to make work, or more
+ * than one build holds. Named in the brief's words, with why, so the member
+ * reads it before confirming. A Free build of 2026-10-28 asked for a home and
+ * a "review helper" page that writes a review draft from a customer's
+ * choices; its plan held the home alone, whose sections still sent visitors
+ * to the helper, and nothing said the helper was left out.
+ */
+export interface AiBuildPlanLeftOut {
+  /** What the brief asks for, in its own words. */
+  asked: string
+  /** Why the plan does not build it, in one sentence. */
+  why: string
+}
+
 export interface AiBuildPlan {
   reuse: AiBuildPlanReuse[]
   create: AiBuildPlanCreate[]
@@ -276,6 +292,12 @@ export interface AiBuildPlan {
    * Absent is none: every other kind's plan.
    */
   items?: AiBuildItem[]
+  /**
+   * What a `build` plan's brief asks for that it does not build (AGL-4087).
+   * Absent is none: every other kind's plan, a build kept before the list
+   * existed, and a build that makes all of it.
+   */
+  leftOut?: AiBuildPlanLeftOut[]
   /**
    * The store pages a `build` adds where its plan turns the site into a store
    * (AGL-3676): worked out by code as the plan is kept, never by the model,
@@ -327,6 +349,8 @@ export const AI_BUILD_PLAN_LIMITS = {
   dependsOn: 8,
   /** The arguments one item carries, as JSON. */
   argsChars: 2_000,
+  /** What a build plan says it leaves out (AGL-4087); past it the rest is cut, never refused. */
+  leftOut: 8,
 } as const
 
 const string = (description: string) => ({ type: 'string', description })
@@ -605,21 +629,38 @@ const ITEMS_SCHEMA = {
   },
 }
 
+const LEFT_OUT_SCHEMA = {
+  type: 'array',
+  description:
+    'What the brief asks for that this plan does not build: a page or a feature the site has no way to make work, or more than this build holds. Empty when the plan builds everything the brief asks for.',
+  items: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['asked', 'why'],
+    properties: {
+      asked: string(`What the brief asks for, in its own words, ${atMost()}.`),
+      why: string(`Why this build does not make it, in one sentence for the site owner, ${atMost()}.`),
+    },
+  },
+}
+
 /**
- * Any plan tool with a build's items (AGL-3616), offered only to a `build`
- * job. The items' arguments travel as one JSON string whose fields the
- * request lists per operation, so the tool stays byte for byte the same
- * whichever plugins registered operations, and the prompt cache keeps it.
+ * Any plan tool with a build's items (AGL-3616) and what it leaves out
+ * (AGL-4087), offered only to a `build` job. The items' arguments travel as
+ * one JSON string whose fields the request lists per operation, so the tool
+ * stays byte for byte the same whichever plugins registered operations, and
+ * the prompt cache keeps it.
  */
 export function withBuildItems(tool: AiTool): AiTool {
   return {
     ...tool,
     inputSchema: {
       ...tool.inputSchema,
-      required: [...(tool.inputSchema['required'] as string[]), 'items'],
+      required: [...(tool.inputSchema['required'] as string[]), 'items', 'leftOut'],
       properties: {
         ...(tool.inputSchema['properties'] as Record<string, unknown>),
         items: ITEMS_SCHEMA,
+        leftOut: LEFT_OUT_SCHEMA,
       },
     },
   }
@@ -957,6 +998,18 @@ export function parseAiBuildPlan(input: unknown): AiBuildPlanParse {
         }
       },
     )
+    // What a build leaves out is read for the member, never refused (AGL-4087):
+    // past the limit the rest is cut, and an entry that names nothing is dropped.
+    const leftOutRaw = root['leftOut'] ?? []
+    if (!Array.isArray(leftOutRaw)) throw new PlanShapeError('leftOut is not a list')
+    if (leftOutRaw.length > AI_BUILD_PLAN_LIMITS.leftOut) {
+      repairs.push(`leftOut listed ${leftOutRaw.length}; kept the first ${AI_BUILD_PLAN_LIMITS.leftOut}`)
+    }
+    const leftOut = leftOutRaw.slice(0, AI_BUILD_PLAN_LIMITS.leftOut).flatMap((raw, index) => {
+      const entry = record(raw, `leftOut[${index}]`)
+      const asked = text(entry['asked'], `leftOut[${index}].asked`)
+      return asked ? [{ asked, why: text(entry['why'] ?? '', `leftOut[${index}].why`) }] : []
+    })
     // A language that is no code is dropped, never refused (AGL-3750): the
     // site keeps the language it has.
     const language = siteLanguageCode(root['language'])
@@ -969,7 +1022,7 @@ export function parseAiBuildPlan(input: unknown): AiBuildPlanParse {
       repairs.push(`photoWords "${root['photoWords'].trim().slice(0, 40)}" is not plain English; ignored`)
     }
     // A plan whose brief asks for no player carries no list, as it did before the list existed;
-    // so does a plan with no items.
+    // so does a plan with no items, and one that leaves nothing out.
     return {
       ok: true,
       plan: {
@@ -978,6 +1031,7 @@ export function parseAiBuildPlan(input: unknown): AiBuildPlanParse {
         screens,
         ...(embeds.length ? { embeds } : {}),
         ...(items.length ? { items } : {}),
+        ...(leftOut.length ? { leftOut } : {}),
         ...(language ? { language } : {}),
         ...(photoWords ? { photoWords } : {}),
       },

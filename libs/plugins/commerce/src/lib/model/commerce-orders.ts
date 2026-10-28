@@ -28,6 +28,7 @@ import type { OrderLineModifier } from './product-modifiers'
 import { stripeIdIsTestMode } from '@aglyn/aglyn/app-utils/stripe-deployment-mode'
 import type { PaymentRisk } from '@aglyn/aglyn/app-utils/payment-risk'
 import type { ProductType } from './commerce'
+import { isCheckInDayKey } from './commerce-check-in-product'
 import type { StorefrontTaxMode } from './commerce-tax-decision'
 import { lineRequiresShipping, orderLineFulfillmentStates } from './order-fulfillment'
 import type { OrderPayment } from './commerce-pos'
@@ -115,6 +116,12 @@ export interface OrderLineItem {
   supplierId?: string
   /** Fulfillment id once this line ships (AGL-288). */
   fulfillmentId?: string
+  /**
+   * The day the buyer chose to use a check-in item (a day pass bought ahead,
+   * AGL-4043), `YYYY-MM-DD` on the store's calendar. Absent: it is due on
+   * the day the order was placed.
+   */
+  useDayKey?: string
 }
 
 export interface OrderTotals {
@@ -401,9 +408,45 @@ export interface OrderCredit {
   appliedAs: 'discount' | 'tender'
 }
 
+/**
+ * The buyer a register user attached to a sale of point of sale hardware on
+ * the platform's own store (AGL-4038): an account the lookup found and the
+ * workspace (and store, when they chose one) the hardware is for, or an
+ * address for someone with no account yet, invited to sign up.
+ */
+export interface OrderHardwareBuyer {
+  uid: string | null
+  orgId: string | null
+  hostId: string | null
+  email: string | null
+  /** The register user who attached them, and when. */
+  attachedBy: string
+  attachedAtMs: number
+  /**
+   * The buyer's name and business address, for the platform's reseller
+   * records (AGL-4038): the account's name, or what the register typed.
+   */
+  name?: string | null
+  address?: {
+    line1: string
+    line2?: string
+    city: string
+    state?: string
+    postalCode: string
+    country: string
+  } | null
+}
+
 export interface HostOrder {
   /** Human order number, sequential per host (e.g. #1042). */
   number?: number
+  /**
+   * The distinct use days its lines name (`OrderLineItem.useDayKey`,
+   * AGL-4043), stamped by every creator through `withOrderListFields` so the
+   * window finds a pass bought ahead on the day it is for. Absent when no
+   * line names one.
+   */
+  useDayKeys?: string[]
   /** Optional lines the buyer added at checkout (AGL-3635); see {@link OrderExtra}. */
   extras?: OrderExtra[]
   /**
@@ -466,6 +509,38 @@ export interface HostOrder {
    */
   posSource?: 'kiosk'
   kioskDeviceId?: string
+  /**
+   * A register sale on the platform's own store that sold point of sale
+   * hardware (AGL-4038): set when the sale is written, cleared once its
+   * hardware order is recorded, so a sale whose recording was missed is
+   * found again rather than lost.
+   */
+  hardwareSalePending?: boolean
+  /** The hardware order the sale became (`orgs/{orgId}/hardwareOrders/{id}`). */
+  hardwareOrderId?: string
+  /** Whose the sale's hardware is, as the register attached them (AGL-4038). */
+  hardwareBuyer?: OrderHardwareBuyer
+  /**
+   * How the buyer of a register sale of hardware agreed to the terms of sale
+   * (AGL-4038, `model/pos-hardware-terms.ts`): on the tablet, on the
+   * customer display, or by the receipt-and-sign notice. The first one stands.
+   */
+  hardwareTermsAcceptance?: {
+    version: string
+    sections: string
+    method: 'tablet' | 'display' | 'notice'
+    atMs: number
+    staffUid: string | null
+    ip: string | null
+    userAgent: string | null
+  }
+  /** Who put the terms of sale on the customer display, and when: the acceptance names them. */
+  hardwareTermsRequest?: { by: string; atMs: number }
+  /**
+   * The serial numbers of the readers the sale sold, scanned or typed at the
+   * sale before its hardware order was recorded (AGL-4038), in reader order.
+   */
+  hardwareSerials?: string[]
   /**
    * Set while a kiosk order waits in its register's queue for a cashier to
    * take payment ("Pay at counter"), and when it joined.
@@ -1073,10 +1148,14 @@ export function computeBuyNowOrder(
     metadataCents(metadata.unitAmountCents) ||
     Math.max(0, Math.round(goodsCents / quantity))
   const variantId = String(metadata.variantId ?? '')
+  // The day the buyer chose to use a check-in item (AGL-4043), checked when
+  // the session was made; re-read only for its shape here.
+  const useDayKey = isCheckInDayKey(metadata.useDayKey) ? String(metadata.useDayKey) : ''
   const lineItems: OrderLineItem[] = [
     {
       productId: String(metadata.productId ?? ''),
       ...(variantId ? { variantId } : {}),
+      ...(useDayKey ? { useDayKey } : {}),
       name: snapshot.name,
       ...(snapshot.variantLabel ? { variantLabel: snapshot.variantLabel } : {}),
       ...(snapshot.sku ? { sku: snapshot.sku } : {}),

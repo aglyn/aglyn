@@ -35,6 +35,8 @@ import {
   type ReactNode,
 } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { hostStampedSitePermission } from '@aglyn/aglyn'
+import { CORE_SITE_ROLE_PRESETS } from '@aglyn/aglyn/app-utils/org-role-grants'
 import { useHost } from '../hooks/use-host'
 import { hostBrandKey, HostSiteKeyContext } from '@aglyn/shared-ui-theme'
 import { useAuthRecovery } from '../hooks/use-auth-recovery'
@@ -180,7 +182,11 @@ function HostPluginPolicyBridge({
       Array.isArray(host?.enabledPlugins) ? host.enabledPlugins.map(String) : [],
     [host?.enabledPlugins],
   )
-  const isAdmin = Boolean(uid && host?.memberRoles?.[uid] === 'admin')
+  // "Manage site settings" (`site.manage`, AGL-4047) on this site, read as
+  // the rules read it: the site's stamp, else the preset of the site Admin.
+  const isAdmin = Boolean(
+    uid && hostStampedSitePermission(host, uid, 'site.manage', CORE_SITE_ROLE_PRESETS['site.manage']),
+  )
   /**
    * Which site every themed surface below is showing (AGL-3068).
    *

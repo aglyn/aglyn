@@ -322,12 +322,29 @@ const DIAGNOSTIC_PATTERNS: readonly RegExp[] = [
   /\b(getting|got|see|seeing|shows?|showing|throws?|returns?|says?|hit)\b[^.?!]{0,40}\berrors?\b/i,
 ]
 
+/**
+ * A question is about the workspace's OWN balance when it asks how much of
+ * something the asker has left or has used. The docs say what each plan
+ * allows; only the workspace knows where it stands, so a quote is a wrong
+ * answer with a citation under it. Retrieval alone used to hold these, and by
+ * luck (AGL-4087): "how many contacts do I have left this month" stayed
+ * ambiguous only while two CRM import sections tied the CRM reports page, and
+ * a docs edit on another page that pushed one of them out of the top six
+ * turned it into a quoted CRM report. Anchored to "how many/much", a
+ * first-person subject and a word of balance, so "how many contacts can I
+ * import" stays a docs question.
+ */
+const OWN_STATE_PATTERNS: readonly RegExp[] = [
+  /\bhow\s+(many|much)\b[^.?!]{0,60}\b(do|did|have|has)\s+(i|we)\b[^.?!]{0,40}\b(left|remaining|used|spent)\b/i,
+]
+
 /** Why a question was not answered from the docs. `null` reason = answered. */
 export type DeflectionRefusal =
   | 'follow-up'
   | 'too-short'
   | 'generative'
   | 'diagnostic'
+  | 'own-state'
   | 'low-score'
   | 'ambiguous'
   | 'low-coverage'
@@ -428,6 +445,9 @@ export function questionIsAnswerableFromDocs(question: string): DeflectionRefusa
   }
   for (const pattern of DIAGNOSTIC_PATTERNS) {
     if (pattern.test(question)) return 'diagnostic'
+  }
+  for (const pattern of OWN_STATE_PATTERNS) {
+    if (pattern.test(question)) return 'own-state'
   }
   return null
 }

@@ -18,6 +18,9 @@
 /** The plugin id: `plugins.config.json`, `org.enabledPlugins`, every registry. */
 export const WAIVERS_PLUGIN_ID = 'waivers'
 
+/** The Sign waiver element's component id. Persisted in screen documents; never rename. */
+export const WAIVERS_SIGN_COMPONENT_ID = 'signWaiver'
+
 /**
  * The entitlement every surface stands on (AGL-4042). A waiver is part of
  * selling a visit — a ride pass, a camp spot, a rental — so it rides the key
@@ -42,7 +45,33 @@ export const WAIVERS_COLLECTIONS = {
   waivers: 'waivers',
   versions: 'versions',
   signatures: 'waiverSignatures',
+  /**
+   * One document per site that has a signature, at
+   * `orgs/{orgId}/waiverRetention/{hostId}` (AGL-4042): the retention period
+   * the site's signatures are stamped with, and when the retention job last
+   * compared it with the store's setting. Server-only, like the signatures.
+   */
+  retention: 'waiverRetention',
 } as const
+
+/**
+ * Each waiver's title and status, mirrored under its site at
+ * `hosts/{hostId}/waiverTitles/{waiverId}` (AGL-4042), so the Besigner's Sign
+ * waiver element can PICK a waiver from a list (the `waivers` entity picker,
+ * declared in `plugins.config.json`) rather than have an id typed. Holds the
+ * title, the status, whether a picker lists it, the version and when it last
+ * changed: nothing of a waiver's words and nothing of a signature. Written
+ * only by this plugin's routes, in the same write as the waiver; the site's
+ * members read it, and the rules refuse every client write.
+ */
+export const WAIVER_TITLES_SUBCOLLECTION = 'waiverTitles'
+
+/**
+ * The attribute type of the Sign waiver element's waiver picker: the
+ * `waivers` entity picker in `plugins.config.json` lists the site's
+ * `waiverTitles` under it, and the element stores the chosen waiver's id.
+ */
+export const WAIVERS_PICKER_ATTRIBUTE = 'waiver-select'
 
 /**
  * Private Storage, beneath the org prefix that org erasure sweeps. Never the
@@ -75,14 +104,50 @@ export const WAIVERS_PERMISSIONS = {
 export const WAIVERS_CONTACT_SOURCE = 'waiver'
 
 /**
+ * The CRM capture door this plugin declares (core `registerPluginContactSource`):
+ * what a contact's source, and a timeline entry from a signature, read as.
+ */
+export const WAIVERS_CONTACT_SOURCE_DECLARATION = {
+  source: WAIVERS_CONTACT_SOURCE,
+  label: 'Waiver signed',
+  openLabel: 'Open waiver',
+} as const
+
+/**
  * The register's check-in zone this plugin fills (AGL-4043 hosts it in the
  * commerce plugin), named by id only: a plugin never imports another.
  */
 export const WAIVERS_CHECK_IN_SLOT = 'posCheckIn'
 export const WAIVERS_CHECK_IN_WIDGET_ID = 'waivers-check-in-status'
 
-/** The console's public signing page, beneath `/kiosk/waivers`. */
+/**
+ * The console's public signing page, beneath `/kiosk/waivers`: where a share
+ * link pointed before it opened on the store's own site. Kept, so a link or
+ * QR code already handed out still works: it sends the signer on to the
+ * store's site.
+ */
 export const WAIVERS_PUBLIC_PAGE_PATH = '/sign'
+
+/**
+ * The store's own signing page (AGL-4042), at `/{path}` on the store's site
+ * (its custom domain, else its platform address), in the site's own header
+ * and footer: where a waiver's share link and QR code open. `?waiver=` names
+ * the waiver; without it, the site's published waivers are listed. Served by
+ * the waivers page resolver only where the site has no page of its own at
+ * that address.
+ */
+export const WAIVERS_SITE_SIGN_PATH = 'sign-waiver'
+
+/**
+ * The console's public page a register's paired customer display opens to
+ * sign at the window (AGL-4042), beneath `/kiosk/waivers`, through core's
+ * customer display seam, with the site as its one parameter (`host`). It
+ * needs no staff session: the display it runs on is paired to the store,
+ * and that pairing, checked through core's display verifier, is what lets
+ * it sign. It stays until the rider signs or the register shows something
+ * else; nothing on it runs out.
+ */
+export const WAIVERS_DISPLAY_PAGE_PATH = '/display-sign'
 
 /** Every route this plugin serves, under `/api/`. */
 export const WAIVERS_API_ROUTES = {
@@ -104,8 +169,17 @@ export const WAIVERS_API_ROUTES = {
   paper: 'waivers/paper',
   /** Console: one person's waiver status for a day. */
   status: 'waivers/status',
+  /**
+   * Console, no session: whether the paired display (by its credential) is
+   * still showing this site's waiver, so the page follows the register.
+   */
+  displayScreen: 'waivers/display-screen',
+  /** Console, no session: sign on the paired customer display, by its credential. */
+  signOnDisplay: 'waivers/sign-on-display',
   /** Public: a site's published waivers, or one of them to sign. */
   publicWaiver: 'waivers/public',
   /** Public: sign one. */
   publicSign: 'waivers/sign',
+  /** Public: the signer's own signed copy as a PDF, by its one-hour link (AGL-4042). */
+  signedCopy: 'waivers/signed-copy',
 } as const

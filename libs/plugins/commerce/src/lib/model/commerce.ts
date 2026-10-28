@@ -102,6 +102,11 @@ export interface ProductVariant {
    * product's own setting; absent follows the product.
    */
   checkIn?: ProductCheckIn
+  /**
+   * Whether the self-service kiosk offers this variant (AGL-4038), within the
+   * product's own choice: `false` leaves it out; absent follows the product.
+   */
+  offerOnKiosk?: boolean
 }
 
 /** A product's packed size and customs facts (AGL-3612). */
@@ -254,6 +259,13 @@ export interface HostProduct {
   name: string
   /** Host-unique URL segment for /products/{slug}. */
   slug: string
+  /**
+   * A SAMPLE a guided start made for the merchant to replace (AGL-4065): the
+   * store's brief named kinds of product and no product. Products shows it
+   * as a sample; the storefront never reads it; the merchant's save clears
+   * it (`productSaveFields`).
+   */
+  sample?: boolean
   description?: string
   type: ProductType
   status: ProductStatus
@@ -334,6 +346,31 @@ export interface HostProduct {
    * {@link productSellsOnline}, never as a truthy field.
    */
   sellOnline?: boolean
+  /**
+   * What the site's review surfaces do with the reviews of a product sold in
+   * person only (`sellOnline: false`, AGL-4060): `show` (or absent) lists
+   * them, marked "Sold in store" and never linked; `hide` keeps them off
+   * every online surface — the store-wide reviews list and its average. A
+   * product sold online ignores it. Read it through
+   * {@link productReviewsOnline}.
+   */
+  inStoreReviews?: 'show' | 'hide'
+  /**
+   * Whether the self-service kiosk offers the product (AGL-4038): `false`
+   * leaves it off the kiosk's grid and refuses it in a kiosk's cart, while
+   * the register, the POS apps and the site sell it as before. Absent reads
+   * as `true`, so every product stored before the choice is offered as it
+   * was; read it through `productOfferedOnKiosk` (`commerce-kiosk-offer.ts`). A variant's own
+   * `offerOnKiosk` narrows it further.
+   */
+  offerOnKiosk?: boolean
+  /**
+   * The point of sale hardware item this product IS (AGL-4038), by its id in
+   * the hardware catalog (`POS_HARDWARE_SKUS`): a sale of it on the
+   * platform's own store becomes a hardware order for the buyer's workspace.
+   * Read only on that store; on any other store it means nothing.
+   */
+  hardwareSku?: string
   /**
    * A pass, a camping spot, parking: each item sold is somebody to check in
    * at the window on the day it was bought, `headcount` people per item
@@ -1269,6 +1306,15 @@ export function productSellsOnline(product: { sellOnline?: unknown } | null | un
   return product?.sellOnline !== false
 }
 
+/** Whether a product is a sample a guided start made for the merchant to replace (AGL-4065). */
+export function productIsSample(product: { sample?: unknown } | null | undefined): boolean {
+  return product?.sample === true
+}
+
+/** What Products says beside a sample (AGL-4065). */
+export const PRODUCT_SAMPLE_NOTE =
+  'A sample made from the kinds of product your site’s brief named. Replace it with your own product: saving your changes makes it yours.'
+
 /**
  * Whether a shopper online may see or buy a product (AGL-4060): live, active
  * and sold online. Every online surface (the product page, grids, search,
@@ -1279,6 +1325,38 @@ export function productListedOnline(
   product: { deletedAt?: unknown; status?: unknown; sellOnline?: unknown } | null | undefined,
 ): boolean {
   return Boolean(product) && !product?.deletedAt && product?.status === 'active' && productSellsOnline(product)
+}
+
+/** The choices a product sold in person only has for its reviews on the site (AGL-4060). */
+export const IN_STORE_REVIEWS_CHOICES = ['show', 'hide'] as const
+
+/**
+ * How a product's reviews appear on the site's online review surfaces
+ * (AGL-4060), or `null` when there is no product to say (deleted, a draft):
+ *
+ * - `listed`: sold online, so named and linked to its page;
+ * - `sold-in-store`: sold in person only, and the store shows its reviews —
+ *   the default — named, marked "Sold in store", never linked (there is no
+ *   page to link to);
+ * - `hidden`: sold in person only, and the store chose to keep its reviews
+ *   off the site: in no list and no average.
+ *
+ * The store's choice is honored whatever the product's status, so a hidden
+ * product archived later stays hidden.
+ */
+export type ProductReviewsOnline = 'listed' | 'sold-in-store' | 'hidden'
+
+export function productReviewsOnline(
+  product:
+    | { deletedAt?: unknown; status?: unknown; sellOnline?: unknown; inStoreReviews?: unknown }
+    | null
+    | undefined,
+): ProductReviewsOnline | null {
+  if (!product) return null
+  if (!productSellsOnline(product) && product.inStoreReviews === 'hide') return 'hidden'
+  if (productListedOnline(product)) return 'listed'
+  if (!product.deletedAt && product.status === 'active' && !productSellsOnline(product)) return 'sold-in-store'
+  return null
 }
 
 /**

@@ -14,9 +14,10 @@ and the register's rules under the site's **Admin → Plugins → Commerce**.
 
 :::info Plan availability
 These are part of the point of sale, so they need **Pro** or above, like the
-register itself. Only members who can use the register — a site **admin** or
-**editor** whose **Manage POS** permission is on — can open shifts, switch in,
-look customers up or take returns.
+register itself. Only members who can use the register — anyone with the **Use
+the point of sale** permission for the site, which owners, admins and editors hold
+by default — can open shifts, switch in, look customers up or take returns. Each
+also needs its own [finer permission](pos-and-reservations.md#who-can-do-what-at-the-register).
 :::
 
 ## Shifts and the cash drawer
@@ -91,7 +92,14 @@ dates to see another day or a whole event, up to 31 days at a time, and
   counted cash and the variance.
 
 Sales count on the day they were rung, and refunds on the day they were
-given back, whenever the sale was. **Export CSV** downloads the report as a
+given back, whenever the sale was and wherever the refund was given: at a
+register, from the order's **Refund** button in **Commerce → Orders**, or in
+your Stripe Dashboard. A refund from the order or from Stripe counts under the
+register the sale was rung at, under the person who gave it (Stripe refunds
+show as **No cashier recorded**), and against the card it went back to. It
+moves no cash drawer, so shift reports leave it out. The day is your site's,
+so a refund at 11:59 PM counts that day and one at midnight counts the next.
+**Export CSV** downloads the report as a
 spreadsheet, and **Print** prints it on an 80 mm receipt printer like a Z
 report.
 
@@ -124,13 +132,41 @@ product with options can set each variant on its own, so a spectator ticket on
 the same product needs no wristband. Turning it on also covers what was
 already sold today.
 
+**Let buyers pick the day.** Under **Check-in**, turn on **Ask the buyer
+which day** to sell passes ahead. The product page then offers an optional
+**Day you will use it** date picker, from today (on your site's calendar) up to
+two years ahead, never a day that has passed. A buyer who leaves it blank gets
+a pass for the day they buy. Each day is its own line in the cart, the cart
+and the order show the day ("For Sat, Nov 1"), and checkout turns away a pass
+whose day passed while it sat in the cart. A variant with its own check-in
+setting has its own **Ask which day** switch. Sales at the register are for
+the day they are rung.
+
 **What is due on a day.** Each paid order's check-in items are due on the day
-the order was placed, counted in your site's time zone, whether it was bought
-online or at the register. A product has no date of its own, so a pass bought
-today is for today. Guests whose stay covers the day are due too, one
-check-in for each day of the stay. An item refunded on its own, or an order
-refunded in full or canceled, is no longer due; anyone already checked in
-stays on the list.
+the buyer picked, or, when they picked none, on the day the order was placed,
+counted in your site's time zone, whether it was bought online or at the
+register. Guests whose stay covers the day are due too, one check-in for each
+day of the stay, or one for each guest (see **Stays: one check-in or one per
+guest** below). An item refunded on its own, or an order refunded in full or
+canceled, is no longer due; anyone already checked in stays on the list.
+
+**Rain checks.** When weather or a closed track means a pass can't be used,
+give it a rain check instead of a refund: tap **Rain check** beside the person
+at the register, or in **Today's check-ins**, then pick one of these:
+
+- **Open: good on any later day until it is used.** The pass stays on its
+  day, marked **Rain check**, and no longer counts as expected there. On any
+  later day, searching for the person finds it, and checking them in uses it
+  that day.
+- **Move it to a day.** Pick the new day: a day after the one the pass is on
+  that has not passed. The pass leaves its day's list and is expected on the
+  new day.
+
+Each rain check records who gave it, when, and the day the pass was on.
+**Undo rain check** puts the pass back on that day. Undoing the check-in of a
+used rain check opens it again. Rain checks are for passes; change a stay's
+dates on the **Reservations** card. **Check in all** leaves open rain checks
+alone, so each is used on purpose.
 
 **At the register,** tap **Check in**, then search by name, email, phone (or
 its last four digits) or order number. Pick the customer to see each person
@@ -142,9 +178,32 @@ check-in is recorded under the person who switched in. On a day you are
 checking people in, attaching a customer to a sale who has someone due today
 offers **Check in** on the customer panel too.
 
+**Stays: one check-in or one per guest.** A stay can be checked in once,
+with one wristband, or one guest at a time, each with their own check-in and
+wristband. Set it for each resource with **At check-in** in its editor on the
+**Reservations** card (**One check-in per stay**, the default, or **One
+check-in per guest**). To set every stay at once, use **Stays at check-in** on
+**Today's check-ins**: **As each resource is set**, **One per stay** or **One
+per guest**. The change shows on the list straight away; anyone already checked
+in stays checked in. Checking in per guest uses the stay's guest count, which
+guests enter when they book with the Reservation widget and staff enter on a
+walk-in. A stay with no count gets one check-in.
+
+**When a stay's guests change.** If a family turns up with one more or one
+fewer, choose **Guests** on the stay's row in **Today's check-ins** or in the
+register's **Check in** window (or on the stay in the **Reservations** card)
+and save the new count. When the stay is checked in per guest, today's list
+follows at once, and so does any later day already on the list: an added guest
+gets their own check-in, and a guest who is no longer coming is taken off only
+if they haven't been checked in. Someone already checked in always stays. If
+the new count is lower than how many are already checked in, it is refused and
+says how many are in; undo a check-in first if that is what you meant. Days
+before today stay as they were.
+
 **Commerce → Orders → Today's check-ins** lists everyone due on a day with
-what they are checked in for, the time, who checked them in and the
-wristband, with expected, checked-in and still-to-come counts. Pick a **Day**
+what they are checked in for, the time, who checked them in, the wristband
+and any rain check, with expected, checked-in and still-to-come counts, and a
+**Rain checks** count when a pass on that day has an open one. Pick a **Day**
 to see another one. Every column sorts, **Export CSV** downloads the list as
 a spreadsheet, and **Print** prints it on an 80 mm receipt printer.
 
@@ -291,6 +350,36 @@ and says what you should look at, on the order and in the register:
   that cash.
 - A discount above the register's limit, tax that differs from your store's
   rate now, or a device clock that was wrong.
+- A discount given by a member whose role does not include **Give discounts at
+  the register**. The register refuses that discount while online; offline the
+  sale has already happened, so it is recorded and flagged for you to review.
+
+### Cards taken offline in the Aglyn POS app
+
+With **Take cards offline in the point of sale app** turned on in your POS
+settings, the Aglyn POS app's own card reader saves each card while the
+connection is down, and Stripe charges it once the app is back online. The
+sale syncs right after, and:
+
+- **The card is charged like a card taken online.** The platform fee is
+  deducted from that card's payout. If Stripe took less than that fee from the
+  payout, the rest is added to your next monthly invoice and the order says
+  so. The sale can be refunded from the order, and a chargeback on it is
+  matched to the order, like any card sale.
+- **A card the bank declined, or that could not be charged,** is recorded as an
+  **unpaid** order, and the register says so. Collect it another way at the
+  register: the payment you take carries the fee for its tender, as on any
+  other sale, and the stock is not taken off the shelf a second time.
+- **A card set to pay a Stripe account that is not your store's** (for example,
+  one taken before you reconnected Stripe) is not charged into your store. The
+  order is recorded unpaid, and Aglyn is alerted to check it.
+- **A charge that differs from the order's total**: the order shows what Stripe
+  took and asks you to check it against the receipt.
+- **A card that reached Stripe but whose sale never synced**, for example
+  because the app was not opened again by the member who rang it: about six
+  hours later your site's managers get a notification. Open the app that took
+  it, signed in as that member, so the sale syncs. A card that was approved but
+  never charged is released about two days after it was taken.
 
 ### Before you go offline
 

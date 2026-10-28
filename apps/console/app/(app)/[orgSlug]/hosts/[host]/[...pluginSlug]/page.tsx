@@ -17,7 +17,10 @@
 'use client'
 
 import {
+  applySiteRolePresets,
   checkEntitlement,
+  isSiteRolePresetPermission,
+  narrowPermissionsToSite,
   RELEASE_FLAGS,
   releaseStageOfSurface,
   type ReleaseFlagKey,
@@ -36,7 +39,7 @@ import {
   useRouter,
   useSearchParams,
 } from 'next/navigation'
-import { Suspense, useEffect, useMemo } from 'react'
+import { Suspense, useCallback, useEffect, useMemo } from 'react'
 import ConsoleMediaPickerProvider from '../../../../../../components/console-media-picker-provider.component'
 import FeatureGate from '../../../../../../components/feature-gate.component'
 import HostDisplayNameComponent from '../../../../../../components/host-display-name.component'
@@ -121,10 +124,46 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
   const pluginHref = segments.length ? `/${segments.join('/')}` : ''
   const { org, ready: orgReady } = useCurrentOrg()
   const {
-    permissions,
+    permissions: orgPermissions,
     can: canOrgPermission,
     loaded: permissionsLoaded,
   } = useOrgPermissions()
+  // The site role, handed DOWN like the release verdict (AGL-2334). A plugin
+  // surface that publishes has to disable its control with a reason, and the
+  // member read it takes is `scope:app`.
+  const {
+    canPublish,
+    loaded: hostRoleLoaded,
+    narrowing,
+    member: hostMember,
+    customRole: hostCustomRole,
+  } = useHostRole(hostId)
+
+  /*
+   * A site that narrows this member (AGL-4047): an editor of the whole
+   * workspace given Viewer or Author access to THIS site does not hold the
+   * keys that follow the site role for them (the register and waivers by
+   * default) here unless the site grants them, which is what the
+   * server answers. Until the site role is read, and for everyone the site
+   * does not narrow, it is the workspace's map unchanged.
+   */
+  /*
+   * And the keys whose preset is the member's role on this site (AGL-4047),
+   * such as "Manage reservations": decided for this site from the access the
+   * member holds here, as the server and the rules decide them, once the
+   * member document is read.
+   */
+  const permissions = useMemo(() => {
+    const narrowed = narrowing ? narrowPermissionsToSite({ ...orgPermissions }, narrowing) : orgPermissions
+    return hostMember ? applySiteRolePresets({ ...narrowed }, hostMember, hostId, hostCustomRole) : narrowed
+  }, [orgPermissions, narrowing, hostMember, hostId, hostCustomRole])
+  const canOnSite = useCallback(
+    (permission: string) =>
+      (narrowing && permission in narrowing.narrows) || (hostMember && isSiteRolePresetPermission(permission))
+        ? permissions[permission] === true
+        : canOrgPermission(permission),
+    [narrowing, hostMember, permissions, canOrgPermission],
+  )
 
   /*
    * The ONE place this route looks a permission key up (AGL-3080). The page
@@ -132,13 +171,9 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
    * rail cannot draw a tab the body is about to refuse.
    */
   const permissionAnswers = useMemo(
-    () => ({ can: canOrgPermission, permissions, loaded: permissionsLoaded }),
-    [canOrgPermission, permissions, permissionsLoaded],
+    () => ({ can: canOnSite, permissions, loaded: permissionsLoaded }),
+    [canOnSite, permissions, permissionsLoaded],
   )
-  // The site role, handed DOWN like the release verdict (AGL-2334). A plugin
-  // surface that publishes has to disable its control with a reason, and the
-  // member read it takes is `scope:app`.
-  const { canPublish, loaded: hostRoleLoaded } = useHostRole(hostId)
   const hostRole = useMemo(
     () => ({ canPublish, loaded: hostRoleLoaded }),
     [canPublish, hostRoleLoaded],

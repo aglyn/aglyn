@@ -260,7 +260,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#notification-settings': 'Everything about what reaches you lives on the second section, Settings.',
     '#notification-sound': 'Pick the sound your notifications make under Notification sound in the Settings section.',
     '#organization-general': 'The General card renames the organization, changes its workspace URL and sets the time zone its sites inherit — "workspace" is the console\'s word for your organization\'s home.',
-    '#organization-settings': 'Organization → Settings is where you run the workspace itself: its name and workspace URL under General, then — for owners and admins — Profile, Plugins, API keys, Branding, Single sign-on, Privacy, Holds & reviews…',
+    '#organization-settings': 'Organization → Settings is where you run the workspace itself: its name and workspace URL under General, then — for owners and admins, or whoever a custom role grants each one — Profile, Plugins, API keys, Branding,…',
     '#recent-activity': 'The Recent Activity card on a site\'s dashboard lists the latest changes made to the site, newest first — who made each one and what it touched, linked straight to it.',
     '#the-sites-list': 'All Sites is the front door of a workspace: one card per site, for the workspace currently selected in the switcher, with the sites you pinned first and the rest in name order.',
     '#workspace-and-site-overrides': 'One workspace or one site sets the same answers for a single workspace or a single site, rather than for your whole account.',
@@ -509,7 +509,9 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#reservations': 'For stays (cabins, rooms, rentals): Add resources on the Products page — nightly rate, weekend multiplier, minimum nights, deposit percent, and free-cancellation window.',
   },
   posHardware: {
+    '#bought-from-us-in-person': 'At an event, Aglyn may sell you a reader in person. You pay at Aglyn\'s register, take the reader with you, and the order joins your workspace.',
     '#buy-a-reader-from-aglyn': 'The Hardware card on Products → Point of sale sells Stripe\'s card readers and their accessories.',
+    '#card-readers-to-set-up': 'A reader bought in person waits on Products → Point of sale, in a Card readers to set up card, until you set it up on a store.',
     '#hardware-purchase-records': 'Aglyn is the seller of these readers, so it keeps a record of each sale for tax and accounting: the items and their prices, shipping, tax, the total, the order\'s status dates, Stripe\'s payment references, and the…',
     '#reader-start-up-screen': 'While a Stripe Reader S700, S710 or BBPOS WisePOS E waits for a payment, it shows a start-up screen.',
     '#receipt-printers': 'A cloud receipt printer collects its work from Aglyn over the internet, so a receipt prints from the register on any device, even one with no printer driver, and even when the printer is on a different network.',
@@ -685,7 +687,8 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
   },
   waivers: {
     '#find-a-signature': 'The Signatures card lists the newest first.',
-    '#versions': 'Every time you save a change to the words, the boxes, the minors setting or how long it lasts, the waiver gets a new version.',
+    '#keeping-signed-waivers': 'A signed waiver is your record of what a rider agreed to. Every one is kept for your retention period, then deleted, with its drawn signature and any photo of a paper page.',
+    '#versions': 'Every time you save a change to the words, the boxes, the adult age, the minors setting or how long it lasts, the waiver gets a new version.',
     '#write-a-waiver': 'Open Waivers and select New waiver. A waiver takes signatures only while it is Published.',
     '#your-waivers': 'The Waivers card lists every waiver on the site: its title, whether it is a Draft, Published or Retired, its version, how long a signature lasts, and when it last changed.',
   },

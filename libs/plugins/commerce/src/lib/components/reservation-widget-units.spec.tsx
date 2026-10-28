@@ -82,6 +82,25 @@ describe('a several-unit resource', () => {
     expect(screen.queryByText(/^Only \d+ left$/)).toBeNull()
   })
 
+  it('follows the threshold the store set for the resource (AGL-4044)', async () => {
+    payload = {
+      ...payload,
+      resource: { ...resource, fewLeftAt: 10 },
+      fewLeft: [{ dayMs: day('2026-07-10'), unitsLeft: 8 }],
+    }
+    await pick('2026-07-10', '2026-07-11')
+
+    expect(await screen.findByText('Only 8 left')).toBeTruthy()
+  })
+
+  it('never shows the line when the store turned it off', async () => {
+    payload = { ...payload, resource: { ...resource, fewLeftAt: 0 } }
+    await pick('2026-07-10', '2026-07-12')
+
+    expect(await screen.findByText('2 nights')).toBeTruthy()
+    expect(screen.queryByText(/^Only \d+ left$/)).toBeNull()
+  })
+
   it('refuses a stay across the full night', async () => {
     await pick('2026-07-11', '2026-07-14')
 
@@ -105,5 +124,19 @@ describe('a one-unit resource', () => {
       target: { value: '2026-07-12' },
     })
     expect(await screen.findByText('Those dates are unavailable.')).toBeTruthy()
+  })
+})
+
+describe('how many guests (AGL-4043)', () => {
+  it('asks up to what one unit sleeps, and holds the button for more', async () => {
+    payload = { resource: { ...resource, capacity: 4 }, unavailable: [] }
+    await pick('2026-07-08', '2026-07-10')
+    expect(await screen.findByText('Up to 4')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'guest@example.com' } })
+    fireEvent.change(screen.getByLabelText('Guests (optional)'), { target: { value: '5' } })
+    expect(screen.getByText('Guests must be a whole number from 1 to 4')).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'Reserve now' }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.change(screen.getByLabelText('Guests (optional)'), { target: { value: '3' } })
+    expect((screen.getByRole('button', { name: 'Reserve now' }) as HTMLButtonElement).disabled).toBe(false)
   })
 })

@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import {
   checkEntitlement,
-  hostRoleCanWrite,
   hostScopeToken,
   isOrgWideMember,
   memberScopeTokens,
@@ -33,9 +33,10 @@ import {
   lockdownJsonResponse,
   type LockdownVerdictOptions,
   mediaStoragePathInScope,
+  memberHasOrgPermission,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
-import type { LockdownFeatureKey } from '@aglyn/aglyn/server'
+import { permissionRefusalText, type LockdownFeatureKey } from '@aglyn/aglyn/server'
 
 export interface MediaScope {
   /** Storage prefix + Firestore parent: `hosts/{id}` or `orgs/{id}`. */
@@ -171,12 +172,13 @@ export async function resolveMediaScope(
 
   if (orgId) {
     const membership = await resolveOrgMembership(uid, orgId)
-    const role = membership?.member.role
-    if (!role || role === 'viewer') {
+    // "Edit the workspace media library" (`org.media`, AGL-4047), whose
+    // default is the owner, admin and editor this asked for.
+    if (!membership || !(await memberHasOrgPermission(orgId, membership.member, 'org.media'))) {
       return {
         error: {
           status: 403,
-          message: 'Editing the organization library requires the editor role',
+          message: permissionRefusalText('org.media'),
         },
       }
     }
@@ -219,14 +221,14 @@ export async function resolveMediaScope(
   if (!hostSnapshot.exists) {
     return { error: { status: 404, message: 'Unknown site' } }
   }
-  const memberRole = (hostSnapshot.get('memberRoles') ?? {})[uid]
   // `author` (AGL-2334) uploads to the SITE library. Adding an image to the
   // page you are editing is editing; a media asset is not reachable by a
   // visitor until a published page references it, and publishing that page is
   // what the rules refuse. Leaving this at admin/editor would have shipped a
-  // content role that cannot add a picture.
-  if (!hostRoleCanWrite(memberRole)) {
-    return { error: { status: 403, message: 'Not a site admin' } }
+  // content role that cannot add a picture. "Edit site content" (`site.edit`,
+  // AGL-4047), read as the rules read it.
+  if (!holdsSiteKey(hostSnapshot, uid, 'site.edit')) {
+    return { error: { status: 403, message: siteKeyRefusal('site.edit') } }
   }
   const resolvedOrg = await getOrgForHost(hostId)
   const billing = resolvedOrg?.org ?? {}

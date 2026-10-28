@@ -40,6 +40,7 @@ import {
   notifyStaff,
   type NotificationEmailDetail,
 } from '@aglyn/tenant-data-admin'
+import { runPluginEventHandlers } from '@aglyn/aglyn/plugin-manager/plugin-events'
 import { DOCS_BASE_URL } from '../../../constants/docs-links'
 import { buildRoute, Route } from '../../../constants/route-links'
 import { renderSystemEmail } from './render-system-email'
@@ -160,6 +161,8 @@ export interface NewWorkspaceAnnouncement {
     email: string | null
     /** As the IdP asserts it (AGL-1131); `null` falls back to "there". */
     displayName: string | null
+    /** Whether the owner's address is verified, as their token says. */
+    emailVerified?: boolean
   }
   /** The console origin the welcome email links to. */
   origin: string
@@ -275,6 +278,19 @@ export async function announceNewWorkspace(
   } catch (staffError) {
     console.error('staff new-workspace notification skipped', staffError)
   }
+
+  // And tell the plugins (AGL-4038): one may be holding something for this
+  // person until they had a workspace. Each handler is isolated and logged;
+  // none can fail the creation.
+  try {
+    await runPluginEventHandlers('org.created', {
+      orgId,
+      owner: { uid: owner.uid, email: owner.email, emailVerified: owner.emailVerified === true },
+      via: via ?? 'workspace-page',
+    })
+  } catch (eventError) {
+    console.error('org.created handlers skipped', eventError)
+  }
 }
 
 export interface NewSiteAnnouncement {
@@ -285,8 +301,12 @@ export interface NewSiteAnnouncement {
   orgSlug: string | null
   /** Who made it: an address for a console session, a label for an API key. */
   createdBy: string | null
-  /** How it was started: the guided AI start, a starter design, the API, or a create that was resumed. */
-  start?: 'guided-ai' | 'starter' | 'api' | 'resumed'
+  /**
+   * How it was started: the guided AI start, a starter design, a starter
+   * picked from the marketplace (AGL-4049), the API, or a create that was
+   * resumed.
+   */
+  start?: 'guided-ai' | 'starter' | 'marketplace-starter' | 'api' | 'resumed'
 }
 
 /**
@@ -336,11 +356,13 @@ export async function announceNewSite(site: NewSiteAnnouncement): Promise<void> 
                 ? 'The guided AI start'
                 : start === 'starter'
                   ? 'A starter design'
-                  : start === 'api'
-                    ? 'The API'
-                    : start === 'resumed'
-                      ? 'A create that was resumed'
-                      : null,
+                  : start === 'marketplace-starter'
+                    ? 'A starter from the marketplace'
+                    : start === 'api'
+                      ? 'The API'
+                      : start === 'resumed'
+                        ? 'A create that was resumed'
+                        : null,
           },
           { label: 'Created by', value: createdBy },
           { label: 'How they found us', value: acquisition ? describeAccountAcquisition(acquisition, { primaryHost: homeHost() }) : null },

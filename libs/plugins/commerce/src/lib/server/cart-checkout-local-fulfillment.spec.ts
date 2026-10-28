@@ -22,6 +22,8 @@ import type {
 import { cartCheckoutHandler } from './cart-checkout'
 import { resolveSiteTimeZone } from '@aglyn/aglyn/app-utils/collection-entry-date'
 import { upcomingLocalDeliveryWindows } from '../model/local-fulfillment-settings'
+import { addCheckInDays } from '../model/commerce-check-in-product'
+import { zonedDayKey } from '@aglyn/shared-util-timestamp/zoned-time'
 
 /**
  * Pickup and local delivery reach the Checkout Session (AGL-3624).
@@ -249,6 +251,8 @@ interface Scenario {
   fulfillment?: unknown
   /** `hosts/host-1/locations/{id}` docs. */
   locations?: Record<string, Record<string, any>>
+  /** The day the cart line is for (AGL-4043). */
+  lineUseDayKey?: string
 }
 
 function makeRequest(scenario: Scenario): PluginApiRequest {
@@ -275,7 +279,14 @@ function seedStore(
 ) {
   docs.clear()
   docs.set('hosts/host-1/carts/cart-1', {
-    lines: [{ productId: 'p1', variantId: 'v1', quantity: 2 }],
+    lines: [
+      {
+        productId: 'p1',
+        variantId: 'v1',
+        quantity: 2,
+        ...(scenario.lineUseDayKey ? { useDayKey: scenario.lineUseDayKey } : {}),
+      },
+    ],
   })
   docs.set('profiles/owner-1', {
     stripeAccountId: 'acct_1',
@@ -584,5 +595,48 @@ describe('cart checkout pickup and local delivery (AGL-3624)', () => {
     )
     expect(result.status).toBe(200)
     expect(body?.get('metadata[fulfillment]')).toBeNull()
+  })
+})
+
+/*
+ * A pass in the cart for a day the shopper chose (AGL-4043): the cart's
+ * checkout sells it while the day has not passed on the store's calendar,
+ * and refuses it, naming it, once the day has gone or the item no longer
+ * asks for one. The webhook copies the day onto the order line.
+ */
+describe('cart checkout with a pass for a chosen day (pass dates)', () => {
+  const realFetch = global.fetch
+  const realKey = process.env.STRIPE_SECRET_KEY
+  beforeAll(() => {
+    global.fetch = fetchMock as unknown as typeof fetch
+    process.env.STRIPE_SECRET_KEY = 'sk_test_fake_never_used'
+  })
+  afterAll(() => {
+    global.fetch = realFetch
+    process.env.STRIPE_SECRET_KEY = realKey as string
+  })
+
+  const today = zonedDayKey(Date.now(), resolveSiteTimeZone(mockOrg.org, null))
+  const pass = { type: 'service', checkIn: { enabled: true, askUseDate: true } }
+
+  it('sells a pass for today or a later day', async () => {
+    const { result } = await runCheckout(null, { product: pass, lineUseDayKey: addCheckInDays(today, 2) })
+    expect(result.status).toBe(200)
+  })
+
+  it('refuses a pass whose day has passed since it went in the cart, naming it', async () => {
+    const { result, body } = await runCheckout(null, { product: pass, lineUseDayKey: addCheckInDays(today, -1) })
+    expect(result.status).toBe(409)
+    expect(result.body.error).toMatch(/^"Kettle": That day has passed/)
+    expect(body).toBeNull()
+  })
+
+  it('refuses a day on an item that no longer asks for one', async () => {
+    const { result } = await runCheckout(null, {
+      product: { type: 'service', checkIn: { enabled: true } },
+      lineUseDayKey: today,
+    })
+    expect(result.status).toBe(409)
+    expect(result.body.error).toMatch(/no day to choose/)
   })
 })

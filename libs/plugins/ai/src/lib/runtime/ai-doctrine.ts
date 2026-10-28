@@ -629,15 +629,22 @@ export function aiDoctrineTreeCheck(
   context: AiDoctrineTreeContext = {},
   otherPages: readonly AiDoctrineTree[] = [],
 ): AiGenerationCheck<AiValidatedTree> {
+  let answers = 0
   return (answer) => {
+    answers += 1
     // A child named and never written, an element held by nothing, a heading
     // whose first clause fits its ceiling and a Grid container's unsized items
     // are settled where each has one reading before the tree is read (AGL-3596),
     // and so is an email's color outside the brand (AGL-3676).
-    // An attribute a rule has one answer for is applied too (AGL-3660).
+    // An attribute a rule has one answer for is applied too (AGL-3660). A link
+    // that goes nowhere is the model's to mend while it can be asked again,
+    // and on the last answer a generation takes it is settled, read in the
+    // check's own context, rather than stopping the job (AGL-4076).
+    const last = answers >= AI_GENERATION_MAX_ATTEMPTS
     const settled = aiSettleWrittenMechanicalRules(
       aiSettleWrittenGridItems(aiSettleCutHeadings(aiSettleDisagreeingNodes(aiAnswerTree(answer)))),
       kind,
+      last ? context : undefined,
     )
     const input = kind === 'email' ? aiSettleOffBrandEmailColors(settled, context.brand) : settled
     const report = validateAiDoctrineTree(input, kind, context, otherPages)

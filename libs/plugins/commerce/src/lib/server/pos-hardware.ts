@@ -16,6 +16,7 @@
  */
 
 import { createHash } from 'crypto'
+import * as Aglyn from '@aglyn/aglyn/server'
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin, readOrgBilling } from '@aglyn/tenant-data-admin'
 import { hostConsoleUrl } from '@aglyn/tenant-data-admin/server/host-console-link'
@@ -24,6 +25,7 @@ import {
   isPosHardwareShippingMethod,
   POS_HARDWARE_ANCHOR,
   parsePosHardwareConfig,
+  parsePosHardwareInPersonConfig,
   POS_HARDWARE_CURRENCY,
   POS_HARDWARE_METADATA_TYPE,
   POS_HARDWARE_ORDERS_COLLECTION,
@@ -31,11 +33,14 @@ import {
   POS_HARDWARE_SHIP_COUNTRIES,
   POS_HARDWARE_SHIPPING_LABELS,
   posHardwareOffers,
+  posHardwareOrderSource,
   posHardwareSku,
   pricePosHardwareCart,
   type PosHardwareConfig,
+  type PosHardwareInPersonConfig,
   type PosHardwareOrder,
 } from '../model/pos-hardware'
+import { mayVisitPosHardwareShop } from '../model/plugin-permissions'
 import { authorizePosStaff, posIdempotencyKey, posRequestBody } from './pos-auth'
 import { posStripe, posTerminalAvailable } from './pos-stripe'
 
@@ -47,9 +52,12 @@ import { posStripe, posTerminalAvailable } from './pos-stripe'
  *   checkout  a Stripe Checkout Session for the basket, on the PLATFORM
  *   orders    this site's hardware orders, newest first
  *
- * Gated like the register (`authorizePosStaff`: an admin or editor of the
- * site with `managePos`, on a plan with POS), because the readers it sells
- * are the register's.
+ * Gated like the register (`authorizePosStaff`, on a plan with POS), because
+ * the readers it sells are the register's, with one difference (AGL-4047):
+ * the shop admits whoever works the register (`managePos`) AND whoever may
+ * buy hardware (`posBuyHardware`), which stands on its own — a bookkeeper
+ * with no register orders the store's readers. A checkout needs
+ * `posBuyHardware`; seeing the catalog and the site's orders needs either.
  *
  * THE SALE IS THE PLATFORM'S. The session is created with the platform key
  * and NO connected account, `transfer_data` or application fee: the merchant
@@ -66,6 +74,35 @@ export function posHardwareConfig(
   // shop opens only where the register offers card readers at all.
   if (!posTerminalAvailable()) return null
   return parsePosHardwareConfig(env)
+}
+
+/**
+ * The platform's own store that sells hardware in person (AGL-4038), or
+ * `null` while that is off. Read like the shop's other figures; a store is
+ * the seller only when BOTH its id and its workspace's match, so a site moved
+ * to another workspace stops selling hardware rather than selling it for them.
+ */
+export function posHardwareInPersonConfig(
+  env: Record<string, string | undefined> = process.env,
+): PosHardwareInPersonConfig | null {
+  return parsePosHardwareInPersonConfig(env)
+}
+
+/** Whether a store, owned by `orgId`, is the platform's own hardware seller. */
+export function isPosHardwareSellerStore(
+  config: PosHardwareInPersonConfig | null,
+  hostId: string,
+  orgId: string,
+): config is PosHardwareInPersonConfig {
+  return Boolean(config) && config?.sellerHostId === hostId && config?.sellerOrgId === orgId
+}
+
+/**
+ * An in-person order's id, from the register sale it came from: one register
+ * sale is one hardware order however often its completion is told.
+ */
+export function posHardwareInPersonOrderId(hostId: string, registerOrderId: string): string {
+  return `hw_${createHash('sha256').update(`pos:${hostId}:${registerOrderId}`).digest('hex').slice(0, 20)}`
 }
 
 /** The order's id, derived from the attempt so a repeated press is one order. */
@@ -117,6 +154,16 @@ export function merchantHardwareOrderView(id: string, order: PosHardwareOrder) {
     tracking: order.tracking ?? null,
     createdAtMs: order.createdAtMs ?? 0,
     updatedAtMs: order.updatedAtMs ?? order.createdAtMs ?? 0,
+    // Bought in person (AGL-4038): handed over at the sale, no parcel.
+    source: posHardwareOrderSource(order),
+    discountCents: order.discountCents ?? 0,
+    /** Readers still to set up, for an in-person order that took serials. */
+    readersToSetUp: (order.units ?? []).filter((unit) => !unit.readerId).length,
+    refundedCents: order.refundedCents ?? 0,
+    /** The buyer's return request and what was decided, without who asked. */
+    returnRequest: order.returnRequest
+      ? { state: order.returnRequest.state, requestedAtMs: order.returnRequest.requestedAtMs, note: order.returnRequest.note }
+      : null,
   }
 }
 
@@ -135,17 +182,124 @@ export function withQueryAndHash(base: string, query: string, hash: string): str
 }
 
 
+/**
+ * The readers this workspace bought in person that are not set up yet
+ * (AGL-4038): whether its plan includes the point of sale, its stores and
+ * whether each can take a reader, and each order with what it waits for.
+ * Nothing at all while the in-person sale is off.
+ */
+export async function waitingInPersonReaders(orgId: string, hostId: string) {
+  if (!posHardwareInPersonConfig() || !orgId) return { posPlan: false, stores: [], orders: [] }
+  const firestore = firebaseAdmin.app().firestore()
+  const [orders, org, hosts] = await Promise.all([
+    hardwareOrdersRef(orgId)
+      .where('attachment.state', '==', 'attached')
+      .where('status', '==', 'delivered')
+      .limit(20)
+      .get(),
+    firestore.collection('orgs').doc(orgId).get(),
+    firestore.collection('hosts').where('orgId', '==', orgId).limit(20).get(),
+  ])
+  if (!orders.docs.length) return { posPlan: false, stores: [], orders: [] }
+  const stores = await Promise.all(
+    hosts.docs.map(async (doc: any) => {
+      const id = String(doc.id)
+      const [terminal, setupUrl] = await Promise.all([
+        firestore.collection('hosts').doc(id).collection('terminal').doc('config').get(),
+        posSettingsUrl(id),
+      ])
+      return {
+        hostId: id,
+        name: String(doc.get('name') ?? doc.get('title') ?? id),
+        hasLocation: Boolean(terminal.exists && terminal.get('stripeLocationId')),
+        setupUrl: `${setupUrl.split('#')[0]}#pos-devices`,
+      }
+    }),
+  )
+  return {
+    posPlan: Aglyn.checkEntitlement(org.data() as never, 'pos'),
+    stores,
+    // Every store's, this store's first: a reader waits wherever the
+    // workspace's people look.
+    orders: orders.docs
+      .map((doc: any) => ({ id: String(doc.id), order: doc.data() as PosHardwareOrder }))
+      .filter(({ order }) => order.source === 'in_person')
+      .sort((a, b) => Number(b.order.hostId === hostId) - Number(a.order.hostId === hostId))
+      .map(({ id, order }) => ({
+        ...merchantHardwareOrderView(id, order),
+        hostId: order.hostId,
+        serialsTaken: (order.units ?? []).filter((unit) => unit.serialNumber && !unit.readerId).length,
+      })),
+  }
+}
+
 export const posHardwareHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   const body = posRequestBody(req)
   const hostId = String(body['hostId'] ?? '')
-  const gate = await authorizePosStaff(req, hostId)
+  const action = String(body['action'] ?? '')
+  // BUYING IS ITS OWN KEY (AGL-4047): anyone who works the register or may
+  // buy hardware sees what the shop offers and what this site ordered, and
+  // only a member holding "Buy point of sale hardware" — which follows
+  // `managePos` until a role or the member sets it, and may be granted
+  // without it — starts a checkout that the workspace pays for.
+  //
+  // A READER BOUGHT IN PERSON (AGL-4038): `waiting` is read without the
+  // point of sale plan, because a workspace without it is exactly the one
+  // that must be told to add it first; choosing its store and marking it set
+  // up are setting up devices (`posDevices`) on the store named.
+  const settingUp = action === 'choose-store' || action === 'mark-set-up'
+  const gate = await authorizePosStaff(
+    req,
+    hostId,
+    action === 'checkout' ? 'posBuyHardware' : settingUp ? 'posDevices' : undefined,
+    mayVisitPosHardwareShop,
+    // A workspace whose plan lost the point of sale still sees what it bought
+    // and may ask to return a reader bought in person.
+    action === 'waiting' || action === 'orders' || action === 'request-return' ? { planRequired: false } : {},
+  )
   if ('error' in gate) return res.status(gate.status).json({ error: gate.error })
   const staff = gate.staff
   const config = posHardwareConfig()
-  const action = String(body['action'] ?? '')
   try {
     switch (action) {
+      case 'waiting':
+        return res.status(200).json(await waitingInPersonReaders(staff.orgId, staff.hostId))
+      case 'request-return': {
+        const returns = await import('./pos-hardware-returns')
+        const orderId = String(body['orderId'] ?? '')
+        try {
+          const order = await returns.requestPosHardwareReturn({
+            orgId: staff.orgId,
+            orderId,
+            uid: staff.uid,
+            reason: body['reason'],
+          })
+          return res.status(200).json({ ok: true, order: merchantHardwareOrderView(orderId, order) })
+        } catch (error) {
+          if (error instanceof returns.PosHardwareReturnRefusal) {
+            return res.status(error.status).json({ error: error.message })
+          }
+          throw error
+        }
+      }
+      case 'choose-store':
+      case 'mark-set-up': {
+        const readers = await import('./pos-hardware-readers')
+        const orderId = String(body['orderId'] ?? '')
+        try {
+          const order =
+            action === 'choose-store'
+              ? await readers.choosePosHardwareStore({ orgId: staff.orgId, orderId, hostId: staff.hostId })
+              : await readers.markPosHardwareSetUp({ orgId: staff.orgId, orderId })
+          return res.status(200).json({ ok: true, order: merchantHardwareOrderView(orderId, order) })
+        } catch (error) {
+          if (error instanceof readers.PosHardwareReaderRefusal) {
+            return res.status(error.status).json({ error: error.message })
+          }
+          throw error
+        }
+      }
       case 'catalog':
         if (!config) return res.status(200).json({ available: false })
         return res.status(200).json({
@@ -160,16 +314,23 @@ export const posHardwareHandler: PluginApiHandler = async (req, res) => {
           shipCountries: POS_HARDWARE_SHIP_COUNTRIES,
         })
       case 'orders': {
-        const snapshot = await hardwareOrdersRef(staff.orgId)
-          .where('hostId', '==', staff.hostId)
-          .orderBy('createdAtMs', 'desc')
-          .limit(50)
-          .get()
-        return res.status(200).json({
-          orders: snapshot.docs.map((doc: any) =>
-            merchantHardwareOrderView(String(doc.id), doc.data() as PosHardwareOrder),
-          ),
-        })
+        // This site's orders, and the readers bought in person for the
+        // workspace that wait for a store to be chosen at setup (AGL-4038).
+        // A sale on the selling workspace's own To attach list is never one.
+        const [site, workspace] = await Promise.all([
+          hardwareOrdersRef(staff.orgId).where('hostId', '==', staff.hostId).orderBy('createdAtMs', 'desc').limit(50).get(),
+          hardwareOrdersRef(staff.orgId)
+            .where('hostId', '==', '')
+            .where('attachment.state', '==', 'attached')
+            .orderBy('createdAtMs', 'desc')
+            .limit(50)
+            .get(),
+        ])
+        const orders = [...site.docs, ...workspace.docs]
+          .map((doc: any) => merchantHardwareOrderView(String(doc.id), doc.data() as PosHardwareOrder))
+          .sort((a, b) => b.createdAtMs - a.createdAtMs)
+          .slice(0, 50)
+        return res.status(200).json({ orders })
       }
       case 'checkout': {
         if (!config) return res.status(404).json({ error: 'The hardware shop is not available.' })

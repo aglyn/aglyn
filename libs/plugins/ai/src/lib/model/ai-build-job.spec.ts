@@ -37,11 +37,13 @@ import {
   aiPlanUndeclaredRefs,
   parseAiBuildPlan,
   withBuildItems,
+  AI_BUILD_PLAN_LIMITS,
   AI_BUILD_PLAN_TOOL,
   type AiBuildItem,
   type AiBuildPlan,
   type AiBuildPlanScreen,
 } from './ai-build-plan'
+import { aiJobPlanLines } from './ai-job-plan-lines'
 import type { AiJobItemLedger } from './ai-jobs.types'
 
 /**
@@ -435,5 +437,111 @@ describe('items in the plan model', () => {
     expect(tool.inputSchema['required']).toContain('items')
     expect(JSON.stringify(tool)).toBe(JSON.stringify(withBuildItems(AI_BUILD_PLAN_TOOL)))
     expect(AI_BUILD_PLAN_TOOL.inputSchema['required']).not.toContain('items')
+  })
+})
+
+// AGL-4087: what a build's brief asks for that its plan does not build is said, never dropped quietly.
+describe('what a build leaves out', () => {
+  const HELPER = {
+    asked: 'Review helper page',
+    why: 'The site cannot write a review draft from a customer’s choices or copy it for them.',
+  }
+  const answer = (leftOut: unknown) => ({ ...canonical(), items: [], leftOut })
+
+  it('is asked of a build’s tool alone, a closed object of what was asked and why', () => {
+    const tool = withBuildItems(AI_BUILD_PLAN_TOOL)
+    expect(tool.inputSchema['required']).toContain('leftOut')
+    const schema = (tool.inputSchema['properties'] as Record<string, { items: Record<string, unknown> }>)['leftOut']
+    expect(schema.items['additionalProperties']).toBe(false)
+    expect(schema.items['required']).toEqual(['asked', 'why'])
+    expect(AI_BUILD_PLAN_TOOL.inputSchema['properties']).not.toHaveProperty('leftOut')
+  })
+
+  it('keeps each entry, and carries no list when nothing is left out', () => {
+    expect(parseAiBuildPlan(answer([HELPER]))).toMatchObject({ ok: true, plan: { leftOut: [HELPER] } })
+    const none = parseAiBuildPlan(answer([]))
+    expect(none.ok && 'leftOut' in none.plan).toBe(false)
+    const absent = parseAiBuildPlan({ ...canonical(), items: [] })
+    expect(absent.ok && 'leftOut' in absent.plan).toBe(false)
+  })
+
+  it('cuts a list past its limit and drops an entry that names nothing, instead of refusing the plan', () => {
+    const many = Array.from({ length: AI_BUILD_PLAN_LIMITS.leftOut + 2 }, (_, index) => ({ asked: `Page ${index}`, why: '' }))
+    const parsed = parseAiBuildPlan(answer([{ asked: ' ', why: 'Nothing.' }, ...many]))
+    expect(parsed.ok && parsed.plan.leftOut?.map((entry) => entry.asked)).toEqual(
+      many.slice(0, AI_BUILD_PLAN_LIMITS.leftOut - 1).map((entry) => entry.asked),
+    )
+    expect(parsed.ok && parsed.repairs).toContain(`leftOut listed ${many.length + 1}; kept the first ${AI_BUILD_PLAN_LIMITS.leftOut}`)
+    expect(parseAiBuildPlan(answer('Review helper page'))).toEqual({ ok: false, error: 'leftOut is not a list' })
+  })
+
+  it('is the last thing the plan card lists, read before Confirm', () => {
+    const parsed = parseAiBuildPlan(answer([HELPER, { asked: 'A members area', why: '' }]))
+    if (!parsed.ok) throw new Error('the plan did not read')
+    const lines = aiJobPlanLines({
+      ...parsed.plan,
+      status: 'proposed',
+      labels: {},
+      proposedAt: null,
+      confirmedAt: null,
+      confirmedBy: null,
+    })
+    expect(lines.slice(-2)).toEqual([
+      {
+        key: 'left-out-0',
+        text: 'Leaves out Review helper page — The site cannot write a review draft from a customer’s choices or copy it for them.',
+      },
+      { key: 'left-out-1', text: 'Leaves out A members area' },
+    ])
+  })
+})
+
+// AGL-4077: one theme change a plan, proposed for the owner to apply in Setup → Theme.
+describe('a theme change in a build', () => {
+  const THEMED: AiBuildOps = new Map([...OPS, ['theme', capability('theme', { noun: 'theme change', maxPerPlan: 1, freeAllowed: false })]])
+  const warmer = (overrides: Partial<AiBuildItem> = {}) =>
+    item(1, { op: 'theme', name: 'Warmer look', why: 'The request asks for a warmer look.', args: {}, ...overrides })
+  const themeChange = { kind: 'theme-change' as const, name: 'Warmer look', why: 'The request asks for a warmer look.', duplicateOf: null, fields: ['palette.primary.main'] }
+
+  it('is a unit built by the theme operation, as an item or as the plan’s theme-change creation', () => {
+    const asItem = { ...canonical(), items: [item(0, {}), warmer()] }
+    expect(aiBuildUnits(asItem).map((unit) => [unit.slot, unit.op])).toContainEqual(['i1', 'theme'])
+    const asCreation = { ...canonical(), create: [...canonical().create, themeChange] }
+    const units = aiBuildUnits(asCreation)
+    expect(units.map((unit) => [unit.slot, unit.op, unit.deps])).toContainEqual(['c1', 'theme', []])
+    expect(units.find((unit) => unit.slot === 'c1')?.creation?.kind).toBe('theme-change')
+  })
+
+  it('admits one on a paid plan, whichever list the plan put it in, instead of refusing it', () => {
+    expect(aiBuildPlanShapeRefusal({ ...canonical(), items: [item(0, {}), warmer()] }, { ops: THEMED })).toBeNull()
+    expect(aiBuildPlanShapeRefusal({ ...canonical(), create: [...canonical().create, themeChange] }, { ops: THEMED })).toBeNull()
+    // A console reading a kept plan has no operations to judge it against.
+    expect(aiBuildPlanShapeRefusal({ ...canonical(), create: [...canonical().create, themeChange] })).toBeNull()
+  })
+
+  it('refuses it on a Free workspace, and where the site has no theme operation, saying so', () => {
+    const two = { ...canonical(), screens: canonical().screens.slice(0, 2) }
+    const free = new Map([...THEMED].filter(([op]) => op !== 'theme'))
+    expect(aiBuildPlanShapeRefusal({ ...two, items: [item(0, {}), warmer()] }, { freeTaste: true, ops: free })).toBe(
+      'A Free workspace cannot have a theme change made (“Warmer look”). Take it out of items.',
+    )
+    expect(aiBuildPlanShapeRefusal({ ...two, create: [...two.create, themeChange] }, { freeTaste: true, ops: free })).toBe(
+      'A Free workspace cannot have a theme change made (“Warmer look”). Take it out of create.',
+    )
+    expect(aiBuildPlanShapeRefusal({ ...canonical(), create: [...canonical().create, themeChange] }, { ops: OPS })).toBe(
+      'Nothing on this site can make “Warmer look” (theme change). Take it out of create.',
+    )
+  })
+
+  it('holds a plan to one theme change, counting both lists', () => {
+    const both = { ...canonical(), create: [...canonical().create, themeChange], items: [item(0, {}), warmer({ name: 'Bolder look' })] }
+    expect(aiBuildPlanShapeRefusal(both, { ops: THEMED })).toBe('This plan makes 2 of “theme change”, and one build makes at most 1.')
+  })
+
+  it('is estimated at one pass', () => {
+    const plan = { ...canonical(), items: [item(0, {}), warmer()] }
+    expect(aiBuildCreditEstimate(plan, { ops: THEMED, slots: new Set(['i1']) })).toBe(50)
+    const created = { ...canonical(), create: [...canonical().create, themeChange] }
+    expect(aiBuildCreditEstimate(created, { ops: THEMED, slots: new Set(['c1']) })).toBe(50)
   })
 })

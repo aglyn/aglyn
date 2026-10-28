@@ -27,6 +27,7 @@ import { overLimitSummary } from '../../utils/over-limit-summary'
 import { type OrgPlan } from '@aglyn/aglyn'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import DataExportCard from '../data-export-card.component'
+import ClosureNotices from '../closure-notices.component'
 import { RetentionFunnelDialog } from '../billing/retention-funnel.dialog'
 import { docsHelp } from '../../constants/docs-links'
 import useCurrentOrg from '../../hooks/use-current-org'
@@ -202,6 +203,8 @@ export function OrgDeleteCard() {
               '7-day hold, all of its sites, files, and data are ' +
               'permanently erased. Cancel now to keep it.'}
           </Alert>
+          {/* What the deletion will change when it runs (AGL-4038). */}
+          <ClosureNotices user={user as never} subject="workspace" orgId={currentOrg?.$id} />
           <Button
             variant="outlined"
             disabled={busy}
@@ -220,6 +223,12 @@ export function OrgDeleteCard() {
               'irreversible and we keep no copy of it. Export ' +
               'anything you want to keep first.'}
           </Typography>
+          {/*
+            WHAT DELETING IT WILL CHANGE, before the confirm (AGL-4038): each
+            plugin says what it will cancel or refund, in its own words. It
+            never holds the delete back.
+          */}
+          <ClosureNotices user={user as never} subject="workspace" orgId={currentOrg?.$id} />
           <TextField
             label={`Type "${orgDisplayName}" to confirm`}
             value={deleteConfirmText}

@@ -22,6 +22,8 @@ import {
 import {
   computePosShiftReport,
   posCsvCell,
+  posOrderTenders,
+  POS_STRIPE_TENDERS,
   POS_TENDER_LABELS,
   POS_TENDER_METHODS,
   type PosCashEvent,
@@ -30,6 +32,7 @@ import {
   type PosShiftReport,
   type PosShiftSale,
   type PosTenderMethod,
+  type PosTenderSource,
 } from './commerce-pos-ops'
 import { currencyMinorDigits } from './order-fulfillment'
 
@@ -48,7 +51,11 @@ import { currencyMinorDigits } from './order-fulfillment'
  *   - SALES: register orders (`channel: 'pos'`) rung in the range, by their
  *     `createdAtMs`; online orders never count. A pending sale took nothing
  *     and a canceled one gave it back, so neither counts, as on a Z report.
- *   - REFUNDS: returns rung at a register in the range, whenever the sale was.
+ *   - REFUNDS: returns rung at a register in the range, whenever the sale was,
+ *     and every other refund of a register sale given in the range: from the
+ *     console's order dialog (`refund.ts`) or in the Stripe Dashboard. Those
+ *     are stored as {@link PosOrderRefund} records beside the register's
+ *     returns, on the day they were given, and counted as stored.
  *   - SHIFTS: every shift that opened or closed in the range, that a sale in
  *     the range was rung in, or that is still open.
  *   - THE DRAWER: the floats of the shifts that opened in the range, and the
@@ -258,6 +265,80 @@ export interface PosDaySale extends PosShiftSale {
 export interface PosDayReturn extends PosShiftRefund {
   registerId: string
   cashierId?: string
+}
+
+/**
+ * A refund of a register sale given AWAY from the register (AGL-4037): from
+ * the console's order dialog (`refund.ts`) or in the Stripe Dashboard. Stored
+ * at `hosts/{hostId}/registers/{registerId}/orderRefunds/{id}` (the register
+ * the sale was rung at), written by the server in the same transaction that
+ * records the refund on the order, and counted by the day report on the day
+ * it was given, in the store's time zone.
+ *
+ * Not a return: nothing came back over the counter and no drawer moved, so no
+ * shift's X or Z report reads it. Only Stripe tenders are refunded this way
+ * (a register's cash and gift cards go back at the register), so its tender
+ * is always a card.
+ */
+export interface PosOrderRefund {
+  orderId: string
+  registerId: string
+  /** When it was given. */
+  atMs: number
+  refundedCents: number
+  tenders: Array<{ method: PosTenderMethod; amountCents: number }>
+  /** The member who gave it; null for a refund made in Stripe. */
+  cashierId: string | null
+  /**
+   * Where it was given: the order dialog, Stripe, or the platform's staff
+   * refunding a card reader sold in person at its own store (AGL-4038).
+   */
+  source: 'order_dialog' | 'stripe' | 'staff'
+  /** Stripe's refund id when it named one. */
+  stripeRefundId: string | null
+}
+
+/** The collection under a register that holds its {@link PosOrderRefund}s. */
+export const POS_ORDER_REFUNDS_COLLECTION = 'orderRefunds'
+
+const REGISTER_ID = /^[A-Za-z0-9_-]{1,128}$/
+
+/**
+ * The record a refund of a register sale leaves for the day report, or null
+ * when the order is not a register sale (or names no register) or nothing was
+ * refunded. The tender is the Stripe payment the money went back to, as the
+ * order's tender ledger names it; a card when the ledger cannot say which.
+ */
+export function posOrderRefundRecord(input: {
+  orderId: string
+  order: (PosTenderSource & { registerId?: unknown }) | null | undefined
+  refundedCents: number
+  paymentIntentId: string | null | undefined
+  cashierId: string | null
+  source: PosOrderRefund['source']
+  stripeRefundId?: string | null
+  atMs: number
+}): PosOrderRefund | null {
+  const { order } = input
+  if (!order || order.channel !== 'pos') return null
+  const registerId = typeof order.registerId === 'string' ? order.registerId : ''
+  if (!REGISTER_ID.test(registerId)) return null
+  const refundedCents = whole(input.refundedCents)
+  if (!(refundedCents > 0)) return null
+  const stripeTenders = posOrderTenders(order).filter((tender) => POS_STRIPE_TENDERS.has(tender.method))
+  const tender =
+    stripeTenders.find((one) => input.paymentIntentId && one.paymentIntentId === input.paymentIntentId) ??
+    stripeTenders[0]
+  return {
+    orderId: input.orderId,
+    registerId,
+    atMs: whole(input.atMs),
+    refundedCents,
+    tenders: [{ method: tender?.method ?? 'card_present', amountCents: refundedCents }],
+    cashierId: input.cashierId || null,
+    source: input.source,
+    stripeRefundId: input.stripeRefundId || null,
+  }
 }
 
 /** A shift in the range, with the X report of an open one already read. */

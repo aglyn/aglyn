@@ -29,6 +29,8 @@
 
 const mockDecoded: Record<string, unknown> = {}
 let mockRole: string | null = 'owner'
+/** The member's own overrides (AGL-4047): where "Holds and reviews" is granted or refused. */
+let mockOverrides: Record<string, boolean> | undefined
 const mockRequests: Array<Record<string, unknown>> = []
 const mockFirestoreTouched = jest.fn()
 
@@ -45,7 +47,14 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
   isImpersonationSession: () => false,
   emailUnverifiedResponse: () => Response.json({ error: 'Verify your email' }, { status: 403 }),
-  resolveOrgMembership: async () => (mockRole ? { member: { role: mockRole } } : null),
+  resolveOrgMembership: async () =>
+    mockRole
+      ? { member: { role: mockRole, allHosts: true, ...(mockOverrides ? { permissions: mockOverrides } : {}) } }
+      : null,
+  // The catalog's own resolver, so the role's default and an override decide (AGL-4047).
+  memberHasOrgPermission: async (_orgId: string, member: Record<string, unknown> | null, permission: string) =>
+    Boolean(member) &&
+    jest.requireActual('@aglyn/aglyn/app-utils/org-permissions').hasOrgPermission(member, permission, null),
   listOwnerRiskNotices: async () => [{ noticeId: 'a'.repeat(40), title: 'An email is on hold for review' }],
   requestRiskReview: async (input: Record<string, unknown>) => {
     mockRequests.push(input)
@@ -75,6 +84,7 @@ const post = (body: Record<string, unknown>) =>
 
 beforeEach(() => {
   mockRole = 'owner'
+  mockOverrides = undefined
   mockRequests.length = 0
   mockFirestoreTouched.mockClear()
   Object.assign(mockDecoded, { uid: 'owner-1', email: 'avery@example.com', email_verified: true, staff: false })
@@ -94,6 +104,19 @@ describe('/api/orgs/risk-notices', () => {
     expect((await get()).status).toBe(403)
     mockRole = null
     expect((await get()).status).toBe(403)
+  })
+
+  it('asks "Holds and reviews", not the role: an editor granted it reads and asks, an admin refused it cannot (AGL-4047)', async () => {
+    mockRole = 'editor'
+    mockOverrides = { 'org.holds': true }
+    expect((await get()).status).toBe(200)
+    expect((await post({ noticeId: 'a'.repeat(40), note: 'Please look again.' })).status).toBe(200)
+    mockRole = 'admin'
+    mockOverrides = { 'org.holds': false }
+    const refused = await get()
+    expect(refused.status).toBe(403)
+    expect((await refused.json()).permission).toBe('org.holds')
+    expect((await post({ noticeId: 'a'.repeat(40), note: 'Please look again.' })).status).toBe(403)
   })
 
   it('lets staff read, but never ask on the workspace’s behalf', async () => {

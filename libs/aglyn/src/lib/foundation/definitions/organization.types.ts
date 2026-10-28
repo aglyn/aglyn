@@ -237,10 +237,20 @@ export interface AglynOrgMember extends AglynDocument {
    * Per-site permission overrides for a COLLABORATOR (AGL-2927), keyed by
    * the host the grant is for. Absent keys resolve by the host role's
    * default, so a document written before this field existed reads the same
-   * as one written after it. Org-wide members are never consulted here:
-   * their org role, custom role and `permissions` map decide.
+   * as one written after it. Org-wide members are consulted here only on a
+   * site where their access is narrower than their workspace role, and only
+   * for the keys such a site narrows (AGL-4047, `narrowPermissionsToSite`);
+   * everywhere else their org role, custom role and `permissions` map decide.
    */
   hostPermissions?: Record<HostUid, Partial<Record<HostPermissionKey, boolean>>>
+  /**
+   * Per key a site can narrow (AGL-4047): `true` follows the site role on a
+   * site where this member's access is narrower than their workspace role,
+   * `false` keeps the permission there. A key it leaves out follows their
+   * custom role's `siteNarrowing`, then the built-in role's default. Read
+   * only for a member who works across the whole workspace.
+   */
+  siteNarrowing?: Partial<Record<string, boolean>>
   /**
    * Denormalized reach as scope tokens (AGL-1038), so rules can intersect
    * it with a resource's `visibleTo` — they cannot derive it from

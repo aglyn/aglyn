@@ -21,7 +21,7 @@
  * made from here; the Firestore rules refuse all of them to clients.
  */
 
-import { registerPluginApiRoute } from '@aglyn/aglyn/server'
+import { registerPluginApiRoute, registerSitePageResolver } from '@aglyn/aglyn/server'
 import { WAIVERS_API_ROUTES } from './constants/bundle-common'
 
 type Handler = (request: Request) => Promise<Response>
@@ -29,6 +29,7 @@ type Modules = {
   templates: typeof import('./server/template-routes')
   signatures: typeof import('./server/signature-routes')
   public: typeof import('./server/public-routes')
+  display: typeof import('./server/display-routes')
 }
 
 const lazy =
@@ -39,7 +40,9 @@ const lazy =
         ? await import('./server/template-routes')
         : module === 'signatures'
           ? await import('./server/signature-routes')
-          : await import('./server/public-routes')
+          : module === 'display'
+            ? await import('./server/display-routes')
+            : await import('./server/public-routes')
     ) as Modules[K]
     return pick(loaded)(request)
   }
@@ -52,11 +55,25 @@ function registerPublicRoutes(): void {
   registerPluginApiRoute(WAIVERS_API_ROUTES.publicSign, {
     web: lazy('public', (routes) => routes.publicSignRoute),
   })
+  // The signer's own copy, by the one-hour link the signing answered with
+  // (AGL-4042): on whichever app the signing page was.
+  registerPluginApiRoute(WAIVERS_API_ROUTES.signedCopy, {
+    web: async (request) => (await import('./server/signed-copy')).signedCopyRoute(request),
+  })
 }
 
-/** Tenant API registration, named in `plugins.config.json` as `tenantApi`. */
+/**
+ * Tenant API registration, named in `plugins.config.json` as `tenantApi`:
+ * the signer's two doors, and the store's own signing page at
+ * `/sign-waiver`, where a share link and its QR code open (the resolver and
+ * the composition behind it load on the first request no published page
+ * claims).
+ */
 export function registerWaiversApi(): void {
   registerPublicRoutes()
+  registerSitePageResolver(async (context) =>
+    (await import('./server/site-page')).waiversSitePageResolver(context),
+  )
 }
 
 /** Console API registration, named in `plugins.config.json` as `consoleApi`. */
@@ -72,6 +89,11 @@ export function registerWaiversConsoleApi(): void {
     [WAIVERS_API_ROUTES.signAtWindow, lazy('signatures', (routes) => routes.signAtWindowRoute)],
     [WAIVERS_API_ROUTES.paper, lazy('signatures', (routes) => routes.paperRoute)],
     [WAIVERS_API_ROUTES.status, lazy('signatures', (routes) => routes.statusRoute)],
+    // The register's paired customer display (AGL-4042): signing on it,
+    // and whether it still shows this site's waiver, both by the display's
+    // own credential. Console only, where the display's page is.
+    [WAIVERS_API_ROUTES.signOnDisplay, lazy('display', (routes) => routes.signOnDisplayRoute)],
+    [WAIVERS_API_ROUTES.displayScreen, lazy('display', (routes) => routes.displayScreenRoute)],
   ]
   for (const [path, handler] of routes) registerPluginApiRoute(path, { web: (request) => handler(request) })
 }

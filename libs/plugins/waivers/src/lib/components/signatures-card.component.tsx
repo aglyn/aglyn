@@ -42,6 +42,8 @@ export interface SignaturesCardProps {
   waivers: WaiverTemplate[]
   canManage: boolean
   canCollect: boolean
+  /** A search to open on, like a rider's name from check-in (AGL-4042). */
+  initialQuery?: string
 }
 
 const when = (ms: number) =>
@@ -56,8 +58,8 @@ const when = (ms: number) =>
 export function SignaturesCard(props: SignaturesCardProps) {
   const { hostId, canCollect, canManage } = props
   const { ready, request, download } = useWaiversFetch()
-  const [text, setText] = useState('')
-  const [query, setQuery] = useState('')
+  const [text, setText] = useState(props.initialQuery ?? '')
+  const [query, setQuery] = useState((props.initialQuery ?? '').trim())
   const [day, setDay] = useState<Dayjs | null>(null)
   const [waiverId, setWaiverId] = useState('')
   const [rows, setRows] = useState<WaiverSignatureRow[] | null>(null)
@@ -161,7 +163,13 @@ export function SignaturesCard(props: SignaturesCardProps) {
         minWidth: 110,
         type: 'boolean',
         renderCell: ({ row }: { row: WaiverSignatureRow }) =>
-          row.voided ? <Chip size="small" color="warning" label="Voided" /> : <Chip size="small" variant="outlined" color="success" label="Signed" />,
+          row.voided ? (
+            <Chip size="small" color="warning" label="Voided" />
+          ) : row.retainedUntilMs ? (
+            <Chip size="small" variant="outlined" color="info" label={`Kept until ${when(row.retainedUntilMs)}`} />
+          ) : (
+            <Chip size="small" variant="outlined" color="success" label="Signed" />
+          ),
       },
     ],
     [],

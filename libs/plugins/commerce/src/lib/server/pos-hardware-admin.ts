@@ -29,27 +29,49 @@ import {
   POS_HARDWARE_ORDER_ID,
   POS_HARDWARE_ORDERS_COLLECTION,
   POS_HARDWARE_STATUS_STAMP,
-  posHardwareRefundable,
+  posHardwareBuyerErasedPatch,
+  posHardwareOrderSource,
   posHardwareSaleRecord,
+  posHardwareSaleSetOptions,
   type PosHardwareOrder,
   type PosHardwareOrderStatus,
   type PosHardwareTracking,
 } from '../model/pos-hardware'
 import { fulfillmentTrackingUrl } from '../model/tracking-url'
-import { hardwareOrdersRef, posHardwareOrderNumber, posHardwareSaleRef } from './pos-hardware'
-import { sendPosHardwareEmail } from './pos-hardware-notify'
-import { posStripe } from './pos-stripe'
+import {
+  hardwareOrdersRef,
+  posHardwareInPersonConfig,
+  posHardwareOrderNumber,
+  posHardwareSaleRef,
+} from './pos-hardware'
+import { cancelAndRefundPosHardwareOrder } from './pos-hardware-cancel'
+import { sendPosHardwareEmail, sendPosHardwareEmailOnce } from './pos-hardware-notify'
 
 /*==========================================
  * `/api/commerce/admin/hardware-orders` (AGL-4038): the staff end of the POS
  * hardware shop, for the Hardware orders staff page.
  *
- *   GET   every workspace's orders, newest first, optionally one status
+ *   GET   every workspace's orders, newest first, optionally one status,
+ *         or `?attach=pending`: the in-person sales nobody has said whose
+ *         they are yet (AGL-4038), after recording any paid sale on the
+ *         seller store still waiting to be recorded
  *   POST  update  record Stripe's order id and the tracking, or move the
  *                 order one step on (Ordered → Shipped → Delivered →
  *                 Registered); Shipped needs a tracking number
  *         cancel  cancel and refund in full, before it ships
  *         refund  refund in full, before it ships
+ *         refund  an order sold in person (AGL-4038): what is left of it,
+ *                 through the register sale's own card refund on the
+ *                 selling store's account (`pos-hardware-returns.ts`)
+ *         Each of the three takes `notifyBuyer`, the dialog's "Email the
+ *         buyer" (AGL-4038): true sends the buyer the canceled-and-refunded
+ *         email (online) or the refunded email (in person), once, under the
+ *         same claim a closure sends it under; false sends nothing. Absent
+ *         reads as the dialog's default, true. It is in the audit row.
+ *         decline-return  decline a buyer's open return request, with a note
+ *         forget-buyer  take the buyer's address and account off an order
+ *                 sold in person (AGL-4038), for a privacy request from
+ *                 someone who never made an account
  *
  * Staff only. Reading is open to every staff role; every write is `super` or
  * `billing`, because each one changes what a customer is told or returns
@@ -89,6 +111,17 @@ function staffView(id: string, order: PosHardwareOrder) {
     refundPending: Boolean((order as { refundRequestedAtMs?: number }).refundRequestedAtMs),
     createdAtMs: order.createdAtMs ?? 0,
     updatedAtMs: order.updatedAtMs ?? 0,
+    // Sold in person at the platform's own store (AGL-4038): where, how it
+    // was paid and into which account, and whose it is.
+    source: posHardwareOrderSource(order),
+    discountCents: order.discountCents ?? 0,
+    posSale: order.posSale ?? null,
+    paidTo: order.paidTo ?? null,
+    attachment: order.attachment ?? null,
+    units: order.units ?? [],
+    refundedCents: order.refundedCents ?? 0,
+    refunds: order.refunds ?? [],
+    returnRequest: order.returnRequest ?? null,
   }
 }
 
@@ -137,8 +170,21 @@ async function handler(request: Request): Promise<Response> {
 
     if (method === 'GET') {
       const requested = String(query?.['status'] ?? '')
+      const attach = String(query?.['attach'] ?? '')
+      if (attach && attach !== 'pending') return json({ error: 'Unknown filter' }, 400)
+      const returns = String(query?.['returns'] ?? '')
+      if (returns && returns !== 'requested') return json({ error: 'Unknown filter' }, 400)
       let ordersQuery: any = firestore.collectionGroup(POS_HARDWARE_ORDERS_COLLECTION)
-      if (requested) {
+      if (returns === 'requested') {
+        // Buyers' open return requests (AGL-4038), oldest waiting first in the
+        // newest-first list like every other filter.
+        ordersQuery = ordersQuery.where('returnRequest.state', '==', 'requested')
+      } else if (attach === 'pending') {
+        // A sale whose recording was missed is recorded before the list is read.
+        const config = posHardwareInPersonConfig()
+        if (config) await (await import('./pos-hardware-in-person')).sweepInPersonPosHardwareSales(config)
+        ordersQuery = ordersQuery.where('attachment.state', '==', 'pending')
+      } else if (requested) {
         if (!isPosHardwareOrderStatus(requested)) return json({ error: 'Unknown status' }, 400)
         ordersQuery = ordersQuery.where('status', '==', requested)
       }
@@ -175,10 +221,24 @@ async function handler(request: Request): Promise<Response> {
     }
     const ref = hardwareOrdersRef(orgId).doc(orderId)
     const actor = { actorUid: decoded.uid, actorEmail: decoded.email ? String(decoded.email) : null }
+    // "Email the buyer" (AGL-4038): explicit when sent, the dialog's default when not.
+    const notifyRaw = input['notifyBuyer']
+    if (notifyRaw !== undefined && typeof notifyRaw !== 'boolean') {
+      return json({ error: 'notifyBuyer must be true or false' }, 400)
+    }
+    const notifyBuyer = notifyRaw !== false
 
     if (action === 'update') return await updateOrder(firestore, ref, orgId, orderId, input, actor)
+    if (action === 'forget-buyer') return await forgetBuyer(firestore, ref, orgId, orderId, actor)
+    if (action === 'decline-return') return await inPersonReturn(firestore, orgId, orderId, action, input, actor)
+    if (action === 'refund-return') return await onlineReturnRefund(firestore, orgId, orderId, input, actor, notifyBuyer)
+    // Handed over at the sale, an in-person order is never canceled: either
+    // button refunds it, its own way.
+    if ((action === 'refund' || action === 'cancel') && (await soldInPerson(ref))) {
+      return await inPersonReturn(firestore, orgId, orderId, 'refund', input, actor, notifyBuyer)
+    }
     if (action === 'cancel' || action === 'refund') {
-      return await refundOrder(firestore, ref, orgId, orderId, action, actor)
+      return await refundOrder(firestore, orgId, orderId, action, actor, notifyBuyer)
     }
     return json({ error: 'Unknown action' }, 400)
   } catch (error) {
@@ -236,7 +296,7 @@ async function updateOrder(
     }
     const after = { ...before, ...patch } as PosHardwareOrder
     transaction.update(ref, patch)
-    transaction.set(posHardwareSaleRef(orderId), posHardwareSaleRecord(orderId, after))
+    transaction.set(posHardwareSaleRef(orderId), posHardwareSaleRecord(orderId, after), posHardwareSaleSetOptions(after))
     return { before, after, reached }
   })
 
@@ -264,85 +324,205 @@ async function updateOrder(
   return json({ ok: true, order: staffView(orderId, outcome.after) })
 }
 
+/** Whether an order was sold in person (AGL-4038), which refunds its own way. */
+async function soldInPerson(ref: any): Promise<boolean> {
+  const snapshot = await ref.get()
+  return snapshot.exists && posHardwareOrderSource(snapshot.data()) === 'in_person'
+}
+
+/**
+ * A refund or a declined return of an order sold in person (AGL-4038): the
+ * refund goes back through the register sale's own card refund on the
+ * selling store's account, never the platform's Checkout.
+ */
+async function inPersonReturn(
+  firestore: any,
+  orgId: string,
+  orderId: string,
+  action: 'refund' | 'decline-return',
+  input: Record<string, unknown>,
+  actor: Actor,
+  notifyBuyer = false,
+): Promise<Response> {
+  const returns = await import('./pos-hardware-returns')
+  try {
+    const outcome =
+      action === 'refund'
+        ? await returns.refundInPersonPosHardwareOrder({
+            config: posHardwareInPersonConfig(),
+            orgId,
+            orderId,
+            actorUid: actor.actorUid,
+          })
+        : await returns.declinePosHardwareReturn({ orgId, orderId, actorUid: actor.actorUid, note: input['note'] })
+    // The refund just made, told once by its own key, when staff chose to.
+    const made = action === 'refund' ? (outcome.order.refunds ?? []).slice(-1)[0] : undefined
+    const buyerEmail =
+      action !== 'refund'
+        ? undefined
+        : !notifyBuyer
+          ? 'off'
+          : made
+            ? await sendPosHardwareEmailOnce('refunded', orderId, outcome.order, `refunded:${made.key}`)
+            : 'skipped'
+    await addAdminAudit(firestore, {
+      action: action === 'refund' ? 'pos-hardware-order-refund' : 'pos-hardware-return-decline',
+      ...actor,
+      scope: 'posHardwareOrder',
+      target: `orgs/${orgId}/${POS_HARDWARE_ORDERS_COLLECTION}/${orderId}`,
+      orgId,
+      before: { status: outcome.before.status, refundedCents: outcome.before.refundedCents ?? 0 },
+      after: {
+        status: outcome.order.status,
+        refundedCents: outcome.order.refundedCents ?? 0,
+        returnRequest: outcome.order.returnRequest?.state ?? null,
+        ...(action === 'refund' ? { notifyBuyer, buyerEmail } : {}),
+      },
+      at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+    })
+    return json({ ok: true, order: staffView(orderId, outcome.order), ...(buyerEmail ? { buyerEmail } : {}) })
+  } catch (error) {
+    if (error instanceof returns.PosHardwareReturnRefusal) throw new Refusal(error.message, error.status)
+    throw error
+  }
+}
+
+/**
+ * Refunds an ONLINE order the buyer sent back (AGL-4038), once its return
+ * was requested: the items and their tax, less any restocking fee Stripe
+ * charged, to the card it was paid with. The buyer is emailed once by the
+ * refund's key, when staff chose to.
+ */
+async function onlineReturnRefund(
+  firestore: any,
+  orgId: string,
+  orderId: string,
+  input: Record<string, unknown>,
+  actor: Actor,
+  notifyBuyer: boolean,
+): Promise<Response> {
+  const returns = await import('./pos-hardware-returns')
+  try {
+    const outcome = await returns.refundReturnedOnlinePosHardwareOrder({
+      orgId,
+      orderId,
+      actorUid: actor.actorUid,
+      restockingFeeCents: input['restockingFeeCents'],
+    })
+    const made = (outcome.order.refunds ?? []).slice(-1)[0]
+    const buyerEmail = !notifyBuyer
+      ? 'off'
+      : made
+        ? await sendPosHardwareEmailOnce('returnRefunded', orderId, outcome.order, `refunded:${made.key}`)
+        : 'skipped'
+    await addAdminAudit(firestore, {
+      action: 'pos-hardware-return-refund',
+      ...actor,
+      scope: 'posHardwareOrder',
+      target: `orgs/${orgId}/${POS_HARDWARE_ORDERS_COLLECTION}/${orderId}`,
+      orgId,
+      before: { status: outcome.before.status, refundedCents: outcome.before.refundedCents ?? 0 },
+      after: {
+        status: outcome.order.status,
+        refundedCents: outcome.order.refundedCents ?? 0,
+        refundId: made?.stripeRefundId ?? null,
+        returnRequest: outcome.order.returnRequest?.state ?? null,
+        notifyBuyer,
+        buyerEmail,
+      },
+      at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+    })
+    return json({ ok: true, order: staffView(orderId, outcome.order), buyerEmail })
+  } catch (error) {
+    if (error instanceof returns.PosHardwareReturnRefusal) throw new Refusal(error.message, error.status)
+    throw error
+  }
+}
+
+/**
+ * Takes the buyer off an order sold in person (AGL-4038): the same patch an
+ * account erasure applies, for a buyer an erasure cannot reach because they
+ * have no account. The order, its amounts and the store's tax region stay.
+ */
+async function forgetBuyer(firestore: any, ref: any, orgId: string, orderId: string, actor: Actor): Promise<Response> {
+  const after = await firestore.runTransaction(async (transaction: any) => {
+    const snapshot = await transaction.get(ref)
+    if (!snapshot.exists) throw new Refusal('No such order', 404)
+    const before = snapshot.data() as PosHardwareOrder
+    if (posHardwareOrderSource(before) !== 'in_person') {
+      throw new Refusal('Only an order sold in person has a buyer to remove here.', 409)
+    }
+    const patch = posHardwareBuyerErasedPatch(before, Date.now())
+    const next = { ...before, ...patch } as PosHardwareOrder
+    transaction.update(ref, patch)
+    transaction.set(posHardwareSaleRef(orderId), posHardwareSaleRecord(orderId, next), posHardwareSaleSetOptions(next))
+    return next
+  })
+  await addAdminAudit(firestore, {
+    action: 'pos-hardware-order-forget-buyer',
+    ...actor,
+    scope: 'posHardwareOrder',
+    target: `orgs/${orgId}/${POS_HARDWARE_ORDERS_COLLECTION}/${orderId}`,
+    orgId,
+    before: null,
+    after: { buyerErasedAtMs: after.buyerErasedAtMs ?? null },
+    at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+  })
+  return json({ ok: true, order: staffView(orderId, after) })
+}
+
 async function refundOrder(
   firestore: any,
-  ref: any,
   orgId: string,
   orderId: string,
   action: 'cancel' | 'refund',
   actor: Actor,
+  notifyBuyer: boolean,
 ): Promise<Response> {
-  const finalStatus: PosHardwareOrderStatus = action === 'cancel' ? 'canceled' : 'refunded'
-  // Claim the refund under the lock first, so the order cannot be marked
-  // shipped while the money is on its way back, and two presses refund once.
-  const claim = await firestore.runTransaction(async (transaction: any) => {
-    const snapshot = await transaction.get(ref)
-    if (!snapshot.exists) throw new Refusal('No such order', 404)
-    const order = snapshot.data() as PosHardwareOrder & { refundRequestedAtMs?: number }
-    if (order.status === finalStatus) return { order, already: true }
-    if (!posHardwareRefundable(order.status)) {
+  const finalStatus = action === 'cancel' ? 'canceled' : 'refunded'
+  // The one cancel-and-refund path (`pos-hardware-cancel.ts`), which a
+  // workspace or account closure takes too: claimed under the lock, refunded
+  // once under one key, settled with the sale record.
+  const result = await cancelAndRefundPosHardwareOrder({ orgId, orderId, finalStatus, reason: 'staff' })
+  switch (result.outcome) {
+    case 'missing':
+      throw new Refusal('No such order', 404)
+    case 'already': {
+      // Pressed again — after a closure, or after an email that failed: the
+      // buyer is told now if they never were, and never twice.
+      const buyerEmail = notifyBuyer ? await sendPosHardwareEmailOnce('canceled', orderId, result.order) : 'off'
+      return json({ ok: true, order: staffView(orderId, result.order), buyerEmail })
+    }
+    case 'not-refundable':
       throw new Refusal(
         'This order has shipped, so it can no longer be canceled or refunded here. Arrange a return with Stripe instead.',
         409,
       )
-    }
-    if (!order.stripePaymentIntentId) throw new Refusal('This order has no payment to refund.', 409)
-    transaction.update(ref, { refundRequestedAtMs: Date.now() })
-    return { order, already: false }
-  })
-  if (claim.already) return json({ ok: true, order: staffView(orderId, claim.order) })
-
-  const refund = await posStripe('POST', 'refunds', {
-    params: {
-      payment_intent: claim.order.stripePaymentIntentId,
-      'metadata[type]': 'pos-hardware-order',
-      'metadata[orderId]': orderId,
-      'metadata[orgId]': orgId,
-    },
-    // One refund per order, whichever of the two acts asked for it.
-    idempotencyKey: `pos-hw-refund-${orderId}`,
-  })
-  if (!refund.ok || !refund.body?.id) {
-    await ref.update({ refundRequestedAtMs: firebaseAdmin.firestore.FieldValue.delete() }).catch(() => undefined)
-    console.error('[pos-hardware-admin] refund refused', orderId, refund.status, refund.body?.error?.code)
-    return json({ error: String(refund.body?.error?.message ?? '') || 'Stripe refused the refund.' }, 502)
+    case 'no-payment':
+      throw new Refusal('This order has no payment to refund.', 409)
+    case 'refused':
+      return json({ error: result.message }, 502)
   }
-  const now = Date.now()
-  const patch = {
-    status: finalStatus,
-    [POS_HARDWARE_STATUS_STAMP[finalStatus]]: now,
-    updatedAtMs: now,
-    refundId: String(refund.body.id),
-    refundedCents: Number(refund.body.amount ?? claim.order.totalCents ?? 0),
-    refundRequestedAtMs: firebaseAdmin.firestore.FieldValue.delete(),
-  }
-  const settled = { ...claim.order }
-  delete settled.refundRequestedAtMs
-  const after: PosHardwareOrder = {
-    ...settled,
-    status: finalStatus,
-    [POS_HARDWARE_STATUS_STAMP[finalStatus]]: now,
-    updatedAtMs: now,
-    refundId: patch.refundId,
-    refundedCents: patch.refundedCents,
-  }
-  // The order and its retained sale record move together: the record is
-  // what the refund is accounted from once the workspace is gone.
-  await firestore.runTransaction(async (transaction: any) => {
-    transaction.update(ref, patch)
-    transaction.set(posHardwareSaleRef(orderId), posHardwareSaleRecord(orderId, after))
-  })
+  // Canceled or refunded, it will not ship: the one canceled-and-refunded
+  // email, once, under the claim a closure sends it under (AGL-4038).
+  const buyerEmail = notifyBuyer ? await sendPosHardwareEmailOnce('canceled', orderId, result.order) : 'off'
   await addAdminAudit(firestore, {
     action: `pos-hardware-order-${action}`,
     ...actor,
     scope: 'posHardwareOrder',
     target: `orgs/${orgId}/${POS_HARDWARE_ORDERS_COLLECTION}/${orderId}`,
     orgId,
-    before: { status: claim.order.status },
-    after: { status: finalStatus, refundId: patch.refundId, refundedCents: patch.refundedCents },
+    before: { status: result.before.status },
+    after: {
+      status: finalStatus,
+      refundId: result.order.refundId,
+      refundedCents: result.order.refundedCents,
+      notifyBuyer,
+      buyerEmail,
+    },
     at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
   })
-  return json({ ok: true, order: staffView(orderId, after) })
+  return json({ ok: true, order: staffView(orderId, result.order), buyerEmail })
 }
 
 export { handler as posHardwareAdminOrders }

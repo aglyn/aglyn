@@ -30,6 +30,7 @@
 
 import {
   docsGroundingBlock,
+  docsLookupNeedsEnglish,
   retrieveDocsSections,
   tokenize,
 } from './docs-retrieval'
@@ -105,6 +106,35 @@ describe('retrieveDocsSections', () => {
     for (const { section } of results) {
       expect(section.path.startsWith('/')).toBe(true)
     }
+  })
+})
+
+/**
+ * The docs are written in English, so a question in another language finds
+ * nothing by its own words (AGL-4075). This is the test that decides when the
+ * Assist chat looks the question up in English first.
+ */
+describe('docsLookupNeedsEnglish', () => {
+  it('asks for an English lookup for a question in a non-Latin script', () => {
+    expect(docsLookupNeedsEnglish('كيف أنشر موقعي؟')).toBe(true)
+    expect(docsLookupNeedsEnglish('사이트를 어떻게 게시하나요?')).toBe(true)
+    expect(docsLookupNeedsEnglish('Как подключить домен?')).toBe(true)
+  })
+
+  it('asks for one for a Latin-script question whose words the docs do not use', () => {
+    expect(docsLookupNeedsEnglish('¿Cómo conecto mi dominio propio?')).toBe(true)
+    expect(docsLookupNeedsEnglish('Comment publier mon site ?')).toBe(true)
+  })
+
+  it('leaves an English question about the product alone', () => {
+    expect(docsLookupNeedsEnglish('How do I connect a custom domain?')).toBe(false)
+    expect(docsLookupNeedsEnglish("Why isn't my custom domain verifying?")).toBe(false)
+    expect(docsLookupNeedsEnglish('Can I add a language switcher to my site?')).toBe(false)
+  })
+
+  it('has nothing to look up for a question with no words', () => {
+    expect(docsLookupNeedsEnglish('?')).toBe(false)
+    expect(docsLookupNeedsEnglish('')).toBe(false)
   })
 })
 

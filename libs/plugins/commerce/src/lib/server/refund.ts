@@ -30,6 +30,10 @@ import { raiseOrderEvent } from './order-events'
 import { reverseOrderConversion } from '@aglyn/aglyn/plugin-manager/plugin-conversion-credit'
 import { createStripeRefund } from './stripe-refund'
 import { posRegisterRefundAuthority } from './pos-refund-authority'
+import { holdsPosPermission } from '../model/plugin-permissions'
+import { posOrderRefundRecord, POS_ORDER_REFUNDS_COLLECTION } from '../model/commerce-pos-day-report'
+import type { PosTenderSource } from '../model/commerce-pos-ops'
+import { posOrderRefundDialogId } from './pos-order-refund-ids'
 
 /**
  * A claim on one refund attempt (AGL-1696), the same primitive the POS sale
@@ -221,14 +225,16 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
       membership.orgWide === true &&
       membership.hostRole === 'admin'
     // THE REGISTER'S OWN REFUNDS (AGL-3609). A member who works the register
-    // — `admin` or `editor` on this site with `managePos` — may refund a POS
-    // order up to the site's cashier refund limit, and above it with a
-    // workspace admin's PIN. Decided below, once the order and the amount are
-    // known; every other refund still needs the workspace admin above.
+    // — `managePos` with the register's refund key, as resolved for this site
+    // (AGL-4047), whatever their site role — may refund a POS order up to the
+    // site's cashier refund limit, and above it with a workspace admin's PIN.
+    // Decided below, once the order and the amount are known; every other
+    // refund still needs the workspace admin above.
     const registerStaff =
       !workspaceAdmin &&
-      (memberRole === 'admin' || memberRole === 'editor') &&
-      membership.permissions?.managePos === true
+      // The register's refund key (AGL-4047), which follows `managePos`
+      // unless a role or the member sets it, and is never held without it.
+      holdsPosPermission(membership.permissions, 'posRefund')
     if (!workspaceAdmin && !registerStaff) {
       return res.status(403).json({
         error:
@@ -607,6 +613,29 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
     let refundedCents = 0
     let fullyRefunded = false
     let closedTheOrder = false
+    // A register sale's refund counts in the day totals on the day it was
+    // given, wherever it was given (AGL-4037): recorded beside the register's
+    // own returns, in the same transaction as the order's count, so the two
+    // cannot disagree. Online orders leave none.
+    const registerRefund = posOrderRefundRecord({
+      orderId,
+      order: order as PosTenderSource & { registerId?: unknown },
+      refundedCents: refundCents,
+      paymentIntentId: String(paymentIntentId),
+      cashierId: decoded.uid,
+      source: 'order_dialog',
+      stripeRefundId: refund.refundId || null,
+      atMs: Date.now(),
+    })
+    const registerRefundRef = registerRefund
+      ? hostRef
+          .collection('registers')
+          .doc(registerRefund.registerId)
+          .collection(POS_ORDER_REFUNDS_COLLECTION)
+          // One record per Stripe refund; a keyed retry replays at the claim
+          // above and never reaches here.
+          .doc(refund.refundId || posOrderRefundDialogId(orderId, claim?.stripeKey ?? registerRefund.atMs))
+      : null
     await firestore.runTransaction(async (transaction) => {
       const fresh = CommerceModel.liftLegacyOrder(
         ((await transaction.get(orderRef)).data() ?? {}) as any,
@@ -664,6 +693,7 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
         },
         { merge: true },
       )
+      if (registerRefund && registerRefundRef) transaction.set(registerRefundRef, registerRefund)
     })
     const payload = { refundedCents, fullyRefunded }
     await claim?.record(200, payload)

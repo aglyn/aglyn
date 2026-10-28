@@ -22,6 +22,7 @@ import {
 } from '@aglyn/aglyn/app-utils/name-search'
 import { describeOrderDispute, type OrderDisputeTone } from './commerce-dispute'
 import { orderSyncFields } from './order-shipping-export'
+import { isCheckInDayKey } from './commerce-check-in-product'
 import {
   formatOrderNumber,
   type HostOrder,
@@ -191,6 +192,25 @@ export function orderListFields(
 export function withOrderListFields<T extends object>(
   docId: string,
   doc: T,
-): T & OrderListFields & { requiresShipping: boolean; updatedAtMs?: number } {
-  return { ...doc, ...orderListFields(doc, docId), ...orderSyncFields(doc) }
+): T & OrderListFields & { requiresShipping: boolean; updatedAtMs?: number; useDayKeys?: string[] } {
+  return { ...doc, ...orderListFields(doc, docId), ...orderSyncFields(doc), ...orderUseDayFields(doc) }
+}
+
+/**
+ * The days an order's check-in items are for when the buyer chose one
+ * (AGL-4043): `useDayKeys`, the distinct `useDayKey`s of its lines, which
+ * the check-in window queries (`array-contains`, its automatic index) to
+ * find a pass bought on another day. Nothing on an order whose lines name
+ * none, so every order written before pass dates reads as it did.
+ */
+export function orderUseDayFields(order: object): { useDayKeys?: string[] } {
+  const lines = (order as Partial<HostOrder>).lineItems
+  const days = [
+    ...new Set(
+      (Array.isArray(lines) ? lines : [])
+        .map((line) => line?.useDayKey)
+        .filter((day): day is string => isCheckInDayKey(day)),
+    ),
+  ].sort()
+  return days.length ? { useDayKeys: days } : {}
 }

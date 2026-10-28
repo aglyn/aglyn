@@ -22,7 +22,8 @@
  * to import.
  *
  * Documents by path; the operators the CRM's transfer hooks and the job
- * engine issue — `where` (equality, ranges, `in`, the array operators),
+ * engine issue — `collectionGroup` (every collection of that name, at any
+ * depth), `where` (equality, ranges, `in`, the array operators),
  * `orderBy` (a field or the document id), `limit`, `startAfter`, `count`,
  * `getAll`, batches and read-then-write transactions — and the write
  * sentinels (`delete`, `serverTimestamp`, `arrayUnion`, `arrayRemove`,
@@ -179,6 +180,8 @@ export function memoryFirestore(clock: () => number = () => 1_800_000_000_000): 
 
   interface QueryState {
     path: string
+    /** A collection-group query: `path` is the collection's NAME, matched at any depth. */
+    group?: boolean
     filters: Array<{ field: string | typeof DOCUMENT_ID; op: string; value: unknown }>
     order: Array<{ field: string | typeof DOCUMENT_ID; direction: 'asc' | 'desc' }>
     limit?: number
@@ -224,11 +227,19 @@ export function memoryFirestore(clock: () => number = () => 1_800_000_000_000): 
     }
   }
 
-  const run = (state: QueryState): any[] => {
+  const inQuery = (state: QueryState, path: string): boolean => {
+    if (state.group) {
+      const segments = path.split('/')
+      return segments.length >= 2 && segments.length % 2 === 0 && segments[segments.length - 2] === state.path
+    }
     const prefix = `${state.path}/`
+    return path.startsWith(prefix) && !path.slice(prefix.length).includes('/')
+  }
+
+  const run = (state: QueryState): any[] => {
     let found = [...docs.entries()]
-      .filter(([path]) => path.startsWith(prefix) && !path.slice(prefix.length).includes('/'))
-      .map(([path, data]) => ({ path, id: path.slice(prefix.length), data }))
+      .filter(([path]) => inQuery(state, path))
+      .map(([path, data]) => ({ path, id: path.slice(path.lastIndexOf('/') + 1), data }))
       .filter((entry) => state.filters.every((filter) => matches(entry.data, entry.id, filter)))
     const order = state.order.length ? state.order : [{ field: DOCUMENT_ID, direction: 'asc' as const }]
     for (const { field } of order) {
@@ -278,6 +289,7 @@ export function memoryFirestore(clock: () => number = () => 1_800_000_000_000): 
 
   const firestore = {
     collection: (name: string) => collectionRef(name),
+    collectionGroup: (name: string) => query({ path: name, group: true, filters: [], order: [] }),
     getAll: async (...refs: Array<{ path: string }>) => refs.map((ref) => snapshot(ref.path)),
     batch: () => {
       const staged: Array<() => Promise<void>> = []

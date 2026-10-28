@@ -17,6 +17,8 @@
 
 import * as Aglyn from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost, logHostActivity } from '@aglyn/tenant-data-admin'
+import { commerceSitePermissionRefusal } from '../model/plugin-permissions'
+import { holdsCommerceSiteKey } from './commerce-site-keys'
 import { readCommerceSecretKeyring } from './order-webhooks'
 import { prepareOpenOrders } from './orders-shipping-prepare'
 import { SHIPPINGEASY_ACTIONS, shippingEasyConnectorAction, type ShippingEasyAction } from './shippingeasy'
@@ -80,7 +82,6 @@ type Action = (typeof ACTIONS)[number] | ShippingEasyAction
 /** The shipping apps the card route manages. `shipstation` when a request names none. */
 const CONNECTORS = ['shipstation', 'shippingeasy'] as const
 type Connector = (typeof CONNECTORS)[number]
-const CONNECTOR_NAMES: Readonly<Record<Connector, string>> = { shipstation: 'ShipStation', shippingeasy: 'ShippingEasy' }
 
 export const shippingConnectorsHandler: Aglyn.PluginApiHandler = async (req, res) => {
   if (req.method !== 'GET' && req.method !== 'POST') {
@@ -112,13 +113,14 @@ export const shippingConnectorsHandler: Aglyn.PluginApiHandler = async (req, res
     const firestore = firebaseAdmin.app().firestore()
     const hostSnapshot = await firestore.collection('hosts').doc(hostId).get()
     if (!hostSnapshot.exists) return res.status(404).json({ error: 'Unknown site' })
-    const role = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    // Reading the status is the order book's role; anything that makes,
-    // shows or ends a credential that reads it is the admin's.
-    const adminOnly = action !== 'status'
-    if (adminOnly ? role !== 'admin' : role !== 'admin' && role !== 'editor') {
+    // Reading the status is the order book's ("Manage orders"); anything that
+    // makes, shows or ends a credential that reads it is "Connect shipping
+    // apps" (AGL-4047), whose preset is the site Admin who alone did it before.
+    const mayManage = holdsCommerceSiteKey(hostSnapshot, decoded.uid, 'commerce.shippingConnections')
+    const changes = action !== 'status'
+    if (changes ? !mayManage : !mayManage && !holdsCommerceSiteKey(hostSnapshot, decoded.uid, 'commerce.orders')) {
       return res.status(403).json({
-        error: adminOnly ? `Only a site admin can manage the ${CONNECTOR_NAMES[connector]} connection` : 'Not permitted',
+        error: commerceSitePermissionRefusal(changes ? 'commerce.shippingConnections' : 'commerce.orders'),
       })
     }
     const owner = await getOrgForHost(hostId)

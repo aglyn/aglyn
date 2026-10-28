@@ -19,6 +19,8 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import { authorizePosStaff, posRequestBody, type PosStaff } from './pos-auth'
 import { revokePosDisplays } from './pos-display'
+import { parsePosHardwareInPersonConfig } from '../model/pos-hardware'
+import { parsePosCellularConfig, posCellularView, type PosCellularView } from '../model/pos-cellular'
 import { posStripe, posStripeErrorMessage, posStripeTestMode, posTerminalAvailable } from './pos-stripe'
 import {
   ensurePosTerminalLocation,
@@ -41,10 +43,12 @@ export const posReadersHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   const body = posRequestBody(req)
   const hostId = String(body['hostId'] ?? '')
-  const gate = await authorizePosStaff(req, hostId)
+  const action = String(body['action'] ?? '')
+  // Listing the readers is the register's; adding, renaming and removing one
+  // is setting it up (AGL-4047).
+  const gate = await authorizePosStaff(req, hostId, action === 'list' ? undefined : 'posDevices')
   if ('error' in gate) return res.status(gate.status).json({ error: gate.error })
   const staff = gate.staff
-  const action = String(body['action'] ?? '')
   try {
     switch (action) {
       case 'list':
@@ -57,6 +61,12 @@ export const posReadersHandler: PluginApiHandler = async (req, res) => {
         return await removeReader(staff, body, res)
       case 'remove-register':
         return await removeRegister(staff, body, res)
+      case 'cellular': {
+        // 4G for the store's S710s (AGL-4038): set up like the readers, so
+        // "Registers and devices" on the store.
+        const answer = await (await import('./pos-cellular')).setPosStoreCellular(staff, body)
+        return res.status(answer.status).json(answer.body)
+      }
       default:
         return res.status(400).json({ error: 'Unknown action' })
     }
@@ -64,6 +74,24 @@ export const posReadersHandler: PluginApiHandler = async (req, res) => {
     console.error('[pos-readers]', action, error)
     return res.status(500).json({ error: 'Card readers could not be updated' })
   }
+}
+
+/**
+ * The 4G row for the card (AGL-4038), or nothing: with why this viewer may
+ * not turn it on, since it is charged to the workspace ("Manage billing"),
+ * asked only where the row shows.
+ */
+async function cellularFor(
+  staff: PosStaff,
+  terminal: Record<string, unknown> | undefined,
+  readers: ReadonlyArray<{ deviceType?: unknown }>,
+): Promise<{ cellular?: PosCellularView }> {
+  const config = parsePosCellularConfig(process.env)
+  if (!posCellularView(config, terminal, readers)) return {}
+  const { mayTurnOnPosCellular, POS_CELLULAR_BILLING_REFUSAL } = await import('./pos-cellular')
+  const turnOnBlocked = (await mayTurnOnPosCellular(staff.uid, staff.hostId)) ? null : POS_CELLULAR_BILLING_REFUSAL
+  const cellular = posCellularView(config, terminal, readers, { turnOnBlocked })
+  return cellular ? { cellular } : {}
 }
 
 function readersRef(hostId: string) {
@@ -97,6 +125,9 @@ async function listReaders(staff: PosStaff, refresh: boolean) {
     available,
     testMode: posStripeTestMode(),
     locationReady: Boolean(config.get('stripeLocationId')),
+    // 4G for the store's S710s (AGL-4038), only where it is offered and the
+    // store has one; absent otherwise, so the card shows nothing of it.
+    ...(available ? await cellularFor(staff, config.data(), readers) : {}),
     readers: readers.map((reader: PosTerminalReader & { id: string }) => ({
       id: reader.id,
       label: reader.label,
@@ -128,23 +159,59 @@ async function registerReader(
   body: Record<string, any>,
   res: Parameters<PluginApiHandler>[1],
 ) {
-  if (!posTerminalAvailable()) {
-    return res.status(409).json({ error: 'Card readers are not available yet.' })
-  }
-  const registrationCode = String(body['registrationCode'] ?? '').trim()
-  if (!/^[A-Za-z0-9-]{3,64}$/.test(registrationCode)) {
-    return res.status(400).json({ error: 'Enter the code the reader shows on its screen.' })
-  }
-  const label = String(body['label'] ?? '').trim().slice(0, 60) || 'Card reader'
   const registerId = String(body['registerId'] ?? '')
   if (registerId && !(await registerExists(staff.hostId, registerId))) {
     return res.status(404).json({ error: 'Unknown register' })
   }
-  const host = await firebaseAdmin.app().firestore().collection('hosts').doc(staff.hostId).get()
-  const address = body['address'] as PosTerminalAddress | undefined
-  const location = await ensurePosTerminalLocation({
+  const registered = await registerPosTerminalReader({
     hostId: staff.hostId,
     orgId: staff.orgId,
+    uid: staff.uid,
+    registrationCode: body['registrationCode'],
+    label: body['label'],
+    ...(registerId ? { registerId } : {}),
+    ...(body['address'] ? { address: body['address'] as PosTerminalAddress } : {}),
+  })
+  if ('error' in registered) return res.status(registered.status).json({ error: registered.error })
+  return res.status(200).json({ reader: { id: registered.id, ...registered.reader } })
+}
+
+/**
+ * Registers a reader to a store by the code it shows: the store's Stripe
+ * Terminal Location (made from `address` when the store has none), the
+ * reader at Stripe, and `hosts/{hostId}/terminalReaders/{id}`. The POS
+ * devices card's Add card reader, and the platform's own register setting a
+ * reader up for the store of the person who just bought it (AGL-4038).
+ *
+ * A reader whose serial number was taken when it was sold in person is
+ * found on its hardware order, which moves on to Set up (AGL-4038,
+ * `pos-hardware-readers.ts`); that never fails the registration.
+ */
+export async function registerPosTerminalReader(input: {
+  hostId: string
+  orgId: string
+  uid: string
+  registrationCode: unknown
+  label?: unknown
+  registerId?: string
+  address?: PosTerminalAddress
+}): Promise<
+  { ok: true; id: string; reader: PosTerminalReader } | { ok: false; status: number; error: string }
+> {
+  if (!posTerminalAvailable()) {
+    return { ok: false, status: 409, error: 'Card readers are not available yet.' }
+  }
+  const registrationCode = String(input.registrationCode ?? '').trim()
+  if (!/^[A-Za-z0-9-]{3,64}$/.test(registrationCode)) {
+    return { ok: false, status: 400, error: 'Enter the code the reader shows on its screen.' }
+  }
+  const label = String(input.label ?? '').trim().slice(0, 60) || 'Card reader'
+  const registerId = input.registerId ?? ''
+  const host = await firebaseAdmin.app().firestore().collection('hosts').doc(input.hostId).get()
+  const address = input.address
+  const location = await ensurePosTerminalLocation({
+    hostId: input.hostId,
+    orgId: input.orgId,
     displayName: String(host.get('name') ?? host.get('title') ?? 'Store'),
     ...(address
       ? {
@@ -159,7 +226,7 @@ async function registerReader(
         }
       : {}),
   })
-  if ('error' in location) return res.status(location.status).json({ error: location.error })
+  if ('error' in location) return { ok: false, status: location.status, error: location.error }
   // Not keyed: a registration code is single-use at Stripe, which is the
   // dedupe — a second press with the same code is refused there, and no
   // other store can ever register a reader this one already holds.
@@ -168,18 +235,20 @@ async function registerReader(
       registration_code: registrationCode,
       label,
       location: location.locationId,
-      'metadata[orgId]': staff.orgId,
-      'metadata[hostId]': staff.hostId,
+      'metadata[orgId]': input.orgId,
+      'metadata[hostId]': input.hostId,
       ...(registerId ? { 'metadata[registerId]': registerId } : {}),
     },
   })
   if (!created.ok || !created.body?.id) {
-    return res.status(400).json({
+    return {
+      ok: false,
+      status: 400,
       error: posStripeErrorMessage(
         created.body,
         'That code did not register a reader. Check the code on the reader and try again.',
       ),
-    })
+    }
   }
   const reader: PosTerminalReader = {
     label,
@@ -190,10 +259,25 @@ async function registerReader(
     status: String(created.body.status ?? 'offline'),
     livemode: Boolean(created.body.livemode),
     createdAtMs: Date.now(),
-    createdBy: staff.uid,
+    createdBy: input.uid,
   }
-  await readersRef(staff.hostId).doc(String(created.body.id)).set(reader)
-  return res.status(200).json({ reader: { id: String(created.body.id), ...reader } })
+  const id = String(created.body.id)
+  await readersRef(input.hostId).doc(id).set(reader)
+  await syncCellular(input.hostId, input.orgId)
+  if (reader.serialNumber && parsePosHardwareInPersonConfig(process.env)) {
+    try {
+      await (await import('./pos-hardware-readers')).matchRegisteredPosHardwareReader({
+        hostId: input.hostId,
+        orgId: input.orgId,
+        uid: input.uid,
+        readerId: id,
+        serialNumber: reader.serialNumber,
+      })
+    } catch (error) {
+      console.error('[pos-readers] the hardware order was not matched', id, error)
+    }
+  }
+  return { ok: true, id, reader }
 }
 
 async function updateReader(
@@ -240,7 +324,21 @@ async function removeReader(
     return res.status(502).json({ error: posStripeErrorMessage(removed.body, 'The reader could not be removed.') })
   }
   await readersRef(staff.hostId).doc(reader.id).delete()
+  await syncCellular(staff.hostId, staff.orgId)
   return res.status(200).json({ ok: true })
+}
+
+/**
+ * A reader added to or removed from a store with 4G (AGL-4038) starts or
+ * stops counting toward its monthly charge. Never fails the reader's own
+ * change; the next turn-on, turn-off or reader change heals a miss.
+ */
+async function syncCellular(hostId: string, orgId: string): Promise<void> {
+  try {
+    await (await import('./pos-cellular')).syncPosCellularReaders({ hostId, orgId })
+  } catch (error) {
+    console.error('[pos-readers] the 4G record was not updated', hostId, error)
+  }
 }
 
 /**

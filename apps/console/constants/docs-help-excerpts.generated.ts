@@ -260,6 +260,7 @@ export const DOCS_HELP_EXCERPTS = {
   waivers: 'Write your waiver once. Riders sign it on their phones before they arrive, on a tablet at the window or on paper, parents sign for minors, and every signer gets a signed PDF.',
   webhooks: 'Connect Aglyn to other systems with outbound and inbound webhooks.',
   weglot: 'Translate your published site in the visitor\'s browser with your own Weglot account, and what that does and does not do for search.',
+  whatsappButton: 'Put a button on your site that opens a WhatsApp chat with your business, set up with the Button\'s own fields and no code.',
   whiteLabel: 'Replace the Aglyn brand across the console, your published sites, and transactional email — product name, logo, colors, support URL, and email from-name.',
   workflows: 'Automate your site — run multi-step workflows on site events, and connect to other systems with webhooks.',
   yourFirstApiCall: 'Create an API key in the console, make your first request, read the response, handle the four errors you will actually hit, and page through a whole dataset.',
@@ -476,7 +477,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#notification-settings': 'Everything about what reaches you lives on the second section, Settings.',
     '#notification-sound': 'Pick the sound your notifications make under Notification sound in the Settings section.',
     '#organization-general': 'The General card renames the organization, changes its workspace URL and sets the time zone its sites inherit — "workspace" is the console\'s word for your organization\'s home.',
-    '#organization-settings': 'Organization → Settings is where you run the workspace itself: its name and workspace URL under General, then — for owners and admins — Profile, Plugins, API keys, Branding, Single sign-on, Privacy, Holds & reviews…',
+    '#organization-settings': 'Organization → Settings is where you run the workspace itself: its name and workspace URL under General, then — for owners and admins, or whoever a custom role grants each one — Profile, Plugins, API keys, Branding,…',
     '#recent-activity': 'The Recent Activity card on a site\'s dashboard lists the latest changes made to the site, newest first — who made each one and what it touched, linked straight to it.',
     '#the-sites-list': 'All Sites is the front door of a workspace: one card per site, for the workspace currently selected in the switcher, with the sites you pinned first and the rest in name order.',
     '#workspace-and-site-overrides': 'One workspace or one site sets the same answers for a single workspace or a single site, rather than for your whole account.',
@@ -501,6 +502,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
   },
   customRoles: {
     '#create-a-custom-role': 'On the organization Team page, find the Custom roles card and choose New role.',
+    '#per-member-overrides': 'Need one person to have slightly more (or less) than their role?',
   },
   datasets: {
     '#default-dataset-sharing': 'Default sharing for new datasets, at the top of the organization Data page, decides what a dataset created on a site\'s Data page starts shared with: All sites, or only that site.',
@@ -780,7 +782,9 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#reservations': 'For stays (cabins, rooms, rentals): Add resources on the Products page — nightly rate, weekend multiplier, minimum nights, deposit percent, and free-cancellation window.',
   },
   posHardware: {
+    '#bought-from-us-in-person': 'At an event, Aglyn may sell you a reader in person. You pay at Aglyn\'s register, take the reader with you, and the order joins your workspace.',
     '#buy-a-reader-from-aglyn': 'The Hardware card on Products → Point of sale sells Stripe\'s card readers and their accessories.',
+    '#card-readers-to-set-up': 'A reader bought in person waits on Products → Point of sale, in a Card readers to set up card, until you set it up on a store.',
     '#hardware-purchase-records': 'Aglyn is the seller of these readers, so it keeps a record of each sale for tax and accounting: the items and their prices, shipping, tax, the total, the order\'s status dates, Stripe\'s payment references, and the…',
     '#reader-start-up-screen': 'While a Stripe Reader S700, S710 or BBPOS WisePOS E waits for a payment, it shows a start-up screen.',
     '#receipt-printers': 'A cloud receipt printer collects its work from Aglyn over the internet, so a receipt prints from the register on any device, even one with no printer driver, and even when the printer is on a different network.',
@@ -883,6 +887,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#tax-return-page': 'Staff → Sales tax turns a period\'s paid invoices into the figures the sales tax return asks for: pick the period, clear the rows that need attention, read the figures, and export the working papers for the filing…',
     '#taxable-purchases': 'Item 3 is the one line on the return that nothing here can compute.',
     '#the-figures': 'The Form 01-114 figures card is Texas only. Aglyn sells everywhere; a Texas return reports Texas receipts, so these lines come from the Texas jurisdiction bucket and never from the platform totals.',
+    '#what-the-figures-are-made-of': 'Beside the figures, the Items 1–2 by source and state card (The figures by source and jurisdiction outside Texas) lists every sale the figures add up, one row per source and state.',
     '#where-this-deployment-files': 'Staff → Platform settings → Sales tax filing. Reading it needs any staff role; changing it needs super, and every change is written to the audit log with the reason you type.',
   },
   sandboxSecurity: {
@@ -1081,7 +1086,8 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
   },
   waivers: {
     '#find-a-signature': 'The Signatures card lists the newest first.',
-    '#versions': 'Every time you save a change to the words, the boxes, the minors setting or how long it lasts, the waiver gets a new version.',
+    '#keeping-signed-waivers': 'A signed waiver is your record of what a rider agreed to. Every one is kept for your retention period, then deleted, with its drawn signature and any photo of a paper page.',
+    '#versions': 'Every time you save a change to the words, the boxes, the adult age, the minors setting or how long it lasts, the waiver gets a new version.',
     '#write-a-waiver': 'Open Waivers and select New waiver. A waiver takes signatures only while it is Published.',
     '#your-waivers': 'The Waivers card lists every waiver on the site: its title, whether it is a Draft, Published or Retired, its version, how long a signature lasts, and when it last changed.',
   },

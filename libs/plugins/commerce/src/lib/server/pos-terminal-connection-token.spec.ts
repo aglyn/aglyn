@@ -27,10 +27,27 @@ import { fakeDocs, resetFakeFirestore } from '../testing/fake-firestore'
 
 let mockMerchantReady = true
 let mockManagePos = true
+/** A role or override that grants (true) or refuses (false) the register; undefined: the site role's default. */
+let mockRegisterGranted: boolean | undefined
 let mockPlan = 'business'
 
 jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
-  resolveOrgPermissions: async () => ({ permissions: { managePos: mockManagePos } }),
+  // As the real resolver answers for a site (AGL-4047): nothing for someone
+  // with no access to it, the site role's default otherwise, and a grant or
+  // a refusal over that default.
+  resolveOrgPermissions: async (uid: string, context: { hostId?: string }) => ({
+    permissions: {
+      managePos:
+        mockManagePos &&
+        jest
+          .requireActual('../testing/site-register-permissions')
+          .siteRegisterVerdict(
+            jest.requireActual('../testing/fake-firestore').fakeDocs.get(`hosts/${context?.hostId}`)?.memberRoles,
+            uid,
+            mockRegisterGranted,
+          ),
+    },
+  }),
 }))
 jest.mock('@aglyn/tenant-data-admin/server/payment-provider', () => ({
   merchantAccountIsReady: () => mockMerchantReady,
@@ -169,9 +186,19 @@ describe('the gate', () => {
     expect(stripeCalls).toHaveLength(0)
   })
 
-  it('refuses a viewer', async () => {
+  it('refuses a viewer who was never granted the register', async () => {
     fakeDocs.set('hosts/host-1', { memberRoles: { 'cashier-1': 'viewer' } })
     expect((await call({})).status).toBe(403)
+  })
+
+  it('asks the permission, not the site role: a viewer granted the register is admitted (AGL-4047)', async () => {
+    fakeDocs.set('hosts/host-1', { name: 'Corner Cafe', memberRoles: { 'cashier-1': 'viewer' } })
+    mockRegisterGranted = true
+    try {
+      expect((await call({})).status).toBe(200)
+    } finally {
+      mockRegisterGranted = undefined
+    }
   })
 })
 

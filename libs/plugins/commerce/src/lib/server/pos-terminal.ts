@@ -1258,7 +1258,7 @@ export async function capturePosOfflineCardIntent(
   paymentIntentId: string,
   applicationFeeCents: number,
   idempotencyKey: string,
-): Promise<{ ok: true; intent: PosOfflineCardIntent } | { ok: false; error: string }> {
+): Promise<{ ok: true; intent: PosOfflineCardIntent } | { ok: false; error: string; status: number }> {
   const captured = await posStripe('POST', `payment_intents/${encodeURIComponent(paymentIntentId)}/capture`, {
     idempotencyKey,
     params: {
@@ -1266,44 +1266,50 @@ export async function capturePosOfflineCardIntent(
       'expand[]': ['latest_charge'],
     },
   })
-  if (!captured.ok) return { ok: false, error: posStripeErrorMessage(captured.body, 'The card payment could not be captured.') }
+  // The status tells the sync whether this attempt definitely failed (AGL-4039).
+  if (!captured.ok) {
+    return {
+      ok: false,
+      status: captured.status,
+      error: posStripeErrorMessage(captured.body, 'The card payment could not be captured.'),
+    }
+  }
   return { ok: true, intent: offlineCardIntent(captured.body) }
 }
 
 /**
- * Turns Stripe's offline mode on for the site's readers: the same per-site
- * Terminal Configuration the reader tipping uses, with `offline[enabled]`,
- * assigned to the site's Location. Done once; a reader picks it up the next
- * time it connects online. False when Stripe refused it.
+ * Turns Stripe's offline mode on for the site's readers, on the site's ONE
+ * Terminal Configuration through {@link savePosReaderConfiguration}, like
+ * reader tipping and the start-up screen (AGL-4048). That helper claims a
+ * first create in a transaction, so offline mode racing tipping or the
+ * start-up screen to the first write lands on one configuration with both
+ * settings, never two configurations of which only one is assigned; and it
+ * finishes an assignment a previous first write left owing.
+ *
+ * Done once per configuration: `offlineConfigurationId` records which one
+ * carries `offline[enabled]`, so a site whose configuration was replaced or
+ * is still owed its assignment is set again rather than answered from a flag
+ * that no longer describes what its readers use. A reader picks the setting
+ * up the next time it connects online. False when Stripe refused it.
  */
 export async function ensurePosOfflineCardConfiguration(hostId: string): Promise<boolean> {
   const ref = terminalConfigRef(hostId)
   const config = await ref.get()
-  if (config.get('offlineEnabled') === true) return true
-  const locationId = String(config.get('stripeLocationId') ?? '')
-  if (!locationId) return false
+  if (!config.get('stripeLocationId')) return false
   const configurationId = String(config.get('stripeConfigurationId') ?? '')
-  const saved = await posStripe(
-    'POST',
-    configurationId ? `terminal/configurations/${configurationId}` : 'terminal/configurations',
-    {
-      params: { 'offline[enabled]': true },
-      ...(configurationId ? {} : { idempotencyKey: `pos-configuration:${hostId}:offline` }),
-    },
-  )
-  if (!saved.ok || !saved.body?.id) {
-    console.error('[pos-terminal] offline configuration failed', hostId, saved.body?.error)
+  if (
+    config.get('offlineEnabled') === true &&
+    configurationId &&
+    config.get('offlineConfigurationId') === configurationId &&
+    config.get('stripeConfigurationAssigned') !== false
+  ) {
+    return true
+  }
+  const saved = await savePosReaderConfiguration(hostId, { 'offline[enabled]': true }, 'offline')
+  if ('error' in saved) {
+    console.error('[pos-terminal] offline configuration failed', hostId, saved.error)
     return false
   }
-  if (!configurationId) {
-    const assigned = await posStripe('POST', `terminal/locations/${locationId}`, {
-      params: { configuration_overrides: String(saved.body.id) },
-    })
-    if (!assigned.ok) {
-      console.error('[pos-terminal] offline configuration assignment failed', hostId, assigned.body?.error)
-      return false
-    }
-  }
-  await ref.set({ stripeConfigurationId: String(saved.body.id), offlineEnabled: true }, { merge: true })
+  await ref.set({ offlineEnabled: true, offlineConfigurationId: saved.configurationId }, { merge: true })
   return true
 }

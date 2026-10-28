@@ -68,6 +68,11 @@ const ENFORCEMENT_ROOTS = [
   'libs/tenant/data/admin/src',
   'libs/tenant/runtime/src',
   'libs/plugins',
+  // The DEPLOYED rules (AGL-4047): a key that decides client-direct writes,
+  // such as "Manage reservations" on a site's stays, bites in the security
+  // rules, which are the server for those writes. The comment-stripped
+  // artifact, so a key a rules comment merely names is never counted.
+  'cloud/firebase-firestore.deploy.rules',
 ]
 
 /** Files that MENTION every key without enforcing any. */
@@ -144,6 +149,14 @@ const CATALOG = [
 const ENFORCED_AS: Record<OrgPermission, readonly string[]> = {
   'org.settings': ["'org.settings'"],
   'org.auditLog': ["'org.auditLog'"],
+  // AGL-4047: the three settings sections that asked for the owner or admin
+  // role. `/api/orgs/api-keys` creates and revokes under `org.apiKeys`;
+  // `/api/orgs/risk-notices` and `/api/hosts/page-holds` read holds and take a
+  // review request under `org.holds`; the CRM's `/api/crm/erase-person` files
+  // an erasure under `org.privacy`.
+  'org.apiKeys': ["'org.apiKeys'"],
+  'org.privacy': ["'org.privacy'"],
+  'org.holds': ["'org.holds'"],
   'billing.view': ["'billing.view'"],
   'billing.manage': ["'billing.manage'"],
   'members.manage': ["'members.manage'", 'permissions.manageMembers'],
@@ -161,6 +174,47 @@ const ENFORCED_AS: Record<OrgPermission, readonly string[]> = {
   // passes as `permission`.
   'ai.use': ["'ai.use'"],
   'ai.generate': ["'ai.generate'"],
+  // "Bring a site in" (AGL-4047): the site import doors and the import
+  // step's admission ask it through `memberHasOrgPermission`.
+  'ai.import': ["'ai.import'"],
+  // The reservation keys (AGL-4047), commerce's, whose preset is the site
+  // role: the rules' reservations and resources block asks "Manage
+  // reservations" through `hostSiteRoleKey`, and the walk-in and guests
+  // routes ask "Book walk-ins and change guests" through their gate.
+  'commerce.reservations': ["'commerce.reservations'"],
+  'commerce.walkIns': ["'commerce.walkIns'"],
+  // The core's site keys (AGL-4047), whose preset is the site role: the
+  // rules' `canWriteHostContent`, `canPublishHostContent` and
+  // `canReadHostSensitive` ask the first three through `hostSiteRoleKey`,
+  // and the site-admin writes (plugins, allow-lists, plugin settings, site
+  // delete) ask the fourth.
+  'site.edit': ["'site.edit'"],
+  'site.publish': ["'site.publish'"],
+  'site.sensitive': ["'site.sensitive'"],
+  'site.manage': ["'site.manage'"],
+  // Commerce's order keys (AGL-4047): the order routes ask "Manage orders"
+  // and the gift cards route "Issue gift cards" through `holdsCommerceSiteKey`.
+  'commerce.orders': ["'commerce.orders'"],
+  // Workspace acts that asked for roles (AGL-4047): `/api/orgs/export-data`,
+  // `/api/email/sending-domains`, the rules' business profile write, the
+  // media scope and the rules' workspace media library, and the erase
+  // route's workspace records.
+  'org.export': ["'org.export'"],
+  'org.sendingDomains': ["'org.sendingDomains'"],
+  'org.businessProfile': ["'org.businessProfile'"],
+  'org.media': ["'org.media'"],
+  'org.eraseRecords': ["'org.eraseRecords'"],
+  'commerce.giftCards': ["'commerce.giftCards'"],
+  // Commerce's store settings (AGL-4047): the payment methods route asks
+  // "Manage payment methods" and the shipping connectors route "Connect
+  // shipping apps", each through `holdsCommerceSiteKey`.
+  'commerce.paymentMethods': ["'commerce.paymentMethods'"],
+  'commerce.shippingConnections': ["'commerce.shippingConnections'"],
+  // Bookings' keys (AGL-4047): the in-person payment route asks "Take
+  // booking payments in person" and the refund route "Refund bookings", each
+  // through `holdsBookingsSiteKey`.
+  'bookings.payments': ["'bookings.payments'"],
+  'bookings.refunds': ["'bookings.refunds'"],
 }
 
 function serverFilesContaining(needle: string): string[] {
@@ -203,7 +257,7 @@ describe('every advertised org permission is enforced server-side (AGL-2444)', (
     expect([...CATALOG].sort()).toEqual(
       Object.keys(ENFORCED_AS).sort(),
     )
-    expect(CATALOG.length).toBe(12)
+    expect(CATALOG.length).toBe(33)
   })
 
   it('the search really searches — a key nobody uses finds nothing', () => {

@@ -54,6 +54,14 @@ names the field. Records written as text before this check keep reading as they 
 Edit records in the **typed document editor** — each field renders the right input for its
 type, so data stays clean.
 
+### Sample rows {#sample-rows}
+
+A site started with AI fills a list your answers gave no entries for with **sample rows**,
+so its pages look complete from the start. Each one is marked **Sample** in the records
+table, and its editor asks you to replace it with your own. Change its values and press
+**Save**: the row is yours, and the mark is gone. Delete the samples you do not need.
+Visitors to your site never see the mark.
+
 ## Filter and search the records {#filter-records}
 
 The records table filters through its own toolbar: **Filters** opens the filter panel,

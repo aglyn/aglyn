@@ -33,6 +33,84 @@ export interface ProductCheckIn {
   enabled: boolean
   /** People one item admits, 1–{@link CHECK_IN_MAX_HEADCOUNT}; absent is 1. */
   headcount?: number
+  /**
+   * Ask the buyer which day they will use it (a day pass bought ahead), as an
+   * optional date at checkout. Without an answer the item is due on the day
+   * it was bought, as every check-in item always has been. Absent is off.
+   */
+  askUseDate?: boolean
+}
+
+/*==========================================
+ * THE USE DAY (pass dates, AGL-4043)
+ *
+ * The day an item is for is a day key, `YYYY-MM-DD` on the store's own
+ * calendar (its time zone): the same key a check-in's `dayKey`, the day
+ * totals' `from`/`to` and the check-in day picker use. An order line
+ * carries the buyer's answer as `useDayKey`; a line without one is due on
+ * the day the order was placed.
+ *=========================================*/
+
+/** The furthest ahead a buyer may choose a use day: about two years. */
+export const CHECK_IN_USE_DAY_MAX_AHEAD_DAYS = 730
+
+const DAY_KEY = /^(\d{4})-(\d{2})-(\d{2})$/
+
+/** UTC midnight of a real `YYYY-MM-DD` calendar day, or null. */
+function dayKeyMs(value: unknown): number | null {
+  const match = typeof value === 'string' ? DAY_KEY.exec(value) : null
+  if (!match) return null
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  const ms = Date.UTC(year, month - 1, day)
+  const check = new Date(ms)
+  return check.getUTCFullYear() === year && check.getUTCMonth() === month - 1 && check.getUTCDate() === day
+    ? ms
+    : null
+}
+
+/** Whether a value is a real calendar day written `YYYY-MM-DD`. */
+export function isCheckInDayKey(value: unknown): value is string {
+  return dayKeyMs(value) !== null
+}
+
+/** The day key `days` after (or before, when negative) another. */
+export function addCheckInDays(dayKey: string, days: number): string {
+  const ms = dayKeyMs(dayKey)
+  if (ms === null) return dayKey
+  return new Date(ms + Math.round(days) * 86_400_000).toISOString().slice(0, 10)
+}
+
+/**
+ * A day as the window and the cart read it: "Sat, Nov 1". It lives here, not
+ * beside the rain checks, because the storefront cart prints a line's use day,
+ * and reaching `commerce-check-in.ts` from the cart pulls the check-in window,
+ * the POS helpers and the receipt into the plugin's eager bytes
+ * (`check:plugin-budgets`).
+ */
+export function checkInDayLabel(dayKey: string | null | undefined): string {
+  if (!isCheckInDayKey(dayKey)) return ''
+  return new Intl.DateTimeFormat('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(`${dayKey}T00:00:00Z`))
+}
+
+/**
+ * Why a chosen use day cannot be sold, or null: a day that is not a date, a
+ * day before `todayKey` (today on the store's calendar), or one further
+ * ahead than {@link CHECK_IN_USE_DAY_MAX_AHEAD_DAYS}.
+ */
+export function checkInUseDayProblem(value: unknown, todayKey: string): string | null {
+  if (!isCheckInDayKey(value)) return 'Choose the day as a date.'
+  if (value < todayKey) return 'That day has passed. Choose today or a later day.'
+  if (value > addCheckInDays(todayKey, CHECK_IN_USE_DAY_MAX_AHEAD_DAYS)) {
+    return 'Choose a day within the next two years.'
+  }
+  return null
 }
 
 function headcountOf(value: unknown): number {
@@ -46,7 +124,11 @@ export function normalizeProductCheckIn(value: unknown): ProductCheckIn | undefi
   const raw = value as Record<string, unknown>
   if (typeof raw['enabled'] !== 'boolean') return undefined
   return raw['enabled']
-    ? { enabled: true, headcount: headcountOf(raw['headcount']) }
+    ? {
+        enabled: true,
+        headcount: headcountOf(raw['headcount']),
+        ...(raw['askUseDate'] === true ? { askUseDate: true } : {}),
+      }
     : { enabled: false }
 }
 
@@ -55,6 +137,10 @@ export function productCheckInProblem(value: unknown): string | null {
   if (value === undefined || value === null) return null
   if (typeof value !== 'object' || typeof (value as ProductCheckIn).enabled !== 'boolean') {
     return 'Check-in must be on or off'
+  }
+  const askUseDate = (value as ProductCheckIn).askUseDate
+  if (askUseDate !== undefined && typeof askUseDate !== 'boolean') {
+    return 'Asking for a use date must be on or off'
   }
   const headcount = (value as ProductCheckIn).headcount
   if (headcount === undefined) return null

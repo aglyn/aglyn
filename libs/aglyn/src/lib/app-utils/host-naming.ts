@@ -60,7 +60,75 @@ export const RESERVED_SUBDOMAINS = new Set([
   'login',
   'signup',
   'auth',
+  // Account, mail and domain words an address can hide behind (AGL-4082).
+  'accounts',
+  'signin',
+  'sso',
+  'secure',
+  'verify',
+  'portal',
+  'webmail',
+  'imap',
+  'mx',
+  'com',
+  'net',
+  'org',
 ])
+
+/**
+ * Infrastructure and account words whose numbered or suffixed variants are
+ * refused too (AGL-4082): `www-2`, `www2`, `mail1`, `login-secure`, `app-online`
+ * read as one of our own servers. Product words such as `demo`, `test` and
+ * `blog` stay out, so `demo-2` is still a fine bakery's address.
+ */
+const INFRASTRUCTURE_WORDS = [
+  'www',
+  'app',
+  'api',
+  'admin',
+  'console',
+  'mail',
+  'webmail',
+  'smtp',
+  'imap',
+  'mx',
+  'ns',
+  'ftp',
+  'cdn',
+  'static',
+  'assets',
+  'status',
+  'aglyn',
+  'billing',
+  'account',
+  'accounts',
+  'login',
+  'signin',
+  'signup',
+  'auth',
+  'sso',
+  'secure',
+  'verify',
+  'portal',
+  'support',
+]
+
+/** The suffixes that turn an infrastructure word into a lookalike address. */
+const INFRASTRUCTURE_SUFFIXES = [
+  'site',
+  'web',
+  'online',
+  'secure',
+  'login',
+  'portal',
+  'official',
+  'verify',
+  'page',
+]
+
+const INFRASTRUCTURE_VARIANT = new RegExp(
+  `^(?:www\\d*-.*|(?:${INFRASTRUCTURE_WORDS.join('|')})(?:-?\\d+|-(?:${INFRASTRUCTURE_SUFFIXES.join('|')})))$`,
+)
 
 /**
  * Profanity fragments blocked as substrings in generated or typed
@@ -113,7 +181,8 @@ export function consoleLabelUnder(
 }
 
 /**
- * True when the subdomain is reserved, contains a blocked fragment, or wears
+ * True when the subdomain is reserved, is a numbered or suffixed variant of an
+ * infrastructure word (AGL-4082), contains a blocked fragment, or wears
  * a brand a phishing kit impersonates (AGL-3356).
  *
  * The brand check is the phishing screen's own ({@link brandForSubdomainLabel}):
@@ -127,6 +196,7 @@ export function consoleLabelUnder(
 export function isBlockedSubdomain(subdomain: string): boolean {
   const normalized = subdomain.toLowerCase()
   if (RESERVED_SUBDOMAINS.has(normalized)) return true
+  if (INFRASTRUCTURE_VARIANT.test(normalized)) return true
   const collapsed = normalized.replace(/[^a-z0-9]/g, '')
   if (BLOCKED_FRAGMENTS.some((fragment) => collapsed.includes(fragment))) return true
   return brandForSubdomainLabel(normalized) !== null

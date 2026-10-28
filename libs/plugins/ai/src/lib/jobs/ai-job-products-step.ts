@@ -53,6 +53,7 @@ import {
   AI_PRODUCT_CATEGORIES_MAX_TOKENS,
   AI_PRODUCT_COPY_MAX_TOKENS,
   AI_PRODUCTS_STEP,
+  aiCatalogProductsNamed,
   generateAiCatalog,
   generateAiCategories,
   generateAiProductCopy,
@@ -414,14 +415,16 @@ export function createAiJobProductsStep(deps: AiJobProductsStepDeps = {}): AiJob
       const spent = aiGenerationSpent(generation)
       if (generation.status === 'refused') return { ...spent, refused: true }
       if (generation.status === 'needs_input') return { ...spent, failure: generation.message }
-      const proposal: AiCatalogProposal = { kind: 'catalog', products: generation.value, notes: [] }
+      // A product its re-ask still named for a kind, a make or a model is left out (AGL-4065).
+      const products = aiCatalogProductsNamed(generation.value, job.brief)
+      const proposal: AiCatalogProposal = { kind: 'catalog', products, notes: [] }
       return {
         ...spent,
         outputs: [
           output(
             site,
             AI_PRODUCTS_OUTPUT_IDS.catalog,
-            `Proposed products · ${generation.value.length}`,
+            `Proposed products · ${products.length}`,
             proposal,
           ),
         ],

@@ -18,6 +18,7 @@
 // The leaf module, not the server barrel: specs stage that barrel as a
 // closed world, and the list keys every create stamps (AGL-3321) are
 // nothing they have reason to name.
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import { artifactCreateListKeys } from '@aglyn/aglyn/app-utils/artifact-list-keys'
 import { PLATFORM_BRAND_NAME, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
@@ -919,9 +920,9 @@ async function handler(request: Request): Promise<Response> {
     if (!hostSnapshot.exists) {
       return Response.json({ error: 'Unknown site' }, { status: 404 })
     }
-    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (memberRole !== 'admin') {
-      return Response.json({ error: 'Not a site admin' }, { status: 403 })
+    // "Manage site settings" (`site.manage`, AGL-4047).
+    if (!holdsSiteKey(hostSnapshot, decoded.uid, 'site.manage')) {
+      return Response.json({ error: siteKeyRefusal('site.manage') }, { status: 403 })
     }
     // Plan gate rides the owning org's doc (AGL-238). The org id is kept —
     // media and a plugin's organization data restore into the org, not the

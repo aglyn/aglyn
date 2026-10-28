@@ -27,16 +27,17 @@ import useOrgPermissions from '../../../../../../hooks/use-org-permissions'
 /**
  * Logo, contact details, and the billing address Stripe Tax reads; then the
  * business profile every site inherits where its own says nothing
- * (AGL-3661), which only an owner or admin writes — the rules' `canManageOrg`.
+ * (AGL-3661), which "Business profile" (`org.businessProfile`, AGL-4047)
+ * writes, as the rules ask it; its default is the owner and admin.
  */
 const SettingsProfile: NextPageWithLayout<Record<string, never>> = () => {
   const { orgId } = useCurrentOrg()
-  const { loaded, role } = useOrgPermissions()
+  const { loaded, can } = useOrgPermissions()
   return (
     <Stack spacing={3}>
       <OrgProfileCard />
       {orgId ? (
-        <BusinessProfileCard orgId={orgId} canEdit={loaded && (role === 'owner' || role === 'admin')} />
+        <BusinessProfileCard orgId={orgId} canEdit={loaded && can('org.businessProfile')} />
       ) : null}
     </Stack>
   )

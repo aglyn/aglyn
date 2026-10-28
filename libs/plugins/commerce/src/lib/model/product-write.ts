@@ -64,6 +64,8 @@ export function productSaveFields(current: EditedProduct, nowMs: number) {
     $id: _syntheticId,
     skus: _seededSkus,
     barcodes: _seededBarcodes,
+    // A sample the merchant saves is theirs now (AGL-4065).
+    sample: _sample,
     ...currentFields
   } = current
   const primaryVariant = current.variants[0]

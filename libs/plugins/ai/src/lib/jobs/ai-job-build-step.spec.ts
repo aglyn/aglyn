@@ -46,12 +46,18 @@ import { AI_JOB_ZERO_USAGE } from './ai-job-generation'
 import { aiPageSectionNodeId } from './ai-job-page-sections'
 import type { AiJobStepOutcome, AiJobStepRunner } from './ai-job-text-step'
 import {
+  AI_BUILD_THEME_PROPOSAL_NOTE,
+  aiBuildBusinessWords,
   aiBuildItemOutputNote,
+  aiBuildJobRunMinimumMs,
   aiBuildStoreLinksToPublish,
   aiBuildUnitJob,
   createAiBuildJobAdmission,
   createAiJobBuildStep,
 } from './ai-job-build-step'
+import type { ResolvedBusinessProfile } from '@aglyn/aglyn/app-utils/business-profile'
+import { AI_JOB_PAGE_STEP_MINIMUM_MS } from './ai-job-page-budget'
+import { AI_JOB_THEME_STEP_MINIMUM_MS } from './ai-job-theme-budget'
 import { AI_BUILD_MADE_INPUT, AI_BUILD_NEEDS_INPUT_CODE, aiBuildCreditRange, aiBuildFirstPagePlan, aiBuildInitialLedger, aiBuildUnits } from '../model/ai-build-job'
 import { AI_CREDITS_CONFIRM_CODE, aiCreditsPromptText } from '../model/ai-credit-estimate'
 import { aiFreeCreditsNoneLeftText } from '../model/ai-site-job'
@@ -841,5 +847,183 @@ describe('a build whose plan leaves out what only the person can give asks for i
   it('admits a tracking change that sets or removes something', async () => {
     await expect(ask(trackingPlan({ metaPixel: '123456789012345' }))).resolves.toBeNull()
     await expect(ask(trackingPlan({ remove: ['metaPixel'] }))).resolves.toBeNull()
+  })
+})
+
+// AGL-4077: a build's theme change is the theme runner's proposal, applied in Setup → Theme.
+describe('a build’s theme change', () => {
+  const themePlan = (as: 'item' | 'creation' = 'item'): AiJobPlan => ({
+    ...plan(),
+    screens: [],
+    ...(as === 'item'
+      ? {
+          items: [
+            { slot: 'i0', op: 'theme', name: 'Warmer look', why: 'The request asks for a warmer look.', dependsOn: [], degrade: 'omit', args: {}, id: 'theme-1' },
+          ],
+        }
+      : {
+          items: [],
+          create: [{ kind: 'theme-change', name: 'Warmer look', why: 'The request asks for a warmer look.', duplicateOf: null, fields: [], id: 'theme-1' }],
+        }),
+  })
+  const brief = 'Add an about page, and give it a warmer look.'
+
+  it.each(['item', 'creation'] as const)('is handed to the theme runner as a change to the theme the site has (%s)', (as) => {
+    const units = aiBuildUnits(themePlan(as))
+    const derived = aiBuildUnitJob(job({ plan: themePlan(as), brief, inputs: { publish: true } }), units[0], {
+      kind: 'theme',
+      units,
+      ledger: aiBuildInitialLedger(units),
+      ops: OPS,
+    })
+    expect(derived).toMatchObject({ $id: 'theme-1', kind: 'theme', plan: null, inputs: { mode: 'modify', originJobId: 'build-1' } })
+    expect(derived.inputs['publish']).toBeUndefined()
+    expect(derived.brief).toBe(`${brief}\nBuild the theme change “Warmer look”: The request asks for a warmer look.`)
+  })
+
+  it('runs the theme runner, keeps its proposal as the item’s output, and names where to apply it', async () => {
+    const seen: AiJob[] = []
+    const themeRunner: AiJobStepRunner = async ({ job: handed }) => {
+      seen.push(handed)
+      return {
+        outputs: [{ resource: 'theme', id: 'proposal', hostId: 'host-1', hostSubdomain: 'shop', label: 'Theme proposal · 2 changes', proposal: { summary: 'Warmer accents.' } }],
+        usage: AI_JOB_ZERO_USAGE,
+        estCostUsd: 0.02,
+        model: 'm',
+        stopReason: 'tool_use',
+      }
+    }
+    const outcome = await createAiJobBuildStep({
+      runnerFor: ((kind: string) => (kind === 'theme' ? themeRunner : null)) as never,
+      opsFor: async () => OPS,
+      admissionFor: async () => null,
+    })(context(job({ plan: themePlan(), brief })))
+    expect(seen.map((handed) => [handed.$id, handed.kind, handed.inputs['mode']])).toEqual([['theme-1', 'theme', 'modify']])
+    expect(outcome.item).toMatchObject({ slot: 'i0', status: 'succeeded', outputs: ['proposal'], note: AI_BUILD_THEME_PROPOSAL_NOTE })
+    expect(outcome.outputs).toEqual([
+      expect.objectContaining({ resource: 'theme', id: 'proposal', hostSubdomain: 'shop', note: AI_BUILD_THEME_PROPOSAL_NOTE }),
+    ])
+    expect(AI_BUILD_THEME_PROPOSAL_NOTE).toBe('A proposal, in Setup → Theme. Nothing on the site changes until you apply it there and save.')
+  })
+
+  it('gives its next pass the theme step’s time, not a page’s', () => {
+    expect(AI_JOB_THEME_STEP_MINIMUM_MS).not.toBe(AI_JOB_PAGE_STEP_MINIMUM_MS)
+    expect(aiBuildJobRunMinimumMs(job({ plan: themePlan() }))).toBe(AI_JOB_THEME_STEP_MINIMUM_MS)
+    expect(aiBuildJobRunMinimumMs(job({ plan: themePlan('creation') }))).toBe(AI_JOB_THEME_STEP_MINIMUM_MS)
+  })
+})
+
+// AGL-4077: a build's pages search photos with the site's business words.
+describe('a build’s business words, from the site’s business profile', () => {
+  const field = <T,>(value: T) => ({ value, origin: 'site' as const })
+  const profile = (patch: Partial<ResolvedBusinessProfile> = {}): ResolvedBusinessProfile => ({
+    name: field('Juniper Clay'),
+    whatYouDo: field('Handmade stoneware and pottery classes'),
+    services: null,
+    serviceArea: null,
+    audience: field('Home cooks and gift buyers'),
+    tone: null,
+    toneNotes: null,
+    businessType: 'Store',
+    contact: { email: null, phone: null, address: null, hours: null },
+    profiles: [],
+    logo: null,
+    ...patch,
+  }) as ResolvedBusinessProfile
+
+  it('reads what the business does, its name and who it is for', () => {
+    expect(aiBuildBusinessWords(profile())).toEqual({
+      businessType: 'Handmade stoneware and pottery classes',
+      businessName: 'Juniper Clay',
+      audience: 'Home cooks and gift buyers',
+    })
+    // No "what you do": the schema.org type, as words.
+    expect(aiBuildBusinessWords(profile({ whatYouDo: null, name: null, audience: null, businessType: 'HomeAndConstructionBusiness' }))).toEqual({
+      businessType: 'home and construction business',
+    })
+    // Clamped at a word to what a site start's own answer holds.
+    const long = aiBuildBusinessWords(profile({ whatYouDo: field(`${'Handmade stoneware '.repeat(10)}and more`) }))
+    expect(long.businessType?.length).toBeLessThanOrEqual(120)
+    expect(long.businessType?.endsWith('stoneware')).toBe(true)
+    expect(aiBuildBusinessWords(null)).toEqual({})
+  })
+
+  it('hands a page the words where the build has none, never over its own', () => {
+    const units = aiBuildUnits(plan())
+    const page = units.find((unit) => unit.slot === 'p0') as (typeof units)[number]
+    const business = aiBuildBusinessWords(profile())
+    const handed = aiBuildUnitJob(job(), page, { kind: 'page', units, ledger: aiBuildInitialLedger(units), ops: OPS, business })
+    expect(handed.inputs).toMatchObject(business)
+    const own = aiBuildUnitJob(job({ inputs: { businessType: 'a pottery studio' } }), page, {
+      kind: 'page',
+      units,
+      ledger: aiBuildInitialLedger(units),
+      ops: OPS,
+      business,
+    })
+    expect(own.inputs['businessType']).toBe('a pottery studio')
+    expect(own.inputs['businessName']).toBeUndefined()
+    expect(own.inputs['audience']).toBeUndefined()
+  })
+
+  it('hands them to no layout, whose header names the site by its token, and to no item, whose inputs are its arguments', () => {
+    const business = aiBuildBusinessWords(profile())
+    const layoutPlan: AiJobPlan = {
+      ...plan(),
+      create: [{ kind: 'layout', name: 'Site frame', why: 'A header and footer.', duplicateOf: null, fields: ['header', 'footer'], id: 'lay-1' }],
+      items: [],
+      screens: [],
+    }
+    const layoutUnits = aiBuildUnits(layoutPlan)
+    const layout = aiBuildUnitJob(job({ plan: layoutPlan }), layoutUnits[0], {
+      kind: 'layout',
+      units: layoutUnits,
+      ledger: aiBuildInitialLedger(layoutUnits),
+      ops: OPS,
+      business,
+    })
+    expect(layout.inputs['businessName']).toBeUndefined()
+    expect(layout.inputs['businessType']).toBeUndefined()
+    const settingsPlan: AiJobPlan = {
+      ...plan(),
+      screens: [],
+      items: [{ slot: 'i0', op: 'settings', name: 'Phone', why: 'Add the phone.', dependsOn: [], degrade: 'omit', args: { telephone: '+1 555 0100' }, id: 'set-1' }],
+    }
+    const units = aiBuildUnits(settingsPlan)
+    const handed = aiBuildUnitJob(job({ plan: settingsPlan }), units[0], {
+      kind: 'settings',
+      units,
+      ledger: aiBuildInitialLedger(units),
+      ops: OPS,
+      business,
+    })
+    expect(handed.inputs['businessName']).toBeUndefined()
+    expect(handed.inputs['telephone']).toBe('+1 555 0100')
+  })
+
+  it('reads the profile for a pass whose build says nothing of the business, and only then', async () => {
+    const seen: AiJob[] = []
+    const reads: Array<{ orgId: string; hostId: string | null | undefined }> = []
+    const readSiteContext = async (_firestore: unknown, input: { orgId: string; hostId: string | null | undefined }) => {
+      reads.push({ orgId: input.orgId, hostId: input.hostId })
+      return { profile: profile() }
+    }
+    const build = createAiJobBuildStep({
+      runnerFor: ((kind: string) => (kind === 'page' ? pageRunner(seen) : null)) as never,
+      opsFor: async () => OPS,
+      readNodes: readNodes as never,
+      readSiteContext: readSiteContext as never,
+    })
+    const pagePlan: AiJobPlan = { ...plan(), items: [], screens: [{ ...plan().screens[0], sections: [{ name: 'hero', uses: [], items: 0 }] }] }
+    await build(context(job({ plan: pagePlan })))
+    expect(reads).toEqual([{ orgId: 'org-1', hostId: 'host-1' }])
+    expect(seen[0].inputs).toMatchObject({
+      businessType: 'Handmade stoneware and pottery classes',
+      businessName: 'Juniper Clay',
+      audience: 'Home cooks and gift buyers',
+    })
+    await build(context(job({ plan: pagePlan, inputs: { businessType: 'a pottery studio' } })))
+    expect(reads).toHaveLength(1)
+    expect(seen[1].inputs['businessType']).toBe('a pottery studio')
   })
 })

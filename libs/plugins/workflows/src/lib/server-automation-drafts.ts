@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { hostRoleCanWrite } from '@aglyn/aglyn/app-utils/organizations'
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import {
   registerPluginResourceDraftWriter,
@@ -80,7 +80,8 @@ export const AUTOMATION_DRAFT_NAME_MAX_CHARS = 60
 export const AUTOMATION_DRAFT_DEFAULT_NAME = 'New automation'
 
 /** The resources route's refusal for a member who may not write the site. */
-export const AUTOMATION_DRAFT_ROLE_REFUSAL = 'Editing requires the editor role'
+/** Names "Edit site content" (`site.edit`, AGL-4047), never a role. */
+export const AUTOMATION_DRAFT_ROLE_REFUSAL = siteKeyRefusal('site.edit')
 
 /** What a person is told when their plan has no actions builder. It names the page that sells one. */
 export const AUTOMATION_DRAFT_PLAN_REFUSAL =
@@ -274,8 +275,7 @@ function recordOf(snapshot: FirebaseFirestore.DocumentSnapshot): PluginDraftReco
 }
 
 function roleRefusal(host: FirebaseFirestore.DocumentSnapshot, uid: string): PluginDraftRefusal | null {
-  const role = (host.get('memberRoles') ?? {})[uid]
-  return hostRoleCanWrite(role) ? null : { status: 403, error: AUTOMATION_DRAFT_ROLE_REFUSAL }
+  return holdsSiteKey(host, uid, 'site.edit') ? null : { status: 403, error: AUTOMATION_DRAFT_ROLE_REFUSAL }
 }
 
 function planRefusal(org: Readonly<Record<string, unknown>> | null): PluginDraftRefusal | null {

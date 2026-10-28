@@ -37,6 +37,7 @@
  *=========================================*/
 
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
+import type { PosHardwareTermsAcceptance } from './pos-hardware-terms'
 
 /** The register's currency, and so the shop's: US dollars. */
 export const POS_HARDWARE_CURRENCY = 'usd'
@@ -69,6 +70,16 @@ export const POS_HARDWARE_ENV = {
   shipping: 'POS_HARDWARE_SHIPPING',
   /** `true` turns Stripe automatic tax on for hardware checkouts. */
   automaticTax: 'POS_HARDWARE_AUTOMATIC_TAX',
+  /**
+   * `true` lets the platform's own store sell hardware IN PERSON at its
+   * register (AGL-4038): a reader handed over at an event, attached to the
+   * buyer's workspace. Absent or anything else keeps it off.
+   */
+  inPersonEnabled: 'POS_HARDWARE_IN_PERSON_ENABLED',
+  /** The site id of the platform's own store whose register sells hardware in person. */
+  sellerHostId: 'POS_HARDWARE_SELLER_HOST_ID',
+  /** The workspace that owns that store. */
+  sellerOrgId: 'POS_HARDWARE_SELLER_ORG_ID',
 } as const
 
 /**
@@ -81,11 +92,18 @@ export const POS_HARDWARE_DEFAULT_MARKUP_BPS = 3000
 export type PosHardwareSkuId =
   | 'stripe-reader-s710'
   | 'stripe-reader-s700'
+  | 'stripe-reader-t600'
   | 'stripe-reader-m2'
   | 'bbpos-wisepos-e'
   | 'stripe-reader-s700-dock'
-  | 'bbpos-wisepos-e-dock'
+  | 'stripe-reader-hub'
+  | 'stripe-reader-s700-case'
+  | 'stripe-reader-s700-cable'
+  | 'stripe-reader-charger'
+  | 'stripe-reader-m2-dock'
   | 'stripe-reader-m2-mount'
+  | 'bbpos-wisepos-e-dock'
+  | 'bbpos-wisepos-e-power-cable'
 
 export interface PosHardwareSku {
   id: PosHardwareSkuId
@@ -109,7 +127,10 @@ export const POS_HARDWARE_SKUS: readonly PosHardwareSku[] = [
     kind: 'reader',
     stripeProductName: 'Stripe Reader S710',
     displayName: 'Stripe Reader S710',
-    use: 'Handheld with its own 4G connection, for events and parking lots',
+    // 4G needs Stripe's cellular service, billed monthly per reader, which a
+    // store turns on for its S710s where it is offered (AGL-4038): the reader
+    // alone does not bring a connection.
+    use: 'Handheld for events and parking lots; 4G needs Stripe’s cellular service, billed monthly',
   },
   {
     id: 'stripe-reader-s700',
@@ -117,6 +138,13 @@ export const POS_HARDWARE_SKUS: readonly PosHardwareSku[] = [
     stripeProductName: 'Stripe Reader S700',
     displayName: 'Stripe Reader S700',
     use: 'Handheld or countertop reader on Wi-Fi',
+  },
+  {
+    id: 'stripe-reader-t600',
+    kind: 'reader',
+    stripeProductName: 'Stripe Reader T600',
+    displayName: 'Stripe Reader T600',
+    use: 'Countertop reader on Wi-Fi, or on Ethernet with the hub',
   },
   {
     id: 'bbpos-wisepos-e',
@@ -135,9 +163,51 @@ export const POS_HARDWARE_SKUS: readonly PosHardwareSku[] = [
   {
     id: 'stripe-reader-s700-dock',
     kind: 'accessory',
-    stripeProductName: 'Stripe Reader S700 Dock',
+    stripeProductName: 'Stripe Reader S700/S710 Dock',
     displayName: 'Charging dock for the S700 and S710',
     use: 'Keeps the reader charged at the counter and adds an Ethernet port',
+  },
+  {
+    id: 'stripe-reader-hub',
+    kind: 'accessory',
+    stripeProductName: 'Stripe Reader Hub',
+    displayName: 'Hub for the S700, S710 and T600',
+    use: 'Connects the reader to Ethernet and power',
+  },
+  {
+    id: 'stripe-reader-s700-case',
+    kind: 'accessory',
+    stripeProductName: 'Stripe Reader S700/S710 Case',
+    displayName: 'Case for the S700 and S710',
+    use: 'Protects a handheld reader on the move',
+  },
+  {
+    id: 'stripe-reader-s700-cable',
+    kind: 'accessory',
+    stripeProductName: 'Stripe Reader S700/S710 Cable',
+    displayName: 'Cable for the S700 and S710',
+    use: 'A spare cable for the reader',
+  },
+  {
+    id: 'stripe-reader-charger',
+    kind: 'accessory',
+    stripeProductName: 'Stripe Reader Charger',
+    displayName: 'Charger for Stripe readers',
+    use: 'A spare wall charger',
+  },
+  {
+    id: 'stripe-reader-m2-dock',
+    kind: 'accessory',
+    stripeProductName: 'Stripe Reader M2 Dock',
+    displayName: 'Charging dock for the M2',
+    use: 'Keeps the M2 charged at the counter',
+  },
+  {
+    id: 'stripe-reader-m2-mount',
+    kind: 'accessory',
+    stripeProductName: 'Stripe Reader M2 Mount',
+    displayName: 'Mount for the M2',
+    use: 'Holds the M2 in place at the counter',
   },
   {
     id: 'bbpos-wisepos-e-dock',
@@ -147,11 +217,11 @@ export const POS_HARDWARE_SKUS: readonly PosHardwareSku[] = [
     use: 'Keeps the reader charged at the counter and adds an Ethernet port',
   },
   {
-    id: 'stripe-reader-m2-mount',
+    id: 'bbpos-wisepos-e-power-cable',
     kind: 'accessory',
-    stripeProductName: 'Stripe Reader M2 Mount',
-    displayName: 'Mount for the M2',
-    use: 'Holds the M2 in place at the counter',
+    stripeProductName: 'BBPOS WisePOS E 5ft Power Cable',
+    displayName: '5 ft power cable for the WisePOS E',
+    use: 'A spare power cable for the reader',
   },
 ]
 
@@ -171,6 +241,21 @@ const SHIPPING_METHODS = Object.keys(POS_HARDWARE_SHIPPING_LABELS) as PosHardwar
 
 export function isPosHardwareShippingMethod(value: unknown): value is PosHardwareShippingMethod {
   return typeof value === 'string' && (SHIPPING_METHODS as string[]).includes(value)
+}
+
+/**
+ * How an order reached the buyer: one of the shop's shipping speeds, or
+ * `in_person` — handed over at the platform's own register (AGL-4038), with
+ * no parcel, address or carrier. Never offered at checkout.
+ */
+export type PosHardwareOrderShippingMethod = PosHardwareShippingMethod | 'in_person'
+
+export const POS_HARDWARE_IN_PERSON_SHIPPING_LABEL = 'Handed over in person'
+
+/** The label of any order's method, the in-person one included. */
+export function posHardwareShippingLabel(method: PosHardwareOrderShippingMethod | null | undefined): string {
+  if (method === 'in_person') return POS_HARDWARE_IN_PERSON_SHIPPING_LABEL
+  return POS_HARDWARE_SHIPPING_LABELS[isPosHardwareShippingMethod(method) ? method : 'standard']
 }
 
 /** The shop's configuration, once every figure it needs is present and sane. */
@@ -253,6 +338,62 @@ export function parsePosHardwareConfig(
     automaticTax:
       String(env[POS_HARDWARE_ENV.automaticTax] ?? '').trim().toLowerCase() === 'true',
   }
+}
+
+/*==========================================
+ * SELLING HARDWARE IN PERSON (AGL-4038).
+ *
+ * The platform also sells readers face to face, at an event, from its OWN
+ * store's register: the same products a store sells, rung up like any other
+ * sale, priced and taxed by that store, paid into that store's account. The
+ * one difference is what follows the sale — a hardware order for the buyer's
+ * workspace, so the reader shows up there and can be set up, returned or
+ * refunded like one bought online.
+ *
+ * Which store that is, is configuration: the site and its workspace, named in
+ * the environment beside the shop's other figures. A product on that store
+ * names the hardware item it is ({@link isPosHardwareSkuId} on the product's
+ * `hardwareSku`), and no other store's product ever does, whatever it says.
+ *=========================================*/
+
+/** The platform's own store, once the in-person sale is turned on and named. */
+export interface PosHardwareInPersonConfig {
+  sellerHostId: string
+  sellerOrgId: string
+}
+
+const CONFIG_ID = /^[A-Za-z0-9_-]{1,128}$/
+
+/**
+ * The in-person sale's configuration from the environment, or `null` while
+ * it is off: not turned on, or the store or its workspace not named, or
+ * named with something that cannot be an id. It needs nothing of the online
+ * shop's: the store's own products carry the prices.
+ */
+export function parsePosHardwareInPersonConfig(
+  env: Record<string, string | undefined>,
+): PosHardwareInPersonConfig | null {
+  if (String(env[POS_HARDWARE_ENV.inPersonEnabled] ?? '').trim().toLowerCase() !== 'true') return null
+  const sellerHostId = String(env[POS_HARDWARE_ENV.sellerHostId] ?? '').trim()
+  const sellerOrgId = String(env[POS_HARDWARE_ENV.sellerOrgId] ?? '').trim()
+  if (!CONFIG_ID.test(sellerHostId) || !CONFIG_ID.test(sellerOrgId)) return null
+  return { sellerHostId, sellerOrgId }
+}
+
+export function isPosHardwareSkuId(value: unknown): value is PosHardwareSkuId {
+  return typeof value === 'string' && posHardwareSku(value) !== null
+}
+
+/**
+ * A reader's serial number as staff scanned or typed it, in the one form
+ * every comparison uses: upper case, letters, digits and dashes only, at
+ * most 64 characters. Empty when nothing usable was given.
+ */
+export function normalizePosHardwareSerial(value: unknown): string {
+  return String(value ?? '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9-]/g, '')
+    .slice(0, 64)
 }
 
 /**
@@ -358,8 +499,9 @@ export function pricePosHardwareCart(
  * THE CHECKOUT SESSION'S METADATA.
  *
  * The webhook builds the order from the session Stripe hands back, so the
- * lines ride in its metadata in a compact form (`sku*qty*unit;…`, well inside
- * Stripe's 500-character value limit for the at most seven distinct items),
+ * lines ride in its metadata in a compact form (`sku*qty*unit;…`, inside
+ * Stripe's 500-character value limit even with every item in the catalog in
+ * one basket at the highest price the config accepts, which a spec holds),
  * and the webhook re-reads every one against the catalog rather than trusting
  * a name from the wire.
  *=========================================*/
@@ -490,10 +632,175 @@ export interface PosHardwareTracking {
   url: string | null
 }
 
+/**
+ * Why an order was canceled and refunded: by staff on the Hardware orders
+ * page, or because the workspace that bought it was deleted or the account
+ * that placed it was closed before it shipped (AGL-4038 closure).
+ */
+export type PosHardwareCancelReason = 'staff' | 'workspace-closed' | 'account-closed'
+
+/**
+ * One entry of the tax Stripe computed on a hardware checkout, as the
+ * storefront's tax rows store it (`StorefrontTaxLine`): the amount, the base
+ * it was applied to (`taxable_amount`, null when Stripe did not state one)
+ * and the rate, for the working papers of the platform's own return.
+ */
+export interface PosHardwareTaxLine {
+  amountCents: number
+  taxabilityReason: string | null
+  taxRateId: string | null
+  taxableAmountCents: number | null
+  jurisdiction: string | null
+  rateState: string | null
+  percentage: number | null
+}
+
+/**
+ * Where an order was sold (AGL-4038): the Hardware card's checkout, or the
+ * platform's own register, in person. Absent on every order sold before the
+ * in-person sale existed, which were all online; read it through
+ * {@link posHardwareOrderSource}.
+ */
+export type PosHardwareOrderSource = 'online' | 'in_person'
+
+export function posHardwareOrderSource(
+  order: { source?: unknown } | null | undefined,
+): PosHardwareOrderSource {
+  return order?.source === 'in_person' ? 'in_person' : 'online'
+}
+
+/**
+ * The register sale an in-person order came from: the platform's own store,
+ * the register order and its number, and how it was rung.
+ */
+export interface PosHardwareRegisterSale {
+  hostId: string
+  orgId: string
+  orderId: string
+  /** The register order's number, as its receipt shows it. */
+  number: number | null
+  registerId: string | null
+  /** A customer built it at the self-service kiosk. */
+  kiosk: boolean
+  /** It was rung while the register was offline, and synced later. */
+  offline: boolean
+  /**
+   * The Checkout Session of the register's payment link, when the sale was
+   * paid by one: the storefront's tax record of the sale is filed under it.
+   */
+  paymentLinkSessionId: string | null
+}
+
+/**
+ * Where an in-person sale's money went, for the books to reconcile it
+ * against: the selling store's own takings — cash in its drawer, cards into
+ * its connected Stripe account, exactly as every sale on its register. The
+ * hardware order records it because the platform's online sales land in the
+ * platform's own account instead, and the two must never be summed as one.
+ */
+export interface PosHardwarePaidTo {
+  account: 'seller_store'
+  hostId: string
+  orgId: string
+  /** The register sale's tenders, as its payments name them (`cash`, `card_present`, …). */
+  tenders: string[]
+  /** The store's connected Stripe account, when its owner has one. */
+  stripeAccountId: string | null
+}
+
+/**
+ * Who an in-person order belongs to (AGL-4038). `attached` once it is in the
+ * buyer's workspace; `pending` while staff have still to say whose it is —
+ * a kiosk or offline sale, a buyer with no account yet (`email`, invited to
+ * sign up), or one with an account and no workspace yet (`uid`). A pending
+ * order is kept in the selling workspace's own `hardwareOrders`, on its "To
+ * attach" list, and moves to the buyer's workspace when it is attached.
+ */
+export interface PosHardwareAttachment {
+  state: 'attached' | 'pending'
+  /** The buyer's address: the account's, or the one typed for a buyer with no account. */
+  email: string | null
+  uid: string | null
+  /** The buyer's workspace, once there is one. */
+  orgId: string | null
+  /** The store the buyer chose for the reader, when they chose one at the sale. */
+  hostId: string | null
+  /** The register user who attached it; null for the buyer's own sign-up. */
+  attachedBy: string | null
+  attachedAtMs: number | null
+  /** When the sign-up invitation went to `email`, for a buyer with no account. */
+  invitedAtMs?: number | null
+  /**
+   * The buyer's name, for the platform's reseller records (AGL-4038): the
+   * account's name, or the one typed at the sale. An online order keeps it
+   * in `shipping.name` instead. Taken off with the buyer's account.
+   */
+  name?: string | null
+  /**
+   * The buyer's business address, for the same records: typed at the sale,
+   * or the address of the store the readers are set up on. Never the tax
+   * region, which stays the selling store's. Taken off with the account.
+   */
+  address?: PosHardwareAddress | null
+}
+
+/**
+ * One reader of an in-person order, by its serial number when staff scanned
+ * it at the sale (AGL-4038). The order moves to Set up when every reader on
+ * it is registered to the buyer's store.
+ */
+export interface PosHardwareUnit {
+  sku: PosHardwareSkuId
+  /** Normalized ({@link normalizePosHardwareSerial}); null when none was taken. */
+  serialNumber: string | null
+  /** The Stripe Terminal reader it was registered as, and on which store. */
+  readerId: string | null
+  hostId: string | null
+  registeredAtMs: number | null
+}
+
+/**
+ * One refund of an in-person order (AGL-4038), once by its key: a return at
+ * the selling store's register (`register:{returnId}`), or a refund from the
+ * staff Hardware orders page (`staff:{n}`), both paid back from the selling
+ * store's own takings the way the sale was paid.
+ */
+export interface PosHardwareRefund {
+  key: string
+  via: 'register' | 'staff'
+  cents: number
+  /** Hardware items it took back; 0 when the refund named none. */
+  quantity: number
+  atMs: number
+  stripeRefundId: string | null
+}
+
+/**
+ * The buyer's request to return an in-person order, from their own
+ * purchase history (AGL-4038). Staff refund it (`refunded`) or decline it.
+ * Returns follow Stripe's hardware terms.
+ */
+export interface PosHardwareReturnRequest {
+  state: 'requested' | 'declined' | 'refunded'
+  /** The buyer's words; taken off with the buyer when their account is erased. */
+  reason: string | null
+  requestedBy: string | null
+  requestedAtMs: number
+  decidedBy: string | null
+  decidedAtMs: number | null
+  /** What staff told the buyer when declining. */
+  note: string | null
+}
+
+export const POS_HARDWARE_RETURN_REASON_MAX = 500
+
 /** `orgs/{orgId}/hardwareOrders/{orderId}`, written only by the server. */
 export interface PosHardwareOrder {
   orgId: string
-  /** The site whose POS settings the order was placed from. */
+  /**
+   * The site whose POS settings the order was placed from; for an in-person
+   * order, the buyer's store once known, else the selling store.
+   */
   hostId: string
   /** The member who started the checkout; `null` once their account is erased. */
   createdBy: string | null
@@ -502,7 +809,7 @@ export interface PosHardwareOrder {
   lines: PosHardwareLine[]
   subtotalCents: number
   shipping: {
-    method: PosHardwareShippingMethod
+    method: PosHardwareOrderShippingMethod
     label: string
     cents: number
     name: string | null
@@ -515,9 +822,20 @@ export interface PosHardwareOrder {
     taxRegion?: PosHardwareTaxRegion | null
   }
   taxCents: number
+  /**
+   * The register sale's discounts that fell on this order's lines, for an
+   * in-person order (AGL-4038): `totalCents` is the lines less this, plus
+   * the tax. Absent, and so nothing, on every online order.
+   */
+  discountCents?: number
   totalCents: number
   currency: string
-  stripeCheckoutSessionId: string
+  /** Whether Stripe Tax computed the tax on the checkout. Absent on orders before it was recorded. */
+  automaticTax?: boolean
+  /** Stripe's tax breakdown for the checkout, when Stripe Tax computed it. */
+  taxLines?: PosHardwareTaxLine[]
+  /** The Hardware card's checkout; null for an in-person sale, which had none. */
+  stripeCheckoutSessionId: string | null
   stripePaymentIntentId: string | null
   /** Stripe's hardware order id, recorded by staff (phase 2 sets it itself). */
   stripeHardwareOrderId: string | null
@@ -536,8 +854,38 @@ export interface PosHardwareOrder {
   refundId?: string | null
   /** The cents Stripe reported refunding. */
   refundedCents?: number
+  /** Why it was canceled, when it was. */
+  cancelReason?: PosHardwareCancelReason
   /** When the buyer's account was erased and their details taken off the order. */
   buyerErasedAtMs?: number
+  /** Where it was sold; absent reads as online ({@link posHardwareOrderSource}). */
+  source?: PosHardwareOrderSource
+  /** The register sale an in-person order came from. */
+  posSale?: PosHardwareRegisterSale
+  /** Where an in-person sale's money went. */
+  paidTo?: PosHardwarePaidTo
+  /** Whose an in-person order is, or that staff have still to say. */
+  attachment?: PosHardwareAttachment
+  /**
+   * How the buyer of an in-person order agreed to the terms of sale
+   * (AGL-4038): copied from the register sale, or the receipt-and-sign
+   * notice when they did not accept electronically.
+   */
+  termsAcceptance?: PosHardwareTermsAcceptance
+  /** Each reader of an in-person order, with its serial when one was taken. */
+  units?: PosHardwareUnit[]
+  /** The units' serial numbers, for finding the order when a reader is registered. */
+  serialNumbers?: string[]
+  /** An in-person order's refunds, each once by its key. */
+  refunds?: PosHardwareRefund[]
+  /** The buyer's request to return it, and what staff decided. */
+  returnRequest?: PosHardwareReturnRequest
+  /**
+   * The emails that are sent once (AGL-4038), by key: `canceled`, or
+   * `refunded:{refund key}`. Claimed before the send, so the staff page and a
+   * closure never both send one.
+   */
+  buyerEmails?: Record<string, { state: 'sending' | 'sent' | 'skipped' | 'failed'; atMs: number }>
 }
 
 /** The timestamp field each status stamps when it is reached. */
@@ -564,7 +912,17 @@ export const POS_HARDWARE_ORDERS_COLLECTION = 'hardwareOrders'
  * record and owes the sales tax on it. So beside every order the server keeps
  * `posHardwareSales/{orderId}`, a TOP-LEVEL record of what tax and accounting
  * need — the lines, the amounts, the tax, Stripe's ids, the status dates and
- * the region it shipped to — and nothing about the person who bought it.
+ * the region it shipped to — and, of the person who bought it, only their
+ * NAME and ADDRESS ({@link PosHardwareSaleBuyer}).
+ *
+ * The name and address are the reseller's records Stripe's Terminal Reseller
+ * Terms §10 ask for: the identity and address of each buyer, open to Stripe's
+ * inspection. §10 states no period, so they are kept for the record's own
+ * seven years. They SURVIVE the buyer's account erasure, which still takes
+ * the email, phone, tracking and the name and street off the ORDER: every
+ * write sets the record through {@link posHardwareSaleSetOptions}, which
+ * leaves the stored name and address alone when the order no longer has
+ * them because its buyer was erased.
  *
  * It is the `platformRevenue` / `storefrontTaxCollected` shape on purpose
  * (AGL-1811, AGL-1904): keyed to the workspace by FIELD, outside
@@ -577,25 +935,61 @@ export const POS_HARDWARE_ORDERS_COLLECTION = 'hardwareOrders'
  * Written in the same transaction as every write to the order, from the
  * order as it stands after that write, so the two never disagree and a
  * missing record heals on the next write.
+ *
+ * KEPT SEVEN YEARS FROM THE SALE, THEN DELETED. Every write stamps
+ * `expiresAt` ({@link posHardwareSaleExpiry}) and the Firestore TTL policy on
+ * `posHardwareSales.expiresAt` deletes the record once it passes.
  *=========================================*/
 
 /** The top-level collection of retained hardware sale records. */
 export const POS_HARDWARE_SALES_COLLECTION = 'posHardwareSales'
 
-/** `posHardwareSales/{orderId}`: an order with every personal detail left out. */
+/**
+ * A street address as the sale record keeps it: every key present, so a
+ * later write of a different address replaces each one.
+ */
+export interface PosHardwareSaleAddress {
+  line1: string
+  line2: string | null
+  city: string
+  state: string | null
+  postalCode: string | null
+  country: string
+}
+
+/**
+ * Who bought it, for the reseller's records (AGL-4038): the buyer's name and
+ * address and nothing else of theirs. An online order's are the shipping
+ * name and address; an in-person order's are on its attachment.
+ */
+export interface PosHardwareSaleBuyer {
+  name: string | null
+  address: PosHardwareSaleAddress | null
+}
+
+/**
+ * `posHardwareSales/{orderId}`: an order with every personal detail left out
+ * but the buyer's name and address.
+ */
 export interface PosHardwareSaleRecord {
   orderId: string
   /** The workspace that bought it, by id; the record outlives the workspace. */
   orgId: string
   lines: Array<Pick<PosHardwareLine, 'sku' | 'name' | 'quantity' | 'unitCents' | 'lineCents'>>
   subtotalCents: number
-  shippingMethod: PosHardwareShippingMethod
+  shippingMethod: PosHardwareOrderShippingMethod
   shippingCents: number
   taxCents: number
+  /** The register discount on an in-person order's lines; 0 for every online one. */
+  discountCents: number
   totalCents: number
   currency: string
   /** The sales tax sourcing input: country, state and postal code, never the street. */
   shipTo: PosHardwareTaxRegion | null
+  /** Whether Stripe Tax computed the tax; null on orders before it was recorded. */
+  automaticTax: boolean | null
+  /** Stripe's tax breakdown: the base each rate was applied to, for the return. */
+  taxLines: PosHardwareTaxLine[]
   stripeCheckoutSessionId: string | null
   stripePaymentIntentId: string | null
   stripeHardwareOrderId: string | null
@@ -612,6 +1006,83 @@ export interface PosHardwareSaleRecord {
   registeredAtMs: number | null
   canceledAtMs: number | null
   refundedAtMs: number | null
+  /** Where it was sold; `online` for every order before the in-person sale. */
+  source: PosHardwareOrderSource
+  /** The register sale an in-person order came from: the selling store and its order. */
+  posHostId: string | null
+  posOrderId: string | null
+  /**
+   * Where the money went: `platform` for the Hardware card's checkout, on
+   * the platform's own Stripe account; `seller_store` for an in-person sale,
+   * the selling store's own takings ({@link PosHardwarePaidTo}).
+   */
+  paidTo: { account: 'platform' } | PosHardwarePaidTo
+  /**
+   * The `storefrontTaxCollected` row the register sale ALSO filed, when it
+   * was paid by a payment link. That row is the whole register sale; the
+   * storefront section leaves this order's part of it out, so the sale is on
+   * the return once, in the hardware section.
+   */
+  storefrontTaxRowId: string | null
+  /**
+   * The buyer's name and address, for the reseller's records; null when the
+   * order names none (a sale not attached to anyone yet). Absent from a write
+   * whose order no longer has them because the buyer's account was erased,
+   * so the stored ones stay ({@link posHardwareSaleSetOptions}).
+   */
+  buyer?: PosHardwareSaleBuyer | null
+  /**
+   * When the record is deleted: {@link POS_HARDWARE_SALE_RETENTION_YEARS}
+   * after the sale, by the Firestore TTL policy on `posHardwareSales.expiresAt`.
+   * Null when the record states no sale date, which keeps it rather than
+   * guessing a date to delete it by.
+   */
+  expiresAt: Date | null
+}
+
+/**
+ * How long the platform keeps a hardware sale record (AGL-4038): seven years
+ * from the sale, then the record is deleted. Longer than the four years Texas
+ * requires for sales tax records, a margin for an audit of an older period.
+ */
+export const POS_HARDWARE_SALE_RETENTION_YEARS = 7
+
+/**
+ * When a sale record expires: the same calendar instant, seven years after
+ * the sale was paid (the order's creation where no payment time is stated).
+ * A sale on 29 February expires on 1 March, a day late rather than early.
+ * Null when there is no sale time, so the record is kept, never reaped at
+ * the epoch.
+ */
+export function posHardwareSaleExpiry(
+  order: Pick<PosHardwareOrder, 'paidAtMs' | 'createdAtMs'>,
+): Date | null {
+  const saleAtMs = [order.paidAtMs, order.createdAtMs].find(
+    (value) => typeof value === 'number' && Number.isFinite(value) && value > 0,
+  )
+  if (saleAtMs === undefined) return null
+  const expires = new Date(saleAtMs)
+  expires.setUTCFullYear(expires.getUTCFullYear() + POS_HARDWARE_SALE_RETENTION_YEARS)
+  return expires
+}
+
+/** A tax line as the record keeps it: every field picked, every figure an integer. */
+function saleTaxLine(line: Partial<PosHardwareTaxLine> | null | undefined): PosHardwareTaxLine {
+  const integerOrNull = (value: unknown): number | null =>
+    typeof value === 'number' && Number.isFinite(value) ? Math.round(value) : null
+  const numberOrNull = (value: unknown): number | null =>
+    typeof value === 'number' && Number.isFinite(value) ? value : null
+  const textOf = (value: unknown): string | null =>
+    typeof value === 'string' && value ? value : null
+  return {
+    amountCents: integerOrNull(line?.amountCents) ?? 0,
+    taxabilityReason: textOf(line?.taxabilityReason),
+    taxRateId: textOf(line?.taxRateId),
+    taxableAmountCents: integerOrNull(line?.taxableAmountCents),
+    jurisdiction: textOf(line?.jurisdiction),
+    rateState: textOf(line?.rateState),
+    percentage: numberOrNull(line?.percentage),
+  }
 }
 
 const stampOrNull = (value: unknown): number | null =>
@@ -636,12 +1107,63 @@ export function posHardwareTaxRegion(order: Pick<PosHardwareOrder, 'shipping'>):
     : null
 }
 
+/** An address with every key present, or null when it names no place. */
+function saleAddress(address: Partial<PosHardwareAddress> | null | undefined): PosHardwareSaleAddress | null {
+  const line1 = textOrNull(address?.line1)
+  const city = textOrNull(address?.city)
+  const country = textOrNull(address?.country)
+  if (!line1 || !city || !country) return null
+  return {
+    line1: line1.slice(0, 200),
+    line2: textOrNull(address?.line2)?.slice(0, 200) ?? null,
+    city: city.slice(0, 100),
+    state: textOrNull(address?.state)?.slice(0, 100) ?? null,
+    postalCode: textOrNull(address?.postalCode)?.slice(0, 20) ?? null,
+    country: country.toUpperCase().slice(0, 2),
+  }
+}
+
+/**
+ * A buyer's business address as an in-person order keeps it (AGL-4038):
+ * trimmed and cut to length, or null when it lacks a street, city, postal
+ * code or two-letter country.
+ */
+export function posHardwareBuyerAddress(value: unknown): PosHardwareAddress | null {
+  const address = (value && typeof value === 'object' ? value : {}) as Partial<Record<keyof PosHardwareAddress, unknown>>
+  const line1 = textOrNull(address.line1)?.slice(0, 200)
+  const city = textOrNull(address.city)?.slice(0, 100)
+  const postalCode = textOrNull(address.postalCode)?.slice(0, 20)
+  const country = textOrNull(address.country)?.toUpperCase()
+  if (!line1 || !city || !postalCode || !country || !/^[A-Z]{2}$/.test(country)) return null
+  const line2 = textOrNull(address.line2)?.slice(0, 200)
+  const state = textOrNull(address.state)?.slice(0, 100)
+  return { line1, ...(line2 ? { line2 } : {}), city, ...(state ? { state } : {}), postalCode, country }
+}
+
+/**
+ * The buyer's name and address as the order holds them now (AGL-4038): the
+ * shipping name and address of an online order, the attachment's of an
+ * in-person one. `undefined` when the order has none BECAUSE its buyer's
+ * account was erased, which tells the write to keep what the record has;
+ * null when it simply names no one yet.
+ */
+export function posHardwareSaleBuyer(
+  order: Pick<PosHardwareOrder, 'shipping' | 'attachment' | 'source' | 'buyerErasedAtMs'>,
+): PosHardwareSaleBuyer | null | undefined {
+  const inPerson = posHardwareOrderSource(order) === 'in_person'
+  const name = textOrNull(inPerson ? order.attachment?.name : order.shipping?.name)?.slice(0, 200) ?? null
+  const address = saleAddress(inPerson ? order.attachment?.address : order.shipping?.address)
+  if (name || address) return { name, address }
+  return typeof order.buyerErasedAtMs === 'number' ? undefined : null
+}
+
 /**
  * The retained sale record of an order, as it stands. Every field is picked
  * by name, so a field added to the order later reaches the record only when
  * someone decides it should.
  */
 export function posHardwareSaleRecord(orderId: string, order: PosHardwareOrder): PosHardwareSaleRecord {
+  const buyer = posHardwareSaleBuyer(order)
   return {
     orderId,
     orgId: order.orgId,
@@ -656,9 +1178,12 @@ export function posHardwareSaleRecord(orderId: string, order: PosHardwareOrder):
     shippingMethod: order.shipping?.method ?? 'standard',
     shippingCents: order.shipping?.cents ?? 0,
     taxCents: order.taxCents ?? 0,
+    discountCents: stampOrNull(order.discountCents) ?? 0,
     totalCents: order.totalCents ?? 0,
     currency: order.currency ?? POS_HARDWARE_CURRENCY,
     shipTo: posHardwareTaxRegion(order),
+    automaticTax: typeof order.automaticTax === 'boolean' ? order.automaticTax : null,
+    taxLines: (Array.isArray(order.taxLines) ? order.taxLines : []).map(saleTaxLine),
     stripeCheckoutSessionId: textOrNull(order.stripeCheckoutSessionId),
     stripePaymentIntentId: textOrNull(order.stripePaymentIntentId),
     stripeHardwareOrderId: textOrNull(order.stripeHardwareOrderId),
@@ -675,6 +1200,43 @@ export function posHardwareSaleRecord(orderId: string, order: PosHardwareOrder):
     registeredAtMs: stampOrNull(order.registeredAtMs),
     canceledAtMs: stampOrNull(order.canceledAtMs),
     refundedAtMs: stampOrNull(order.refundedAtMs),
+    source: posHardwareOrderSource(order),
+    posHostId: textOrNull(order.posSale?.hostId),
+    posOrderId: textOrNull(order.posSale?.orderId),
+    paidTo: salePaidTo(order),
+    storefrontTaxRowId: textOrNull(order.posSale?.paymentLinkSessionId),
+    // Left out, never written as null, once the buyer was erased: the
+    // stored name and address are the reseller's records and stay.
+    ...(buyer === undefined ? {} : { buyer }),
+    // The TTL policy's field: the record outlives the workspace, not the law.
+    expiresAt: posHardwareSaleExpiry(order),
+  }
+}
+
+/**
+ * How every write of a sale record is made (AGL-4038): `set` with exactly
+ * the record's own fields as `mergeFields`, so each one is replaced whole —
+ * a map included, never merged key by key — and a field the record leaves
+ * out is left as stored. The record leaves out only `buyer`, and only once
+ * the buyer's account was erased ({@link posHardwareSaleBuyer}), so the
+ * buyer's name and address outlive the erasure and every write after it.
+ */
+export function posHardwareSaleSetOptions(order: PosHardwareOrder): { mergeFields: string[] } {
+  return { mergeFields: Object.keys(posHardwareSaleRecord('', order)) }
+}
+
+/** Where a sale's money went, picked by name: never a buyer detail. */
+function salePaidTo(order: Pick<PosHardwareOrder, 'source' | 'paidTo'>): PosHardwareSaleRecord['paidTo'] {
+  const paidTo = order.paidTo
+  if (posHardwareOrderSource(order) !== 'in_person' || paidTo?.account !== 'seller_store') {
+    return { account: 'platform' }
+  }
+  return {
+    account: 'seller_store',
+    hostId: String(paidTo.hostId ?? ''),
+    orgId: String(paidTo.orgId ?? ''),
+    tenders: (Array.isArray(paidTo.tenders) ? paidTo.tenders : []).map(String).slice(0, 10),
+    stripeAccountId: textOrNull(paidTo.stripeAccountId),
   }
 }
 
@@ -686,20 +1248,25 @@ export function posHardwareSaleRecord(orderId: string, order: PosHardwareOrder):
  * The country, state and postal code stay, because sales tax is sourced by
  * them. Deterministic but for the stamp, and an order already erased no
  * longer answers to the person's uid, so a second run finds nothing.
+ *
+ * The buyer's NAME and ADDRESS stay on the platform's sale record, not on
+ * the order: `buyerErasedAtMs` is what tells the record's next write to keep
+ * them ({@link posHardwareSaleBuyer}, {@link posHardwareSaleSetOptions}).
  */
 export function posHardwareBuyerErasedPatch(
-  order: Pick<PosHardwareOrder, 'shipping'>,
+  order: Pick<PosHardwareOrder, 'shipping' | 'attachment' | 'returnRequest'>,
   now: number,
 ): Record<string, unknown> {
   // The whole map, read in the same transaction: a dotted-path update would
   // leave a field added to `shipping` later standing with the person in it.
   const shipping = order.shipping
+  const attachment = order.attachment
   return {
     createdBy: null,
     contactEmail: null,
     shipping: {
       method: shipping?.method ?? 'standard',
-      label: shipping?.label ?? POS_HARDWARE_SHIPPING_LABELS[shipping?.method ?? 'standard'],
+      label: shipping?.label ?? posHardwareShippingLabel(shipping?.method),
       cents: shipping?.cents ?? 0,
       name: null,
       phone: null,
@@ -707,6 +1274,26 @@ export function posHardwareBuyerErasedPatch(
       taxRegion: posHardwareTaxRegion(order),
     },
     tracking: null,
+    // An in-person order's attachment names the buyer too (AGL-4038): their
+    // email, account, name and address come off it (the map is rebuilt with
+    // none of them); the workspace and store it is in stay.
+    ...(attachment
+      ? {
+          attachment: {
+            state: attachment.state === 'attached' ? 'attached' : 'pending',
+            email: null,
+            uid: null,
+            orgId: attachment.orgId ?? null,
+            hostId: attachment.hostId ?? null,
+            attachedBy: attachment.attachedBy ?? null,
+            attachedAtMs: attachment.attachedAtMs ?? null,
+          },
+        }
+      : {}),
+    // Their return request keeps its outcome; their words and account go.
+    ...(order.returnRequest
+      ? { returnRequest: { ...order.returnRequest, reason: null, requestedBy: null } }
+      : {}),
     buyerErasedAtMs: now,
     updatedAtMs: now,
   }

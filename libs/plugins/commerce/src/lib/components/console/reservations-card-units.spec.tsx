@@ -239,6 +239,98 @@ describe('the resource editor', () => {
   })
 })
 
+describe('when the widget says "Only N left" (AGL-4044)', () => {
+  const openEditor = () => {
+    fireEvent.click(screen.getAllByRole('button', { name: 'Edit' })[0])
+  }
+  const field = () => screen.queryByLabelText('Show “Only N left” at')
+
+  it('is asked only of a resource with several units', () => {
+    collections['resources'] = [cabin]
+    render(<ReservationsCard hostId="host-1" />)
+    openEditor()
+    expect(field()).toBeNull()
+    fireEvent.change(screen.getByLabelText('Spots or units available'), {
+      target: { value: '12' },
+    })
+    expect(field()).toBeTruthy()
+  })
+
+  it('saves the threshold typed, and 0 to never show it', async () => {
+    collections['resources'] = [hookups]
+    render(<ReservationsCard hostId="host-1" />)
+    openEditor()
+    fireEvent.change(field()!, { target: { value: '0' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(setDoc).toHaveBeenCalledTimes(1))
+    expect((setDoc as jest.Mock).mock.calls[0][1].fewLeftAt).toBe(0)
+  })
+
+  it('writes a cleared field back as the default it reads as', async () => {
+    collections['resources'] = [{ ...hookups, fewLeftAt: 8 }]
+    render(<ReservationsCard hostId="host-1" />)
+    openEditor()
+    fireEvent.change(field()!, { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(setDoc).toHaveBeenCalledTimes(1))
+    expect((setDoc as jest.Mock).mock.calls[0][1].fewLeftAt).toBe(3)
+  })
+
+  it('refuses a threshold above the most units a resource can hold', () => {
+    collections['resources'] = [hookups]
+    render(<ReservationsCard hostId="host-1" />)
+    openEditor()
+    fireEvent.change(field()!, { target: { value: '501' } })
+
+    expect(screen.getByText('A whole number from 0 to 500')).toBeTruthy()
+    expect(
+      (screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true)
+  })
+
+  it('colors the nights at or under the store’s threshold', () => {
+    collections['resources'] = [{ ...hookups, units: 4, fewLeftAt: 0 }]
+    collections['reservations'] = [stayOn('hookups', 0, 1), stayOn('hookups', 0, 1)]
+    render(<ReservationsCard hostId="host-1" />)
+    const first = screen.getAllByText(/ of 4 left$/)[0]!
+    expect(first.closest('.MuiChip-colorWarning')).toBeNull()
+  })
+})
+
+describe('guests and check-in per guest (AGL-4043)', () => {
+  it('saves how the resource is checked in', async () => {
+    collections['resources'] = [cabin]
+    render(<ReservationsCard hostId="host-1" />)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Edit' })[0])
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'At check-in' }))
+    fireEvent.click(screen.getByRole('option', { name: 'One check-in per guest' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(setDoc).toHaveBeenCalledTimes(1))
+    expect((setDoc as jest.Mock).mock.calls[0][1].checkInPerGuest).toBe(true)
+  })
+
+  it('books a walk-in with its guest count, and refuses more than the cabin sleeps', async () => {
+    collections['resources'] = [{ ...cabin, capacity: 4 }]
+    render(<ReservationsCard hostId="host-1" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Walk-in' }))
+    fireEvent.change(screen.getByLabelText('Check-in'), { target: { value: iso(TODAY + 1 * DAY) } })
+    fireEvent.change(screen.getByLabelText('Check-out'), { target: { value: iso(TODAY + 2 * DAY) } })
+    fireEvent.change(screen.getByLabelText('Guests'), { target: { value: '5' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Reserve' }))
+    await waitFor(() =>
+      expect(enqueueSnackbar).toHaveBeenCalledWith('Guests must be a whole number from 1 to 4', expect.anything()),
+    )
+    expect(authorizedFetch).not.toHaveBeenCalled()
+    fireEvent.change(screen.getByLabelText('Guests'), { target: { value: '3' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Reserve' }))
+    await waitFor(() => expect(authorizedFetch).toHaveBeenCalledTimes(1))
+    expect(JSON.parse(authorizedFetch.mock.calls[0][2].body)).toMatchObject({ guests: 3 })
+  })
+})
+
 describe('a walk-in on a several-unit resource', () => {
   const walkIn = async () => {
     fireEvent.click(screen.getByRole('button', { name: 'Walk-in' }))

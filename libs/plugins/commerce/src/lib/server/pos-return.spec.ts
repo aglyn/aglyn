@@ -96,6 +96,18 @@ describe('finding the order', () => {
   const find = (text: string, hostId = 'shop') =>
     handlePosReturn(deps, h.request('cashier', { hostId, action: 'find', text }))
 
+  it('needs the refunds key to find a sale or take it back (AGL-4047)', async () => {
+    h.memberships['cashier'] = {
+      ...h.memberships['cashier']!,
+      permissions: { managePos: true, posRefund: false },
+    }
+    const refused = await find('1001')
+    expect(refused.status).toBe(403)
+    expect(String(refused.body['error'])).toContain('Refunds and returns')
+    expect((await ret({ lines: [{ lineIndex: 0, quantity: 1 }] })).status).toBe(403)
+    expect(order().refunds ?? []).toEqual([])
+  })
+
   it('finds it by number, by the scanned barcode, by email and by id', async () => {
     for (const text of ['1001', '#1001', 'Dana@Acme.com', 'o1']) {
       const found = (await find(text)).body['orders'] as Array<{ id: string }>
@@ -146,6 +158,9 @@ describe('refunding a return', () => {
     expect(adjustments.map(([, row]) => [row['delta'], row['reason'], row['locationId']])).toEqual([[1, 'refund', 'loc-1']])
     expect(effects).toHaveLength(1)
     expect(effects[0]).toMatchObject({ orderId: 'o1', refundCents: oneMug, closedTheOrder: false, email: 'dana@acme.com' })
+    // Each line taken back with its share, for what follows a line in
+    // particular: a card reader's hardware order (AGL-4038).
+    expect(effects[0]!.lines).toEqual([{ index: expect.any(Number), quantity: 1, refundCents: oneMug }])
   })
 
   it('splits the money to the tenders the cashier names, and pays cash out of the open drawer', async () => {

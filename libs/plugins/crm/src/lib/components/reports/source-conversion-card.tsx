@@ -17,6 +17,7 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
+import { labelContactSource } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import {
   measuredRate,
@@ -135,7 +136,7 @@ export function SourceConversionCard(props: SourceConversionCardProps) {
     ? measuredRate(conversion.customers, conversion.total, 'captured')
     : null
   const labelOf = (source: Aglyn.ContactSource): string =>
-    Aglyn.CONTACT_SOURCE_LABELS[source] ?? source
+    labelContactSource(source)
   const sampled =
     read &&
     (window.truncated ||

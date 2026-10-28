@@ -36,6 +36,8 @@ import {
   aiPlanSlugKey,
   isAiPlanNewRef,
   type AiBuildPlan,
+  type AiBuildPlanCreate,
+  type AiBuildPlanScreen,
 } from '../model/ai-build-plan'
 import type { AiJob, AiJobKind, AiJobPlan, AiJobReview, AiJobStatus } from '../model/ai-jobs.types'
 import { AI_BUILD_PRODUCT_OP, aiBuildStorePagesFor } from '../model/ai-build-store-pages'
@@ -58,6 +60,7 @@ import {
 } from '../model/ai-plan-capabilities'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
 import {
+  aiSettlePlanSplitListings,
   aiSettleSiteForeignDatasets,
   aiSiteInventoryWithRecordCounts,
   aiSitePlanDatasetCapability,
@@ -82,6 +85,7 @@ import {
   aiSiteEmptyGalleryViolations,
   AI_SITE_DATASETS_MAX,
   AI_SITE_GALLERY_MIN_ITEMS,
+  AI_SITE_MAX_SECTIONS,
 } from '../model/ai-site-job'
 import { aiSiteContentPart } from './ai-job-site-content'
 import {
@@ -91,7 +95,7 @@ import {
 } from '../model/ai-plan-said-sections'
 import { aiLayoutIsShopPage, aiLayoutShopGridSection } from '../layout-language/ai-layout-listings'
 import { aiLayoutSpeaksOtherThanEnglish } from '../layout-language/ai-layout-labels'
-import { aiStorefrontPlanScreens } from '../layout-language/ai-layout-storefront'
+import { aiStorefrontPlanScreens, aiStorefrontSays } from '../layout-language/ai-layout-storefront'
 import { AI_GENERATION_MAX_ATTEMPTS } from '../runtime/ai-generation-bounds'
 import { aiPlanFailureCopy, aiPlanRetryRefusal } from '../model/ai-job-failure-copy'
 import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
@@ -260,10 +264,22 @@ export interface AiPlanSiteOptions {
 }
 
 /**
+ * What a build's plan does with a request it cannot make (AGL-4087). Told
+ * only how many pages it may hold, a Free build asked for a home and a page
+ * that writes a review draft from a customer's choices planned the home
+ * alone, kept two sections sending visitors to the other page, and said
+ * nothing; the member confirmed a plan that had quietly dropped half of what
+ * they asked for.
+ */
+export const AI_PLAN_BUILD_LEFT_OUT_SENTENCE =
+  'Plan every page the request asks for. When it asks for something this build cannot make work, such as a page whose purpose is a feature the site has no way to do, or more pages than it holds, leave that out, name it in leftOut with why, and plan no section that sends visitors to it. leftOut is empty when the plan builds everything the request asks for.'
+
+/**
  * What a BUILD job's plan is told (AGL-3616): that one request becomes pages,
- * creations and items, how many pages it may hold, and the item operations
- * this site has with their arguments. On the job's own turn, never a cached
- * system block, because the operations are per site.
+ * creations and items, how many pages it may hold, what to do with what it
+ * cannot make (AGL-4087), and the item operations this site has with their
+ * arguments. On the job's own turn, never a cached system block, because the
+ * operations are per site.
  */
 export function aiPlanBuildLines(
   job: Pick<AiJob, 'kind'>,
@@ -275,6 +291,7 @@ export function aiPlanBuildLines(
   const pages = aiBuildPageLimit(capabilities?.freeTaste === true)
   return [
     `This is a build from one request: plan each page it asks for in screens (at most ${pages}), each new layout, form, component or email design in create, and anything else in items. Plan only what the request asks for; reuse what the site has.`,
+    AI_PLAN_BUILD_LEFT_OUT_SENTENCE,
     'A page section that shows a form or an item places it: put its new:<name> in that section\'s uses. An item built after another lists it in dependsOn.',
     // The layout language draws a section's repeated items (AGL-3660), so the
     // doctrine's "repeated items place a component" is not asked of a build.
@@ -566,23 +583,72 @@ export const AI_SITE_STORE_PAGES_SENTENCE =
  * (AGL-3899).
  */
 export const AI_SITE_STORE_HOME_BANDS =
-  'a hero that sells first and a "Newsletter sign-up" band last, and between them "Bestsellers" (the platform lists the real products), "Shop by collection" with 3 or 4 items, the brand story, why buy here with 3 or 4 items and "Customer reviews" (the platform shows the store\'s real ones)'
+  'a hero that sells first and a "Newsletter sign-up" band last (the platform\'s own email field — never one of your forms), and between them "Bestsellers" (the platform lists the real products), "Shop by collection" with 3 or 4 items, the brand story, why buy here with 3 or 4 items and "Customer reviews" (the platform shows the store\'s real ones)'
 
 /**
  * A store plan held to a storefront (AGL-3676, `ai-layout-storefront.ts`):
  * on a paid start its home gains the parts a shopper expects that the plan
  * left out — bestsellers, collections, reviews, a newsletter sign-up —
  * while the page has room; on any start its Shop page opens on its grid.
- * Settled, never re-asked: each part has one answer, and the Free wall's
- * home keeps the sections it planned.
+ * Its sign-up band places no form of its own ({@link aiSiteSignupWithoutForms},
+ * AGL-4065). Settled, never re-asked: each part has one answer, and the Free
+ * wall's home keeps the sections it planned.
  */
-export function aiSiteStorefrontPlan<P extends Pick<AiBuildPlan, 'screens'>>(plan: P, options: { paid: boolean }): P {
-  const screens = aiStorefrontPlanScreens(plan.screens, {
-    paid: options.paid,
-    isShopPage: aiLayoutIsShopPage,
-    gridSection: aiLayoutShopGridSection,
-  })
+export function aiSiteStorefrontPlan<P extends Pick<AiBuildPlan, 'screens'> & Partial<Pick<AiBuildPlan, 'create'>>>(
+  plan: P,
+  options: { paid: boolean },
+): P {
+  const screens = aiSiteSignupWithoutForms(
+    aiStorefrontPlanScreens(plan.screens, {
+      paid: options.paid,
+      isShopPage: aiLayoutIsShopPage,
+      gridSection: aiLayoutShopGridSection,
+    }),
+    plan.create ?? [],
+  )
   return screens.every((screen, index) => screen === plan.screens[index]) ? plan : { ...plan, screens }
+}
+
+/** A section's reference to a form: one the plan creates (`new:<its name>`), or any whose words say form, as the listings read it. */
+function namesForm(ref: string, create: readonly Pick<AiBuildPlanCreate, 'kind' | 'name'>[]): boolean {
+  const named = isAiPlanNewRef(ref) ? ref.slice(ref.indexOf(':') + 1).trim().toLowerCase() : null
+  return /form/i.test(ref) || create.some((entry) => entry.kind === 'form' && entry.name.trim().toLowerCase() === named)
+}
+
+/**
+ * A store's newsletter band is the platform's own email field (AGL-4065).
+ * The 2026-10-25 Berm & Bolt plan placed its parts inquiry form in the home's
+ * "Newsletter sign-up" band; the listings place no sign-up where a section
+ * places a form, so the home drew the inquiry form under that heading. A
+ * section whose name says sign-up loses every form it names. A form placed
+ * nowhere else keeps a band of its own, named for it, just before the
+ * sign-up while the page has room; else the sign-up band becomes it. Pure;
+ * a plan whose sign-up places no form comes back as it was.
+ */
+export function aiSiteSignupWithoutForms<S extends Pick<AiBuildPlanScreen, 'sections'>>(
+  screens: readonly S[],
+  create: readonly Pick<AiBuildPlanCreate, 'kind' | 'name'>[],
+): S[] {
+  const signup = (section: AiBuildPlanScreen['sections'][number]) => aiStorefrontSays('signup', section.name)
+  return screens.map((screen) => {
+    if (!screen.sections.some((section) => signup(section) && section.uses.some((ref) => namesForm(ref, create)))) return screen
+    const sections = screen.sections.flatMap((section, index) => {
+      if (!signup(section)) return [section]
+      const forms = section.uses.filter((ref) => namesForm(ref, create))
+      if (!forms.length) return [section]
+      const rest = { ...section, uses: section.uses.filter((ref) => !forms.includes(ref)) }
+      // A form no other section of any page places keeps a band of its own.
+      const elsewhere = (ref: string) =>
+        screens.some((other) => other.sections.some((entry, at) => (other !== screen || at !== index) && entry.uses.includes(ref)))
+      const alone = forms.filter((ref) => !elsewhere(ref))
+      if (!alone.length) return [rest]
+      const own = alone[0] as string
+      const purpose = own.slice(own.indexOf(':') + 1).replace(/\s*\bform\b\s*$/i, '').trim()
+      const band = { name: purpose || 'Get in touch', uses: alone, items: 0 }
+      return screen.sections.length < AI_SITE_MAX_SECTIONS ? [band, rest] : [{ ...rest, ...band }]
+    })
+    return { ...screen, sections }
+  })
 }
 
 /** The code a store plan with no Shop page is re-asked under. */
@@ -1314,7 +1380,9 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
     if (reused) {
       // The reused plan's draft ids name the other job's drafts; this job's are its own.
       // Settled again against what the datasets hold now (AGL-3912).
-      const kept = site ? aiSettlePlanDatasets(aiSettleSiteForeignDatasets(reused.plan, inventory, capabilities), capabilities) : reused.plan
+      const kept = site
+        ? aiSettlePlanSplitListings(aiSettlePlanDatasets(aiSettleSiteForeignDatasets(reused.plan, inventory, capabilities), capabilities))
+        : reused.plan
       const plan: AiJobPlan = aiPlanWithStorePages(job.kind, ops, inventory, aiPlanWithItemCredits(itemOps, aiPlanWithDraftIds(job.kind, {
         ...aiPlanWithInspiration(kept, inspiration),
         status: 'proposed',
@@ -1377,7 +1445,8 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
                 siteLayout: aiSiteLayoutOf(inventory),
               })
             : site
-              ? aiSettleSiteForeignDatasets(answered, inventory, capabilities)
+              ? // Two lists of one new dataset on one page that nothing tells apart are one (AGL-4065).
+                aiSettlePlanSplitListings(aiSettleSiteForeignDatasets(answered, inventory, capabilities))
               : answered,
         ),
       // A site start's home places no form another page holds (AGL-3899):

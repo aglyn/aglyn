@@ -281,9 +281,10 @@ const PLATFORM_RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
       'and two of its stylesheets through the SSRF-guarded fetch and keeps ' +
       'signals only (section order, spacing, header, colors, type mood, ' +
       'button and card shape, motion, and on a paid plan the features it ' +
-      'offers), never its words, images or logos. OFF by default: no field ' +
-      'is shown and no site is read.',
-    defaultEnabled: false,
+      'offers), never its words, images or logos. ON since 2026-10-28, ' +
+      'after its live eval re-run passed; turned off, no field is shown ' +
+      'and no site is read.',
+    defaultEnabled: true,
   },
   // Platform-wide, never per org: the nightly job reads only the platform
   // value, because it is the operator's own marketing and no workspace's

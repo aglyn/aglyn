@@ -309,6 +309,31 @@ describe('buy now for a product sold in person only (AGL-4060)', () => {
   })
 })
 
+describe('buy now for a product that is not active (AGL-4060)', () => {
+  // The cart's checkout refuses any line `productListedOnline` refuses, and
+  // the product page answers a draft 404. Buy now asked only whether the
+  // product sold online, so a draft or archived product, unlisted everywhere
+  // else, could still be bought by posting its id.
+  it.each(['draft', 'archived'])('answers 404 for a %s product and opens no session or claim', async (status) => {
+    docs.set('hosts/host-1/products/product-1', {
+      ...docs.get('hosts/host-1/products/product-1'),
+      status,
+    })
+    const result = await post({}, { 'idempotency-key': `attempt-${status}` })
+    expect(result.status).toBe(404)
+    expect(result.body).toEqual({ error: 'Unknown product' })
+    expect(sessionCalls()).toHaveLength(0)
+    expect(claimDocs()).toHaveLength(0)
+  })
+
+  it('still sells a legacy product stored with no status, as the cart does', async () => {
+    docs.set('hosts/host-1/products/product-1', { name: 'Walnut desk', priceUsd: 40, inventory: null })
+    const result = await post({}, { 'idempotency-key': 'attempt-legacy' })
+    expect(result.status).toBe(200)
+    expect(sessionCalls()).toHaveLength(1)
+  })
+})
+
 describe('buy-now checkout idempotency (AGL-1697)', () => {
   it('creates one session and records the claim', async () => {
     const result = await post({}, { 'idempotency-key': 'attempt-a' })

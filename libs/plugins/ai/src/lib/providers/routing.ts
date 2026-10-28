@@ -192,9 +192,12 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
     // A scoped, latency-sensitive chat turn: no thinking, the low effort rung.
     thinking: 'off',
     effort: 'low',
-    maxTokens: 1024,
+    // 2,048 since AGL-4075: a non-Latin script spends two to four times the
+    // tokens per character, and 5 of 17 non-English answers stopped at 1,024
+    // against 1 of 33 English ones. Output is billed only as it is written.
+    maxTokens: 2048,
     maxTokensBasis:
-      'a docs-grounded answer of a few short paragraphs; the edit rung raises it for its tool call',
+      'a docs-grounded answer of a few short paragraphs in any language; the edit rung raises it for its tool call',
     eval: { kinds: ['chat'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9688 },
   },
   'copy.element': {

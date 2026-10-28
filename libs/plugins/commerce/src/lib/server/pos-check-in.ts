@@ -33,14 +33,25 @@ import {
   dueCheckInsForReservation,
   newCheckInDocument,
   normalizeWristband,
+  rainCheckProblem,
   sortCheckInRows,
+  type CheckInRainCheck,
   type CheckInRow,
   type CheckInWristband,
   type DueCheckIn,
   type HostCheckIn,
+  STAY_CHECK_IN_SETTINGS_DOC,
+  storedStayCheckIns,
 } from '../model/commerce-check-in'
 import { posDayReportRange } from '../model/commerce-pos-day-report'
 import type { HostOrder } from '../model/commerce-orders'
+import {
+  readStayCheckInMode as readStayCheckInModeValue,
+  stayChecksInPerGuest,
+  STAY_CHECK_IN_MODES,
+  type HostResource,
+  type StayCheckInMode,
+} from '../model/commerce-reservations'
 import {
   authorizePosOps,
   defaultPosOpsDeps,
@@ -61,6 +72,9 @@ import { onPosSaleCompleted, type PosSaleCompletedEvent } from './pos-sale'
  *   POST { hostId, action: 'check_in', checkIns: [{ id, wristband? }], registerId?, cashierAssertion? }
  *   POST { hostId, action: 'undo',     id }
  *   POST { hostId, action: 'wristband', id, wristband }
+ *   POST { hostId, action: 'stay_mode', mode: 'resource' | 'stay' | 'guest', day? }
+ *   POST { hostId, action: 'rain_check', id, kind: 'open' | 'date', day? }
+ *   POST { hostId, action: 'undo_rain_check', id }
  *   GET  ?hostId=…&day=YYYY-MM-DD[&format=csv]   the day's list
  *
  * `day` is today in the site's time zone when absent. Who may use it is who
@@ -75,11 +89,21 @@ import { onPosSaleCompleted, type PosSaleCompletedEvent } from './pos-sale'
  *
  *  - a register sale, the moment it completes (the sale-completed seam);
  *  - and every source, by {@link reconcileCheckInDay}: the day's orders
- *    (`createdAtMs` in the day, the automatic single-field index) and the
- *    stays that began within a year before it (`checkInDayMs`, likewise),
- *    at most every {@link CHECK_IN_RECONCILE_MS} per day, on the next search
- *    or list. So an online order paid a minute ago is found on the next
- *    search after that.
+ *    (`createdAtMs` in the day, the automatic single-field index), the
+ *    orders bought on another day for this one (`useDayKeys array-contains`
+ *    the day, likewise automatic) and the stays that began within a year
+ *    before it (`checkInDayMs`, likewise), at most every
+ *    {@link CHECK_IN_RECONCILE_MS} per day, on the next search or list. So
+ *    an online order paid a minute ago is found on the next search after
+ *    that.
+ *
+ * RAIN CHECKS (`rain_check`, `undo_rain_check`) move one person's pass to a
+ * later day, or leave it open for any later day; an open one is found on a
+ * later day by `rainCheckOpen == true` and `dayKey <` the day, beside the
+ * day's own (indexes: rainCheckOpen, searchTokens, dayKey; and
+ * rainCheckOpen, customerKey, dayKey). Checking in an open one claims it on
+ * the day it is used. Each is a transaction on the one document, gated as
+ * check-in is.
  *
  * Reconciling only ever CREATES what is missing, refreshes a waiting
  * person's name and address, and removes a waiting person whose order was
@@ -129,6 +153,15 @@ export async function readCheckInDay(
   const range = posDayReportRange({ from: day, to: day, nowMs: deps.now(), timeZone })
   if ('error' in range) return { ok: false, error: 'Choose the day as YYYY-MM-DD.' }
   return { ok: true, dayKey: range.from, startMs: range.startMs, endMs: range.endMs, timeZone }
+}
+
+// Where the store's stay check-in control lives, beside the rules that read it.
+export { STAY_CHECK_IN_SETTINGS_DOC }
+
+/** The store's control for how stays are checked in; each resource's own setting when unset. */
+export async function readStayCheckInMode(hostRef: FirebaseFirestore.DocumentReference): Promise<StayCheckInMode> {
+  const snapshot = await hostRef.collection('settings').doc(STAY_CHECK_IN_SETTINGS_DOC).get()
+  return readStayCheckInModeValue(snapshot.exists ? snapshot.get('stays') : undefined)
 }
 
 /** Reads documents by reference, a few hundred at a time. */
@@ -221,12 +254,19 @@ export async function reconcileCheckInDay(
   }
   const dayMs = checkInDayMs(day.dayKey) ?? 0
   const checkIns = hostRef.collection('checkIns')
-  const [ordersSnapshot, staysSnapshot, existingSnapshot] = await Promise.all([
+  const [ordersSnapshot, forTheDaySnapshot, staysSnapshot, existingSnapshot] = await Promise.all([
     hostRef
       .collection('orders')
       .where('createdAtMs', '>=', day.startMs)
       .where('createdAtMs', '<', day.endMs)
       .orderBy('createdAtMs')
+      .limit(CHECK_IN_DAY_CEILING + 1)
+      .get(),
+    // Passes bought on another day for this one: the days the buyer chose,
+    // stamped on the order by every creator (`withOrderListFields`).
+    hostRef
+      .collection('orders')
+      .where('useDayKeys', 'array-contains', day.dayKey)
       .limit(CHECK_IN_DAY_CEILING + 1)
       .get(),
     hostRef
@@ -240,9 +280,16 @@ export async function reconcileCheckInDay(
   ])
   const truncated =
     ordersSnapshot.docs.length > CHECK_IN_DAY_CEILING ||
+    forTheDaySnapshot.docs.length > CHECK_IN_DAY_CEILING ||
     staysSnapshot.docs.length > CHECK_IN_DAY_CEILING ||
     existingSnapshot.docs.length > CHECK_IN_DAY_CEILING
-  const orders = ordersSnapshot.docs.slice(0, CHECK_IN_DAY_CEILING)
+  const orders = [
+    ...new Map(
+      [...ordersSnapshot.docs.slice(0, CHECK_IN_DAY_CEILING), ...forTheDaySnapshot.docs.slice(0, CHECK_IN_DAY_CEILING)].map(
+        (doc) => [doc.id, doc] as const,
+      ),
+    ).values(),
+  ]
   const stays = staysSnapshot.docs.slice(0, CHECK_IN_DAY_CEILING)
 
   const products = await productsFor(
@@ -254,35 +301,57 @@ export async function reconcileCheckInDay(
     ...new Set(stays.map((doc) => String(doc.get('resourceId') ?? '')).filter((id) => posOpsCleanId(id))),
   ]
   const resourceNames = new Map<string, string>()
+  const perGuestResources = new Set<string>()
+  // How stays are checked in (AGL-4043): the store's control, else each
+  // resource's own setting. Read only on a day with stays to check in.
+  const stayMode = stays.length ? await readStayCheckInMode(hostRef) : 'resource'
   for (const snapshot of await readAll(
     deps.firestore(),
     resourceIds.map((id) => hostRef.collection('resources').doc(id)),
   )) {
-    if (snapshot.exists) resourceNames.set(snapshot.id, String(snapshot.get('name') ?? ''))
+    if (!snapshot.exists) continue
+    resourceNames.set(snapshot.id, String(snapshot.get('name') ?? ''))
+    if (stayChecksInPerGuest(snapshot.data() as HostResource, stayMode)) perGuestResources.add(snapshot.id)
   }
 
   const due = new Map<string, DueCheckIn>()
+  // Every unit the orders read still owe, on whatever day: a pass moved here
+  // or away by a rain check, or bought for another day, is owed but not due
+  // today, and a waiting one is removed only when its order no longer owes it.
+  const owed = new Set<string>()
   const readOrders = new Set<string>()
   const readStays = new Set<string>()
   for (const doc of orders) {
     readOrders.add(doc.id)
+    const order = doc.data() as Partial<HostOrder>
     for (const [id, entry] of dueCheckInsForOrder({
       orderId: doc.id,
-      order: doc.data() as Partial<HostOrder>,
+      order,
       products,
-      dayKey: day.dayKey,
+      // The day it was bought, on the site's calendar: the day a line the
+      // buyer chose no day for is due.
+      purchaseDayKey: zonedDayKey(Number(order.createdAtMs ?? day.startMs), day.timeZone),
     })) {
-      due.set(id, entry)
+      owed.add(id)
+      if (entry.dayKey === day.dayKey) due.set(id, entry)
     }
   }
+  // Each stay's check-ins already stored on the day: a guest checked in keeps
+  // their place when the stay's count comes down (`stayCheckInPlan`).
+  const storedByStay = storedStayCheckIns(existingSnapshot.docs.slice(0, CHECK_IN_DAY_CEILING))
   for (const doc of stays) {
     readStays.add(doc.id)
+    const resourceId = String(doc.get('resourceId') ?? '')
     for (const [id, entry] of dueCheckInsForReservation({
       reservationId: doc.id,
       reservation: doc.data() as Record<string, any>,
-      resourceName: resourceNames.get(String(doc.get('resourceId') ?? '')) ?? null,
+      resourceName: resourceNames.get(resourceId) ?? null,
       dayKey: day.dayKey,
+      // A resource gone since the stay was booked is checked in once per stay.
+      perGuest: perGuestResources.has(resourceId) || (stayMode === 'guest' && !resourceNames.has(resourceId)),
+      existing: storedByStay.get(doc.id) ?? [],
     })) {
+      owed.add(id)
       due.set(id, entry)
     }
   }
@@ -301,7 +370,7 @@ export async function reconcileCheckInDay(
       const sourceRead =
         (stored.source === 'order' && stored.orderId && readOrders.has(stored.orderId)) ||
         (stored.source === 'reservation' && stored.reservationId && readStays.has(stored.reservationId))
-      return sourceRead ? [{ ref: doc.ref, patch: null }] : []
+      return sourceRead && !owed.has(doc.id) ? [{ ref: doc.ref, patch: null }] : []
     }
     const patch = changedCheckInCustomerFields(stored, wanted)
     return patch ? [{ ref: doc.ref, patch }] : []
@@ -338,8 +407,8 @@ export async function recordSaleCheckIns(deps: PosOpsDeps, event: PosSaleComplet
     (owner?.org ?? null) as { timeZone?: string } | null,
     (host.data() ?? null) as { timeZone?: string } | null,
   )
-  const dayKey = zonedDayKey(Number(event.order.createdAtMs ?? deps.now()), timeZone)
-  const due = dueCheckInsForOrder({ orderId, order: event.order, products, dayKey })
+  const purchaseDayKey = zonedDayKey(Number(event.order.createdAtMs ?? deps.now()), timeZone)
+  const due = dueCheckInsForOrder({ orderId, order: event.order, products, purchaseDayKey })
   if (!due.size) return 0
   return createMissing(hostRef.collection('checkIns'), due, new Set(), deps.now())
 }
@@ -365,6 +434,32 @@ export function registerPosSaleCheckIns(): void {
 
 const rowOf = (doc: FirebaseFirestore.DocumentSnapshot): CheckInRow =>
   ({ ...(doc.data() as HostCheckIn), id: doc.id })
+
+/**
+ * The open rain checks from days before `dayKey` that also match `field`:
+ * passes good on any later day, which a later day's search and customer
+ * lookup offer beside the day's own (`rainCheckOpen`, the field, `dayKey`).
+ */
+function openRainChecks(
+  checkIns: FirebaseFirestore.CollectionReference,
+  dayKey: string,
+  field: { name: 'searchTokens'; token: string } | { name: 'customerKey'; key: string },
+  ceiling: number,
+): Promise<FirebaseFirestore.QuerySnapshot> {
+  const open = checkIns.where('rainCheckOpen', '==', true)
+  const matched =
+    field.name === 'searchTokens'
+      ? open.where('searchTokens', 'array-contains', field.token)
+      : open.where('customerKey', '==', field.key)
+  return matched.where('dayKey', '<', dayKey).limit(ceiling).get()
+}
+
+/** The rows of several snapshots, each once. */
+function uniqueRows(...snapshots: FirebaseFirestore.QuerySnapshot[]): CheckInRow[] {
+  const rows = new Map<string, CheckInRow>()
+  for (const snapshot of snapshots) for (const doc of snapshot.docs) rows.set(doc.id, rowOf(doc))
+  return [...rows.values()]
+}
 
 /** Who checks people in: the member a PIN put at the register, else the signed-in one. */
 async function checkerOf(
@@ -399,17 +494,20 @@ export async function handlePosCheckIn(deps: PosOpsDeps, req: PluginApiRequest):
         return { status: 200, body: { dayKey: day.dayKey, timeZone: day.timeZone, customers: [] } }
       }
       await reconcileCheckInDay(deps, staff.hostRef, day)
-      const snapshot = await checkIns
-        .where('dayKey', '==', day.dayKey)
-        .where('searchTokens', 'array-contains', token)
-        .limit(CHECK_IN_SEARCH_ROWS)
-        .get()
+      const [snapshot, rainChecks] = await Promise.all([
+        checkIns
+          .where('dayKey', '==', day.dayKey)
+          .where('searchTokens', 'array-contains', token)
+          .limit(CHECK_IN_SEARCH_ROWS)
+          .get(),
+        openRainChecks(checkIns, day.dayKey, { name: 'searchTokens', token }, CHECK_IN_SEARCH_ROWS),
+      ])
       return {
         status: 200,
         body: {
           dayKey: day.dayKey,
           timeZone: day.timeZone,
-          customers: checkInCustomers(snapshot.docs.map(rowOf)).slice(0, CHECK_IN_SEARCH_CUSTOMERS),
+          customers: checkInCustomers(uniqueRows(snapshot, rainChecks)).slice(0, CHECK_IN_SEARCH_CUSTOMERS),
         },
       }
     }
@@ -434,12 +532,15 @@ export async function handlePosCheckIn(deps: PosOpsDeps, req: PluginApiRequest):
       if (body['reconcile'] !== false) {
         await reconcileCheckInDay(deps, staff.hostRef, day, { onlyIfUsed: body['reconcile'] === 'if-used' })
       }
-      const snapshot = await checkIns
-        .where('dayKey', '==', day.dayKey)
-        .where('customerKey', '==', customerKey)
-        .limit(CHECK_IN_DAY_CEILING)
-        .get()
-      const rows = sortCheckInRows(snapshot.docs.map(rowOf))
+      const [snapshot, rainChecks] = await Promise.all([
+        checkIns
+          .where('dayKey', '==', day.dayKey)
+          .where('customerKey', '==', customerKey)
+          .limit(CHECK_IN_DAY_CEILING)
+          .get(),
+        openRainChecks(checkIns, day.dayKey, { name: 'customerKey', key: customerKey }, CHECK_IN_SEARCH_ROWS),
+      ])
+      const rows = sortCheckInRows(uniqueRows(snapshot, rainChecks))
       return {
         status: 200,
         body: {
@@ -467,6 +568,10 @@ export async function handlePosCheckIn(deps: PosOpsDeps, req: PluginApiRequest):
       }
       const attempt = posOpsIdempotencyKey(req) || null
       const checker = await checkerOf(deps, staff, body)
+      // The day the window is working: an open rain check checked in is used
+      // on it, and moves to it.
+      const workingDay = await readCheckInDay(deps, staff.hostRef, staff.org, body['day'])
+      if ('error' in workingDay) return { status: 400, body: { error: workingDay.error } }
       const nowMs = deps.now()
       const outcome = await deps.firestore().runTransaction(async (transaction) => {
         const done: CheckInRow[] = []
@@ -494,6 +599,15 @@ export async function handlePosCheckIn(deps: PosOpsDeps, req: PluginApiRequest):
             wristband,
             checkInAttempt: attempt,
             updatedAtMs: nowMs,
+            // An open rain check is used today: it leaves the day it waited
+            // on for this one, and says when it was claimed.
+            ...(row.rainCheckOpen === true && row.rainCheck
+              ? {
+                  dayKey: workingDay.dayKey,
+                  rainCheckOpen: false,
+                  rainCheck: { ...row.rainCheck, claimedDayKey: workingDay.dayKey },
+                }
+              : {}),
           }
           writes.push({ ref, patch })
           done.push({ ...row, ...patch })
@@ -530,6 +644,16 @@ export async function handlePosCheckIn(deps: PosOpsDeps, req: PluginApiRequest):
         if (row.status !== 'checked_in') {
           return { status: 409, error: 'They are not checked in yet.' } as const
         }
+        // Undoing the check-in of a rain check used today opens it again, on
+        // the day it waited on.
+        const reopened: Partial<HostCheckIn> =
+          row.rainCheck?.kind === 'open' && row.rainCheck.claimedDayKey
+            ? {
+                dayKey: row.rainCheck.fromDayKey,
+                rainCheckOpen: true,
+                rainCheck: { ...row.rainCheck, claimedDayKey: null },
+              }
+            : {}
         const patch: Partial<HostCheckIn> =
           action === 'undo'
             ? {
@@ -542,8 +666,96 @@ export async function handlePosCheckIn(deps: PosOpsDeps, req: PluginApiRequest):
                 undoneAtMs: nowMs,
                 undoneBy: checker?.uid ?? staff.uid,
                 updatedAtMs: nowMs,
+                ...reopened,
               }
             : { wristband, updatedAtMs: nowMs }
+        transaction.update(ref, patch)
+        return { status: 200, row: { ...row, ...patch } } as const
+      })
+      if ('error' in outcome) return { status: outcome.status, body: { error: outcome.error } }
+      return { status: 200, body: { checkIn: outcome.row } }
+    }
+
+    case 'stay_mode': {
+      // The store's quick control for stays (AGL-4043): one check-in per
+      // stay, one per guest, or each resource's own setting. The day asked
+      // for is brought in line at once, so the window sees the change.
+      const mode = body['mode']
+      if (!(STAY_CHECK_IN_MODES as readonly unknown[]).includes(mode)) {
+        return { status: 400, body: { error: 'Choose per resource, one per stay or one per guest.' } }
+      }
+      const day = await readCheckInDay(deps, staff.hostRef, staff.org, body['day'])
+      if ('error' in day) return { status: 400, body: { error: day.error } }
+      await staff.hostRef
+        .collection('settings')
+        .doc(STAY_CHECK_IN_SETTINGS_DOC)
+        .set({ stays: mode, updatedAtMs: deps.now(), updatedBy: staff.uid }, { merge: true })
+      await reconcileCheckInDay(deps, staff.hostRef, day, { force: true })
+      return { status: 200, body: { stayCheckIn: mode, dayKey: day.dayKey } }
+    }
+
+    case 'rain_check':
+    case 'undo_rain_check': {
+      const id = cleanCheckInId(body['id'])
+      if (!id) return { status: 400, body: { error: 'That is not a check-in.' } }
+      const kind = body['kind'] === 'date' ? 'date' : body['kind'] === 'open' ? 'open' : null
+      if (action === 'rain_check' && !kind) {
+        return { status: 400, body: { error: 'Choose an open rain check or a new day.' } }
+      }
+      const askedDay = String(body['day'] ?? '').trim()
+      // Today on the store's calendar: a pass is never moved to a day that
+      // has passed.
+      const today = await readCheckInDay(deps, staff.hostRef, staff.org, '')
+      if ('error' in today) return { status: 400, body: { error: today.error } }
+      const checker = await checkerOf(deps, staff, body)
+      const nowMs = deps.now()
+      const ref = checkIns.doc(id)
+      const outcome = await deps.firestore().runTransaction(async (transaction) => {
+        const snapshot = await transaction.get(ref)
+        if (!snapshot.exists) return { status: 404, error: 'That check-in is no longer due.' } as const
+        const row = rowOf(snapshot)
+        if (action === 'undo_rain_check') {
+          // Nothing to take back: already undone, and a retry says so the same way.
+          if (!row.rainCheck) return { status: 200, row } as const
+          if (row.status !== 'expected') {
+            return { status: 409, error: 'They are already checked in. Undo the check-in first.' } as const
+          }
+          const patch: Partial<HostCheckIn> = {
+            dayKey: row.rainCheck.fromDayKey,
+            rainCheck: null,
+            rainCheckOpen: false,
+            rainCheckUndoneAtMs: nowMs,
+            rainCheckUndoneBy: checker.uid,
+            updatedAtMs: nowMs,
+          }
+          transaction.update(ref, patch)
+          return { status: 200, row: { ...row, ...patch } } as const
+        }
+        // The same rain check asked again (a retried tap) answers what it made.
+        if (
+          row.status === 'expected' &&
+          ((kind === 'open' && row.rainCheckOpen === true) ||
+            (kind === 'date' && row.rainCheck?.kind === 'date' && row.rainCheck.toDayKey === askedDay))
+        ) {
+          return { status: 200, row } as const
+        }
+        const problem = rainCheckProblem(row, { kind: kind!, dayKey: askedDay }, today.dayKey)
+        if (problem) return { status: row.status === 'expected' ? 400 : 409, error: problem } as const
+        const rainCheck: CheckInRainCheck = {
+          kind: kind!,
+          fromDayKey: row.dayKey,
+          toDayKey: kind === 'date' ? askedDay : null,
+          claimedDayKey: null,
+          byUid: checker.uid,
+          byName: checker.name || null,
+          atMs: nowMs,
+        }
+        const patch: Partial<HostCheckIn> = {
+          ...(kind === 'date' ? { dayKey: askedDay } : {}),
+          rainCheck,
+          rainCheckOpen: kind === 'open',
+          updatedAtMs: nowMs,
+        }
         transaction.update(ref, patch)
         return { status: 200, row: { ...row, ...patch } } as const
       })
@@ -573,7 +785,10 @@ async function handleDayList(deps: PosOpsDeps, req: PluginApiRequest): Promise<O
     .where('dayKey', '==', day.dayKey)
     .limit(CHECK_IN_DAY_CEILING + 1)
     .get()
-  const rows = sortCheckInRows(snapshot.docs.slice(0, CHECK_IN_DAY_CEILING).map(rowOf))
+  const [rows, stayCheckIn] = await Promise.all([
+    Promise.resolve(sortCheckInRows(snapshot.docs.slice(0, CHECK_IN_DAY_CEILING).map(rowOf))),
+    readStayCheckInMode(staff.hostRef),
+  ])
   if (format === 'csv') {
     return { status: 200, csv: checkInDayCsv(rows, day.timeZone), filename: `check-ins-${day.dayKey}.csv` }
   }
@@ -584,6 +799,8 @@ async function handleDayList(deps: PosOpsDeps, req: PluginApiRequest): Promise<O
       timeZone: day.timeZone,
       totals: checkInDayTotals(rows),
       checkIns: rows,
+      // How stays are checked in, for the screen's quick control.
+      stayCheckIn,
       truncated: truncated || snapshot.docs.length > CHECK_IN_DAY_CEILING,
     },
   }

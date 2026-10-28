@@ -83,6 +83,7 @@ import { enqueueSupplierDelivery } from './supplier-outbox'
 import { routeCartOrderToSuppliers } from './supplier-routing'
 import { notifyOrderBuyer, onlineReceiptExtras } from './order-notifications'
 import { ORDER_PAID_EVENT, ORDER_REFUNDED_EVENT } from '../model/order-events'
+import { posOrderRefundRecord, POS_ORDER_REFUNDS_COLLECTION } from '../model/commerce-pos-day-report'
 import {
   checkoutExtrasCents,
   decodeCheckoutExtrasMetadata,
@@ -96,6 +97,7 @@ import {
 import { raiseOrderEvent } from './order-events'
 import { handlePosStripeEvent } from './pos-terminal'
 import { notifyPosSaleCompleted } from './pos-sale'
+import { posOrderRefundStripeId } from './pos-order-refund-ids'
 
 /**
  * Assigns unassigned license keys for a digital product (AGL-308):
@@ -599,6 +601,34 @@ async function recordExternalRefund(
       const externalCents = Math.max(0, Number(data['externalRefundedCents'] ?? 0))
       const newCents = stripeRefundedCents - consoleCents - externalCents
       if (!(newCents > 0)) return null
+      // A register sale refunded in Stripe still counts in the day totals,
+      // on the day Stripe gave it (AGL-4037): the same record the console's
+      // refund leaves, keyed by the charge's refunded total, which this
+      // transaction only ever advances once per amount.
+      const registerRefund = posOrderRefundRecord({
+        orderId: orderRef.id,
+        order: data as never,
+        refundedCents: newCents,
+        paymentIntentId:
+          typeof charge?.payment_intent === 'string'
+            ? charge.payment_intent
+            : String(charge?.payment_intent?.id ?? ''),
+        cashierId: null,
+        source: 'stripe',
+        stripeRefundId: (charge?.refunds?.data ?? [])[0]?.id ? String(charge.refunds.data[0].id) : null,
+        atMs: Date.now(),
+      })
+      const hostRef = orderRef.parent.parent
+      if (registerRefund && hostRef) {
+        transaction.set(
+          hostRef
+            .collection('registers')
+            .doc(registerRefund.registerId)
+            .collection(POS_ORDER_REFUNDS_COLLECTION)
+            .doc(posOrderRefundStripeId(String(charge?.id ?? orderRef.id), stripeRefundedCents)),
+          registerRefund,
+        )
+      }
       transaction.set(
         orderRef,
         {
@@ -3549,6 +3579,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             return {
               productId: line.productId,
               ...(line.variantId ? { variantId: line.variantId } : {}),
+              // The day the buyer chose to use a check-in item (AGL-4043),
+              // checked when the session was made.
+              ...(CommerceModel.isCheckInDayKey(line.useDayKey) ? { useDayKey: line.useDayKey } : {}),
               name: product.name,
               ...(variant && Object.keys(variant.options ?? {}).length
                 ? {

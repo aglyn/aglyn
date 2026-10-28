@@ -16,11 +16,13 @@
  */
 
 import {
+  WAIVER_DEFAULT_ADULT_AGE,
   WAIVER_LIMITS,
   addDays,
   formatDayKey,
   isDayKey,
   validityLabel,
+  waiverAdultAge,
   waiverBodyText,
   type WaiverDraft,
   type WaiverValidity,
@@ -42,26 +44,80 @@ export const WAIVER_METHOD_LABELS: Record<WaiverSignMethod, string> = {
 }
 
 /**
- * The age below which somebody is a minor here, so a parent or guardian
- * signs for them. One number for every site today; where a state sets a
- * different age, that is the merchant's waiver text to say.
+ * The age below which somebody is a minor on a waiver that sets none, so a
+ * parent or guardian signs for them. Each waiver sets its own adult age
+ * (`waiverAdultAge`); this is the one a waiver saved before that setting
+ * reads as.
  */
-export const WAIVER_ADULT_AGE = 18
+export const WAIVER_ADULT_AGE = WAIVER_DEFAULT_ADULT_AGE
 
 /**
- * The sentence a signer agrees to before an electronic signature counts as
- * theirs (the consent the US ESIGN Act and UETA ask for). Stored on every
- * signature exactly as shown, with its version, so a later wording change
- * never rewrites what somebody agreed to. It says what signing electronically
- * means for the signer; it makes no claim about how a court reads a waiver.
+ * The first consent sentence (version 1), as every signature taken under it
+ * stored it. Kept for the record: a v1 signature carries its own copy of
+ * these words, which no later version rewrites.
+ */
+export const WAIVER_ESIGN_CONSENT_V1_TEXT =
+  'I agree to sign this waiver electronically and to receive it and my signed copy by email. ' +
+  'I intend my electronic signature to be my signature on this waiver. ' +
+  'I can ask the business for a paper copy instead.'
+
+/**
+ * What a signer agrees to before an electronic signature counts as theirs
+ * (the consumer consent the US ESIGN Act, 15 U.S.C. 7001(c), and UETA ask
+ * for), VERSION 2 (AGL-4042). It answers each disclosure the first version
+ * left open: that it covers this waiver and its copy only, the minors the
+ * signer lists too; the device needed, and the PDF the copy comes as, by
+ * email only when an address is given, and to download on finishing; that
+ * paper is the alternative; and how to get a paper copy (no charge), change
+ * the email, or withdraw — by contacting the business, whose contact the
+ * page shows — and what withdrawing does not undo.
+ *
+ * `{business}` is the site's business name and `{contact}` its contact
+ * (`waiverBusinessContact`), so the text a signature stores is the exact
+ * sentence its signer read. Stored on every signature with its version, so a
+ * later wording never rewrites what somebody agreed to. It makes no claim
+ * about how a court reads a waiver. ⚠️ Counsel reads it before production use.
  */
 export const WAIVER_ESIGN_CONSENT = {
-  version: 1,
-  text:
-    'I agree to sign this waiver electronically and to receive it and my signed copy by email. ' +
-    'I intend my electronic signature to be my signature on this waiver. ' +
-    'I can ask the business for a paper copy instead.',
+  version: 2,
+  heading: 'Signing electronically',
+  template:
+    'I agree to sign this waiver electronically, for myself and for any minors I list, and I intend my drawn or typed signature to be my signature. ' +
+    'This agreement covers only this waiver and my signed copy of it. ' +
+    'To sign here I need a device with a current web browser. ' +
+    'If I give an email address, {business} will email my signed copy to it as a PDF file, which most phones and computers can open, and I can also download it when I finish signing. ' +
+    'I don’t have to sign electronically: I can ask {business} to let me sign on paper instead. ' +
+    'After I sign, I can ask {business} for a paper copy at no charge, change the email address for my copy, or withdraw this agreement for anything not yet sent to me, by contacting {business}{contact}. ' +
+    'Withdrawing doesn’t undo a signature I have already given.',
 } as const
+
+/**
+ * The consent sentence as a signer of this site reads it, and as their
+ * signature stores it: the business's name, and ` at ` its contact when the
+ * site has one. Without a name, "the business".
+ */
+export function waiverEsignConsentText(input: { business: string | null | undefined; contact: string | null | undefined }): string {
+  const business = String(input.business ?? '').trim().slice(0, 200) || 'the business'
+  const contact = String(input.contact ?? '').trim().slice(0, 300)
+  return WAIVER_ESIGN_CONSENT.template
+    .replace(/\{business\}/g, business)
+    .replace('{contact}', contact ? ` at ${contact}` : '')
+}
+
+/**
+ * How a signer reaches the business, as the consent and the signing page
+ * name it: the site's contact email (its listing's, or its support email)
+ * and its phone, either or both; null when the site has neither.
+ */
+export function waiverBusinessContact(host: {
+  seo?: { entity?: { email?: unknown; telephone?: unknown } | null } | null
+  business?: { supportEmail?: unknown } | null
+} | null | undefined): string | null {
+  const text = (value: unknown, max: number) => (typeof value === 'string' && value.trim() ? value.trim().slice(0, max) : '')
+  const email = text(host?.seo?.entity?.email, 320) || text(host?.business?.supportEmail, 320)
+  const phone = text(host?.seo?.entity?.telephone, 64)
+  return [email, phone].filter(Boolean).join(' or ') || null
+}
 
 export interface WaiverMinor {
   name: string
@@ -107,6 +163,12 @@ export interface StoredWaiverSignature {
   /** The exact text agreed to, kept as a snapshot, and its sha256 (hex). */
   signedText: string
   signedTextSha256: string
+  /**
+   * The adult age the signing was checked against: the waiver's own, as it
+   * stood at the version signed. Absent on a signature taken before each
+   * waiver set its own, which was checked against the default.
+   */
+  adultAge?: number
   signer: WaiverSigner
   minors: WaiverMinor[]
   guardianRelationship: string | null
@@ -141,9 +203,35 @@ export interface StoredWaiverSignature {
   emailLower: string
   nameLower: string
   nameTokens: string[]
+  /**
+   * One match key per person the signature covers, the signer and each
+   * minor: `name|YYYY-MM-DD`, the name lower case with its spacing settled
+   * (`waiverNameDobKeys`, AGL-4042). What check-in matches a rider by when
+   * their email matches nothing. Absent on a signature taken before the
+   * field, until `backfill-waiver-name-dob-keys.mts` stamps it.
+   */
+  nameDobKeys?: string[]
   voidedAt: number | null
   voidedBy: string | null
   voidReason: string | null
+  /**
+   * The signer asked to be erased (AGL-4042). The signature is the store's
+   * record of what they agreed to, so it is kept rather than deleted, until
+   * {@link retainUntilMs}; the link to their people record is cleared, since
+   * that record is erased. Absent or `null` for a signer who never asked.
+   */
+  erasure?: { requestedAtMs: number } | null
+  /**
+   * When the signature is deleted, epoch ms: the end of the store's waiver
+   * retention period (`waiverRetainUntilMs`). The waivers retention job
+   * deletes it, with its drawn signature and paper photo, on the first run
+   * after. Stamped on every signature when it is signed, and again when the
+   * store changes the period; absent only on one signed before every
+   * signature was stamped, until the backfill or the job reaches it.
+   */
+  retainUntilMs?: number | null
+  /** The retention period, in whole years, {@link retainUntilMs} was counted with. */
+  retentionYears?: number | null
 }
 
 /** What the console list shows of one signature (no strokes, no snapshot). */
@@ -161,6 +249,8 @@ export interface WaiverSignatureRow {
   dayKey: string
   validThroughDayKey: string
   voided: boolean
+  /** Kept after its signer asked to be erased, until this time (epoch ms); `null` otherwise. */
+  retainedUntilMs: number | null
 }
 
 export function signatureRow(signature: StoredWaiverSignature): WaiverSignatureRow {
@@ -178,6 +268,7 @@ export function signatureRow(signature: StoredWaiverSignature): WaiverSignatureR
     dayKey: signature.dayKey,
     validThroughDayKey: signature.validThroughDayKey,
     voided: Boolean(signature.voidedAt),
+    retainedUntilMs: signature.erasure ? (signature.retainUntilMs ?? null) : null,
   }
 }
 
@@ -280,10 +371,11 @@ export function normalizeSignInput(
   if (!isDayKey(signer.dateOfBirth) || signer.dateOfBirth > dayKey) {
     return { ok: false, error: 'Enter your date of birth.' }
   }
-  if (ageOn(signer.dateOfBirth, dayKey) < WAIVER_ADULT_AGE) {
+  const adultAge = waiverAdultAge(waiver)
+  if (ageOn(signer.dateOfBirth, dayKey) < adultAge) {
     return {
       ok: false,
-      error: `Anyone under ${WAIVER_ADULT_AGE} needs a parent or guardian to sign for them.`,
+      error: `Anyone under ${adultAge} needs a parent or guardian to sign for them.`,
     }
   }
   const minorsRaw = Array.isArray(body['minors']) ? body['minors'] : []
@@ -302,8 +394,8 @@ export function normalizeSignInput(
     if (!isDayKey(dateOfBirth) || dateOfBirth > dayKey) {
       return { ok: false, error: `Enter ${name}’s date of birth.` }
     }
-    if (ageOn(dateOfBirth, dayKey) >= WAIVER_ADULT_AGE) {
-      return { ok: false, error: `${name} is ${WAIVER_ADULT_AGE} or older, so they sign their own waiver.` }
+    if (ageOn(dateOfBirth, dayKey) >= adultAge) {
+      return { ok: false, error: `${name} is ${adultAge} or older, so they sign their own waiver.` }
     }
     minors.push({ name, dateOfBirth })
   }
@@ -354,7 +446,7 @@ export function normalizeSignInput(
  */
 export function waiverSignedText(
   waiver: WaiverDraft & { version: number },
-  options: { consent: boolean },
+  options: { consent: boolean; consentText?: string },
 ): string {
   const parts = [
     waiver.title,
@@ -363,7 +455,10 @@ export function waiverSignedText(
     ...waiver.checkboxes.map((box) => `[x] ${box.label}`),
     validityLabel(waiver.validity),
   ]
-  if (options.consent) parts.push(`Electronic signature consent: ${WAIVER_ESIGN_CONSENT.text}`)
+  if (options.consent) {
+    const consent = options.consentText ?? waiverEsignConsentText({ business: null, contact: null })
+    parts.push(`Electronic signature consent: ${consent}`)
+  }
   return parts.filter(Boolean).join('\n\n')
 }
 

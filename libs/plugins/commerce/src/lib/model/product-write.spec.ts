@@ -37,6 +37,10 @@ const product: EditedProduct = {
 describe('productSaveFields: what the product editor writes', () => {
   const fields = productSaveFields(product, 1_000)
 
+  it('makes a sample the merchant saves their own (AGL-4065)', () => {
+    expect(productSaveFields({ ...product, sample: true }, 1_000)).not.toHaveProperty('sample')
+  })
+
   it('drops the listener id and the seeded codes', () => {
     expect(fields).not.toHaveProperty('$id')
     expect((fields as { skus?: string[] }).skus).toEqual(productSearchFields({ name: 'Latte', variants: product.variants }).skus)

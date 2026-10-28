@@ -1,8 +1,8 @@
 {
   "team": "AGL",
-  "highest": 4068,
-  "verifiedAt": "2026-10-25",
-  "verifiedBy": "AGL-4068 (Google Cloud alert sweep 10/22–10/25: client error beacon (React error 185, Besigner onClick, reCAPTCHA timeout), Todo) is cited by this change; read from the workspace 2026-10-25.",
+  "highest": 4091,
+  "verifiedAt": "2026-10-28",
+  "verifiedBy": "Read from the workspace 2026-10-28 ~21:47Z: AGL-4091 (Upgrade Next.js to 16.4.3 for two critical RCE advisories) was created then and is the newest issue.",
   "note": "The highest issue identifier that EXISTS, and a FLOOR rather than the answer. Any citation above it was never assigned, because Linear numbers issues sequentially per team. check-linear-ids.mjs asks Linear for the real highest on every run and can only ever RAISE this number with the answer, so with LINEAR_API_KEY set there is nothing to maintain here; this value is what the check falls back to when the query cannot be made. Raise it only after reading the workspace — never to whatever number a failing check just reported. See tools/scripts/lib/linear-ids.mjs.",
   "historicalCitations": {
     "note": "Commits already on `main` whose messages cite a fabricated id. History is NOT rewritten (see docs/DECISION_LOG.md, 2026-08-28), so the commit sweep would otherwise be permanently red and the guard would never be wirable into CI. Listed by sha rather than exempted by date: a FIFTEENTH such commit still fails. This list may shrink and must never grow.",

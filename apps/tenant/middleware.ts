@@ -41,6 +41,9 @@ import {
 // Deep import for the same reason: the leaving notice's path, from a leaf
 // with no imports of its own (AGL-3452).
 import { LEAVING_NOTICE_PATH } from '@aglyn/aglyn/app-utils/leaving-notice'
+// Deep import for the same reason: one pure function with no imports, the
+// merge a site redirect applies to the visitor's query string.
+import { withVisitorQuery } from '@aglyn/aglyn/app-utils/redirect-query'
 import { nativeAppAssociationRoute } from '@aglyn/aglyn/app-utils/native-app-association'
 // Deep import for the same reason: a leaf with no imports of its own.
 import { boundedAwait } from '@aglyn/shared-util-http/bounded-await'
@@ -546,6 +549,81 @@ async function hostVerdict(
   }
 }
 
+/**
+ * Site redirects keep the visitor's query string.
+ *
+ * The loader applies a site's redirect rules from an ISR-cached render keyed
+ * on the PATH, so the query never reaches it: `example.com/booth?ref=flyer`
+ * arrived at the rule's destination without `ref`. Only this middleware sees
+ * the query, and it cannot read Firestore, so a request that CARRIES one asks
+ * `/api/redirect-verdict` whether its path redirects — the fetch-a-verdict
+ * pattern of the lockdown check above — and answers the redirect itself with
+ * the visitor's parameters merged in (`withVisitorQuery`: the rule's own
+ * parameters win, the rest are added).
+ *
+ * A request without a query is untouched: it costs no fetch, and the loader's
+ * redirect serves it exactly as before. Memoized per host and path for as long
+ * as a rule edit takes to go live through the loader (30s), negative answers
+ * included, since most query-bearing requests are ordinary pages with
+ * campaign tags.
+ *
+ * FAILS TOWARD THE PAGE: an unreachable or slow verdict means no redirect
+ * here, the request is rewritten as usual, and the loader still redirects it —
+ * without the visitor's query, which is the old behaviour, never a lost rule.
+ */
+const REDIRECT_VERDICT_TTL_MS = 30_000
+/** Short, unlike the lockdown deadline: the page is the fallback, not an outage. */
+const REDIRECT_VERDICT_DEADLINE_MS = 1_500
+/** Bounds the memo; the oldest entry goes first. */
+const REDIRECT_VERDICT_MAX_ENTRIES = 2_000
+const redirectVerdicts = new Map<
+  string,
+  { at: number; destination: string | null; statusCode: number }
+>()
+
+async function redirectVerdict(
+  origin: string,
+  tenantHost: string,
+  pathname: string,
+): Promise<{ destination: string; statusCode: number } | null> {
+  const key = `${tenantHost} ${pathname}`
+  const cached = redirectVerdicts.get(key)
+  if (cached && Date.now() - cached.at < REDIRECT_VERDICT_TTL_MS) {
+    return cached.destination
+      ? { destination: cached.destination, statusCode: cached.statusCode }
+      : null
+  }
+  const verdict = await boundedAwait(
+    (signal) =>
+      fetch(
+        `${origin}/api/redirect-verdict?host=${encodeURIComponent(tenantHost)}&path=${encodeURIComponent(pathname)}`,
+        { headers: { accept: 'application/json' }, signal },
+      ).then(async (response) =>
+        response.ok ? await response.json().catch(() => null) : null,
+      ),
+    REDIRECT_VERDICT_DEADLINE_MS,
+    null,
+    'tenant-middleware.redirect-verdict',
+  ).catch(() => null)
+  // Not memoized when the route could not answer: the next request asks again
+  // rather than holding a guess for 30 seconds.
+  if (!verdict || typeof verdict !== 'object') return null
+  const data = verdict as { destination?: unknown; statusCode?: unknown }
+  const destination =
+    typeof data.destination === 'string' && data.destination
+      ? data.destination
+      : null
+  const statusCode = [301, 302, 307, 308].includes(data.statusCode as number)
+    ? (data.statusCode as number)
+    : 302
+  if (redirectVerdicts.size >= REDIRECT_VERDICT_MAX_ENTRIES) {
+    const oldest = redirectVerdicts.keys().next().value
+    if (oldest !== undefined) redirectVerdicts.delete(oldest)
+  }
+  redirectVerdicts.set(key, { at: Date.now(), destination, statusCode })
+  return destination ? { destination, statusCode } : null
+}
+
 export const middleware: NextMiddleware = async (req, event) => {
   // The native apps' association documents (AGL-3817), FIRST: they are not a
   // page of any site, so no host is resolved, no lockdown verdict is spent and
@@ -817,6 +895,29 @@ export const middleware: NextMiddleware = async (req, event) => {
     return NextResponse.rewrite(leavingUrl, {
       request: { headers: leavingHeaders },
     })
+  }
+
+  // Site redirects keep the visitor's query string: see `redirectVerdict`.
+  // Below the lockdown and leaving branches, so a locked site redirects
+  // nowhere; skipped for an entry preview, whose token is the query.
+  if (
+    req.nextUrl.search &&
+    (req.method === 'GET' || req.method === 'HEAD') &&
+    !req.nextUrl.searchParams.has(ENTRY_PREVIEW_PARAM)
+  ) {
+    const redirect = await redirectVerdict(
+      req.nextUrl.origin,
+      tenantHost,
+      req.nextUrl.pathname,
+    )
+    if (redirect) {
+      return new NextResponse(null, {
+        status: redirect.statusCode,
+        headers: {
+          Location: withVisitorQuery(redirect.destination, req.nextUrl.search),
+        },
+      })
+    }
   }
 
   // Per-host SEO files resolve through api routes (SEO Toolkit). Clone the

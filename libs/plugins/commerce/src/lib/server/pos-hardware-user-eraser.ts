@@ -24,9 +24,12 @@ import {
   POS_HARDWARE_ORDERS_COLLECTION,
   POS_HARDWARE_SALES_COLLECTION,
   posHardwareBuyerErasedPatch,
+  posHardwareRefundable,
   posHardwareSaleRecord,
+  posHardwareSaleSetOptions,
   type PosHardwareOrder,
 } from '../model/pos-hardware'
+import { closeUnshippedPosHardwareOrders, type PosHardwareClosureCounts } from './pos-hardware-closure'
 
 /*==========================================
  * COMMERCE'S SHARE OF AN ACCOUNT ERASURE: HARDWARE ORDERS (AGL-4038).
@@ -35,9 +38,14 @@ import {
  * an account erasure keeps it and every amount on it, and takes the BUYER
  * off it: who started it, the email, the name, the phone, the street and the
  * tracking (`posHardwareBuyerErasedPatch`). The country, state and postal
- * code stay, because sales tax is sourced by them. The retained sale record
- * (`posHardwareSales/{orderId}`) never held the person, and is rewritten
- * from the redacted order in the same transaction so the two agree.
+ * code stay, because sales tax is sourced by them.
+ *
+ * The retained sale record (`posHardwareSales/{orderId}`) KEEPS the buyer's
+ * name and address, and nothing else of theirs: they are the reseller's
+ * records Stripe's Terminal Reseller Terms §10 ask for, kept for the
+ * record's seven years. It is rewritten from the redacted order in the same
+ * transaction, with `posHardwareSaleSetOptions`, which leaves the stored
+ * name and address in place; the email, phone and tracking were never on it.
  *
  * Found by a COLLECTION-GROUP query on `createdBy`, so an order placed in a
  * workspace the person has since left is reached too — the support-thread
@@ -48,6 +56,13 @@ import {
  * says so (`formerWorkspacesReached: false`), rather than reporting a clean
  * pass over orders it could not see.
  *
+ * FIRST, AN ORDER THAT HAS NOT SHIPPED IS CANCELED AND REFUNDED (AGL-4038
+ * closure). Closing the account that placed it cancels every `paid` or
+ * `ordered` order of theirs, refunds it in full and emails them about it
+ * (`pos-hardware-closure.ts`), while the order still carries the address the
+ * email goes to; only then is the buyer taken off it. A refusal is alerted
+ * and counted, and the erasure goes on.
+ *
  * Idempotent: a redacted order no longer carries the uid, so a second run
  * finds nothing to do.
  *=========================================*/
@@ -57,15 +72,25 @@ type Firestore = FirebaseFirestore.Firestore
 export interface PosHardwareUserEraserDeps {
   firestore(): Firestore
   now?: () => number
+  /** The closure's cancel, replaceable in a spec. */
+  closeUnshipped?: typeof closeUnshippedPosHardwareOrders
 }
 
 const LABEL = '[pos-hardware] user eraser'
 
+/** The closure's counts where nothing was unshipped. */
+const NO_CLOSURE: PosHardwareClosureCounts = {
+  hardwareOrdersCanceled: 0,
+  hardwareOrdersPlacedWithStripe: 0,
+  hardwareRefundsFailed: 0,
+}
+
 export function createPosHardwareUserEraser(deps: PosHardwareUserEraserDeps): PluginUserEraser {
   return async ({ uid, orgIds }): Promise<PluginUserErasureReport> => {
-    if (!uid) return { hardwareOrdersRedacted: 0, formerWorkspacesReached: true }
+    if (!uid) return { hardwareOrdersRedacted: 0, formerWorkspacesReached: true, ...NO_CLOSURE }
     const db = deps.firestore()
     const now = deps.now ?? Date.now
+    const closeUnshipped = deps.closeUnshipped ?? closeUnshippedPosHardwareOrders
 
     let refs: FirebaseFirestore.DocumentReference[]
     let formerWorkspacesReached = true
@@ -87,6 +112,19 @@ export function createPosHardwareUserEraser(deps: PosHardwareUserEraserDeps): Pl
       }
     }
 
+    // Cancel and refund what has not shipped, while each order still names
+    // the buyer the email goes to.
+    const placed: Array<{ orderId: string; order: PosHardwareOrder }> = []
+    for (const ref of refs) {
+      const order = (await ref.get()).data() as PosHardwareOrder | undefined
+      if (order && order.createdBy === uid && posHardwareRefundable(order.status)) {
+        placed.push({ orderId: ref.id, order })
+      }
+    }
+    const closure: PosHardwareClosureCounts = placed.length
+      ? await closeUnshipped(placed, 'account-closed')
+      : { ...NO_CLOSURE }
+
     let hardwareOrdersRedacted = 0
     for (const ref of refs) {
       const redacted = await db.runTransaction(async (transaction) => {
@@ -95,16 +133,21 @@ export function createPosHardwareUserEraser(deps: PosHardwareUserEraserDeps): Pl
         // Gone, or already someone else's: nothing of this person is on it.
         if (!snapshot.exists || !order || order.createdBy !== uid) return false
         const patch = posHardwareBuyerErasedPatch(order, now())
+        const erased = { ...order, ...patch } as PosHardwareOrder
         transaction.update(ref, patch)
+        // The record keeps the buyer's name and address (the reseller's
+        // records): the erased order no longer has them, so the write leaves
+        // the stored ones in place.
         transaction.set(
           db.collection(POS_HARDWARE_SALES_COLLECTION).doc(ref.id),
-          posHardwareSaleRecord(ref.id, { ...order, ...patch } as PosHardwareOrder),
+          posHardwareSaleRecord(ref.id, erased),
+          posHardwareSaleSetOptions(erased),
         )
         return true
       })
       if (redacted) hardwareOrdersRedacted += 1
     }
-    return { hardwareOrdersRedacted, formerWorkspacesReached }
+    return { hardwareOrdersRedacted, formerWorkspacesReached, ...closure }
   }
 }
 

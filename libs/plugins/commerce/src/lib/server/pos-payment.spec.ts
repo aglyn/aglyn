@@ -27,6 +27,7 @@ import type { PluginApiRequest, PluginApiResponse } from '@aglyn/aglyn/server'
 import { fakeDocs, resetFakeFirestore } from '../testing/fake-firestore'
 import { registerPluginSmsMessaging } from '@aglyn/aglyn/plugin-manager/plugin-sms-messaging'
 import { posCardProcessingCostCents } from './pos-stripe'
+import { posOfflineCardOrderMoney } from './pos-offline-card-order'
 
 const mockDecrement = jest.fn(async (options: any) => ({
   before: { variants: [] },
@@ -83,7 +84,18 @@ jest.mock('@aglyn/shared-util-email', () => ({
   sendEmail: async () => undefined,
 }))
 jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
-  resolveOrgPermissions: async () => ({ permissions: { managePos: true } }),
+  // As the real resolver answers for a site (AGL-4047): nothing for someone
+  // with no access to it, the site role's default otherwise.
+  resolveOrgPermissions: async (uid: string, context: { hostId?: string }) => ({
+    permissions: {
+      managePos: jest
+        .requireActual('../testing/site-register-permissions')
+        .siteRegisterVerdict(
+          jest.requireActual('../testing/fake-firestore').fakeDocs.get(`hosts/${context?.hostId}`)?.memberRoles,
+          uid,
+        ),
+    },
+  }),
 }))
 jest.mock('@aglyn/tenant-data-admin/server/payment-provider', () => ({
   merchantAccountIsReady: () => true,
@@ -461,6 +473,72 @@ describe('the platform fee on a split sale (AGL-4036)', () => {
     expect(sale().totals.feeCents).toBe(0)
     expect(sale().feeCollection).toBeUndefined()
     expect(accrual()).toBeUndefined()
+  })
+})
+
+/*
+ * A CARD TAKEN OFFLINE THAT WAS DECLINED (AGL-4039), collected later at the
+ * register. The offline sync records it unpaid, exactly as seeded here, with
+ * the sale's take for the collection to read; the stock went with the
+ * customer and was taken at sync, so completing it takes none.
+ */
+describe('a declined offline card, collected later at the register (AGL-4039)', () => {
+  const seedDeclinedOffline = (withTake = true) => {
+    seedSale()
+    const totals = { itemsCents: 10_000, shippingCents: 0, taxCents: 0, discountCents: 0, feeCents: 0, totalCents: 10_000 }
+    const money = posOfflineCardOrderMoney({
+      settled: { kind: 'unpaid', flag: 'card-declined', intentId: 'pi_offline_9', message: 'Your card was declined.' },
+      totals,
+      planTakeCents: 200,
+      soldAtMs: 1_000,
+      nowMs: 2_000,
+      cashierId: 'cashier-1',
+      feeOrgId: 'org-1',
+    })
+    const withoutTake: Record<string, unknown> = { ...money.fields }
+    delete withoutTake['posTakeFeeCents']
+    delete withoutTake['posFeeOrgId']
+    fakeDocs.set(ORDER, {
+      number: 7,
+      status: money.status,
+      channel: 'pos',
+      registerId: 'register-1',
+      lineItems: [{ productId: 'coffee', name: 'Coffee', quantity: 2, unitAmountCents: 5000 }],
+      totals: money.totals,
+      payments: [money.payment],
+      ...(withTake ? money.fields : withoutTake),
+      offline: { saleKey: 'sale-1', soldAtMs: 1_000, syncedAtMs: 2_000, syncedBy: 'cashier-1', flags: ['card-declined'] },
+      timeline: [],
+    })
+  }
+
+  it('charges a card that collects it the sale’s take, and takes no stock twice', async () => {
+    seedDeclinedOffline()
+    const paid = await act({ action: 'card-keyed', amountCents: 10_000, paymentMethodId: 'pm_cardVisa1234' }, 'k-later')
+    expect(paid.body.completed).toBe(true)
+    const create = stripeCalls.find((call) => call.path === 'payment_intents')!
+    expect(Number(create.params.get('application_fee_amount'))).toBe(200 + posCardProcessingCostCents(10_000))
+    expect(sale().status).toBe('paid')
+    expect(sale().totals.feeCents).toBe(200 + posCardProcessingCostCents(10_000))
+    expect(sale().paymentIntentId).toBe(sale().payments[1].paymentIntentId)
+    expect(mockDecrement).not.toHaveBeenCalled()
+    expect(mockSaleCompleted).toEqual(['sale-1'])
+  })
+
+  it('accrues the take of a room charge that collects it to the invoice', async () => {
+    seedDeclinedOffline()
+    fakeDocs.set('hosts/host-1/reservations/stay-9', { status: 'checked-in' })
+    const paid = await act({ action: 'folio', reservationId: 'stay-9' }, 'f-later')
+    expect(paid.body.completed).toBe(true)
+    expect(accrual()).toMatchObject({ feeCents: 200, orders: 1 })
+    expect(mockDecrement).not.toHaveBeenCalled()
+  })
+
+  it('charged no take at all while the unpaid order carried none (the defect)', async () => {
+    seedDeclinedOffline(false)
+    await act({ action: 'card-keyed', amountCents: 10_000, paymentMethodId: 'pm_cardVisa1234' }, 'k-old')
+    const create = stripeCalls.find((call) => call.path === 'payment_intents')!
+    expect(Number(create.params.get('application_fee_amount'))).toBe(posCardProcessingCostCents(10_000))
   })
 })
 

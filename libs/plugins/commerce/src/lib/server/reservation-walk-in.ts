@@ -22,8 +22,13 @@ import * as CommerceModel from '../model'
 import {
   readLiveReservations,
   reservationAvailabilityQuery,
+  reservationsOnPlan,
 } from './reservation-availability-query'
-import { bodyOf, gate, resolved, validId, type ProductsWriteDeps } from './products-write'
+import {
+  RESERVATION_SITE_ROLE_PRESET,
+  reservationPermissionRefusal,
+} from '../model/plugin-permissions'
+import { bodyOf, gate, resolved, validId, type GatePermission, type ProductsWriteDeps } from './products-write'
 
 /*
  * `POST /api/commerce/reservations/walk-in` (AGL-4046): a staff walk-in,
@@ -37,12 +42,17 @@ import { bodyOf, gate, resolved, validId, type ProductsWriteDeps } from './produ
  * storefront's `/api/commerce/reserve` uses, so the loser's transaction re-runs
  * on the winner's write and is refused.
  *
- * Who may call it is who the Firestore rules let write a reservation from the
- * console: a verified member with a content-write role on the site
- * (`canWriteHostContent`: admin, editor, author), or staff, while the site,
- * its org and the platform are not frozen. That is `products-write.ts`'s
- * `gate`, reused rather than restated. The commerce plugin must also be on for
- * the site.
+ * Who may call it: a verified member who holds "Book walk-ins and change
+ * guests" (`commerce.walkIns`, AGL-4047) on the site, or staff, while the
+ * site, its org and the platform are not frozen. The key's preset is the
+ * site role that wrote a reservation before it was a key (Admin, Editor,
+ * Author), and it follows "Manage reservations" unless a role or member sets
+ * it, so nobody's access moved; a custom role can now grant it to the
+ * window's staff. That is `products-write.ts`'s `gate`, reused rather than
+ * restated, reading the key as the rules do. The commerce plugin must
+ * also be on for the site, and the store's plan must take reservations: the
+ * same `commerce` entitlement `/api/commerce/reserve` asks
+ * (`reservationsOnPlan`), so a lapsed plan books through neither door.
  *
  * The stay is written with exactly the fields the card wrote: confirmed, no
  * email, no deposit, nothing paid. Payment is collected at the register.
@@ -54,6 +64,21 @@ export const WALK_IN_TAKEN_EVERY_UNIT =
   'Every unit is taken on at least one of those nights'
 export const WALK_IN_PLUGIN_OFF = 'Reservations are not turned on for this site'
 export const WALK_IN_ID_CONFLICT = 'That walk-in id belongs to another stay'
+/**
+ * A member who does not hold "Book walk-ins and change guests" on the site
+ * (AGL-4047): the refusal names the permission and who can change it, never
+ * a role.
+ */
+export const WALK_IN_PERMISSION_REFUSAL = reservationPermissionRefusal('commerce.walkIns')
+
+/** The key a walk-in and a guests change check, read as the rules read it. */
+export const WALK_IN_PERMISSION: GatePermission = {
+  key: 'commerce.walkIns',
+  presetFor: RESERVATION_SITE_ROLE_PRESET,
+  refusal: WALK_IN_PERMISSION_REFUSAL,
+}
+/** A store whose plan does not take reservations, worded as the plan refusals are. */
+export const WALK_IN_PLAN_REFUSAL = 'Reservations are not included in your plan — see Billing'
 
 /** The refusal for dates with no free unit, worded for the resource. */
 export function walkInTakenMessage(resource: CommerceModel.HostResource): string {
@@ -71,6 +96,12 @@ type Outcome =
   | { status: 200; body: { reservationId: string; replayed?: true } }
   | { status: 409; body: { error: string } }
 
+/*
+ * Body: `{ hostId, resourceId, checkInDayMs, checkOutDayMs, guestName?,
+ * guests?, reservationId? }`. `guests` (AGL-4043) is how many the stay is
+ * for, 1 up to what the resource sleeps; a stay checked in per guest makes a
+ * check-in for each.
+ */
 export function createReservationWalkInHandler(
   options: ProductsWriteDeps = {},
 ): PluginApiHandler {
@@ -88,6 +119,11 @@ export function createReservationWalkInHandler(
       typeof body['guestName'] === 'string'
         ? body['guestName'].trim().slice(0, 120)
         : ''
+    // How many guests (AGL-4043): optional, checked against what the
+    // resource sleeps once it is read.
+    const rawGuests = body['guests']
+    const guestsAsked =
+      rawGuests === undefined || rawGuests === null || rawGuests === '' ? undefined : Number(rawGuests)
     // Optional, client-minted: a retry of the same walk-in (a dropped
     // response on a weak signal) finds its own stay instead of booking a
     // second unit.
@@ -102,10 +138,16 @@ export function createReservationWalkInHandler(
       return res.status(400).json({ error: 'Missing walk-in details' })
     }
     try {
-      const door = await gate(req, res, hostId, deps)
+      const door = await gate(req, res, hostId, deps, { permission: WALK_IN_PERMISSION })
       if (!door) return
       if (!isHostPluginEnabled(door.org as never, door.host.data() as never, BUNDLE_ID)) {
         return res.status(403).json({ error: WALK_IN_PLUGIN_OFF })
+      }
+      // The plan question every reservation door asks (AGL-1873), before
+      // anything is read or written. Staff impersonating a store still meet
+      // it: the walk-in books for the store, on the store's plan.
+      if (!reservationsOnPlan(door.org)) {
+        return res.status(403).json({ error: WALK_IN_PLAN_REFUSAL })
       }
       const db = deps.firestore()
       const hostRef = db.collection('hosts').doc(hostId)
@@ -118,6 +160,8 @@ export function createReservationWalkInHandler(
       // stay), shared with the card, the widget and both native apps.
       const quote = CommerceModel.computeReservationQuote(resource, checkInDayMs, checkOutDayMs)
       if (quote.problem) return res.status(400).json({ error: quote.problem })
+      const guestsProblem = CommerceModel.reservationGuestsProblem(guestsAsked, resource)
+      if (guestsProblem) return res.status(400).json({ error: guestsProblem })
 
       const reservations = hostRef.collection('reservations')
       const availability = reservationAvailabilityQuery(reservations, resourceId, checkInDayMs)
@@ -159,6 +203,7 @@ export function createReservationWalkInHandler(
           checkOutDayMs,
           guestName: guestName || null,
           guestEmail: null,
+          ...(guestsAsked !== undefined ? { guests: guestsAsked } : {}),
           nights: quote.nights,
           totalCents: quote.totalCents,
           depositCents: 0,

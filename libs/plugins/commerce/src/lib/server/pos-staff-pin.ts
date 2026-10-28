@@ -21,6 +21,7 @@ import {
   POS_PIN_MAX_ATTEMPTS,
   posPinProblem,
 } from '../model/commerce-pos-ops'
+import { holdsPosPermission } from '../model/plugin-permissions'
 import { hashMemberPassword, verifyMemberPassword } from './membership'
 import {
   authorizePosOps,
@@ -96,12 +97,10 @@ export async function handlePosStaffPin(deps: PosOpsDeps, req: PluginApiRequest)
           body: { error: "Only a workspace admin can set another member's PIN." },
         }
       }
-      if (target !== staff.uid) {
-        const host = await staff.hostRef.get()
-        const role = (host.get('memberRoles') ?? {})[target]
-        if (role !== 'admin' && role !== 'editor') {
-          return { status: 404, body: { error: 'That member does not work on this site.' } }
-        }
+      // Whoever works this site's register, by permission, not by site role
+      // (AGL-4047): the gate every PIN use re-asks.
+      if (target !== staff.uid && !mayWorkRegister(await deps.membership(target, staff.hostId))) {
+        return { status: 404, body: { error: 'That member does not work on this site.' } }
       }
       if (action === 'clear') {
         await pinRef(staff.hostRef, target).delete()
@@ -121,12 +120,17 @@ export async function handlePosStaffPin(deps: PosOpsDeps, req: PluginApiRequest)
     }
 
     case 'roster': {
-      const host = await staff.hostRef.get()
-      const roles = (host.get('memberRoles') ?? {}) as Record<string, string>
       const pins = await staff.hostRef.collection('posStaffPins').limit(200).get()
-      const staffWithPins = pins.docs
-        .map((doc) => doc.id)
-        .filter((uid) => roles[uid] === 'admin' || roles[uid] === 'editor')
+      // Those who may still ring a sale here, by permission (AGL-4047): the
+      // switch-in below refuses anybody else.
+      const holders = pins.docs.map((doc) => String(doc.id))
+      const sells = await Promise.all(
+        holders.map(async (uid) => {
+          const membership = await deps.membership(uid, staff.hostId)
+          return mayWorkRegister(membership) && holdsPosPermission(membership.permissions, 'posSell')
+        }),
+      )
+      const staffWithPins = holders.filter((_, index) => sells[index])
       const members = await Promise.all(
         staffWithPins.map(async (uid) => ({ uid, name: await deps.memberName(uid) })),
       )
@@ -190,12 +194,17 @@ export async function handlePosStaffPin(deps: PosOpsDeps, req: PluginApiRequest)
         }
       }
       await ref.update({ failedAttempts: 0, lockedUntilMs: null, lastUsedAtMs: now })
-      // The PIN is right; whether it still buys anything is today's role.
+      // The PIN is right; whether it still buys anything is today's
+      // permissions, and for a manager's approval today's role.
       const host = await staff.hostRef.get()
       const role = (host.get('memberRoles') ?? {})[memberUid]
       const membership = await deps.membership(memberUid, staff.hostId)
+      // A cashier switched in by PIN rings sales, so they need the register's
+      // sell key too (AGL-4047), not only the register.
       const allowed =
-        purpose === 'manager' ? isPosManager(role, membership) : mayWorkRegister(role, membership)
+        purpose === 'manager'
+          ? isPosManager(role, membership)
+          : mayWorkRegister(membership) && holdsPosPermission(membership.permissions, 'posSell')
       if (!allowed) {
         return {
           status: 403,

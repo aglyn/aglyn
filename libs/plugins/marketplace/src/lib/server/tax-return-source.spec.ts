@@ -97,7 +97,10 @@ function mockQuery(
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { TaxReturnSourceRequest } from '@aglyn/aglyn/plugin-manager/plugin-tax-return-sources'
+import type {
+  TaxReturnSourceAnswer,
+  TaxReturnSourceRequest,
+} from '@aglyn/aglyn/plugin-manager/plugin-tax-return-sources'
 import {
   marketplaceTaxFigures,
   marketplaceTaxReturnAnswer,
@@ -326,7 +329,13 @@ const REQUEST: TaxReturnSourceRequest = {
 describe('the marketplace’s tax return source', () => {
   beforeEach(() => mockDocs.clear())
 
-  const read = () => marketplaceTaxReturnSource.read(REQUEST)
+  // A source may answer several sections since AGL-4038; the marketplace
+  // answers one, so the specs read it as one.
+  const read = async (request: TaxReturnSourceRequest = REQUEST): Promise<TaxReturnSourceAnswer> => {
+    const answer = await marketplaceTaxReturnSource.read(request)
+    if (Array.isArray(answer)) throw new Error('the marketplace answers one section')
+    return answer as TaxReturnSourceAnswer
+  }
   const summaryOf = (answer: Awaited<ReturnType<typeof read>>) =>
     answer.summary as ReturnType<typeof marketplaceTaxSummary>
 
@@ -418,7 +427,7 @@ describe('the marketplace’s tax return source', () => {
     expect(summaryOf(whole).transactionCount).toBe(2)
     expect(whole.truncated).toBe(false)
     expect(whole.undatedRows).toBe(1)
-    const capped = await marketplaceTaxReturnSource.read({ ...REQUEST, rowCap: 1 })
+    const capped = await read({ ...REQUEST, rowCap: 1 })
     expect(capped.truncated).toBe(true)
     expect(capped.rows).toHaveLength(1)
   })

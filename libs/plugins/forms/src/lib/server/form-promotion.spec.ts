@@ -375,13 +375,14 @@ describe('the promote route is gated on the resolver', () => {
     expect(write).toContain('versionId,')
   })
 
-  it('gates on the PUBLISH role, not merely on write access', () => {
+  it('gates on PUBLISHING, not merely on write access', () => {
     // An `author` may create a draft version and may not make one live. The
-    // version-create route next door correctly asks `hostRoleCanWrite`; asking
-    // the same question here would let an author move the pointer.
+    // version-create route next door correctly asks "Edit site content";
+    // asking the same question here would let an author move the pointer.
+    // Both are site keys whose presets are those roles (AGL-4047).
     const text = source()
-    expect(text).toContain('hostRoleCanPublish(memberRole)')
-    expect(text).not.toContain('hostRoleCanWrite(memberRole)')
+    expect(text).toContain("holdsSiteKey(hostSnapshot, decoded.uid, 'site.publish')")
+    expect(text).not.toContain("'site.edit'")
   })
 
   it('reads the stored version rather than taking a tree from the caller', () => {

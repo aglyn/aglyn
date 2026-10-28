@@ -57,7 +57,20 @@ jest.mock('@aglyn/aglyn/plugin-manager/record-captured-contact', () => ({
 }))
 jest.mock('@aglyn/shared-util-email', () => ({ isEmailConfigured: () => false, sendEmail: async () => undefined }))
 jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
-  resolveOrgPermissions: async () => ({ permissions: { managePos: mockState.managePos } }),
+  // As the real resolver answers for a site (AGL-4047): nothing for someone
+  // with no access to it, the site role's default otherwise.
+  resolveOrgPermissions: async (uid: string, context: { hostId?: string }) => ({
+    permissions: {
+      managePos:
+        mockState.managePos &&
+        jest
+          .requireActual('../testing/site-register-permissions')
+          .siteRegisterVerdict(
+            jest.requireActual('../testing/fake-firestore').fakeDocs.get(`hosts/${context?.hostId}`)?.memberRoles,
+            uid,
+          ),
+    },
+  }),
 }))
 jest.mock('@aglyn/tenant-data-admin/server/payment-provider', () => ({ merchantAccountIsReady: () => true }))
 jest.mock('@aglyn/tenant-data-admin', () => {
@@ -416,6 +429,35 @@ describe('what the kiosk reads', () => {
     const token = await pair()
     const result = await kiosk({ action: 'catalog' }, { token, method: 'GET' })
     expect(result.body.products.map((item: any) => item.name).sort()).toEqual(['Card reader', 'Flat white'])
+  })
+
+  it("leaves off what the merchant chose not to offer on the kiosk, product or variant (AGL-4038)", async () => {
+    fakeDocs.set('hosts/host-1/products/hidden', product({ name: 'Behind the counter', offerOnKiosk: false }))
+    fakeDocs.set(
+      'hosts/host-1/products/sizes',
+      product({
+        name: 'Drip coffee',
+        options: [{ name: 'Size', values: ['Small', 'Large'] }],
+        variants: [
+          { id: 'small', priceUsd: 2, options: { Size: 'Small' } },
+          { id: 'large', priceUsd: 3, options: { Size: 'Large' }, offerOnKiosk: false },
+        ],
+      }),
+    )
+    fakeDocs.set(
+      'hosts/host-1/products/none-left',
+      product({ name: 'Every size held back', variants: [{ id: 'default', priceUsd: 2, options: {}, offerOnKiosk: false }] }),
+    )
+    const token = await pair()
+    const result = await kiosk({ action: 'catalog' }, { token, method: 'GET' })
+    expect(result.body.products.map((item: any) => item.name).sort()).toEqual(['Drip coffee', 'Flat white'])
+    const drip = result.body.products.find((item: any) => item.name === 'Drip coffee')
+    expect(drip.variants.map((variant: any) => variant.id)).toEqual(['small'])
+    // And a cart naming one anyway is refused, never priced.
+    expect((await checkout(token, [{ productId: 'hidden', quantity: 1 }])).status).toBe(409)
+    expect((await checkout(token, [{ productId: 'sizes', variantId: 'large', quantity: 1 }])).status).toBe(409)
+    expect(mockSalesOpened).toHaveLength(0)
+    expect((await checkout(token, [{ productId: 'sizes', variantId: 'small', quantity: 1 }])).status).toBe(200)
   })
 
   it('a category is a clause on the query', async () => {

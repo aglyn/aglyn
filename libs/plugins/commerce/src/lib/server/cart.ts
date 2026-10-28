@@ -21,6 +21,7 @@ import * as CommerceModel from '../model'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 import { cartCookieName, mintCartId, readCartId } from './cart-cookie'
+import { readStoreDay } from './store-day'
 
 export interface ResolvedCartLine extends CommerceModel.CartLine {
   name: string
@@ -92,9 +93,13 @@ export const cartHandler: PluginApiHandler = async (req, res) => {
 
     if (isPost) {
       const action = String(body.action ?? 'add')
+      // The day the shopper chose to use a check-in item (AGL-4043): part of
+      // the line's identity, so two days of one pass are two lines.
+      const useDayKey = typeof body.useDayKey === 'string' ? body.useDayKey.trim() : ''
       const line: CommerceModel.CartLine = {
         productId: String(body.productId ?? ''),
         ...(body.variantId ? { variantId: String(body.variantId) } : {}),
+        ...(useDayKey ? { useDayKey } : {}),
         // Clamped at the door as well as in the model (AGL-2285): the route
         // used `Math.round(Number(...))` alone, which yields `NaN` for
         // `{"quantity":"x"}` and slipped past `upsertCartLine`'s `<= 0` guard.
@@ -107,6 +112,9 @@ export const cartHandler: PluginApiHandler = async (req, res) => {
               : 0,
           ),
         ),
+      }
+      if (useDayKey && !CommerceModel.isCheckInDayKey(useDayKey)) {
+        return res.status(400).json({ error: 'Choose the day as a date.' })
       }
       if (action === 'clear') {
         cart.lines = []
@@ -122,6 +130,20 @@ export const cartHandler: PluginApiHandler = async (req, res) => {
           const productSnapshot = await hostRef.collection('products').doc(line.productId).get()
           if (productSnapshot.exists && !CommerceModel.productSellsOnline(productSnapshot.data())) {
             return res.status(404).json({ error: 'Unknown product' })
+          }
+          // A use day is asked only by an item that asks for one, and is a
+          // day that has not passed on the store's calendar (AGL-4043).
+          const isNewLine = !cart.lines.some(
+            (held) => CommerceModel.cartLineKey(held) === CommerceModel.cartLineKey(line),
+          )
+          if (useDayKey && (action === 'add' || isNewLine)) {
+            const product = productSnapshot.exists ? CommerceModel.liftLegacyProduct(productSnapshot.data() as any) : null
+            const variantId = line.variantId ?? product?.variants[0]?.id
+            if (!product || !CommerceModel.productAsksUseDate(product, variantId)) {
+              return res.status(400).json({ error: 'This item has no day to choose.' })
+            }
+            const problem = CommerceModel.checkInUseDayProblem(useDayKey, (await readStoreDay(hostRef)).todayKey)
+            if (problem) return res.status(400).json({ error: problem })
           }
         }
         cart.lines = CommerceModel.upsertCartLine(

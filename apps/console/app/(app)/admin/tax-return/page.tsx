@@ -77,9 +77,11 @@
 import type {
   TaxReturnSection,
   TaxReturnSectionCell,
+  TaxReturnSectionColumn,
   TaxReturnSectionTable,
 } from '@aglyn/aglyn/plugin-manager/plugin-tax-return-sources'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
+import { sortListRows } from '@aglyn/shared-util-tools/list-query/list-column-sort'
 import { CardDisplay, Container, GridItems } from '@aglyn/shared-ui-jsx'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
@@ -98,6 +100,7 @@ import {
   TableBody,
   TableCell,
   TableRow,
+  TableSortLabel,
   TextField,
   Typography,
 } from '@mui/material'
@@ -106,6 +109,7 @@ import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../components/staff-only.component'
 import StaffTaxFindingsCard from '../../../../components/staff-tax-findings-card.component'
 import StaffTaxablePurchasesCard from '../../../../components/staff-taxable-purchases-card.component'
+import StaffTaxOwnSalesBreakdownCard from '../../../../components/staff-tax-own-sales-breakdown-card.component'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
@@ -181,6 +185,28 @@ function LeadCell({ cell }: { cell: TaxReturnSectionCell }) {
   )
 }
 
+/**
+ * What a source's cell sorts by: a figure by its number (`$1,234.56`,
+ * `12`), anything else by its words. A cell with no figure sorts last.
+ */
+function sourceSortValue(
+  column: TaxReturnSectionColumn | undefined,
+  cell: TaxReturnSectionCell | undefined,
+): string | number | null {
+  const text = (cell?.text ?? '').trim()
+  if (!text) return null
+  if (column?.numeric || column?.money) {
+    const figure = Number(text.replace(/[^0-9.-]/g, ''))
+    return Number.isFinite(figure) ? figure : null
+  }
+  return text
+}
+
+/**
+ * A source's table, sorted by any column (AGL-3680): every row the source
+ * answered is on screen, so the order is the whole table's, exact. Unsorted,
+ * it keeps the source's own order, which leads with the row that matters.
+ */
 function SourceTable({
   table,
   first,
@@ -188,6 +214,27 @@ function SourceTable({
   table: TaxReturnSectionTable
   first: boolean
 }) {
+  const [sort, setSort] = useState<{ column: number; direction: 'asc' | 'desc' } | null>(null)
+  const rows = useMemo(
+    () =>
+      sort
+        ? sortListRows(
+            table.rows,
+            (row) => sourceSortValue(table.columns[sort.column], row.cells[sort.column]),
+            sort.direction,
+          )
+        : table.rows,
+    [sort, table],
+  )
+  // Ascending, descending, then the source's own order again.
+  const sortBy = (column: number) =>
+    setSort((current) =>
+      current?.column !== column
+        ? { column, direction: 'asc' }
+        : current.direction === 'asc'
+          ? { column, direction: 'desc' }
+          : null,
+    )
   return (
     <>
       {table.heading ? (
@@ -207,18 +254,28 @@ function SourceTable({
       <ScrollTable size="small">
         <StaffTableHead>
           <TableRow>
-            {table.columns.map((column, index) => (
-              <TableCell
-                key={`${index}:${column.label}`}
-                {...(column.numeric ? { align: 'right' as const } : {})}
-              >
-                {column.label}
-              </TableCell>
-            ))}
+            {table.columns.map((column, index) => {
+              const direction = sort?.column === index ? sort.direction : null
+              return (
+                <TableCell
+                  key={`${index}:${column.label}`}
+                  sortDirection={direction ?? false}
+                  {...(column.numeric ? { align: 'right' as const } : {})}
+                >
+                  <TableSortLabel
+                    active={direction !== null}
+                    direction={direction ?? 'asc'}
+                    onClick={() => sortBy(index)}
+                  >
+                    {column.label}
+                  </TableSortLabel>
+                </TableCell>
+              )
+            })}
           </TableRow>
         </StaffTableHead>
         <TableBody>
-          {table.rows.length === 0 ? (
+          {rows.length === 0 ? (
             <TableRow>
               <TableCell colSpan={Math.max(1, table.columns.length)}>
                 <Typography variant="body2" color="text.secondary">
@@ -227,7 +284,7 @@ function SourceTable({
               </TableCell>
             </TableRow>
           ) : (
-            table.rows.map((row) => (
+            rows.map((row) => (
               <TableRow key={row.key}>
                 {row.cells.map((cell, index) => {
                   const column = table.columns[index]
@@ -774,6 +831,14 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                 </Typography>
               ) : null}
             </CardDisplay>
+
+            {/*
+              WHAT THE FIGURES ARE MADE OF (AGL-4038): the invoices and the
+              operator's own sales outside them — the card reader shop, its
+              own stores — by source and state, beside the figures they add
+              up to.
+            */}
+            <StaffTaxOwnSalesBreakdownCard payload={payload} />
 
             {/*
               ITEM 3, which no query here can answer. Only where the form is

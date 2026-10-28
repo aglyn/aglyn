@@ -47,6 +47,30 @@ describe('who may run a shift', () => {
     expect((await shift({ action: 'current' })).status).toBe(403)
   })
 
+  it('needs the cash drawer key for everything but reading the open shift (AGL-4047)', async () => {
+    h.memberships['cashier'] = {
+      ...h.memberships['cashier']!,
+      permissions: { managePos: true, posCashDrawer: false },
+    }
+    expect((await shift({ action: 'current' })).status).toBe(200)
+    const refused = await shift({ action: 'open', openingFloatCents: 10_000 })
+    expect(refused.status).toBe(403)
+    expect(String(refused.body['error'])).toContain('Cash drawer and shifts')
+    expect((await shift({ action: 'x-report' })).status).toBe(403)
+    // A key the map does not carry follows `managePos`.
+    h.memberships['cashier'] = { ...h.memberships['cashier']!, permissions: { managePos: true } }
+    expect((await shift({ action: 'open', openingFloatCents: 10_000 })).status).toBe(200)
+  })
+
+  it('asks the permission, not the site role: a site viewer granted the register runs a shift (AGL-4047)', async () => {
+    h.memberships['viewer'] = { ...h.memberships['viewer']!, permissions: { managePos: true } }
+    expect((await shift({ action: 'current' }, 'viewer')).status).toBe(200)
+    expect((await shift({ action: 'open', openingFloatCents: 5_000 }, 'viewer')).status).toBe(200)
+    // An editor a role narrows is refused, whatever the site role says.
+    h.memberships['cashier'] = { ...h.memberships['cashier']!, permissions: { managePos: false } }
+    expect((await shift({ action: 'current' })).status).toBe(403)
+  })
+
   it("refuses another site's register as unknown", async () => {
     const outcome = await shift({ action: 'open', registerId: 'theirs', openingFloatCents: 100 })
     expect(outcome.status).toBe(404)

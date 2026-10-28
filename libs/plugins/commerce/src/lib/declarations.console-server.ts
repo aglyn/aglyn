@@ -18,13 +18,18 @@
 // The registry's own module, not the data layer's barrel: boot needs the
 // registry, not the whole server surface.
 import { registerApiV1SiteResource } from '@aglyn/tenant-data-admin/server/api-v1-resources'
+import { registerPluginOrgEraser } from '@aglyn/aglyn/plugin-manager/plugin-org-erasure'
 import { registerPluginPersonEraser } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
 import { registerPluginUserEraser } from '@aglyn/aglyn/plugin-manager/plugin-user-erasure'
 import { registerPluginService } from '@aglyn/aglyn/plugin-manager/plugin-services'
+import { registerClosureNoticeSource } from '@aglyn/aglyn/plugin-manager/plugin-closure-notices'
+import { registerCustomerDisplayVerifier } from '@aglyn/aglyn/plugin-manager/plugin-customer-display-verifier'
+import { registerPluginEventHandler } from '@aglyn/aglyn/plugin-manager/plugin-events'
 import { registerPluginSearchSources } from '@aglyn/aglyn/plugin-manager/plugin-search-sources'
 import { COMMERCE_SERVER_SEARCH_SOURCES } from './model/commerce-server-search-sources'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { ORDER_HISTORY_CONTRACT } from './model/order-history'
+import { parsePosHardwareInPersonConfig } from './model/pos-hardware'
 import { registerCommerceTransferResources } from './transfer/register-transfer-resources'
 
 /**
@@ -57,10 +62,63 @@ export function registerCommerceConsoleServerDeclarations(): void {
     { pluginId: BUNDLE_ID },
   )
   // Commerce's share of an ACCOUNT erasure (AGL-4038): every POS hardware
-  // order the person placed keeps its amounts and its tax region, with the
+  // order the person placed that has not shipped is canceled and refunded in
+  // full, then every one keeps its amounts and its tax region, with the
   // buyer taken off it. Loaded with the first erasure.
   registerPluginUserEraser(
     async (request) => (await import('./server/pos-hardware-user-eraser')).posHardwareUserEraser(request),
+    { pluginId: BUNDLE_ID },
+  )
+  // Commerce's share of a WORKSPACE erasure (AGL-4038): every hardware order
+  // the workspace bought that has not shipped is canceled and refunded in
+  // full before the erasure deletes it, and the buyer and staff are told.
+  // Never fails the erasure. Loaded with the first erasure.
+  registerPluginOrgEraser(
+    async (request) => (await import('./server/pos-hardware-closure')).posHardwareOrgEraser(request),
+    { pluginId: BUNDLE_ID },
+  )
+  // A workspace erasure turns 4G off at Stripe for every one of its stores
+  // that had it (AGL-4038), so the platform stops paying for readers nobody
+  // will be charged for. Never fails the erasure. Loaded with the first one.
+  registerPluginOrgEraser(
+    async (request) => (await import('./server/pos-cellular-billing')).posCellularOrgEraser(request),
+    { pluginId: BUNDLE_ID },
+  )
+  // …and says so BEFORE the closure (AGL-4038): the delete-workspace and
+  // close-account screens list the unshipped hardware orders a closure will
+  // cancel and refund. Loaded with the first screen that asks.
+  registerClosureNoticeSource(
+    {
+      notices: async (subject) =>
+        (await import('./server/pos-hardware-closure-notices')).posHardwareClosureNoticeSource.notices(subject),
+    },
+    { pluginId: BUNDLE_ID },
+  )
+  // A card reader bought in person before its buyer had a workspace
+  // (AGL-4038) joins the workspace they create, by their account or their
+  // verified address. Loaded with the first workspace created while the
+  // in-person sale is on.
+  registerPluginEventHandler(
+    'org.created',
+    async (payload) => {
+      const config = parsePosHardwareInPersonConfig(process.env)
+      if (!config) return
+      const { claimPosHardwareForNewWorkspace } = await import('./server/pos-hardware-attach')
+      await claimPosHardwareForNewWorkspace({
+        config,
+        orgId: payload.orgId,
+        ownerUid: payload.owner.uid,
+        ownerEmail: payload.owner.email,
+        emailVerified: payload.owner.emailVerified,
+      })
+    },
+    { pluginId: BUNDLE_ID },
+  )
+  // Who a paired customer display is (AGL-4042), for another plugin's
+  // server acting for the screen the register put on it: the display's own
+  // token is the credential. Loaded with the first screen that asks.
+  registerCustomerDisplayVerifier(
+    { verify: async (credential) => (await import('./server/pos-display')).verifyPosCustomerDisplay(credential) },
     { pluginId: BUNDLE_ID },
   )
   // A site's earlier orders, for a plugin that reads history behind the

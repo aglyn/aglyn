@@ -225,7 +225,7 @@ describe('who may test an action', () => {
     async (token) => {
       expect(await call({ hostId: SITE, actionId: 'act-scroll' }, token)).toMatchObject({
         status: 403,
-        body: { error: 'Only a site admin or editor can test an action' },
+        body: { error: 'Your role does not include "Publish site content" — ask an organization admin' },
       })
       expect(consumeRateLimit).not.toHaveBeenCalled()
       expect(runAction).not.toHaveBeenCalled()

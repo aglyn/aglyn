@@ -185,6 +185,52 @@ describe('the prepared sales tax return', () => {
     expect(view.verdict.state).toBe('blocking')
   })
 
+  it('sends the apps what the figures are made of, the folded own sales included (AGL-4038)', () => {
+    const own = {
+      outcome: 'answered',
+      pluginId: 'commerce',
+      id: 'posHardware',
+      name: 'Card reader hardware',
+      title: 'Card reader hardware',
+      help: '',
+      intro: '',
+      truncated: false,
+      undatedRows: 0,
+      findings: [],
+      filingLines: [],
+      tables: [],
+      figures: [],
+      exports: [],
+      summary: {},
+      rows: [],
+      operatorSales: [
+        {
+          id: 'posHardwareShop',
+          label: 'Card reader shop (online)',
+          byJurisdiction: {
+            'US-TX': {
+              transactionCount: 1,
+              totalSalesCents: 30000,
+              taxableSalesCents: 30000,
+              taxCollectedCents: 2475,
+              refundCount: 0,
+              refundedSalesCents: 0,
+              refundedTaxCents: 0,
+            },
+          },
+        },
+      ],
+    }
+    const view = taxReturnView(payload({ sources: [own] } as Partial<TaxReturnPayload>), options)
+    expect(view.figures.lines[0]).toMatchObject({ item: 'Item 1', value: '500.00' })
+    expect(view.figures.breakdown.header).toBe(TAX_RETURN_COPY.breakdownHeader(true))
+    expect(view.figures.breakdown.rows.map((row) => [row.source, row.jurisdiction, row.inFigures, row.totalSales, row.refunded])).toEqual([
+      ['Aglyn invoices (subscriptions and add-ons)', 'US-TX', true, '$200.00', 'On the refunds card'],
+      ['Card reader shop (online)', 'US-TX', true, '$300.00', '$0.00'],
+      ['Aglyn invoices (subscriptions and add-ons)', 'US-CA', false, '$100.00', 'On the refunds card'],
+    ])
+  })
+
   it('is a breakdown, not a form, for a jurisdiction with no known form', () => {
     const view = taxReturnView(
       payload({ registration: { jurisdiction: 'US-CA', registrationId: 'REG-SYNTHETIC-1', filingId: null } } as Partial<TaxReturnPayload>),

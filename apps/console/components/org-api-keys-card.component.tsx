@@ -17,7 +17,7 @@
 'use client'
 
 import { buildDocsUrl } from '../constants/docs-links'
-import { canManageOrg, checkEntitlement } from '@aglyn/aglyn'
+import { checkEntitlement } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -41,6 +41,7 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
 import useBranding from '../hooks/use-branding'
 import useCurrentOrg from '../hooks/use-current-org'
+import useOrgPermissions from '../hooks/use-org-permissions'
 import { useOrgScope } from '../hooks/use-org-scope'
 
 /**
@@ -107,7 +108,11 @@ export function OrgApiKeysCard() {
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const orgId = currentOrg?.$id
-  const canManage = canManageOrg(currentOrg?.role)
+  // The key the route checks (AGL-4047), not the role: a custom role or an
+  // override that grants or takes `org.apiKeys` moves this the way it moves
+  // the server. Held while the permissions load.
+  const orgPermissions = useOrgPermissions()
+  const canManage = orgPermissions.loaded && orgPermissions.can('org.apiKeys')
   const entitled = checkEntitlement(org, 'apiAccess')
 
   const [keys, setKeys] = useState<PublicApiKey[]>([])

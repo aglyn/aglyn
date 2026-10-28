@@ -16,9 +16,10 @@
  */
 
 import { createHash } from 'node:crypto'
+import { holdsSiteKey, hostStampedSitePermission, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
-import { hostRoleCanWrite } from '@aglyn/aglyn/app-utils/organizations'
+import type { HostAccessRole } from '@aglyn/aglyn/foundation/definitions/organization.types'
 import { countLiveDocuments } from '@aglyn/aglyn/app-utils/live-document-count'
 import { dropPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
@@ -59,7 +60,8 @@ import { planRefusal, roomRefusal } from './product-drafts'
 
 type Firestore = FirebaseFirestore.Firestore
 
-export const ROLE_REFUSAL = 'Editing requires the editor role'
+/** Names "Edit site content" (`site.edit`, AGL-4047), never a role. */
+export const ROLE_REFUSAL = siteKeyRefusal('site.edit')
 const MAX_BODY_BYTES = 256_000
 
 /** The reasons the Adjust stock dialog offers. */
@@ -94,16 +96,43 @@ export const validId = (value: unknown): value is string =>
 
 export interface Gate {
   uid: string
+  /** The caller's address, for an activity line; null when the token has none. */
+  email: string | null
   staff: boolean
   host: FirebaseFirestore.DocumentSnapshot
   org: Record<string, unknown>
 }
 
 /**
+ * The permission a route built on {@link gate} checks instead of the site
+ * role (AGL-4047): a key whose preset is the site role, that preset (the
+ * declaring plugin's own table, so the answer does not depend on which
+ * plugins this process loaded), and the refusal naming it.
+ */
+export interface GatePermission {
+  key: string
+  presetFor: Readonly<Record<HostAccessRole, boolean>>
+  refusal: string
+}
+
+/**
  * Who may write this site's products, as the rules decide it. Answers the
  * caller's reply on a refusal and returns null.
+ *
+ * A route that is not about products names the key it checks instead
+ * (`permission`, AGL-4047): the walk-in and the guests change ask their
+ * reservation key, read as the rules read it, from the site's
+ * `memberPermissions` stamp, else the preset of the member's `memberRoles`
+ * entry, so the route and the rules give one answer. Without it, the
+ * product routes ask "Edit site content" (`site.edit`) the same way.
  */
-export async function gate(req: Parameters<PluginApiHandler>[0], res: Reply, hostId: string, deps: Required<ProductsWriteDeps>): Promise<Gate | null> {
+export async function gate(
+  req: Parameters<PluginApiHandler>[0],
+  res: Reply,
+  hostId: string,
+  deps: Required<ProductsWriteDeps>,
+  options: { permission?: GatePermission } = {},
+): Promise<Gate | null> {
   const authorization = String(req.headers.authorization ?? '')
   const token = authorization.startsWith('Bearer ') ? authorization.slice('Bearer '.length) : ''
   if (!token) return void res.status(401).json({ error: 'Unauthenticated' }), null
@@ -121,13 +150,18 @@ export async function gate(req: Parameters<PluginApiHandler>[0], res: Reply, hos
   }
   const host = await deps.firestore().collection('hosts').doc(hostId).get()
   if (!host.exists) return void res.status(404).json({ error: 'Unknown site' }), null
-  if (!staff && !hostRoleCanWrite((host.get('memberRoles') ?? {})[decoded.uid])) {
-    return void res.status(403).json({ error: ROLE_REFUSAL }), null
+  if (!staff) {
+    const { permission } = options
+    const allowed = permission
+      ? hostStampedSitePermission(host.data(), decoded.uid, permission.key, permission.presetFor)
+      : holdsSiteKey(host, decoded.uid, 'site.edit')
+    if (!allowed) return void res.status(403).json({ error: permission?.refusal ?? ROLE_REFUSAL }), null
   }
   const org = ((await deps.orgForHost(hostId))?.org ?? {}) as Record<string, unknown>
   const locked = await deps.lockdown({ staff, uid: decoded.uid, org: org as never, host: host.data() as never, request: { method: 'POST' } as never })
   if (locked) return void res.status(423).json({ error: 'This site is not accepting changes right now' }), null
-  return { uid: decoded.uid, staff, host, org }
+  const email = typeof decoded['email'] === 'string' ? decoded['email'] : null
+  return { uid: decoded.uid, email, staff, host, org }
 }
 
 /** The site-wide cache drop a product change is owed (AGL-3386): an outbox entry in the write, then the drop. */

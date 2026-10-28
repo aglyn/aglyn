@@ -27,26 +27,25 @@
  * `/api/orgs/risk-notices`, and nothing a site member can reach releases a
  * page — that is staff's decision in the abuse queue.
  *
- * Site members and staff. `canRequestReview` says whether THIS reader is an
- * owner or admin of the workspace, the people `/api/orgs/risk-notices`
- * takes a request from.
+ * Site members and staff. `canRequestReview` says whether THIS reader holds
+ * "Holds and reviews" (`org.holds`, AGL-4047) over the whole workspace, the
+ * people `/api/orgs/risk-notices` takes a request from.
  */
 
 // lockdown-423: exempt — read-only, and part of the appeal path: a locked site's members must
 // still see which of its pages is held and why before they ask for a review.
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { isOrgWideMember, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
   listHostPageHolds,
+  memberHasOrgPermission,
   resolveOrgIdForHost,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
-
-const MANAGER_ROLES = new Set(['owner', 'admin'])
 
 async function handler(request: Request): Promise<Response> {
   const { method, query, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -81,7 +80,10 @@ async function handler(request: Request): Promise<Response> {
       {
         holds,
         orgId,
-        canRequestReview: MANAGER_ROLES.has(String(actor?.member?.role)),
+        canRequestReview:
+          Boolean(orgId) &&
+          isOrgWideMember(actor?.member) &&
+          (await memberHasOrgPermission(orgId as string, actor?.member, 'org.holds')),
       },
       { status: 200, headers: { 'Cache-Control': 'no-store' } },
     )

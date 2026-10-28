@@ -40,6 +40,7 @@ import {
 // The leaf, not the barrel: the dispatcher's specs substitute the barrel,
 // and a route's own registration must still be read where it was made.
 import {
+  isPluginImagesRoute,
   isPluginMachineRoute,
   isPluginPortabilityRoute,
   isPluginRecipientLinkRoute,
@@ -247,6 +248,9 @@ async function dispatch(
 
   const match = resolvePluginApiMatch(path)
   if (!match) return Response.json({ error: 'Not found' }, { status: 404 })
+  // A route that draws images (AGL-4048) runs only in the plugins' image
+  // function, which ships the image library this one does not.
+  if (isPluginImagesRoute(path)) return Response.json({ error: 'Not found' }, { status: 404 })
 
   // Console-write rate limit. This dispatcher is the single chokepoint for
   // every plugin's console handler — marketplace installs and publishes,

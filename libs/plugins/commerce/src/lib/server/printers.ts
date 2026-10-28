@@ -33,6 +33,11 @@ import type { HostOrder } from '../model/commerce-orders'
 import { enqueuePrintJob, printJobsRef, printersRef } from './print-queue'
 import { printerPollUrl } from './printer-secret'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
+import {
+  holdsPosPermission,
+  posPermissionRefusal,
+  type PosPermission,
+} from '../model/plugin-permissions'
 
 /**
  * `POST /api/commerce/printers` (AGL-3619): a register's cloud receipt
@@ -53,12 +58,15 @@ interface PrinterManager {
 }
 
 /**
- * The register's gate (`pos-order.ts`): `admin` or `editor` on THIS site,
- * `managePos` on the member's permissions, and `pos` on the owning plan.
+ * The register's gate (`pos-order.ts`): `managePos` on the member's
+ * permissions as resolved for THIS site — the key decides, not the site role
+ * (AGL-4047) — and `pos` on the owning plan.
  */
 export async function authorizePrinterManager(
   req: PluginApiRequest,
   hostId: string,
+  /** The register's finer key the action needs (AGL-4047), if any. */
+  permission?: PosPermission,
 ): Promise<{ ok: true; manager: PrinterManager } | { ok: false; status: number; error: string }> {
   const authorization = String(req.headers.authorization ?? '')
   const idToken = authorization.startsWith('Bearer ') ? authorization.slice(7) : ''
@@ -73,10 +81,11 @@ export async function authorizePrinterManager(
   }
   const host = await firebaseAdmin.app().firestore().collection('hosts').doc(hostId).get()
   if (!host.exists) return { ok: false, status: 404, error: 'Unknown site' }
-  const role = (host.get('memberRoles') ?? {})[uid]
-  if (role !== 'admin' && role !== 'editor') return { ok: false, status: 403, error: 'Not permitted' }
   const membership = await resolveOrgPermissions(uid, { hostId })
   if (!membership.permissions.managePos) return { ok: false, status: 403, error: 'Not permitted' }
+  if (permission && !holdsPosPermission(membership.permissions, permission)) {
+    return { ok: false, status: 403, error: posPermissionRefusal(permission) }
+  }
   const owner = await getOrgForHost(hostId)
   if (!Aglyn.checkEntitlement(owner?.org as any, 'pos')) {
     return { ok: false, status: 403, error: 'POS requires the Pro plan or above' }
@@ -363,12 +372,23 @@ export const printersHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   const body = requestBody(req)
   const hostId = text(body['hostId'], 128)
-  const gate = await authorizePrinterManager(req, hostId)
+  const action = text(body['action'], 20)
+  // Adding, changing, testing and removing a printer is setting the register
+  // up, and opening the drawer without a sale is the cash drawer's (AGL-4047);
+  // a reprint or a cancelled job is part of the sale.
+  const gate = await authorizePrinterManager(
+    req,
+    hostId,
+    action === 'drawer'
+      ? 'posCashDrawer'
+      : action === 'reprint' || action === 'cancel'
+        ? undefined
+        : 'posDevices',
+  )
   if ('error' in gate) return res.status(gate.status).json({ error: gate.error })
   const { uid } = gate.manager
   const firestore = firebaseAdmin.app().firestore()
   const printers = printersRef(firestore, hostId)
-  const action = text(body['action'], 20)
   const printerId = text(body['printerId'], 128)
   const loadPrinter = async () => {
     if (!/^[A-Za-z0-9_-]{1,128}$/.test(printerId)) return null

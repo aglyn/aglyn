@@ -17,11 +17,26 @@
 
 import {
   cartCount,
+  cartLineKey,
   CART_MAX_QUANTITY,
   mergeCarts,
   removeCartLine,
   upsertCartLine,
 } from './commerce-cart'
+
+describe('a pass for a chosen day (AGL-4043)', () => {
+  it('is its own line for each day, and is removed by its day', () => {
+    let lines = upsertCartLine({ lines: [] }, { productId: 'pass', variantId: 'a', quantity: 1, useDayKey: '2027-01-20' })
+    lines = upsertCartLine({ lines }, { productId: 'pass', variantId: 'a', quantity: 1 })
+    lines = upsertCartLine({ lines }, { productId: 'pass', variantId: 'a', quantity: 2, useDayKey: '2027-01-20' })
+    expect(lines).toEqual([
+      { productId: 'pass', variantId: 'a', quantity: 3, useDayKey: '2027-01-20' },
+      { productId: 'pass', variantId: 'a', quantity: 1 },
+    ])
+    expect(removeCartLine({ lines }, { productId: 'pass', variantId: 'a' })).toEqual([lines[0]])
+    expect(cartLineKey({ productId: 'pass', useDayKey: '2027-01-20' })).toBe('pass::2027-01-20')
+  })
+})
 
 describe('upsertCartLine', () => {
   it('adds, accumulates, sets, and removes at zero', () => {

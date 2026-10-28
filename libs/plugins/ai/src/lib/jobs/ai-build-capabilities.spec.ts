@@ -45,6 +45,7 @@ import {
   type PluginAiCapability,
 } from '@aglyn/aglyn/plugin-manager/plugin-ai-capabilities'
 import {
+  AI_BUILD_THEME_OP_LINE,
   AI_OWNED_CAPABILITIES,
   AI_OWNED_OP_WRITERS,
   aiBuildIntents,
@@ -204,5 +205,63 @@ describe('the operations the plan step lists', () => {
 
   it('says to leave items empty where nothing is offered, and adds no rule there', () => {
     expect(aiBuildOpLines(new Map(), [])).toEqual(['Operations for items: none on this site. Leave items empty.'])
+  })
+})
+
+// AGL-4077: a build from the chat proposes a theme change, never writes one.
+describe('the theme operation', () => {
+  const THEME = AI_OWNED_CAPABILITIES.find((one) => one.op === 'theme')
+
+  it('is well-formed: one per plan, paid plans only, run by the theme runner, one pass', () => {
+    expect(THEME).toBeDefined()
+    expect(pluginAiCapabilityProblem(THEME as never)).toBeNull()
+    expect(THEME).toMatchObject({
+      op: 'theme',
+      noun: 'theme change',
+      where: 'Setup → Theme',
+      runnerKind: 'theme',
+      maxPerPlan: 1,
+      freeAllowed: false,
+      degrade: 'omit',
+      argsSchema: { properties: {} },
+    })
+    // A proposal the owner applies: never saved live, and needs no feature beyond the plan.
+    expect(THEME?.live).toBeUndefined()
+    expect(THEME?.feature).toBeUndefined()
+    expect(THEME?.estimateCredits({})).toBe(50)
+    expect(THEME?.intents).toEqual([
+      'a change to the site’s theme — its colors, fonts or corners — proposed for the owner to apply in Setup → Theme; the build never changes the live theme',
+    ])
+  })
+
+  it('is offered on a paid plan where the theme runner is loaded, never on the Free taste', async () => {
+    const deps = { capabilities, releasedPlugins: async (ids: string[]) => ids, writerOwner: () => null }
+    const paid = await aiBuildOps(context({ org: { plan: 'pro' }, freeTaste: false }), { ...deps, hasRunner: () => true })
+    expect(paid.get('theme')).toBe(THEME)
+    expect(aiBuildIntents(paid)).toContain(THEME?.intents[0])
+    const free = await aiBuildOps(context(), { ...deps, hasRunner: () => true })
+    expect(free.has('theme')).toBe(false)
+    expect(free.has('page')).toBe(true)
+    const unloaded = await aiBuildOps(context({ org: { plan: 'pro' }, freeTaste: false }), {
+      ...deps,
+      hasRunner: (kind) => kind !== 'theme',
+    })
+    expect(unloaded.has('theme')).toBe(false)
+  })
+
+  it('is listed to the planner as an item with no arguments', () => {
+    const lines = aiBuildOpLines(new Map([['theme', THEME as PluginAiCapability]]), ['page', 'layout', 'form', 'component', 'email'])
+    expect(lines[1]).toBe(
+      '- theme: a theme change, at most 1; for a change to the site’s theme — its colors, fonts or corners — proposed for the owner to apply in Setup → Theme; the build never changes the live theme. Args: {}.',
+    )
+    // The plan's vocabulary also has a theme change in create, which a build does not build there.
+    expect(lines[2]).toBe(AI_BUILD_THEME_OP_LINE)
+    expect(AI_BUILD_THEME_OP_LINE).toBe(
+      'A change to the theme is planned as the theme item, never as a theme change in create: at most one, and only when the request asks for a different look.',
+    )
+    expect(lines.at(-1)).toMatch(/^When the request asks for what one of these operations makes/)
+    // Where the theme cannot be changed, the planner is told nothing of it.
+    const free = new Map(AI_OWNED_CAPABILITIES.filter((one) => one.freeAllowed).map((one) => [one.op, one] as const))
+    expect(aiBuildOpLines(free, ['page', 'layout', 'form', 'component', 'email']).join('\n')).not.toMatch(/theme/)
   })
 })

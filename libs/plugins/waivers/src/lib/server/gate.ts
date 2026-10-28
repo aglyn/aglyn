@@ -18,6 +18,7 @@
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { resolveSiteTimeZone } from '@aglyn/aglyn/app-utils/collection-entry-date'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
+import { findUserByUidAcrossPools } from '@aglyn/tenant-data-admin/server/auth-pools'
 import { isEmailVerified, isImpersonationSession } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
@@ -33,15 +34,24 @@ import { isDocumentId, waiversDb } from './db'
  *   403  unverified address (impersonation exempt)
  *   400  no site named
  *   404  no such site
- *   403  not an admin or editor of the site, or without the permission the
- *        route needs (`manageWaivers` to write waivers and void, or
- *        `collectWaivers` to read signatures and take them)
+ *   403  without the permission the route needs (`manageWaivers` to write
+ *        waivers and void, or `collectWaivers` to read signatures and take
+ *        them) on THIS site
  *   403  a plan that does not sell
  *
+ * THE KEY DECIDES, NOT THE ROLE (AGL-4047). Both keys are on for a site's
+ * admins and editors and off for its viewers by default, and the resolver
+ * answers them for this site: an org-wide member from their org role, custom
+ * role and overrides, a site collaborator from the role they hold here and
+ * their overrides, and anyone without access to the site with nothing. So
+ * a viewer the workspace trusts at the window (a custom role or an override
+ * that grants `collectWaivers`) takes signatures, and an admin a role
+ * narrows is refused, which a host-role allowlist answered the other way.
+ *
  * A signature holds a signer's date of birth, a minor's name and a drawn
- * signature, so a site's viewers are refused, and staff claims grant nothing
- * here: an Aglyn staff session reads a customer's signers only by
- * impersonating a member who may.
+ * signature, so a site's viewers are refused unless granted, and staff
+ * claims grant nothing here: an Aglyn staff session reads a customer's
+ * signers only by impersonating a member who may.
  */
 
 const NO_STORE = { 'Cache-Control': 'no-store' }
@@ -72,6 +82,12 @@ export interface WaiversGateDeps {
   verifyIdToken(token: string): Promise<Record<string, unknown> & { uid: string }>
   permissions(uid: string, hostId: string): Promise<Record<string, boolean | undefined>>
   orgForHost(hostId: string): Promise<{ orgId: string; org: Record<string, unknown> | null } | null>
+  /**
+   * A member's name for a signature's audit, when no session of theirs is on
+   * the request (AGL-4042: the staff member who put a waiver on the paired
+   * customer display): their display name, else their email, else `null`.
+   */
+  memberName(uid: string): Promise<string | null>
 }
 
 const defaultDeps: WaiversGateDeps = {
@@ -83,6 +99,12 @@ const defaultDeps: WaiversGateDeps = {
     const found = await getOrgForHost(hostId)
     return found ? { orgId: found.orgId, org: (found.org as Record<string, unknown>) ?? null } : null
   },
+  memberName: async (uid) => {
+    // Across every sign-in pool: staff who sign in through SSO live in a
+    // tenant pool the project-level lookup never sees (AGL-1122).
+    const found = await findUserByUidAcrossPools(uid).catch(() => null)
+    return found?.record.displayName || found?.record.email || null
+  },
 }
 
 let depsOverride: Partial<WaiversGateDeps> | null = null
@@ -93,6 +115,21 @@ export function setWaiversGateDepsForTests(deps: Partial<WaiversGateDeps> | null
 }
 
 const deps = (): WaiversGateDeps => ({ ...defaultDeps, ...(depsOverride ?? {}) })
+
+/** Whether a member holds any of these keys on a site, with no session of theirs on the request. */
+export async function memberHolds(
+  uid: string,
+  hostId: string,
+  keys: readonly WaiversPermission[],
+): Promise<boolean> {
+  const permissions = await deps().permissions(uid, hostId)
+  return keys.some((key) => permissions[key] === true)
+}
+
+/** A member's name for a signature's audit, or `null` (see {@link WaiversGateDeps.memberName}). */
+export function memberName(uid: string): Promise<string | null> {
+  return deps().memberName(uid).catch(() => null)
+}
 
 /** A JSON body, or `{}`. */
 export async function readJsonBody(request: Request): Promise<Record<string, unknown>> {
@@ -128,8 +165,6 @@ export async function waiversGate(
   const hostSnapshot = await waiversDb().collection('hosts').doc(hostId).get()
   if (!hostSnapshot.exists) return refuse(404, 'Unknown site')
   const host = (hostSnapshot.data() ?? {}) as Record<string, unknown>
-  const role = String((host['memberRoles'] as Record<string, unknown> | undefined)?.[decoded.uid] ?? '')
-  if (role !== 'admin' && role !== 'editor') return refuse(403, 'Not permitted')
   const permissions = await deps().permissions(decoded.uid, hostId)
   const wanted: readonly WaiversPermission[] = Array.isArray(options.permission)
     ? options.permission

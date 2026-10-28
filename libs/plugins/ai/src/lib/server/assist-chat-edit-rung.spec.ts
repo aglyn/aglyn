@@ -498,7 +498,8 @@ describe('GUARD: below the rung the canvas never reaches the provider', () => {
     expect(events.find((event) => event.type === 'done')?.edit).toBeNull()
     const request = providerRequest()
     expect(request.tools).toBeUndefined()
-    expect(request.max_tokens).toBe(1024)
+    // The chat's own ceiling, 2,048 since AGL-4075: below the rung it is an answer.
+    expect(request.max_tokens).toBe(2048)
     const prompt = JSON.stringify(request.system)
     expect(prompt).not.toContain('Editing this canvas')
     expect(prompt).not.toContain('Selected element')

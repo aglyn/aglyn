@@ -128,4 +128,15 @@ export const waiversRefs = {
   signatures: (orgId: string) => org(orgId).collection(WAIVERS_COLLECTIONS.signatures),
   signature: (orgId: string, signatureId: string) =>
     org(orgId).collection(WAIVERS_COLLECTIONS.signatures).doc(signatureId),
+  /** A site's retention state: the period its signatures are stamped with (AGL-4042). */
+  retention: (orgId: string, hostId: string) => org(orgId).collection(WAIVERS_COLLECTIONS.retention).doc(hostId),
+  /**
+   * The site's mirror of each waiver's title, for the Besigner's picker. The
+   * name is written out (it is `WAIVER_TITLES_SUBCOLLECTION`) because the
+   * repo's host-subcollection sweeps, the media usage corpus and the rules'
+   * write-deny coverage, read literal paths: behind a constant this
+   * collection is invisible to both, and its classification reads as stale.
+   */
+  title: (hostId: string, waiverId: string) =>
+    waiversDb().collection('hosts').doc(hostId).collection('waiverTitles').doc(waiverId),
 }

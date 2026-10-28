@@ -16,16 +16,31 @@
  */
 import { validateProduct, type HostProduct } from './commerce'
 import {
+  addCheckInDays,
   alreadyCheckedInLabel,
   checkInCustomers,
+  checkInDayLabel,
+  checkInDayTotals,
   checkInItemLabel,
   checkInSearchToken,
+  checkInStatusLabel,
+  checkInUseDayProblem,
   describeWristband,
+  dueCheckInsForOrder,
+  dueCheckInsForReservation,
+  isCheckInDayKey,
+  normalizeProductCheckIn,
   normalizeWristband,
+  productAsksUseDate,
   productCheckInFor,
   productCheckInProblem,
   productNeedsCheckIn,
+  rainCheckLabel,
+  rainCheckProblem,
+  stayCheckInPlan,
+  storedStayCheckIns,
   type CheckInRow,
+  type StayCheckInSlot,
 } from './commerce-check-in'
 
 /** The product setting, wristbands and the labels the window reads (AGL-4043). */
@@ -46,16 +61,16 @@ const product = (extra: Partial<HostProduct> = {}): HostProduct => ({
 describe('which items need check-in, and for how many people', () => {
   it('follows the product, overridden by a variant', () => {
     const pass = product({ checkIn: { enabled: true } })
-    expect(productCheckInFor(pass, 'adult')).toEqual({ headcount: 1 })
-    expect(productCheckInFor(pass, 'kid')).toEqual({ headcount: 2 })
+    expect(productCheckInFor(pass, 'adult')).toEqual({ headcount: 1, askUseDate: false })
+    expect(productCheckInFor(pass, 'kid')).toEqual({ headcount: 2, askUseDate: false })
     expect(productCheckInFor(pass, 'spectator')).toBeNull()
-    expect(productCheckInFor(pass, 'unknown')).toEqual({ headcount: 1 })
+    expect(productCheckInFor(pass, 'unknown')).toEqual({ headcount: 1, askUseDate: false })
   })
 
   it('a product that is off can still have one variant that needs it', () => {
     const off = product()
     expect(productCheckInFor(off, 'adult')).toBeNull()
-    expect(productCheckInFor(off, 'kid')).toEqual({ headcount: 2 })
+    expect(productCheckInFor(off, 'kid')).toEqual({ headcount: 2, askUseDate: false })
     expect(productNeedsCheckIn(off)).toBe(true)
     expect(productNeedsCheckIn(product({ variants: [{ id: 'default', priceUsd: 1 }] }))).toBe(false)
     expect(productCheckInFor(null, 'adult')).toBeNull()
@@ -135,5 +150,218 @@ describe('what the window reads', () => {
     expect(checkInSearchToken('Jordan Lee')).toBe('jordan')
     expect(checkInSearchToken('#1042')).toBe('#1042')
     expect(checkInSearchToken('12')).toBe('')
+  })
+})
+
+describe('the day a pass is for (pass dates)', () => {
+  it('asks the buyer only where the product or the variant says so', () => {
+    const pass = product({ checkIn: { enabled: true, askUseDate: true } })
+    expect(productCheckInFor(pass, 'adult')).toEqual({ headcount: 1, askUseDate: true })
+    expect(productAsksUseDate(pass, 'adult')).toBe(true)
+    // A variant's own setting replaces the product's, asking or not.
+    expect(productAsksUseDate(pass, 'kid')).toBe(false)
+    expect(productAsksUseDate(pass, 'spectator')).toBe(false)
+    expect(productAsksUseDate(product(), 'adult')).toBe(false)
+  })
+
+  it('keeps the ask only on a setting that is on, and refuses one that is not on or off', () => {
+    expect(normalizeProductCheckIn({ enabled: true, askUseDate: true })).toEqual({
+      enabled: true,
+      headcount: 1,
+      askUseDate: true,
+    })
+    expect(normalizeProductCheckIn({ enabled: true, askUseDate: 'yes' })).toEqual({ enabled: true, headcount: 1 })
+    expect(normalizeProductCheckIn({ enabled: false, askUseDate: true })).toEqual({ enabled: false })
+    expect(productCheckInProblem({ enabled: true, askUseDate: 'yes' })).toMatch(/on or off/)
+    expect(productCheckInProblem({ enabled: true, askUseDate: true })).toBeNull()
+  })
+
+  it('takes today or a later day within two years, on the store’s calendar', () => {
+    expect(isCheckInDayKey('2027-02-28')).toBe(true)
+    expect(isCheckInDayKey('2027-02-30')).toBe(false)
+    expect(isCheckInDayKey('tomorrow')).toBe(false)
+    expect(addCheckInDays('2027-12-31', 1)).toBe('2028-01-01')
+    expect(checkInUseDayProblem('2027-01-15', '2027-01-15')).toBeNull()
+    expect(checkInUseDayProblem('2027-01-14', '2027-01-15')).toMatch(/passed/)
+    expect(checkInUseDayProblem('2029-01-14', '2027-01-15')).toBeNull()
+    expect(checkInUseDayProblem('2029-01-15', '2027-01-15')).toMatch(/two years/)
+    expect(checkInUseDayProblem('2027-1-15', '2027-01-15')).toMatch(/date/)
+  })
+
+  it('puts each line on the day its buyer chose, else the day it was bought', () => {
+    const products = new Map([['pass', product({ checkIn: { enabled: true, askUseDate: true } })]])
+    const due = dueCheckInsForOrder({
+      orderId: 'o1',
+      order: {
+        status: 'paid',
+        lineItems: [
+          { productId: 'pass', variantId: 'adult', name: 'Day pass', quantity: 2, unitAmountCents: 4000, useDayKey: '2027-01-20' },
+          { productId: 'pass', variantId: 'adult', name: 'Day pass', quantity: 1, unitAmountCents: 4000 },
+          { productId: 'pass', variantId: 'adult', name: 'Day pass', quantity: 1, unitAmountCents: 4000, useDayKey: 'junk' },
+        ],
+      },
+      products,
+      purchaseDayKey: '2027-01-15',
+    })
+    expect([...due].map(([id, entry]) => `${id} ${entry.dayKey}`)).toEqual([
+      'o_o1_0_0 2027-01-20',
+      'o_o1_0_1 2027-01-20',
+      'o_o1_1_0 2027-01-15',
+      'o_o1_2_0 2027-01-15',
+    ])
+  })
+})
+
+describe('rain checks', () => {
+  const pass = (extra: Partial<CheckInRow> = {}) =>
+    ({ source: 'order', status: 'expected', dayKey: '2027-01-15', ...extra }) as CheckInRow
+
+  it('only on a pass nobody has used yet', () => {
+    expect(rainCheckProblem(pass(), { kind: 'open' }, '2027-01-15')).toBeNull()
+    expect(rainCheckProblem(pass({ source: 'reservation' }), { kind: 'open' }, '2027-01-15')).toMatch(/Reservations card/)
+    expect(rainCheckProblem(pass({ status: 'checked_in' }), { kind: 'open' }, '2027-01-15')).toMatch(/Undo the check-in/)
+  })
+
+  it('moves a pass only to a later day that has not passed', () => {
+    expect(rainCheckProblem(pass(), { kind: 'date', dayKey: '2027-01-16' }, '2027-01-15')).toBeNull()
+    expect(rainCheckProblem(pass(), { kind: 'date', dayKey: '2027-01-15' }, '2027-01-15')).toMatch(/after/)
+    expect(rainCheckProblem(pass(), { kind: 'date', dayKey: 'soon' }, '2027-01-15')).toMatch(/date/)
+    // Yesterday's unused pass can be moved to today, never to another past day.
+    expect(rainCheckProblem(pass({ dayKey: '2027-01-14' }), { kind: 'date', dayKey: '2027-01-15' }, '2027-01-15')).toBeNull()
+    expect(rainCheckProblem(pass({ dayKey: '2027-01-10' }), { kind: 'date', dayKey: '2027-01-12' }, '2027-01-15')).toMatch(
+      /passed/,
+    )
+  })
+
+  it('says what happened, and counts an open one apart from those expected', () => {
+    const rainCheck = {
+      kind: 'open' as const,
+      fromDayKey: '2027-01-15',
+      toDayKey: null,
+      claimedDayKey: null,
+      byUid: 'cashier',
+      byName: 'Cal',
+      atMs: 1,
+    }
+    expect(checkInDayLabel('2027-01-15')).toBe('Fri, Jan 15')
+    expect(rainCheckLabel(pass({ rainCheck, rainCheckOpen: true }))).toBe(
+      'Rain check from Fri, Jan 15: good on any later day',
+    )
+    expect(rainCheckLabel(pass({ rainCheck: { ...rainCheck, claimedDayKey: '2027-01-17' } }))).toBe(
+      'Rain check from Fri, Jan 15, used Sun, Jan 17',
+    )
+    expect(rainCheckLabel(pass({ rainCheck: { ...rainCheck, kind: 'date', toDayKey: '2027-01-16' } }))).toBe(
+      'Rain check: moved from Fri, Jan 15 to Sat, Jan 16',
+    )
+    expect(rainCheckLabel(pass())).toBe('')
+    expect(checkInStatusLabel(pass({ rainCheckOpen: true }))).toBe('Rain check')
+    expect(
+      checkInDayTotals([
+        pass({ rainCheckOpen: true }),
+        pass(),
+        pass({ status: 'checked_in' }),
+      ]),
+    ).toEqual({ expected: 2, checkedIn: 1, rainChecks: 1 })
+  })
+})
+
+describe('a stay checked in per guest', () => {
+  const stay = { status: 'confirmed' as const, checkInDayMs: Date.UTC(2027, 0, 15), checkOutDayMs: Date.UTC(2027, 0, 17), guestName: 'Sam Rivera', guests: 3 }
+
+  it('makes one check-in per guest each day, or one for the stay', () => {
+    const perGuest = dueCheckInsForReservation({ reservationId: 's1', reservation: stay, resourceName: 'Cabin 3', dayKey: '2027-01-16', perGuest: true })
+    expect([...perGuest].map(([id, entry]) => `${id} ${entry.unitIndex + 1}/${entry.unitCount}`)).toEqual([
+      'r_s1_2027-01-16_0 1/3',
+      'r_s1_2027-01-16_1 2/3',
+      'r_s1_2027-01-16_2 3/3',
+    ])
+    const perStay = dueCheckInsForReservation({ reservationId: 's1', reservation: stay, resourceName: 'Cabin 3', dayKey: '2027-01-16' })
+    expect([...perStay.keys()]).toEqual(['r_s1_2027-01-16_0'])
+    // No guest count: one, whichever way it is checked in.
+    const unknown = dueCheckInsForReservation({
+      reservationId: 's2',
+      reservation: { ...stay, guests: undefined },
+      resourceName: 'Cabin 3',
+      dayKey: '2027-01-16',
+      perGuest: true,
+    })
+    expect([...unknown.keys()]).toEqual(['r_s2_2027-01-16_0'])
+  })
+})
+
+describe('a stay’s check-ins when its count changes (AGL-4043)', () => {
+  const slot = (place: number, status: StayCheckInSlot['status'] = 'expected'): StayCheckInSlot => ({
+    id: `r_s1_2027-01-16_${place}`,
+    status,
+    unitIndex: place,
+  })
+
+  it('adds the lowest free places for more guests', () => {
+    expect(stayCheckInPlan({ unitCount: 5, existing: [slot(0), slot(1, 'checked_in'), slot(2)] })).toEqual({
+      unitIndexes: [0, 1, 2, 3, 4],
+      create: [3, 4],
+      drop: [],
+      checkedIn: 1,
+    })
+    // A gap left by an earlier change is filled first.
+    expect(stayCheckInPlan({ unitCount: 3, existing: [slot(0), slot(2, 'checked_in')] }).create).toEqual([1])
+  })
+
+  it('drops waiting guests from the highest place down, and never one checked in', () => {
+    expect(stayCheckInPlan({ unitCount: 2, existing: [slot(0), slot(1), slot(2, 'checked_in'), slot(3)] })).toEqual({
+      unitIndexes: [0, 2],
+      create: [],
+      drop: ['r_s1_2027-01-16_1', 'r_s1_2027-01-16_3'],
+      checkedIn: 1,
+    })
+  })
+
+  it('keeps every guest checked in when more are in than the count, and says how many', () => {
+    expect(stayCheckInPlan({ unitCount: 1, existing: [slot(0), slot(1, 'checked_in'), slot(2, 'checked_in')] })).toEqual({
+      unitIndexes: [1, 2],
+      create: [],
+      drop: ['r_s1_2027-01-16_0'],
+      checkedIn: 2,
+    })
+  })
+
+  it('makes every place from the first when nothing is stored yet', () => {
+    expect(stayCheckInPlan({ unitCount: 3, existing: [] }).unitIndexes).toEqual([0, 1, 2])
+  })
+
+  it('follows what is stored when it works out a stay’s due check-ins', () => {
+    const stay = { status: 'confirmed' as const, checkInDayMs: Date.UTC(2027, 0, 15), checkOutDayMs: Date.UTC(2027, 0, 17), guestName: 'Sam Rivera', guests: 2 }
+    const due = dueCheckInsForReservation({
+      reservationId: 's1',
+      reservation: stay,
+      resourceName: 'Cabin 3',
+      dayKey: '2027-01-16',
+      perGuest: true,
+      existing: [slot(0), slot(1), slot(2, 'checked_in')],
+    })
+    expect([...due].map(([id, entry]) => `${id} ${entry.unitCount}`)).toEqual([
+      'r_s1_2027-01-16_0 2',
+      'r_s1_2027-01-16_2 2',
+    ])
+  })
+
+  it('groups stored check-ins by stay, leaving out passes', () => {
+    const doc = (id: string, data: Record<string, unknown>) => ({ id, get: (field: string) => data[field] })
+    const grouped = storedStayCheckIns([
+      doc('r_s1_2027-01-16_0', { source: 'reservation', reservationId: 's1', status: 'checked_in', unitIndex: 0 }),
+      doc('r_s1_2027-01-16_1', { source: 'reservation', reservationId: 's1', status: 'expected', unitIndex: 1 }),
+      doc('o_o1_0_0', { source: 'order', reservationId: null, status: 'expected', unitIndex: 0 }),
+    ])
+    expect([...grouped.keys()]).toEqual(['s1'])
+    expect(grouped.get('s1')).toEqual([
+      { id: 'r_s1_2027-01-16_0', status: 'checked_in', unitIndex: 0 },
+      { id: 'r_s1_2027-01-16_1', status: 'expected', unitIndex: 1 },
+    ])
+  })
+
+  it('never names a place past the count: no "4 of 2"', () => {
+    const row = { itemName: 'Cabin 3', variantLabel: null, unitIndex: 3, unitCount: 2 }
+    expect(checkInItemLabel(row)).toBe('Cabin 3')
+    expect(checkInItemLabel({ ...row, unitIndex: 1 })).toBe('Cabin 3 (2 of 2)')
   })
 })

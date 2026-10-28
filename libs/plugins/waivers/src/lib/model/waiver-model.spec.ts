@@ -23,7 +23,9 @@ import {
   normalizeWaiverDraft,
   validThroughDayKey,
   validityLabel,
+  waiverAdultAge,
   waiverBodyText,
+  waiverSnapshot,
   type WaiverDraft,
 } from './waiver'
 import {
@@ -34,6 +36,10 @@ import {
   signatureCsvRow,
   waiverDayStatus,
   waiverSignedText,
+  waiverBusinessContact,
+  waiverEsignConsentText,
+  WAIVER_ESIGN_CONSENT,
+  WAIVER_ESIGN_CONSENT_V1_TEXT,
   waiverStatusLabel,
   WAIVER_SIGNATURE_CSV_HEADER,
   type StoredWaiverSignature,
@@ -68,7 +74,14 @@ describe('a waiver draft', () => {
     const result = normalizeWaiverDraft({ ...DRAFT, title: '  Rider   release ' })
     expect(result).toEqual({
       ok: true,
-      draft: { title: 'Rider release', body: DRAFT.body, checkboxes: DRAFT.checkboxes, allowMinors: true, validity: { kind: 'visit' } },
+      draft: {
+        title: 'Rider release',
+        body: DRAFT.body,
+        checkboxes: DRAFT.checkboxes,
+        allowMinors: true,
+        validity: { kind: 'visit' },
+        adultAge: 18,
+      },
     })
   })
 
@@ -97,6 +110,25 @@ describe('a waiver draft', () => {
     expect(draftChangesText(DRAFT, { ...DRAFT, body: `${DRAFT.body}\n\nMore.` })).toBe(true)
     expect(draftChangesText(DRAFT, { ...DRAFT, allowMinors: false })).toBe(true)
     expect(draftChangesText(DRAFT, { ...DRAFT, validity: { kind: 'days', days: 365 } })).toBe(true)
+    expect(draftChangesText(DRAFT, { ...DRAFT, adultAge: 19 })).toBe(true)
+  })
+
+  it('reads a waiver saved before the adult age setting as 18, and saving it there starts no version', () => {
+    expect(waiverAdultAge(DRAFT)).toBe(18)
+    expect(waiverAdultAge({ adultAge: 21 })).toBe(21)
+    expect(waiverAdultAge({ adultAge: 40 })).toBe(18)
+    expect(waiverSnapshot(DRAFT).adultAge).toBe(18)
+    expect(draftChangesText(DRAFT, { ...DRAFT, adultAge: 18 })).toBe(false)
+  })
+
+  it('takes an adult age of 18 to 21 whole years, and says what to fix otherwise', () => {
+    const age = (adultAge: unknown) => normalizeWaiverDraft({ ...DRAFT, adultAge })
+    expect(age(undefined)).toMatchObject({ ok: true, draft: { adultAge: 18 } })
+    expect(age(21)).toMatchObject({ ok: true, draft: { adultAge: 21 } })
+    expect(age('19')).toMatchObject({ ok: true, draft: { adultAge: 19 } })
+    for (const bad of [17, 22, 18.5, 'eighteen']) {
+      expect(age(bad)).toEqual({ ok: false, error: 'Choose an adult age from 18 to 21.' })
+    }
   })
 
   it('reads its words as plain text: headings, paragraphs, bullets and numbers, no syntax', () => {
@@ -173,12 +205,79 @@ describe('a signing', () => {
     expect(ageOn('2008-10-25', '2026-10-24')).toBe(17)
   })
 
+  it('decides who is an adult by the waiver’s own adult age, at the boundary', () => {
+    const at21 = { ...DRAFT, adultAge: 21 }
+    const sign = (input: Record<string, unknown>, waiver: WaiverDraft & { version: number } = at21) =>
+      normalizeSignInput({ ...SIGNING, ...input }, waiver, '2026-10-24', { method: 'online' })
+    const errorOf = (result: ReturnType<typeof sign>) => (result.ok === false ? result.error : null)
+    // A signer 21 today is an adult; one a day short of it is not.
+    expect(errorOf(sign({ signer: { ...SIGNING.signer, dateOfBirth: '2005-10-24' } }))).toBeNull()
+    expect(errorOf(sign({ signer: { ...SIGNING.signer, dateOfBirth: '2005-10-25' } }))).toBe(
+      'Anyone under 21 needs a parent or guardian to sign for them.',
+    )
+    // The same 19-year-old signs for themselves on an 18 waiver.
+    expect(errorOf(sign({ signer: { ...SIGNING.signer, dateOfBirth: '2007-01-01' } }, DRAFT))).toBeNull()
+    // A guardian signs for a 20-year-old on a 21 waiver, and not for one who turns 21 today.
+    expect(errorOf(sign({ minors: [{ name: 'Sam Lee', dateOfBirth: '2005-10-25' }] }))).toBeNull()
+    expect(errorOf(sign({ minors: [{ name: 'Sam Lee', dateOfBirth: '2005-10-24' }] }))).toBe(
+      'Sam Lee is 21 or older, so they sign their own waiver.',
+    )
+  })
+
   it('signs the waiver’s own text, the same for every signer, consent last', () => {
     const text = waiverSignedText(DRAFT, { consent: true })
     expect(text.startsWith('Rider release\n\nVersion 3\n\nRisks')).toBe(true)
     expect(text).toContain('[x] I will wear my gear.')
-    expect(text.endsWith('I can ask the business for a paper copy instead.')).toBe(true)
+    expect(text.endsWith('Withdrawing doesn’t undo a signature I have already given.')).toBe(true)
     expect(waiverSignedText(DRAFT, { consent: false })).not.toContain('Electronic signature consent')
+    // The consent as the site's signers read it is the one signed.
+    const consentText = waiverEsignConsentText({ business: 'Ridgeline Moto', contact: 'hello@example.com' })
+    expect(waiverSignedText(DRAFT, { consent: true, consentText })).toContain(`Electronic signature consent: ${consentText}`)
+  })
+})
+
+describe('the e-signature consent, version 2 (AGL-4042)', () => {
+  const text = waiverEsignConsentText({ business: 'Ridgeline Moto', contact: 'hello@example.com or (555) 010-0100' })
+
+  it('is version 2, and version 1 is kept word for word for the signatures that agreed to it', () => {
+    expect(WAIVER_ESIGN_CONSENT.version).toBe(2)
+    expect(WAIVER_ESIGN_CONSENT_V1_TEXT).toBe(
+      'I agree to sign this waiver electronically and to receive it and my signed copy by email. ' +
+        'I intend my electronic signature to be my signature on this waiver. ' +
+        'I can ask the business for a paper copy instead.',
+    )
+  })
+
+  it('answers each disclosure: minors, scope, device, a copy by email only when one is given, paper, the copy, withdrawal and who to contact', () => {
+    for (const part of [
+      'for myself and for any minors I list',
+      'This agreement covers only this waiver and my signed copy of it.',
+      'a device with a current web browser',
+      'If I give an email address, Ridgeline Moto will email my signed copy to it as a PDF file',
+      'I can also download it when I finish signing',
+      'I can ask Ridgeline Moto to let me sign on paper instead',
+      'a paper copy at no charge',
+      'change the email address for my copy',
+      'withdraw this agreement for anything not yet sent to me',
+      'by contacting Ridgeline Moto at hello@example.com or (555) 010-0100.',
+      'Withdrawing doesn’t undo a signature I have already given.',
+    ]) {
+      expect([part, text.includes(part)]).toEqual([part, true])
+    }
+    expect(text).not.toContain('{')
+  })
+
+  it('reads plainly without a contact or a name', () => {
+    expect(waiverEsignConsentText({ business: 'Ridgeline Moto', contact: null })).toContain('by contacting Ridgeline Moto.')
+    expect(waiverEsignConsentText({ business: '', contact: '' })).toContain('I can ask the business to let me sign on paper instead')
+  })
+
+  it('takes the site’s contact from its listing, else its support email', () => {
+    expect(waiverBusinessContact({ seo: { entity: { email: 'hi@example.com', telephone: '+1-555-010-0100' } } })).toBe(
+      'hi@example.com or +1-555-010-0100',
+    )
+    expect(waiverBusinessContact({ business: { supportEmail: 'help@example.com' } })).toBe('help@example.com')
+    expect(waiverBusinessContact({})).toBeNull()
   })
 })
 

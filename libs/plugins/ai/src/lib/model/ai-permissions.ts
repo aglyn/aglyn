@@ -61,6 +61,12 @@ const CONTENT_ROLES: Readonly<Record<HostAccessRole, boolean>> = {
  * asking the assistant nothing: a viewer spends none of the workspace's AI
  * credits. A site collaborator holds both on a site where their host role
  * may change content.
+ *
+ * A site can narrow both (AGL-4047), and by default neither does: an editor
+ * of the whole workspace given Viewer or Author access to one site keeps AI
+ * there, as before, unless a custom role or their own permissions choose
+ * "Follow the site role" for the key, in which case that site's access
+ * decides it (`CONTENT_ROLES` below: Author keeps it, Viewer does not).
  */
 export const AI_ORG_PERMISSIONS: readonly PluginOrgPermissionDeclaration[] = [
   {
@@ -71,6 +77,7 @@ export const AI_ORG_PERMISSIONS: readonly PluginOrgPermissionDeclaration[] = [
     hostRoleDefaults: CONTENT_ROLES,
     group: 'ai',
     groupLabel: 'AI',
+    narrowsPerSite: false,
   },
   {
     key: 'ai.generate',
@@ -79,6 +86,24 @@ export const AI_ORG_PERMISSIONS: readonly PluginOrgPermissionDeclaration[] = [
       'Run AI generation jobs and AI edits: pages, components, emails, campaigns, products, CRM, insights, workflows.',
     roleDefaults: { owner: true, admin: true, editor: true, viewer: false },
     hostRoleDefaults: CONTENT_ROLES,
+    group: 'ai',
+    groupLabel: 'AI',
+    narrowsPerSite: false,
+  },
+]
+
+/**
+ * The AI plugin's workspace keys (AGL-4047), decided by the workspace role,
+ * the custom role and the member's own permissions, never per site.
+ * "Bring a site in" asked whether the member was the workspace's owner or an
+ * admin; its default is exactly those roles.
+ */
+export const AI_WORKSPACE_PERMISSIONS: readonly PluginOrgPermissionDeclaration[] = [
+  {
+    key: 'ai.import',
+    label: 'Bring a site in',
+    description: 'Import an existing website into the workspace with Bring my site.',
+    roleDefaults: { owner: true, admin: true, editor: false, viewer: false },
     group: 'ai',
     groupLabel: 'AI',
   },

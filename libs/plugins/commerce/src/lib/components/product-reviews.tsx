@@ -60,6 +60,8 @@ interface StoreReviewView {
   createdAtMs: number
   productName?: string
   productSlug?: string
+  /** Sold in person only, and the store shows its reviews (AGL-4060). */
+  soldInStore?: boolean
 }
 
 const EDITOR_HINT_SX = {
@@ -157,7 +159,9 @@ ProductReviews.displayName = 'AglynProductReviews'
 /**
  * The store-wide reviews band (`scope: 'store'`): the store's latest APPROVED
  * reviews, read-only stars, the reviewer's first name and initial, a verified
- * badge, and the product reviewed. Real reviews or nothing: with none it
+ * badge, and the product reviewed — linked to its page, or, for a product
+ * sold in person only, marked "Sold in store" and linked nowhere (AGL-4060).
+ * Real reviews or nothing: with none it
  * renders an empty, zero-height element — never sample reviews on a live page
  * (sample testimonials presented as customers' would be fake reviews). The
  * editor, which has no site, gets a dashed hint instead.
@@ -271,16 +275,21 @@ const StoreReviews = forwardRef<HTMLDivElement, ProductReviewsProps>(
                   <Chip label="Verified buyer" size="small" variant="outlined" color="success" />
                 ) : null}
               </Box>
-              {review.productName ? (
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  component={review.productSlug ? 'a' : 'span'}
-                  {...(review.productSlug ? { href: `/products/${review.productSlug}` } : {})}
-                  sx={{ textDecoration: 'none' }}
-                >
-                  {review.productName}
-                </Typography>
+              {review.productName || review.soldInStore ? (
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
+                  {review.productName ? (
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      component={review.productSlug && !review.soldInStore ? 'a' : 'span'}
+                      {...(review.productSlug && !review.soldInStore ? { href: `/products/${review.productSlug}` } : {})}
+                      sx={{ textDecoration: 'none' }}
+                    >
+                      {review.productName}
+                    </Typography>
+                  ) : null}
+                  {review.soldInStore ? <Chip label="Sold in store" size="small" variant="outlined" /> : null}
+                </Box>
               ) : null}
             </Box>
           ))}

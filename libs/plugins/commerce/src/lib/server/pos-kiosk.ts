@@ -29,6 +29,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import * as CommerceModel from '../model'
+import { productOfferedOnKiosk } from '../model/commerce-kiosk-offer'
 import { posRegisterSettings, type PosRegisterSettings } from '../plugin-config'
 import { posKioskSettings, type PosKioskSettings } from '../pos-kiosk-config'
 import { verifyMemberPassword } from './membership'
@@ -139,11 +140,12 @@ async function authorizeKiosk(
     hostRef.collection('registers').doc(device.registerId).get(),
   ])
   if (!host.exists || !register.exists) return refuse(401, 'This kiosk is not paired.')
-  const role = (host.get('memberRoles') ?? {})[device.createdBy]
+  // The member who paired it must still work the register here: the key
+  // decides, not the site role (AGL-4047).
   const membership = device.createdBy
     ? await resolveOrgPermissions(device.createdBy, { hostId: device.hostId })
     : null
-  if ((role !== 'admin' && role !== 'editor') || !membership?.permissions?.managePos) {
+  if (!membership?.permissions?.managePos) {
     return refuse(403, 'This kiosk needs a staff member to pair it again.')
   }
   const owner = await getOrgForHost(device.hostId)
@@ -255,10 +257,21 @@ async function context(gate: KioskGate): Promise<Outcome> {
  */
 export function posKioskSellable(product: CommerceModel.HostProduct): boolean {
   if (product.status !== 'active') return false
+  // The merchant's own choice of what the kiosk offers (AGL-4038), for any
+  // product: "Offer on the kiosk" in the product editor.
+  if (!productOfferedOnKiosk(product)) return false
   if (product.subscription && !product.subscriptionOptional) return false
   if (product.giftCard) return false
   if (product.type === 'digital') return false
-  return (product.variants ?? []).some((variant) => CommerceModel.variantHasPrice(variant))
+  return (product.variants ?? []).some((variant) => posKioskVariantOffered(product, variant))
+}
+
+/** A variant the kiosk may sell: priced, and offered by the merchant's choice (AGL-4038). */
+export function posKioskVariantOffered(
+  product: CommerceModel.HostProduct,
+  variant: CommerceModel.ProductVariant,
+): boolean {
+  return CommerceModel.variantHasPrice(variant) && productOfferedOnKiosk(product, variant.id)
 }
 
 /** A product as the kiosk may show it: names, prices and choices, nothing else. */
@@ -277,7 +290,7 @@ export function posKioskProduct(
     categoryIds: (product.categoryIds ?? []).slice(0, 20),
     options: (product.options ?? []).map((option) => ({ name: option.name, values: [...option.values] })),
     variants: (product.variants ?? [])
-      .filter((variant) => CommerceModel.variantHasPrice(variant))
+      .filter((variant) => posKioskVariantOffered(product, variant))
       .map((variant) => ({
         id: variant.id,
         options: { ...(variant.options ?? {}) },
@@ -425,7 +438,7 @@ async function checkout(
     const variant = line.variantId
       ? product.variants.find((candidate) => candidate.id === line.variantId)
       : product.variants[0]
-    if (!variant || !CommerceModel.variantHasPrice(variant)) {
+    if (!variant || !posKioskVariantOffered(product, variant)) {
       return refuse(409, `${product.name} is no longer available. Remove it and try again.`)
     }
     const wanted = cart.lines
@@ -704,11 +717,8 @@ export function readPosKioskUnlock(token: unknown, deviceId: string, nowMs: numb
   }
 }
 
-/** Whether a member may still unlock: their role and `managePos` today. */
+/** Whether a member may still unlock: `managePos` here today, whatever their site role (AGL-4047). */
 async function mayUnlock(gate: KioskGate, memberUid: string): Promise<boolean> {
-  const host = await gate.hostRef.get()
-  const role = (host.get('memberRoles') ?? {})[memberUid]
-  if (role !== 'admin' && role !== 'editor') return false
   const membership = await resolveOrgPermissions(memberUid, { hostId: gate.hostId })
   return membership?.permissions?.managePos === true
 }
@@ -744,13 +754,14 @@ async function unlock(gate: KioskGate, req: PluginApiRequest, body: Record<strin
   if (claim.kind === 'locked') {
     return { status: 423, body: { error: 'Too many wrong PINs. Try again later.', lockedUntilMs: claim.lockedUntilMs } }
   }
+  // Members of this site only, any role: `mayUnlock` below asks the key.
   const host = await gate.hostRef.get()
   const roles = (host.get('memberRoles') ?? {}) as Record<string, string>
   const pins = await gate.hostRef.collection('posStaffPins').limit(50).get()
   let matched = ''
   for (const doc of pins.docs) {
     const uid = String(doc.id)
-    if (roles[uid] !== 'admin' && roles[uid] !== 'editor') continue
+    if (!roles[uid]) continue
     if (Number(doc.get('lockedUntilMs') ?? 0) > now) continue
     const hash = String(doc.get('pinScrypt') ?? '')
     if (hash && verifyMemberPassword(pin, hash)) {

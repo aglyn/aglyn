@@ -17,6 +17,7 @@ export function registerPluginServerDeclarations(): Promise<void> {
   done ??= (async () => {
     ;(await import('@aglyn/plugins-forms/declarations.server')).registerFormsServerDeclarations()
     ;(await import('@aglyn/plugins-forms/declarations.console-server')).registerFormsConsoleServerDeclarations()
+    ;(await import('@aglyn/plugins-bookings/declarations')).registerBookingsDeclarations()
     ;(await import('@aglyn/plugins-bookings/declarations.console-server')).registerBookingsConsoleServerDeclarations()
     ;(await import('@aglyn/plugins-commerce/declarations')).registerCommerceDeclarations()
     ;(await import('@aglyn/plugins-commerce/declarations.server')).registerCommerceServerDeclarations()
@@ -51,6 +52,7 @@ export function registerPluginServerDeclarations(): Promise<void> {
     ;(await import('@aglyn/plugins-loyalty/declarations.server')).registerLoyaltyServerDeclarations()
     ;(await import('@aglyn/plugins-waivers/declarations')).registerWaiversDeclarations()
     ;(await import('@aglyn/plugins-waivers/declarations.server')).registerWaiversServerDeclarations()
+    ;(await import('@aglyn/plugins-waivers/declarations.console-server')).registerWaiversConsoleServerDeclarations()
     ;(await import('@aglyn/plugins-tax-engines/declarations.server')).registerTaxEnginesServerDeclarations()
     ;(await import('@aglyn/plugins-marketing-platforms/declarations.server')).registerMarketingPlatformsServerDeclarations()
     ;(await import('@aglyn/plugins-marketing-platforms/declarations.console-server')).registerMarketingPlatformsConsoleServerDeclarations()

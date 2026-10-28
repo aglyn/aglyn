@@ -302,6 +302,94 @@ registerPluginJob({
 })
 
 /**
+ * The monthly 4G charge for Stripe Reader S710s (AGL-4038): each workspace
+ * whose readers had 4G in the month just ended is charged once, through
+ * core's usage-invoice charge. Every six hours, so the charge goes out early
+ * on the 1st and one that could not reach Stripe is tried again the same
+ * day; a month already settled costs a read per workspace. Nothing runs
+ * where 4G is not offered (`POS_CELLULAR_MONTHLY_COST_CENTS` unset).
+ * Per-host: a store locked for security or abuse is not charged while it is.
+ */
+registerPluginJob({
+  pluginId: BUNDLE_ID,
+  name: 'pos-cellular-billing',
+  intervalMinutes: 6 * 60,
+  description:
+    'Charge each workspace for 4G on its Stripe Reader S710s for the month just ended, once (AGL-4038).',
+  lockdown: { scope: 'per-host' },
+  handler: async (gate) => {
+    if (!process.env.STRIPE_SECRET_KEY || !process.env.POS_CELLULAR_MONTHLY_COST_CENTS) return
+    const { runPosCellularBilling } = await import('./server/pos-cellular-billing')
+    const report = await runPosCellularBilling(gate)
+    if (report.workspaces || report.storesGone || report.warned || report.turnedOff || report.paidLate) {
+      console.info(
+        `commerce: 4G for ${report.month} — ${report.paid} paid, ${report.open} left open, ` +
+          `${report.failed} not reached, ${report.unbillable} not billable, ${report.deferred} deferred, ` +
+          `${report.storesGone} deleted stores turned off; unpaid charges: ${report.warned} warned, ` +
+          `${report.paidLate} paid since, ${report.turnedOff} turned off`,
+      )
+    }
+  },
+})
+
+/**
+ * Card reader start-up screens (AGL-4048) that went stale with nobody opening
+ * the POS devices card: a logo changed on the organization profile or the
+ * white-label brand, or the logo's file replaced in the media library. Every
+ * 15 minutes, like the recovery pair: a store whose screen did not move costs
+ * a few reads and no Stripe call, and nothing a merchant saves waits on it.
+ * A screen Stripe refused is retried after six hours here, and at once when
+ * the card is opened.
+ */
+registerPluginJob({
+  pluginId: BUNDLE_ID,
+  name: 'pos-reader-splash-refresh',
+  intervalMinutes: RECOVERY_JOB_INTERVAL_MINUTES,
+  description:
+    'Bring card reader start-up screens up to date after a logo change (AGL-4048).',
+  lockdown: { scope: 'per-host' },
+  handler: async (gate) => {
+    if (!process.env.STRIPE_SECRET_KEY) return
+    const { refreshPosReaderSplashes } = await import('./server/pos-reader-splash')
+    const result = await refreshPosReaderSplashes(gate)
+    if (result.applied || result.failed || result.more) {
+      console.info(
+        `commerce: reader start-up screens — ${result.applied} updated, ` +
+          `${result.failed} failed${result.more ? ', more stores than one pass reaches' : ''}`,
+      )
+    }
+  },
+})
+
+/**
+ * Cards taken offline whose sale never synced (AGL-4039).
+ *
+ * HOURLY. The alert falls due six hours after the intent was first seen, and
+ * Stripe's authorization lasts about two days, so an hour's delay costs
+ * nothing and leaves the beat one collection-group range read that is empty in
+ * the ordinary case. It never captures: without the sale there is no fee to
+ * capture with, so it tells the operator and the site's managers instead.
+ *
+ * Not gated on `isEmailConfigured()`: the console notification and the
+ * operator alert both work without mail.
+ */
+registerPluginJob({
+  pluginId: BUNDLE_ID,
+  name: 'offline-card-unsynced',
+  intervalMinutes: 60,
+  description:
+    'Tell the operator and the site when a card taken offline reached Stripe but its sale never synced (AGL-4039).',
+  lockdown: { scope: 'per-host' },
+  handler: async (gate) => {
+    const { scanUnsyncedOfflineCards } = await import('./server/pos-offline-card-reconcile')
+    const scan = await scanUnsyncedOfflineCards(gate)
+    if (scan.alerted) {
+      console.warn(`commerce: ${scan.alerted} cards taken offline have no synced sale`)
+    }
+  },
+})
+
+/**
  * A visitor's payment door: it opens a Stripe Checkout Session for whoever
  * calls it, so the dispatcher holds it to the card-testing counters
  * (AGL-3363). Declared here, beside the registration, so the door cannot
@@ -481,6 +569,13 @@ export function registerCommerceConsoleApi(): void {
   registerPluginApiRoute('commerce/reservations/walk-in', async (req, res) =>
     (await import('./server/reservation-walk-in')).reservationWalkInHandler(req, res),
   )
+  // A stay's guest count after it is booked (AGL-4043), from the Reservations
+  // card and the check-in screen: the walk-in's gate, and the stay's
+  // check-ins for today on brought in line in the same transaction. Loaded
+  // on first call.
+  registerPluginApiRoute('commerce/reservations/guests', async (req, res) =>
+    (await import('./server/reservation-guests')).reservationGuestsHandler(req, res),
+  )
   // The products list's Duplicate and Delete for the native apps (AGL-3841):
   // the console's own copy and soft delete, with the site-wide cache drop.
   registerPluginApiRoute('commerce/products/duplicate', async (req, res) =>
@@ -568,9 +663,16 @@ export function registerCommerceConsoleApi(): void {
   registerPluginApiRoute('commerce/pos-hardware', async (req, res) =>
     (await import('./server/pos-hardware')).posHardwareHandler(req, res),
   )
+  // Selling a card reader in person at the platform's own store's register
+  // (AGL-4038): whether this store is that seller. Gated like a sale, and
+  // silent about the configuration on every other store. Loaded on first call.
+  registerPluginApiRoute('commerce/pos-hardware-sale', async (req, res) =>
+    (await import('./server/pos-hardware-sale')).posHardwareSaleHandler(req, res),
+  )
   // A store's card reader start-up screen (AGL-4048): the POS devices card's
-  // setting, gated like a sale, and the staff page's platform default. Both
-  // draw images, so each loads with its first call.
+  // setting, gated like a sale, and the staff page's platform default. Each
+  // loads with its first call; the drawing they ask for is the images
+  // route's, below.
   registerPluginApiRoute('commerce/pos-reader-splash', async (req, res) =>
     (await import('./server/pos-reader-splash')).posReaderSplashHandler(req, res),
   )
@@ -578,6 +680,19 @@ export function registerCommerceConsoleApi(): void {
     web: async (request) =>
       (await import('./server/pos-reader-splash-admin')).posReaderSplashAdmin(request),
   })
+  // The image work behind both (AGL-4048): drawing a screen and reading an
+  // uploaded one take `sharp`, whose native library only the console's
+  // plugins' image function ships (`/api/plugin-images/…`), so the plugin
+  // API's function does not carry it. Called by our own servers, signed; a
+  // machine's door.
+  registerPluginApiRoute(
+    'commerce/pos-reader-splash-images',
+    {
+      web: async (request) =>
+        (await import('./server/pos-reader-splash-images-route')).posReaderSplashImagesRoute(request),
+    },
+    { machine: true, images: true },
+  )
   registerPluginApiRoute('commerce/admin/hardware-orders', {
     web: async (request) =>
       (await import('./server/pos-hardware-admin')).posHardwareAdminOrders(request),

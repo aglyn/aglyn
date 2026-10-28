@@ -37,16 +37,27 @@ import { waiverShareLink } from './waivers-api'
 /**
  * The share link and its QR code (AGL-4042), for a waiver signers open on
  * their own phones before they arrive: in a confirmation email, a text, a
- * sign at the gate. Only a published waiver takes signatures, so a draft's
- * link is shown with that said.
+ * sign at the gate. The link opens on the store's own site, in its own
+ * header and footer (its custom domain, else its platform address). Only a
+ * published waiver takes signatures, so a draft's link is shown with that
+ * said.
  */
-export function ShareWaiverDialog(props: { hostId: string; waiver: WaiverTemplate | null; onClose: () => void }) {
-  const { waiver } = props
+export function ShareWaiverDialog(props: {
+  hostId: string
+  waiver: WaiverTemplate | null
+  /** The store's own site; `null` for a site with no public address, whose link stays the console's. */
+  signPageOrigin: string | null
+  onClose: () => void
+}) {
+  const { waiver, signPageOrigin } = props
   const [copied, setCopied] = useState(false)
   const qr = useRef<HTMLDivElement | null>(null)
   const link = useMemo(
-    () => (waiver && typeof window !== 'undefined' ? waiverShareLink(window.location.origin, props.hostId, waiver.id) : ''),
-    [waiver, props.hostId],
+    () =>
+      waiver && typeof window !== 'undefined'
+        ? waiverShareLink(signPageOrigin, window.location.origin, props.hostId, waiver.id)
+        : '',
+    [waiver, props.hostId, signPageOrigin],
   )
   const downloadQr = () => {
     const svg = qr.current?.querySelector('svg')
@@ -69,7 +80,9 @@ export function ShareWaiverDialog(props: { hostId: string; waiver: WaiverTemplat
               <Alert severity="warning">{'Publish this waiver first: the link takes signatures only while it is published.'}</Alert>
             ) : null}
             <Typography variant="body2" color="text.secondary">
-              {'Riders open this link on their own phone to sign before they arrive. Print the QR code for the gate or the window.'}
+              {signPageOrigin
+                ? 'Riders open this link on their own phone to sign before they arrive. It opens on your site, with your header and footer. Print the QR code for the gate or the window.'
+                : 'Riders open this link on their own phone to sign before they arrive. Print the QR code for the gate or the window.'}
             </Typography>
             <TextField label="Link" value={link} fullWidth slotProps={{ htmlInput: { readOnly: true } }} />
             <Paper ref={qr} variant="outlined" sx={{ p: 2, alignSelf: 'center', bgcolor: 'common.white' }}>

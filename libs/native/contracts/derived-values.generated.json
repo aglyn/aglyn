@@ -2715,7 +2715,7 @@
       "plans": []
     },
     "release_ai_site_inspiration": {
-      "enabled": false,
+      "enabled": true,
       "rolloutPercent": 0,
       "plans": []
     },

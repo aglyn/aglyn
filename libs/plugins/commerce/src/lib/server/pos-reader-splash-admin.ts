@@ -27,8 +27,7 @@ import {
   posReaderSplashImageProblem,
 } from '../model/pos-reader-splash'
 import {
-  applyPosReaderSplash,
-  ownerOrgOf,
+  applyPosReaderSplashToStores,
   platformSplashReady,
   platformSplashRef,
   posReaderSplashBucket,
@@ -63,10 +62,6 @@ import { posReaderSplashImageFacts } from './pos-reader-splash-render'
 
 const WRITE_ROLES = ['super']
 
-/** How many stores one `apply` reaches; staff press it again for the rest. */
-const APPLY_WINDOW = 400
-const APPLY_CONCURRENCY = 4
-
 const json = (body: unknown, status = 200) =>
   Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } })
 
@@ -96,6 +91,28 @@ function view(doc: PlatformSplashDoc) {
 
 export type StaffReaderSplashView = ReturnType<typeof view>
 
+/**
+ * An uploaded screen's format and size, read here where this process can
+ * draw, else by the images function (AGL-4048), which ships `sharp`.
+ */
+async function uploadedImageFacts(body: Buffer): Promise<{ contentType: string; width: number; height: number } | null> {
+  const images = await import('./pos-reader-splash-images')
+  const origin = images.posReaderSplashImagesOrigin()
+  if (!origin) {
+    const { loadSharp } = await import('./pos-reader-splash-server')
+    return posReaderSplashImageFacts((await loadSharp()) as any, body)
+  }
+  try {
+    const answer = await images.requestPosReaderSplashImages<{
+      facts: { contentType: string; width: number; height: number } | null
+    }>(origin, { op: 'facts', dataBase64: body.toString('base64') })
+    return answer.facts
+  } catch (error) {
+    if (error instanceof images.PosReaderSplashImagesRefusal) return null
+    throw error
+  }
+}
+
 async function upload(
   doc: PlatformSplashDoc,
   input: Record<string, unknown>,
@@ -109,8 +126,7 @@ async function upload(
     return { error: 'Use an image under 2 MB.', status: 400 }
   }
   const body = Buffer.from(raw, 'base64')
-  const { loadSharp } = await import('./pos-reader-splash-server')
-  const facts = await posReaderSplashImageFacts((await loadSharp()) as any, body)
+  const facts = await uploadedImageFacts(body)
   if (!facts) return { error: 'That image could not be read.', status: 400 }
   // The bytes decide the type, never the name or the browser's claim.
   const problem = posReaderSplashImageProblem({ ...facts, bytes: body.length }, family)
@@ -138,29 +154,13 @@ async function upload(
   }
 }
 
-/** Every store with a Location, its screen brought up to the current default. */
+/**
+ * Every store with a Location, its screen brought up to the current default.
+ * One `apply` reaches `POS_READER_SPLASH_SWEEP_WINDOW` stores; staff
+ * press it again for the rest.
+ */
 async function applyToEveryStore() {
-  const firestore = firebaseAdmin.app().firestore()
-  const platform = await readPlatformSplash()
-  const snapshot = await firestore.collectionGroup('terminal').limit(APPLY_WINDOW + 1).get()
-  const hostIds = (snapshot.docs as Array<{ id: string; ref: { path: string }; get: (field: string) => unknown }>)
-    .filter((doc) => doc.id === 'config' && doc.get('stripeLocationId'))
-    .map((doc) => doc.ref.path.split('/')[1])
-    .filter(Boolean)
-  const counts = { applied: 0, unchanged: 0, failed: 0 }
-  const queue = hostIds.slice(0, APPLY_WINDOW)
-  await Promise.all(
-    Array.from({ length: APPLY_CONCURRENCY }, async () => {
-      for (let hostId = queue.shift(); hostId; hostId = queue.shift()) {
-        const org = await ownerOrgOf(hostId)
-        const result = await applyPosReaderSplash(hostId, { org, platform })
-        if (result.outcome === 'applied' || result.outcome === 'cleared') counts.applied += 1
-        else if (result.outcome === 'failed') counts.failed += 1
-        else counts.unchanged += 1
-      }
-    }),
-  )
-  return { ...counts, more: snapshot.docs.length > APPLY_WINDOW }
+  return applyPosReaderSplashToStores({ platform: await readPlatformSplash() })
 }
 
 async function handler(request: Request): Promise<Response> {

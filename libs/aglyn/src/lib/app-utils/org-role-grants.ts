@@ -57,6 +57,19 @@ export interface OrgPermissionEntry {
   group?: string
   /** Where it is decided; absent reads as `org`. */
   scope?: OrgPermissionScope
+  /**
+   * The broader key this one is a finer part of (AGL-4047): never granted
+   * without it, and following it where no custom role or override sets this
+   * key. Absent for a key that refines nothing.
+   */
+  refines?: string
+  /**
+   * The key this one follows where no custom role or override sets it,
+   * without needing it (AGL-4047): granted on its own, it holds while that
+   * key is refused. Absent for a key that follows nothing, and for one that
+   * refines.
+   */
+  follows?: string
 }
 
 /** A heading the role editor groups keys under. */
@@ -96,6 +109,10 @@ export interface OrgPermissionDeclaration {
   /** That group's heading, for a group the core does not name. */
   groupLabel?: string
   pluginId?: string
+  /** The broader key it refines (AGL-4047). */
+  refines?: string
+  /** The key it follows without needing it (AGL-4047). */
+  follows?: string
 }
 
 /** A custom role (`orgs/{orgId}/roles/{roleId}`) or a member's overrides: explicit verdicts per key. */
@@ -162,6 +179,44 @@ export const CORE_ORG_PERMISSION_ENTRIES: readonly OrgPermissionEntry[] = [
     description: 'See the organization activity feed.',
   },
   {
+    key: 'org.apiKeys',
+    group: 'organization',
+    label: 'Manage API keys',
+    description: 'Create and revoke the workspace’s REST API keys.',
+  },
+  {
+    key: 'org.privacy',
+    group: 'organization',
+    label: 'Privacy requests',
+    description: 'Erase a person from every site in the workspace when they ask.',
+  },
+  {
+    key: 'org.holds',
+    group: 'organization',
+    label: 'Holds and reviews',
+    description: 'See what is held, flagged or locked on the workspace, and request a review.',
+  },
+  // Workspace acts that asked for the owner or admin role (AGL-4047), each
+  // a key of its own whose default is exactly those roles.
+  {
+    key: 'org.export',
+    group: 'organization',
+    label: 'Export workspace data',
+    description: 'Download a copy of everything the workspace holds.',
+  },
+  {
+    key: 'org.sendingDomains',
+    group: 'organization',
+    label: 'Sending domains',
+    description: 'Add, verify and remove the domains the workspace’s mail is sent from.',
+  },
+  {
+    key: 'org.businessProfile',
+    group: 'organization',
+    label: 'Business profile',
+    description: 'Change the services, audience and tone every site starts from.',
+  },
+  {
     key: 'billing.view',
     group: 'billing',
     label: 'View billing',
@@ -191,11 +246,55 @@ export const CORE_ORG_PERMISSION_ENTRIES: readonly OrgPermissionEntry[] = [
     label: 'Delete sites',
     description: 'Delete sites the member can access.',
   },
+  // The site keys (AGL-4047): each replaced a gate on the member's role on a
+  // site, and keeps that role as its preset (`CORE_SITE_ROLE_PRESETS`).
+  {
+    key: 'site.edit',
+    group: 'sites',
+    scope: 'site',
+    label: 'Edit site content',
+    description: 'Create and change pages, content and everything else on a site, without making it live.',
+  },
+  {
+    key: 'site.publish',
+    group: 'sites',
+    scope: 'site',
+    label: 'Publish site content',
+    description: 'Make pages and content live, take them down or schedule them, and change redirects.',
+  },
+  {
+    key: 'site.sensitive',
+    group: 'sites',
+    scope: 'site',
+    label: 'See orders and webhooks',
+    description: 'Read a site’s orders and returns, and set up its webhooks.',
+  },
+  {
+    key: 'site.manage',
+    group: 'sites',
+    scope: 'site',
+    label: 'Manage site settings',
+    description: 'Manage a site’s people, domain, address and plugins, change its plugin settings and security allow-lists, import, export and delete it.',
+  },
   {
     key: 'data.manage',
     group: 'datasets',
     label: 'Manage data',
     description: 'Create, edit, and delete organization datasets.',
+  },
+  // Workspace content that asked for the owner, admin or editor role
+  // (AGL-4047), each a key whose default is exactly those roles.
+  {
+    key: 'org.media',
+    group: 'datasets',
+    label: 'Edit the workspace media library',
+    description: 'Upload, change, move and remove the files in the media library every site shares.',
+  },
+  {
+    key: 'org.eraseRecords',
+    group: 'datasets',
+    label: 'Delete workspace records',
+    description: 'Delete records the whole workspace shares, such as dataset rows, contacts and lists.',
   },
   {
     key: 'marketplace.publish',
@@ -214,6 +313,26 @@ export const CORE_ORG_PERMISSION_ENTRIES: readonly OrgPermissionEntry[] = [
 const CORE_KEYS = CORE_ORG_PERMISSION_ENTRIES.map((entry) => entry.key)
 
 /**
+ * The core keys whose preset is the member's role ON THE SITE (AGL-4047), and
+ * each site role's verdict: the sets the rules' `canWriteHostContent`,
+ * `canPublishHostContent`, `canReadHostSensitive` and the site-admin checks
+ * asked before they asked these keys. A member's preset on a site is the
+ * verdict for the role they hold there (the owner and admins are Admin on
+ * every site); a custom role, their own permissions and that site's toggle
+ * then grant or refuse it. Each workspace role's default below is the verdict
+ * for its own site role, which is the answer with no site named.
+ */
+export const CORE_SITE_ROLE_PRESETS: Readonly<Record<string, Readonly<Record<string, boolean>>>> = {
+  'site.edit': { admin: true, editor: true, author: true, viewer: false },
+  'site.publish': { admin: true, editor: true, author: false, viewer: false },
+  'site.sensitive': { admin: true, editor: true, author: false, viewer: false },
+  'site.manage': { admin: true, editor: false, author: false, viewer: false },
+}
+
+/** The workspace editor's site keys: its own site role's preset. */
+const EDITOR_SITE_KEYS = Object.keys(CORE_SITE_ROLE_PRESETS).filter((key) => CORE_SITE_ROLE_PRESETS[key].editor)
+
+/**
  * The core keys each org role holds when nothing refines it: owners and
  * admins hold every core key (owner-only acts like deleting the
  * organization stay role-checked, not permission-checked); editors work on
@@ -222,7 +341,7 @@ const CORE_KEYS = CORE_ORG_PERMISSION_ENTRIES.map((entry) => entry.key)
 export const CORE_ORG_ROLE_GRANTS: Readonly<Record<OrgRoleName, readonly string[]>> = {
   owner: CORE_KEYS,
   admin: CORE_KEYS,
-  editor: ['data.manage', 'marketplace.publish', 'plugins.install'],
+  editor: ['data.manage', 'org.media', 'org.eraseRecords', 'marketplace.publish', 'plugins.install', ...EDITOR_SITE_KEYS],
   viewer: [],
 }
 
@@ -270,6 +389,10 @@ export function assembleOrgRoleGrants(
       ...(declaration.pluginId ? { pluginId: declaration.pluginId } : {}),
       ...(group ? { group } : {}),
       scope: declaration.hostRoleDefaults ? 'site' : 'org',
+      ...(declaration.refines && declaration.refines !== declaration.key ? { refines: declaration.refines } : {}),
+      ...(declaration.follows && declaration.follows !== declaration.key && !declaration.refines
+        ? { follows: declaration.follows }
+        : {}),
     })
     if (group && !groupIds.has(group)) {
       groupIds.add(group)
@@ -278,6 +401,12 @@ export function assembleOrgRoleGrants(
         label: declaration.groupLabel ?? group,
         ...(declaration.pluginId ? { pluginId: declaration.pluginId } : {}),
       })
+    } else if (group && declaration.pluginId) {
+      // A plugin's group opened by a declaration that names no plugin (an org
+      // catalog declaration, AGL-4047) is still that plugin's: the first of
+      // its declarations that names one says so.
+      const index = groups.findIndex((entry) => entry.id === group)
+      if (index >= 0 && !groups[index].pluginId) groups[index] = { ...groups[index], pluginId: declaration.pluginId }
     }
     const defaults = declarationRoleDefaults(declaration)
     for (const role of ORG_ROLE_NAMES) {
@@ -310,6 +439,45 @@ export function rolePermissions(
     for (const key of keys) {
       if (typeof values[key] === 'boolean') out[key] = values[key]
     }
+  }
+  // A key that refines a broader one (AGL-4047) is never held without it, and
+  // follows it where neither layer set the key; a key that only follows one
+  // takes its verdict where neither layer set the key, and nothing more.
+  // Applied broader keys first, so a chain settles in one pass; a refinement
+  // that loops is left alone.
+  const broader = new Map<string, string>()
+  const followsOnly = new Set<string>()
+  for (const entry of catalog.permissions) {
+    if (entry.refines && entry.refines in out) broader.set(entry.key, entry.refines)
+    else if (entry.follows && entry.follows in out) {
+      broader.set(entry.key, entry.follows)
+      followsOnly.add(entry.key)
+    }
+  }
+  const depth = (key: string): number => {
+    const seen = new Set<string>()
+    let steps = 0
+    let current = key
+    while (broader.has(current)) {
+      if (seen.has(current)) return -1
+      seen.add(current)
+      current = broader.get(current) as string
+      steps += 1
+    }
+    return steps
+  }
+  const ordered = [...broader.keys()]
+    .map((key) => ({ key, steps: depth(key) }))
+    .filter((entry) => entry.steps > 0)
+    .sort((a, b) => a.steps - b.steps)
+  for (const { key } of ordered) {
+    let stored: boolean | undefined
+    for (const layer of [customRole, overrides]) {
+      const value = layer?.permissions?.[key]
+      if (typeof value === 'boolean') stored = value
+    }
+    const held = out[broader.get(key) as string] === true
+    out[key] = followsOnly.has(key) ? (stored === undefined ? held : stored) : held && (stored === undefined ? true : stored)
   }
   return out
 }

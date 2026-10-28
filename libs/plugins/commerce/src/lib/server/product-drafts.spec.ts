@@ -52,6 +52,7 @@ import {
   PRODUCT_DRAFT_ROLE_REFUSAL,
   productDraftLimitRefusal,
   productDraftWriter,
+  readProductDraftContent,
   registerProductDraftWriter,
 } from './product-drafts'
 
@@ -263,6 +264,16 @@ describe('the product writer', () => {
     // No price is invented: every variant is still unpriced, and there is no flat price.
     expect(product.variants.every((variant) => !variantHasPrice(variant))).toBe(true)
     expect(product).not.toHaveProperty('priceUsd')
+  })
+
+  it('marks a sample a guided start made for the merchant to replace, and nothing else (AGL-4065)', async () => {
+    const written = await writer.write(request({ content: { ...CONTENT, sample: true } }))
+    expect(written).toMatchObject({ ok: true })
+    expect(stored()).toMatchObject({ sample: true })
+    expect(checkProductDraftContent({ ...CONTENT, sample: 'yes' })).toEqual({ ok: false, problems: ['Sample is true or false'] })
+    // A product of the merchant's own carries no mark at all.
+    expect(readProductDraftContent(CONTENT)).toMatchObject({ ok: true })
+    expect((readProductDraftContent(CONTENT) as { value: object }).value).not.toHaveProperty('sample')
   })
 
   it('takes a slug no product holds, a deleted one included', async () => {

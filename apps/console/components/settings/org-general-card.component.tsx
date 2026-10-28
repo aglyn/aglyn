@@ -28,12 +28,13 @@ import {
 } from '@mui/material'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useEffect, useState } from 'react'
-import { canManageOrg, isValidOrgSlug, supportedTimeZones } from '@aglyn/aglyn'
+import { isValidOrgSlug, supportedTimeZones } from '@aglyn/aglyn'
 import { WORKSPACE_DOMAIN } from '../../constants/workspace-domain'
 import { docsHelp } from '../../constants/docs-links'
 import useCurrentOrg from '../../hooks/use-current-org'
 import { useOrgScope } from '../../hooks/use-org-scope'
 import useOrgSettingsRequest from '../../hooks/use-org-settings-request'
+import useOrgPermissions from '../../hooks/use-org-permissions'
 
 /**
  * The organization's name, its workspace URL and its time zone.
@@ -55,7 +56,11 @@ export function OrgGeneralCard() {
   const { confirm } = useConfirmationContext()
   const settingsRequest = useOrgSettingsRequest()
   const { org, ready: orgReady } = useCurrentOrg()
-  const canManage = canManageOrg(currentOrg?.role)
+  // The key the route checks (AGL-4047), not the role: a custom role or an
+  // override that grants or takes `org.settings` moves this the way it moves
+  // the server. Held while the permissions load.
+  const orgPermissions = useOrgPermissions()
+  const canManage = orgPermissions.loaded && orgPermissions.can('org.settings')
   const isOwner = currentOrg?.role === 'owner'
   const [busy, setBusy] = useState(false)
   const [name, setName] = useState('')

@@ -368,6 +368,25 @@ service cloud.firestore {
         return isOrgMember() && orgMember().role in ['owner', 'admin'];
       }
       /**
+       * Does this member hold a workspace key whose default is a set of
+       * workspace roles (AGL-4047)? A gate that asked "is their role owner or
+       * admin?" asks the key that replaced it, whose default is that set, so
+       * nobody's access moved:
+       *
+       *   - the member's `resolvedPermissions` stamp when the projection
+       *     wrote the key (the role's default with their custom role and
+       *     their own permissions applied);
+       *   - else the default itself: their role in `presetRoles`, exactly the
+       *     rule it replaced, for a member the projection has not reached
+       *     since the key existed.
+       *
+       * One read, the member document `orgMember()` already paid for.
+       */
+      function memberKeyOr(permission, presetRoles) {
+        let stamped = orgMember().get('resolvedPermissions', {}).get(permission, null);
+        return stamped is bool ? stamped == true : orgMember().get('role', '') in presetRoles;
+      }
+      /**
        * A member whose reach is the WHOLE org, not a named set of sites
        * (AGL-1026).
        *
@@ -926,11 +945,19 @@ service cloud.firestore {
       // staff and by an org-wide member who may run the register (owner,
       // admin or editor without a `managePos` override of false); the
       // console itself reads them through the plugin's route.
+      //
+      // And by an org-wide member whose resolved permissions say they may
+      // buy hardware (AGL-4047): `posBuyHardware` stands on its own, so a
+      // member granted it without the register — a bookkeeper — sees the
+      // orders they place, as the shop's route shows them. `memberStamps`
+      // grants nothing to a member the projection has not stamped, so it
+      // only ever widens the role arm for a member somebody granted it.
       match /hardwareOrders/{orderId} {
         allow read: if isStaff() ||
           (isOrgWideMember() && orgNotSuspended() &&
-           orgMember().role in ['owner', 'admin', 'editor'] &&
-           memberGrants('managePos'));
+           ((orgMember().role in ['owner', 'admin', 'editor'] &&
+             memberGrants('managePos')) ||
+            memberStamps('posBuyHardware')));
         allow write: if false;
       }
 
@@ -1018,6 +1045,10 @@ service cloud.firestore {
       match /waiverSignatures/{signatureId} {
         allow read, write: if false;
       }
+      // A waiver's title and status are mirrored under the site, at
+      // `hosts/{hostId}/waiverTitles`, for the Besigner's waiver picker:
+      // readable by the site's members, written only by the plugin's routes
+      // (the host catch-all's three exclusion lists).
 
       // Outreach (AGL-2974): the mailboxes reps connect, the sequences they
       // send and each prospect's enrollment in one. Read through
@@ -1282,8 +1313,12 @@ service cloud.firestore {
       // them; only a manager writes them, as they speak for every site.
       match /businessProfile/{docId} {
         allow read: if isStaff() || isOrgMember();
+        // "Business profile" (`org.businessProfile`, AGL-4047), whose default
+        // is the owner and admin `canManageOrg` asked for.
         allow write: if isStaff() ||
-          (docId == 'defaults' && canManageOrg() && isVerified() && orgNotSuspended());
+          (docId == 'defaults' && isOrgMember() &&
+            memberKeyOr('org.businessProfile', ['owner', 'admin']) &&
+            isVerified() && orgNotSuspended());
       }
 
       // Org-shared data (AGL-237): datasets (records included), contacts
@@ -1490,6 +1525,16 @@ service cloud.firestore {
       }
       function canWriteScopedOrgData() {
         return canWriteOrgData() && canReadScoped();
+      }
+      /**
+       * `canWriteOrgData` for the workspace media library (AGL-4047): the
+       * same verified, unsuspended member, asking "Edit the workspace media
+       * library" (`org.media`), whose default is the owner, admin and editor.
+       */
+      function canWriteOrgMedia() {
+        return isOrgMember() && isVerified() &&
+          memberKeyOr('org.media', ['owner', 'admin', 'editor']) &&
+          orgNotSuspended();
       }
       /**
        * The dataset-only twin. Same scoping, plus `data.manage`.
@@ -2217,24 +2262,27 @@ service cloud.firestore {
       // every frozen field is an Admin-SDK route, and the DAM's client writes
       // are `fileName`, `alt`, `description`, `tags`, `folderId`/`folder` and
       // `visibleTo`.
+      // The workspace media library asks "Edit the workspace media library"
+      // (`org.media`, AGL-4047) where it asked `canWriteOrgData`'s owner,
+      // admin and editor, which is the key's default; the scoping is as before.
       match /media/{mediaId} {
         allow read: if isStaff() || canReadScoped();
         allow create: if isStaff() ||
-          (canWriteOrgData() && canCreateScoped() && mediaObjectFieldsUnset());
+          (canWriteOrgMedia() && canCreateScoped() && mediaObjectFieldsUnset());
         allow update: if isStaff() ||
-          (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()) &&
+          (canWriteOrgMedia() && canReadScoped() && (isOrgWideMember() || scopeUnchanged()) &&
            mediaObjectFieldsUnchanged());
-        allow delete: if isStaff() || canWriteScopedOrgData();
+        allow delete: if isStaff() || (canWriteOrgMedia() && canReadScoped());
       }
       // Folders hold a name and a parent; they address no Storage object, so
       // the object freeze has nothing to say here and is deliberately absent
       // rather than copied for symmetry.
       match /mediaFolders/{folderId} {
         allow read: if isStaff() || canReadScoped();
-        allow create: if isStaff() || (canWriteOrgData() && canCreateScoped());
+        allow create: if isStaff() || (canWriteOrgMedia() && canCreateScoped());
         allow update: if isStaff() ||
-          (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()));
-        allow delete: if isStaff() || canWriteScopedOrgData();
+          (canWriteOrgMedia() && canReadScoped() && (isOrgWideMember() || scopeUnchanged()));
+        allow delete: if isStaff() || (canWriteOrgMedia() && canReadScoped());
       }
       // Storage quota meter for the org library.
       match /counters/{counterId} {
@@ -2922,10 +2970,23 @@ service cloud.firestore {
     //
     // Same retention rule as `platformRevenue` and `storefrontTaxCollected`
     // above: these are the platform's sales-tax and accounting records,
-    // kept after the workspace is erased (GDPR Art. 17(3)(b)) with nothing
-    // about the buyer in them. They are org-keyed by FIELD, and they must
-    // NEVER be added to an org-keyed deletion pass.
+    // kept after the workspace is erased (GDPR Art. 17(3)(b)), holding of
+    // the buyer only their name and address (the reseller records Stripe's
+    // Terminal Reseller Terms ask for). They are org-keyed by FIELD, and
+    // they must NEVER be added to an org-keyed deletion pass.
     match /posHardwareSales/{orderId} {
+      allow read, write: if false;
+    }
+
+    // 4G for Stripe Reader S710s (AGL-4038): each reader's 4G months and
+    // each workspace's monthly 4G charge, written only by the commerce
+    // plugin's card readers route and billing job on the Admin SDK. Deny ALL
+    // client access: the POS devices card reads 4G through the route. Both
+    // are org-keyed and erased with the workspace (plugins.config.json).
+    match /posCellularReaders/{recordId} {
+      allow read, write: if false;
+    }
+    match /posCellularCharges/{chargeId} {
       allow read, write: if false;
     }
 
@@ -2950,10 +3011,10 @@ service cloud.firestore {
      * is the whole test.
      *
      * It is NOT an admin gate and must never be used as one. Rules that mean
-     * admin-only spell the comparison out inline —
-     * `hostMemberRole(hostId) == 'admin'`, as the `pluginSettings` write
-     * does — so that a rule restricting something to owners cannot be
-     * satisfied by a viewer. It says nothing about writing either: mutating
+     * admin-only ask "Manage site settings" —
+     * `hostSiteRoleKey(hostId, 'site.manage', ['admin'])`, as the
+     * `pluginSettings` write does (AGL-4047) — so that a rule restricting
+     * something to admins cannot be satisfied by a viewer. It says nothing about writing either: mutating
      * content asks `canWriteHostContent`, making it live asks
      * `canPublishHostContent`, and the documents carrying webhook secrets and
      * shopper PII ask `canReadHostSensitive`.
@@ -2977,9 +3038,14 @@ service cloud.firestore {
      * on the reads because a screen holds the BODY of a campaign email, and
      * the send path resolves it from this tree.
      */
+    //
+    // Since AGL-4047 it asks the KEY "Edit site content" (`site.edit`), whose
+    // preset is exactly the three roles above: the site's stamp when the
+    // projection wrote one, else those roles (`hostSiteRoleKey`). A custom
+    // role, an override or a site toggle can now grant or refuse it.
     function canWriteHostContent(hostId) {
       return isVerified() &&
-        hostMemberRole(hostId) in ['admin', 'editor', 'author'];
+        hostSiteRoleKey(hostId, 'site.edit', ['admin', 'editor', 'author']);
     }
     /**
      * May this member make content LIVE? (`author` excluded — that is the
@@ -3019,8 +3085,12 @@ service cloud.firestore {
      * reasoning as the helper above and one step sharper: this one also gates
      * `publishOutbox`, which is a client write that makes the PLATFORM act.
      */
+    //
+    // Since AGL-4047 it asks "Publish site content" (`site.publish`), whose
+    // preset is Admin and Editor, the same way `canWriteHostContent` asks its
+    // key.
     function canPublishHostContent(hostId) {
-      return isVerified() && hostMemberRole(hostId) in ['admin', 'editor'];
+      return isVerified() && hostSiteRoleKey(hostId, 'site.publish', ['admin', 'editor']);
     }
     // AGL-3463: a client write removes at most one route, and nothing else
     // in the map changes with it — one explicit unpublish or delete. The one
@@ -3051,8 +3121,102 @@ service cloud.firestore {
      * Keeping the two apart means a later decision to let authors publish
      * cannot drag the PII gate along with it by accident.
      */
+    //
+    // Since AGL-4047 it asks "See orders and webhooks" (`site.sensitive`),
+    // whose preset is Admin and Editor: still a key of its own, so granting
+    // an author content edits never hands them the order book.
     function canReadHostSensitive(hostId) {
-      return isSignedIn() && hostMemberRole(hostId) in ['admin', 'editor'];
+      return isSignedIn() && hostSiteRoleKey(hostId, 'site.sensitive', ['admin', 'editor']);
+    }
+    /**
+     * Was this permission written down as granted for this member ON THIS
+     * SITE, by the workspace that owns it (AGL-4047)?
+     *
+     * The site's twin of the org rules' `memberStamps`, for a key the host
+     * role cannot carry: the plugin keys a custom role or an override can
+     * hand to a site viewer, which the POS routes now decide on alone.
+     *
+     * The site's own stamp first: `memberPermissions[uid]` on the host is
+     * the server's verdict for this member on this site, and for a member
+     * who works across the workspace it carries the keys a site narrows,
+     * decided for this site. An editor of the workspace given Viewer or
+     * Author access here does not hold the register here unless the site
+     * grants it, and only this stamp knows whether it did.
+     *
+     * Where the site's stamp does not carry the key (a collaborator, whose
+     * keys come from their site role and their own overrides, or a site the
+     * projection has not reached since), the same default chain as before —
+     * the member's `resolvedPermissions` stamp, else their own overrides,
+     * else `false` — except for a member this site narrows, who is refused:
+     * their workspace stamp is the verdict the narrowing takes back, and a
+     * site that granted them anything was projected when it did. So it
+     * grants nothing to a member the projection has not reached. Callers
+     * conjoin it with `isHostMember`, which is what scopes a stamp written
+     * for the whole workspace to a site the member can reach.
+     *
+     * Two document reads: the host (`hostMemberRole` already paid for it,
+     * and identical get()s are billed once) and the member.
+     */
+    function hostOrgMemberStamps(hostId, permission) {
+      let host = get(/databases/$(database)/documents/hosts/$(hostId)).data;
+      let orgId = host.get('orgId', '');
+      let onSite = host.get('memberPermissions', {}).get(request.auth.uid, {});
+      let member = get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data;
+      return onSite.get(permission, null) is bool
+        ? onSite.get(permission, false) == true
+        : !hostNarrowsMember(hostId, member) &&
+          member.get('resolvedPermissions', member.get('permissions', {}))
+            .get(permission, false) == true;
+    }
+    /**
+     * Does this site narrow this member (AGL-4047)? An editor of the whole
+     * workspace given Viewer or Author access to it. Owners and admins are
+     * admins of every site, and a viewer has nothing narrower, so the editor
+     * is the only role a site narrows: `siteNarrowingFor` in the platform
+     * core, kept in step with this.
+     */
+    function hostNarrowsMember(hostId, member) {
+      return member.get('allHosts', false) == true &&
+        member.get('role', '') == 'editor' &&
+        member.get('hostAccess', {}).get(hostId, '') in ['author', 'viewer'];
+    }
+    /**
+     * Does this member hold, ON THIS SITE, a key whose preset is their role
+     * on the site (AGL-4047)?
+     *
+     * Every action is permission-checked and roles are only presets, so a
+     * rule that asked "is their role here Admin, Editor or Author?" asks the
+     * key that replaced it. The key's preset is that same site role, which
+     * is how nobody's access moved when it became a key:
+     *
+     *   - the site's own stamp first: `memberPermissions[uid][permission]` on
+     *     the host is the server's verdict for this member on this site, the
+     *     site role's preset with their custom role, their own permissions
+     *     and the site's toggle applied (`resolveSiteRolePresetPermissions`);
+     *   - where the stamp does not carry the key (a site the projection has
+     *     not reached since the key existed), the preset itself: their
+     *     `memberRoles` entry in `presetRoles`, exactly the rule it replaced.
+     *
+     * One read, the host, which `hostMemberRole` already paid for. The server
+     * twin is `hostStampedSitePermission`, which a route asks so the two
+     * cannot disagree.
+     */
+    function hostSiteRoleKey(hostId, permission, presetRoles) {
+      let onSite = get(/databases/$(database)/documents/hosts/$(hostId)).data
+        .get('memberPermissions', {}).get(request.auth.uid, {});
+      return onSite.get(permission, null) is bool
+        ? onSite.get(permission, false) == true
+        : hostMemberRole(hostId) in presetRoles;
+    }
+    /**
+     * May this member read a REGISTER sale on this site (AGL-4047)? A member
+     * of the site, the order rung at the register, and `posSell` — which
+     * refines `managePos`, so a stamped grant of it means both.
+     */
+    function canReadRegisterSale(hostId) {
+      return isSignedIn() && isHostMember(hostId) &&
+        resource.data.get('channel', '') == 'pos' &&
+        hostOrgMemberStamps(hostId, 'posSell');
     }
     /**
      * Is the `suspended*` family on this document an ACTIVE suspension right
@@ -3401,7 +3565,9 @@ service cloud.firestore {
           // while publishing nothing. The console card writes this key from
           // the Admin -> Plugins page, which is already admin-only, so the
           // tier matches the surface that sets it.
-          (hostMemberRole(hostId) == 'admin' ||
+          // "Manage site settings" (`site.manage`, AGL-4047), whose preset is
+          // the site Admin this asked for before.
+          (hostSiteRoleKey(hostId, 'site.manage', ['admin']) ||
             !request.resource.data.diff(resource.data).affectedKeys()
               .hasAny(['disabledPlugins', 'enabledPlugins', 'authScreens',
                        'approvedImageHosts', 'approvedMediaHosts',
@@ -3424,7 +3590,7 @@ service cloud.firestore {
               .hasAny(['screens', 'defaultHomeScreenId'])) &&
           routeRemovalAllowed());
       allow delete: if isStaff() ||
-        (hostMemberRole(hostId) == 'admin' && isVerified() &&
+        (isVerified() && hostSiteRoleKey(hostId, 'site.manage', ['admin']) &&
           !hostWritesFrozen(hostId));
       // Screen/layout DOC creates are API-only (AGL-473): /api/hosts/
       // resources enforces screensPerHost / sharedLayoutsPerHost (and the
@@ -3826,8 +3992,15 @@ service cloud.firestore {
       // is the shape the comment already claimed. `diff()` reports CHANGED
       // keys only, so a patch that spells out an unchanged `status` still
       // passes — the AGL-1795/1813/1824 property, unchanged.
+      // A REGISTER SALE is also read by whoever may ring one here (AGL-4047):
+      // the register reads back the order it just made for its receipt. The
+      // POS routes decide on the register's keys alone, not the site role, so
+      // a site viewer the workspace grants `posSell` rings a sale; this is
+      // the read that sale's receipt needs. A `pos` order only — an online
+      // order's shopper address and history stay with `canReadHostSensitive`.
       match /orders/{orderId} {
-        allow read: if isStaff() || canReadHostSensitive(hostId);
+        allow read: if isStaff() || canReadHostSensitive(hostId) ||
+          canReadRegisterSale(hostId);
         allow update: if isStaff() ||
           (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
            request.resource.data.diff(resource.data)
@@ -3875,7 +4048,7 @@ service cloud.firestore {
       match /pluginSettings/{pluginId} {
         allow read: if isStaff() || isHostMember(hostId);
         allow write: if pluginId != 'live-chat' && (isStaff() ||
-          (hostMemberRole(hostId) == 'admin' && isVerified() &&
+          (isVerified() && hostSiteRoleKey(hostId, 'site.manage', ['admin']) &&
             !hostWritesFrozen(hostId)));
       }
       // Storefront product reviews (AGL-3736). Every review is CREATED by
@@ -4069,12 +4242,25 @@ service cloud.firestore {
         //    token that is the only lock on the store's catalog feed, and a
         //    connection holds a sealed channel OAuth token. The sales-channels
         //    routes are the only reader and writer, so it joins the `!=`.
+        //  - `waiverTitles`, all three (AGL-4042): each waiver's title and
+        //    status, mirrored from `orgs/{orgId}/waivers` by the waivers
+        //    plugin's routes so the Besigner's Sign waiver element can PICK a
+        //    waiver from a list. READ stays with the catch-all — a title is
+        //    what the site's own signing page shows anyone — and nothing else
+        //    of a waiver, and nothing of a signature, is in it. A client write
+        //    would list a waiver that does not exist, or hide one that does.
         //  - `aiMemory`, CREATE and UPDATE (AGL-3661): the preferences Aglyn
         //    AI distilled from the edits a site's owner applied, read into
         //    every later AI prompt for the site. The assist edit route writes
         //    them on the Admin SDK; a client write would put words of its
         //    choosing into those prompts. DELETE stays open: the Business
         //    profile page clears one, or all, with a client `deleteDoc`.
+        //  - `reservations` and `resources`, all three, and NOT a denial
+        //    (AGL-4047): the block beside `redirects` re-grants them under
+        //    "Manage reservations", whose preset is the content-write role
+        //    that decided them here. A name left off any list keeps this
+        //    looser sibling deciding it, and a member a role refuses the key
+        //    could still write.
         allow create: if subcollection != 'siteMemberCredentials' &&
           subcollection != 'orderWebhookSecrets' &&
           subcollection != 'posStaffPins' &&
@@ -4098,7 +4284,8 @@ service cloud.firestore {
               'siteMemberCredentials', 'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers',
               'printJobs', 'returns', 'orderWebhooks',
               'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults',
-              'aiMemory', 'reviews', 'reviewTokens', 'checkIns', 'checkInDays']) &&
+              'aiMemory', 'reviews', 'reviewTokens', 'checkIns', 'checkInDays',
+              'waiverTitles', 'reservations', 'resources']) &&
             // The org Inbox's collection-group read (AGL-3303) lists EVERY
             // `formSubmissions` collection, at any depth, filed under the org
             // a row names, so none may be minted beneath another name here.
@@ -4268,7 +4455,8 @@ service cloud.firestore {
               'siteMemberCredentials', 'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers',
               'printJobs', 'returns', 'orderWebhooks',
               'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults',
-              'aiMemory', 'reviews', 'reviewTokens', 'checkIns', 'checkInDays'])));
+              'aiMemory', 'reviews', 'reviewTokens', 'checkIns', 'checkInDays',
+              'waiverTitles', 'reservations', 'resources'])));
         // `collections` joins the delete exclusion (AGL-947): a collection
         // owns `entries`, Firestore doesn't cascade, and a client delete
         // orphaned them — /api/resources/erase recursiveDeletes instead.
@@ -4327,7 +4515,7 @@ service cloud.firestore {
               'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers', 'printJobs', 'returns',
               'orderWebhooks',
               'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults', 'reviews', 'reviewTokens',
-              'checkIns', 'checkInDays'])));
+              'checkIns', 'checkInDays', 'waiverTitles', 'reservations', 'resources'])));
       }
       // Members-only posts (AGL-2372). Create and update are denied outright
       // by the exclusions above — /api/commerce/member-post is the only
@@ -4399,6 +4587,35 @@ service cloud.firestore {
       match /redirects/{redirectId} {
         allow update, delete: if isStaff() ||
           (canPublishHostContent(hostId) && !hostWritesFrozen(hostId));
+      }
+      /**
+       * A site's stays and what they book (AGL-4047): `reservations` and the
+       * bookable `resources` (a campsite, an RV hookup, a room), which the
+       * console's Reservations card and the native apps edit from the client
+       * (a stay's status, a resource's details). Both are on the catch-all's
+       * create, update and delete lists so that this block alone decides
+       * them, under "Manage reservations" (`commerce.reservations`) rather
+       * than the content-write role.
+       *
+       * The key's preset is the site role that wrote them before (Admin,
+       * Editor, Author), so `hostSiteRoleKey` answers exactly as
+       * `canWriteHostContent` did for everyone the projection has not given a
+       * custom role, an override or a site toggle for it. A walk-in and a
+       * guests change are not client writes at all: they go through
+       * `/api/commerce/reservations/*`, which asks `commerce.walkIns` the same
+       * way. READ stays with the catch-all (any member of the site), as before.
+       * `{path=**}` keeps every document under each name in this block, the
+       * span the catch-all decided.
+       */
+      match /reservations/{path=**} {
+        allow create, update, delete: if isStaff() ||
+          (isVerified() && !hostWritesFrozen(hostId) &&
+            hostSiteRoleKey(hostId, 'commerce.reservations', ['admin', 'editor', 'author']));
+      }
+      match /resources/{path=**} {
+        allow create, update, delete: if isStaff() ||
+          (isVerified() && !hostWritesFrozen(hostId) &&
+            hostSiteRoleKey(hostId, 'commerce.reservations', ['admin', 'editor', 'author']));
       }
       // The site's media library, re-granted with the object fields frozen
       // (AGL-1881). `media` is excluded from the catch-all's create and update
@@ -5079,7 +5296,13 @@ service cloud.firestore {
                      'displayName', 'deletedAt', 'visibility',
                      // Buyer-read copy, phishing-screened by the API (AGL-3365).
                      'description', 'readme', 'homepageUrl', 'repositoryUrl',
-                     'license', 'workspaceLockedAt']));
+                     'license', 'workspaceLockedAt',
+                     // Site starters (AGL-4049): the facets and `official`
+                     // order the starter picker and gate nothing a client may
+                     // decide; `sourceStarterHostId` is the one-listing-per-
+                     // source key the publish door looks up.
+                     'official', 'starterKind', 'starterBase', 'starterFonts',
+                     'starterPages', 'starterMode', 'sourceStarterHostId']));
       allow delete: if isStaff() || listingManager();
       // Version snapshots hold the actual (possibly paid) content — no
       // client reads; installs go through /api/marketplace/install, which

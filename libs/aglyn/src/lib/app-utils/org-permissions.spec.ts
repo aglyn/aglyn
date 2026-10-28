@@ -100,10 +100,19 @@ describe('org permissions (AGL-243)', () => {
     // The catalog was TEN after AGL-2444 removed `marketing.manage`, which
     // named a host-scoped action no org-level boundary governs, and is
     // TWELVE since AGL-2927 added the two AI keys, each enforced at the AI
-    // doors. Asserted exactly rather than as a floor: the point of AGL-2444
-    // is that a key nobody enforces must not sit here quietly, and a `>`
-    // bound is exactly the assertion an unenforced addition would slip past.
-    expect(ORG_PERMISSION_KEYS.length).toBe(12)
+    // doors, and FIFTEEN since AGL-4047 moved API keys, privacy requests and
+    // holds off the owner/admin role onto keys of their own, each enforced at
+    // its route, and NINETEEN since AGL-4047's site keys (edit, publish,
+    // orders and webhooks, site settings) took over the rules' and routes'
+    // gates on the site role, each enforced by the rules, and TWENTY-FOUR
+    // since five workspace acts that asked for roles (export, sending
+    // domains, business profile, the media library, deleting records) became
+    // keys of their own. Asserted exactly
+    // rather than as a floor: the point of
+    // AGL-2444 is that a key nobody enforces must not sit here quietly, and a
+    // `>` bound is exactly the assertion an unenforced addition would slip
+    // past.
+    expect(ORG_PERMISSION_KEYS.length).toBe(24)
     expect(ORG_PERMISSION_KEYS).not.toContain('marketing.manage')
   })
 })

@@ -83,6 +83,8 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     claims,
     /** `memberRoles` on the host doc — the admin gate's only input. */
     memberRoles: {} as Record<string, string>,
+    /** The site's stamp (AGL-4047): decides "Refund bookings" when it names it. */
+    memberPermissions: {} as Record<string, Record<string, boolean>>,
     hostExists: true,
     bookingExists: true,
     uid: 'admin-1',
@@ -115,7 +117,11 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     get: async () => ({
       exists: state.hostExists,
       get: (field: string) =>
-        field === 'memberRoles' ? state.memberRoles : undefined,
+        field === 'memberRoles'
+          ? state.memberRoles
+          : field === 'memberPermissions'
+            ? state.memberPermissions
+            : undefined,
     }),
     collection: () => ({ doc: () => bookingRef }),
   }
@@ -183,6 +189,7 @@ const mockAdmin = jest.requireMock('@aglyn/tenant-data-admin') as {
     booking: Record<string, unknown>
     claims: Map<string, Record<string, unknown>>
     memberRoles: Record<string, string>
+    memberPermissions: Record<string, Record<string, boolean>>
     hostExists: boolean
     bookingExists: boolean
     uid: string
@@ -255,6 +262,7 @@ beforeEach(() => {
   state.bookingExists = true
   state.uid = 'admin-1'
   state.memberRoles = { 'admin-1': 'admin', 'editor-1': 'editor' }
+  state.memberPermissions = {}
   state.claims.clear()
   state.interleave = null
   for (const key of Object.keys(state.booking)) delete state.booking[key]
@@ -483,6 +491,21 @@ describe('who may refund a booking (AGL-2315)', () => {
     expect(stripePosts).toHaveLength(0)
     // And nothing was written on the way to the refusal.
     expect(mockAdmin.__state.booking['refundedCents']).toBeUndefined()
+  })
+
+  it('asks "Refund bookings", so the site’s stamp decides either way (AGL-4047)', async () => {
+    mockAdmin.__state.memberPermissions = { 'admin-1': { 'bookings.refunds': false } }
+    const refused = makeRes()
+    await bookingRefundHandler(makeReq({}, 'stamp-a'), refused)
+    expect(refused.statusCode).toBe(403)
+    expect(refused.body).toEqual({ error: 'Your role does not include "Refund bookings" — ask an organization admin' })
+    expect(stripePosts).toHaveLength(0)
+
+    mockAdmin.__state.uid = 'editor-1'
+    mockAdmin.__state.memberPermissions = { 'editor-1': { 'bookings.refunds': true } }
+    const granted = makeRes()
+    await bookingRefundHandler(makeReq({}, 'stamp-b'), granted)
+    expect(granted.statusCode).toBe(200)
   })
 
   it('refuses a stranger to the site', async () => {

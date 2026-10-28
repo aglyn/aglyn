@@ -282,6 +282,7 @@ async function handler(request: Request): Promise<Response> {
         // Same claim, same reason (AGL-1131) — the welcome email opened
         // "Hi there," for SSO owners regardless of what their IdP sent.
         displayName: resolveIdpDisplayName(decoded) || null,
+        emailVerified: decoded.email_verified === true,
       },
       origin: headers.origin ?? `https://${headers.host}`,
       via: 'workspace-page',

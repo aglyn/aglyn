@@ -16,6 +16,7 @@
  */
 
 import type * as CommerceModel from '../../../model'
+import { rememberCustomerDisplayCredential } from '@aglyn/aglyn/plugin-manager/plugin-customer-display'
 
 /**
  * The customer display's half of `/api/commerce/pos-display` (AGL-3608).
@@ -78,7 +79,14 @@ export function readStoredToken(): string | null {
   }
 }
 
+/**
+ * Keeps the display's token, or forgets it. Core keeps a copy too (AGL-4042):
+ * the display's credential, which another plugin's screen on this display
+ * sends its own server so core's verifier can say which store's display it
+ * is. Forgotten with it when the display is unpaired.
+ */
 export function storeToken(token: string | null): void {
+  rememberCustomerDisplayCredential(token)
   try {
     if (token) window.localStorage.setItem(POS_DISPLAY_TOKEN_KEY, token)
     else window.localStorage.removeItem(POS_DISPLAY_TOKEN_KEY)

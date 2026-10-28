@@ -15,9 +15,10 @@
  * limitations under the License.
  */
 
-import type {
-  PluginContactCaptureRequest,
-  PluginContactCaptured,
+import {
+  pluginContactSource,
+  type PluginContactCaptureRequest,
+  type PluginContactCaptured,
 } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
 import {
   CONTACT_SOURCE_LABELS,
@@ -468,14 +469,14 @@ function conversionTouchOf(
  * than rejected — refusing it would lose a third-party plugin's capture over
  * a label, and the capture is the part that matters.
  *
- * ⛔ What it costs, until the union is widened: the console's source filter
- * and `SOURCE_LABELS` key on these values, so an undeclared word renders raw
- * and matches no filter. Every first-party silo uses a word in the union, so
- * nothing does that today.
+ * A declared word READS by its plugin's label (`labelContactSource`, AGL-4042:
+ * the waivers plugin's `waiver`). ⛔ What it still costs, until the union is
+ * widened: the console's source filter keys on the union, so a plugin's word
+ * matches no filter option, and an UNDECLARED word also renders raw.
  */
 export function contactSourceOf(source: string): ContactSource {
   const word = String(source ?? '').trim()
-  if (!Object.hasOwn(CONTACT_SOURCE_LABELS, word)) {
+  if (!Object.hasOwn(CONTACT_SOURCE_LABELS, word) && !pluginContactSource(word)) {
     // Said once, where somebody debugging an unlabelled row will find it.
     // Not a refusal: the capture is worth more than the label.
     console.warn(

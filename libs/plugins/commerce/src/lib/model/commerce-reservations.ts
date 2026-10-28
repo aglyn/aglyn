@@ -57,6 +57,24 @@ export interface HostResource {
    * {@link resourceUnits}, never raw.
    */
   units?: number
+  /**
+   * When the booking widget's scarcity line ("Only 2 left") starts, for a
+   * resource with several units (AGL-4044): it shows once this many units or
+   * fewer are free on a night of the stay. Absent is
+   * {@link FEW_UNITS_LEFT}, the line every several-unit resource has always
+   * had; 0 never shows it. A whole number from 0 to
+   * {@link MAX_RESOURCE_UNITS}; read it through {@link resourceFewLeftAt},
+   * never raw.
+   */
+  fewLeftAt?: number
+  /**
+   * How a stay on this resource is checked in at the window (AGL-4043):
+   * `false` or absent, one check-in (and wristband) per stay per day; `true`,
+   * one per guest per day, from the stay's {@link HostReservation.guests}.
+   * The store's quick control on the check-in screen can set every resource
+   * at once (`settings/checkIn.stays`).
+   */
+  checkInPerGuest?: boolean
   photoUrls?: string[]
   amenities?: string[]
   nightlyRateUsd: number
@@ -90,6 +108,16 @@ export interface HostReservation {
   checkOutDayMs: number
   guestName?: string | null
   guestEmail?: string | null
+  /**
+   * How many guests the stay is for (AGL-4043), 1 up to what the resource
+   * sleeps ({@link resourceGuestCeiling}); absent on a stay booked before the
+   * field existed, or without an answer, which reads as 1. Checking in one
+   * guest at a time asks it.
+   */
+  guests?: number
+  /** When staff last changed {@link guests} after booking, and who (AGL-4043). */
+  guestsChangedAtMs?: number
+  guestsChangedBy?: string
   nights?: number
   totalCents?: number
   depositCents?: number
@@ -412,27 +440,109 @@ export function isRangeAvailable(
  * The widget's scarcity line starts at this many units left (AGL-4044):
  * "Only 2 left". Never on a one-unit resource, where every free night would
  * read "Only 1 left", and never on a night nothing is booked on.
+ * A resource may set its own threshold, {@link HostResource.fewLeftAt}.
  */
 export const FEW_UNITS_LEFT = 3
 
 /**
+ * When a resource's scarcity line starts: its own `fewLeftAt` as a whole
+ * number from 0 (never) to {@link MAX_RESOURCE_UNITS}, and
+ * {@link FEW_UNITS_LEFT} for anything else (absent, negative, not a number),
+ * so a resource saved before the setting existed reads exactly as it did.
+ */
+export function resourceFewLeftAt(
+  resource: Pick<HostResource, 'fewLeftAt'> | null | undefined,
+): number {
+  const raw = resource?.fewLeftAt
+  if (raw === undefined || raw === null || (raw as unknown) === '') return FEW_UNITS_LEFT
+  const at = Math.floor(Number(raw))
+  if (!Number.isFinite(at) || at < 0) return FEW_UNITS_LEFT
+  return Math.min(MAX_RESOURCE_UNITS, at)
+}
+
+/**
  * The fewest units left across `[checkInDayMs, checkOutDayMs)` when that is
- * {@link FEW_UNITS_LEFT} or fewer and at least one, else null. `fewLeft`
- * lists only the scarce nights, as the availability endpoint sends them; a
- * night it leaves out has more than {@link FEW_UNITS_LEFT} free.
+ * `fewLeftAt` or fewer and at least one, else null. `fewLeft` lists only the
+ * scarce nights, as the availability endpoint sends them; a night it leaves
+ * out has more than the resource's threshold free. `fewLeftAt` is the
+ * resource's threshold ({@link resourceFewLeftAt}); 0 never shows the line.
  */
 export function fewestUnitsLeft(
   fewLeft: Array<{ dayMs: number; unitsLeft: number }> | null | undefined,
   checkInDayMs: number,
   checkOutDayMs: number,
+  fewLeftAt: number = FEW_UNITS_LEFT,
 ): number | null {
   let fewest: number | null = null
   for (const night of fewLeft ?? []) {
     if (night.dayMs < checkInDayMs || night.dayMs >= checkOutDayMs) continue
-    if (!(night.unitsLeft >= 1) || night.unitsLeft > FEW_UNITS_LEFT) continue
+    if (!(night.unitsLeft >= 1) || night.unitsLeft > fewLeftAt) continue
     fewest = fewest === null ? night.unitsLeft : Math.min(fewest, night.unitsLeft)
   }
   return fewest
+}
+
+/** The most guests one stay may name when its resource says nothing of how many it sleeps. */
+export const MAX_RESERVATION_GUESTS = 50
+
+/** Where staff change a stay's guest count after it is booked (AGL-4043): `{ hostId, reservationId, guests }`. */
+export const RESERVATION_GUESTS_ROUTE = '/api/commerce/reservations/guests'
+
+/**
+ * The most guests a stay on this resource may name: what one unit sleeps
+ * (`capacity`), else {@link MAX_RESERVATION_GUESTS}.
+ */
+export function resourceGuestCeiling(resource: Pick<HostResource, 'capacity'> | null | undefined): number {
+  const sleeps = Math.floor(Number(resource?.capacity))
+  return Number.isFinite(sleeps) && sleeps >= 1 ? Math.min(sleeps, MAX_RESERVATION_GUESTS) : MAX_RESERVATION_GUESTS
+}
+
+/** How many guests a stay is for: its `guests` as a whole number of at least 1, else 1. */
+export function reservationGuests(reservation: Pick<HostReservation, 'guests'> | null | undefined): number {
+  const guests = Math.floor(Number(reservation?.guests))
+  return Number.isFinite(guests) && guests >= 1 ? Math.min(guests, MAX_RESERVATION_GUESTS) : 1
+}
+
+/**
+ * Why a guest count cannot be booked on a resource, or null. Absent (or
+ * empty) is fine: the stay is for one guest as far as check-in is concerned.
+ */
+export function reservationGuestsProblem(
+  guests: unknown,
+  resource: Pick<HostResource, 'capacity'> | null | undefined,
+): string | null {
+  if (guests === undefined || guests === null || guests === '') return null
+  const count = Number(guests)
+  const ceiling = resourceGuestCeiling(resource)
+  if (!Number.isInteger(count) || count < 1 || count > ceiling) {
+    return ceiling === 1 ? 'This stay sleeps 1 guest' : `Guests must be a whole number from 1 to ${ceiling}`
+  }
+  return null
+}
+
+/**
+ * How the store checks stays in (AGL-4043), the quick control on the
+ * check-in screen: `resource` follows each resource's own setting
+ * ({@link HostResource.checkInPerGuest}); `stay` and `guest` set every
+ * resource at once. Stored at `hosts/{hostId}/settings/checkIn.stays`.
+ */
+export type StayCheckInMode = 'resource' | 'stay' | 'guest'
+
+export const STAY_CHECK_IN_MODES: readonly StayCheckInMode[] = ['resource', 'stay', 'guest']
+
+/** A stored mode made safe: anything unknown follows each resource. */
+export function readStayCheckInMode(value: unknown): StayCheckInMode {
+  return value === 'stay' || value === 'guest' ? value : 'resource'
+}
+
+/** Whether a stay on this resource is checked in one guest at a time, under the store's mode. */
+export function stayChecksInPerGuest(
+  resource: Pick<HostResource, 'checkInPerGuest'> | null | undefined,
+  mode: StayCheckInMode,
+): boolean {
+  if (mode === 'guest') return true
+  if (mode === 'stay') return false
+  return resource?.checkInPerGuest === true
 }
 
 /** Free-cancellation check against the policy window. */

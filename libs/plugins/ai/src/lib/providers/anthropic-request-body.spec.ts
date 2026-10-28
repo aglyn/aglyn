@@ -66,7 +66,7 @@ describe('the Messages API body for the models that refuse disabled thinking (AG
     expect(body('claude-opus-5-5', { effort: 'low' })['output_config']).toEqual({ effort: 'low' })
   })
 
-  it('never forces a tool on any model', () => {
+  it('never forces a tool a request does not name, on any model', () => {
     for (const model of ['claude-sonnet-5', 'claude-sonnet-5-5', 'claude-opus-5-5']) {
       expect([model, body(model)['tool_choice']]).toEqual([model, { type: 'auto' }])
     }
@@ -335,5 +335,39 @@ describe('an answer read off the wire or out of a batch', () => {
   it("prices a batch's answer at half", () => {
     const full = anthropicResultFrom(answer, 'claude-sonnet-5').estCostUsd
     expect(anthropicResultFrom(answer, 'claude-sonnet-5', 0.5).estCostUsd).toBeCloseTo(full / 2, 6)
+  })
+})
+
+describe('a request that names the tool it is for (AGL-4076)', () => {
+  const OTHER: AiTool = { ...TOOL, name: 'read' }
+  const named = (model: string, extra: Record<string, unknown> = {}) =>
+    body(model, { tools: [OTHER, TOOL], toolChoice: 'submit', thinking: 'off', ...extra })
+
+  it('is forced on a model that takes a forced choice, with thinking sent off', () => {
+    for (const model of ['claude-opus-5', 'claude-opus-4-8', 'claude-sonnet-4-6']) {
+      const sent = named(model)
+      expect([model, sent['tool_choice'], sent['thinking']]).toEqual([model, { type: 'tool', name: 'submit' }, { type: 'disabled' }])
+    }
+  })
+
+  it('stays automatic on Claude Sonnet 5.5 and Claude Opus 5.5, which refuse a forced choice', () => {
+    for (const model of ['claude-sonnet-5-5', 'claude-opus-5-5', 'claude-haiku-5-5']) {
+      expect([model, named(model)['tool_choice']]).toEqual([model, { type: 'auto' }])
+    }
+  })
+
+  it('stays automatic where the request thinks, which a forced choice cannot', () => {
+    expect(named('claude-opus-5', { thinking: 'adaptive' })['tool_choice']).toEqual({ type: 'auto' })
+    expect(named('claude-opus-5', { thinking: undefined })['tool_choice']).toEqual({ type: 'auto' })
+  })
+
+  it('stays automatic for a name the request sends no tool for', () => {
+    expect(named('claude-opus-5', { toolChoice: 'missing' })['tool_choice']).toEqual({ type: 'auto' })
+  })
+
+  it('sends the same tools whichever it names, so the prefix the provider caches is the same bytes', () => {
+    const read = named('claude-sonnet-5-5', { toolChoice: 'read' })
+    const answer = named('claude-sonnet-5-5', { toolChoice: 'submit' })
+    expect(JSON.stringify([read['tools'], read['system']])).toBe(JSON.stringify([answer['tools'], answer['system']]))
   })
 })

@@ -124,11 +124,17 @@ describe('AGL-2334 · the author host role is assignable in the console', () => 
     // The server helpers are an ECHO of the rules, not the enforcement. If
     // the two ever disagree, the console says one thing and the database does
     // another — and the rules win, silently.
+    // Since AGL-4047 the rules ask the site keys, whose presets are these
+    // two sets (`hostSiteRoleKey`), and the core's presets name them too.
     const rules = read('cloud/firebase-firestore.rules')
     expect(rules).toContain(
-      "hostMemberRole(hostId) in ['admin', 'editor', 'author']",
+      "hostSiteRoleKey(hostId, 'site.edit', ['admin', 'editor', 'author'])",
     )
+    expect(rules).toContain("hostSiteRoleKey(hostId, 'site.publish', ['admin', 'editor'])")
     expect(rules).toContain('function canPublishHostContent(hostId)')
+    const presets = read('libs/aglyn/src/lib/app-utils/org-role-grants.ts')
+    expect(presets).toContain("'site.edit': { admin: true, editor: true, author: true, viewer: false }")
+    expect(presets).toContain("'site.publish': { admin: true, editor: true, author: false, viewer: false }")
     const shared = read('libs/aglyn/src/lib/app-utils/organizations.ts')
     expect(shared).toContain("'admin',\n  'editor',\n  'author',\n]")
     expect(shared).toContain(

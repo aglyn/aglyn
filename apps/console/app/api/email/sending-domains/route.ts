@@ -22,6 +22,8 @@ import {
   isImpersonationSession,
   listSendingDomains,
   lockdownRefusal,
+  memberHasOrgPermission,
+  permissionRefusal,
   readDmarcPolicy,
   readSenderReadiness,
   readTrackingCaaNeed,
@@ -179,17 +181,18 @@ async function handler(request: Request): Promise<Response> {
     return Response.json({ error: 'Unknown organization' }, { status: 404 })
   }
 
-  // Owner or admin only. A sending domain decides what every recipient of
-  // this org's mail sees in the `From:` line, which is not an editor's call.
+  // "Sending domains" (`org.sendingDomains`, AGL-4047), whose default is the
+  // owner and admin this asked for: a sending domain decides what every
+  // recipient of this org's mail sees in the `From:` line.
   const memberSnapshot = await firestore
     .collection('orgs')
     .doc(orgId)
     .collection('members')
     .doc(decoded.uid)
     .get()
-  const role = String(memberSnapshot.get('role') ?? '')
-  if (role !== 'owner' && role !== 'admin' && decoded['staff'] !== true) {
-    return Response.json({ error: 'Not an organization admin' }, { status: 403 })
+  const member = memberSnapshot.exists ? (memberSnapshot.data() as never) : null
+  if (decoded['staff'] !== true && !(member && (await memberHasOrgPermission(orgId, member, 'org.sendingDomains')))) {
+    return permissionRefusal('org.sendingDomains')
   }
 
   // Passing `request` derives the intent from the verb, so a read-only lock

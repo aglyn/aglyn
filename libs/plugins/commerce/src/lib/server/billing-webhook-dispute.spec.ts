@@ -17,6 +17,7 @@
 
 import type { PluginPersonRefundRequest } from '@aglyn/aglyn/plugin-manager/plugin-person-records'
 import { commerceBillingWebhookHandler } from './billing-webhook'
+import { posOfflineCardOrderMoney } from './pos-offline-card-order'
 import {
   reportedRefundLedger,
   standInPersonRecords,
@@ -1941,6 +1942,37 @@ describe('a refund made outside the console (AGL-3363)', () => {
     expect(order()).not.toHaveProperty('externalRefundedCents')
   })
 
+  it('records a register sale’s Dashboard refund for the day totals, once (AGL-4037)', async () => {
+    docs.set('hosts/host-1/orders/order-1', {
+      ...docs.get('hosts/host-1/orders/order-1'),
+      channel: 'pos',
+      registerId: 'front',
+      payments: [
+        { id: 'p1', method: 'card_keyed', amountCents: 8000, status: 'succeeded', atMs: 1, paymentIntentId: 'pi_dispute_1' },
+      ],
+    })
+    const records = () =>
+      [...docs.entries()].filter(([path]) => path.startsWith('hosts/host-1/registers/front/orderRefunds/'))
+    await deliver('charge.refunded', { ...refunded(1234), refunds: { data: [{ id: 're_dash' }] } })
+    await deliver('charge.refunded', { ...refunded(1234), refunds: { data: [{ id: 're_dash' }] } })
+    expect(records()).toHaveLength(1)
+    expect(records()[0]![1]).toMatchObject({
+      orderId: 'order-1',
+      registerId: 'front',
+      refundedCents: 1234,
+      tenders: [{ method: 'card_keyed', amountCents: 1234 }],
+      cashierId: null,
+      source: 'stripe',
+      stripeRefundId: 're_dash',
+    })
+    expect(Number(records()[0]![1]['atMs']) > 0).toBe(true)
+  })
+
+  it('leaves no register record for an online order refunded in Stripe', async () => {
+    await deliver('charge.refunded', refunded(1234))
+    expect([...docs.keys()].some((path) => path.includes('/orderRefunds/'))).toBe(false)
+  })
+
   it('a redelivery counts the Dashboard refund once', async () => {
     await deliver('charge.refunded', refunded(1234))
     await deliver('charge.refunded', refunded(1234))
@@ -1971,5 +2003,60 @@ describe('a refund made outside the console (AGL-3363)', () => {
     await expect(
       deliver('charge.refunded', { ...refunded(1000), payment_intent: 'pi_other' }),
     ).resolves.toBeUndefined()
+  })
+})
+
+describe('a register card sale taken offline (AGL-4039)', () => {
+  /**
+   * The offline sync used to keep the intent only inside `payments[0]`, which
+   * neither the single-charge lookup nor the split lookup reads, so a
+   * chargeback on such a sale matched no order. Seeded exactly as the sync
+   * writes the order now.
+   */
+  const seedOfflineOrder = (orderLevelIntent: boolean) => {
+    const money = posOfflineCardOrderMoney({
+      settled: {
+        kind: 'captured',
+        intentId: 'pi_offline_card',
+        amountCents: 4100,
+        feeCents: 230,
+        expectedFeeCents: 230,
+        takeShareCents: 82,
+        livemode: false,
+        brand: 'visa',
+        last4: '4242',
+      },
+      totals: { itemsCents: 4100, shippingCents: 0, taxCents: 0, discountCents: 0, feeCents: 0, totalCents: 4100 },
+      planTakeCents: 82,
+      soldAtMs: 1_000,
+      nowMs: 2_000,
+      cashierId: 'cashier-1',
+      feeOrgId: 'org-1',
+    })
+    const fields = orderLevelIntent ? money.fields : { feeCollection: money.fields['feeCollection'] }
+    docs.set('hosts/host-1/orders/order-offline', {
+      status: money.status,
+      channel: 'pos',
+      lineItems: [{ productId: 'product-1', name: 'Chair', quantity: 1, unitAmountCents: 4100 }],
+      totals: money.totals,
+      payments: [money.payment],
+      ...fields,
+      offline: { saleKey: 'order-offline', soldAtMs: 1_000, syncedAtMs: 2_000, syncedBy: 'cashier-1', flags: [] },
+    })
+  }
+
+  it('claims the chargeback and flags the sale', async () => {
+    seedOfflineOrder(true)
+    await expect(
+      deliver('charge.dispute.created', disputeEvent({ amount: 4100, payment_intent: 'pi_offline_card' })),
+    ).resolves.toEqual({ claimed: true, hostId: 'host-1' })
+    expect(docs.get('hosts/host-1/orders/order-offline')?.dispute).toMatchObject({ id: 'dp_1', amountCents: 4100 })
+  })
+
+  it('matched no order while the intent was kept only inside the payment (the defect)', async () => {
+    seedOfflineOrder(false)
+    await expect(
+      deliver('charge.dispute.created', disputeEvent({ amount: 4100, payment_intent: 'pi_offline_card' })),
+    ).resolves.toEqual({ claimed: false })
   })
 })

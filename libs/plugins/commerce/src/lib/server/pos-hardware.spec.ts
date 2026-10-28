@@ -39,6 +39,8 @@ import type { PluginApiRequest, PluginApiResponse } from '@aglyn/aglyn/server'
 import { fakeDocs, resetFakeFirestore } from '../testing/fake-firestore'
 
 let mockManagePos = true
+/** The finer "Buy point of sale hardware" key (AGL-4047); undefined follows `managePos`. */
+let mockBuyHardware: boolean | undefined
 let mockPlan = 'business'
 const mockSendEmail = jest.fn<Promise<{ sent: boolean }>, [Record<string, unknown>]>(async () => ({ sent: true }))
 const mockRaiseAlert = jest.fn<Promise<{ outcome: string }>, unknown[]>(async () => ({ outcome: 'sent' }))
@@ -55,7 +57,12 @@ const TOKENS: Record<string, Record<string, unknown>> = {
 }
 
 jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
-  resolveOrgPermissions: async () => ({ permissions: { managePos: mockManagePos } }),
+  resolveOrgPermissions: async () => ({
+    permissions: {
+      managePos: mockManagePos,
+      ...(mockBuyHardware === undefined ? {} : { posBuyHardware: mockBuyHardware }),
+    },
+  }),
 }))
 jest.mock('@aglyn/tenant-data-admin', () => {
   const fake = jest.requireActual('../testing/fake-firestore')
@@ -111,8 +118,9 @@ jest.mock('@aglyn/shared-util-email', () => ({
 import { posHardwareHandler, posHardwareOrderId } from './pos-hardware'
 import { posHardwareBillingWebhookHandler } from './pos-hardware-webhook'
 import { posHardwareAdminOrders } from './pos-hardware-admin'
-import { posHardwareEmailMerge } from './pos-hardware-notify'
+import { posHardwareEmailMerge, posHardwareInviteMerge } from './pos-hardware-notify'
 import { createPosHardwareUserEraser } from './pos-hardware-user-eraser'
+import { createPosHardwareOrgEraser } from './pos-hardware-closure'
 import { fakeFirestore } from '../testing/fake-firestore'
 import {
   POS_HARDWARE_ENV,
@@ -120,6 +128,10 @@ import {
   type PosHardwareOrder,
   type PosHardwareSaleRecord,
 } from '../model/pos-hardware'
+import {
+  COMMERCE_POS_HARDWARE_CANCELED_AFTER_ORDERING,
+  COMMERCE_POS_HARDWARE_REFUND_FAILED,
+} from '../constants/operator-alerts'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import { POS_HARDWARE_EMAIL_KEYS, posHardwareSystemEmailTemplates } from '@aglyn/shared-util-email/pos-hardware-emails'
@@ -133,15 +145,39 @@ interface StripeCall {
 }
 const stripeCalls: StripeCall[] = []
 let refundOk = true
+/** A refund Stripe already made on the payment: a new ask is refused as already refunded. */
+let refundAlready: { id: string; amount: number } | null = null
+/** The expanded Checkout Session Stripe answers with its tax breakdown. */
+let expandedSession: Record<string, unknown> | null = null
 
 const fetchMock = jest.fn(async (url: any, init: any) => {
   const target = new URL(String(url))
   const path = target.pathname.replace(/^\/v1\//, '')
-  const params = new URLSearchParams(String(init?.body ?? ''))
+  // A GET carries its parameters on the URL, a POST in its body.
+  const params = init?.method === 'GET' ? target.searchParams : new URLSearchParams(String(init?.body ?? ''))
   const headers = (init?.headers ?? {}) as Record<string, string>
   stripeCalls.push({ method: String(init?.method ?? 'GET'), path, key: headers['Idempotency-Key'] ?? null, headers, params })
   if (path === 'checkout/sessions') {
     return { ok: true, status: 200, json: async () => ({ id: 'cs_test_1', url: 'https://checkout.stripe.com/c/pay/cs_test_1' }) }
+  }
+  if (path.startsWith('checkout/sessions/') && init?.method === 'GET') {
+    return expandedSession
+      ? { ok: true, status: 200, json: async () => expandedSession }
+      : { ok: false, status: 404, json: async () => ({ error: { message: 'No such session' } }) }
+  }
+  if (path === 'refunds' && init?.method === 'GET') {
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ data: refundAlready ? [{ ...refundAlready, status: 'succeeded' }] : [] }),
+    }
+  }
+  if (path === 'refunds' && refundAlready) {
+    return {
+      ok: false,
+      status: 400,
+      json: async () => ({ error: { message: 'Charge already refunded', code: 'charge_already_refunded' } }),
+    }
   }
   if (path === 'refunds') {
     return refundOk
@@ -248,8 +284,29 @@ const ORDER_ID = 'hw_0123456789abcdef0123'
 const ORDER_PATH = `orgs/org-1/hardwareOrders/${ORDER_ID}`
 const SALE_PATH = `posHardwareSales/${ORDER_ID}`
 
-/** Every personal detail the fixtures carry, none of which a sale record may hold. */
-const PERSONAL = /Jordan|Pat Lee|Main St|Elm St|buyer@example|5555550100|manager-1|1Z/
+/**
+ * Every personal detail the fixtures carry, none of which a sale record may
+ * hold. The tracking number is matched as a word: a record's ISO expiry ends
+ * in a digit and `Z` (`…701Z`), which is not a tracking number.
+ */
+const PERSONAL = /Jordan|Pat Lee|Main St|Elm St|buyer@example|5555550100|manager-1|\b1Z\b/
+
+/**
+ * The buyer's name and address the sale record keeps for the reseller's
+ * records (AGL-4038), as the online order's shipping names them.
+ */
+const RECORDED_BUYER = {
+  name: 'Jordan Lee',
+  address: { line1: '12 Main St', line2: null, city: 'Springfield', state: 'IL', postalCode: '62701', country: 'US' },
+}
+
+/** A sale record without the buyer it keeps for the reseller's records. */
+function withoutBuyer(record: PosHardwareSaleRecord | undefined): Omit<PosHardwareSaleRecord, 'buyer'> | undefined {
+  if (!record) return record
+  const rest: Partial<PosHardwareSaleRecord> = { ...record }
+  delete rest.buyer
+  return rest as Omit<PosHardwareSaleRecord, 'buyer'>
+}
 
 beforeAll(() => {
   ;(global as any).fetch = fetchMock
@@ -262,8 +319,11 @@ beforeEach(() => {
   mockRaiseAlert.mockClear()
   mockAudit.mockClear()
   mockManagePos = true
+  mockBuyHardware = undefined
   mockPlan = 'business'
   refundOk = true
+  refundAlready = null
+  expandedSession = null
   process.env.STRIPE_SECRET_KEY = 'sk_test_fake'
   delete process.env.STRIPE_TERMINAL_LIVE_ENABLED
   setShopEnv(SHOP_ENV)
@@ -305,6 +365,63 @@ describe('the shop route', () => {
     mockManagePos = false
     expect((await shop({ action: 'catalog' })).status).toBe(403)
     expect((await shop({ action: 'catalog' }, { token: 'stranger' })).status).toBe(403)
+  })
+
+  it('lets only a member holding the buy key check out, and still shows them the shop (AGL-4047)', async () => {
+    mockBuyHardware = false
+    expect((await shop({ action: 'catalog' })).status).toBe(200)
+    expect((await shop({ action: 'orders' })).status).toBe(200)
+    const refused = await shop(
+      { action: 'checkout', lines: [{ sku: 'stripe-reader-m2', quantity: 1 }], shippingMethod: 'standard' },
+      { attemptKey: 'attempt-1' },
+    )
+    expect(refused.status).toBe(403)
+    expect(refused.body.error).toContain('Buy point of sale hardware')
+    expect(stripeCalls).toHaveLength(0)
+    // Granted outright, it checks out.
+    mockBuyHardware = true
+    const bought = await shop(
+      { action: 'checkout', lines: [{ sku: 'stripe-reader-m2', quantity: 1 }], shippingMethod: 'standard' },
+      { attemptKey: 'attempt-2' },
+    )
+    expect(bought.status).toBe(200)
+  })
+
+  it('lets a member who may buy hardware without the register see the shop, their orders and check out (AGL-4047)', async () => {
+    mockManagePos = false
+    mockBuyHardware = true
+    expect((await shop({ action: 'catalog' })).status).toBe(200)
+    expect((await shop({ action: 'orders' })).status).toBe(200)
+    const bought = await shop(
+      { action: 'checkout', lines: [{ sku: 'stripe-reader-m2', quantity: 1 }], shippingMethod: 'standard' },
+      { attemptKey: 'attempt-hw-only' },
+    )
+    expect(bought.status).toBe(200)
+    expect(stripeCalls.filter((call) => call.path === 'checkout/sessions')).toHaveLength(1)
+    // With neither the register nor the key, the shop is shut.
+    mockBuyHardware = undefined
+    expect((await shop({ action: 'catalog' })).status).toBe(403)
+    mockBuyHardware = false
+    expect((await shop({ action: 'orders' })).status).toBe(403)
+  })
+
+  it('refuses a checkout to a member who works the register with buying hardware denied (AGL-4047)', async () => {
+    mockManagePos = true
+    mockBuyHardware = false
+    const refused = await shop(
+      { action: 'checkout', lines: [{ sku: 'stripe-reader-m2', quantity: 1 }], shippingMethod: 'standard' },
+      { attemptKey: 'attempt-denied' },
+    )
+    expect(refused.status).toBe(403)
+    expect(refused.body.error).toContain('Buy point of sale hardware')
+    expect(stripeCalls).toHaveLength(0)
+  })
+
+  it('asks the permissions, not the site role: a site viewer granted the register is admitted (AGL-4047)', async () => {
+    fakeDocs.set('hosts/host-1', { name: 'Corner Cafe', memberRoles: { 'manager-1': 'viewer' } })
+    expect((await shop({ action: 'catalog' })).status).toBe(200)
+    mockManagePos = false
+    expect((await shop({ action: 'catalog' })).status).toBe(403)
   })
 
   it('makes a PLATFORM checkout session priced on the server, under one key per attempt', async () => {
@@ -420,6 +537,53 @@ describe('the webhook', () => {
     expect([...fakeDocs.keys()].filter((key) => key.includes('/hardwareOrders/'))).toHaveLength(1)
     expect(mockSendEmail).toHaveBeenCalledTimes(1)
     expect(mockRaiseAlert).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps Stripe’s tax base from the session’s breakdown where Stripe Tax ran', async () => {
+    const taxed = paidSession({
+      automatic_tax: { enabled: true },
+      total_details: { amount_tax: 1_907 },
+      amount_total: 25_027,
+    })
+    expandedSession = {
+      ...taxed,
+      total_details: {
+        amount_tax: 1_907,
+        breakdown: {
+          taxes: [
+            {
+              amount: 1_907,
+              taxable_amount: 23_120,
+              taxability_reason: 'standard_rated',
+              rate: { id: 'txr_tx', jurisdiction: 'Texas', state: 'TX', percentage: 8.25 },
+            },
+          ],
+        },
+      },
+    }
+    await deliver(taxed)
+    expect(stripeCalls.map((call) => [call.method, call.path, call.params.get('expand[]')])).toEqual([
+      ['GET', 'checkout/sessions/cs_test_1', 'total_details.breakdown'],
+    ])
+    const order = fakeDocs.get(ORDER_PATH) as PosHardwareOrder
+    expect(order).toMatchObject({ automaticTax: true, taxCents: 1_907 })
+    expect(order.taxLines).toEqual([
+      {
+        amountCents: 1_907,
+        taxabilityReason: 'standard_rated',
+        taxRateId: 'txr_tx',
+        taxableAmountCents: 23_120,
+        jurisdiction: 'Texas',
+        rateState: 'TX',
+        percentage: 8.25,
+      },
+    ])
+    expect((fakeDocs.get(SALE_PATH) as PosHardwareSaleRecord).taxLines[0].taxableAmountCents).toBe(23_120)
+  })
+
+  it('still records the order, with no stated base, when the breakdown cannot be read', async () => {
+    await deliver(paidSession({ automatic_tax: { enabled: true }, total_details: { amount_tax: 1_907 } }))
+    expect(fakeDocs.get(ORDER_PATH)).toMatchObject({ automaticTax: true, taxCents: 1_907, taxLines: [] })
   })
 
   it('reads the older API’s shipping_details too', async () => {
@@ -637,11 +801,15 @@ describe('the emails', () => {
       tracking: { carrier: 'ups', number: '1Z', url: 'https://www.ups.com/track?tracknum=1Z' },
     } as unknown as PosHardwareOrder
     const merge = await posHardwareEmailMerge(ORDER_ID, order, { site: 'Corner Cafe', org: 'Acme' })
+    // The sign-up invitation (AGL-4038) is filled by its own sender.
+    const invite = posHardwareInviteMerge(ORDER_ID, order)
     for (const template of posHardwareSystemEmailTemplates('https://console.example.com')) {
+      const filled = template.key === POS_HARDWARE_EMAIL_KEYS.invited ? invite : merge
       for (const token of template.mergeTokens) {
-        expect([template.key, token.name, merge[token.name] !== undefined]).toEqual([template.key, token.name, true])
+        expect([template.key, token.name, filled[token.name] !== undefined]).toEqual([template.key, token.name, true])
       }
     }
+    expect(invite['order.signUpUrl']).toMatch(/\/signup$/)
     expect(merge['order.total']).toBe('$140.00')
     expect(merge['order.carrier']).toBe('UPS')
     expect(merge['order.shipTo']).toBe('Jordan Lee\n12 Main St\nSpringfield, IL 62701')
@@ -658,7 +826,7 @@ describe('the retained sale record (AGL-4038)', () => {
     })
   const sale = () => fakeDocs.get(SALE_PATH) as PosHardwareSaleRecord | undefined
 
-  it('is written with the order, with the amounts and the tax region and nothing about the buyer', async () => {
+  it('is written with the order, with the amounts, the tax region and only the buyer’s name and address', async () => {
     await deliver(paidSession({ total_details: { amount_tax: 1_705 }, amount_total: 24_825 }))
     expect(sale()).toMatchObject({
       orderId: ORDER_ID,
@@ -679,7 +847,10 @@ describe('the retained sale record (AGL-4038)', () => {
       ['stripe-reader-m2', 1, 7_670],
     ])
     expect(sale()?.paidAtMs).toEqual(expect.any(Number))
-    expect(JSON.stringify(sale())).not.toMatch(PERSONAL)
+    // The reseller's records: the buyer's name and address, and nothing
+    // else of theirs — no email, phone, account or tracking.
+    expect(sale()?.buyer).toEqual(RECORDED_BUYER)
+    expect(JSON.stringify(withoutBuyer(sale()))).not.toMatch(PERSONAL)
     for (const field of ['hostId', 'createdBy', 'contactEmail', 'shipping', 'tracking']) {
       expect([field, field in (sale() ?? {})]).toEqual([field, false])
     }
@@ -707,7 +878,7 @@ describe('the retained sale record (AGL-4038)', () => {
       method: 'POST',
       body: { action: 'update', orgId: 'org-1', orderId: ORDER_ID, tracking: { carrier: 'UPS', number: '1Z 999' } },
     })
-    expect(JSON.stringify(sale())).not.toMatch(/1Z/)
+    expect(JSON.stringify(sale())).not.toMatch(/\b1Z\b/)
     await staff('staff-super', { method: 'POST', body: { action: 'refund', orgId: 'org-1', orderId: ORDER_ID } })
     expect(sale()).toMatchObject({
       status: 'refunded',
@@ -776,12 +947,25 @@ describe('an account erasure of the buyer (AGL-4038)', () => {
       method: 'POST',
       body: { action: 'update', orgId: 'org-1', orderId: ORDER_ID, tracking: { carrier: 'UPS', number: '1Z 999' } },
     })
+    // Shipped, so the closure cancels nothing and only the redaction is left.
+    await staff('staff-super', {
+      method: 'POST',
+      body: { action: 'update', orgId: 'org-1', orderId: ORDER_ID, status: 'shipped' },
+    })
+    stripeCalls.length = 0
+    mockSendEmail.mockClear()
+    mockRaiseAlert.mockClear()
   })
+
+  const NOTHING_CANCELED = { hardwareOrdersCanceled: 0, hardwareOrdersPlacedWithStripe: 0, hardwareRefundsFailed: 0 }
 
   it('takes the buyer off the order and keeps every amount, the status dates and the tax region', async () => {
     const before = fakeDocs.get(ORDER_PATH) as PosHardwareOrder
     const report = await eraser({ uid: 'manager-1', orgIds: ['org-1'] })
-    expect(report).toEqual({ hardwareOrdersRedacted: 1, formerWorkspacesReached: true })
+    expect(report).toEqual({ hardwareOrdersRedacted: 1, formerWorkspacesReached: true, ...NOTHING_CANCELED })
+    // A shipped order is never refunded by a closure.
+    expect(stripeCalls).toHaveLength(0)
+    expect(mockSendEmail).not.toHaveBeenCalled()
     const after = fakeDocs.get(ORDER_PATH) as PosHardwareOrder
     expect(after).toMatchObject({
       createdBy: null,
@@ -795,9 +979,10 @@ describe('an account erasure of the buyer (AGL-4038)', () => {
       totalCents: before.totalCents,
       stripeCheckoutSessionId: 'cs_test_1',
       stripePaymentIntentId: 'pi_test_1',
-      status: 'ordered',
+      status: 'shipped',
       paidAtMs: before.paidAtMs,
       orderedAtMs: before.orderedAtMs,
+      shippedAtMs: before.shippedAtMs,
       createdAtMs: before.createdAtMs,
     })
     expect(after.shipping).toEqual({
@@ -810,10 +995,26 @@ describe('an account erasure of the buyer (AGL-4038)', () => {
       taxRegion: { country: 'US', state: 'IL', postalCode: '62701' },
     })
     expect(JSON.stringify(after)).not.toMatch(PERSONAL)
-    // The sale record still names the region, and still holds no one.
+    // The sale record still names the region, and KEEPS the buyer's name
+    // and address for the reseller's records; nothing else of theirs.
     const record = fakeDocs.get(SALE_PATH) as PosHardwareSaleRecord
-    expect(record).toMatchObject({ shipTo: { country: 'US', state: 'IL', postalCode: '62701' }, status: 'ordered' })
-    expect(JSON.stringify(record)).not.toMatch(PERSONAL)
+    expect(record).toMatchObject({ shipTo: { country: 'US', state: 'IL', postalCode: '62701' }, status: 'shipped' })
+    expect(record.buyer).toEqual(RECORDED_BUYER)
+    expect(JSON.stringify(withoutBuyer(record))).not.toMatch(PERSONAL)
+  })
+
+  it('keeps the buyer’s name and address on the sale record through every later write of the order', async () => {
+    await eraser({ uid: 'manager-1', orgIds: ['org-1'] })
+    // A staff write after the erasure rebuilds the record from an order
+    // that no longer names the buyer.
+    await staff('staff-super', {
+      method: 'POST',
+      body: { action: 'update', orgId: 'org-1', orderId: ORDER_ID, status: 'delivered' },
+    })
+    const record = fakeDocs.get(SALE_PATH) as PosHardwareSaleRecord
+    expect(record.status).toBe('delivered')
+    expect(record.buyer).toEqual(RECORDED_BUYER)
+    expect((fakeDocs.get(ORDER_PATH) as PosHardwareOrder).shipping.name).toBeNull()
   })
 
   it('leaves a colleague’s order alone', async () => {
@@ -832,7 +1033,7 @@ describe('an account erasure of the buyer (AGL-4038)', () => {
     await eraser({ uid: 'manager-1', orgIds: ['org-1'] })
     const once = JSON.stringify([...fakeDocs.entries()])
     const again = await eraser({ uid: 'manager-1', orgIds: ['org-1'] })
-    expect(again).toEqual({ hardwareOrdersRedacted: 0, formerWorkspacesReached: true })
+    expect(again).toEqual({ hardwareOrdersRedacted: 0, formerWorkspacesReached: true, ...NOTHING_CANCELED })
     expect(JSON.stringify([...fakeDocs.entries()])).toBe(once)
   })
 
@@ -851,7 +1052,7 @@ describe('an account erasure of the buyer (AGL-4038)', () => {
     const spy = jest.spyOn(console, 'error').mockImplementation(() => undefined)
     try {
       const report = await fallback({ uid: 'manager-1', orgIds: ['org-1'] })
-      expect(report).toEqual({ hardwareOrdersRedacted: 1, formerWorkspacesReached: false })
+      expect(report).toEqual({ hardwareOrdersRedacted: 1, formerWorkspacesReached: false, ...NOTHING_CANCELED })
     } finally {
       spy.mockRestore()
     }
@@ -879,5 +1080,307 @@ describe('an account erasure of the buyer (AGL-4038)', () => {
       (entry) => entry.collectionGroup === 'hardwareOrders' && entry.fieldPath === 'createdBy',
     )
     expect(override?.indexes.map((index) => index.queryScope)).toContain('COLLECTION_GROUP')
+  })
+})
+
+describe('closing a workspace or the buying account with an unshipped order (AGL-4038)', () => {
+  const orgEraser = createPosHardwareOrgEraser({ firestore: () => fakeFirestore })
+  const userEraser = createPosHardwareUserEraser({ firestore: () => fakeFirestore, now: () => 9_999 })
+  const deliver = (object: Record<string, unknown>) =>
+    posHardwareBillingWebhookHandler({
+      type: 'checkout.session.completed',
+      object,
+      event: { type: 'checkout.session.completed', data: { object } },
+    })
+  const refundPosts = () => stripeCalls.filter((call) => call.method === 'POST' && call.path === 'refunds')
+  const alertsOf = (type: string) =>
+    mockRaiseAlert.mock.calls.filter((call) => (call[0] as { type: string }).type === type)
+  const audits = () => mockAudit.mock.calls.map((call) => call[1] as Record<string, any>)
+  const order = () => fakeDocs.get(ORDER_PATH) as PosHardwareOrder & { refundRequestedAtMs?: number }
+  const sale = () => fakeDocs.get(SALE_PATH) as PosHardwareSaleRecord
+
+  /** Paid, and, for `ordered`, placed with Stripe by staff. */
+  async function placeOrder(status: 'paid' | 'ordered' | 'shipped' | 'delivered' | 'registered') {
+    await deliver(paidSession())
+    const steps = ['ordered', 'shipped', 'delivered', 'registered']
+    for (const step of steps.slice(0, steps.indexOf(status) + 1)) {
+      await staff('staff-super', {
+        method: 'POST',
+        body: {
+          action: 'update',
+          orgId: 'org-1',
+          orderId: ORDER_ID,
+          status: step,
+          ...(step === 'ordered' ? { stripeHardwareOrderId: 'thor_1' } : {}),
+          ...(step === 'shipped' ? { tracking: { carrier: 'UPS', number: '1Z 999' } } : {}),
+        },
+      })
+    }
+    stripeCalls.length = 0
+    mockSendEmail.mockClear()
+    mockRaiseAlert.mockClear()
+    mockAudit.mockClear()
+  }
+
+  it('deleting the workspace cancels and refunds a paid order in full, once, under the staff page’s key', async () => {
+    await placeOrder('paid')
+    const report = await orgEraser({ orgId: 'org-1', dryRun: false })
+    expect(report).toEqual({ hardwareOrdersCanceled: 1, hardwareOrdersPlacedWithStripe: 0, hardwareRefundsFailed: 0 })
+    expect(refundPosts().map((call) => [call.key, call.params.get('payment_intent'), call.params.get('amount')])).toEqual([
+      [`pos-hw-refund-${ORDER_ID}`, 'pi_test_1', null],
+    ])
+    expect(order()).toMatchObject({
+      status: 'canceled',
+      refundId: 're_1',
+      refundedCents: 23_120,
+      cancelReason: 'workspace-closed',
+      canceledAtMs: expect.any(Number),
+    })
+    expect(order().refundRequestedAtMs).toBeUndefined()
+    // The retained record says so, and it is the one the workspace erasure leaves.
+    expect(sale()).toMatchObject({ status: 'canceled', refundId: 're_1', refundedCents: 23_120, canceledAtMs: expect.any(Number) })
+    expect(JSON.stringify(withoutBuyer(sale()))).not.toMatch(PERSONAL)
+    // The buyer is told; staff are not, because it was never placed with Stripe.
+    expect(mockSendEmail).toHaveBeenCalledTimes(1)
+    expect(mockSendEmail.mock.calls[0][0]).toMatchObject({
+      to: 'buyer@example.com',
+      context: POS_HARDWARE_EMAIL_KEYS.canceled,
+    })
+    expect(alertsOf(COMMERCE_POS_HARDWARE_CANCELED_AFTER_ORDERING.type)).toHaveLength(0)
+    expect(audits()).toEqual([
+      expect.objectContaining({
+        action: 'pos-hardware-order-cancel',
+        actorUid: 'system:workspace-closed',
+        actorEmail: null,
+        before: { status: 'paid' },
+        after: { status: 'canceled', refundId: 're_1', refundedCents: 23_120, reason: 'workspace-closed' },
+      }),
+    ])
+  })
+
+  it('alerts staff when the order was already placed with Stripe', async () => {
+    await placeOrder('ordered')
+    const report = await orgEraser({ orgId: 'org-1', dryRun: false })
+    expect(report).toEqual({ hardwareOrdersCanceled: 1, hardwareOrdersPlacedWithStripe: 1, hardwareRefundsFailed: 0 })
+    expect(order()).toMatchObject({ status: 'canceled', refundId: 're_1' })
+    const [alert] = alertsOf(COMMERCE_POS_HARDWARE_CANCELED_AFTER_ORDERING.type)
+    expect(COMMERCE_POS_HARDWARE_CANCELED_AFTER_ORDERING.tier).toBe('must')
+    expect(alert[1]).toMatchObject({
+      dedupeKey: ORDER_ID,
+      orgId: 'org-1',
+      context: {
+        orderNumber: 'HW-012345',
+        amount: expect.stringContaining('231.20'),
+        items: '1 × Stripe Reader S710, 1 × Stripe Reader M2',
+        reason: 'its workspace org-1 was deleted',
+        stripeOrder: ' (Stripe order thor_1)',
+      },
+    })
+    // Staff text names the order and the closure, never the buyer.
+    expect(JSON.stringify(alert[1])).not.toMatch(PERSONAL)
+  })
+
+  it.each(['shipped', 'delivered', 'registered'] as const)('leaves an order that is %s alone', async (status) => {
+    await placeOrder(status)
+    const before = JSON.stringify(order())
+    const report = await orgEraser({ orgId: 'org-1', dryRun: false })
+    expect(report).toEqual({ hardwareOrdersCanceled: 0, hardwareOrdersPlacedWithStripe: 0, hardwareRefundsFailed: 0 })
+    expect(JSON.stringify(order())).toBe(before)
+    expect(stripeCalls).toHaveLength(0)
+    expect(mockSendEmail).not.toHaveBeenCalled()
+  })
+
+  it('a replay refunds nothing twice, emails nothing twice', async () => {
+    await placeOrder('paid')
+    await orgEraser({ orgId: 'org-1', dryRun: false })
+    const settled = JSON.stringify(order())
+    const again = await orgEraser({ orgId: 'org-1', dryRun: false })
+    expect(again).toEqual({ hardwareOrdersCanceled: 0, hardwareOrdersPlacedWithStripe: 0, hardwareRefundsFailed: 0 })
+    expect(refundPosts()).toHaveLength(1)
+    expect(mockSendEmail).toHaveBeenCalledTimes(1)
+    expect(JSON.stringify(order())).toBe(settled)
+  })
+
+  it('a run that died after Stripe refunded reads that refund back rather than making a second', async () => {
+    await placeOrder('paid')
+    // The earlier run's claim is still on the order, and Stripe already refunded.
+    fakeDocs.set(ORDER_PATH, { ...order(), refundRequestedAtMs: 5 })
+    refundAlready = { id: 're_earlier', amount: 23_120 }
+    const report = await orgEraser({ orgId: 'org-1', dryRun: false })
+    expect(report.hardwareOrdersCanceled).toBe(1)
+    expect(order()).toMatchObject({ status: 'canceled', refundId: 're_earlier', refundedCents: 23_120 })
+    expect(stripeCalls.map((call) => [call.method, call.path])).toEqual([
+      ['POST', 'refunds'],
+      ['GET', 'refunds'],
+    ])
+    expect(stripeCalls[1].params.get('payment_intent')).toBe('pi_test_1')
+  })
+
+  it('goes ahead when Stripe refuses, and asks staff to refund by hand', async () => {
+    await placeOrder('ordered')
+    refundOk = false
+    const report = await orgEraser({ orgId: 'org-1', dryRun: false })
+    expect(report).toEqual({ hardwareOrdersCanceled: 0, hardwareOrdersPlacedWithStripe: 0, hardwareRefundsFailed: 1 })
+    // Released, never half-written: the order is as it was.
+    expect(order()).toMatchObject({ status: 'ordered' })
+    expect(order().refundRequestedAtMs).toBeUndefined()
+    expect(mockSendEmail).not.toHaveBeenCalled()
+    const [alert] = alertsOf(COMMERCE_POS_HARDWARE_REFUND_FAILED.type)
+    expect(alert[1]).toMatchObject({
+      dedupeKey: ORDER_ID,
+      context: {
+        paymentIntentId: 'pi_test_1',
+        error: 'Charge already refunded',
+        orderedNote: '. It had already been placed with Stripe as thor_1, so cancel it there too before it ships',
+      },
+    })
+  })
+
+  it('a plan counts what it would cancel and touches neither Stripe nor the order', async () => {
+    await placeOrder('ordered')
+    const before = JSON.stringify([...fakeDocs.entries()])
+    const plan = await orgEraser({ orgId: 'org-1', dryRun: true })
+    expect(plan).toEqual({ hardwareOrdersCanceled: 1, hardwareOrdersPlacedWithStripe: 1, hardwareRefundsFailed: 0 })
+    expect(stripeCalls).toHaveLength(0)
+    expect(JSON.stringify([...fakeDocs.entries()])).toBe(before)
+    expect(mockSendEmail).not.toHaveBeenCalled()
+  })
+
+  it('closing the buying account cancels and refunds their unshipped order, emails them, then takes them off it', async () => {
+    await placeOrder('paid')
+    const OTHER_ORDER = 'hw_ffffffffffffffffffff'
+    await deliver(
+      paidSession({
+        id: 'cs_test_2',
+        metadata: { ...paidSession().metadata, orderId: OTHER_ORDER, uid: 'colleague-1' },
+        customer_details: { email: 'colleague@example.com', name: 'Sam Roe', phone: null },
+      }),
+    )
+    mockSendEmail.mockClear()
+    const report = await userEraser({ uid: 'manager-1', orgIds: ['org-1'] })
+    expect(report).toEqual({
+      hardwareOrdersRedacted: 1,
+      formerWorkspacesReached: true,
+      hardwareOrdersCanceled: 1,
+      hardwareOrdersPlacedWithStripe: 0,
+      hardwareRefundsFailed: 0,
+    })
+    // Emailed at the address on the order before it came off.
+    expect(mockSendEmail).toHaveBeenCalledTimes(1)
+    expect(mockSendEmail.mock.calls[0][0]).toMatchObject({ to: 'buyer@example.com', context: POS_HARDWARE_EMAIL_KEYS.canceled })
+    expect(order()).toMatchObject({
+      status: 'canceled',
+      cancelReason: 'account-closed',
+      refundId: 're_1',
+      createdBy: null,
+      contactEmail: null,
+    })
+    expect(sale()).toMatchObject({ status: 'canceled', refundedCents: 23_120 })
+    expect(audits()[0]).toMatchObject({ actorUid: 'system:account-closed', after: { reason: 'account-closed' } })
+    // A colleague's order in the same workspace is theirs, and stays paid.
+    expect(fakeDocs.get(`orgs/org-1/hardwareOrders/${OTHER_ORDER}`)).toMatchObject({ status: 'paid' })
+    expect(refundPosts()).toHaveLength(1)
+  })
+
+  it('the canceled email says why, what was refunded, and what happens next', async () => {
+    await placeOrder('paid')
+    await orgEraser({ orgId: 'org-1', dryRun: false })
+    const merge = await posHardwareEmailMerge(ORDER_ID, order(), { site: 'Corner Cafe', org: 'Acme' })
+    expect(merge['order.cancelReason']).toBe('We canceled your order because the Acme workspace was deleted.')
+    expect(merge['order.refunded']).toBe('$231.20')
+    const sent = mockSendEmail.mock.calls[0][0] as { subject: string; text: string }
+    expect(sent.subject).toBe('Your card reader order HW-012345 was canceled and refunded')
+    const template = posHardwareSystemEmailTemplates('https://console.example.com').find(
+      (entry) => entry.key === POS_HARDWARE_EMAIL_KEYS.canceled,
+    )
+    const words = JSON.stringify(template?.defaultBody)
+    for (const part of ['heading', 'details', 'subheading', 'button', '{{order.cancelReason}}', '{{order.refunded}}', '{{brand.supportUrl}}']) {
+      expect([part, words.includes(part)]).toEqual([part, true])
+    }
+    const account = await posHardwareEmailMerge(ORDER_ID, { ...order(), cancelReason: 'account-closed' }, { site: 'Corner Cafe', org: 'Acme' })
+    expect(account['order.cancelReason']).toBe('We canceled your order because the account that placed it was closed.')
+    const byStaff = await posHardwareEmailMerge(ORDER_ID, { ...order(), cancelReason: 'staff' }, { site: 'Corner Cafe', org: 'Acme' })
+    expect(byStaff['order.cancelReason']).toBe('Our team canceled your order.')
+  })
+
+  /*========================================
+   * EMAIL THE BUYER (AGL-4038): a staff cancel or refund of an online order
+   * sends the same canceled-and-refunded email the closure sends, when staff
+   * leave "Email the buyer" on, and nothing when they turn it off — once,
+   * between the staff page and a closure, under one claim on the order.
+   *========================================*/
+  const cancel = (body: Record<string, unknown>) =>
+    staff('staff-super', { method: 'POST', body: { action: 'cancel', orgId: 'org-1', orderId: ORDER_ID, ...body } })
+
+  it('a staff cancel emails the buyer the canceled-and-refunded email when asked, and audits the choice', async () => {
+    await placeOrder('paid')
+    const answer = await cancel({ notifyBuyer: true })
+    expect(answer.status).toBe(200)
+    expect(answer.body.buyerEmail).toBe('sent')
+    expect(mockSendEmail).toHaveBeenCalledTimes(1)
+    expect(mockSendEmail.mock.calls[0][0]).toMatchObject({ to: 'buyer@example.com', context: POS_HARDWARE_EMAIL_KEYS.canceled })
+    expect(order()).toMatchObject({ status: 'canceled', cancelReason: 'staff', buyerEmails: { canceled: { state: 'sent' } } })
+    expect(audits()).toEqual([
+      expect.objectContaining({
+        action: 'pos-hardware-order-cancel',
+        actorUid: 'staff-1',
+        after: expect.objectContaining({ status: 'canceled', notifyBuyer: true, buyerEmail: 'sent' }),
+      }),
+    ])
+    // Pressed again, it is already canceled and the buyer already told.
+    const again = await cancel({ notifyBuyer: true })
+    expect(again.body.buyerEmail).toBe('already')
+    expect(mockSendEmail).toHaveBeenCalledTimes(1)
+  })
+
+  it('a staff refund before it ships sends the same email, and nothing when staff turn it off', async () => {
+    await placeOrder('ordered')
+    const off = await staff('staff-super', {
+      method: 'POST',
+      body: { action: 'refund', orgId: 'org-1', orderId: ORDER_ID, notifyBuyer: false },
+    })
+    expect(off.status).toBe(200)
+    expect(off.body.buyerEmail).toBe('off')
+    expect(order()).toMatchObject({ status: 'refunded' })
+    expect(order().buyerEmails).toBeUndefined()
+    expect(mockSendEmail).not.toHaveBeenCalled()
+    expect(audits()[0]).toMatchObject({ after: expect.objectContaining({ notifyBuyer: false, buyerEmail: 'off' }) })
+  })
+
+  it('reads a missing choice as the dialog’s default, and refuses one that is not true or false', async () => {
+    await placeOrder('paid')
+    expect((await cancel({ notifyBuyer: 'yes' })).status).toBe(400)
+    expect(refundPosts()).toHaveLength(0)
+    const answer = await cancel({})
+    expect(answer.body.buyerEmail).toBe('sent')
+  })
+
+  it('never emails twice: a staff cancel, then the workspace deleted', async () => {
+    await placeOrder('paid')
+    await cancel({ notifyBuyer: true })
+    // The order is canceled already, so the closure has nothing to cancel
+    // and nobody to tell again.
+    await orgEraser({ orgId: 'org-1', dryRun: false })
+    expect(mockSendEmail).toHaveBeenCalledTimes(1)
+  })
+
+  it('never emails twice: the workspace deleted, then a staff press', async () => {
+    await placeOrder('paid')
+    await orgEraser({ orgId: 'org-1', dryRun: false })
+    expect(mockSendEmail).toHaveBeenCalledTimes(1)
+    expect(order().buyerEmails?.['canceled']?.state).toBe('sent')
+    expect((await cancel({ notifyBuyer: true })).body.buyerEmail).toBe('already')
+    expect(mockSendEmail).toHaveBeenCalledTimes(1)
+  })
+
+  it('sends an email that failed on the next press, once', async () => {
+    await placeOrder('paid')
+    mockSendEmail.mockResolvedValueOnce({ sent: false })
+    expect((await cancel({ notifyBuyer: true })).body.buyerEmail).toBe('failed')
+    expect(order().buyerEmails?.['canceled']?.state).toBe('failed')
+    expect((await cancel({ notifyBuyer: true })).body.buyerEmail).toBe('sent')
+    expect((await cancel({ notifyBuyer: true })).body.buyerEmail).toBe('already')
+    expect(mockSendEmail).toHaveBeenCalledTimes(2)
+    expect(refundPosts()).toHaveLength(1)
   })
 })

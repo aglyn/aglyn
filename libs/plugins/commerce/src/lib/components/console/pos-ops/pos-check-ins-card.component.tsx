@@ -21,22 +21,29 @@ import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useFirestore, useFirestoreCollection, useUser } from '@aglyn/tenant-feature-instance'
-import { Alert, Button, Chip, Stack, Typography } from '@mui/material'
+import { Alert, Button, Chip, Stack, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
 import { DatePicker } from '@mui/x-date-pickers/DatePicker'
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
 import type { Dayjs } from 'dayjs'
 import { collection, documentId, limit, orderBy, query } from 'firebase/firestore'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { zonedDayKey } from '@aglyn/shared-util-timestamp/zoned-time'
 import {
   checkInItemLabel,
+  checkInRainCheckIsOpen,
+  checkInStatusLabel,
   checkInTimeLabel,
   describeWristband,
   POS_CHECK_IN_ROUTE,
+  rainCheckLabel,
   type CheckInDayTotals,
   type CheckInRow,
 } from '../../../model/commerce-check-in'
+import { callPosOps } from './pos-ops-api'
+import type { StayCheckInMode } from '../../../model/commerce-reservations'
+import { PosRainCheckDialog } from './pos-rain-check-dialog.component'
 import { escapeHtml } from '../../../utils/escape-html'
 import CommerceStatTile from '../commerce-stat-tile.component'
 import { EntitlementGatedCard } from '../entitlement-gate.component'
@@ -56,6 +63,9 @@ export interface PosCheckInsCardProps {
   canManagePos?: boolean
 }
 
+/** A stay's guest count (AGL-4043), loaded the first time it opens. */
+const ReservationGuestsDialog = lazy(() => import('../reservation-guests-dialog.component'))
+
 const HEADER = "Today's check-ins"
 const HELP = pluginDocsHelp('posOperations', { anchor: '#check-in-at-the-window' })
 const DAY_FORMAT = 'YYYY-MM-DD'
@@ -66,7 +76,16 @@ interface DayList {
   totals: CheckInDayTotals
   checkIns: CheckInRow[]
   truncated?: boolean
+  /** How the store checks stays in (AGL-4043). */
+  stayCheckIn?: StayCheckInMode
 }
+
+/** The quick control's choices, in the order the window reads them. */
+const STAY_MODE_LABELS: ReadonlyArray<{ mode: StayCheckInMode; label: string }> = [
+  { mode: 'resource', label: 'As each resource is set' },
+  { mode: 'stay', label: 'One per stay' },
+  { mode: 'guest', label: 'One per guest' },
+]
 
 type Answer =
   | { state: 'idle' | 'loading' }
@@ -82,7 +101,9 @@ export function posCheckInsDocument(list: DayList): string {
         `<span>${escapeHtml(
           row.status === 'checked_in'
             ? [checkInTimeLabel(row.checkedInAtMs, list.timeZone), describeWristband(row.wristband)].filter(Boolean).join(' ')
-            : '—',
+            : checkInRainCheckIsOpen(row)
+              ? 'Rain check'
+              : '—',
         )}</span></div>`,
     )
     .join('')
@@ -101,6 +122,11 @@ function PosCheckInsBody(props: PosCheckInsCardProps) {
   const [day, setDay] = useState<Dayjs | null>(null)
   const [answer, setAnswer] = useState<Answer>({ state: 'idle' })
   const [exporting, setExporting] = useState(false)
+  /** The pass a rain check is being given on (AGL-4043). */
+  const [rainCheckRow, setRainCheckRow] = useState<CheckInRow | null>(null)
+  const [actionError, setActionError] = useState('')
+  /** The stay whose guests are being changed (AGL-4043). */
+  const [guestsFor, setGuestsFor] = useState<string | null>(null)
 
   const url = useCallback(
     (format?: 'csv') => {
@@ -133,6 +159,41 @@ function PosCheckInsBody(props: PosCheckInsCardProps) {
   }, [load])
 
   const list = answer.state === 'ready' ? answer.list : null
+  const todayKey = list ? zonedDayKey(Date.now(), list.timeZone) : ''
+
+  const [savingStayMode, setSavingStayMode] = useState(false)
+  /** The store's quick control for stays: one check-in per stay or per guest (AGL-4043). */
+  const setStayMode = useCallback(
+    async (mode: StayCheckInMode) => {
+      setActionError('')
+      setSavingStayMode(true)
+      const done = await callPosOps(user, 'pos-check-in', {
+        hostId,
+        action: 'stay_mode',
+        mode,
+        ...(day?.isValid() ? { day: day.format(DAY_FORMAT) } : {}),
+      })
+      setSavingStayMode(false)
+      if (!done.ok) return setActionError(done.body.error ?? 'The setting could not be saved.')
+      await load()
+    },
+    [user, hostId, day, load],
+  )
+
+  const undoRainCheck = useCallback(
+    async (row: CheckInRow) => {
+      setActionError('')
+      const done = await callPosOps<{ checkIn?: CheckInRow }>(user, 'pos-check-in', {
+        hostId,
+        action: 'undo_rain_check',
+        id: row.id,
+      })
+      if (!done.ok) return setActionError(done.body.error ?? 'The rain check could not be undone.')
+      await load()
+    },
+    [user, hostId, load],
+  )
+
   const columns = useMemo<GridColDef[]>(
     () => [
       {
@@ -159,12 +220,22 @@ function PosCheckInsBody(props: PosCheckInsCardProps) {
         field: 'status',
         headerName: 'Status',
         minWidth: 120,
+        valueGetter: (_value: unknown, row: CheckInRow) => checkInStatusLabel(row),
         renderCell: ({ row }: { row: CheckInRow }) =>
           row.status === 'checked_in' ? (
             <Chip size="small" color="success" label="Checked in" />
+          ) : checkInRainCheckIsOpen(row) ? (
+            <Chip size="small" color="info" variant="outlined" label="Rain check" />
           ) : (
             <Chip size="small" variant="outlined" label="Expected" />
           ),
+      },
+      {
+        field: 'rainCheck',
+        headerName: 'Rain check',
+        minWidth: 200,
+        flex: 1,
+        valueGetter: (_value: unknown, row: CheckInRow) => rainCheckLabel(row),
       },
       {
         field: 'checkedInAtMs',
@@ -180,8 +251,34 @@ function PosCheckInsBody(props: PosCheckInsCardProps) {
         minWidth: 120,
         valueGetter: (_value: unknown, row: CheckInRow) => describeWristband(row.wristband),
       },
+      {
+        // What a pass waiting at the window can still have done to it: a
+        // rain check, or one taken back; and a stay's guest count (AGL-4043).
+        // Not a value, so nothing to sort.
+        field: 'rainCheckAction',
+        headerName: '',
+        minWidth: 150,
+        sortable: false,
+        filterable: false,
+        hideable: false,
+        disableColumnMenu: true,
+        renderCell: ({ row }: { row: CheckInRow }) =>
+          row.source === 'reservation' && row.reservationId ? (
+            <Button size="small" disabled={!canManagePos} onClick={() => setGuestsFor(row.reservationId)}>
+              {'Guests'}
+            </Button>
+          ) : row.source !== 'order' || row.status !== 'expected' ? null : row.rainCheck ? (
+            <Button size="small" disabled={!canManagePos} onClick={() => void undoRainCheck(row)}>
+              {'Undo rain check'}
+            </Button>
+          ) : (
+            <Button size="small" disabled={!canManagePos || !todayKey} onClick={() => setRainCheckRow(row)}>
+              {'Rain check'}
+            </Button>
+          ),
+      },
     ],
-    [list],
+    [list, canManagePos, todayKey, undoRainCheck],
   )
   const rows = useMemo(() => (list ? list.checkIns.map((row) => ({ ...row, $id: row.id })) : []), [list])
 
@@ -249,6 +346,31 @@ function PosCheckInsBody(props: PosCheckInsCardProps) {
             </Button>
           </Stack>
         </LocalizationProvider>
+        <Stack spacing={0.5}>
+          <Typography variant="subtitle2" component="h3" id="stay-check-in-label">
+            {'Stays at check-in'}
+          </Typography>
+          <ToggleButtonGroup
+            exclusive
+            size="small"
+            aria-labelledby="stay-check-in-label"
+            value={list?.stayCheckIn ?? 'resource'}
+            onChange={(_event, mode: StayCheckInMode | null) => {
+              if (mode && mode !== list?.stayCheckIn) void setStayMode(mode)
+            }}
+            disabled={!canManagePos || !list || savingStayMode}
+            sx={{ flexWrap: 'wrap' }}
+          >
+            {STAY_MODE_LABELS.map((choice) => (
+              <ToggleButton key={choice.mode} value={choice.mode}>
+                {choice.label}
+              </ToggleButton>
+            ))}
+          </ToggleButtonGroup>
+          <Typography variant="caption" color="text.secondary">
+            {'One per guest gives each guest of a stay their own check-in and wristband, by the stay’s guest count.'}
+          </Typography>
+        </Stack>
         {answer.state === 'loading' ? (
           <Typography variant="body2" color="text.secondary">
             {'Reading who is due…'}
@@ -269,7 +391,11 @@ function PosCheckInsBody(props: PosCheckInsCardProps) {
               <CommerceStatTile label="Expected" value={String(list.totals.expected)} />
               <CommerceStatTile label="Checked in" value={String(list.totals.checkedIn)} />
               <CommerceStatTile label="Still to come" value={String(list.totals.expected - list.totals.checkedIn)} />
+              {list.totals.rainChecks ? (
+                <CommerceStatTile label="Rain checks" value={String(list.totals.rainChecks)} />
+              ) : null}
             </Stack>
+            {actionError ? <Alert severity="warning">{actionError}</Alert> : null}
             <ListTable
               aria-label="Check-ins on this day"
               rows={rows}
@@ -279,6 +405,29 @@ function PosCheckInsBody(props: PosCheckInsCardProps) {
           </>
         ) : null}
       </Stack>
+      <PosRainCheckDialog
+        row={rainCheckRow}
+        hostId={hostId}
+        todayKey={todayKey}
+        onClose={() => setRainCheckRow(null)}
+        onDone={() => {
+          setRainCheckRow(null)
+          void load()
+        }}
+      />
+      {guestsFor ? (
+        <Suspense fallback={null}>
+          <ReservationGuestsDialog
+            reservationId={guestsFor}
+            hostId={hostId}
+            onClose={() => setGuestsFor(null)}
+            onDone={() => {
+              setGuestsFor(null)
+              void load()
+            }}
+          />
+        </Suspense>
+      ) : null}
     </CardDisplay>
   )
 }

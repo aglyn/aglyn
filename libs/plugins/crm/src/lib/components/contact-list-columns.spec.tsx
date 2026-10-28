@@ -26,6 +26,8 @@
  * the hidden filter columns) is the v1 list's, moved here unchanged.
  */
 
+import { registerPluginContactSource } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
+import { unregisterPluginServices } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import type { GridColDef } from '@mui/x-data-grid'
 import {
   CONTACT_FILTER_COLUMNS,
@@ -141,6 +143,25 @@ describe('contactListColumns', () => {
     expect(column('emailState').filterable).toBe(false)
     expect(CONTACT_FILTER_COLUMNS).toContain('emailState')
     expect(JSON.stringify((column('emailState').renderCell as any)({ row: blocked }))).toContain('blocked')
+  })
+
+  /*
+   * A source word a PLUGIN owns (AGL-4042): the core's label map is closed,
+   * so a chip that read it alone printed the plugin's raw word. The CRM
+   * names no plugin, so the door here is a made-up one.
+   */
+  it('labels a plugin’s capture door by the label it declared, not its raw word', () => {
+    const chips = (record: ContactRecord) => JSON.stringify((column('sources').renderCell as any)({ row: record }))
+    // A plugin's word is outside the core's union by design, so the typed map cannot name it.
+    const signed = row({ sources: { form: true, kiosk: true } as ContactRecord['sources'] })
+    expect(chips(signed)).toContain('"label":"kiosk"')
+    registerPluginContactSource({ source: 'kiosk', label: 'Guest book' }, { pluginId: 'kiosk' })
+    try {
+      expect(chips(signed)).toContain('"label":"Guest book"')
+      expect(chips(signed)).toContain('"label":"Form"')
+    } finally {
+      unregisterPluginServices('kiosk')
+    }
   })
 
   it('names the owner through the roster, and never offers the column as a query', () => {

@@ -1714,6 +1714,28 @@ nothing itself.
   told to plan /shop with a "Product grid" section and is re-asked once for a
   missing Shop page (`plan-store-shop-page`); a store whose products were
   skipped or failed carries no cart until it sells.
+  A store whose brief names KINDS of product and no product (AGL-4065: the
+  2026-10-25 Berm & Bolt Moto Parts brief listed "OEM and aftermarket parts,
+  tires, riding gear, special orders; in-store pickup", and its products were
+  "OEM ATV Parts Order", "Riding Gear Item" and the like at suggested prices)
+  starts with SAMPLE products (the Q1 decision, `AI_SITE_SAMPLE_PRODUCTS_INPUT`,
+  `ai-job-site-content.ts`). `aiSiteSampleProductKinds` reads the business type:
+  what follows a colon or "selling" is what the shop sells, less what it does
+  (orders, pickup, repairs, services); one thing said in two words or more of
+  what it is ("hand-poured soy candles") names the products and keeps the old
+  rule, anything else is kinds. The products unit's brief then asks for samples
+  of those kinds, each a plain item of one ("Knobby dirt bike tire"), priced as
+  before, and each is written with the commerce plugin's `sample` mark, which
+  Products shows as a Sample chip and a "replace this with your own product"
+  line (the editor's save clears it) and the storefront never reads; the name
+  carries nothing extra (`AI_SITE_SAMPLE_PRODUCT_NAME_SUFFIX` is empty), and
+  the row's note says the samples were made from the kinds the brief named.
+  EVERY catalog (`generateAiCatalog`) is held to names a shopper buys: on its
+  first answer a name that is a kind with "Item", "Order", "Part", "Gear" or
+  the like after it, or a make or model number the brief does not name
+  (`aiCatalogNameProblem`, `model/ai-products.ts`), is refused and re-asked
+  once; a product the second answer still names so is left out of the
+  proposal (`aiCatalogProductsNamed`).
   A store is a STOREFRONT, the way a designer shop theme is (second round,
   2026-10-09: the beta.237 Willow Wick start was a lifestyle hero, one row of
   products and four text-only bands, its /shop grid below the fold;
@@ -1726,7 +1748,13 @@ nothing itself.
     (`aiSiteStorefrontPlan`): on a paid start the home gains any part it left
     out — bestsellers, collections, sign-up, then reviews — while it has room
     (eight sections, nothing removed); on any start the Shop page's grid
-    section moves to second, straight under its title.
+    section moves to second, straight under its title. The "Newsletter
+    sign-up" band is the platform's own email field (AGL-4065): the plan is
+    told so, and a sign-up section that names one of the plan's forms loses
+    it (`aiSiteSignupWithoutForms`) — the 2026-10-25 Berm & Bolt home drew its
+    parts inquiry form under that heading, since the listings place no
+    sign-up where a section places a form. A form placed nowhere else keeps a
+    band of its own, named for it, just before the sign-up.
   - **The pages.** A storefront home's hero gets "Shop all" as its first
     button where it had no button to the shop; the bestsellers list through
     the Product grid with quick add (`quickAdd`); collection groups draw as
@@ -2039,9 +2067,9 @@ the `theme` kind's proposal, and no site plan may propose one.
 
 ### Sites I like (AGL-3975)
 
-Behind `release_ai_site_inspiration`, OFF by default. While it is on for a
-workspace, the guided start's Style step asks for sites the person likes: one
-on Free, three on a paid plan. A Free workspace sees the second and third
+Behind `release_ai_site_inspiration`, ON by default since 2026-10-28. While
+it is on for a workspace, the guided start's Style step asks for sites the
+person likes: one on Free, three on a paid plan. A Free workspace sees the second and third
 fields disabled with the reason and an Upgrade link (`BlockedControl` and
 `PrerequisiteNotice`), and the review lists the sites by host.
 
@@ -2195,6 +2223,48 @@ photographer's gallery with six broken covers.
   listed all ten records; Northgate's /courses and Granite Peak's /services list
   their datasets once and are unchanged. `ai-stock-photo-agl3856-beta265.spec.ts`
   replays the real records and plan.
+
+### A list the brief gives no entries for (AGL-4065)
+
+The 2026-10-25 Rut Runners Racing start's "Race events" dataset came back as ten
+numbered placeholders, "Upcoming race 1 (details to be added)" to "Past race 5
+(details to be added)": the dataset rules forbid inventing a date and its first
+field may not be empty, so the model numbered rows; nothing checked them, and the
+Schedule page's "Upcoming races" and "Past results" both listed the first five.
+
+- **Samples, never placeholders** (the Q2 decision, `AI_DATASET_LIST_WITHOUT_ENTRIES`,
+  `runtime/ai-dataset-generation.ts`, `samples`). A list the brief gives no entries
+  for starts with SAMPLE records: each complete of its kind, named in the brief's
+  own words, marked `sample` through the `submit_dataset` tool, never a price,
+  contact detail, real person's name or brand. The dataset unit gives a dated
+  list's samples real dates (`aiDatasetSampleDates`): the first Saturday at least
+  two weeks after the job's day, then every three weeks; a sample that is behind
+  us (its split value or every section that lists it says past) on the Saturdays
+  as far back, the latest first; a sample still to come has no result. The data
+  plugin's writer stores `sample: true` beside each one's values (`samples` on
+  its content), which Data shows as a Sample chip with a "replace it with your
+  own" line, the record's save clears, and no page reads. `empty` is the other
+  answer: the fields and no records, and the pages say the entries are on the way.
+- **The check** (`checkAiDatasetRecords`). A record any value of which marks a gap
+  ("details to be added", "TBD", "coming soon") or whose name is a number after
+  nothing but the list's own words and stand-ins ("Item 1", "Race 2", "Upcoming
+  race 3") is refused with `AI_DATASET_PLACEHOLDER_REASK`, re-asked once; so is a
+  sample that names a make the brief does not. An answer that still holds
+  placeholders after the re-ask keeps the records that name real things
+  (`aiDatasetWithoutPlaceholders`) — none, as often as not — and is written with
+  its fields, its note saying where its rows go and the pages told it has none
+  yet, so each keeps its band, an honest line and the live list.
+- **Two lists of one dataset on one page** (`aiSiteDatasetSplitOf`,
+  `aiSettlePlanSplitListings`). Where a page lists a new dataset in two sections
+  or more and the dataset plans a field that files its records (Status, Stage,
+  Category, Type…), the value each section names — its words past the dataset's
+  own and its fields' ("Upcoming races" and "Past results" over Race events are
+  "Upcoming" and "Past") — goes to the dataset's design as one line, the unit holds
+  the field to those spellings, and its output's `groups` carries them as
+  `expected`, so each section is filtered (`status == Upcoming`) even before the
+  owner's first row. Where nothing can tell them apart, the plan is settled to list
+  the dataset once on that page, the first section taking the others' names and
+  the most items.
 
 ## The `build` kind: Assist builds from one request
 
@@ -2532,7 +2602,11 @@ the theme editor exposes, and nothing the editor does not.
   a white-label workspace's brand color, colors read from the site logo when
   the logo is an asset of the site's or its org's media library, and colors
   read from a public https page the brief links to, fetched through the
-  plugin-fetch SSRF guard. Only hex colors from those reach the prompt.
+  plugin-fetch SSRF guard. Only hex colors from those reach the prompt. On
+  Vercel the logo is read and decoded by the console's plugins' image function
+  (`ai/image-reads`, AGL-4048), the one function that ships `sharp`'s native
+  library, inside the same 8 s bound; a read that does not come back leaves
+  the logo's colors out with their note, as a failed read always did.
 - **What the model is asked.** The call is
   `runValidatedGeneration('theme', …)`: the doctrine's cached block, which
   carries the acceptable-use rules, then the step's own cached rules block,
@@ -3303,6 +3377,44 @@ AGL-3660), which fills every empty slot and takes the icon out of its frame:
   works chose a photo, while production's library got none and logged nothing: a
   chosen photo that never reached the library is now logged and takes a starter
   (above).
+- **The trade, never a word of it (AGL-4065).** Six booth-kit starts of 2026-10-25
+  (a landscaper, a handyman, three motocross businesses, a taco trailer) shipped
+  off-trade photos, each traced to its query by the media doc's `stockPhoto.query`.
+  `aiStockSiteTerms` now reads two worlds: `domain` (every word the type names, what
+  a picture of a thing is held to) and `lead` (the listed crafts the business's own
+  clause names, their names and kin, and its own words no craft covers, never a word
+  in `LEAD_GENERIC` such as "race" or "team"). A hero's first tag and a hit of a
+  search that is not of a thing name the lead (`AiStockJudgement.world`): "race car"
+  no longer names "Amateur motocross race team". A business type named by two things
+  joined by "and" before a place of business is one clause (`businessClauses`):
+  "Motorcycle and dirt bike repair shop" is the business "dirt bike repair shop". Of
+  the listed crafts, the one named first leads, and a craft named only in a clause
+  opened by a customer's verb (`TRANSACTION_VERBS`: "takes catering requests") lends
+  kin and refusals but no searches; a trade of a world (`of`, the moto parts group)
+  is the craft, and the world it serves qualifies its pictures (`leadWord`: "dirt bike
+  parts"). `CRAFT_KIN` lists landscaping, handyman, motocross, moto parts and tacos,
+  with rivals (bicycles, cars, horses, scooters) and `shunLead`; a hit's words carry
+  stem pairs, so "dirt bike" is named whole and "bike" alone is not the world. What a
+  customer is asked to do (`TRANSACTION_STEMS`) is never a world. `MAKERS` turns
+  down a hit whose tags or page address name a vehicle or product maker the business
+  type does not name (wallpaper tags such as "iphone wallpaper" excepted); it reads
+  tags, so a logo no tag names is only seen in the live check. A sentence to the
+  reader, a job or an order is never a subject (`STOPWORDS`, `SENTENCE_WORDS`,
+  `GENERIC_OBJECTS`), "Potato and egg breakfast taco" is a taco, a part or gear is
+  searched only with its world (`WORLD_OBJECTS`), and a record's cover searches its
+  world first and is held to its object among the first tags. A listed world widens
+  only where the library answered none of the slot's own searches with any photo,
+  and an outdoor, vehicle, tool or food world (`aiStockWorldIsOutdoorOrTrade`) never
+  widens to an office's kinds. On the page, a gallery picture the library answered
+  with nothing fitting, or any cell of a band of pictures
+  (`aiLayoutPictureBandCells`), takes a job photo the page does not show yet; a band
+  of pictures left with no photo, or a section named as pictures that holds only
+  words, is left out whole (`aiLayoutDropEmptyPictureBands`). The replays are
+  `ai-stock-photo-agl4065-{terms,moto,trades,tacos}.spec.ts` and
+  `ai-layout-pictures-agl4065-gallery.spec.ts`, from the six sites' media records
+  (`fixtures/ai-stock-photo-agl4065-recordings.ts`; the search cache had expired, so
+  each list is what one search placed, tagged by its page address) and their stored
+  home pages (`fixtures/ai-site-agl4065-pages.ts`).
 - **One refused photo is that photo's (AGL-3923, #1770).** The provider names a
   download by its bytes (`sniffPhotoContentType`, the upload check's own
   signatures), never by its label. A media-library refusal of one photo's own bytes
@@ -4225,6 +4337,37 @@ the element budget its request asks for.
   the pick), the group style among cards, ruled columns and icon columns, and whether a
   section of words takes a photo (`features`, 60%, always on a storefront); icon columns
   outside a store draw side by side only, where rule 1 knows them by their cells.
+  AGL-4065 widened the two signatures that held one option, after the 2026-10-25 booth
+  kit's two trades sites read as one page: trades now draws its groups as cards, ruled
+  columns or icon rows and its steps numbered or ruled, fitness its groups as cards or
+  ruled columns and its steps either way (`AI_LAYOUT_KIND_SIGNATURES`), and two trades
+  seeds now share hero, group style and steps about one time in twelve instead of one in
+  two. Every site also draws two more choices from its seed, after `writing` so each
+  seed's earlier choices stay what they were: `headingCase` sets a designed group's item
+  titles (ruled columns, icon rows, a ruled timeline) in the theme's own overline label
+  instead of its item heading, three sites in ten for trades and fitness and one in ten
+  elsewhere (a section heading's case stays the look's font pairing); `bandRhythm` either
+  keeps the model's plain and soft bands, turning the second of two like neighbors to the
+  other, or keeps one ground for the page (soft drawn plain, brand and dark untouched),
+  one site in three, one in two for galleries and publications. Two more compiler rules
+  shipped with them. A section that would be the third in a row to show no picture — its
+  own, a stand-in, a record's photo, or a listing of products, posts or events — is set
+  beside a stand-in photo of its heading's subject, its words and its one group of cards
+  or lines in the wider half, at most twice a page (`rhythmSection`, settled as "drawn
+  beside a photo: third text-only band"); steps, questions, figures, a designed group of
+  pictures, a section with its own picture, form or row, and the closing call to action
+  are left as designed, and a page drawn with no design is unchanged. And a row's icons
+  follow what its items mean (`aiStorefrontItemIcons`): a section named for places
+  ("Areas we serve", "Towns we serve") gives every place the map marker, a reason's title
+  and then its words suggest one ("On time" a clock, "English and Spanish" the translate
+  mark, from the compiler's own `AI_ICON_DRAWN`, which the model's schema does not list),
+  and a reason that suggests none takes one neutral icon along the row — the check, or the
+  sparkle on a yoga, wellness, beauty or events site — never the star, heart, sparkle mix
+  the booth kit's towns showed. A hero eyebrow over its 40 characters is fitted around the
+  site's own names (`aiLayoutFitEyebrow`, the names read from the job's words by
+  `aiLayoutPlaceWords`): it loses a coordinated part before its town ("Lawn care and
+  landscaping in New Braunfels" → "Landscaping in New Braunfels"), and a cut never ends
+  inside a name or on a word that joins.
 - **A paid blog start's blog is the blog (AGL-3660, AGL-3676).** Its first posts are
   written into a collection at /blog, and the live Slow Roads start (2026-10-08) also
   planned an "Articles" page of featured cards that the header linked while it never
@@ -4839,7 +4982,12 @@ cards and the eval harness read.
   or its org's, the way the media CDN would serve it, and sent as a new JPEG
   at most 768 px on its longer edge at quality 80, which carries none of the
   original's metadata (`src/lib/jobs/ai-product-image.ts`). No other asset,
-  file name or alt text is read, and nothing is fetched from a URL. The
+  file name or alt text is read, and nothing is fetched from a URL. On Vercel
+  the read and the encode run in the console's plugins' image function
+  (`ai/image-reads`, AGL-4048), which ships `sharp`'s native library while the
+  doors and the beat do not, signed and bounded by `AI_PRODUCT_IMAGE_READ_MS`;
+  a photo it does not return is unreadable, and the copy is written from the
+  product's words. The
   provider contract carries the picture as an image part of a user turn, and
   the runtime refuses one for a model whose catalog row does not say `vision`.
 - **Held in code.** Each answer runs through its tool's check

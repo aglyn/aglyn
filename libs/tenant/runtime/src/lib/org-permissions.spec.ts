@@ -60,9 +60,20 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       return mockResolveGranular(member as never, customRole as never)
     },
   ),
+  /** Modeled the same way (AGL-4047): the custom role by `roleId`, then the core's narrowing. */
+  resolveMemberSiteNarrowing: jest.fn(
+    async (orgId: string, member: Record<string, unknown> | null, hostId: string) => {
+      const roleId = member?.['roleId'] as string | undefined
+      const customRole = roleId ? (roles.get(`${orgId}:${roleId}`) ?? null) : null
+      return mockSiteNarrowingFor(member as never, hostId, customRole as never)
+    },
+  ),
 }))
 
-import { resolveOrgPermissions as mockResolveGranular } from '@aglyn/aglyn'
+import {
+  resolveOrgPermissions as mockResolveGranular,
+  siteNarrowingFor as mockSiteNarrowingFor,
+} from '@aglyn/aglyn'
 
 import { registerPluginPermissions } from '@aglyn/aglyn/server'
 
@@ -401,5 +412,112 @@ describe('plugin-declared permissions resolve and can be overridden (AGL-2474)',
       orgId: 'org-1',
     })
     expect(resolved.permissions.runtimeTestPerm).toBe(false)
+  })
+})
+
+/**
+ * A site narrows a workspace-wide member (AGL-4047): the route gates for a
+ * site's register and waivers ask this resolver with the site named, so an
+ * editor of the whole workspace given Viewer access to one site is refused
+ * that site's `narrowsPerSite` keys there, and keeps them everywhere else,
+ * unless the site grants them back.
+ */
+describe('a site narrows a workspace-wide member (AGL-4047)', () => {
+  beforeAll(() => {
+    registerPluginPermissions([
+      {
+        key: 'narrowTestRegister',
+        pluginId: 'narrow-test',
+        label: 'Register',
+        defaults: { admin: true, editor: true, viewer: false },
+        narrowsPerSite: true,
+      },
+      {
+        key: 'narrowTestSell',
+        pluginId: 'narrow-test',
+        label: 'Sell',
+        defaults: { admin: true, editor: true, viewer: false },
+        refines: 'narrowTestRegister',
+        narrowsPerSite: true,
+      },
+      {
+        key: 'narrowTestCollect',
+        pluginId: 'narrow-test',
+        label: 'Collect',
+        defaults: { admin: true, editor: true, viewer: false },
+        narrowsPerSite: true,
+      },
+    ])
+  })
+
+  const narrowed = { role: 'editor', allHosts: true, hostAccess: { 'host-a': 'viewer' } }
+
+  it('refuses the register and collecting on the site that narrows them', async () => {
+    members.set('org-1:ed', narrowed)
+    const resolved = await resolveOrgPermissions('ed', { hostId: 'host-a' })
+    expect(resolved.orgWide).toBe(true)
+    expect(resolved.hostRole).toBe('viewer')
+    expect(resolved.permissions.narrowTestRegister).toBe(false)
+    expect(resolved.permissions.narrowTestSell).toBe(false)
+    expect(resolved.permissions.narrowTestCollect).toBe(false)
+    // Nothing the site does not narrow moves.
+    expect(resolved.permissions.createHosts).toBe(
+      (await resolveOrgPermissions('ed', { orgId: 'org-1' })).permissions.createHosts,
+    )
+  })
+
+  it('keeps them on another site, and with no site named', async () => {
+    members.set('org-1:ed', narrowed)
+    for (const context of [{ hostId: 'host-b' }, { orgId: 'org-1' }]) {
+      const resolved = await resolveOrgPermissions('ed', context)
+      expect(resolved.permissions.narrowTestRegister).toBe(true)
+      expect(resolved.permissions.narrowTestSell).toBe(true)
+      expect(resolved.permissions.narrowTestCollect).toBe(true)
+    }
+  })
+
+  it('a site that grants the sell key back opens the register there', async () => {
+    members.set('org-1:ed', { ...narrowed, hostPermissions: { 'host-a': { narrowTestSell: true } } })
+    const resolved = await resolveOrgPermissions('ed', { hostId: 'host-a' })
+    expect(resolved.permissions.narrowTestRegister).toBe(true)
+    expect(resolved.permissions.narrowTestSell).toBe(true)
+    expect(resolved.permissions.narrowTestCollect).toBe(false)
+  })
+
+  it('an editor no site narrows is unchanged', async () => {
+    members.set('org-1:ed', { role: 'editor', allHosts: true, hostAccess: { 'host-a': 'editor' } })
+    const resolved = await resolveOrgPermissions('ed', { hostId: 'host-a' })
+    expect(resolved.permissions.narrowTestRegister).toBe(true)
+    expect(resolved.permissions.narrowTestCollect).toBe(true)
+  })
+
+  it('a site collaborator still resolves from their site role alone', async () => {
+    members.set('org-1:contractor', { role: 'editor', allHosts: false, hostAccess: { 'host-a': 'viewer' } })
+    const resolved = await resolveOrgPermissions('contractor', { hostId: 'host-a' })
+    expect(resolved.orgWide).toBe(false)
+    expect(resolved.permissions.narrowTestRegister).toBe(false)
+  })
+
+  it('a custom role that keeps the register keeps it on the narrower site', async () => {
+    roles.set('org-1:floor', { name: 'Floor', siteNarrowing: { narrowTestRegister: false, narrowTestSell: false } })
+    members.set('org-1:ed', { ...narrowed, roleId: 'floor' })
+    const resolved = await resolveOrgPermissions('ed', { hostId: 'host-a' })
+    expect(resolved.permissions.narrowTestRegister).toBe(true)
+    expect(resolved.permissions.narrowTestSell).toBe(true)
+    // The key the role leaves alone still follows the site role.
+    expect(resolved.permissions.narrowTestCollect).toBe(false)
+  })
+
+  it("a member's own choice wins over their custom role's", async () => {
+    roles.set('org-1:floor', { name: 'Floor', siteNarrowing: { narrowTestRegister: false, narrowTestSell: false } })
+    members.set('org-1:ed', {
+      ...narrowed,
+      roleId: 'floor',
+      siteNarrowing: { narrowTestRegister: true, narrowTestSell: true, narrowTestCollect: false },
+    })
+    const resolved = await resolveOrgPermissions('ed', { hostId: 'host-a' })
+    expect(resolved.permissions.narrowTestRegister).toBe(false)
+    expect(resolved.permissions.narrowTestSell).toBe(false)
+    expect(resolved.permissions.narrowTestCollect).toBe(true)
   })
 })

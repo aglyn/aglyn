@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { holdsCommerceSiteKey } from './commerce-site-keys'
+import { commerceSitePermissionRefusal } from '../model/plugin-permissions'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { pluginSmsAvailable } from '@aglyn/aglyn/plugin-manager/plugin-sms-messaging'
 import { consumeRateLimit, firebaseAdmin } from '@aglyn/tenant-data-admin'
@@ -75,9 +77,10 @@ export const orderReceiptSendHandler: PluginApiHandler = async (req, res) => {
     if (!hostSnapshot.exists) {
       return res.status(404).json({ error: 'Unknown site' })
     }
-    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (memberRole !== 'admin' && memberRole !== 'editor') {
-      return res.status(403).json({ error: 'Not permitted' })
+    // "Manage orders" (`commerce.orders`, AGL-4047), whose preset is the site's Admin
+    // and Editor this asked for, read as the rules would read it.
+    if (!holdsCommerceSiteKey(hostSnapshot, decoded.uid, 'commerce.orders')) {
+      return res.status(403).json({ error: commerceSitePermissionRefusal('commerce.orders') })
     }
     if (req.method === 'GET') {
       return res

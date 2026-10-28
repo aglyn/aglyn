@@ -57,9 +57,10 @@ const doors = sources.filter(
 
 describe('every install door checks the listing, not just the buyer (AGL-2290)', () => {
   it('finds every door the repo has', () => {
-    // Not vacuous. Nine exist today — the eight install routes plus
-    // `update-artifact`, which hands over a NEW version of already-installed
-    // content and is a content door by every property that matters here.
+    // Not vacuous. Ten exist today — the eight install routes, the site
+    // starter source, and `update-artifact`, which hands over a NEW version of
+    // already-installed content and is a content door by every property that
+    // matters here.
     expect(doors.map((file) => file.name).sort()).toEqual([
       'install-dataset-schema.ts',
       'install-email-starter.ts',
@@ -69,6 +70,10 @@ describe('every install door checks the listing, not just the buyer (AGL-2290)',
       'install-template.ts',
       'install-theme.ts',
       'install.ts',
+      // The site starter source's `resolve` (AGL-4049): it hands a listing's
+      // stored version to the site created from it, a content door by every
+      // property this guard names.
+      'site-starter-source.ts',
       'update-artifact.ts',
     ])
   })

@@ -285,6 +285,24 @@ const POLICIES: Array<{
     writers: ['libs/plugins/stock-photos/src/lib/server/search-cache.ts'],
     stamp: 'expiresAt: new Date(at + STOCK_PHOTO_SEARCH_CACHE_MS)',
   },
+  // AGL-4038: the platform's retained record of each POS hardware sale, kept
+  // seven years from the sale. Every write rebuilds the record from the
+  // order through `posHardwareSaleRecord`, which stamps `expiresAt`
+  // (`posHardwareSaleExpiry`, pinned at its period in the model spec).
+  {
+    collectionGroup: 'posHardwareSales',
+    writers: [
+      'libs/plugins/commerce/src/lib/server/pos-hardware-webhook.ts',
+      'libs/plugins/commerce/src/lib/server/pos-hardware-admin.ts',
+      'libs/plugins/commerce/src/lib/server/pos-hardware-cancel.ts',
+      'libs/plugins/commerce/src/lib/server/pos-hardware-user-eraser.ts',
+      'libs/plugins/commerce/src/lib/server/pos-hardware-attach.ts',
+      'libs/plugins/commerce/src/lib/server/pos-hardware-readers.ts',
+      'libs/plugins/commerce/src/lib/server/pos-hardware-returns.ts',
+      'libs/plugins/commerce/src/lib/server/pos-hardware-buyer-record.ts',
+    ],
+    stamp: 'posHardwareSaleRecord(',
+  },
   {
     // The review-request email's single-use links (AGL-3736).
     collectionGroup: 'reviewTokens',

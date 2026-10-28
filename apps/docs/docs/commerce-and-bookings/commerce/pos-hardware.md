@@ -33,9 +33,10 @@ The register takes card-present payments on Stripe's smart readers:
 | Reader | Notes |
 | --- | --- |
 | **Stripe Reader S700** / **S710** | Android-based smart reader for the countertop or the hand. |
+| **Stripe Reader T600** | Countertop smart reader, on Wi-Fi or on Ethernet with the hub. |
 | **BBPOS WisePOS E** | Countertop smart reader. |
 
-Both are sold by Stripe. They are smart readers: each one talks to Stripe
+All are sold by Stripe. They are smart readers: each one talks to Stripe
 over its own internet connection, so it does not need to be plugged into
 or paired by Bluetooth with the device the register runs on. Card readers
 are shown in the console only when they are available for your store.
@@ -86,6 +87,38 @@ only register a reader to the Stripe account that ordered it.
   check that it is on and connected, cancel the payment, and take it again
   — or use **Card (QR)** or **Type card** for that sale.
 
+### 4G for the Stripe Reader S710 {#reader-4g}
+
+Where it's available, the **POS devices** card of a store with a Stripe
+Reader S710 shows **4G (cellular)**. Select **Turn on 4G** to give every
+S710 at that store Stripe's cellular service, which it uses whenever Wi-Fi
+and Ethernet aren't available. The card shows the monthly price for each
+reader, and you agree to it before 4G turns on.
+
+- **Who can turn it on.** 4G is charged to your workspace, so turning it on
+  needs both **Registers and devices** and the workspace's **Manage billing**
+  permission. Turning it off needs only **Registers and devices**. If your
+  role is missing **Manage billing**, the card tells you so.
+- **How it's charged.** At the start of each month, your workspace's card is
+  charged for each S710 that had 4G at any time in the month before.
+  Turning 4G off stops the charge from the next month.
+- **If a charge isn't paid.** It stays open on your workspace's **Billing**
+  page, and the same day everyone with the workspace's **Manage billing**
+  permission gets an email and a console notification. They say how much is due and the date 4G turns off
+  for your stores, in your workspace's time zone, unless the invoice is paid.
+  The grace period is two weeks unless your platform sets a different one.
+  Pay it on the **Billing** page before that date and 4G stays on, with
+  nothing else to do.
+- **If it's still unpaid on that date.** 4G is turned off for all of your
+  workspace's stores, and everyone with **Manage billing** gets another email
+  and notification. Your readers keep working on Wi-Fi or Ethernet. To get 4G
+  back, pay the open invoice on the **Billing** page, then select **Turn on
+  4G** again for each store. It doesn't come back on by itself.
+- **If you delete the workspace.** When the workspace is removed for good,
+  after the waiting period, 4G is turned off. The month it's removed in is
+  charged then, for each S710 that had 4G during that month, along with the
+  month before if that one hasn't been charged yet.
+
 
 ### Reader start-up screen {#reader-start-up-screen}
 
@@ -106,9 +139,13 @@ A workspace on a white-label plan never shows the Aglyn screen: its readers
 show its own logo unless it picks an image.
 
 Your choice goes to every reader on the site, including ones you add later.
-Readers pick up a change within about ten minutes. If you change your logo,
-open the **POS devices** card again to send the new one. Any admin or editor
-who can use the point of sale can change it.
+Readers pick up a change within about ten minutes. When you save a new logo on
+your organization profile or your white-label brand, it goes to the readers of
+every store in the workspace straight away, without holding up the save, and
+reaches them within about ten minutes. If you replace the logo's file in your
+media library instead, your readers get it within about half an hour; open the
+**POS devices** card to send it right away. Anyone with the **Registers and
+devices** permission can change the choice.
 
 ## Buy a reader from Aglyn {#buy-a-reader-from-aglyn}
 
@@ -128,11 +165,14 @@ through Aglyn: add it to a register with its pairing code when it arrives.
 
 | Item | What it's for |
 | --- | --- |
-| **Stripe Reader S710** | Handheld with its own 4G connection, for events and parking lots |
+| **Stripe Reader S710** | Handheld for events and parking lots. It can use 4G with Stripe's cellular service, which is billed monthly for each reader; without it, the S710 uses Wi-Fi |
 | **Stripe Reader S700** | Handheld or countertop reader on Wi-Fi |
+| **Stripe Reader T600** | Countertop reader on Wi-Fi, or on Ethernet with the hub |
 | **BBPOS WisePOS E** | Countertop reader on Wi-Fi |
 | **Stripe Reader M2** | Pairs with the Aglyn POS app on your phone or tablet by Bluetooth |
-| Charging docks and the M2 mount | Keep a reader charged and in place at the counter |
+| Charging docks for the S700/S710, the WisePOS E and the M2, and the M2 mount | Keep a reader charged and in place at the counter |
+| The Stripe Reader Hub | Connects an S700, S710 or T600 to Ethernet and power |
+| A case for the S700/S710, and spare cables and chargers | Protect a handheld reader, or replace a lost cable or charger |
 
 The card shows only what is available to order, with its price.
 
@@ -149,6 +189,20 @@ The card shows only what is available to order, with its price.
 You come back to the card, which says the order is in. Orders ship to street
 addresses in the United States; P.O. boxes and military addresses are not
 accepted.
+
+#### Who can buy hardware {#who-can-buy-hardware}
+
+Placing an order needs the **Buy point of sale hardware** permission. Owners,
+admins and editors hold it with the point of sale, and viewers don't. It stands on
+its own:
+
+- To keep ordering to a few people, deny it in a
+  [custom role](../../workspace-and-billing/teams-and-roles/custom-roles.md#point-of-sale-permissions)
+  or for one member. They still see the card and the orders, and **Check out** says
+  why it is unavailable.
+- To let someone order readers without working the register, such as a
+  bookkeeper, allow it for them. They open **Products → Point of sale** and see the
+  **Hardware** card and the site's orders, and nothing at the register.
 
 **Follow an order**
 
@@ -168,14 +222,102 @@ You get an email when the order is received, when it ships (with the carrier and
 a tracking link), and when it is delivered (with the steps to set the reader
 up). To change or cancel an order before it ships, contact support.
 
+**Returning an order shipped to you.** Once it has shipped, select **Request a
+return** on the order under **Your orders** on the **Hardware** card, and say
+why. Aglyn's team arranges the return with you and, once it's back, refunds the
+price of the items and the tax on them to the card you paid with, or tells you
+why it can't. The return shipping is yours to pay, the original shipping isn't
+refunded, and any restocking fee charged for the return comes off the refund.
+The order shows **Return requested**, then **Returned** or **Return declined**,
+and you get an email with what was refunded.
+
 **When it arrives**
 
 Set the reader up as in [Setting one up](#card-readers): charge it, connect it to
 Wi-Fi, generate a pairing code on the reader, and add it on the **POS devices**
 card. A Stripe Reader M2 pairs by Bluetooth from the Aglyn POS app instead.
 
-**Who can buy:** an admin or editor of the site with the **Use the point of
-sale** permission, on a plan that includes POS.
+**Who can buy:** a member with the **Buy point of sale hardware** permission for
+the site, on a plan that includes POS.
+
+### Bought from us in person {#bought-from-us-in-person}
+
+At an event, Aglyn may sell you a reader in person. You pay at Aglyn's register,
+take the reader with you, and the order joins your workspace.
+
+**The terms of sale.** Before you pay, Aglyn's staff ask you to accept the terms
+of sale, Sections 4.26–4.32 of the [Terms](https://aglyn.com/legal/terms): on the
+register's customer display, or on the register tablet they hand you. The screen
+sums them up, links to the whole, and you tick the box and select **Accept**. If
+neither screen can be used, for example with no power or no connection, your
+receipt and a sign at the booth say which terms the sale is made under, and
+paying is agreeing to them. Every receipt for a reader bought this way says so too.
+
+Then:
+
+- **If you have an account**, Aglyn's staff look you up by your email address,
+  your name or your workspace's name, check your email address with you, and
+  attach the reader to the workspace you choose, and to a store when you pick one.
+- **If you don't have an account yet**, you get an email inviting you to create
+  one with the same address. Once you create your workspace, the reader is in it.
+  There is nothing to accept.
+
+The order is in your purchase history on the **Hardware** card, under **Your
+orders**, even before buying online is open for your workspace.
+
+**Returning one.** Returns follow the hardware terms of sale, and the return
+shipping is yours to pay. There are three ways:
+
+- Bring it to Aglyn's register at a later event. The refund goes back the way
+  you paid.
+- On the **Hardware** card, under **Your orders**, select **Request a return** on
+  the order and say why. Aglyn's team arranges the return with you, then refunds
+  it to the card you paid with, or tells you why it can't. The order shows
+  **Return requested**, then **Returned** or **Return declined**.
+- Aglyn's team can also refund it to the card you paid with at any time.
+
+A reader paid for in cash is refunded at Aglyn's register.
+
+#### Card readers to set up {#card-readers-to-set-up}
+
+A reader bought in person waits on **Products → Point of sale**, in a **Card
+readers to set up** card, until you set it up on a store. The card says what it
+still needs:
+
+1. **A plan that includes the point of sale.** A reader takes payments at the
+   register, so the card asks you to add it first, with a link to the plans.
+2. **The store it is for**, when nobody chose one at the event. Pick it under
+   **Which store is it for?** and select **Choose**.
+3. **Adding it on the store's POS devices card** with the pairing code it shows,
+   as in [Setting one up](#card-readers). The first reader on a store asks for
+   the store's address.
+
+If Aglyn's staff took the reader's serial number when you bought it, the order
+moves to **Set up** by itself as soon as you add the reader. Otherwise, or for a
+Stripe Reader M2 you pair by Bluetooth, select **Mark set up** when it is done.
+Staff can also add the reader to your store for you at the event, by its pairing
+code, while you are there. If your store has no address for card readers yet,
+they can enter it with you, and it is saved to your store as if you had added it
+on the **POS devices** card; a store that already has one keeps it.
+
+### If the workspace or your account closes before an order ships {#hardware-orders-at-closure}
+
+When a workspace is
+[deleted](../../workspace-and-billing/billing-and-plans/downgrading-and-canceling.md#deleting-your-organization),
+every hardware order it placed that has not shipped yet is canceled and the
+full amount, shipping and tax included, is refunded to the card it was paid
+with. The same happens to the orders a person placed when they
+[close their account](../../workspace-and-billing/manage-account.md#close-account-deleted).
+The person who placed the order gets an email saying it was canceled and
+refunded. The workspace deletion or the account closing goes ahead right away;
+it never waits for an order. Orders that have already shipped are not
+affected.
+
+You are told before you confirm. The **Delete organization** card, and the
+**Close your account?** dialog, list every order that will be canceled and
+refunded — its order number, what is in it and the amount — above the confirm.
+They don't stop you: keep the workspace or the account if you still want the
+order.
 
 ### Records of your purchases {#hardware-purchase-records}
 
@@ -184,13 +326,22 @@ and accounting: the items and their prices, shipping, tax, the total, the order'
 status dates, Stripe's payment references, and the state, ZIP code and country it
 shipped to. That record stays after the workspace is
 [deleted](../../workspace-and-billing/billing-and-plans/downgrading-and-canceling.md#deleting-your-organization),
-for as long as tax law requires. It never holds the buyer's name, email, phone,
-street address or tracking number.
+and is kept for seven years from the sale, then deleted. Of the buyer, it keeps
+only their name and address, which Aglyn must keep as a reseller of Stripe's
+readers; it never holds their email, phone or tracking number. If an order is
+canceled and refunded, the record says so.
+
+For a reader bought from Aglyn in person, the record names Aglyn's register sale
+and how it was paid instead of a shipping address, and the tax is the one Aglyn's
+store charged at the sale. The buyer's name is their account's name, or the one
+given at the sale, and their address is the one given at the sale or else the
+address of the store the readers are set up on.
 
 If the person who placed an order
 [closes their account](../../workspace-and-billing/manage-account.md#close-account-deleted),
 the workspace keeps the order and its amounts, and their name, email, phone,
-street address and the tracking are removed from it.
+street address and the tracking are removed from it. Aglyn's record of the sale
+keeps their name and address until it is deleted.
 
 ## Receipt printers
 

@@ -28,8 +28,30 @@ import {
   ORDER_SEARCH_TOKEN_LIMIT,
   orderDisputeKey,
   orderListFields,
+  orderUseDayFields,
   withOrderListFields,
 } from './order-list-fields'
+
+describe('the days an order’s passes are for (AGL-4043)', () => {
+  it('stamps each day its lines name, once and in order, and nothing when none does', () => {
+    const order = {
+      status: 'paid',
+      lineItems: [
+        { productId: 'p', name: 'Pass', quantity: 1, unitAmountCents: 1, useDayKey: '2027-01-20' },
+        { productId: 'p', name: 'Pass', quantity: 1, unitAmountCents: 1, useDayKey: '2027-01-18' },
+        { productId: 'p', name: 'Pass', quantity: 1, unitAmountCents: 1, useDayKey: '2027-01-20' },
+        { productId: 'q', name: 'Mug', quantity: 1, unitAmountCents: 1 },
+      ],
+    }
+    expect(orderUseDayFields(order)).toEqual({ useDayKeys: ['2027-01-18', '2027-01-20'] })
+    expect(withOrderListFields('o1', order).useDayKeys).toEqual(['2027-01-18', '2027-01-20'])
+    expect(withOrderListFields('o2', { status: 'paid', lineItems: [order.lineItems[3]] })).not.toHaveProperty(
+      'useDayKeys',
+    )
+    // Not a list column: the orders backfill restates `orderListFields` alone.
+    expect(orderListFields(order, 'o1')).not.toHaveProperty('useDayKeys')
+  })
+})
 
 /**
  * What the orders list's query reads, as every writer stamps it (AGL-3321).

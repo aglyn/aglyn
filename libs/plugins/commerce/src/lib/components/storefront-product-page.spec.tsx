@@ -153,6 +153,52 @@ describe('the product page', () => {
   })
 })
 
+describe('a pass bought for a day the buyer picks (pass dates)', () => {
+  const pass = (asks: boolean) =>
+    candle({
+      name: 'Day pass',
+      type: 'service',
+      options: [],
+      variants: [{ id: 'v1', priceUsd: 40, soldOut: false, ...(asks ? { asksUseDate: true } : {}) }],
+      ...(asks ? { useDayTimeZone: 'America/Chicago' } : {}),
+    })
+
+  it('offers an optional day on a variant that asks for one, and none otherwise', async () => {
+    mockSite.pageData = { commerce: { product: pass(true) } }
+    const { unmount } = render(<ProductDetail />)
+    expect((await screen.findAllByLabelText('Day you will use it (optional)')).length).toBeGreaterThan(0)
+    expect(screen.getByText('Leave it blank to use it the day you buy.')).toBeTruthy()
+    unmount()
+    mockSite.pageData = { commerce: { product: pass(false) } }
+    render(<ProductDetail />)
+    await act(async () => undefined)
+    expect(screen.queryByText('Leave it blank to use it the day you buy.')).toBeNull()
+  })
+
+  it('adds a pass with no day chosen without one, for the day it is bought', async () => {
+    mockSite.pageData = { commerce: { product: pass(true) } }
+    fetchMock.mockImplementation(async (url: string) =>
+      String(url).includes('/api/commerce/cart')
+        ? { ok: true, status: 200, json: async () => ({ lines: [], count: 1 }) }
+        : { ok: false, status: 404, json: async () => ({}) },
+    )
+    render(<ProductDetail />)
+    await screen.findAllByLabelText('Day you will use it (optional)')
+    fireEvent.click(screen.getByText('Add to cart'))
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/commerce/cart'))).toBe(true),
+    )
+    const [, init] = fetchMock.mock.calls.find(([url]) => String(url).includes('/api/commerce/cart'))!
+    expect(JSON.parse(String(init.body))).toEqual({
+      hostId: 'host-1',
+      action: 'add',
+      productId: 'p1',
+      variantId: 'v1',
+      quantity: 1,
+    })
+  })
+})
+
 describe('related products', () => {
   beforeEach(() => {
     mockSite.pageData = { commerce: { product: { id: 'p1' } } }
@@ -214,6 +260,23 @@ describe('store-wide reviews', () => {
     expect(screen.getByText('4.7 out of 5 · 3 reviews')).toBeTruthy()
     expect(screen.getByRole('img', { name: '5 Stars' })).toBeTruthy()
     expect(screen.queryByText('Write a review')).toBeNull()
+  })
+
+  it('marks a review of a product sold in person only "Sold in store", and links it nowhere (AGL-4060)', async () => {
+    answer({
+      reviews: [
+        { id: 'r1', rating: 4, body: 'Great hat.', authorName: 'Pat L.', verified: true, createdAtMs: 3, productName: 'Trucker Hat', soldInStore: true },
+        { id: 'r2', rating: 5, body: 'Smells wonderful.', authorName: 'Jane D.', verified: false, createdAtMs: 2, productName: 'Candle Gift Set', productSlug: 'candle-gift-set' },
+      ],
+      aggregate: { count: 2, average: 4.5 },
+    })
+    render(<ProductReviews scope="store" heading="Loved by customers" />)
+    expect(await screen.findByText('Great hat.')).toBeTruthy()
+    expect(screen.getByText('Sold in store')).toBeTruthy()
+    expect(screen.getByText('Trucker Hat').closest('a')).toBeNull()
+    // A product sold online keeps its link, and no label.
+    expect(screen.getByText('Candle Gift Set').closest('a')?.getAttribute('href')).toBe('/products/candle-gift-set')
+    expect(screen.getAllByText('Sold in store')).toHaveLength(1)
   })
 
   it('shows the editor a hint, never sample reviews', () => {

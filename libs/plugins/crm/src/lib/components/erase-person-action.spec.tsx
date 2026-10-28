@@ -21,8 +21,8 @@ import { useErasePersonAction, type UseErasePersonActionProps } from './erase-pe
 
 let canManage = true
 let ready = true
-jest.mock('./settings-section', () => ({
-  useCanManageCrmSettings: () => ({ canManage, ready }),
+jest.mock('./use-can-erase-people', () => ({
+  useCanErasePeople: () => ({ canErase: canManage, ready }),
 }))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => ({ data: { uid: 'uid-admin', getIdToken: async () => 'token-abc' } }),
@@ -102,7 +102,9 @@ describe('the menu item', () => {
     canManage = false
     render(<Harness hostId="h1" orgId="org1" subject={contact} requestedAtMs={null} />)
     expect(item().disabled).toBe(true)
-    expect(item().getAttribute('title')).toBe('Only a workspace admin can erase a person')
+    expect(item().getAttribute('title')).toBe(
+      'Your role does not include "Privacy requests" — ask an organization admin',
+    )
   })
 
   it('waits for the role before deciding, and for the record before offering', () => {

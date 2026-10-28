@@ -203,20 +203,51 @@ writes `NOT CONFIGURED …` rather than a blank cell someone files from.
 
 - **Item 1 — Total Texas sales.** Receipts excluding the tax itself, including the
   20% that [§151.351](https://statutes.capitol.texas.gov/Docs/TX/htm/TX.151.htm) exempts.
+  It includes **all of Aglyn's own sales**, not only its invoices: card readers from the
+  hardware shop and everything sold from Aglyn's own stores, folded in automatically.
+  See [What the figures are made of](#what-the-figures-are-made-of).
 - **Item 2 — Taxable sales.** The base the rate was applied to: Stripe's
   `taxable_amount` summed, which is 80% of the charge under the data-processing
-  position Aglyn files on.
+  position Aglyn files on for its invoices, plus the taxable base of Aglyn's own other
+  sales.
 - **Item 3 — Taxable purchases.** Use tax on Aglyn's *own* purchases, which is not in
   the revenue records at all. Unentered, it reads **not computed**; entered, it reads
   the figure with an *Entered, not computed* mark. See
   [Taxable purchases](#taxable-purchases).
 - **Tax collected** is not a form line. It is what was actually charged to Texas
-  customers, there to reconcile against the tax Webfile computes from Item 2. A gap
-  between them is a real discrepancy worth understanding before submitting.
+  customers, on invoices and on Aglyn's own other sales, there to reconcile against
+  the tax Webfile computes from Item 2. A gap between them is a real discrepancy worth
+  understanding before submitting.
 
 While a blocking finding stands, the figures render dimmed with a warning beneath them.
 They are still shown — you need them to investigate — but they must not read as ready
 to type in.
+
+### What the figures are made of {#what-the-figures-are-made-of}
+
+Beside the figures, the **Items 1–2 by source and state** card (**The figures by source
+and jurisdiction** outside Texas) lists every sale the figures add up, one row per source
+and state:
+
+| Source | What it is |
+| --- | --- |
+| Aglyn invoices (subscriptions and add-ons) | Aglyn's own invoices, as before. |
+| Card reader shop (online) | Card readers and accessories workspaces bought online from the [POS hardware shop](../commerce-and-bookings/commerce/pos-hardware.md#buy-a-reader-from-aglyn). |
+| *Store* — sold in person | Everything sold at the register of one of [Aglyn's own stores](#aglyns-own-stores): card readers at an event, apparel, anything else. |
+| *Store* — sold online | Everything sold online from one of Aglyn's own stores. |
+
+The rows marked **In the figures** are the filing jurisdiction's, and they add up to the
+figures exactly; the other rows are the same kinds of sale in other states, for checking.
+The notes on Item 1, Item 2 and the tax collected line say how much of each figure came
+from sales outside the invoices.
+
+Each sale is counted **once**, under one source. A card reader sold at the register of
+one of Aglyn's own stores is in that store's register sales, not again under the card
+reader shop; a sale of one of Aglyn's own stores is never on the storefront card, which
+is merchants' sales only. A sale is in the period it was paid, and a refund in the period
+it was made, stated in the card's **Refunded in period** column and never netted from the
+figures. The invoices' refunds are on their own [Refunds](#refunds) card. Test-mode
+sales are in no row. The working papers export carries the same table.
 
 ### Period bounds {#period-bounds}
 
@@ -289,8 +320,92 @@ money and are never summed.
 
 Each plugin that sells through the platform — the storefront, the marketplace — adds
 its own card with what it sold in the period, attributed the way that plugin measures
-it. A plugin card that says its sales **could not be read** means none of them are in
+it. A plugin that records several kinds of sale apart adds a card for each: commerce adds
+one for merchants' storefront sales, one for the card readers Aglyn sells itself, and
+one for Aglyn's own stores. A plugin may state some of its sales as **Aglyn's own**,
+and those are folded into the figures, listed in
+[What the figures are made of](#what-the-figures-are-made-of); a merchant's sale never is.
+A plugin card that says its sales **could not be read** means none of them are in
 any figure on the page: do not file until it reads.
+
+Every table on a plugin's card sorts by any of its columns: select a column's
+header once for ascending, again for descending, and a third time to return to the
+card's own order, which leads with the row that matters most.
+
+## Card reader hardware — Aglyn's own sales {#hardware-sales}
+
+Aglyn is the seller of record for every card reader a workspace buys, online from the
+[POS hardware shop](../commerce-and-bookings/commerce/pos-hardware.md#buy-a-reader-from-aglyn)
+or in person at one of Aglyn's own stores, so these are **Aglyn's own sales**, not
+facilitated ones. They are **folded into Items 1–2 automatically**: there is nothing to
+add by hand.
+
+- **Sold online** from the shop: folded in as **Card reader shop (online)**.
+- **Sold in person** at an Aglyn store's register: part of that store's register sale,
+  so folded in with the store's other sales, never a second time here.
+
+The **Card reader hardware** card lists every card reader sale, online and in person, by
+ship-to state, and the working papers say where each order is folded in. If a reader was
+sold in person at a store that is not one of [Aglyn's own stores](#aglyns-own-stores)
+(the store was moved, or no workspace is named as Aglyn's own), it is folded in from its
+own record instead, and the review finding **Card readers sold in person at a store that
+is not one of Aglyn's own** says so.
+
+How a period is counted:
+
+- **A sale belongs to the period it was paid in**, from the first instant of the
+  period up to, not including, the first instant of the next. An order canceled later
+  is still a sale of the period it was paid in.
+- **A refund belongs to the period it was made in**, whenever the order was paid.
+  An order paid and refunded in the same period shows as both a sale and a refund.
+  Hardware refunds are whole, so the tax refunded is the order's own tax.
+- **An order canceled when its workspace was deleted or its buyer's account closed**
+  is refunded in full, so it counts the same way: a sale when paid, a refund when
+  canceled.
+- **Test-mode orders are not sales.** They are in no figure, and the card says how
+  many were left out.
+- **The jurisdiction is where the order shipped**, the state shown on the card's
+  **Ship-to state** table. That table also lists every other state, which is the
+  figure an economic-nexus threshold there is measured against.
+
+The card's other review findings: card readers sold into Texas **without tax** (sold
+while Stripe Tax was off for the shop; the tax may still be owed), orders taxed **with
+no stated base**, orders with **no ship-to region**, and orders marked **canceled with
+no refund recorded**. The working papers export carries every order of the period,
+with its paid date, status, ship-to state, amounts, refund and where it is folded in.
+
+## Aglyn's own stores {#aglyns-own-stores}
+
+Everything Aglyn sells from a store of its own is its own sale, whatever it is: card
+readers at an event's register, apparel online, anything Aglyn decides to sell later.
+The **Aglyn's own stores** card lists them, one line per store, channel and state, and
+they are **folded into Items 1–2 automatically**.
+
+**Which stores are Aglyn's own** is configuration, not a list in the code: every site of
+the workspace named by `POS_HARDWARE_SELLER_ORG_ID`, the workspace the deployment
+already names as owning its own store. The card's **Stores read** line names them, or
+says none is named, in which case nothing is folded in from a store. A merchant's store
+is never read here: its sales stay on the storefront card.
+
+How a period is counted:
+
+- **A sale belongs to the period it was paid in.** An order canceled later is still a
+  sale of the period it was paid in; a register sale that was voided before it was
+  paid, or a draft never paid, is no sale.
+- **A refund belongs to the period it was made in**, stated beside the sales and never
+  netted. Like an invoice, an order keeps only its latest refund date.
+- **Where it is taxed**: a register or pickup sale where the store is, from the store's
+  tax address; anything else where it shipped, or the billing address.
+- **Taxable sales** are the base Stripe stated where Stripe Tax computed the tax, and
+  otherwise the whole sale less the tax when tax was charged.
+- **Test-mode sales are not sales**, and neither is a sale on an outside marketplace that
+  collects and remits the tax itself. Both are left out and counted on the card.
+
+Orders placed up to 15 months before the period are read for a payment or refund made in
+it. The card's review findings: sales with **no tax charged**, sales with **no region**,
+and orders marked **canceled with no refund recorded**. The working papers carry every
+order of the period, with its store, channel, paid date, jurisdiction, amounts, refund and
+whether its taxable base was stated by Stripe.
 
 ## Facilitated sales by buyer state
 

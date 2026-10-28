@@ -88,7 +88,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   listApiKeys: (...a: unknown[]) => mockListApiKeys(...(a as [])),
   lockdownRefusal: async () => null,
   logOrgActivity: async () => undefined,
-  mintApiKey: async () => ({}),
+  mintApiKey: async () => ({ token: 'aglyn_sk_test_x', key: { keyId: 'key-2' } }),
+  // The catalog's own resolver (AGL-4047): the role's default and an override decide.
+  memberHasOrgPermission: async (_orgId: string, member: Record<string, unknown> | null, permission: string) =>
+    Boolean(member) &&
+    jest.requireActual('@aglyn/aglyn/app-utils/org-permissions').hasOrgPermission(member, permission, null),
   normalizeScopes: (s: unknown) => s,
   resolveOrgMembership: async (uid: string, orgId: string) => {
     const member = mockMembers.get(`${orgId}:${uid}`)
@@ -99,7 +103,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 
 import { isOrgWideMember as mockIsOrgWideMember } from '@aglyn/aglyn'
 
-import { GET } from '../app/api/orgs/api-keys/route'
+import { GET, POST } from '../app/api/orgs/api-keys/route'
 
 const ORG = 'org-1'
 
@@ -158,5 +162,47 @@ describe('GET /api/orgs/api-keys is org-wide only', () => {
     const response = await GET(get('stranger'))
     expect(response.status).toBe(403)
     expect(mockListApiKeys).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * Managing keys asks "Manage API keys" (`org.apiKeys`, AGL-4047), not the
+ * owner or admin role: on for those two by default, so nobody loses it, and
+ * a custom role or an override moves it either way. A site collaborator never
+ * manages the workspace's keys, granted the key or not.
+ */
+describe('POST /api/orgs/api-keys asks org.apiKeys (AGL-4047)', () => {
+  function create(uid: string) {
+    mockVerifyIdToken.mockResolvedValue({ uid, email_verified: true })
+    return new Request('https://console.test/api/orgs/api-keys', {
+      method: 'POST',
+      headers: { authorization: 'Bearer token', 'content-type': 'application/json' },
+      body: JSON.stringify({ orgId: ORG, action: 'create', name: 'Zapier', scopes: ['contacts:read'] }),
+    })
+  }
+
+  it('lets an owner and an admin create a key by default, and refuses an editor', async () => {
+    mockMembers.set(`${ORG}:owner`, { role: 'owner', allHosts: true })
+    mockMembers.set(`${ORG}:admin`, { role: 'admin', allHosts: true })
+    mockMembers.set(`${ORG}:editor`, { role: 'editor', allHosts: true })
+    expect((await POST(create('owner'))).status).toBe(200)
+    expect((await POST(create('admin'))).status).toBe(200)
+    const refused = await POST(create('editor'))
+    expect(refused.status).toBe(403)
+    expect((await refused.json()).permission).toBe('org.apiKeys')
+  })
+
+  it('follows an override both ways, and never admits a site collaborator', async () => {
+    mockMembers.set(`${ORG}:editor`, { role: 'editor', allHosts: true, permissions: { 'org.apiKeys': true } })
+    mockMembers.set(`${ORG}:admin`, { role: 'admin', allHosts: true, permissions: { 'org.apiKeys': false } })
+    mockMembers.set(`${ORG}:contractor`, {
+      role: 'editor',
+      allHosts: false,
+      hostAccess: { 'host-9': 'editor' },
+      permissions: { 'org.apiKeys': true },
+    })
+    expect((await POST(create('editor'))).status).toBe(200)
+    expect((await POST(create('admin'))).status).toBe(403)
+    expect((await POST(create('contractor'))).status).toBe(403)
   })
 })

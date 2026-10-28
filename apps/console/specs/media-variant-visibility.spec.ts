@@ -145,10 +145,16 @@ describe('the sharp native libraries are traced into the lambda (AGL-1471)', () 
     },
   )
 
-  it('declares the include for the plugin route, beside its WASM', () => {
-    // AGL-4048: commerce draws a card reader's start-up screen with sharp on
-    // a plugin route, so that lambda needs libvips like the media routes.
-    expect(includes).toMatch(/'\/api\/\[\.\.\.pluginApi\]':\s*\[[^\]]*\.\.\.SHARP_NATIVE_LIBRARIES/)
+  it("declares the include for the plugins' image function, and not for the plugin dispatcher", () => {
+    // AGL-4048: a plugin route that draws with sharp (a card reader's
+    // start-up screen) runs in a function of its own, so that lambda needs
+    // libvips like the media routes and the dispatcher's does not.
+    expect(includes).toMatch(/'\/api\/plugin-images\/\[\.\.\.pluginApi\]':\s*SHARP_NATIVE_LIBRARIES/)
+    expect(includes).toMatch(/'\/api\/\[\.\.\.pluginApi\]':\s*FONT_INSTALLER_WASM,/)
+    expect(includes).not.toMatch(/'\/api\/\[\.\.\.pluginApi\]':[^\n]*SHARP_NATIVE_LIBRARIES/)
+    // Nor for the AI jobs beat: a job step's photo and logo reads ask the
+    // image function too (`ai/image-reads`), so the beat's lambda stays small.
+    expect(includes).not.toMatch(/'\/api\/admin\/ai-jobs-beat'/)
   })
 
   it('points at directories that actually hold a native library', () => {

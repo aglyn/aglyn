@@ -33,6 +33,7 @@ import {
   listApiKeys,
   lockdownRefusal,
   logOrgActivity,
+  memberHasOrgPermission,
   mintApiKey,
   normalizeScopes,
   resolveOrgMembership,
@@ -41,15 +42,20 @@ import {
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
- * Only owners/admins manage keys; any ORG-WIDE member may view the (metadata)
- * list.
+ * Managing keys takes the "Manage API keys" permission (`org.apiKeys`,
+ * AGL-4047) over the whole workspace; any ORG-WIDE member may view the
+ * (metadata) list.
  *
- * This said "any member", and the GET honoured it literally — which stopped
- * being the right rule when AGL-1026 established that a site collaborator is
- * a real org member whose reach is a list of sites. The word doing the work
- * is now `isOrgWideMember`, at the GET below.
+ * The list said "any member", and the GET honoured it literally — which
+ * stopped being the right rule when AGL-1026 established that a site
+ * collaborator is a real org member whose reach is a list of sites. The word
+ * doing the work is now `isOrgWideMember`, at the GET below.
+ *
+ * Managing asked for the owner or admin ROLE. The key is on for exactly those
+ * two by default, so nobody loses it; a custom role or an override can now
+ * hand it to an editor, or take it from an admin, and the console's API keys
+ * section asks the same key.
  */
-const MANAGER_ROLES = new Set(['owner', 'admin'])
 
 async function handler(request: Request): Promise<Response> {
   const {
@@ -130,10 +136,17 @@ async function handler(request: Request): Promise<Response> {
     }
 
     const isManager =
-      isStaff || MANAGER_ROLES.has(String(actor?.member?.role))
+      isStaff ||
+      (isOrgWideMember(actor?.member) &&
+        (await memberHasOrgPermission(orgId, actor?.member, 'org.apiKeys')))
     if (!isManager) {
       return Response.json(
-        { error: 'Managing API keys requires the owner or admin role' },
+        {
+          error:
+            'Your role does not include "Manage API keys" — ask an organization admin',
+          reason: 'permission',
+          permission: 'org.apiKeys',
+        },
         { status: 403 },
       )
     }

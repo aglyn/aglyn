@@ -46,12 +46,20 @@ function listingArtifactType(listing) {
   return 'component'
 }
 
-/** `isListingBrowsable`: not taken down, not private, and reviewed if a plugin. */
+/**
+ * `REVIEWED_ARTIFACT_TYPES`: the types that wait for review before they are
+ * browsable, plugins (AGL-432) and site starters (AGL-4049). A seed that
+ * wrote a `submitted` starter through a copy that knew only plugins would put
+ * an unreviewed starter on the public shelf.
+ */
+const REVIEWED_ARTIFACT_TYPES = new Set(['plugin', 'siteStarter'])
+
+/** `isListingBrowsable`: not taken down, not private, and reviewed if a plugin or a site starter. */
 function isListingBrowsable(listing) {
   if (listing.hiddenAt) return false
   if (listing.workspaceLockedAt) return false
   if (listing.visibility === 'private') return false
-  if (listingArtifactType(listing) !== 'plugin') return true
+  if (!REVIEWED_ARTIFACT_TYPES.has(listingArtifactType(listing))) return true
   return (
     listing.reviewStatus === undefined ||
     listing.reviewStatus === 'listed' ||

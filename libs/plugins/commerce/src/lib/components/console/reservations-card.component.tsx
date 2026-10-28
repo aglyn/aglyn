@@ -18,6 +18,7 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import * as CommerceModel from '../../model'
+import { reservationPermissionRefusal } from '../../model/plugin-permissions'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -45,7 +46,7 @@ import {
   updateDoc,
   where,
 } from 'firebase/firestore'
-import { useCallback, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useMemo, useState } from 'react'
 import { useFirestore, useMerchantPayments, useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { PrerequisiteNotice } from '@aglyn/shared-ui-jsx/components/prerequisite-notice.component'
@@ -58,7 +59,22 @@ import { pluginDocsHelp } from '@aglyn/aglyn'
 
 export interface ReservationsCardProps {
   hostId: string
+  /**
+   * "Manage reservations" (`commerce.reservations`, AGL-4047) on this site:
+   * edit, cancel and check out stays and change what can be booked. The rules
+   * decide it; this only disables the controls with the reason. Absent reads
+   * as held, so a surface that does not pass it shows the card as before.
+   */
+  canManage?: boolean
+  /** "Book walk-ins and change guests" (`commerce.walkIns`), which the routes ask. */
+  canWalkIn?: boolean
 }
+
+/** A stay's guest count after booking (AGL-4043), loaded the first time it opens. */
+const ReservationGuestsDialog = lazy(() => import('./reservation-guests-dialog.component'))
+
+/** The statuses whose guest count staff can still change. */
+const GUESTS_OPEN_STATUSES = ['pending', 'confirmed', 'checked_in']
 
 const STATUS_COLOR: Record<
   string,
@@ -107,13 +123,35 @@ function unitsProblem(units: number | undefined): string | null {
 }
 
 /**
+ * The "Only N left" field's problem (AGL-4044), or null when the typed value
+ * is a valid threshold: 0 (never) up to the most units a resource can hold.
+ */
+function fewLeftAtProblem(fewLeftAt: number | undefined): string | null {
+  if (fewLeftAt === undefined) return null
+  if (
+    !Number.isInteger(fewLeftAt) ||
+    fewLeftAt < 0 ||
+    fewLeftAt > CommerceModel.MAX_RESOURCE_UNITS
+  ) {
+    return `A whole number from 0 to ${CommerceModel.MAX_RESOURCE_UNITS}`
+  }
+  return null
+}
+
+/**
  * Reservations console (AGL-311): resources CRUD (nightly pricing,
  * seasons via multipliers, deposits) plus the reservations list with
  * check-in/out, no-show, cancel, and walk-in creation. The storefront
  * widget books against the same docs.
  */
 export function ReservationsCard(props: ReservationsCardProps) {
-  const { hostId } = props
+  const { hostId, canManage = true, canWalkIn = true } = props
+  // The permissions this member lacks here, named, for the line under the
+  // card's actions (AGL-4047): a disabled control says why.
+  const missing = [
+    ...(canManage ? [] : [reservationPermissionRefusal('commerce.reservations')]),
+    ...(canWalkIn ? [] : [reservationPermissionRefusal('commerce.walkIns')]),
+  ]
   // Every reservation is paid when it is booked, so a store that cannot
   // charge turns each guest away; the card says so up front.
   const payments = useMerchantPayments(hostId)
@@ -234,10 +272,14 @@ export function ReservationsCard(props: ReservationsCardProps) {
     checkIn: string
     checkOut: string
     guestName: string
+    /** How many guests (AGL-4043); '' sends none. */
+    guests: string
     /** One walk-in attempt: a retry of it finds its own stay (AGL-4046). */
     attemptId: string
   } | null>(null)
   const [walkInBusy, setWalkInBusy] = useState(false)
+  /** The stay whose guests are being changed (AGL-4043). */
+  const [guestsFor, setGuestsFor] = useState<string | null>(null)
 
   const handleResourceSave = useCallback(async () => {
     if (!resourceDraft?.name?.trim() || !(resourceDraft.nightlyRateUsd! > 0)) {
@@ -255,14 +297,20 @@ export function ReservationsCard(props: ReservationsCardProps) {
      * reader can tell it from a field the card meant to write.
      */
     if (unitsProblem(resourceDraft.units)) return
+    if (fewLeftAtProblem(resourceDraft.fewLeftAt)) return
     const seeded = resourceDraft as typeof resourceDraft & { $id?: string }
-    const { id, $id: _syntheticId, units, ...fields } = seeded
+    const { id, $id: _syntheticId, units, fewLeftAt, ...fields } = seeded
     // Units are written as the count the model reads (AGL-4044), and a
     // cleared field as 1 rather than left out: `merge: true` would otherwise
-    // keep a stored 12 the merchant just removed.
-    const data = 'units' in seeded
-      ? { ...fields, units: CommerceModel.resourceUnits({ units }) }
-      : fields
+    // keep a stored 12 the merchant just removed. The "Only N left" threshold
+    // the same way: a cleared field is written as the default it reads as.
+    const data = {
+      ...fields,
+      ...('units' in seeded ? { units: CommerceModel.resourceUnits({ units }) } : {}),
+      ...('fewLeftAt' in seeded
+        ? { fewLeftAt: CommerceModel.resourceFewLeftAt({ fewLeftAt }) }
+        : {}),
+    }
     /**
      * Refuse an EDIT whose seed the server never confirmed (AGL-1358).
      * `data` is the whole stored row spread out of the listener, so
@@ -337,6 +385,11 @@ export function ReservationsCard(props: ReservationsCardProps) {
     if (!resource) return
     const checkInDayMs = Date.parse(`${walkIn.checkIn}T00:00:00Z`)
     const checkOutDayMs = Date.parse(`${walkIn.checkOut}T00:00:00Z`)
+    const guests = walkIn.guests.trim() ? Number(walkIn.guests) : undefined
+    const guestsProblem = CommerceModel.reservationGuestsProblem(guests, resource)
+    if (guestsProblem) {
+      return void enqueueSnackbar(guestsProblem, { variant: 'warning', persist: false })
+    }
     /*
      * The stay is priced FIRST, and its `problem` stops the walk-in: the quote
      * is the one rule for what can be booked (no nights, under the minimum
@@ -424,6 +477,7 @@ export function ReservationsCard(props: ReservationsCardProps) {
             checkInDayMs,
             checkOutDayMs,
             guestName: walkIn.guestName || undefined,
+            ...(guests !== undefined ? { guests } : {}),
             reservationId: walkIn.attemptId,
           }),
         },
@@ -492,6 +546,7 @@ export function ReservationsCard(props: ReservationsCardProps) {
               </Stack>
               <Button
                 size="small"
+                disabled={!canManage}
                 onClick={() => setResourceDraft({ id: resource.$id, ...resource })}
               >
                 {'Edit'}
@@ -499,6 +554,7 @@ export function ReservationsCard(props: ReservationsCardProps) {
               <Button
                 size="small"
                 color="error"
+                disabled={!canManage}
                 onClick={async () => {
                   const confirmed = await confirm({
                     title: 'Remove this resource?',
@@ -534,7 +590,8 @@ export function ReservationsCard(props: ReservationsCardProps) {
                     color={
                       night.unitsLeft === 0
                         ? 'error'
-                        : night.unitsLeft <= CommerceModel.FEW_UNITS_LEFT
+                        : night.unitsLeft <=
+                            CommerceModel.resourceFewLeftAt(resource)
                           ? 'warning'
                           : 'default'
                     }
@@ -548,6 +605,7 @@ export function ReservationsCard(props: ReservationsCardProps) {
         <Stack direction="row" spacing={1}>
           <Button
             size="small"
+            disabled={!canManage}
             onClick={() =>
               setResourceDraft({
                 id: null,
@@ -562,13 +620,14 @@ export function ReservationsCard(props: ReservationsCardProps) {
           </Button>
           <Button
             size="small"
-            disabled={(resourceDocs?.length ?? 0) === 0}
+            disabled={!canWalkIn || (resourceDocs?.length ?? 0) === 0}
             onClick={() =>
               setWalkIn({
                 resourceId: resourceDocs?.[0]?.$id ?? '',
                 checkIn: '',
                 checkOut: '',
                 guestName: '',
+                guests: '',
                 attemptId: Aglyn.createResourceUid(),
               })
             }
@@ -576,6 +635,11 @@ export function ReservationsCard(props: ReservationsCardProps) {
             {'Walk-in'}
           </Button>
         </Stack>
+        {missing.map((reason) => (
+          <Typography key={reason} variant="caption" color="text.secondary">
+            {reason}
+          </Typography>
+        ))}
 
         <Typography variant="subtitle2" sx={{ mt: 1 }}>
           {'Upcoming & recent stays'}
@@ -600,6 +664,9 @@ export function ReservationsCard(props: ReservationsCardProps) {
                 <Typography variant="caption" color="text.secondary" noWrap>
                   {[
                     reservation.guestName ?? reservation.guestEmail ?? 'Guest',
+                    ...(reservation.guests
+                      ? [`${CommerceModel.reservationGuests(reservation)} guest${CommerceModel.reservationGuests(reservation) === 1 ? '' : 's'}`]
+                      : []),
                     `${usd(reservation.paidCents)} / ${usd(reservation.totalCents)} paid`,
                   ].join(' · ')}
                 </Typography>
@@ -612,12 +679,13 @@ export function ReservationsCard(props: ReservationsCardProps) {
               />
               {reservation.status === 'confirmed' ? (
                 <>
-                  <Button size="small" onClick={handleStatus(reservation, 'checked_in')}>
+                  <Button size="small" disabled={!canManage} onClick={handleStatus(reservation, 'checked_in')}>
                     {'Check in'}
                   </Button>
                   <Button
                     size="small"
                     color="error"
+                    disabled={!canManage}
                     onClick={handleStatus(reservation, 'no_show')}
                   >
                     {'No-show'}
@@ -627,6 +695,7 @@ export function ReservationsCard(props: ReservationsCardProps) {
               {reservation.status === 'checked_in' ? (
                 <Button
                   size="small"
+                  disabled={!canManage}
                   onClick={async () => {
                     // Folio settlement (AGL-317): surface unpaid room
                     // charges before the guest leaves.
@@ -658,10 +727,16 @@ export function ReservationsCard(props: ReservationsCardProps) {
                   {'Check out'}
                 </Button>
               ) : null}
+              {GUESTS_OPEN_STATUSES.includes(reservation.status) ? (
+                <Button size="small" disabled={!canWalkIn} onClick={() => setGuestsFor(reservation.$id)}>
+                  {'Guests'}
+                </Button>
+              ) : null}
               {['pending', 'confirmed'].includes(reservation.status) ? (
                 <Button
                   size="small"
                   color="error"
+                  disabled={!canManage}
                   onClick={handleStatus(reservation, 'cancelled')}
                 >
                   {'Cancel'}
@@ -679,6 +754,25 @@ export function ReservationsCard(props: ReservationsCardProps) {
           onPageSizeChange={setPageSize}
         />
       </Stack>
+
+      {guestsFor ? (
+        <Suspense fallback={null}>
+          <ReservationGuestsDialog
+            reservationId={guestsFor}
+            hostId={hostId}
+            onClose={() => setGuestsFor(null)}
+            onDone={(answer) => {
+              setGuestsFor(null)
+              enqueueSnackbar(
+                answer.unchanged
+                  ? `Still ${answer.guests} guest${answer.guests === 1 ? '' : 's'}`
+                  : `Guests changed to ${answer.guests}`,
+                { variant: 'success', persist: false },
+              )
+            }}
+          />
+        </Suspense>
+      ) : null}
 
       <Dialog
         open={Boolean(resourceDraft)}
@@ -750,6 +844,50 @@ export function ReservationsCard(props: ReservationsCardProps) {
               slotProps={{ htmlInput: { inputMode: 'numeric' } }}
             />
           </Stack>
+          {CommerceModel.resourceUnits(resourceDraft) > 1 ? (
+            <TextField
+              label="Show “Only N left” at"
+              placeholder={String(CommerceModel.FEW_UNITS_LEFT)}
+              value={resourceDraft?.fewLeftAt ?? ''}
+              onChange={(event) =>
+                setResourceDraft((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        fewLeftAt:
+                          event.target.value.replace(/\D/g, '') === ''
+                            ? undefined
+                            : Number(event.target.value.replace(/\D/g, '')),
+                      }
+                    : prev,
+                )
+              }
+              error={Boolean(fewLeftAtProblem(resourceDraft?.fewLeftAt))}
+              helperText={
+                fewLeftAtProblem(resourceDraft?.fewLeftAt) ??
+                'The booking widget says “Only 2 left” once this many or fewer are free on a night. 0 never shows it.'
+              }
+              size="small"
+              fullWidth
+              slotProps={{ htmlInput: { inputMode: 'numeric' } }}
+            />
+          ) : null}
+          <TextField
+            select
+            label="At check-in"
+            value={resourceDraft?.checkInPerGuest ? 'guest' : 'stay'}
+            onChange={(event) =>
+              setResourceDraft((prev) =>
+                prev ? { ...prev, checkInPerGuest: event.target.value === 'guest' } : prev,
+              )
+            }
+            helperText="One per guest gives each guest their own check-in and wristband. The check-in screen can set every stay at once."
+            size="small"
+            fullWidth
+          >
+            <MenuItem value="stay">{'One check-in per stay'}</MenuItem>
+            <MenuItem value="guest">{'One check-in per guest'}</MenuItem>
+          </TextField>
           <Stack direction="row" spacing={1}>
             <TextField
               label="Nightly rate ($)"
@@ -849,7 +987,8 @@ export function ReservationsCard(props: ReservationsCardProps) {
             disabled={
               !resourceDraft?.name?.trim() ||
               !((resourceDraft?.nightlyRateUsd ?? 0) > 0) ||
-              Boolean(unitsProblem(resourceDraft?.units))
+              Boolean(unitsProblem(resourceDraft?.units)) ||
+              Boolean(fewLeftAtProblem(resourceDraft?.fewLeftAt))
             }
             onClick={handleResourceSave}
           >
@@ -921,6 +1060,20 @@ export function ReservationsCard(props: ReservationsCardProps) {
               )
             }
             size="small"
+          />
+          <TextField
+            label="Guests"
+            value={walkIn?.guests ?? ''}
+            onChange={(event) =>
+              setWalkIn((prev) =>
+                prev ? { ...prev, guests: event.target.value.replace(/\D/g, '') } : prev,
+              )
+            }
+            helperText={`Optional, up to ${CommerceModel.resourceGuestCeiling(
+              (resourceDocs ?? []).find((item: any) => item.$id === walkIn?.resourceId),
+            )}. Each guest gets a check-in when the stay is checked in per guest.`}
+            size="small"
+            slotProps={{ htmlInput: { inputMode: 'numeric' } }}
           />
         </DialogContent>
         <DialogActions>

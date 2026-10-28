@@ -19,6 +19,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import type { ConsolePluginPageProps } from '@aglyn/aglyn'
 import * as CommerceModel from '../../model'
+import { posPermissionRefusal, type PosPermission } from '../../model/plugin-permissions'
 import {
   PRODUCT_LIST_BASE,
   PRODUCT_LIST_QUERY,
@@ -48,7 +49,7 @@ import {
   query,
   where,
 } from 'firebase/firestore'
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
 import { listQueryConstraints } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
@@ -86,6 +87,14 @@ import {
   useConsoleWidgetSlot,
 } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import { POS_ORDERS_ZONE } from './pos-zones'
+import { isPosHardwareSkuId } from '../../model/pos-hardware'
+
+/**
+ * Card reader sales at the platform's own store (AGL-4038): attaching the
+ * buyer and the To attach list. Its own chunk, and it draws nothing on any
+ * store but that one.
+ */
+const PosHardwareBuyer = lazy(() => import('./pos/pos-hardware-buyer.component'))
 import { PosOfflineBanner, PosOfflineCheckout, usePosOffline } from './pos-offline/register-offline'
 
 /** The till sells active products only; every read of the catalog asks it. */
@@ -236,7 +245,21 @@ const PosOrdersZone = memo(function PosOrdersZone(props: {
   return <Renderer slot={POS_ORDERS_ZONE.id} hostId={hostId} orgId={undefined} registerId={registerId} />
 })
 
-export function PosConsolePage({ hostId, basePath }: ConsolePluginPageProps) {
+export function PosConsolePage({ hostId, basePath, permissions }: ConsolePluginPageProps) {
+  /*
+   * The register's FINER keys (AGL-4047) — discounts, returns, the drawer —
+   * are read here, unlike `managePos` above: the shell admits anyone who may
+   * use the register, and these say which of its controls are theirs. Only an
+   * explicit refusal disables one; a map without the key follows `managePos`,
+   * which the shell already confirmed. The routes refuse either way.
+   */
+  const refusedReason = (key: PosPermission): string | undefined =>
+    permissions?.[key] === false ? posPermissionRefusal(key) : undefined
+  const blockedControls = {
+    returns: refusedReason('posRefund'),
+    shift: refusedReason('posCashDrawer'),
+  }
+  const discountBlocked = refusedReason('posDiscount')
   const WidgetSlot = useConsoleWidgetSlot()
   const firestore = useFirestore()
   const { data: user } = useUser()
@@ -445,6 +468,19 @@ export function PosConsolePage({ hostId, basePath }: ConsolePluginPageProps) {
   const productsById = useMemo(
     () => new Map<string, any>(sellProducts.map((product: any) => [product.$id, product] as const)),
     [sellProducts],
+  )
+  // Whether the sale on the register sells a card reader (AGL-4038): only
+  // the platform's own store names hardware on a product, and only there
+  // does the buyer step draw.
+  const saleSellsHardware = useMemo(
+    () =>
+      (sale ? saleLines : lines).some((line) => isPosHardwareSkuId(productsById.get(line.productId)?.hardwareSku)),
+    [sale, saleLines, lines, productsById],
+  )
+  // Only a store whose catalog names hardware asks whether it is the seller.
+  const storeSellsHardware = useMemo(
+    () => products.some((product: { hardwareSku?: unknown }) => isPosHardwareSkuId(product.hardwareSku)),
+    [products],
   )
   /** AGL-2357: warns, never blocks. */
   const shortfalls = useMemo(
@@ -815,6 +851,7 @@ export function PosConsolePage({ hostId, basePath }: ConsolePluginPageProps) {
           registerId={registerId}
           {...(registerName ? { registerName } : {})}
           cashier={cashier}
+          blocked={blockedControls}
           onExchange={(returned) =>
             setCustomer(
               returned.email || returned.name
@@ -825,6 +862,7 @@ export function PosConsolePage({ hostId, basePath }: ConsolePluginPageProps) {
         />
       ) : null}
       <PosCartPanel
+        {...(discountBlocked ? { discountBlocked } : {})}
         lines={sale ? saleLines : lines}
         shortfalls={sale ? [] : shortfalls}
         onQuantity={(index, quantity) =>
@@ -854,15 +892,27 @@ export function PosConsolePage({ hostId, basePath }: ConsolePluginPageProps) {
         discountPct={discountPct}
         onDiscountPct={setDiscountPct}
         customer={
-          sale ? null : (
-            <PosCustomerLookup
-              hostId={hostId}
-              value={customer}
-              onChange={setCustomer}
-              registerId={registerId}
-              {...(cashier.assertion ? { cashierAssertion: cashier.assertion } : {})}
-            />
-          )
+          <>
+            {sale ? null : (
+              <PosCustomerLookup
+                hostId={hostId}
+                value={customer}
+                onChange={setCustomer}
+                registerId={registerId}
+                {...(cashier.assertion ? { cashierAssertion: cashier.assertion } : {})}
+              />
+            )}
+            {user && storeSellsHardware ? (
+              <Suspense fallback={null}>
+                <PosHardwareBuyer
+                  user={user}
+                  hostId={hostId}
+                  saleOrderId={sale && saleSellsHardware ? sale.orderId : null}
+                  notify={notify}
+                />
+              </Suspense>
+            ) : null}
+          </>
         }
         locked={Boolean(sale)}
       />

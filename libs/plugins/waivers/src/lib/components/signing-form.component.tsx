@@ -39,11 +39,14 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
 import { DatePicker } from '@mui/x-date-pickers/DatePicker'
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
 import type { Dayjs } from 'dayjs'
-import { useMemo, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useMemo, useState, type ReactNode } from 'react'
 import { WAIVER_LIMITS } from '../model/waiver'
 import type { WaiverMinor, WaiverStrokes } from '../model/waiver-signature'
 import { SignaturePad } from './signature-pad.component'
 import { newWaiverAttemptKey } from './waivers-api'
+
+/** The scan code for a copy at the window or the display: loaded only when one finishes. */
+const SignedCopyCode = lazy(() => import('./signed-copy-code.component'))
 
 /*==========================================
  * THE SIGNING FORM (AGL-4042), one component for every place a waiver is
@@ -65,15 +68,28 @@ export interface SignableWaiver {
   validityText: string
 }
 
+/** What a signing answers: who it covers, for how long, and the signer's own copy. */
+export interface SigningResult {
+  people: string[]
+  window: string
+  emailed: boolean
+  /** A one-hour link to the signed copy as a PDF (AGL-4042), when the signing made one. */
+  copyUrl?: string | null
+}
+
 export interface SigningFormProps {
   siteName: string
+  /** How a signer reaches the business: its contact email or phone (AGL-4042), when the site lists one. */
+  siteContact?: string | null
   waiver: SignableWaiver
   consentText: string
+  /** The heading over the consent, shown before the signature. */
+  consentHeading?: string
   adultAge: number
   /** `online` asks for an email (the signed copy goes there); `at_window` only suggests it. */
   mode: 'online' | 'at_window'
   /** Sends the payload; answers what to show when it lands, or throws the sentence to show. */
-  submit: (payload: Record<string, unknown>) => Promise<{ people: string[]; window: string; emailed: boolean }>
+  submit: (payload: Record<string, unknown>) => Promise<SigningResult>
   /** Drawn under the confirmation, e.g. "Next signer". */
   doneActions?: (reset: () => void) => ReactNode
   /** What staff already know of the signer, filled in for them to check. */
@@ -104,6 +120,28 @@ function DateField(props: { label: string; value: Dayjs | null; onChange: (value
   )
 }
 
+/**
+ * The signer's own copy (AGL-4042): a download on their own device, and a
+ * code to scan with their phone on the window's tablet or the register's
+ * display, which is not theirs to keep a file on. The link works for an hour.
+ */
+function SignedCopy(props: { href: string; mode: 'online' | 'at_window' }) {
+  if (props.mode === 'online') {
+    return (
+      <Box>
+        <Button variant="outlined" href={props.href} download>
+          {'Download your signed copy (PDF)'}
+        </Button>
+      </Box>
+    )
+  }
+  return (
+    <Suspense fallback={null}>
+      <SignedCopyCode href={props.href} />
+    </Suspense>
+  )
+}
+
 export function SigningForm(props: SigningFormProps) {
   const { waiver, mode } = props
   const [attemptKey, setAttemptKey] = useState(newWaiverAttemptKey)
@@ -122,7 +160,7 @@ export function SigningForm(props: SigningFormProps) {
   const [website, setWebsite] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [done, setDone] = useState<{ people: string[]; window: string; emailed: boolean } | null>(null)
+  const [done, setDone] = useState<SigningResult | null>(null)
 
   const reset = () => {
     setAttemptKey(newWaiverAttemptKey())
@@ -206,6 +244,7 @@ export function SigningForm(props: SigningFormProps) {
             <Typography variant="body2">{'A signed copy is on its way to your email.'}</Typography>
           ) : null}
         </Alert>
+        {done.copyUrl ? <SignedCopy href={done.copyUrl} mode={mode} /> : null}
         {props.doneActions?.(reset)}
       </Stack>
     )
@@ -227,6 +266,11 @@ export function SigningForm(props: SigningFormProps) {
           <Typography variant="body2" color="text.secondary">
             {waiver.validityText}
           </Typography>
+          {props.siteContact ? (
+            <Typography variant="body2" color="text.secondary">
+              {`Questions about this waiver? Contact ${props.siteName} at ${props.siteContact}.`}
+            </Typography>
+          ) : null}
         </Stack>
 
         <Paper variant="outlined" sx={{ p: 2, maxHeight: { xs: '50vh', md: '60vh' }, overflowY: 'auto' }}>
@@ -350,6 +394,19 @@ export function SigningForm(props: SigningFormProps) {
 
         <Divider />
 
+        {/* The consent comes BEFORE the signature (e-sign consent v2,
+            AGL-4042), so the disclosure plainly precedes the act of signing. */}
+        <Stack spacing={1}>
+          <Typography variant="h6" component="h2">
+            {props.consentHeading || 'Signing electronically'}
+          </Typography>
+          <FormControlLabel
+            sx={{ alignItems: 'flex-start' }}
+            control={<Checkbox checked={consent} onChange={(event) => setConsent(event.target.checked)} />}
+            label={<Typography variant="body2" sx={{ pt: 1.25 }}>{props.consentText}</Typography>}
+          />
+        </Stack>
+
         <Stack spacing={2}>
           <Typography variant="h6" component="h2">
             {'Signature'}
@@ -384,11 +441,6 @@ export function SigningForm(props: SigningFormProps) {
               ) : null}
             </Stack>
           )}
-          <FormControlLabel
-            sx={{ alignItems: 'flex-start' }}
-            control={<Checkbox checked={consent} onChange={(event) => setConsent(event.target.checked)} />}
-            label={<Typography variant="body2" sx={{ pt: 1.25 }}>{props.consentText}</Typography>}
-          />
         </Stack>
 
         {/* Left empty by people; a bot that fills every field fills this one. */}

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { checkPurchaseGatePreclearance } from '@aglyn/aglyn/plugin-manager/purchase-gate-preclearance'
 import { lookalikeBrandForHost } from '@aglyn/shared-util-email/outbound-phishing-screen'
@@ -161,10 +162,10 @@ export async function domainsGate(
     const hostSnapshot = await db().collection('hosts').doc(hostId).get()
     if (!hostSnapshot.exists) return domainsError(404, 'Unknown site')
     host = (hostSnapshot.data() ?? {}) as Record<string, unknown>
-    const role = String(
-      (host['memberRoles'] as Record<string, unknown> | undefined)?.[decoded.uid] ?? '',
-    )
-    if (!staff && role !== 'admin') return domainsError(403, 'Only a site admin can do this')
+    // "Manage site settings" (`site.manage`, AGL-4047), read as the rules read it.
+    if (!staff && !holdsSiteKey(host, decoded.uid, 'site.manage')) {
+      return domainsError(403, siteKeyRefusal('site.manage'))
+    }
     const resolved = await getOrgForHost(hostId)
     if (!resolved) return domainsError(404, 'Unknown workspace')
     orgId = resolved.orgId

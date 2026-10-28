@@ -99,6 +99,30 @@ describe('the signing form', () => {
   })
 })
 
+describe('e-sign consent v2 on the form (AGL-4042)', () => {
+  it('puts the consent, under its heading, before the signature, and shows how to reach the business', async () => {
+    await settled(
+      <SigningForm
+        siteName="Acme Motocross"
+        siteContact="hello@example.com"
+        waiver={WAIVER}
+        consentText="I agree to sign this waiver electronically."
+        consentHeading="Signing electronically"
+        adultAge={18}
+        mode="online"
+        submit={jest.fn()}
+      />,
+    )
+    expect(screen.getByText('Questions about this waiver? Contact Acme Motocross at hello@example.com.')).toBeTruthy()
+    const consentHeading = screen.getByRole('heading', { name: 'Signing electronically' })
+    const signatureHeading = screen.getByRole('heading', { name: 'Signature' })
+    // The disclosure comes before the act of signing.
+    expect(consentHeading.compareDocumentPosition(signatureHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const consentBox = screen.getByLabelText('I agree to sign this waiver electronically.')
+    expect(consentBox.compareDocumentPosition(signatureHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+})
+
 describe('choosing a waiver to sign', () => {
   const fetchMock = jest.fn()
   beforeEach(() => {

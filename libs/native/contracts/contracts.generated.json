@@ -286,6 +286,21 @@
       }
     ]
   },
+  "CHECK_IN_BATCH_MAX": 50,
+  "CHECK_IN_MAX_HEADCOUNT": 50,
+  "CHECK_IN_USE_DAY_MAX_AHEAD_DAYS": 730,
+  "CHECK_IN_WRISTBAND_COLORS": [
+    "Red",
+    "Orange",
+    "Yellow",
+    "Green",
+    "Blue",
+    "Purple",
+    "Pink",
+    "White",
+    "Black"
+  ],
+  "CHECK_IN_WRISTBAND_MAX": 24,
   "CHECKOUT_SHIPPING_COUNTRY_CODES": [
     "US",
     "CA",
@@ -1601,6 +1616,32 @@
       "value": "TechArticle"
     }
   ],
+  "CORE_SITE_ROLE_PRESETS": {
+    "site.edit": {
+      "admin": true,
+      "author": true,
+      "editor": true,
+      "viewer": false
+    },
+    "site.manage": {
+      "admin": true,
+      "author": false,
+      "editor": false,
+      "viewer": false
+    },
+    "site.publish": {
+      "admin": true,
+      "author": false,
+      "editor": true,
+      "viewer": false
+    },
+    "site.sensitive": {
+      "admin": true,
+      "author": false,
+      "editor": true,
+      "viewer": false
+    }
+  },
   "CRM_ACTIVITIES_PER_RECORD_CEILING": 5000,
   "CRM_ACTIVITY_DIRECTION_LABELS": {
     "inbound": "Inbound",
@@ -3936,6 +3977,7 @@
     ]
   },
   "MAX_LABEL_COPIES": 500,
+  "MAX_RESERVATION_GUESTS": 50,
   "MAX_RESOURCE_UNITS": 500,
   "MEDIA_ALT_MAX_LENGTH": 300,
   "MEDIA_ALT_OPTIONS": [
@@ -7294,47 +7336,119 @@
       "admin": [
         "org.settings",
         "org.auditLog",
+        "org.apiKeys",
+        "org.privacy",
+        "org.holds",
+        "org.export",
+        "org.sendingDomains",
+        "org.businessProfile",
         "billing.view",
         "billing.manage",
         "members.manage",
         "hosts.create",
         "hosts.delete",
+        "site.edit",
+        "site.publish",
+        "site.sensitive",
+        "site.manage",
         "data.manage",
+        "org.media",
+        "org.eraseRecords",
         "marketplace.publish",
         "plugins.install",
         "ai.use",
         "ai.generate",
+        "ai.import",
+        "bookings.payments",
+        "bookings.refunds",
+        "commerce.reservations",
+        "commerce.walkIns",
+        "commerce.orders",
+        "commerce.giftCards",
+        "commerce.paymentMethods",
+        "commerce.shippingConnections",
         "managePos",
+        "posSell",
+        "posRefund",
+        "posDiscount",
+        "posCashDrawer",
+        "posDevices",
+        "posBuyHardware",
         "outreach.use",
+        "outreach.manageAll",
         "accounting.manage",
         "manageWaivers",
         "collectWaivers"
       ],
       "editor": [
         "data.manage",
+        "org.media",
+        "org.eraseRecords",
         "marketplace.publish",
         "plugins.install",
+        "site.edit",
+        "site.publish",
+        "site.sensitive",
         "ai.use",
         "ai.generate",
+        "bookings.payments",
+        "commerce.reservations",
+        "commerce.walkIns",
+        "commerce.orders",
+        "commerce.giftCards",
         "managePos",
+        "posSell",
+        "posRefund",
+        "posDiscount",
+        "posCashDrawer",
+        "posDevices",
+        "posBuyHardware",
         "manageWaivers",
         "collectWaivers"
       ],
       "owner": [
         "org.settings",
         "org.auditLog",
+        "org.apiKeys",
+        "org.privacy",
+        "org.holds",
+        "org.export",
+        "org.sendingDomains",
+        "org.businessProfile",
         "billing.view",
         "billing.manage",
         "members.manage",
         "hosts.create",
         "hosts.delete",
+        "site.edit",
+        "site.publish",
+        "site.sensitive",
+        "site.manage",
         "data.manage",
+        "org.media",
+        "org.eraseRecords",
         "marketplace.publish",
         "plugins.install",
         "ai.use",
         "ai.generate",
+        "ai.import",
+        "bookings.payments",
+        "bookings.refunds",
+        "commerce.reservations",
+        "commerce.walkIns",
+        "commerce.orders",
+        "commerce.giftCards",
+        "commerce.paymentMethods",
+        "commerce.shippingConnections",
         "managePos",
+        "posSell",
+        "posRefund",
+        "posDiscount",
+        "posCashDrawer",
+        "posDevices",
+        "posBuyHardware",
         "outreach.use",
+        "outreach.manageAll",
         "accounting.manage",
         "manageWaivers",
         "collectWaivers"
@@ -7371,6 +7485,10 @@
         "label": "AI"
       },
       {
+        "id": "bookings",
+        "label": "Bookings"
+      },
+      {
         "id": "commerce",
         "label": "Commerce",
         "pluginId": "commerce"
@@ -7405,6 +7523,42 @@
         "label": "Activity & audit log"
       },
       {
+        "description": "Create and revoke the workspace’s REST API keys.",
+        "group": "organization",
+        "key": "org.apiKeys",
+        "label": "Manage API keys"
+      },
+      {
+        "description": "Erase a person from every site in the workspace when they ask.",
+        "group": "organization",
+        "key": "org.privacy",
+        "label": "Privacy requests"
+      },
+      {
+        "description": "See what is held, flagged or locked on the workspace, and request a review.",
+        "group": "organization",
+        "key": "org.holds",
+        "label": "Holds and reviews"
+      },
+      {
+        "description": "Download a copy of everything the workspace holds.",
+        "group": "organization",
+        "key": "org.export",
+        "label": "Export workspace data"
+      },
+      {
+        "description": "Add, verify and remove the domains the workspace’s mail is sent from.",
+        "group": "organization",
+        "key": "org.sendingDomains",
+        "label": "Sending domains"
+      },
+      {
+        "description": "Change the services, audience and tone every site starts from.",
+        "group": "organization",
+        "key": "org.businessProfile",
+        "label": "Business profile"
+      },
+      {
         "description": "See the plan, usage meters, and invoices.",
         "group": "billing",
         "key": "billing.view",
@@ -7435,10 +7589,50 @@
         "label": "Delete sites"
       },
       {
+        "description": "Create and change pages, content and everything else on a site, without making it live.",
+        "group": "sites",
+        "key": "site.edit",
+        "label": "Edit site content",
+        "scope": "site"
+      },
+      {
+        "description": "Make pages and content live, take them down or schedule them, and change redirects.",
+        "group": "sites",
+        "key": "site.publish",
+        "label": "Publish site content",
+        "scope": "site"
+      },
+      {
+        "description": "Read a site’s orders and returns, and set up its webhooks.",
+        "group": "sites",
+        "key": "site.sensitive",
+        "label": "See orders and webhooks",
+        "scope": "site"
+      },
+      {
+        "description": "Manage a site’s people, domain, address and plugins, change its plugin settings and security allow-lists, import, export and delete it.",
+        "group": "sites",
+        "key": "site.manage",
+        "label": "Manage site settings",
+        "scope": "site"
+      },
+      {
         "description": "Create, edit, and delete organization datasets.",
         "group": "datasets",
         "key": "data.manage",
         "label": "Manage data"
+      },
+      {
+        "description": "Upload, change, move and remove the files in the media library every site shares.",
+        "group": "datasets",
+        "key": "org.media",
+        "label": "Edit the workspace media library"
+      },
+      {
+        "description": "Delete records the whole workspace shares, such as dataset rows, contacts and lists.",
+        "group": "datasets",
+        "key": "org.eraseRecords",
+        "label": "Delete workspace records"
       },
       {
         "description": "Publish listings under the organization profile.",
@@ -7467,10 +7661,128 @@
         "scope": "site"
       },
       {
-        "description": "Open the POS page and record in-person sales.",
+        "description": "Import an existing website into the workspace with Bring my site.",
+        "group": "ai",
+        "key": "ai.import",
+        "label": "Bring a site in",
+        "scope": "org"
+      },
+      {
+        "description": "Take a booking’s payment at the desk on a card reader. Follows the site role unless a role or member sets it.",
+        "group": "bookings",
+        "key": "bookings.payments",
+        "label": "Take booking payments in person",
+        "scope": "site"
+      },
+      {
+        "description": "Refund a paid booking, in full or in part. Follows the site role unless a role or member sets it.",
+        "group": "bookings",
+        "key": "bookings.refunds",
+        "label": "Refund bookings",
+        "scope": "site"
+      },
+      {
+        "description": "Edit, cancel and check out stays, and add, change and remove what can be booked. Follows the site role unless a role or member sets it.",
+        "group": "commerce",
+        "key": "commerce.reservations",
+        "label": "Manage reservations",
+        "scope": "site"
+      },
+      {
+        "description": "Book a walk-in stay and change how many guests a stay is for. Follows \"Manage reservations\" unless a role or member sets it, and may be allowed without it.",
+        "follows": "commerce.reservations",
+        "group": "commerce",
+        "key": "commerce.walkIns",
+        "label": "Book walk-ins and change guests",
+        "scope": "site"
+      },
+      {
+        "description": "Fulfill, cancel and print orders, resend receipts, build draft orders, take returns and record shipments. Follows the site role unless a role or member sets it.",
+        "group": "commerce",
+        "key": "commerce.orders",
+        "label": "Manage orders",
+        "scope": "site"
+      },
+      {
+        "description": "Issue, adjust and void the store’s gift cards. Follows the site role unless a role or member sets it.",
+        "group": "commerce",
+        "key": "commerce.giftCards",
+        "label": "Issue gift cards",
+        "scope": "site"
+      },
+      {
+        "description": "Turn the store’s payment methods on and off. Anyone with \"Manage orders\" sees them. Follows the site role unless a role or member sets it.",
+        "group": "commerce",
+        "key": "commerce.paymentMethods",
+        "label": "Manage payment methods",
+        "scope": "site"
+      },
+      {
+        "description": "Connect, sync and disconnect ShipStation and ShippingEasy, and show or replace their credentials. Anyone with \"Manage orders\" sees whether they are connected. Follows the site role unless a role or member sets it.",
+        "group": "commerce",
+        "key": "commerce.shippingConnections",
+        "label": "Connect shipping apps",
+        "scope": "site"
+      },
+      {
+        "description": "Open the point of sale. Each point of sale permission below follows this one unless a role or member sets it.",
         "group": "commerce",
         "key": "managePos",
         "label": "Use the point of sale",
+        "pluginId": "commerce",
+        "scope": "org"
+      },
+      {
+        "description": "Ring up sales and take payment at the register, the kiosk and the point of sale apps.",
+        "group": "commerce",
+        "key": "posSell",
+        "label": "Sell at the register",
+        "pluginId": "commerce",
+        "refines": "managePos",
+        "scope": "org"
+      },
+      {
+        "description": "Refund point of sale orders at the register, up to its refund limit, and take returns and exchanges.",
+        "group": "commerce",
+        "key": "posRefund",
+        "label": "Refunds and returns",
+        "pluginId": "commerce",
+        "refines": "managePos",
+        "scope": "org"
+      },
+      {
+        "description": "Take a discount off a sale at the register. A shopper’s discount code and the store’s own promotions apply without it.",
+        "group": "commerce",
+        "key": "posDiscount",
+        "label": "Give discounts at the register",
+        "pluginId": "commerce",
+        "refines": "managePos",
+        "scope": "org"
+      },
+      {
+        "description": "Open and close shifts, record cash in and out, print shift reports and open the drawer without a sale.",
+        "group": "commerce",
+        "key": "posCashDrawer",
+        "label": "Cash drawer and shifts",
+        "pluginId": "commerce",
+        "refines": "managePos",
+        "scope": "org"
+      },
+      {
+        "description": "Add, change and remove card readers, receipt printers and customer displays, and set the reader screen.",
+        "group": "commerce",
+        "key": "posDevices",
+        "label": "Registers and devices",
+        "pluginId": "commerce",
+        "refines": "managePos",
+        "scope": "org"
+      },
+      {
+        "description": "Order card readers and other hardware from the hardware shop. Follows \"Use the point of sale\" unless a role or member sets it, and may be allowed without it.",
+        "follows": "managePos",
+        "group": "commerce",
+        "key": "posBuyHardware",
+        "label": "Buy point of sale hardware",
         "pluginId": "commerce",
         "scope": "org"
       },
@@ -7479,6 +7791,14 @@
         "group": "outreach",
         "key": "outreach.use",
         "label": "Use Sequences",
+        "pluginId": "outreach",
+        "scope": "org"
+      },
+      {
+        "description": "Change, send from and pause a mailbox or sequence someone else connected, and set up link domains.",
+        "group": "outreach",
+        "key": "outreach.manageAll",
+        "label": "Manage everyone’s Sequences",
         "pluginId": "outreach",
         "scope": "org"
       },
@@ -7999,6 +8319,7 @@
     "paid_out": "Paid out",
     "refund": "Cash refund"
   },
+  "POS_CHECK_IN_ROUTE": "/api/commerce/pos-check-in",
   "POS_DAY_REPORT_MAX_DAYS": 31,
   "POS_DAY_REPORT_ROUTE": "/api/commerce/pos-day-report",
   "POS_DISPLAY_MAX_LINES": 60,
@@ -8028,11 +8349,14 @@
     "gift_card": "A gift card balance can only be checked online."
   },
   "POS_OFFLINE_FLAG_LABELS": {
+    "card-amount-differs": "The card was charged a different amount than the sale’s total; the payment records what Stripe took",
     "card-declined": "The card taken offline was declined when it was charged; the order is unpaid",
+    "card-fee-short": "Stripe took less than the platform fee from this card’s payout; the rest goes on the workspace’s monthly invoice",
     "card-not-charged": "The card taken offline could not be charged; the order is unpaid",
     "cash-short": "The cash recorded is less than the total",
     "cashier-unverified": "The PIN-switched cashier could not be confirmed; the sale is under the signed-in member",
     "clock-adjusted": "The device clock was off; the sale is dated when it synced",
+    "discount-not-permitted": "The discount was given by a member whose role does not include “Give discounts at the register”",
     "discount-over-limit": "The discount is above this register’s limit",
     "late-sync": "Synced more than a day after it was rung",
     "no-shift": "Rung with no shift open, on a site that requires one",
@@ -8273,6 +8597,7 @@
   "REMINDER_WINDOW_START_HOURS": 23,
   "REPLY_BODY_MAX": 20000,
   "REPLY_SUBJECT_MAX": 150,
+  "RESERVATION_GUESTS_ROUTE": "/api/commerce/reservations/guests",
   "RESERVED_SCREEN_ROUTE_SEGMENTS": [
     "404",
     "500",
@@ -8443,6 +8768,11 @@
   ],
   "STARRED_FIELD": "starred",
   "STARRED_MAX": 50,
+  "STAY_CHECK_IN_MODES": [
+    "resource",
+    "stay",
+    "guest"
+  ],
   "SUBMISSION_FILTER_HEADERS": {
     "formId": "Form",
     "from": "From",
@@ -10786,6 +11116,16 @@
           "variant": "body"
         },
         {
+          "block": "text",
+          "text": "Your paper copy and your choices",
+          "variant": "subheading"
+        },
+        {
+          "block": "text",
+          "text": "You can ask {{host.businessName}} for a paper copy at no charge, change the email address for your copy, or withdraw your agreement to sign electronically for anything not yet sent to you. Withdrawing doesn’t undo the signature you gave. {{waiver.contact}}",
+          "variant": "body"
+        },
+        {
           "block": "button",
           "href": "{{host.url}}",
           "label": "Visit {{host.businessName}}"
@@ -10820,6 +11160,11 @@
           "description": "The days it covers",
           "name": "waiver.validity",
           "sample": "Good for Oct 24, 2026"
+        },
+        {
+          "description": "How to reach the business, as a sentence: its contact email or phone when the site lists one",
+          "name": "waiver.contact",
+          "sample": "Contact Ridgeline Moto at hello@example.com or (555) 010-0100."
         }
       ],
       "name": "Signed waiver copy",

@@ -19,6 +19,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useFirestore, useFirestoreCollection, useOrgPlan, useUser } from '@aglyn/tenant-feature-instance'
 import {
@@ -35,7 +36,8 @@ import {
   Typography,
 } from '@mui/material'
 import { collection, limit, query } from 'firebase/firestore'
-import { useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
+import type { PosCellularView } from '../../model/pos-cellular'
 import { posDisplayCall, posReadersCall, PosRequestError } from './pos/pos-api'
 import { POS_DEVICES_ANCHOR } from './pos/pos-kiosk-readiness.component'
 import { POS_REGISTERS_ANCHOR, usePosPairing } from './pos/pos-pairing.component'
@@ -55,8 +57,13 @@ interface ReadersAnswer {
   available: boolean
   testMode: boolean
   locationReady: boolean
+  /** 4G for the store's S710s, where it is offered and the store has one (AGL-4038). */
+  cellular?: PosCellularView
   readers: ReaderRow[]
 }
+
+/** Drawn only where 4G is offered, so it arrives with the first store that shows it. */
+const PosCellularControl = lazy(() => import('./pos-cellular-control.component'))
 
 interface DisplayRow {
   id: string
@@ -74,7 +81,19 @@ export interface PosDevicesCardProps {
    * rather than offering a button that fails. Absent reads as not allowed.
    */
   canManagePos?: boolean
+  /**
+   * Whether the viewer may set the register's devices up (AGL-4047): the
+   * "Registers and devices" key on top of `canManagePos`. Adding, renaming,
+   * moving and removing a reader, pairing a display and signing one out are
+   * refused by the server without it, so each control says why. Absent
+   * follows `canManagePos`.
+   */
+  canSetUpDevices?: boolean
 }
+
+/** Why a device control is not offered to someone who works the register. */
+const DEVICES_KEY_REASON =
+  'Only a member with the "Registers and devices" permission can set up card readers, displays and kiosks.'
 
 const EMPTY_ADDRESS = { line1: '', line2: '', city: '', state: '', postalCode: '', country: 'US' }
 
@@ -88,7 +107,11 @@ const EMPTY_ADDRESS = { line1: '', line2: '', city: '', state: '', postalCode: '
  * through the same flow as the register's own Pair display (AGL-3712); a site
  * with no register is sent to the card that makes one.
  */
-export function PosDevicesCard({ hostId, canManagePos = false }: PosDevicesCardProps) {
+export function PosDevicesCard({
+  hostId,
+  canManagePos = false,
+  canSetUpDevices = canManagePos,
+}: PosDevicesCardProps) {
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
@@ -136,7 +159,15 @@ export function PosDevicesCard({ hostId, canManagePos = false }: PosDevicesCardP
       ? 'Point of Sale is not on your plan. Upgrade in Billing to pair displays and kiosks.'
       : !canManagePos
         ? 'Only an admin or editor with the "Use the point of sale" permission can pair displays and kiosks.'
-        : null
+        : !canSetUpDevices
+          ? DEVICES_KEY_REASON
+          : null
+  /** Why the reader controls are not offered, or null when they are. */
+  const readersBlocked = !canManagePos
+    ? 'Only an admin or editor with the "Use the point of sale" permission can set up card readers.'
+    : !canSetUpDevices
+      ? DEVICES_KEY_REASON
+      : null
 
   const load = useCallback(
     async (refresh = false) => {
@@ -234,9 +265,11 @@ export function PosDevicesCard({ hostId, canManagePos = false }: PosDevicesCardP
                     </Button>
                   ) : null}
                   {showReaders ? (
-                    <Button size="small" onClick={() => setAdding(true)}>
-                      {'Add card reader'}
-                    </Button>
+                    <BlockedControl blocked={Boolean(readersBlocked)} reason={readersBlocked ?? ''}>
+                      <Button size="small" onClick={() => setAdding(true)}>
+                        {'Add card reader'}
+                      </Button>
+                    </BlockedControl>
                   ) : null}
                 </Stack>
               ),
@@ -280,6 +313,7 @@ export function PosDevicesCard({ hostId, canManagePos = false }: PosDevicesCardP
                     select
                     size="small"
                     label="Register"
+                    disabled={Boolean(readersBlocked)}
                     value={reader.registerId ?? ''}
                     onChange={async (event) => {
                       if (!user) return
@@ -304,15 +338,19 @@ export function PosDevicesCard({ hostId, canManagePos = false }: PosDevicesCardP
                       </MenuItem>
                     ))}
                   </TextField>
-                  <Button
-                    size="small"
-                    onClick={() => setRenaming({ id: reader.id, label: reader.label })}
-                  >
-                    {'Rename'}
-                  </Button>
+                  <BlockedControl blocked={Boolean(readersBlocked)} reason={readersBlocked ?? ''}>
+                    <Button
+                      size="small"
+                      onClick={() => setRenaming({ id: reader.id, label: reader.label })}
+                    >
+                      {'Rename'}
+                    </Button>
+                  </BlockedControl>
                   <Button
                     size="small"
                     color="error"
+                    disabled={Boolean(readersBlocked)}
+                    title={readersBlocked ?? undefined}
                     onClick={async () => {
                       const confirmed = await confirm({
                         title: 'Remove this card reader?',
@@ -340,9 +378,21 @@ export function PosDevicesCard({ hostId, canManagePos = false }: PosDevicesCardP
             )}
           </Stack>
         ) : null}
+        {showReaders && answer?.cellular ? (
+          <Suspense fallback={null}>
+            <PosCellularControl
+              hostId={hostId}
+              cellular={answer.cellular}
+              blocked={readersBlocked}
+              onChanged={() => load()}
+            />
+          </Suspense>
+        ) : null}
         {/* What the readers show while idle (AGL-4048); renders nothing
             where card readers are not offered. */}
-        {showReaders ? <PosReaderSplashSetting hostId={hostId} canManagePos={canManagePos} /> : null}
+        {showReaders ? (
+          <PosReaderSplashSetting hostId={hostId} canManagePos={canManagePos && canSetUpDevices} />
+        ) : null}
         <Stack spacing={1}>
           <Typography variant="subtitle2">{'Customer displays and kiosks'}</Typography>
           {noRegisters ? (
@@ -383,6 +433,8 @@ export function PosDevicesCard({ hostId, canManagePos = false }: PosDevicesCardP
                       <Button
                         size="small"
                         color="error"
+                        disabled={Boolean(pairBlocked)}
+                        title={pairBlocked ?? undefined}
                         onClick={async () => {
                           if (!user) return
                           try {
@@ -455,6 +507,11 @@ export function PosDevicesCard({ hostId, canManagePos = false }: PosDevicesCardP
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
             {'On the reader, open Settings and choose Generate pairing code, then enter the code it shows.'}
           </Typography>
+          {answer?.cellular?.enabled ? (
+            <Typography variant="body2" color="text.secondary">
+              {'4G is on at this store: a Stripe Reader S710 you add gets it too, and is charged for it each month.'}
+            </Typography>
+          ) : null}
           <TextField
             label="Registration code"
             value={code}

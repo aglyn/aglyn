@@ -286,6 +286,8 @@ export function aiLayoutFrameCheck(input: {
       aiSettleMechanicalRules(
         { rootId: stored.rootId, nodes: copy.nodes as unknown as Record<string, AiDoctrineNode> },
         'layout',
+        // And on the last answer, a link that goes nowhere, as the check below reads it (AGL-4076).
+        last ? context : undefined,
       ),
       'layout',
       context,

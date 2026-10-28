@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { registerCustomerDisplayHost } from '@aglyn/aglyn/plugin-manager/plugin-customer-display'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type * as CommerceModel from '../../../model'
 import { newAttemptKey, posDisplayCall } from './pos-api'
@@ -102,6 +103,42 @@ export function usePosDisplay(
       clearInterval(timer)
     }
   }, [uid, hostId, registerId])
+
+  // While this register has a display, any plugin's widget on the page may
+  // put one of its own public pages on it (AGL-4042), through core's seam,
+  // which names no plugin here and no register there.
+  useEffect(() => {
+    if (!connected || !uid || !registerId) return undefined
+    return registerCustomerDisplayHost({
+      show: async (screen) => {
+        const signedIn = userRef.current
+        if (!signedIn) return false
+        try {
+          await posDisplayCall(signedIn, {
+            action: 'push',
+            hostId,
+            registerId,
+            state: { mode: 'screen', screen, promptId: newAttemptKey().slice(0, 32) },
+          })
+          return true
+        } catch {
+          return false
+        }
+      },
+      // Staff closed the plugin's screen (AGL-4042): the display shows the
+      // register's own screen again, unless the register already moved on.
+      close: async (pluginId) => {
+        const signedIn = userRef.current
+        if (!signedIn) return false
+        try {
+          await posDisplayCall(signedIn, { action: 'close-screen', hostId, registerId, pluginId })
+          return true
+        } catch {
+          return false
+        }
+      },
+    })
+  }, [connected, uid, hostId, registerId])
 
   const show = useCallback<PosDisplayControl['show']>(
     async (state) => {
