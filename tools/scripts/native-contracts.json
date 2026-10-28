@@ -1107,6 +1107,7 @@
       "with": "assembleOrgRoleGrants",
       "collect": [
         "AI_ORG_PERMISSIONS",
+        "AI_WORKSPACE_PERMISSIONS",
         "COMMERCE_SITE_PERMISSIONS",
         "COMMERCE_PERMISSIONS",
         "OUTREACH_PERMISSIONS",

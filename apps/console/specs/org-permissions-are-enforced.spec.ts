@@ -174,6 +174,9 @@ const ENFORCED_AS: Record<OrgPermission, readonly string[]> = {
   // passes as `permission`.
   'ai.use': ["'ai.use'"],
   'ai.generate': ["'ai.generate'"],
+  // "Bring a site in" (AGL-4047): the site import doors and the import
+  // step's admission ask it through `memberHasOrgPermission`.
+  'ai.import': ["'ai.import'"],
   // The reservation keys (AGL-4047), commerce's, whose preset is the site
   // role: the rules' reservations and resources block asks "Manage
   // reservations" through `hostSiteRoleKey`, and the walk-in and guests
@@ -244,7 +247,7 @@ describe('every advertised org permission is enforced server-side (AGL-2444)', (
     expect([...CATALOG].sort()).toEqual(
       Object.keys(ENFORCED_AS).sort(),
     )
-    expect(CATALOG.length).toBe(28)
+    expect(CATALOG.length).toBe(29)
   })
 
   it('the search really searches — a key nobody uses finds nothing', () => {

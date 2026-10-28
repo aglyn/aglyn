@@ -184,6 +184,7 @@ Two keys decide who may spend the workspace's AI credits:
 |---|---|---|---|---|
 | **Use AI assistance** (`ai.use`) | The assistant, copy rewrites, and "generate a section" in the Besigner | Yes | Yes | No |
 | **Generate with AI** (`ai.generate`) | AI generation jobs and AI edits — pages, components, emails, campaigns, products, CRM, insights, workflows | Yes | Yes | No |
+| **Bring a site in** (`ai.import`) | Import an existing website into the workspace with Bring my site | Yes | No | No |
 
 Both are ordinary catalog keys: a custom role can grant or deny either, and a
 per-member override wins over the role. An editor given **Viewer** or **Author**

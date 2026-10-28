@@ -7358,6 +7358,7 @@
         "plugins.install",
         "ai.use",
         "ai.generate",
+        "ai.import",
         "commerce.reservations",
         "commerce.walkIns",
         "commerce.orders",
@@ -7370,6 +7371,7 @@
         "posDevices",
         "posBuyHardware",
         "outreach.use",
+        "outreach.manageAll",
         "accounting.manage",
         "manageWaivers",
         "collectWaivers"
@@ -7424,6 +7426,7 @@
         "plugins.install",
         "ai.use",
         "ai.generate",
+        "ai.import",
         "commerce.reservations",
         "commerce.walkIns",
         "commerce.orders",
@@ -7436,6 +7439,7 @@
         "posDevices",
         "posBuyHardware",
         "outreach.use",
+        "outreach.manageAll",
         "accounting.manage",
         "manageWaivers",
         "collectWaivers"
@@ -7644,6 +7648,13 @@
         "scope": "site"
       },
       {
+        "description": "Import an existing website into the workspace with Bring my site.",
+        "group": "ai",
+        "key": "ai.import",
+        "label": "Bring a site in",
+        "scope": "org"
+      },
+      {
         "description": "Edit, cancel and check out stays, and add, change and remove what can be booked. Follows the site role unless a role or member sets it.",
         "group": "commerce",
         "key": "commerce.reservations",
@@ -7739,6 +7750,14 @@
         "group": "outreach",
         "key": "outreach.use",
         "label": "Use Sequences",
+        "pluginId": "outreach",
+        "scope": "org"
+      },
+      {
+        "description": "Change, send from and pause a mailbox or sequence someone else connected, and set up link domains.",
+        "group": "outreach",
+        "key": "outreach.manageAll",
+        "label": "Manage everyone’s Sequences",
         "pluginId": "outreach",
         "scope": "org"
       },

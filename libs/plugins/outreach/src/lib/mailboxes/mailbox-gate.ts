@@ -22,7 +22,7 @@ import {
 } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import type { DecodedIdToken } from 'firebase-admin/auth'
-import { OUTREACH_USE_PERMISSION } from '../constants/bundle-common'
+import { OUTREACH_MANAGE_ALL_PERMISSION, OUTREACH_USE_PERMISSION } from '../constants/bundle-common'
 import type { OutreachApiRefusalReason } from './mailbox-api'
 
 /**
@@ -153,6 +153,8 @@ export async function outreachMemberGate(
     staff,
     orgId,
     org,
-    isOrgAdmin: membership.isOwner,
+    // "Manage everyone's Sequences" (AGL-4047), whose default is the owner
+    // and admin `isOwner` named.
+    isOrgAdmin: membership.permissions[OUTREACH_MANAGE_ALL_PERMISSION] === true,
   }
 }
