@@ -69,7 +69,8 @@ The **AI** chip in the top bar, beside the notifications bell, appears while any
 running or waiting: **AI · plan ready**, **AI · needs attention**, **AI · planning** or
 **AI · working**. Choose it to open that job in the list.
 
-A notification arrives when a plan is ready, when a job finishes and when it stops. Turn
+A notification arrives when a plan is ready, when a job finishes and when it stops. A plan
+still waiting for you a day after it was ready gets one reminder, and never another. Turn
 them off under **AI job needs you**, **AI job finished** and **AI job stopped** in your
 notification settings.
 

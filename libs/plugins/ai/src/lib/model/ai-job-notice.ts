@@ -276,3 +276,35 @@ export function aiJobNotice(
     ...scope,
   }
 }
+
+/**
+ * The one reminder a plan that waits for its confirmation gets (AGL-4076),
+ * a day after it was ready. The same kind of notice as the first one
+ * (`content.aiJobNeedsYou`), so the same switch in the person's notification
+ * settings turns both off, and it opens the same place: AI jobs on the job, or
+ * a site start's build page. It says it is the only one, because it is.
+ */
+export function aiJobPlanReminderNotice(job: AiJobNoticeSource, site: AiJobNoticeSite | null = null): AiJobNotice {
+  const noun = aiJobKindNoun(job.kind)
+  const scope = { orgId: job.orgId, ...(job.hostId ? { hostId: job.hostId } : {}) }
+  const link = aiJobNoticeLink(job, 'needs-review')
+  const on = site ? ` for ${site.name}` : ''
+  if (job.input?.message) {
+    return {
+      type: 'content.aiJobNeedsYou',
+      level: 'warning',
+      title: `Your ${noun}${on} still needs one detail from you`,
+      body: `${job.input.message} Nothing is built until you answer it and confirm the plan. It waits in AI jobs. This is the only reminder.`,
+      link,
+      ...scope,
+    }
+  }
+  return {
+    type: 'content.aiJobNeedsYou',
+    level: 'warning',
+    title: noun === 'AI job' ? `Your plan${on} is still waiting for you` : `Your ${noun} plan${on} is still waiting for you`,
+    body: 'Nothing is built until you confirm the plan. It waits in AI jobs. This is the only reminder.',
+    link,
+    ...scope,
+  }
+}
