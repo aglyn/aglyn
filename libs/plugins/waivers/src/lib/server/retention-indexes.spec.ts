@@ -20,12 +20,17 @@
 
 /**
  * Index coverage for the waivers retention job (AGL-4042), which asks, across
- * every workspace, for the signed waivers kept after an erasure request whose
- * period has run out:
+ * every workspace, for the signed waivers whose period has run out, and for
+ * the sites whose period it has not compared with the store's setting for an
+ * hour:
  *
  *     collectionGroup('waiverSignatures')
  *       .where('retainUntilMs', '<=', now)
  *       .orderBy('retainUntilMs', 'asc')
+ *
+ *     collectionGroup('waiverRetention')
+ *       .where('checkedAtMs', '<=', now - hour)
+ *       .orderBy('checkedAtMs', 'asc')
  *
  * One field, so a single-field index, and Firestore builds those
  * automatically at COLLECTION scope only: the collection-group form needs an
@@ -53,5 +58,33 @@ describe('the retention job’s index', () => {
         { queryScope: 'COLLECTION', order: 'DESCENDING' },
       ]),
     )
+  })
+
+  it('declares a collection-group ascending index on waiverRetention.checkedAtMs', () => {
+    const override = CONFIG.fieldOverrides.find(
+      (entry) => entry.collectionGroup === 'waiverRetention' && entry.fieldPath === 'checkedAtMs',
+    )
+    expect(override?.indexes).toEqual(
+      expect.arrayContaining([
+        { queryScope: 'COLLECTION_GROUP', order: 'ASCENDING' },
+        { queryScope: 'COLLECTION', order: 'ASCENDING' },
+        { queryScope: 'COLLECTION', order: 'DESCENDING' },
+      ]),
+    )
+  })
+
+  it('pages a site’s signatures on the composite index the console list already has', () => {
+    const composite = (CONFIG as unknown as {
+      indexes: Array<{ collectionGroup: string; queryScope: string; fields: Array<{ fieldPath: string; order?: string }> }>
+    }).indexes.find(
+      (entry) =>
+        entry.collectionGroup === 'waiverSignatures' &&
+        entry.queryScope === 'COLLECTION' &&
+        entry.fields.length === 2 &&
+        entry.fields[0].fieldPath === 'hostId' &&
+        entry.fields[1].fieldPath === 'signedAtMs' &&
+        entry.fields[1].order === 'DESCENDING',
+    )
+    expect(composite).toBeDefined()
   })
 })

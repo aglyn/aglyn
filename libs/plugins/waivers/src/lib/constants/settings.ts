@@ -19,13 +19,13 @@ import type { PluginConfigSchema } from '@aglyn/aglyn/plugin-manager/plugin-conf
 import { WAIVERS_PLUGIN_ID } from './bundle-common'
 
 /*==========================================
- * WAIVERS' SETTINGS (AGL-4042): how many years a signed waiver is kept after
- * its signer asks to be erased. Pure data, so the light declarations module
+ * WAIVERS' SETTINGS (AGL-4042): how many years every signed waiver is kept,
+ * an erasure request or not. Pure data, so the light declarations module
  * registers the schema at boot without loading the waiver model; the rule
  * that reads it is `model/waiver-retention.ts`.
  *=========================================*/
 
-/** The years a store keeps a signed waiver after an erasure request: the default and the bounds. */
+/** The years a store keeps a signed waiver: the default and the bounds. */
 export const WAIVER_RETENTION_YEARS = { default: 7, min: 1, max: 30 } as const
 
 /** The settings key the period is stored under. */
@@ -40,11 +40,11 @@ export const WAIVER_RETENTION_YEARS_KEY = 'retentionYears'
 export const WAIVERS_CONFIG_SCHEMA: PluginConfigSchema = {
   pluginId: WAIVERS_PLUGIN_ID,
   notice:
-    'When somebody who signed a waiver asks to be erased, their signed waivers are kept as your record of what they agreed to, for the years you set here, then deleted. Ask your own lawyer how long yours should be kept.',
+    'Every signed waiver is kept as your record of what was agreed to for the years you set here, then deleted. A signer who asks to be erased does not shorten it. Ask your own lawyer how long yours should be kept.',
   fields: [
     {
       key: WAIVER_RETENTION_YEARS_KEY,
-      label: 'Years to keep a signed waiver after its signer asks to be erased',
+      label: 'Years to keep a signed waiver',
       type: 'number',
       min: WAIVER_RETENTION_YEARS.min,
       max: WAIVER_RETENTION_YEARS.max,

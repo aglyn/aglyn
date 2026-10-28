@@ -33,15 +33,31 @@ import {
   type WaiverMinor,
   type WaiverSignMethod,
 } from '../model/waiver-signature'
+import { waiverRetentionStamp } from '../model/waiver-retention'
 import { WaiverFileRefusedError, waiversFiles, waiversRefs } from './db'
 import { sendWaiverEmail, signedCopyEmail } from './emails'
+import { ensureSiteRetentionState, siteRetentionYears } from './retention'
 
 /*==========================================
  * WRITING A SIGNATURE (AGL-4042), whichever door it came through: a signer
  * online, a tablet staff handed over at the window, or a paper waiver staff
  * recorded. Each is keyed by the signing attempt the form minted, so a
- * retried press stores one signature and sends one email.
+ * retried press stores one signature and sends one email. Each is stamped
+ * with the day the store's retention period deletes it (`retention.ts`).
  *=========================================*/
+
+/**
+ * Stamps a new signature with its retention period as the site resolves it
+ * now, and records that the site has signatures stamped with it.
+ */
+async function withRetention(
+  context: SignContext,
+  signature: StoredWaiverSignature,
+): Promise<StoredWaiverSignature> {
+  const years = await siteRetentionYears(context.orgId, context.hostId)
+  await ensureSiteRetentionState(context.orgId, context.hostId, years, signature.signedAtMs)
+  return { ...signature, ...waiverRetentionStamp(signature, years) }
+}
 
 export type SignOutcome =
   | { ok: true; signature: StoredWaiverSignature; replayed: boolean }
@@ -203,7 +219,7 @@ export async function recordSignature(
     }
   }
   const signedText = waiverSignedText(waiver, { consent: true })
-  const signature: StoredWaiverSignature = {
+  const signature: StoredWaiverSignature = await withRetention(context, {
     id,
     orgId: context.orgId,
     hostId: context.hostId,
@@ -236,7 +252,7 @@ export async function recordSignature(
     voidedAt: null,
     voidedBy: null,
     voidReason: null,
-  }
+  })
   try {
     await waiversRefs.signature(context.orgId, id).create(stripStrokesForFirestore(signature))
   } catch (error) {
@@ -327,7 +343,7 @@ export async function recordPaperSignature(
   }
   const signedText = waiverSignedText(waiver, { consent: false })
   const minors: WaiverMinor[] = checked.input.minors
-  const signature: StoredWaiverSignature = {
+  const signature: StoredWaiverSignature = await withRetention(context, {
     id,
     orgId: context.orgId,
     hostId: context.hostId,
@@ -357,7 +373,7 @@ export async function recordPaperSignature(
     voidedAt: null,
     voidedBy: null,
     voidReason: null,
-  }
+  })
   await waiversRefs.signature(context.orgId, id).create(stripStrokesForFirestore(signature))
   return { ok: true, signature: await afterSigning(context, signature, { sendCopy: false }), replayed: false }
 }

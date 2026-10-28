@@ -21,16 +21,21 @@ import { WAIVER_DEFAULT_ADULT_AGE, addDays, isDayKey } from './waiver'
 export { WAIVERS_CONFIG_SCHEMA, WAIVER_RETENTION_YEARS, WAIVER_RETENTION_YEARS_KEY } from '../constants/settings'
 
 /*==========================================
- * KEEPING A SIGNED WAIVER AFTER ITS SIGNER ASKS TO BE ERASED (AGL-4042).
+ * HOW LONG A SIGNED WAIVER IS KEPT (AGL-4042).
  *
- * A signed waiver is the store's record of what a rider agreed to, so an
- * erasure request does not delete it: it is kept for the store's waiver
- * retention period, then deleted with its drawn signature and paper photo.
- * The period is a plugin setting, at the workspace and per site, in whole
- * years, counted from the last day the waiver covers, or, for one signed
- * for minors, from the day the youngest of them reaches the waiver's adult
- * age, whichever is later. Pure: the eraser, the retention job and the
- * console read the same rule from here.
+ * Every signed waiver is the store's record of what a rider agreed to, and
+ * every one is kept for the store's waiver retention period, then deleted
+ * with its drawn signature and paper photo. An erasure request does not
+ * delete it sooner. The period is a plugin setting, at the workspace and per
+ * site, in whole years, counted from the last day the waiver covers, or, for
+ * one signed for minors, from the day the youngest of them reaches the
+ * waiver's adult age, whichever is later.
+ *
+ * A signature is stamped with the date it is deleted (`retainUntilMs`) and
+ * the period that date was counted with (`retentionYears`) when it is
+ * signed; the retention job stamps it again when the store changes the
+ * period. Pure: signing, the eraser, the retention job, the backfill script
+ * and the console read the same rule from here.
  *=========================================*/
 
 /** The period a resolved settings object names, in whole years, inside the bounds. */
@@ -77,4 +82,27 @@ export function waiverRetainUntilMs(signature: WaiverRetentionSubject, years: nu
   const lastKept = yearsAfter(waiverRetentionStartDayKey(signature), years)
   const [y, m, d] = addDays(lastKept, 1).split('-').map(Number)
   return Date.UTC(y, m - 1, d)
+}
+
+/** What a signature carries of its retention: when it is deleted, and the period that was counted with. */
+export interface WaiverRetentionStamp {
+  retainUntilMs: number
+  retentionYears: number
+}
+
+/** A signature's retention stamp under a period of `years`. */
+export function waiverRetentionStamp(signature: WaiverRetentionSubject, years: number): WaiverRetentionStamp {
+  return { retainUntilMs: waiverRetainUntilMs(signature, years), retentionYears: years }
+}
+
+/**
+ * Whether a signature's stored stamp differs from the one its period gives
+ * now: never stamped (signed before every signature was), or stamped under a
+ * period the store has since changed.
+ */
+export function waiverRetentionStampMoved(
+  stored: { retainUntilMs?: number | null; retentionYears?: number | null },
+  stamp: WaiverRetentionStamp,
+): boolean {
+  return stored.retainUntilMs !== stamp.retainUntilMs || stored.retentionYears !== stamp.retentionYears
 }

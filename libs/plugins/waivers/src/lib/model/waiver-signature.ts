@@ -161,11 +161,16 @@ export interface StoredWaiverSignature {
    */
   erasure?: { requestedAtMs: number } | null
   /**
-   * When a kept signature is deleted, epoch ms: the waivers retention job
+   * When the signature is deleted, epoch ms: the end of the store's waiver
+   * retention period (`waiverRetainUntilMs`). The waivers retention job
    * deletes it, with its drawn signature and paper photo, on the first run
-   * after. Set only by an erasure request; absent or `null` otherwise.
+   * after. Stamped on every signature when it is signed, and again when the
+   * store changes the period; absent only on one signed before every
+   * signature was stamped, until the backfill or the job reaches it.
    */
   retainUntilMs?: number | null
+  /** The retention period, in whole years, {@link retainUntilMs} was counted with. */
+  retentionYears?: number | null
 }
 
 /** What the console list shows of one signature (no strokes, no snapshot). */

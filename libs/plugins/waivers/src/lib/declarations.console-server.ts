@@ -23,10 +23,10 @@ export const WAIVERS_RETENTION_JOB_ID = 'waivers-retention'
 
 /**
  * Waivers' console boot registrations (AGL-4042): the retention job, on the
- * console's fifteen-minute tick, which deletes a signed waiver kept after
- * its signer asked to be erased once the store's retention period has run
- * out. The job, the Admin SDK and the settings read load with the first
- * tick, through this plugin's own module.
+ * console's fifteen-minute tick, which stamps a site's signed waivers again
+ * when the store changes its retention period, and deletes each signed
+ * waiver once that period has run out. The job, the Admin SDK and the
+ * settings read load with the first tick, through this plugin's own module.
  */
 export function registerWaiversConsoleServerDeclarations(): void {
   registerPluginConsoleCron(
@@ -34,7 +34,7 @@ export function registerWaiversConsoleServerDeclarations(): void {
       id: WAIVERS_RETENTION_JOB_ID,
       label: 'Waiver retention',
       drives:
-        'Deletes each signed waiver kept after its signer asked to be erased, with its drawn signature and paper photo, once the store’s retention period has run out. If it stops, those waivers are kept past their period.',
+        'Deletes each signed waiver, with its drawn signature and paper photo, once the store’s retention period has run out, and applies a changed period to the waivers already signed. If it stops, signed waivers are kept past their period.',
       run: async (context) => (await import('./server/retention-job')).runWaiversRetentionJob(context),
     },
     { pluginId: WAIVERS_PLUGIN_ID },

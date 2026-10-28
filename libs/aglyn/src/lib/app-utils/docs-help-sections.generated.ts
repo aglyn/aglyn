@@ -685,7 +685,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
   },
   waivers: {
     '#find-a-signature': 'The Signatures card lists the newest first.',
-    '#keeping-signed-waivers': 'A signed waiver is your record of what a rider agreed to.',
+    '#keeping-signed-waivers': 'A signed waiver is your record of what a rider agreed to. Every one is kept for your retention period, then deleted, with its drawn signature and any photo of a paper page.',
     '#versions': 'Every time you save a change to the words, the boxes, the adult age, the minors setting or how long it lasts, the waiver gets a new version.',
     '#write-a-waiver': 'Open Waivers and select New waiver. A waiver takes signatures only while it is Published.',
     '#your-waivers': 'The Waivers card lists every waiver on the site: its title, whether it is a Draft, Published or Retired, its version, how long a signature lasts, and when it last changed.',

@@ -116,6 +116,10 @@ function SignatureBody(props: { hostId: string; signature: SignatureDetail; time
         <Row label="Covers">{signatureWindowLabel(signature)}</Row>
         <Row label="Method">{WAIVER_METHOD_LABELS[signature.method]}</Row>
         <Row label="Adult age">{String(signature.adultAge ?? WAIVER_DEFAULT_ADULT_AGE)}</Row>
+        {/* Every signed waiver is kept for the store's retention period, then deleted (AGL-4042). */}
+        {signature.retainUntilMs && !signature.erasure ? (
+          <Row label="Kept until">{when(signature.retainUntilMs, timeZone)}</Row>
+        ) : null}
       </Stack>
       <Divider />
       <Stack spacing={1}>

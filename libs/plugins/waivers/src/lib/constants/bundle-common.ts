@@ -45,6 +45,13 @@ export const WAIVERS_COLLECTIONS = {
   waivers: 'waivers',
   versions: 'versions',
   signatures: 'waiverSignatures',
+  /**
+   * One document per site that has a signature, at
+   * `orgs/{orgId}/waiverRetention/{hostId}` (AGL-4042): the retention period
+   * the site's signatures are stamped with, and when the retention job last
+   * compared it with the store's setting. Server-only, like the signatures.
+   */
+  retention: 'waiverRetention',
 } as const
 
 /**
