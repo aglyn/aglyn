@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { resolveSiteTimeZone } from '@aglyn/aglyn/app-utils/collection-entry-date'
 import { isAccountBanLockdownReason, normalizeOrgLockdown } from '@aglyn/aglyn/app-utils/lockdown'
 import { platformConsoleOrigin } from '@aglyn/aglyn/app-utils/platform-brand'
 import { POS_CELLULAR_EMAIL_KEYS, sendEmail } from '@aglyn/shared-util-email'
@@ -24,31 +25,49 @@ import {
   listOrgMembers,
   memberHasOrgPermission,
   meterPlatformEmail,
-  notifyOrgAdmins,
+  notifyUsers,
 } from '@aglyn/tenant-data-admin'
 import { filterSuppressedEmails } from '@aglyn/tenant-data-admin/server/email-suppression'
 import {
   orgSystemEmailBrand,
   renderSystemEmailContent,
 } from '@aglyn/tenant-data-admin/server/render-system-email'
-import { posCellularMonthLabel } from '../model/pos-cellular'
+import { posCellularDayLabel, posCellularMonthLabel } from '../model/pos-cellular'
 
 /*==========================================
- * TELLING THE WORKSPACE THAT 4G WAS TURNED OFF (AGL-4038).
+ * TELLING THE WORKSPACE ABOUT AN UNPAID 4G CHARGE (AGL-4038).
  *
- * When a month's 4G charge is still unpaid after the grace period and 4G is
- * turned off for the workspace's stores (`pos-cellular-billing.ts`), the
- * members who hold "Manage billing" get the designed system email
- * (`pos-cellular-emails.ts` in the email library): the month, the amount,
- * the stores, and the way back. The console's notification feed says the
- * same, without mailing it twice.
+ * Twice, from the daily run (`pos-cellular-billing.ts`), to the members who
+ * hold "Manage billing" (the key, never a role): the designed system email
+ * (`pos-cellular-emails.ts` in the email library), and the same words in
+ * their console notification feed, without mailing them twice.
  *
- * Returns whether anyone was told, so the caller records the notice once.
- * Never throws: 4G is already off when this runs, and a lost email must not
- * undo that or stop the daily run.
+ * 1. PAYMENT DUE, the day a month's charge doesn't go through: the amount,
+ *    the month, and the day 4G turns off for the workspace's stores unless
+ *    the open invoice is paid, in the workspace's time zone.
+ * 2. TURNED OFF, when that day comes and it is still unpaid: the month, the
+ *    amount, the stores, and the way back.
+ *
+ * Each returns whether anyone was told (or there was nobody to tell), so the
+ * caller records it once. Neither throws: a lost email must not undo the
+ * step it reports on or stop the daily run.
  *=========================================*/
 
-/** What the notice says. */
+/** What the warning, the day a charge is left open, says. */
+export interface PosCellularPaymentDueNotice {
+  orgId: string
+  month: string
+  /** Formatted, e.g. `$21.65`. */
+  amount: string
+  readers: number
+  openedAtMs: number
+  /** When the grace runs out: 4G turns off for the workspace's stores then, unless it is paid. */
+  turnsOffAtMs: number
+  /** The stores with 4G on now, which lose it then. */
+  hostIds: string[]
+}
+
+/** What the notice that 4G was turned off says. */
 export interface PosCellularTurnedOffNotice {
   orgId: string
   month: string
@@ -60,80 +79,166 @@ export interface PosCellularTurnedOffNotice {
   hostIds: string[]
 }
 
-const day = (ms: number) =>
-  new Date(ms).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+type Firestore = ReturnType<ReturnType<typeof firebaseAdmin.app>['firestore']>
 
+interface Workspace {
+  name: string
+  billingPath: string
+  timeZone: string
+}
+
+/** The workspace as the notices name it; null for a banned account, which is sent nothing (AGL-3420). */
+async function readWorkspace(firestore: Firestore, orgId: string): Promise<Workspace | null> {
+  const org = await firestore.collection('orgs').doc(orgId).get().catch(() => null)
+  const data = (org?.data() ?? null) as Record<string, unknown> | null
+  const lock = normalizeOrgLockdown(data as never)
+  if (lock && isAccountBanLockdownReason(lock.reason)) return null
+  const slug = String(data?.['slug'] ?? '').trim()
+  return {
+    name: String(data?.['name'] ?? '').trim() || 'your workspace',
+    billingPath: slug ? `/${slug}/billing` : '/billing',
+    timeZone: resolveSiteTimeZone(data as { timeZone?: string } | null, null),
+  }
+}
+
+/** The stores' names, one per line, or `fallback` when none is left. */
+async function storeNames(firestore: Firestore, hostIds: readonly string[], fallback: string): Promise<string> {
+  const hosts = await Promise.all(
+    hostIds.map((hostId) => firestore.collection('hosts').doc(hostId).get().catch(() => null)),
+  )
+  const names = hosts
+    .map((host, index) =>
+      host?.exists ? hostDisplayName(host.data() as Record<string, unknown>, hostIds[index]) : null,
+    )
+    .filter((name): name is string => Boolean(name))
+  return names.join('\n') || fallback
+}
+
+/**
+ * Emails the members who hold "Manage billing" and puts the same words in
+ * their console feed. True once someone was emailed, or nobody can be.
+ */
+async function tellBillingManagers(
+  orgId: string,
+  workspace: Workspace,
+  message: {
+    key: string
+    merge: Record<string, string>
+    title: string
+    body: string
+  },
+): Promise<boolean> {
+  // Whoever may pay it: the workspace's "Manage billing" key, not a role.
+  const members = await listOrgMembers(orgId)
+  const managers = (
+    await Promise.all(
+      members.map(async (member) =>
+        (await memberHasOrgPermission(orgId, member, 'billing.manage').catch(() => false)) ? member : null,
+      ),
+    )
+  ).filter((member): member is (typeof members)[number] => member !== null)
+  const addresses = managers.map((member) => String((member as { email?: unknown }).email ?? '').trim()).filter(Boolean)
+  const recipients = await filterSuppressedEmails(addresses)
+  let told = false
+  if (recipients.length) {
+    const brand = await orgSystemEmailBrand(orgId)
+    const content = await renderSystemEmailContent(message.key, message.merge, brand, {
+      subject: message.title,
+      text: `${message.title}\n\n${message.body}\n\n${message.merge['cellular.billingUrl']}`,
+    })
+    const results = await Promise.all(
+      recipients.map((to) =>
+        sendEmail({
+          to,
+          ...content,
+          ...(brand.fromName ? { fromName: brand.fromName } : {}),
+          context: message.key,
+        }),
+      ),
+    )
+    const sent = results.filter((result) => result.sent).length
+    await meterPlatformEmail(sent)
+    told = sent > 0
+  }
+  await notifyUsers(
+    managers.map((member) => String((member as { $id?: unknown }).$id ?? '')).filter(Boolean),
+    {
+      type: 'billing.paymentFailed',
+      title: message.title,
+      body: message.body,
+      level: 'warning',
+      link: workspace.billingPath,
+      orgId,
+    },
+    // The designed email above is the email; the notification is the feed.
+    { skipEmail: true },
+  )
+  return told || recipients.length === 0
+}
+
+const readersText = (readers: number) => `${readers} Stripe Reader S710${readers === 1 ? '' : 's'}`
+
+/**
+ * The day a month's charge is left open: it is due, and 4G turns off for the
+ * workspace's stores on the day its grace runs out unless it is paid.
+ */
+export async function sendPosCellularPaymentDueNotice(notice: PosCellularPaymentDueNotice): Promise<boolean> {
+  try {
+    const firestore = firebaseAdmin.app().firestore()
+    const workspace = await readWorkspace(firestore, notice.orgId)
+    if (!workspace) return false
+    const month = posCellularMonthLabel(notice.month)
+    const turnsOffOn = posCellularDayLabel(notice.turnsOffAtMs, workspace.timeZone)
+    const merge: Record<string, string> = {
+      'org.name': workspace.name,
+      'cellular.month': month,
+      'cellular.amount': notice.amount,
+      'cellular.readers': readersText(notice.readers),
+      'cellular.openedOn': posCellularDayLabel(notice.openedAtMs, workspace.timeZone),
+      'cellular.turnsOffOn': turnsOffOn,
+      // Blank when no store has 4G now: the email then leaves the row out.
+      'cellular.stores': await storeNames(firestore, notice.hostIds, ''),
+      'cellular.billingUrl': `${platformConsoleOrigin()}${workspace.billingPath}`,
+    }
+    return await tellBillingManagers(notice.orgId, workspace, {
+      key: POS_CELLULAR_EMAIL_KEYS.paymentDue,
+      merge,
+      title: `4G turns off on ${turnsOffOn} unless the ${month} charge is paid`,
+      body:
+        `The 4G charge of ${notice.amount} for ${month} didn’t go through. ` +
+        `Pay it on the Billing page before ${turnsOffOn} to keep 4G on for your stores.`,
+    })
+  } catch (error) {
+    console.error('[pos-cellular] the payment-due notice failed', notice.orgId, notice.month, error)
+    return false
+  }
+}
+
+/** The day 4G was turned off for the workspace's stores because a month's charge stayed unpaid. */
 export async function sendPosCellularTurnedOffNotice(notice: PosCellularTurnedOffNotice): Promise<boolean> {
   try {
     const firestore = firebaseAdmin.app().firestore()
-    const org = await firestore.collection('orgs').doc(notice.orgId).get().catch(() => null)
-    // A ban is a ban (AGL-3420): after its notice the account is sent nothing.
-    const lock = normalizeOrgLockdown(org?.data() as never)
-    if (lock && isAccountBanLockdownReason(lock.reason)) return false
-    const slug = String(org?.get('slug') ?? '').trim()
-    const billingPath = slug ? `/${slug}/billing` : '/billing'
-    const hosts = await Promise.all(
-      notice.hostIds.map((hostId) => firestore.collection('hosts').doc(hostId).get().catch(() => null)),
-    )
-    const stores = hosts
-      .map((host, index) =>
-        host?.exists ? hostDisplayName(host.data() as Record<string, unknown>, notice.hostIds[index]) : null,
-      )
-      .filter((name): name is string => Boolean(name))
+    const workspace = await readWorkspace(firestore, notice.orgId)
+    if (!workspace) return false
     const month = posCellularMonthLabel(notice.month)
     const merge: Record<string, string> = {
-      'org.name': String(org?.get('name') ?? '').trim() || 'your workspace',
+      'org.name': workspace.name,
       'cellular.month': month,
       'cellular.amount': notice.amount,
-      'cellular.readers': `${notice.readers} Stripe Reader S710${notice.readers === 1 ? '' : 's'}`,
-      'cellular.openedOn': day(notice.openedAtMs),
-      'cellular.turnedOffOn': day(notice.turnedOffAtMs),
-      'cellular.stores': stores.join('\n') || 'Your stores',
-      'cellular.billingUrl': `${platformConsoleOrigin()}${billingPath}`,
+      'cellular.readers': readersText(notice.readers),
+      'cellular.openedOn': posCellularDayLabel(notice.openedAtMs, workspace.timeZone),
+      'cellular.turnedOffOn': posCellularDayLabel(notice.turnedOffAtMs, workspace.timeZone),
+      'cellular.stores': await storeNames(firestore, notice.hostIds, 'Your stores'),
+      'cellular.billingUrl': `${platformConsoleOrigin()}${workspace.billingPath}`,
     }
-    const title = `4G is off for your card readers: the ${month} charge is unpaid`
-    const body =
-      `The 4G charge of ${notice.amount} for ${month} is still unpaid, so 4G was turned off for your stores. ` +
-      'Pay it on the Billing page, then turn 4G on again from each store’s POS devices card.'
-
-    // Whoever may pay it: the workspace's "Manage billing" key, not a role.
-    const members = await listOrgMembers(notice.orgId)
-    const managers = await Promise.all(
-      members.map(async (member) =>
-        (await memberHasOrgPermission(notice.orgId, member, 'billing.manage').catch(() => false))
-          ? String((member as { email?: unknown }).email ?? '').trim()
-          : '',
-      ),
-    )
-    const recipients = await filterSuppressedEmails(managers.filter(Boolean))
-    let told = false
-    if (recipients.length) {
-      const brand = await orgSystemEmailBrand(notice.orgId)
-      const content = await renderSystemEmailContent(POS_CELLULAR_EMAIL_KEYS.turnedOffUnpaid, merge, brand, {
-        subject: title,
-        text: `${title}\n\n${body}\n\n${merge['cellular.billingUrl']}`,
-      })
-      const results = await Promise.all(
-        recipients.map((to) =>
-          sendEmail({
-            to,
-            ...content,
-            ...(brand.fromName ? { fromName: brand.fromName } : {}),
-            context: POS_CELLULAR_EMAIL_KEYS.turnedOffUnpaid,
-          }),
-        ),
-      )
-      const sent = results.filter((result) => result.sent).length
-      await meterPlatformEmail(sent)
-      told = sent > 0
-    }
-    await notifyOrgAdmins(
-      notice.orgId,
-      { type: 'billing.paymentFailed', title, body, level: 'warning', link: billingPath },
-      // The designed email above is the email; the notification is the feed.
-      { skipEmail: true },
-    )
-    return told || recipients.length === 0
+    return await tellBillingManagers(notice.orgId, workspace, {
+      key: POS_CELLULAR_EMAIL_KEYS.turnedOffUnpaid,
+      merge,
+      title: `4G is off for your card readers: the ${month} charge is unpaid`,
+      body:
+        `The 4G charge of ${notice.amount} for ${month} is still unpaid, so 4G was turned off for your stores. ` +
+        'Pay it on the Billing page, then turn 4G on again from each store’s POS devices card.',
+    })
   } catch (error) {
     console.error('[pos-cellular] the turned-off notice failed', notice.orgId, notice.month, error)
     return false

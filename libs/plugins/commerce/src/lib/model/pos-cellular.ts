@@ -65,11 +65,12 @@ import {
  * charge from the next calendar month.
  *
  * A charge that does not collect stays open on the workspace's Billing page
- * and staff are alerted. Still unpaid after the grace period, 4G is turned
- * off at Stripe for every store of the workspace, and the people who manage
- * its billing are told; paying does not turn it back on, and it cannot be
- * turned on again until the charge is paid. A workspace deleted mid-month is
- * charged for that final month as it is erased.
+ * and staff are alerted; the people who manage its billing are warned the
+ * same day, once, of the day 4G turns off unless it is paid. Still unpaid
+ * after the grace period, 4G is turned off at Stripe for every store of the
+ * workspace, and they are told again; paying does not turn it back on, and
+ * it cannot be turned on again until the charge is paid. A workspace deleted
+ * mid-month is charged for that final month as it is erased.
  *=========================================*/
 
 export const POS_CELLULAR_ENV = {
@@ -343,7 +344,12 @@ export interface PosCellularCharge {
   suspendedAtMs?: number | null
   /** The stores 4G was turned off for, whose notice clears once it is paid. */
   suspendedHostIds?: string[]
-  /** When the people who manage the workspace's billing were told. */
+  /**
+   * When the people who manage the workspace's billing were warned, as the
+   * charge was left open, of the day 4G turns off unless it is paid.
+   */
+  warnedAtMs?: number | null
+  /** When the people who manage the workspace's billing were told 4G was turned off. */
   noticeSentAtMs?: number | null
   /** Charged as the workspace was erased, for the month it was deleted in (or the one before). */
   final?: boolean
@@ -368,6 +374,31 @@ export function posCellularOverdue(
   now: number,
 ): boolean {
   return charge.state === 'open' && now >= posCellularGraceEndsAtMs(charge, graceDays)
+}
+
+/**
+ * Whether the people who manage a workspace's billing are still owed the
+ * warning that 4G turns off unless the charge is paid: an open charge not yet
+ * warned of. Never a charge made as the workspace was erased, whose 4G is
+ * already off and whose members are gone.
+ */
+export function posCellularWarningDue(
+  charge: Pick<PosCellularCharge, 'state' | 'warnedAtMs' | 'final'>,
+): boolean {
+  return charge.state === 'open' && !charge.warnedAtMs && !charge.final
+}
+
+/**
+ * A day as the workspace reads it, `November 16, 2026`, in its time zone
+ * (UTC for a zone the runtime cannot format in).
+ */
+export function posCellularDayLabel(ms: number, timeZone = 'UTC'): string {
+  const options = { month: 'long', day: 'numeric', year: 'numeric' } as const
+  try {
+    return new Date(ms).toLocaleDateString('en-US', { ...options, timeZone })
+  } catch {
+    return new Date(ms).toLocaleDateString('en-US', { ...options, timeZone: 'UTC' })
+  }
 }
 
 /**

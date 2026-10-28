@@ -1267,9 +1267,11 @@ about 4G shows anywhere.
 Turning 4G on takes the workspace's **Manage billing** permission as well as
 **Registers and devices**; turning it off takes only **Registers and devices**.
 A charge that doesn't collect stays open on the workspace's Billing page and
-raises an operator alert. If it is still unpaid after the grace period, 4G is
-turned off at Stripe for all of the workspace's stores, the members who manage
-its billing are emailed, and another operator alert is raised. Paying doesn't
+raises an operator alert, and the members who manage the workspace's billing
+are emailed once, that day, with the date 4G turns off unless it is paid. If it
+is still unpaid after the grace period, 4G is turned off at Stripe for all of
+the workspace's stores, those members are emailed again, and another operator
+alert is raised. Paying doesn't
 turn 4G back on: the merchant turns it on again once the charge is paid. When
 a workspace is erased, its erasure charges the month it is erased in (and the
 month before, if the monthly run has not charged it yet) before any data is

@@ -65,6 +65,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
 import { POS_CELLULAR_ENV, type PosCellularCharge, type PosCellularReaderRecord } from '../model/pos-cellular'
 import { posReadersHandler } from './pos-readers'
 import { createPosCellularOrgEraser, runPosCellularBilling } from './pos-cellular-billing'
+import type { PosCellularPaymentDueNotice } from './pos-cellular-notify'
 
 interface StripeCall {
   method: string
@@ -519,12 +520,18 @@ describe('alert, then turn off: a charge unpaid past its grace (AGL-4038)', () =
           notices.push(notice as unknown as Record<string, unknown>)
           return true
         },
+        warn: async (notice) => {
+          warnings.push(notice)
+          return true
+        },
       },
     )
   const chargeDoc = () => fakeDocs.get('posCellularCharges/org-1_2026-10') as PosCellularCharge | undefined
+  const warnings: PosCellularPaymentDueNotice[] = []
 
   beforeEach(() => {
     notices.length = 0
+    warnings.length = 0
     turnedOff.length = 0
     invoice = { status: 'open', amountPaidCents: 0 }
     // October's charge did not go through on November 2: open, with its invoice.
@@ -540,6 +547,8 @@ describe('alert, then turn off: a charge unpaid past its grace (AGL-4038)', () =
       createdAtMs: OPENED,
       updatedAtMs: OPENED,
       openedAtMs: OPENED,
+      // Warned the day it was left open (below: warn at the start).
+      warnedAtMs: OPENED,
     })
     fakeDocs.set('hosts/host-1/terminal/config', {
       stripeLocationId: 'tml_1',
@@ -560,12 +569,13 @@ describe('alert, then turn off: a charge unpaid past its grace (AGL-4038)', () =
     })
   })
 
-  it('keeps 4G on through the grace period, with staff already alerted', async () => {
+  it('keeps 4G on through the grace period, with staff already alerted and the workspace already warned', async () => {
     const report = await run(OPENED + 14 * DAY - 1)
     expect(report.turnedOff).toBe(0)
     expect(turnedOff).toEqual([])
     expect(chargeDoc()?.state).toBe('open')
     expect(fakeDocs.get('hosts/host-1/terminal/config')?.['cellularEnabled']).toBe(true)
+    expect(warnings).toEqual([])
   })
 
   it('turns 4G off at Stripe once the grace runs out, tells the workspace and staff once, and closes the readers', async () => {
@@ -651,6 +661,164 @@ describe('alert, then turn off: a charge unpaid past its grace (AGL-4038)', () =
     expect(turnedOff).toEqual(['tmc_1'])
     expect(notices).toHaveLength(1)
     expect(chargeDoc()).toMatchObject({ state: 'suspended', noticeSentAtMs: OPENED + 15 * DAY })
+  })
+})
+
+describe('warn at the start: the day a charge is left open (AGL-4038)', () => {
+  const DAY = 24 * 60 * 60 * 1000
+  const HOUR = 60 * 60 * 1000
+  const NOV_2 = Date.UTC(2026, 10, 2, 9)
+  const warnings: PosCellularPaymentDueNotice[] = []
+  const notices: unknown[] = []
+  let answer: Partial<OrgUsageInvoiceResult> = {}
+  let invoice: { status: string; amountPaidCents: number } | null = null
+  let warnAnswer = true
+  const run = (at: number) =>
+    runPosCellularBilling(
+      { isLocked: async () => false },
+      {
+        now: () => at,
+        charge: async () =>
+          ({ ok: false, invoiceId: null, status: null, totalCents: 0, amountPaidCents: 0, requiresAction: false, error: null, ...answer }) as OrgUsageInvoiceResult,
+        readBilling: async () => mockBilling,
+        turnOff: async () => true,
+        invoiceStatus: async () => invoice,
+        notify: async (notice) => {
+          notices.push(notice)
+          return true
+        },
+        warn: async (notice) => {
+          warnings.push(notice)
+          return warnAnswer
+        },
+      },
+    )
+  const chargeDoc = () => fakeDocs.get('posCellularCharges/org-1_2026-10') as PosCellularCharge | undefined
+  /** October's charge, already left open on `openedAtMs` and not yet warned of. */
+  const seedOpen = (fields: Partial<PosCellularCharge> = {}) =>
+    fakeDocs.set('posCellularCharges/org-1_2026-10', {
+      orgId: 'org-1',
+      month: '2026-10',
+      readers: 1,
+      amountCents: 1_061,
+      state: 'open',
+      invoiceId: 'in_due',
+      paidCents: 0,
+      attempts: 1,
+      createdAtMs: NOV_2,
+      updatedAtMs: NOV_2,
+      openedAtMs: NOV_2,
+      ...fields,
+    })
+
+  beforeEach(() => {
+    warnings.length = 0
+    notices.length = 0
+    answer = { ok: false, invoiceId: 'in_due', error: 'Your card was declined.' }
+    invoice = { status: 'open', amountPaidCents: 0 }
+    warnAnswer = true
+    fakeDocs.set('posCellularReaders/host-1_tmr_gate710', {
+      orgId: 'org-1',
+      hostId: 'host-1',
+      readerId: 'tmr_gate710',
+      serialNumber: 'STRS710-1',
+      stripeConfigurationId: 'tmc_1',
+      enabled: true,
+      periods: [{ fromMs: Date.UTC(2026, 8, 1), toMs: null }],
+      disabledAtMs: null,
+      updatedAtMs: 1,
+    })
+  })
+
+  it('warns in the run that leaves it open: the amount, the stores, and the day 4G turns off', async () => {
+    const report = await run(NOV_2)
+    expect(report).toMatchObject({ open: 1, warned: 1, turnedOff: 0 })
+    expect(warnings).toEqual([
+      {
+        orgId: 'org-1',
+        month: '2026-10',
+        amount: '$10.61',
+        readers: 1,
+        openedAtMs: NOV_2,
+        turnsOffAtMs: NOV_2 + 14 * DAY,
+        hostIds: ['host-1'],
+      },
+    ])
+    expect(chargeDoc()).toMatchObject({ state: 'open', openedAtMs: NOV_2, warnedAtMs: NOV_2 })
+    // Staff hear of it as before.
+    expect(mockAlerts.map((alert) => alert.type)).toEqual(['commerce.posCellularChargeFailed'])
+  })
+
+  it('is sent once: later runs in the grace send nothing more, and the turn-off still tells them', async () => {
+    await run(NOV_2)
+    await run(NOV_2 + 6 * HOUR)
+    await run(NOV_2 + 13 * DAY)
+    expect(warnings).toHaveLength(1)
+    expect(notices).toEqual([])
+    const report = await run(NOV_2 + 14 * DAY)
+    expect(report.turnedOff).toBe(1)
+    expect(warnings).toHaveLength(1)
+    expect(notices).toHaveLength(1)
+  })
+
+  it('sends nothing for a charge paid before the run asks Stripe', async () => {
+    invoice = { status: 'paid', amountPaidCents: 1_061 }
+    const report = await run(NOV_2)
+    expect(report).toMatchObject({ open: 1, paidLate: 1, warned: 0 })
+    expect(warnings).toEqual([])
+    expect(chargeDoc()).toMatchObject({ state: 'paid', paidCents: 1_061 })
+  })
+
+  it('sends nothing else once it is paid before the day', async () => {
+    await run(NOV_2)
+    invoice = { status: 'paid', amountPaidCents: 1_061 }
+    await run(NOV_2 + 3 * DAY)
+    await run(NOV_2 + 14 * DAY)
+    expect(warnings).toHaveLength(1)
+    expect(notices).toEqual([])
+    expect(chargeDoc()).toMatchObject({ state: 'paid' })
+  })
+
+  it('waits for Stripe’s word, and is tried again when nobody could be told', async () => {
+    invoice = null
+    await run(NOV_2)
+    expect(warnings).toEqual([])
+    expect(chargeDoc()?.warnedAtMs).toBeUndefined()
+    invoice = { status: 'open', amountPaidCents: 0 }
+    warnAnswer = false
+    expect((await run(NOV_2 + 6 * HOUR)).warned).toBe(0)
+    expect(chargeDoc()?.warnedAtMs).toBeNull()
+    warnAnswer = true
+    expect((await run(NOV_2 + 12 * HOUR)).warned).toBe(1)
+    expect(chargeDoc()?.warnedAtMs).toBe(NOV_2 + 12 * HOUR)
+    // The day it names is still the grace from the day the charge was left open.
+    expect(warnings.map((notice) => notice.turnsOffAtMs)).toEqual([NOV_2 + 14 * DAY, NOV_2 + 14 * DAY])
+  })
+
+  it('at the grace edge: warned up to its last instant, turned off (and not warned) from it', async () => {
+    seedOpen()
+    expect(await run(NOV_2 + 14 * DAY - 1)).toMatchObject({ warned: 1, turnedOff: 0 })
+    expect(warnings.map((notice) => notice.turnsOffAtMs)).toEqual([NOV_2 + 14 * DAY])
+    seedOpen()
+    warnings.length = 0
+    expect(await run(NOV_2 + 14 * DAY)).toMatchObject({ warned: 0, turnedOff: 1 })
+    expect(warnings).toEqual([])
+    expect(notices).toHaveLength(1)
+  })
+
+  it('pins the day a charge from before that day was stored counts from, so the turn-off keeps the day it named', async () => {
+    seedOpen({ openedAtMs: undefined })
+    await run(NOV_2 + DAY)
+    expect(warnings.map((notice) => notice.turnsOffAtMs)).toEqual([NOV_2 + 14 * DAY])
+    expect(chargeDoc()).toMatchObject({ openedAtMs: NOV_2, warnedAtMs: NOV_2 + DAY })
+    expect((await run(NOV_2 + 14 * DAY - 1)).turnedOff).toBe(0)
+    expect((await run(NOV_2 + 14 * DAY)).turnedOff).toBe(1)
+  })
+
+  it('never warns of a charge made as the workspace was erased', async () => {
+    seedOpen({ final: true })
+    expect((await run(NOV_2)).warned).toBe(0)
+    expect(warnings).toEqual([])
   })
 })
 

@@ -27,6 +27,14 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — a warning before 4G turns off
+
+- **[The date 4G turns off, the day a charge is missed](commerce-and-bookings/commerce/pos-hardware.md#reader-4g)** —
+  when a month's 4G charge for your card readers doesn't go through, everyone
+  with **Manage billing** gets an email and a console notification that day. They
+  say how much is due and the date 4G turns off for your stores unless the
+  invoice is paid. Pay it on the **Billing** page before then and 4G stays on.
+
 ## October 2026 — 4G for card readers: who turns it on, and unpaid months
 
 - **[Turning on 4G needs Manage billing](commerce-and-bookings/commerce/pos-hardware.md#reader-4g)** —
