@@ -106,9 +106,30 @@ address. If you connect a custom domain later, links and QR codes you already
 handed out still work: your `.aglyn.app` address sends signers on to it.
 
 The page is made for phones. The signer reads the waiver, fills in their name, email,
-phone and date of birth, ticks the boxes, signs with a finger or types their name, and
-agrees to sign electronically. They see a confirmation, and a signed copy goes to
-their email.
+phone and date of birth, ticks the boxes, agrees to sign electronically, and signs with
+a finger or types their name. They see a confirmation with **Download your signed copy
+(PDF)**, and a signed copy goes to their email.
+
+### Signing electronically {#signing-electronically}
+
+Before the signature, under **Signing electronically**, the signer ticks a box agreeing
+to sign electronically, for themselves and any minors they list. The wording says what
+that covers (this waiver and its signed copy), what they need (a device with a web
+browser, and a way to open a PDF), that they can sign on paper instead, and that after
+signing they can ask you for a paper copy at no charge, change the email for their copy,
+or withdraw their agreement for anything not yet sent, by contacting you. It names your
+business and how to reach you: the site's [**Contact email** and **Contact
+phone**](../../building-sites/seo/overview.md#entity-contact), or else the **Support
+email** under **Setup → Details → Business details**. The signing page shows the same
+contact under the waiver's title, and the signed copy email repeats it. Add one so
+signers know how to reach you.
+
+Each signature keeps the exact words its signer agreed to, with their version. Signatures
+taken under the earlier wording keep that wording.
+
+On the window's tablet or your register's customer display, the confirmation shows a code
+the signer scans with their phone to download their signed copy, so someone who gave no
+email still keeps one. The download link and the code work for an hour.
 
 The **/sign-waiver** page is there on every site with Waivers on. To design that page
 yourself, make a page at that address with a **Sign waiver** element on it, and your
@@ -171,6 +192,11 @@ birth together**: the person who signed, or a minor a parent or guardian listed 
 their waiver. Capital letters and extra spaces in the name don't matter; the spelling
 and the date of birth must be the same. A name on its own is never a match, because
 two riders can share one.
+
+When the customer is one of your [contacts](../../content-and-data/crm/contact-record.md)
+and their record on this site has a **Birthdate**, that birth date is used, with
+their name, so you don't have to ask. A birth date another of your sites keeps is
+never used.
 
 When a customer shows **Waiver not matched — check by name**, select **Find by name**.
 Ask the rider their date of birth, enter it beside their name and select **Check**:

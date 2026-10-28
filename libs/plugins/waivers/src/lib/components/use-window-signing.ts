@@ -31,8 +31,9 @@ export function useWindowSigning(hostId: string) {
   const { request } = useWaiversFetch()
   return useCallback(
     async (payload: Record<string, unknown>) => {
-      const { signature } = await request<{
+      const { signature, copyUrl } = await request<{
         signature: { signerName: string; minors: Array<{ name: string }>; validThroughDayKey: string; dayKey: string; email: string }
+        copyUrl?: string | null
       }>(WAIVERS_API_ROUTES.signAtWindow, { body: { ...payload, hostId } })
       return {
         people: [signature.signerName, ...signature.minors.map((minor) => minor.name)],
@@ -41,6 +42,7 @@ export function useWindowSigning(hostId: string) {
             ? `Good for ${formatDayKey(signature.dayKey)}`
             : `Good ${formatDayKey(signature.dayKey)} through ${formatDayKey(signature.validThroughDayKey)}`,
         emailed: Boolean(signature.email),
+        copyUrl: copyUrl ?? null,
       }
     },
     [request, hostId],

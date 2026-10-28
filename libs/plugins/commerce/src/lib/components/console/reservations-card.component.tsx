@@ -18,6 +18,7 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import * as CommerceModel from '../../model'
+import { reservationPermissionRefusal } from '../../model/plugin-permissions'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -58,6 +59,15 @@ import { pluginDocsHelp } from '@aglyn/aglyn'
 
 export interface ReservationsCardProps {
   hostId: string
+  /**
+   * "Manage reservations" (`commerce.reservations`, AGL-4047) on this site:
+   * edit, cancel and check out stays and change what can be booked. The rules
+   * decide it; this only disables the controls with the reason. Absent reads
+   * as held, so a surface that does not pass it shows the card as before.
+   */
+  canManage?: boolean
+  /** "Book walk-ins and change guests" (`commerce.walkIns`), which the routes ask. */
+  canWalkIn?: boolean
 }
 
 /** A stay's guest count after booking (AGL-4043), loaded the first time it opens. */
@@ -135,7 +145,13 @@ function fewLeftAtProblem(fewLeftAt: number | undefined): string | null {
  * widget books against the same docs.
  */
 export function ReservationsCard(props: ReservationsCardProps) {
-  const { hostId } = props
+  const { hostId, canManage = true, canWalkIn = true } = props
+  // The permissions this member lacks here, named, for the line under the
+  // card's actions (AGL-4047): a disabled control says why.
+  const missing = [
+    ...(canManage ? [] : [reservationPermissionRefusal('commerce.reservations')]),
+    ...(canWalkIn ? [] : [reservationPermissionRefusal('commerce.walkIns')]),
+  ]
   // Every reservation is paid when it is booked, so a store that cannot
   // charge turns each guest away; the card says so up front.
   const payments = useMerchantPayments(hostId)
@@ -530,6 +546,7 @@ export function ReservationsCard(props: ReservationsCardProps) {
               </Stack>
               <Button
                 size="small"
+                disabled={!canManage}
                 onClick={() => setResourceDraft({ id: resource.$id, ...resource })}
               >
                 {'Edit'}
@@ -537,6 +554,7 @@ export function ReservationsCard(props: ReservationsCardProps) {
               <Button
                 size="small"
                 color="error"
+                disabled={!canManage}
                 onClick={async () => {
                   const confirmed = await confirm({
                     title: 'Remove this resource?',
@@ -587,6 +605,7 @@ export function ReservationsCard(props: ReservationsCardProps) {
         <Stack direction="row" spacing={1}>
           <Button
             size="small"
+            disabled={!canManage}
             onClick={() =>
               setResourceDraft({
                 id: null,
@@ -601,7 +620,7 @@ export function ReservationsCard(props: ReservationsCardProps) {
           </Button>
           <Button
             size="small"
-            disabled={(resourceDocs?.length ?? 0) === 0}
+            disabled={!canWalkIn || (resourceDocs?.length ?? 0) === 0}
             onClick={() =>
               setWalkIn({
                 resourceId: resourceDocs?.[0]?.$id ?? '',
@@ -616,6 +635,11 @@ export function ReservationsCard(props: ReservationsCardProps) {
             {'Walk-in'}
           </Button>
         </Stack>
+        {missing.map((reason) => (
+          <Typography key={reason} variant="caption" color="text.secondary">
+            {reason}
+          </Typography>
+        ))}
 
         <Typography variant="subtitle2" sx={{ mt: 1 }}>
           {'Upcoming & recent stays'}
@@ -655,12 +679,13 @@ export function ReservationsCard(props: ReservationsCardProps) {
               />
               {reservation.status === 'confirmed' ? (
                 <>
-                  <Button size="small" onClick={handleStatus(reservation, 'checked_in')}>
+                  <Button size="small" disabled={!canManage} onClick={handleStatus(reservation, 'checked_in')}>
                     {'Check in'}
                   </Button>
                   <Button
                     size="small"
                     color="error"
+                    disabled={!canManage}
                     onClick={handleStatus(reservation, 'no_show')}
                   >
                     {'No-show'}
@@ -670,6 +695,7 @@ export function ReservationsCard(props: ReservationsCardProps) {
               {reservation.status === 'checked_in' ? (
                 <Button
                   size="small"
+                  disabled={!canManage}
                   onClick={async () => {
                     // Folio settlement (AGL-317): surface unpaid room
                     // charges before the guest leaves.
@@ -702,7 +728,7 @@ export function ReservationsCard(props: ReservationsCardProps) {
                 </Button>
               ) : null}
               {GUESTS_OPEN_STATUSES.includes(reservation.status) ? (
-                <Button size="small" onClick={() => setGuestsFor(reservation.$id)}>
+                <Button size="small" disabled={!canWalkIn} onClick={() => setGuestsFor(reservation.$id)}>
                   {'Guests'}
                 </Button>
               ) : null}
@@ -710,6 +736,7 @@ export function ReservationsCard(props: ReservationsCardProps) {
                 <Button
                   size="small"
                   color="error"
+                  disabled={!canManage}
                   onClick={handleStatus(reservation, 'cancelled')}
                 >
                   {'Cancel'}

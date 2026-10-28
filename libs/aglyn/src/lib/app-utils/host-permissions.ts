@@ -23,7 +23,7 @@ import type {
   OrgRole,
 } from '../foundation'
 import { listPluginOrgPermissions } from '../plugin-manager/plugin-entitlements'
-import { refinePermissionMap } from '../plugin-manager/plugin-permissions'
+import { refinePermissionMap, type PermissionRefinement } from '../plugin-manager/plugin-permissions'
 import { hostRoleFor, isOrgWideMember } from './organizations'
 import {
   ORG_PERMISSION_REFINEMENTS,
@@ -80,6 +80,15 @@ function noHostPermissions(): Record<HostPermissionKey, boolean> {
 }
 
 /**
+ * The catalog's refinements whose key and broader key are both in `map`
+ * (AGL-4047): the links a per-site map can settle on its own. A link to a
+ * key the map does not carry would read that key as refused and add it.
+ */
+function refinementsWithin(map: Readonly<Record<string, boolean>>): PermissionRefinement[] {
+  return ORG_PERMISSION_REFINEMENTS.filter(([key, parent]) => key in map && parent in map)
+}
+
+/**
  * A collaborator's verdict on ONE site for every per-site key, or null where
  * they have no access to that site at all. An absent toggle reads as the host
  * role's default, which is what makes a member document written before
@@ -100,7 +109,130 @@ export function resolveCollaboratorHostPermissions(
       if (typeof value === 'boolean') merged[key] = value
     }
   }
-  return merged
+  // A per-site key that follows or refines another per-site key (AGL-4047)
+  // takes its verdict from that key on this site where the site sets nothing
+  // for it, as the org catalog's resolver does with a custom role.
+  return refinePermissionMap(merged, refinementsWithin(merged), [toggles])
+}
+
+/*
+ * KEYS WHOSE PRESET IS THE SITE ROLE (AGL-4047).
+ *
+ * Some checks were written against the member's role on a site: who may book
+ * a walk-in, change a stay or edit a site's reservations asked whether their
+ * `memberRoles` entry was Admin, Editor or Author. Roles are only presets of
+ * permissions, so those checks became keys, and a key that replaces a gate
+ * on the site role keeps that role as its preset (`presetFromSiteRole`):
+ *
+ *   1. the member's role ON THE SITE (`hostRoleFor`): Admin for the owner and
+ *      admins, a workspace-wide editor's or viewer's own role unless the site
+ *      gives them other access there, narrower or wider, and a collaborator's
+ *      site role; no access to the site holds nothing;
+ *   2. that role's `hostRoleDefaults` verdict for the key;
+ *   3. then, for a workspace-wide member, their custom role's verdict and
+ *      their own permissions' verdict, when either sets the key;
+ *   4. then the site's own toggle for them (`hostPermissions[hostId][key]`).
+ *
+ * With nothing set at 3 or 4, the verdict is exactly what the role gate
+ * answered, for every member on every site, which is how the built-in roles
+ * keep the access they had. A collaborator has no custom role and no
+ * workspace standing to refine, so only the site's toggle moves their
+ * verdict, as for every other per-site key.
+ *
+ * These keys narrow nothing (`narrowsPerSite` is dropped): the site role is
+ * already their preset. With no site named, the org catalog's verdict
+ * (`roleDefaults`, then the layers) stands, which is the same answer for a
+ * workspace-wide member on a site where their access is their workspace role.
+ */
+
+/** The catalog keys whose preset is the member's role on the site, in catalog order. */
+export function siteRolePresetPermissionKeys(): string[] {
+  return ORG_PERMISSIONS.filter((definition) => definition.presetFromSiteRole).map(
+    (definition) => definition.key,
+  )
+}
+
+/** Is this a key whose preset is the member's role on the site? */
+export function isSiteRolePresetPermission(permission: string): boolean {
+  return ORG_PERMISSIONS.some(
+    (definition) => definition.key === permission && definition.presetFromSiteRole === true,
+  )
+}
+
+/**
+ * A member's verdict on ONE site for every key whose preset is their role
+ * there (see above). `customRole` is their custom role document when they
+ * carry a `roleId` and the caller has it, and is ignored for a collaborator.
+ * No site named, or no access to it, refuses every such key.
+ */
+export function resolveSiteRolePresetPermissions(
+  member: (Partial<AglynOrgMember> & { roleId?: string | null }) | null | undefined,
+  hostId: HostUid | null | undefined,
+  customRole?: Pick<AglynOrgCustomRole, 'permissions'> | null,
+): Record<string, boolean> {
+  const definitions = ORG_PERMISSIONS.filter((definition) => definition.presetFromSiteRole)
+  if (!definitions.length) return {}
+  const role = member && hostId ? hostRoleFor(member, hostId) : null
+  if (!member || !hostId || !role) {
+    return Object.fromEntries(definitions.map((definition) => [definition.key, false]))
+  }
+  const toggles = member.hostPermissions?.[hostId]
+  const layers: ReadonlyArray<Readonly<Partial<Record<string, unknown>>> | null | undefined> =
+    isOrgWideMember(member)
+      ? [member.roleId ? customRole?.permissions : undefined, member.permissions, toggles]
+      : [toggles]
+  const out: Record<string, boolean> = {}
+  for (const definition of definitions) {
+    let verdict = definition.hostRoleDefaults?.[role] === true
+    for (const layer of layers) {
+      const value = layer?.[definition.key]
+      if (typeof value === 'boolean') verdict = value
+    }
+    out[definition.key] = verdict
+  }
+  return refinePermissionMap(out, refinementsWithin(out), layers)
+}
+
+/**
+ * `granted` with every key whose preset is the site role decided for this
+ * site. With no site named it is `granted` as given, so a resolver can call
+ * it unconditionally.
+ */
+export function applySiteRolePresets<T extends Record<string, boolean>>(
+  granted: T,
+  member: (Partial<AglynOrgMember> & { roleId?: string | null }) | null | undefined,
+  hostId: HostUid | null | undefined,
+  customRole?: Pick<AglynOrgCustomRole, 'permissions'> | null,
+): T {
+  if (!hostId) return granted
+  return { ...granted, ...resolveSiteRolePresetPermissions(member, hostId, customRole) }
+}
+
+/**
+ * The verdict the site's own stamp gives a member for one key whose preset
+ * is the site role, as the Firestore rules read it (AGL-4047): the site's
+ * `memberPermissions[uid][key]` when the projection wrote one, else the
+ * preset of the role the site's `memberRoles` projection holds for them.
+ *
+ * For a door that has the host document in hand and asks what the rules
+ * ask, so the two cannot disagree: the stamp is written beside
+ * `memberRoles` by the same projection, with every layer applied, and a
+ * site the projection has not reached since the key existed answers exactly
+ * as the role gate it replaced. `presetFor` is the declaring plugin's own
+ * table, so the answer does not depend on which plugins this process loaded.
+ */
+export function hostStampedSitePermission(
+  host: { memberPermissions?: unknown; memberRoles?: unknown } | null | undefined,
+  uid: string,
+  permission: string,
+  presetFor: Readonly<Partial<Record<HostAccessRole, boolean>>>,
+): boolean {
+  const stamped = (host?.memberPermissions as Record<string, Record<string, unknown> | undefined> | undefined)?.[uid]?.[
+    permission
+  ]
+  if (typeof stamped === 'boolean') return stamped
+  const role = (host?.memberRoles as Record<string, unknown> | undefined)?.[uid]
+  return typeof role === 'string' && presetFor[role as HostAccessRole] === true
 }
 
 /*
@@ -350,9 +482,16 @@ export function resolveMemberHostPermissions(options: {
   const { member, customRole, hostId } = options
   if (!member) return noHostPermissions()
   if (isOrgWideMember(member)) {
-    const granted = narrowPermissionsToSite(
-      resolveOrgPermissions(member, customRole ?? null),
-      siteNarrowingFor(member, hostId, customRole ?? null),
+    // The keys whose preset is the site role (AGL-4047) are decided for this
+    // site last; they narrow nothing, so the narrowing pass leaves them be.
+    const granted = applySiteRolePresets(
+      narrowPermissionsToSite(
+        resolveOrgPermissions(member, customRole ?? null),
+        siteNarrowingFor(member, hostId, customRole ?? null),
+      ),
+      member,
+      hostId,
+      customRole ?? null,
     )
     return Object.fromEntries(
       [...hostPermissionKeys(), ...siteNarrowedPermissionKeys()].map((key) => [key, granted[key] === true]),

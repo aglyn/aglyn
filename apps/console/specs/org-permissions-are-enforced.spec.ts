@@ -68,6 +68,11 @@ const ENFORCEMENT_ROOTS = [
   'libs/tenant/data/admin/src',
   'libs/tenant/runtime/src',
   'libs/plugins',
+  // The DEPLOYED rules (AGL-4047): a key that decides client-direct writes,
+  // such as "Manage reservations" on a site's stays, bites in the security
+  // rules, which are the server for those writes. The comment-stripped
+  // artifact, so a key a rules comment merely names is never counted.
+  'cloud/firebase-firestore.deploy.rules',
 ]
 
 /** Files that MENTION every key without enforcing any. */
@@ -169,6 +174,12 @@ const ENFORCED_AS: Record<OrgPermission, readonly string[]> = {
   // passes as `permission`.
   'ai.use': ["'ai.use'"],
   'ai.generate': ["'ai.generate'"],
+  // The reservation keys (AGL-4047), commerce's, whose preset is the site
+  // role: the rules' reservations and resources block asks "Manage
+  // reservations" through `hostSiteRoleKey`, and the walk-in and guests
+  // routes ask "Book walk-ins and change guests" through their gate.
+  'commerce.reservations': ["'commerce.reservations'"],
+  'commerce.walkIns': ["'commerce.walkIns'"],
 }
 
 function serverFilesContaining(needle: string): string[] {
@@ -211,7 +222,7 @@ describe('every advertised org permission is enforced server-side (AGL-2444)', (
     expect([...CATALOG].sort()).toEqual(
       Object.keys(ENFORCED_AS).sort(),
     )
-    expect(CATALOG.length).toBe(15)
+    expect(CATALOG.length).toBe(17)
   })
 
   it('the search really searches — a key nobody uses finds nothing', () => {
