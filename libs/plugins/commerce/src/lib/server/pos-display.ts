@@ -22,6 +22,8 @@ import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import { sanitizeCustomerDisplayScreen } from '@aglyn/aglyn/plugin-manager/plugin-customer-display'
 import { pluginSmsAvailable } from '@aglyn/aglyn/plugin-manager/plugin-sms-messaging'
 import * as CommerceModel from '../model'
+import { BUNDLE_ID } from '../constants/bundle-common'
+import { parsePosHardwareInPersonConfig } from '../model/pos-hardware'
 import { posRegisterSettings } from '../plugin-config'
 import { authorizePosStaff, posQueryBody, posRequestBody } from './pos-auth'
 import { POS_CURRENCY } from './pos-stripe'
@@ -314,6 +316,17 @@ export const posDisplayHandler: PluginApiHandler = async (req, res) => {
         await stateRef(display.hostId, display.registerId).set({ response }, { merge: true })
         return res.status(200).json({ ok: true })
       }
+      case 'hardware-terms':
+      case 'accept-hardware-terms': {
+        // The terms of sale for a card reader sold here (AGL-4038), on the
+        // screen the register put on this display: the display's own token,
+        // never a staff session.
+        if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+        const display = await resolveDisplayToken(displayToken(req, body))
+        if (!display) return res.status(401).json({ error: 'This display is not paired.' })
+        if (display.mode === 'kiosk') return res.status(403).json({ error: 'This device is a self-service kiosk.' })
+        return await hardwareTermsOnDisplay(req, display, body, action, res)
+      }
       default:
         return await staffAction(req, body, action, res)
     }
@@ -510,3 +523,55 @@ async function staffAction(
       return res.status(400).json({ error: 'Unknown action' })
   }
 }
+
+/** The page the terms of sale open at on a display, beneath `/kiosk/commerce`. */
+export const POS_HARDWARE_TERMS_PAGE_PATH = '/hardware-terms'
+
+/**
+ * The terms of sale on a customer display (AGL-4038): read them, or accept
+ * them, for the sale the register put on THIS display — the screen must be
+ * showing, for this register, with this sale's id, so a display can neither
+ * read nor accept for another sale. Accepting records it and takes the
+ * screen off, so the display shows the register again.
+ */
+async function hardwareTermsOnDisplay(
+  req: PluginApiRequest,
+  display: PosDeviceToken,
+  body: Record<string, any>,
+  action: 'hardware-terms' | 'accept-hardware-terms',
+  res: Parameters<PluginApiHandler>[1],
+) {
+  const config = parsePosHardwareInPersonConfig(process.env)
+  if (!config || display.hostId !== config.sellerHostId) {
+    return res.status(404).json({ error: 'Card reader sales are not available here.' })
+  }
+  const order = String(body['order'] ?? '')
+  const snapshot = await stateRef(display.hostId, display.registerId).get()
+  const state = snapshot.exists ? (snapshot.data() as CommerceModel.PosDisplayState) : null
+  const showing =
+    state?.mode === 'screen' &&
+    state.screen?.pluginId === BUNDLE_ID &&
+    state.screen?.path === POS_HARDWARE_TERMS_PAGE_PATH &&
+    state.screen?.params?.['order'] === order
+  if (!showing) return res.status(409).json({ error: 'That screen has moved on. Check the display.' })
+  const terms = await import('./pos-hardware-terms')
+  try {
+    if (action === 'hardware-terms') {
+      return res.status(200).json({ ...terms.posHardwareTermsView(), ...(await terms.posHardwareTermsSale(config, order)) })
+    }
+    if (body['accept'] !== true) return res.status(400).json({ error: 'Tick the box to accept the terms of sale.' })
+    const acceptance = await terms.recordPosHardwareTermsAcceptance({
+      config,
+      registerOrderId: order,
+      method: 'display',
+      staffUid: null,
+      ...terms.posHardwareTermsDevice(req.headers as Record<string, unknown>),
+    })
+    await writePosDisplayState(display.hostId, display.registerId, { mode: 'idle', updatedAtMs: Date.now() })
+    return res.status(200).json({ ok: true, acceptance })
+  } catch (error) {
+    if (error instanceof terms.PosHardwareTermsRefusal) return res.status(error.status).json({ error: error.message })
+    throw error
+  }
+}
+

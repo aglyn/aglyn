@@ -1098,7 +1098,9 @@
           ],
           "publicRoutes": [
             "/pos-display",
-            "/pos-kiosk"
+            "/pos-kiosk",
+            "/hardware-terms",
+            "/hardware-terms-sign"
           ]
         }
       }

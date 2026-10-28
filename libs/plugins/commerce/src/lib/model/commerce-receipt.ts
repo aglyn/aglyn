@@ -16,6 +16,7 @@
  */
 
 import type { HostOrder } from './commerce-orders'
+import { withPosHardwareReceiptNotice } from './pos-hardware-terms'
 
 /**
  * A receipt as DATA (AGL-3619), shared by every surface that prints one: the
@@ -224,7 +225,9 @@ export function receiptDataFromOrder(
     ...(tenders.length ? { tenders } : {}),
     ...(changeCents ? { changeCents } : {}),
     ...(whole(order.refundedCents) ? { refundedCents: whole(order.refundedCents) } : {}),
-    ...(context.footer ? { footer: context.footer } : {}),
+    // A sale of card reader hardware prints the terms it is sold under
+    // (AGL-4038, Terms 4.28), after the store's own footer.
+    ...(withPosHardwareReceiptNotice(context.footer, order) ? { footer: withPosHardwareReceiptNotice(context.footer, order) } : {}),
     barcode: orderNumber,
     ...(context.banner ? { banner: context.banner } : {}),
   }

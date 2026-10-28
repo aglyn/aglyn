@@ -164,3 +164,46 @@ export function posHardwareRegisterAtBooth(
     attemptKey,
   })
 }
+
+/** The terms of sale the buyer accepts before paying (AGL-4038). */
+export interface PosHardwareTermsView {
+  version: string
+  sections: string
+  url: string
+  summary: string[]
+}
+
+/** How and when the buyer accepted, as the route answers it. */
+export interface PosHardwareTermsAcceptanceView {
+  version: string
+  sections: string
+  method: 'tablet' | 'display' | 'notice'
+  atMs: number
+}
+
+export function posHardwareTerms(user: User, hostId: string) {
+  return sendPosHardwareRequest<PosHardwareTermsView>(user, SALE, { method: 'POST', body: { action: 'terms', hostId } })
+}
+
+export function posHardwareTermsStatus(user: User, hostId: string, registerOrderId: string) {
+  return sendPosHardwareRequest<{ acceptance: PosHardwareTermsAcceptanceView | null }>(user, SALE, {
+    method: 'POST',
+    body: { action: 'terms-status', hostId, registerOrderId },
+  })
+}
+
+/** Notes who is putting the terms on the display, before the register shows them there. */
+export function posHardwareTermsOnDisplay(user: User, hostId: string, registerOrderId: string) {
+  return sendPosHardwareRequest<{ ok: true }>(user, SALE, {
+    method: 'POST',
+    body: { action: 'terms-on-display', hostId, registerOrderId },
+  })
+}
+
+/** The buyer accepted on the register tablet handed to them. */
+export function posHardwareAcceptTerms(user: User, hostId: string, registerOrderId: string) {
+  return sendPosHardwareRequest<{ ok: true; acceptance: PosHardwareTermsAcceptanceView }>(user, SALE, {
+    method: 'POST',
+    body: { action: 'accept-terms', hostId, registerOrderId },
+  })
+}

@@ -521,6 +521,22 @@ export interface HostOrder {
   /** Whose the sale's hardware is, as the register attached them (AGL-4038). */
   hardwareBuyer?: OrderHardwareBuyer
   /**
+   * How the buyer of a register sale of hardware agreed to the terms of sale
+   * (AGL-4038, `model/pos-hardware-terms.ts`): on the tablet, on the
+   * customer display, or by the receipt-and-sign notice. The first one stands.
+   */
+  hardwareTermsAcceptance?: {
+    version: string
+    sections: string
+    method: 'tablet' | 'display' | 'notice'
+    atMs: number
+    staffUid: string | null
+    ip: string | null
+    userAgent: string | null
+  }
+  /** Who put the terms of sale on the customer display, and when: the acceptance names them. */
+  hardwareTermsRequest?: { by: string; atMs: number }
+  /**
    * The serial numbers of the readers the sale sold, scanned or typed at the
    * sale before its hardware order was recorded (AGL-4038), in reader order.
    */

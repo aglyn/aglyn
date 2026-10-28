@@ -906,6 +906,8 @@ data class HostOrder(
     val hardwareOrderId: String? = null,
     val hardwareSalePending: Boolean? = null,
     val hardwareSerials: List<String>? = null,
+    val hardwareTermsAcceptance: HostOrderHardwareTermsAcceptance? = null,
+    val hardwareTermsRequest: HostOrderHardwareTermsRequest? = null,
     val invoiceId: String? = null,
     val kioskDeviceId: String? = null,
     val kioskQueuedAtMs: Double? = null,
@@ -972,6 +974,35 @@ internal object HostOrderBuyerNotificationsValueStateSerializer :
 data class HostOrderCustomerRecord(
     val id: String,
     val kind: String,
+)
+
+@Serializable
+data class HostOrderHardwareTermsAcceptance(
+    val atMs: Double,
+    val ip: String? = null,
+    val method: HostOrderHardwareTermsAcceptanceMethod,
+    val sections: String,
+    val staffUid: String? = null,
+    val userAgent: String? = null,
+    val version: String,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = HostOrderHardwareTermsAcceptanceMethodSerializer::class)
+enum class HostOrderHardwareTermsAcceptanceMethod(val raw: String) {
+    DISPLAY("display"),
+    NOTICE("notice"),
+    TABLET("tablet"),
+    UNKNOWN(""),
+}
+
+internal object HostOrderHardwareTermsAcceptanceMethodSerializer :
+    RawEnumSerializer<HostOrderHardwareTermsAcceptanceMethod>("com.aglyn.contracts.HostOrderHardwareTermsAcceptanceMethod", HostOrderHardwareTermsAcceptanceMethod.entries, HostOrderHardwareTermsAcceptanceMethod.UNKNOWN, { it.raw })
+
+@Serializable
+data class HostOrderHardwareTermsRequest(
+    val atMs: Double,
+    val by: String,
 )
 
 @Serializable

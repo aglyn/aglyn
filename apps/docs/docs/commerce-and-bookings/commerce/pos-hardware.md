@@ -211,7 +211,17 @@ the site, on a plan that includes POS.
 ### Bought from us in person {#bought-from-us-in-person}
 
 At an event, Aglyn may sell you a reader in person. You pay at Aglyn's register,
-take the reader with you, and the order joins your workspace:
+take the reader with you, and the order joins your workspace.
+
+**The terms of sale.** Before you pay, Aglyn's staff ask you to accept the terms
+of sale, Sections 4.26–4.32 of the [Terms](https://aglyn.com/legal/terms): on the
+register's customer display, or on the register tablet they hand you. The screen
+sums them up, links to the whole, and you tick the box and select **Accept**. If
+neither screen can be used, for example with no power or no connection, your
+receipt and a sign at the booth say which terms the sale is made under, and
+paying is agreeing to them. Every receipt for a reader bought this way says so too.
+
+Then:
 
 - **If you have an account**, Aglyn's staff look you up by your email address,
   your name or your workspace's name, check your email address with you, and
