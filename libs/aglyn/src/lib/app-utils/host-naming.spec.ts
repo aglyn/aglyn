@@ -41,6 +41,44 @@ describe('isBlockedSubdomain', () => {
     expect(isBlockedSubdomain('demo-2')).toBe(false)
   })
 
+  it('blocks addresses that read as our own servers (AGL-4082)', () => {
+    // The two names that reached production, and the shapes beside them.
+    for (const name of [
+      'www-2',
+      'www2',
+      'www-mybank',
+      'com',
+      'net',
+      'mail1',
+      'mail-2',
+      'app2',
+      'api-1',
+      'login-secure',
+      'admin-portal',
+      'secure',
+      'verify',
+      'sso',
+      'support-online',
+    ]) {
+      expect(isBlockedSubdomain(name)).toBe(true)
+    }
+    // …and no suggestion routes around it.
+    expect(suggestSubdomains('www')).toEqual([])
+  })
+
+  it('still allows a business whose name merely starts with one of those words', () => {
+    for (const name of [
+      'appliance-repair',
+      'mailbox-co',
+      'portal-pizza',
+      'support-local-farms',
+      'comet-cafe',
+      'network-plumbing',
+    ]) {
+      expect(isBlockedSubdomain(name)).toBe(false)
+    }
+  })
+
   it('blocks a brand a phishing kit wears, or a lookalike of one (AGL-3356)', () => {
     // The incident's own subdomain, and the shapes that follow it.
     for (const name of ['poshmark', 'paypal-secure', 'paypa1', 'booking-review', 'appleid', 'apple-support']) {
