@@ -78,7 +78,10 @@ import {
   pruneSharedClientStateFor,
 } from './firestore-cache'
 import { keepAppCheckRecaptchaContainer } from './app-check-recaptcha-container'
-import { markMultiTabFirestore } from './firestore-multitab-wedge'
+import {
+  confirmSharedCacheLock,
+  markMultiTabFirestore,
+} from './firestore-multitab-wedge'
 import { firestorePersistencePrefix } from './firestore-shared-client-state'
 import { startFirestoreTabHandoff } from './firestore-tab-handoff'
 
@@ -415,10 +418,16 @@ function bootFirebaseCore(
   // `durable` resolves to the same `getAuth(app)` this always called.
   const auth = createAuthInstance(app, authPersistence)
 
+  // The durable cache's IndexedDB database, `<persistence prefix>main`.
+  const persistencePrefix = app.options?.projectId
+    ? firestorePersistencePrefix(app.name, app.options.projectId)
+    : undefined
+  const databaseName = persistencePrefix && `${persistencePrefix}main`
   // The origin's class, unless this tab fell back to the memory cache
-  // because another tab locked the shared one (AGL-3428). Firestore only:
-  // `auth` above keeps the origin's class.
-  const firestoreCacheClass = firestoreCacheClassFor(authPersistence)
+  // because another tab locked the shared one (AGL-3428), or a tab has just
+  // seen that lock (AGL-4090). Firestore only: `auth` above keeps the
+  // origin's class.
+  const firestoreCacheClass = firestoreCacheClassFor(authPersistence, databaseName)
   if (!firestoreInitialized.has(appName)) {
     try {
       // Under the emulator (dev/e2e only): force long-polling and skip
@@ -484,15 +493,19 @@ function bootFirebaseCore(
         void pruneSharedClientStateFor(firestoreCacheClass, app)
         // Only the durable multi-tab cache can be locked by another tab,
         // so only it gets the lease check after a stalled recovery.
-        if (firestoreCacheClass === 'durable' && app.options?.projectId) {
-          const prefix = firestorePersistencePrefix(app.name, app.options.projectId)
-          markMultiTabFirestore(getFirestore(app), `${prefix}main`)
+        if (firestoreCacheClass === 'durable' && persistencePrefix && databaseName) {
+          markMultiTabFirestore(getFirestore(app), databaseName)
           // A visible tab opened while a background tab holds the shared
           // cache's lease takes the lease at boot instead of routing every
           // query through the background tab until its lease lapses
           // (AGL-3660). In initializeFirestore's task: its first step
           // snapshots the other tabs before this tab's client can start.
-          void startFirestoreTabHandoff(getFirestore(app), prefix)
+          void startFirestoreTabHandoff(getFirestore(app), persistencePrefix)
+        } else if (authPersistence === 'durable' && databaseName) {
+          // A durable origin's tab on the memory cache. If that is because a
+          // tab saw the shared cache locked, read the lease once, read-only,
+          // so the record lasts only as long as the lock (AGL-4090).
+          void confirmSharedCacheLock(databaseName)
         }
       }
     } catch {
