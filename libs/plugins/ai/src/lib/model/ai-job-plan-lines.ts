@@ -29,7 +29,8 @@ import type { AiJobPlanSummary } from './ai-jobs.types'
 /**
  * A JOB'S PLAN AS THE LINES A PERSON READS BEFORE CONFIRMING IT (AGL-2935):
  * what it reuses from the site, what it creates and why, the pages it builds,
- * the items, the players it embeds and the store pages the platform adds. The
+ * the items, the players it embeds, the store pages the platform adds, and
+ * what the request asked for that a build leaves out (AGL-4087). The
  * console's plan card draws these, and the native apps' follow view sends them
  * (AGL-3854), so both say the same sentences.
  */
@@ -106,6 +107,11 @@ export function aiJobPlanLines(plan: AiJobPlanSummary): AiJobPlanLine[] {
       key: `store-${page.key}`,
       text: `Adds the page ${page.title} at ${page.href} — added for your store automatically, uses no AI credits`,
       platformAdded: true,
+    })),
+    // Read before Confirm, so nothing asked for is dropped without a word (AGL-4087).
+    ...(plan.leftOut ?? []).map((entry, index) => ({
+      key: `left-out-${index}`,
+      text: `Leaves out ${entry.asked}${entry.why ? ` — ${entry.why}` : ''}`,
     })),
   ]
 }
