@@ -94,46 +94,62 @@ function buildJob(): AiJob {
   } as unknown as AiJob
 }
 
+/** The helper page, as a page title, a section or a left-out entry names it. */
+const HELPER = /review helper|review draft/i
+
+/** What the plan step keeps for the request on a site with these operations, and what the checks read off it. */
+async function planWith(ops: AiBuildOps) {
+  const outcome = (await createAiJobPlanStep({
+    readInventory: async () => emptyAiSiteInventory('host-live'),
+    findPlansByKey: null,
+    // No paid plan: the Free taste, its 2 pages and its one form a site.
+    readCapabilities: async () => aiPlanCapabilitiesFrom(null),
+    readOps: async () => ops,
+    admissionRefusal: async () => null,
+  })({
+    job: buildJob(),
+    stepIndex: 0,
+    now: NOW,
+    firestore: aiEvalMemoryFirestore({}).firestore,
+    org: ORG,
+  } as never)) as unknown as Record<string, unknown>
+  const plan = (outcome['plan'] ?? null) as AiJobPlan | null
+  const review = outcome['review'] as { reason?: string; findings?: Array<{ code: string; message: string }> } | undefined
+  const helperPage = Boolean(plan?.screens.some((screen) => HELPER.test(`${screen.title} ${screen.slug}`)))
+  const result = {
+    planned: Boolean(plan) && (!review || review.reason === 'plan'),
+    findings: (review?.findings ?? []).map((finding) => `${finding.code}: ${finding.message}`),
+    shape: plan ? aiBuildPlanShapeRefusal(plan, { freeTaste: true, ops }) : 'no plan',
+    pages: plan?.screens.map((screen) => `${screen.title} ${screen.slug}`) ?? [],
+    helperPage,
+    leftOut: plan?.leftOut ?? [],
+    // A section sending visitors to a helper the plan does not build.
+    deadEnds: helperPage
+      ? []
+      : (plan?.screens ?? []).flatMap((screen) => screen.sections.map((section) => section.name)).filter((name) => HELPER.test(name)),
+    estCostUsd: Number(outcome['estCostUsd'] ?? 0),
+  }
+  console.log(JSON.stringify({ run: aiLiveRunLedger(), result, plan }, null, 1))
+  return result
+}
+
 const describeLive = LIVE ? describe : describe.skip
 
 describeLive('a request with a page the build cannot make, planned by the real model (AGL-4087)', () => {
   jest.setTimeout(aiLiveTimeoutMs(15 * 60_000))
 
   it('builds the helper page or names it in leftOut, and sends no visitor to a page it leaves out', async () => {
-    const outcome = (await createAiJobPlanStep({
-      readInventory: async () => emptyAiSiteInventory('host-live'),
-      findPlansByKey: null,
-      // No paid plan: the Free taste, its 2 pages and its one form a site.
-      readCapabilities: async () => aiPlanCapabilitiesFrom(null),
-      readOps: async () => OPS,
-      admissionRefusal: async () => null,
-    })({
-      job: buildJob(),
-      stepIndex: 0,
-      now: NOW,
-      firestore: aiEvalMemoryFirestore({}).firestore,
-      org: ORG,
-    } as never)) as unknown as Record<string, unknown>
-    const plan = (outcome['plan'] ?? null) as AiJobPlan | null
-    const review = outcome['review'] as { reason?: string; findings?: Array<{ code: string; message: string }> } | undefined
-    const helper = /review helper|review draft/i
-    const helperPage = Boolean(plan?.screens.some((screen) => helper.test(`${screen.title} ${screen.slug}`)))
-    const result = {
-      planned: Boolean(plan) && (!review || review.reason === 'plan'),
-      findings: (review?.findings ?? []).map((finding) => `${finding.code}: ${finding.message}`),
-      shape: plan ? aiBuildPlanShapeRefusal(plan, { freeTaste: true, ops: OPS }) : 'no plan',
-      pages: plan?.screens.map((screen) => `${screen.title} ${screen.slug}`) ?? [],
-      helperPage,
-      leftOut: plan?.leftOut ?? [],
-      // A section sending visitors to a helper the plan does not build.
-      deadEnds: helperPage
-        ? []
-        : (plan?.screens ?? []).flatMap((screen) => screen.sections.map((section) => section.name)).filter((name) => helper.test(name)),
-      estCostUsd: Number(outcome['estCostUsd'] ?? 0),
-    }
-    console.log(JSON.stringify({ run: aiLiveRunLedger(), result, plan }, null, 1))
+    const result = await planWith(OPS)
     expect(result).toMatchObject({ planned: true, shape: null, deadEnds: [] })
-    expect(result.helperPage || result.leftOut.some((entry) => helper.test(entry.asked))).toBe(true)
+    expect(result.helperPage || result.leftOut.some((entry) => HELPER.test(entry.asked))).toBe(true)
+  })
+
+  // A site with Logic switched off has no function to write the draft with.
+  it('does the same where the site cannot make a function', async () => {
+    const ops: AiBuildOps = new Map([...OPS].filter(([op]) => op !== 'function'))
+    const result = await planWith(ops)
+    expect(result).toMatchObject({ planned: true, shape: null, deadEnds: [] })
+    expect(result.helperPage || result.leftOut.some((entry) => HELPER.test(entry.asked))).toBe(true)
   })
 })
 
