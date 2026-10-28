@@ -162,6 +162,22 @@ describe('switching cashier with a PIN', () => {
     expect(readPosAssertion(h.deps, manager.body['assertion'], { hostId: 'shop', registerId: 'front', purpose: 'cashier' })).toBeNull()
   })
 
+  it('asks "Approve refunds over the register’s limit", so the site’s stamp decides either way (AGL-4047)', async () => {
+    h.memory.seed('hosts/shop', {
+      memberRoles: { owner: 'admin', cashier: 'editor', cashier2: 'editor', viewer: 'viewer' },
+      memberPermissions: { owner: { 'commerce.posApprovals': false }, cashier: { 'commerce.posApprovals': true } },
+    })
+    const refused = await verify('owner', '9137', { purpose: 'manager' })
+    expect(refused.status).toBe(403)
+    expect(refused.body['error']).toBe(
+      'Your role does not include "Approve refunds over the register’s limit" — ask an organization admin',
+    )
+    expect((await pin({ action: 'set', pin: '4826', memberUid: 'cashier2' }, 'owner')).status).toBe(403)
+    // A collaborator the site granted it approves and sets PINs; its preset never reaches them.
+    expect((await verify('cashier', '2580', { purpose: 'manager' })).status).toBe(200)
+    expect((await pin({ action: 'set', pin: '4826', memberUid: 'cashier2' }, 'cashier')).status).toBe(200)
+  })
+
   it("refuses another site's register", async () => {
     expect((await verify('cashier', '2580', { registerId: 'theirs' })).status).toBe(404)
   })

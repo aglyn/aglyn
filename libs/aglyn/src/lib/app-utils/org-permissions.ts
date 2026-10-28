@@ -139,6 +139,14 @@ export interface OrgPermissionDefinition {
    * (`CORE_SITE_ROLE_PRESETS`) and a plugin's key with `hostRoleDefaults`.
    */
   presetFromSiteRole?: true
+  /**
+   * With `presetFromSiteRole`: the site role is the preset only for a member
+   * of the whole workspace (AGL-4047). A site collaborator's preset is
+   * refusal, whatever their site role, and only the site's toggle grants it
+   * to them. A plugin's key that replaces a gate asking for an admin of the
+   * whole workspace who is also the site's admin.
+   */
+  workspaceMembersOnly?: true
 }
 
 /**
@@ -309,6 +317,9 @@ function syncCatalog(): void {
       ...(declared.follows && !declared.refines ? { follows: declared.follows } : {}),
       ...(declared.narrowsPerSite ? { narrowsPerSite: { ...declared.narrowsPerSite } } : {}),
       ...(declared.presetFromSiteRole && declared.hostRoleDefaults ? { presetFromSiteRole: true as const } : {}),
+      ...(declared.presetFromSiteRole && declared.hostRoleDefaults && declared.workspaceMembersOnly
+        ? { workspaceMembersOnly: true as const }
+        : {}),
     })
     if (declared.source === 'tier') tierKeys.push(declared.key)
     if (!groups.some((group) => group.id === declared.group)) {

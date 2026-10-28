@@ -390,7 +390,7 @@ export async function handlePosReturn(deps: PosReturnDeps, req: PluginApiRequest
 
   const cashier = await resolvePosCashier(deps, staff, registerId, body['cashierAssertion'])
   // The limit is the person at the till's: a PIN-switched cashier is held
-  // to it even on a device a workspace admin signed in on.
+  // to it even on a device someone who holds the approval signed in on.
   const cashierIsManager =
     cashier.cashierId === staff.uid
       ? staff.isManager
@@ -795,16 +795,14 @@ export function unitsHeldByOnlineReturns(
   return held
 }
 
-/** Whether a member is a workspace admin and this site's admin, asked now. */
+/** Whether a member holds "Approve refunds over the register's limit" here, asked now (AGL-4047). */
 async function memberIsPosManager(
   deps: PosOpsDeps,
   hostRef: FirebaseFirestore.DocumentReference,
   hostId: string,
   uid: string,
 ): Promise<boolean> {
-  const host = await hostRef.get()
-  const role = (host.get('memberRoles') ?? {})[uid]
-  return isPosManager(role, await deps.membership(uid, hostId))
+  return isPosManager(await hostRef.get(), uid, await deps.membership(uid, hostId))
 }
 
 class ReturnRefusal extends Error {

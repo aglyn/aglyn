@@ -7367,6 +7367,9 @@
         "commerce.giftCards",
         "commerce.paymentMethods",
         "commerce.shippingConnections",
+        "commerce.refunds",
+        "commerce.posApprovals",
+        "commerce.webhooks",
         "managePos",
         "posSell",
         "posRefund",
@@ -7440,6 +7443,9 @@
         "commerce.giftCards",
         "commerce.paymentMethods",
         "commerce.shippingConnections",
+        "commerce.refunds",
+        "commerce.posApprovals",
+        "commerce.webhooks",
         "managePos",
         "posSell",
         "posRefund",
@@ -7722,6 +7728,27 @@
         "group": "commerce",
         "key": "commerce.shippingConnections",
         "label": "Connect shipping apps",
+        "scope": "site"
+      },
+      {
+        "description": "Refund any order, online or at the register, in full or in part, with no register limit. A member of the whole workspace who is the site’s admin holds it unless a role or member sets it; someone added to just this site holds it only when the site grants it.",
+        "group": "commerce",
+        "key": "commerce.refunds",
+        "label": "Refund orders",
+        "scope": "site"
+      },
+      {
+        "description": "Refund at the register above its refund limit, approve a cashier’s refund over it with a PIN, and set or clear other staff members’ PINs. A member of the whole workspace who is the site’s admin holds it unless a role or member sets it; someone added to just this site holds it only when the site grants it.",
+        "group": "commerce",
+        "key": "commerce.posApprovals",
+        "label": "Approve refunds over the register’s limit",
+        "scope": "site"
+      },
+      {
+        "description": "Add, change, test and remove the store’s order webhooks, roll their secrets and resend deliveries. A member of the whole workspace who is the site’s admin holds it unless a role or member sets it; someone added to just this site holds it only when the site grants it.",
+        "group": "commerce",
+        "key": "commerce.webhooks",
+        "label": "Manage order webhooks",
         "scope": "site"
       },
       {

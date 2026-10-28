@@ -182,13 +182,26 @@ afterAll(() => {
 })
 
 describe('the console door', () => {
-  it('lets only an admin of the whole workspace manage webhooks', async () => {
+  it('lets only an admin of the whole workspace manage webhooks, as before (the key’s preset)', async () => {
     expect((await call({ action: 'status' }, 'editor-1')).status).toBe(403)
     mockPermissions.mockResolvedValueOnce({ orgWide: false, hostRole: 'admin' })
     expect((await call({ action: 'status' })).status).toBe(403)
     const status = await call({ action: 'status' })
     expect(status.body).toMatchObject({ configured: true })
     expect(status.body.events.map((entry: any) => entry.event)).toContain('return.requested')
+  })
+
+  it('asks "Manage order webhooks", so the site’s stamp decides either way (AGL-4047)', async () => {
+    docs.set(`hosts/${HOST}`, {
+      memberRoles: { 'admin-1': 'admin', 'editor-1': 'editor' },
+      memberPermissions: { 'admin-1': { 'commerce.webhooks': false }, 'editor-1': { 'commerce.webhooks': true } },
+    })
+    const refused = await call({ action: 'status' })
+    expect(refused.status).toBe(403)
+    expect(refused.body.error).toBe('Your role does not include "Manage order webhooks" — ask an organization admin')
+    // A collaborator the site granted it manages them; its preset never reaches them.
+    mockPermissions.mockResolvedValueOnce({ orgWide: false, hostRole: 'editor' })
+    expect((await call({ action: 'status' }, 'editor-1')).status).toBe(200)
   })
 
   it('says it is not configured, and adds nothing, without a key', async () => {

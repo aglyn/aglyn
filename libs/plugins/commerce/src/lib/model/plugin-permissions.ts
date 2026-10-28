@@ -233,7 +233,7 @@ export const STORE_SETTINGS_SITE_ROLE_PRESET: Readonly<Record<HostAccessRole, bo
 }
 
 /** The same, per workspace role: the answer with no site named. */
-const STORE_SETTINGS_ORG_ROLE_PRESET = { owner: true, admin: true, editor: false, viewer: false } as const
+export const STORE_SETTINGS_ORG_ROLE_PRESET = { owner: true, admin: true, editor: false, viewer: false } as const
 
 /**
  * The reservation keys as commerce declares them into the org permission

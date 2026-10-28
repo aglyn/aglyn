@@ -40,6 +40,8 @@ import {
 import { createHmac, hkdfSync, randomBytes } from 'node:crypto'
 import { COMMERCE_EVENT_DECLARATIONS } from '../model/order-events'
 import * as Webhooks from '../model/order-webhooks'
+import { commerceWorkspacePermissionRefusal } from '../model/workspace-site-permissions'
+import { holdsCommerceWorkspaceSiteKey } from './commerce-site-keys'
 
 /**
  * Merchant order webhooks (AGL-3611): the console's door and the delivery
@@ -453,12 +455,12 @@ export const orderWebhooksHandler: PluginApiHandler = async (req, res) => {
     const hostRef = hostRefFor(firestore, hostId)
     const hostSnapshot = await hostRef.get()
     if (!hostSnapshot.exists) return res.status(404).json({ error: 'Unknown site' })
-    if ((hostSnapshot.get('memberRoles') ?? {})[decoded.uid] !== 'admin') {
-      return res.status(403).json({ error: 'Webhooks are managed by a site admin' })
-    }
+    // "Manage order webhooks" (`commerce.webhooks`, AGL-4047): its preset is
+    // the gate this asked before, the site's Admin who is a member of the
+    // whole workspace (a webhook's secret signs every order it is sent).
     const membership = await resolveOrgPermissions(decoded.uid, { hostId })
-    if (!membership.orgWide || membership.hostRole !== 'admin') {
-      return res.status(403).json({ error: 'Webhooks are managed by an admin of the whole workspace' })
+    if (!holdsCommerceWorkspaceSiteKey(hostSnapshot, decoded.uid, 'commerce.webhooks', membership)) {
+      return res.status(403).json({ error: commerceWorkspacePermissionRefusal('commerce.webhooks') })
     }
     const keyring = readCommerceSecretKeyring()
     if (action === 'status') {
