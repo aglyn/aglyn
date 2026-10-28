@@ -185,6 +185,14 @@ for (const [who, db] of [...mayRead, ...mayNotRead]) {
   )
   await check(`${who} cannot change a sale record`, () => assertFails(updateDoc(saleRef(db()), { totalCents: 1 })))
   await check(`${who} cannot delete a sale record`, () => assertFails(deleteDoc(saleRef(db()))))
+  // 4G (AGL-4038): server-only, for every client.
+  for (const name of ['posCellularReaders', 'posCellularCharges']) {
+    await check(`${who} cannot read ${name}`, () => assertFails(getDoc(doc(db(), name, 'host-hw_tmr_1'))))
+    await check(`${who} cannot list ${name}`, () => assertFails(getDocs(collection(db(), name))))
+    await check(`${who} cannot write ${name}`, () =>
+      assertFails(setDoc(doc(db(), name, 'host-hw_tmr_2'), { orgId: ORG, enabled: true })),
+    )
+  }
 }
 // The record outlives the workspace: with the org and its roster gone, it
 // is still unreadable to the former owner.

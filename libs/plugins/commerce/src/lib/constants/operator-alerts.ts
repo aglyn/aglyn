@@ -228,6 +228,51 @@ export const COMMERCE_POS_HARDWARE_RETURN_REQUESTED: OperatorAlertDefinition = {
   defaultEnabled: true,
 }
 
+/**
+ * A workspace's monthly 4G charge for its Stripe Reader S710s did not
+ * collect (AGL-4038): the card declined or asked for authentication (the
+ * invoice is left open on their Billing page, which nothing retries), or
+ * the workspace has no Stripe customer to bill. Stripe still bills the
+ * platform for those readers' cellular service.
+ */
+export const COMMERCE_POS_CELLULAR_CHARGE_FAILED: OperatorAlertDefinition = {
+  type: 'commerce.posCellularChargeFailed',
+  pluginId: BUNDLE_ID,
+  label: '4G charge for card readers not collected',
+  description:
+    'A workspace’s monthly charge for 4G on its Stripe Reader S710s did not collect. Stripe still bills the platform for those readers. Follow up with the workspace, or turn 4G off for its stores.',
+  tier: 'should',
+  category: 'payments',
+  title: '4G charge for {{month}} not collected: {{amount}}',
+  body:
+    'Workspace {{orgId}} had 4G on {{readers}} card reader(s) in {{month}}, and its charge of {{amount}} was not collected: {{reason}}. Stripe still bills the platform for those readers.',
+  delivery: 'immediate',
+  dedupeWindowMinutes: 30 * DAY,
+  defaultEnabled: true,
+}
+
+/**
+ * 4G could not be turned off at Stripe for a store that is gone (AGL-4038):
+ * its workspace was deleted, or the store was, while its S710s had 4G. The
+ * readers stay on the platform's Stripe account with cellular on, which
+ * Stripe keeps billing the platform for, and nobody is charged for it.
+ */
+export const COMMERCE_POS_CELLULAR_TURN_OFF_FAILED: OperatorAlertDefinition = {
+  type: 'commerce.posCellularTurnOffFailed',
+  pluginId: BUNDLE_ID,
+  label: '4G not turned off for a deleted store',
+  description:
+    'A store with 4G on its Stripe Reader S710s was deleted, with its workspace or on its own, and Stripe refused to turn cellular off on its Terminal configuration. Turn it off in the Stripe Dashboard, or Stripe keeps billing the platform for it.',
+  tier: 'must',
+  category: 'payments',
+  title: 'Turn off 4G on Terminal configuration {{configurationId}}',
+  body:
+    'Store {{hostId}} of workspace {{orgId}} was deleted while its card readers had 4G, and Stripe refused to turn cellular off on Terminal configuration {{configurationId}}. Turn it off in the Stripe Dashboard (Terminal → Locations), or Stripe keeps billing the platform for those readers.',
+  delivery: 'immediate',
+  dedupeWindowMinutes: 30 * DAY,
+  defaultEnabled: true,
+}
+
 export const COMMERCE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
   COMMERCE_CHARGEBACK_UNROUTABLE,
   COMMERCE_TAX_NOT_REVERSED,
@@ -239,4 +284,6 @@ export const COMMERCE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
   COMMERCE_POS_HARDWARE_CANCELED_AFTER_ORDERING,
   COMMERCE_POS_HARDWARE_REFUND_FAILED,
   COMMERCE_POS_HARDWARE_RETURN_REQUESTED,
+  COMMERCE_POS_CELLULAR_CHARGE_FAILED,
+  COMMERCE_POS_CELLULAR_TURN_OFF_FAILED,
 ]

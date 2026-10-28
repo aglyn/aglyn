@@ -302,6 +302,36 @@ registerPluginJob({
 })
 
 /**
+ * The monthly 4G charge for Stripe Reader S710s (AGL-4038): each workspace
+ * whose readers had 4G in the month just ended is charged once, through
+ * core's usage-invoice charge. Every six hours, so the charge goes out early
+ * on the 1st and one that could not reach Stripe is tried again the same
+ * day; a month already settled costs a read per workspace. Nothing runs
+ * where 4G is not offered (`POS_CELLULAR_MONTHLY_COST_CENTS` unset).
+ * Per-host: a store locked for security or abuse is not charged while it is.
+ */
+registerPluginJob({
+  pluginId: BUNDLE_ID,
+  name: 'pos-cellular-billing',
+  intervalMinutes: 6 * 60,
+  description:
+    'Charge each workspace for 4G on its Stripe Reader S710s for the month just ended, once (AGL-4038).',
+  lockdown: { scope: 'per-host' },
+  handler: async (gate) => {
+    if (!process.env.STRIPE_SECRET_KEY || !process.env.POS_CELLULAR_MONTHLY_COST_CENTS) return
+    const { runPosCellularBilling } = await import('./server/pos-cellular-billing')
+    const report = await runPosCellularBilling(gate)
+    if (report.workspaces || report.storesGone) {
+      console.info(
+        `commerce: 4G for ${report.month} — ${report.paid} paid, ${report.open} left open, ` +
+          `${report.failed} not reached, ${report.unbillable} not billable, ${report.deferred} deferred, ` +
+          `${report.storesGone} deleted stores turned off`,
+      )
+    }
+  },
+})
+
+/**
  * Card reader start-up screens (AGL-4048) that went stale with nobody opening
  * the POS devices card: a logo changed on the organization profile or the
  * white-label brand, or the logo's file replaced in the media library. Every
