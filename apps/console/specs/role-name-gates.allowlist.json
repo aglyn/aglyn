@@ -209,36 +209,8 @@
       "count": 2,
       "kind": "pending"
     },
-    "libs/plugins/funnels/src/lib/components/funnels-card.component.tsx": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/funnels/src/lib/model/funnels.types.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/funnels/src/lib/server/funnel-drafts.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/funnels/src/lib/server/funnels-api.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
     "libs/plugins/inbox/src/lib/server.ts": {
       "count": 5,
-      "kind": "pending"
-    },
-    "libs/plugins/marketing/src/lib/server/campaign-manage.ts": {
-      "count": 4,
-      "kind": "pending"
-    },
-    "libs/plugins/marketing/src/lib/server/campaign-recipients.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/marketing/src/lib/server/campaign-send.ts": {
-      "count": 1,
       "kind": "pending"
     },
     "libs/plugins/marketplace/src/lib/components/publisher-agreement-client.ts": {
