@@ -362,6 +362,10 @@
       "why": "The AI plugin's org catalog keys and their role defaults, assembled into the contracts' ORG_ROLE_GRANTS (AGL-3950); type-only imports."
     },
     {
+      "path": "libs/plugins/bookings/src/lib/model/bookings-permissions.ts",
+      "why": "The bookings plugin's site keys (in-person payments, refunds) and their site-role presets, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
       "path": "libs/plugins/ai/src/lib/model/ai-products-bulk.ts",
       "why": "The copy job a landed product import starts: its brief, inputs and the created ids read from the import's results; no imports, so the native apps replay it (AGL-3671)."
     },

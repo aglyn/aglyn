@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { hostRoleCanWrite } from '@aglyn/aglyn/app-utils/organizations'
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import type { PluginApiHandler, PluginApiRequest } from '@aglyn/aglyn/app-utils/api-plugins'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import {
@@ -44,9 +44,10 @@ import { type BookingEventInput, raiseBookingEvent } from './booking-events'
  * Checking a guest in and moving a booking (AGL-3621), for the site's team.
  *
  * The native Aglyn app's bookings calendar calls these; any console surface
- * may too. Each is a member route: the caller's ID token names them, the
- * host's `memberRoles` must give them a content-writing role (the same roles the rules let write
- * a booking directly), and a locked-down site refuses. Each decides inside
+ * may too. Each is a member route: the caller's ID token names them, they
+ * must hold "Edit site content" on the site (`site.edit`, AGL-4047: the key
+ * the rules ask to write a booking directly, whose preset is the
+ * content-writing roles that did before), and a locked-down site refuses. Each decides inside
  * ONE transaction, re-reading the booking, so two phones acting at once
  * cannot both move it or check in a guest whose booking was just canceled.
  *
@@ -155,8 +156,7 @@ async function authorize(
   }
   const host = await deps.firestore().doc(`hosts/${hostId}`).get()
   if (!host.exists) throw new Refusal(404, 'Unknown site')
-  const role = ((host.get('memberRoles') ?? {}) as Record<string, unknown>)[uid]
-  if (!hostRoleCanWrite(role)) throw new Refusal(403, 'Your role on this site cannot change bookings')
+  if (!holdsSiteKey(host, uid, 'site.edit')) throw new Refusal(403, siteKeyRefusal('site.edit'))
   if (await deps.siteLocked(hostId)) throw new Refusal(423, 'This site is locked and cannot take changes right now')
   return { uid }
 }

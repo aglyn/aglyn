@@ -7359,6 +7359,8 @@
         "ai.use",
         "ai.generate",
         "ai.import",
+        "bookings.payments",
+        "bookings.refunds",
         "commerce.reservations",
         "commerce.walkIns",
         "commerce.orders",
@@ -7389,6 +7391,7 @@
         "site.sensitive",
         "ai.use",
         "ai.generate",
+        "bookings.payments",
         "commerce.reservations",
         "commerce.walkIns",
         "commerce.orders",
@@ -7429,6 +7432,8 @@
         "ai.use",
         "ai.generate",
         "ai.import",
+        "bookings.payments",
+        "bookings.refunds",
         "commerce.reservations",
         "commerce.walkIns",
         "commerce.orders",
@@ -7478,6 +7483,10 @@
       {
         "id": "ai",
         "label": "AI"
+      },
+      {
+        "id": "bookings",
+        "label": "Bookings"
       },
       {
         "id": "commerce",
@@ -7657,6 +7666,20 @@
         "key": "ai.import",
         "label": "Bring a site in",
         "scope": "org"
+      },
+      {
+        "description": "Take a booking’s payment at the desk on a card reader. Follows the site role unless a role or member sets it.",
+        "group": "bookings",
+        "key": "bookings.payments",
+        "label": "Take booking payments in person",
+        "scope": "site"
+      },
+      {
+        "description": "Refund a paid booking, in full or in part. Follows the site role unless a role or member sets it.",
+        "group": "bookings",
+        "key": "bookings.refunds",
+        "label": "Refund bookings",
+        "scope": "site"
       },
       {
         "description": "Edit, cancel and check out stays, and add, change and remove what can be booked. Follows the site role unless a role or member sets it.",

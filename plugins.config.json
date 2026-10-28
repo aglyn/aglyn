@@ -309,6 +309,7 @@
         "console": "registerBookingsConsole",
         "tenantApi": "registerBookingsApi",
         "consoleApi": "registerBookingsConsoleApi",
+        "declarations": "registerBookingsDeclarations",
         "consoleServerDeclarations": "registerBookingsConsoleServerDeclarations",
         "tenantEmails": "bookingsTenantEmails"
       },

@@ -29,6 +29,8 @@ import {
   bookingInPersonState,
   type BookingInPersonPayment,
 } from '../model/booking-in-person'
+import { bookingsSitePermissionRefusal } from '../model/bookings-permissions'
+import { holdsBookingsSiteKey } from './bookings-site-keys'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 
 /*==========================================
@@ -137,8 +139,11 @@ async function authorize(
   }
   const host = await firebaseAdmin.app().firestore().collection('hosts').doc(hostId).get()
   if (!host.exists) return { ok: false, status: 404, error: 'Unknown site' }
-  const role = (host.get('memberRoles') ?? {})[uid]
-  if (role !== 'admin' && role !== 'editor') return { ok: false, status: 403, error: 'Not permitted' }
+  // "Take booking payments in person" (AGL-4047), whose preset is the site
+  // Admin and Editor who took them before.
+  if (!holdsBookingsSiteKey(host, uid, 'bookings.payments')) {
+    return { ok: false, status: 403, error: bookingsSitePermissionRefusal('bookings.payments') }
+  }
   const org = ((await getOrgForHost(hostId))?.org as Record<string, any> | undefined) ?? null
   if (!checkEntitlement(org as never, 'bookings') || !checkEntitlement(org as never, 'pos')) {
     return { ok: false, status: 403, error: 'Taking booking payments in person needs the POS plan.' }

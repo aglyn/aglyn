@@ -163,6 +163,18 @@ and it can be allowed on its own: the staff at your check-in window can book wal
 without changing anyone's booking. For someone added to one site only, set either one
 for that site in its **Users** card: choose **Permissions** beside them.
 
+### Booking permissions {#booking-permissions}
+
+| Permission | What it opens | Admin | Editor | Author | Viewer |
+|---|---|---|---|---|---|
+| **Take booking payments in person** (`bookings.payments`) | Take a booking's payment at the desk on a card reader | Yes | Yes | No | No |
+| **Refund bookings** (`bookings.refunds`) | Refund a paid booking, including **Cancel and refund** | Yes | No | No | No |
+
+Checking guests in and moving bookings follow **Edit site content**, as editing a
+booking always has. Like the site permissions, both start from the member's role on
+the site, so nobody's access changed when they became permissions, and a custom role,
+a per-member override or the site's **Permissions** dialog can grant or deny either one.
+
 ### API keys, privacy requests, and holds {#api-keys-privacy-and-holds}
 
 Three settings sections have a permission each. Owners and admins hold all three by
