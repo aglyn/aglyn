@@ -84,8 +84,13 @@ const OUTPUTS = [
   'libs/aglyn/src/lib/app-utils/docs-help-sections.generated.ts',
 ]
 
+// A merge commit stages every file main changed, so its -U0 diff can run to
+// hundreds of megabytes: the default 1 MB buffer threw ENOBUFS and failed the
+// hook on any large merge. The diff is only scanned, never kept.
+const GIT_MAX_BUFFER = 1024 * 1024 * 1024
+
 const git = (args, options) =>
-  execFileSync('git', args, { encoding: 'utf8', ...options })
+  execFileSync('git', args, { encoding: 'utf8', maxBuffer: GIT_MAX_BUFFER, ...options })
 
 const nulSeparated = (text) => text.split('\0').filter(Boolean)
 
