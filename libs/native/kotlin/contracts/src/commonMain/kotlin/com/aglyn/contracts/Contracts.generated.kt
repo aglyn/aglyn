@@ -2572,6 +2572,7 @@ data class PosDisplayState(
     val receipt: PosDisplayStateReceipt? = null,
     val response: PosDisplayResponse? = null,
     val screen: PosDisplayScreen? = null,
+    val screenShownBy: String? = null,
     val tip: PosDisplayStateTip? = null,
     val updatedAtMs: Double,
 )

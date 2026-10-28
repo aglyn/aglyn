@@ -23,6 +23,7 @@ import { registerPluginPersonEraser } from '@aglyn/aglyn/plugin-manager/plugin-p
 import { registerPluginUserEraser } from '@aglyn/aglyn/plugin-manager/plugin-user-erasure'
 import { registerPluginService } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { registerClosureNoticeSource } from '@aglyn/aglyn/plugin-manager/plugin-closure-notices'
+import { registerCustomerDisplayVerifier } from '@aglyn/aglyn/plugin-manager/plugin-customer-display-verifier'
 import { registerPluginEventHandler } from '@aglyn/aglyn/plugin-manager/plugin-events'
 import { registerPluginSearchSources } from '@aglyn/aglyn/plugin-manager/plugin-search-sources'
 import { COMMERCE_SERVER_SEARCH_SOURCES } from './model/commerce-server-search-sources'
@@ -111,6 +112,13 @@ export function registerCommerceConsoleServerDeclarations(): void {
         emailVerified: payload.owner.emailVerified,
       })
     },
+    { pluginId: BUNDLE_ID },
+  )
+  // Who a paired customer display is (AGL-4042), for another plugin's
+  // server acting for the screen the register put on it: the display's own
+  // token is the credential. Loaded with the first screen that asks.
+  registerCustomerDisplayVerifier(
+    { verify: async (credential) => (await import('./server/pos-display')).verifyPosCustomerDisplay(credential) },
     { pluginId: BUNDLE_ID },
   )
   // A site's earlier orders, for a plugin that reads history behind the

@@ -537,6 +537,14 @@ export interface PosDisplayState {
   processing?: { message: string }
   /** The plugin page a `screen` state opens, as core's seam shapes it. */
   screen?: PosDisplayScreen
+  /**
+   * The staff member (uid) who put {@link screen} on the display (AGL-4042),
+   * stamped by the server from the session that pushed it, never taken from
+   * the register's body. Core's display verifier names them to the screen's
+   * plugin, whose record of what the customer did there names who showed it.
+   * Never sent to the display.
+   */
+  screenShownBy?: string
   response?: PosDisplayResponse
 }
 
@@ -725,9 +733,10 @@ export function sanitizePosDisplayResponse(
 export function posDisplayPublicState(
   state: PosDisplayState | null | undefined,
   nowMs: number,
-): Omit<PosDisplayState, 'response'> & { answered: boolean } {
+): Omit<PosDisplayState, 'response' | 'screenShownBy'> & { answered: boolean } {
   if (!state) return { mode: 'idle', updatedAtMs: nowMs, answered: false }
-  const { response, ...rest } = state
+  // Who showed a plugin's screen is the server's to know, not the display's.
+  const { response, screenShownBy: _shownBy, ...rest } = state
   if (rest.mode === 'thanks' && nowMs - rest.updatedAtMs > POS_DISPLAY_THANKS_MS) {
     return { mode: 'idle', updatedAtMs: rest.updatedAtMs, answered: false }
   }

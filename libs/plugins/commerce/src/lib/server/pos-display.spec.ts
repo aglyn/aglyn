@@ -50,7 +50,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
 })
 
 import { registerPluginSmsMessaging } from '@aglyn/aglyn/plugin-manager/plugin-sms-messaging'
-import { finishPosDisplayReceipt, posDisplayHandler, resetPosDisplay } from './pos-display'
+import { finishPosDisplayReceipt, posDisplayHandler, resetPosDisplay, verifyPosCustomerDisplay } from './pos-display'
 
 let mockSmsConfigured = true
 registerPluginSmsMessaging(
@@ -241,6 +241,25 @@ describe('the end of a sale (AGL-3608)', () => {
     expect(poll.body.state.screen).toBeUndefined()
   })
 
+  it('stamps who showed a plugin’s screen from the session, and never tells the display (AGL-4042)', async () => {
+    const token = await pairDisplay()
+    const screen = { pluginId: 'acme-forms', path: '/display-fill', params: { host: 'host-1' } }
+    // A register cannot claim someone else sent it.
+    await call(
+      { action: 'push', ...SITE, state: { mode: 'screen', promptId: 's1', screen, screenShownBy: 'someone-else' } },
+      { staff: true },
+    )
+    expect(fakeDocs.get('posDisplayStates/host-1__register-1')).toMatchObject({ mode: 'screen', screenShownBy: 'cashier-1' })
+    const poll = await call({ action: 'poll' }, { method: 'GET', token })
+    expect(poll.body.state.screenShownBy).toBeUndefined()
+    // A basket names nobody.
+    await call(
+      { action: 'push', ...SITE, state: { mode: 'cart', cart: { lines: [], itemsCents: 0, discountCents: 0, taxCents: 0, totalCents: 0 } } },
+      { staff: true },
+    )
+    expect(fakeDocs.get('posDisplayStates/host-1__register-1')?.['screenShownBy']).toBeUndefined()
+  })
+
   it('takes a plugin’s screen off only while it is the one showing (AGL-4042)', async () => {
     const token = await pairDisplay()
     const screen = { pluginId: 'acme-forms', path: '/display-fill', params: { grant: 'g.1' } }
@@ -321,5 +340,34 @@ describe('the end of a sale (AGL-3608)', () => {
     await resetPosDisplay('host-1', 'register-1')
     expect(fakeDocs.get(STATE_KEY)).toMatchObject({ mode: 'thanks', currency: 'usd' })
     expect(JSON.stringify(fakeDocs.get(STATE_KEY))).not.toContain('15550109999')
+  })
+})
+
+describe('core’s customer display verifier (AGL-4042)', () => {
+  const screen = { pluginId: 'acme-forms', path: '/display-fill', params: { host: 'host-1' } }
+
+  it('vouches for a paired display: its store, its workspace, what it shows and who sent it', async () => {
+    const token = await pairDisplay()
+    expect(await verifyPosCustomerDisplay(token)).toEqual({ hostId: 'host-1', orgId: 'org-1', screen: null, shownBy: null })
+    await call({ action: 'push', ...SITE, state: { mode: 'screen', promptId: 's1', screen } }, { staff: true })
+    expect(await verifyPosCustomerDisplay(token)).toEqual({ hostId: 'host-1', orgId: 'org-1', screen, shownBy: 'cashier-1' })
+    // However long the screen stays: the pairing, not a clock, is what vouches.
+    const later = jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 60 * 60 * 1000)
+    expect((await verifyPosCustomerDisplay(token))?.screen).toEqual(screen)
+    later.mockRestore()
+    // The register moves on: the display shows its own screen again.
+    await resetPosDisplay('host-1', 'register-1')
+    expect(await verifyPosCustomerDisplay(token)).toEqual({ hostId: 'host-1', orgId: 'org-1', screen: null, shownBy: null })
+  })
+
+  it('vouches for nothing else: a made-up token, a revoked display, or a self-service kiosk', async () => {
+    expect(await verifyPosCustomerDisplay('x'.repeat(43))).toBeNull()
+    const token = await pairDisplay()
+    await call({ action: 'revoke', ...SITE, displayId: '*' }, { staff: true })
+    expect(await verifyPosCustomerDisplay(token)).toBeNull()
+    const code = await call({ action: 'pairing-code', ...SITE, mode: 'kiosk' }, { staff: true })
+    const kiosk = await call({ action: 'pair', code: code.body.code, mode: 'kiosk' })
+    expect(kiosk.status).toBe(200)
+    expect(await verifyPosCustomerDisplay(kiosk.body.token)).toBeNull()
   })
 })

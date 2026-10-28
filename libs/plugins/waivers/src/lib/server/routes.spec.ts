@@ -20,11 +20,11 @@
 
 import { createHash } from 'crypto'
 import { registerPluginPersonRecords } from '@aglyn/aglyn/plugin-manager/plugin-person-records'
-import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
+import { registerCustomerDisplayVerifier, type VerifiedCustomerDisplay } from '@aglyn/aglyn/plugin-manager/plugin-customer-display-verifier'
+import { resetPluginServicesForTests, unregisterPluginServices } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { createMemoryFirestore, type MemoryFirestore } from '../testing/memory-firestore'
 import { setWaiversDbForTests, setWaiversFilesForTests } from './db'
-import { setWaiverDisplaySecretForTests } from './display-grant'
-import { displayGrantRoute, displayGrantStateRoute, signOnDisplayRoute } from './display-routes'
+import { displayScreenRoute, signOnDisplayRoute } from './display-routes'
 import { setWaiversEmailSenderForTests, type WaiverEmail } from './emails'
 import { signedCopyPath, signedCopyRoute } from './signed-copy'
 import { setWaiversGateDepsForTests } from './gate'
@@ -130,7 +130,6 @@ beforeEach(() => {
     read: async (path) => files.get(path) ?? null,
   })
   setWaiversClockForTests(() => NOW)
-  setWaiverDisplaySecretForTests(() => 'spec-secret')
   retentionYears = {}
   setWaiversErasureDepsForTests({
     bucket: () => ({
@@ -147,6 +146,10 @@ beforeEach(() => {
       return decoded
     },
     permissions: async (uid) => PERMISSIONS[uid] ?? {},
+    memberName: async (uid) => {
+      const decoded = Object.values(TOKENS).find((one) => one.uid === uid)
+      return (decoded?.['name'] as string | undefined) ?? (decoded?.['email'] as string | undefined) ?? null
+    },
     orgForHost: async (hostId) =>
       hostId === HOST || hostId === OTHER_HOST ? { orgId: ORG, org: { id: ORG, plan } } : null,
   })
@@ -175,7 +178,6 @@ afterAll(() => {
   setWaiversGateDepsForTests(null)
   setWaiversClockForTests(null)
   setWaiversErasureDepsForTests(null)
-  setWaiverDisplaySecretForTests(null)
 })
 
 function call(
@@ -431,38 +433,50 @@ describe('signing at the window', () => {
   })
 })
 
-describe('signing on the register’s customer display', () => {
-  async function grantFor(token = 'tok-clerk', host = HOST) {
-    const response = await call(displayGrantRoute, 'POST', { token, host })
-    return { status: response.status, body: await response.json() }
-  }
-  async function staff(action: 'state' | 'close', grantId: string, token = 'tok-clerk', host = HOST) {
-    const response = await call(displayGrantRoute, 'POST', { token, host, body: { action, grantId } })
-    return { status: response.status, body: await response.json() }
-  }
-  async function displayState(body: Record<string, unknown>) {
-    const response = await call(displayGrantStateRoute, 'POST', { token: null, body })
-    return { status: response.status, body: await response.json() }
-  }
+describe('signing on the register’s paired customer display (AGL-4042)', () => {
+  /**
+   * The paired displays, as the plugin that pairs them vouches for them
+   * through core's verifier: one at this track, one at the other site. What
+   * each shows changes as the register sends it something.
+   */
+  const TRACK_DISPLAY = 'display-track-0123456789abcdef'
+  const OTHER_DISPLAY = 'display-other-0123456789abcdef'
+  const displays = new Map<string, VerifiedCustomerDisplay>()
+  const waiverScreen = (hostId: string) => ({ pluginId: 'waivers', path: '/display-sign', params: { host: hostId } })
+  const waiverScreenFor = (hostId: string, shownBy = 'uid-clerk'): VerifiedCustomerDisplay => ({
+    hostId,
+    orgId: ORG,
+    screen: waiverScreen(hostId),
+    shownBy,
+  })
+  /** Staff send the site's waiver to a display. */
+  const send = (credential: string, hostId: string, shownBy = 'uid-clerk') =>
+    displays.set(credential, waiverScreenFor(hostId, shownBy))
 
-  it('grants it only to a member who may take signatures', async () => {
-    expect((await grantFor('tok-viewer')).status).toBe(403)
-    expect((await grantFor('tok-narrowed')).status).toBe(403)
-    expect((await grantFor(null as never)).status).toBe(401)
-    const granted = await grantFor('tok-window')
-    expect(granted.status).toBe(201)
-    expect(granted.body).toEqual({
-      grant: expect.stringMatching(/^aglyn-waiver-display-v2\./),
-      grantId: expect.stringMatching(/^[a-f0-9]{32}$/),
-    })
+  beforeAll(() => {
+    registerCustomerDisplayVerifier({ verify: async (credential) => displays.get(credential) ?? null }, { pluginId: 'pos-spec' })
+  })
+  afterAll(() => unregisterPluginServices('pos-spec'))
+  beforeEach(() => {
+    displays.clear()
+    displays.set(TRACK_DISPLAY, { hostId: HOST, orgId: ORG, screen: null, shownBy: null })
+    displays.set(OTHER_DISPLAY, { hostId: OTHER_HOST, orgId: ORG, screen: null, shownBy: null })
   })
 
-  it('signs with the grant and no session, naming the staff member who put it on the display', async () => {
+  function sign(body: Record<string, unknown>) {
+    return call(signOnDisplayRoute, 'POST', { token: null, body })
+  }
+  async function showing(credential: string, host = HOST) {
+    const response = await call(displayScreenRoute, 'POST', { token: null, host, body: { display: credential } })
+    return (await response.json()).showing
+  }
+
+  it('signs with the display’s pairing and no session, naming the staff member who sent it', async () => {
     const waiver = await publishedWaiver()
-    const { body } = await grantFor()
-    const response = await call(signOnDisplayRoute, 'POST', {
-      token: null,
-      body: { ...signing(waiver, { signer: { name: 'Jordan Lee', email: '', phone: '', dateOfBirth: '1990-04-02' } }), grant: body.grant },
+    send(TRACK_DISPLAY, HOST)
+    const response = await sign({
+      ...signing(waiver, { signer: { name: 'Jordan Lee', email: '', phone: '', dateOfBirth: '1990-04-02' } }),
+      display: TRACK_DISPLAY,
     })
     expect(response.status).toBe(201)
     expect(await response.json()).toMatchObject({ people: ['Jordan Lee', 'Pat Lee'], emailed: false })
@@ -471,67 +485,80 @@ describe('signing on the register’s customer display', () => {
       method: 'at_window',
       audit: { staffUid: 'uid-clerk', staffName: 'Sam Clerk', ip: '203.0.113.7' },
     })
+    // The display's credential is the key, never part of the record.
+    expect(JSON.stringify(stored)).not.toContain(TRACK_DISPLAY)
   })
 
-  it('lasts until staff close it: no timer, then nothing signs under it (AGL-4042)', async () => {
+  it('signs ten minutes after it was sent, and an hour after: nothing on it runs out', async () => {
     const waiver = await publishedWaiver()
-    const { body } = await grantFor()
-    // Hours later, still open, still signs.
-    setWaiversClockForTests(() => NOW + 6 * 60 * 60 * 1000)
-    expect((await staff('state', body.grantId)).body).toEqual({ open: true })
-    expect((await displayState({ grant: body.grant, hostId: HOST })).body).toEqual({ open: true })
-    const late = await call(signOnDisplayRoute, 'POST', { token: null, body: { ...signing(waiver), grant: body.grant } })
-    expect(late.status).toBe(201)
-    // A member who may not take signatures can neither ask nor close.
-    expect((await staff('close', body.grantId, 'tok-viewer')).status).toBe(403)
-    expect((await staff('close', body.grantId)).body).toEqual({ closed: true })
-    expect((await staff('state', body.grantId)).body).toEqual({ open: false })
-    expect((await displayState({ grant: body.grant, hostId: HOST })).body).toEqual({ open: false })
-    const refused = await call(signOnDisplayRoute, 'POST', {
-      token: null,
-      body: { ...signing(waiver, { attemptKey: 'after-close-1' }), grant: body.grant },
-    })
-    expect(refused.status).toBe(401)
-    expect((await refused.json()).error).toMatch(/closed this screen/)
-    expect(signatures()).toHaveLength(1)
+    send(TRACK_DISPLAY, HOST)
+    setWaiversClockForTests(() => NOW + 10 * 60 * 1000)
+    expect(await showing(TRACK_DISPLAY)).toBe(true)
+    expect((await sign({ ...signing(waiver), display: TRACK_DISPLAY })).status).toBe(201)
+    setWaiversClockForTests(() => NOW + 60 * 60 * 1000)
+    expect(await showing(TRACK_DISPLAY)).toBe(true)
+    expect((await sign({ ...signing(waiver, { attemptKey: 'next-signer-1' }), display: TRACK_DISPLAY })).status).toBe(201)
+    expect(signatures()).toHaveLength(2)
   })
 
-  it('closes as the display goes back, by the grant it holds, and for its own site only', async () => {
-    const { body } = await grantFor()
-    // Another site named, or a forged grant: nothing closes.
-    expect((await displayState({ grant: body.grant, hostId: OTHER_HOST, close: true })).body).toEqual({ open: false })
-    expect((await displayState({ grant: `${body.grant}x`, hostId: HOST, close: true })).body).toEqual({ open: false })
-    expect((await staff('state', body.grantId)).body).toEqual({ open: true })
-    // A grant of this site is not another site's staff's to close.
-    expect((await staff('close', body.grantId, 'tok-clerk', OTHER_HOST)).body).toEqual({ closed: false })
-    expect((await displayState({ grant: body.grant, hostId: HOST, close: true })).body).toEqual({ open: false })
-    expect((await staff('state', body.grantId)).body).toEqual({ open: false })
-  })
-
-  it('refuses no grant, a forged one, another site’s, and stores nothing', async () => {
+  it('refuses a signing without a valid pairing token, and stores nothing', async () => {
     const waiver = await publishedWaiver()
-    const { body } = await grantFor()
-    const attempts: Array<Record<string, unknown>> = [
-      { ...signing(waiver) },
-      { ...signing(waiver), grant: `${body.grant}x` },
-      { ...signing(waiver), grant: body.grant, hostId: OTHER_HOST },
-    ]
-    for (const attempt of attempts) {
-      const refused = await call(signOnDisplayRoute, 'POST', { token: null, body: attempt })
+    send(TRACK_DISPLAY, HOST)
+    for (const display of [undefined, '', `${TRACK_DISPLAY}x`, 'not-a-display-0123456789']) {
+      const refused = await sign({ ...signing(waiver), ...(display === undefined ? {} : { display }) })
       expect(refused.status).toBe(401)
-      expect((await refused.json()).error).toMatch(/closed this screen/)
+      expect((await refused.json()).error).toMatch(/isn’t this store’s customer display/)
     }
+    expect(await showing(`${TRACK_DISPLAY}x`)).toBe(false)
     expect(signatures()).toHaveLength(0)
+  })
+
+  it('refuses a display paired to another store', async () => {
+    const waiver = await publishedWaiver()
+    send(OTHER_DISPLAY, OTHER_HOST)
+    // The other store's display, naming this track.
+    const refused = await sign({ ...signing(waiver), display: OTHER_DISPLAY })
+    expect(refused.status).toBe(401)
+    expect(await showing(OTHER_DISPLAY, HOST)).toBe(false)
+    // A display whose store's workspace is not the one the site belongs to now.
+    displays.set(TRACK_DISPLAY, { ...waiverScreenFor(HOST), orgId: 'org-elsewhere' })
+    expect((await sign({ ...signing(waiver), display: TRACK_DISPLAY })).status).toBe(401)
+    expect(signatures()).toHaveLength(0)
+  })
+
+  it('signs only while the display shows the waiver: once the register shows something else, it is refused', async () => {
+    const waiver = await publishedWaiver()
+    // Paired, but nothing sent.
+    expect((await sign({ ...signing(waiver), display: TRACK_DISPLAY })).status).toBe(409)
+    send(TRACK_DISPLAY, HOST)
+    expect(await showing(TRACK_DISPLAY)).toBe(true)
+    // The register shows a sale's basket (its own screen), or another plugin's page.
+    displays.set(TRACK_DISPLAY, { hostId: HOST, orgId: ORG, screen: null, shownBy: null })
+    expect(await showing(TRACK_DISPLAY)).toBe(false)
+    const refused = await sign({ ...signing(waiver), display: TRACK_DISPLAY })
+    expect(refused.status).toBe(409)
+    expect((await refused.json()).error).toMatch(/showing something else/)
+    displays.set(TRACK_DISPLAY, { hostId: HOST, orgId: ORG, screen: { pluginId: 'acme-forms', path: '/display-fill', params: {} }, shownBy: 'uid-clerk' })
+    expect((await sign({ ...signing(waiver), display: TRACK_DISPLAY })).status).toBe(409)
+    expect(signatures()).toHaveLength(0)
+  })
+
+  it('refuses a waiver sent by a member who does not take signatures here', async () => {
+    const waiver = await publishedWaiver()
+    send(TRACK_DISPLAY, HOST, 'uid-narrowed')
+    const refused = await sign({ ...signing(waiver), display: TRACK_DISPLAY })
+    expect(refused.status).toBe(403)
+    send(TRACK_DISPLAY, HOST, 'uid-window')
+    expect((await sign({ ...signing(waiver), display: TRACK_DISPLAY })).status).toBe(201)
+    expect(signatures()[0]).toMatchObject({ audit: { staffUid: 'uid-window', staffName: 'Wes Window' } })
   })
 
   it('answers a filled honeypot as a success and limits a flood', async () => {
     const waiver = await publishedWaiver()
-    const { body } = await grantFor()
-    expect(
-      (await call(signOnDisplayRoute, 'POST', { token: null, body: { ...signing(waiver), grant: body.grant, website: 'spam' } })).status,
-    ).toBe(201)
+    send(TRACK_DISPLAY, HOST)
+    expect((await sign({ ...signing(waiver), display: TRACK_DISPLAY, website: 'spam' })).status).toBe(201)
     rateAllowed = false
-    expect((await call(signOnDisplayRoute, 'POST', { token: null, body: { ...signing(waiver), grant: body.grant } })).status).toBe(429)
+    expect((await sign({ ...signing(waiver), display: TRACK_DISPLAY })).status).toBe(429)
     expect(signatures()).toHaveLength(0)
   })
 })

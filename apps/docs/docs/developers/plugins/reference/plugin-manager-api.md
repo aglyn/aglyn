@@ -429,6 +429,11 @@ the plugin that runs the register, so another plugin that needs the customer's
 own hands on a screen — a form to fill in, a document to sign — asks for it
 through core, and neither plugin names the other.
 
+The paired display is the authorization. Staff paired it to one store, so a
+screen's page needs no staff session and nothing minted for it: it sends its
+own server the display's credential, and that server asks core who the display
+is.
+
 ```ts
 // the page running a register, while its display is connected
 useEffect(() => {
@@ -439,36 +444,59 @@ useEffect(() => {
 // ANOTHER plugin's console widget on that page
 const display = useSyncExternalStore(subscribeCustomerDisplayHost, customerDisplayHost, () => null)
 if (display) {
-  await display.show({ pluginId: 'acme-forms', path: '/display-fill', params: { grant } })
+  await display.show({ pluginId: 'acme-forms', path: '/display-fill', params: { host: hostId } })
 }
+
+// the display's own page, once paired (and with null once unpaired)
+rememberCustomerDisplayCredential(token)
 
 // the display, when its state names a screen it has not opened yet
 const href = customerDisplayScreenHref(screen, '/kiosk/acme-pos/display')
 
-// the plugin's public page, when the customer is done
+// the plugin's public page: its credential for its own server, and the way back
+const credential = customerDisplayCredential()
 const back = customerDisplayReturnPath(window.location.search)
+
+// the plugin's server, acting for that page
+const display = await verifyCustomerDisplay(body.display)
+if (!display || display.hostId !== hostId) return refuse(401)
+if (!customerDisplayShows(display, { pluginId: 'acme-forms', path: '/display-fill', params: { host: hostId } })) {
+  return refuse(409) // the register shows something else now
+}
 ```
 
 | API | Semantics |
 | --- | --- |
-| `CustomerDisplayScreen` | `{ pluginId, path, params }`: one of the asking plugin's own public console pages (`ConsolePublicPage`, at `/kiosk/{pluginId}{path}`), with up to eight short plain string parameters. Never a customer's details: they ride the display's state and its address bar. |
+| `CustomerDisplayScreen` | `{ pluginId, path, params }`: one of the asking plugin's own public console pages (`ConsolePublicPage`, at `/kiosk/{pluginId}{path}`), with up to eight short plain string parameters. Never a customer's details, and never the display's credential: they ride the display's state and its address bar. |
 | `sanitizeCustomerDisplayScreen(raw)` | The screen as a register may store it, or `null`. The display's host checks every screen with it before storing one. |
 | `customerDisplayScreenHref(screen, returnTo)` | Where the display opens the screen: the plugin's page, its parameters, and `return` set to the display's own `/kiosk/…` address. `null` for anything out of shape. |
 | `customerDisplayReturnPath(search)` | The `/kiosk/…` address the screen's page sends the display back to, or `null`. Nothing outside the console's public pages is ever returned. |
 | `registerCustomerDisplayHost(host)` | Offers `{ show(screen), close(pluginId) }` to every plugin on the page, replacing any other; answers the function that withdraws it, and only it. `close` takes the plugin's screen off the display when it is the one showing, back to the register's own screen. |
 | `customerDisplayHost()` / `subscribeCustomerDisplayHost(listener)` | The host on this page, or `null`, and a subscription to it arriving or leaving. |
+| `rememberCustomerDisplayCredential(credential)` / `customerDisplayCredential()` | The display's page keeps the credential its pairing gave it (or forgets it with `null`); a screen's page on the same display reads it, or `null` on a device that is not a paired display. |
 
-A screen has no timer: it stays until the register shows something else, the
-plugin calls `close`, or its page sends the display back. Anything the page was
-handed that must stop working (a grant to sign, say) is the plugin's to revoke on
-its own server when the screen closes, and its page should ask that server
-whether it is still open so a screen closed from the register goes back.
+And on the server, from `@aglyn/aglyn/plugin-manager/plugin-customer-display-verifier`:
+
+| API | Semantics |
+| --- | --- |
+| `registerCustomerDisplayVerifier({ verify })` | The plugin that pairs displays registers the one verifier, from its `consoleServerDeclarations`. A second plugin's is refused. |
+| `verifyCustomerDisplay(credential)` | `{ hostId, orgId, screen, shownBy }`: the store the display is paired to, the workspace that owns it, the plugin screen it shows now (or `null`), and the uid of the staff member who put that screen there. `null` for a credential that opens no display, when no verifier is registered, or when it fails. |
+| `customerDisplayShows(display, screen)` | Whether that display shows a plugin's page now, with every parameter given. |
+
+A screen has no timer: it stays, however long the customer takes, until the
+register shows something else, the plugin calls `close`, or its page sends the
+display back once the customer is done. To follow the register, a screen's page
+asks its own server whether `customerDisplayShows` still holds, and goes back
+when it doesn't. A server acting for the page checks the same thing, so nothing
+is done for a screen the register already replaced.
 
 The display opens only a page the plugin **declared** public
 (`contributes.console.publicRoutes`): the console's public route refuses any
-other before the plugin loads. Client-only and React-free; import it by its
-own subpath (`@aglyn/aglyn/plugin-manager/plugin-customer-display`), it is not
-in the barrel.
+other before the plugin loads. The client half is client-only and React-free;
+import each half by its own subpath
+(`@aglyn/aglyn/plugin-manager/plugin-customer-display`,
+`@aglyn/aglyn/plugin-manager/plugin-customer-display-verifier`), neither is in
+the barrel.
 
 ## Host subcollections — `plugin-host-collections`
 

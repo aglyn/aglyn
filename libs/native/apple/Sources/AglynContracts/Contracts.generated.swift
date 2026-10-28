@@ -3897,10 +3897,11 @@ public struct PosDisplayState: Codable, Hashable, Sendable {
   public var receipt: PosDisplayStateReceipt?
   public var response: PosDisplayResponse?
   public var screen: PosDisplayScreen?
+  public var screenShownBy: String?
   public var tip: PosDisplayStateTip?
   public var updatedAtMs: Double
 
-  public init(cart: PosDisplayCart? = nil, currency: String? = nil, mode: PosDisplayMode, processing: PosDisplayStateProcessing? = nil, promptId: String? = nil, receipt: PosDisplayStateReceipt? = nil, response: PosDisplayResponse? = nil, screen: PosDisplayScreen? = nil, tip: PosDisplayStateTip? = nil, updatedAtMs: Double) {
+  public init(cart: PosDisplayCart? = nil, currency: String? = nil, mode: PosDisplayMode, processing: PosDisplayStateProcessing? = nil, promptId: String? = nil, receipt: PosDisplayStateReceipt? = nil, response: PosDisplayResponse? = nil, screen: PosDisplayScreen? = nil, screenShownBy: String? = nil, tip: PosDisplayStateTip? = nil, updatedAtMs: Double) {
     self.cart = cart
     self.currency = currency
     self.mode = mode
@@ -3909,6 +3910,7 @@ public struct PosDisplayState: Codable, Hashable, Sendable {
     self.receipt = receipt
     self.response = response
     self.screen = screen
+    self.screenShownBy = screenShownBy
     self.tip = tip
     self.updatedAtMs = updatedAtMs
   }

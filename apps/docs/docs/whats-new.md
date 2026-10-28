@@ -59,12 +59,13 @@ for the how-to.
   them, and a custom role or a per-member override can now grant either one, so the
   staff at your check-in window can book walk-ins without being editors.
 
-## October 2026 — a waiver stays on the customer display until you close it
+## October 2026 — a waiver on the customer display stays until it's signed
 
-- **[No timer on the customer display](commerce-and-bookings/commerce/waivers.md#on-the-customer-display)** —
-  a waiver you put on the customer display at check-in stays there however long the
-  rider takes to read it, until you select **Close display** beside the customer or
-  the rider is done. Once closed, the display can't sign under it again.
+- **[Nothing to open or close](commerce-and-bookings/commerce/waivers.md#on-the-customer-display)** —
+  a waiver you send to the customer display at check-in stays there however long the
+  rider takes to read it, until they sign or you show something else on the display.
+  There's no timer: the display is paired to your store, and that's what lets the
+  rider sign on it.
 
 ## October 2026 — waivers matched by the birth date on a contact
 

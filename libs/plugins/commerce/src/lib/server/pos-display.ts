@@ -252,6 +252,36 @@ export async function resolveDisplayToken(token: string): Promise<PosDeviceToken
   }
 }
 
+/**
+ * Core's customer display verifier (AGL-4042, `plugin-customer-display-verifier`):
+ * who a paired display is, for another plugin's server acting for the screen
+ * it put there. The display's own token is the credential, so the pairing is
+ * the authorization: a live CUSTOMER DISPLAY token (never a kiosk's) answers
+ * the store it is paired to, the workspace that owns it, the plugin screen it
+ * is showing now, and who put it there. Anything else answers `null`.
+ */
+export async function verifyPosCustomerDisplay(credential: string): Promise<{
+  hostId: string
+  orgId: string
+  screen: CommerceModel.PosDisplayScreen | null
+  shownBy: string | null
+} | null> {
+  const display = await resolveDisplayToken(credential)
+  if (!display || display.mode !== 'display') return null
+  const owner = await getOrgForHost(display.hostId).catch(() => null)
+  const orgId = String(owner?.org?.id ?? owner?.orgId ?? '')
+  if (!orgId) return null
+  const snapshot = await stateRef(display.hostId, display.registerId).get()
+  const state = snapshot.exists ? (snapshot.data() as CommerceModel.PosDisplayState) : null
+  const screen = state?.mode === 'screen' && state.screen ? state.screen : null
+  return {
+    hostId: display.hostId,
+    orgId,
+    screen,
+    shownBy: screen && typeof state?.screenShownBy === 'string' ? state.screenShownBy : null,
+  }
+}
+
 /** A token row's mode, `display` for one that predates kiosks. */
 function tokenMode(doc: any): CommerceModel.PosDeviceMode {
   return doc.get('mode') === 'kiosk' ? 'kiosk' : 'display'
@@ -450,6 +480,9 @@ async function staffAction(
       const state = CommerceModel.sanitizePosDisplayState(body['state'], Date.now(), {
         screen: sanitizeCustomerDisplayScreen,
       })
+      // Who put a plugin's screen there (AGL-4042), from the session, so the
+      // screen's plugin can name them through core's display verifier.
+      if (state.mode === 'screen') state.screenShownBy = gate.staff.uid
       // "Text" is never offered on a screen when the store cannot send one.
       if (state.receipt && !pluginSmsAvailable()) {
         const channels = state.receipt.channels.filter((channel) => channel !== 'sms')
