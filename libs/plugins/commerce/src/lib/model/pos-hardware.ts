@@ -754,6 +754,41 @@ export interface PosHardwareUnit {
   registeredAtMs: number | null
 }
 
+/**
+ * One refund of an in-person order (AGL-4038), once by its key: a return at
+ * the selling store's register (`register:{returnId}`), or a refund from the
+ * staff Hardware orders page (`staff:{n}`), both paid back from the selling
+ * store's own takings the way the sale was paid.
+ */
+export interface PosHardwareRefund {
+  key: string
+  via: 'register' | 'staff'
+  cents: number
+  /** Hardware items it took back; 0 when the refund named none. */
+  quantity: number
+  atMs: number
+  stripeRefundId: string | null
+}
+
+/**
+ * The buyer's request to return an in-person order, from their own
+ * purchase history (AGL-4038). Staff refund it (`refunded`) or decline it.
+ * Returns follow Stripe's hardware terms.
+ */
+export interface PosHardwareReturnRequest {
+  state: 'requested' | 'declined' | 'refunded'
+  /** The buyer's words; taken off with the buyer when their account is erased. */
+  reason: string | null
+  requestedBy: string | null
+  requestedAtMs: number
+  decidedBy: string | null
+  decidedAtMs: number | null
+  /** What staff told the buyer when declining. */
+  note: string | null
+}
+
+export const POS_HARDWARE_RETURN_REASON_MAX = 500
+
 /** `orgs/{orgId}/hardwareOrders/{orderId}`, written only by the server. */
 export interface PosHardwareOrder {
   orgId: string
@@ -830,6 +865,10 @@ export interface PosHardwareOrder {
   units?: PosHardwareUnit[]
   /** The units' serial numbers, for finding the order when a reader is registered. */
   serialNumbers?: string[]
+  /** An in-person order's refunds, each once by its key. */
+  refunds?: PosHardwareRefund[]
+  /** The buyer's request to return it, and what staff decided. */
+  returnRequest?: PosHardwareReturnRequest
 }
 
 /** The timestamp field each status stamps when it is reached. */
@@ -1085,7 +1124,7 @@ function salePaidTo(order: Pick<PosHardwareOrder, 'source' | 'paidTo'>): PosHard
  * longer answers to the person's uid, so a second run finds nothing.
  */
 export function posHardwareBuyerErasedPatch(
-  order: Pick<PosHardwareOrder, 'shipping' | 'attachment'>,
+  order: Pick<PosHardwareOrder, 'shipping' | 'attachment' | 'returnRequest'>,
   now: number,
 ): Record<string, unknown> {
   // The whole map, read in the same transaction: a dotted-path update would
@@ -1119,6 +1158,10 @@ export function posHardwareBuyerErasedPatch(
             attachedAtMs: attachment.attachedAtMs ?? null,
           },
         }
+      : {}),
+    // Their return request keeps its outcome; their words and account go.
+    ...(order.returnRequest
+      ? { returnRequest: { ...order.returnRequest, reason: null, requestedBy: null } }
       : {}),
     buyerErasedAtMs: now,
     updatedAtMs: now,

@@ -289,7 +289,11 @@ export interface PosOrderRefund {
   tenders: Array<{ method: PosTenderMethod; amountCents: number }>
   /** The member who gave it; null for a refund made in Stripe. */
   cashierId: string | null
-  source: 'order_dialog' | 'stripe'
+  /**
+   * Where it was given: the order dialog, Stripe, or the platform's staff
+   * refunding a card reader sold in person at its own store (AGL-4038).
+   */
+  source: 'order_dialog' | 'stripe' | 'staff'
   /** Stripe's refund id when it named one. */
   stripeRefundId: string | null
 }

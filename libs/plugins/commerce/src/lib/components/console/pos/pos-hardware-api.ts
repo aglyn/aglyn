@@ -24,7 +24,9 @@ import type {
   PosHardwareOrderSource,
   PosHardwareOrderStatus,
   PosHardwarePaidTo,
+  PosHardwareRefund,
   PosHardwareRegisterSale,
+  PosHardwareReturnRequest,
   PosHardwareShippingMethod,
   PosHardwareTracking,
   PosHardwareUnit,
@@ -95,6 +97,8 @@ export interface PosHardwareOrderRow {
   source?: PosHardwareOrderSource
   discountCents?: number
   readersToSetUp?: number
+  refundedCents?: number
+  returnRequest?: { state: PosHardwareReturnRequest['state']; requestedAtMs: number; note: string | null } | null
 }
 
 const SHOP = '/api/commerce/pos-hardware'
@@ -198,16 +202,20 @@ export interface StaffHardwareOrderRow extends Omit<PosHardwareOrderRow, 'shippi
   paidTo: PosHardwarePaidTo | null
   attachment: PosHardwareAttachment | null
   units: PosHardwareUnit[]
+  refundedCents: number
+  refunds: PosHardwareRefund[]
+  returnRequest: PosHardwareReturnRequest | null
 }
 
 const STAFF = '/api/commerce/admin/hardware-orders'
 
 /** The staff list's filter: one status, every order, or the in-person sales still to attach. */
-export type StaffHardwareFilter = PosHardwareOrderStatus | '' | 'to-attach'
+export type StaffHardwareFilter = PosHardwareOrderStatus | '' | 'to-attach' | 'returns'
 
 export function staffHardwareOrders(user: User, filter: StaffHardwareFilter, after: string | null = null) {
   const params = new URLSearchParams()
   if (filter === 'to-attach') params.set('attach', 'pending')
+  else if (filter === 'returns') params.set('returns', 'requested')
   else if (filter) params.set('status', filter)
   if (after) params.set('after', after)
   const search = params.toString()
@@ -221,7 +229,8 @@ export function staffHardwareOrders(user: User, filter: StaffHardwareFilter, aft
 export function staffHardwareOrderAction(
   user: User,
   body: {
-    action: 'update' | 'cancel' | 'refund' | 'forget-buyer'
+    action: 'update' | 'cancel' | 'refund' | 'forget-buyer' | 'decline-return'
+    note?: string
     orgId: string
     orderId: string
     stripeHardwareOrderId?: string | null
@@ -230,4 +239,12 @@ export function staffHardwareOrderAction(
   },
 ) {
   return sendPosHardwareRequest<{ ok: true; order: StaffHardwareOrderRow }>(user, STAFF, { method: 'POST', body })
+}
+
+/** Asks to return a card reader bought in person, with the reason (AGL-4038). */
+export function posHardwareRequestReturn(user: User, hostId: string, orderId: string, reason: string) {
+  return sendPosHardwareRequest<{ ok: true; order: PosHardwareOrderRow }>(user, SHOP, {
+    method: 'POST',
+    body: { action: 'request-return', hostId, orderId, reason },
+  })
 }

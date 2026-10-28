@@ -99,6 +99,9 @@ const inPerson = {
   paidTo: { account: 'seller_store', hostId: 'host-seller', orgId: 'org-seller', tenders: ['cash'], stripeAccountId: 'acct_seller' },
   attachment: { state: 'pending', email: null, uid: null, orgId: null, hostId: null, attachedBy: null, attachedAtMs: null },
   units: [],
+  refundedCents: 0,
+  refunds: [],
+  returnRequest: null,
 }
 
 describe('Staff → Hardware orders, sold in person', () => {
@@ -128,5 +131,42 @@ describe('Staff → Hardware orders, sold in person', () => {
     expect(within(dialog).queryByText('Order in the Stripe hardware shop')).toBeNull()
     // A buyer who never made an account is removed from here, on a privacy request.
     expect(within(dialog).getByRole('button', { name: "Remove buyer's details" })).toBeTruthy()
+  })
+})
+
+describe('Staff → Hardware orders, a return requested', () => {
+  beforeEach(() => {
+    requested.length = 0
+    rows = [
+      {
+        ...inPerson,
+        status: 'registered',
+        attachment: { ...inPerson.attachment, state: 'attached', orgId: 'org-pat' },
+        returnRequest: {
+          state: 'requested',
+          reason: 'Not needed',
+          requestedBy: 'uid-pat',
+          requestedAtMs: 2_000,
+          decidedBy: null,
+          decidedAtMs: null,
+          note: null,
+        },
+      },
+    ]
+  })
+
+  it('filters to the requests, says what was asked, and offers the refund and a decline with a note', async () => {
+    render(<PosHardwareOrdersStaffPage basePath="/admin" />)
+    fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Status' }))
+    fireEvent.click(within(screen.getByRole('listbox')).getByText('Return requested'))
+    await waitFor(() => expect(requested).toContain('returns'))
+    fireEvent.click(await screen.findByTestId('order-row'))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText(/Return requested .*“Not needed”/)).toBeTruthy()
+    // A reader handed over at the sale is refunded, never canceled.
+    expect(within(dialog).queryByRole('button', { name: 'Cancel and refund' })).toBeNull()
+    expect((within(dialog).getByRole('button', { name: 'Refund' }) as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Decline return' }))
+    expect(await screen.findByText('Decline this return?')).toBeTruthy()
   })
 })

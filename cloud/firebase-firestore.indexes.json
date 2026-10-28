@@ -10544,6 +10544,20 @@
     },
     {
       "collectionGroup": "hardwareOrders",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "returnRequest.state",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAtMs",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "hardwareOrders",
       "queryScope": "COLLECTION",
       "fields": [
         {

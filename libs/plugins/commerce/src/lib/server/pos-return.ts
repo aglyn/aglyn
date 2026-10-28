@@ -54,6 +54,7 @@ import {
   type PosOpsDeps,
 } from './pos-ops-gate'
 import { createStripeRefund } from './stripe-refund'
+import { parsePosHardwareInPersonConfig } from '../model/pos-hardware'
 
 /*==========================================
  * RETURNS AT THE REGISTER (AGL-3609): `POST /api/commerce/pos-return`.
@@ -101,6 +102,12 @@ export interface PosReturnSideEffects {
   lineIndexes: number[]
   /** The lines this return finished taking back in full. */
   fullLineIndexes: number[]
+  /**
+   * Each line taken back, with its units and its share of the refund, for
+   * whatever follows a line in particular — a card reader sold in person,
+   * whose hardware order is told (AGL-4038).
+   */
+  lines?: Array<{ index: number; quantity: number; refundCents: number }>
 }
 
 export interface PosReturnDeps extends PosOpsDeps {
@@ -185,6 +192,21 @@ export function defaultPosReturnDeps(): PosReturnDeps {
           },
         }),
       )
+      // A card reader the platform's own store sold in person (AGL-4038):
+      // its hardware order and retained sale record take the return too.
+      // Answered from the environment for every other store.
+      if (input.lines?.length && parsePosHardwareInPersonConfig(process.env)?.sellerHostId === input.hostId) {
+        await settle('hardware return', async () =>
+          (await import('./pos-hardware-returns')).recordRegisterHardwareReturn({
+            config: parsePosHardwareInPersonConfig(process.env),
+            hostId: input.hostId,
+            registerOrderId: input.orderId,
+            returnId: input.returnId,
+            refundCents: input.refundCents,
+            lines: input.lines ?? [],
+          }),
+        )
+      }
       await settle('buyer notice', () =>
         notifyOrderBuyer({ hostId: input.hostId, orderId: input.orderId }, 'refunded', {
           refundId: '',
@@ -743,6 +765,7 @@ export async function handlePosReturn(deps: PosReturnDeps, req: PluginApiRequest
       ],
       lineIndexes: picks.map((pick) => pick.index),
       fullLineIndexes: reserved.completedLines,
+      lines: lines.map((line) => ({ index: line.index, quantity: line.quantity, refundCents: line.refundCents })),
       returnId,
       storeReturn: storeReturn as unknown as CommerceModel.HostReturn,
       refundIds: results.flatMap((result) => (result.refundId ? [result.refundId] : [])),

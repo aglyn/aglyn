@@ -63,6 +63,7 @@ const WRITE_ROLES = ['super', 'billing'] as const
 
 const NOT_REFUNDABLE = 'Only an order that has not shipped can be canceled or refunded.'
 const CLOSED = 'A canceled or refunded order can no longer change.'
+const REFUNDED = 'This order is refunded in full.'
 
 /** A control disabled with its reason, or passed through when there is none. */
 function Guarded(props: { reason?: string; children: ReactElement<{ disabled?: boolean }> }) {
@@ -142,6 +143,8 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
   const [open, setOpen] = useState<StaffHardwareOrderRow | null>(null)
   const [busy, setBusy] = useState(false)
   const [form, setForm] = useState({ stripeHardwareOrderId: '', carrier: '', number: '', url: '' })
+  /** The note for declining a return request, while its dialog is open. */
+  const [declineNote, setDeclineNote] = useState<string | null>(null)
   const gate = resolveStaffRoleGate(staffRole, WRITE_ROLES)
   const uid = user?.uid ?? ''
 
@@ -232,13 +235,21 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
     if (confirmed) await act({ action: 'forget-buyer' }, "Buyer's details removed")
   }
 
+  const declineReturn = async () => {
+    if (!open || declineNote === null) return
+    await act({ action: 'decline-return', note: declineNote.trim() }, 'Return request declined')
+    setDeclineNote(null)
+  }
+
   const returnMoney = async (action: 'cancel' | 'refund') => {
     if (!open) return
+    const sameSale = open.source === 'in_person'
     const confirmed = await confirm({
       title: action === 'cancel' ? 'Cancel and refund this order?' : 'Refund this order?',
-      description:
-        `${formatPosHardwareCents(open.totalCents)} goes back to the card it was paid with. ` +
-        'Cancel the order in the Stripe Dashboard too if it was already placed there.',
+      description: sameSale
+        ? `${formatPosHardwareCents(open.totalCents - open.refundedCents)} goes back to the card the register sale was paid with, from the selling store's own account. Under Stripe's hardware terms the buyer sends the reader back at their cost.`
+        : `${formatPosHardwareCents(open.totalCents)} goes back to the card it was paid with. ` +
+          'Cancel the order in the Stripe Dashboard too if it was already placed there.',
       confirmationText: action === 'cancel' ? 'Cancel and refund' : 'Refund',
       confirmationButtonProps: { color: 'error' },
     })
@@ -334,7 +345,14 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
   const inPerson = open?.source === 'in_person'
   const next = open ? nextPosHardwareStatus(open.status) : null
   const closed = open ? open.status === 'canceled' || open.status === 'refunded' : true
-  const refundable = open ? posHardwareRefundable(open.status) && !open.refundPending : false
+  // A reader sold in person refunds what is left of it, its own way, until
+  // it is refunded in full (AGL-4038).
+  const refundable = open
+    ? inPerson
+      ? open.status !== 'refunded' && open.status !== 'canceled' && open.refundedCents < open.totalCents
+      : posHardwareRefundable(open.status) && !open.refundPending
+    : false
+  const returnRequested = open?.returnRequest?.state === 'requested'
   const writeReason = gate.blocked ? gate.reason : undefined
 
   return (
@@ -353,6 +371,7 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
           >
             <MenuItem value="">{'All'}</MenuItem>
             <MenuItem value="to-attach">{'Sold in person, to attach'}</MenuItem>
+            <MenuItem value="returns">{'Return requested'}</MenuItem>
             {POS_HARDWARE_ORDER_STATUSES.map((value) => (
               <MenuItem key={value} value={value}>
                 {POS_HARDWARE_STAFF_STATUS_LABELS[value]}
@@ -370,6 +389,8 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
           <Typography variant="body2" color="text.secondary">
             {status === 'to-attach'
               ? 'Every card reader sold in person is attached to a workspace.'
+              : status === 'returns'
+                ? 'No return requests are waiting.'
               : status
                 ? `No orders are ${POS_HARDWARE_STAFF_STATUS_LABELS[status].toLowerCase()}.`
                 : 'No hardware orders yet.'}
@@ -423,6 +444,18 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
                   {`Into the store's own account${open.paidTo?.stripeAccountId ? ` (${open.paidTo.stripeAccountId})` : ''}, not the platform's.`}
                 </Typography>
                 <Typography variant="body2">{attachedTo(open)}</Typography>
+                {open.refundedCents ? (
+                  <Typography variant="body2" color="text.secondary">
+                    {`Refunded ${formatPosHardwareCents(open.refundedCents)}${open.refunds.some((refund) => refund.via === 'register') ? ', partly as a return at the register' : ''}`}
+                  </Typography>
+                ) : null}
+                {open.returnRequest ? (
+                  <Alert severity={returnRequested ? 'warning' : 'info'}>
+                    {returnRequested
+                      ? `Return requested ${when(open.returnRequest.requestedAtMs)}: “${open.returnRequest.reason ?? ''}”. Refund it, or decline it with a note.`
+                      : `Return request ${open.returnRequest.state}${open.returnRequest.note ? `: ${open.returnRequest.note}` : ''}.`}
+                  </Alert>
+                ) : null}
                 {open.contactEmail ? (
                   <Typography variant="body2" color="text.secondary">
                     {open.contactEmail}
@@ -486,6 +519,13 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
           </DialogContent>
         ) : null}
         <DialogActions sx={{ flexWrap: 'wrap', gap: 1 }}>
+          {returnRequested ? (
+            <Guarded reason={writeReason}>
+              <Button disabled={busy} onClick={() => setDeclineNote('')}>
+                {'Decline return'}
+              </Button>
+            </Guarded>
+          ) : null}
           {inPerson && (open?.contactEmail || open?.attachment?.email || open?.attachment?.uid) ? (
             <Guarded reason={writeReason}>
               <Button color="error" disabled={busy} onClick={() => void forgetBuyer()}>
@@ -493,12 +533,14 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
               </Button>
             </Guarded>
           ) : null}
-          <Guarded reason={writeReason ?? (refundable ? undefined : NOT_REFUNDABLE)}>
-            <Button color="error" disabled={busy} onClick={() => void returnMoney('cancel')}>
-              {'Cancel and refund'}
-            </Button>
-          </Guarded>
-          <Guarded reason={writeReason ?? (refundable ? undefined : NOT_REFUNDABLE)}>
+          {inPerson ? null : (
+            <Guarded reason={writeReason ?? (refundable ? undefined : NOT_REFUNDABLE)}>
+              <Button color="error" disabled={busy} onClick={() => void returnMoney('cancel')}>
+                {'Cancel and refund'}
+              </Button>
+            </Guarded>
+          )}
+          <Guarded reason={writeReason ?? (refundable ? undefined : inPerson ? REFUNDED : NOT_REFUNDABLE)}>
             <Button color="error" disabled={busy} onClick={() => void returnMoney('refund')}>
               {'Refund'}
             </Button>
@@ -521,6 +563,27 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
               </Button>
             </Guarded>
           ) : null}
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={declineNote !== null} onClose={() => setDeclineNote(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>{'Decline this return?'}</DialogTitle>
+        <DialogContent>
+          <TextField
+            label="Note for the buyer (optional)"
+            value={declineNote ?? ''}
+            onChange={(event) => setDeclineNote(event.target.value)}
+            multiline
+            minRows={2}
+            fullWidth
+            sx={{ mt: 1 }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeclineNote(null)}>{'Keep it open'}</Button>
+          <Button color="error" disabled={busy} onClick={() => void declineReturn()}>
+            {'Decline'}
+          </Button>
         </DialogActions>
       </Dialog>
     </CardDisplay>

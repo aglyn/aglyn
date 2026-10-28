@@ -206,6 +206,28 @@ export const COMMERCE_POS_HARDWARE_REFUND_FAILED: OperatorAlertDefinition = {
   defaultEnabled: true,
 }
 
+/**
+ * A buyer asked to return a card reader they bought in person at the
+ * platform's own store (AGL-4038), from their own purchase history. Staff
+ * refund it from Staff → Hardware orders, or decline it there.
+ */
+export const COMMERCE_POS_HARDWARE_RETURN_REQUESTED: OperatorAlertDefinition = {
+  type: 'commerce.posHardwareReturnRequested',
+  pluginId: BUNDLE_ID,
+  label: 'Card reader return requested',
+  description:
+    'A workspace asked to return card reader hardware it bought in person. Arrange the return under Stripe’s hardware terms, then refund it or decline it on Staff → Hardware orders, under Return requested.',
+  tier: 'should',
+  category: 'payments',
+  title: 'Return requested for hardware order {{orderNumber}} ({{amount}})',
+  body:
+    'Workspace {{orgId}} asked to return {{items}} from hardware order {{orderNumber}} ({{amount}}), bought in person: “{{reason}}”. Refund it or decline it on Staff → Hardware orders, under Return requested.',
+  link: '/admin/hardware-orders',
+  delivery: 'immediate',
+  dedupeWindowMinutes: 30 * DAY,
+  defaultEnabled: true,
+}
+
 export const COMMERCE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
   COMMERCE_CHARGEBACK_UNROUTABLE,
   COMMERCE_TAX_NOT_REVERSED,
@@ -216,4 +238,5 @@ export const COMMERCE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
   COMMERCE_POS_OFFLINE_CARD_WRONG_ACCOUNT,
   COMMERCE_POS_HARDWARE_CANCELED_AFTER_ORDERING,
   COMMERCE_POS_HARDWARE_REFUND_FAILED,
+  COMMERCE_POS_HARDWARE_RETURN_REQUESTED,
 ]
