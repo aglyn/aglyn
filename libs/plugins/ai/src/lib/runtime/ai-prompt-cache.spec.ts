@@ -977,12 +977,16 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       'product-copy': { prefixTokens: 2_424, minimum: 512, caches: true, toolsStable: true },
       // The catalog is up 132 at AGL-3733 (Zach, 2026-10-12): each product's
       // suggested price, its field and the rule that prices it by kind.
-      catalog: { prefixTokens: 2_582, minimum: 512, caches: true, toolsStable: true },
+      // Up 72 at AGL-4065: the rule that names each product as one thing a
+      // shopper buys, never a kind with "Item" or "Order" after it.
+      catalog: { prefixTokens: 2_654, minimum: 512, caches: true, toolsStable: true },
       categories: { prefixTokens: 2_349, minimum: 512, caches: true, toolsStable: true },
       // A site's first post (AGL-3676): the doctrine's fields block, its rules and its tool.
       'blog-post': { prefixTokens: 821, minimum: 512, caches: true, toolsStable: true },
       // A site's dataset (AGL-3616): the doctrine's fields block, its rules and its tool.
-      dataset: { prefixTokens: 1_030, minimum: 512, caches: true, toolsStable: true },
+      // Up 195 at AGL-4065: the rule that a list the brief gives no entries for
+      // starts with marked samples, and the tool's `sample` on each record.
+      dataset: { prefixTokens: 1_225, minimum: 512, caches: true, toolsStable: true },
       // CRM by AI (AGL-2917), on the fast tier: each prompt is only the field
       // rules, the kind's own and its tool, which no shape took past Claude
       // Haiku 4.5's minimum and every shape takes past Claude Haiku 5.5's

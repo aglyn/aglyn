@@ -61,6 +61,7 @@ import {
   MenuItem,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import {
@@ -723,6 +724,12 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
             {CommerceModel.productSellsOnline(row) ? null : (
               <Chip label="In person only" size="small" variant="outlined" />
             )}
+            {/* A sample a guided start made, to replace with the merchant's own (AGL-4065). */}
+            {CommerceModel.productIsSample(row) ? (
+              <Tooltip title={CommerceModel.PRODUCT_SAMPLE_NOTE}>
+                <Chip label="Sample" size="small" color="info" variant="outlined" />
+              </Tooltip>
+            ) : null}
           </Stack>
         ),
       },
