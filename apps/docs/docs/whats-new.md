@@ -27,6 +27,15 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — waivers matched by name and date of birth
+
+- **[A rider matched by name and date of birth](commerce-and-bookings/commerce/waivers.md#how-a-rider-is-matched)** —
+  at check-in, a customer is matched to a waiver by their email first and, when no
+  waiver was signed with it, by their full name and date of birth together,
+  including a minor a parent signed for. A name alone never counts. When the
+  register can't tell, it says **Waiver not matched — check by name**, and **Find by
+  name** checks a date of birth and opens the signatures search on the name.
+
 ## October 2026 — change a stay's guests
 
 - **[Change how many guests a stay is for](commerce-and-bookings/commerce/pos-operations.md#check-in-at-the-window)** —

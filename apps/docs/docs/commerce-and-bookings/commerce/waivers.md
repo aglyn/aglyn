@@ -154,11 +154,27 @@ shows their waiver for the day:
 - **Signed for 2 of 3 riders**: a signature covers today, but for fewer people than
   the customer is checking in. Have the rest sign.
 - **Waiver needed** or **Waiver not on file**: nobody has signed for today yet.
+- **Waiver not matched — check by name**: no waiver was signed with the customer's
+  email, and the register doesn't know their date of birth, so it can't tell whether
+  someone signed for them under another email, such as a parent. It never guesses
+  from a name alone.
 
 Select **Sign waiver** to sign right there on the register's device, the same way as
-[at the window](#sign-at-the-window). The status updates when you're done. A customer
-is matched to their waiver by the email they bought with, so ask riders to sign with
-that address.
+[at the window](#sign-at-the-window). The status updates when you're done.
+
+### How a rider is matched to a waiver {#how-a-rider-is-matched}
+
+A customer is matched to a waiver by the email they bought with first. When no
+waiver was signed with that email, they are matched by their **full name and date of
+birth together**: the person who signed, or a minor a parent or guardian listed on
+their waiver. Capital letters and extra spaces in the name don't matter; the spelling
+and the date of birth must be the same. A name on its own is never a match, because
+two riders can share one.
+
+When a customer shows **Waiver not matched — check by name**, select **Find by name**.
+Ask the rider their date of birth, enter it beside their name and select **Check**:
+it says whether a signed waiver covers them today. Below it, the signatures search
+opens on their name, so you can read through the waivers signed with it.
 
 ### On the customer display {#on-the-customer-display}
 
