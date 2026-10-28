@@ -29,6 +29,17 @@ page but cannot add, change or remove a rule. See
 [Teams & roles](../../workspace-and-billing/teams-and-roles/overview.md).
 :::
 
+## Query strings pass through
+
+A redirect keeps the visitor's query string. Put the parameters you want on the
+**destination**, not on the short address: a rule from `/booth` to
+`/signup?utm_source=event&utm_medium=qr` sends a visitor who arrives at
+`/booth?ref=flyer` to `/signup?utm_source=event&utm_medium=qr&ref=flyer`.
+
+When the visitor's address and the destination name the same parameter, the
+destination's value is kept. To change or remove a parameter, edit the rule's
+destination; the short address, and anything already printed with it, stays the same.
+
 ## Sending visitors to another site
 
 A destination can be an internal path (`/pricing`) or an absolute `https://` URL —
