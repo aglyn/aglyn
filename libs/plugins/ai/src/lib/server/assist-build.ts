@@ -78,6 +78,7 @@ export function assistBuildBlock(): string {
     '- summary: one short sentence, such as "Plan three pages, a contact form and a booking service".',
     '- Nothing is built when you call the tool: the user is shown a plan with its price and confirms it. Never say anything is made, and never quote a price.',
     '- Only offer what the "A build here can make" block lists. If they ask for something it does not list, say plainly it cannot be built here from the chat and build the rest.',
+    '- A change to the site’s theme or look (its colors, fonts or corners) is offered only where the "A build here can make" block lists it, which it does on paid plans. When it is asked for and not listed, say a build cannot change the theme on this workspace’s plan and that they can change it in Setup → Theme, where the Theme assistant can propose one; then build the rest.',
     '- A question, or a change to the canvas the user has open, is not a build: answer it, or use the canvas edit tool where it is offered.',
   ].join('\n')
 }

@@ -108,6 +108,17 @@ export const AI_BUILD_CREATE_KINDS: readonly AiBuildPlanCreateKind[] = ['layout'
 export const AI_BUILD_STRUCTURAL_OPS: readonly string[] = ['page', ...AI_BUILD_CREATE_KINDS]
 
 /**
+ * The operation that proposes a change to the site's theme (AGL-4077): the
+ * theme runner's proposal, which the owner applies in Setup → Theme. Planned
+ * as an item; a plan that names it as its `theme-change` creation, the
+ * doctrine's word for it, is built by the same operation rather than refused.
+ */
+export const AI_BUILD_THEME_OP = 'theme'
+
+/** The creations a build builds as units: its structural kinds, and a theme change, as the theme operation. */
+const AI_BUILD_UNIT_CREATE_KINDS: readonly AiBuildPlanCreateKind[] = [...AI_BUILD_CREATE_KINDS, 'theme-change']
+
+/**
  * What a build hands an item it made before it (AGL-3728): its pages, by the
  * title the plan gave each and the id it was written under, and its layouts,
  * by name. An item's `new:<title>` destinations are read against it.
@@ -137,14 +148,14 @@ export interface AiBuildUnit {
 
 /** The operation a creation is built as. */
 function creationOp(creation: AiBuildPlanCreate): string {
-  return creation.kind
+  return creation.kind === 'theme-change' ? AI_BUILD_THEME_OP : creation.kind
 }
 
 /** A plan's `new:<name>` names, each to the slot that builds it. */
 function namedSlots(plan: AiBuildPlan): Map<string, string> {
   const slots = new Map<string, string>()
   plan.create.forEach((creation, index) => {
-    if (AI_BUILD_CREATE_KINDS.includes(creation.kind)) slots.set(creation.name.toLowerCase(), `c${index}`)
+    if (AI_BUILD_UNIT_CREATE_KINDS.includes(creation.kind)) slots.set(creation.name.toLowerCase(), `c${index}`)
   })
   for (const item of plan.items ?? []) slots.set(item.name.toLowerCase(), item.slot)
   return slots
@@ -213,7 +224,7 @@ export function aiBuildUnits(plan: AiBuildPlan): AiBuildUnit[] {
   }
   const units: AiBuildUnit[] = []
   plan.create.forEach((creation, index) => {
-    if (!AI_BUILD_CREATE_KINDS.includes(creation.kind)) return
+    if (!AI_BUILD_UNIT_CREATE_KINDS.includes(creation.kind)) return
     const slot = `c${index}`
     // A form is built after the dataset it writes to (AGL-3616).
     units.push({
@@ -335,14 +346,18 @@ export function aiBuildPlanShapeRefusal(
     if (slugs.has(slug)) return `Two pages in this plan share the address ${screen.slug}.`
     slugs.add(slug)
   }
+  const ops = options.ops
   for (const creation of plan.create) {
-    if (!AI_BUILD_CREATE_KINDS.includes(creation.kind)) {
-      return `A build does not create ${creation.kind === 'theme-change' ? 'theme changes' : `${creation.kind}s`} (“${creation.name}”). Take it out of create.`
+    if (AI_BUILD_CREATE_KINDS.includes(creation.kind)) continue
+    if (creation.kind !== 'theme-change') {
+      return `A build does not create ${creation.kind}s (“${creation.name}”). Take it out of create.`
     }
+    // A theme change is the theme operation's (AGL-4077), held as its item would be.
+    const refusal = aiBuildThemeRefusal(creation.name, 'create', options)
+    if (refusal) return refusal
   }
   const graph = aiBuildGraphProblems(plan)
   if (graph.length) return graph[0]
-  const ops = options.ops
   const counts = new Map<string, number>()
   for (const unit of units) counts.set(unit.op, (counts.get(unit.op) ?? 0) + 1)
   for (const item of plan.items ?? []) {
@@ -350,6 +365,10 @@ export function aiBuildPlanShapeRefusal(
       return item.op === 'page'
         ? `“${item.name}” is a page: plan it in screens, not items.`
         : `“${item.name}” is ${item.op === 'email' ? 'an' : 'a'} ${item.op}: plan it in create, not items.`
+    }
+    if (item.op === AI_BUILD_THEME_OP) {
+      const refusal = aiBuildThemeRefusal(item.name, 'items', options)
+      if (refusal) return refusal
     }
     if (!ops) continue
     const capability = ops.get(item.op)
@@ -368,6 +387,23 @@ export function aiBuildPlanShapeRefusal(
       }
     }
   }
+  return null
+}
+
+/**
+ * Why a build cannot make this theme change (AGL-4077), naming the list the
+ * plan put it in; `null` when it can, or when there are no operations to
+ * judge it against. The Free taste is named for what it is: its operations
+ * never hold the theme operation, which only paid plans are offered.
+ */
+function aiBuildThemeRefusal(
+  name: string,
+  list: 'create' | 'items',
+  options: { freeTaste?: boolean; ops?: AiBuildOps },
+): string | null {
+  if (!options.ops) return null
+  if (options.freeTaste) return `A Free workspace cannot have a theme change made (“${name}”). Take it out of ${list}.`
+  if (!options.ops.has(AI_BUILD_THEME_OP)) return `Nothing on this site can make “${name}” (theme change). Take it out of ${list}.`
   return null
 }
 
@@ -535,7 +571,7 @@ export function aiBuildFirstPagePlan<T extends AiBuildPlan>(plan: T): T | null {
   }
   if (keep.size === units.length) return null
   const screen = plan.screens[index]
-  const create = plan.create.filter((creation, at) => !AI_BUILD_CREATE_KINDS.includes(creation.kind) || keep.has(`c${at}`))
+  const create = plan.create.filter((creation, at) => !AI_BUILD_UNIT_CREATE_KINDS.includes(creation.kind) || keep.has(`c${at}`))
   const items = (plan.items ?? []).filter((item) => keep.has(item.slot))
   const kept = new Set([screen.slug, ...create.map((entry) => `${AI_PLAN_NEW_REF_PREFIX}${entry.name}`)])
   const smaller: T = {

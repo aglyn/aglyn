@@ -19,12 +19,15 @@ import { aiJobCancelAsked } from './ai-job-cancel'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import type { PluginAiCapability } from '@aglyn/aglyn/plugin-manager/plugin-ai-capabilities'
 import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import type { ResolvedBusinessProfile } from '@aglyn/aglyn/app-utils/business-profile'
 import { resolveOrgIdForHost } from '@aglyn/tenant-data-admin/server/organizations'
 import {
   AI_BUILD_LIMITS,
   AI_BUILD_MADE_INPUT,
   AI_BUILD_PUBLISH_INPUT,
+  AI_BUILD_THEME_OP,
   aiArticle,
+  aiBuildCreationNoun,
   aiBuildCreditRange,
   aiBuildDegradation,
   aiBuildInitialLedger,
@@ -54,7 +57,7 @@ import type {
   AiJobOutput,
   AiJobPlan,
 } from '../model/ai-jobs.types'
-import { AI_SITE_MAX_SECTIONS } from '../model/ai-site-job'
+import { AI_SITE_INPUT_MAX_CHARS, AI_SITE_MAX_SECTIONS } from '../model/ai-site-job'
 import {
   AI_CREDITS_CONFIRM_CODE,
   aiCreditsPromptFor,
@@ -65,6 +68,7 @@ import {
 } from '../model/ai-credit-estimate'
 import { aiFreeCreditsNoneLeftText, aiSiteWords } from '../model/ai-site-job'
 import { readFreeAiCreditsLeft } from '../usage/free-ai-credits-left'
+import { readAiSiteContext } from '../runtime/site-context'
 import { aiModelForStep } from '../providers/routing'
 import {
   AI_BUILD_UNIT_EMPTY_COPY,
@@ -203,6 +207,8 @@ const CREATION_JOB_KINDS: Partial<Record<AiBuildPlanCreateKind, AiJobKind>> = {
   form: 'form',
   component: 'component',
   email: 'email',
+  // The theme operation's unit, where the plan named it as its creation (AGL-4077).
+  'theme-change': 'theme',
 }
 
 /** The job kind a unit is built by, where an AI runner builds it. */
@@ -233,6 +239,69 @@ export function aiBuildItemArgsWithout(
   )
 }
 
+/**
+ * What a build's theme change says under its proposal (AGL-4077): the theme
+ * runner proposes and never saves, so the owner applies it, or not, where
+ * every theme change is made.
+ */
+export const AI_BUILD_THEME_PROPOSAL_NOTE =
+  'A proposal, in Setup → Theme. Nothing on the site changes until you apply it there and save.'
+
+/**
+ * What a build's units are told about the business (AGL-4077), in the inputs
+ * a site start's own units carry: what it does (`businessType`), its name and
+ * who it is for. A build started from the chat carries none of them, so its
+ * pages searched photos by their section names alone.
+ */
+export interface AiBuildBusinessWords {
+  businessType?: string
+  businessName?: string
+  audience?: string
+}
+
+/** Text held to what a site start's own answer holds, cut at a word. */
+function clipWords(value: string | null | undefined): string {
+  const text = (value ?? '').replace(/\s+/g, ' ').trim()
+  if (text.length <= AI_SITE_INPUT_MAX_CHARS) return text
+  const cut = text.slice(0, AI_SITE_INPUT_MAX_CHARS + 1)
+  const space = cut.lastIndexOf(' ')
+  return (space > 0 ? cut.slice(0, space) : cut.slice(0, AI_SITE_INPUT_MAX_CHARS)).replace(/[\s,;:.–—-]+$/, '')
+}
+
+/**
+ * The site's business profile as those inputs (AGL-4077): what the business
+ * does, else the schema.org type its settings name, as words; its name; who
+ * it is for. Only what the profile says; nothing for a site with none.
+ */
+export function aiBuildBusinessWords(profile: ResolvedBusinessProfile | null | undefined): AiBuildBusinessWords {
+  if (!profile) return {}
+  const type = profile.businessType ? profile.businessType.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase() : ''
+  const words: AiBuildBusinessWords = {
+    businessType: clipWords(profile.whatYouDo?.value) || clipWords(type),
+    businessName: clipWords(profile.name?.value),
+    audience: clipWords(profile.audience?.value),
+  }
+  return Object.fromEntries(Object.entries(words).filter(([, value]) => value)) as AiBuildBusinessWords
+}
+
+/**
+ * The business words a unit is handed (AGL-4077): only where the build itself
+ * names no business, only what the build does not say already, and never a
+ * word an item's own arguments name — an item's inputs ARE its arguments, so
+ * a settings change handed the profile's name would set it.
+ */
+function aiBuildBusinessInputs(
+  inputs: Readonly<Record<string, unknown>> | null | undefined,
+  business: AiBuildBusinessWords | null | undefined,
+  capability: Pick<PluginAiCapability, 'argsSchema'> | undefined,
+): AiBuildBusinessWords {
+  if (!business || aiSiteWords(inputs).about) return {}
+  const given = (key: string) => typeof inputs?.[key] === 'string' && (inputs[key] as string).trim() !== ''
+  return Object.fromEntries(
+    Object.entries(business).filter(([key]) => !given(key) && !(capability && key in capability.argsSchema.properties)),
+  ) as AiBuildBusinessWords
+}
+
 /** The id a unit's job, and so its draft, is named by. */
 export function aiBuildUnitJobId(job: Pick<AiJob, '$id'>, unit: AiBuildUnit): string {
   return unit.creation?.id ?? unit.screen?.id ?? unit.item?.id ?? `${job.$id}-${unit.slot}`
@@ -258,6 +327,8 @@ export function aiBuildUnitJob(
     dropped?: ReadonlySet<string>
     /** The motion of the site the build adds to, from its stored look (`aiLayoutSiteMotionOf`); absent, none stored. */
     siteMotion?: AiLayoutSiteMotion | null
+    /** What the site's business profile says the business is (`aiBuildBusinessWords`, AGL-4077); absent, nothing read. */
+    business?: AiBuildBusinessWords | null
   },
 ): AiJob {
   const plan = job.plan as AiJobPlan
@@ -279,7 +350,8 @@ export function aiBuildUnitJob(
         ...(unit.creation.writesTo ? { writesTo: aiSiteResolvedRef(unit.creation.writesTo, built) } : {}),
       },
     ]
-    brief.push(`Build the ${unit.creation.kind} “${unit.creation.name}”: ${unit.creation.why}`)
+    const what = unit.creation.kind === 'theme-change' ? aiBuildCreationNoun(unit.creation.kind) : unit.creation.kind
+    brief.push(`Build the ${what} “${unit.creation.name}”: ${unit.creation.why}`)
   }
   if (unit.screen) {
     const screen = unit.screen
@@ -325,10 +397,14 @@ export function aiBuildUnitJob(
   brief.push(...(context.briefLines ?? []))
   const inputs: Record<string, unknown> = {
     ...job.inputs,
+    // What the business is, from the site's profile, where the build says nothing of it (AGL-4077).
+    ...aiBuildBusinessInputs(job.inputs, context.business, item ? context.ops.get(item.op) : undefined),
     ...aiBuildItemArgsWithout(item?.args ?? {}, context.dropped),
     originJobId: aiOriginJobId(job),
   }
   delete inputs[AI_BUILD_PUBLISH_INPUT]
+  // A theme change is a change to the theme the site has (AGL-4077), never a new one.
+  if (context.kind === 'theme') inputs['mode'] = 'modify'
   // What a build adds to a site moves the way the site's own pages do
   // (AGL-3949): its look's motion style, drawn with the site's seed.
   if (context.siteMotion && (context.kind === 'page' || context.kind === 'layout' || context.kind === 'template')) {
@@ -397,7 +473,8 @@ export function aiBuildUnitJob(
     steps: [],
     outputs: [],
     items: null,
-    plan: item && !AI_PLANNED_JOB_KINDS.includes(context.kind) ? null : unitPlan,
+    // Only a planned kind builds from a plan: an item's other runners, and the theme runner, take none.
+    plan: AI_PLANNED_JOB_KINDS.includes(context.kind) ? unitPlan : null,
     inputs,
     brief: brief.join('\n').slice(0, AI_JOB_BRIEF_MAX_CHARS),
   }
@@ -434,6 +511,8 @@ export interface AiJobBuildStepDeps {
   readSitePages?: typeof readAiStoreSitePages
   /** The draft version of the site's layout a store's links are written into. */
   writeStoreLinks?: typeof writeAiStoreLinksLayoutDraft
+  /** The site's business profile, read where the build names no business (AGL-4077). */
+  readSiteContext?: typeof readAiSiteContext
 }
 
 /** The site's pages as a store's own pages are checked against them (AGL-3676): every page that is not deleted. */
@@ -590,6 +669,7 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
   const storePagesRefusal = deps.storePagesRefusal ?? aiSiteStorePagesRefusal
   const readSitePages = deps.readSitePages ?? readAiStoreSitePages
   const writeStoreLinks = deps.writeStoreLinks ?? writeAiStoreLinksLayoutDraft
+  const readSiteContext = deps.readSiteContext ?? readAiSiteContext
 
   return async (context): Promise<AiJobStepOutcome> => {
     const { job, firestore } = context
@@ -759,6 +839,21 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
     if (!capability) return settle({ slot: unit.slot, status: 'skipped', note: aiBuildUnavailableCopy(noun) })
     const degraded = degradation.degradedBy.length > 0
     const note = degradation.notes.length ? degradation.notes.join(' ') : null
+    // What the business is, for a page, a layout, form, component or email
+    // design, or another plugin's draft, read from the site's profile where
+    // the build names none (AGL-4077): a build from the chat carries no
+    // businessType, so its pages searched photos with nothing of the business
+    // to go on. Fail-soft: unread, the unit is built as it was.
+    const describesBusiness = Boolean(unit.screen || (unit.creation && unit.op !== AI_BUILD_THEME_OP) || capability.draftResource)
+    const business =
+      job.hostId && !aiSiteWords(job.inputs).about && describesBusiness
+        ? await readSiteContext(firestore, { orgId: job.orgId, hostId: job.hostId, host })
+            .then((read) => aiBuildBusinessWords(read?.profile))
+            .catch((error: unknown) => {
+              console.warn('ai build business profile unread', { orgId: job.orgId, jobId: job.$id, error })
+              return null
+            })
+        : null
 
     // Another plugin's resource: its writer, with the content its capability derives.
     if (capability.draftResource) {
@@ -803,7 +898,7 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
         org,
         now: context.now,
         // Drafts of one build share what must not repeat (a cover photo) and read its business (AGL-3755).
-        act: { id: aiOriginJobId(job), business: aiSiteWords(job.inputs).about || job.brief || '' },
+        act: { id: aiOriginJobId(job), business: aiSiteWords(job.inputs).about || business?.businessType || job.brief || '' },
         id,
         name: item.name,
         content,
@@ -845,6 +940,7 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
       briefLines: degradation.briefLines,
       dropped: degradation.dropped,
       siteMotion: aiLayoutSiteMotionOf(host?.['siteStyle']),
+      business,
     })
     // An item's kind is asked its own admission first (a campaign's plan,
     // a template's subject), once, before its first pass.
@@ -873,7 +969,14 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
       console.error('ai build unit threw', { orgId: job.orgId, jobId: job.$id, slot: unit.slot, error })
       return settle(failed(unit.slot, { ours: true, reason: 'provider', message: AI_BUILD_UNIT_EMPTY_COPY }))
     }
-    const spent = aiUnitSpend(outcome)
+    // A theme change's proposal says where it is applied (AGL-4077).
+    const theme = kind === 'theme'
+    const spent = theme
+      ? {
+          ...aiUnitSpend(outcome),
+          outputs: outcome.outputs.map((output) => (output.resource === 'theme' ? { ...output, note: AI_BUILD_THEME_PROPOSAL_NOTE } : output)),
+        }
+      : aiUnitSpend(outcome)
     const ids = outcome.outputs.map((output) => output.id)
     const stopped = aiUnitFailure(unit.slot, outcome)
     if (stopped) return settle(stopped, spent)
@@ -905,7 +1008,7 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
         slot: unit.slot,
         status: degraded ? 'degraded' : 'succeeded',
         outputs: ids,
-        note,
+        note: theme ? [note, AI_BUILD_THEME_PROPOSAL_NOTE].filter(Boolean).join(' ') : note,
         ...(degraded ? { degradedBy: degradation.degradedBy } : {}),
       },
       spent,
@@ -954,6 +1057,7 @@ const AI_BUILD_ITEM_RUNNER_KINDS: Readonly<Record<string, AiJobKind>> = {
   media: 'media',
   tracking: 'tracking',
   privacy: 'privacy',
+  [AI_BUILD_THEME_OP]: 'theme',
 }
 
 /**
