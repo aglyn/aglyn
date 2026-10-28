@@ -34,6 +34,15 @@ for the how-to.
   rider takes to read it, until you select **Close display** beside the customer or
   the rider is done. Once closed, the display can't sign under it again.
 
+## October 2026 — waivers: clearer e-signature consent and a copy to download
+
+- **[Signing electronically](commerce-and-bookings/commerce/waivers.md#signing-electronically)** —
+  the consent signers agree to now comes before the signature, covers any minors they
+  list, says what they need and how to get a paper copy, change their email or withdraw,
+  and names your business's contact. The signing page shows your contact, the signed
+  copy email repeats it, and every signer can download their signed copy when they
+  finish: a button on their own phone, a code to scan at your window or display.
+
 ## October 2026 — accept the terms of sale for a reader bought in person
 
 - **[The terms of sale, accepted at the booth](commerce-and-bookings/commerce/pos-hardware.md#bought-from-us-in-person)** —

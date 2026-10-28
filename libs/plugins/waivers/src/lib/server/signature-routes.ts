@@ -221,7 +221,11 @@ export async function signAtWindowRoute(request: Request): Promise<Response> {
     audit: { ...requestAudit(request), staffUid: staff.uid, staffName: staff.name ?? staff.email },
   })
   if (outcome.ok === false) return json({ error: outcome.error, ...(outcome.code ? { code: outcome.code } : {}) }, outcome.status)
-  return json({ signature: signatureRow(outcome.signature) }, outcome.replayed ? 200 : 201)
+  // The signer's own copy, as a code to scan from the tablet (AGL-4042).
+  const copyUrl = await (await import('./signed-copy'))
+    .signedCopyPath({ orgId: staff.orgId, hostId: staff.hostId, signature: outcome.signature })
+    .catch(() => null)
+  return json({ signature: signatureRow(outcome.signature), copyUrl }, outcome.replayed ? 200 : 201)
 }
 
 /** `POST waivers/paper`: record a waiver signed on paper, with a photo of the page. */
