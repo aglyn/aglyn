@@ -30,6 +30,7 @@
 import {
   ASSIST_OPEN_JOBS_LIMIT,
   ASSIST_OPEN_JOB_FIELDS,
+  assistAsksAboutItsWorkspace,
   assistJobsHere,
   assistOpenJobFrom,
   assistWorkspaceBlock,
@@ -187,5 +188,37 @@ describe('where the person is', () => {
       hostId: '',
     })
     expect(assistJobsHere('/acme/billing', '', new Set(['admin']))).toEqual({ orgSlug: 'acme', hostSegment: '', hostId: '' })
+  })
+})
+
+describe('a question only the workspace block can answer', () => {
+  it('asks about the plan the workspace is on', () => {
+    for (const question of ['What plan is my workspace on?', 'Which plan am I on?', 'Is my current plan Free?', 'What plan are we on right now']) {
+      expect([question, assistAsksAboutItsWorkspace(question, { jobs: false })]).toEqual([question, true])
+    }
+  })
+
+  it('asks where an AI job stands, where the workspace has AI jobs', () => {
+    for (const question of [
+      'Where is my about page? Is it built yet?',
+      'Is my build done?',
+      'What are my AI jobs doing?',
+      'How do I confirm my plan?',
+      'Is the plan ready?',
+    ]) {
+      expect([question, assistAsksAboutItsWorkspace(question, { jobs: true })]).toEqual([question, true])
+    }
+    expect(assistAsksAboutItsWorkspace('Is my build done?', { jobs: false })).toBe(false)
+  })
+
+  it('leaves a how-to question to the docs', () => {
+    for (const question of [
+      'How do I publish my first page?',
+      'how do I connect that custom domain to my site',
+      'how do I add an element to my page',
+      'Where do I change the site theme?',
+    ]) {
+      expect([question, assistAsksAboutItsWorkspace(question, { jobs: true })]).toEqual([question, false])
+    }
   })
 })

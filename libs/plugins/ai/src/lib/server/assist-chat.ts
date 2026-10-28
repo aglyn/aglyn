@@ -118,6 +118,7 @@ import {
   withAssistOpenDraftAction,
 } from './assist-view-context'
 import {
+  assistAsksAboutItsWorkspace,
   assistJobsHere,
   assistWorkspaceBlock,
   readAssistOpenJobs,
@@ -1185,6 +1186,12 @@ async function handler(request: Request): Promise<Response> {
     // never answered with an English quote, since its answer is written in
     // the asker's language.
     const needsEnglish = docsLookupNeedsEnglish(body.question)
+    // Nor is a question about the workspace's own plan or AI jobs (AGL-4075):
+    // the docs describe every plan and every job, and only this turn's
+    // workspace block says which plan this is and where its jobs stand.
+    const asksAboutWorkspace = assistAsksAboutItsWorkspace(body.question, {
+      jobs: checkEntitlement(org, 'aiGenerative'),
+    })
 
     // On the edit rung a docs quote cannot carry the proposal the author may
     // be asking for, so only a question that reads on its own — a how-to, not
@@ -1194,7 +1201,9 @@ async function handler(request: Request): Promise<Response> {
     // exactly what an edit request leans on. So is a follow-up on a draft
     // this thread's build made (AGL-3616): "make the about page shorter".
     const deflection =
-      needsEnglish || ((editRung || buildRung || body.drafts.length) && !questionStandsAlone(body.question))
+      needsEnglish ||
+      asksAboutWorkspace ||
+      ((editRung || buildRung || body.drafts.length) && !questionStandsAlone(body.question))
         ? null
         : deflectToDocs(body.question, scored, body.history.length > 0)
     if (deflection?.answered) {

@@ -2444,6 +2444,26 @@ describe('honest answers: the plan, the open jobs, the language, the limits', ()
     expect(mockFetch).toHaveBeenCalledTimes(2)
   })
 
+  it.each([
+    ['the plan', 'What plan is my workspace on?', 'This workspace is on the Free plan.'],
+    ['an AI job', 'Where is my about page? Is it built yet?', 'Confirm plan'],
+  ])('answers a question about %s from the workspace, never from a docs quote', async (_label, question, told) => {
+    seedOrgs()
+    seedJob('job-mine', {
+      kind: 'page',
+      status: 'needs_review',
+      review: { reason: 'plan' },
+      createdBy: 'user-1',
+      brief: 'An about page for the team',
+    })
+    armUpstream()
+    const response = await POST(post({ ...QUESTION_BODY(FREE_ORG), question }))
+    await response.text()
+    expect(response.headers.get('X-Assist-Served-By')).toBeNull()
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    expect(systemOf()).toContain(told)
+  })
+
   it('never looks an English question up twice', async () => {
     seedOrgs()
     armUpstream()

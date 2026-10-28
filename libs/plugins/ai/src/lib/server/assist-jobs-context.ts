@@ -268,3 +268,41 @@ export function assistJobsHere(route: string, hostId: string, orgless: ReadonlyS
   const hostSegment = parts[1] === 'hosts' ? sanitiseId(parts[2] ?? '') : ''
   return { orgSlug, hostSegment, hostId: sanitiseId(hostId) }
 }
+
+/**
+ * Questions about the workspace's own plan, which the docs cannot answer:
+ * they describe every plan, and only the workspace block says which one this
+ * is.
+ */
+const PLAN_STATE_PATTERNS: readonly RegExp[] = [
+  /\bwhat\s+plan\b/i,
+  /\bwhich\s+plan\s+(?:am|are|is)\b/i,
+  /\b(?:my|our|current)\s+(?:plan|subscription)\b/i,
+  /\bplan\s+(?:am\s+i|are\s+we)\s+on\b/i,
+]
+
+/**
+ * Questions about the workspace's own AI jobs, which the docs cannot answer
+ * either: where a build is, whether it is done, what it waits for.
+ */
+const JOB_STATE_PATTERNS: readonly RegExp[] = [
+  /\bai\s+jobs?\b/i,
+  /\b(?:my|our)\s+(?:ai\s+)?(?:builds?|jobs?)\b/i,
+  /\b(?:built|ready|done|finished)\s+yet\b/i,
+  /\b(?:is|are)\s+(?:it|they)\s+(?:built|ready|done|finished)\b/i,
+  /\bconfirm\s+(?:the|my|our)\s+plan\b/i,
+  /\bplan\s+(?:is\s+)?ready\b/i,
+]
+
+/**
+ * Whether a question asks about the workspace's own state (AGL-4075) — its
+ * plan, or its AI jobs where the workspace has them — which only this turn's
+ * workspace block answers. Such a question is never answered with a docs
+ * quote: "what plan am I on" quoted the pricing page, and "is my about page
+ * built yet" quoted the AI jobs guide, while the turn knew the answer.
+ */
+export function assistAsksAboutItsWorkspace(question: string, input: { jobs: boolean }): boolean {
+  const text = String(question ?? '')
+  if (PLAN_STATE_PATTERNS.some((pattern) => pattern.test(text))) return true
+  return input.jobs && JOB_STATE_PATTERNS.some((pattern) => pattern.test(text))
+}
