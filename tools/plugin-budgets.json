@@ -68,10 +68,10 @@
     "budget": 6144
   },
   "ai": {
-    "baseline": 54894,
-    "budget": 60416,
+    "baseline": 60461,
+    "budget": 66560,
     "headroom": 1.1,
-    "note": "AGL-3649: 409 KB eager before, when plugin.ts imported every card and page statically and the console loads AI on every screen (it fills the dock and the top bar). Every component is now registered through lazyWidget, so what is eager is the registrations, the copy assistant's provider (it wraps the page, so it cannot load late), the provider catalog and the config schema. 10% headroom, not 25%: this plugin's eager bytes are on every console page, and a card made eager again is the regression this entry exists to catch."
+    "note": "AGL-3649: 409 KB eager before, when plugin.ts imported every card and page statically and the console loads AI on every screen (it fills the dock and the top bar). Every component is now registered through lazyWidget, so what is eager is the registrations, the copy assistant's provider (it wraps the page, so it cannot load late), the provider catalog and the config schema. 10% headroom, not 25%: this plugin's eager bytes are on every console page, and a card made eager again is the regression this entry exists to catch. Re-baselined for AGL-4047: the \"Bring a site in\" permission (`ai.import`) is declared at load, as every permission in the catalog is."
   },
   "theme-presets": {
     "baseline": 50022,
