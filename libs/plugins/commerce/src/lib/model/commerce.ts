@@ -340,6 +340,15 @@ export interface HostProduct {
    */
   sellOnline?: boolean
   /**
+   * What the site's review surfaces do with the reviews of a product sold in
+   * person only (`sellOnline: false`, AGL-4060): `show` (or absent) lists
+   * them, marked "Sold in store" and never linked; `hide` keeps them off
+   * every online surface — the store-wide reviews list and its average. A
+   * product sold online ignores it. Read it through
+   * {@link productReviewsOnline}.
+   */
+  inStoreReviews?: 'show' | 'hide'
+  /**
    * Whether the self-service kiosk offers the product (AGL-4038): `false`
    * leaves it off the kiosk's grid and refuses it in a kiosk's cart, while
    * the register, the POS apps and the site sell it as before. Absent reads
@@ -1300,6 +1309,38 @@ export function productListedOnline(
   product: { deletedAt?: unknown; status?: unknown; sellOnline?: unknown } | null | undefined,
 ): boolean {
   return Boolean(product) && !product?.deletedAt && product?.status === 'active' && productSellsOnline(product)
+}
+
+/** The choices a product sold in person only has for its reviews on the site (AGL-4060). */
+export const IN_STORE_REVIEWS_CHOICES = ['show', 'hide'] as const
+
+/**
+ * How a product's reviews appear on the site's online review surfaces
+ * (AGL-4060), or `null` when there is no product to say (deleted, a draft):
+ *
+ * - `listed`: sold online, so named and linked to its page;
+ * - `sold-in-store`: sold in person only, and the store shows its reviews —
+ *   the default — named, marked "Sold in store", never linked (there is no
+ *   page to link to);
+ * - `hidden`: sold in person only, and the store chose to keep its reviews
+ *   off the site: in no list and no average.
+ *
+ * The store's choice is honored whatever the product's status, so a hidden
+ * product archived later stays hidden.
+ */
+export type ProductReviewsOnline = 'listed' | 'sold-in-store' | 'hidden'
+
+export function productReviewsOnline(
+  product:
+    | { deletedAt?: unknown; status?: unknown; sellOnline?: unknown; inStoreReviews?: unknown }
+    | null
+    | undefined,
+): ProductReviewsOnline | null {
+  if (!product) return null
+  if (!productSellsOnline(product) && product.inStoreReviews === 'hide') return 'hidden'
+  if (productListedOnline(product)) return 'listed'
+  if (!product.deletedAt && product.status === 'active' && !productSellsOnline(product)) return 'sold-in-store'
+  return null
 }
 
 /**

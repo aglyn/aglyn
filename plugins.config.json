@@ -572,6 +572,7 @@
               "modifierGroups",
               "posQuickKey",
               "sellOnline",
+              "inStoreReviews",
               "offerOnKiosk",
               "hardwareSku",
               "checkIn",

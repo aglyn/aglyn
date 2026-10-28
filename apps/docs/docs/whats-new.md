@@ -27,6 +27,14 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — reviews of products sold in store
+
+- **[Reviews of a product sold in person only](commerce-and-bookings/commerce/catalog.md#sell-in-person-only)** —
+  still show in your store's reviews across every product, marked **Sold in
+  store** and unlinked, since the product has no page. **Reviews on your site**
+  in the product editor can hide them from your site instead, from the list and
+  the average alike.
+
 ## October 2026 — Aglyn's own sales fold into the staff tax return
 
 - **[Aglyn's own sales fold into Items 1–2](staff-console/sales-tax-return.md#what-the-figures-are-made-of)**

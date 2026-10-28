@@ -995,6 +995,7 @@ data class HostProduct(
     val giftCard: Boolean? = null,
     val hardwareSku: String? = null,
     val imageUrl: String? = null,
+    val inStoreReviews: HostProductInStoreReviews? = null,
     val inventory: Double? = null,
     val lowStockThreshold: Double? = null,
     val mediaUrls: List<String>? = null,
@@ -1033,6 +1034,17 @@ data class HostProductGatedVideosItem(
     val title: String? = null,
     val url: String,
 )
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = HostProductInStoreReviewsSerializer::class)
+enum class HostProductInStoreReviews(val raw: String) {
+    HIDE("hide"),
+    SHOW("show"),
+    UNKNOWN(""),
+}
+
+internal object HostProductInStoreReviewsSerializer :
+    RawEnumSerializer<HostProductInStoreReviews>("com.aglyn.contracts.HostProductInStoreReviews", HostProductInStoreReviews.entries, HostProductInStoreReviews.UNKNOWN, { it.raw })
 
 /** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
 @Serializable(with = HostProductOversellPolicySerializer::class)

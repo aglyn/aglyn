@@ -54,7 +54,7 @@ A product that is in person only:
   the Aglyn POS apps, and on draft orders;
 - **has no page on your site**: its `/products/{slug}` address answers "page
   not found", and it is left out of product grids, collections, search, related
-  products, wishlists, the sitemap, and the store-wide reviews' product links;
+  products, wishlists and the sitemap;
 - **cannot be bought online**: it can't be added to a cart, a cart that
   already holds it can't check out until the line is removed, and **Buy now**
   refuses it;
@@ -63,8 +63,19 @@ A product that is in person only:
   [marketplace](./marketplaces.md) and [delivery app](./delivery-apps.md)
   menu. An [inventory sync](./inventory-and-erp-sync.md) still counts its stock.
 
+Its reviews still show on your site by default. With **Sell online** off, the
+editor offers **Reviews on your site**:
+
+- **Show, marked Sold in store** (the default): its reviews appear in your
+  store's [reviews across every product](#show-reviews) and count toward the
+  average, with the product's name, a **Sold in store** label, and no link,
+  since it has no page.
+- **Hide**: its reviews appear nowhere on your site, neither in the list nor
+  in the average. You still see and moderate them under
+  [Review moderation](#review-moderation).
+
 Back-in-stock emails for it wait until it sells online again. Turn **Sell
-online** back on and everything above returns. The switch comes with the point
+online** back on and everything above returns, its reviews included. The switch comes with the point
 of sale; on a plan without it, a product already set to in person only still
 shows the switch so you can put it back online.
 
@@ -179,7 +190,10 @@ in.
 
 To show your store's latest published reviews across every product, on a home
 page for example, set **Show** to **Whole store** and choose **Max reviews**
-(6 by default, 12 at most). It shows nothing until a review is published.
+(6 by default, 12 at most). It shows nothing until a review is published. A
+review of a product you [sell in person only](#sell-in-person-only) is marked
+**Sold in store** and doesn't link anywhere, unless you chose to hide that
+product's reviews from your site.
 
 ### Review settings {#review-settings}
 
