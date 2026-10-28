@@ -186,7 +186,9 @@ If a quoted page did not cover what you meant, just ask again with more detail
 — the follow-up gets a written answer.
 
 A question asked in another language is never answered with a quote, since the
-pages are in English: it always gets a written answer in your language.
+pages are in English: it always gets a written answer in your language. Nor is a
+question about your own workspace, such as which plan it is on or whether an AI job
+is done, since the pages describe every workspace and not yours.
 
 ## Message limits
 
