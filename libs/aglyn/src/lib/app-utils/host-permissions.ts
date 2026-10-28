@@ -26,7 +26,7 @@ import { refinePermissionMap, type PermissionRefinement } from '../plugin-manage
 import { hostRoleFor, isOrgWideMember } from './organizations'
 import { CORE_SITE_ROLE_PRESETS } from './org-role-grants'
 import {
-  orgPermissionLabel,
+  permissionRefusalText,
   ORG_PERMISSION_REFINEMENTS,
   ORG_PERMISSIONS,
   resolveOrgPermissions,
@@ -571,6 +571,6 @@ export function holdsSiteKey(hostDoc: HostDocumentLike, uid: string, key: CoreSi
  * (AGL-4047): it names the permission and who can change it, never a role.
  */
 export function siteKeyRefusal(key: string): string {
-  return `Your role does not include "${orgPermissionLabel(key)}" — ask an organization admin`
+  return permissionRefusalText(key)
 }
 
