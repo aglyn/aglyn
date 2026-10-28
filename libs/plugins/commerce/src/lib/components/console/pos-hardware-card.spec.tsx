@@ -91,7 +91,7 @@ import PosHardwareCard from './pos-hardware-card.component'
 const OPEN_CATALOG = {
   available: true,
   offers: [
-    { sku: 'stripe-reader-s710', kind: 'reader', name: 'Stripe Reader S710', use: 'Handheld with its own 4G connection', unitCents: 13_000 },
+    { sku: 'stripe-reader-s710', kind: 'reader', name: 'Stripe Reader S710', use: 'Handheld for events and parking lots', unitCents: 13_000 },
     { sku: 'stripe-reader-m2', kind: 'reader', name: 'Stripe Reader M2', use: 'Pairs by Bluetooth', unitCents: 7_670 },
   ],
   shipping: [

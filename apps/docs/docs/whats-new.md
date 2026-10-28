@@ -34,6 +34,15 @@ for the how-to.
   rider takes to read it, until you select **Close display** beside the customer or
   the rider is done. Once closed, the display can't sign under it again.
 
+## October 2026 — return a card reader order shipped to you
+
+- **[Request a return of an order shipped to you](commerce-and-bookings/commerce/pos-hardware.md#buy-a-reader-from-aglyn)** —
+  once a card reader order has shipped, select **Request a return** on it on the
+  **Hardware** card, as for a reader bought in person. Aglyn's team arranges it,
+  refunds the items and their tax once it's back, and emails you what was refunded.
+- **The Stripe Reader S710** on the Hardware card no longer says it comes with its
+  own 4G: 4G needs Stripe's cellular service, which is billed monthly for each reader.
+
 ## October 2026 — card reader sale records keep the buyer's name and address
 
 - **[Who bought each reader, on Aglyn's record of the sale](commerce-and-bookings/commerce/pos-hardware.md#hardware-purchase-records)** —
@@ -668,7 +677,7 @@ for the how-to.
 
 - **[Buy a reader from Aglyn](commerce-and-bookings/commerce/pos-hardware.md#buy-a-reader-from-aglyn)** —
   order Stripe card readers and accessories from the Hardware card on **Products →
-  Point of sale**, including the Stripe Reader S710 with its own 4G connection.
+  Point of sale**, including the Stripe Reader S710 handheld.
   Stripe ships them straight to you, the card shows each order's status and
   tracking, and you're emailed as it ships and arrives, with the steps to add the
   reader to a register. If the workspace is deleted, or the account that placed

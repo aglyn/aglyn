@@ -66,6 +66,14 @@ import {
 const WRITE_ROLES = ['super', 'billing'] as const
 
 const NOT_REFUNDABLE = 'Only an order that has not shipped can be canceled or refunded.'
+
+/** Dollars typed by staff as whole cents; empty is 0, anything else unreadable is null. */
+function centsOf(text: string): number | null {
+  const trimmed = text.trim().replace(/^\$/, '')
+  if (!trimmed) return 0
+  if (!/^\d+(\.\d{1,2})?$/.test(trimmed)) return null
+  return Math.round(Number(trimmed) * 100)
+}
 const CLOSED = 'A canceled or refunded order can no longer change.'
 const REFUNDED = 'This order is refunded in full.'
 
@@ -153,7 +161,12 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
    * The cancel or refund being confirmed, and whether to email the buyer
    * about it (AGL-4038): on unless staff turn it off.
    */
-  const [returning, setReturning] = useState<{ action: 'cancel' | 'refund'; notifyBuyer: boolean } | null>(null)
+  const [returning, setReturning] = useState<{
+    action: 'cancel' | 'refund' | 'refund-return'
+    notifyBuyer: boolean
+    /** An online return's restocking fee, in dollars as typed (AGL-4038). */
+    restockingFee?: string
+  } | null>(null)
   const gate = resolveStaffRoleGate(staffRole, WRITE_ROLES)
   const uid = user?.uid ?? ''
 
@@ -251,15 +264,17 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
   }
 
   /** Opens the confirm for a cancel or a refund, emailing the buyer by default. */
-  const returnMoney = (action: 'cancel' | 'refund') => {
-    if (open) setReturning({ action, notifyBuyer: true })
+  const returnMoney = (action: 'cancel' | 'refund' | 'refund-return') => {
+    if (open) setReturning({ action, notifyBuyer: true, ...(action === 'refund-return' ? { restockingFee: '' } : {}) })
   }
 
   const confirmReturn = async () => {
     if (!open || !returning) return
     const { action, notifyBuyer } = returning
     const verb = action === 'cancel' && open.source !== 'in_person' ? 'Canceled and refunded' : 'Refunded'
-    await act({ action, notifyBuyer }, ({ buyerEmail }) =>
+    const restockingFeeCents = action === 'refund-return' ? centsOf(returning.restockingFee ?? '') : undefined
+    if (restockingFeeCents === null) return
+    await act({ action, notifyBuyer, ...(restockingFeeCents ? { restockingFeeCents } : {}) }, ({ buyerEmail }) =>
       buyerEmail === 'sent'
         ? `${verb}. The buyer was emailed.`
         : buyerEmail === 'already'
@@ -368,6 +383,11 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
       : posHardwareRefundable(open.status) && !open.refundPending
     : false
   const returnRequested = open?.returnRequest?.state === 'requested'
+  // An online order sent back after its return was requested (AGL-4038):
+  // refunded as a return, the items and their tax less any restocking fee.
+  const onlineReturn =
+    Boolean(open) && !inPerson && returnRequested && ['shipped', 'delivered', 'registered'].includes(String(open?.status))
+  const returnCents = open ? Math.max(0, open.totalCents - (open.shipping?.cents ?? 0)) : 0
   const writeReason = gate.blocked ? gate.reason : undefined
 
   return (
@@ -560,11 +580,19 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
               </Button>
             </Guarded>
           )}
-          <Guarded reason={writeReason ?? (refundable ? undefined : inPerson ? REFUNDED : NOT_REFUNDABLE)}>
-            <Button color="error" disabled={busy} onClick={() => void returnMoney('refund')}>
-              {'Refund'}
-            </Button>
-          </Guarded>
+          {onlineReturn ? (
+            <Guarded reason={writeReason ?? (open?.refundPending ? 'A refund is in progress.' : undefined)}>
+              <Button color="error" disabled={busy} onClick={() => void returnMoney('refund-return')}>
+                {'Refund return'}
+              </Button>
+            </Guarded>
+          ) : (
+            <Guarded reason={writeReason ?? (refundable ? undefined : inPerson ? REFUNDED : NOT_REFUNDABLE)}>
+              <Button color="error" disabled={busy} onClick={() => void returnMoney('refund')}>
+                {'Refund'}
+              </Button>
+            </Guarded>
+          )}
           <Button onClick={() => setOpen(null)}>{'Close'}</Button>
           <Guarded reason={writeReason ?? (closed ? CLOSED : undefined)}>
             <Button disabled={busy} onClick={() => save()}>
@@ -599,12 +627,26 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
         <DialogContent>
           <Stack spacing={2}>
             <DialogContentText>
-              {open?.source === 'in_person'
-                ? `${formatPosHardwareCents(open.totalCents - open.refundedCents)} goes back to the card the register sale was paid with, from the selling store's own account. Under Stripe's hardware terms the buyer sends the reader back at their cost.`
+              {returning?.action === 'refund-return' && open
+                ? `${formatPosHardwareCents(Math.max(0, returnCents - (centsOf(returning.restockingFee ?? '') ?? 0)))} goes back to the card it was paid with: the items and their tax. The original shipping is not refunded, and a restocking fee Stripe charged for the return comes off.`
+                : open?.source === 'in_person'
+                ? `${formatPosHardwareCents(open.totalCents - open.refundedCents)} goes back to the card the register sale was paid with, from the selling store's own account. Under the hardware terms of sale the buyer sends the reader back at their cost.`
                 : open
                   ? `${formatPosHardwareCents(open.totalCents)} goes back to the card it was paid with. Cancel the order in the Stripe Dashboard too if it was already placed there.`
                   : ''}
             </DialogContentText>
+            {returning?.action === 'refund-return' ? (
+              <TextField
+                label="Restocking fee Stripe charged (optional)"
+                value={returning.restockingFee ?? ''}
+                onChange={(event) =>
+                  setReturning((current) => (current ? { ...current, restockingFee: event.target.value } : current))
+                }
+                error={centsOf(returning.restockingFee ?? '') === null}
+                helperText={centsOf(returning.restockingFee ?? '') === null ? 'Enter an amount like 15.00, or leave it empty.' : 'In dollars. Leave it empty when Stripe charged none.'}
+                slotProps={{ htmlInput: { inputMode: 'decimal' } }}
+              />
+            ) : null}
             <Stack>
               <FormControlLabel
                 control={
@@ -618,7 +660,9 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
                 label="Email the buyer"
               />
               <FormHelperText>
-                {open?.source === 'in_person'
+                {returning?.action === 'refund-return'
+                  ? 'Sends the buyer the return refund email with what came back and what did not.'
+                  : open?.source === 'in_person'
                   ? 'Sends the buyer the refund email with what came back to their card.'
                   : 'Sends the buyer the canceled-and-refunded email. They get it once, even if their workspace or account later closes.'}
               </FormHelperText>
@@ -627,8 +671,16 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setReturning(null)}>{'Keep the order'}</Button>
-          <Button color="error" disabled={busy} onClick={() => void confirmReturn()}>
-            {returning?.action === 'cancel' && open?.source !== 'in_person' ? 'Cancel and refund' : 'Refund'}
+          <Button
+            color="error"
+            disabled={busy || (returning?.action === 'refund-return' && centsOf(returning.restockingFee ?? '') === null)}
+            onClick={() => void confirmReturn()}
+          >
+            {returning?.action === 'cancel' && open?.source !== 'in_person'
+              ? 'Cancel and refund'
+              : returning?.action === 'refund-return'
+                ? 'Refund return'
+                : 'Refund'}
           </Button>
         </DialogActions>
       </Dialog>

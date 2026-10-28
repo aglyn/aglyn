@@ -235,7 +235,9 @@ export function staffHardwareOrders(user: User, filter: StaffHardwareFilter, aft
 export function staffHardwareOrderAction(
   user: User,
   body: {
-    action: 'update' | 'cancel' | 'refund' | 'forget-buyer' | 'decline-return'
+    action: 'update' | 'cancel' | 'refund' | 'refund-return' | 'forget-buyer' | 'decline-return'
+    /** An online return's restocking fee, in cents (AGL-4038). */
+    restockingFeeCents?: number
     note?: string
     orgId: string
     orderId: string

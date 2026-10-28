@@ -231,6 +231,7 @@ async function handler(request: Request): Promise<Response> {
     if (action === 'update') return await updateOrder(firestore, ref, orgId, orderId, input, actor)
     if (action === 'forget-buyer') return await forgetBuyer(firestore, ref, orgId, orderId, actor)
     if (action === 'decline-return') return await inPersonReturn(firestore, orgId, orderId, action, input, actor)
+    if (action === 'refund-return') return await onlineReturnRefund(firestore, orgId, orderId, input, actor, notifyBuyer)
     // Handed over at the sale, an in-person order is never canceled: either
     // button refunds it, its own way.
     if ((action === 'refund' || action === 'cancel') && (await soldInPerson(ref))) {
@@ -380,6 +381,58 @@ async function inPersonReturn(
       at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
     })
     return json({ ok: true, order: staffView(orderId, outcome.order), ...(buyerEmail ? { buyerEmail } : {}) })
+  } catch (error) {
+    if (error instanceof returns.PosHardwareReturnRefusal) throw new Refusal(error.message, error.status)
+    throw error
+  }
+}
+
+/**
+ * Refunds an ONLINE order the buyer sent back (AGL-4038), once its return
+ * was requested: the items and their tax, less any restocking fee Stripe
+ * charged, to the card it was paid with. The buyer is emailed once by the
+ * refund's key, when staff chose to.
+ */
+async function onlineReturnRefund(
+  firestore: any,
+  orgId: string,
+  orderId: string,
+  input: Record<string, unknown>,
+  actor: Actor,
+  notifyBuyer: boolean,
+): Promise<Response> {
+  const returns = await import('./pos-hardware-returns')
+  try {
+    const outcome = await returns.refundReturnedOnlinePosHardwareOrder({
+      orgId,
+      orderId,
+      actorUid: actor.actorUid,
+      restockingFeeCents: input['restockingFeeCents'],
+    })
+    const made = (outcome.order.refunds ?? []).slice(-1)[0]
+    const buyerEmail = !notifyBuyer
+      ? 'off'
+      : made
+        ? await sendPosHardwareEmailOnce('returnRefunded', orderId, outcome.order, `refunded:${made.key}`)
+        : 'skipped'
+    await addAdminAudit(firestore, {
+      action: 'pos-hardware-return-refund',
+      ...actor,
+      scope: 'posHardwareOrder',
+      target: `orgs/${orgId}/${POS_HARDWARE_ORDERS_COLLECTION}/${orderId}`,
+      orgId,
+      before: { status: outcome.before.status, refundedCents: outcome.before.refundedCents ?? 0 },
+      after: {
+        status: outcome.order.status,
+        refundedCents: outcome.order.refundedCents ?? 0,
+        refundId: made?.stripeRefundId ?? null,
+        returnRequest: outcome.order.returnRequest?.state ?? null,
+        notifyBuyer,
+        buyerEmail,
+      },
+      at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+    })
+    return json({ ok: true, order: staffView(orderId, outcome.order), buyerEmail })
   } catch (error) {
     if (error instanceof returns.PosHardwareReturnRefusal) throw new Refusal(error.message, error.status)
     throw error

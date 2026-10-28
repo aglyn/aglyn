@@ -49,6 +49,7 @@ export const POS_HARDWARE_EMAIL_KEYS = {
   canceled: 'pos-hardware-order-canceled',
   refunded: 'pos-hardware-order-refunded',
   invited: 'pos-hardware-sign-up-invite',
+  returnRefunded: 'pos-hardware-return-refunded',
 } as const
 
 const SOURCE = 'libs/plugins/commerce/src/lib/server/pos-hardware-notify.ts'
@@ -113,6 +114,11 @@ function tokens(origin: string): Record<string, SystemEmailMergeToken> {
       name: 'order.total',
       description: 'What was paid at the register, tax included',
       sample: '$324.75',
+    },
+    kept: {
+      name: 'order.kept',
+      description: 'What a return did not refund: the original shipping and any restocking fee',
+      sample: '$25.00',
     },
     signUpUrl: {
       name: 'order.signUpUrl',
@@ -248,6 +254,34 @@ export function posHardwareSystemEmailTemplates(
       footerReason:
         'You’re receiving this because you bought card reader hardware from ' +
         '{{brand.productName}} in person and a refund was made on it.',
+      source: SOURCE,
+    },
+    {
+      key: POS_HARDWARE_EMAIL_KEYS.returnRefunded,
+      name: 'Card reader order returned: refunded',
+      description:
+        'Sent when the team refunds a card reader order that was shipped to ' +
+        'the buyer and sent back after they asked to return it, from the staff ' +
+        'Hardware orders page, when they choose to email the buyer. Sent once ' +
+        'per refund.',
+      deliveredBy: 'resend',
+      defaultSubject: 'We refunded your returned card reader order {{order.number}}',
+      mergeTokens: [t.org, t.number, t.items, t.refundedNow, t.kept, t.total, t.ordersUrl],
+      defaultBody: [
+        { block: 'text', text: 'Order {{order.number}}', variant: 'eyebrow' },
+        { block: 'text', text: 'Your return is refunded', variant: 'heading' },
+        { block: 'text', text: 'We received the card reader hardware you sent back and refunded {{order.refundedNow}} to the card you paid with: the price of the items and the tax on them.', variant: 'body' },
+        { block: 'text', text: '{{order.items}}\nRefunded: {{order.refundedNow}}\nNot refunded: {{order.kept}}\nPaid: {{order.total}}', variant: 'details' },
+        { block: 'text', text: 'What was not refunded', variant: 'subheading' },
+        { block: 'text', text: 'The original shipping is not refunded on a return, and any restocking fee charged for the return comes off the refund, as the hardware terms of sale say.', variant: 'body' },
+        { block: 'text', text: 'What happens next', variant: 'subheading' },
+        { block: 'text', text: 'There is nothing you need to do. Most banks show the refund on the card within 5 to 10 business days. The order shows as Refunded on the Hardware card.', variant: 'body' },
+        { block: 'button', label: 'Open the Hardware card', href: '{{order.ordersUrl}}' },
+        { block: 'text', text: 'If the amount is not what you expected, contact support and quote order {{order.number}}.', variant: 'caption' },
+      ],
+      footerReason:
+        'You’re receiving this because you ordered card reader hardware from ' +
+        '{{brand.productName}} for {{org.name}} and returned it.',
       source: SOURCE,
     },
     {

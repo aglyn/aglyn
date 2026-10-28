@@ -126,7 +126,10 @@ export const POS_HARDWARE_SKUS: readonly PosHardwareSku[] = [
     kind: 'reader',
     stripeProductName: 'Stripe Reader S710',
     displayName: 'Stripe Reader S710',
-    use: 'Handheld with its own 4G connection, for events and parking lots',
+    // 4G needs Stripe's cellular service, billed monthly per reader, which a
+    // store turns on for its S710s where it is offered (AGL-4038): the reader
+    // alone does not bring a connection.
+    use: 'Handheld for events and parking lots; 4G needs Stripe’s cellular service, billed monthly',
   },
   {
     id: 'stripe-reader-s700',

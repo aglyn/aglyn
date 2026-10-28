@@ -360,14 +360,113 @@ describe("the buyer's return request", () => {
     expect(posHardwareBuyerErasedPatch(hardware(), 9)['returnRequest']).toMatchObject({ state: 'refunded', reason: null, requestedBy: null })
   })
 
-  it('needs a reason, and is refused for an order already refunded or shipped to them', async () => {
+  it('needs a reason, and is refused for an order already refunded or one shipped to them that has not shipped yet', async () => {
     seed()
     expect((await merchant(posHardwareHandler, { action: 'request-return', hostId: 'host-pat', orderId: ID, reason: '' })).status).toBe(400)
-    fakeDocs.set('orgs/org-pat/hardwareOrders/hw_bbbbbbbbbbbbbbbbbbbb', { orgId: 'org-pat', status: 'delivered', lines: [] })
-    expect(
-      (await merchant(posHardwareHandler, { action: 'request-return', hostId: 'host-pat', orderId: 'hw_bbbbbbbbbbbbbbbbbbbb', reason: 'Broken' })).status,
-    ).toBe(409)
+    fakeDocs.set('orgs/org-pat/hardwareOrders/hw_bbbbbbbbbbbbbbbbbbbb', { orgId: 'org-pat', status: 'ordered', lines: [] })
+    const unshipped = await merchant(posHardwareHandler, { action: 'request-return', hostId: 'host-pat', orderId: 'hw_bbbbbbbbbbbbbbbbbbbb', reason: 'Broken' })
+    expect(unshipped).toMatchObject({ status: 409, body: { error: expect.stringMatching(/contact support/) } })
     fakeDocs.set(`orgs/org-pat/hardwareOrders/${ID}`, { ...hardware(), status: 'refunded' } as any)
     expect((await merchant(posHardwareHandler, { action: 'request-return', hostId: 'host-pat', orderId: ID, reason: 'Broken' })).status).toBe(409)
   })
 })
+
+describe('returning an order shipped to the buyer (AGL-4038)', () => {
+  const ONLINE = 'hw_cccccccccccccccccccc'
+  const online = () => fakeDocs.get(`orgs/org-pat/hardwareOrders/${ONLINE}`) as PosHardwareOrder
+  const stripeCalls: Array<{ path: string; key: string | null; params: URLSearchParams }> = []
+  let refuse = false
+
+  beforeEach(() => {
+    stripeCalls.length = 0
+    refuse = false
+    process.env['STRIPE_SECRET_KEY'] = 'sk_test_returns'
+    ;(global as any).fetch = jest.fn(async (url: any, init: any) => {
+      const path = new URL(String(url)).pathname.replace(/^\/v1\//, '')
+      const headers = (init?.headers ?? {}) as Record<string, string>
+      stripeCalls.push({ path, key: headers['Idempotency-Key'] ?? null, params: new URLSearchParams(String(init?.body ?? '')) })
+      if (refuse) return { ok: false, status: 400, json: async () => ({ error: { message: 'Charge already refunded' } }) }
+      return { ok: true, status: 200, json: async () => ({ id: `re_ret${stripeCalls.length}`, amount: Number(new URLSearchParams(String(init?.body ?? '')).get('amount')) }) }
+    })
+    fakeDocs.set('hosts/host-pat', { name: 'Main Street', orgId: 'org-pat' })
+    const order = {
+      orgId: 'org-pat',
+      hostId: 'host-pat',
+      createdBy: 'uid-pat',
+      contactEmail: 'pat@example.com',
+      lines: [{ sku: 'stripe-reader-s710', name: 'Stripe Reader S710', quantity: 1, unitCents: 13_000, lineCents: 13_000 }],
+      subtotalCents: 13_000,
+      shipping: { method: 'standard', label: 'Standard', cents: 1_000, name: 'Pat Lee', phone: null, address: null },
+      taxCents: 1_073,
+      totalCents: 15_073,
+      currency: 'usd',
+      stripeCheckoutSessionId: 'cs_1',
+      stripePaymentIntentId: 'pi_online',
+      stripeHardwareOrderId: 'thor_1',
+      tracking: null,
+      status: 'delivered',
+      livemode: false,
+      createdAtMs: 1,
+      updatedAtMs: 1,
+      paidAtMs: 1,
+    } as unknown as PosHardwareOrder
+    fakeDocs.set(`orgs/org-pat/hardwareOrders/${ONLINE}`, order as any)
+    fakeDocs.set(`posHardwareSales/${ONLINE}`, posHardwareSaleRecord(ONLINE, order) as any)
+  })
+  afterAll(() => {
+    delete process.env['STRIPE_SECRET_KEY']
+  })
+
+  it('may be asked back once it has shipped, and staff are alerted', async () => {
+    const asked = await merchant(posHardwareHandler, { action: 'request-return', hostId: 'host-pat', orderId: ONLINE, reason: 'Wrong model' })
+    expect(asked.status).toBe(200)
+    expect(online().returnRequest).toMatchObject({ state: 'requested', reason: 'Wrong model' })
+    expect(mockAlerts.map((alert) => alert.type)).toEqual(['commerce.posHardwareReturnRequested'])
+  })
+
+  it('is refunded as a return: the items and their tax, less the restocking fee, once, and the buyer is told once', async () => {
+    await merchant(posHardwareHandler, { action: 'request-return', hostId: 'host-pat', orderId: ONLINE, reason: 'Wrong model' })
+    const refunded = await staff({
+      method: 'POST',
+      body: { action: 'refund-return', orgId: 'org-pat', orderId: ONLINE, restockingFeeCents: 1_500 },
+    })
+    expect(refunded.status).toBe(200)
+    // 15,073 paid − 1,000 original shipping − 1,500 restocking fee.
+    expect(stripeCalls.map((call) => [call.path, call.params.get('payment_intent'), call.params.get('amount'), call.key])).toEqual([
+      ['refunds', 'pi_online', '12573', `pos-hw-return-${ONLINE}-12573`],
+    ])
+    expect(online()).toMatchObject({
+      status: 'refunded',
+      refundedCents: 12_573,
+      returnRequest: { state: 'refunded', decidedBy: 'staff-1' },
+      refunds: [{ via: 'staff', cents: 12_573, quantity: 1, stripeRefundId: 're_ret1' }],
+    })
+    expect(online()).not.toHaveProperty('refundRequestedAtMs')
+    expect(fakeDocs.get(`posHardwareSales/${ONLINE}`)).toMatchObject({ status: 'refunded', refundedCents: 12_573 })
+    expect(refunded.body.buyerEmail).toBe('sent')
+    expect(mockSendEmail).toHaveBeenCalledTimes(1)
+    const sent = mockSendEmail.mock.calls[0][0] as Record<string, any>
+    expect(sent).toMatchObject({ to: 'pat@example.com', context: 'pos-hardware-return-refunded' })
+    expect(JSON.parse(String(sent['text']))).toMatchObject({ 'order.refundedNow': '$125.73', 'order.kept': '$25.00' })
+    // Pressed again: nothing more is refunded or sent.
+    expect((await staff({ method: 'POST', body: { action: 'refund-return', orgId: 'org-pat', orderId: ONLINE } })).status).toBe(409)
+    expect(stripeCalls).toHaveLength(1)
+    expect(mockSendEmail).toHaveBeenCalledTimes(1)
+  })
+
+  it('needs an open request, a fee that leaves something, and hands a Stripe refusal back with nothing recorded', async () => {
+    expect((await staff({ method: 'POST', body: { action: 'refund-return', orgId: 'org-pat', orderId: ONLINE } })).status).toBe(409)
+    await merchant(posHardwareHandler, { action: 'request-return', hostId: 'host-pat', orderId: ONLINE, reason: 'Wrong model' })
+    expect((await staff({ method: 'POST', body: { action: 'refund-return', orgId: 'org-pat', orderId: ONLINE, restockingFeeCents: -5 } })).status).toBe(400)
+    expect((await staff({ method: 'POST', body: { action: 'refund-return', orgId: 'org-pat', orderId: ONLINE, restockingFeeCents: 14_073 } })).status).toBe(400)
+    refuse = true
+    const refused = await staff({ method: 'POST', body: { action: 'refund-return', orgId: 'org-pat', orderId: ONLINE } })
+    expect(refused.status).toBe(409)
+    expect(online()).toMatchObject({ status: 'delivered', returnRequest: { state: 'requested' } })
+    expect(online()).not.toHaveProperty('refundRequestedAtMs')
+    // Staff decline it instead, as for a reader sold in person.
+    const declined = await staff({ method: 'POST', body: { action: 'decline-return', orgId: 'org-pat', orderId: ONLINE, note: 'Outside 30 days' } })
+    expect(declined.body.order.returnRequest).toMatchObject({ state: 'declined', note: 'Outside 30 days' })
+  })
+})
+
