@@ -27,6 +27,14 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — booking payments and refunds are permissions
+
+- **[Booking permissions](workspace-and-billing/teams-and-roles/custom-roles.md#booking-permissions)** —
+  taking a booking's payment in person and refunding a booking now each have a
+  permission, **Take booking payments in person** and **Refund bookings**. A site's admins
+  and editors keep the first and its admins the second, and a custom role or a
+  per-member override can grant or deny either one.
+
 ## October 2026 — a warning before 4G turns off
 
 - **[The date 4G turns off, the day a charge is missed](commerce-and-bookings/commerce/pos-hardware.md#reader-4g)** —

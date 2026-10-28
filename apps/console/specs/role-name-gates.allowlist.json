@@ -133,18 +133,6 @@
       "kind": "not-a-gate",
       "note": "Picks who an allotment alert goes to."
     },
-    "libs/plugins/bookings/src/lib/server/booking-manage.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/bookings/src/lib/server/in-person-payment.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/bookings/src/lib/server/refund.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
     "libs/plugins/commerce/src/lib/server/order-webhooks.ts": {
       "count": 2,
       "kind": "pending"

@@ -23,6 +23,8 @@ import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { reverseOrderConversion } from '@aglyn/aglyn/plugin-manager/plugin-conversion-credit'
 import { createHash } from 'crypto'
 import { apiIdempotencyExpiry } from '@aglyn/aglyn/app-utils/api-idempotency'
+import { bookingsSitePermissionRefusal } from '../model/bookings-permissions'
+import { holdsBookingsSiteKey } from './bookings-site-keys'
 import { raiseBookingEvent } from './booking-events'
 
 /**
@@ -112,11 +114,10 @@ export const bookingRefundHandler: PluginApiHandler = async (req, res) => {
     if (!hostSnapshot.exists) {
       return res.status(404).json({ error: 'Unknown site' })
     }
-    // Site ADMIN, not merely a member: this moves money. The same gate
-    // `commerce/refund.ts` applies.
-    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (memberRole !== 'admin') {
-      return res.status(403).json({ error: 'Refunds require a site admin' })
+    // "Refund bookings" (AGL-4047), not merely a member: this moves money.
+    // Its preset is the site Admin, the gate `commerce/refund.ts` applies.
+    if (!holdsBookingsSiteKey(hostSnapshot, decoded.uid, 'bookings.refunds')) {
+      return res.status(403).json({ error: bookingsSitePermissionRefusal('bookings.refunds') })
     }
     const bookingRef = hostRef.collection('bookings').doc(bookingId)
     const bookingSnapshot = await bookingRef.get()
