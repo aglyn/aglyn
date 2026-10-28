@@ -933,6 +933,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/building-sites/multilingual/weglot',
     title: 'Translate with Weglot',
   },
+  whatsappButton: {
+    path: '/building-sites/besigner/whatsapp-button',
+    title: 'Add a WhatsApp button',
+  },
   whiteLabel: {
     path: '/workspace-and-billing/white-label',
     title: 'White-label',
@@ -1093,7 +1097,7 @@ export const DOCS_HELP_ANCHORS = {
   newsletterSignUpBand: ['#why-not-the-newsletter-signup-block', '#1-create-the-saved-form', '#2-add-an-input-and-a-button', '#3-style-the-form-with-the-styles-panel', '#4-make-it-a-sign-up-form', '#5-create-the-live-audience', '#6-build-the-band-as-a-reusable-component', '#7-place-the-band-on-your-pages', '#8-check-it-on-the-live-site', '#troubleshooting', '#related'],
   onboardingDeepLinks: ['#the-contract', '#what-the-console-does-with-it', '#rules-this-parser-follows-and-why', '#known-gap'],
   operatorAlerts: ['#channels', '#settings', '#alert-list', '#health', '#render-monitor', '#self-hosting'],
-  orderNotifications: ['#customer-emails', '#tracking-links', '#turning-emails-off', '#changing-the-wording-and-colors', '#order-status-page', '#resend-receipt', '#text-messages', '#related'],
+  orderNotifications: ['#customer-emails', '#tracking-links', '#turning-emails-off', '#changing-the-wording-and-colors', '#who-is-told', '#switch-off-team-notices', '#order-status-page', '#resend-receipt', '#text-messages', '#related'],
   ordersAndReturns: ['#fulfillment', '#invoices', '#returns', '#buyer-requests', '#run-a-return', '#order-webhooks', '#when-an-endpoint-is-down', '#related'],
   orderWebhooks: ['#what-your-endpoint-receives', '#check-the-signature', '#answer-quickly-and-retries', '#related'],
   orgAutomations: ['#what-an-org-automation-is', '#create-one', '#triggers', '#steps', '#pause-it-on-one-site', '#waiting-switching-off-and-deleting', '#every-sites-own-automations', '#related'],
@@ -1176,6 +1180,7 @@ export const DOCS_HELP_ANCHORS = {
   waivers: ['#your-waivers', '#write-a-waiver', '#versions', '#how-long-a-signature-lasts', '#share-it-before-riders-arrive', '#on-your-site', '#sign-at-the-window', '#at-check-in', '#how-a-rider-is-matched', '#on-the-customer-display', '#minors', '#paper-waivers', '#find-a-signature', '#a-signatures-record', '#contacts', '#privacy', '#keeping-signed-waivers', '#related'],
   webhooks: ['#outbound-webhooks', '#slack', '#inbound-webhooks', '#tips', '#related'],
   weglot: ['#seo', '#before-you-start', '#turn-it-on', '#settings', '#what-visitors-see', '#page-speed', '#cookies-and-privacy', '#security', '#turn-it-off', '#related'],
+  whatsappButton: ['#before-you-start', '#1-add-the-button', '#2-fill-in-its-fields', '#pick-the-whatsapp-icon', '#prefilled-message', '#render-as-link', '#3-publish-and-try-it', '#related'],
   whiteLabel: ['#where', '#fields', '#where-you-see-it', '#email', '#merge-tokens', '#email-logo', '#email-footer', '#sending-address', '#custom-console-domain', '#platform-brand', '#related'],
   workflows: ['#workflows', '#actions-builder', '#webhooks', '#org-automations', '#run-history', '#related'],
   yourFirstApiCall: ['#step-1-create-a-key', '#step-2-check-the-key', '#step-3-your-first-request', '#in-javascript', '#step-4-write-something', '#idempotency', '#step-5-page-through-everything', '#the-four-errors-you-will-hit', '#mcp', '#where-to-go-next', '#related'],
