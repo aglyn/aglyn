@@ -16,6 +16,7 @@
  */
 
 import { activitySearchTokens } from '@aglyn/aglyn/app-utils/activity-search'
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import {
   SCREEN_SLUG_PATH_SEPARATOR_MESSAGE,
   blockingRouteOwner,
@@ -59,8 +60,9 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
  * addresses to announce) are the console's own pure code
  * (`screen-route.ts`, `screen-route-plan.ts`), and this route runs that same
  * code over the Admin SDK so an app publishes, unpublishes, moves and
- * deletes a page exactly as the console does, under the same gate: the
- * site's publishing roles, a verified email, and the lockdown verdict.
+ * deletes a page exactly as the console does, under the same gate: "Publish
+ * site content" (`site.publish`, AGL-4047, whose preset is the site's
+ * publishing roles), a verified email, and the lockdown verdict.
  *
  *   POST /api/hosts/pages  { hostId, action, id, … }
  *     publish        { slug }                 → { ok, path }
@@ -69,8 +71,6 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
  *     move           { parentId|null, index } → { ok, moved }
  *     delete-group   {}                       → { ok }   (its pages move up, addresses unchanged)
  */
-
-const PUBLISH_ROLES = new Set(['admin', 'editor'])
 
 /** The most screens the tree is read for: the hub's own window and more. */
 const SCREENS_READ_LIMIT = 2000
@@ -129,9 +129,8 @@ async function handler(request: Request): Promise<Response> {
     if (!hostSnapshot.exists) return json({ error: 'Unknown site' }, 404)
     const isStaff = decoded['staff'] === true
     if (!isStaff) {
-      const role = String((hostSnapshot.get('memberRoles') ?? {})[decoded.uid] ?? '')
-      if (!PUBLISH_ROLES.has(role)) {
-        return json({ error: 'Publishing pages needs a publishing role — ask an editor or admin' }, 403)
+      if (!holdsSiteKey(hostSnapshot, decoded.uid, 'site.publish')) {
+        return json({ error: siteKeyRefusal('site.publish') }, 403)
       }
       const orgId = hostSnapshot.get('orgId') as string | undefined
       const org = orgId ? (await firestore.collection('orgs').doc(orgId).get()).data() : undefined
