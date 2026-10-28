@@ -419,7 +419,7 @@ describe('whether a part may be built here, before it spends', () => {
   it('lets a member who may write the site have posts, and refuses one who may not', async () => {
     expect(await aiSiteContentRefusal('posts', { firestore, org: null, now: NOW, job })).toBeNull()
     expect(await aiSiteContentRefusal('posts', { firestore, org: null, now: NOW, job: { ...job, createdBy: 'uid-2' } })).toBe(
-      'Editing requires the editor role',
+      'Your role does not include "Edit site content" — ask an organization admin',
     )
   })
 

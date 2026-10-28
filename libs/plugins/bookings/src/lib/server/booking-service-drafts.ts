@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { hostRoleCanWrite } from '@aglyn/aglyn/app-utils/organizations'
 import { checkEntitlement, checkQuota } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import { countLiveDocuments } from '@aglyn/aglyn/app-utils/live-document-count'
 import {
   registerPluginResourceDraftWriter,
@@ -81,7 +81,8 @@ export const BOOKING_SERVICE_WINDOWS_PER_DAY_MAX = 12
 export const BOOKING_SERVICE_PRICE_MAX_USD = 100_000
 
 /** The resources route's refusal for a member who may not write the site. */
-export const BOOKING_SERVICE_ROLE_REFUSAL = 'Editing requires the editor role'
+/** Names "Edit site content" (`site.edit`, AGL-4047), never a role. */
+export const BOOKING_SERVICE_ROLE_REFUSAL = siteKeyRefusal('site.edit')
 /** The resources route's refusal for a plan without the feature. */
 export const BOOKING_SERVICE_PLAN_REFUSAL =
   'This feature is not included in your plan — see Billing'
@@ -324,8 +325,7 @@ function recordOf(service: FirebaseFirestore.DocumentSnapshot): PluginDraftRecor
 }
 
 function roleRefusal(host: FirebaseFirestore.DocumentSnapshot, uid: string): PluginDraftRefusal | null {
-  const role = (host.get('memberRoles') ?? {})[uid]
-  return hostRoleCanWrite(role) ? null : { status: 403, error: BOOKING_SERVICE_ROLE_REFUSAL }
+  return holdsSiteKey(host, uid, 'site.edit') ? null : { status: 403, error: BOOKING_SERVICE_ROLE_REFUSAL }
 }
 
 function planRefusal(org: PluginDraftContext['org']): PluginDraftRefusal | null {

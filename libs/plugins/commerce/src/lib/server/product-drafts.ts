@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { hostRoleCanWrite } from '@aglyn/aglyn/app-utils/organizations'
 import { checkEntitlement, checkQuota } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import { countLiveDocuments } from '@aglyn/aglyn/app-utils/live-document-count'
 import {
   registerPluginResourceDraftWriter,
@@ -99,7 +99,8 @@ export const PRODUCT_DRAFT_SEO_TITLE_MAX = 120
 export const PRODUCT_DRAFT_SEO_DESCRIPTION_MAX = 320
 
 /** The resources route's refusal for a member who may not write the site. */
-export const PRODUCT_DRAFT_ROLE_REFUSAL = 'Editing requires the editor role'
+/** Names "Edit site content" (`site.edit`, AGL-4047), never a role. */
+export const PRODUCT_DRAFT_ROLE_REFUSAL = siteKeyRefusal('site.edit')
 /** The resources route's refusal for a plan without the feature. */
 export const PRODUCT_DRAFT_PLAN_REFUSAL = 'This feature is not included in your plan — see Billing'
 
@@ -370,8 +371,7 @@ function recordOf(product: FirebaseFirestore.DocumentSnapshot): PluginDraftRecor
 }
 
 export function roleRefusal(host: FirebaseFirestore.DocumentSnapshot, uid: string): PluginDraftRefusal | null {
-  const role = (host.get('memberRoles') ?? {})[uid]
-  return hostRoleCanWrite(role) ? null : { status: 403, error: PRODUCT_DRAFT_ROLE_REFUSAL }
+  return holdsSiteKey(host, uid, 'site.edit') ? null : { status: 403, error: PRODUCT_DRAFT_ROLE_REFUSAL }
 }
 
 export function planRefusal(org: PluginDraftContext['org']): PluginDraftRefusal | null {

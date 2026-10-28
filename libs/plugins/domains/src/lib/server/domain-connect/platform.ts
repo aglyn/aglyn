@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { holdsSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { resolveHostEnabledPlugins } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
 import { isDevelopmentRuntime } from '@aglyn/aglyn/server'
@@ -110,8 +111,8 @@ const entitled = (org: Record<string, unknown>) => checkEntitlement(org as never
 async function stillPermitted(session: DomainConnectSession): Promise<string | null> {
   const site = await readSite(session.hostId)
   if (!site || site.orgId !== session.orgId) return 'unknown-site'
-  const role = (site.host['memberRoles'] as Record<string, unknown> | undefined)?.[session.createdBy]
-  if (role !== 'admin') return 'not-admin'
+  // "Manage site settings" (`site.manage`, AGL-4047), as the route asked it.
+  if (!holdsSiteKey(site.host, session.createdBy, 'site.manage')) return 'not-admin'
   if (!entitled(site.org)) return 'not-entitled'
   const enabled = resolveHostEnabledPlugins(
     site.org as { enabledPlugins?: string[] },

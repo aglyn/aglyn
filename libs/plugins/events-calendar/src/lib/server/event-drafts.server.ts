@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { hostRoleCanPublish, hostRoleCanWrite } from '@aglyn/aglyn/app-utils/organizations'
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import type {
   PluginDraftContext,
   PluginDraftRecord,
@@ -76,7 +76,8 @@ import { EVENT_COVER_ALT_MAX_LENGTH, eventWrite } from '../model/event-write'
 type Firestore = FirebaseFirestore.Firestore
 
 /** The refusal for a member who may not write the site. */
-export const EVENT_DRAFT_ROLE_REFUSAL = 'Editing requires the editor role'
+/** Names "Edit site content" (`site.edit`, AGL-4047), never a role. */
+export const EVENT_DRAFT_ROLE_REFUSAL = siteKeyRefusal('site.edit')
 
 /** The refusal for a workspace without the add-on, in the Events page's words. */
 export const EVENT_DRAFT_PLAN_REFUSAL =
@@ -118,8 +119,7 @@ function recordOf(event: FirebaseFirestore.DocumentSnapshot): PluginDraftRecord 
 }
 
 function roleRefusal(host: FirebaseFirestore.DocumentSnapshot, uid: string): PluginDraftRefusal | null {
-  const role = (host.get('memberRoles') ?? {})[uid]
-  return hostRoleCanWrite(role) ? null : { status: 403, error: EVENT_DRAFT_ROLE_REFUSAL }
+  return holdsSiteKey(host, uid, 'site.edit') ? null : { status: 403, error: EVENT_DRAFT_ROLE_REFUSAL }
 }
 
 function planRefusal(org: PluginDraftContext['org']): PluginDraftRefusal | null {
@@ -224,7 +224,8 @@ export function createEventDraftWriter(deps: EventDraftWriterDeps = {}): PluginR
         const early = roleRefusal(host, request.uid) ?? planRefusal(request.org)
         if (early) return { ok: false, ...early }
         // The Events page's publish: `status`, and only for the publishing role.
-        const published = hostRoleCanPublish((host.get('memberRoles') ?? {})[request.uid])
+        // "Publish site content" (`site.publish`, AGL-4047) on this site.
+        const published = holdsSiteKey(host, request.uid, 'site.publish')
         const write = eventWrite({ ...read.value, status: published ? 'published' : 'draft' })
         tx.create(eventRef, {
           ...write.fields,

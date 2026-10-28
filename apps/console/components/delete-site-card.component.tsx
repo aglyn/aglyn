@@ -31,6 +31,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { useHost } from '../hooks/use-host'
+import { holdsSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
 import { buildRoute, Route } from '../constants/route-links'
@@ -152,8 +153,9 @@ export function DeleteSiteCard(props: { hostId: string }) {
   const [confirmText, setConfirmText] = useState('')
   const [busy, setBusy] = useState(false)
 
-  const isAdmin =
-    (host as any)?.memberRoles?.[(user as any)?.uid] === 'admin'
+  // "Manage site settings" (`site.manage`, AGL-4047), read as the rules and
+  // `/api/hosts/delete` read it.
+  const isAdmin = holdsSiteKey(host as never, (user as any)?.uid ?? '', 'site.manage')
   const siteName = (host as any)?.displayName || hostId
   const preview = useDeleteSitePreview(hostId, user, isAdmin)
   // Only site admins can delete; the tab still renders for others without it.

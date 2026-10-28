@@ -102,9 +102,9 @@ Four permissions decide what someone may do on a site:
 | Permission | What it opens | Admin | Editor | Author | Viewer |
 |---|---|---|---|---|---|
 | **Edit site content** (`site.edit`) | Create and change pages, layouts, components, entries, media and the rest of a site's content, without making it live | Yes | Yes | Yes | No |
-| **Publish site content** (`site.publish`) | Publish, unpublish and schedule pages and entries, delete pages, and change redirects | Yes | Yes | No | No |
+| **Publish site content** (`site.publish`) | Publish, unpublish and schedule pages and entries, delete pages and content, change redirects, choose a theme from the library, publish forms and members-only posts, and test an automation's actions | Yes | Yes | No | No |
 | **See orders and webhooks** (`site.sensitive`) | Read the site's orders and returns, and set up its webhooks | Yes | Yes | No | No |
-| **Manage site settings** (`site.manage`) | Turn the site's plugins on and off, and change their settings and its security allow-lists | Yes | No | No | No |
+| **Manage site settings** (`site.manage`) | Manage the site's people, custom domain, address and plugins, change its plugin settings and security allow-lists, import and export it, and delete it or a collection (deleting the site also needs **Delete sites**) | Yes | No | No | No |
 
 Each starts from the member's role on the site, the columns above, so nobody's access
 changed when they became permissions. Owners and admins are admins of every site, and

@@ -16,7 +16,8 @@
  */
 
 import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
-import { hostRoleCanWrite } from '@aglyn/aglyn/app-utils/organizations'
+import { holdsSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
+import { orgPermissionLabel } from '@aglyn/aglyn/app-utils/org-permissions'
 import { SCREEN_ROOT_PATH } from '@aglyn/aglyn/app-utils/screen-route'
 import {
   GA_MEASUREMENT_ID_PATTERN,
@@ -84,7 +85,8 @@ export const AI_TRACKING_KIND = 'tracking' as const
 export const AI_JOB_TRACKING_STEP_MINIMUM_MS = 5_000
 
 export const AI_TRACKING_NO_SITE_COPY = 'Open the site whose tracking should change.'
-export const AI_TRACKING_ROLE_COPY = 'Changing the site’s tracking needs the admin, editor or author role on this site.'
+/** Names "Edit site content" (`site.edit`, AGL-4047), never a role. */
+export const AI_TRACKING_ROLE_COPY = `Changing the site’s tracking needs the "${orgPermissionLabel('site.edit')}" permission on this site — ask an organization admin.`
 export const AI_TRACKING_LOCKED_COPY = 'This site is not accepting changes right now.'
 export const AI_TRACKING_NOTHING_COPY = 'The request named no tracking id this could set or remove.'
 
@@ -360,8 +362,7 @@ export async function writeAiSiteTracking(
   return firestore.runTransaction(async (tx): Promise<AiTrackingWrite> => {
     const host = await tx.get(hostRef)
     if (!host.exists) return { ok: false, error: 'Unknown site' }
-    const roles = (host.get('memberRoles') ?? {}) as Record<string, unknown>
-    if (!hostRoleCanWrite(roles[input.uid])) return { ok: false, error: AI_TRACKING_ROLE_COPY }
+    if (!holdsSiteKey(host, input.uid, 'site.edit')) return { ok: false, error: AI_TRACKING_ROLE_COPY }
     const data = (host.data() ?? {}) as Record<string, unknown>
     const changes = aiTrackingChanges(input.request)
     const changed = changes.filter((change) => {
@@ -409,8 +410,7 @@ export async function aiTrackingAccessRefusal(
   deps: { lockdown?: typeof getLockdownVerdict } = {},
 ): Promise<string | null> {
   if (!input.host.exists) return 'Unknown site'
-  const roles = (input.host.get('memberRoles') ?? {}) as Record<string, unknown>
-  if (!hostRoleCanWrite(roles[input.uid])) return AI_TRACKING_ROLE_COPY
+  if (!holdsSiteKey(input.host, input.uid, 'site.edit')) return AI_TRACKING_ROLE_COPY
   const locked = await (deps.lockdown ?? getLockdownVerdict)({
     staff: false,
     uid: input.uid,

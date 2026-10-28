@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { holdsSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
 import {
   ONE_BOX_WORKSPACES_GROUP,
   pageOneBoxGroup,
@@ -182,7 +183,6 @@ export async function runOneBoxSearch(input: OneBoxSearchInput): Promise<OneBoxS
   let member: Record<string, unknown> | null = null
   let org: Record<string, unknown> | null = null
   let host: Record<string, unknown> | null = null
-  let hostRole: string | null = null
   let enabled: string[] = []
   if (orgId) {
     member = await store.get(`orgs/${orgId}/members/${uid}`)
@@ -194,7 +194,8 @@ export async function runOneBoxSearch(input: OneBoxSearchInput): Promise<OneBoxS
         return { status: 404, error: 'No such site in this workspace' }
       }
       const roles = host['memberRoles']
-      hostRole =
+      // Membership of the site at all; what they may read is a key below.
+      const hostRole =
         roles && typeof roles === 'object'
           ? text((roles as Record<string, unknown>)[uid]) || null
           : null
@@ -434,7 +435,8 @@ export async function runOneBoxSearch(input: OneBoxSearchInput): Promise<OneBoxS
       const flags = [gates.featureFlag, source.featureFlag].filter(Boolean) as string[]
       if (flags.some((flag) => entitlements?.[flag] !== true)) continue
       if (!entitlementAllows(def, entitlements)) continue
-      if (source.hostAccess === 'sensitive' && !['admin', 'editor'].includes(hostRole ?? '')) continue
+      // "See orders and webhooks" (`site.sensitive`, AGL-4047), read as the rules read it.
+      if (source.hostAccess === 'sensitive' && !holdsSiteKey(host, uid, 'site.sensitive')) continue
       if (!(await can(gates.permission)) || !(await can(source.permission))) continue
       plans.push(
         source.listQuery

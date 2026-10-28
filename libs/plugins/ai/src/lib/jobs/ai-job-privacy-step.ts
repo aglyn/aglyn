@@ -16,7 +16,8 @@
  */
 
 import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
-import { hostRoleCanWrite } from '@aglyn/aglyn/app-utils/organizations'
+import { holdsSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
+import { orgPermissionLabel } from '@aglyn/aglyn/app-utils/org-permissions'
 import { aiAddonName, checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { SCREEN_ROOT_PATH } from '@aglyn/aglyn/app-utils/screen-route'
@@ -87,8 +88,10 @@ export const AI_PRIVACY_KIND = 'privacy' as const
 export const AI_JOB_PRIVACY_STEP_MINIMUM_MS = 5_000
 
 export const AI_PRIVACY_NO_SITE_COPY = 'Open the site whose privacy should change.'
-export const AI_PRIVACY_ROLE_COPY = 'Changing who can see the site needs the admin, editor or author role on this site.'
-export const AI_PRIVACY_ADMIN_COPY = 'Only a site admin can turn maintenance mode on or off, so it was left as it is.'
+/** Names "Edit site content" (`site.edit`, AGL-4047), never a role. */
+export const AI_PRIVACY_ROLE_COPY = `Changing who can see the site needs the "${orgPermissionLabel('site.edit')}" permission on this site — ask an organization admin.`
+/** Names "Manage site settings" (`site.manage`, AGL-4047), never a role. */
+export const AI_PRIVACY_ADMIN_COPY = `Turning maintenance mode on or off needs the "${orgPermissionLabel('site.manage')}" permission, so it was left as it is.`
 export const AI_PRIVACY_LOCKED_COPY = 'This site is not accepting changes right now.'
 export const AI_PRIVACY_NOTHING_COPY = 'The request named no privacy change this could make.'
 export const AI_PRIVACY_PASSWORD_COPY =
@@ -250,8 +253,8 @@ export async function writeAiSitePrivacy(
   return firestore.runTransaction(async (tx): Promise<AiPrivacyWrite> => {
     const host = await tx.get(hostRef)
     if (!host.exists) return { ok: false, error: 'Unknown site' }
-    const role = ((host.get('memberRoles') ?? {}) as Record<string, unknown>)[input.uid]
-    if (!hostRoleCanWrite(role)) return { ok: false, error: AI_PRIVACY_ROLE_COPY }
+    if (!holdsSiteKey(host, input.uid, 'site.edit')) return { ok: false, error: AI_PRIVACY_ROLE_COPY }
+    const managesSite = holdsSiteKey(host, input.uid, 'site.manage')
     const pageDocs = await Promise.all(input.request.pages.map((one) => tx.get(screens.doc(one.page))))
 
     const done: { output: keyof typeof AI_PRIVACY_OUTPUTS; said: string }[] = []
@@ -261,7 +264,7 @@ export async function writeAiSitePrivacy(
 
     const { maintenance, discourageSearchEngines } = input.request
     if (maintenance !== null) {
-      if (role !== 'admin') {
+      if (!managesSite) {
         notDone.push(AI_PRIVACY_ADMIN_COPY)
       } else {
         if ((host.get('maintenance') === true) !== maintenance) {
@@ -337,12 +340,11 @@ export async function aiPrivacyAccessRefusal(
   deps: { lockdown?: typeof getLockdownVerdict } = {},
 ): Promise<string | null> {
   if (!input.host.exists) return 'Unknown site'
-  const role = ((input.host.get('memberRoles') ?? {}) as Record<string, unknown>)[input.uid]
-  if (!hostRoleCanWrite(role)) return AI_PRIVACY_ROLE_COPY
+  if (!holdsSiteKey(input.host, input.uid, 'site.edit')) return AI_PRIVACY_ROLE_COPY
   // A request that is ONLY maintenance has nothing a non-admin may make.
   const onlyMaintenance =
     input.request.maintenance !== null && input.request.discourageSearchEngines === null && !input.request.pages.length
-  if (onlyMaintenance && role !== 'admin') return AI_PRIVACY_ADMIN_COPY
+  if (onlyMaintenance && !holdsSiteKey(input.host, input.uid, 'site.manage')) return AI_PRIVACY_ADMIN_COPY
   const locked = await (deps.lockdown ?? getLockdownVerdict)({
     staff: false,
     uid: input.uid,

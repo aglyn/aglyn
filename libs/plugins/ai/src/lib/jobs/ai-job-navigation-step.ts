@@ -15,8 +15,9 @@
  * limitations under the License.
  */
 
-import { hostRoleCanWrite } from '@aglyn/aglyn/app-utils/organizations'
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { holdsSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
+import { orgPermissionLabel } from '@aglyn/aglyn/app-utils/org-permissions'
 import { decodeStoredNodes, encodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { getLockdownVerdict } from '@aglyn/tenant-data-admin/server/lockdown'
 import { resolveOrgIdForHost } from '@aglyn/tenant-data-admin/server/organizations'
@@ -87,7 +88,8 @@ export const AI_NAVIGATION_KIND = 'navigation' as const
 export const AI_JOB_NAVIGATION_STEP_MINIMUM_MS = 5_000
 
 export const AI_NAVIGATION_NO_SITE_COPY = 'Open the site whose menu should change.'
-export const AI_NAVIGATION_ROLE_COPY = 'Changing the site’s menus needs the admin, editor or author role on this site.'
+/** Names "Edit site content" (`site.edit`, AGL-4047), never a role. */
+export const AI_NAVIGATION_ROLE_COPY = `Changing the site’s menus needs the "${orgPermissionLabel('site.edit')}" permission on this site — ask an organization admin.`
 export const AI_NAVIGATION_LOCKED_COPY = 'This site is not accepting changes right now.'
 export const AI_NAVIGATION_NO_LAYOUT_COPY = 'This site has no layout with a header or footer to change. Make one in Layouts first.'
 export const AI_NAVIGATION_NOTHING_COPY = 'The request named no menu change this could make.'
@@ -181,8 +183,7 @@ export async function aiNavigationAccessRefusal(
   input: { host: FirebaseFirestore.DocumentSnapshot; uid: string; org: object | null },
   deps: { lockdown?: typeof getLockdownVerdict } = {},
 ): Promise<string | null> {
-  const roles = (input.host.get('memberRoles') ?? {}) as Record<string, unknown>
-  if (!hostRoleCanWrite(roles[input.uid])) return AI_NAVIGATION_ROLE_COPY
+  if (!holdsSiteKey(input.host, input.uid, 'site.edit')) return AI_NAVIGATION_ROLE_COPY
   const locked = await (deps.lockdown ?? getLockdownVerdict)({
     staff: false,
     uid: input.uid,
@@ -234,8 +235,7 @@ export async function writeAiNavigation(
     if (already.exists) return { ok: true, versionId: input.versionId, done: [], notDone: [] }
     if (!doc.exists || doc.get('deletedAt') != null) return { ok: false, error: AI_EDIT_GONE_COPY }
     if (!source.exists) return { ok: false, error: AI_EDIT_VERSION_GONE_COPY }
-    const roles = (host.get('memberRoles') ?? {}) as Record<string, unknown>
-    if (!hostRoleCanWrite(roles[input.uid])) return { ok: false, error: AI_NAVIGATION_ROLE_COPY }
+    if (!holdsSiteKey(host, input.uid, 'site.edit')) return { ok: false, error: AI_NAVIGATION_ROLE_COPY }
     const pointer = text(doc.get('versionId')) || null
     const placement = aiEditPlacement({
       versioning: input.versioning,

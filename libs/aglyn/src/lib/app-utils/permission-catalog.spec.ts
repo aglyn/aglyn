@@ -267,7 +267,7 @@ describe('one permission catalog (AGL-4047)', () => {
     expect(keys('MANAGEPOS')).toEqual(['managePos'])
     expect(keys('billing')).toEqual(expect.arrayContaining(['billing.view', 'billing.manage']))
     expect(keys('sequences')).toEqual(['outreach.use'])
-    expect(keys('delete sites')).toEqual(['hosts.delete'])
+    expect(keys('delete sites')).toEqual(['hosts.delete', 'site.manage'])
     expect(keys('no such thing')).toEqual([])
   })
 

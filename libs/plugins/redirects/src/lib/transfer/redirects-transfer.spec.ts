@@ -577,7 +577,7 @@ describe('the dry run', () => {
     const author = await dryRun([{ source: '/one', destination: '/1' }], { actor: AUTHOR })
     expect(rowOf(author, 0)).toMatchObject({ verdict: 'fail', reason: 'resourceRule' })
     expect(findingsOf(author)).toEqual([
-      'Importing redirects needs a publishing role on this site — ask an editor or admin',
+      'Your role does not include "Publish site content" — ask an organization admin',
     ])
     org = { plan: 'free' }
     const free = await dryRun([{ source: '/one', destination: '/1' }])
@@ -712,7 +712,7 @@ describe('apply', () => {
     expect(results).toEqual([
       expect.objectContaining({
         outcome: 'failed',
-        message: 'Importing redirects needs a publishing role on this site — ask an editor or admin',
+        message: 'Your role does not include "Publish site content" — ask an organization admin',
       }),
     ])
     expect(docs.has(`${RULES}/job1-0`)).toBe(false)
@@ -761,7 +761,7 @@ describe('undo', () => {
 
   it('needs the publishing role', async () => {
     const snapshot = await applied([{ source: '/fresh', destination: '/1' }])
-    await expect(resource.revert(ctx(AUTHOR), snapshot)).rejects.toThrow('publishing role')
+    await expect(resource.revert(ctx(AUTHOR), snapshot)).rejects.toThrow('Publish site content')
     expect(docs.has(`${RULES}/job1-0`)).toBe(true)
   })
 })

@@ -22,7 +22,7 @@ import {
 } from '@aglyn/aglyn/app-utils/collection-entries'
 import { entryHasByline } from '@aglyn/aglyn/app-utils/content-authors'
 import { entryTitleSearchFields } from '@aglyn/aglyn/app-utils/content-query-fields'
-import { hostRoleCanPublish, hostRoleCanWrite } from '@aglyn/aglyn/app-utils/organizations'
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import type { Firestore } from 'firebase-admin/firestore'
 
 /**
@@ -73,9 +73,11 @@ export const CONTENT_ENTRY_DRAFT_FIELDS = [
 ] as const
 
 /** The routes' refusal for a member who may not write the site's content. */
-export const CONTENT_DRAFT_ROLE_REFUSAL = 'Editing requires the editor role'
+/** Names "Edit site content" (`site.edit`, AGL-4047), never a role. */
+export const CONTENT_DRAFT_ROLE_REFUSAL = siteKeyRefusal('site.edit')
 /** The refusal for a member who may not publish it. */
-export const CONTENT_PUBLISH_ROLE_REFUSAL = 'Publishing requires the publisher role'
+/** Names "Publish site content" (`site.publish`, AGL-4047), never a role. */
+export const CONTENT_PUBLISH_ROLE_REFUSAL = siteKeyRefusal('site.publish')
 /** The collections route's refusal at the per-site cap. */
 export const CONTENT_COLLECTIONS_FULL_REFUSAL =
   `This site holds the maximum of ${COLLECTIONS_MAX_PER_HOST} collections — delete one to make room`
@@ -112,9 +114,6 @@ export type ContentEntryWrite =
   | { ok: true; id: string; slug: string; title: string; replayed: boolean }
   | ContentDraftRefusal
 
-function roleOf(host: FirebaseFirestore.DocumentSnapshot, uid: string): unknown {
-  return (host.get('memberRoles') ?? {})[uid]
-}
 
 /**
  * The site's content collection under `id`, created when it does not exist:
@@ -147,7 +146,7 @@ export async function writeContentCollection(
         displayName: String(existing.get('displayName') ?? ''),
       }
     }
-    if (!hostRoleCanWrite(roleOf(host, request.uid))) return { ok: false, status: 403, error: CONTENT_DRAFT_ROLE_REFUSAL }
+    if (!holdsSiteKey(host, request.uid, 'site.edit')) return { ok: false, status: 403, error: CONTENT_DRAFT_ROLE_REFUSAL }
     const held = await tx.get(collections.where('slug', 'in', slugs.slice(0, 10)))
     const taken = new Set(
       held.docs.filter((doc) => hostCollectionKind(doc.data()) === 'content').map((doc) => String(doc.get('slug'))),
@@ -206,7 +205,7 @@ export async function writeContentEntryDraft(
     if (!parent.exists || hostCollectionKind(parent.data()) !== 'content') {
       return { ok: false, status: 404, error: 'Unknown collections document' }
     }
-    if (!hostRoleCanWrite(roleOf(host, request.uid))) return { ok: false, status: 403, error: CONTENT_DRAFT_ROLE_REFUSAL }
+    if (!holdsSiteKey(host, request.uid, 'site.edit')) return { ok: false, status: 403, error: CONTENT_DRAFT_ROLE_REFUSAL }
     const candidates = Array.from({ length: 10 }, (_, index) => (index === 0 ? base : `${base}-${index + 1}`))
     const held = new Set((await tx.get(entries.where('slug', 'in', candidates))).docs.map((doc) => String(doc.get('slug'))))
     const slug = candidates.find((candidate) => !held.has(candidate)) ?? `${base}-${request.id.slice(0, 8).toLowerCase()}`
@@ -251,7 +250,7 @@ export async function publishContentEntries(
   const hostRef = firestore.collection('hosts').doc(request.hostId)
   const host = await hostRef.get()
   if (!host.exists) return { ok: false, status: 404, error: 'Unknown site' }
-  if (!hostRoleCanPublish(roleOf(host, request.uid))) return { ok: false, status: 403, error: CONTENT_PUBLISH_ROLE_REFUSAL }
+  if (!holdsSiteKey(host, request.uid, 'site.publish')) return { ok: false, status: 403, error: CONTENT_PUBLISH_ROLE_REFUSAL }
   const entries = hostRef.collection('collections').doc(request.collectionId).collection('entries')
   const result: ContentEntriesPublish = { published: [], kept: [] }
   const batch = firestore.batch()

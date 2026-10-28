@@ -16,6 +16,8 @@
  */
 
 import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
+import { holdsSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
+import { orgPermissionLabel } from '@aglyn/aglyn/app-utils/org-permissions'
 import { MEDIA_ALT_MAX_LENGTH } from '@aglyn/aglyn/app-utils/media-alt'
 import { embeddedMetadataIsCurrent } from '@aglyn/aglyn/app-utils/media-embedded-fields'
 import {
@@ -31,7 +33,6 @@ import {
   mediaNameWords,
   normalizeMediaTags,
 } from '@aglyn/aglyn/app-utils/media-metadata'
-import { hostRoleCanWrite } from '@aglyn/aglyn/app-utils/organizations'
 import type { PluginAiCapabilityArgsSchema } from '@aglyn/aglyn/plugin-manager/plugin-ai-capabilities'
 import { getLockdownVerdict } from '@aglyn/tenant-data-admin/server/lockdown'
 import { resolveOrgIdForHost } from '@aglyn/tenant-data-admin/server/organizations'
@@ -104,7 +105,8 @@ export const AI_MEDIA_KIND = 'media' as const
 export const AI_JOB_MEDIA_STEP_MINIMUM_MS = 8_000
 
 export const AI_MEDIA_NO_SITE_COPY = 'Open the site whose media library should change.'
-export const AI_MEDIA_ROLE_COPY = 'Organizing the media library needs the admin, editor or author role on this site.'
+/** Names "Edit site content" (`site.edit`, AGL-4047), never a role. */
+export const AI_MEDIA_ROLE_COPY = `Organizing the media library needs the "${orgPermissionLabel('site.edit')}" permission on this site — ask an organization admin.`
 export const AI_MEDIA_LOCKED_COPY = 'This site is not accepting changes right now.'
 export const AI_MEDIA_NOTHING_COPY = 'The request named no file in the media library and no change this could make to it.'
 
@@ -447,8 +449,7 @@ export async function writeAiMediaChanges(
     // Every read first: a transaction writes nothing until its reads are done.
     const host = await tx.get(hostRef)
     if (!host.exists) return { ok: false, error: 'Unknown site' }
-    const roles = (host.get('memberRoles') ?? {}) as Record<string, unknown>
-    if (!hostRoleCanWrite(roles[input.uid])) return { ok: false, error: AI_MEDIA_ROLE_COPY }
+    if (!holdsSiteKey(host, input.uid, 'site.edit')) return { ok: false, error: AI_MEDIA_ROLE_COPY }
     const notDone: string[] = []
     const rows = new Map<string, AiMediaRow>()
     for (const source of request.files) {
@@ -522,8 +523,7 @@ export async function aiMediaAccessRefusal(
   deps: { lockdown?: typeof getLockdownVerdict } = {},
 ): Promise<string | null> {
   if (!input.host.exists) return 'Unknown site'
-  const roles = (input.host.get('memberRoles') ?? {}) as Record<string, unknown>
-  if (!hostRoleCanWrite(roles[input.uid])) return AI_MEDIA_ROLE_COPY
+  if (!holdsSiteKey(input.host, input.uid, 'site.edit')) return AI_MEDIA_ROLE_COPY
   const locked = await (deps.lockdown ?? getLockdownVerdict)({
     staff: false,
     uid: input.uid,

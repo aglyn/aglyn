@@ -7557,7 +7557,7 @@
         "scope": "site"
       },
       {
-        "description": "Turn a site’s plugins on and off, and change their settings and its security allow-lists.",
+        "description": "Manage a site’s people, domain, address and plugins, change its plugin settings and security allow-lists, import, export and delete it.",
         "group": "sites",
         "key": "site.manage",
         "label": "Manage site settings",

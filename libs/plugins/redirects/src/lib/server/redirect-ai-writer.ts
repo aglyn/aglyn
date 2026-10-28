@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { hostRoleCanPublish } from '@aglyn/aglyn/app-utils/organizations'
 import { checkEntitlement, checkQuota } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import { countLiveDocuments } from '@aglyn/aglyn/app-utils/live-document-count'
 import type { ResolvedPluginHostResource } from '@aglyn/aglyn/plugin-manager/plugin-host-resources'
 import type {
@@ -98,7 +98,8 @@ type Firestore = FirebaseFirestore.Firestore
 type StoredRule = Record<string, unknown>
 
 /** The page's refusal for a member without the publishing role. */
-export const REDIRECT_AI_ROLE_REFUSAL = 'Changing a redirect needs a publishing role — ask an editor or admin'
+/** Names "Publish site content" (`site.publish`, AGL-4047), never a role. */
+export const REDIRECT_AI_ROLE_REFUSAL = siteKeyRefusal('site.publish')
 /** The page's refusal for a plan without redirects. */
 export const REDIRECT_AI_PLAN_REFUSAL = 'URL redirects require a Starter plan — see Billing to upgrade'
 /** What a member is told while a lockdown refuses writes to the site. */
@@ -172,8 +173,7 @@ export function createRedirectAiWriter(deps: RedirectAiWriterDeps): PluginResour
   ): Promise<PluginDraftRefusal | null> {
     if (!host.exists) return { status: 404, error: 'Unknown site' }
     const data = (host.data() ?? {}) as StoredRule
-    const role = ((data['memberRoles'] ?? {}) as Record<string, unknown>)[context.uid]
-    if (!hostRoleCanPublish(role)) return { status: 403, error: REDIRECT_AI_ROLE_REFUSAL }
+    if (!holdsSiteKey(data, context.uid, 'site.publish')) return { status: 403, error: REDIRECT_AI_ROLE_REFUSAL }
     const declared = declaration()
     if (declared.entitlement && !checkEntitlement((context.org ?? {}) as never, declared.entitlement)) {
       return { status: 403, error: REDIRECT_AI_PLAN_REFUSAL }

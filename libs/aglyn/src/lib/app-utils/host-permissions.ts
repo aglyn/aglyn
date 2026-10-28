@@ -24,7 +24,9 @@ import type {
 } from '../foundation'
 import { refinePermissionMap, type PermissionRefinement } from '../plugin-manager/plugin-permissions'
 import { hostRoleFor, isOrgWideMember } from './organizations'
+import { CORE_SITE_ROLE_PRESETS } from './org-role-grants'
 import {
+  orgPermissionLabel,
   ORG_PERMISSION_REFINEMENTS,
   ORG_PERMISSIONS,
   resolveOrgPermissions,
@@ -528,3 +530,45 @@ export function projectHostMemberPermissions(
   }
   return projection
 }
+
+/** The core's site keys (AGL-4047): `CORE_SITE_ROLE_PRESETS`. */
+export type CoreSiteKey = 'site.edit' | 'site.publish' | 'site.sensitive' | 'site.manage'
+
+/** A host document, as a snapshot (`get`) or as its data. */
+export type HostDocumentLike =
+  | { get(field: string): unknown }
+  | { memberPermissions?: unknown; memberRoles?: unknown }
+  | null
+  | undefined
+
+/**
+ * Does this member hold one of the core's site keys on this site (AGL-4047)?
+ * The door's twin of the rules' `canWriteHostContent`,
+ * `canPublishHostContent`, `canReadHostSensitive` and site-settings checks:
+ * the site's `memberPermissions` stamp, else the preset of the member's
+ * `memberRoles` entry (`hostStampedSitePermission`), so a route that asks it
+ * answers what the rules answer for the same write. For the routes that read
+ * the host document already; it costs no read.
+ */
+export function holdsSiteKey(host: HostDocumentLike, uid: string, key: CoreSiteKey): boolean {
+  if (!host || !uid) return false
+  const read = (field: string): unknown =>
+    typeof (host as { get?: unknown }).get === 'function'
+      ? (host as { get(field: string): unknown }).get(field)
+      : (host as Record<string, unknown>)[field]
+  return hostStampedSitePermission(
+    { memberPermissions: read('memberPermissions'), memberRoles: read('memberRoles') },
+    uid,
+    key,
+    CORE_SITE_ROLE_PRESETS[key] ?? {},
+  )
+}
+
+/**
+ * The refusal a door answers when a member does not hold a site key
+ * (AGL-4047): it names the permission and who can change it, never a role.
+ */
+export function siteKeyRefusal(key: string): string {
+  return `Your role does not include "${orgPermissionLabel(key)}" — ask an organization admin`
+}
+
