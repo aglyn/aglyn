@@ -58406,6 +58406,8 @@
             "billing.manage": true,
             "billing.view": true,
             "collectWaivers": true,
+            "commerce.reservations": true,
+            "commerce.walkIns": true,
             "data.manage": true,
             "hosts.create": true,
             "hosts.delete": true,
@@ -58425,7 +58427,11 @@
             "posDevices": true,
             "posDiscount": true,
             "posRefund": true,
-            "posSell": true
+            "posSell": true,
+            "site.edit": true,
+            "site.manage": true,
+            "site.publish": true,
+            "site.sensitive": true
           }
         },
         {
@@ -58441,6 +58447,8 @@
             "billing.manage": true,
             "billing.view": true,
             "collectWaivers": true,
+            "commerce.reservations": true,
+            "commerce.walkIns": true,
             "data.manage": true,
             "hosts.create": true,
             "hosts.delete": true,
@@ -58460,7 +58468,11 @@
             "posDevices": true,
             "posDiscount": true,
             "posRefund": true,
-            "posSell": true
+            "posSell": true,
+            "site.edit": true,
+            "site.manage": true,
+            "site.publish": true,
+            "site.sensitive": true
           }
         },
         {
@@ -58476,6 +58488,8 @@
             "billing.manage": false,
             "billing.view": false,
             "collectWaivers": true,
+            "commerce.reservations": true,
+            "commerce.walkIns": true,
             "data.manage": true,
             "hosts.create": false,
             "hosts.delete": false,
@@ -58495,7 +58509,11 @@
             "posDevices": true,
             "posDiscount": true,
             "posRefund": true,
-            "posSell": true
+            "posSell": true,
+            "site.edit": true,
+            "site.manage": false,
+            "site.publish": true,
+            "site.sensitive": true
           }
         },
         {
@@ -58511,6 +58529,8 @@
             "billing.manage": false,
             "billing.view": false,
             "collectWaivers": false,
+            "commerce.reservations": false,
+            "commerce.walkIns": false,
             "data.manage": false,
             "hosts.create": false,
             "hosts.delete": false,
@@ -58530,7 +58550,11 @@
             "posDevices": false,
             "posDiscount": false,
             "posRefund": false,
-            "posSell": false
+            "posSell": false,
+            "site.edit": false,
+            "site.manage": false,
+            "site.publish": false,
+            "site.sensitive": false
           }
         },
         {
@@ -58546,6 +58570,8 @@
             "billing.manage": false,
             "billing.view": false,
             "collectWaivers": false,
+            "commerce.reservations": false,
+            "commerce.walkIns": false,
             "data.manage": false,
             "hosts.create": false,
             "hosts.delete": false,
@@ -58565,7 +58591,11 @@
             "posDevices": false,
             "posDiscount": false,
             "posRefund": false,
-            "posSell": false
+            "posSell": false,
+            "site.edit": false,
+            "site.manage": false,
+            "site.publish": false,
+            "site.sensitive": false
           }
         },
         {
@@ -58581,6 +58611,8 @@
             "billing.manage": false,
             "billing.view": false,
             "collectWaivers": false,
+            "commerce.reservations": false,
+            "commerce.walkIns": false,
             "data.manage": false,
             "hosts.create": false,
             "hosts.delete": false,
@@ -58600,7 +58632,11 @@
             "posDevices": false,
             "posDiscount": false,
             "posRefund": false,
-            "posSell": false
+            "posSell": false,
+            "site.edit": false,
+            "site.manage": false,
+            "site.publish": false,
+            "site.sensitive": false
           }
         },
         {
@@ -58623,6 +58659,8 @@
             "billing.manage": false,
             "billing.view": false,
             "collectWaivers": true,
+            "commerce.reservations": true,
+            "commerce.walkIns": true,
             "data.manage": false,
             "hosts.create": true,
             "hosts.delete": false,
@@ -58642,7 +58680,11 @@
             "posDevices": true,
             "posDiscount": true,
             "posRefund": true,
-            "posSell": true
+            "posSell": true,
+            "site.edit": true,
+            "site.manage": false,
+            "site.publish": true,
+            "site.sensitive": true
           }
         },
         {
@@ -58667,6 +58709,8 @@
             "billing.manage": false,
             "billing.view": false,
             "collectWaivers": false,
+            "commerce.reservations": false,
+            "commerce.walkIns": false,
             "data.manage": false,
             "hosts.create": false,
             "hosts.delete": false,
@@ -58686,7 +58730,11 @@
             "posDevices": false,
             "posDiscount": false,
             "posRefund": false,
-            "posSell": false
+            "posSell": false,
+            "site.edit": false,
+            "site.manage": false,
+            "site.publish": false,
+            "site.sensitive": false
           }
         },
         {
@@ -58706,6 +58754,8 @@
             "billing.manage": true,
             "billing.view": true,
             "collectWaivers": true,
+            "commerce.reservations": true,
+            "commerce.walkIns": true,
             "data.manage": true,
             "hosts.create": true,
             "hosts.delete": false,
@@ -58725,7 +58775,11 @@
             "posDevices": true,
             "posDiscount": true,
             "posRefund": true,
-            "posSell": true
+            "posSell": true,
+            "site.edit": true,
+            "site.manage": true,
+            "site.publish": true,
+            "site.sensitive": true
           }
         }
       ]

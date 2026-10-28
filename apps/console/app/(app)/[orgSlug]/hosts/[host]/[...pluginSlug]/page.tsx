@@ -17,7 +17,9 @@
 'use client'
 
 import {
+  applySiteRolePresets,
   checkEntitlement,
+  isSiteRolePresetPermission,
   narrowPermissionsToSite,
   RELEASE_FLAGS,
   releaseStageOfSurface,
@@ -129,7 +131,13 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
   // The site role, handed DOWN like the release verdict (AGL-2334). A plugin
   // surface that publishes has to disable its control with a reason, and the
   // member read it takes is `scope:app`.
-  const { canPublish, loaded: hostRoleLoaded, narrowing } = useHostRole(hostId)
+  const {
+    canPublish,
+    loaded: hostRoleLoaded,
+    narrowing,
+    member: hostMember,
+    customRole: hostCustomRole,
+  } = useHostRole(hostId)
 
   /*
    * A site that narrows this member (AGL-4047): an editor of the whole
@@ -139,16 +147,22 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
    * server answers. Until the site role is read, and for everyone the site
    * does not narrow, it is the workspace's map unchanged.
    */
-  const permissions = useMemo(
-    () => (narrowing ? narrowPermissionsToSite({ ...orgPermissions }, narrowing) : orgPermissions),
-    [orgPermissions, narrowing],
-  )
+  /*
+   * And the keys whose preset is the member's role on this site (AGL-4047),
+   * such as "Manage reservations": decided for this site from the access the
+   * member holds here, as the server and the rules decide them, once the
+   * member document is read.
+   */
+  const permissions = useMemo(() => {
+    const narrowed = narrowing ? narrowPermissionsToSite({ ...orgPermissions }, narrowing) : orgPermissions
+    return hostMember ? applySiteRolePresets({ ...narrowed }, hostMember, hostId, hostCustomRole) : narrowed
+  }, [orgPermissions, narrowing, hostMember, hostId, hostCustomRole])
   const canOnSite = useCallback(
     (permission: string) =>
-      narrowing && permission in narrowing.narrows
+      (narrowing && permission in narrowing.narrows) || (hostMember && isSiteRolePresetPermission(permission))
         ? permissions[permission] === true
         : canOrgPermission(permission),
-    [narrowing, permissions, canOrgPermission],
+    [narrowing, hostMember, permissions, canOrgPermission],
   )
 
   /*

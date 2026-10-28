@@ -1025,6 +1025,7 @@
         "OrgPermissionLayer"
       ],
       "values": [
+        "CORE_SITE_ROLE_PRESETS",
         "ORG_ROLE_GRANTS",
         "ORG_ROLE_NAMES"
       ]
@@ -1106,6 +1107,7 @@
       "with": "assembleOrgRoleGrants",
       "collect": [
         "AI_ORG_PERMISSIONS",
+        "COMMERCE_SITE_PERMISSIONS",
         "COMMERCE_PERMISSIONS",
         "OUTREACH_PERMISSIONS",
         "ACCOUNTING_PERMISSIONS",

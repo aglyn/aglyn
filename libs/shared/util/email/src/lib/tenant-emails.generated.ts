@@ -1976,6 +1976,11 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
         "name": "waiver.validity",
         "description": "The days it covers",
         "sample": "Good for Oct 24, 2026"
+      },
+      {
+        "name": "waiver.contact",
+        "description": "How to reach the business, as a sentence: its contact email or phone when the site lists one",
+        "sample": "Contact Ridgeline Moto at hello@example.com or (555) 010-0100."
       }
     ],
     "defaultBody": [
@@ -2002,6 +2007,16 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       {
         "block": "text",
         "text": "You don’t need to print it: staff can find your waiver by name when you arrive. If anything on it is wrong, contact {{host.businessName}}.",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "Your paper copy and your choices",
+        "variant": "subheading"
+      },
+      {
+        "block": "text",
+        "text": "You can ask {{host.businessName}} for a paper copy at no charge, change the email address for your copy, or withdraw your agreement to sign electronically for anything not yet sent to you. Withdrawing doesn’t undo the signature you gave. {{waiver.contact}}",
         "variant": "body"
       },
       {

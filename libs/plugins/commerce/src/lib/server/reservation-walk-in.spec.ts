@@ -43,7 +43,7 @@ import {
   WALK_IN_ID_CONFLICT,
   WALK_IN_PLAN_REFUSAL,
   WALK_IN_PLUGIN_OFF,
-  WALK_IN_ROLE_REFUSAL,
+  WALK_IN_PERMISSION_REFUSAL,
   WALK_IN_TAKEN_EVERY_UNIT,
   WALK_IN_TAKEN_ONE_UNIT,
 } from './reservation-walk-in'
@@ -299,11 +299,44 @@ describe('who may book a walk-in', () => {
     expect(stays()).toHaveLength(1)
   })
 
-  it('names what booking a walk-in needs, not the editor role (AGL-4046)', async () => {
+  it('names the permission booking a walk-in needs, never a role (AGL-4047)', async () => {
     const res = await call('viewer', walkIn())
-    expect(res).toMatchObject({ statusCode: 403, body: { error: WALK_IN_ROLE_REFUSAL } })
-    expect(res.body.error).not.toMatch(/editing/i)
-    expect(res.body.error).toContain('admin, editor or author')
+    expect(res).toMatchObject({ statusCode: 403, body: { error: WALK_IN_PERMISSION_REFUSAL } })
+    expect(res.body.error).toBe(
+      'Your role does not include "Book walk-ins and change guests" — ask an organization admin',
+    )
+    expect(res.body.error).not.toMatch(/\b(admin, editor|editor role|author role)\b/i)
+  })
+
+  describe('the site’s stamp decides once the projection wrote it (AGL-4047)', () => {
+    const stamp = (memberPermissions: Record<string, Record<string, boolean>>) =>
+      writeDoc('hosts/h1', { ...docs.get('hosts/h1'), memberPermissions }, false)
+
+    it('lets a viewer a custom role or override granted walk-ins book one', async () => {
+      stamp({ 'u-viewer': { 'commerce.walkIns': true, 'commerce.reservations': false } })
+      const res = await call('viewer', walkIn())
+      expect(res.statusCode).toBe(200)
+      expect(stays()).toHaveLength(1)
+    })
+
+    it('refuses an editor whose walk-ins a role or the site took away', async () => {
+      stamp({ 'u-editor': { 'commerce.walkIns': false, 'commerce.reservations': true } })
+      const res = await call('editor', walkIn())
+      expect(res).toMatchObject({ statusCode: 403, body: { error: WALK_IN_PERMISSION_REFUSAL } })
+      expect(stays()).toEqual([])
+    })
+
+    it('reads the site role’s preset for a member the stamp does not carry the key for', async () => {
+      // A stamp written before the key existed carries other keys only.
+      stamp({ 'u-author': { 'ai.use': true }, 'u-viewer': { 'ai.use': false } })
+      expect((await call('author', walkIn())).statusCode).toBe(200)
+      expect((await call('viewer', walkIn({ reservationId: 'other-attempt' }))).statusCode).toBe(403)
+    })
+
+    it('staff are still let through whatever the stamp says', async () => {
+      stamp({ 'u-staff': { 'commerce.walkIns': false } })
+      expect((await call('staff', walkIn())).statusCode).toBe(200)
+    })
   })
 
   it('refuses a store whose plan does not take reservations, as the booking door does', async () => {

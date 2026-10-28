@@ -20,7 +20,7 @@
 import { Alert, Button, CircularProgress, List, ListItemButton, ListItemText, Stack, Typography } from '@mui/material'
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { WAIVERS_API_ROUTES } from '../constants/bundle-common'
-import { SigningForm, type SignableWaiver } from './signing-form.component'
+import { SigningForm, type SignableWaiver, type SigningResult } from './signing-form.component'
 import { publicWaiversRequest } from './waivers-api'
 
 /*==========================================
@@ -31,9 +31,9 @@ import { publicWaiversRequest } from './waivers-api'
  *=========================================*/
 
 export interface WaiverToSign {
-  site: { name: string }
+  site: { name: string; contact?: string | null }
   waiver: SignableWaiver
-  consent: { text: string; version: number }
+  consent: { heading?: string; text: string; version: number }
   adultAge: number
 }
 
@@ -42,7 +42,7 @@ export interface WaiverSignFlowProps {
   waiverId?: string | null
   mode: 'online' | 'at_window'
   /** Sends a signing; the public door unless the window's own is given. */
-  submit?: (payload: Record<string, unknown>) => Promise<{ people: string[]; window: string; emailed: boolean }>
+  submit?: (payload: Record<string, unknown>) => Promise<SigningResult>
   doneActions?: (reset: () => void) => ReactNode
   /** Heading over the list of waivers, when more than one is published. */
   heading?: string
@@ -100,7 +100,7 @@ export function WaiverSignFlow(props: WaiverSignFlowProps) {
     (payload: Record<string, unknown>) =>
       props.submit
         ? props.submit(payload)
-        : publicWaiversRequest<{ people: string[]; window: string; emailed: boolean }>(WAIVERS_API_ROUTES.publicSign, {
+        : publicWaiversRequest<SigningResult>(WAIVERS_API_ROUTES.publicSign, {
             body: { ...payload, hostId },
           }),
     [props, hostId],
@@ -149,8 +149,10 @@ export function WaiverSignFlow(props: WaiverSignFlowProps) {
       <SigningForm
         key={`${state.answer.waiver.id}-${state.answer.waiver.version}`}
         siteName={state.answer.site.name}
+        siteContact={state.answer.site.contact ?? null}
         waiver={state.answer.waiver}
         consentText={state.answer.consent.text}
+        consentHeading={state.answer.consent.heading}
         adultAge={state.answer.adultAge}
         mode={mode}
         submit={submit}

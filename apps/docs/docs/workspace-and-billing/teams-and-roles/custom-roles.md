@@ -29,9 +29,11 @@ Control what each teammate can do with **roles** — named permission sets — p
 
 The permission catalog covers organization settings, the activity log, API keys,
 privacy requests, holds and reviews, billing (view and manage separately), member
-management, site creation and deletion, organization data, marketplace publishing,
+management, site creation and deletion, the [site permissions](#site-permissions),
+organization data, marketplace publishing,
 plugin installs, the two AI keys, and every permission the workspace's plugins add,
-such as **Use the point of sale** (`managePos`). A plugin's permissions are listed
+such as **Use the point of sale** (`managePos`) and the
+[reservation permissions](#reservation-permissions). A plugin's permissions are listed
 while the plugin is on for the workspace. Owners, admins and editors hold the point
 of sale by default and viewers don't, so a custom role can hand the register to a
 viewer or take it from an editor. The permission decides on its own: a member's
@@ -92,6 +94,44 @@ the permissions that follow the site role for them, each **Allow**, **Deny** or
 opens the register to sell and nothing else; allowing **Use the point of sale** gives
 back the whole register, as far as their workspace role and custom role allow it.
 Everything else about them is still set on their Team page.
+
+### Site permissions {#site-permissions}
+
+Four permissions decide what someone may do on a site:
+
+| Permission | What it opens | Admin | Editor | Author | Viewer |
+|---|---|---|---|---|---|
+| **Edit site content** (`site.edit`) | Create and change pages, layouts, components, entries, media and the rest of a site's content, without making it live | Yes | Yes | Yes | No |
+| **Publish site content** (`site.publish`) | Publish, unpublish and schedule pages and entries, delete pages, and change redirects | Yes | Yes | No | No |
+| **See orders and webhooks** (`site.sensitive`) | Read the site's orders and returns, and set up its webhooks | Yes | Yes | No | No |
+| **Manage site settings** (`site.manage`) | Turn the site's plugins on and off, and change their settings and its security allow-lists | Yes | No | No | No |
+
+Each starts from the member's role on the site, the columns above, so nobody's access
+changed when they became permissions. Owners and admins are admins of every site, and
+someone whose access to one site differs from their workspace role starts from their
+access there. A custom role or a per-member override can then grant or deny any of
+them, and it applies on every site the member can reach. For someone added to one site
+only, set them for that site in its **Users** card: choose **Permissions** beside them.
+
+### Reservation permissions {#reservation-permissions}
+
+Two permissions decide who may work a site's stays:
+
+| Permission | What it opens |
+|---|---|
+| **Manage reservations** (`commerce.reservations`) | Check stays in and out, mark no-shows, cancel stays, and add, change and remove what can be booked, on the **Reservations** card and in the apps |
+| **Book walk-ins and change guests** (`commerce.walkIns`) | Book a walk-in stay and change how many guests a stay is for |
+
+Both start from the member's role on the site, so nobody's access changed when they
+became permissions: a site's admins, editors and authors hold them, and viewers
+don't. That includes someone whose access to one site is different from their
+workspace role, such as an editor given **Viewer** access there, or a viewer given
+**Editor** access there. A custom role or a per-member override can then grant or
+deny either one, and it applies on every site the member can reach. **Book walk-ins
+and change guests** follows **Manage reservations** until a role or a member sets it,
+and it can be allowed on its own: the staff at your check-in window can book walk-ins
+without changing anyone's booking. For someone added to one site only, set either one
+for that site in its **Users** card: choose **Permissions** beside them.
 
 ### API keys, privacy requests, and holds {#api-keys-privacy-and-holds}
 

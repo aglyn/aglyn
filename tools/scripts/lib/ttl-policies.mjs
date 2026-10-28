@@ -256,4 +256,12 @@ export const TTL_POLICIES = Object.freeze([
     // also refused by age on read.
     why: 'single-use review links from review-request emails, 60 days',
   },
+  {
+    collection: 'posHardwareSales',
+    field: 'expiresAt',
+    // AGL-4038 — Aglyn's own record of each POS hardware sale (seller of
+    // record): kept past erasure as a tax and reseller record, and this is
+    // what ends it. `posHardwareSaleRecord` stamps `posHardwareSaleExpiry`.
+    why: 'POS hardware sale records (tax and reseller), 7 years from the sale',
+  },
 ])

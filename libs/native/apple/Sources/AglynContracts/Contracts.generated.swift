@@ -5736,6 +5736,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let contactListDeclaration: ListQueryDeclaration
   public let contentSchemaTypeDefault: ContentSchemaType
   public let contentSchemaTypeOptions: [ContentSchemaTypeOptionsItem]
+  public let coreSiteRolePresets: [String: [String: Bool]]
   public let crmActivitiesPerRecordCeiling: Int
   public let crmActivityDirectionLabels: [String: String]
   public let crmActivityKindLabels: [String: String]
@@ -6088,6 +6089,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case contactListDeclaration = "CONTACT_LIST_DECLARATION"
     case contentSchemaTypeDefault = "CONTENT_SCHEMA_TYPE_DEFAULT"
     case contentSchemaTypeOptions = "CONTENT_SCHEMA_TYPE_OPTIONS"
+    case coreSiteRolePresets = "CORE_SITE_ROLE_PRESETS"
     case crmActivitiesPerRecordCeiling = "CRM_ACTIVITIES_PER_RECORD_CEILING"
     case crmActivityDirectionLabels = "CRM_ACTIVITY_DIRECTION_LABELS"
     case crmActivityKindLabels = "CRM_ACTIVITY_KIND_LABELS"

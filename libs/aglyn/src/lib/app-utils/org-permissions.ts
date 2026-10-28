@@ -31,6 +31,7 @@ import {
   CORE_ORG_PERMISSION_ENTRIES,
   CORE_ORG_PERMISSION_GROUPS,
   CORE_ORG_ROLE_GRANTS,
+  CORE_SITE_ROLE_PRESETS,
   type OrgPermissionGroup,
   type OrgPermissionScope,
 } from './org-role-grants'
@@ -60,6 +61,10 @@ export type CoreOrgPermission =
   | 'data.manage'
   | 'marketplace.publish'
   | 'plugins.install'
+  | 'site.edit'
+  | 'site.publish'
+  | 'site.sensitive'
+  | 'site.manage'
 
 /**
  * A key of the catalog: a core key above, or a key a plugin declares into
@@ -120,6 +125,15 @@ export interface OrgPermissionDefinition {
    * default for it. `narrowPermissionsToSite` applies it. Only a plugin's key.
    */
   narrowsPerSite?: Readonly<Record<OrgRole, boolean>>
+  /**
+   * The key's preset is the member's role ON THE SITE a request names, for
+   * every member (AGL-4047): `hostRoleDefaults` read for the access they hold
+   * there, then their custom role, their own permissions and that site's
+   * toggle. `roleDefaults` is the answer with no site named.
+   * `resolveSiteRolePresetPermissions` decides it. The core's site keys
+   * (`CORE_SITE_ROLE_PRESETS`) and a plugin's key with `hostRoleDefaults`.
+   */
+  presetFromSiteRole?: true
 }
 
 /**
@@ -150,7 +164,11 @@ const CORE_ORG_PERMISSIONS: readonly OrgPermissionDefinition[] =
     ...entry,
     key: entry.key as CoreOrgPermission,
     group: entry.group ?? 'organization',
-    scope: 'org' as const,
+    scope: entry.scope ?? 'org',
+    // A site key's preset is the member's role on the site (AGL-4047).
+    ...(CORE_SITE_ROLE_PRESETS[entry.key]
+      ? { hostRoleDefaults: { ...CORE_SITE_ROLE_PRESETS[entry.key] }, presetFromSiteRole: true as const }
+      : {}),
     roleDefaults: {
       owner: CORE_ORG_ROLE_GRANTS.owner.includes(entry.key),
       admin: CORE_ORG_ROLE_GRANTS.admin.includes(entry.key),
@@ -285,6 +303,7 @@ function syncCatalog(): void {
       ...(declared.refines ? { refines: declared.refines } : {}),
       ...(declared.follows && !declared.refines ? { follows: declared.follows } : {}),
       ...(declared.narrowsPerSite ? { narrowsPerSite: { ...declared.narrowsPerSite } } : {}),
+      ...(declared.presetFromSiteRole && declared.hostRoleDefaults ? { presetFromSiteRole: true as const } : {}),
     })
     if (declared.source === 'tier') tierKeys.push(declared.key)
     if (!groups.some((group) => group.id === declared.group)) {

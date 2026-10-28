@@ -49,10 +49,22 @@ export function setWaiversEmailSenderForTests(sender: Sender | null): void {
   senderOverride = sender
 }
 
+/**
+ * How a signer reaches the business, as the signed-copy email says it
+ * (AGL-4042): the e-sign consent promises a paper copy, a changed email or a
+ * withdrawal by contacting the business, so the copy repeats how.
+ */
+export function waiverContactSentence(businessName: string, contact: string | null | undefined): string {
+  const reach = String(contact ?? '').trim()
+  return reach ? `Contact ${businessName} at ${reach}.` : `Contact ${businessName}.`
+}
+
 export function signedCopyEmail(input: {
   signature: StoredWaiverSignature
   org: Record<string, unknown> | null
   businessName: string
+  /** The business's contact email or phone, as the signing page showed it. */
+  contact?: string | null
 }): WaiverEmail | null {
   const { signature } = input
   const to = signature.signer?.email
@@ -63,6 +75,7 @@ export function signedCopyEmail(input: {
     'waiver.signedAt': formatInstant(signature.signedAtMs, signature.timeZone),
     'waiver.people': signatureNames(signature).join(', '),
     'waiver.validity': signatureWindowLabel(signature),
+    'waiver.contact': waiverContactSentence(input.businessName, input.contact),
   }
   const bytes = signaturePdf(signature, input.businessName)
   return {
@@ -76,6 +89,7 @@ export function signedCopyEmail(input: {
         `Thanks, ${tokens.name}. You signed ${tokens['waiver.title']} for ${input.businessName}. Your signed copy is attached as a PDF.`,
         `Signed: ${tokens['waiver.signedAt']}\nCovers: ${tokens['waiver.people']}\n${tokens['waiver.validity']}`,
         'You don’t need to print it: staff can find your waiver by name when you arrive.',
+        `You can ask ${input.businessName} for a paper copy at no charge, change the email address for your copy, or withdraw your agreement to sign electronically for anything not yet sent to you. Withdrawing doesn’t undo the signature you gave. ${tokens['waiver.contact']}`,
       ].join('\n\n'),
     },
     attachment: {

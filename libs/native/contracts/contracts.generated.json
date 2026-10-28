@@ -1616,6 +1616,32 @@
       "value": "TechArticle"
     }
   ],
+  "CORE_SITE_ROLE_PRESETS": {
+    "site.edit": {
+      "admin": true,
+      "author": true,
+      "editor": true,
+      "viewer": false
+    },
+    "site.manage": {
+      "admin": true,
+      "author": false,
+      "editor": false,
+      "viewer": false
+    },
+    "site.publish": {
+      "admin": true,
+      "author": false,
+      "editor": true,
+      "viewer": false
+    },
+    "site.sensitive": {
+      "admin": true,
+      "author": false,
+      "editor": true,
+      "viewer": false
+    }
+  },
   "CRM_ACTIVITIES_PER_RECORD_CEILING": 5000,
   "CRM_ACTIVITY_DIRECTION_LABELS": {
     "inbound": "Inbound",
@@ -7318,11 +7344,17 @@
         "members.manage",
         "hosts.create",
         "hosts.delete",
+        "site.edit",
+        "site.publish",
+        "site.sensitive",
+        "site.manage",
         "data.manage",
         "marketplace.publish",
         "plugins.install",
         "ai.use",
         "ai.generate",
+        "commerce.reservations",
+        "commerce.walkIns",
         "managePos",
         "posSell",
         "posRefund",
@@ -7339,8 +7371,13 @@
         "data.manage",
         "marketplace.publish",
         "plugins.install",
+        "site.edit",
+        "site.publish",
+        "site.sensitive",
         "ai.use",
         "ai.generate",
+        "commerce.reservations",
+        "commerce.walkIns",
         "managePos",
         "posSell",
         "posRefund",
@@ -7362,11 +7399,17 @@
         "members.manage",
         "hosts.create",
         "hosts.delete",
+        "site.edit",
+        "site.publish",
+        "site.sensitive",
+        "site.manage",
         "data.manage",
         "marketplace.publish",
         "plugins.install",
         "ai.use",
         "ai.generate",
+        "commerce.reservations",
+        "commerce.walkIns",
         "managePos",
         "posSell",
         "posRefund",
@@ -7493,6 +7536,34 @@
         "label": "Delete sites"
       },
       {
+        "description": "Create and change pages, content and everything else on a site, without making it live.",
+        "group": "sites",
+        "key": "site.edit",
+        "label": "Edit site content",
+        "scope": "site"
+      },
+      {
+        "description": "Make pages and content live, take them down or schedule them, and change redirects.",
+        "group": "sites",
+        "key": "site.publish",
+        "label": "Publish site content",
+        "scope": "site"
+      },
+      {
+        "description": "Read a site’s orders and returns, and set up its webhooks.",
+        "group": "sites",
+        "key": "site.sensitive",
+        "label": "See orders and webhooks",
+        "scope": "site"
+      },
+      {
+        "description": "Turn a site’s plugins on and off, and change their settings and its security allow-lists.",
+        "group": "sites",
+        "key": "site.manage",
+        "label": "Manage site settings",
+        "scope": "site"
+      },
+      {
         "description": "Create, edit, and delete organization datasets.",
         "group": "datasets",
         "key": "data.manage",
@@ -7522,6 +7593,21 @@
         "group": "ai",
         "key": "ai.generate",
         "label": "Generate with AI",
+        "scope": "site"
+      },
+      {
+        "description": "Edit, cancel and check out stays, and add, change and remove what can be booked. Follows the site role unless a role or member sets it.",
+        "group": "commerce",
+        "key": "commerce.reservations",
+        "label": "Manage reservations",
+        "scope": "site"
+      },
+      {
+        "description": "Book a walk-in stay and change how many guests a stay is for. Follows \"Manage reservations\" unless a role or member sets it, and may be allowed without it.",
+        "follows": "commerce.reservations",
+        "group": "commerce",
+        "key": "commerce.walkIns",
+        "label": "Book walk-ins and change guests",
         "scope": "site"
       },
       {
@@ -10908,6 +10994,16 @@
           "variant": "body"
         },
         {
+          "block": "text",
+          "text": "Your paper copy and your choices",
+          "variant": "subheading"
+        },
+        {
+          "block": "text",
+          "text": "You can ask {{host.businessName}} for a paper copy at no charge, change the email address for your copy, or withdraw your agreement to sign electronically for anything not yet sent to you. Withdrawing doesn’t undo the signature you gave. {{waiver.contact}}",
+          "variant": "body"
+        },
+        {
           "block": "button",
           "href": "{{host.url}}",
           "label": "Visit {{host.businessName}}"
@@ -10942,6 +11038,11 @@
           "description": "The days it covers",
           "name": "waiver.validity",
           "sample": "Good for Oct 24, 2026"
+        },
+        {
+          "description": "How to reach the business, as a sentence: its contact email or phone when the site lists one",
+          "name": "waiver.contact",
+          "sample": "Contact Ridgeline Moto at hello@example.com or (555) 010-0100."
         }
       ],
       "name": "Signed waiver copy",
