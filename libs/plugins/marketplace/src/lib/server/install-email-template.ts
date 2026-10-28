@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { holdsStampedSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
+import { MARKETPLACE_SITE_ROLE_PRESET, marketplaceSitePermissionRefusal } from '../model/marketplace-site-permissions'
 import {
   createResourceUid,
   decodeStoredNodes,
@@ -86,9 +88,10 @@ export const installEmailTemplateHandler: PluginApiHandler = async (
     if (!hostSnapshot.exists) {
       return res.status(404).json({ error: 'Unknown site' })
     }
-    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (memberRole !== 'admin' && memberRole !== 'editor') {
-      return res.status(403).json({ error: 'Not a site admin or editor' })
+    // "Install marketplace items into a site" (AGL-4047): the site's stamp, else
+    // the preset of the member's site role, the Admin and Editor this asked for.
+    if (!holdsStampedSiteKey(hostSnapshot, decoded.uid, 'marketplace.siteInstall', MARKETPLACE_SITE_ROLE_PRESET)) {
+      return res.status(403).json({ error: marketplaceSitePermissionRefusal('marketplace.siteInstall') })
     }
 
     const listingRef = firestore.collection('marketplaceListings').doc(listingId)

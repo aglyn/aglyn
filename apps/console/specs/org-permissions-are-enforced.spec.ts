@@ -229,6 +229,11 @@ const ENFORCED_AS: Record<OrgPermission, readonly string[]> = {
   // hub's campaigns through `memberHasOrgPermission`).
   'funnels.manage': ["'funnels.manage'"],
   'marketing.campaigns': ["'marketing.campaigns'"],
+  // The marketplace on a site (AGL-4047): the seven install doors ask
+  // "Install marketplace items into a site" and the six publish doors
+  // "Publish a site's items to the marketplace", beside the workspace keys.
+  'marketplace.siteInstall': ["'marketplace.siteInstall'"],
+  'marketplace.sitePublish': ["'marketplace.sitePublish'"],
 }
 
 function serverFilesContaining(needle: string): string[] {
@@ -271,7 +276,7 @@ describe('every advertised org permission is enforced server-side (AGL-2444)', (
     expect([...CATALOG].sort()).toEqual(
       Object.keys(ENFORCED_AS).sort(),
     )
-    expect(CATALOG.length).toBe(38)
+    expect(CATALOG.length).toBe(40)
   })
 
   it('the search really searches — a key nobody uses finds nothing', () => {

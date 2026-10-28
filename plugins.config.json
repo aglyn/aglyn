@@ -1113,6 +1113,7 @@
         "console": "registerMarketplaceConsole",
         "staff": "registerMarketplaceConsole",
         "consoleApi": "registerMarketplaceConsoleApi",
+        "declarations": "registerMarketplaceDeclarations",
         "serverDeclarations": "registerMarketplaceServerDeclarations",
         "planEntitlements": "marketplacePlanEntitlements"
       },

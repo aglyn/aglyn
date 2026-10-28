@@ -1113,6 +1113,7 @@
         "COMMERCE_SITE_PERMISSIONS",
         "COMMERCE_WORKSPACE_SITE_PERMISSIONS",
         "COMMERCE_PERMISSIONS",
+        "MARKETPLACE_SITE_PERMISSIONS",
         "OUTREACH_PERMISSIONS",
         "MARKETING_SITE_PERMISSIONS",
         "ACCOUNTING_PERMISSIONS",
@@ -1125,6 +1126,7 @@
         "libs/plugins/commerce/src/lib/model/workspace-site-permissions.ts",
         "libs/plugins/funnels/src/lib/model/funnels-permissions.ts",
         "libs/plugins/marketing/src/lib/model/marketing-permissions.ts",
+        "libs/plugins/marketplace/src/lib/model/marketplace-site-permissions.ts",
         "libs/plugins/outreach/src/lib/constants/bundle-common.ts",
         "libs/plugins/accounting/src/lib/constants/bundle-common.ts",
         "libs/plugins/waivers/src/lib/constants/permissions.ts"

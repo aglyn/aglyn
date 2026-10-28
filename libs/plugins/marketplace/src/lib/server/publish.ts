@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { holdsStampedSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
+import { MARKETPLACE_SITE_ROLE_PRESET, marketplaceSitePermissionRefusal } from '../model/marketplace-site-permissions'
 import { displayNameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import {
   checkEntitlement,
@@ -88,9 +90,10 @@ export const publishHandler: PluginApiHandler = async (req, res) => {
     if (!hostSnapshot.exists) {
       return res.status(404).json({ error: 'Unknown site' })
     }
-    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (memberRole !== 'admin' && memberRole !== 'editor') {
-      return res.status(403).json({ error: 'Not a site admin or editor' })
+    // "Publish a site’s items to the marketplace" (AGL-4047): the site's stamp, else
+    // the preset of the member's site role, the Admin and Editor this asked for.
+    if (!holdsStampedSiteKey(hostSnapshot, decoded.uid, 'marketplace.sitePublish', MARKETPLACE_SITE_ROLE_PRESET)) {
+      return res.status(403).json({ error: marketplaceSitePermissionRefusal('marketplace.sitePublish') })
     }
 
     // Plan gate rides the owning org's doc (AGL-238).
