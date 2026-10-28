@@ -285,21 +285,16 @@ export function aiBuildBusinessWords(profile: ResolvedBusinessProfile | null | u
 }
 
 /**
- * The business words a unit is handed (AGL-4077): only where the build itself
- * names no business, only what the build does not say already, and never a
- * word an item's own arguments name — an item's inputs ARE its arguments, so
- * a settings change handed the profile's name would set it.
+ * The business words a page is handed (AGL-4077): only where the build itself
+ * names no business, and only what the build does not say already.
  */
 function aiBuildBusinessInputs(
   inputs: Readonly<Record<string, unknown>> | null | undefined,
   business: AiBuildBusinessWords | null | undefined,
-  capability: Pick<PluginAiCapability, 'argsSchema'> | undefined,
 ): AiBuildBusinessWords {
   if (!business || aiSiteWords(inputs).about) return {}
   const given = (key: string) => typeof inputs?.[key] === 'string' && (inputs[key] as string).trim() !== ''
-  return Object.fromEntries(
-    Object.entries(business).filter(([key]) => !given(key) && !(capability && key in capability.argsSchema.properties)),
-  ) as AiBuildBusinessWords
+  return Object.fromEntries(Object.entries(business).filter(([key]) => !given(key))) as AiBuildBusinessWords
 }
 
 /** The id a unit's job, and so its draft, is named by. */
@@ -397,8 +392,11 @@ export function aiBuildUnitJob(
   brief.push(...(context.briefLines ?? []))
   const inputs: Record<string, unknown> = {
     ...job.inputs,
-    // What the business is, from the site's profile, where the build says nothing of it (AGL-4077).
-    ...aiBuildBusinessInputs(job.inputs, context.business, item ? context.ops.get(item.op) : undefined),
+    // What the business is, from the site's profile, where the build says
+    // nothing of it (AGL-4077): a page's photos are searched with them. Never
+    // a layout, which would write the name where the token that reads the
+    // site's own name goes, and never an item, whose inputs are its arguments.
+    ...(unit.screen ? aiBuildBusinessInputs(job.inputs, context.business) : {}),
     ...aiBuildItemArgsWithout(item?.args ?? {}, context.dropped),
     originJobId: aiOriginJobId(job),
   }
@@ -839,14 +837,13 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
     if (!capability) return settle({ slot: unit.slot, status: 'skipped', note: aiBuildUnavailableCopy(noun) })
     const degraded = degradation.degradedBy.length > 0
     const note = degradation.notes.length ? degradation.notes.join(' ') : null
-    // What the business is, for a page, a layout, form, component or email
-    // design, or another plugin's draft, read from the site's profile where
-    // the build names none (AGL-4077): a build from the chat carries no
-    // businessType, so its pages searched photos with nothing of the business
-    // to go on. Fail-soft: unread, the unit is built as it was.
-    const describesBusiness = Boolean(unit.screen || (unit.creation && unit.op !== AI_BUILD_THEME_OP) || capability.draftResource)
+    // What the business is, for a page or another plugin's draft, read from
+    // the site's profile where the build names none (AGL-4077): a build from
+    // the chat carries no businessType, so its pages searched photos with
+    // nothing of the business to go on. Fail-soft: unread, the unit is built
+    // as it was.
     const business =
-      job.hostId && !aiSiteWords(job.inputs).about && describesBusiness
+      job.hostId && !aiSiteWords(job.inputs).about && (unit.screen || capability.draftResource)
         ? await readSiteContext(firestore, { orgId: job.orgId, hostId: job.hostId, host })
             .then((read) => aiBuildBusinessWords(read?.profile))
             .catch((error: unknown) => {

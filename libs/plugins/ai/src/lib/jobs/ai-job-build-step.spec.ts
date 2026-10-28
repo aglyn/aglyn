@@ -948,7 +948,7 @@ describe('a build’s business words, from the site’s business profile', () =>
     expect(aiBuildBusinessWords(null)).toEqual({})
   })
 
-  it('hands a page and a creation the words where the build has none, never over its own', () => {
+  it('hands a page the words where the build has none, never over its own', () => {
     const units = aiBuildUnits(plan())
     const page = units.find((unit) => unit.slot === 'p0') as (typeof units)[number]
     const business = aiBuildBusinessWords(profile())
@@ -966,7 +966,24 @@ describe('a build’s business words, from the site’s business profile', () =>
     expect(own.inputs['audience']).toBeUndefined()
   })
 
-  it('never hands an item a word its own arguments name: a settings change is told only what it was asked', () => {
+  it('hands them to no layout, whose header names the site by its token, and to no item, whose inputs are its arguments', () => {
+    const business = aiBuildBusinessWords(profile())
+    const layoutPlan: AiJobPlan = {
+      ...plan(),
+      create: [{ kind: 'layout', name: 'Site frame', why: 'A header and footer.', duplicateOf: null, fields: ['header', 'footer'], id: 'lay-1' }],
+      items: [],
+      screens: [],
+    }
+    const layoutUnits = aiBuildUnits(layoutPlan)
+    const layout = aiBuildUnitJob(job({ plan: layoutPlan }), layoutUnits[0], {
+      kind: 'layout',
+      units: layoutUnits,
+      ledger: aiBuildInitialLedger(layoutUnits),
+      ops: OPS,
+      business,
+    })
+    expect(layout.inputs['businessName']).toBeUndefined()
+    expect(layout.inputs['businessType']).toBeUndefined()
     const settingsPlan: AiJobPlan = {
       ...plan(),
       screens: [],
@@ -978,7 +995,7 @@ describe('a build’s business words, from the site’s business profile', () =>
       units,
       ledger: aiBuildInitialLedger(units),
       ops: OPS,
-      business: aiBuildBusinessWords(profile()),
+      business,
     })
     expect(handed.inputs['businessName']).toBeUndefined()
     expect(handed.inputs['telephone']).toBe('+1 555 0100')
