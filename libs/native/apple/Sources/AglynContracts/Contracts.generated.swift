@@ -1473,13 +1473,13 @@ public struct HostOrderCustomerRecord: Codable, Hashable, Sendable {
 public struct HostOrderHardwareTermsAcceptance: Codable, Hashable, Sendable {
   public var atMs: Double
   public var ip: String?
-  public var method: HostOrderHardwareTermsAcceptanceMethod
+  public var method: PosHardwareTermsMethod
   public var sections: String
   public var staffUid: String?
   public var userAgent: String?
   public var version: String
 
-  public init(atMs: Double, ip: String? = nil, method: HostOrderHardwareTermsAcceptanceMethod, sections: String, staffUid: String? = nil, userAgent: String? = nil, version: String) {
+  public init(atMs: Double, ip: String? = nil, method: PosHardwareTermsMethod, sections: String, staffUid: String? = nil, userAgent: String? = nil, version: String) {
     self.atMs = atMs
     self.ip = ip
     self.method = method
@@ -1487,19 +1487,6 @@ public struct HostOrderHardwareTermsAcceptance: Codable, Hashable, Sendable {
     self.staffUid = staffUid
     self.userAgent = userAgent
     self.version = version
-  }
-}
-
-/// A newer server value decodes as `.unknown`, so an older app never fails on it.
-public enum HostOrderHardwareTermsAcceptanceMethod: String, Codable, CaseIterable, Hashable, Sendable {
-  case display = "display"
-  case notice = "notice"
-  case tablet = "tablet"
-  case unknown = ""
-
-  public init(from decoder: Decoder) throws {
-    let raw = try decoder.singleValueContainer().decode(String.self)
-    self = Self(rawValue: raw) ?? .unknown
   }
 }
 
@@ -3945,6 +3932,19 @@ public struct PosDisplayStateTip: Codable, Hashable, Sendable {
     self.allowCustom = allowCustom
     self.baseCents = baseCents
     self.percentages = percentages
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum PosHardwareTermsMethod: String, Codable, CaseIterable, Hashable, Sendable {
+  case display = "display"
+  case notice = "notice"
+  case tablet = "tablet"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
   }
 }
 
