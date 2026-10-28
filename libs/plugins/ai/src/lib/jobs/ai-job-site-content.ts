@@ -499,7 +499,7 @@ export function aiSiteProductsBriefLine(input: AiSiteProductsInput = AI_SITE_PRO
 // ── Sample products (AGL-4065) ──────────────────────────────────────────
 
 /**
- * ZACH'S Q1 (AGL-4065, decided 2026-10-28): a store whose brief names kinds
+ * THE Q1 DECISION (AGL-4065, 2026-10-28): a store whose brief names kinds
  * of product and no product starts with SAMPLE products, one or more of
  * each kind, at a suggested price as before. Each is named as a plain item
  * of its kind ("Knobby dirt bike tire", never "Riding Gear Item"), written

@@ -60,7 +60,7 @@ export const AI_DATASET_MAX_TOKENS = Math.min(4_000, AI_ROUTING_TABLE[AI_DATASET
 export const AI_DATASET_KIND = 'dataset'
 
 /**
- * ZACH'S Q2 (AGL-4065): what a list the brief gives no entries for starts
+ * THE Q2 DECISION (AGL-4065): what a list the brief gives no entries for starts
  * with. `samples` (decided 2026-10-28): complete-looking SAMPLE records the
  * owner replaces, each marked a sample in Data, a dated list's dates set by
  * the platform (`aiDatasetSampleDates`), so the site looks complete and no

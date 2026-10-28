@@ -1718,7 +1718,7 @@ nothing itself.
   2026-10-25 Berm & Bolt Moto Parts brief listed "OEM and aftermarket parts,
   tires, riding gear, special orders; in-store pickup", and its products were
   "OEM ATV Parts Order", "Riding Gear Item" and the like at suggested prices)
-  starts with SAMPLE products (Zach's Q1, `AI_SITE_SAMPLE_PRODUCTS_INPUT`,
+  starts with SAMPLE products (the Q1 decision, `AI_SITE_SAMPLE_PRODUCTS_INPUT`,
   `ai-job-site-content.ts`). `aiSiteSampleProductKinds` reads the business type:
   what follows a colon or "selling" is what the shop sells, less what it does
   (orders, pickup, repairs, services); one thing said in two words or more of
@@ -2232,7 +2232,7 @@ numbered placeholders, "Upcoming race 1 (details to be added)" to "Past race 5
 field may not be empty, so the model numbered rows; nothing checked them, and the
 Schedule page's "Upcoming races" and "Past results" both listed the first five.
 
-- **Samples, never placeholders** (Zach's Q2, `AI_DATASET_LIST_WITHOUT_ENTRIES`,
+- **Samples, never placeholders** (the Q2 decision, `AI_DATASET_LIST_WITHOUT_ENTRIES`,
   `runtime/ai-dataset-generation.ts`, `samples`). A list the brief gives no entries
   for starts with SAMPLE records: each complete of its kind, named in the brief's
   own words, marked `sample` through the `submit_dataset` tool, never a price,
