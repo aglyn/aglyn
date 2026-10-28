@@ -28,6 +28,7 @@ import {
   waiverStatusLabel,
   type StoredWaiverSignature,
 } from '../model/waiver-signature'
+import { WAIVER_NOT_MATCHED_LABEL, waiverMatchName, waiverNameDobKey } from '../model/waiver-match'
 import { isDocumentId, waiversFiles, waiversRefs } from './db'
 import { signaturePdf, signaturePdfFilename } from './documents'
 import { json, refuse, waiversGate, type WaiversStaff } from './gate'
@@ -234,9 +235,17 @@ export async function paperRoute(request: Request): Promise<Response> {
 }
 
 /**
- * `GET waivers/status?hostId=&dayKey=&email=|contactId=`: whether one
- * person's waiver covers a day, and the names it covers. The person's own
- * signatures are one query, newest first and bounded, then read whole.
+ * `GET waivers/status?hostId=&dayKey=&email=|contactId=&name=&dateOfBirth=&people=`:
+ * whether one person's waiver covers a day, the names it covers, and how
+ * they were matched (AGL-4042).
+ *
+ * Email (else the CRM contact) first. When that matches no signature
+ * covering the day, and the caller knows the rider's name AND date of birth,
+ * the signature whose `nameDobKeys` holds that person — the signer, or a
+ * minor a guardian listed — answers instead. A name alone never matches:
+ * with no email match and no date of birth the answer is "not matched",
+ * with the name to search by, rather than a guess. Each is one query, newest
+ * first and bounded, on its own index.
  */
 export async function statusRoute(request: Request): Promise<Response> {
   if (request.method !== 'GET') return refuse(405, 'Method not allowed')
@@ -247,17 +256,42 @@ export async function statusRoute(request: Request): Promise<Response> {
   if (!isDayKey(dayKey)) return refuse(400, 'Choose a day')
   const email = String(params.get('email') ?? '').trim().toLowerCase()
   const contactId = params.get('contactId')
-  let query = waiversRefs.signatures(staff.orgId).where('hostId', '==', staff.hostId) as FirebaseFirestore.Query
-  if (email) query = query.where('emailLower', '==', email)
-  else if (contactId && isDocumentId(contactId)) query = query.where('contactId', '==', contactId)
-  else return refuse(400, 'Name the person by email or contact')
-  const snapshot = await query.orderBy('signedAtMs', 'desc').limit(50).get()
-  const signatures = snapshot.docs.map((doc) => readStoredSignature(doc.data()) as StoredWaiverSignature)
+  const name = String(params.get('name') ?? '').trim().slice(0, 120)
+  const dateOfBirth = String(params.get('dateOfBirth') ?? '').trim()
+  const byContact = Boolean(!email && contactId && isDocumentId(contactId))
+  if (!email && !byContact && !waiverMatchName(name)) return refuse(400, 'Name the person by email, contact or name')
+  const site = waiversRefs.signatures(staff.orgId).where('hostId', '==', staff.hostId) as FirebaseFirestore.Query
+  const read = async (query: FirebaseFirestore.Query) =>
+    (await query.orderBy('signedAtMs', 'desc').limit(50).get()).docs.map(
+      (doc) => readStoredSignature(doc.data()) as StoredWaiverSignature,
+    )
+
+  let matchedBy: 'email' | 'contact' | 'nameDob' | null = null
+  let signatures: StoredWaiverSignature[] = []
+  if (email || byContact) {
+    signatures = await read(email ? site.where('emailLower', '==', email) : site.where('contactId', '==', contactId))
+    if (signatures.length) matchedBy = email ? 'email' : 'contact'
+  }
+  const nameDobKey = waiverNameDobKey(name, dateOfBirth)
+  if (nameDobKey && !waiverDayStatus(signatures, dayKey).signed) {
+    const byNameDob = await read(site.where('nameDobKeys', 'array-contains', nameDobKey))
+    if (byNameDob.length && (!matchedBy || waiverDayStatus(byNameDob, dayKey).signed)) {
+      signatures = byNameDob
+      matchedBy = 'nameDob'
+    }
+  }
   const status = waiverDayStatus(signatures, dayKey)
+  // No email match, and no birth date to match the name with: say so.
+  if (!matchedBy && waiverMatchName(name) && !isDayKey(dateOfBirth)) {
+    return json({ dayKey, ...status, matched: false, matchedBy, searchName: name, label: WAIVER_NOT_MATCHED_LABEL })
+  }
   const expected = Number(params.get('people'))
   return json({
     dayKey,
     ...status,
+    matched: matchedBy !== null,
+    matchedBy,
+    searchName: null,
     label: waiverStatusLabel(status, Number.isInteger(expected) && expected > 0 ? expected : undefined),
   })
 }

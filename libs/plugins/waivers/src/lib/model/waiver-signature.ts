@@ -150,6 +150,14 @@ export interface StoredWaiverSignature {
   emailLower: string
   nameLower: string
   nameTokens: string[]
+  /**
+   * One match key per person the signature covers, the signer and each
+   * minor: `name|YYYY-MM-DD`, the name lower case with its spacing settled
+   * (`waiverNameDobKeys`, AGL-4042). What check-in matches a rider by when
+   * their email matches nothing. Absent on a signature taken before the
+   * field, until `backfill-waiver-name-dob-keys.mts` stamps it.
+   */
+  nameDobKeys?: string[]
   voidedAt: number | null
   voidedBy: string | null
   voidReason: string | null

@@ -33,6 +33,7 @@ import {
   type WaiverMinor,
   type WaiverSignMethod,
 } from '../model/waiver-signature'
+import { waiverNameDobKeys } from '../model/waiver-match'
 import { waiverRetentionStamp } from '../model/waiver-retention'
 import { WaiverFileRefusedError, waiversFiles, waiversRefs } from './db'
 import { sendWaiverEmail, signedCopyEmail } from './emails'
@@ -249,6 +250,7 @@ export async function recordSignature(
     emailLower: input.signer.email.toLowerCase(),
     nameLower: input.signer.name.toLowerCase(),
     nameTokens: nameSearchTokens([input.signer.name, ...input.minors.map((minor) => minor.name)]),
+    nameDobKeys: waiverNameDobKeys({ signer: input.signer, minors: input.minors }),
     voidedAt: null,
     voidedBy: null,
     voidReason: null,
@@ -370,6 +372,7 @@ export async function recordPaperSignature(
     emailLower: checked.input.signer.email.toLowerCase(),
     nameLower: checked.input.signer.name.toLowerCase(),
     nameTokens: nameSearchTokens([checked.input.signer.name, ...minors.map((minor) => minor.name)]),
+    nameDobKeys: waiverNameDobKeys({ signer: checked.input.signer, minors }),
     voidedAt: null,
     voidedBy: null,
     voidReason: null,
