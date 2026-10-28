@@ -133,27 +133,15 @@
       "kind": "not-a-gate",
       "note": "Picks who an allotment alert goes to."
     },
-    "libs/plugins/commerce/src/lib/server/order-webhooks.ts": {
-      "count": 2,
-      "kind": "pending"
-    },
     "libs/plugins/commerce/src/lib/server/pos-hardware-admin.ts": {
       "count": 2,
       "kind": "not-a-gate",
       "note": "Platform staff roles (super, billing) on a staff page, not a member’s role."
     },
-    "libs/plugins/commerce/src/lib/server/pos-ops-gate.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
     "libs/plugins/commerce/src/lib/server/pos-reader-splash-admin.ts": {
       "count": 2,
       "kind": "not-a-gate",
       "note": "Platform staff roles (super, billing) on a staff page, not a member’s role."
-    },
-    "libs/plugins/commerce/src/lib/server/refund.ts": {
-      "count": 3,
-      "kind": "pending"
     },
     "libs/plugins/crm/src/lib/components/settings-section.tsx": {
       "count": 1,

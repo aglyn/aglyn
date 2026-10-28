@@ -111,7 +111,7 @@ export function OrderWebhooksCard(props: OrderWebhooksCardProps) {
         if (active) setStatus(payload as WebhooksStatus)
       })
       .catch(() => {
-        // Not an admin of the whole workspace, or the route is down: the
+        // Without "Manage order webhooks" (AGL-4047), or the route is down: the
         // card is not this person's to use.
         if (active) setStatus(null)
       })

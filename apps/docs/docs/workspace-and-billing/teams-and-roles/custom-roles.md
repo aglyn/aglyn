@@ -138,10 +138,17 @@ only, set them for that site in its **Users** card: choose **Permissions** besid
 | **Issue gift cards** (`commerce.giftCards`) | Issue, adjust and void the store's gift cards | Yes | Yes | No | No |
 | **Manage payment methods** (`commerce.paymentMethods`) | Turn the store's payment methods on and off (anyone with **Manage orders** sees them) | Yes | No | No | No |
 | **Connect shipping apps** (`commerce.shippingConnections`) | Connect, sync and disconnect ShipStation and ShippingEasy, and show or replace their credentials (anyone with **Manage orders** sees whether they're connected) | Yes | No | No | No |
+| **Refund orders** (`commerce.refunds`) | Refund any order, online or at the register, with no register limit | Yes* | No | No | No |
+| **Approve refunds over the register's limit** (`commerce.posApprovals`) | Refund at the register above its limit, approve a cashier's refund over it with a PIN, and set or clear other staff members' PINs | Yes* | No | No | No |
+| **Manage order webhooks** (`commerce.webhooks`) | Add, change, test and remove order webhooks, roll their secrets and resend deliveries | Yes* | No | No | No |
 
 Like the site permissions, each starts from the member's role on the site, so nobody's
 access changed when they became permissions, and a custom role, a per-member override
 or the site's **Permissions** dialog can grant or deny any of them.
+
+\* Only for a member of the whole workspace. These three move money or the store's
+order data out of the business, so someone added to just one site as its admin doesn't
+hold them unless that site grants them in its **Permissions** dialog.
 
 ### Reservation permissions {#reservation-permissions}
 

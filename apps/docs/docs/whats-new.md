@@ -27,6 +27,15 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — refunds, register approvals and order webhooks are permissions
+
+- **[Order permissions](workspace-and-billing/teams-and-roles/custom-roles.md#order-permissions)** —
+  refunding orders, approving a refund over the register's limit and managing order
+  webhooks now each have a permission: **Refund orders**, **Approve refunds over the
+  register's limit** and **Manage order webhooks**. As before, an admin of the site who
+  works across the whole workspace holds them and someone added to just one site doesn't,
+  and a custom role, a per-member override or the site can now grant or deny each one.
+
 ## October 2026 — booking payments and refunds are permissions
 
 - **[Booking permissions](workspace-and-billing/teams-and-roles/custom-roles.md#booking-permissions)** —

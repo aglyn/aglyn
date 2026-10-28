@@ -1110,6 +1110,7 @@
         "AI_WORKSPACE_PERMISSIONS",
         "BOOKINGS_SITE_PERMISSIONS",
         "COMMERCE_SITE_PERMISSIONS",
+        "COMMERCE_WORKSPACE_SITE_PERMISSIONS",
         "COMMERCE_PERMISSIONS",
         "OUTREACH_PERMISSIONS",
         "ACCOUNTING_PERMISSIONS",
@@ -1119,6 +1120,7 @@
         "libs/plugins/ai/src/lib/model/ai-permissions.ts",
         "libs/plugins/bookings/src/lib/model/bookings-permissions.ts",
         "libs/plugins/commerce/src/lib/model/plugin-permissions.ts",
+        "libs/plugins/commerce/src/lib/model/workspace-site-permissions.ts",
         "libs/plugins/outreach/src/lib/constants/bundle-common.ts",
         "libs/plugins/accounting/src/lib/constants/bundle-common.ts",
         "libs/plugins/waivers/src/lib/constants/permissions.ts"

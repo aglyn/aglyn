@@ -215,6 +215,14 @@ const ENFORCED_AS: Record<OrgPermission, readonly string[]> = {
   // through `holdsBookingsSiteKey`.
   'bookings.payments': ["'bookings.payments'"],
   'bookings.refunds': ["'bookings.refunds'"],
+  // Commerce's keys for members of the whole workspace only (AGL-4047): the
+  // refund route asks "Refund orders", the register's gate, PIN and return
+  // doors "Approve refunds over the register's limit", and the order
+  // webhooks route "Manage order webhooks", each through
+  // `holdsCommerceWorkspaceSiteKey`.
+  'commerce.refunds': ["'commerce.refunds'"],
+  'commerce.posApprovals': ["'commerce.posApprovals'"],
+  'commerce.webhooks': ["'commerce.webhooks'"],
 }
 
 function serverFilesContaining(needle: string): string[] {
@@ -257,7 +265,7 @@ describe('every advertised org permission is enforced server-side (AGL-2444)', (
     expect([...CATALOG].sort()).toEqual(
       Object.keys(ENFORCED_AS).sort(),
     )
-    expect(CATALOG.length).toBe(33)
+    expect(CATALOG.length).toBe(36)
   })
 
   it('the search really searches — a key nobody uses finds nothing', () => {

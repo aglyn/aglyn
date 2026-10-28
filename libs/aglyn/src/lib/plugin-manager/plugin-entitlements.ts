@@ -219,6 +219,16 @@ export interface PluginOrgPermissionDeclaration {
    * while the key becomes grantable and deniable like every other.
    */
   presetFromSiteRole?: boolean
+  /**
+   * With `presetFromSiteRole`: the site role is the preset only for a member
+   * of the WHOLE workspace (AGL-4047). Someone added to one site only holds
+   * the key there when the site's toggle grants it, whatever their site role,
+   * and `hostRoleDefaults` is not their default. For a key that replaces a
+   * gate asking for an admin of the whole workspace who is also this site's
+   * admin (refunds, say): a site's Members card can make a contractor the
+   * admin of one site, and that never carried those acts.
+   */
+  workspaceMembersOnly?: boolean
 }
 
 /**
@@ -249,6 +259,8 @@ export interface PluginCatalogPermission {
   narrowsPerSite?: Readonly<Record<OrgRole, boolean>>
   /** The key's preset is the member's role on the site (AGL-4047); see the declaration's. */
   presetFromSiteRole?: true
+  /** That preset holds for members of the whole workspace only (AGL-4047); see the declaration's. */
+  workspaceMembersOnly?: true
 }
 
 export interface PluginEntitlementRegistration {
@@ -493,7 +505,10 @@ export function listPluginCatalogPermissions(): PluginCatalogPermission[] {
       // A key whose preset is the site role follows every site's access
       // already, so it offers no narrowing control (AGL-4047).
       ...(permission.presetFromSiteRole && permission.hostRoleDefaults
-        ? { presetFromSiteRole: true as const }
+        ? {
+            presetFromSiteRole: true as const,
+            ...(permission.workspaceMembersOnly ? { workspaceMembersOnly: true as const } : {}),
+          }
         : narrowingDefaultsOf(permission.narrowsPerSite)),
     })
   }
