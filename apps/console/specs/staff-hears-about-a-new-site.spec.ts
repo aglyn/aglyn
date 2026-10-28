@@ -188,7 +188,9 @@ describe('AGL-3491 · /api/hosts/create announces what it creates', () => {
         orgId: 'org-1',
         name: 'Northwind Coffee',
         slug: 'northwind',
-        owner: { uid: 'u-new', email: 'owner@example.com', displayName: 'Northwind Coffee' },
+        // Whether the owner's address is verified rides along for the
+        // plugins that hear `org.created` (AGL-4038).
+        owner: { uid: 'u-new', email: 'owner@example.com', displayName: 'Northwind Coffee', emailVerified: true },
         origin: 'https://app.aglyn.com',
         // Which door made the workspace, for the staff email (AGL-3897).
         via: 'first-site',

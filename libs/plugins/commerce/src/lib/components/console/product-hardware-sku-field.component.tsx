@@ -81,7 +81,7 @@ function ProductHardwareSkuField(props: ProductHardwareSkuFieldProps) {
       </TextField>
       <Typography id={helpId} variant="body2" color="text.secondary">
         {known
-          ? 'Selling this at the register makes a hardware order for the buyer’s workspace.'
+          ? 'Selling this at the register makes a hardware order for the buyer’s workspace, attached at the sale or later from the To attach list.'
           : 'Choose the card reader or accessory this product is, so a sale of it at the register reaches the buyer’s workspace.'}
       </Typography>
     </Stack>

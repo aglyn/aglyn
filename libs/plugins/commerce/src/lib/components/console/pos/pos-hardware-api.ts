@@ -91,6 +91,10 @@ export interface PosHardwareOrderRow {
   tracking: PosHardwareTracking | null
   createdAtMs: number
   updatedAtMs: number
+  /** Bought in person at the platform's own store (AGL-4038), and its readers still to set up. */
+  source?: PosHardwareOrderSource
+  discountCents?: number
+  readersToSetUp?: number
 }
 
 const SHOP = '/api/commerce/pos-hardware'

@@ -22,10 +22,12 @@ import { registerPluginOrgEraser } from '@aglyn/aglyn/plugin-manager/plugin-org-
 import { registerPluginPersonEraser } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
 import { registerPluginUserEraser } from '@aglyn/aglyn/plugin-manager/plugin-user-erasure'
 import { registerPluginService } from '@aglyn/aglyn/plugin-manager/plugin-services'
+import { registerPluginEventHandler } from '@aglyn/aglyn/plugin-manager/plugin-events'
 import { registerPluginSearchSources } from '@aglyn/aglyn/plugin-manager/plugin-search-sources'
 import { COMMERCE_SERVER_SEARCH_SOURCES } from './model/commerce-server-search-sources'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { ORDER_HISTORY_CONTRACT } from './model/order-history'
+import { parsePosHardwareInPersonConfig } from './model/pos-hardware'
 import { registerCommerceTransferResources } from './transfer/register-transfer-resources'
 
 /**
@@ -71,6 +73,26 @@ export function registerCommerceConsoleServerDeclarations(): void {
   // Never fails the erasure. Loaded with the first erasure.
   registerPluginOrgEraser(
     async (request) => (await import('./server/pos-hardware-closure')).posHardwareOrgEraser(request),
+    { pluginId: BUNDLE_ID },
+  )
+  // A card reader bought in person before its buyer had a workspace
+  // (AGL-4038) joins the workspace they create, by their account or their
+  // verified address. Loaded with the first workspace created while the
+  // in-person sale is on.
+  registerPluginEventHandler(
+    'org.created',
+    async (payload) => {
+      const config = parsePosHardwareInPersonConfig(process.env)
+      if (!config) return
+      const { claimPosHardwareForNewWorkspace } = await import('./server/pos-hardware-attach')
+      await claimPosHardwareForNewWorkspace({
+        config,
+        orgId: payload.orgId,
+        ownerUid: payload.owner.uid,
+        ownerEmail: payload.owner.email,
+        emailVerified: payload.owner.emailVerified,
+      })
+    },
     { pluginId: BUNDLE_ID },
   )
   // A site's earlier orders, for a plugin that reads history behind the

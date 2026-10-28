@@ -2397,6 +2397,7 @@ after, never a reference to the plugin.
 | `org.seatAddons.changed` | the add-on checkout and the billing webhook | `{ orgId, actor, before, after }` — the `org.seatAddons` maps |
 | `org.permissions.changed` | the member, role and host-member routes | `{ orgId, actor, subject: { type, id?, name? }, permission, granted }` |
 | `org.logo.changed` | the organization settings route, once a profile or white-label brand save has answered | `{ orgId, actor, changed }` — `changed` lists `logo`, `logoDark`, `brandLogo` and `brandLogoDark` as they moved |
+| `org.created` | both doors that create a workspace (the new-workspace page and an account's first site), once it exists and its welcome is sent | `{ orgId, owner: { uid, email, emailVerified }, via }` — `via` is `workspace-page` or `first-site` |
 | `host.records.removed` | the public API's deletes and a person's erasure, after the delete lands | `{ orgId, hostIds, collection, records: [{ id, data }] }` — each removed document as it stood |
 | `host.email.engaged` | the email delivery webhook, for a message tagged with a site, after the delivery log records it | `{ hostId, events: [{ to, type, at, firstOfType }] }` — opens and clicks only; `firstOfType` marks the first of its type for that message |
 | `billing.invoice.paid` | the billing webhook, once the invoice resolves to a workspace | `{ orgId, invoiceId, amountPaidCents, currency, paidOutOfBand, metadata }` |

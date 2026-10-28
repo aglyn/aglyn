@@ -22,7 +22,10 @@
  * placed the order: the order received, the parcel shipped with its
  * tracking, the parcel delivered with the way to set the reader up, and the
  * order canceled and refunded because the workspace was deleted or the
- * buyer's account closed before it shipped. The
+ * buyer's account closed before it shipped — and, for a reader bought in
+ * person at the platform's own store by someone with no account yet, the
+ * invitation to sign up with that address so the order joins their
+ * workspace on its own. The
  * platform is the seller, so they are SYSTEM emails in the platform's brand
  * (or the workspace's white label), not a store's own emails to its buyers.
  *
@@ -43,6 +46,7 @@ export const POS_HARDWARE_EMAIL_KEYS = {
   shipped: 'pos-hardware-order-shipped',
   delivered: 'pos-hardware-order-delivered',
   canceled: 'pos-hardware-order-canceled',
+  invited: 'pos-hardware-sign-up-invite',
 } as const
 
 const SOURCE = 'libs/plugins/commerce/src/lib/server/pos-hardware-notify.ts'
@@ -97,6 +101,16 @@ function tokens(origin: string): Record<string, SystemEmailMergeToken> {
       name: 'order.cancelReason',
       description: 'Why the order was canceled, as the end of a sentence',
       sample: 'the Test Org workspace was deleted',
+    },
+    paid: {
+      name: 'order.total',
+      description: 'What was paid at the register, tax included',
+      sample: '$324.75',
+    },
+    signUpUrl: {
+      name: 'order.signUpUrl',
+      description: 'Where to create an account with this address',
+      sample: `${origin}/signup`,
     },
   }
 }
@@ -200,6 +214,31 @@ export function posHardwareSystemEmailTemplates(
         { block: 'text', text: 'Order {{order.number}} for {{org.name}}.', variant: 'caption' },
       ],
       footerReason: footer,
+      source: SOURCE,
+    },
+    {
+      key: POS_HARDWARE_EMAIL_KEYS.invited,
+      name: 'Card reader bought in person: create your account',
+      description:
+        'Sent to someone who bought a card reader in person from the platform ' +
+        'with no account yet, inviting them to sign up with the same address ' +
+        'so the order shows up in their workspace on its own.',
+      deliveredBy: 'resend',
+      defaultSubject: 'Your card reader from {{brand.productName}} is waiting for your account',
+      mergeTokens: [t.number, t.items, t.paid, t.signUpUrl],
+      defaultBody: [
+        { block: 'text', text: 'Order {{order.number}}', variant: 'eyebrow' },
+        { block: 'text', text: 'Your card reader is ready for your account', variant: 'heading' },
+        { block: 'text', text: 'Thanks for buying from us in person. Create your {{brand.productName}} account with this email address and the order shows up in your workspace on its own, ready to set up. There is nothing to accept.', variant: 'body' },
+        { block: 'text', text: '{{order.items}}\nPaid: {{order.total}}', variant: 'details' },
+        { block: 'text', text: 'What happens next', variant: 'subheading' },
+        { block: 'text', text: '1. Create your account with this email address.\n2. Create your workspace and your store.\n3. Open Products → Point of sale, where the order is waiting, and add the reader to a register with the pairing code it shows.', variant: 'details' },
+        { block: 'button', label: 'Create your account', href: '{{order.signUpUrl}}' },
+        { block: 'text', text: 'Taking card payments at the register comes with a plan that includes the point of sale. If you did not buy a card reader from {{brand.productName}}, you can ignore this email.', variant: 'caption' },
+      ],
+      footerReason:
+        'You’re receiving this because you bought card reader hardware from ' +
+        '{{brand.productName}} in person and gave this address.',
       source: SOURCE,
     },
   ]

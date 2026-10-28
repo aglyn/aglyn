@@ -183,6 +183,11 @@ export async function recordInPersonPosHardwareSale(
     { hardwareOrderId: orderId, hardwareSalePending: firebaseAdmin.firestore.FieldValue.delete() },
     { merge: true },
   )
+  // A buyer with no account, named at the register while the sale was open,
+  // is invited to sign up now that there is an order to point them at.
+  if (created && hardwareOrder.attachment?.state === 'pending' && hardwareOrder.attachment.email) {
+    await (await import('./pos-hardware-attach')).invitePendingBuyer(orderId, hardwareOrder.orgId, hardwareOrder)
+  }
   return {
     outcome: created ? 'recorded' : 'already',
     orderId,

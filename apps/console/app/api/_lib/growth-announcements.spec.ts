@@ -45,6 +45,10 @@ jest.mock('./render-system-email', () => ({
 
 import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
 import { announceNewSite, announceNewWorkspace } from './growth-announcements'
+import {
+  registerPluginEventHandler,
+  resetPluginEventHandlersForTests,
+} from '@aglyn/aglyn/plugin-manager/plugin-events'
 
 const SITE = {
   hostId: 'host-1',
@@ -136,5 +140,39 @@ describe('AGL-3491 · announceNewWorkspace', () => {
     })
 
     expect(mockNotifyStaff).not.toHaveBeenCalled()
+  })
+})
+
+/*==========================================
+ * AGL-4038: the plugins hear a workspace was created, with whether its
+ * owner's address is verified, from either door; and a plugin that fails
+ * never fails the creation.
+ *=========================================*/
+describe('AGL-4038 · org.created', () => {
+  const WORKSPACE = {
+    orgId: 'org-1',
+    name: 'Northwind Coffee',
+    slug: 'northwind',
+    owner: { uid: 'u-1', email: 'owner@example.com', displayName: null, emailVerified: true },
+    origin: 'https://app.aglyn.com',
+    via: 'first-site' as const,
+  }
+
+  afterEach(() => resetPluginEventHandlersForTests())
+
+  it('is raised with the owner and the door', async () => {
+    const heard: unknown[] = []
+    registerPluginEventHandler('org.created', (payload) => void heard.push(payload), { pluginId: 'test' })
+    await announceNewWorkspace(WORKSPACE)
+    expect(heard).toEqual([
+      { orgId: 'org-1', owner: { uid: 'u-1', email: 'owner@example.com', emailVerified: true }, via: 'first-site' },
+    ])
+    await announceNewWorkspace({ ...WORKSPACE, owner: { ...WORKSPACE.owner, emailVerified: undefined } as never, via: undefined as never })
+    expect(heard[1]).toMatchObject({ owner: { emailVerified: false }, via: 'workspace-page' })
+  })
+
+  it('never throws into the route when a plugin fails', async () => {
+    registerPluginEventHandler('org.created', () => Promise.reject(new Error('boom')), { pluginId: 'test' })
+    await expect(announceNewWorkspace(WORKSPACE)).resolves.toBeUndefined()
   })
 })
