@@ -25,6 +25,7 @@ import {
   POS_HARDWARE_ORDER_ID,
   POS_HARDWARE_SHIPPING_LABELS,
   posHardwareSaleRecord,
+  posHardwareSaleSetOptions,
   type PosHardwareAddress,
   type PosHardwareOrder,
 } from '../model/pos-hardware'
@@ -192,7 +193,7 @@ export async function recordPosHardwareOrder(
       const [existing, sale] = await Promise.all([transaction.get(ref), transaction.get(saleRef)])
       if (existing.exists || sale.exists) return { created: false }
       transaction.create(ref, order)
-      transaction.set(saleRef, posHardwareSaleRecord(orderId, order))
+      transaction.set(saleRef, posHardwareSaleRecord(orderId, order), posHardwareSaleSetOptions(order))
       return { created: true }
     })
 }

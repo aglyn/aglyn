@@ -30,8 +30,11 @@ import {
   normalizePosHardwareSerial,
   parsePosHardwareConfig,
   parsePosHardwareInPersonConfig,
+  posHardwareBuyerAddress,
   posHardwareBuyerErasedPatch,
   posHardwareOrderSource,
+  posHardwareSaleBuyer,
+  posHardwareSaleSetOptions,
   posHardwareShippingLabel,
   POS_HARDWARE_DEFAULT_MARKUP_BPS,
   POS_HARDWARE_ENV,
@@ -500,5 +503,68 @@ describe('in-person orders in the model (AGL-4038)', () => {
     expect(patch['shipping']).toMatchObject({ method: 'in_person', label: 'Handed over in person' })
     // An online order has no attachment to rewrite.
     expect(posHardwareBuyerErasedPatch({ shipping: inPerson.shipping }, 5_000)).not.toHaveProperty('attachment')
+  })
+})
+
+describe('the buyer the sale record keeps for the reseller’s records (AGL-4038)', () => {
+  const address = { line1: '12 Main St', city: 'Springfield', state: 'IL', postalCode: '62701', country: 'US' }
+  const recorded = { line1: '12 Main St', line2: null, city: 'Springfield', state: 'IL', postalCode: '62701', country: 'US' }
+  const online = {
+    orgId: 'org-1',
+    status: 'paid',
+    lines: [],
+    shipping: { method: 'standard', label: 'Standard', cents: 1_000, name: 'Jordan Lee', phone: '5555550100', address },
+    contactEmail: 'buyer@example.com',
+    createdAtMs: 1_000,
+    paidAtMs: 1_000,
+  } as unknown as PosHardwareOrder
+  const inPerson = {
+    ...online,
+    source: 'in_person',
+    shipping: { method: 'in_person', label: 'Handed over in person', cents: 0, name: null, phone: null, address: null, taxRegion: { country: 'US', state: 'TX', postalCode: null } },
+    attachment: { state: 'attached', email: 'pat@example.com', uid: 'u', orgId: 'org-1', hostId: 'h', attachedBy: 's', attachedAtMs: 1, name: 'Pat Lee', address },
+  } as unknown as PosHardwareOrder
+
+  it('is the shipping name and address of an online order, and nothing else of the buyer', () => {
+    const record = posHardwareSaleRecord('hw_1', online)
+    expect(record.buyer).toEqual({ name: 'Jordan Lee', address: recorded })
+    expect(JSON.stringify(record)).not.toMatch(/buyer@example|5555550100/)
+  })
+
+  it('is the attachment’s name and address of an in-person order, never its tax region', () => {
+    const record = posHardwareSaleRecord('hw_2', inPerson)
+    expect(record.buyer).toEqual({ name: 'Pat Lee', address: recorded })
+    // Sold at the counter: still taxed where the selling store is.
+    expect(record.shipTo).toEqual({ country: 'US', state: 'TX', postalCode: null })
+    expect(JSON.stringify(record)).not.toContain('pat@example.com')
+  })
+
+  it('is null for a sale that names no one yet, so a detached buyer comes off the record', () => {
+    const pending = { ...inPerson, attachment: { state: 'pending', email: null, uid: null, orgId: null, hostId: null, attachedBy: null, attachedAtMs: null } } as unknown as PosHardwareOrder
+    expect(posHardwareSaleBuyer(pending)).toBeNull()
+    expect(posHardwareSaleRecord('hw_3', pending).buyer).toBeNull()
+    expect(posHardwareSaleSetOptions(pending).mergeFields).toContain('buyer')
+  })
+
+  it('is left out of the write once the buyer was erased, so the stored name and address stay', () => {
+    for (const order of [online, inPerson]) {
+      const erased = { ...order, ...posHardwareBuyerErasedPatch(order, 9_000) } as PosHardwareOrder
+      expect(posHardwareSaleBuyer(erased)).toBeUndefined()
+      const record = posHardwareSaleRecord('hw_4', erased)
+      expect(record).not.toHaveProperty('buyer')
+      const { mergeFields } = posHardwareSaleSetOptions(erased)
+      // Every other field is still written whole, the tax region and the TTL included.
+      expect(mergeFields).not.toContain('buyer')
+      expect(mergeFields).toEqual(expect.arrayContaining(['shipTo', 'status', 'paidTo', 'expiresAt', 'lines']))
+      expect(mergeFields.sort()).toEqual(Object.keys(record).sort())
+    }
+  })
+
+  it('takes only a whole business address, trimmed and cut to length', () => {
+    expect(posHardwareBuyerAddress({ ...address, line2: '  ', country: 'us' })).toEqual({ ...address, country: 'US' })
+    expect(posHardwareBuyerAddress({ ...address, line1: '' })).toBeNull()
+    expect(posHardwareBuyerAddress({ ...address, country: 'USA' })).toBeNull()
+    expect(posHardwareBuyerAddress('12 Main St')).toBeNull()
+    expect(posHardwareBuyerAddress({ ...address, line1: 'x'.repeat(500) })?.line1).toHaveLength(200)
   })
 })

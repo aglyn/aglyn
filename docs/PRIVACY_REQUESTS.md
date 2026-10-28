@@ -214,7 +214,11 @@ Authorization: Bearer <super-staff ID token>
 (AGL-4038).** Erasing a person cancels every POS hardware order they placed
 that is still paid or placed with Stripe but not shipped, refunds it in full
 to the card and emails them that it was canceled, then takes their name,
-email, phone, street and tracking off every order they placed. Erasing a
+email, phone, street and tracking off every order they placed. The platform's
+own record of each sale (`posHardwareSales`) keeps their **name and address**
+for its seven years: they are the reseller records Stripe's Terminal Reseller
+Terms §10 require (the identity and address of each buyer), so they are not
+erased; tell the requester so. Their email, phone and tracking are never on it. Erasing a
 workspace does the same for every unshipped order of the workspace before its
 data goes. Neither waits on Stripe: a refund Stripe refuses is raised to staff
 as a **must** operator alert, to be refunded by hand, and the erasure goes on.
@@ -226,7 +230,9 @@ the address the register took on the selling workspace's pending order until
 it is attached. Erasing an account does not reach an order that names only an
 address: find it on **Staff → Hardware orders → Sold in person, to attach**,
 open it and select **Remove buyer's details** (super or billing staff) before
-closing the request. The order and its amounts stay; the address goes.
+closing the request. The order and its amounts stay; the email address goes,
+and so do a name and business address typed at the sale, from the order. The
+platform's sale record keeps that name and address, as above.
 
 It refuses with `skippedReason: 'owns-orgs'` and a `blockers` list if they own
 a workspace. That refusal is correct — deleting a workspace as a side effect of
@@ -365,8 +371,10 @@ Work this list, not the tree.
 **Deliberately excluded from erasure, and disclose them on an access request**
 - `platformRevenue`, `storefrontTaxCollected`, `posHardwareSales` — statutory
   tax records (AGL-1811/AGL-1904/AGL-4038; the last is Aglyn's own sale of POS
-  hardware to the workspace, with no buyer details in it, kept **seven years
-  from the sale** and then deleted by its TTL). GDPR Art. 17(3)(b) exempts them from erasure; it does
+  hardware to the workspace, holding the buyer's name and address and no
+  other buyer detail, kept **seven years from the sale** and then deleted by
+  its TTL; the name and address are kept through an erasure as the reseller
+  records Stripe's Terminal Reseller Terms §10 require). GDPR Art. 17(3)(b) exempts them from erasure; it does
   **not** exempt them from access. If a transaction of theirs is in there, it
   is disclosable.
 - `contactSuppressions` — kept precisely so we can honour "stop contacting me".

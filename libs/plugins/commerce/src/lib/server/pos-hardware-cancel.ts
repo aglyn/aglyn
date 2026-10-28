@@ -20,6 +20,7 @@ import {
   POS_HARDWARE_STATUS_STAMP,
   posHardwareRefundable,
   posHardwareSaleRecord,
+  posHardwareSaleSetOptions,
   type PosHardwareCancelReason,
   type PosHardwareOrder,
 } from '../model/pos-hardware'
@@ -173,7 +174,7 @@ export async function cancelAndRefundPosHardwareOrder(
   // what the refund is accounted from once the workspace is gone.
   await firestore.runTransaction(async (transaction: any) => {
     transaction.update(ref, patch)
-    transaction.set(posHardwareSaleRef(orderId), posHardwareSaleRecord(orderId, after))
+    transaction.set(posHardwareSaleRef(orderId), posHardwareSaleRecord(orderId, after), posHardwareSaleSetOptions(after))
   })
   return { outcome: 'settled', before: settled, order: after }
 }

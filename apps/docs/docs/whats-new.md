@@ -27,6 +27,14 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — card reader sale records keep the buyer's name and address
+
+- **[Who bought each reader, on Aglyn's record of the sale](commerce-and-bookings/commerce/pos-hardware.md#hardware-purchase-records)** —
+  as a reseller of Stripe's readers, Aglyn now keeps the buyer's name and address
+  on its record of each card reader sale, online or in person, for the record's
+  seven years, including after the buyer closes their account. Their email, phone
+  and tracking are still removed from the order when they do.
+
 ## October 2026 — card readers bought at an event
 
 - **[Your store's address at the booth](commerce-and-bookings/commerce/pos-hardware.md#bought-from-us-in-person)** —

@@ -101,6 +101,7 @@ describe('units and the attachment', () => {
     const base = { attachedBy: 'cashier-1', attachedAtMs: 5 }
     expect(posHardwareAttachmentOf({ ...base, uid: 'u', orgId: 'o', hostId: 'h', email: 'Pat@Example.com' })).toEqual({
       state: 'attached', email: 'pat@example.com', uid: 'u', orgId: 'o', hostId: 'h', attachedBy: 'cashier-1', attachedAtMs: 5,
+      name: null, address: null,
     })
     expect(posHardwareAttachmentOf({ ...base, uid: 'u', orgId: null, hostId: 'h', email: null })).toMatchObject({
       state: 'pending', uid: 'u', orgId: null, hostId: null, attachedAtMs: null,
