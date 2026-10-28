@@ -17,6 +17,7 @@
 
 import { ENTRY_PREVIEW_PARAM } from '@aglyn/aglyn/app-utils/entry-preview-link'
 import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console-routes'
+import { platformConsoleOrigin } from '@aglyn/aglyn/app-utils/platform-brand'
 import {
   isHostInPreview,
   PAGE_PREVIEW_BANNER_TEXT,
@@ -117,9 +118,9 @@ function presentedToken(
   return typeof raw === 'string' ? raw : ''
 }
 
-/** Where the console is, for the banner's link. The same default as the rest. */
+/** Where the console is, for the banner's link: the deployment's own (`platformConsoleOrigin`), never a literal of ours. */
 function consoleOrigin(): string {
-  return (process.env.NEXT_PUBLIC_CONSOLE_URL ?? '').trim() || 'https://app.aglyn.com'
+  return platformConsoleOrigin()
 }
 
 interface ResolvedPreview {

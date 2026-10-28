@@ -28,6 +28,11 @@ export interface SiteVisitButtonProps {
   href: string
   /** The site is in preview, so the button enters it as the team. */
   inPreview: boolean
+  /**
+   * The site opens in a new tab, both ways: said at every call site, where the
+   * console's new-tab sweep (`preview-links-open-in-new-tab.spec.ts`) reads it.
+   */
+  newTab: true
   variant?: ButtonProps['variant']
   color?: ButtonProps['color']
   children: ReactNode

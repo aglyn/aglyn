@@ -275,6 +275,7 @@ function SiteCard(props: SiteCardProps) {
       actions={
         <>
           <SiteVisitButton
+            newTab
             hostId={host.$id}
             // A site in preview (AGL-4086) is entered as the team, through
             // a console-minted link, on whatever address it has.

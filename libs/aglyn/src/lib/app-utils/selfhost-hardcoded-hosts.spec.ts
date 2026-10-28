@@ -185,6 +185,12 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'AGL-2193. The daily external-fact checker. Its hostnames are the checker\'s OWN self-test fixtures — including deliberate negative controls such as `aglyn.com.evil.net` that must NOT match. A build tool, never shipped, and the literals are the test data.',
   },
   {
+    file: 'libs/plugins/ai/src/lib/site-import/fixtures/aglyn-com-recordings.ts',
+    count: 1,
+    reason:
+      'AGL-4083. Test data, never shipped at runtime: the recordings of aglyn.com that the Bring my site replay specs read (site-import-crawl, site-import-html, the import build specs). The domain IS the recording: every recorded address, sitemap and robots.txt line is that site, and the importer itself names no host of ours.',
+  },
+  {
     file: 'libs/plugins/marketplace/src/lib/model/listing-social-card.ts',
     count: 1,
     reason:
