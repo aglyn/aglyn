@@ -2988,14 +2988,18 @@ export const AI_LAYOUT_SHOP_ALL = AI_LAYOUT_LABELS_EN.shopAll
  * A storefront's reasons to buy as open columns, each led by an icon over its
  * title and words (AGL-3676): the icon the design named for it, else one its
  * words suggest (shipping a truck, returns the arrows, small batch the hand),
- * never the same twice in a row. One style key an element, so a row repeats
- * no multi-key inline style (rule 16).
+ * else one neutral icon along the row; a row of places ("Areas we serve")
+ * shows the place marker for every place (AGL-4065). One style key an
+ * element, so a row repeats no multi-key inline style (rule 16).
  */
 function iconColumns(scope: SectionScope, items: readonly AiLayoutItem[], room: Room): string {
   const { page } = scope
   const tree = page.tree
   const facts = page.targets.facts
-  const iconWords = aiStorefrontItemIcons(items, (word) => !!aiIconOfWord(word))
+  const iconWords = aiStorefrontItemIcons(items, (word) => !!aiIconOfWord(word), {
+    section: scope.words ?? '',
+    ...(page.design ? { kind: page.design.input.kind } : {}),
+  })
   const perRow = across(items.length, room, 'cards')
   const textAlign = scope.centered ? { align: 'center' } : {}
   page.settled.push({ at: scope.at, what: `${items.length} items drawn as icon columns` })
