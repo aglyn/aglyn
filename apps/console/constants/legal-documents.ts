@@ -72,7 +72,7 @@
 
 import { LEGAL_URLS } from './shared'
 
-export const LEGAL_DOCUMENT_VERSION = 'v19'
+export const LEGAL_DOCUMENT_VERSION = 'v20'
 
 export interface LegalDocumentManifestEntry {
   /** Stable key, and the snapshot's filename under `legal/{version}/`. */
@@ -972,6 +972,64 @@ export interface LegalDocumentManifestEntry {
  * the control: the live privacy page reproduced its `v18` pin (31383 bytes /
  * `4209f2…`) byte for byte before and after publication, and keeps that pin.
  *
+ * v20 (2026-10-28): hardware sales, online and in person, and waivers
+ * (AGL-4038, AGL-4042).
+ *
+ *   - Terms §4.8 excepts the Hardware refunds. New §4.26–§4.32 are Aglyn's
+ *     terms of sale for the card readers and accessories it sells
+ *     (`libs/plugins/commerce`, `pos-hardware*`): Aglyn is the seller, for
+ *     business use in the United States and not for resale; online orders
+ *     (US street addresses, 10 per item and 20 per order, title and risk on
+ *     delivery); in-person sales at Aglyn's register, accepted electronically
+ *     at the sale, or by paying after notice on the receipt and a sign when
+ *     that is unavailable; sales tax as the seller; Aglyn's own 30-day
+ *     returns (less any restocking fee Stripe charges for the return, original
+ *     shipping not refunded, return shipping paid by the buyer) and one-year
+ *     limited warranty, each from the buyer's purchase; unshipped orders
+ *     canceled and refunded when an Organization or account closes; and the
+ *     reader software, opt-in cellular service billed per reader, an AS IS
+ *     disclaimer and a liability cap of the amount paid. New §10.8: waivers
+ *     (`libs/plugins/waivers`) are a tool only; the merchant owns the
+ *     wording, enforceability, e-sign consent and retention, and signed
+ *     waivers are Customer Content kept for the merchant's period, including
+ *     through an erasure of the signer.
+ *   - Privacy §1.1 lists what a hardware purchase collects; §2 adds the uses
+ *     and the in-person register lookup (what staff see, the audit log, the
+ *     invitation, serial numbers, booth set-up); §3 says Stripe supplies,
+ *     charges, taxes and ships hardware and may review the record of buyers;
+ *     §1.4 describes waiver signing and the register at a business's own
+ *     store, with Aglyn as processor; §5 keeps the hardware sale record,
+ *     including the buyer's name and address, for seven years after deletion,
+ *     says what account deletion removes from the order, and gives the
+ *     waiver retention rule (minors counted from the youngest reaching the
+ *     waiver's adult age); §9 covers waivers signed for minors.
+ *   - DPA (not acceptance-pinned) §4 Annex I names waivers, their signers and
+ *     minors, and their data; §11 makes a retention period the Customer sets
+ *     part of its instructions, including signed waivers kept through an
+ *     erasure. Subprocessors (not acceptance-pinned): Stripe, Inc.'s purpose
+ *     and data add the hardware it supplies and the reader start-up image,
+ *     with a change-log entry; no subprocessor is added. The AUP, DMCA,
+ *     Cookie Policy, EULA and Marketplace Publisher Agreement are unchanged.
+ *
+ * Terms, Privacy, DPA, Subprocessors and their `/legal` index cards move
+ * "Last updated" to October 28, 2026 (the Terms keep "Effective date: August
+ * 5, 2026"), published from the console's Publish now at 11:59–12:02 Central
+ * that day. The wording, and publishing it on its own with re-acceptance,
+ * were approved on 2026-10-28; the record is
+ * `Platform Docs/Legal/Proposed/2026-10-28-commerce-v3/`.
+ *
+ * Publication-first: the Google Doc masters were edited and verified through
+ * the Docs API, the pages were published, the live pages confirmed serving
+ * the new text, and only then were both documents captured: terms 69816
+ * bytes (`5d7acb…`), privacy 38630 bytes (`b315fe…`), each identical across
+ * two requests and a cache-busting query in two rounds, and differing from
+ * the `v19` archive by the edited paragraphs alone; archived in
+ * `Acceptance-Snapshots/v20`. Both pinned documents changed, so neither could
+ * be the control. The method was proven before publication instead: minutes
+ * before it, the live pages reproduced their `v19` pins (terms 60723 bytes /
+ * `80ef32…`, privacy 31383 bytes / `4209f2…`) byte for byte across the same
+ * three requests.
+ *
  * ## ONE snapshot in the tree, and why that is enough
  *
  * Only the CURRENT version is checked out. Superseded text is not deleted —
@@ -1031,14 +1089,14 @@ export const LEGAL_DOCUMENTS: LegalDocumentManifestEntry[] = [
     key: 'terms',
     url: LEGAL_URLS.TERMS,
     sha256:
-      '80ef324d89028c5fcac29f4a65145b5547e18970ea9a827873aa5ea883354d9f',
-    bytes: 60723,
+      '5d7acb59fa2a1aa6b2cfabff3e848f3325486d8bbddb94f282f9bd1b1db068fb',
+    bytes: 69816,
   },
   {
     key: 'privacy',
     url: LEGAL_URLS.PRIVACY,
     sha256:
-      '4209f2eca0ba0dda57e1b3c003e37ebaba05d125d4c814cf8816cdfba814799b',
-    bytes: 31383,
+      'b315fe1fc77594acc034188783f43c0b4a7eb4e042b176d207a62aeb0f503cfc',
+    bytes: 38630,
   },
 ]
