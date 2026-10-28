@@ -133,7 +133,7 @@ through Aglyn: add it to a register with its pairing code when it arrives.
 
 | Item | What it's for |
 | --- | --- |
-| **Stripe Reader S710** | Handheld with its own 4G connection, for events and parking lots |
+| **Stripe Reader S710** | Handheld for events and parking lots. It can use 4G with Stripe's cellular service, which is billed monthly for each reader; without it, the S710 uses Wi-Fi |
 | **Stripe Reader S700** | Handheld or countertop reader on Wi-Fi |
 | **Stripe Reader T600** | Countertop reader on Wi-Fi, or on Ethernet with the hub |
 | **BBPOS WisePOS E** | Countertop reader on Wi-Fi |
@@ -190,6 +190,15 @@ You get an email when the order is received, when it ships (with the carrier and
 a tracking link), and when it is delivered (with the steps to set the reader
 up). To change or cancel an order before it ships, contact support.
 
+**Returning an order shipped to you.** Once it has shipped, select **Request a
+return** on the order under **Your orders** on the **Hardware** card, and say
+why. Aglyn's team arranges the return with you and, once it's back, refunds the
+price of the items and the tax on them to the card you paid with, or tells you
+why it can't. The return shipping is yours to pay, the original shipping isn't
+refunded, and any restocking fee charged for the return comes off the refund.
+The order shows **Return requested**, then **Returned** or **Return declined**,
+and you get an email with what was refunded.
+
 **When it arrives**
 
 Set the reader up as in [Setting one up](#card-readers): charge it, connect it to
@@ -233,8 +242,8 @@ on the **POS devices** card; a store that already has one keeps it.
 The order is in your purchase history on the **Hardware** card, under **Your
 orders**, even before buying online is open for your workspace.
 
-**Returning one.** Returns follow Stripe's hardware terms, and the return shipping
-is yours to pay. There are three ways:
+**Returning one.** Returns follow the hardware terms of sale, and the return
+shipping is yours to pay. There are three ways:
 
 - Bring it to Aglyn's register at a later event. The refund goes back the way
   you paid.
