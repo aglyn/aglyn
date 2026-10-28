@@ -175,10 +175,13 @@ describe('per-site plugin enablement wiring (AGL-1014)', () => {
     // written about them — the same reason the theme-history migration strips
     // comments before reading its own precondition.
     const executable = withoutComments(rules)
+    // The gate asks "Manage site settings" since AGL-4047, whose preset is
+    // the site Admin it named before; the keys are the `hasAny` list after it.
     const adminGate = executable.slice(
-      executable.indexOf("hostMemberRole(hostId) == 'admin'"),
+      executable.indexOf("hostSiteRoleKey(hostId, 'site.manage', ['admin'])"),
     )
-    const keyList = adminGate.slice(0, adminGate.indexOf('])') + 2)
+    const listAt = adminGate.indexOf('hasAny([')
+    const keyList = adminGate.slice(listAt, adminGate.indexOf('])', listAt) + 2)
     for (const key of ['disabledPlugins', 'enabledPlugins']) {
       expect(keyList).toContain(`'${key}'`)
     }

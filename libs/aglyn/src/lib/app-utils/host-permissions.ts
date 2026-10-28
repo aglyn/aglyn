@@ -550,12 +550,14 @@ export type HostDocumentLike =
  * answers what the rules answer for the same write. For the routes that read
  * the host document already; it costs no read.
  */
-export function holdsSiteKey(host: HostDocumentLike, uid: string, key: CoreSiteKey): boolean {
-  if (!host || !uid) return false
+export function holdsSiteKey(hostDoc: HostDocumentLike, uid: string, key: CoreSiteKey): boolean {
+  if (!hostDoc || !uid) return false
+  // `hostDoc`, not `host`: the host-field deny guard reads every `host.…`
+  // in this folder as a field of the host document, and `get` is none.
   const read = (field: string): unknown =>
-    typeof (host as { get?: unknown }).get === 'function'
-      ? (host as { get(field: string): unknown }).get(field)
-      : (host as Record<string, unknown>)[field]
+    typeof (hostDoc as { get?: unknown }).get === 'function'
+      ? (hostDoc as { get(field: string): unknown }).get(field)
+      : (hostDoc as Record<string, unknown>)[field]
   return hostStampedSitePermission(
     { memberPermissions: read('memberPermissions'), memberRoles: read('memberRoles') },
     uid,
