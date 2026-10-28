@@ -34,6 +34,17 @@ the exact docs section and the console page where you do it.
   for a change to the page, component or layout you have open, and it shows
   exactly what would change before anything does. See
   [Edits in the Besigner](#edits-in-the-besigner).
+- **Answer in your language** — ask in any language and it answers in that
+  language. It looks your question up in this documentation, which is in English,
+  so its **Sources** are English pages.
+- **Know where your AI jobs stand** — it can see the workspace's open
+  [AI jobs](../ai/ai-jobs-and-activity.md), so it can tell you that a plan is ready
+  and that nothing is built until you choose **Confirm plan**. It also knows which
+  plan your workspace is on.
+
+The chat takes text only: you can't attach a file, an image or a screenshot to a
+message. To use a picture or a document on your site, upload it on the site's
+**Media** page; see [Media library](../content-and-data/media/overview.md).
 
 Aglyn Assist answers and directs. It never saves, publishes or changes a
 setting on its own. The one thing it can change is the canvas you have open in
@@ -173,6 +184,9 @@ There are two things worth knowing about them.
 
 If a quoted page did not cover what you meant, just ask again with more detail
 — the follow-up gets a written answer.
+
+A question asked in another language is never answered with a quote, since the
+pages are in English: it always gets a written answer in your language.
 
 ## Message limits
 
