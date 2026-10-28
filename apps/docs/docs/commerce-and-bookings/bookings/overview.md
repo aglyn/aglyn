@@ -239,7 +239,8 @@ and tells you the amount before you confirm.
 - If the refund fails, **the booking is not canceled**. The appointment stays on
   the list and the message says what went wrong, so you never end up with a
   canceled slot the visitor was never paid back for.
-- Refunding is **site-admin only**, because it moves money.
+- Refunding takes the **Refund bookings** permission, which a site's admins have,
+  because it moves money. See [booking permissions](../../workspace-and-billing/teams-and-roles/custom-roles.md#booking-permissions).
 - Bookings paid before this was supported have to be refunded from the Stripe
   dashboard instead — the console will say so, and will remind you to tick
   **Reverse transfer** so the amount comes back from your account rather than
