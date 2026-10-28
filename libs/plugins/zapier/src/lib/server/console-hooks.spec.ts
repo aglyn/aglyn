@@ -49,7 +49,8 @@ function setup(overrides: Partial<ZapierConsoleDeps> = {}) {
       if (token === 'bad') throw Object.assign(new Error('expired'), { code: 'auth/id-token-expired' })
       return { uid: token }
     },
-    readMemberRoles: async (hostId) => (hostId === 'h1' || hostId === 'h2' ? { admin1: 'admin', editor1: 'editor' } : null),
+    readSiteAccess: async (hostId) =>
+      hostId === 'h1' || hostId === 'h2' ? { memberRoles: { admin1: 'admin', editor1: 'editor' } } : null,
     siteLocked: async () => false,
     store: () => memory.store,
     appUrl: () => APP,
@@ -131,5 +132,21 @@ describe('/api/zapier/hooks (AGL-3643)', () => {
     const { call, hooks } = setup({ siteLocked: async () => true })
     expect((await call('POST', 'admin1', { hostId: 'h1', hookId: 'a' })).statusCode).toBe(423)
     expect(hooks.has('a')).toBe(true)
+  })
+
+  it('asks "Manage site settings", so the site’s stamp decides either way (AGL-4047)', async () => {
+    const { call, hooks } = setup({
+      readSiteAccess: async () => ({
+        memberRoles: { admin1: 'admin', editor1: 'editor' },
+        memberPermissions: { admin1: { 'site.manage': false }, editor1: { 'site.manage': true } },
+      }),
+    })
+    const refused = await call('POST', 'admin1', { hostId: 'h1', hookId: 'a' })
+    expect([refused.statusCode, refused.body]).toEqual([
+      403,
+      { error: 'Your role does not include "Manage site settings" — ask an organization admin' },
+    ])
+    expect(hooks.has('a')).toBe(true)
+    expect((await call('POST', 'editor1', { hostId: 'h1', hookId: 'a' })).statusCode).toBe(200)
   })
 })

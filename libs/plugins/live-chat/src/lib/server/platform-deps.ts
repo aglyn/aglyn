@@ -57,9 +57,14 @@ export function liveChatSettingsHandler() {
       return { uid: decoded.uid, staff: decoded['staff'] === true }
     },
     isEmailUnverified: (error) => error instanceof EmailNotVerifiedError,
-    readMemberRoles: async (hostId) => {
+    readSiteAccess: async (hostId) => {
       const host = await firestore().collection('hosts').doc(hostId).get()
-      return host.exists ? ((host.get('memberRoles') ?? {}) as Record<string, unknown>) : null
+      return host.exists
+        ? {
+            memberRoles: (host.get('memberRoles') ?? {}) as Record<string, unknown>,
+            memberPermissions: host.get('memberPermissions'),
+          }
+        : null
     },
     siteLocked: async (hostId) => Boolean(await getSiteLockdown(hostId)),
     readSettings: readLiveChatSettingsDoc,

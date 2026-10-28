@@ -260,7 +260,7 @@ export const CORE_ORG_PERMISSION_ENTRIES: readonly OrgPermissionEntry[] = [
     group: 'sites',
     scope: 'site',
     label: 'Publish site content',
-    description: 'Make pages and content live, take them down or schedule them, and change redirects.',
+    description: 'Make pages and content live, take them down or schedule them, change redirects and change the site’s fonts.',
   },
   {
     key: 'site.sensitive',
@@ -274,7 +274,7 @@ export const CORE_ORG_PERMISSION_ENTRIES: readonly OrgPermissionEntry[] = [
     group: 'sites',
     scope: 'site',
     label: 'Manage site settings',
-    description: 'Manage a site’s people, domain, address and plugins, change its plugin settings and security allow-lists, import, export and delete it.',
+    description: 'Manage a site’s people, domain, address and plugins, change its plugin settings (live chat, Zapier) and security allow-lists, import, export and delete it.',
   },
   {
     key: 'data.manage',

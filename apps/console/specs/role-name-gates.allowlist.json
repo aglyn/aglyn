@@ -45,10 +45,6 @@
       "kind": "not-a-gate",
       "note": "Validates the site role a request names."
     },
-    "apps/console/app/api/hosts/pages/route.ts": {
-      "count": 2,
-      "kind": "pending"
-    },
     "apps/console/app/api/orgs/invites/route.ts": {
       "count": 6,
       "kind": "exception",
@@ -213,14 +209,6 @@
       "count": 2,
       "kind": "pending"
     },
-    "libs/plugins/fonts/src/lib/server/prepare-route.ts": {
-      "count": 2,
-      "kind": "pending"
-    },
-    "libs/plugins/fonts/src/lib/server/theme-route.ts": {
-      "count": 2,
-      "kind": "pending"
-    },
     "libs/plugins/funnels/src/lib/components/funnels-card.component.tsx": {
       "count": 1,
       "kind": "pending"
@@ -239,10 +227,6 @@
     },
     "libs/plugins/inbox/src/lib/server.ts": {
       "count": 5,
-      "kind": "pending"
-    },
-    "libs/plugins/live-chat/src/lib/server/settings-route.ts": {
-      "count": 1,
       "kind": "pending"
     },
     "libs/plugins/marketing/src/lib/server/campaign-manage.ts": {
@@ -327,10 +311,6 @@
       "kind": "pending"
     },
     "libs/plugins/workflows/src/lib/transfer/org-automations-package.server.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/zapier/src/lib/server/console-hooks.ts": {
       "count": 1,
       "kind": "pending"
     },

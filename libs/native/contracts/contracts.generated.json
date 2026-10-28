@@ -7602,7 +7602,7 @@
         "scope": "site"
       },
       {
-        "description": "Make pages and content live, take them down or schedule them, and change redirects.",
+        "description": "Make pages and content live, take them down or schedule them, change redirects and change the site’s fonts.",
         "group": "sites",
         "key": "site.publish",
         "label": "Publish site content",
@@ -7616,7 +7616,7 @@
         "scope": "site"
       },
       {
-        "description": "Manage a site’s people, domain, address and plugins, change its plugin settings and security allow-lists, import, export and delete it.",
+        "description": "Manage a site’s people, domain, address and plugins, change its plugin settings (live chat, Zapier) and security allow-lists, import, export and delete it.",
         "group": "sites",
         "key": "site.manage",
         "label": "Manage site settings",
