@@ -89,6 +89,12 @@ const PLATFORM_SENDERS: Record<string, string> = {
     'or contact — so the mail is platform mail, metered as platform. The ' +
     'sign-up invitation goes to someone who bought a reader from Aglyn in ' +
     'person with no account yet: again Aglyn writing to its own buyer.',
+  [join('libs', 'plugins', 'commerce', 'src', 'lib', 'server', 'pos-cellular-notify.ts')]:
+    'The notice that 4G was turned off for a workspace’s card readers ' +
+    "because a month's 4G charge stayed unpaid (AGL-4038). The platform " +
+    "billed the charge and the recipients are Aglyn's customers, the " +
+    'workspace members who manage its billing — never a site visitor or ' +
+    'contact — so the mail is platform mail, metered as platform.',
   [join('apps', 'tenant', 'app', 'api', '_legal-intake', 'acknowledge.ts')]:
     'DMCA and abuse acknowledgements. The recipient is the REPORTER in ' +
     "Aglyn's own legal process, not the site's customer, and the mail is " +
@@ -307,7 +313,9 @@ describe('the platform senders are named, not inferred', () => {
   it('keeps the exemption list short', () => {
     // 7 with the POS hardware shop's order mail (AGL-4038): Aglyn is the
     // seller there, so it is platform mail by the same test as the rest.
-    expect(Object.keys(PLATFORM_SENDERS).length).toBeLessThan(8)
+    // 8 with the notice that 4G was turned off for an unpaid month
+    // (AGL-4038): Aglyn billed that charge, so the same test again.
+    expect(Object.keys(PLATFORM_SENDERS).length).toBeLessThan(9)
   })
 })
 

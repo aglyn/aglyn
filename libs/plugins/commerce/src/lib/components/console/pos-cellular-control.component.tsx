@@ -19,6 +19,7 @@ import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
+  Alert,
   Box,
   Button,
   Checkbox,
@@ -51,7 +52,10 @@ const readersText = (count: number) => `${count} Stripe Reader S710${count === 1
  * Stripe turns cellular service on for a store's reader Location, so this is
  * one switch for the store: it says plainly that every S710 at the store
  * gets 4G and that each one is charged, and turning it on takes an explicit
- * agreement to the monthly price. Loaded only where 4G is offered and the
+ * agreement to the monthly price. Turning it ON is charged to the workspace,
+ * so it also takes "Manage billing": without it the control says so rather
+ * than hiding. A store whose 4G was turned off for an unpaid month says
+ * which, and how to turn it back on. Loaded only where 4G is offered and the
  * store has an S710.
  */
 export function PosCellularControl({ hostId, cellular, blocked, onChanged }: PosCellularControlProps) {
@@ -61,6 +65,8 @@ export function PosCellularControl({ hostId, cellular, blocked, onChanged }: Pos
   const [agreed, setAgreed] = useState(false)
   const [busy, setBusy] = useState(false)
   const price = usd(cellular.readerMonthlyCents)
+  // Off needs only the card's key; on is charged to the workspace, so billing too.
+  const reason = blocked ?? (cellular.enabled ? null : (cellular.turnOnBlocked ?? null))
 
   const change = async (enabled: boolean) => {
     if (!user) return
@@ -97,11 +103,16 @@ export function PosCellularControl({ hostId, cellular, blocked, onChanged }: Pos
         </Typography>
       </Box>
       <Chip size="small" label={cellular.enabled ? 'On' : 'Off'} color={cellular.enabled ? 'success' : 'default'} />
-      <BlockedControl blocked={Boolean(blocked)} reason={blocked ?? ''}>
+      <BlockedControl blocked={Boolean(reason)} reason={reason ?? ''}>
         <Button size="small" onClick={() => setDialog(cellular.enabled ? 'off' : 'on')}>
           {cellular.enabled ? 'Turn off 4G' : 'Turn on 4G'}
         </Button>
       </BlockedControl>
+      {cellular.suspended ? (
+        <Alert severity="warning" sx={{ flexBasis: '100%' }}>
+          {`4G was turned off because the 4G charge for ${cellular.suspended.month} wasn't paid. Pay it on the Billing page, then turn 4G on again here.`}
+        </Alert>
+      ) : null}
 
       <Dialog open={dialog === 'on'} onClose={() => (busy ? undefined : setDialog(null))} maxWidth="sm" fullWidth>
         <DialogTitle>{'Turn on 4G for this store?'}</DialogTitle>
@@ -110,7 +121,7 @@ export function PosCellularControl({ hostId, cellular, blocked, onChanged }: Pos
             {`Every Stripe Reader S710 at this store gets Stripe's 4G service and uses it whenever Wi-Fi and Ethernet are not available. That is ${readersText(cellular.readers)} now, and any S710 you add here later.`}
           </Typography>
           <Typography variant="body2">
-            {`Each S710 is charged ${price} a month, plus any sales tax, for every calendar month it has 4G. The charge goes to this workspace's card at the start of the next month. Turning 4G off stops the charge from the next month.`}
+            {`Each S710 is charged ${price} a month, plus any sales tax, for every calendar month it has 4G. The charge goes to this workspace's card at the start of the next month. Turning 4G off stops the charge from the next month. If a month's charge isn't paid, 4G is turned off after a grace period, until it's paid and turned on again.`}
           </Typography>
           <FormControlLabel
             control={<Checkbox checked={agreed} onChange={(event) => setAgreed(event.target.checked)} />}
