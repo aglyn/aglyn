@@ -387,6 +387,27 @@ Every quote that moved went down, to what billing has charged since
 2026-10-19, so it went out at once. A brief with no AI quotes exactly what it
 did before.
 
+### 2026-10-29, later — the pricing calculator quotes Site Care (AGL-3954)
+
+The calculator now has a Site Care switch, so it is a Site Care pricing
+surface: a change to `SITE_CARE_ADDON_MONTHLY_USD` owes it an edit.
+
+- `plan_rates.site_care` is 49. `estimate_plan` (`catNvLFb59`) gains a
+  `site_care` switch and a `c_site_care` line, priced once per workspace and
+  the same on every plan, the way the Event Calendar is. It never changes
+  which plan wins.
+- The screen (`DLvsEL-aO-`) went from `LOLTIHnVcD` to `K7pXMVxoVn`, "Site
+  Care switch and line (AGL-3954)". The switch, "Site Care: we make your site
+  changes for you", sits after the Event Calendar's in "What you switch on".
+  The itemized line, "Site Care", carries the note "Up to about an hour of
+  work a month, done within 2 business days". Both take their wording from
+  `/pricing`'s Site Care card.
+- Like the Event Calendar, it counts in Aglyn's figure in the platform
+  comparison ("the add-ons this brief needs"). It states no extra-time rate
+  and no project price.
+
+With the switch off, every figure on the page is what it was before.
+
 ## Enterprise has no price here, but it has bands
 
 `PLAN_ENTITLEMENTS.enterprise` is a row of **finite fallbacks** — twice
