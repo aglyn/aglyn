@@ -191,6 +191,21 @@ describe('NotificationsTable (AGL-3045)', () => {
     expect(rowOf('Ways in is degraded').className).toContain('notification-level-warning')
   })
 
+  it('reads a notification that names itself as that, not as its type (AGL-4096)', () => {
+    const answer = {
+      $id: 'n-6',
+      type: 'content.order',
+      level: 'success',
+      label: 'Proof approved',
+      title: 'Jordan Lee approved the proof for Quote #1042 on Copper Kettle',
+      createdAt: at('2026-10-29T15:00:00Z'),
+      readAt: null,
+    }
+    renderTable({ rows: [answer, read] })
+    expect(within(rowOf(answer.title)).getByText('Proof approved')).toBeTruthy()
+    expect(within(rowOf(answer.title)).queryByText('New order')).toBeNull()
+  })
+
   it('opens a notification from its row', () => {
     const { onOpen } = renderTable()
     fireEvent.click(within(rowOf('Your invoice is ready')).getByText('Invoice available'))

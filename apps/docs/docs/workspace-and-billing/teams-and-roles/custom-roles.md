@@ -110,6 +110,11 @@ override can hand one to someone outside the roles that held it, or take it away
 
 Each starts with exactly the roles that could do it before, so nobody's access changed.
 
+**Manage data** (`data.manage`) decides the workspace's datasets on its own: creating,
+editing and deleting datasets and their records, and importing into them. Owners,
+admins and editors hold it by default and viewers don't, so a custom role or a
+per-member override can let a viewer edit datasets, or stop an editor from doing so.
+
 ### Site permissions {#site-permissions}
 
 Four permissions decide what someone may do on a site:

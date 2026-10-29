@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { notificationLevel } from '@aglyn/aglyn/app-utils/notifications'
+import { notificationLabel, notificationLevel } from '@aglyn/aglyn/app-utils/notifications'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
@@ -43,7 +43,6 @@ import {
   notificationLevelRowClass,
   notificationLevelGridSx,
   NotificationTypeChip,
-  notificationTypeLabel,
 } from './notification-level.component'
 
 /** The empty feed with no filter set, once it has loaded. */
@@ -101,7 +100,9 @@ const notificationColumns = (
     field: 'type',
     headerName: 'Type',
     width: 190,
-    valueGetter: (_value, row) => notificationTypeLabel(row.type),
+    // What the chip reads (AGL-4096), so the column sorts and exports the
+    // words on screen.
+    valueGetter: (_value, row) => notificationLabel(row),
     renderCell: ({ row }) => <NotificationTypeChip notification={row} />,
   },
   {

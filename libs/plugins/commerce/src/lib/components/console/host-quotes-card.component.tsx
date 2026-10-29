@@ -33,7 +33,8 @@ import {
 import { Button, Chip, Stack, Typography } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import { collection, limit, query, where } from 'firebase/firestore'
-import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import QuoteEditorDialog, { type QuoteRow } from './quote-editor-dialog.component'
 
 export interface HostQuotesCardProps {
@@ -124,14 +125,16 @@ export function HostQuotesCard(props: HostQuotesCardProps) {
   const openQuote = openId && openId !== 'new' ? (quotes.rows.find((row) => row.$id === openId) ?? null) : null
 
   // A manager notice opens its quote (AGL-4096): `?quote=<id>` on the Orders
-  // page, once that quote has loaded.
-  const [linkedId, setLinkedId] = useState(() =>
-    typeof window === 'undefined' ? '' : (new URLSearchParams(window.location.search).get('quote') ?? ''),
-  )
+  // page, once that quote has loaded. Read from the router, so a notice
+  // followed while this page is already open opens its quote too; once per
+  // id, so closing the dialog does not reopen it.
+  const searchParams = useSearchParams()
+  const linkedId = searchParams?.get('quote') ?? ''
+  const opened = useRef('')
   useEffect(() => {
-    if (!linkedId || !quotes.rows.some((row) => row.$id === linkedId)) return
+    if (!linkedId || opened.current === linkedId || !quotes.rows.some((row) => row.$id === linkedId)) return
+    opened.current = linkedId
     setOpenId(linkedId)
-    setLinkedId('')
   }, [linkedId, quotes.rows])
 
   const columns = useMemo<GridColDef[]>(

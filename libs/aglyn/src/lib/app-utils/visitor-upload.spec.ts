@@ -19,12 +19,16 @@ import {
   checkVisitorUploadRequest,
   checkVisitorUploadSelection,
   describeVisitorUploadTypes,
+  mediaLibraryBytes,
   resolveVisitorUploadType,
   safeVisitorUploadName,
   visitorUploadFinalPath,
+  visitorUploadCounterBytes,
   visitorUploadFileView,
   visitorUploadIsInline,
   visitorUploadPendingPath,
+  VISITOR_UPLOAD_COUNTER_BYTES,
+  VISITOR_UPLOAD_COUNTER_FILES,
   VISITOR_UPLOAD_MAX_BYTES,
   VISITOR_UPLOAD_PENDING_PREFIX,
   VISITOR_UPLOAD_TYPES,
@@ -146,5 +150,27 @@ describe('names and paths', () => {
     expect(
       visitorUploadFileView({ id: 'u1', name: 'a.png', contentType: 'image/png', size: 3, path: 'hosts/x/private/uploads/p/r/u1', uploadedAtMs: 5 }),
     ).toEqual({ id: 'u1', name: 'a.png', contentType: 'image/png', size: 3, uploadedAtMs: 5 })
+  })
+})
+
+describe('a kept file’s share of the site’s storage counter', () => {
+  it('is counted beside the library’s bytes, under its own two fields', () => {
+    expect([VISITOR_UPLOAD_COUNTER_BYTES, VISITOR_UPLOAD_COUNTER_FILES]).toEqual(['uploadBytes', 'uploadCount'])
+  })
+
+  it('leaves the library its own files’ bytes', () => {
+    const counter = { bytes: 900, count: 4, uploadBytes: 300, uploadCount: 2 }
+    expect(visitorUploadCounterBytes(counter)).toBe(300)
+    expect(mediaLibraryBytes(counter)).toBe(600)
+  })
+
+  it('reads a counter with no kept files, a missing one and a corrupt one as safely as the band does', () => {
+    expect(mediaLibraryBytes({ bytes: 500, count: 2 })).toBe(500)
+    expect(mediaLibraryBytes(null)).toBe(0)
+    expect(mediaLibraryBytes({ bytes: -20, uploadBytes: 5 })).toBe(0)
+    // Never more kept-file bytes than the counter holds, so the library never reads below zero.
+    expect(visitorUploadCounterBytes({ bytes: 100, uploadBytes: 400 })).toBe(100)
+    expect(mediaLibraryBytes({ bytes: 100, uploadBytes: 400 })).toBe(0)
+    expect(mediaLibraryBytes({ bytes: 100, uploadBytes: Number.NaN })).toBe(100)
   })
 })

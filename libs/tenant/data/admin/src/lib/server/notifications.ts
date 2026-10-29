@@ -29,7 +29,7 @@ import { operatorAlertForNotificationType } from '@aglyn/aglyn/plugin-manager/op
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { notificationPushEnabled } from '@aglyn/aglyn/app-utils/notification-push'
 import { NOTIFICATION_SOUND_FIELD, notificationSound } from '@aglyn/aglyn/app-utils/notification-sounds'
-import { notificationEmailAction } from '@aglyn/aglyn/app-utils/notifications'
+import { notificationEmailAction, notificationLabel } from '@aglyn/aglyn/app-utils/notifications'
 import { PLATFORM_BRANDING_PROFILE, platformConsoleOrigin } from '@aglyn/aglyn/app-utils/platform-brand'
 import { FieldValue } from 'firebase-admin/firestore'
 import { withoutMailWithheldAccounts } from './account-mail'
@@ -192,6 +192,12 @@ async function emailNotification(
   const context = await notificationEmailContext(payload, audience)
   const url = notificationEmailUrl(payload, context, origin)
   const details = formatNotificationEmailDetails(emailDetails)
+  // The eyebrow names what this is before where (AGL-4096), "Proof approved ·
+  // Copper Kettle · Acme", when the emitter gave the notification a label of
+  // its own; every other notification keeps the site and workspace alone.
+  const eyebrow = [payload.label ? notificationLabel(payload) : '', context.line ?? '']
+    .filter(Boolean)
+    .join(' · ')
   const loaded = await loadSystemEmail('notification').catch(() => null)
   const fallbackText = [
     payload.title,
@@ -225,11 +231,12 @@ async function emailNotification(
             'notification.body': payload.body ?? '',
             'notification.details': details,
             'notification.url': url,
-            'notification.context': context.line ?? '',
+            'notification.context': eyebrow,
             'notification.replyNote': replyTo ? `Reply to this email to answer ${replyTo}.` : '',
             'notification.action': notificationEmailAction(
               payload.type,
               context.brand.merge['brand.productName'] || PLATFORM_BRANDING_PROFILE.productName,
+              payload.actionLabel,
             ),
             settingsUrl,
           },

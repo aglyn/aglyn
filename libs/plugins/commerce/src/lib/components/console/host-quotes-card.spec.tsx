@@ -35,6 +35,12 @@ const mockFetch = jest.fn<Promise<{ ok: boolean; json: () => Promise<Record<stri
 )
 let mockQuotes: Array<Record<string, unknown>> = []
 let mockStore: Record<string, unknown> = {}
+/** The page's query string, as the router reads it (a manager notice's `?quote=`). */
+let mockSearch = ''
+
+jest.mock('next/navigation', () => ({
+  useSearchParams: () => new URLSearchParams(mockSearch),
+}))
 
 jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
   authorizedFetch: (...args: unknown[]) => mockFetch(...args),
@@ -121,6 +127,7 @@ const QUOTE = {
 beforeEach(() => {
   mockFetch.mockClear()
   mockQuotes = []
+  mockSearch = ''
   mockStore = { tax: { mode: 'manual', origin: { country: 'US', state: 'TX' }, rates: [{ country: 'US', state: 'TX', pct: 10 }] } }
 })
 
@@ -623,10 +630,24 @@ describe('a quote’s proofs and revisions (AGL-4096)', () => {
   })
 
   it('opens the quote a manager notice links to', async () => {
-    window.history.replaceState(null, '', '/acme/hosts/shop/products/orders?quote=q-1')
+    mockSearch = '?quote=q-1'
     mockQuotes = [QUOTE]
     render(<HostQuotesCard hostId="site1" canEdit canSend />)
     expect(await screen.findByRole('dialog')).toBeTruthy()
-    window.history.replaceState(null, '', '/')
+  })
+
+  it('opens it when the notice is followed with the Orders page already open, and only once', async () => {
+    mockQuotes = [QUOTE]
+    const view = render(<HostQuotesCard hostId="site1" canEdit canSend />)
+    expect(screen.queryByRole('dialog')).toBeNull()
+    // The bell pushes `?quote=` onto the page that is already showing.
+    mockSearch = '?quote=q-1'
+    view.rerender(<HostQuotesCard hostId="site1" canEdit canSend />)
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    // The same address read again (any re-render) does not reopen it.
+    view.rerender(<HostQuotesCard hostId="site1" canEdit canSend />)
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 })
