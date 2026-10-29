@@ -47,7 +47,6 @@ function input(over: Partial<FormConfirmationInput> = {}): FormConfirmationInput
     host: HOST,
     org: null,
     to: 'jane@example.com',
-    formName: 'Request a quote',
     request: { kind: 'quote' },
     answers: { name: 'Jane Doe', email: 'jane@example.com', message: 'Two banners, please.' },
     decls: [{ fieldName: 'name', fieldType: 'text', label: 'Your name' }],
@@ -101,11 +100,11 @@ describe('the form confirmation', () => {
     expect(done.thread).toEqual({
       messageId: done.messageId,
       references: [root, done.messageId],
-      subject: 'We got your quote request — Northwind Signs',
+      subject: 'Your quote request with Northwind Signs',
     })
     expect(sent[0]).toMatchObject({
       to: 'jane@example.com',
-      subject: 'We got your quote request — Northwind Signs',
+      subject: 'Your quote request with Northwind Signs',
       replyTo: 'hello@northwind.example',
       audience: 'tenant',
       context: 'form confirmation',

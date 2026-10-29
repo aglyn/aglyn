@@ -9391,14 +9391,14 @@
       "key": "form-confirmation",
       "mergeTokens": [
         {
-          "description": "The subject: what they sent, to whom",
+          "description": "The subject, which the conversation keeps: “Your quote request with” the business for a request, else “We got your message”",
           "name": "form.subject",
-          "sample": "We got your quote request — Northwind Signs"
+          "sample": "Your quote request with Northwind Signs"
         },
         {
-          "description": "The form’s name",
+          "description": "What they sent, as they would call it: “Quote request”, else “Your message”",
           "name": "form.name",
-          "sample": "Request a quote"
+          "sample": "Quote request"
         },
         {
           "description": "“We got your request” for a request, else “Thanks, we got your message”",

@@ -1144,9 +1144,20 @@ describe('sending the quote by email (AGL-4097)', () => {
       expect.arrayContaining(['quote-link-replaced', 'quote-sent']),
     )
 
-    // Sending revision 2 again keeps its link.
+    // Sending revision 2 again keeps its link, and is not called an update a second time.
     expect((await send('admin', quoteId)).body).toMatchObject({ revision: 2, linkVersion: 2, linkReplaced: false })
     expect(stored(path)['quote']['sends'].map((entry: { linkVersion: number }) => entry.linkVersion)).toEqual([1, 1, 2, 2])
+    expect(renderedTokens[1]['quote.heading']).toBe('Your quote from Acme Signs')
+    expect(renderedTokens[3]['quote.heading']).toBe('Your quote from Acme Signs')
+    expect(renderedTokens[3]['quote.intro']).not.toContain('replaces')
+  })
+
+  it('a quote first emailed at a later revision is a quote, not an update, and keeps its link', async () => {
+    const { quoteId } = await created()
+    expect((await startRevision(quoteId)).status).toBe(200)
+    expect((await send('admin', quoteId)).body).toMatchObject({ revision: 2, linkVersion: 1, linkReplaced: false })
+    expect(renderedTokens[0]['quote.heading']).toBe('Your quote from Acme Signs')
+    expect(renderedTokens[0]['quote.intro']).toContain('Acme Signs put together a quote for you.')
   })
 
   it('replies into the conversation a request already started, under its subject (a thread stored before roots)', async () => {

@@ -27,12 +27,11 @@ import type {
   ConsoleCreatedSite,
   ConsolePendingSite,
 } from '@aglyn/aglyn/plugin-manager/feature-plugins'
+import { useLoading } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
-  Box,
   Button,
-  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -217,6 +216,18 @@ function CreateSiteFlow({ onClose }: { onClose: () => void }) {
         : verdict === true
           ? 'start'
           : 'resolving'
+
+  // While the flow decides which start to draw, the console's own loading
+  // overlay covers it, as every other wait in the console does, rather than
+  // a dialog of its own around a spinner.
+  const { queueLoading } = useLoading()
+  useEffect(() => {
+    if (mode !== 'resolving') return
+    // Outside a loading provider (a spec) the context's default returns
+    // nothing to dequeue.
+    const dequeue: (() => void) | undefined = queueLoading()
+    return () => dequeue?.()
+  }, [mode, queueLoading])
 
   const land = useCallback(
     (target: string) => {
@@ -421,20 +432,9 @@ function CreateSiteFlow({ onClose }: { onClose: () => void }) {
 
   if (mode === 'start') return startZone
 
-  if (mode === 'resolving') {
-    return (
-      <>
-        {startZone}
-        <Dialog open onClose={onClose} maxWidth="xs" fullWidth aria-label="Create a new site">
-          <DialogContent>
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-              <CircularProgress aria-label="Getting your site ready to start…" />
-            </Box>
-          </DialogContent>
-        </Dialog>
-      </>
-    )
-  }
+  // The start zone stays mounted while resolving: its widget is what gives
+  // the verdict.
+  if (mode === 'resolving') return startZone
 
   if (mode === 'blocked') {
     return (

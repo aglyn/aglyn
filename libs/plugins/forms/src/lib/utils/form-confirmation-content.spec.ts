@@ -43,7 +43,6 @@ const DECLS: FormFieldDecl[] = [
 function input(over: Partial<FormConfirmationInput> = {}): FormConfirmationInput {
   return {
     businessName: 'Northwind Signs',
-    formName: 'Request a quote',
     request: { kind: 'quote' },
     answers: {
       name: 'Jane Doe',
@@ -85,9 +84,11 @@ describe('the form confirmation says what arrived and what happens next (AGL-409
 
   it('a quote request: its own heading, a copy of the answers under the form’s labels, the files, the next step and the contact', () => {
     const content = formConfirmationContent(input())
-    expect(content.subject).toBe('We got your quote request — Northwind Signs')
+    // The subject names the conversation the quote and its invoice reply into.
+    expect(content.subject).toBe('Your quote request with Northwind Signs')
     const { html, text } = render(content)
-    expect(text).toContain('Northwind Signs · Request a quote')
+    // What they sent, as they would call it: never the form's internal name.
+    expect(text).toContain('Northwind Signs · Quote request')
     expect(text).toContain('We got your request')
     expect(text).toContain('Thanks for asking Northwind Signs for a quote. Here is a copy of what you sent.')
     expect(text).toContain('Your name: Jane Doe')
@@ -111,6 +112,8 @@ describe('the form confirmation says what arrived and what happens next (AGL-409
     const content = formConfirmationContent(input({ request: null, fileNames: [], contactPhone: null }))
     expect(content.subject).toBe('We got your message — Northwind Signs')
     expect(content.tokens['form.heading']).toBe('Thanks, we got your message')
+    expect(content.tokens['form.name']).toBe('Your message')
+    expect(render(content).text).toContain('Northwind Signs · Your message')
     expect(content.tokens['form.files']).toBe('')
     expect(content.tokens['form.nextStep']).toBe(
       'Northwind Signs will get back to you soon. Reply to this email if you want to add anything.',

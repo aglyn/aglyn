@@ -171,10 +171,6 @@
       "count": 1,
       "kind": "pending"
     },
-    "libs/plugins/delivery-apps/src/lib/server/platform-deps.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
     "libs/plugins/domains/src/lib/server/domain-emails.ts": {
       "count": 1,
       "kind": "not-a-gate",
