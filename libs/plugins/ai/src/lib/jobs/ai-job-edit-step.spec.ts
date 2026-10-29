@@ -79,6 +79,7 @@ import {
   AI_JOB_EDIT_RULES,
   AI_JOB_EDIT_STEP_BUDGET,
   AI_JOB_EDIT_STEP_MINIMUM_MS,
+  aiEditDatasetScope,
   aiEditJobAdmission,
   aiEditPlacement,
   aiJobEditModel,
@@ -516,6 +517,62 @@ describe('the answer', () => {
     mockRunAiRequest.mockResolvedValueOnce({ kind: 'refusal', text: '', toolUse: [], usage: USAGE, estCostUsd: 0.01, stopReason: 'refusal' })
     const outcome = await runStep()
     expect(outcome.refused).toBe(true)
+  })
+})
+
+describe('a page that shows a dataset’s records (AGL-3616)', () => {
+  const SERVICES = {
+    id: 'ds-services',
+    name: 'Services',
+    fields: ['Name', 'Summary', 'Best for'],
+    fieldIds: ['name', 'summary', 'best_for'],
+  }
+  const runWith = (datasets: unknown[]) =>
+    createAiJobEditStep({ readDatasets: async () => datasets as never })({ job: job({ brief: 'Add a services grid.' }), stepIndex: 0, now: NOW, firestore, org: PRO } as never)
+  /** A grid under the services heading, its repeat as given. */
+  const grid = (repeat: Array<{ name: string; value: string }>) => ({
+    ...BLANK,
+    op: 'insertSubtree',
+    parentId: 'services',
+    nodes: [
+      { id: 'grid', componentId: 'muiGrid', children: ['cell'], props: [{ name: 'container', value: 'true' }, ...repeat], sx: [] },
+      { id: 'cell', componentId: 'muiGrid', children: ['name'], props: [{ name: 'size', value: 'xs:12 md:4' }], sx: [] },
+      { id: 'name', componentId: 'muiTypography', children: [], props: [{ name: 'children', value: '{{item.name}}' }], sx: [] },
+    ],
+  })
+
+  it('shows the model the site’s datasets and keeps the repeat it binds to one', async () => {
+    seed({ routed: false })
+    mockRunAiRequest.mockResolvedValueOnce(completion({ summary: 'Services grid', ops: [grid([{ name: 'repeatDataset', value: 'ds-services' }])] }))
+    const outcome = await runWith([SERVICES])
+    expect(outcome.failure).toBeUndefined()
+    const user = mockRunAiRequest.mock.calls[0][0].messages[0].content as string
+    expect(user).toContain('- ds-services · Services · name (Name), summary (Summary), best_for (Best for)')
+    expect(user.indexOf('ds-services')).toBeLessThan(user.indexOf('Request: Add a services grid.'))
+    const nodes = Object.values(stored(`${SCREEN}/versions/job-1`))
+    expect(nodes.find((node) => node.props?.container)?.props.repeatDataset).toBe('ds-services')
+    expect(nodes.find((node) => node.props?.children === '{{item.name}}')).toBeDefined()
+  })
+
+  it('re-asks a grid whose record tokens nothing fills, and saves the one bound to the dataset', async () => {
+    seed({ routed: false })
+    mockRunAiRequest
+      .mockResolvedValueOnce(completion({ summary: 'Services grid', ops: [grid([])] }))
+      .mockResolvedValueOnce(completion({ summary: 'Services grid', ops: [grid([{ name: 'repeatDataset', value: 'ds-services' }])] }))
+    const outcome = await runWith([SERVICES])
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
+    expect(JSON.stringify(mockRunAiRequest.mock.calls[1][0].messages)).toContain('sits in no element that repeats over a dataset')
+    expect(outcome.failure).toBeUndefined()
+    const nodes = Object.values(stored(`${SCREEN}/versions/job-1`))
+    expect(nodes.find((node) => node.props?.container)?.props.repeatDataset).toBe('ds-services')
+  })
+
+  it('reads a record page as filling its tokens, and lists nothing where the site holds no datasets', () => {
+    const record = aiEditDatasetScope([{ ...SERVICES, recordScreenId: 'home' }], { kind: 'screen', id: 'home' })
+    expect(record.recordDatasetId).toBe('ds-services')
+    expect(record.datasets[0]).not.toHaveProperty('recordScreenId')
+    expect(aiEditDatasetScope([{ ...SERVICES, recordScreenId: 'home' }], { kind: 'layout', id: 'home' }).recordDatasetId).toBeNull()
+    expect(aiEditDatasetScope([], { kind: 'screen', id: 'home' })).toEqual({ datasets: [], recordDatasetId: null })
   })
 })
 
