@@ -166,10 +166,11 @@ function budgetLine(kind: AiOutputKind): string {
  * billed at full input rate every single time.
  *
  * Sending fewer rules is not only cheaper here, it is more accurate: rule 14
- * tells a writer to mark a fact it lacks in square brackets, which is right
- * for page copy a person edits before publishing and wrong for a search title
- * that is published exactly as written — and the SEO doors' own rules already
- * say to write only from the text they were given.
+ * is about a whole document's copy — leave a fact it lacks out, and mark one
+ * in square brackets only where a door's own instructions ask for it, as an
+ * email's, an automation's and a product's do (AGL-4092) — while a search
+ * title is one value published exactly as written, and the SEO doors' own
+ * rules already say to write only from the text they were given.
  */
 export type AiDoctrineScope =
   /** A document the palette composes, or a plan for them: all seventeen rules. */
@@ -206,7 +207,8 @@ const AI_DOCTRINE_RULE_TEXT: readonly AiDoctrineRuleText[] = [
   { n: 11, scopes: DOCUMENTS, text: 'One main landmark and an ordered outline. A page declares at most one "main"; a component, form or email declares none; a layout has exactly one "layoutSlot". A page has exactly one h1 and never skips a heading level, and a layout has no h1. Set a heading\'s level with the Typography "component" (h1 to h6).' },
   { n: 12, scopes: DOCUMENTS, text: 'Responsive by the theme\'s breakpoints. Widths come from a Container\'s maxWidth, a Grid\'s size, a percentage, or responsive values keyed by xs, sm, md, lg and xl, never a fixed px or viewport width.' },
   { n: 13, scopes: EVERY_SCOPE, text: 'Drafts only. Everything you produce is a new draft that a person reviews and publishes. Never ask to publish, and never change something already live.' },
-  { n: 14, scopes: DOCUMENTS, text: 'The site\'s voice, with no filler. Write real copy in the tone of the site and the brief, never lorem ipsum or "your text here". When the brief lacks a fact such as a phone number, a price or a name, mark it in square brackets instead of inventing it. For agencies and enterprises, never call the work simple, cheap or effortless.' },
+  // AGL-4092: "mark it in square brackets" put "[year founded]" and "[email]" in an Assist build's plan card.
+  { n: 14, scopes: DOCUMENTS, text: 'The site\'s voice, with no filler. Write real copy in the tone of the site and the brief, never lorem ipsum or "your text here". When the brief lacks a fact such as a phone number, a price or a name, leave it out and write the sentence without it: never a bracket, a placeholder or an invented fact, unless your own instructions ask for a bracket. For agencies and enterprises, never call the work simple, cheap or effortless.' },
   { n: 15, scopes: DOCUMENTS, text: 'Start from a duplicate of the nearest thing. When the site has a similar page, template or email, plan a duplicate of it and edit that, which keeps its versions, bindings and SEO.' },
   { n: 16, scopes: DOCUMENTS, text: 'The smallest document that does the job. Build the flattest tree that renders the design: no container wrapping a single container, no empty containers, no inline style repeated across elements, text as text, images lazy below the first, video by poster and click-to-play, no fonts beyond the theme\'s, and no third-party player unless the brief asks for one and the plan lists it.' },
   { n: 17, scopes: DOCUMENTS, text: `A measured budget for every output. Each document is measured and refused over its budget: ${AI_OUTPUT_KINDS.map(budgetLine).join('; ')}.` },

@@ -59,9 +59,9 @@ or **Cancel job**. **Open AI jobs** follows the job in the Assist panel instead.
 A form collects text, choices and ratings. When your brief asks for something else, such as a
 file or photo upload, a signature or a payment, the form leaves it out and the job says so
 beside **Open draft**. For a roofing quote request that asks for photos of the damage, for
-example, the form asks for a written description of the damage instead. The job also lists any
-fact the brief did not give that the form marks in square brackets, such as a label naming your
-studio, for you to fill in before the form goes on a page.
+example, the form asks for a written description of the damage instead. A fact the brief did
+not give is left out of the form. If the form still shows one in square brackets, such as a
+label naming your studio, the job lists it for you to fill in before the form goes on a page.
 
 ## Nothing is live until you place it
 

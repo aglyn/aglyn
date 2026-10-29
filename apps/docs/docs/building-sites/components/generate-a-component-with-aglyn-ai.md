@@ -63,8 +63,9 @@ job never makes a property that hides the whole component.
 
 Each property's default is what the component shows until a page sets its own value. Copy is
 written in your site's voice from the brief. Where the brief leaves out a fact, such as a
-customer's name, the default marks the gap in square brackets, such as **[Customer name]**,
-instead of inventing one, and **AI jobs** lists those gaps beside the draft. An Image starts empty for you to upload, and a Link names one of your
+customer's name, the default is written without it instead of inventing one. If a default
+still shows a gap in square brackets, such as **[Customer name]**, **AI jobs** lists it beside
+the draft. An Image starts empty for you to upload, and a Link names one of your
 pages. An Icon starts empty too: you pick each icon from the library, on the component or on each
 page that places it, because the AI never picks an icon for you.
 

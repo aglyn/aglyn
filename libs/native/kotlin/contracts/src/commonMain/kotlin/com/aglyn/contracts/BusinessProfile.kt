@@ -96,6 +96,8 @@ data class ResolvedBusinessProfile(
   val audience: ResolvedBusinessField<String>?,
   val tone: ResolvedBusinessField<String>?,
   val toneNotes: ResolvedBusinessField<String>?,
+  /** The year the business started (AGL-4092). */
+  val founded: ResolvedBusinessField<String>?,
   /** The schema.org business type the SEO entity names, e.g. `Plumber`. */
   val businessType: String?,
   /** Real contact details, each only where the owner entered it in the site's settings. */
@@ -178,6 +180,7 @@ fun resolveBusinessProfile(host: Map<String, Any?>?, site: Map<String, Any?>? = 
     audience = resolve("audience"),
     tone = resolve("tone"),
     toneNotes = resolve("toneNotes"),
+    founded = resolve("founded"),
     businessType = profileText(entity?.get("businessType"), 80).ifEmpty { null },
     contact = ResolvedContact(
       email = profileText(entity?.get("email"), 320).ifEmpty { profileText(host.child("business")?.get("supportEmail"), 320) }.ifEmpty { null },

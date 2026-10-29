@@ -5935,7 +5935,8 @@ export interface AiFreePageWorstCase {
 export const AI_FREE_PAGE_WORST_CASE_CREDITS: Readonly<AiFreePageWorstCase> = {
   plan: 83,
   layout: 64,
-  firstSection: 44,
+  // 44 until AGL-4092, whose rule 14 every section pass's cached prefix carries.
+  firstSection: 45,
   laterSection: 20,
   // A page's listing, on the fast tier at the platform's markup since
   // AGL-3781 (3 credits at Claude Haiku 4.5's cost before).

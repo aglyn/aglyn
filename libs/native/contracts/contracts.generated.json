@@ -193,10 +193,12 @@
     "serviceArea",
     "audience",
     "tone",
-    "toneNotes"
+    "toneNotes",
+    "founded"
   ],
   "BUSINESS_PROFILE_MAX_CHARS": {
     "audience": 160,
+    "founded": 4,
     "serviceArea": 120,
     "services": 60,
     "toneNotes": 200,

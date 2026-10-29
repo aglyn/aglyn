@@ -188,7 +188,8 @@ describe('the doctrine block', () => {
 
   it('pins the doctrine’s bytes, so changing what every generator is told is a deliberate cache break', () => {
     expect(createHash('sha256').update(AI_DOCTRINE_SYSTEM_BLOCK.text).digest('hex')).toBe(
-      'abc89b1c89654cfb5ac445903cff10ebd09dd824a295bacc8030100e3e21ae44',
+      // AGL-4092: rule 14 leaves a missing fact out, never a bracket unless a door's own instructions ask for one.
+      '749faf6311c783e24b5706850aafc361c5d89f20f01be7ee2b6a237631e12a2f',
     )
   })
 

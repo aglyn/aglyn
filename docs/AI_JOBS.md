@@ -38,9 +38,15 @@ a proposal, which a person puts in the theme editor and saves there.
 ### What a draft asks the member to fill
 
 Where the brief leaves out a fact, such as an address, a phone number or a price,
-rule 14 has the copy mark the gap in square brackets instead of inventing it, and
-a draft is only ready to publish once a member fills those gaps. So a page, layout,
-component or form output's `note` lists the facts in square brackets its draft holds
+rule 14 has the copy leave it out and write the sentence without it, never a bracket,
+a placeholder or an invented fact (AGL-4092: "mark it in square brackets" put "[year
+founded]" and "[email]" on an Assist build's plan card). Only a draft whose own
+instructions ask for it — an email, an automation, a product description — marks a
+missing fact in square brackets, for a person to fill before it is sent or saved. The
+site context's closing rule (`AI_SITE_CONTEXT_RULE`) and the text job's system text say
+the same. A draft is only ready to publish once a member fills whatever gap a model
+still writes, so a page, layout, component or form output's `note` lists the facts in
+square brackets its draft holds
 (AGL-3056), in the member's words and in the order they first appear, each once:
 "Before you publish, replace the facts in square brackets, which the brief did not
 give: [Office address], [Office phone number] and [Office hours]." A form's note
@@ -59,9 +65,15 @@ first to need it: its address, phone and hours were all brackets, and nothing sa
   unset gets one sentence for the component however often the page places it: "The
   "Practice area card" component on this page shows [What the firm handles] until you
   replace it."
-- **Nothing is refused for it.** A bracketed gap is the honest answer rule 14 asks
-  for, so the note costs no prompt byte and no re-ask; a draft copied through the
-  duplicate module, or reported by a run cut off after it wrote, carries none.
+- **Nothing is refused for it.** A bracketed gap is still better than an invented
+  fact, so the note is the safety net, costing no prompt byte and no re-ask; a draft
+  copied through the duplicate module, or reported by a run cut off after it wrote,
+  carries none.
+- **A plan names no gap** (`aiSettlePlanPlaceholderNames`, `model/ai-plan-said-sections.ts`).
+  Every plan's section names are settled before the card shows them: the word
+  "placeholder" (AGL-3887), a fact in square brackets, "to be added" and "TBD" are
+  taken out with the words that joined them (AGL-4092), so "Who we are: a team, with
+  [year founded] and [team story]" is "Who we are: a team".
 
 ## The document
 
@@ -433,7 +445,9 @@ that forbids an invented name, contact detail, price or review.
   another org), so a missing profile never stops a job.
 - **Where it is filled.** The guided start's answers and a site job's plan
   prefill the profile through `prefillAiBusinessProfile`, never over what the
-  owner typed (`mergeBusinessProfilePrefill`); `assist-edit-applied` records
+  owner typed (`mergeBusinessProfilePrefill`). The start's "Year founded" is the
+  profile's `founded` (AGL-4092), printed as `Founded: 2019`, so a build reads the
+  year instead of planning "[year founded]"; `assist-edit-applied` records
   preferences with `rememberAiSitePreferences`. The owner edits the profile on
   Setup → Business profile and clears preferences there.
 
@@ -2254,6 +2268,22 @@ Schedule page's "Upcoming races" and "Past results" both listed the first five.
   (`aiDatasetWithoutPlaceholders`) — none, as often as not — and is written with
   its fields, its note saying where its rows go and the pages told it has none
   yet, so each keeps its band, an honest line and the live list.
+- **No instruction to the owner** (AGL-4092). The 2026-10-28 start's six sample
+  riders each ended "Add this rider's story here.", and its six past races' results
+  were "Add finishing position": the check knew gap markers, never an imperative
+  telling the owner what to write. A sample's words now read as finished copy about
+  it (the samples rule says so, and `AI_DATASET_PLACEHOLDER_REASK` names both
+  examples). A sentence, an aside or a sentence's last turn that opens with an
+  owner's verb (add, write, enter, replace, fill in, update…) and names where it goes
+  ("here", "later", "soon", "in Data", "your own"), or is nothing but that verb and a
+  part of the record ("Add finishing position", "Enter result"), makes the record a
+  placeholder (`aiDatasetInstructionSentence`); a visitor's "Fill in the form on the
+  Contact page", a menu's "Add avocado" and "Riders enter the gate early and race
+  later" are kept. After the one re-ask the instruction is taken out of the answer
+  (`aiDatasetWithoutInstructions`) before the placeholder salvage, so a sample keeps
+  the rest of what it says, a row with no name left goes, and a past sample's result
+  is left "" rather than an instruction. `aiDatasetRealRecords` does the same to
+  whatever reaches the writer.
 - **Two lists of one dataset on one page** (`aiSiteDatasetSplitOf`,
   `aiSettlePlanSplitListings`). Where a page lists a new dataset in two sections
   or more and the dataset plans a field that files its records (Status, Stage,
@@ -2277,7 +2307,13 @@ thing.
 - **From the chat.** On a site, with `aiGenerative`, `release_ai_generative`,
   `ai.generate` and the `ai-generate` switch, `/api/assist/chat` offers the
   strict `propose_build` tool (`assistBuildRung`, `src/lib/server/assist-build.ts`).
-  The model restates the whole request as a brief; it never plans. The panel
+  The model restates the whole request as a brief; it never plans, and never
+  asks for placeholders, brackets or "to be added" text (AGL-4092: a brief the
+  chat wrote ended "use bracketed placeholders where details are missing").
+  `resolveAssistBuild` drops any clause of the brief that still asks for one
+  (`assistBuildBriefWithoutGaps`) and appends `ASSIST_BUILD_FACTS_LINE`, which
+  says facts come from the site's profile and contact details and a missing one
+  is left out, before the console-page line. The panel
   then creates one `build` job through `POST /api/ai/jobs`, whose plan step
   plans against the site's real inventory and stops with the plan card and
   its one price (`assist-build-card.component.tsx`). Nothing is built until
@@ -3839,7 +3875,7 @@ the same way, in a Grid with a row direction and no container.
   they are re-ask sentences, and no system block, tool or cached prefix changes.
   `ai-job-free-page.spec.ts` re-asks the Free page's practice areas for each of the three
   shapes a section pass still re-asks through the real page step: a section re-asked for any of them costs at most 22
-  credits, less than the 44 of the largest pass, which the room the arithmetic keeps for
+  credits, less than the 45 of the largest pass, which the room the arithmetic keeps for
   a re-asked section must exceed.
 
 ### A finished section
@@ -4012,7 +4048,7 @@ when the hero was written.
   new code, and the harness reads a page answer's links against the sections of the plan
   it was built from.
 - **What it costs.** The hero's re-ask names the page's four sections, and the Free page's
-  hero re-asked costs 21 credits, within the 44 of the largest pass the room the arithmetic
+  hero re-asked costs 21 credits, within the 45 of the largest pass the room the arithmetic
   keeps for a re-asked section must exceed. Its cut subhead is settled to its first whole clause before the check (AGL-3596), so the re-ask names only the button.
 
 ### The time budget
@@ -4118,9 +4154,11 @@ needs, and the machine does not start it with less.
   request's line is the same length either way, so no figure the Free page's
   arithmetic quotes moves.
 - **The ceiling does not move to make a section fit.** The balanced tier's
-  1,050 fits the Free page's wall with little to spare: past 1,077 tokens the first section pass costs 45 credits, and the Free page that builds its layout
+  1,050 fits the Free page's wall with little to spare: past 1,076 tokens the first section pass costs 45 credits, and the Free page that builds its layout
   first leaves 45 of the 300 — no more than that pass, which is the room the
-  arithmetic keeps for a re-asked section. That margin was 1,060 until the
+  arithmetic keeps for a re-asked section. Rule 14's wording that leaves a missing
+  fact out (AGL-4092), 24 estimated tokens on every document door's prefix, took it
+  from 1,077, the largest pass from 44 credits to 45, and both page totals up one. That margin was 1,060 until the
   palette learned the layout elements' Color scheme (AGL-3284): 20 estimated
   tokens on every document door's cached prefix, the page's then 4,618. Three
   tokens then separated the ceiling from the wall, so the next palette line a
@@ -4261,11 +4299,11 @@ the element budget its request asks for.
   its answer ceiling, the first writing the cache; and the listing at the SEO step's
   nominal usage. Characters are read four to a token and scaled by what the live
   run measured against the ledger's estimate, the higher of the plan's and the
-  layout's ratios. The four-section Free page comes to at most 188 credits of the 300, and a Free page fits 9 sections at every pass's ceiling. On a Free site with
+  layout's ratios. The four-section Free page comes to at most 189 credits of the 300, and a Free page fits 9 sections at every pass's ceiling. On a Free site with
   no layout yet, the page job builds the one layout the Free plan includes first
   (AGL-3031), at the layout generation measured live (1,709 input, 6,649 cache read,
   6,649 cache write and 2,057 output), grown with the layout request's cached prefix:
-  the same page that creates its layout first comes to at most 252 credits, and a
+  the same page that creates its layout first comes to at most 253 credits, and a
   Free page fits 6 sections with its layout. Those two counts are what the plan rules
   hold a Free plan to (AGL-3070): the spec computes them with the plan rules' own
   `aiFreePageSectionsWithin` and holds each exchange's figure to

@@ -28,8 +28,8 @@ import type { AiJobTransitionListener } from './ai-jobs'
  *
  * Two sources, each recorded as itself:
  * - `start`: the answers the owner gave the guided start — what the business
- *   is, who it is for, the areas it serves (else its city). Their words,
- *   given in another place.
+ *   is, who it is for, the areas it serves (else its city), the year it was
+ *   founded (AGL-4092). Their words, given in another place.
  * - `ai`: what the plan wrote for the home page's search description, used
  *   only where the start said nothing about what the business does.
  *
@@ -55,12 +55,15 @@ export function aiBusinessProfileStartValues(job: Pick<AiJob, 'kind' | 'inputs'>
   // The areas "More details" names (AGL-3979), as many whole ones as the field holds; else the city.
   const max = BUSINESS_PROFILE_MAX_CHARS.serviceArea
   let serviceArea = ''
-  for (const area of aiSiteServiceAreas(aiSiteDetailsOf(inputs).serviceArea)) {
+  const details = aiSiteDetailsOf(inputs)
+  for (const area of aiSiteServiceAreas(details.serviceArea)) {
     const next = serviceArea ? `${serviceArea}, ${area}` : area
     if (next.length > max) break
     serviceArea = next
   }
   if (serviceArea || city) values.serviceArea = (serviceArea || city).slice(0, max)
+  // The year "More details" names (AGL-4092), so a later build reads it from the profile instead of marking a gap for it.
+  if (details.founded) values.founded = details.founded.slice(0, BUSINESS_PROFILE_MAX_CHARS.founded)
   return Object.keys(values).length ? values : null
 }
 

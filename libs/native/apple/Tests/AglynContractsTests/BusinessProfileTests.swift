@@ -35,7 +35,8 @@ final class BusinessProfileTests: XCTestCase {
   private func json(_ p: ResolvedBusinessProfile) -> [String: Any?] {
     [
       "name": field(p.name), "whatYouDo": field(p.whatYouDo), "services": field(p.services), "serviceArea": field(p.serviceArea),
-      "audience": field(p.audience), "tone": field(p.tone), "toneNotes": field(p.toneNotes), "businessType": p.businessType,
+      "audience": field(p.audience), "tone": field(p.tone), "toneNotes": field(p.toneNotes), "founded": field(p.founded),
+      "businessType": p.businessType,
       "contact": ["email": p.contact.email, "phone": p.contact.phone, "address": p.contact.address, "hours": p.contact.hours] as [String: Any?],
       "profiles": p.profiles, "logo": p.logo,
     ]

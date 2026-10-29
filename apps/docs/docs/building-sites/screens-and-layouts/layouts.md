@@ -135,8 +135,8 @@ follows the job in the Assist panel instead.
 
 A link in the layout goes only to a page that does what its words say, and one on a colored
 band, such as a footer in your primary color, uses the band's text color. Where the brief leaves
-out a fact, such as your address or opening hours, the footer marks it in square brackets, and
-**AI jobs** lists those gaps beside the draft.
+out a fact, such as your address or opening hours, the footer leaves it out. If the draft still
+shows one in square brackets, **AI jobs** lists it beside the draft.
 
 The layout arrives as a new draft in **Layouts**, and **Open draft** on the job opens it in the
 Besigner. No page uses it until you assign it, so nothing on the live site changes. It counts

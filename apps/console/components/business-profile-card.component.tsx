@@ -28,6 +28,7 @@ import {
   BUSINESS_PROFILE_WORKSPACE_DOC,
   BUSINESS_TONES,
   BUSINESS_TONE_LABELS,
+  businessProfileFoundedProblem,
   businessProfileOwnerWrite,
   businessProfileSourceOf,
   resolveBusinessProfile,
@@ -71,6 +72,7 @@ export const toForm = (stored: BusinessProfileDoc | null | undefined): FormValue
   audience: stored?.audience ?? '',
   tone: stored?.tone ?? '',
   toneNotes: stored?.toneNotes ?? '',
+  founded: stored?.founded ?? '',
 })
 
 export const fromForm = (values: FormValues): BusinessProfileValues => ({
@@ -82,6 +84,7 @@ export const fromForm = (values: FormValues): BusinessProfileValues => ({
     ? (values.tone as BusinessProfileValues['tone'])
     : null,
   toneNotes: values.toneNotes ?? '',
+  founded: values.founded ?? '',
 })
 
 /**
@@ -114,7 +117,8 @@ export function originLine(
   return fallback
 }
 
-function profileSchema(
+/** The card's form: the site's profile, or the workspace's defaults, read-only where `canEdit` is false. */
+export function profileSchema(
   level: 'site' | 'workspace',
   stored: BusinessProfileDoc | null | undefined,
   resolved: ResolvedBusinessProfile | null,
@@ -209,7 +213,24 @@ function profileSchema(
         isReadOnly: !canEdit,
         helperText: line('toneNotes', 'Words to use or avoid, in your own words'),
         validate: [max('toneNotes', 'Please enter shorter notes')],
+        // Beside the year founded on a site's card; the whole row on the workspace's.
+        ...(level === 'site' ? { FormFieldGridProps: half } : {}),
       },
+      // The year the business started (AGL-4092): a fact of this business, so the site's card only.
+      ...(level === 'site'
+        ? [
+            {
+              component: FieldComponentType.TEXT_FIELD,
+              name: 'founded',
+              label: 'Year founded',
+              placeholder: '2015',
+              isReadOnly: !canEdit,
+              helperText: line('founded', 'Four digits, such as 2015'),
+              validate: [(value: unknown) => businessProfileFoundedProblem(value) ?? undefined],
+              FormFieldGridProps: half,
+            },
+          ]
+        : []),
     ],
   }
 }
