@@ -22,6 +22,7 @@ func businessOriginLine(_ field: String, stored: [String: Any]?, resolved: Resol
   case "audience": used = resolved?.audience.map { ($0.value, $0.origin) }
   case "tone": used = resolved?.tone.map { (contracts.businessToneLabels[$0.value] ?? $0.value, $0.origin) }
   case "toneNotes": used = resolved?.toneNotes.map { ($0.value, $0.origin) }
+  case "founded": used = resolved?.founded.map { ($0.value, $0.origin) }
   default: used = nil
   }
   if let used, used.origin == "site" || used.origin == "workspace" {
@@ -30,6 +31,33 @@ func businessOriginLine(_ field: String, stored: [String: Any]?, resolved: Resol
   }
   return fallback
 }
+
+/// The form's text for what is stored: the services one per line, a missing value empty.
+func businessProfileForm(_ stored: [String: Any]?) -> [String: String] {
+  [
+    "whatYouDo": stored?["whatYouDo"] as? String ?? "",
+    "services": (stored?["services"] as? [String] ?? []).joined(separator: "\n"),
+    "serviceArea": stored?["serviceArea"] as? String ?? "",
+    "audience": stored?["audience"] as? String ?? "",
+    "tone": stored?["tone"] as? String ?? "",
+    "toneNotes": stored?["toneNotes"] as? String ?? "",
+    "founded": stored?["founded"] as? String ?? "",
+  ]
+}
+
+/// What the owner's save carries: every field the form shows, as typed; the owner's write sanitizes it.
+func businessProfileSaveValues(_ fields: [String: String]) -> [String: Any] {
+  let tone = fields["tone"] ?? ""
+  return [
+    "whatYouDo": fields["whatYouDo"] ?? "", "services": (fields["services"] ?? "").components(separatedBy: "\n"),
+    "serviceArea": fields["serviceArea"] ?? "", "audience": fields["audience"] ?? "", "toneNotes": fields["toneNotes"] ?? "",
+    "founded": fields["founded"] ?? "",
+    "tone": ContractValues.shared.businessToneOrder.contains(tone) ? tone : NSNull(),
+  ]
+}
+
+/// Why the year founded the form holds cannot be saved, in the console's words (AGL-4102), or nil when it can.
+func businessFoundedError(_ fields: [String: String]) -> String? { businessProfileFoundedProblem(fields["founded"] ?? "") }
 
 /// A site's business profile (AGL-3661): the services, audience, area and tone that have no other home, and that every AI job for
 /// the site reads. The save is the OWNER's write, so every field they changed becomes theirs and a field they left as it was keeps
@@ -51,27 +79,17 @@ struct BusinessSection: View {
   private var stored: [String: Any]? { profile.document?.data }
   private var resolved: ResolvedBusinessProfile { resolveBusinessProfile(host: host, site: stored, workspace: workspace.document?.data) }
 
-  private func form(_ stored: [String: Any]?) -> [String: String] {
-    [
-      "whatYouDo": stored?["whatYouDo"] as? String ?? "",
-      "services": (stored?["services"] as? [String] ?? []).joined(separator: "\n"),
-      "serviceArea": stored?["serviceArea"] as? String ?? "",
-      "audience": stored?["audience"] as? String ?? "",
-      "tone": stored?["tone"] as? String ?? "",
-      "toneNotes": stored?["toneNotes"] as? String ?? "",
-    ]
-  }
-
   private func binding(_ key: String) -> Binding<String> { Binding(get: { fields[key] ?? "" }, set: { fields[key] = $0 }) }
 
   private func line(_ field: String, _ fallback: String) -> String { businessOriginLine(field, stored: stored, resolved: resolved, fallback: fallback) }
 
   var body: some View {
     let maxChars = contracts.businessProfileMaxChars
+    let foundedError = businessFoundedError(fields)
     AglynFormCard(
       "Business profile",
       message: "What this business does and how it speaks. Aglyn AI reads it on every job for this site, and never replaces what you write here.",
-      dirty: fields != seeded, canSave: canEdit && profile.ready && !profile.failed, busy: runner.busy, error: runner.error, notice: runner.notice,
+      dirty: fields != seeded, canSave: canEdit && profile.ready && !profile.failed && foundedError == nil, busy: runner.busy, error: runner.error, notice: runner.notice,
       onDiscard: {
         fields = seeded
         runner.clear()
@@ -101,6 +119,10 @@ struct BusinessSection: View {
         "Notes on tone", text: binding("toneNotes"), max: Int(maxChars["toneNotes"] ?? 200),
         supporting: line("toneNotes", "Words to use or avoid, in your own words"),
         placeholder: "Say “pups”, never “pets”. No exclamation marks.", enabled: canEdit)
+      // The year the business started (AGL-4102), as the console's card has it: checked by the console's own rule.
+      AglynCountedField(
+        "Year founded", text: binding("founded"), error: foundedError, supporting: line("founded", "Four digits, such as 2015"),
+        placeholder: "2015", keyboard: .number, enabled: canEdit)
     }
     facts
       .task(id: hostID) {
@@ -109,7 +131,7 @@ struct BusinessSection: View {
           workspace.start(context.firestore, ["orgs", orgID, contracts.businessProfileSubcollection, contracts.businessProfileWorkspaceDoc])
         }
       }
-      .onChange(of: stored.map { form($0) } ?? form(nil), initial: true) { _, next in
+      .onChange(of: businessProfileForm(stored), initial: true) { _, next in
         // Re-read whenever what is stored changes, but never over edits in progress.
         if fields == seeded || fields.isEmpty { fields = next }
         seeded = next
@@ -123,11 +145,7 @@ struct BusinessSection: View {
   }
 
   private func save() {
-    var values: [String: Any] = [
-      "whatYouDo": fields["whatYouDo"] ?? "", "services": (fields["services"] ?? "").components(separatedBy: "\n"),
-      "serviceArea": fields["serviceArea"] ?? "", "audience": fields["audience"] ?? "", "toneNotes": fields["toneNotes"] ?? "",
-    ]
-    values["tone"] = contracts.businessToneOrder.contains(fields["tone"] ?? "") ? fields["tone"]! : NSNull()
+    let values = businessProfileSaveValues(fields)
     let current = stored
     let path = path
     let uid = context.uid

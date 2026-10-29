@@ -145,12 +145,13 @@ export function fieldValue(doc: BusinessProfileValues | null | undefined, field:
 /**
  * What is wrong with a year founded as the owner typed it (AGL-4092), or
  * `null` when nothing is: empty, or four digits no later than this year —
- * the guided start's own rule.
+ * the guided start's own rule. `now` is a `Date` or epoch milliseconds, so
+ * the native apps replay the same answers (AGL-4102).
  */
-export function businessProfileFoundedProblem(value: unknown, now: Date = new Date()): string | null {
+export function businessProfileFoundedProblem(value: unknown, now: Date | number = Date.now()): string | null {
   const year = typeof value === 'string' ? value.trim() : ''
   if (!year) return null
-  const latest = now.getFullYear()
+  const latest = new Date(now).getFullYear()
   return /^\d{4}$/.test(year) && Number(year) >= 1000 && Number(year) <= latest
     ? null
     : `Enter the year as four digits, like ${latest - 10}.`

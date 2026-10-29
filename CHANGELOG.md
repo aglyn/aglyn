@@ -9,6 +9,28 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.292 — 2026-10-29
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.291...v1.0.0-beta.292)
+
+### Added
+
+- **commerce:** add-ons priced on the storefront, and no silent cut at 100 variants ([AGL-4100](https://linear.app/aglyn/issue/AGL-4100))
+
+### Fixed
+
+- **commerce:** quote, invoice and request-confirmation emails carry a conversation root in References, so replies stay in one conversation ([AGL-4097](https://linear.app/aglyn/issue/AGL-4097))
+- **console:** Create site waits under the console loading overlay, not a spinner dialog ([AGL-4103](https://linear.app/aglyn/issue/AGL-4103))
+- **commerce:** a fresh pay link after a new quote version, and the "updated quote" wording only for a new revision ([AGL-4097](https://linear.app/aglyn/issue/AGL-4097))
+- **forms:** the request confirmation names the conversation, not the form's name ([AGL-4098](https://linear.app/aglyn/issue/AGL-4098))
+- **console:** a preview whose read is slow says so, never that the page has nothing saved ([AGL-4101](https://linear.app/aglyn/issue/AGL-4101))
+
+### Documentation
+
+- **assist:** regenerate the docs index for the add-ons sections ([AGL-4100](https://linear.app/aglyn/issue/AGL-4100))
+
+1 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
 ## v1.0.0-beta.291 — 2026-10-29
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/554f125c9...v1.0.0-beta.291)

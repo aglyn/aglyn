@@ -52,6 +52,21 @@ fun businessProfileSourceOf(doc: Map<String, Any?>?, field: String): String? {
 }
 
 /** Every value a write may carry, sanitized; an absent field stays absent. */
+private val FOUR_DIGITS = Regex("^[0-9]{4}$")
+
+/**
+ * What is wrong with a year founded as the owner typed it (AGL-4092, AGL-4102), or null when nothing is: empty, or four digits
+ * no later than this year, the guided start's own rule. [nowMs] is read on the device's calendar, as the console reads it in
+ * the browser's; a screen passes the clock's now.
+ */
+fun businessProfileFoundedProblem(value: Any?, nowMs: Long): String? {
+  val year = (value as? String)?.trim().orEmpty()
+  if (year.isEmpty()) return null
+  val latest = localParts(nowMs).year
+  val number = year.toIntOrNull()
+  return if (FOUR_DIGITS.matches(year) && number != null && number >= 1000 && number <= latest) null else "Enter the year as four digits, like ${latest - 10}."
+}
+
 fun sanitizeBusinessProfileValues(values: Map<String, Any?>): Map<String, Any?> {
   val clean = LinkedHashMap<String, Any?>()
   for (field in Contracts.businessProfileFieldOrder) if (field in values) clean[field] = profileField(values, field)

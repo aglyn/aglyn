@@ -72,6 +72,16 @@ final class BusinessProfileTests: XCTestCase {
     }
   }
 
+  /// The year founded's rule (AGL-4102): the console's own answers, each at the moment the case names.
+  func testFoundedProblem() {
+    for item in cases("businessProfileFoundedProblem") {
+      let value: Any? = item.args[0] is NSNull ? nil : item.args[0]
+      let nowMs = (item.args[1] as? NSNumber)?.doubleValue ?? 0
+      XCTAssertEqual(businessProfileFoundedProblem(value, nowMs: nowMs), item.result as? String, "\(item.args)")
+    }
+    XCTAssertNil(businessProfileFoundedProblem(String(Calendar(identifier: .gregorian).component(.year, from: Date()))))
+  }
+
   func testPlacesAndProfileUrls() {
     for item in cases("normalizeAreaServed") { XCTAssertEqual(normalizeAreaServed(item.args[0] is NSNull ? nil : item.args[0]), item.result as? [String], "\(item.args)") }
     for item in cases("siteProfileUrls") { XCTAssertEqual(siteProfileUrls(map(item.args[0])), item.result as? [String], "\(item.args)") }
