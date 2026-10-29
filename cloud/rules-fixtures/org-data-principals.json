@@ -6,12 +6,14 @@
     "",
     "cloud/rules-org-data-permission.spec.mjs seeds these into the emulator",
     "and asks Firestore. apps/console/specs/dataset-write-authority-agrees",
-    ".spec.ts runs the server's own resolver over the same rows. A row where",
-    "the two disagree is the defect this table exists to pin: the rules read",
-    "the raw `role` against a hardcoded list while the API resolved a custom",
-    "role, so an editor whose `data.manage` was revoked was refused by the",
-    "API and permitted by the rules — and dataset UPDATES and record",
-    "update/deletes go client-direct, gated by nothing else.",
+    ".spec.ts runs the server's own resolver over the same rows. Both sides",
+    "ask \"Manage data\" (`data.manage`) and nothing about the role (AGL-4047):",
+    "its default is the owner, admin and editor, a custom role or a per-member",
+    "override decides it for ANY role, and dataset UPDATES and record",
+    "update/deletes go client-direct, gated by the rules alone. The first",
+    "defect this table pinned ran the other way: the rules read the raw `role`",
+    "while the API resolved a custom role, so an editor whose `data.manage` was",
+    "revoked was refused by the API and permitted by the rules.",
     "",
     "`member` is the document AS STORED. A row with no `resolvedPermissions`",
     "key is a member whose document predates the field or was written by a",
@@ -25,7 +27,11 @@
     "`mayWriteDatasets` is the ONE expected verdict. `rulesOnly` rows are",
     "excluded from the agreement check because the API expresses that",
     "condition through a different mechanism (suspension is `lockdownRefusal`",
-    "there, not a permission)."
+    "there, not a permission).",
+    "",
+    "The seeded dataset is shared with the workspace and with `host:host-a`, so",
+    "the site collaborator rows reach it and a refusal of theirs is about the",
+    "key, not the scope."
   ],
   "principals": [
     {
@@ -76,7 +82,7 @@
     },
     {
       "uid": "uid-viewer",
-      "note": "A viewer holds nothing. Refused by the role gate on both sides.",
+      "note": "A viewer holds nothing by default. Refused on both sides.",
       "member": {
         "role": "viewer",
         "allHosts": true,
@@ -93,6 +99,25 @@
           "marketplace.publish": false,
           "plugins.install": false
         }
+      },
+      "customRole": null,
+      "mayWriteDatasets": false
+    },
+    {
+      "uid": "uid-admin-bare",
+      "note": "An admin with no resolved map: the key's default for the role, which for an admin is yes.",
+      "member": { "role": "admin", "allHosts": true, "scopeTokens": ["org"] },
+      "customRole": null,
+      "mayWriteDatasets": true
+    },
+    {
+      "uid": "uid-site-author",
+      "note": "A site collaborator with Author access to host-a (a workspace viewer scoped to one site), granted nothing. They reach the dataset and hold no `data.manage` by default: refused on the key, not the scope.",
+      "member": {
+        "role": "viewer",
+        "allHosts": false,
+        "hostAccess": { "host-a": "author" },
+        "scopeTokens": ["host:host-a"]
       },
       "customRole": null,
       "mayWriteDatasets": false
@@ -123,7 +148,7 @@
     },
     {
       "uid": "uid-viewer-granted",
-      "note": "The mirror, and the direction the defect was first guessed to run: a custom role GRANTING `data.manage` to a viewer. Refused by both — the API's writer-role gate leads and has no staff bypass, and the rules' role list is unchanged. A custom role narrows; it has never widened.",
+      "note": "A custom role GRANTING `data.manage` to a viewer. Permitted by both (AGL-4047): the key decides and a role is only its preset. Before, a role gate led on both sides and refused this principal.",
       "member": {
         "role": "viewer",
         "allHosts": true,
@@ -143,7 +168,7 @@
         }
       },
       "customRole": { "id": "role-granting", "permissions": { "data.manage": true } },
-      "mayWriteDatasets": false
+      "mayWriteDatasets": true
     },
     {
       "uid": "uid-editor-restored",
@@ -172,14 +197,14 @@
     },
     {
       "uid": "uid-editor-bare",
-      "note": "NO resolvedPermissions AT ALL — the shape of every member written before the field existed. Must resolve to the role's own verdict, so the verdict comes from the role gate alone. If this is false the deploy is a mass lockout.",
+      "note": "NO resolvedPermissions AT ALL — the shape of every member written before the field existed. Must resolve to the key's default for the role, which for an editor is yes. If this is false the deploy is a mass lockout.",
       "member": { "role": "editor", "allHosts": true, "scopeTokens": ["org"] },
       "customRole": null,
       "mayWriteDatasets": true
     },
     {
       "uid": "uid-viewer-bare",
-      "note": "The same absent map on a VIEWER. The control that stops 'absent' reading as 'everything allowed': the role gate is a separate conjunct no missing field can satisfy.",
+      "note": "The same absent map on a VIEWER. The control that stops 'absent' reading as 'everything allowed': an absent key reads as the role's default, and a viewer's default is no.",
       "member": { "role": "viewer", "allHosts": true, "scopeTokens": ["org"] },
       "customRole": null,
       "mayWriteDatasets": false
@@ -195,6 +220,44 @@
       },
       "customRole": null,
       "mayWriteDatasets": false
+    },
+    {
+      "uid": "uid-editor-member-denied",
+      "note": "An editor whose OWN permissions deny `data.manage`, as the projection stamps it: the per-member layer refuses the role's default.",
+      "member": {
+        "role": "editor",
+        "allHosts": true,
+        "permissions": { "data.manage": false },
+        "scopeTokens": ["org"],
+        "resolvedPermissions": { "data.manage": false, "marketplace.publish": true, "plugins.install": true }
+      },
+      "customRole": null,
+      "mayWriteDatasets": false
+    },
+    {
+      "uid": "uid-viewer-member-granted",
+      "note": "A viewer whose OWN permissions grant `data.manage`, as the projection stamps it (AGL-4047): the key decides.",
+      "member": {
+        "role": "viewer",
+        "allHosts": true,
+        "permissions": { "data.manage": true },
+        "scopeTokens": ["org"],
+        "resolvedPermissions": { "data.manage": true }
+      },
+      "customRole": null,
+      "mayWriteDatasets": true
+    },
+    {
+      "uid": "uid-viewer-override-only-granted",
+      "note": "A viewer granted `data.manage` by a per-member override the projection has not stamped yet. The rules read the override where no resolved map exists, as the API resolves it.",
+      "member": {
+        "role": "viewer",
+        "allHosts": true,
+        "permissions": { "data.manage": true },
+        "scopeTokens": ["org"]
+      },
+      "customRole": null,
+      "mayWriteDatasets": true
     },
     {
       "uid": "uid-editor-other-key",

@@ -218,7 +218,7 @@ sends. Someone who signed up through the form reads **Opted in**. See
    | Name | Type | Label | Default |
    | --- | --- | --- | --- |
    | `heading` | Text | Heading | `Get product updates` |
-   | `description` | Text | Description | `New features, guides, and early-access news — straight to your inbox. No spam.` |
+   | `description` | Text | Description | `New features, guides, and product news — straight to your inbox. No spam.` |
 
    Choose **Save properties**.
 

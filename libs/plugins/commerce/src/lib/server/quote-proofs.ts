@@ -17,7 +17,7 @@
 
 import { claimAttempt, type PluginApiHandler, type PluginApiRequest } from '@aglyn/aglyn/server'
 import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
-import { VISITOR_UPLOAD_HONEYPOT_FIELD, visitorUploadFileView } from '@aglyn/aglyn/app-utils/visitor-upload'
+import { VISITOR_UPLOAD_HONEYPOT_FIELD, visitorUploadFileView, visitorUploadFolder } from '@aglyn/aglyn/app-utils/visitor-upload'
 import { notifyHostManagers } from '@aglyn/tenant-data-admin'
 import * as CommerceModel from '../model'
 import { orderStatusUrl } from './order-status-token'
@@ -30,6 +30,7 @@ import {
   type QuoteLinkOutcome,
   type QuotePayDeps,
 } from './quote-pay'
+import { keepSentQuoteUploads, quoteUploadKeyRef, recordPendingQuoteUpload } from './quote-upload-keys'
 import { quoteUploadCalls, type QuoteUploadCalls } from './quote-uploads'
 
 /*==========================================
@@ -37,8 +38,8 @@ import { quoteUploadCalls, type QuoteUploadCalls } from './quote-uploads'
  * the quote's signed pay link like the page itself:
  *
  *   GET  /api/commerce/quote-proof?hostId=&q=&t=&file=<proofId>
- *        → the current revision's proof (a picture inline, anything else as a
- *          download) | 404 | 410 replaced | 429
+ *        → a proof from any revision, for a link to any version of this quote
+ *          (a picture inline, anything else as a download) | 404 | 429
  *   POST /api/commerce/quote-upload  { hostId, q, t, action: 'ticket', file: { name, contentType, size } }
  *        → { ticket, upload: { url, fields }, file }
  *   POST /api/commerce/quote-upload  { hostId, q, t, action: 'finalize', ticket }
@@ -48,14 +49,19 @@ import { quoteUploadCalls, type QuoteUploadCalls } from './quote-uploads'
  *        + Idempotency-Key → 200 { view } | 409 { error, reason } | 410 { replaced } | 404 | 400 | 429
  *
  * Every route spends a per-address rate limit on the site BEFORE the token is
- * checked, answers a wrong token exactly as a missing quote, and answers a
- * link to an older version as replaced. The uploads are the shared visitor
+ * checked, answers a wrong token exactly as a missing quote, and (but for a
+ * proof, which an earlier email still draws) answers a link to an older
+ * version as replaced. The uploads are the shared visitor
  * upload (`@aglyn/tenant-data-admin/server/visitor-upload`), scoped to this
  * quote's artwork; the answer names the files by id and the server reads
  * them back from that scope, so nothing else can be attached.
  *
  * `v` is the edit of the quote the page showed, as Pay sends it: an answer to
  * proofs the customer has not seen is refused and the page is shown again.
+ *
+ * A file goes up before the answer does, so each one is recorded as pending
+ * under its quote from its ticket on, and the answer that sends it takes it
+ * off; one never sent is deleted a day later (`quote-upload-keys.ts`).
  *=========================================*/
 
 /** Proofs one address may load per site, per ten minutes: every thumbnail of a few visits. */
@@ -108,7 +114,17 @@ const reasonRefusal = (status: number, reason: string, error: string): QuoteLink
 /** What a proof route answers: a JSON outcome, or a file to stream. */
 export type QuoteProofOutcome = QuoteLinkOutcome & { file?: { path: string; name: string; contentType: string } }
 
-/** `GET /api/commerce/quote-proof`: one of the current revision's proofs. */
+const PROOF_GONE: QuoteProofOutcome = { status: 404, body: { error: 'That proof is no longer on this quote.' } }
+
+/**
+ * `GET /api/commerce/quote-proof`: one of the proofs in the quote's history
+ * (AGL-4097). An email is a record the customer keeps, so the proof it draws
+ * keeps showing after the business starts the next revision or replaces the
+ * link: any link signed for this quote, an older version's too, is served the
+ * current revision's proofs and every earlier revision's as its snapshot kept
+ * them. A proof taken off its revision, another quote's file and a wrong token
+ * are not found.
+ */
 export async function handleQuoteProof(deps: QuoteProofDeps, req: PluginApiRequest): Promise<QuoteProofOutcome> {
   if (req.method !== 'GET') return { status: 405, body: { error: 'Method not allowed' } }
   const query = (req.query ?? {}) as Record<string, unknown>
@@ -117,10 +133,19 @@ export async function handleQuoteProof(deps: QuoteProofDeps, req: PluginApiReque
   if (!complete || !fileId) return { status: 400, body: { error: 'This link is incomplete.' } }
   const limited = await limitedQuoteLink(deps, req, `commerce-quote-proof:${hostId}`, QUOTE_PROOF_LOADS_PER_WINDOW)
   if (limited) return limited
-  const linked = await loadLinkedQuote(deps, hostId, quoteId, token)
+  const linked = await loadLinkedQuote(deps, hostId, quoteId, token, { history: true })
   if ('outcome' in linked) return linked.outcome
-  const proof = CommerceModel.currentQuoteProofs(linked.loaded.order.quote).find((entry) => entry.id === fileId)
-  if (!proof?.path) return { status: 404, body: { error: 'That proof is no longer on this quote.' } }
+  const quote = linked.loaded.order.quote
+  // The earlier revisions are read only when the current one lacks the proof.
+  let proof = CommerceModel.quoteProofInHistory(quote, [], fileId)
+  if (!proof) {
+    const listed = await linked.loaded.hostRef.collection('orders').doc(quoteId).collection('revisions').get()
+    const snapshots = listed.docs.map((entry) => entry.data() as Partial<CommerceModel.QuoteRevisionSnapshot>)
+    proof = CommerceModel.quoteProofInHistory(quote, snapshots, fileId)
+  }
+  // A proof is kept under this quote's own folder; a path anywhere else is never served.
+  const folder = visitorUploadFolder({ hostId, purpose: CommerceModel.QUOTE_PROOF_PURPOSE, purposeId: quoteId })
+  if (!proof?.path || !proof.path.startsWith(folder)) return PROOF_GONE
   return { status: 200, body: {}, file: { path: proof.path, name: proof.name, contentType: proof.contentType } }
 }
 
@@ -154,11 +179,15 @@ export async function handleQuoteUpload(deps: QuoteProofDeps, req: PluginApiRequ
         ...(minted.retryAfterSeconds ? { headers: { 'Retry-After': String(minted.retryAfterSeconds) } } : {}),
       }
     }
+    // Pending before a byte can arrive, so a file kept and never sent is always swept.
+    await recordPendingQuoteUpload(deps.firestore(), { hostId, quoteId, fileId: minted.file.id, nowMs: deps.now() })
     return { status: 200, body: { ticket: minted.ticket, upload: minted.upload, file: minted.file } }
   }
   if (body['action'] === 'finalize') {
     const kept = await uploads.finalize({ scope, ticket: body['ticket'], caller })
     if ('error' in kept) return { status: kept.status, body: { error: kept.error, code: kept.code } }
+    // Its day starts again from the latest file.
+    await recordPendingQuoteUpload(deps.firestore(), { hostId, quoteId, fileId: kept.file.id, nowMs: deps.now() })
     return { status: 200, body: { file: visitorUploadFileView(kept.file) } }
   }
   return { status: 400, body: { error: 'Unknown action' } }
@@ -166,12 +195,23 @@ export async function handleQuoteUpload(deps: QuoteProofDeps, req: PluginApiRequ
 
 const UPDATED_MESSAGE = 'This quote was updated since you opened it. Look it over again before you answer.'
 
-/** The managers' notice of an answer: who, which quote and revision, what they said, and what to do next. */
+/**
+ * The managers' notice of an answer (AGL-4096): who, which quote and
+ * revision, what they said, and what to do next.
+ *
+ * It rides `content.order`, so whoever is told about orders (in the feed, by
+ * email, by push) is told about the quotes that become them, and it names
+ * itself as what it is rather than as that type: "Proof approved" or
+ * "Changes requested" where the feed and the email's eyebrow would say "New
+ * order", the customer and the quote as its heading, and "View quote" on the
+ * email's button, which opens the quote's dialog on the Orders page.
+ */
 function noticeOf(input: {
   hostId: string
   quoteId: string
   order: CommerceModel.HostOrder
   response: CommerceModel.QuoteCustomerResponse
+  currency: string
 }) {
   const { hostId, quoteId, order, response } = input
   const quote = order.quote as CommerceModel.OrderQuote
@@ -180,11 +220,14 @@ function noticeOf(input: {
   const revision = response.revision
   const files = response.files ?? []
   const approving = response.action === 'approve'
-  const payNote = quote.requireProofApproval === true ? ' They can pay the quote now.' : ''
+  const money = CommerceModel.formatOrderMoney(Number(order.totals?.totalCents ?? 0), input.currency)
+  const total = quote.tax?.kind === 'at-payment' ? `${money} before tax` : money
+  const filesSent = `${files.length} file${files.length === 1 ? '' : 's'}`
   const details = [
     { label: 'Quote', value: number },
     { label: 'Customer', value: [quote.customer?.name, quote.customer?.company, quote.customer?.email].filter(Boolean).join(', ') },
     { label: 'Revision', value: String(revision) },
+    { label: 'Total', value: total },
     ...(approving
       ? [{ label: 'Approved as', value: response.name ?? '' }]
       : [
@@ -196,12 +239,23 @@ function noticeOf(input: {
   return {
     payload: {
       type: 'content.order' as const,
-      title: approving ? `Proof approved — ${number} on {site}` : `Changes requested — ${number} on {site}`,
+      // Good news for an approval; a change request is work to read.
+      level: approving ? ('success' as const) : ('info' as const),
+      label: approving ? 'Proof approved' : 'Changes requested',
+      actionLabel: 'View quote',
+      title: approving
+        ? `${customer} approved the proof for ${number} on {site}`
+        : `${customer} asked for changes to ${number} on {site}`,
       body: approving
-        ? `${customer} approved the proof for revision ${revision} of ${number}.${payNote} The approval, with the name, time and address it was given from, is on the quote.`
-        : `${customer} asked for changes to revision ${revision} of ${number}` +
-          (files.length ? ` and sent ${files.length} file${files.length === 1 ? '' : 's'}` : '') +
-          `. Read what they asked for on the quote, then start revision ${revision + 1} with new proofs.`,
+        ? (quote.requireProofApproval === true
+            ? `Revision ${revision} is approved, so they can pay the quote now. It becomes an order when they do.`
+            : `Revision ${revision} is approved. The quote becomes an order when they pay.`) +
+          ' The approval, with the name, time and address it was given from, is on the quote.'
+        : files.length
+          ? `What they want changed on revision ${revision}, and the ${filesSent} they sent, are on the quote. ` +
+            `Read them, then start revision ${revision + 1} with new proofs and send it.`
+          : `What they want changed on revision ${revision} is on the quote. ` +
+            `Read it, then start revision ${revision + 1} with new proofs and send it.`,
       link: `/${hostId}/products/orders?quote=${encodeURIComponent(quoteId)}`,
     },
     options: {
@@ -271,9 +325,12 @@ export async function handleQuoteRespond(deps: QuoteProofDeps, req: PluginApiReq
   const now = deps.now()
   try {
     const ref = hostRef.collection('orders').doc(quoteId)
+    const pendingRef = quoteUploadKeyRef(deps.firestore(), hostId, quoteId)
     const settled = await deps.firestore().runTransaction(
       async (transaction): Promise<{ outcome: QuoteLinkOutcome; order?: CommerceModel.HostOrder; response?: CommerceModel.QuoteCustomerResponse }> => {
         const snapshot = await transaction.get(ref)
+        // The files this answer sends leave the pending record with it.
+        const pending = files.length ? await transaction.get(pendingRef) : null
         const current = snapshot.exists ? (snapshot.data() as CommerceModel.HostOrder) : null
         if (!current || !CommerceModel.isQuote(current) || !current.quote) {
           return { outcome: { status: 404, body: { error: 'We could not find that quote. Check the link you were sent.' } } }
@@ -300,6 +357,7 @@ export async function handleQuoteRespond(deps: QuoteProofDeps, req: PluginApiReq
           }
         }
         transaction.set(ref, answered.order)
+        if (pending) keepSentQuoteUploads(transaction, pending, pendingRef, files.map((file) => file.id))
         return { outcome: { status: 200, body: {} }, order: answered.order, response: answered.response }
       },
     )
@@ -316,7 +374,13 @@ export async function handleQuoteRespond(deps: QuoteProofDeps, req: PluginApiReq
     })
     const outcome = { status: 200, body: { view } as Record<string, unknown> }
     await claim.record(200, outcome.body)
-    const notice = noticeOf({ hostId, quoteId, order: settled.order, response: settled.response })
+    const notice = noticeOf({
+      hostId,
+      quoteId,
+      order: settled.order,
+      response: settled.response,
+      currency: String(store.get('currency') ?? 'USD'),
+    })
     void deps.notify(hostId, notice.payload, notice.options)
     return outcome
   } catch (error) {

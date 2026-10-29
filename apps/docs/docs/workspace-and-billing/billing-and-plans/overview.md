@@ -205,8 +205,9 @@ Nothing here guarantees that a price or feature set will remain the same.
   allowance for the whole workspace, so every site's runs count against them.
 - **Storage** is one allowance for the whole workspace too — see
   [storage overage](#storage-overage). **Storage (organization)** shows everything your
-  workspace stores — every site's media library and the organization library — out of
-  that allowance, with how much of it the organization library holds. Under each site,
+  workspace stores — every site's media library, the organization library, and the
+  proofs and customer files on quotes and forms — out of that allowance, with how much of
+  it the organization library holds. Under each site,
   **Storage on this site** lists what that site's library holds: its share of the one
   allowance, not a limit of its own. The **Metered usage estimate** counts the
   organization library in the same Storage line; it has no separate allowance.
@@ -312,8 +313,9 @@ them requires **Manage billing**. See
 ## Storage overage
 
 Your plan includes an amount of storage for each of its sites, and the workspace shares
-it as one allowance: every site's media library and the organization library draw on the
-same total. On a paid plan, going past it is **not** a wall:
+it as one allowance: every site's media library, the organization library, and the
+[files kept with quotes and forms](#files-on-quotes-and-forms) draw on the same total. On a paid
+plan, going past it is **not** a wall:
 
 - **Uploads keep working.** You are never stopped from adding files because you reached
   your included storage.
@@ -337,11 +339,27 @@ takes effect immediately.
 
 :::info Free plans are never billed for storage
 On the Free plan there is no storage overage at all. Your included storage is a fixed
-cap, shared the same way: uploads stop when the workspace reaches it, wherever they are
-going, nothing is metered, and no amount of usage produces a charge —
+cap, shared the same way: your uploads stop when the workspace reaches it, wherever they
+are going, nothing is metered, and no amount of usage produces a charge —
 so there is nothing to cap and nothing to configure. Enterprise storage is a fixed
-default that an agreement raises, with no overage either: uploads stop there.
+default that an agreement raises, with no overage either: uploads stop there. Files your
+customers send are still taken; see below.
 :::
+
+### Files on quotes and forms {#files-on-quotes-and-forms}
+
+The proofs you attach to a [quote](../../commerce-and-bookings/commerce/quotes-and-proofs.md#proofs),
+the files your customer sends when they ask for changes, and the files a
+[File upload](../../content-and-data/forms/overview.md#file-upload) field takes count
+toward your storage exactly as files in a media library do: the same allowance, the same
+meter and alerts, and on a paid plan the same billing past it. Removing a proof, deleting a
+quote or deleting a submission frees the space its files took.
+
+A proof is your upload, so it stops where your other uploads stop: at a storage cap you
+set, or on Free when the workspace is full. A file your **customer** sends is never turned
+away because your storage is full, since they can't free space or change your plan. It is
+kept and counted like the rest, and the storage alerts tell you when you're near or past
+your allowance.
 
 :::tip No surprise bills
 Two things prevent one, and they work in different ways. The **alerts** at 75%, 80%, 90% and 100%

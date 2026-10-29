@@ -1182,12 +1182,16 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         },
         {
           name: 'notification.context',
-          description: 'The site and workspace it is about, when it is about one',
+          description:
+            'The site and workspace it is about, when it is about one, after what it is ' +
+            'when its sender names that ("Proof approved")',
           sample: 'Copper Kettle Catering · Test Org',
         },
         {
           name: 'notification.action',
-          description: 'What the button opens: "View submission", "View order", or "Open in" the product',
+          description:
+            'What the button opens: "View submission", "View order", what its sender names ' +
+            '("View quote"), or "Open in" the product',
           sample: 'View submission',
         },
         {

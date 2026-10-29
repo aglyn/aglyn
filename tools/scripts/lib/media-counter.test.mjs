@@ -304,3 +304,33 @@ test('a media document written without the helper is what drift MEASURES', async
   assert.equal(drift.reconciled, false)
   assert.equal(drift.bytesDrift, -561000)
 })
+
+test('files kept outside the library are counted beside it, not as drift (AGL-4096)', async () => {
+  // A quote's proof adds its bytes to `bytes` and to `uploadBytes`, and no
+  // media document: the library's share still matches its documents.
+  const db = fakeFirestore()
+  await putMediaDocument({
+    firestore: db,
+    scopeRef: hostRef(db),
+    mediaId: 'a',
+    data: { fileName: 'a.jpg', sizeBytes: 1000 },
+  })
+  await db
+    .collection('hosts')
+    .doc('h1')
+    .collection('counters')
+    .doc('media')
+    .set({ bytes: 1500, uploadBytes: 500, uploadCount: 1 }, { merge: true })
+  const drift = await measureMediaCounterDrift(hostRef(db))
+  assert.deepEqual(drift.counter, { count: 1, bytes: 1000 })
+  assert.equal(drift.reconciled, true)
+  // And a later media write keeps the kept files' share as it was.
+  await putMediaDocument({
+    firestore: db,
+    scopeRef: hostRef(db),
+    mediaId: 'b',
+    data: { fileName: 'b.jpg', sizeBytes: 200 },
+  })
+  assert.equal(db.store.get('hosts/h1/counters/media').uploadBytes, 500)
+  assert.equal((await measureMediaCounterDrift(hostRef(db))).reconciled, true)
+})

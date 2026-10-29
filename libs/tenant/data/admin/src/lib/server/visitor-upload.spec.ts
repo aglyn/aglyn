@@ -21,6 +21,7 @@
 
 import { Readable, Writable } from 'node:stream'
 import {
+  deleteVisitorUpload,
   deleteVisitorUploads,
   finalizeVisitorUpload,
   mintVisitorUploadTicket,
@@ -31,6 +32,7 @@ import {
   type VisitorUploadBucket,
   type VisitorUploadDeps,
   type VisitorUploadObject,
+  type VisitorUploadStorageDelta,
 } from './visitor-upload'
 
 jest.mock('./firebase-admin', () => ({ __esModule: true, default: {} }))
@@ -51,7 +53,17 @@ interface Stored {
 
 const objects = new Map<string, Stored>()
 const policies: Array<{ path: string; options: Record<string, any> }> = []
-const deletedPrefixes: string[] = []
+const listedPrefixes: string[] = []
+
+/** What Storage throws for an object that is not there. */
+const notFound = () => Object.assign(new Error('No such object'), { code: 404 })
+
+/** The metadata a read of a stored object answers, as Storage shapes it. */
+const metadataOf = (stored: Stored) => ({
+  size: String(stored.bytes.length),
+  contentType: stored.contentType,
+  metadata: stored.metadata['metadata'] as never,
+})
 
 function fileOf(path: string): VisitorUploadObject {
   return {
@@ -62,8 +74,8 @@ function fileOf(path: string): VisitorUploadObject {
     exists: async () => [objects.has(path)],
     getMetadata: async () => {
       const stored = objects.get(path)
-      if (!stored) throw new Error('No such object')
-      return [{ size: String(stored.bytes.length), contentType: stored.contentType, metadata: stored.metadata['metadata'] as never }]
+      if (!stored) throw notFound()
+      return [metadataOf(stored)]
     },
     download: async (options) => {
       const stored = objects.get(path)
@@ -87,10 +99,15 @@ function fileOf(path: string): VisitorUploadObject {
     setMetadata: async (metadata) => {
       const stored = objects.get(path)
       if (!stored) throw new Error('No such object')
-      stored.metadata = { ...stored.metadata, ...metadata }
+      // Custom metadata merges key by key, as in Storage (a null there clears the key).
+      const custom = {
+        ...((stored.metadata['metadata'] ?? {}) as Record<string, unknown>),
+        ...((metadata['metadata'] ?? {}) as Record<string, unknown>),
+      }
+      stored.metadata = { ...stored.metadata, ...metadata, metadata: custom }
     },
-    delete: async () => {
-      objects.delete(path)
+    delete: async (options) => {
+      if (!objects.delete(path) && !options?.ignoreNotFound) throw notFound()
     },
     createReadStream: () => Readable.from([objects.get(path)?.bytes ?? Buffer.alloc(0)]),
   }
@@ -98,9 +115,12 @@ function fileOf(path: string): VisitorUploadObject {
 
 const bucket: VisitorUploadBucket = {
   file: fileOf,
-  deleteFiles: async ({ prefix }) => {
-    deletedPrefixes.push(prefix)
-    for (const path of [...objects.keys()]) if (path.startsWith(prefix)) objects.delete(path)
+  getFiles: async ({ prefix }) => {
+    listedPrefixes.push(prefix)
+    const listed = [...objects.entries()]
+      .filter(([path]) => path.startsWith(prefix))
+      .map(([path, stored]) => ({ name: path, metadata: metadataOf(stored), delete: fileOf(path).delete }))
+    return [listed]
   },
 }
 
@@ -109,6 +129,12 @@ let paused = false
 let ids = 0
 const spent: Array<{ key: string; limit: number }> = []
 let allow: (key: string) => boolean = () => true
+/** Every move of a site's storage counter, in order. */
+const counted: Array<{ hostId: string } & VisitorUploadStorageDelta> = []
+let counterFails = false
+/** What the workspace's storage band answers; every question it was asked. */
+let storageFull: { status: number; error: string; code: string } | null = null
+const gateAsked: Array<{ hostId: string; bytes: number }> = []
 
 const deps: VisitorUploadDeps = {
   bucket: () => bucket,
@@ -120,7 +146,19 @@ const deps: VisitorUploadDeps = {
   secret: () => 'visitor-upload-spec-secret',
   now: () => nowMs,
   newId: () => `upload${++ids}`,
+  countStorage: async (hostId, delta) => {
+    if (counterFails) throw new Error('counter unavailable')
+    counted.push({ hostId, ...delta })
+  },
+  storageGate: async (input) => {
+    gateAsked.push(input)
+    return storageFull
+  },
 }
+
+/** The site's counter as the moves so far leave it. */
+const counterNow = () =>
+  counted.reduce((sum, move) => ({ bytes: sum.bytes + move.bytes, files: sum.files + move.files }), { bytes: 0, files: 0 })
 
 const SCOPE = { hostId: 'site1', purpose: 'quote-artwork', purposeId: 'q-1' }
 const VISITOR = { ip: '203.0.113.9' }
@@ -129,8 +167,12 @@ const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a
 beforeEach(() => {
   objects.clear()
   policies.length = 0
-  deletedPrefixes.length = 0
+  listedPrefixes.length = 0
   spent.length = 0
+  counted.length = 0
+  counterFails = false
+  storageFull = null
+  gateAsked.length = 0
   nowMs = 1_000_000
   paused = false
   ids = 0
@@ -231,7 +273,7 @@ describe('finalize', () => {
     expect(stored?.metadata).toMatchObject({
       cacheControl: 'private, no-store',
       contentDisposition: 'inline; filename="Logo.png"; filename*=UTF-8\'\'Logo.png',
-      metadata: { name: 'Logo.png', uploadedAtMs: String(nowMs), firebaseStorageDownloadTokens: null },
+      metadata: { name: 'Logo.png', uploadedAtMs: String(nowMs), firebaseStorageDownloadTokens: null, storageCounted: '1' },
     })
   })
 
@@ -241,6 +283,8 @@ describe('finalize', () => {
     const first = await finalizeVisitorUpload(deps, { scope: SCOPE, ticket: minted.ticket, caller: VISITOR })
     const again = await finalizeVisitorUpload(deps, { scope: SCOPE, ticket: minted.ticket, caller: VISITOR })
     expect(again).toEqual(first)
+    // Counted once, by the finalize that kept it.
+    expect(counted).toEqual([{ hostId: 'site1', bytes: PNG.length, files: 1 }])
   })
 
   it('refuses bytes that are not what the file says it is, and deletes them', async () => {
@@ -363,7 +407,117 @@ describe('a kept file', () => {
   it('goes with its record', async () => {
     await keep('Logo.png', 'image/png', PNG)
     await deleteVisitorUploads(deps, SCOPE)
-    expect(deletedPrefixes).toEqual(['hosts/site1/private/uploads/quote-artwork/q-1/'])
+    expect(listedPrefixes).toEqual(['hosts/site1/private/uploads/quote-artwork/q-1/'])
     expect(objects.size).toBe(0)
+  })
+})
+
+describe('storage (AGL-4096)', () => {
+  async function keep(name: string, contentType: string, bytes: Buffer, scope = SCOPE, caller: { ip: string } | { uid: string } = VISITOR) {
+    const minted = await mintVisitorUploadTicket(deps, { scope, request: { name, contentType, size: bytes.length }, caller })
+    if (!('ticket' in minted)) throw new Error(`refused: ${minted.error}`)
+    arrive(`visitor-uploads-pending/${scope.hostId}/${scope.purpose}/${scope.purposeId}/${minted.file.id}`, bytes, contentType)
+    const kept = await finalizeVisitorUpload(deps, { scope, ticket: minted.ticket, caller })
+    if (!('file' in kept)) throw new Error('not kept')
+    return kept.file
+  }
+
+  it('counts a kept file toward its site’s storage, by the bytes kept', async () => {
+    await keep('Logo.png', 'image/png', PNG)
+    const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script><rect width="1" height="1"/></svg>')
+    const mark = await keep('mark.svg', 'image/svg+xml', svg)
+    // The SVG by what was kept once its script was stripped, not what was sent.
+    expect(mark.size).toBeLessThan(svg.length)
+    expect(counted).toEqual([
+      { hostId: 'site1', bytes: PNG.length, files: 1 },
+      { hostId: 'site1', bytes: mark.size, files: 1 },
+    ])
+  })
+
+  it('counts nothing for a file it refused', async () => {
+    const minted = await ticketFor('Logo.png', 'image/png', 300)
+    arrive('visitor-uploads-pending/site1/quote-artwork/q-1/upload1', Buffer.concat([Buffer.from('MZ'), Buffer.alloc(100)]), 'image/png')
+    await finalizeVisitorUpload(deps, { scope: SCOPE, ticket: minted.ticket, caller: VISITOR })
+    expect(counted).toEqual([])
+  })
+
+  it('releases a file’s bytes when it is deleted, once', async () => {
+    const file = await keep('Logo.png', 'image/png', PNG)
+    await deleteVisitorUpload(deps, file.path)
+    await deleteVisitorUpload(deps, file.path)
+    expect(objects.size).toBe(0)
+    expect(counterNow()).toEqual({ bytes: 0, files: 0 })
+    expect(counted).toHaveLength(2)
+  })
+
+  it('releases every file of a record, and only that record’s', async () => {
+    const other = { ...SCOPE, purposeId: 'q-2' }
+    const a = await keep('a.png', 'image/png', PNG)
+    const b = await keep('b.png', 'image/png', Buffer.concat([PNG, Buffer.alloc(50, 2)]))
+    const kept = await keep('c.png', 'image/png', PNG, other)
+    await deleteVisitorUploads(deps, SCOPE)
+    expect(counted[counted.length - 1]).toEqual({ hostId: 'site1', bytes: -(a.size + b.size), files: -2 })
+    expect(counterNow()).toEqual({ bytes: kept.size, files: 1 })
+    expect([...objects.keys()]).toEqual([kept.path])
+  })
+
+  it('releases nothing for a file kept before files were counted', async () => {
+    // As slice 4 kept them: the same metadata with no mark.
+    objects.set('hosts/site1/private/uploads/quote-artwork/q-1/old1', {
+      bytes: PNG,
+      contentType: 'image/png',
+      metadata: { metadata: { name: 'Old.png', uploadedAtMs: '1' } },
+    })
+    await deleteVisitorUpload(deps, 'hosts/site1/private/uploads/quote-artwork/q-1/old1')
+    expect(objects.size).toBe(0)
+    expect(counted).toEqual([])
+  })
+
+  it('keeps the file when the counter cannot move, and then releases nothing for it', async () => {
+    counterFails = true
+    const errors = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    const file = await keep('Logo.png', 'image/png', PNG)
+    expect(objects.get(file.path)?.metadata['metadata']).toMatchObject({ storageCounted: null })
+    expect(await readVisitorUpload(deps, SCOPE, file.id)).toEqual(file)
+    counterFails = false
+    await deleteVisitorUpload(deps, file.path)
+    expect(counted).toEqual([])
+    errors.mockRestore()
+  })
+
+  it('never fails a delete because the counter could not move', async () => {
+    const file = await keep('Logo.png', 'image/png', PNG)
+    counterFails = true
+    const errors = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    await expect(deleteVisitorUpload(deps, file.path)).resolves.toBeUndefined()
+    expect(objects.size).toBe(0)
+    errors.mockRestore()
+  })
+
+  it('refuses a MEMBER’s file the workspace’s storage band refuses, before any limit is spent', async () => {
+    storageFull = { status: 403, error: 'Storage limit reached (250 MB)', code: 'plan_limit_reached' }
+    const refused = await mintVisitorUploadTicket(deps, {
+      scope: SCOPE,
+      request: { name: 'Proof.png', contentType: 'image/png', size: PNG.length },
+      caller: { uid: 'u1' },
+    })
+    expect(refused).toEqual({ ok: false, status: 403, code: 'storage', error: 'Storage limit reached (250 MB)' })
+    expect(gateAsked).toEqual([{ hostId: 'site1', bytes: PNG.length }])
+    expect(spent).toEqual([])
+    expect(policies).toEqual([])
+  })
+
+  it('takes a member’s file the band takes, and counts it', async () => {
+    await keep('Proof.png', 'image/png', PNG, SCOPE, { uid: 'u1' })
+    expect(gateAsked).toEqual([{ hostId: 'site1', bytes: PNG.length }])
+    expect(counted).toEqual([{ hostId: 'site1', bytes: PNG.length, files: 1 }])
+  })
+
+  it('NEVER refuses a visitor for the business’s storage, and still counts the file', async () => {
+    storageFull = { status: 403, error: 'Storage limit reached (250 MB)', code: 'plan_limit_reached' }
+    const file = await keep('Artwork.png', 'image/png', PNG)
+    expect(file.size).toBe(PNG.length)
+    expect(gateAsked).toEqual([])
+    expect(counted).toEqual([{ hostId: 'site1', bytes: PNG.length, files: 1 }])
   })
 })

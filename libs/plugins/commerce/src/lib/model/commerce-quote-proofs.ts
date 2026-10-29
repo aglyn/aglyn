@@ -99,6 +99,27 @@ export function currentQuoteProofs(quote: Pick<OrderQuote, 'proofs' | 'revision'
   return (quote?.proofs ?? []).filter((proof) => Number(proof?.revision) === revision)
 }
 
+/**
+ * One of the proofs the quote has shown its customer, by id (AGL-4097): the
+ * current revision's, else an earlier revision's as its snapshot keeps it
+ * (`orders/{id}/revisions/{n}`). A proof the business took off a revision
+ * before the next one started is in neither, so it is not found.
+ */
+export function quoteProofInHistory(
+  quote: Pick<OrderQuote, 'proofs' | 'revision'> | null | undefined,
+  snapshots: ReadonlyArray<Partial<Pick<QuoteRevisionSnapshot, 'proofs'>> | null | undefined>,
+  proofId: string,
+): QuoteProof | null {
+  if (!proofId) return null
+  const current = currentQuoteProofs(quote).find((proof) => proof?.id === proofId)
+  if (current) return current
+  for (const snapshot of snapshots) {
+    const kept = (Array.isArray(snapshot?.proofs) ? snapshot.proofs : []).find((proof) => proof?.id === proofId)
+    if (kept) return kept
+  }
+  return null
+}
+
 /** The customer's latest answer to the current revision, if they gave one. */
 export function latestQuoteResponse(
   quote: Pick<OrderQuote, 'responses' | 'revision'> | null | undefined,

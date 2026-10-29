@@ -641,6 +641,41 @@ describe('the notification email is a system email (AGL-3367)', () => {
     expect(metered).toEqual(['org:org-1'])
   })
 
+  it('names what the notification is and what its button opens, when the emitter says (AGL-4096)', async () => {
+    userDocs.set('uid-a', ON)
+    directory.set('uid-a', 'a@example.com')
+    hostDocs.set('orgs/org-1', { slug: 'acme', name: 'Acme' })
+    hostDocs.set('hosts/host-1', { orgId: 'org-1', subdomain: 'shop', displayName: 'Copper Kettle', memberRoles: { 'uid-a': 'admin' } })
+    await notifyHostManagers('host-1', {
+      type: 'content.order',
+      label: 'Proof approved',
+      actionLabel: 'View quote',
+      title: 'Jordan Lee approved the proof for Quote #1042 on {site}',
+      link: '/host-1/products/orders?quote=q-1',
+    })
+    expect(sends).toHaveLength(1)
+    expect(sends[0]['subject']).toBe('Jordan Lee approved the proof for Quote #1042 on Copper Kettle')
+    const html = String(sends[0]['html'])
+    expect(html).toContain('Proof approved · Copper Kettle · Acme')
+    expect(html).toContain('>View quote</a>')
+    expect(html).not.toContain('View order')
+    expect(html).toContain('href="https://app.example.com/acme/hosts/shop/products/orders?quote=q-1"')
+    // The feed entry keeps both, for the bell's label and any client's button.
+    expect(written[0].data).toMatchObject({ label: 'Proof approved', actionLabel: 'View quote' })
+  })
+
+  it('keeps the site and workspace alone as the eyebrow of a notification that names nothing', async () => {
+    userDocs.set('uid-a', ON)
+    directory.set('uid-a', 'a@example.com')
+    hostDocs.set('orgs/org-1', { slug: 'acme', name: 'Acme' })
+    hostDocs.set('hosts/host-1', { orgId: 'org-1', subdomain: 'shop', displayName: 'Copper Kettle', memberRoles: { 'uid-a': 'admin' } })
+    await notifyHostManagers('host-1', { type: 'content.order', title: 'New order on {site}' })
+    const html = String(sends[0]['html'])
+    expect(html).toContain('Copper Kettle · Acme')
+    expect(html).not.toContain('New order · Copper Kettle')
+    expect(html).toContain('>View order</a>')
+  })
+
   it('speaks as the platform to staff, and bills the platform, whatever org it is about', async () => {
     userDocs.set('uid-s', ON)
     directory.set('uid-s', 's@example.com')

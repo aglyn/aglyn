@@ -28,6 +28,8 @@ import {
   notificationAccountTypePref,
   notificationCategory,
   notificationChannelEnabled,
+  notificationEmailAction,
+  notificationLabel,
   notificationMuted,
   notificationOverriddenScopes,
   notificationScopePref,
@@ -727,5 +729,24 @@ describe('categories a plugin declares', () => {
     expect(notificationChannelEnabled(undefined, 'console', 'unclaimed.thing')).toBe(true)
     // Not an inherited property either: a prefix is looked up as the map's own.
     expect(notificationCategory('constructor.thing')).toBe('system')
+  })
+})
+
+describe('a notification can name itself (AGL-4096)', () => {
+  it('reads as its type until its emitter names it', () => {
+    expect(notificationLabel({ type: 'content.order' })).toBe('New order')
+    expect(notificationLabel({ type: 'content.order', label: 'Proof approved' })).toBe('Proof approved')
+    // A blank or non-text label is no label.
+    expect(notificationLabel({ type: 'content.order', label: '  ' })).toBe('New order')
+    expect(notificationLabel({ type: 'content.order', label: 7 })).toBe('New order')
+    expect(notificationLabel({ type: 'unclaimed.thing' })).toBe('unclaimed.thing')
+    expect(notificationLabel({})).toBe('')
+  })
+
+  it('names what its email button opens, else what its type opens', () => {
+    expect(notificationEmailAction('content.order', 'Aglyn')).toBe('View order')
+    expect(notificationEmailAction('content.order', 'Aglyn', 'View quote')).toBe('View quote')
+    expect(notificationEmailAction('content.order', 'Aglyn', ' ')).toBe('View order')
+    expect(notificationEmailAction('system.announcement', 'Acme Sites')).toBe('Open in Acme Sites')
   })
 })
