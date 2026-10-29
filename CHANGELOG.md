@@ -9,6 +9,18 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.295 — 2026-10-29
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/7016b756b...v1.0.0-beta.295)
+
+### Added
+
+- **ai:** a page change from Assist is a draft of that page with a Besigner link ([AGL-4116](https://linear.app/aglyn/issue/AGL-4116))
+
+### Fixed
+
+- **ai:** Assist keeps a thread per site and sends AI jobs to the site's page ([AGL-4116](https://linear.app/aglyn/issue/AGL-4116))
+
 ## v1.0.0-beta.294 — 2026-10-29
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.293...v1.0.0-beta.294)
