@@ -29,6 +29,16 @@ If you haven't assigned a **503 · Maintenance** page, maintenance mode still wo
 visitors get Aglyn's plain built-in notice ("This site is undergoing maintenance. Please
 check back shortly.") rather than anything on-brand. Design and assign the 503 first.
 
+## Search engines and feeds
+
+While maintenance mode is on, every address tells search engines the site is down for a
+short while and to check back later. They don't take your 503 page for your site's
+content, so your pages aren't replaced by it in search results. Your site's search page
+and its collection feeds pause too, and come back when you switch maintenance mode off.
+
+Keep it short on a site that's already live. If a site stays unavailable for more than
+a couple of days, search engines may start dropping its pages.
+
 ## Tips
 
 - Design the 503 page first (see [custom error pages](error-screens.md)) so maintenance
