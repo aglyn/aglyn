@@ -22,8 +22,8 @@
  *
  *   1. READ the proved site (no model): the crawler reads it as AglynBot,
  *      main pages first, up to the plan's page count; the inventory is cut
- *      into waves (`model/ai-site-import.ts`), every page gets a ledger row,
- *      and Trust & Safety gets its row. The job then WAITS (`needs_review`,
+ *      into waves (`model/ai-site-import.ts`) and every page gets a ledger
+ *      row. The job then WAITS (`needs_review`,
  *      reason `wave`): nothing is brought in until the person starts wave 1.
  *   2. START A WAVE (no model), on the person's say-so: the proof is still
  *      current, the day's limit has room, the plan still has room; the
@@ -123,7 +123,6 @@ import { AI_LAYOUT_IMPORTED_SECTIONS_INPUT, type AiSiteImportDocument } from './
 import { aiSiteImportSectionNames } from './ai-site-import-compile'
 import { aiRunSiteImportLook, type AiSiteImportLookDeps } from './ai-site-import-look'
 import { aiPublishImportedWave } from './ai-site-import-publish'
-import { fileSiteImportReview } from '../site-import/site-import-review'
 import { aiUnitErrorRetryable, aiUnitFailure, aiUnitSpend } from './ai-build-unit-outcome'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
 import { AI_JOB_STEP_OVERHEAD_MS } from './ai-job-budget'
@@ -223,7 +222,6 @@ export interface AiSiteImportStepDeps {
   fetchImage?: SiteImportPhotosDeps['fetch']
   readRoom?: typeof readAiScreenRoom
   readSiteName?: (firestore: FirebaseFirestore.Firestore, hostId: string) => Promise<string>
-  fileReview?: typeof fileSiteImportReview
   pageWritten?: typeof aiSitePageWritten
   mintId?: () => string
   clock?: () => number
@@ -730,7 +728,6 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
   const ingestOf = deps.ingest ?? pluginMediaIngest
   const readRoom = deps.readRoom ?? readAiScreenRoom
   const siteNameOf = deps.readSiteName ?? readSiteName
-  const fileReview = deps.fileReview ?? fileSiteImportReview
   const pageWritten = deps.pageWritten ?? aiSitePageWritten
   const mintId = deps.mintId ?? createResourceUid
   const clock = deps.clock ?? Date.now
@@ -750,8 +747,6 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
     const items = job.items ?? []
     const work = aiSiteImportNextWork(state, items)
     const nowIso = now.toISOString()
-    const review = (event: 'read' | 'wave-started' | 'wave-finished', next: AiSiteImportState, ledger: readonly AiJobItemLedger[], wave?: number) =>
-      fileReview(firestore, { orgId: job.orgId, hostId, jobId: job.$id, state: next, items: ledger, event, nowMs: now.getTime(), ...(wave !== undefined ? { wave } : {}) })
 
     /** Closes the wave when this pass settled its last row: the review, or the job's end after the last wave. */
     const closing = async (
@@ -778,7 +773,6 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
         console.error('ai site import: a wave could not be published into the preview', { orgId: job.orgId, jobId: job.$id, wave: wave.index, error })
       }
       const published = sitePublish ? { sitePublish } : {}
-      await review('wave-finished', closed, ledger, wave.index)
       const waiting = closed.waves.find((entry) => entry.index === wave.index)?.status === 'review'
       if (waiting) {
         const message = sitePublish?.published.length ? aiSiteImportPreviewMessage(closed, wave, sitePublish.published.length) : aiSiteImportWaveMessage(closed, ledger)
@@ -858,9 +852,7 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
       )
       const planned = { ...aiSiteImportWithBuilds(inventory, mainWords), home: aiSiteImportHomeOf(crawled) }
       const ledger = aiSiteImportLedger(planned)
-      const reviewId = await review('read', planned, ledger)
-      const next = { ...planned, reviewId }
-      return unspent({ items: ledger, siteImport: next, review: waveReview(aiSiteImportWaveMessage(next, ledger)) })
+      return unspent({ items: ledger, siteImport: planned, review: waveReview(aiSiteImportWaveMessage(planned, ledger)) })
     }
 
     if (!state) return unspent({ failure: AI_SITE_IMPORT_COPY.badDomain })
@@ -917,7 +909,6 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
         )
       }
       const started = aiSiteImportWithBuilds(aiSiteImportWaveStarted(state, wave.index, nowIso, reads))
-      await review('wave-started', started, ledger, wave.index)
       const running = started.waves.find((entry) => entry.index === wave.index) as AiSiteImportWave
       return closing(started, ledger, running, unspent({ items: ledger }))
     }

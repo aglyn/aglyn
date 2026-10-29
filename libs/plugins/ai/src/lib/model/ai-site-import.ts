@@ -684,8 +684,6 @@ export interface AiSiteImportState {
   leftOutCount: Partial<Record<AiSiteImportLeftOutReason, number>>
   /** The header and footer's draft id, built in the first wave; `null` when there are no main pages. */
   frame: { draftId: string } | null
-  /** The Trust & Safety row this import is logged under. */
-  reviewId: string | null
   /**
    * "Start every remaining wave" (AGL-4083): each wave closes and the next
    * starts with no review between them; the last wave's close is the stop.
@@ -1133,7 +1131,6 @@ export interface AiSiteImportInventoryInput {
   existingPages: number
   /** Mints one draft id; the inventory names every page's draft before any is written. */
   mintId: () => string
-  reviewId?: string | null
   wavePages?: number
 }
 
@@ -1182,7 +1179,6 @@ export function aiSiteImportInventory(input: AiSiteImportInventoryInput): AiSite
       leftOut,
       leftOutCount,
       frame: null,
-      reviewId: input.reviewId ?? null,
       verdict,
     }
   }
@@ -1256,7 +1252,6 @@ export function aiSiteImportInventory(input: AiSiteImportInventoryInput): AiSite
     leftOut,
     leftOutCount,
     frame: waves[0]?.frame ? { draftId: input.mintId() } : null,
-    reviewId: input.reviewId ?? null,
     verdict,
   }
 }

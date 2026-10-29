@@ -2738,11 +2738,10 @@ whose passes each do one unit (`aiSiteImportNextWork`):
 - **Published only into a preview.** A wave's pages go live only on a site in
   preview, where the public sees the notice; `sitePublish` carries what went
   live. On a site not in preview every output stays a draft.
-- **Trust & Safety.** Every import files one `abuseReports` row
-  (`site-import/site-import-review.ts`, `source: 'site-import'`, category
-  `impersonation`, severity `normal`, the outbound screen's shape), rewritten
-  at the read and at each wave's start and finish, `reportCount` counting the
-  waves. It holds nothing.
+- **Trust & Safety.** An import files nothing in the abuse queue: proving
+  the domain is the control, and an import that passed it is not a report.
+  Until 2026-10-29 every import filed a `source: 'site-import'` row; the
+  admin page still labels the rows filed before then.
 - **Admission.** `createAiSiteImportAdmission`, asked by the create and resume
   doors: the flag, a site (or one about to be created), a paid plan, the
   owner or an admin, and a current proof for `inputs.domain`.

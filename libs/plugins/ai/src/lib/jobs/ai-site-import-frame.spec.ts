@@ -113,7 +113,6 @@ function aglynState(): AiSiteImportState {
     leftOut: [],
     leftOutCount: {},
     frame: { draftId: 'frameDraft' },
-    reviewId: null,
     home: aiSiteImportHomeOf({ pages: [crawledHome('home')] }),
     look: {
       at: NOW.toISOString(),

@@ -18,8 +18,7 @@
 /**
  * The import step's own rules (AGL-3976), pass by pass against fakes for
  * everything outside it: who may start an import and when, what a page's
- * model answer is told and how its text is fenced, what Trust & Safety reads,
- * what a wave leaves out when the site changed since it was read, and how
+ * model answer is told and how its text is fenced, what a wave leaves out when the site changed since it was read, and how
  * long each pass may take. The machine's half — waves started by a person,
  * the review between them, refunds — is in `ai-jobs.spec.ts`.
  */
@@ -47,7 +46,6 @@ import {
 } from '../model/ai-site-import'
 import type { SiteImportBlock } from '../site-import/site-import-html'
 import { AI_LAYOUT_IMPORTED_SECTIONS_INPUT, type AiSiteImportDocument } from './ai-site-import-document'
-import { siteImportReviewDetails, fileSiteImportReview, SITE_IMPORT_REVIEW_SOURCE } from '../site-import/site-import-review'
 import {
   HARBOR_DOMAIN,
   HARBOR_INJECTION,
@@ -135,7 +133,6 @@ function deps(patch: Partial<AiSiteImportStepDeps> = {}): AiSiteImportStepDeps {
     ingest: () => null,
     readRoom: async () => ({ limit: 25, used: 0 }),
     readSiteName: async () => 'Harbor Dental',
-    fileReview: async () => 'row',
     pageWritten: async () => true,
     ...patch,
   }
@@ -419,64 +416,6 @@ describe('a wave reads its pages again, and leaves out what changed', () => {
     const result = await run(step, importJob({ siteImport: state, items: aiSiteImportLedger(state) }))
     expect(result.review).toMatchObject({ reason: 'wave', message: AI_SITE_IMPORT_COPY.unavailable })
     expect(result.siteImport).toBeUndefined()
-  })
-})
-
-describe('the Trust & Safety row every import files', () => {
-  const state = harborState()
-  const input = {
-    orgId: 'org-pro',
-    hostId: 'host-1',
-    jobId: 'importJob1',
-    state,
-    items: aiSiteImportLedger(state),
-    event: 'read' as const,
-    nowMs: NOW.getTime(),
-  }
-
-  it('says what was proved and how, what was read, kept and left out, and that nothing is published', () => {
-    const details = siteImportReviewDetails(input)
-    expect(details).toContain(`Site import: ${HARBOR_DOMAIN} into site host-1 (AI job importJob1).`)
-    expect(details).toContain('Ownership proven by a DNS TXT record (_aglyn-challenge.harbor-dental.com) on 2026-10-19.')
-    expect(details).toContain('Read 5 pages; bringing in 5 pages in 1 wave (plan page count 25, 0 already on the site).')
-    expect(details).toContain('Left out: robots 1.')
-    expect(details).toContain('Nothing is published by the import')
-  })
-
-  it('is written in the abuse queue’s own shape, as the outbound screen files a hold', async () => {
-    const writes: Array<{ path: string; data: Record<string, unknown> }> = []
-    const firestore = {
-      collection: (name: string) => ({
-        doc: (id: string) => ({
-          get: async () => ({ exists: false }),
-          set: async (data: Record<string, unknown>) => {
-            writes.push({ path: `${name}/${id}`, data })
-          },
-        }),
-      }),
-    } as unknown as FirebaseFirestore.Firestore
-    expect(await fileSiteImportReview(firestore, input)).toBe('site-import-importJob1')
-    expect(writes[0].path).toBe('abuseReports/site-import-importJob1')
-    expect(writes[0].data).toMatchObject({
-      reference: 'SI-IMPORTJOB1',
-      category: 'impersonation',
-      severity: 'normal',
-      source: SITE_IMPORT_REVIEW_SOURCE,
-      url: `https://${HARBOR_DOMAIN}/`,
-      reportedHostname: HARBOR_DOMAIN,
-      hostId: 'host-1',
-      orgId: 'org-pro',
-      reporterEmail: null,
-      dmca: null,
-      status: 'open',
-      siteImport: { jobId: 'importJob1', domain: HARBOR_DOMAIN, method: 'dns', kept: 5, waves: 1 },
-    })
-  })
-
-  it('never stops an import when the row cannot be written', async () => {
-    const firestore = { collection: () => ({ doc: () => ({ get: async () => Promise.reject(new Error('down')) }) }) } as never
-    jest.spyOn(console, 'error').mockImplementation(() => undefined)
-    expect(await fileSiteImportReview(firestore, input)).toBeNull()
   })
 })
 

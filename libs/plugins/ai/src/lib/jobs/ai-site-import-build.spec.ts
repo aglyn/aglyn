@@ -180,7 +180,6 @@ function harness(patch: Partial<AiSiteImportStepDeps> = {}, theme: 'applied' | '
     ingest: () => lib,
     readRoom: async () => ({ limit: null, used: 0 }),
     readSiteName: async () => SITE_NAME,
-    fileReview: async () => 'row',
     pageWritten: async () => true,
     draftWords: async () => 120,
     publishWave: async (_firestore, input) => {
@@ -387,7 +386,6 @@ describe('a wave’s close lands in the site’s preview (AGL-4084, on AGL-4086�
     leftOut: [],
     leftOutCount: {},
     frame: { draftId: 'd-frame' },
-    reviewId: 'row',
     look: { at: NOW.toISOString(), theme: 'applied', colors: [], logo: null, seo: false, seed: 1 },
   })
   const ledger = (): AiJobItemLedger[] =>
