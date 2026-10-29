@@ -25,6 +25,7 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import { ORDER_STATUS_PATH } from './order-status-token'
 import { ORDER_STATUS_COMPONENT_ID } from '../constants/order-status'
 import { RETURN_REQUEST_COMPONENT_ID, RETURN_REQUEST_PATH } from '../constants/return-request'
+import { QUOTE_PAGE_COMPONENT_ID, QUOTE_PAGE_PATH } from '../constants/quote-page'
 import getScreen from '@aglyn/tenant-runtime/get-screen'
 import { collectSocialImageFacts } from '@aglyn/tenant-runtime/social-image-facts'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
@@ -66,6 +67,12 @@ export const commerceSitePageResolver: SitePageResolver = async ({
   // from the link's `?o=&t=` (or the member's session), UNLISTED.
   if (pdpSegments.length === 1 && pdpSegments[0] === RETURN_REQUEST_PATH) {
     return composeReturnRequestPage(hostId, host)
+  }
+  // The customer's quote page (AGL-4094), at /pay-quote, under the same
+  // terms: no page of the site's own there, the quote read after hydration
+  // from the pay link's `?q=&t=`, UNLISTED.
+  if (pdpSegments.length === 1 && pdpSegments[0] === QUOTE_PAGE_PATH) {
+    return composeQuotePage(hostId, host)
   }
   if (pdpSegments.length === 2 && pdpSegments[0] === 'products') {
     const adminFirestore = firebaseAdmin.app().firestore()
@@ -606,6 +613,67 @@ async function composeReturnRequestPage(hostId: string, host: unknown) {
     }
   } catch (error) {
     console.error('return request page composition failed', error)
+    return undefined
+  }
+}
+
+const QUOTE_PAGE_NODE = 'quote-page__block'
+
+/** The quote page's node tree, root first, for the layout's slot. */
+export function buildQuotePageNodes(): Record<string, Aglyn.AglynNodeSchema> {
+  return {
+    [Aglyn.NODE_ROOT_ID]: {
+      $id: Aglyn.NODE_ROOT_ID,
+      componentId: 'div',
+      nodes: ['quote-page__container'],
+    } as Aglyn.AglynNodeSchema,
+    'quote-page__container': {
+      $id: 'quote-page__container',
+      parentId: Aglyn.NODE_ROOT_ID,
+      componentId: 'muiContainer',
+      pluginId: 'mui',
+      props: { maxWidth: 'md', sx: { paddingTop: 6, paddingBottom: 8 } },
+      nodes: [QUOTE_PAGE_NODE],
+    } as Aglyn.AglynNodeSchema,
+    [QUOTE_PAGE_NODE]: {
+      $id: QUOTE_PAGE_NODE,
+      parentId: 'quote-page__container',
+      componentId: QUOTE_PAGE_COMPONENT_ID,
+      pluginId: 'commerce',
+      props: {},
+    } as Aglyn.AglynNodeSchema,
+  }
+}
+
+async function composeQuotePage(hostId: string, host: unknown) {
+  try {
+    const layoutId = await resolveBuiltInPageLayoutId({ hostId, host: host as never })
+    const nodes = await composeNodesWithChrome({
+      hostId,
+      layoutId,
+      screenNodes: buildQuotePageNodes(),
+      host: host as Aglyn.HostTokenSource,
+    })
+    if (!nodes) return undefined
+    return {
+      props: JSON.parse(
+        JSON.stringify({
+          data: {
+            host,
+            screen: {
+              data: {
+                displayName: 'Your quote',
+                visibility: Aglyn.HostScreenVisibility.UNLISTED,
+              },
+            },
+          },
+          nodes,
+        }),
+      ),
+      revalidate: 3600,
+    }
+  } catch (error) {
+    console.error('quote page composition failed', error)
     return undefined
   }
 }

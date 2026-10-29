@@ -32,6 +32,8 @@ import {
   type StorefrontPaymentMethodId,
   type StorefrontPaymentMethodSettings,
 } from '../model/commerce-payment-methods'
+import { commerceSitePermissionRefusal } from '../model/plugin-permissions'
+import { holdsCommerceSiteKey } from './commerce-site-keys'
 import {
   type PaymentMethodDomainRecord,
   readSiteDomainRecords,
@@ -274,14 +276,16 @@ export async function paymentMethodsHandler(request: Request): Promise<Response>
     const hostSnapshot = await hostRef.get()
     if (!hostSnapshot.exists) return json({ error: 'Not found' }, 404)
 
-    // An allowlist. Reading the card is for whoever manages the store; a
-    // change asks Stripe for capabilities on the owner's payout account, so it
-    // is an admin's, like connecting that account is the owner's.
-    const role = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    const mayRead = role === 'admin' || role === 'editor'
+    // An allowlist. Reading the card is for whoever works the store's orders
+    // or changes its methods; a change asks Stripe for capabilities on the
+    // owner's payout account, so it is "Manage payment methods" (AGL-4047),
+    // whose preset is the site Admin who alone made it before, as the
+    // reader's is the Admin and Editor.
+    const mayEdit = holdsCommerceSiteKey(hostSnapshot, decoded.uid, 'commerce.paymentMethods')
+    const mayRead = mayEdit || holdsCommerceSiteKey(hostSnapshot, decoded.uid, 'commerce.orders')
     if (!mayRead) return json({ error: 'Not found' }, 404)
-    if (method === 'POST' && role !== 'admin') {
-      return json({ error: 'Only a site admin can change payment methods' }, 403)
+    if (method === 'POST' && !mayEdit) {
+      return json({ error: commerceSitePermissionRefusal('commerce.paymentMethods') }, 403)
     }
 
     const owner = await getOrgForHost(hostId)
@@ -375,7 +379,7 @@ export async function paymentMethodsHandler(request: Request): Promise<Response>
       methods: buildPaymentMethodRows(settings, platform, capabilities),
       domains: await readSiteDomainRecords(hostSnapshot.data() as SiteReturnHost | undefined),
       accountConnected: Boolean(accountId),
-      canEdit: role === 'admin',
+      canEdit: mayEdit,
       canFinish: Boolean(accountId) && decoded.uid === ownerUid,
       warnings,
     }

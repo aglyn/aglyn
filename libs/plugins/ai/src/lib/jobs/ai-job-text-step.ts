@@ -228,8 +228,9 @@ export const AI_JOB_TEXT_SYSTEM: AiSystemBlock[] = [
       'no closing remarks, no markdown fences. Keep to the length the brief ' +
       'implies; when it implies none, write under 150 words. Write in the ' +
       'language of the brief. Never invent facts, prices, names or claims ' +
-      'the brief did not give you; where a detail is missing, leave a ' +
-      'clearly marked placeholder in square brackets.',
+      // AGL-4092: never a bracketed placeholder, which a page shows as written.
+      'the brief did not give you; where a detail is missing, leave it out ' +
+      'and write the sentence without it.',
     cacheBreakpoint: true,
   },
 ]

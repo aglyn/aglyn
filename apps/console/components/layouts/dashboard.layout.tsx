@@ -33,6 +33,7 @@ import { DOCS_HELP_TOPICS } from '../../constants/docs-links'
 import FooterComponent from '../footer.component'
 import QuotaWarningsBanner from '../quota-warnings-banner.component'
 import SearchDiscouragedBanner from '../search-discouraged-banner.component'
+import SitePreviewBanner from '../site-preview-banner.component'
 
 const defaultBreadcrumbs = [
   {
@@ -175,6 +176,9 @@ export function DashboardLayout(props: DashboardLayoutProps) {
           {/* "Hidden from search" indicator (AGL-1263) — persistent on purpose;
             a switch left on is invisible everywhere else. */}
           <SearchDiscouragedBanner />
+          {/* "This site is in preview" (AGL-4086) — persistent for the same
+            reason: a private site nobody remembers to make public. */}
+          <SitePreviewBanner />
           <DashboardHeaderComponent
             disableBreadcrumbs={disableBreadcrumbs}
             breadcrumbItems={breadcrumbs}

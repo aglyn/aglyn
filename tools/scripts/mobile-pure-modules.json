@@ -214,6 +214,10 @@
       "why": "Reached by host-events: each plugin's declared host events, generated data with no imports."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/published-legal-pages.ts",
+      "why": "Which legal documents have a published page and the origin they are served from (LEGAL_ORIGIN): the hardware terms of sale the receipts print name its Terms address (AGL-4038); no imports, one public env read like platform-brand.ts."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/resolve-named-tokens.ts",
       "why": "A template's {{name}} placeholders filled in as a page, component or layout is made from it (AGL-3668). Type-only import."
     },
@@ -358,6 +362,10 @@
       "why": "The AI plugin's org catalog keys and their role defaults, assembled into the contracts' ORG_ROLE_GRANTS (AGL-3950); type-only imports."
     },
     {
+      "path": "libs/plugins/bookings/src/lib/model/bookings-permissions.ts",
+      "why": "The bookings plugin's site keys (in-person payments, refunds) and their site-role presets, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
       "path": "libs/plugins/ai/src/lib/model/ai-products-bulk.ts",
       "why": "The copy job a landed product import starts: its brief, inputs and the created ids read from the import's results; no imports, so the native apps replay it (AGL-3671)."
     },
@@ -442,6 +450,10 @@
       "why": "The self-service kiosk's catalog, cart, sale and context shapes and their pure checks (AGL-3623); imports only commerce-pos and product-modifiers. The native POS app reads the kiosk route through these."
     },
     {
+      "path": "libs/plugins/commerce/src/lib/model/pos-hardware-terms.ts",
+      "why": "The booth terms of sale for hardware (AGL-4038): the Terms version and sections, the acceptance record, and the receipt line commerce-receipt.ts and commerce-pos-ops.ts print on a register sale of hardware; imports only published-legal-pages.ts."
+    },
+    {
       "path": "libs/plugins/commerce/src/lib/model/pos-offline-card-limits.ts",
       "why": "The ceilings of cards taken offline on the app reader (AGL-4039): three numbers and no imports, re-exported by commerce-pos-offline so the native contracts carry them and the eager commerce settings can read them without the offline model."
     },
@@ -482,8 +494,16 @@
       "why": "What a store's shipping zones and rates cover: the resolver checkout builds its shipping options from and the Coverage block's words. Pure arithmetic over the settings document; the native Shipping page replays it from function-cases.generated.json."
     },
     {
+      "path": "libs/plugins/commerce/src/lib/model/commerce-quotes.ts",
+      "why": "A quote's shape on its order (the quote section, its customer, discount, shipping and tax basis) and the pure totals, tax basis, status and proof-approval rules (AGL-4093); imports commerce, commerce-orders (types), commerce-tax, commerce-tax-decision, commerce-tax-engine and product-modifiers. HostOrder.quote reaches the apps' order contract through it."
+    },
+    {
       "path": "libs/plugins/commerce/src/lib/model/commerce-tax-decision.ts",
       "why": "How an order's tax was calculated, in the order dialog's words; a type-only import of commerce-tax. The apps' order screens replay describeOrderTaxMode (AGL-3841)."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/commerce-tax-engine.ts",
+      "why": "A tax service's stamp on an order and the cent allocation a quote spreads its discount with (AGL-3631, AGL-4093); no imports."
     },
     {
       "path": "libs/plugins/commerce/src/lib/model/commerce-tax.ts",
@@ -520,6 +540,38 @@
     {
       "path": "libs/plugins/commerce/src/lib/model/plugin-permissions.ts",
       "why": "The commerce plugin's permission keys (managePos) and their tier defaults, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/workspace-site-permissions.ts",
+      "why": "The commerce plugin's keys for members of the whole workspace only (refunds, the register's approvals, order webhooks), assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
+      "path": "libs/plugins/funnels/src/lib/model/funnels-permissions.ts",
+      "why": "The funnels plugin's site key (Manage funnels) and its site-role preset, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
+      "path": "libs/plugins/marketing/src/lib/model/marketing-permissions.ts",
+      "why": "The marketing plugin's site key (Run email campaigns) and its site-role preset, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
+      "path": "libs/plugins/marketplace/src/lib/model/marketplace-site-permissions.ts",
+      "why": "The marketplace plugin's site keys (install into a site, publish from one) and their site-role preset, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
+      "path": "libs/plugins/workflows/src/lib/model/workflows-permissions.ts",
+      "why": "The workflows plugin's keys (manage the organization's automations, pause one on a site) and their presets, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
+      "path": "libs/plugins/domains/src/lib/model/domains-permissions.ts",
+      "why": "The domains plugin's workspace key (manage the workspace's domains) and its role defaults, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
+      "path": "libs/plugins/email/src/lib/model/email-permissions.ts",
+      "why": "The email plugin's site keys (suppressions, list membership) and their site-role preset, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
+      "path": "libs/plugins/inbox/src/lib/model/inbox-permissions.ts",
+      "why": "The inbox plugin's site keys (reply, add to lists) and their site-role preset, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
     },
     {
       "path": "libs/plugins/commerce/src/lib/model/product-channel.ts",

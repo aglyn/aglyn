@@ -250,6 +250,13 @@ export interface AiDoctrineTreeContext extends AiNodeTreeContext {
    */
   repeatsCompiled?: boolean
   /**
+   * The page is its owner's own words, brought in from their website word for
+   * word (AGL-4084). Rule 8 does not ask for a dataset for its lists, which
+   * are the source's, and rule 14's copy checks (filler, placeholders,
+   * unfinished lines) judge copy a generator wrote, never the owner's.
+   */
+  ownWords?: boolean
+  /**
    * The site's home screens, by id (AGL-3056): the screen a link falls back
    * to when the site has none for what it promises. Absent: none is known.
    */
@@ -3558,6 +3565,15 @@ const BUDGET_METRICS: readonly AiBudgetMetric[] = [
 ]
 
 /**
+ * The budget of a page that is its owner's own words, brought in from their
+ * website word for word (AGL-4084): a long policy or a full price table is
+ * as long as the owner wrote it, and is never cut to a generated page's
+ * budget. Still far under the 900 KB a page's nodes may be saved at
+ * (`NODE_MAP_MAX_BYTES`).
+ */
+export const AI_OWN_WORDS_PAGE_BUDGET = { nodes: 1_500, bytes: 300_000 } as const
+
+/**
  * Rule 17. An output over its kind's budget is refused with the figure, the
  * budget and the heaviest parts named, so the re-ask knows where to cut.
  */
@@ -3567,7 +3583,11 @@ export function detectOverBudget(
   tree: AiDoctrineTree,
   context: AiDoctrineTreeContext = {},
 ): AiDoctrineViolation[] {
-  const budget = AI_OUTPUT_BUDGETS[outputKind]
+  // A page of its owner's own words weighs what their page does (AGL-4084), within the save ceiling.
+  const budget =
+    context.ownWords && (outputKind === 'page' || outputKind === 'template')
+      ? { ...AI_OUTPUT_BUDGETS[outputKind], ...AI_OWN_WORDS_PAGE_BUDGET }
+      : AI_OUTPUT_BUDGETS[outputKind]
   const violations: AiDoctrineViolation[] = []
   for (const metric of BUDGET_METRICS) {
     const value = score[metric]
@@ -4220,7 +4240,7 @@ export function validateAiDoctrineTree(
     ...detectInvisibleLinks(tree, outputKind),
     ...detectPageTextOnBands(tree, outputKind),
     ...detectOffBrandEmail(tree, outputKind, context.brand),
-    ...detectTypedData(tree),
+    ...(context.ownWords ? [] : detectTypedData(tree)),
     ...detectUnfilledInstances(tree, context),
     ...detectImageSources(tree, context),
     ...detectUnrelatedScreenLinks(tree, outputKind, context),
@@ -4228,10 +4248,10 @@ export function validateAiDoctrineTree(
     ...detectDocumentStructure(tree, outputKind),
     ...detectAdHocWidths(tree, outputKind),
     ...detectUnresponsiveGrids(tree, outputKind, writtenOf),
-    ...detectOffVoiceCopy(aiTreeCopy(tree, context), context.framing),
-    ...detectPlaceholderTokens(tree, outputKind, context),
+    ...(context.ownWords ? [] : detectOffVoiceCopy(aiTreeCopy(tree, context), context.framing)),
+    ...(context.ownWords ? [] : detectPlaceholderTokens(tree, outputKind, context)),
     ...detectCutLines(validated.repairs, written, (id) => minted.get(id) ?? id),
-    ...detectDanglingWords(tree),
+    ...(context.ownWords ? [] : detectDanglingWords(tree)),
     ...detectHeavyDocument(tree, outputKind, context),
     ...detectEmptyItems(tree),
   ]
@@ -5935,7 +5955,8 @@ export interface AiFreePageWorstCase {
 export const AI_FREE_PAGE_WORST_CASE_CREDITS: Readonly<AiFreePageWorstCase> = {
   plan: 83,
   layout: 64,
-  firstSection: 44,
+  // 44 until AGL-4092, whose rule 14 every section pass's cached prefix carries.
+  firstSection: 45,
   laterSection: 20,
   // A page's listing, on the fast tier at the platform's markup since
   // AGL-3781 (3 credits at Claude Haiku 4.5's cost before).

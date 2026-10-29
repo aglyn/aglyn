@@ -382,6 +382,25 @@ return isOrgMember() && orgMember().role in ['owner', 'admin'];
 
 
 
+function memberKeyOr(permission, presetRoles) {
+let stamped = orgMember().get('resolvedPermissions', {}).get(permission, null);
+return stamped is bool ? stamped == true : orgMember().get('role', '') in presetRoles;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 function isOrgWideMember() {
 return isOrgMember() &&
@@ -1294,8 +1313,12 @@ allow write: if isStaff() ||
 
 match /businessProfile/{docId} {
 allow read: if isStaff() || isOrgMember();
+
+
 allow write: if isStaff() ||
-(docId == 'defaults' && canManageOrg() && isVerified() && orgNotSuspended());
+(docId == 'defaults' && isOrgMember() &&
+memberKeyOr('org.businessProfile', ['owner', 'admin']) &&
+isVerified() && orgNotSuspended());
 }
 
 
@@ -1502,6 +1525,16 @@ memberResolves('data.manage')));
 }
 function canWriteScopedOrgData() {
 return canWriteOrgData() && canReadScoped();
+}
+
+
+
+
+
+function canWriteOrgMedia() {
+return isOrgMember() && isVerified() &&
+memberKeyOr('org.media', ['owner', 'admin', 'editor']) &&
+orgNotSuspended();
 }
 
 
@@ -2229,24 +2262,27 @@ allow delete: if isStaff() ||
 
 
 
+
+
+
 match /media/{mediaId} {
 allow read: if isStaff() || canReadScoped();
 allow create: if isStaff() ||
-(canWriteOrgData() && canCreateScoped() && mediaObjectFieldsUnset());
+(canWriteOrgMedia() && canCreateScoped() && mediaObjectFieldsUnset());
 allow update: if isStaff() ||
-(canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()) &&
+(canWriteOrgMedia() && canReadScoped() && (isOrgWideMember() || scopeUnchanged()) &&
 mediaObjectFieldsUnchanged());
-allow delete: if isStaff() || canWriteScopedOrgData();
+allow delete: if isStaff() || (canWriteOrgMedia() && canReadScoped());
 }
 
 
 
 match /mediaFolders/{folderId} {
 allow read: if isStaff() || canReadScoped();
-allow create: if isStaff() || (canWriteOrgData() && canCreateScoped());
+allow create: if isStaff() || (canWriteOrgMedia() && canCreateScoped());
 allow update: if isStaff() ||
-(canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()));
-allow delete: if isStaff() || canWriteScopedOrgData();
+(canWriteOrgMedia() && canReadScoped() && (isOrgWideMember() || scopeUnchanged()));
+allow delete: if isStaff() || (canWriteOrgMedia() && canReadScoped());
 }
 
 match /counters/{counterId} {
@@ -3457,6 +3493,12 @@ allow update: if isStaff() ||
 
 
 
+
+'preview', 'publicSinceMs',
+
+
+
+
 'funnelRecording',
 
 
@@ -3549,9 +3591,13 @@ allow update: if isStaff() ||
 
 
 
+
+
+
+
 (canPublishHostContent(hostId) ||
 !request.resource.data.diff(resource.data).affectedKeys()
-.hasAny(['screens', 'defaultHomeScreenId'])) &&
+.hasAny(['screens', 'defaultHomeScreenId', 'previewScreens'])) &&
 routeRemovalAllowed());
 allow delete: if isStaff() ||
 (isVerified() && hostSiteRoleKey(hostId, 'site.manage', ['admin']) &&

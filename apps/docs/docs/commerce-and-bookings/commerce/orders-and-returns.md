@@ -38,11 +38,21 @@ in the list and choosing **Mark as fulfilled** ships every remaining unit of eac
 
 ## Invoices and packing slips {#invoices}
 
-**Invoice** in the order's dialog opens the order as a bill, ready to print: your
-business name, the date, who it is billed and shipped to, each line with its unit
-price, the subtotal, discount, shipping, tax and total, and anything refunded. Your
-store's receipt footer and terms address print at the foot. To keep a PDF, choose
-**Save as PDF** in the print dialog.
+**Invoice** in the order's dialog has two choices:
+
+- **Print invoice** opens the order as a bill, ready to print: your business name,
+  the date, who it is billed and shipped to, each line with its unit price, the
+  subtotal, discount, shipping, tax and total, and anything refunded. Your store's
+  receipt footer and terms address print at the foot.
+- **Download PDF** saves the same invoice as a PDF file in your site's look: your
+  logo and contact details at the top, a band in your site's primary color, the
+  invoice number, the order date and whether it is paid, then the lines and totals.
+  A paid quote's invoice works the same way, with **Included** beside anything
+  included at no charge.
+
+The PDF takes your logo and contact details from your site's settings, and its
+colors from your site's theme. Downloading it takes the **Manage orders**
+permission.
 
 **Packing slip** prints what goes in the box — the shipping address and each line's
 quantity, name, option and SKU — with no prices.
@@ -101,7 +111,7 @@ is written to [Stock movements](overview.md#stock-movements) beside the sale.
 **Refund…** suggests what the items are worth — each line's paid price, after the
 order's discount, for the units coming back — and you can change it, for example to
 add the shipping. The money goes back to the original payment through the order's own
-refund, so the refund rules are the same: it needs an admin of the whole workspace,
+refund, so the refund rules are the same: it needs the **Refund orders** permission,
 and it cannot refund more than is left on the order. Asking twice refunds once. The
 buyer is emailed the amount, and the order's restock question is answered by what the
 return already put back.
@@ -114,8 +124,9 @@ declined** and **Return refunded** — are designed like your other store emails
 
 An order webhook posts each order event to an address you choose, as it happens: a
 warehouse system, an ERP, a spreadsheet script. Add them under **Notifications** →
-**Order webhooks** in the Products hub. Managing webhooks needs the **admin** role
-*and* organization-wide membership, the same as refunds.
+**Order webhooks** in the Products hub. Managing webhooks needs the **Manage order
+webhooks** permission. By default, as with refunds, that's an admin of the whole
+workspace who is also the site's admin.
 
 **Add endpoint** asks for:
 

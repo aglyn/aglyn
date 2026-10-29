@@ -385,6 +385,18 @@ export type AiJobReviewReason =
    * made. Verifying again and starting the wave runs it.
    */
   | 'ownership'
+  /**
+   * A site import's read found its home page turned away by the site's bot
+   * protection or firewall (AGL-4083): nothing is planned or spent. Letting
+   * AglynBot in and choosing Check again reads the site again.
+   */
+  | 'blocked'
+  /**
+   * A site import's read could not read its home page for any other reason
+   * (AGL-4083): an error, no answer, or a page that needs a browser to show
+   * its words. Nothing is planned or spent; Check again reads it again.
+   */
+  | 'unreadable'
 
 /**
  * A building rule an answer broke, as the job keeps it: the number, the code,

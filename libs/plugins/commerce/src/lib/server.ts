@@ -33,6 +33,7 @@ import {
   registerSitePageResolver,
   registerPluginPermissions,
   registerPluginConfigSchema,
+  type PluginApiHandler,
 } from '@aglyn/aglyn/server'
 import { isEmailConfigured } from '@aglyn/shared-util-email'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
@@ -321,11 +322,12 @@ registerPluginJob({
     if (!process.env.STRIPE_SECRET_KEY || !process.env.POS_CELLULAR_MONTHLY_COST_CENTS) return
     const { runPosCellularBilling } = await import('./server/pos-cellular-billing')
     const report = await runPosCellularBilling(gate)
-    if (report.workspaces || report.storesGone) {
+    if (report.workspaces || report.storesGone || report.warned || report.turnedOff || report.paidLate) {
       console.info(
         `commerce: 4G for ${report.month} — ${report.paid} paid, ${report.open} left open, ` +
           `${report.failed} not reached, ${report.unbillable} not billable, ${report.deferred} deferred, ` +
-          `${report.storesGone} deleted stores turned off`,
+          `${report.storesGone} deleted stores turned off; unpaid charges: ${report.warned} warned, ` +
+          `${report.paidLate} paid since, ${report.turnedOff} turned off`,
       )
     }
   },
@@ -396,6 +398,13 @@ registerPluginJob({
  */
 const CARD_PAYMENT_DOOR = { cardPayment: true } as const
 
+/**
+ * The quote page's Pay button (AGL-4094): a fresh Checkout Session for a
+ * quote, for whoever holds its signed pay link. Loaded on first call.
+ */
+const quotePayDoor: PluginApiHandler = async (req, res) =>
+  (await import('./server/quote-pay')).quotePayHandler(req, res)
+
 /** Registers the commerce plugin's storefront API routes. */
 export function registerCommerceApi(): void {
   registerProductCardReader()
@@ -439,6 +448,23 @@ export function registerCommerceApi(): void {
   // …and its "Request a return" button (AGL-3611), on an order that can
   // still send something back.
   registerOrderStatusActions(returnRequestStatusAction)
+  // The customer's quote page (AGL-4094), behind the signed pay link a
+  // business sends: the quote, and its Pay button. The page's data is a
+  // recipient link, so it outlives the site's gates like the order status.
+  registerPluginApiRoute(
+    'commerce/quote-view',
+    async (req, res) => (await import('./server/quote-pay')).quoteViewHandler(req, res),
+    { recipientLink: true },
+  )
+  registerPluginApiRoute('commerce/quote-pay', quotePayDoor, CARD_PAYMENT_DOOR)
+  // The quote as a PDF (AGL-4095), by the same signed link and on the same
+  // terms as the page's data. Loaded on first call, with sharp and the PDF
+  // writer behind it.
+  registerPluginApiRoute(
+    'commerce/quote-pdf',
+    async (req, res) => (await import('./server/commerce-pdf')).quotePdfHandler(req, res),
+    { recipientLink: true },
+  )
   // What became of a session the shopper was returned from (AGL-3606).
   registerPluginApiRoute('commerce/checkout-status', checkoutStatusHandler)
   registerPluginApiRoute('commerce/product', productHandler)
@@ -537,6 +563,11 @@ export function registerCommerceConsoleApi(): void {
   registerPluginApiRoute('commerce/shipping/carrier-rates', carrierRatesAvailabilityHandler)
   registerPluginApiRoute('commerce/connect', connectHandler)
   registerPluginApiRoute('commerce/draft-order', draftOrderHandler)
+  // Quotes (AGL-4093): create, edit and delete a quote, and find the customer
+  // it is for, under "Create and edit quotes". Loaded on first call.
+  registerPluginApiRoute('commerce/quote', async (req, res) =>
+    (await import('./server/quote')).quoteHandler(req, res),
+  )
   // Fulfil + mark-delivered with the transition re-asked under the write
   // (AGL-1819) — the same stale-dialog hole cancel-order closes, minus the
   // stock release those two transitions never had. The customer REST API's
@@ -594,7 +625,9 @@ export function registerCommerceConsoleApi(): void {
   )
   // The order dialog's Packing slip and Invoice for the native apps
   // (AGL-3841): the console's own two pages over the stored order, which the
-  // apps print on the device's print sheet. Loaded on first call.
+  // apps print on the device's print sheet; and the invoice as a PDF file
+  // (`kind=invoice-pdf`, AGL-4095) for the console and the apps. Loaded on
+  // first call.
   registerPluginApiRoute('commerce/order-print', async (req, res) =>
     (await import('./server/order-print')).orderPrintHandler(req, res),
   )

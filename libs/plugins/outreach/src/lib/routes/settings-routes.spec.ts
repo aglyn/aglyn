@@ -93,7 +93,12 @@ const gate: OutreachRouteGateDeps = {
   resolveOrgPermissions: async (uid, context) => {
     const member = members[uid]
     return member
-      ? { orgId: context.orgId, isOwner: member.role === 'owner', ...member }
+      ? {
+          orgId: context.orgId,
+          isOwner: member.role === 'owner',
+          ...member,
+          permissions: { 'outreach.manageAll': member.role === 'owner', ...member.permissions },
+        }
       : { orgId: context.orgId, role: null, isOwner: false, orgWide: false, permissions: {} }
   },
   holdsOrgCatalogPermission: async (uid, _orgId, key) => members[uid]?.permissions[key] === true,

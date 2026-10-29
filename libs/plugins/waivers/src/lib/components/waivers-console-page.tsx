@@ -18,7 +18,9 @@
 'use client'
 
 import type { ConsolePluginPageProps } from '@aglyn/aglyn'
-import { Stack } from '@mui/material'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console-routes'
+import { Alert, Button, Stack } from '@mui/material'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { HandOverScreen } from './hand-over-screen.component'
 import { SignaturesCard } from './signatures-card.component'
@@ -39,8 +41,11 @@ export function WaiversConsolePage(props: ConsolePluginPageProps) {
   const permissions = props.permissions ?? {}
   const canManage = permissions['manageWaivers'] === true
   const canCollect = permissions['collectWaivers'] === true || canManage
-  const { waivers, signPageOrigin, error, reload } = useSiteWaivers(hostId)
+  const { waivers, signPageOrigin, businessContact, error, reload } = useSiteWaivers(hostId)
   const base = props.basePath ?? ''
+  // `/{orgSlug}/hosts/{host}/waivers`: the site's own Setup is beside it.
+  const [, orgSlug, , host] = base.split('/')
+  const detailsHref = orgSlug && host ? buildRoute(Route.HOST_SETUP_DETAILS, { orgSlug, host }) : null
   const [first, second] = props.segments ?? []
   const go = (path: string) => router.push(`${base}${path}`)
 
@@ -65,6 +70,25 @@ export function WaiversConsolePage(props: ConsolePluginPageProps) {
   }
   return (
     <Stack spacing={3}>
+      {businessContact === null ? (
+        // The e-sign consent promises a paper copy, a changed email or a
+        // withdrawal "by contacting" the business. Without a contact it
+        // names none, and signers have no way to ask.
+        <Alert
+          severity="warning"
+          action={
+            detailsHref ? (
+              <Button component={Link} href={detailsHref} color="inherit" size="small">
+                {'Add a support email'}
+              </Button>
+            ) : null
+          }
+        >
+          {'Signers can’t see how to reach you. The e-sign agreement on every waiver tells them to contact you for a ' +
+            'paper copy or to withdraw, and this site has no contact email or phone yet. Add a support email in ' +
+            'Setup, under Details.'}
+        </Alert>
+      ) : null}
       <SignaturesCard hostId={hostId} waivers={waivers ?? []} canManage={canManage} canCollect={canCollect} />
       <WaiversListCard
         hostId={hostId}

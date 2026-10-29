@@ -42,6 +42,9 @@ import {
   aiSiteImportStartAction,
   aiSiteImportWaveRows,
   aiSiteImportWaveSpent,
+  aiSiteImportHeldCopy,
+  aiSiteImportStartAllAction,
+  aiSiteImportWaveQuote,
 } from './ai-site-import-view'
 
 const listed = (path: string): AiSiteImportListedPage => ({
@@ -176,5 +179,110 @@ describe('an import job’s page', () => {
     const job = summary({ status: 'needs_review', items: ledger, siteImport: state })
     expect(aiSiteImportWaveSpent(job, state.waves[0])).toBe(90)
     expect(aiSiteImportStartAction(job)).toMatchObject({ label: 'Start Blog', quote: 'About 189 credits (up to 700)' })
+  })
+})
+
+/*------------------------------------------
+ * What the read found and what it did not (AGL-4083)
+ *-----------------------------------------*/
+
+describe('what the read says it found', () => {
+  it('says how many pages more could not be read, and why the read stopped short', () => {
+    let id = 0
+    const state = aiSiteImportInventory({
+      domain: 'harbor-dental.com',
+      siteName: 'Harbor Dental',
+      ownership: { method: 'dns', provenAt: 1, detail: null },
+      readAt: 'x',
+      pages: ['/', '/about', '/team'].map(listed),
+      menu: [],
+      skipped: [
+        { url: 'https://harbor-dental.com/booking', reason: 'blocked' },
+        { url: 'https://harbor-dental.com/blog/a', reason: 'not-reached' },
+        { url: 'https://harbor-dental.com/blog/b', reason: 'not-reached' },
+      ],
+      stoppedBy: 'time',
+      pageLimit: null,
+      existingPages: 0,
+      mintId: () => `d${++id}`,
+    })
+    expect(aiSiteImportFoundText(state)).toBe('Found 3 pages on harbor-dental.com: Main pages (3). 3 more could not be read; see Not brought in.')
+    expect(aiSiteImportPlanText(state)).toBe(
+      'Your plan has no page limit, so 3 pages are brought in, in one wave. Only the first 3 pages could be read in the time allowed; the rest are listed under Not brought in as not reached.',
+    )
+    expect(aiSiteImportLeftOutLines(state).map((line) => [line.reason, line.count])).toEqual([
+      ['not-reached', 2],
+      ['blocked', 1],
+    ])
+  })
+
+  it('holds a site whose home page was turned away: the reason, the way through and Check again', () => {
+    const review = { reason: 'blocked' as const, message: 'm', findings: [] }
+    const job = summary({ status: 'needs_review', review })
+    expect(aiSiteImportPhaseOf(job)).toBe('held')
+    expect(aiSiteImportHeldCopy(job)).toEqual({ heading: 'AglynBot was turned away', action: 'Check again', message: 'm' })
+    expect(aiSiteImportHeldCopy(summary({ status: 'needs_review', review: { ...review, reason: 'unreadable' as const } }))).toMatchObject({
+      heading: 'Your home page could not be read',
+      action: 'Check again',
+    })
+    // An inventory that found Home turned away holds the same way, with its own sentence.
+    let id = 0
+    const state = aiSiteImportInventory({
+      domain: 'aglyn.com',
+      siteName: 'Aglyn',
+      ownership: { method: 'dns', provenAt: 1, detail: null },
+      readAt: 'x',
+      pages: [{ ...listed('/contact'), url: 'https://aglyn.com/contact' }],
+      menu: [],
+      skipped: [{ url: 'https://aglyn.com/', reason: 'blocked' }],
+      stoppedBy: null,
+      pageLimit: null,
+      existingPages: 0,
+      mintId: () => `d${++id}`,
+    })
+    const held = summary({ status: 'needs_review', review: { reason: 'wave', message: 'x', findings: [] }, siteImport: state })
+    expect(aiSiteImportPhaseOf(held)).toBe('held')
+    expect(aiSiteImportHeldCopy(held)).toMatchObject({ heading: 'AglynBot was turned away', action: 'Check again' })
+    expect(aiSiteImportHeldCopy(held)?.message).toContain('before it could read your home page')
+    // Any other hold keeps its own words.
+    expect(aiSiteImportHeldCopy(summary({ status: 'needs_review', review: { reason: 'limit', message: 'l', findings: [] } }))).toBeNull()
+  })
+})
+
+describe('each row says what came through', () => {
+  it('names the old page, the photos brought against the photos tried, and the words once the page is in', () => {
+    let state = harbor()
+    state = aiSiteImportWaveStarted(state, 0, 'x', new Map())
+    state = aiSiteImportPhotosIn(state, 'p1', { brought: 2, reused: 1, skipped: 2, assets: [] })
+    state = {
+      ...state,
+      pages: state.pages.map((page) => (page.slot === 'p0' ? { ...page, build: 'arranged' as const, brought: { words: 96 } } : page.slot === 'p1' ? { ...page, build: 'copied' as const } : page)),
+    }
+    const rows = aiSiteImportWaveRows(summary({ status: 'running', items: aiSiteImportLedger(state), siteImport: state }), state.waves[0])
+    expect(rows[0]).toMatchObject({ slot: 'frame', oldPage: 'https://harbor-dental.com/', words: null, build: null })
+    expect(rows[1]).toMatchObject({ oldPage: 'https://harbor-dental.com/', words: '96 of 100 words', build: 'Arranged by Aglyn AI' })
+    expect(rows[2]).toMatchObject({
+      oldPage: 'https://harbor-dental.com/about',
+      words: null,
+      build: 'Copied as it is',
+      photos: '3 of 5 photos: 2 added, 1 already in your media library, 2 could not be brought in',
+    })
+  })
+
+  it('names the copied and arranged pages in a wave’s quote, once the step has chosen', () => {
+    let state = harbor()
+    state = { ...state, pages: state.pages.map((page, index) => ({ ...page, build: index === 0 ? ('copied' as const) : ('arranged' as const) })) }
+    const job = summary({ siteImport: state, items: aiSiteImportLedger(state) })
+    expect(aiSiteImportWaveQuote(job, state.waves[0])).toMatch(/^About \d+ credits \(up to \d+\): 2 pages arranged by Aglyn AI, 1 copied as it is$/)
+    expect(aiSiteImportWaveQuote(summary({ siteImport: harbor(), items: aiSiteImportLedger(harbor()) }), harbor().waves[0])).toBe('About 110 credits (up to 350)')
+  })
+
+  it('offers every remaining wave at once, off by default, only when more than one waits', () => {
+    const state = harbor()
+    const job = summary({ siteImport: state, items: aiSiteImportLedger(state) })
+    expect(aiSiteImportStartAllAction(job)).toEqual({ label: 'Start every remaining wave', quote: 'About 299 credits (up to 1,050)', waves: 2 })
+    const last = aiSiteImportWaveClosed(aiSiteImportWaveStarted(state, 0, 'x', new Map()), 0, 'y')
+    const reviewed = { ...last, waves: last.waves.map((wave) => (wave.index === 1 ? wave : { ...wave, status: 'done' as const })) }
+    expect(aiSiteImportStartAllAction(summary({ siteImport: reviewed, items: aiSiteImportLedger(reviewed) }))).toBeNull()
   })
 })

@@ -179,6 +179,9 @@ jest.mock('@aglyn/aglyn/server', () => ({
     body: await request.json(),
     headers: Object.fromEntries(request.headers),
   }),
+  // A changed logo is told to the plugins after the save answers (AGL-4048);
+  // no plugin handler is under test here.
+  runPluginEventHandlers: async () => undefined,
 }))
 
 jest.mock('@aglyn/tenant-data-admin', () => ({

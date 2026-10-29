@@ -33,6 +33,8 @@ import { serverPluginLoader } from '../../../../utils/server-plugin-loader'
 import CatchAllClient from '../[[...slug]]/catch-all-client'
 import PageBodyBoundary from '../[[...slug]]/page-body-boundary'
 import { getHostCached } from '../../host-data'
+import { sitePreviewViewer } from '../../../../utils/site-preview-viewer'
+import { isHostInPreview } from '@aglyn/aglyn/app-utils/site-preview'
 import SearchResults from './search-results.component'
 
 // Reads ?q= per request, so it can never be statically cached.
@@ -93,6 +95,15 @@ export default async function SearchPage({
   const facetKey = String(sp?.in ?? SEARCH_FACET_ALL).slice(0, 100)
   const hostRes = await getHostCached(host)
   if (hostRes.error || !hostRes.host) notFound()
+  // A site in preview (AGL-4086) answers its search to its team alone: the
+  // results are the site's own words, which the public may not see yet. This
+  // page is dynamic already, so asking who is here costs it no cache.
+  if (
+    isHostInPreview(hostRes.host as never) &&
+    !(await sitePreviewViewer(String(hostRes.host.$id))).admitted
+  ) {
+    notFound()
+  }
   // The org is read for entitlements further down and is render-cached, so
   // asking for it here costs nothing and lets the result dates carry the
   // site's zone (AGL-3237) rather than the server's. The host is passed with

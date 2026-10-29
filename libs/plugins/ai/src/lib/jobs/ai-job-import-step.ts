@@ -29,20 +29,28 @@
  *      current, the day's limit has room, the plan still has room; the
  *      wave's pages are read again, fresh, and a page that became a sign-in
  *      page, went away or is now off limits to AglynBot is left out.
- *   3. THE HEADER AND FOOTER, in the first wave: the layout step's own pass,
- *      linking the wave's pages.
- *   4. EACH PAGE: its photos into the media library (no model, deduped by
- *      source key), then the page step's own passes in the layout language,
- *      told the page's text FENCED as untrusted data.
- *   5. CLOSE THE WAVE: the job waits again, with the wave's pages as drafts
- *      to review, until the person starts the next one. The last wave ends
- *      the job.
+ *   3. THE LOOK, in the first wave (no model, AGL-4084): the theme drawn
+ *      from the owner's own home page, its logo into the library, the site's
+ *      listing from the home page's own words (`ai-site-import-look.ts`).
+ *   4. THE HEADER AND FOOTER, in the first wave: the layout step's own pass,
+ *      with the source's brand as its header draws it, its own header and
+ *      footer words as the footer's facts, and the site's menu order.
+ *   5. EACH PAGE: its photos into the media library (no model, deduped by
+ *      source key), then the page step's own passes, NEVER REWRITTEN
+ *      (AGL-4084, `ai-site-import-document.ts`): a collection's page or a
+ *      long page is copied as it is, every word in order, with no model; a
+ *      main page is arranged, the model placing the source's numbered lines
+ *      and code writing every word as the source has it.
+ *   6. CLOSE THE WAVE: its pages go live in the site's preview (AGL-4084,
+ *      `ai-site-import-publish.ts`), where only its team sees them, and the
+ *      job waits again until the person starts the next wave, or, where the
+ *      person chose "Start every remaining wave", starts it. The last wave
+ *      ends the job.
  *
  * Every page is an item of the job's ledger, so a page that fails on our
  * side gives back its own spend (the machine's `refundBuildCredits`) and the
- * wave goes on. Nothing here publishes: every page is a draft, and the site
- * stays unpublished until a member publishes it, which they can only reach
- * once the import, behind its ownership proof, has written something.
+ * wave goes on. Nothing is ever public by this job: a wave lands only in a
+ * site that is in preview, and a site that is not keeps its pages as drafts.
  *=========================================*/
 
 import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
@@ -52,7 +60,7 @@ import {
   listDomainOwnershipClaims,
   normalizeOwnershipDomain,
 } from '@aglyn/tenant-data-admin/server/domain-ownership'
-import { getOrgForUser } from '@aglyn/tenant-data-admin/server/organizations'
+import { getOrgForUser, memberHasOrgPermission } from '@aglyn/tenant-data-admin/server/organizations'
 import { consumeRateLimit } from '@aglyn/tenant-data-admin/server/rate-limit-store'
 import { isServerReleaseFlagOnForOrg } from '@aglyn/tenant-data-admin/server/release-flags'
 import type { AiBuildPlanCreate, AiBuildPlanScreen } from '../model/ai-build-plan'
@@ -60,6 +68,7 @@ import type { AiJob, AiJobItemLedger, AiJobPlan, AiJobReview } from '../model/ai
 import {
   AI_SITE_IMPORT_DOMAIN_INPUT,
   AI_SITE_IMPORT_FRAME_SLOT,
+  AI_SITE_IMPORT_LABEL_MAX_CHARS,
   AI_SITE_IMPORT_LEFT_OUT_COPY,
   AI_SITE_IMPORT_MAX_PAGES,
   AI_SITE_IMPORT_MIN_WORDS,
@@ -68,12 +77,19 @@ import {
   aiSiteImportItemOpen,
   aiSiteImportLedger,
   aiSiteImportNextWork,
+  aiSiteImportPageBuild,
   aiSiteImportPageSettled,
   aiSiteImportPagesRead,
   aiSiteImportPhotosIn,
+  aiSiteImportReadStops,
+  aiSiteImportReadVerdict,
+  aiSiteImportReadVerdictMessage,
+  aiSiteImportReadVerdictReason,
   aiSiteImportWaveClosed,
   aiSiteImportWaveMessage,
   aiSiteImportWaveStarted,
+  type AiSiteImportBuild,
+  type AiSiteImportHome,
   type AiSiteImportLeftOutReason,
   type AiSiteImportPage,
   type AiSiteImportPageRead,
@@ -84,12 +100,26 @@ import { aiModelForStep } from '../providers/routing'
 import { SITE_IMPORT_RELEASE_FLAG } from '../site-import/site-import-flag'
 import { crawlSiteForImport, type SiteImportCrawlSeams, type SiteImportInventory } from '../site-import/site-import-crawl'
 import { bringInSiteImportPhotos, type SiteImportPhotosDeps } from '../site-import/site-import-images'
-import { siteImportLeftOutReason, siteImportListedPage, siteImportPageRead, siteImportPageWords } from '../site-import/site-import-page'
+import {
+  siteImportHeaderBrand,
+  siteImportLabel,
+  siteImportLeftOutReason,
+  siteImportListedPage,
+  siteImportPageRead,
+  siteImportPageWords,
+  siteImportSiteFacts,
+  siteImportSiteName,
+} from '../site-import/site-import-page'
+import { aiSiteKindFor } from '../model/ai-site-kinds'
+import { AI_LAYOUT_SITE_BRAND_INPUT, AI_LAYOUT_SITE_FACTS_INPUT } from './ai-job-layout-language'
+import { AI_LAYOUT_IMPORTED_SECTIONS_INPUT, aiSiteImportDocLines, type AiSiteImportDocument } from './ai-site-import-document'
+import { aiRunSiteImportLook, type AiSiteImportLookDeps } from './ai-site-import-look'
+import { aiPublishImportedWave } from './ai-site-import-publish'
 import { fileSiteImportReview } from '../site-import/site-import-review'
 import { aiUnitErrorRetryable, aiUnitFailure, aiUnitSpend } from './ai-build-unit-outcome'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
 import { AI_JOB_STEP_OVERHEAD_MS } from './ai-job-budget'
-import { readAiScreenRoom } from './ai-job-drafts'
+import { readAiDraftNodes, readAiScreenRoom } from './ai-job-drafts'
 import { aiUnspentOutcome } from './ai-job-generation'
 import { AI_LAYOUT_PAGE_PHOTOS_INPUT } from './ai-layout-owner-photos'
 import { AI_LAYOUT_SITE_PAGES_INPUT, AI_LAYOUT_SITE_PAGES_MAX, type AiLayoutSitePage } from './ai-job-layout-site-pages'
@@ -159,7 +189,8 @@ export const AI_SITE_IMPORT_COPY = {
   pageUnavailable: 'Pages cannot be built here right now.',
   pageNotWritten: 'This page could not be written from its old page. Its spend is given back.',
   plan: 'Bringing an existing site in is included on every paid plan.',
-  role: 'Only the workspace owner or an admin can bring a site in.',
+  /** Names "Bring a site in" (`ai.import`, AGL-4047), never a role. */
+  role: 'Your role does not include "Bring a site in" — ask an organization admin',
 } as const
 
 /*------------------------------------------
@@ -188,6 +219,13 @@ export interface AiSiteImportStepDeps {
   pageWritten?: typeof aiSitePageWritten
   mintId?: () => string
   clock?: () => number
+  /** The first wave's look pass (AGL-4084), and what it reads and writes through. */
+  look?: typeof aiRunSiteImportLook
+  lookDeps?: AiSiteImportLookDeps
+  /** A closed wave's pages into the site's preview (AGL-4084). */
+  publishWave?: typeof aiPublishImportedWave
+  /** The words a page that came in shows, read off its draft (AGL-4084). */
+  draftWords?: (firestore: FirebaseFirestore.Firestore, hostId: string, draftId: string) => Promise<number | null>
 }
 
 async function readOwnership(orgId: string, domain: string): Promise<AiSiteImportOwnership | null> {
@@ -252,7 +290,46 @@ export function aiSiteImportLinkedPages(
   return [...pages.filter((page) => page.slug === '/'), ...pages.filter((page) => page.slug !== '/')].slice(0, AI_LAYOUT_SITE_PAGES_MAX)
 }
 
-/** The header and footer's job: a layout of the site's name, linking the wave's pages, in the layout language. */
+/**
+ * How a page is built (AGL-4084): a collection's page, or a long page, is
+ * copied as it is; a main page is arranged. The home page is always
+ * arranged, however long: it is the site's front door, never a document.
+ */
+export function aiSiteImportBuildOf(page: Pick<AiSiteImportPage, 'group' | 'words' | 'slug'>): AiSiteImportBuild {
+  return page.group === 'main' && page.slug === '/' ? 'arranged' : aiSiteImportPageBuild(page)
+}
+
+/**
+ * The name the header and footer carry (AGL-4084): the site's own name where
+ * it is the name the person gave Create site but for its case or its
+ * punctuation, else the person's.
+ */
+export function aiSiteImportBrandName(given: string, own: string): string {
+  const key = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '')
+  return own && key(own) && key(own) === key(given) ? own : given
+}
+
+/** The design inputs every unit of an import is drawn with: the kind of site its own words say, and its look (AGL-4084). */
+function aiSiteImportDesignInputs(state: AiSiteImportState): Record<string, unknown> {
+  const home = state.home
+  const kind = home ? aiSiteKindFor(`${home.siteName} ${home.description}`) : null
+  const look = state.look
+  return {
+    ...(kind ? { siteKind: kind.id } : {}),
+    ...(look && look.seed !== null
+      ? {
+          siteStyle: {
+            seed: look.seed,
+            ...(look.style?.headerAlign ? { headerAlign: look.style.headerAlign } : {}),
+            ...(look.style?.rhythm ? { rhythm: look.style.rhythm } : {}),
+            ...(look.style?.motion ? { motion: look.style.motion } : {}),
+          },
+        }
+      : {}),
+  }
+}
+
+/** The header and footer's job: a layout of the site's brand, linking the wave's pages, in the layout language. */
 export function aiSiteImportFrameJob(job: AiJob, state: AiSiteImportState, wave: AiSiteImportWave, items: readonly AiJobItemLedger[]): AiJob {
   const draftId = state.frame?.draftId ?? `${job.$id}-${AI_SITE_IMPORT_FRAME_SLOT}`
   const creation: AiBuildPlanCreate = {
@@ -263,6 +340,10 @@ export function aiSiteImportFrameJob(job: AiJob, state: AiSiteImportState, wave:
     fields: ['header', 'nav', 'main', 'footer'],
     id: draftId,
   }
+  const home = state.home ?? null
+  const logo = state.look?.logo ?? null
+  // The brand as the source's header draws it; with no logo in the library, its name.
+  const brand = home ? { ...(logo && home.brand.kind !== 'name-only' ? { logo: { src: logo.src } } : {}), name: !logo || home.brand.kind !== 'logo-only' } : null
   return {
     ...job,
     $id: draftId,
@@ -274,23 +355,47 @@ export function aiSiteImportFrameJob(job: AiJob, state: AiSiteImportState, wave:
     plan: unitPlan(job, { create: [creation] }),
     inputs: {
       originJobId: job.$id,
-      businessName: state.siteName,
+      businessName: aiSiteImportBrandName(state.siteName, home?.siteName ?? ''),
       [AI_LAYOUT_LANGUAGE_INPUT]: true,
       [AI_LAYOUT_SITE_PAGES_INPUT]: aiSiteImportLinkedPages(state, items, wave.index),
+      ...aiSiteImportDesignInputs(state),
+      ...(brand ? { [AI_LAYOUT_SITE_BRAND_INPUT]: brand } : {}),
+      // The source's own header and footer words, fenced where the prompt shows them (AGL-4084).
+      ...(home ? { [AI_LAYOUT_SITE_FACTS_INPUT]: { url: home.url, description: home.description, lines: home.facts.lines } } : {}),
     },
-    brief: `Build the header and footer of “${state.siteName}”, a website brought in from ${state.domain}.`.slice(0, AI_JOB_BRIEF_MAX_CHARS),
+    // Never words a footer could print as the site's own (AGL-4084): the prompt shows the source's.
+    brief: `The header and footer of the site “${state.siteName}”.`.slice(0, AI_JOB_BRIEF_MAX_CHARS),
   }
 }
 
-/** One page's job: a page job's plan of one screen, its sections from the old page's headings, its text fenced. */
+/** The page brought in, as its page job carries it: its lines, its photos, and the pages its links may go to (AGL-4084). */
+export function aiSiteImportDocumentFor(state: AiSiteImportState, page: AiSiteImportPage): AiSiteImportDocument | null {
+  const blocks = page.read?.blocks
+  if (!blocks?.length) return null
+  return {
+    build: page.build ?? aiSiteImportBuildOf(page),
+    title: page.title,
+    url: page.url,
+    blocks,
+    photos: page.photos?.assets ?? [],
+    // Home's own links are words: a link home says home, which the source's words may not.
+    links: state.pages.filter((entry) => entry.slug !== '/' && !entry.refused).map((entry) => ({ path: entry.path.replace(/\/+$/, '') || '/', id: entry.draftId })),
+    origins: [`https://${state.domain}`, `https://www.${state.domain.replace(/^www\./, '')}`],
+  }
+}
+
+/** One page's job: a page job's plan of one screen, its sections the old page's own, its words carried as they are. */
 export function aiSiteImportPageJob(
   job: AiJob,
   state: AiSiteImportState,
   page: AiSiteImportPage,
   items: readonly AiJobItemLedger[],
 ): AiJob {
-  const sections = (page.read?.sections.length ? page.read.sections : ['Introduction']).map((name) => ({
-    name,
+  const doc = aiSiteImportDocumentFor(state, page)
+  // The page's sections are the source's own (AGL-4084): its opening, then one at each second-level heading.
+  const names = doc ? aiSiteImportDocLines(doc.blocks, doc.title).sections.map((section) => section.name) : page.read?.sections ?? []
+  const sections = (names.length ? names : ['Introduction']).map((name) => ({
+    name: name.slice(0, AI_SITE_IMPORT_LABEL_MAX_CHARS),
     uses: [],
     items: 0,
   }))
@@ -321,14 +426,61 @@ export function aiSiteImportPageJob(
     plan: unitPlan(job, { screens: [screen] }),
     inputs: {
       originJobId: job.$id,
-      businessName: state.siteName,
+      businessName: aiSiteImportBrandName(state.siteName, state.home?.siteName ?? ''),
       [AI_LAYOUT_LANGUAGE_INPUT]: true,
       [AI_LAYOUT_SITE_PAGES_INPUT]: aiSiteImportLinkedPages(state, items, page.wave),
-      [AI_LAYOUT_IMPORTED_PAGE_INPUT]: { url: page.url, text: page.read?.text ?? '' },
+      ...aiSiteImportDesignInputs(state),
+      // Every word as the source has it (AGL-4084); a read from before it was kept is the text the old page step had.
+      ...(doc
+        ? { [AI_LAYOUT_IMPORTED_SECTIONS_INPUT]: doc }
+        : { [AI_LAYOUT_IMPORTED_PAGE_INPUT]: { url: page.url, text: page.read?.text ?? '' } }),
       [AI_LAYOUT_PAGE_PHOTOS_INPUT]: page.photos?.assets ?? [],
       ...(others.length ? { [AI_STOCK_PHOTO_PAGES_INPUT]: others } : {}),
     },
     brief: `Bring in the page “${page.title}” of ${state.domain} as a page of “${state.siteName}”.`.slice(0, AI_JOB_BRIEF_MAX_CHARS),
+  }
+}
+
+/** What the home page says of the site as a whole (AGL-4084), kept for the look, the header and footer and the listing. */
+export function aiSiteImportHomeOf(crawled: Pick<SiteImportInventory, 'pages'>): AiSiteImportHome | null {
+  const page = crawled.pages.find((entry) => entry.foundBy === 'home') ?? crawled.pages.find((entry) => (entry.path.replace(/\/+$/, '') || '/') === '/')
+  if (!page) return null
+  const brand = siteImportHeaderBrand(page)
+  const facts = siteImportSiteFacts(page)
+  const lines: string[] = []
+  let chars = 0
+  for (const block of [...facts.header, ...facts.footer]) {
+    if (block.kind === 'image' || (block.kind === 'link' && block.inline)) continue
+    const text = block.text.replace(/\s+/g, ' ').trim()
+    const line = block.kind === 'link' && /^(?:mailto|tel):/i.test(block.href) ? text : block.kind === 'link' && facts.social.includes(block.href) ? `${text}: ${block.href}` : text
+    if (!line || lines.includes(line) || chars + line.length > 3_000 || lines.length >= 60) continue
+    lines.push(line)
+    chars += line.length
+  }
+  // And what the site states of itself in its structured data, as written: its address, phone and email.
+  const organization = facts.organization
+  for (const line of [organization?.address, organization?.telephone, organization?.email]) {
+    const text = (line ?? '').replace(/\s+/g, ' ').trim()
+    if (text && !lines.some((entry) => entry.includes(text))) lines.push(text)
+  }
+  return {
+    url: page.url,
+    title: siteImportLabel(page.title ?? '', 160),
+    description: siteImportLabel(page.description ?? '', 320),
+    ogImage: page.ogImage ?? null,
+    siteName: siteImportSiteName(page),
+    brand: {
+      kind: brand.kind,
+      text: brand.text,
+      logo: brand.logo ? { url: brand.logo.url, alt: brand.logo.alt, type: brand.logo.type } : null,
+    },
+    facts: {
+      lines,
+      emails: facts.emails,
+      phones: facts.phones,
+      social: facts.social,
+      address: facts.organization?.address ?? '',
+    },
   }
 }
 
@@ -373,6 +525,51 @@ function withLeftOutRows(
   })
 }
 
+/**
+ * The state with how each page is built (AGL-4084): from its main region's
+ * words as the inventory listed them, and again from a wave's fresh read,
+ * which is what the page is built from.
+ */
+export function aiSiteImportWithBuilds(state: AiSiteImportState, mainWords?: ReadonlyMap<string, number>): AiSiteImportState {
+  return {
+    ...state,
+    pages: state.pages.map((page) => {
+      const words = page.read?.words ?? mainWords?.get(page.url) ?? page.words
+      const build = aiSiteImportBuildOf({ ...page, words })
+      return page.build === build ? page : { ...page, build }
+    }),
+  }
+}
+
+/** The words a stored page shows (AGL-4084): its text, its list lines and its buttons. */
+export function aiSiteImportShownWords(nodes: Readonly<Record<string, unknown>>): number {
+  let words = 0
+  for (const node of Object.values(nodes)) {
+    const props = (node as { props?: Record<string, unknown> } | null)?.props ?? {}
+    for (const key of ['children', 'primary', 'secondary']) {
+      const value = props[key]
+      if (typeof value === 'string') words += (value.match(/[\p{L}\p{N}]+/gu) ?? []).length
+    }
+  }
+  return words
+}
+
+async function readDraftWords(firestore: FirebaseFirestore.Firestore, hostId: string, draftId: string): Promise<number | null> {
+  const stored = await readAiDraftNodes(firestore, { kind: 'screen', hostId, id: draftId })
+  return stored ? aiSiteImportShownWords(stored.nodes as unknown as Record<string, unknown>) : null
+}
+
+/**
+ * The review a wave that went live in the site's preview parks on (AGL-4084):
+ * where its pages are now, who sees them, and the next wave's start.
+ */
+export function aiSiteImportPreviewMessage(state: AiSiteImportState, wave: Pick<AiSiteImportWave, 'label'>, published: number): string {
+  const pages = `${published.toLocaleString('en-US')} ${published === 1 ? 'page is' : 'pages are'}`
+  const lead = `${wave.label} is in your site’s preview: ${pages} on your site, where only you and your team can see ${published === 1 ? 'it' : 'them'}.`
+  const next = state.waves.find((entry) => entry.status === 'waiting')
+  return next ? `${lead} Start ${next.label} when you are ready.` : lead
+}
+
 /** Whether every row of the wave is settled, its header and footer included. */
 function waveSettled(state: AiSiteImportState, wave: AiSiteImportWave, items: readonly AiJobItemLedger[]): boolean {
   if (wave.frame && state.frame && aiSiteImportItemOpen(items, AI_SITE_IMPORT_FRAME_SLOT)) return false
@@ -392,6 +589,9 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
   const pageWritten = deps.pageWritten ?? aiSitePageWritten
   const mintId = deps.mintId ?? createResourceUid
   const clock = deps.clock ?? Date.now
+  const runLook = deps.look ?? aiRunSiteImportLook
+  const publishWave = deps.publishWave ?? aiPublishImportedWave
+  const draftWordsOf = deps.draftWords ?? readDraftWords
 
   return async (context: AiJobStepContext): Promise<AiJobStepOutcome> => {
     const { job, firestore, now, signal } = context
@@ -417,22 +617,44 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
     ): Promise<AiJobStepOutcome> => {
       if (!waveSettled(next, wave, ledger)) return { ...outcome, siteImport: next, continue: true }
       const closed = aiSiteImportWaveClosed(next, wave.index, nowIso)
+      // The wave's pages go live in the site's preview, where only its team sees them (AGL-4084).
+      let sitePublish = null as Awaited<ReturnType<typeof publishWave>>
+      try {
+        sitePublish = await publishWave(firestore, {
+          job,
+          state: closed,
+          wave,
+          items: ledger,
+          outputs: [...(job.outputs ?? []), ...(outcome.outputs ?? [])],
+          now,
+        })
+      } catch (error) {
+        // A publish that failed leaves the pages drafts; the wave is still in.
+        console.error('ai site import: a wave could not be published into the preview', { orgId: job.orgId, jobId: job.$id, wave: wave.index, error })
+      }
+      const published = sitePublish ? { sitePublish } : {}
       await review('wave-finished', closed, ledger, wave.index)
       const waiting = closed.waves.find((entry) => entry.index === wave.index)?.status === 'review'
-      return waiting
-        ? { ...outcome, siteImport: closed, review: waveReview(aiSiteImportWaveMessage(closed, ledger)) }
-        : { ...outcome, siteImport: closed }
+      if (waiting) {
+        const message = sitePublish?.published.length ? aiSiteImportPreviewMessage(closed, wave, sitePublish.published.length) : aiSiteImportWaveMessage(closed, ledger)
+        return { ...outcome, ...published, siteImport: closed, review: waveReview(message) }
+      }
+      // "Start every remaining wave" (AGL-4083): the next wave starts with no review between them.
+      const more = closed.autoContinue === true && closed.waves.some((entry) => entry.status === 'waiting')
+      return { ...outcome, ...published, siteImport: closed, ...(more ? { continue: true } : {}) }
     }
 
     /** The proof, the flag and the day's limit, asked before anything is read. */
-    const gate = async (): Promise<{ ownership: AiSiteImportOwnership } | AiJobStepOutcome> => {
+    const gate = async (counted = true): Promise<{ ownership: AiSiteImportOwnership } | AiJobStepOutcome> => {
       if (!(await flagOn(job.orgId))) return unspent({ review: waveReview(AI_SITE_IMPORT_COPY.unavailable) })
       const ownership = await ownershipOf(job.orgId, domain)
       if (!ownership?.current) {
         return unspent({ review: { reason: 'ownership', message: AI_SITE_IMPORT_COPY.ownership(domain), findings: [] } })
       }
-      const window = await rateLimit(siteImportRateKey(job.orgId), { limit: SITE_IMPORT_WAVES_PER_ORG_PER_DAY, windowMs: DAY_MS })
-      if (!window.allowed) return unspent({ review: { reason: 'limit', message: AI_SITE_IMPORT_COPY.limit, findings: [] } })
+      if (counted) {
+        const window = await rateLimit(siteImportRateKey(job.orgId), { limit: SITE_IMPORT_WAVES_PER_ORG_PER_DAY, windowMs: DAY_MS })
+        if (!window.allowed) return unspent({ review: { reason: 'limit', message: AI_SITE_IMPORT_COPY.limit, findings: [] } })
+      }
       return { ownership }
     }
 
@@ -456,11 +678,8 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
       if (crawled.refused) return unspent({ failure: AI_SITE_IMPORT_COPY.badDomain })
       if (crawled.stoppedBy === 'robots-unreachable') return unspent({ review: waveReview(AI_SITE_IMPORT_COPY.robots(domain)) })
       const skipped = crawled.skipped.map((entry) => ({ url: entry.url, reason: siteImportLeftOutReason(entry.reason, entry.status) }))
-      if (!crawled.pages.length) {
-        // A site its bot protection keeps AglynBot off is up: say what lets AglynBot in, not to check that it is.
-        const blocked = skipped.some((entry) => entry.reason === 'blocked')
-        return unspent({ review: waveReview(AI_SITE_IMPORT_COPY[blocked ? 'blocked' : 'nothing'](domain)) })
-      }
+      // Home first (AGL-4083): a site read without its home page plans nothing, quotes nothing and spends nothing.
+      const verdict = aiSiteImportReadVerdict(crawled)
       const inventory = aiSiteImportInventory({
         domain,
         siteName: await siteNameOf(firestore, hostId),
@@ -473,11 +692,29 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
         stoppedBy: crawled.stoppedBy,
         pageLimit: room.limit,
         existingPages: room.used,
+        verdict,
         mintId,
       })
-      const ledger = aiSiteImportLedger(inventory)
-      const reviewId = await review('read', inventory, ledger)
-      const next = { ...inventory, reviewId }
+      if (aiSiteImportReadStops(inventory.verdict)) {
+        // Check again is the read again: the job waits, with why and what to do, and no ledger.
+        return unspent({
+          items: [],
+          siteImport: inventory,
+          review: {
+            reason: aiSiteImportReadVerdictReason(inventory.verdict) ?? 'unreadable',
+            message: aiSiteImportReadVerdictMessage(inventory.verdict, domain) ?? AI_SITE_IMPORT_COPY.nothing(domain),
+            findings: [],
+          },
+        })
+      }
+      // How each page is built, from its main region's own words (AGL-4084), and what the home page says of the site.
+      const mainWords = new Map(
+        crawled.pages.map((page) => [page.url, siteImportPageWords({ title: '', blocks: page.blocks.filter((block) => block.region === 'main') })]),
+      )
+      const planned = { ...aiSiteImportWithBuilds(inventory, mainWords), home: aiSiteImportHomeOf(crawled) }
+      const ledger = aiSiteImportLedger(planned)
+      const reviewId = await review('read', planned, ledger)
+      const next = { ...planned, reviewId }
       return unspent({ items: ledger, siteImport: next, review: waveReview(aiSiteImportWaveMessage(next, ledger)) })
     }
 
@@ -486,7 +723,9 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
 
     // ── 2. Start a wave ──
     if (work.kind === 'start-wave') {
-      const passed = await gate()
+      // A wave "Start every remaining wave" started after the one the person did is that same start.
+      const counted = !(state.autoContinue && typeof state.autoContinueFrom === 'number' && work.wave.index > state.autoContinueFrom)
+      const passed = await gate(counted)
       if (!('ownership' in passed)) return passed
       const wave = work.wave
       const pages = wave.slots
@@ -532,7 +771,7 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
             : row,
         )
       }
-      const started = aiSiteImportWaveStarted(state, wave.index, nowIso, reads)
+      const started = aiSiteImportWithBuilds(aiSiteImportWaveStarted(state, wave.index, nowIso, reads))
       await review('wave-started', started, ledger, wave.index)
       const running = started.waves.find((entry) => entry.index === wave.index) as AiSiteImportWave
       return closing(started, ledger, running, unspent({ items: ledger }))
@@ -555,10 +794,35 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
       if (crawled.stoppedBy === 'robots-unreachable') return unspent({ review: waveReview(AI_SITE_IMPORT_COPY.robots(domain)) })
       const reads = siteImportWaveReads(work.pages, crawled, nowIso, { cutShort: crawled.stoppedBy === 'time' })
       const ledger = withLeftOutRows(items, reads)
-      return closing(aiSiteImportPagesRead(state, reads), ledger, wave, unspent({ items: ledger }))
+      return closing(aiSiteImportWithBuilds(aiSiteImportPagesRead(state, reads)), ledger, wave, unspent({ items: ledger }))
     }
 
-    // ── 3. The header and footer ──
+    // ── 3. The look, before anything of the first wave is built (AGL-4084): no model ──
+    const firstWave = state.waves[0]?.index === wave.index
+    if (firstWave && !state.look && state.home && (work.kind === 'frame' || work.kind === 'images' || work.kind === 'page')) {
+      const look = await runLook(
+        {
+          firestore,
+          hostId,
+          orgId: job.orgId,
+          uid: job.createdBy,
+          jobId: job.$id,
+          domain,
+          home: state.home,
+          at: nowIso,
+          ...(signal ? { signal } : {}),
+        },
+        {
+          ingest: ingestOf(),
+          ...(deps.crawlSeams?.fetch ? { fetch: deps.crawlSeams.fetch } : {}),
+          ...(deps.crawlSeams?.headersFor ? { headersFor: deps.crawlSeams.headersFor } : {}),
+          ...deps.lookDeps,
+        },
+      )
+      return unspent({ siteImport: { ...state, look }, continue: true })
+    }
+
+    // ── 4. The header and footer ──
     if (work.kind === 'frame') {
       const runner = runnerFor('layout')
       if (!runner) {
@@ -652,7 +916,13 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
       } else {
         item = { slot, status: 'succeeded', outputs: spent.outputs.map((output) => output.id) }
       }
-      const settledState = page ? aiSiteImportPageSettled(current, slot) : current
+      // What came through, for the row that says it beside what the old page had (AGL-4084).
+      let withBrought = current
+      if (page && item.status === 'succeeded') {
+        const words = await draftWordsOf(firestore, hostId as string, page.draftId).catch(() => null)
+        if (words !== null) withBrought = { ...current, pages: current.pages.map((entry) => (entry.slot === slot ? { ...entry, brought: { words } } : entry)) }
+      }
+      const settledState = page ? aiSiteImportPageSettled(withBrought, slot) : withBrought
       return closing(
         settledState,
         aiApplyJobItemRecord(items, item, 0, now),
@@ -738,6 +1008,22 @@ function siteImportReadOrEmpty(page: SiteImportInventory['pages'][number], at: s
   return siteImportPageRead(page, at)
 }
 
+/**
+ * "Start every remaining wave" (AGL-4083, wired by AGL-4084), as the resume
+ * door writes it onto an import waiting to start its next wave: every
+ * remaining wave starts after the one before it closes, with no review
+ * between them, and the person's one start is the one the day's limit
+ * counts. `null` when the job is not an import waiting for a wave.
+ */
+export function aiSiteImportStartAllUpdate(
+  job: Pick<AiJob, 'kind' | 'status' | 'review' | 'siteImport'>,
+): { 'siteImport.autoContinue': true; 'siteImport.autoContinueFrom': number } | null {
+  if (job.kind !== 'import' || job.status !== 'needs_review' || job.review?.reason !== 'wave') return null
+  const next = job.siteImport?.waves.find((wave) => wave.status === 'waiting')
+  if (!next) return null
+  return { 'siteImport.autoContinue': true, 'siteImport.autoContinueFrom': next.index }
+}
+
 /*------------------------------------------
  * Admission, and registration
  *-----------------------------------------*/
@@ -745,7 +1031,8 @@ function siteImportReadOrEmpty(page: SiteImportInventory['pages'][number], at: s
 export interface AiSiteImportAdmissionDeps {
   releaseFlagOn?: (orgId: string) => Promise<boolean>
   ownership?: (orgId: string, domain: string) => Promise<AiSiteImportOwnership | null>
-  memberRole?: (uid: string, orgId: string) => Promise<string | null>
+  /** "Bring a site in" (`ai.import`, AGL-4047) for this member; specs hand in a double. */
+  holdsSiteImport?: (uid: string, orgId: string) => Promise<boolean>
 }
 
 /**
@@ -757,15 +1044,21 @@ export interface AiSiteImportAdmissionDeps {
 export function createAiSiteImportAdmission(deps: AiSiteImportAdmissionDeps = {}): AiJobAdmission {
   const flagOn = deps.releaseFlagOn ?? ((orgId: string) => isServerReleaseFlagOnForOrg(SITE_IMPORT_RELEASE_FLAG, orgId))
   const ownershipOf = deps.ownership ?? readOwnership
-  const memberRole =
-    deps.memberRole ??
-    (async (uid: string, orgId: string) => (await getOrgForUser(uid, orgId))?.member?.role ?? null)
+  const holdsSiteImport =
+    deps.holdsSiteImport ??
+    (async (uid: string, orgId: string) => {
+      const member = (await getOrgForUser(uid, orgId))?.member ?? null
+      return Boolean(member) && (await memberHasOrgPermission(orgId, member, 'ai.import'))
+    })
   return async (context) => {
     if (!(await flagOn(context.orgId))) return { status: 404, error: 'Not found' }
     if (!context.hostId && !context.siteToCome) return { status: 400, error: AI_SITE_IMPORT_COPY.noSite }
     if (resolveEffectivePlan(context.org as never) === 'free') return { status: 403, error: AI_SITE_IMPORT_COPY.plan }
-    const role = context.uid ? await memberRole(context.uid, context.orgId) : null
-    if (role !== 'owner' && role !== 'admin') return { status: 403, error: AI_SITE_IMPORT_COPY.role }
+    // "Bring a site in" (`ai.import`, AGL-4047), whose default is the owner
+    // and admin this asked for.
+    if (!context.uid || !(await holdsSiteImport(context.uid, context.orgId))) {
+      return { status: 403, error: AI_SITE_IMPORT_COPY.role }
+    }
     const { domain, error } = normalizeOwnershipDomain(String(context.inputs[AI_SITE_IMPORT_DOMAIN_INPUT] ?? ''))
     if (!domain) return { status: 400, error: error ?? AI_SITE_IMPORT_COPY.badDomain }
     const ownership = await ownershipOf(context.orgId, domain)

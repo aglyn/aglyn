@@ -16,17 +16,8 @@
  */
 
 import { createHash } from 'node:crypto'
-import { parseMediaCdnScope, type MediaCdnScope } from '@aglyn/aglyn/app-utils/media-cdn-scope'
-import {
-  formatMediaRef,
-  isMediaCdnPath,
-  MEDIA_CDN_ROUTE,
-  mediaRefFromStorageUrl,
-  parseMediaRef,
-  resolveMediaSrc,
-} from '@aglyn/aglyn/app-utils/media-ref'
+import { formatMediaRef, resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import { checkEntitlement, resolveBrandingProfile } from '@aglyn/aglyn/app-utils/plan-entitlements'
-import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import type { PluginEventPayloads } from '@aglyn/aglyn/plugin-manager/plugin-events'
 import type { PluginJobHostGate } from '@aglyn/aglyn/server'
@@ -55,6 +46,12 @@ import {
 } from './pos-reader-splash-render'
 import { POS_STRIPE_VERSION, posTerminalAvailable } from './pos-stripe'
 import { savePosReaderConfiguration } from './pos-terminal'
+import {
+  locateImageSource,
+  locateMediaImage,
+  readImageSourceBytes,
+  type LocatedImageSource,
+} from './site-image-source'
 
 /*==========================================
  * A STORE'S CARD READERS SHOW ITS START-UP SCREEN (AGL-4048).
@@ -167,127 +164,17 @@ const digest = (value: string | Buffer) => createHash('sha256').update(value).di
 const cleanString = (value: unknown): string => (typeof value === 'string' ? value.trim() : '')
 
 /*==========================================
- * READING A SOURCE IMAGE.
- *
- * A media value is read from STORAGE, never fetched, when it names this
- * site's library or its org's: the document must be live, not private,
- * visible to this site, its scope not locked and the asset not quarantined,
- * and the object path inside the scope's media prefix (the rules the media
- * CDN serves by). An https address outside the libraries is fetched only from
- * a public address, pinned against DNS rebinding, with no redirects, a
- * timeout and a size cap.
+ * READING A SOURCE IMAGE: `site-image-source.ts`, with the reader screen's
+ * size cap.
  *=========================================*/
 
-interface LocatedAsset {
-  kind: 'asset'
-  scope: MediaCdnScope
-  scopeSegment: string
-  mediaId: string
-  doc: Record<string, unknown>
-  /** What changes when the asset's bytes do. */
-  version: string
-}
+const locateMediaAsset = (scopeSegment: string, mediaId: string, hostId: string, orgId: string) =>
+  locateMediaImage(scopeSegment, mediaId, hostId, orgId, POS_READER_SPLASH_SOURCE_MAX_BYTES)
 
-interface LocatedUrl {
-  kind: 'url'
-  url: string
-  version: string
-}
+const locateSource = (value: string, hostId: string, orgId: string) =>
+  locateImageSource(value, hostId, orgId, POS_READER_SPLASH_SOURCE_MAX_BYTES)
 
-type LocatedSource = LocatedAsset | LocatedUrl
-
-async function locateMediaAsset(
-  scopeSegment: string,
-  mediaId: string,
-  hostId: string,
-  orgId: string,
-): Promise<LocatedAsset | null> {
-  const scope = parseMediaCdnScope(scopeSegment)
-  if (!scope || !/^[A-Za-z0-9_-]{1,64}$/.test(mediaId)) return null
-  const owned = scope.isOrg ? scope.scopeId === orgId : scope.scopeId === hostId
-  if (!owned) return null
-  const snapshot = await firestore()
-    .collection(scope.isOrg ? 'orgs' : 'hosts')
-    .doc(scope.scopeId)
-    .collection('media')
-    .doc(mediaId)
-    .get()
-  const doc = (snapshot.exists ? snapshot.data() : null) as Record<string, unknown> | null
-  if (!doc || doc['deletedAt'] || doc['private']) return null
-  if (scope.isOrg && !visibleToHost(doc['visibleTo'] as string[] | undefined, hostId)) return null
-  if (!/^image\//.test(String(doc['contentType'] ?? ''))) return null
-  if (typeof doc['sizeBytes'] === 'number' && doc['sizeBytes'] > POS_READER_SPLASH_SOURCE_MAX_BYTES) return null
-  const version =
-    cleanString(doc['contentSha256']) ||
-    cleanString(doc['contentHash']) ||
-    String(doc['updatedAtMs'] ?? doc['sizeBytes'] ?? '')
-  return { kind: 'asset', scope, scopeSegment, mediaId, doc, version }
-}
-
-/** Where a stored logo or image value lives, or null when it cannot be read. */
-async function locateSource(value: string, hostId: string, orgId: string): Promise<LocatedSource | null> {
-  const stored = parseMediaRef(value) ? value : mediaRefFromStorageUrl(value)
-  const ref = stored ? parseMediaRef(stored) : null
-  if (ref) return locateMediaAsset(ref.scope, ref.mediaId, hostId, orgId)
-  if (isMediaCdnPath(value)) {
-    const rest = value.slice(`${MEDIA_CDN_ROUTE}/`.length).split('?')[0]
-    const slash = rest.indexOf('/')
-    if (slash <= 0) return null
-    return locateMediaAsset(rest.slice(0, slash), rest.slice(slash + 1), hostId, orgId)
-  }
-  // `isMediaCdnPath` narrows a string it refuses to `never`; the value is still the string.
-  const address: string = value as string
-  if (/^https:\/\//.test(address) && address.length <= 2000) return { kind: 'url', url: address, version: address }
-  return null
-}
-
-async function readAssetBytes(asset: LocatedAsset): Promise<Buffer | null> {
-  const { mediaCdnServeBlock, mediaStoragePathInScope } = await import('./pos-reader-splash-server')
-  const blocked = await mediaCdnServeBlock(asset.scope, {
-    contentSha256: typeof asset.doc['contentSha256'] === 'string' ? (asset.doc['contentSha256'] as string) : undefined,
-    contentHash: typeof asset.doc['contentHash'] === 'string' ? (asset.doc['contentHash'] as string) : undefined,
-    scopeSegment: asset.scopeSegment,
-    mediaId: asset.mediaId,
-  })
-  if (blocked) return null
-  const objectPath = mediaStoragePathInScope({
-    storagePath: asset.doc['storagePath'],
-    base: `${asset.scope.isOrg ? 'orgs' : 'hosts'}/${asset.scope.scopeId}`,
-    mediaId: asset.mediaId,
-  })
-  const [buffer] = (await posReaderSplashBucket().file(objectPath).download()) as [Buffer]
-  return buffer.length > POS_READER_SPLASH_SOURCE_MAX_BYTES ? null : buffer
-}
-
-const FETCH_TIMEOUT_MS = 8000
-
-async function fetchPublicImage(url: string): Promise<Buffer | null> {
-  const { createPinnedDispatcher, resolvePublicIp } = await import('./pos-reader-splash-server')
-  const pinnedIp = await resolvePublicIp(new URL(url).hostname)
-  if (!pinnedIp) return null
-  const dispatcher = createPinnedDispatcher(pinnedIp)
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
-  try {
-    const init = { redirect: 'error' as const, signal: controller.signal, dispatcher }
-    const response = await fetch(url, init as RequestInit)
-    if (!response.ok) return null
-    if (!/^image\//.test(response.headers.get('content-type') ?? '')) return null
-    const declared = Number(response.headers.get('content-length') ?? 0)
-    if (declared > POS_READER_SPLASH_SOURCE_MAX_BYTES) return null
-    const buffer = Buffer.from(await response.arrayBuffer())
-    return buffer.length > POS_READER_SPLASH_SOURCE_MAX_BYTES ? null : buffer
-  } catch {
-    return null
-  } finally {
-    clearTimeout(timeout)
-    ;(dispatcher as { close?: () => Promise<void> }).close?.().catch(() => undefined)
-  }
-}
-
-async function readSourceBytes(source: LocatedSource): Promise<Buffer | null> {
-  return source.kind === 'asset' ? readAssetBytes(source) : fetchPublicImage(source.url)
-}
+const readSourceBytes = (source: LocatedImageSource) => readImageSourceBytes(source, POS_READER_SPLASH_SOURCE_MAX_BYTES)
 
 /*==========================================
  * WHAT A STORE SHOWS.
@@ -306,7 +193,7 @@ export function workspaceLogoValue(org: Record<string, any> | null, whiteLabel: 
 
 export type SplashSource =
   | { mode: 'platform'; doc: PlatformSplashDoc }
-  | { mode: 'logo' | 'artwork'; located: LocatedSource }
+  | { mode: 'logo' | 'artwork'; located: LocatedImageSource }
 
 export interface PosReaderSplashPlan {
   choice: PosReaderSplashChoice | null

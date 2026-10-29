@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import { resolveBrandingProfile, validateNewPassword } from '@aglyn/aglyn/server'
 import { hostPublicOrigin } from '@aglyn/aglyn/server'
@@ -53,8 +54,10 @@ import {
  * account exists, so hiding failures would only leave them guessing whether
  * their click did anything. Every outcome here is reported honestly.
  *
- * Auth is the console id-token check `hosts/members` uses (site admin via
- * the `memberRoles` projection, or an org role carrying manageMembers) — NOT
+ * Auth is the console id-token check `hosts/members` uses ("Manage site
+ * settings" here, `site.manage` (AGL-4047), whose preset is the site admin
+ * the `memberRoles` projection named before, or an org role carrying
+ * manageMembers) — NOT
  * the visitor session cookie the rest of the membership endpoints take. A
  * console route, so it is registered on the console's API surface.
  *
@@ -104,13 +107,12 @@ export const membershipAdminPasswordHandler: PluginApiHandler = async (
     const hostRef = firestore.collection('hosts').doc(hostId)
     const hostSnapshot = await hostRef.get()
     const host = hostSnapshot.data()
-    const memberRole = (host?.['memberRoles'] ?? {})[decoded.uid]
     const orgPermissions = await resolveOrgPermissions(decoded.uid, { hostId })
     if (
       !host ||
-      (memberRole !== 'admin' && !orgPermissions.permissions.manageMembers)
+      (!holdsSiteKey(host, decoded.uid, 'site.manage') && !orgPermissions.permissions.manageMembers)
     ) {
-      return res.status(403).json({ error: 'Not a site admin' })
+      return res.status(403).json({ error: siteKeyRefusal('site.manage') })
     }
 
     const memberRef = hostRef.collection('siteMembers').doc(memberId)

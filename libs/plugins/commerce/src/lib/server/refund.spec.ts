@@ -1554,12 +1554,12 @@ describe('who may refund (AGL-2372)', () => {
     cashier({ managePos: true })
     const reached = await post({}, { 'idempotency-key': 'attempt-a' })
     expect(reached.status).toBe(403)
-    expect(reached.body.error).toBe('Refunds of online orders require an admin of the whole workspace')
+    expect(reached.body.error).toBe('Your role does not include "Refund orders" — ask an organization admin')
     // Refused the refunds key, they are not register staff at all.
     cashier({ managePos: true, posRefund: false })
     const refused = await post({}, { 'idempotency-key': 'attempt-b' })
     expect(refused.status).toBe(403)
-    expect(refused.body.error).toBe('Refunds require a site admin')
+    expect(refused.body.error).toBe('Your role does not include "Refund orders" — ask an organization admin')
     expect(refundCalls).toHaveLength(0)
   })
 
@@ -1576,8 +1576,41 @@ describe('who may refund (AGL-2372)', () => {
     } as any)
     const reached = await post({}, { 'idempotency-key': 'attempt-a' })
     expect(reached.status).toBe(403)
-    expect(reached.body.error).toBe('Refunds of online orders require an admin of the whole workspace')
+    expect(reached.body.error).toBe('Your role does not include "Refund orders" — ask an organization admin')
     expect(refundCalls).toHaveLength(0)
+  })
+
+  it('asks "Refund orders", so the site’s stamp decides either way (AGL-4047)', async () => {
+    // A collaborator the site granted the key refunds; its preset never
+    // reaches them (`workspaceMembersOnly`), the site's grant does.
+    asSiteCollaborator()
+    docs.set('hosts/host-1', {
+      memberRoles: { 'admin-1': 'admin', 'contractor-1': 'admin' },
+      memberPermissions: { 'contractor-1': { 'commerce.refunds': true } },
+    })
+    const granted = await post({}, { 'idempotency-key': 'attempt-a' })
+    expect(granted.status).toBe(200)
+    expect(refundCalls).toHaveLength(1)
+
+    // A workspace admin whose custom role refuses it does not, in the
+    // permission's words.
+    mockVerifyIdToken.mockResolvedValue({ uid: 'admin-1' })
+    mockResolveOrgPermissions.mockResolvedValue({
+      orgId: 'org-1',
+      role: 'admin',
+      isOwner: true,
+      permissions: {},
+      orgWide: true,
+      hostRole: 'admin',
+    } as any)
+    docs.set('hosts/host-1', {
+      memberRoles: { 'admin-1': 'admin' },
+      memberPermissions: { 'admin-1': { 'commerce.refunds': false } },
+    })
+    const refused = await post({ amountCents: 100 }, { 'idempotency-key': 'attempt-b' })
+    expect(refused.status).toBe(403)
+    expect(refused.body.error).toBe('Your role does not include "Refund orders" — ask an organization admin')
+    expect(refundCalls).toHaveLength(1)
   })
 
   it('still admits an org-wide admin — the control refuses, it does not block', async () => {

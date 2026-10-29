@@ -47,6 +47,10 @@ export const AI_SITE_IMPORT_HELP = {
     anchor: '#waves',
     excerpt: 'Your main pages come in first, then each collection, such as blog posts, ten pages at a time. You review each wave and start the next yourself.',
   }),
+  turnedAway: pluginDocsHelp('aiImport', {
+    anchor: '#turned-away',
+    excerpt: 'Allow AglynBot in your site’s bot protection or firewall settings, then choose Check again. Reading your site again uses no AI credits.',
+  }),
 }
 
 type Step = 'address' | 'prove' | 'read'
@@ -130,7 +134,9 @@ export function AiSiteImportStart({ orgId, orgSlug, hostId, host, user, pendingS
       if (!hostId && pendingSite) {
         // Asked before the site exists, so a refusal creates nothing (AGL-3859).
         if (!pendingSite.created && !(await refused(await requestJob(null, true)))) return
-        const made = await pendingSite.create()
+        // A site brought in starts in preview unless the person switched it
+        // off (AGL-4086): its pages arrive here before anyone has looked.
+        const made = await pendingSite.create({ start: 'import' })
         if ('error' in made) {
           setNotice(made.error)
           if (made.address) onBack()
@@ -213,10 +219,13 @@ export function AiSiteImportStart({ orgId, orgSlug, hostId, host, user, pendingS
           </Stack>
           <Box component="ul" sx={{ m: 0, pl: 3, '& li': { mb: 1 } }}>
             <Typography component="li" variant="body2">
-              {`AglynBot reads your site, as many pages as your plan includes: your main pages first, then collections such as blog posts.`}
+              {`AglynBot reads your whole site, home page first, as many pages as your plan includes: your main pages first, then collections such as blog posts.`}
             </Typography>
             <Typography component="li" variant="body2">
-              {`You see what was found and what each wave of up to ${AI_SITE_IMPORT_WAVE_PAGES} pages costs before anything is built. Reading your site uses no AI credits.`}
+              {`You see what was found, what could not be read and why, and what each wave of up to ${AI_SITE_IMPORT_WAVE_PAGES} pages costs before anything is built. Reading your site uses no AI credits.`}
+            </Typography>
+            <Typography component="li" variant="body2">
+              {'If your home page cannot be read, nothing is planned and no AI credits are used. You are told why, and you check again once it can be.'}
             </Typography>
             <Typography component="li" variant="body2">
               {`${PLATFORM_BRAND_NAME} AI rewrites each page into your new site’s design, with its words, facts and photos. You review each wave and start the next yourself.`}
@@ -225,6 +234,11 @@ export function AiSiteImportStart({ orgId, orgSlug, hostId, host, user, pendingS
               {'Every page is a draft. Nothing is published until you publish it, and your current site is not changed.'}
             </Typography>
           </Box>
+          {/* Start in preview (AGL-4086), for a site this creates: on unless
+              the person switches it off. */}
+          {!hostId && pendingSite && !pendingSite.created
+            ? pendingSite.previewControl?.('import')
+            : null}
         </Stack>
       )}
       <Stack direction="row" spacing={1} sx={{ justifyContent: 'space-between' }}>

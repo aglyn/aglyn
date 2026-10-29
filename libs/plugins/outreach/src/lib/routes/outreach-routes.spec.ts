@@ -301,7 +301,13 @@ const gate: OutreachRouteGateDeps = {
   resolveOrgPermissions: async (uid, context) => {
     const member = members[uid]
     return member
-      ? { orgId: context.orgId, isOwner: ['owner', 'admin'].includes(member.role), ...member }
+      ? {
+          orgId: context.orgId,
+          isOwner: ['owner', 'admin'].includes(member.role),
+          ...member,
+          // "Manage everyone's Sequences" (AGL-4047): its default is the owner and admin.
+          permissions: { 'outreach.manageAll': ['owner', 'admin'].includes(member.role), ...member.permissions },
+        }
       : { orgId: context.orgId, role: null, isOwner: false, orgWide: false, permissions: {} }
   },
   holdsOrgCatalogPermission: async (uid, _orgId, key) => members[uid]?.permissions[key] === true,

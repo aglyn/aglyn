@@ -13,10 +13,10 @@
     "budget": 28672
   },
   "commerce": {
-    "baseline": 195532,
-    "budget": 205824,
+    "baseline": 208018,
+    "budget": 219136,
     "headroom": 1.05,
-    "note": "Re-baselined 2026-10-25 at 190.9 KB eager (was 150.8 KB at the last baseline, against a 189.0 KB budget) after beta.282's POS work (AGL-4036/4037/4038/4043) took the storefront's eager bytes past it; the product model now validates a variant's check-in setting. Headroom is cut to 5% so the next growth is looked at, not absorbed. Making the member/return/review widgets lazy (`--why commerce`) is the follow-up that earns headroom back."
+    "note": "Re-baselined 2026-10-28 at 203.1 KB eager for the customer's quote page (AGL-4094): the page itself loads lazily (`quote-page-body.tsx`), and what stays eager is its small shell and schema and the new send-quotes permission entry. Before that, re-baselined 2026-10-25 at 190.9 KB (was 150.8 KB at the last baseline, against a 189.0 KB budget) after beta.282's POS work (AGL-4036/4037/4038/4043) took the storefront's eager bytes past it; the product model now validates a variant's check-in setting. Headroom is cut to 5% so the next growth is looked at, not absorbed. Making the member/return/review widgets lazy (`--why commerce`) is the follow-up that earns headroom back."
   },
   "marketplace": {
     "baseline": 248508,
@@ -68,10 +68,10 @@
     "budget": 6144
   },
   "ai": {
-    "baseline": 54894,
-    "budget": 60416,
+    "baseline": 60461,
+    "budget": 66560,
     "headroom": 1.1,
-    "note": "AGL-3649: 409 KB eager before, when plugin.ts imported every card and page statically and the console loads AI on every screen (it fills the dock and the top bar). Every component is now registered through lazyWidget, so what is eager is the registrations, the copy assistant's provider (it wraps the page, so it cannot load late), the provider catalog and the config schema. 10% headroom, not 25%: this plugin's eager bytes are on every console page, and a card made eager again is the regression this entry exists to catch."
+    "note": "AGL-3649: 409 KB eager before, when plugin.ts imported every card and page statically and the console loads AI on every screen (it fills the dock and the top bar). Every component is now registered through lazyWidget, so what is eager is the registrations, the copy assistant's provider (it wraps the page, so it cannot load late), the provider catalog and the config schema. 10% headroom, not 25%: this plugin's eager bytes are on every console page, and a card made eager again is the regression this entry exists to catch. Re-baselined for AGL-4047: the \"Bring a site in\" permission (`ai.import`) is declared at load, as every permission in the catalog is."
   },
   "theme-presets": {
     "baseline": 50022,

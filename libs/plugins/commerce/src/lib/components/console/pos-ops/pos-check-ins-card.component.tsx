@@ -204,6 +204,37 @@ function PosCheckInsBody(props: PosCheckInsCardProps) {
         valueGetter: (_value: unknown, row: CheckInRow) => row.customerName || row.customerEmail || '',
       },
       {
+        // What a pass waiting at the window can still have done to it: a
+        // rain check, or one taken back; and a stay's guest count (AGL-4043).
+        // Not a value, so nothing to sort.
+        //
+        // Second, beside the name it acts on, rather than trailing. The grid
+        // has no column pinning, so a trailing column sat past the right edge
+        // of any window narrower than every column put together — on a
+        // laptop, and always on a phone — and the window could not see it.
+        field: 'rainCheckAction',
+        headerName: 'Actions',
+        minWidth: 150,
+        sortable: false,
+        filterable: false,
+        hideable: false,
+        disableColumnMenu: true,
+        renderCell: ({ row }: { row: CheckInRow }) =>
+          row.source === 'reservation' && row.reservationId ? (
+            <Button size="small" disabled={!canManagePos} onClick={() => setGuestsFor(row.reservationId)}>
+              {'Guests'}
+            </Button>
+          ) : row.source !== 'order' || row.status !== 'expected' ? null : row.rainCheck ? (
+            <Button size="small" disabled={!canManagePos} onClick={() => void undoRainCheck(row)}>
+              {'Undo rain check'}
+            </Button>
+          ) : (
+            <Button size="small" disabled={!canManagePos || !todayKey} onClick={() => setRainCheckRow(row)}>
+              {'Rain check'}
+            </Button>
+          ),
+      },
+      {
         field: 'itemName',
         headerName: 'Item',
         flex: 1,
@@ -250,32 +281,6 @@ function PosCheckInsBody(props: PosCheckInsCardProps) {
         headerName: 'Wristband',
         minWidth: 120,
         valueGetter: (_value: unknown, row: CheckInRow) => describeWristband(row.wristband),
-      },
-      {
-        // What a pass waiting at the window can still have done to it: a
-        // rain check, or one taken back; and a stay's guest count (AGL-4043).
-        // Not a value, so nothing to sort.
-        field: 'rainCheckAction',
-        headerName: '',
-        minWidth: 150,
-        sortable: false,
-        filterable: false,
-        hideable: false,
-        disableColumnMenu: true,
-        renderCell: ({ row }: { row: CheckInRow }) =>
-          row.source === 'reservation' && row.reservationId ? (
-            <Button size="small" disabled={!canManagePos} onClick={() => setGuestsFor(row.reservationId)}>
-              {'Guests'}
-            </Button>
-          ) : row.source !== 'order' || row.status !== 'expected' ? null : row.rainCheck ? (
-            <Button size="small" disabled={!canManagePos} onClick={() => void undoRainCheck(row)}>
-              {'Undo rain check'}
-            </Button>
-          ) : (
-            <Button size="small" disabled={!canManagePos || !todayKey} onClick={() => setRainCheckRow(row)}>
-              {'Rain check'}
-            </Button>
-          ),
       },
     ],
     [list, canManagePos, todayKey, undoRainCheck],

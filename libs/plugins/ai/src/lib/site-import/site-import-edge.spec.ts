@@ -42,7 +42,7 @@ jest.mock('@aglyn/tenant-data-admin/server/platform-served-domain', () => ({
   isPlatformServedDomain: (host: string) => mockIsPlatformServedDomain(host),
 }))
 
-import { fetchPublicTextDetailed } from '../jobs/ai-theme-brand-inputs'
+import { fetchPublicTextDetailed, readReferencePage } from '../jobs/ai-theme-brand-inputs'
 import { AGLYN_BOT_USER_AGENT, crawlSiteForImport, readSiteVerificationMeta } from './site-import-crawl'
 import {
   SITE_IMPORT_EDGE_HEADER,
@@ -59,6 +59,7 @@ const ENV = { SITE_IMPORT_EDGE_TOKEN: TOKEN }
 const SERVED = 'hosted-here.example'
 const FOREIGN = 'rosies-bakery.example'
 const ELSEWHERE = 'checkout.elsewhere.example'
+const CDN = 'cdn.elsewhere.example'
 const servedOnly = async (host: string) => host === SERVED
 
 const html = (body: string) => ({
@@ -94,7 +95,20 @@ function recordingsFor(domain: string): Record<string, Recorded> {
   }
 }
 
-const RECORDINGS: Record<string, Recorded> = { ...recordingsFor(SERVED), ...recordingsFor(FOREIGN) }
+const css = (body: string) => ({ status: 200, headers: { 'content-type': 'text/css' }, body })
+
+const RECORDINGS: Record<string, Recorded> = {
+  ...recordingsFor(SERVED),
+  ...recordingsFor(FOREIGN),
+  // A page the brand reads take colors from: one sheet on the site, one on a CDN.
+  [`https://${SERVED}/styled`]: {
+    status: 200,
+    headers: { 'content-type': 'text/html' },
+    body: `<html><head><link rel="stylesheet" href="/site.css"><link rel="stylesheet" href="https://${CDN}/lib.css"></head><body><h1>Styled</h1></body></html>`,
+  },
+  [`https://${SERVED}/site.css`]: css('body { color: #1f4e8c; }'),
+  [`https://${CDN}/lib.css`]: css('a { color: #c2410c; }'),
+}
 
 type Call = { url: string; headers: Record<string, string> }
 let calls: Call[] = []
@@ -182,11 +196,8 @@ describe('the secret', () => {
 
 describe('the crawl', () => {
   it('sends the edge header only to platform-served hosts: every request to the site we serve carries it with AglynBot', async () => {
-    const headersFor = await siteImportEdgeHeadersFor([`https://${SERVED}`, `https://www.${SERVED}`], {
-      env: ENV,
-      served: servedOnly,
-    })
-    const inventory = await crawlSiteForImport({ domain: SERVED, maxPages: 10 }, { headersFor })
+    process.env['SITE_IMPORT_EDGE_TOKEN'] = TOKEN
+    const inventory = await crawlSiteForImport({ domain: SERVED, maxPages: 10 })
     expect(inventory.pages.map((page) => page.path)).toEqual(['/', '/about', '/about-us'])
     const toServed = calls.filter((call) => hostOf(call.url) === SERVED)
     expect(toServed.length).toBeGreaterThanOrEqual(4)
@@ -197,22 +208,16 @@ describe('the crawl', () => {
   })
 
   it('never sends it to a foreign site, even with the secret configured', async () => {
-    const headersFor = await siteImportEdgeHeadersFor([`https://${FOREIGN}`, `https://www.${FOREIGN}`], {
-      env: ENV,
-      served: servedOnly,
-    })
-    const inventory = await crawlSiteForImport({ domain: FOREIGN, maxPages: 10 }, { headersFor })
+    process.env['SITE_IMPORT_EDGE_TOKEN'] = TOKEN
+    const inventory = await crawlSiteForImport({ domain: FOREIGN, maxPages: 10 })
     expect(inventory.pages.length).toBeGreaterThan(0)
     expect(calls.length).toBeGreaterThan(3)
     expect(secretCalls()).toEqual([])
   })
 
   it('never sends it off the site: a redirect to another host is refused unfollowed, and the www twin is its own decision', async () => {
-    const headersFor = await siteImportEdgeHeadersFor([`https://${SERVED}`, `https://www.${SERVED}`], {
-      env: ENV,
-      served: servedOnly,
-    })
-    const inventory = await crawlSiteForImport({ domain: SERVED, maxPages: 10 }, { headersFor })
+    process.env['SITE_IMPORT_EDGE_TOKEN'] = TOKEN
+    const inventory = await crawlSiteForImport({ domain: SERVED, maxPages: 10 })
     expect(calls.some((call) => hostOf(call.url) === ELSEWHERE)).toBe(false)
     expect(inventory.skipped).toContainEqual(
       expect.objectContaining({ reason: 'off-origin-redirect', location: `https://${ELSEWHERE}/pay` }),
@@ -225,8 +230,15 @@ describe('the crawl', () => {
   })
 
   it("holds the line even against a caller's own headersFor that would hand the secret to anyone", async () => {
-    const leaky = () => ({ [SITE_IMPORT_EDGE_HEADER]: TOKEN })
+    // The crawl seam's shape (domain → headers), asked once with the domain.
+    const asked: string[] = []
+    const leaky = (domain: string) => {
+      asked.push(domain)
+      return { [SITE_IMPORT_EDGE_HEADER]: TOKEN }
+    }
     await crawlSiteForImport({ domain: SERVED, maxPages: 10 }, { headersFor: leaky })
+    expect(asked).toEqual([SERVED])
+    expect(mockIsPlatformServedDomain).not.toHaveBeenCalled()
     expect(secretCalls().length).toBeGreaterThan(0)
     expect(secretCalls().every((call) => [SERVED, `www.${SERVED}`].includes(hostOf(call.url)))).toBe(true)
     expect(calls.some((call) => hostOf(call.url) === ELSEWHERE)).toBe(false)
@@ -273,6 +285,27 @@ describe('the fetch seam', () => {
       headersFor,
     })
     expect(result.ok).toBe(true)
+    expect(calls.map((call) => [hostOf(call.url), SITE_IMPORT_EDGE_HEADER in call.headers])).toEqual([
+      [SERVED, true],
+      [ELSEWHERE, false],
+    ])
+  })
+
+  it('the brand reads take the same rule: the page and a stylesheet on the served origin carry it, a CDN stylesheet and an off-host hop do not', async () => {
+    const headersFor = await siteImportEdgeHeadersFor([`https://${SERVED}`, `https://www.${SERVED}`], {
+      env: ENV,
+      served: servedOnly,
+    })
+    const page = await readReferencePage(new URL(`https://${SERVED}/styled`), new AbortController().signal, headersFor)
+    expect(page?.stylesheets.length).toBe(2)
+    expect(calls.map((call) => [call.url, SITE_IMPORT_EDGE_HEADER in call.headers])).toEqual([
+      [`https://${SERVED}/styled`, true],
+      [`https://${SERVED}/site.css`, true],
+      [`https://${CDN}/lib.css`, false],
+    ])
+
+    calls = []
+    await readReferencePage(new URL(`https://${SERVED}/checkout`), new AbortController().signal, headersFor)
     expect(calls.map((call) => [hostOf(call.url), SITE_IMPORT_EDGE_HEADER in call.headers])).toEqual([
       [SERVED, true],
       [ELSEWHERE, false],

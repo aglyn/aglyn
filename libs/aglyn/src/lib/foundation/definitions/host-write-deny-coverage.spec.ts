@@ -226,6 +226,13 @@ describe('every server-owned host field is denied to client writes (AGL-1361)', 
           // parser still sees a hasAny list guarded by a role condition
           // rather than by `isStaff`.
           'screens',
+          // Preview (AGL-4086). Making a site public is a launch, so the
+          // switch and its "has been public" stamp are Admin-SDK-only; a page
+          // in preview sits in the routing map's tier, because showing it to
+          // the public is a publish.
+          'preview',
+          'publicSinceMs',
+          'previewScreens',
         ]),
       )
       expect(rule.denied.length).toBeGreaterThanOrEqual(12)

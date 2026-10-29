@@ -502,6 +502,11 @@ export const PLUGIN_DOCS = {
     title: 'Publisher handbook',
     excerpt: 'Publishing to the Aglyn marketplace — from profile setup through listing authoring, review, updates, and getting paid.',
   },
+  quotes: {
+    path: '/commerce-and-bookings/commerce/quotes-and-proofs',
+    title: 'Quotes',
+    excerpt: 'Price a customer\'s order before they buy, with products and their add-ons, items typed for the job, things included at no charge, a discount, shipping, notes and terms, and tax worked out as you go.',
+  },
   redirects: {
     path: '/building-sites/redirects/overview',
     title: 'Redirects',
@@ -593,7 +598,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   aiExperiments: ['#it-proposes-you-write', '#write-variants', '#putting-them-in', '#draft-versions', '#what-it-will-not-write', '#read-a-result', '#the-verdict', '#the-words', '#undecided', '#what-is-sent', '#who-can-use-it', '#related'],
   aiForm: ['#describe-the-form', '#what-the-form-gets', '#what-a-form-cannot-collect', '#nothing-is-live-until-you-place-it', '#who-can-use-it', '#related'],
   aiImages: ['#make-a-picture', '#shapes-and-how-many', '#what-each-picture-gets', '#credits', '#safety', '#declined-pictures', '#what-is-sent', '#who-can-use-it', '#related'],
-  aiImport: ['#start', '#your-current-website', '#prove-it-is-yours', '#read-my-site', '#waves', '#review-a-wave', '#photos', '#never-brought-in', '#when-an-import-waits', '#turned-away'],
+  aiImport: ['#start', '#your-current-website', '#prove-it-is-yours', '#read-my-site', '#not-brought-in', '#waves', '#your-sites-preview', '#review-a-wave', '#photos', '#never-brought-in', '#when-an-import-waits', '#turned-away'],
   aiInsights: ['#asking-a-question', '#how-an-answer-is-made', '#asking-about-datasets', '#weekly-insights', '#privacy'],
   aiJobs: ['#the-ai-jobs-page', '#statuses', '#one-jobs-page', '#ai-jobs-in-assist', '#cancel-a-job', '#cancel-a-new-site', '#ai-activity', '#how-long-jobs-are-kept', '#related'],
   aiLayout: ['#what-a-layout-is', '#find-a-layout', '#nested-layouts', '#layout-properties', '#restyle-the-layout-on-one-page', '#duplicate', '#generate-a-layout-with-aglyn-ai', '#used-by', '#layouts-vs-reusable-components', '#related'],
@@ -665,12 +670,13 @@ export const PLUGIN_DOCS_ANCHORS = {
   pickupAndDelivery: ['#set-up-pickup', '#set-up-local-delivery', '#queue', '#ask-aglyn-ai', '#related'],
   plugins: ['#install--upgrade', '#browse-card', '#whats-included', '#what-the-badges-on-a-listing-mean', '#how-plugins-run', '#when-one-plugin-depends-on-another', '#a-dependency-that-is-off-for-one-site', '#configure', '#configure-site', '#publish-your-own', '#related'],
   pos: ['#registers', '#who-can-do-what-at-the-register', '#the-register', '#modifiers', '#selling-past-the-count', '#taking-payment', '#platform-fees-at-the-register', '#when-something-disconnects', '#tips', '#receipts', '#card-readers', '#customer-display', '#self-service-kiosk', '#reservations', '#several-identical-units', '#related'],
-  posHardware: ['#recommended-kit', '#card-readers', '#reader-start-up-screen', '#buy-a-reader-from-aglyn', '#who-can-buy-hardware', '#bought-from-us-in-person', '#hardware-orders-at-closure', '#hardware-purchase-records', '#receipt-printers', '#add-a-printer', '#what-prints', '#your-logo-on-the-receipt', '#status', '#cash-drawer', '#barcode-scanning', '#label-printers', '#product-labels', '#shipping-labels', '#customer-display-tablet', '#related'],
+  posHardware: ['#recommended-kit', '#card-readers', '#reader-4g', '#reader-start-up-screen', '#buy-a-reader-from-aglyn', '#who-can-buy-hardware', '#bought-from-us-in-person', '#card-readers-to-set-up', '#hardware-orders-at-closure', '#hardware-purchase-records', '#receipt-printers', '#add-a-printer', '#what-prints', '#your-logo-on-the-receipt', '#status', '#cash-drawer', '#barcode-scanning', '#label-printers', '#product-labels', '#shipping-labels', '#customer-display-tablet', '#related'],
   posOperations: ['#shifts-and-the-cash-drawer', '#what-the-reports-show', '#shift-history', '#day-and-event-totals', '#requiring-a-shift', '#who-rang-it', '#check-in-at-the-window', '#staff-pins', '#customers-at-the-register', '#returns-and-exchanges', '#refund-limits-and-manager-approval', '#printed-receipts', '#selling-while-offline', '#what-the-sync-checks', '#cards-taken-offline-in-the-aglyn-pos-app', '#before-you-go-offline', '#related'],
   postPurchase: ['#connect-a-service', '#afterships-webhook', '#package-protection-at-checkout', '#branded-tracking-pages', '#on-the-order', '#switching-it-off-for-a-site'],
   printOnDemand: ['#before-you-start', '#connect', '#import-products', '#costs-and-margins', '#orders', '#test-orders', '#canceling-and-refunding', '#shipments-and-tracking', '#disconnect', '#what-is-sent-to-the-service'],
   publishAPlugin: ['#the-publish-pipeline', '#private-plugins', '#paid-listings', '#your-publisher-profile', '#profile-card', '#listing-publisher-card', '#tips', '#related'],
   publisherHandbook: ['#before-your-first-publish', '#public-profile', '#the-publisher-agreement', '#where-to-publish-from', '#what-installing-each-type-does', '#rules-an-email-starter-has-to-meet', '#publishing-a-version', '#bundle-and-manifest', '#before-you-publish', '#review-what-happens-after-you-publish', '#the-two-badges-and-what-each-one-promises', '#asking-to-be-verified', '#testing-a-version-before-it-is-approved', '#watching-your-own-submission', '#disabled-versions', '#private-plugins', '#authoring-your-listing', '#edit-listing', '#your-listings', '#listing-links', '#what-your-listing-can-say-about-aglyn', '#versioning--updates', '#listing-changelog', '#version-history', '#shipping-a-new-version', '#how-installs-work-the-buyer-side', '#install-card', '#installed-from-the-marketplace', '#licenses', '#workspace-licenses', '#licenses-you-bought', '#getting-paid', '#set-up-payouts', '#purchases-and-fees', '#refund-reversals', '#low-prices-and-processing'],
+  quotes: ['#what-a-quote-holds', '#quote-defaults', '#make-a-quote', '#totals-and-tax', '#pay-link', '#customer-page', '#pdf', '#paying', '#paid', '#quotes-are-not-orders', '#permissions'],
   redirects: ['#manage-redirects', '#query-strings-pass-through', '#sending-visitors-to-another-site', '#import-and-export', '#columns', '#how-a-row-finds-an-existing-rule', '#conflicts-the-dry-run-and-undo', '#ask-aglyn-ai', '#metrics', '#match-modes-v2', '#related'],
   reviewPlatforms: ['#who-is-invited', '#trustpilot', '#trustpilot-invitation-address', '#trustpilot-api', '#yotpo-reviews', '#on-the-order', '#switching-it-off-for-a-site', '#related'],
   salesChannels: ['#set-up-sales-channels', '#turn-on-a-channel', '#keep-the-address-private', '#what-each-product-sends', '#brand-barcode-and-category', '#shipping', '#check-your-products', '#how-fresh-the-feed-is', '#earlier-merchant-center-address', '#turn-off', '#related'],
@@ -766,6 +772,7 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
   },
   aiImport: {
     '#prove-it-is-yours': 'Prove it is yours',
+    '#turned-away': 'When your site turns AglynBot away',
     '#waves': 'Waves',
     '#your-current-website': 'Your current website',
   },
@@ -1175,6 +1182,7 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
   posHardware: {
     '#bought-from-us-in-person': 'Bought from us in person',
     '#buy-a-reader-from-aglyn': 'Buy a reader from Aglyn',
+    '#card-readers-to-set-up': 'Card readers to set up',
     '#hardware-purchase-records': 'Records of your purchases',
     '#reader-start-up-screen': 'Reader start-up screen',
     '#receipt-printers': 'Receipt printers',
@@ -1220,6 +1228,10 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
     '#where-to-publish-from': 'Where to publish from',
     '#workspace-licenses': 'This workspace',
     '#your-listings': 'Your listings',
+  },
+  quotes: {
+    '#make-a-quote': 'Make a quote',
+    '#quote-defaults': 'New-quote defaults',
   },
   redirects: {
     '#manage-redirects': 'Manage redirects',

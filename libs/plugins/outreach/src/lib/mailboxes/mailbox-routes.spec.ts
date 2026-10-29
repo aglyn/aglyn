@@ -323,7 +323,13 @@ const members: Record<
 > = {
   [REP]: { orgId: ORG, role: 'editor', isOwner: false, orgWide: true, permissions: { 'outreach.use': true } },
   [TEAMMATE]: { orgId: ORG, role: 'editor', isOwner: false, orgWide: true, permissions: { 'outreach.use': true } },
-  [ADMIN]: { orgId: ORG, role: 'admin', isOwner: true, orgWide: true, permissions: { 'outreach.use': true } },
+  [ADMIN]: {
+    orgId: ORG,
+    role: 'admin',
+    isOwner: true,
+    orgWide: true,
+    permissions: { 'outreach.use': true, 'outreach.manageAll': true },
+  },
 }
 
 const tokens: Record<string, Partial<DecodedIdToken>> = {

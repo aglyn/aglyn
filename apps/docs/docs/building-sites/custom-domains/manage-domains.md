@@ -8,7 +8,8 @@ description: See every domain your workspace holds on its Domains page, connect 
 
 Your workspace's **Domains** page lists every domain it holds through Aglyn: the ones
 connected to a site, the ones that aren't connected yet, and the ones on their way. Open
-it from your workspace's menu. Workspace owners and admins can open it.
+it from your workspace's menu. Opening it takes the **Manage the workspace's domains**
+permission, which workspace owners and admins have.
 
 :::info Plan availability
 **Starter and above** for buying, transferring in and connecting domains. On a plan

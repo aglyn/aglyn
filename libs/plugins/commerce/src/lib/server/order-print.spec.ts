@@ -48,6 +48,11 @@ const order = {
   totals: { itemsCents: 2500, shippingCents: 0, taxCents: 0, discountCents: 0, totalCents: 2500, feeCents: 0 },
 }
 
+const invoicePdf = jest.fn(async (input: { order: { number?: number } }) => ({
+  bytes: new Uint8Array([37, 80, 68, 70, 45]),
+  filename: `juniper-street-co-invoice-${String(input.order.number)}.pdf`,
+}))
+
 function setup() {
   const memory = memoryFirestore(() => 5_000)
   memory.seed('hosts/h1', {
@@ -58,6 +63,7 @@ function setup() {
   memory.seed('hosts/h1/orders/o1', order)
   const handler = createOrderPrintHandler({
     firestore: () => memory.firestore as never,
+    invoicePdf: invoicePdf as never,
     verifyIdToken: async (token: string) => {
       const decoded = TOKENS[token]
       if (!decoded) throw Object.assign(new Error('bad token'), { code: 'auth/argument-error' })
@@ -68,9 +74,11 @@ function setup() {
 }
 
 function call(handler: any, token: string | null, query: Record<string, unknown>, method = 'GET') {
-  const res: any = { statusCode: 0, body: undefined }
+  const res: any = { statusCode: 0, body: undefined, headers: {} }
   res.status = (code: number) => ((res.statusCode = code), res)
   res.json = (value: unknown) => ((res.body = value), res)
+  res.send = (value: unknown) => ((res.body = value), res)
+  res.setHeader = (name: string, value: string) => void (res.headers[name.toLowerCase()] = value)
   return Promise.resolve(
     handler({ method, query, headers: { ...(token ? { authorization: `Bearer ${token}` } : {}) } }, res),
   ).then(() => res)
@@ -117,5 +125,44 @@ describe('commerce/order-print', () => {
     expect((await call(handler, 'editor', { hostId: 'h1', orderId: 'o1', kind: 'receipt' })).statusCode).toBe(400)
     expect((await call(handler, 'editor', { hostId: 'h1', orderId: '../x', kind: 'invoice' })).statusCode).toBe(400)
     expect((await call(handler, 'editor', { hostId: 'h1', orderId: 'o1', kind: 'invoice' }, 'POST')).statusCode).toBe(405)
+  })
+})
+
+describe('commerce/order-print?kind=invoice-pdf (AGL-4095)', () => {
+  beforeEach(() => invoicePdf.mockClear())
+
+  it('answers the invoice as a PDF download, made from the stored order, its site and its store', async () => {
+    const { handler } = setup()
+    const res = await call(handler, 'admin', { hostId: 'h1', orderId: 'o1', kind: 'invoice-pdf' })
+    expect(res.statusCode).toBe(200)
+    expect(Buffer.isBuffer(res.body)).toBe(true)
+    expect(String(res.body)).toBe('%PDF-')
+    expect(res.headers).toEqual({
+      'content-type': 'application/pdf',
+      'content-disposition': 'attachment; filename="juniper-street-co-invoice-1042.pdf"',
+      'cache-control': 'private, no-store',
+      'x-robots-tag': 'noindex, nofollow',
+      'referrer-policy': 'no-referrer',
+    })
+    expect(invoicePdf).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hostId: 'h1',
+        orderId: 'o1',
+        order: expect.objectContaining({ number: 1042 }),
+        host: expect.objectContaining({ businessName: 'Juniper Street Co.' }),
+        store: expect.objectContaining({ receiptFooter: 'Thank you!' }),
+      }),
+    )
+  })
+
+  it('asks "Manage orders" as the printable invoice does', async () => {
+    const { handler } = setup()
+    expect((await call(handler, 'staff', { hostId: 'h1', orderId: 'o1', kind: 'invoice-pdf' })).statusCode).toBe(200)
+    const viewer = await call(handler, 'viewer', { hostId: 'h1', orderId: 'o1', kind: 'invoice-pdf' })
+    expect(viewer.statusCode).toBe(403)
+    expect(viewer.body.error).toContain('Manage orders')
+    expect((await call(handler, null, { hostId: 'h1', orderId: 'o1', kind: 'invoice-pdf' })).statusCode).toBe(401)
+    expect((await call(handler, 'editor', { hostId: 'h1', orderId: 'gone', kind: 'invoice-pdf' })).statusCode).toBe(404)
+    expect(invoicePdf).toHaveBeenCalledTimes(1)
   })
 })

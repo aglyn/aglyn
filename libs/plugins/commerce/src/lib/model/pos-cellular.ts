@@ -54,12 +54,23 @@ import {
  *   STRIPE_PRODUCT_POS_CELLULAR            the product the invoice line is
  *                                          billed against (its tax code);
  *                                          `setup-stripe.mjs` makes it
+ *   POS_CELLULAR_GRACE_DAYS                how long a month's charge may stay
+ *                                          unpaid before 4G is turned off for
+ *                                          the workspace's stores (default 14)
  *
  * Billed in ARREARS, once per workspace per calendar month, on a one-off
  * invoice through core's usage-invoice charge — the same path a domain or
  * an AI overage takes — for the readers that had 4G at any time that month,
  * which is what Stripe bills the platform for. Turning 4G off stops the
  * charge from the next calendar month.
+ *
+ * A charge that does not collect stays open on the workspace's Billing page
+ * and staff are alerted; the people who manage its billing are warned the
+ * same day, once, of the day 4G turns off unless it is paid. Still unpaid
+ * after the grace period, 4G is turned off at Stripe for every store of the
+ * workspace, and they are told again; paying does not turn it back on, and
+ * it cannot be turned on again until the charge is paid. A workspace deleted
+ * mid-month is charged for that final month as it is erased.
  *=========================================*/
 
 export const POS_CELLULAR_ENV = {
@@ -67,7 +78,14 @@ export const POS_CELLULAR_ENV = {
   billingCostBps: 'POS_CELLULAR_BILLING_COST_BPS',
   billingCostFixedCents: 'POS_CELLULAR_BILLING_COST_FIXED_CENTS',
   productId: 'STRIPE_PRODUCT_POS_CELLULAR',
+  graceDays: 'POS_CELLULAR_GRACE_DAYS',
 } as const
+
+/** How long a month's charge may stay unpaid before 4G is turned off, unless configured. */
+export const POS_CELLULAR_DEFAULT_GRACE_DAYS = 14
+
+/** A day, in milliseconds. */
+export const POS_CELLULAR_DAY_MS = 24 * 60 * 60 * 1000
 
 /** The platform's card processing rate, in basis points: the default billing cost. */
 export const POS_CELLULAR_DEFAULT_BILLING_COST_BPS = Math.round(STRIPE_PROCESSOR_FEE_PCT * 10_000)
@@ -95,6 +113,8 @@ export interface PosCellularConfig {
   billingCostBps: number
   billingCostFixedCents: number
   productId: string
+  /** Days a charge may stay unpaid before 4G is turned off for the workspace. */
+  graceDays: number
 }
 
 function wholeNumber(text: string | undefined, fallback: number, max: number): number | null {
@@ -125,8 +145,9 @@ export function parsePosCellularConfig(
     POS_CELLULAR_DEFAULT_BILLING_COST_FIXED_CENTS,
     1_000,
   )
-  if (billingCostBps === null || billingCostFixedCents === null) return null
-  return { monthlyCostCents, billingCostBps, billingCostFixedCents, productId }
+  const graceDays = wholeNumber(env[POS_CELLULAR_ENV.graceDays], POS_CELLULAR_DEFAULT_GRACE_DAYS, 90)
+  if (billingCostBps === null || billingCostFixedCents === null || graceDays === null || graceDays < 1) return null
+  return { monthlyCostCents, billingCostBps, billingCostFixedCents, productId, graceDays }
 }
 
 /**
@@ -277,14 +298,18 @@ export function posCellularReadersByWorkspace(
 
 /**
  * The outcome of a workspace's month: charged and paid; charged and left
- * open on their Billing page because the card failed; not charged because
- * there is no one to bill (no workspace, no customer) or nothing to bill
- * (under Stripe's minimum); or `charging`, claimed by a run in progress.
+ * open on their Billing page because the card failed; still unpaid after the
+ * grace period, so 4G was turned off for the workspace (`suspended`); its
+ * invoice voided by staff (`voided`); not charged because there is no one to
+ * bill (no workspace, no customer) or nothing to bill (under Stripe's
+ * minimum); or `charging`, claimed by a run in progress.
  */
 export type PosCellularChargeState =
   | 'charging'
   | 'paid'
   | 'open'
+  | 'suspended'
+  | 'voided'
   | 'failed'
   | 'no-workspace'
   | 'no-customer'
@@ -294,6 +319,8 @@ export type PosCellularChargeState =
 export const POS_CELLULAR_SETTLED_STATES: readonly PosCellularChargeState[] = [
   'paid',
   'open',
+  'suspended',
+  'voided',
   'no-workspace',
   'no-customer',
   'below-minimum',
@@ -311,6 +338,77 @@ export interface PosCellularCharge {
   attempts: number
   createdAtMs: number
   updatedAtMs: number
+  /** When the charge was left open, which the grace period counts from. */
+  openedAtMs?: number | null
+  /** When 4G was turned off for the workspace because it stayed unpaid. */
+  suspendedAtMs?: number | null
+  /** The stores 4G was turned off for, whose notice clears once it is paid. */
+  suspendedHostIds?: string[]
+  /**
+   * When the people who manage the workspace's billing were warned, as the
+   * charge was left open, of the day 4G turns off unless it is paid.
+   */
+  warnedAtMs?: number | null
+  /** When the people who manage the workspace's billing were told 4G was turned off. */
+  noticeSentAtMs?: number | null
+  /** Charged as the workspace was erased, for the month it was deleted in (or the one before). */
+  final?: boolean
+}
+
+/**
+ * When a charge left open runs out of grace: the grace period after it was
+ * left open (or, for a charge from before that was recorded, after it last
+ * changed).
+ */
+export function posCellularGraceEndsAtMs(
+  charge: Pick<PosCellularCharge, 'openedAtMs' | 'updatedAtMs'>,
+  graceDays: number,
+): number {
+  return Number(charge.openedAtMs ?? charge.updatedAtMs) + graceDays * POS_CELLULAR_DAY_MS
+}
+
+/** Whether an open charge is past its grace period. */
+export function posCellularOverdue(
+  charge: Pick<PosCellularCharge, 'state' | 'openedAtMs' | 'updatedAtMs'>,
+  graceDays: number,
+  now: number,
+): boolean {
+  return charge.state === 'open' && now >= posCellularGraceEndsAtMs(charge, graceDays)
+}
+
+/**
+ * Whether the people who manage a workspace's billing are still owed the
+ * warning that 4G turns off unless the charge is paid: an open charge not yet
+ * warned of. Never a charge made as the workspace was erased, whose 4G is
+ * already off and whose members are gone.
+ */
+export function posCellularWarningDue(
+  charge: Pick<PosCellularCharge, 'state' | 'warnedAtMs' | 'final'>,
+): boolean {
+  return charge.state === 'open' && !charge.warnedAtMs && !charge.final
+}
+
+/**
+ * A day as the workspace reads it, `November 16, 2026`, in its time zone
+ * (UTC for a zone the runtime cannot format in).
+ */
+export function posCellularDayLabel(ms: number, timeZone = 'UTC'): string {
+  const options = { month: 'long', day: 'numeric', year: 'numeric' } as const
+  try {
+    return new Date(ms).toLocaleDateString('en-US', { ...options, timeZone })
+  } catch {
+    return new Date(ms).toLocaleDateString('en-US', { ...options, timeZone: 'UTC' })
+  }
+}
+
+/**
+ * On a store's terminal settings (`cellularSuspended`) while 4G is off because
+ * a month's charge was not paid: which month, its invoice, and when.
+ */
+export interface PosCellularSuspension {
+  month: string
+  invoiceId: string | null
+  atMs: number
 }
 
 /** What the POS devices card is told about 4G for a store; null hides it. */
@@ -320,6 +418,14 @@ export interface PosCellularView {
   enabled: boolean
   /** The store's readers that take 4G. */
   readers: number
+  /** Turned off because a month's charge was not paid: that month, as `October 2026`, and when. */
+  suspended?: { month: string; atMs: number } | null
+  /**
+   * Why the viewer may not turn 4G ON (it is charged to the workspace, so it
+   * also takes "Manage billing"), or null. Turning it off needs only the
+   * card's own key.
+   */
+  turnOnBlocked?: string | null
 }
 
 /**
@@ -328,12 +434,24 @@ export interface PosCellularView {
  */
 export function posCellularView(
   config: PosCellularConfig | null,
-  terminal: { cellularEnabled?: unknown } | null | undefined,
+  terminal: { cellularEnabled?: unknown; cellularSuspended?: unknown } | null | undefined,
   readers: ReadonlyArray<{ deviceType?: unknown }>,
+  options: { turnOnBlocked?: string | null } = {},
 ): PosCellularView | null {
   if (!config) return null
   const enabled = terminal?.cellularEnabled === true
   const capable = readers.filter((reader) => isPosCellularDeviceType(reader.deviceType)).length
   if (!enabled && capable === 0) return null
-  return { readerMonthlyCents: posCellularReaderMonthlyCents(config), enabled, readers: capable }
+  const suspension = terminal?.cellularSuspended as Partial<PosCellularSuspension> | null | undefined
+  const suspended =
+    !enabled && suspension && typeof suspension.month === 'string'
+      ? { month: posCellularMonthLabel(suspension.month), atMs: Number(suspension.atMs ?? 0) }
+      : null
+  return {
+    readerMonthlyCents: posCellularReaderMonthlyCents(config),
+    enabled,
+    readers: capable,
+    suspended,
+    turnOnBlocked: options.turnOnBlocked ?? null,
+  }
 }

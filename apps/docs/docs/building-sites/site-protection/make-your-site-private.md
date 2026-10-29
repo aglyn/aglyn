@@ -10,6 +10,10 @@ keywords:
   - restrict access
   - not public
   - coming soon
+  - preview
+  - preview mode
+  - team only
+  - start in preview
 ---
 
 # Make your site private
@@ -21,13 +25,84 @@ switch that puts every page behind one password. Instead, pick the setting that 
 
 | Who should see the site | Use | Where | Plan |
 | --- | --- | --- | --- |
+| **Only you and your team, while you finish it** | [Preview](#keep-it-to-your-team-with-preview) | **Admin → Error pages** (also offered when you create a site) | Every plan |
 | **No one yet.** Not visitors, not search engines, not someone with the link | [Maintenance mode](#hide-the-whole-site-until-launch) | **Admin → Error pages** | Every plan |
 | **Anyone with the link, but keep it off Google** | [Discourage search engines](#keep-it-out-of-search-only) | **Setup → SEO → Search engines** | Every plan |
 | **Only people you give a password to** | [Password protected](#share-it-behind-a-password), page by page | The page's **Page Access** card | Every plan |
 | **Only people signed in to your site** | [Members only](#only-signed-in-members), page by page | The page's **Page Access** card | Business and above |
 
-Hiding a page from search doesn't stop people opening it. Only maintenance mode, a page
-password, and members-only actually keep visitors out.
+Hiding a page from search doesn't stop people opening it. Only preview, maintenance mode,
+a page password, and members-only actually keep visitors out.
+
+## Keep it to your team with Preview {#keep-it-to-your-team-with-preview}
+
+**Preview** keeps the whole site to the people building it. Visitors see your 503 page, or
+a plain **Coming soon** notice if you haven't designed one, at every address. You and your
+team see the whole site: every page, your header and footer, collections and working forms,
+with a bar across the top that says only your team can see it. When you're ready, you flip
+one switch and the site is public to everyone.
+
+1. Open **Admin → Error pages** for the site. Only **site admins** can open the Admin area.
+2. Switch on **Preview — only you and your team can see the site**. It confirms with
+   *"Your site is in preview — only you and your team can see it"*.
+3. Keep building. A banner, *"This site is in preview"*, follows you around the site's
+   console pages so it isn't forgotten at launch, and the site's card in **Sites** reads
+   **In preview**.
+4. On launch day, switch **Preview** off. **Make it public** on the banner takes you
+   straight to the switch. Your pages are public within about a minute.
+
+### Who sees what
+
+- **Visitors** see your **503 · Maintenance** page if you've assigned one (see
+  [custom error pages](error-screens.md)), or a **Coming soon** notice with your site's
+  name. Design the 503 page first if you want visitors to see your brand.
+- **Your team** sees the whole site. That is anyone who can open the site in the console:
+  workspace owners and admins, members who look after every site, and anyone with a role on
+  this site. Someone who is only on *other* sites of your workspace doesn't see it.
+- **Aglyn support** can see it too, so they can help you with it before it's public.
+- **People who signed up on your site** (its member accounts) are visitors, not your team,
+  so they see the 503 page.
+
+### Open your site while it's in preview
+
+Choose **Visit site** on the site's dashboard, or **Visit** on its card in **Sites**. While
+the site is in preview these buttons sign you in to the site itself, so the same click works
+on its Aglyn address and on your own domain. That sign-in lasts 12 hours; after that, choose
+**Visit site** again.
+
+If you open the address some other way, such as from a bookmark, on your own domain, you'll
+see what visitors see until you come in through **Visit site** once.
+
+### Search engines stay away
+
+While the site is in preview, search engines are asked to stay away from every page, the
+site lists no pages for them, and its feeds are switched off. Nothing about the unfinished
+site gets indexed. When you make it public, your pages are offered to search engines again
+as usual, unless you've also switched on
+[Discourage search engines](#keep-it-out-of-search-only).
+
+### Start a site in preview
+
+When you create a site, the **Start in preview** switch decides whether it starts this way.
+It's on when you [bring in your current site](../../ai/bring-my-site.md), so nothing of it
+is public before you've looked at it, and off when you start from the starter site or with
+Aglyn AI. Change it before you create the site, either way.
+
+### Keep one page to your team
+
+To keep a single page to your team while the rest of the site is public, open the page in
+**Pages** and switch on **Preview — only your team can see this page** in its **Page
+Access** card. Once the page is published, visitors get your 404 page at its address and
+your team sees the page. Switch it off to make the page public. When you create a page, the
+**Start in preview** switch in **Create new page** does the same from the start.
+
+Choosing who sees a page is part of publishing, so it needs a role that can publish.
+
+:::note Preview or maintenance mode?
+Both show visitors your 503 page. **Maintenance mode** shows it to everyone, your team
+included. **Preview** keeps the whole site working for your team. If both are on, maintenance
+mode wins and nobody sees the site.
+:::
 
 ## Hide the whole site until launch {#hide-the-whole-site-until-launch}
 
@@ -127,6 +202,8 @@ instead. Building from the chat needs AI generation on your plan; see
 
 Before you share a link or announce a launch:
 
+- If the site was in **Preview**, check the banner is gone and the site's card in **Sites**
+  no longer reads **In preview**.
 - Open the site in a private (incognito) browser window, where you aren't signed in, and
   click through it as a visitor would.
 - In **Pages**, open any page you added recently and check its **Page Access**
@@ -137,6 +214,7 @@ Before you share a link or announce a launch:
 ## Related
 
 - [Site Protection & Error Pages](overview.md)
+- [Keep it to your team with Preview](#keep-it-to-your-team-with-preview)
 - [Maintenance mode](maintenance-mode.md)
 - [Password-protect a page](password-a-screen.md)
 - [Members-only areas](../../workspace-and-billing/teams-and-roles/members-only.md)

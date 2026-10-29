@@ -155,12 +155,14 @@ export function CommerceAnalyticsCard(props: CommerceAnalyticsCardProps) {
     const productCents = new Map<string, { name: string; cents: number }>()
     for (const order of window30) {
       for (const line of order.lineItems ?? []) {
-        const entry = productCents.get(line.productId) ?? {
+        // A line typed on a quote has no product; it ranks under its own name.
+        const key = CommerceModel.orderLineProductKey(line)
+        const entry = productCents.get(key) ?? {
           name: line.name,
           cents: 0,
         }
         entry.cents += line.unitAmountCents * line.quantity
-        productCents.set(line.productId, entry)
+        productCents.set(key, entry)
       }
     }
     const topProducts = [...productCents.values()]

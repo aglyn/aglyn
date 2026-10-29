@@ -102,6 +102,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
   },
   aiImport: {
     '#prove-it-is-yours': 'Use one of these three ways. The status at the top shows Verified once one of them works.',
+    '#turned-away': 'Many hosts protect a site with bot protection or a firewall that turns away visitors it takes for robots.',
     '#waves': 'The first wave brings in your main pages: home, then the pages in your menu, then your other top-level pages.',
     '#your-current-website': 'Under Website address, type the address people use to reach your site today, for example example.com, and choose Next.',
   },
@@ -511,6 +512,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
   posHardware: {
     '#bought-from-us-in-person': 'At an event, Aglyn may sell you a reader in person. You pay at Aglyn\'s register, take the reader with you, and the order joins your workspace.',
     '#buy-a-reader-from-aglyn': 'The Hardware card on Products → Point of sale sells Stripe\'s card readers and their accessories.',
+    '#card-readers-to-set-up': 'A reader bought in person waits on Products → Point of sale, in a Card readers to set up card, until you set it up on a store.',
     '#hardware-purchase-records': 'Aglyn is the seller of these readers, so it keeps a record of each sale for tax and accounting: the items and their prices, shipping, tax, the total, the order\'s status dates, Stripe\'s payment references, and the…',
     '#reader-start-up-screen': 'While a Stripe Reader S700, S710 or BBPOS WisePOS E waits for a payment, it shows a start-up screen.',
     '#receipt-printers': 'A cloud receipt printer collects its work from Aglyn over the internet, so a receipt prints from the register on any device, even one with no printer driver, and even when the printer is on a different network.',
@@ -556,6 +558,10 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#where-to-publish-from': 'Publishing lives at the organization level — Marketplace → Publish.',
     '#workspace-licenses': 'This workspace lists the marketplace licenses this workspace owns — installable by any member with install permission, whoever on the team paid for it.',
     '#your-listings': 'Marketplace → Listings lists everything your organization has published, with its preview image; a row\'s menu is where you Publish new version…, Edit listing, or switch a plugin between private and public.',
+  },
+  quotes: {
+    '#make-a-quote': 'On the Orders tab, choose New quote in the Quotes card. The quote gets the next number from your store\'s order numbers and is listed as Quote #1042, for example.',
+    '#quote-defaults': 'The Quotes card on the Checkout settings page sets what every new quote starts with: whether customers approve the proof before they can pay.',
   },
   redirects: {
     '#manage-redirects': 'Create, edit, and delete redirect rules from the redirect manager page.',

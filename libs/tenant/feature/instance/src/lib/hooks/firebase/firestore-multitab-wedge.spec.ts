@@ -37,6 +37,7 @@ import { memoryLocalCache, persistentLocalCache } from 'firebase/firestore'
 
 import { firestoreCacheClassFor, localCacheFor } from './firestore-cache'
 import {
+  confirmSharedCacheLock,
   createWedgeEscalation,
   fallBackToMemoryCache,
   memoryCacheFallbackActive,
@@ -44,6 +45,10 @@ import {
   MEMORY_CACHE_FALLBACK_TTL_MS,
   probePrimaryLease,
   readMemoryCacheFallback,
+  readSharedCacheLock,
+  recordSharedCacheLock,
+  SHARED_CACHE_LOCK_KEY,
+  SHARED_CACHE_LOCK_TTL_MS,
   STALE_PRIMARY_LEASE_MS,
   wedgeEvidenceFrom,
   type WedgeEvidence,
@@ -203,6 +208,7 @@ describe('wedgeEvidenceFrom (AGL-3428)', () => {
 describe('a stalled tab behind a frozen primary recovers onto the memory cache (AGL-3428)', () => {
   beforeEach(() => {
     window.sessionStorage.clear()
+    window.localStorage.clear()
     jest.clearAllMocks()
   })
 
@@ -353,5 +359,238 @@ describe('a stalled tab behind a frozen primary recovers onto the memory cache (
     expect(readMemoryCacheFallback({ getItem: () => 'not json' }, NOW)).toBeUndefined()
     expect(window.sessionStorage.getItem(MEMORY_CACHE_FALLBACK_KEY)).toBeNull()
     expect(firestoreCacheClassFor('durable')).toBe('durable')
+  })
+})
+
+/**
+ * AGL-4090: each tab used to find the lock on its own, so every NEW tab sat on
+ * an empty page through the stall, the cycle, the settle and the lease read
+ * before reloading — about half a minute, per tab. Here the first tab runs
+ * that whole path once; the tab opened after it is a fresh `sessionStorage`
+ * over the same origin's `localStorage`, which is exactly what a browser
+ * gives a new tab.
+ */
+describe('a tab opened after another has seen the lock skips the wait (AGL-4090)', () => {
+  beforeEach(() => {
+    window.sessionStorage.clear()
+    window.localStorage.clear()
+    jest.clearAllMocks()
+  })
+  afterEach(() => {
+    window.sessionStorage.clear()
+    window.localStorage.clear()
+  })
+
+  /** A new tab: its own, empty `sessionStorage`; the origin's `localStorage`. */
+  const openNewTab = () => window.sessionStorage.clear()
+
+  /** The whole AGL-3428 path in the first tab, recording what it finds. */
+  const firstTabRecovers = async (idb: ReturnType<typeof fakeIndexedDb>) => {
+    const reload = jest.fn()
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const recovery = createStallRecovery({
+      disable: hangs,
+      enable: hangs,
+      isOnline: () => true,
+      isVisible: () => true,
+      stepTimeoutMs: 20,
+      afterCycle: createWedgeEscalation({
+        probe: () => probePrimaryLease(idb.factory, DATABASE, { timeoutMs: 20 }),
+        fallBack: (evidence) =>
+          fallBackToMemoryCache(evidence, { databaseName: DATABASE, reload }),
+        isOnline: () => true,
+        isVisible: () => true,
+        wait: async () => undefined,
+      }),
+    })
+    const outcome = await recovery.recover()
+    warn.mockRestore()
+    return { outcome, reload }
+  }
+
+  it('starts the next tab on the memory cache at boot, with no stall, no cycle and no reload', async () => {
+    const first = await firstTabRecovers(fakeIndexedDb({ locked: true }))
+
+    // The first tab behaves exactly as before: it finds the lock itself,
+    // keeps its own fallback and reloads once.
+    expect(first.outcome).toBe('fell-back')
+    expect(first.reload).toHaveBeenCalledTimes(1)
+    expect(memoryCacheFallbackActive()).toBe(true)
+
+    openNewTab()
+    // The new tab has seen nothing itself…
+    expect(memoryCacheFallbackActive()).toBe(false)
+    // …yet the provider's synchronous question, asked before
+    // `initializeFirestore` and before any read could stall, already answers
+    // with the memory cache. The durable cache is never built, so the tab is
+    // never registered for the escalation and never reloads.
+    expect(firestoreCacheClassFor('durable', DATABASE)).toBe('ephemeral')
+    localCacheFor(firestoreCacheClassFor('durable', DATABASE))
+    expect(memoryLocalCache).toHaveBeenCalled()
+    expect(persistentLocalCache).not.toHaveBeenCalled()
+  })
+
+  it('leaves a single tab exactly as before: with no lock seen, it boots on the durable cache', () => {
+    expect(window.localStorage.getItem(SHARED_CACHE_LOCK_KEY)).toBeNull()
+
+    expect(firestoreCacheClassFor('durable', DATABASE)).toBe('durable')
+    localCacheFor(firestoreCacheClassFor('durable', DATABASE))
+    expect(persistentLocalCache).toHaveBeenCalled()
+    expect(memoryLocalCache).not.toHaveBeenCalled()
+  })
+
+  it('keeps a stale lease to the tab that saw it: a new tab wins a lapsed lease on start', async () => {
+    const first = await firstTabRecovers(
+      fakeIndexedDb({
+        lease: { ownerId: 'hCao0NnJ', allowTabSynchronization: true, leaseTimestampMs: Date.now() - 120_000 },
+      }),
+    )
+    expect(first.outcome).toBe('fell-back')
+
+    expect(window.localStorage.getItem(SHARED_CACHE_LOCK_KEY)).toBeNull()
+    openNewTab()
+    expect(firestoreCacheClassFor('durable', DATABASE)).toBe('durable')
+  })
+
+  it('moves nothing for another database, an ephemeral origin, or a caller that names no database', () => {
+    recordSharedCacheLock('firestore/OTHER_APP/aglyn-main/main')
+    expect(firestoreCacheClassFor('durable', DATABASE)).toBe('durable')
+
+    recordSharedCacheLock(DATABASE)
+    expect(firestoreCacheClassFor('durable')).toBe('durable')
+    // An ephemeral origin was never on the durable cache to begin with.
+    expect(firestoreCacheClassFor('ephemeral', DATABASE)).toBe('ephemeral')
+  })
+
+  it('expires, and ignores a record that does not parse or is not a lock', () => {
+    const storage = (record: unknown) => ({ getItem: () => JSON.stringify(record) })
+    const lock = { reason: 'lease-locked', databaseName: DATABASE, at: NOW }
+
+    expect(readSharedCacheLock(storage(lock), DATABASE, NOW + 1_000)).toEqual(lock)
+    expect(
+      readSharedCacheLock(storage(lock), DATABASE, NOW + SHARED_CACHE_LOCK_TTL_MS),
+    ).toBeUndefined()
+    // A stamp ahead of this clock is no evidence of anything.
+    expect(readSharedCacheLock(storage(lock), DATABASE, NOW - 1)).toBeUndefined()
+    // A stale lease is never shared, whatever the record says.
+    expect(
+      readSharedCacheLock(storage({ ...lock, reason: 'lease-stale' }), DATABASE, NOW),
+    ).toBeUndefined()
+    expect(readSharedCacheLock({ getItem: () => 'not json' }, DATABASE, NOW)).toBeUndefined()
+    expect(
+      readSharedCacheLock(
+        {
+          getItem: () => {
+            throw new Error('SecurityError')
+          },
+        },
+        DATABASE,
+        NOW,
+      ),
+    ).toBeUndefined()
+  })
+
+  it('still shares the lock when this tab cannot keep its own record, and still falls back when it cannot share', () => {
+    const reload = jest.fn()
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const refuses = {
+      setItem: () => {
+        throw new Error('QuotaExceededError')
+      },
+    }
+
+    fallBackToMemoryCache(
+      { reason: 'lease-locked' },
+      { databaseName: DATABASE, storage: refuses, reload },
+    )
+    expect(reload).not.toHaveBeenCalled()
+    expect(readSharedCacheLock(window.localStorage, DATABASE, Date.now())).toBeDefined()
+
+    window.localStorage.clear()
+    fallBackToMemoryCache(
+      { reason: 'lease-locked' },
+      { databaseName: DATABASE, sharedStorage: refuses, reload },
+    )
+    expect(reload).toHaveBeenCalledTimes(1)
+    expect(memoryCacheFallbackActive()).toBe(true)
+    expect(window.localStorage.getItem(SHARED_CACHE_LOCK_KEY)).toBeNull()
+    warn.mockRestore()
+  })
+})
+
+describe('confirmSharedCacheLock: the record lasts only as long as the lock (AGL-4090)', () => {
+  beforeEach(() => {
+    window.sessionStorage.clear()
+    window.localStorage.clear()
+  })
+  afterEach(() => {
+    window.localStorage.clear()
+  })
+
+  it('re-stamps the record while the store is still locked, so the tabs after this one skip the wait too', async () => {
+    recordSharedCacheLock(DATABASE, { now: () => NOW })
+    const idb = fakeIndexedDb({ locked: true })
+
+    await expect(
+      confirmSharedCacheLock(DATABASE, {
+        probe: () => probePrimaryLease(idb.factory, DATABASE, { timeoutMs: 20 }),
+        now: () => NOW + 60_000,
+      }),
+    ).resolves.toBe('still-locked')
+    expect(readSharedCacheLock(window.localStorage, DATABASE, NOW + 60_000)).toEqual({
+      reason: 'lease-locked',
+      databaseName: DATABASE,
+      at: NOW + 60_000,
+    })
+    // Read-only, and released once the lock lifts (asserted by the fake).
+    idb.release()
+    expect(idb.connections[0].closed).toBe(true)
+  })
+
+  it('clears the record as soon as the store answers, so the next tab gets the durable cache back', async () => {
+    const answers = [
+      // The lock lifted and a tab is renewing the lease.
+      fakeIndexedDb({
+        lease: { ownerId: 'hCao0NnJ', allowTabSynchronization: true, leaseTimestampMs: NOW - 1_000 },
+      }),
+      // Readable, though no tab holds the lease: a new tab would take it.
+      fakeIndexedDb({}),
+      // The database is gone, and with it the lock.
+      fakeIndexedDb({ exists: false }),
+    ]
+    for (const idb of answers) {
+      recordSharedCacheLock(DATABASE, { now: () => NOW })
+      await expect(
+        confirmSharedCacheLock(DATABASE, {
+          probe: () => probePrimaryLease(idb.factory, DATABASE, { now: () => NOW }),
+          now: () => NOW + 1_000,
+        }),
+      ).resolves.toBe('cleared')
+      expect(window.localStorage.getItem(SHARED_CACHE_LOCK_KEY)).toBeNull()
+    }
+    expect(firestoreCacheClassFor('durable', DATABASE)).toBe('durable')
+  })
+
+  it('never reads the lease, and never creates a record, when no tab has seen a lock', async () => {
+    const probe = jest.fn(async () => ({ state: 'locked' as const }))
+
+    await expect(confirmSharedCacheLock(DATABASE, { probe })).resolves.toBe('absent')
+    expect(probe).not.toHaveBeenCalled()
+    expect(window.localStorage.getItem(SHARED_CACHE_LOCK_KEY)).toBeNull()
+  })
+
+  it('leaves a record another tab wrote while this read ran: it saw the lock later', async () => {
+    recordSharedCacheLock(DATABASE, { now: () => NOW })
+
+    await expect(
+      confirmSharedCacheLock(DATABASE, {
+        probe: async () => {
+          recordSharedCacheLock(DATABASE, { now: () => NOW + 500 })
+          return { state: 'vacant' }
+        },
+        now: () => NOW + 1_000,
+      }),
+    ).resolves.toBe('still-locked')
+    expect(readSharedCacheLock(window.localStorage, DATABASE, NOW + 1_000)?.at).toBe(NOW + 500)
   })
 })

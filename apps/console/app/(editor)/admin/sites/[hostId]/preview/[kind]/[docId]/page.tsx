@@ -18,12 +18,15 @@
 
 import { EnabledPluginsContext, resolveHostEnabledPlugins } from '@aglyn/aglyn'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { getDocBounded } from '@aglyn/tenant-feature-instance/hooks/firebase/firestore-bounded-read'
 import { Alert, Box } from '@mui/material'
-import { doc, getDoc } from 'firebase/firestore'
+import { doc } from 'firebase/firestore'
 import { useParams, useSearchParams } from 'next/navigation'
 import { Suspense, useEffect, useState } from 'react'
 import '../../../../../../../../constants/app-setup'
-import DocumentPreview from '../../../../../../../../components/document-preview.component'
+import DocumentPreview, {
+  DocumentPreviewPreparing,
+} from '../../../../../../../../components/document-preview.component'
 import { consolePluginLoader } from '../../../../../../../../constants/console-plugin-loader'
 import { isPreviewKind } from '../../../../../../../../utils/staff-site-links'
 
@@ -37,6 +40,10 @@ import { isPreviewKind } from '../../../../../../../../utils/staff-site-links'
  * with THAT workspace's blocks, and a block the site uses and the staffer's
  * workspace does not enable would draw as missing. The rules let staff read
  * both documents, so the set is the one the site itself renders with.
+ *
+ * Both reads are bounded (AGL-4089): a plain `getDoc` never settles while
+ * another tab holds the shared cache, and the route drew a blank page for as
+ * long as that lasted.
  */
 function useSitePluginIds(hostId: string): { ready: boolean; ids: string[]; failed: boolean } {
   const firestore = useFirestore()
@@ -49,10 +56,12 @@ function useSitePluginIds(hostId: string): { ready: boolean; ids: string[]; fail
     let active = true
     void (async () => {
       try {
-        const host = await getDoc(doc(firestore, 'hosts', hostId))
+        const host = (await getDocBounded(doc(firestore, 'hosts', hostId))).snapshot
         const orgId = host.get('orgId')
         const org =
-          typeof orgId === 'string' && orgId ? await getDoc(doc(firestore, 'orgs', orgId)) : null
+          typeof orgId === 'string' && orgId
+            ? (await getDocBounded(doc(firestore, 'orgs', orgId))).snapshot
+            : null
         const ids = resolveHostEnabledPlugins(
           (org?.data() as { enabledPlugins?: string[] } | undefined) ?? null,
           (host.data() as { disabledPlugins?: string[]; enabledPlugins?: string[] } | undefined) ??
@@ -95,7 +104,8 @@ function StaffSitePreview() {
       </Box>
     )
   }
-  if (!plugins.ready) return null
+  // The preview's own spinner, so the wait is never a blank page (AGL-4089).
+  if (!plugins.ready) return <DocumentPreviewPreparing kind={kind} />
   return (
     <EnabledPluginsContext.Provider value={plugins.ids}>
       <DocumentPreview ids={hostId && docId ? { hostId, kind, docId, versionId } : null} />
@@ -111,7 +121,7 @@ function StaffSitePreview() {
  */
 export default function StaffSitePreviewPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<DocumentPreviewPreparing />}>
       <StaffSitePreview />
     </Suspense>
   )

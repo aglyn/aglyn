@@ -97,7 +97,24 @@ export interface AiLayoutFramePlan {
   storeLinks?: AiStoreFrameLinks | null
   /** The site's language (AGL-3760): the frame's own words are in it where `ai-layout-labels.ts` lists it. */
   language?: string
+  /**
+   * The brand as a site brought in from elsewhere draws it (AGL-4084): its
+   * logo alone, its logo with its name, or its name alone, as the source's
+   * header shows it. Absent, the name alone.
+   */
+  brand?: AiLayoutFrameBrand | null
 }
+
+/** A header's brand as the source shows it (AGL-4084). */
+export interface AiLayoutFrameBrand {
+  /** The logo, from the site's own media library. */
+  logo?: { src: string } | null
+  /** Whether the header prints the name as words, beside the logo or alone. */
+  name: boolean
+}
+
+/** The height a header's logo is drawn at: a Besigner field the owner may change. */
+export const AI_LAYOUT_LOGO_HEIGHT = '40px'
 
 /** What the header's link to a store's account page says (AGL-3676), in English. */
 export const AI_LAYOUT_ACCOUNT_LINK = AI_LAYOUT_LABELS_EN.account
@@ -259,7 +276,10 @@ export function aiCompileLayoutFrame(
     minWidth: 0,
     ...(centeredNav ? {} : { flexGrow: 1 }),
   }
-  const brand = plan.homeId
+  const logo = plan.brand?.logo?.src ? plan.brand.logo.src : null
+  const brand = logo
+    ? brandMark(tree, { src: logo, name: name.slice(0, 40), withName: plan.brand?.name === true, homeId: plan.homeId, centered: centeredNav })
+    : plan.homeId
     ? tree.add(
         'muiScreenLink',
         {
@@ -711,4 +731,41 @@ function compileFooter(
     [container],
     'footer',
   )
+}
+
+/**
+ * The header's brand drawn with the site's logo (AGL-4084), as the source's
+ * header draws it: the logo alone, named by its alt text, or the logo with
+ * the name beside it; either way the link home.
+ */
+function brandMark(
+  tree: AiLayoutTreeBuilder,
+  input: { src: string; name: string; withName: boolean; homeId: string | null; centered: boolean },
+): string {
+  const image = (alone: boolean) =>
+    tree.add(
+      'image',
+      {
+        src: input.src,
+        ...(alone ? { alt: input.name } : { decorative: true }),
+        objectFit: 'contain',
+        width: 'auto',
+        height: AI_LAYOUT_LOGO_HEIGHT,
+        loading: 'eager',
+        ...(alone && input.homeId ? { screenId: input.homeId } : {}),
+      },
+      null,
+      null,
+      'logo',
+    )
+  const grow = input.centered ? null : { flexGrow: 1 }
+  if (!input.withName) {
+    if (!grow) return image(true)
+    return tree.add('muiBox', null, { ...grow, display: 'flex', alignItems: 'center', minWidth: 0 }, [image(true)], 'brand')
+  }
+  const words = tree.add('muiTypography', { children: input.name, variant: 'h6', component: 'p' }, { fontWeight: 800, whiteSpace: 'nowrap' }, null, 'brandName')
+  const row = tree.add('muiStack', { direction: 'row', spacing: '1.5', alignItems: 'center' }, null, [image(false), words], 'brandRow')
+  return input.homeId
+    ? tree.add('muiLinkBox', { screenId: input.homeId, ariaLabel: input.name }, { ...(grow ?? {}), textDecoration: 'none', color: 'inherit', minWidth: 0 }, [row], 'brand')
+    : tree.add('muiBox', null, { ...(grow ?? {}), minWidth: 0 }, [row], 'brand')
 }

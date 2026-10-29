@@ -25,6 +25,7 @@
  */
 
 import type { OrderLineModifier } from './product-modifiers'
+import type { OrderQuote } from './commerce-quotes'
 import { stripeIdIsTestMode } from '@aglyn/aglyn/app-utils/stripe-deployment-mode'
 import type { PaymentRisk } from '@aglyn/aglyn/app-utils/payment-risk'
 import type { ProductType } from './commerce'
@@ -49,7 +50,8 @@ export type OrderStatus =
   | 'refunded'
 
 /**
- * Where the sale came through. `subscription` is a recurring cycle of a
+ * Where the sale came through. `quote` is an order a business quoted before
+ * the customer paid it (AGL-4093, `commerce-quotes.ts`). `subscription` is a recurring cycle of a
  * PHYSICAL subscription product (AGL-1750): each paid invoice mints one order
  * so fulfilment has something to pick, pack and label against, and so
  * recurring revenue reaches the surfaces that read `orders`. Digital and
@@ -57,7 +59,7 @@ export type OrderStatus =
  * there is nothing to ship, and AGL-1732's "a subscription is not an order"
  * stands for them.
  */
-export type OrderChannel = 'online' | 'pos' | 'draft' | 'subscription' | 'marketplace'
+export type OrderChannel = 'online' | 'pos' | 'draft' | 'subscription' | 'marketplace' | 'quote'
 
 /**
  * Where an order sold on an outside channel came from (AGL-3638): a
@@ -97,7 +99,20 @@ export interface OrderChannelSource {
 
 /** Snapshot of what was bought — self-contained for history. */
 export interface OrderLineItem {
+  /**
+   * The product sold. EMPTY on a line typed on a quote (`custom`), which no
+   * product stands behind: every reader that looks a product up by this id
+   * skips an empty one (AGL-4093).
+   */
   productId: string
+  /** A line typed on a quote rather than picked from the catalog (AGL-4093). */
+  custom?: boolean
+  /** Included at no charge (AGL-4093): `unitAmountCents` is 0. */
+  included?: boolean
+  /** What the line is, in the business's words, beyond its name (AGL-4093). */
+  description?: string
+  /** The product was tax-exempt when the line was priced (AGL-4093). */
+  taxExempt?: boolean
   variantId?: string
   /** Display snapshot at purchase time. */
   name: string
@@ -635,6 +650,8 @@ export interface HostOrder {
   invoiceId?: string
   /** Draft orders (AGL-287): the link sent to the buyer. */
   paymentLinkUrl?: string
+  /** What only a quote has (channel `quote`, AGL-4093); see `commerce-quotes.ts`. */
+  quote?: OrderQuote
   refundedCents?: number
   /**
    * Line indexes an admin refunded BY NAME (AGL-2454), and therefore the lines
@@ -1535,6 +1552,15 @@ export function liftLegacyOrder(raw: Partial<HostOrder>): HostOrder {
 }
 
 /**
+ * What a report groups a line under: its product, or for a line typed on a
+ * quote (no product) its name, so two different typed lines never pool into
+ * one empty-id bucket.
+ */
+export function orderLineProductKey(line: Pick<OrderLineItem, 'productId' | 'name'>): string {
+  return line.productId ? line.productId : `custom:${line.name ?? ''}`
+}
+
+/**
  * Does this order contain `productId`?
  *
  * Line items first, legacy flat `productId` as the fallback — the same test
@@ -1813,6 +1839,7 @@ export const ORDER_CHANNEL_LABELS: Record<OrderChannel, string> = {
   draft: 'Draft',
   subscription: 'Subscription',
   marketplace: 'Marketplace',
+  quote: 'Quote',
 }
 
 /** Human label for a channel, tolerating a legacy/unknown value. */

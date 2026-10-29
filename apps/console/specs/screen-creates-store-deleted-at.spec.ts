@@ -59,6 +59,8 @@ const DOORS = [
   'apps/console/utils/server/provision-host.ts',
   // Duplicate, from the console, the AI tool and the page step.
   'libs/tenant/data/admin/src/lib/server/duplicate-resource.ts',
+  // A site starter's pages, written onto the new site it provisions (AGL-4049).
+  'libs/tenant/data/admin/src/lib/server/provision-starter.ts',
   'libs/plugins/marketplace/src/lib/server/install-email-starter.ts',
   'libs/plugins/ai/src/lib/jobs/ai-job-drafts.ts',
   'libs/plugins/email/src/lib/server-email-drafts.ts',

@@ -16,6 +16,8 @@
  */
 
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
+import { buildPdfFile, pdfNumber } from '@aglyn/shared-util-tools/pdf/pdf-file'
+import { pdfString, wrapText } from '@aglyn/shared-util-tools/pdf/pdf-text'
 import type { WaiverStrokes } from './waiver-signature'
 
 /*==========================================
@@ -25,6 +27,11 @@ import type { WaiverStrokes } from './waiver-signature'
  * signer's details, a drawn signature redrawn as vector strokes (sharper than
  * the stored picture) or a typed one in italics, and the audit trail. Pure,
  * so a spec reads the bytes it makes.
+ *
+ * The text encoding, the widths it wraps by and the file itself come from the
+ * shared writer (`@aglyn/shared-util-tools/pdf/*`); the layout is this
+ * document's own. It wraps by the writer's quick estimate (`wrapText`), so
+ * the same signature always makes the same bytes.
  *=========================================*/
 
 export interface WaiverPdfInput {
@@ -52,98 +59,7 @@ const MARGIN = 54
 const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2
 const FOOTER_SPACE = 36
 
-/** Helvetica advance widths, 1/1000 em, for the printable ASCII range 32–126. */
-const HELVETICA_WIDTHS = [
-  278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556, 556, 556,
-  556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556, 1015, 667, 667, 722, 722, 667, 611, 778, 722, 278,
-  500, 667, 556, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 278, 278, 278, 469,
-  556, 333, 556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556, 556, 556, 333, 500,
-  278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584,
-]
-
-/** Characters outside ASCII that WinAnsi holds at another code point. */
-const WIN_ANSI: Record<string, number> = {
-  '‘': 0x91,
-  '’': 0x92,
-  '“': 0x93,
-  '”': 0x94,
-  '•': 0x95,
-  '–': 0x96,
-  '—': 0x97,
-  '…': 0x85,
-  '€': 0x80,
-  '™': 0x99,
-}
-
-/** One character's WinAnsi byte, `?` for anything the standard fonts cannot draw. */
-function winAnsiByte(char: string): number {
-  const code = char.codePointAt(0) ?? 63
-  if (code >= 32 && code <= 126) return code
-  if (code >= 0xa0 && code <= 0xff) return code
-  return WIN_ANSI[char] ?? 63
-}
-
-function charWidth(byte: number): number {
-  if (byte >= 32 && byte <= 126) return HELVETICA_WIDTHS[byte - 32]
-  if (byte === 0x95) return 350
-  if (byte === 0x97 || byte === 0x85) return 1000
-  return 556
-}
-
-/** A string's width in points at `size`; bold runs a little wider. */
-export function textWidth(text: string, size: number, bold = false): number {
-  let total = 0
-  for (const char of text) total += charWidth(winAnsiByte(char))
-  return (total / 1000) * size * (bold ? 1.07 : 1)
-}
-
-/** Words wrapped into lines no wider than `width`; an overlong word is broken. */
-export function wrapText(text: string, size: number, width: number, bold = false): string[] {
-  const lines: string[] = []
-  for (const paragraph of String(text ?? '').split('\n')) {
-    const words = paragraph.split(/\s+/).filter(Boolean)
-    if (!words.length) {
-      lines.push('')
-      continue
-    }
-    let line = ''
-    for (let word of words) {
-      while (textWidth(word, size, bold) > width) {
-        let cut = word.length - 1
-        while (cut > 1 && textWidth(word.slice(0, cut), size, bold) > width) cut -= 1
-        if (line) {
-          lines.push(line)
-          line = ''
-        }
-        lines.push(word.slice(0, cut))
-        word = word.slice(cut)
-      }
-      const next = line ? `${line} ${word}` : word
-      if (textWidth(next, size, bold) > width && line) {
-        lines.push(line)
-        line = word
-      } else {
-        line = next
-      }
-    }
-    if (line) lines.push(line)
-  }
-  return lines
-}
-
-/** A PDF string literal's body: WinAnsi bytes, with `\`, `(` and `)` escaped and the rest octal above ASCII. */
-function pdfString(text: string): string {
-  let out = ''
-  for (const char of text) {
-    const byte = winAnsiByte(char)
-    if (byte === 0x5c || byte === 0x28 || byte === 0x29) out += `\\${String.fromCharCode(byte)}`
-    else if (byte < 32 || byte > 126) out += `\\${byte.toString(8).padStart(3, '0')}`
-    else out += String.fromCharCode(byte)
-  }
-  return out
-}
-
-const num = (value: number) => (Math.round(value * 100) / 100).toString()
+const num = pdfNumber
 
 type Font = 'F1' | 'F2' | 'F3'
 
@@ -282,37 +198,9 @@ export function renderWaiverPdf(input: WaiverPdfInput): Uint8Array {
     )
   })
 
-  // Objects: 1 catalog, 2 pages, 3–5 fonts, 6 info, then a page and its content per page.
-  const objects: string[] = []
-  const pageIds = layout.pages.map((_, index) => 7 + index * 2)
-  objects[1] = '<< /Type /Catalog /Pages 2 0 R >>'
-  objects[2] = `<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${total} >>`
-  objects[3] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>'
-  objects[4] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>'
-  objects[5] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Oblique /Encoding /WinAnsiEncoding >>'
-  objects[6] = `<< /Title (${pdfString(input.title)}) /Producer (${pdfString(PLATFORM_BRAND_NAME)}) >>`
-  layout.pages.forEach((ops, index) => {
-    const pageId = pageIds[index]
-    const stream = ops.join('\n')
-    objects[pageId] =
-      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}] ` +
-      `/Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents ${pageId + 1} 0 R >>`
-    objects[pageId + 1] = `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`
+  return buildPdfFile({
+    title: input.title,
+    producer: PLATFORM_BRAND_NAME,
+    pages: layout.pages.map((ops) => ({ width: PAGE_WIDTH, height: PAGE_HEIGHT, content: ops.join('\n') })),
   })
-
-  // Every string above is single-byte (WinAnsi escapes are ASCII), so a
-  // character offset is a byte offset.
-  let out = '%PDF-1.4\n%âãÏÓ\n'
-  const offsets: number[] = []
-  for (let id = 1; id < objects.length; id += 1) {
-    offsets[id] = out.length
-    out += `${id} 0 obj\n${objects[id]}\nendobj\n`
-  }
-  const xref = out.length
-  out += `xref\n0 ${objects.length}\n0000000000 65535 f \n`
-  for (let id = 1; id < objects.length; id += 1) out += `${String(offsets[id]).padStart(10, '0')} 00000 n \n`
-  out += `trailer\n<< /Size ${objects.length} /Root 1 0 R /Info 6 0 R >>\nstartxref\n${xref}\n%%EOF\n`
-  const bytes = new Uint8Array(out.length)
-  for (let index = 0; index < out.length; index += 1) bytes[index] = out.charCodeAt(index) & 0xff
-  return bytes
 }

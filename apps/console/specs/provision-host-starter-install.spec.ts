@@ -176,6 +176,33 @@ describe('claimHostForOrg: the default and guided creates are unchanged, byte fo
   })
 })
 
+describe('claimHostForOrg: Start in preview (AGL-4086)', () => {
+  it('writes `preview: true` on a site born in preview, beside its identity', async () => {
+    const writes: Write[] = []
+    mockUid = 0
+    await claimHostForOrg({
+      firestore: recordingFirestore(writes) as never,
+      orgId: 'org-1',
+      displayName: 'Royal Styles',
+      subdomain: 'royal-styles',
+      preview: true,
+    })
+    const host = writes.find(([path]) => path === 'hosts/uid-1')?.[1] as Record<string, unknown>
+    expect(host['preview']).toBe(true)
+    // Nothing else about the site changes: it is the default site, in preview.
+    const { preview, ...rest } = host
+    expect(preview).toBe(true)
+    mockUid = 1
+    expect(rest).toEqual(defaultHostDoc(true, defaultSiteWrites('Royal Styles').screenId))
+  })
+
+  it('writes no `preview` key at all for a public site', async () => {
+    const { writes } = await claim(undefined)
+    const host = writes.find(([path]) => path === 'hosts/uid-1')?.[1] as Record<string, unknown>
+    expect('preview' in host).toBe(false)
+  })
+})
+
 describe('claimHostForOrg: a picked starter (AGL-4049)', () => {
   const layoutNodes = {
     'canvas-root': { componentId: 'box', props: {}, nodes: ['brand', 'slot'] },

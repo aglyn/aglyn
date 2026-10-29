@@ -174,6 +174,12 @@ export const ORDER_STATUS_OPTIONS: readonly ListFilterOption[] = (
   Object.keys(ORDER_STATUS_LABELS) as OrderStatus[]
 ).map((status) => ({ value: status, label: ORDER_STATUS_LABELS[status] }))
 
+/*
+ * Every channel, `quote` included: a quote is listed here once it is paid
+ * (AGL-4094), as the order it became, and "Quote" finds those orders. An
+ * unpaid quote is never on this list (`commerce-quotes.ts`); the Quotes card
+ * lists it.
+ */
 export const ORDER_CHANNEL_OPTIONS: readonly ListFilterOption[] = (
   Object.keys(ORDER_CHANNEL_LABELS) as OrderChannel[]
 ).map((channel) => ({ value: channel, label: ORDER_CHANNEL_LABELS[channel] }))

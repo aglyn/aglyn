@@ -125,6 +125,15 @@ describe('POST /api/fonts/theme (AGL-3668)', () => {
     expect((await post({ op: 'list' })).status).toBe(200)
   })
 
+  it('asks "Publish site content", so the site’s stamp decides either way (AGL-4047)', async () => {
+    state.host = { memberRoles: { u1: 'editor' }, memberPermissions: { u1: { 'site.publish': false } } }
+    const refused = await post({ op: 'list' })
+    expect(refused.status).toBe(403)
+    expect((await refused.json()).error).toBe('Your role does not include "Publish site content" — ask an organization admin')
+    state.host = { memberRoles: { u1: 'author' }, memberPermissions: { u1: { 'site.publish': true } } }
+    expect((await post({ op: 'list' })).status).toBe(200)
+  })
+
   it('needs a site, an operation it can read, and a site that exists', async () => {
     expect((await post({ op: 'list' }, '')).status).toBe(400)
     expect((await post({ op: 'nope' })).status).toBe(400)

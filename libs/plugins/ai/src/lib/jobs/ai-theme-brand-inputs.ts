@@ -438,12 +438,28 @@ export interface PublicFetchResult {
   location?: string
   /** The body's bytes, with `binary`; absent otherwise. */
   data?: Uint8Array
+  /**
+   * Whose edge refused an error answer, when its headers say (AGL-4083): the
+   * bot protection a site owner opens for AglynBot is that edge's setting.
+   */
+  edge?: PublicFetchEdge
+}
+
+/** An edge network that names itself on the answers it refuses with. */
+export type PublicFetchEdge = 'vercel' | 'cloudflare'
+
+/** The edge an answer came through, from the headers each one sets; `null` for neither. */
+export function publicFetchEdgeOf(headers: Pick<Headers, 'get'>): PublicFetchEdge | null {
+  const server = (headers.get('server') ?? '').toLowerCase()
+  if (headers.get('x-vercel-mitigated') || headers.get('x-vercel-id') || server === 'vercel') return 'vercel'
+  if (headers.get('cf-mitigated') || headers.get('cf-ray') || server === 'cloudflare') return 'cloudflare'
+  return null
 }
 
 function refusedFetch(
   refusal: PublicFetchRefusal,
   url: string,
-  extra: { status?: number; location?: string } = {},
+  extra: { status?: number; location?: string; edge?: PublicFetchEdge } = {},
 ): PublicFetchResult {
   return { ok: false, url, text: '', bytes: 0, truncated: false, contentType: '', refusal, ...extra }
 }
@@ -458,9 +474,11 @@ export interface PublicFetchOptions {
   /** Sent as `Accept`. */
   acceptHeader?: string
   /**
-   * Extra headers for one hop, asked again for EVERY hop's own address
-   * (AGL-4085): a header meant for one host never rides a redirect to
-   * another. `Accept` and `User-Agent` above always win over these.
+   * More request headers for one hop, asked again for EVERY hop's own address
+   * (AGL-4083, AGL-4085), so a header meant for one host never rides a
+   * redirect to another. Sent under `Accept` and `User-Agent`, and neither
+   * can be changed through here. The site import's edge header goes this
+   * way, and only to the hosts `siteImportEdgeHeadersFor` decided are ours.
    */
   headersFor?: (url: URL) => Readonly<Record<string, string>> | undefined
   /** Asked of every redirect hop before it is followed; the SSRF checks run as well. */
@@ -469,6 +487,16 @@ export interface PublicFetchOptions {
   refuseOver?: boolean
   /** Keep the body's bytes as `data` rather than decode them as text (a picture, AGL-3976). */
   binary?: boolean
+}
+
+/** The caller's extra headers, without any that would say what the request is: those are the fetch's own. */
+function publicFetchExtraHeaders(headers: Readonly<Record<string, string>> | undefined): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const [name, value] of Object.entries(headers ?? {})) {
+    if (/^(?:accept|user-agent|host|cookie|authorization|content-length)$/i.test(name)) continue
+    if (typeof value === 'string') out[name] = value
+  }
+  return out
 }
 
 /**
@@ -512,7 +540,7 @@ export async function fetchPublicTextDetailed(
         signal: clock.signal,
         dispatcher,
         headers: {
-          ...(options.headersFor?.(parsed) ?? {}),
+          ...publicFetchExtraHeaders(options.headersFor?.(parsed)),
           Accept: options.acceptHeader ?? 'text/html, text/css;q=0.9',
           ...(options.userAgent ? { 'User-Agent': options.userAgent } : {}),
         },
@@ -538,7 +566,8 @@ export async function fetchPublicTextDetailed(
       }
       if (!response.ok || !response.body) {
         await response.body?.cancel().catch(() => undefined)
-        return refusedFetch('http-status', parsed.toString(), { status: response.status })
+        const edge = publicFetchEdgeOf(response.headers)
+        return refusedFetch('http-status', parsed.toString(), { status: response.status, ...(edge ? { edge } : {}) })
       }
       const contentType = response.headers.get('content-type') ?? ''
       if (!options.accept.test(contentType)) {
@@ -568,7 +597,7 @@ export async function fetchPublicTextDetailed(
 /** {@link fetchPublicTextDetailed}, answering `null` for anything it refused. */
 export async function fetchPublicText(
   url: string,
-  options: { maxBytes: number; accept: RegExp; signal?: AbortSignal; timeoutMs?: number },
+  options: { maxBytes: number; accept: RegExp; signal?: AbortSignal; timeoutMs?: number; headersFor?: PublicFetchOptions['headersFor'] },
 ): Promise<{ text: string; url: string } | null> {
   const result = await fetchPublicTextDetailed(url, options)
   return result.ok ? { text: result.text, url: result.url } : null
@@ -587,12 +616,24 @@ export interface AiReferencePage {
   stylesheets: string[]
 }
 
-/** A page and its first stylesheets through {@link fetchPublicText}; `null` when the page cannot be read. */
-export async function readReferencePage(url: URL, signal: AbortSignal): Promise<AiReferencePage | null> {
+/**
+ * A page and its first stylesheets through {@link fetchPublicText}; `null` when the page cannot be read.
+ * `headersFor` is asked for every request and every redirect hop, the page's
+ * and each stylesheet's, by its own address (AGL-4083, AGL-4085): the site
+ * import's edge header, built by `siteImportEdgeHeadersFor`, answers only for
+ * the site's own origins we serve, so a hop or a stylesheet anywhere else (a
+ * CDN's, another site's) carries nothing.
+ */
+export async function readReferencePage(
+  url: URL,
+  signal: AbortSignal,
+  headersFor?: PublicFetchOptions['headersFor'],
+): Promise<AiReferencePage | null> {
   const page = await fetchPublicText(url.toString(), {
     maxBytes: AI_THEME_REFERENCE_MAX_BYTES,
     accept: /text\/html|application\/xhtml\+xml/i,
     signal,
+    ...(headersFor ? { headersFor } : {}),
   })
   if (!page) return null
   const stylesheets: string[] = []
@@ -601,6 +642,7 @@ export async function readReferencePage(url: URL, signal: AbortSignal): Promise<
       maxBytes: AI_THEME_STYLESHEET_MAX_BYTES,
       accept: /text\/css/i,
       signal,
+      ...(headersFor ? { headersFor } : {}),
     })
     if (css) stylesheets.push(css.text)
   }

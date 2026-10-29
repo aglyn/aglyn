@@ -71,6 +71,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     mockState.locked ? Response.json({ error: 'locked' }, { status: 423 }) : null,
   getOrgDoc: async () => ({ name: 'Acme' }),
   resolveOrgMembership: (...args: unknown[]) => mockResolveMembership(...args),
+  // "Export workspace data" (`org.export`, AGL-4047), resolved by the real
+  // catalog from the member the double hands back.
+  memberHasOrgPermission: async (_orgId: string, member: unknown, permission: string) =>
+    jest.requireActual('@aglyn/aglyn').resolveOrgPermissions(member, null)[permission] === true,
   exportUserData: (...args: unknown[]) => mockExportUserData(...args),
   exportOrgData: (...args: unknown[]) => mockExportOrgData(...args),
   exportFilename: (exported: any) =>

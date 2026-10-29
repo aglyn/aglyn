@@ -43,6 +43,7 @@ export {
   BUSINESS_PROFILE_WORKSPACE_DOC,
   BUSINESS_TONE_LABELS,
   BUSINESS_TONES,
+  businessProfileFoundedProblem,
   businessProfileOwnerWrite,
   businessProfileSourceOf,
   mergeBusinessProfilePrefill,
@@ -78,8 +79,8 @@ export const BUSINESS_PROFILE_FIELD_ORDER: readonly string[] = BUSINESS_PROFILE_
  * here would make two places to keep in step, and the copy would drift.
  *
  * So the profile document holds only what has no home yet — the services, the
- * audience, the tone of voice — plus a line about the business and the area it
- * serves for a site whose SEO entity does not say. {@link resolveBusinessProfile}
+ * audience, the tone of voice, the year it was founded — plus a line about the
+ * business and the area it serves for a site whose SEO entity does not say. {@link resolveBusinessProfile}
  * reads the two together into one picture, field by field, and says where
  * each value came from.
  *
@@ -127,6 +128,8 @@ export interface ResolvedBusinessProfile {
   audience: ResolvedBusinessField<string> | null
   tone: ResolvedBusinessField<BusinessTone> | null
   toneNotes: ResolvedBusinessField<string> | null
+  /** The year the business started (AGL-4092). */
+  founded: ResolvedBusinessField<string> | null
   /** The schema.org business type the SEO entity names, e.g. `Plumber`. */
   businessType: string | null
   /** Real contact details, each only where the owner entered it in the site's settings. */
@@ -203,6 +206,7 @@ export function resolveBusinessProfile(input: {
     audience: resolve<string>('audience'),
     tone: resolve<BusinessTone>('tone'),
     toneNotes: resolve<string>('toneNotes'),
+    founded: resolve<string>('founded'),
     businessType: text(entity?.businessType, 80) || null,
     contact: {
       email: text(entity?.email, 320) || text(host?.business?.supportEmail, 320) || null,

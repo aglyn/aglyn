@@ -130,7 +130,7 @@ describeEmulated('a mailbox connect against Firestore (AGL-2978)', () => {
         role: 'admin',
         isOwner: true,
         orgWide: true,
-        permissions: { 'outreach.use': true },
+        permissions: { 'outreach.use': true, 'outreach.manageAll': true },
       }),
       readOrg: async (orgId) => (await db.collection('orgs').doc(orgId).get()).data() ?? null,
       lockdownRefusal: async () => null,

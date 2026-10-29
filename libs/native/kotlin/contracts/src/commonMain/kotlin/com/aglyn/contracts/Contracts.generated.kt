@@ -818,6 +818,7 @@ enum class HostCheckInChannel(val raw: String) {
     MARKETPLACE("marketplace"),
     ONLINE("online"),
     POS("pos"),
+    QUOTE("quote"),
     RESERVATION("reservation"),
     SUBSCRIPTION("subscription"),
     UNKNOWN(""),
@@ -925,6 +926,7 @@ data class HostOrder(
     val pickup: OrderPickup? = null,
     val posSource: String? = null,
     val productId: String? = null,
+    val quote: OrderQuote? = null,
     val receiptRequest: HostOrderReceiptRequest? = null,
     val refundedCents: Double? = null,
     val refundedLineItemIds: List<Double>? = null,
@@ -980,24 +982,12 @@ data class HostOrderCustomerRecord(
 data class HostOrderHardwareTermsAcceptance(
     val atMs: Double,
     val ip: String? = null,
-    val method: HostOrderHardwareTermsAcceptanceMethod,
+    val method: PosHardwareTermsMethod,
     val sections: String,
     val staffUid: String? = null,
     val userAgent: String? = null,
     val version: String,
 )
-
-/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
-@Serializable(with = HostOrderHardwareTermsAcceptanceMethodSerializer::class)
-enum class HostOrderHardwareTermsAcceptanceMethod(val raw: String) {
-    DISPLAY("display"),
-    NOTICE("notice"),
-    TABLET("tablet"),
-    UNKNOWN(""),
-}
-
-internal object HostOrderHardwareTermsAcceptanceMethodSerializer :
-    RawEnumSerializer<HostOrderHardwareTermsAcceptanceMethod>("com.aglyn.contracts.HostOrderHardwareTermsAcceptanceMethod", HostOrderHardwareTermsAcceptanceMethod.entries, HostOrderHardwareTermsAcceptanceMethod.UNKNOWN, { it.raw })
 
 @Serializable
 data class HostOrderHardwareTermsRequest(
@@ -1737,6 +1727,7 @@ enum class OrderChannel(val raw: String) {
     MARKETPLACE("marketplace"),
     ONLINE("online"),
     POS("pos"),
+    QUOTE("quote"),
     SUBSCRIPTION("subscription"),
     UNKNOWN(""),
 }
@@ -1949,7 +1940,10 @@ data class OrderHardwareBuyerAddress(
 
 @Serializable
 data class OrderLineItem(
+    val custom: Boolean? = null,
+    val description: String? = null,
     val fulfillmentId: String? = null,
+    val included: Boolean? = null,
     val modifiers: List<OrderLineModifier>? = null,
     val name: String,
     val productId: String,
@@ -1957,6 +1951,7 @@ data class OrderLineItem(
     val quantity: Double,
     val sku: String? = null,
     val supplierId: String? = null,
+    val taxExempt: Boolean? = null,
     val unitAmountCents: Double,
     val useDayKey: String? = null,
     val variantId: String? = null,
@@ -2104,6 +2099,30 @@ enum class OrderPickupStatus(val raw: String) {
 
 internal object OrderPickupStatusSerializer :
     RawEnumSerializer<OrderPickupStatus>("com.aglyn.contracts.OrderPickupStatus", OrderPickupStatus.entries, OrderPickupStatus.UNKNOWN, { it.raw })
+
+@Serializable
+data class OrderQuote(
+    val approvedRevision: Double? = null,
+    val billTo: OrderAddress? = null,
+    val createdAtMs: Double,
+    val createdBy: String,
+    val customer: QuoteCustomer,
+    val discount: QuoteDiscount? = null,
+    val linkVersion: Double? = null,
+    val notes: String? = null,
+    val paidAtMs: Double? = null,
+    val proofs: List<QuoteProofRef>? = null,
+    val requireProofApproval: Boolean? = null,
+    val revision: Double,
+    val shipping: QuoteShipping? = null,
+    val shipTo: OrderAddress? = null,
+    val stage: QuoteStage,
+    val tax: QuoteTaxBasis,
+    val terms: String? = null,
+    val unmatchedPayments: List<QuoteUnmatchedPayment>? = null,
+    val updatedAtMs: Double,
+    val updatedBy: String,
+)
 
 @Serializable
 data class OrderRestockCheck(
@@ -2595,6 +2614,18 @@ data class PosDisplayStateTip(
     val baseCents: Double,
     val percentages: List<Double>,
 )
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = PosHardwareTermsMethodSerializer::class)
+enum class PosHardwareTermsMethod(val raw: String) {
+    DISPLAY("display"),
+    NOTICE("notice"),
+    TABLET("tablet"),
+    UNKNOWN(""),
+}
+
+internal object PosHardwareTermsMethodSerializer :
+    RawEnumSerializer<PosHardwareTermsMethod>("com.aglyn.contracts.PosHardwareTermsMethod", PosHardwareTermsMethod.entries, PosHardwareTermsMethod.UNKNOWN, { it.raw })
 
 @Serializable
 data class PosKioskCatalog(
@@ -3154,6 +3185,120 @@ data class ProductVariant(
     val sku: String? = null,
     val weightGrams: Double? = null,
 )
+
+@Serializable
+data class QuoteCustomer(
+    val company: String? = null,
+    val email: String? = null,
+    val emailLower: String? = null,
+    val name: String? = null,
+    val phone: String? = null,
+    val record: QuoteCustomerRecord? = null,
+)
+
+@Serializable
+data class QuoteCustomerRecord(
+    val id: String,
+    val kind: String,
+)
+
+@Serializable
+data class QuoteDiscount(
+    val amountCents: Double? = null,
+    val kind: QuoteDiscountKind,
+    val pct: Double? = null,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = QuoteDiscountKindSerializer::class)
+enum class QuoteDiscountKind(val raw: String) {
+    AMOUNT("amount"),
+    PERCENT("percent"),
+    UNKNOWN(""),
+}
+
+internal object QuoteDiscountKindSerializer :
+    RawEnumSerializer<QuoteDiscountKind>("com.aglyn.contracts.QuoteDiscountKind", QuoteDiscountKind.entries, QuoteDiscountKind.UNKNOWN, { it.raw })
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = QuoteNoTaxReasonSerializer::class)
+enum class QuoteNoTaxReason(val raw: String) {
+    NO_RATE("no-rate"),
+    NOT_COLLECTED("not-collected"),
+    PRICES_INCLUDE_TAX("prices-include-tax"),
+    UNDECIDED("undecided"),
+    UNKNOWN(""),
+}
+
+internal object QuoteNoTaxReasonSerializer :
+    RawEnumSerializer<QuoteNoTaxReason>("com.aglyn.contracts.QuoteNoTaxReason", QuoteNoTaxReason.entries, QuoteNoTaxReason.UNKNOWN, { it.raw })
+
+@Serializable
+data class QuoteProofRef(
+    val id: String,
+    val revision: Double,
+)
+
+@Serializable
+data class QuoteShipping(
+    val amountCents: Double,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = QuoteStageSerializer::class)
+enum class QuoteStage(val raw: String) {
+    APPROVED("approved"),
+    CHANGES_REQUESTED("changes_requested"),
+    DRAFT("draft"),
+    SENT("sent"),
+    UNKNOWN(""),
+}
+
+internal object QuoteStageSerializer :
+    RawEnumSerializer<QuoteStage>("com.aglyn.contracts.QuoteStage", QuoteStage.entries, QuoteStage.UNKNOWN, { it.raw })
+
+@Serializable
+data class QuoteTaxBasis(
+    val kind: QuoteTaxKind,
+    val label: String? = null,
+    val pct: Double? = null,
+    val providerLabel: String? = null,
+    val reason: QuoteNoTaxReason? = null,
+    val taxCents: Double? = null,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = QuoteTaxKindSerializer::class)
+enum class QuoteTaxKind(val raw: String) {
+    AT_PAYMENT("at-payment"),
+    NONE("none"),
+    RATE("rate"),
+    SERVICE("service"),
+    UNKNOWN(""),
+}
+
+internal object QuoteTaxKindSerializer :
+    RawEnumSerializer<QuoteTaxKind>("com.aglyn.contracts.QuoteTaxKind", QuoteTaxKind.entries, QuoteTaxKind.UNKNOWN, { it.raw })
+
+@Serializable
+data class QuoteUnmatchedPayment(
+    val amountCents: Double,
+    val atMs: Double,
+    val paymentIntentId: String? = null,
+    val reason: QuoteUnmatchedPaymentReason,
+    val sessionId: String,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = QuoteUnmatchedPaymentReasonSerializer::class)
+enum class QuoteUnmatchedPaymentReason(val raw: String) {
+    ALREADY_PAID("already-paid"),
+    SUPERSEDED("superseded"),
+    UNKNOWN(""),
+}
+
+internal object QuoteUnmatchedPaymentReasonSerializer :
+    RawEnumSerializer<QuoteUnmatchedPaymentReason>("com.aglyn.contracts.QuoteUnmatchedPaymentReason", QuoteUnmatchedPaymentReason.entries, QuoteUnmatchedPaymentReason.UNKNOWN, { it.raw })
 
 @Serializable
 data class RailWorkspaces(

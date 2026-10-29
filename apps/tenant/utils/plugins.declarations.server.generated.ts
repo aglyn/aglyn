@@ -16,14 +16,19 @@ let done: Promise<void> | undefined
 export function registerPluginServerDeclarations(): Promise<void> {
   done ??= (async () => {
     ;(await import('@aglyn/plugins-forms/declarations.server')).registerFormsServerDeclarations()
+    ;(await import('@aglyn/plugins-bookings/declarations')).registerBookingsDeclarations()
     ;(await import('@aglyn/plugins-commerce/declarations')).registerCommerceDeclarations()
     ;(await import('@aglyn/plugins-commerce/declarations.server')).registerCommerceServerDeclarations()
+    ;(await import('@aglyn/plugins-marketplace/declarations')).registerMarketplaceDeclarations()
     ;(await import('@aglyn/plugins-marketplace/declarations.server')).registerMarketplaceServerDeclarations()
     ;(await import('@aglyn/plugins-crm/declarations')).registerCrmDeclarations()
     ;(await import('@aglyn/plugins-crm/declarations.server')).registerCrmServerDeclarations()
     ;(await import('@aglyn/plugins-accounting/declarations.server')).registerAccountingServerDeclarations()
     ;(await import('@aglyn/plugins-data/declarations.server')).registerDataServerDeclarations()
+    ;(await import('@aglyn/plugins-email/declarations')).registerEmailDeclarations()
+    ;(await import('@aglyn/plugins-inbox/declarations')).registerInboxDeclarations()
     ;(await import('@aglyn/plugins-logic/declarations.server')).registerLogicServerDeclarations()
+    ;(await import('@aglyn/plugins-marketing/declarations')).registerMarketingDeclarations()
     ;(await import('@aglyn/plugins-marketing/declarations.server')).registerMarketingServerDeclarations()
     ;(await import('@aglyn/plugins-workflows/declarations')).registerWorkflowsDeclarations()
     ;(await import('@aglyn/plugins-workflows/declarations.server')).registerWorkflowsServerDeclarations()
@@ -49,8 +54,10 @@ export function registerPluginServerDeclarations(): Promise<void> {
     ;(await import('@aglyn/plugins-inventory-sync/declarations.server')).registerInventorySyncServerDeclarations()
     ;(await import('@aglyn/plugins-sales-channels/declarations.server')).registerSalesChannelsServerDeclarations()
     ;(await import('@aglyn/plugins-video-delivery/declarations.server')).registerVideoDeliveryServerDeclarations()
+    ;(await import('@aglyn/plugins-funnels/declarations')).registerFunnelsDeclarations()
     ;(await import('@aglyn/plugins-funnels/declarations.server')).registerFunnelsServerDeclarations()
     ;(await import('@aglyn/plugins-weglot/declarations')).registerWeglotDeclarations()
+    ;(await import('@aglyn/plugins-domains/declarations')).registerDomainsDeclarations()
   })()
   return done
 }

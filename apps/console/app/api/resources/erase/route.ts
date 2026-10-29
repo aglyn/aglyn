@@ -34,12 +34,12 @@ import {
   firebaseAdmin,
   isImpersonationSession,
   lockdownRefusal,
+  memberHasOrgPermission,
+  permissionRefusal,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
-/** Roles allowed to delete org data — mirrors rules' canWriteOrgData(). */
-const ORG_WRITER_ROLES = new Set(['owner', 'admin', 'editor'])
 /*
  * Deleting a whole COLLECTION is a site-structural act, not a content edit
  * (AGL-1324): it removes the `/{slug}` and `/{slug}/{entry}` routes the site
@@ -171,10 +171,10 @@ async function handler(request: Request): Promise<Response> {
     if (!isStaff && scope === 'orgs') {
       const membership = await resolveOrgMembership(decoded.uid, scopeId)
       const member = membership?.member as any
-      if (!member || !ORG_WRITER_ROLES.has(String(member.role))) {
-        return Response.json({
-          error: 'Deleting org data requires the editor role',
-        }, { status: 403 })
+      // "Delete workspace records" (`org.eraseRecords`, AGL-4047), whose
+      // default is the owner, admin and editor this asked for.
+      if (!member || !(await memberHasOrgPermission(scopeId, member, 'org.eraseRecords'))) {
+        return permissionRefusal('org.eraseRecords')
       }
       // Lockdown verdict (AGL-1506): the `orgSuspended` member projection
       // stays the per-request org signal (no org-doc read on the happy

@@ -16,6 +16,7 @@
  */
 
 import type { PluginApiHandler, PluginApiRequest } from '@aglyn/aglyn/app-utils/api-plugins'
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { zapierHookView, type ZapierHookStore } from './store'
 import type { ZapierHookView } from '../model/hook-events'
@@ -35,8 +36,12 @@ import type { ZapierHookView } from '../model/hook-events'
 
 export interface ZapierConsoleDeps {
   verifyIdToken: (token: string) => Promise<{ uid: string }>
-  /** The site's member roles, or null when there is no such site. */
-  readMemberRoles: (hostId: string) => Promise<Record<string, unknown> | null>
+  /**
+   * The site's access fields (AGL-4047): `memberRoles`, and the
+   * `memberPermissions` stamp the projection writes beside it; null when
+   * there is no such site.
+   */
+  readSiteAccess: (hostId: string) => Promise<{ memberRoles: Record<string, unknown>; memberPermissions?: unknown } | null>
   siteLocked: (hostId: string) => Promise<boolean>
   store: () => ZapierHookStore
   /** The published app's link, or null while it is hidden. */
@@ -88,12 +93,13 @@ export function createZapierConsoleHooksHandler(deps: ZapierConsoleDeps): Plugin
         if (!isRefusedIdToken(error)) throw error
         return res.status(401).json({ error: 'Unauthenticated' })
       }
-      const roles = await deps.readMemberRoles(hostId)
-      if (!roles) return res.status(404).json({ error: 'Unknown site' })
-      const role = roles[uid]
-      if (!role) return res.status(403).json({ error: 'You are not a member of this site' })
+      const access = await deps.readSiteAccess(hostId)
+      if (!access) return res.status(404).json({ error: 'Unknown site' })
+      if (!access.memberRoles[uid]) return res.status(403).json({ error: 'You are not a member of this site' })
       const appUrl = deps.appUrl()
-      const canManage = role === 'admin'
+      // "Manage site settings" (AGL-4047), whose preset is the site Admin who
+      // alone disconnected a Zap before.
+      const canManage = holdsSiteKey(access, uid, 'site.manage')
 
       if (req.method === 'GET') {
         const answer: ZapierConsoleAnswer = appUrl
@@ -102,7 +108,7 @@ export function createZapierConsoleHooksHandler(deps: ZapierConsoleDeps): Plugin
         return res.status(200).json(answer)
       }
 
-      if (!canManage) return res.status(403).json({ error: 'Zaps are disconnected by a site admin' })
+      if (!canManage) return res.status(403).json({ error: siteKeyRefusal('site.manage') })
       if (await deps.siteLocked(hostId)) {
         return res.status(423).json({ error: 'This site is locked and cannot take changes right now' })
       }

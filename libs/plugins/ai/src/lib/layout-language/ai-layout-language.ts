@@ -576,3 +576,171 @@ function readBare(raw: Record<string, unknown>): AiLayoutSection {
   const align = oneOf(raw['align'], AI_LAYOUT_ALIGNS)
   return { ...(band ? { band } : {}), ...(align ? { align } : {}), blocks: [] }
 }
+
+// ── Arranging a page brought in (AGL-4084) ───────────────────────────────
+
+/**
+ * A page brought in from its owner's own website is ARRANGED, never written
+ * (AGL-4084): its words are the source's, numbered line by line, and the
+ * answer says only how each section is laid out and which numbered lines go
+ * in which kind of block. Code substitutes every line exactly as the source
+ * wrote it (`jobs/ai-site-import-document.ts`), so the schema below has no
+ * field a model could put a word of copy in: a rewording has nowhere to go.
+ */
+
+/** The kinds of block an arranged line may go in. */
+export const AI_LAYOUT_ARRANGE_KINDS = [
+  'eyebrow',
+  'heading',
+  'lede',
+  'text',
+  'note',
+  'list',
+  'button',
+  'image',
+  'cards',
+  'steps',
+  'stats',
+  'faq',
+] as const
+
+export type AiLayoutArrangeKind = (typeof AI_LAYOUT_ARRANGE_KINDS)[number]
+
+/** The arranged kinds whose lines are items: each item's `from` is its title line, then its text lines. */
+export const AI_LAYOUT_ARRANGE_ITEM_KINDS: ReadonlySet<AiLayoutArrangeKind> = new Set(['cards', 'steps', 'stats', 'faq'])
+
+/** The bands an arranged section may take: a brand band's words need a contrast the source never chose. */
+export const AI_LAYOUT_ARRANGE_BANDS = ['plain', 'soft', 'dark'] as const
+export type AiLayoutArrangeBand = (typeof AI_LAYOUT_ARRANGE_BANDS)[number]
+
+export interface AiLayoutArrangedBlock {
+  kind: AiLayoutArrangeKind
+  col?: number
+  /** The numbered source lines it shows, in order. */
+  from: number[]
+  style?: AiLayoutStyle
+  /** For a group: each item's lines, its title line first. */
+  items?: number[][]
+}
+
+export interface AiLayoutArrangedSection {
+  band?: AiLayoutArrangeBand
+  cols?: number[]
+  align?: AiLayoutAlign
+  blocks: AiLayoutArrangedBlock[]
+}
+
+/** An arrangement answer read: one entry per source section, `null` where it gave none. */
+export interface AiLayoutArrangement {
+  sections: Array<AiLayoutArrangedSection | null>
+}
+
+const LINE_LIST_SCHEMA = { type: 'array', items: { type: 'integer' } } as const
+
+const ARRANGE_ITEM_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['from'],
+  properties: { from: LINE_LIST_SCHEMA },
+} as const
+
+const ARRANGE_BLOCK_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['kind', 'col', 'from', 'style', 'items'],
+  properties: {
+    kind: { type: 'string', enum: [...AI_LAYOUT_ARRANGE_KINDS] },
+    col: { type: 'integer' },
+    from: LINE_LIST_SCHEMA,
+    style: { type: 'string', enum: [...AI_LAYOUT_STYLES, 'none'] },
+    items: { type: 'array', items: ARRANGE_ITEM_SCHEMA },
+  },
+} as const
+
+const ARRANGE_SECTION_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['band', 'cols', 'align', 'blocks'],
+  properties: {
+    band: { type: 'string', enum: [...AI_LAYOUT_ARRANGE_BANDS] },
+    cols: { type: 'array', items: { type: 'integer' } },
+    align: { type: 'string', enum: [...AI_LAYOUT_ALIGNS] },
+    blocks: { type: 'array', items: ARRANGE_BLOCK_SCHEMA },
+  },
+} as const
+
+/** The arrangement tool: every section of a page brought in, in order, by its numbered lines. */
+export const AI_LAYOUT_ARRANGE_TOOL: AiTool = {
+  name: 'submit_arrangement',
+  description:
+    "Submit the page's arrangement: one entry in sections for each section of the page, in order, placing its numbered lines in blocks by from.",
+  strict: true,
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['sections'],
+    properties: { sections: { type: 'array', items: ARRANGE_SECTION_SCHEMA } },
+  },
+}
+
+/** Line numbers as an answer gives them: whole, positive, each once. */
+function lineNumbers(value: unknown): number[] {
+  if (!Array.isArray(value)) return []
+  const out: number[] = []
+  for (const entry of value) {
+    if (typeof entry === 'number' && Number.isInteger(entry) && entry > 0 && !out.includes(entry)) out.push(entry)
+  }
+  return out
+}
+
+function readArrangedBlock(raw: unknown): AiLayoutArrangedBlock | null {
+  if (!isRecord(raw)) return null
+  const kind = oneOf(raw['kind'], AI_LAYOUT_ARRANGE_KINDS)
+  if (!kind) return null
+  // Only line numbers are read: any words an answer carried are ignored.
+  const block: AiLayoutArrangedBlock = { kind, from: lineNumbers(raw['from']) }
+  if (typeof raw['col'] === 'number' && Number.isInteger(raw['col']) && raw['col'] >= 0) block.col = raw['col']
+  const style = oneOf(raw['style'], AI_LAYOUT_STYLES)
+  if (style) block.style = style
+  if (AI_LAYOUT_ARRANGE_ITEM_KINDS.has(kind)) {
+    const items = (Array.isArray(raw['items']) ? raw['items'] : [])
+      .map((item) => (isRecord(item) ? lineNumbers(item['from']) : []))
+      .filter((lines) => lines.length > 0)
+    if (items.length) block.items = items
+  }
+  // A block that names no line is no block.
+  return block.from.length || block.items?.length ? block : null
+}
+
+function readArrangedSection(raw: unknown): AiLayoutArrangedSection | null {
+  if (!isRecord(raw)) return null
+  const section: AiLayoutArrangedSection = { blocks: [] }
+  const band = oneOf(raw['band'], AI_LAYOUT_ARRANGE_BANDS)
+  if (band) section.band = band
+  const align = oneOf(raw['align'], AI_LAYOUT_ALIGNS)
+  if (align) section.align = align
+  if (Array.isArray(raw['cols'])) {
+    const cols = raw['cols'].filter((value): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0)
+    if (cols.length >= 2) section.cols = cols.slice(0, AI_LAYOUT_MAX_COLS).map((value) => Math.min(12, Math.max(1, Math.round(value))))
+  }
+  for (const entry of Array.isArray(raw['blocks']) ? raw['blocks'] : []) {
+    const block = readArrangedBlock(entry)
+    if (!block) continue
+    if (block.col !== undefined && (!section.cols || block.col >= section.cols.length)) {
+      if (section.cols) block.col = section.cols.length - 1
+      else delete block.col
+    }
+    section.blocks.push(block)
+  }
+  return section.blocks.length ? section : null
+}
+
+/**
+ * An arrangement answer read (AGL-4084): each source section's layout, by
+ * position, and `null` for one it gave nothing usable for — that section is
+ * then laid out as the source has it. Words are never read from an answer.
+ */
+export function aiReadLayoutArrangement(raw: unknown, sections: number): AiLayoutArrangement {
+  const given = isRecord(raw) && Array.isArray(raw['sections']) ? raw['sections'] : []
+  return { sections: Array.from({ length: Math.max(0, sections) }, (_, index) => readArrangedSection(given[index])) }
+}

@@ -130,6 +130,8 @@ public struct ResolvedBusinessProfile: Equatable, Sendable {
   public let audience: ResolvedBusinessField<String>?
   public let tone: ResolvedBusinessField<String>?
   public let toneNotes: ResolvedBusinessField<String>?
+  /// The year the business started (AGL-4092).
+  public let founded: ResolvedBusinessField<String>?
   /// The schema.org business type the SEO entity names, e.g. `Plumber`.
   public let businessType: String?
   /// Real contact details, each only where the owner entered it in the site's settings.
@@ -211,6 +213,7 @@ public func resolveBusinessProfile(host: [String: Any]?, site: [String: Any]? = 
     whatYouDo: resolve("whatYouDo", as: String.self), services: resolve("services", as: [String].self),
     serviceArea: resolve("serviceArea", as: String.self), audience: resolve("audience", as: String.self),
     tone: resolve("tone", as: String.self), toneNotes: resolve("toneNotes", as: String.self),
+    founded: resolve("founded", as: String.self),
     businessType: orNil(profileText(entity?["businessType"], 80)),
     contact: ResolvedContact(
       email: orNil(profileText(entity?["email"], 320)) ?? orNil(profileText(child(host, "business")?["supportEmail"], 320)),

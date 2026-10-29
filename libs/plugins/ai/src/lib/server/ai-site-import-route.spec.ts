@@ -56,6 +56,12 @@ jest.mock('@aglyn/tenant-data-admin/server/lockdown', () => ({
   lockdownRefusal: async () => null,
 }))
 jest.mock('@aglyn/tenant-data-admin/server/organizations', () => ({
+  // "Bring a site in" (`ai.import`, AGL-4047), answered by the real catalog
+  // with the AI plugin's declarations registered.
+  memberHasOrgPermission: async (_orgId: string, member: unknown, permission: string) => {
+    jest.requireActual('../declarations').registerAiDeclarations()
+    return jest.requireActual('@aglyn/aglyn/app-utils/org-permissions').resolveOrgPermissions(member, null)[permission] === true
+  },
   __esModule: true,
   getOrgForUser: (...args: unknown[]) => mockGetOrgForUser(...args),
 }))

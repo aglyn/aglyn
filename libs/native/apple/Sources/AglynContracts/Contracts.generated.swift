@@ -1206,6 +1206,7 @@ public enum HostCheckInChannel: String, Codable, CaseIterable, Hashable, Sendabl
   case marketplace = "marketplace"
   case online = "online"
   case pos = "pos"
+  case quote = "quote"
   case reservation = "reservation"
   case subscription = "subscription"
   case unknown = ""
@@ -1346,6 +1347,7 @@ public struct HostOrder: Codable, Hashable, Sendable {
   public var pickup: OrderPickup?
   public var posSource: String?
   public var productId: String?
+  public var quote: OrderQuote?
   public var receiptRequest: HostOrderReceiptRequest?
   public var refundedCents: Double?
   public var refundedLineItemIds: [Double]?
@@ -1361,7 +1363,7 @@ public struct HostOrder: Codable, Hashable, Sendable {
   public var unresolvedLines: [OrderUnresolvedLine]?
   public var useDayKeys: [String]?
 
-  public init(amountCents: Double? = nil, billingAddress: OrderAddress? = nil, buyerNotifications: [String: HostOrderBuyerNotificationsValue]? = nil, cashierId: String? = nil, channel: OrderChannel? = nil, channelSource: OrderChannelSource? = nil, checkoutSessionId: String? = nil, couponCode: String? = nil, createdAtMs: Double? = nil, credits: [OrderCredit]? = nil, customerEmail: String? = nil, customerId: String? = nil, customerName: String? = nil, customerPhone: String? = nil, customerRecord: HostOrderCustomerRecord? = nil, discountBy: String? = nil, discountPct: Double? = nil, dispute: OrderDispute? = nil, extras: [OrderExtra]? = nil, feeCents: Double? = nil, fulfillmentMethod: OrderFulfillmentMethod? = nil, fulfillments: [OrderFulfillment]? = nil, hardwareBuyer: OrderHardwareBuyer? = nil, hardwareOrderId: String? = nil, hardwareSalePending: Bool? = nil, hardwareSerials: [String]? = nil, hardwareTermsAcceptance: HostOrderHardwareTermsAcceptance? = nil, hardwareTermsRequest: HostOrderHardwareTermsRequest? = nil, invoiceId: String? = nil, kioskDeviceId: String? = nil, kioskQueuedAtMs: Double? = nil, kioskQueueRegisterId: String? = nil, lineItems: [OrderLineItem]? = nil, localDelivery: OrderLocalDelivery? = nil, locationId: String? = nil, note: String? = nil, number: Double? = nil, offline: PosOfflineOrderStamp? = nil, paymentIntentId: String? = nil, paymentLinkUrl: String? = nil, paymentRisk: PaymentRisk? = nil, payments: [OrderPayment]? = nil, pickup: OrderPickup? = nil, posSource: String? = nil, productId: String? = nil, receiptRequest: HostOrderReceiptRequest? = nil, refundedCents: Double? = nil, refundedLineItemIds: [Double]? = nil, registerId: String? = nil, restockCheck: OrderRestockCheck? = nil, shiftId: String? = nil, shippingAddress: OrderAddress? = nil, status: OrderStatus? = nil, subscriptionId: String? = nil, taxMode: StorefrontTaxMode? = nil, timeline: [OrderTimelineEvent]? = nil, totals: OrderTotals? = nil, unresolvedLines: [OrderUnresolvedLine]? = nil, useDayKeys: [String]? = nil) {
+  public init(amountCents: Double? = nil, billingAddress: OrderAddress? = nil, buyerNotifications: [String: HostOrderBuyerNotificationsValue]? = nil, cashierId: String? = nil, channel: OrderChannel? = nil, channelSource: OrderChannelSource? = nil, checkoutSessionId: String? = nil, couponCode: String? = nil, createdAtMs: Double? = nil, credits: [OrderCredit]? = nil, customerEmail: String? = nil, customerId: String? = nil, customerName: String? = nil, customerPhone: String? = nil, customerRecord: HostOrderCustomerRecord? = nil, discountBy: String? = nil, discountPct: Double? = nil, dispute: OrderDispute? = nil, extras: [OrderExtra]? = nil, feeCents: Double? = nil, fulfillmentMethod: OrderFulfillmentMethod? = nil, fulfillments: [OrderFulfillment]? = nil, hardwareBuyer: OrderHardwareBuyer? = nil, hardwareOrderId: String? = nil, hardwareSalePending: Bool? = nil, hardwareSerials: [String]? = nil, hardwareTermsAcceptance: HostOrderHardwareTermsAcceptance? = nil, hardwareTermsRequest: HostOrderHardwareTermsRequest? = nil, invoiceId: String? = nil, kioskDeviceId: String? = nil, kioskQueuedAtMs: Double? = nil, kioskQueueRegisterId: String? = nil, lineItems: [OrderLineItem]? = nil, localDelivery: OrderLocalDelivery? = nil, locationId: String? = nil, note: String? = nil, number: Double? = nil, offline: PosOfflineOrderStamp? = nil, paymentIntentId: String? = nil, paymentLinkUrl: String? = nil, paymentRisk: PaymentRisk? = nil, payments: [OrderPayment]? = nil, pickup: OrderPickup? = nil, posSource: String? = nil, productId: String? = nil, quote: OrderQuote? = nil, receiptRequest: HostOrderReceiptRequest? = nil, refundedCents: Double? = nil, refundedLineItemIds: [Double]? = nil, registerId: String? = nil, restockCheck: OrderRestockCheck? = nil, shiftId: String? = nil, shippingAddress: OrderAddress? = nil, status: OrderStatus? = nil, subscriptionId: String? = nil, taxMode: StorefrontTaxMode? = nil, timeline: [OrderTimelineEvent]? = nil, totals: OrderTotals? = nil, unresolvedLines: [OrderUnresolvedLine]? = nil, useDayKeys: [String]? = nil) {
     self.amountCents = amountCents
     self.billingAddress = billingAddress
     self.buyerNotifications = buyerNotifications
@@ -1407,6 +1409,7 @@ public struct HostOrder: Codable, Hashable, Sendable {
     self.pickup = pickup
     self.posSource = posSource
     self.productId = productId
+    self.quote = quote
     self.receiptRequest = receiptRequest
     self.refundedCents = refundedCents
     self.refundedLineItemIds = refundedLineItemIds
@@ -1473,13 +1476,13 @@ public struct HostOrderCustomerRecord: Codable, Hashable, Sendable {
 public struct HostOrderHardwareTermsAcceptance: Codable, Hashable, Sendable {
   public var atMs: Double
   public var ip: String?
-  public var method: HostOrderHardwareTermsAcceptanceMethod
+  public var method: PosHardwareTermsMethod
   public var sections: String
   public var staffUid: String?
   public var userAgent: String?
   public var version: String
 
-  public init(atMs: Double, ip: String? = nil, method: HostOrderHardwareTermsAcceptanceMethod, sections: String, staffUid: String? = nil, userAgent: String? = nil, version: String) {
+  public init(atMs: Double, ip: String? = nil, method: PosHardwareTermsMethod, sections: String, staffUid: String? = nil, userAgent: String? = nil, version: String) {
     self.atMs = atMs
     self.ip = ip
     self.method = method
@@ -1487,19 +1490,6 @@ public struct HostOrderHardwareTermsAcceptance: Codable, Hashable, Sendable {
     self.staffUid = staffUid
     self.userAgent = userAgent
     self.version = version
-  }
-}
-
-/// A newer server value decodes as `.unknown`, so an older app never fails on it.
-public enum HostOrderHardwareTermsAcceptanceMethod: String, Codable, CaseIterable, Hashable, Sendable {
-  case display = "display"
-  case notice = "notice"
-  case tablet = "tablet"
-  case unknown = ""
-
-  public init(from decoder: Decoder) throws {
-    let raw = try decoder.singleValueContainer().decode(String.self)
-    self = Self(rawValue: raw) ?? .unknown
   }
 }
 
@@ -2615,6 +2605,7 @@ public enum OrderChannel: String, Codable, CaseIterable, Hashable, Sendable {
   case marketplace = "marketplace"
   case online = "online"
   case pos = "pos"
+  case quote = "quote"
   case subscription = "subscription"
   case unknown = ""
 
@@ -2928,7 +2919,10 @@ public struct OrderHardwareBuyerAddress: Codable, Hashable, Sendable {
 }
 
 public struct OrderLineItem: Codable, Hashable, Sendable {
+  public var custom: Bool?
+  public var description: String?
   public var fulfillmentId: String?
+  public var included: Bool?
   public var modifiers: [OrderLineModifier]?
   public var name: String
   public var productId: String
@@ -2936,13 +2930,17 @@ public struct OrderLineItem: Codable, Hashable, Sendable {
   public var quantity: Double
   public var sku: String?
   public var supplierId: String?
+  public var taxExempt: Bool?
   public var unitAmountCents: Double
   public var useDayKey: String?
   public var variantId: String?
   public var variantLabel: String?
 
-  public init(fulfillmentId: String? = nil, modifiers: [OrderLineModifier]? = nil, name: String, productId: String, productType: ProductType? = nil, quantity: Double, sku: String? = nil, supplierId: String? = nil, unitAmountCents: Double, useDayKey: String? = nil, variantId: String? = nil, variantLabel: String? = nil) {
+  public init(custom: Bool? = nil, description: String? = nil, fulfillmentId: String? = nil, included: Bool? = nil, modifiers: [OrderLineModifier]? = nil, name: String, productId: String, productType: ProductType? = nil, quantity: Double, sku: String? = nil, supplierId: String? = nil, taxExempt: Bool? = nil, unitAmountCents: Double, useDayKey: String? = nil, variantId: String? = nil, variantLabel: String? = nil) {
+    self.custom = custom
+    self.description = description
     self.fulfillmentId = fulfillmentId
+    self.included = included
     self.modifiers = modifiers
     self.name = name
     self.productId = productId
@@ -2950,6 +2948,7 @@ public struct OrderLineItem: Codable, Hashable, Sendable {
     self.quantity = quantity
     self.sku = sku
     self.supplierId = supplierId
+    self.taxExempt = taxExempt
     self.unitAmountCents = unitAmountCents
     self.useDayKey = useDayKey
     self.variantId = variantId
@@ -3177,6 +3176,52 @@ public enum OrderPickupStatus: String, Codable, CaseIterable, Hashable, Sendable
   public init(from decoder: Decoder) throws {
     let raw = try decoder.singleValueContainer().decode(String.self)
     self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct OrderQuote: Codable, Hashable, Sendable {
+  public var approvedRevision: Double?
+  public var billTo: OrderAddress?
+  public var createdAtMs: Double
+  public var createdBy: String
+  public var customer: QuoteCustomer
+  public var discount: QuoteDiscount?
+  public var linkVersion: Double?
+  public var notes: String?
+  public var paidAtMs: Double?
+  public var proofs: [QuoteProofRef]?
+  public var requireProofApproval: Bool?
+  public var revision: Double
+  public var shipping: QuoteShipping?
+  public var shipTo: OrderAddress?
+  public var stage: QuoteStage
+  public var tax: QuoteTaxBasis
+  public var terms: String?
+  public var unmatchedPayments: [QuoteUnmatchedPayment]?
+  public var updatedAtMs: Double
+  public var updatedBy: String
+
+  public init(approvedRevision: Double? = nil, billTo: OrderAddress? = nil, createdAtMs: Double, createdBy: String, customer: QuoteCustomer, discount: QuoteDiscount? = nil, linkVersion: Double? = nil, notes: String? = nil, paidAtMs: Double? = nil, proofs: [QuoteProofRef]? = nil, requireProofApproval: Bool? = nil, revision: Double, shipping: QuoteShipping? = nil, shipTo: OrderAddress? = nil, stage: QuoteStage, tax: QuoteTaxBasis, terms: String? = nil, unmatchedPayments: [QuoteUnmatchedPayment]? = nil, updatedAtMs: Double, updatedBy: String) {
+    self.approvedRevision = approvedRevision
+    self.billTo = billTo
+    self.createdAtMs = createdAtMs
+    self.createdBy = createdBy
+    self.customer = customer
+    self.discount = discount
+    self.linkVersion = linkVersion
+    self.notes = notes
+    self.paidAtMs = paidAtMs
+    self.proofs = proofs
+    self.requireProofApproval = requireProofApproval
+    self.revision = revision
+    self.shipping = shipping
+    self.shipTo = shipTo
+    self.stage = stage
+    self.tax = tax
+    self.terms = terms
+    self.unmatchedPayments = unmatchedPayments
+    self.updatedAtMs = updatedAtMs
+    self.updatedBy = updatedBy
   }
 }
 
@@ -3945,6 +3990,19 @@ public struct PosDisplayStateTip: Codable, Hashable, Sendable {
     self.allowCustom = allowCustom
     self.baseCents = baseCents
     self.percentages = percentages
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum PosHardwareTermsMethod: String, Codable, CaseIterable, Hashable, Sendable {
+  case display = "display"
+  case notice = "notice"
+  case tablet = "tablet"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
   }
 }
 
@@ -4821,6 +4879,164 @@ public struct ProductVariant: Codable, Hashable, Sendable {
     self.priceUsd = priceUsd
     self.sku = sku
     self.weightGrams = weightGrams
+  }
+}
+
+public struct QuoteCustomer: Codable, Hashable, Sendable {
+  public var company: String?
+  public var email: String?
+  public var emailLower: String?
+  public var name: String?
+  public var phone: String?
+  public var record: QuoteCustomerRecord?
+
+  public init(company: String? = nil, email: String? = nil, emailLower: String? = nil, name: String? = nil, phone: String? = nil, record: QuoteCustomerRecord? = nil) {
+    self.company = company
+    self.email = email
+    self.emailLower = emailLower
+    self.name = name
+    self.phone = phone
+    self.record = record
+  }
+}
+
+public struct QuoteCustomerRecord: Codable, Hashable, Sendable {
+  public var id: String
+  public var kind: String
+
+  public init(id: String, kind: String) {
+    self.id = id
+    self.kind = kind
+  }
+}
+
+public struct QuoteDiscount: Codable, Hashable, Sendable {
+  public var amountCents: Double?
+  public var kind: QuoteDiscountKind
+  public var pct: Double?
+
+  public init(amountCents: Double? = nil, kind: QuoteDiscountKind, pct: Double? = nil) {
+    self.amountCents = amountCents
+    self.kind = kind
+    self.pct = pct
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum QuoteDiscountKind: String, Codable, CaseIterable, Hashable, Sendable {
+  case amount = "amount"
+  case percent = "percent"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum QuoteNoTaxReason: String, Codable, CaseIterable, Hashable, Sendable {
+  case noRate = "no-rate"
+  case notCollected = "not-collected"
+  case pricesIncludeTax = "prices-include-tax"
+  case undecided = "undecided"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct QuoteProofRef: Codable, Hashable, Sendable {
+  public var id: String
+  public var revision: Double
+
+  public init(id: String, revision: Double) {
+    self.id = id
+    self.revision = revision
+  }
+}
+
+public struct QuoteShipping: Codable, Hashable, Sendable {
+  public var amountCents: Double
+
+  public init(amountCents: Double) {
+    self.amountCents = amountCents
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum QuoteStage: String, Codable, CaseIterable, Hashable, Sendable {
+  case approved = "approved"
+  case changesRequested = "changes_requested"
+  case draft = "draft"
+  case sent = "sent"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct QuoteTaxBasis: Codable, Hashable, Sendable {
+  public var kind: QuoteTaxKind
+  public var label: String?
+  public var pct: Double?
+  public var providerLabel: String?
+  public var reason: QuoteNoTaxReason?
+  public var taxCents: Double?
+
+  public init(kind: QuoteTaxKind, label: String? = nil, pct: Double? = nil, providerLabel: String? = nil, reason: QuoteNoTaxReason? = nil, taxCents: Double? = nil) {
+    self.kind = kind
+    self.label = label
+    self.pct = pct
+    self.providerLabel = providerLabel
+    self.reason = reason
+    self.taxCents = taxCents
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum QuoteTaxKind: String, Codable, CaseIterable, Hashable, Sendable {
+  case atPayment = "at-payment"
+  case none = "none"
+  case rate = "rate"
+  case service = "service"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct QuoteUnmatchedPayment: Codable, Hashable, Sendable {
+  public var amountCents: Double
+  public var atMs: Double
+  public var paymentIntentId: String?
+  public var reason: QuoteUnmatchedPaymentReason
+  public var sessionId: String
+
+  public init(amountCents: Double, atMs: Double, paymentIntentId: String? = nil, reason: QuoteUnmatchedPaymentReason, sessionId: String) {
+    self.amountCents = amountCents
+    self.atMs = atMs
+    self.paymentIntentId = paymentIntentId
+    self.reason = reason
+    self.sessionId = sessionId
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum QuoteUnmatchedPaymentReason: String, Codable, CaseIterable, Hashable, Sendable {
+  case alreadyPaid = "already-paid"
+  case superseded = "superseded"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
   }
 }
 

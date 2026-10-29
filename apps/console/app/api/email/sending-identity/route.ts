@@ -30,8 +30,9 @@
  *
  * ## The two gates, and why they are not the same gate
  *
- * `GET` is admin-or-editor **on the site**, matching `campaignSendHandler`
- * exactly. Anyone who may compose a campaign has to be able to see which
+ * `GET` is "See orders and webhooks" (`site.sensitive`, AGL-4047) **on the
+ * site**, whose preset is the Admin and Editor `campaignSendHandler` asked
+ * for. Anyone who may compose a campaign has to be able to see which
  * address it will leave on, and refusing them that read would put the
  * composer's identity readout behind a permission the composer itself does
  * not require — a merchant would meet an empty box where the answer goes.
@@ -121,6 +122,7 @@
  * swallowed by it.
  */
 
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import { checkEntitlement, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
@@ -240,12 +242,10 @@ async function handler(request: Request): Promise<Response> {
   }
 
   const staff = decoded['staff'] === true
-  const hostRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-  if (!staff && hostRole !== 'admin' && hostRole !== 'editor') {
-    return Response.json(
-      { error: 'Not a site admin or editor' },
-      { status: 403 },
-    )
+  // "See orders and webhooks" (`site.sensitive`, AGL-4047), whose preset is
+  // the site Admin and Editor this asked for, as the campaign composer was.
+  if (!staff && !holdsSiteKey(hostSnapshot, decoded.uid, 'site.sensitive')) {
+    return Response.json({ error: siteKeyRefusal('site.sensitive') }, { status: 403 })
   }
 
   const orgForHost = await getOrgForHost(hostId).catch(() => null)

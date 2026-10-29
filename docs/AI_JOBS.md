@@ -38,9 +38,15 @@ a proposal, which a person puts in the theme editor and saves there.
 ### What a draft asks the member to fill
 
 Where the brief leaves out a fact, such as an address, a phone number or a price,
-rule 14 has the copy mark the gap in square brackets instead of inventing it, and
-a draft is only ready to publish once a member fills those gaps. So a page, layout,
-component or form output's `note` lists the facts in square brackets its draft holds
+rule 14 has the copy leave it out and write the sentence without it, never a bracket,
+a placeholder or an invented fact (AGL-4092: "mark it in square brackets" put "[year
+founded]" and "[email]" on an Assist build's plan card). Only a draft whose own
+instructions ask for it — an email, an automation, a product description — marks a
+missing fact in square brackets, for a person to fill before it is sent or saved. The
+site context's closing rule (`AI_SITE_CONTEXT_RULE`) and the text job's system text say
+the same. A draft is only ready to publish once a member fills whatever gap a model
+still writes, so a page, layout, component or form output's `note` lists the facts in
+square brackets its draft holds
 (AGL-3056), in the member's words and in the order they first appear, each once:
 "Before you publish, replace the facts in square brackets, which the brief did not
 give: [Office address], [Office phone number] and [Office hours]." A form's note
@@ -59,9 +65,15 @@ first to need it: its address, phone and hours were all brackets, and nothing sa
   unset gets one sentence for the component however often the page places it: "The
   "Practice area card" component on this page shows [What the firm handles] until you
   replace it."
-- **Nothing is refused for it.** A bracketed gap is the honest answer rule 14 asks
-  for, so the note costs no prompt byte and no re-ask; a draft copied through the
-  duplicate module, or reported by a run cut off after it wrote, carries none.
+- **Nothing is refused for it.** A bracketed gap is still better than an invented
+  fact, so the note is the safety net, costing no prompt byte and no re-ask; a draft
+  copied through the duplicate module, or reported by a run cut off after it wrote,
+  carries none.
+- **A plan names no gap** (`aiSettlePlanPlaceholderNames`, `model/ai-plan-said-sections.ts`).
+  Every plan's section names are settled before the card shows them: the word
+  "placeholder" (AGL-3887), a fact in square brackets, "to be added" and "TBD" are
+  taken out with the words that joined them (AGL-4092), so "Who we are: a team, with
+  [year founded] and [team story]" is "Who we are: a team".
 
 ## The document
 
@@ -433,7 +445,9 @@ that forbids an invented name, contact detail, price or review.
   another org), so a missing profile never stops a job.
 - **Where it is filled.** The guided start's answers and a site job's plan
   prefill the profile through `prefillAiBusinessProfile`, never over what the
-  owner typed (`mergeBusinessProfilePrefill`); `assist-edit-applied` records
+  owner typed (`mergeBusinessProfilePrefill`). The start's "Year founded" is the
+  profile's `founded` (AGL-4092), printed as `Founded: 2019`, so a build reads the
+  year instead of planning "[year founded]"; `assist-edit-applied` records
   preferences with `rememberAiSitePreferences`. The owner edits the profile on
   Setup → Business profile and clears preferences there.
 
@@ -2254,6 +2268,22 @@ Schedule page's "Upcoming races" and "Past results" both listed the first five.
   (`aiDatasetWithoutPlaceholders`) — none, as often as not — and is written with
   its fields, its note saying where its rows go and the pages told it has none
   yet, so each keeps its band, an honest line and the live list.
+- **No instruction to the owner** (AGL-4092). The 2026-10-28 start's six sample
+  riders each ended "Add this rider's story here.", and its six past races' results
+  were "Add finishing position": the check knew gap markers, never an imperative
+  telling the owner what to write. A sample's words now read as finished copy about
+  it (the samples rule says so, and `AI_DATASET_PLACEHOLDER_REASK` names both
+  examples). A sentence, an aside or a sentence's last turn that opens with an
+  owner's verb (add, write, enter, replace, fill in, update…) and names where it goes
+  ("here", "later", "soon", "in Data", "your own"), or is nothing but that verb and a
+  part of the record ("Add finishing position", "Enter result"), makes the record a
+  placeholder (`aiDatasetInstructionSentence`); a visitor's "Fill in the form on the
+  Contact page", a menu's "Add avocado" and "Riders enter the gate early and race
+  later" are kept. After the one re-ask the instruction is taken out of the answer
+  (`aiDatasetWithoutInstructions`) before the placeholder salvage, so a sample keeps
+  the rest of what it says, a row with no name left goes, and a past sample's result
+  is left "" rather than an instruction. `aiDatasetRealRecords` does the same to
+  whatever reaches the writer.
 - **Two lists of one dataset on one page** (`aiSiteDatasetSplitOf`,
   `aiSettlePlanSplitListings`). Where a page lists a new dataset in two sections
   or more and the dataset plans a field that files its records (Status, Stage,
@@ -2277,7 +2307,13 @@ thing.
 - **From the chat.** On a site, with `aiGenerative`, `release_ai_generative`,
   `ai.generate` and the `ai-generate` switch, `/api/assist/chat` offers the
   strict `propose_build` tool (`assistBuildRung`, `src/lib/server/assist-build.ts`).
-  The model restates the whole request as a brief; it never plans. The panel
+  The model restates the whole request as a brief; it never plans, and never
+  asks for placeholders, brackets or "to be added" text (AGL-4092: a brief the
+  chat wrote ended "use bracketed placeholders where details are missing").
+  `resolveAssistBuild` drops any clause of the brief that still asks for one
+  (`assistBuildBriefWithoutGaps`) and appends `ASSIST_BUILD_FACTS_LINE`, which
+  says facts come from the site's profile and contact details and a missing one
+  is left out, before the console-page line. The panel
   then creates one `build` job through `POST /api/ai/jobs`, whose plan step
   plans against the site's real inventory and stops with the plan card and
   its one price (`assist-build-card.component.tsx`). Nothing is built until
@@ -2540,33 +2576,84 @@ whose passes each do one unit (`aiSiteImportNextWork`):
    the next pass (`read`) reads them before anything is built. A page's name
    is its own part of its browser title ("About | Rosie's Bakery" is
    "About"), the home page "Home".
-3. **The header and footer**, in the first wave: the layout step's own pass on
-   a derived `layout` job in the layout language, linking the wave's pages.
-4. **Each page**: its photos first (no model), through `pluginMediaIngest()
+3. **The look** (no model, AGL-4084), before anything of the first wave is
+   built (`jobs/ai-site-import-look.ts`): the owner's home page is read once
+   more as AglynBot, with the crawl's `headersFor` edge headers, and its first
+   stylesheets; the inspiration signals (`aiSiteInspirationSignals`, AGL-3975)
+   pin the look, the brand being the source's strongest color drawn SOLID
+   (`aiSiteImportBrandColors`: a translucent tint is not counted), and the look
+   is drawn and saved as a guided start's (`aiSiteStyleFor`, `aiSaveSiteTheme`,
+   which keeps a theme the owner chose). The header's logo
+   (`siteImportHeaderBrand`) is brought into the library once by its import
+   key, an SVG drawn as a PNG 192 px tall (`rasterizeAiLogoSvg`, on Vercel the
+   images function's `logo-raster` op). The home page's `<title>`,
+   `description` and `og:image` become the site's listing only where it is
+   still the seeded one (`aiSiteImportListingUpdates`, `aiSiteListingSeeded`).
+   The result is `siteImport.look`; its seed and style ride every unit
+   (`siteKind`, `siteStyle`).
+4. **The header and footer**, in the first wave: the layout step's own pass on
+   a derived `layout` job in the layout language, linking the wave's pages in
+   the menu's order. Its brand is the source's (`siteBrand`: the logo alone,
+   the logo and the name, or the name, drawn by `ai-layout-frame.ts`); its
+   prompt shows the source's own header and footer lines and description
+   (`siteFacts`), FENCED under `UNTRUSTED_TEXT_RULE`, in place of the brief,
+   and its contact check admits what they state. `businessName` is the
+   person's name for the site unless the source's differs from it only by
+   case or punctuation.
+5. **Each page**: its photos first (no model), through `pluginMediaIngest()
    .ingest` with `importedFrom` and the key `import:<sha256 of the address>`,
    asked of `findImportedPhoto` before anything is fetched, so a photo is stored
-   once per site (an ingest that cannot answer stores nothing); then the page
-   step's own passes on a derived `page` job: one screen at the page's new
-   one-segment address, its sections from the old page's headings, its photos
-   in `pagePhotos` (placed before owner and stock photos), its text in
-   `importedPage`, which the page prompt shows only FENCED
-   (`aiLayoutImportedPageLines`) under `UNTRUSTED_TEXT_RULE`, a static system
-   block of its own (`aiJobPageLanguageInstructions`). The old page's text
-   counts as given facts, so its phone and address are not "invented".
-5. **Close the wave**: the job parks again, reason `wave`, with the wave's
-   pages as drafts to review, until the next wave is started. The last wave
-   ends the job.
+   once per site (an ingest that cannot answer stores nothing), each kept with
+   the address it was read from (`from`); then the page step's own passes on a
+   derived `page` job, NEVER REWRITTEN (AGL-4084,
+   `jobs/ai-site-import-document.ts`). The job carries `importedSections`: the
+   read's blocks, the photos and where the site's own links go. The plan's
+   sections are the source's (its opening, then one at each h2). How the page
+   is built is decided by code (`aiSiteImportBuildOf`):
+   - **copied** (a collection's page, any page past `AI_SITE_IMPORT_PROSE_WORDS`
+     words): `aiCompileImportedDocument` lays every line out in source order,
+     bands alternating plain and soft, with NO model; only the listing pass
+     spends;
+   - **arranged** (the main pages, Home always): one answer on the page tier
+     through `submit_arrangement` (`AI_LAYOUT_ARRANGE_TOOL`, which has no field
+     for a word), told the numbered lines fenced (`aiLayoutArrangePrompt`). The
+     compiler substitutes each line as written; a block naming a line already
+     placed is dropped, a line of another section is not taken, and every line
+     the answer left out is added at the end of its section.
+   Both are checked as the owner's own words (`ownWords` on the doctrine
+   context): rule 8 asks no dataset of their lists, rule 14's copy checks do
+   not judge them, and the page budget is `AI_OWN_WORDS_PAGE_BUDGET`. A
+   paragraph longer than a text element holds is split between sentences. The
+   words on the stored draft are counted into the page's `brought`.
+6. **Close the wave**: its pages go live INTO THE PREVIEW
+   (`jobs/ai-site-import-publish.ts`, `aiPublishImportedWave` on
+   `aiPublishGuidedSite`) when the site is in preview (`host.preview`,
+   AGL-4086): Home takes `/` in the first wave, later waves join what is live
+   (`retry`), links to a page not in come out, and `site_published` is not
+   sent (the switch sends it). A site not in preview keeps the drafts. The job
+   then parks again, reason `wave`, until the next wave is started, or, with
+   `siteImport.autoContinue` (the resume door's `startAll`,
+   `aiSiteImportStartAllUpdate`), goes straight on to it; only the wave the
+   person started counts against the day's limit (`autoContinueFrom`). The
+   last wave ends the job.
+- **Home first.** The read's verdict (`aiSiteImportReadVerdict`) is passed to
+  the inventory; a read that could not see the home page parks with reason
+  `blocked` or `unreadable`, the verdict's sentence, no ledger and no quote,
+  and the resume door (Check again) reads again.
 
 - **Settled by item.** `import` is one of `aiJobSettlesByItem`'s kinds: a page
   that fails on our side gives back its own spend (`refundBuildCredits`), its
   row says why, and the wave goes on. The machine keeps `siteImport` on the job
   from the outcome in the pass's own write; the summary carries it without any
   page text (`aiSiteImportWire`).
-- **Priced as an AI page.** `AI_MEASURED_IMPORT_CREDITS`: a page is the paid
-  table's page (27 / 47), the header its layout; each wave is quoted before it
-  starts (`aiSiteImportWaveCreditRange`), its ceiling two passes a page.
-- **Nothing is published.** Every output is a draft; the job writes no
-  `sitePublish`, and the site created for it is created empty.
+- **Priced by how a page is built.** `AI_MEASURED_IMPORT_CREDITS`: an
+  arranged page at `arranged`, a copied page at `copied` (its listing pass), the
+  header its layout; each wave is quoted before it starts
+  (`aiSiteImportWaveCreditRange`), naming both. Both rows are provisional until
+  the live check measures them.
+- **Published only into a preview.** A wave's pages go live only on a site in
+  preview, where the public sees the notice; `sitePublish` carries what went
+  live. On a site not in preview every output stays a draft.
 - **Trust & Safety.** Every import files one `abuseReports` row
   (`site-import/site-import-review.ts`, `source: 'site-import'`, category
   `impersonation`, severity `normal`, the outbound screen's shape), rewritten
@@ -3415,6 +3502,58 @@ AGL-3660), which fills every empty slot and takes the icon out of its frame:
   (`fixtures/ai-stock-photo-agl4065-recordings.ts`; the search cache had expired, so
   each list is what one search placed, tagged by its page address) and their stored
   home pages (`fixtures/ai-site-agl4065-pages.ts`).
+- **The thing, the place and the trade (AGL-4092).** The 2026-10-28 live check on
+  beta.287 put a bare foot tagged "body part" on a dirt bike parts shop's "Engine and
+  air" tile, a transmission chain under its "Brake Pad Set" (searched "part" alone),
+  one contributor's shoot under both of its tires, a cat tagged "hungry" under a taco
+  trailer's "Come hungry", a European alley under "Around town", a chicken salad
+  tagged "taco bowl" under "Race day", and a man posing with a street bike, tagged
+  "susuki" 21st, in a motocross team's "The team in pictures". Each is closed by a
+  rule the tags can see:
+  - *A picture of a thing is held to the business's own world.* The strict gate's
+    world half reads `lead`, never every word of the type, so "street" and
+    "breakfast" of "street and breakfast tacos" vouch for nothing. A feeling, a time
+    or a way of being somewhere is never a thing (`NON_THINGS`: "hungry", "day",
+    "town", "PR"); a caption left with none is searched as the world's own
+    (`"<leadWord ?? craft> <caption>"`), and one that says where the business is
+    (`PLACE_PHRASES`: "around town", "at events") asks for its customers out there
+    (`CRAFT_KIN.out`: "food truck crowd" for tacos, else "<lead> customers"), needing
+    people or a stand and refusing a street that is someone else's (`FOREIGN_STREET`).
+  - *A broad search finds a photo OF the world.* Every non-hero broad rung of the
+    site's own world, and a trade's product fallbacks, take a hit only where one of
+    its first three tags names the lead and ends in a word of it (`leadOwn`,
+    `leadsWithWorld`): "street tacos" and "dirt bike tire" do, "taco bowl" and "body
+    part" do not. A wider world (AGL-3923) keeps its own rule. An animal, a toy or a
+    bare body part never leads a hit whose first tags name nothing of the lead
+    (`aiStockOddLeads`), unless the slot, its section or the brief names its group;
+    a portrait's face and a photographer's scenes keep their bodies.
+  - *A trade's things are held to the world it serves.* Where the craft is a trade
+    (`of`), `held` is the served world's names: its products and collection tiles
+    must name one (`served`, kin or not: a railway brake wheel tagged "brake" is no
+    brake pad), the craft alone is never searched, and a product's search is
+    qualified by `leadWord` ("dirt bike skid plate"), never "part". `OBJECT_KIN`
+    gains brakes, engines and air filters, a food truck, tortilla chips and sodas. A
+    product's photo naming its object first or second scores 2 more, and a product
+    takes a photo of a shoot no other slot shows before one that another does
+    (`aiStockFreshShootsFirst` with `whole`). A gallery keeps its order: the recorded
+    fixtures name one contributor for all, so a shoot cannot be told offline.
+  - *A band of pictures is the gallery's* (`aiLayoutPictureRole`): its cells are
+    portraits only where their own words are of people, so "The team in pictures"
+    is searched as motocross, and "Meet the riders" stays the team's.
+  - *A motocross business's world is off-road.* Where its own clause names no wider
+    word of its group (`CRAFT_KIN.wider`: "motorcycle", "motorbike", "moto"), those
+    leave `lead`, and `shunLead` gains a street bike's own subjects (a model, posing,
+    urban, a street). A business that says "motorcycle" keeps it.
+  - *Brand marks are refused by their tags, everywhere, with no image read.* A tag
+    one letter off a maker of six letters or more names it ("susuki", "yamha"),
+    except a word of its own ("barley", "rental", "phone"); gear and tire makers join
+    `MAKERS` and the alt text's `BRANDS`, those whose name is a common word only in
+    their phrase ("fox racing", "shift mx"). The Pixabay provider keeps up to 30 tags
+    of a hit (it kept 20, and the "susuki" was the 21st). A mark only the pixels show
+    (the team hero's "SHIFT" jersey) is still placed: that is the stated limit.
+  The replays are `ai-stock-photo-agl4092-{berm,pit,rut}.spec.ts` and
+  `ai-layout-pictures-agl4092-roles.spec.ts`, over 40 searches re-asked of Pixabay
+  on 2026-10-28 as the source asks them (`fixtures/ai-stock-photo-agl4092-recordings.ts`).
 - **One refused photo is that photo's (AGL-3923, #1770).** The provider names a
   download by its bytes (`sniffPhotoContentType`, the upload check's own
   signatures), never by its label. A media-library refusal of one photo's own bytes
@@ -3787,7 +3926,7 @@ the same way, in a Grid with a row direction and no container.
   they are re-ask sentences, and no system block, tool or cached prefix changes.
   `ai-job-free-page.spec.ts` re-asks the Free page's practice areas for each of the three
   shapes a section pass still re-asks through the real page step: a section re-asked for any of them costs at most 22
-  credits, less than the 44 of the largest pass, which the room the arithmetic keeps for
+  credits, less than the 45 of the largest pass, which the room the arithmetic keeps for
   a re-asked section must exceed.
 
 ### A finished section
@@ -3960,7 +4099,7 @@ when the hero was written.
   new code, and the harness reads a page answer's links against the sections of the plan
   it was built from.
 - **What it costs.** The hero's re-ask names the page's four sections, and the Free page's
-  hero re-asked costs 21 credits, within the 44 of the largest pass the room the arithmetic
+  hero re-asked costs 21 credits, within the 45 of the largest pass the room the arithmetic
   keeps for a re-asked section must exceed. Its cut subhead is settled to its first whole clause before the check (AGL-3596), so the re-ask names only the button.
 
 ### The time budget
@@ -4066,9 +4205,11 @@ needs, and the machine does not start it with less.
   request's line is the same length either way, so no figure the Free page's
   arithmetic quotes moves.
 - **The ceiling does not move to make a section fit.** The balanced tier's
-  1,050 fits the Free page's wall with little to spare: past 1,077 tokens the first section pass costs 45 credits, and the Free page that builds its layout
+  1,050 fits the Free page's wall with little to spare: past 1,076 tokens the first section pass costs 45 credits, and the Free page that builds its layout
   first leaves 45 of the 300 — no more than that pass, which is the room the
-  arithmetic keeps for a re-asked section. That margin was 1,060 until the
+  arithmetic keeps for a re-asked section. Rule 14's wording that leaves a missing
+  fact out (AGL-4092), 24 estimated tokens on every document door's prefix, took it
+  from 1,077, the largest pass from 44 credits to 45, and both page totals up one. That margin was 1,060 until the
   palette learned the layout elements' Color scheme (AGL-3284): 20 estimated
   tokens on every document door's cached prefix, the page's then 4,618. Three
   tokens then separated the ceiling from the wall, so the next palette line a
@@ -4209,11 +4350,11 @@ the element budget its request asks for.
   its answer ceiling, the first writing the cache; and the listing at the SEO step's
   nominal usage. Characters are read four to a token and scaled by what the live
   run measured against the ledger's estimate, the higher of the plan's and the
-  layout's ratios. The four-section Free page comes to at most 188 credits of the 300, and a Free page fits 9 sections at every pass's ceiling. On a Free site with
+  layout's ratios. The four-section Free page comes to at most 189 credits of the 300, and a Free page fits 9 sections at every pass's ceiling. On a Free site with
   no layout yet, the page job builds the one layout the Free plan includes first
   (AGL-3031), at the layout generation measured live (1,709 input, 6,649 cache read,
   6,649 cache write and 2,057 output), grown with the layout request's cached prefix:
-  the same page that creates its layout first comes to at most 252 credits, and a
+  the same page that creates its layout first comes to at most 253 credits, and a
   Free page fits 6 sections with its layout. Those two counts are what the plan rules
   hold a Free plan to (AGL-3070): the spec computes them with the plan rules' own
   `aiFreePageSectionsWithin` and holds each exchange's figure to

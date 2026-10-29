@@ -65,7 +65,7 @@ export function invoiceStoreFrom(
   }
 }
 
-type InvoiceOrder = Pick<
+export type InvoiceOrder = Pick<
   HostOrder,
   | 'number'
   | 'status'
@@ -88,19 +88,32 @@ export function invoiceMoney(cents: number, currency: string): string {
   }
 }
 
-function addressLines(address: OrderAddress | undefined | null): string[] {
+/** The United States, however an address names it: left off, as a US envelope does. */
+const US_COUNTRY = /^(us|usa|u\.s\.a?\.?|united states( of america)?)$/i
+
+/**
+ * An address as lines, the American way: name, street, `City, ST 12345`,
+ * the country unless it is the United States, then the phone when the
+ * address carries one and it is wanted.
+ */
+export function invoiceAddressLines(
+  address: Partial<OrderAddress> | undefined | null,
+  options: { phone?: boolean } = {},
+): string[] {
   if (!address) return []
+  const clean = (part: unknown) => String(part ?? '').trim()
+  const region = [clean(address.state), clean(address.postalCode)].filter(Boolean).join(' ')
   return [
-    address.name,
-    address.line1,
-    address.line2,
-    [address.city, address.state, address.postalCode].filter(Boolean).join(' '),
-    address.country,
-    address.phone,
-  ]
-    .map((part) => String(part ?? '').trim())
-    .filter(Boolean)
+    clean(address.name),
+    clean(address.line1),
+    clean(address.line2),
+    [clean(address.city), region].filter(Boolean).join(', '),
+    US_COUNTRY.test(clean(address.country)) ? '' : clean(address.country),
+    options.phone === false ? '' : clean(address.phone),
+  ].filter(Boolean)
 }
+
+const addressLines = (address: OrderAddress | undefined | null) => invoiceAddressLines(address)
 
 /** What the payment line says. */
 export function invoicePaymentStatus(order: Pick<InvoiceOrder, 'status' | 'refundedCents' | 'totals' | 'amountCents'>): string {
@@ -114,17 +127,53 @@ export function invoicePaymentStatus(order: Pick<InvoiceOrder, 'status' | 'refun
   return 'Paid'
 }
 
-/** The invoice's markup: a full document body, every value escaped. */
-export function buildOrderInvoiceHtml(input: {
+/** One line of an invoice, as both the printed page and the PDF set it. */
+export interface InvoiceLine {
+  name: string
+  /** The option chosen and the SKU, as one line under the name. */
+  detail: string
+  /** A typed line's own description. */
+  description: string
+  quantity: number
+  unitCents: number
+  amountCents: number
+  /** Included at no charge. */
+  included: boolean
+}
+
+/** One row of an invoice's summary: a figure, or a deduction printed with a minus. */
+export interface InvoiceSummaryRow {
+  label: string
+  cents: number
+  minus?: boolean
+  /** The row the summary leads to: the total, or what was paid after refunds. */
+  emphasis?: boolean
+}
+
+/** An invoice's content, worked out once for the printed page and the PDF. */
+export interface OrderInvoiceData {
+  /** `#1042`. */
+  number: string
+  /** When the order was placed; 0 when it does not say. */
+  dateMs: number
+  currency: string
+  paymentStatus: string
+  billTo: string[]
+  shipTo: string[]
+  lines: InvoiceLine[]
+  summary: InvoiceSummaryRow[]
+  footer: string
+  termsUrl: string
+}
+
+/** What an invoice says, from the order and its store. */
+export function buildOrderInvoiceData(input: {
   order: InvoiceOrder
   orderId: string
   store: OrderInvoiceStore
-}): string {
+}): OrderInvoiceData {
   const { order, orderId, store } = input
   const currency = String(order.currency || store.currency || 'USD').toUpperCase()
-  const money = (cents: number) => escapeHtml(invoiceMoney(cents, currency))
-  const number = formatOrderNumber(order, orderId)
-  const createdAt = orderCreatedAtMs(order as never)
   const totals = order.totals
   const itemsCents =
     totals?.itemsCents ??
@@ -132,38 +181,75 @@ export function buildOrderInvoiceHtml(input: {
   const totalCents = Number(totals?.totalCents ?? order.amountCents ?? itemsCents)
   const refundedCents = Math.max(0, Number(order.refundedCents ?? 0))
 
-  const billTo = [
-    ...(order.billingAddress ? addressLines(order.billingAddress) : [order.customerName ?? ''].filter(Boolean)),
-    order.customerEmail ?? '',
-  ].filter(Boolean)
-  const shipTo = addressLines(order.shippingAddress)
+  const lines = (order.lineItems ?? []).map((line): InvoiceLine => {
+    const quantity = Number(line.quantity) || 0
+    const unit = Number(line.unitAmountCents) || 0
+    return {
+      name: String(line.name ?? ''),
+      detail: [line.variantLabel ? String(line.variantLabel) : '', line.sku ? `SKU ${line.sku}` : ''].filter(Boolean).join(' · '),
+      description: String(line.description ?? '').trim(),
+      quantity,
+      unitCents: unit,
+      amountCents: unit * quantity,
+      included: line.included === true,
+    }
+  })
 
-  const rows = (order.lineItems ?? [])
+  const summary: InvoiceSummaryRow[] = [{ label: 'Subtotal', cents: itemsCents }]
+  if (Number(totals?.discountCents ?? 0) > 0) summary.push({ label: 'Discount', cents: Number(totals?.discountCents), minus: true })
+  if (Number(totals?.shippingCents ?? 0) > 0) summary.push({ label: 'Shipping', cents: Number(totals?.shippingCents) })
+  if (Number(totals?.taxCents ?? 0) > 0) summary.push({ label: 'Tax', cents: Number(totals?.taxCents) })
+  summary.push({ label: 'Total', cents: totalCents, emphasis: true })
+  if (Number(totals?.tipCents ?? 0) > 0) summary.push({ label: 'Tip', cents: Number(totals?.tipCents) })
+  if (refundedCents > 0) {
+    summary.push({ label: 'Refunded', cents: refundedCents, minus: true })
+    summary.push({ label: 'Net paid', cents: Math.max(0, totalCents - refundedCents), emphasis: true })
+  }
+
+  return {
+    number: formatOrderNumber(order, orderId),
+    dateMs: orderCreatedAtMs(order as never),
+    currency,
+    paymentStatus: invoicePaymentStatus(order),
+    billTo: [
+      ...(order.billingAddress ? addressLines(order.billingAddress) : [order.customerName ?? ''].filter(Boolean)),
+      order.customerEmail ?? '',
+    ].filter(Boolean),
+    shipTo: addressLines(order.shippingAddress),
+    lines,
+    summary,
+    footer: String(store.footer ?? '').trim(),
+    termsUrl: String(store.termsUrl ?? '').trim(),
+  }
+}
+
+/** The invoice's markup: a full document body, every value escaped. */
+export function buildOrderInvoiceHtml(input: {
+  order: InvoiceOrder
+  orderId: string
+  store: OrderInvoiceStore
+}): string {
+  const data = buildOrderInvoiceData(input)
+  const { store } = input
+  const money = (cents: number) => escapeHtml(invoiceMoney(cents, data.currency))
+  const number = data.number
+
+  const rows = data.lines
     .map((line) => {
-      const quantity = Number(line.quantity) || 0
-      const unit = Number(line.unitAmountCents) || 0
-      const detail = [line.variantLabel ? escapeHtml(line.variantLabel) : '', line.sku ? `SKU ${escapeHtml(line.sku)}` : '']
-        .filter(Boolean)
-        .join(' · ')
+      const detail = [line.detail, line.description].filter(Boolean).map((part) => escapeHtml(part)).join('<br/>')
       return (
         `<tr><td>${escapeHtml(line.name)}${detail ? `<br/><small>${detail}</small>` : ''}</td>` +
-        `<td align="right">${escapeHtml(quantity)}</td>` +
-        `<td align="right">${money(unit)}</td>` +
-        `<td align="right">${money(unit * quantity)}</td></tr>`
+        `<td align="right">${escapeHtml(line.quantity)}</td>` +
+        `<td align="right">${line.included ? '' : money(line.unitCents)}</td>` +
+        `<td align="right">${line.included ? 'Included' : money(line.amountCents)}</td></tr>`
       )
     })
     .join('')
 
-  const summary: Array<[string, string]> = [['Subtotal', money(itemsCents)]]
-  if (Number(totals?.discountCents ?? 0) > 0) summary.push(['Discount', `−${money(Number(totals?.discountCents))}`])
-  if (Number(totals?.shippingCents ?? 0) > 0) summary.push(['Shipping', money(Number(totals?.shippingCents))])
-  if (Number(totals?.taxCents ?? 0) > 0) summary.push(['Tax', money(Number(totals?.taxCents))])
-  summary.push(['<b>Total</b>', `<b>${money(totalCents)}</b>`])
-  if (Number(totals?.tipCents ?? 0) > 0) summary.push(['Tip', money(Number(totals?.tipCents))])
-  if (refundedCents > 0) {
-    summary.push(['Refunded', `−${money(refundedCents)}`])
-    summary.push(['<b>Net paid</b>', `<b>${money(Math.max(0, totalCents - refundedCents))}</b>`])
-  }
+  const summary = data.summary.map(({ label, cents, minus, emphasis }): [string, string] => {
+    const figure = `${minus ? '−' : ''}${money(cents)}`
+    return emphasis ? [`<b>${label}</b>`, `<b>${figure}</b>`] : [label, figure]
+  })
 
   const block = (title: string, lines: string[]) =>
     lines.length ? `<td valign="top"><b>${title}</b><br/>${lines.map((line) => escapeHtml(line)).join('<br/>')}</td>` : ''
@@ -172,9 +258,9 @@ export function buildOrderInvoiceHtml(input: {
     `<title>${escapeHtml(`Invoice ${number}`)}</title>` +
     `<h2>${escapeHtml(store.name || 'Invoice')}</h2>` +
     `<h3>${escapeHtml(`Invoice ${number}`)}</h3>` +
-    `<p>${createdAt ? `Date: ${escapeHtml(new Date(createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }))}<br/>` : ''}` +
-    `Payment: ${escapeHtml(invoicePaymentStatus(order))}<br/>Currency: ${escapeHtml(currency)}</p>` +
-    `<table width="100%" cellpadding="6"><tr>${block('Bill to', billTo)}${block('Ship to', shipTo)}</tr></table>` +
+    `<p>${data.dateMs ? `Date: ${escapeHtml(new Date(data.dateMs).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }))}<br/>` : ''}` +
+    `Payment: ${escapeHtml(data.paymentStatus)}<br/>Currency: ${escapeHtml(data.currency)}</p>` +
+    `<table width="100%" cellpadding="6"><tr>${block('Bill to', data.billTo)}${block('Ship to', data.shipTo)}</tr></table>` +
     `<table width="100%" cellpadding="6" border="1" cellspacing="0">` +
     `<tr><th align="left">Item</th><th align="right">Qty</th><th align="right">Unit price</th><th align="right">Amount</th></tr>` +
     rows +

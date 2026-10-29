@@ -73,6 +73,8 @@ import {
 // wholesale, and what a deleted contact's refusal still says must be read
 // under them by the real store and the real merge.
 import { readContactConsent } from '@aglyn/tenant-data-admin/server/consent-by-address'
+import { holdsStampedSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
+import { EMAIL_SITE_ROLE_PRESET, emailSitePermissionRefusal } from './model/email-permissions'
 
 /**
  * The most addresses one request may name.
@@ -146,12 +148,14 @@ export async function resolveListContext(
   if (!hostSnapshot.exists) {
     return { ok: false, status: 404, body: { error: 'Unknown site' } }
   }
-  const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-  if (memberRole !== 'admin' && memberRole !== 'editor') {
+  // "Add people to marketing lists from a site" (AGL-4047): the site's
+  // stamp, else the preset of the member's site role, the Admin and Editor
+  // this asked for. The organization-wide writer is still asked below.
+  if (!holdsStampedSiteKey(hostSnapshot, decoded.uid, 'email.lists', EMAIL_SITE_ROLE_PRESET)) {
     return {
       ok: false,
       status: 403,
-      body: { error: 'Not a site admin or editor' },
+      body: { error: emailSitePermissionRefusal('email.lists') },
     }
   }
 

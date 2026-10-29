@@ -9,6 +9,233 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.289 — 2026-10-29
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.288...v1.0.0-beta.289)
+
+### Added
+
+- **ai:** import keeps every word, takes the site's look and lands in its preview ([AGL-4084](https://linear.app/aglyn/issue/AGL-4084), [AGL-4083](https://linear.app/aglyn/issue/AGL-4083), [AGL-4086](https://linear.app/aglyn/issue/AGL-4086))
+- **console:** the Preview switch, Start in preview at every create, page preview ([AGL-4086](https://linear.app/aglyn/issue/AGL-4086))
+- **tenant:** a site or page in preview shows the public its notice and its team the site ([AGL-4086](https://linear.app/aglyn/issue/AGL-4086))
+- **ai:** import reads the whole site and says what it found ([AGL-4083](https://linear.app/aglyn/issue/AGL-4083))
+
+### Fixed
+
+- the import and preview branches' reds, after main ([AGL-4084](https://linear.app/aglyn/issue/AGL-4084))
+- **ai:** a wave that lands in the preview says so in its review ([AGL-4084](https://linear.app/aglyn/issue/AGL-4084))
+- **ai:** import copy reads the configured brand name ([AGL-4083](https://linear.app/aglyn/issue/AGL-4083))
+
+### Documentation
+
+- **ai:** a reviewed wave is in the site's preview, public by the Preview switch ([AGL-4084](https://linear.app/aglyn/issue/AGL-4084))
+- **site-protection:** keep a site to your team with Preview; native switch and status ([AGL-4086](https://linear.app/aglyn/issue/AGL-4086))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **deps:** bump systeminformation from 5.33.14 to 5.33.18
+
+</details>
+
+6 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
+## v1.0.0-beta.288 — 2026-10-29
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.287...v1.0.0-beta.288)
+
+### Added
+
+- **ai:** the year founded is a business profile field ([AGL-4092](https://linear.app/aglyn/issue/AGL-4092))
+- **permissions:** suppressions, lists, inbox replies and sender ask keys ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **permissions:** org automations and workspace domains are plugin keys ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **permissions:** installing and publishing on a site are marketplace keys ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **permissions:** funnels and email campaigns are plugin keys ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **permissions:** fonts, page publishing, live chat and Zapier ask site keys ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **permissions:** refunds, POS approvals and webhooks are workspace-only keys ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+
+### Fixed
+
+- **ai:** stock photos fit the thing, the place and the trade ([AGL-4092](https://linear.app/aglyn/issue/AGL-4092))
+- **ai:** rule 14 and a plan's section names leave a missing fact out ([AGL-4092](https://linear.app/aglyn/issue/AGL-4092))
+- **stock-photos:** keep up to 30 of a Pixabay hit's tags ([AGL-4092](https://linear.app/aglyn/issue/AGL-4092))
+- **ai:** an Assist build never asks for placeholders ([AGL-4092](https://linear.app/aglyn/issue/AGL-4092))
+- **ai:** a dataset sample never tells the owner what to add ([AGL-4092](https://linear.app/aglyn/issue/AGL-4092))
+
+### Performance
+
+- **console:** a new tab skips the wait once another has seen the Firestore cache locked ([AGL-4090](https://linear.app/aglyn/issue/AGL-4090), [AGL-3428](https://linear.app/aglyn/issue/AGL-3428), [AGL-3788](https://linear.app/aglyn/issue/AGL-3788))
+
+### Documentation
+
+- **ai:** reshoot Setup -> Business profile with the Year founded field ([AGL-4092](https://linear.app/aglyn/issue/AGL-4092))
+- **ai:** no bracket, no instruction, and the year founded ([AGL-4092](https://linear.app/aglyn/issue/AGL-4092))
+
+<details>
+<summary>Also in this release: 1 test, 1 chore</summary>
+
+- **console:** the community-naming spec reads boot declarations from declarations.ts ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **deps:** bump re2js from 2.8.6 to 2.9.1
+
+</details>
+
+## v1.0.0-beta.287 — 2026-10-28
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.286...v1.0.0-beta.287)
+
+### Added
+
+- **marketplace:** the starter seed holds its pages to the starter rule ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **marketplace:** check a built-in starter theme as the site wears it ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **redirects:** keep the visitor's query string on a site redirect ([AGL-4081](https://linear.app/aglyn/issue/AGL-4081))
+- **waivers:** the paired display authorizes signing on it, no grant or timer ([AGL-4042](https://linear.app/aglyn/issue/AGL-4042))
+- **permissions:** co-editing and the edit bar ask Edit site content per site ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **commerce:** orders and gift cards are keys with site-role presets ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **permissions:** site routes and writers ask the site keys, not the site role ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **permissions:** core site keys whose preset is the site role ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **ai:** chat builds propose a theme change and search photos with business words ([AGL-4077](https://linear.app/aglyn/issue/AGL-4077))
+- **ai:** chat sees open AI jobs and the plan, reads docs in English, 2,048 ceiling ([AGL-4075](https://linear.app/aglyn/issue/AGL-4075))
+- **ai:** one plan reminder a day after a plan is ready, never a second ([AGL-4076](https://linear.app/aglyn/issue/AGL-4076))
+- **permissions:** walk-ins and stays are keys whose preset is the site role ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **waivers:** match a rider by the birth date on their CRM contact ([AGL-4042](https://linear.app/aglyn/issue/AGL-4042))
+- **waivers:** e-sign consent v2, the business contact and a copy to download ([AGL-4042](https://linear.app/aglyn/issue/AGL-4042))
+- **commerce:** booth buyers accept the terms of sale on the display or tablet ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **commerce:** request a return of a shipped online reader order; S710 4G copy ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **marketplace:** publish a site as a site starter, the publish-starter door ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **marketplace:** the core.site-starters source, search and resolve ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **aglyn:** the site starter node rule, a whole site kept safe ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **marketplace:** site starter listing fields, rules deny-list and search indexes ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **commerce:** turn on 4G for a store's Stripe Reader S710s, billed monthly ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **waivers:** display signing lasts until closed; screens draw apart ([AGL-4042](https://linear.app/aglyn/issue/AGL-4042), [AGL-4048](https://linear.app/aglyn/issue/AGL-4048))
+- **ai:** sites you like is on — flag defaults on, guide drops its rolling-out note ([AGL-3975](https://linear.app/aglyn/issue/AGL-3975))
+- **sites:** create a site from a starter picked from the marketplace ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **tenant:** the documents a site created from a starter starts with ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **aglyn:** a site starter's theme, planned against the empty host it creates ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **marketplace:** seed the platform's own site starter listings ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **legal:** pin Legal v20, hardware sales and waivers ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038), [AGL-4042](https://linear.app/aglyn/issue/AGL-4042))
+- **ai:** vary trades and fitness layouts; no three bare bands in a row ([AGL-4065](https://linear.app/aglyn/issue/AGL-4065))
+- **commerce:** keep hardware buyers' name and address on the sale record ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **aglyn:** an optional installed() on the site starter source seam ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **aglyn:** site starter page links by slug across publish and install ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **commerce:** booth shows the buyer's whole email and takes the store address ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **permissions:** narrowing per site is a control on roles and members ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **commerce:** in-store products' reviews show marked Sold in store, or hide ([AGL-4060](https://linear.app/aglyn/issue/AGL-4060))
+- **commerce:** staff hardware cancels and refunds can email the buyer ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **commerce:** warn before a closure cancels unshipped hardware orders ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **commerce:** fold the operator's own sales into tax return Items 1-2 ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **waivers:** match riders by email, else name and birth date together ([AGL-4042](https://linear.app/aglyn/issue/AGL-4042))
+- **commerce:** staff change a stay's guest count after booking ([AGL-4043](https://linear.app/aglyn/issue/AGL-4043))
+- **commerce:** in-person reader returns: register, staff refund, buyer request ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **commerce:** in-person readers onto the buyer's store, serials, booth, setup ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **commerce:** look up and attach an in-person reader buyer, invite, claim ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **waivers:** every signed waiver follows the store's retention period ([AGL-4042](https://linear.app/aglyn/issue/AGL-4042))
+- **commerce:** record in-person hardware sales, To attach list, tax once ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **permissions:** narrower site access narrows its register and waivers ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **commerce:** in-person hardware model, kiosk offer choice, seller gates ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **waivers:** sign on the customer display through a generic core seam ([AGL-4042](https://linear.app/aglyn/issue/AGL-4042))
+- **permissions:** move API keys, privacy requests and holds to catalog keys ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **permissions:** the register's keys decide alone; buying hardware stands on its own ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **commerce:** a saved workspace logo reaches card readers at once ([AGL-4048](https://linear.app/aglyn/issue/AGL-4048))
+- **waivers:** pick the waiver a Sign waiver element signs in the Besigner ([AGL-4042](https://linear.app/aglyn/issue/AGL-4042))
+- **commerce:** check stays in once per stay or once per guest ([AGL-4043](https://linear.app/aglyn/issue/AGL-4043))
+- **waivers:** adult age per waiver, keep waivers on erasure, store-site links ([AGL-4042](https://linear.app/aglyn/issue/AGL-4042))
+- **commerce:** pass use dates and rain checks at the check-in window ([AGL-4043](https://linear.app/aglyn/issue/AGL-4043))
+- **commerce:** hardware closure refunds, 7-year sale records, tax return ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **commerce:** walk-ins need the reservations plan and say which roles book ([AGL-4046](https://linear.app/aglyn/issue/AGL-4046))
+- **commerce:** let the store set when "Only N left" shows for a resource ([AGL-4044](https://linear.app/aglyn/issue/AGL-4044))
+- **commerce:** count order-dialog and Stripe refunds of register sales in day totals ([AGL-4037](https://linear.app/aglyn/issue/AGL-4037))
+- **permissions:** console gates and waivers ask permission keys, not roles ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **permissions:** finer point of sale keys under managePos ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **permissions:** per-member and per-site permission overrides ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+
+### Fixed
+
+- **abuse:** refuse site names that read as our servers, like www-2 and com ([AGL-4082](https://linear.app/aglyn/issue/AGL-4082))
+- **marketplace:** a starter publish asks Publish site content, not a site role ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **aglyn:** the starter theme planner names its input source, not listing ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **commerce:** the 4G monthly charge id comes from a named key function ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **commerce:** register refund record ids come from named key functions ([AGL-4037](https://linear.app/aglyn/issue/AGL-4037))
+- **tools:** the staged docs-registry hook reads a large merge's diff ([AGL-3707](https://linear.app/aglyn/issue/AGL-3707))
+- **notifications:** name a workspace by its orgName, not as one you left ([AGL-2915](https://linear.app/aglyn/issue/AGL-2915))
+- **waivers:** name the waiverTitles path literally so the host sweeps see it ([AGL-4042](https://linear.app/aglyn/issue/AGL-4042))
+- **ai:** settle dead links and repeated styles instead of stopping a job ([AGL-4076](https://linear.app/aglyn/issue/AGL-4076))
+- **ai:** a question about the workspace's own plan or AI jobs is never a docs quote ([AGL-4075](https://linear.app/aglyn/issue/AGL-4075))
+- **ai:** hand the business words to a build's pages only, never its layout or items ([AGL-4077](https://linear.app/aglyn/issue/AGL-4077))
+- **tools:** carry the posHardwareSales TTL policy in the declared list ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **console:** one provisioning reader per new account ([AGL-4079](https://linear.app/aglyn/issue/AGL-4079), [AGL-4021](https://linear.app/aglyn/issue/AGL-4021))
+- **ai:** job photo and logo reads ask the plugins' image function ([AGL-4048](https://linear.app/aglyn/issue/AGL-4048))
+- **console:** closure notices answer a locked workspace's 423 ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **ai:** a band "in pictures" or "in photos" is a gallery of picture slots ([AGL-4065](https://linear.app/aglyn/issue/AGL-4065))
+- **marketplace:** the starter seed takes --org with a space, as documented ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **ai:** photos fit the trade and no empty gallery bands ([AGL-4065](https://linear.app/aglyn/issue/AGL-4065))
+- **ai:** a row's icons follow its items' meaning; towns share one marker ([AGL-4065](https://linear.app/aglyn/issue/AGL-4065))
+- **ai:** fit a hero eyebrow around its town, never through a name ([AGL-4065](https://linear.app/aglyn/issue/AGL-4065))
+- **ai:** a store's newsletter band is the platform's sign-up field, never a form ([AGL-4065](https://linear.app/aglyn/issue/AGL-4065))
+- **ai:** a store whose brief names only kinds of product starts with marked samples ([AGL-4065](https://linear.app/aglyn/issue/AGL-4065))
+- **ai:** seed AI starts with marked sample rows, never placeholders, one list per value ([AGL-4065](https://linear.app/aglyn/issue/AGL-4065))
+- **marketplace:** the seeds' browsability copy reviews site starters too ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **commerce:** offline card fee flag names the monthly invoice, not a brand ([AGL-4039](https://linear.app/aglyn/issue/AGL-4039))
+- **commerce:** flag an offline sale whose discount the member's role does not allow ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **commerce:** offline card sync checks the account, settles fees, refunds and alerts ([AGL-4039](https://linear.app/aglyn/issue/AGL-4039))
+- **commerce:** a changed logo reaches card readers without opening the POS devices card ([AGL-4048](https://linear.app/aglyn/issue/AGL-4048))
+- **crm:** a waiver signer's source reads "Waiver signed", not the raw word ([AGL-4042](https://linear.app/aglyn/issue/AGL-4042))
+- **commerce:** a new product keeps its quick key and modifier groups ([AGL-3607](https://linear.app/aglyn/issue/AGL-3607))
+- **commerce:** a new product keeps its check-in setting ([AGL-4043](https://linear.app/aglyn/issue/AGL-4043))
+- **commerce:** offline card mode writes the site's one reader configuration safely ([AGL-4039](https://linear.app/aglyn/issue/AGL-4039))
+- **commerce:** the Buy now door refuses a draft or archived product, as the cart does ([AGL-4060](https://linear.app/aglyn/issue/AGL-4060))
+- **commerce:** the hardware shop lists all 14 Stripe items and flags the WisePOS E ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+
+### Performance
+
+- **ai:** the insight step's two calls send one tool list, so the answer reads the cache ([AGL-4076](https://linear.app/aglyn/issue/AGL-4076))
+- **commerce:** keep the check-in window and POS helpers out of commerce's eager bytes ([AGL-4043](https://linear.app/aglyn/issue/AGL-4043))
+
+### Changed
+
+- **theme:** font read and write move to shared-util-tools so the core can set fonts ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+
+### Documentation
+
+- **ai:** a question about your own workspace gets a written answer ([AGL-4075](https://linear.app/aglyn/issue/AGL-4075))
+- add a WhatsApp button guide, and say who on your side is told about an order ([AGL-4078](https://linear.app/aglyn/issue/AGL-4078))
+- **ai:** chat answers in your language, sees AI jobs; right-to-left not supported yet ([AGL-4075](https://linear.app/aglyn/issue/AGL-4075))
+- **ai:** photos fit the business and empty picture bands are left out ([AGL-4065](https://linear.app/aglyn/issue/AGL-4065))
+- **ai:** name the AGL-4065 decisions by their question, not by who made them ([AGL-4065](https://linear.app/aglyn/issue/AGL-4065))
+- **ai:** sample rows and sample products in AI starts, the newsletter band ([AGL-4065](https://linear.app/aglyn/issue/AGL-4065))
+- **waivers:** matching a rider by name and date of birth at check-in ([AGL-4042](https://linear.app/aglyn/issue/AGL-4042))
+- **commerce:** change a stay's guests after booking ([AGL-4043](https://linear.app/aglyn/issue/AGL-4043))
+- **commerce:** the in-person reader sale at the register and for staff ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **permissions:** register keys, hardware buyers, settings keys, reader logos ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **commerce:** stays checked in per stay or per guest, and guest counts ([AGL-4043](https://linear.app/aglyn/issue/AGL-4043))
+- **commerce:** passes for a day the buyer picks, and rain checks ([AGL-4043](https://linear.app/aglyn/issue/AGL-4043))
+- **commerce:** cards taken offline in the Aglyn POS app settle like online cards ([AGL-4039](https://linear.app/aglyn/issue/AGL-4039))
+- **commerce:** what's new for reader logos, waiver sources, product fields and Buy now ([AGL-4048](https://linear.app/aglyn/issue/AGL-4048), [AGL-4042](https://linear.app/aglyn/issue/AGL-4042), [AGL-3607](https://linear.app/aglyn/issue/AGL-3607), [AGL-4043](https://linear.app/aglyn/issue/AGL-4043), [AGL-4060](https://linear.app/aglyn/issue/AGL-4060))
+
+<details>
+<summary>Also in this release: 12 test, 7 chore</summary>
+
+- raise the Linear id ceiling to AGL-4086 ([AGL-4086](https://linear.app/aglyn/issue/AGL-4086))
+- **permissions:** re-anchor three rules and field guards on the site keys ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **tools:** raise the linear id ceiling to 4081, which exists ([AGL-2500](https://linear.app/aglyn/issue/AGL-2500), [AGL-4081](https://linear.app/aglyn/issue/AGL-4081))
+- **console:** stock photo job-title words count 4 in the role-name ratchet ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **commerce:** the AI guided start's sample mark is a server-stamped product field ([AGL-4065](https://linear.app/aglyn/issue/AGL-4065))
+- **native:** regenerate contracts for the product sample flag ([AGL-4065](https://linear.app/aglyn/issue/AGL-4065))
+- **ai:** a live spec that the insight answer call reads the cache ([AGL-4076](https://linear.app/aglyn/issue/AGL-4076))
+- **marketplace:** tax return source spec reads its one section ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **commerce:** gift cards surface spec holds the commerce.giftCards key gate ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **commerce:** checkout specs seed an active product, as Buy now now requires ([AGL-4060](https://linear.app/aglyn/issue/AGL-4060))
+- **tools:** raise the linear id ceiling to 4080, which exists ([AGL-2500](https://linear.app/aglyn/issue/AGL-2500), [AGL-4079](https://linear.app/aglyn/issue/AGL-4079), [AGL-4080](https://linear.app/aglyn/issue/AGL-4080))
+- **console:** the site-switch spec mocks the permissions hook the switchboard reads ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **ai:** a live check of the chat's honest answers, run only when asked ([AGL-4075](https://linear.app/aglyn/issue/AGL-4075))
+- raise the Linear id ceiling to AGL-4078 ([AGL-4078](https://linear.app/aglyn/issue/AGL-4078))
+- **ai:** re-render the four style previews the new layout choices change ([AGL-4065](https://linear.app/aglyn/issue/AGL-4065))
+- **ai:** replay the booth kit's eyebrows, icons, layouts and bare bands offline ([AGL-4065](https://linear.app/aglyn/issue/AGL-4065))
+- **commerce:** spec the register card reader buyer step ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **tools:** raise the linear id ceiling to 4074, which exists ([AGL-2500](https://linear.app/aglyn/issue/AGL-2500), [AGL-4068](https://linear.app/aglyn/issue/AGL-4068), [AGL-4069](https://linear.app/aglyn/issue/AGL-4069), [AGL-4072](https://linear.app/aglyn/issue/AGL-4072), [AGL-4073](https://linear.app/aglyn/issue/AGL-4073), [AGL-4074](https://linear.app/aglyn/issue/AGL-4074))
+- **billing:** health fixtures carry the offline card payment_intent events ([AGL-4039](https://linear.app/aglyn/issue/AGL-4039))
+
+</details>
+
 ## v1.0.0-beta.286 — 2026-10-27
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.285...v1.0.0-beta.286)

@@ -38,7 +38,7 @@ import { SEO_LISTING_FIELDS, type SeoListingFieldKey } from '@aglyn/aglyn/app-ut
 import { AI_JOB_EMAIL_TOOL } from '../jobs/ai-job-email-step'
 import { AI_JOB_FORM_TOOL } from '../jobs/ai-job-form-step'
 import { AI_PAGE_SECTION_TOOL } from '../jobs/ai-job-page-sections'
-import { AI_LAYOUT_FRAME_TOOL, AI_LAYOUT_PAGE_TOOL } from '../layout-language/ai-layout-language'
+import { AI_LAYOUT_ARRANGE_TOOL, AI_LAYOUT_FRAME_TOOL, AI_LAYOUT_PAGE_TOOL } from '../layout-language/ai-layout-language'
 import { AI_BUILD_PLAN_TOOL } from '../model/ai-build-plan'
 import { AI_CRM_RECORD_KINDS } from '../model/ai-crm'
 import { AI_AUTOMATION_STEP_TYPES } from '../model/ai-workflow-job'
@@ -170,7 +170,11 @@ const TOOL_SETS: Record<string, Readonly<Record<string, () => AiTool[]>>> = {
   'jobs/ai-job-component-step.ts': { component: () => [aiComponentTool(), aiInventoryLookupTool()] },
   'jobs/ai-job-page-step.ts': { section: () => [AI_PAGE_SECTION_TOOL, aiInventoryLookupTool()] },
   // A whole page in the layout language (AGL-3660), asked by the page step's own pass.
-  'jobs/ai-job-page-language.ts': { 'language page': () => [AI_LAYOUT_PAGE_TOOL, aiInventoryLookupTool()] },
+  // And a page brought in, arranged by its numbered lines (AGL-4084), which reads no site.
+  'jobs/ai-job-page-language.ts': {
+    'language page': () => [AI_LAYOUT_PAGE_TOOL, aiInventoryLookupTool()],
+    'arranged page': () => [AI_LAYOUT_ARRANGE_TOOL],
+  },
   'jobs/ai-job-crm-step.ts': {
     ...Object.fromEntries(AI_CRM_RECORD_KINDS.map((kind) => [`${kind} record`, () => [aiCrmRecordTool(kind)]])),
     email: () => [AI_CRM_EMAIL_TOOL],

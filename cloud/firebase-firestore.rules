@@ -368,6 +368,25 @@ service cloud.firestore {
         return isOrgMember() && orgMember().role in ['owner', 'admin'];
       }
       /**
+       * Does this member hold a workspace key whose default is a set of
+       * workspace roles (AGL-4047)? A gate that asked "is their role owner or
+       * admin?" asks the key that replaced it, whose default is that set, so
+       * nobody's access moved:
+       *
+       *   - the member's `resolvedPermissions` stamp when the projection
+       *     wrote the key (the role's default with their custom role and
+       *     their own permissions applied);
+       *   - else the default itself: their role in `presetRoles`, exactly the
+       *     rule it replaced, for a member the projection has not reached
+       *     since the key existed.
+       *
+       * One read, the member document `orgMember()` already paid for.
+       */
+      function memberKeyOr(permission, presetRoles) {
+        let stamped = orgMember().get('resolvedPermissions', {}).get(permission, null);
+        return stamped is bool ? stamped == true : orgMember().get('role', '') in presetRoles;
+      }
+      /**
        * A member whose reach is the WHOLE org, not a named set of sites
        * (AGL-1026).
        *
@@ -1294,8 +1313,12 @@ service cloud.firestore {
       // them; only a manager writes them, as they speak for every site.
       match /businessProfile/{docId} {
         allow read: if isStaff() || isOrgMember();
+        // "Business profile" (`org.businessProfile`, AGL-4047), whose default
+        // is the owner and admin `canManageOrg` asked for.
         allow write: if isStaff() ||
-          (docId == 'defaults' && canManageOrg() && isVerified() && orgNotSuspended());
+          (docId == 'defaults' && isOrgMember() &&
+            memberKeyOr('org.businessProfile', ['owner', 'admin']) &&
+            isVerified() && orgNotSuspended());
       }
 
       // Org-shared data (AGL-237): datasets (records included), contacts
@@ -1502,6 +1525,16 @@ service cloud.firestore {
       }
       function canWriteScopedOrgData() {
         return canWriteOrgData() && canReadScoped();
+      }
+      /**
+       * `canWriteOrgData` for the workspace media library (AGL-4047): the
+       * same verified, unsuspended member, asking "Edit the workspace media
+       * library" (`org.media`), whose default is the owner, admin and editor.
+       */
+      function canWriteOrgMedia() {
+        return isOrgMember() && isVerified() &&
+          memberKeyOr('org.media', ['owner', 'admin', 'editor']) &&
+          orgNotSuspended();
       }
       /**
        * The dataset-only twin. Same scoping, plus `data.manage`.
@@ -2229,24 +2262,27 @@ service cloud.firestore {
       // every frozen field is an Admin-SDK route, and the DAM's client writes
       // are `fileName`, `alt`, `description`, `tags`, `folderId`/`folder` and
       // `visibleTo`.
+      // The workspace media library asks "Edit the workspace media library"
+      // (`org.media`, AGL-4047) where it asked `canWriteOrgData`'s owner,
+      // admin and editor, which is the key's default; the scoping is as before.
       match /media/{mediaId} {
         allow read: if isStaff() || canReadScoped();
         allow create: if isStaff() ||
-          (canWriteOrgData() && canCreateScoped() && mediaObjectFieldsUnset());
+          (canWriteOrgMedia() && canCreateScoped() && mediaObjectFieldsUnset());
         allow update: if isStaff() ||
-          (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()) &&
+          (canWriteOrgMedia() && canReadScoped() && (isOrgWideMember() || scopeUnchanged()) &&
            mediaObjectFieldsUnchanged());
-        allow delete: if isStaff() || canWriteScopedOrgData();
+        allow delete: if isStaff() || (canWriteOrgMedia() && canReadScoped());
       }
       // Folders hold a name and a parent; they address no Storage object, so
       // the object freeze has nothing to say here and is deliberately absent
       // rather than copied for symmetry.
       match /mediaFolders/{folderId} {
         allow read: if isStaff() || canReadScoped();
-        allow create: if isStaff() || (canWriteOrgData() && canCreateScoped());
+        allow create: if isStaff() || (canWriteOrgMedia() && canCreateScoped());
         allow update: if isStaff() ||
-          (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()));
-        allow delete: if isStaff() || canWriteScopedOrgData();
+          (canWriteOrgMedia() && canReadScoped() && (isOrgWideMember() || scopeUnchanged()));
+        allow delete: if isStaff() || (canWriteOrgMedia() && canReadScoped());
       }
       // Storage quota meter for the org library.
       match /counters/{counterId} {
@@ -3453,6 +3489,12 @@ service cloud.firestore {
                      // whether the guided AI start is still offered, and only
                      // the starter route writes it.
                      'starterProvisionedAt',
+                     // Preview (AGL-4086): whether only the site's team can
+                     // see it, and whether it has been public before. Making
+                     // a site public is a launch — it drops every cached page
+                     // and reports the first publish — so only
+                     // /api/hosts/preview and /api/hosts/create write them.
+                     'preview', 'publicSinceMs',
                      // Whether the site records visitor journeys (AGL-3605).
                      // The tenant's collector reads it to decide whether a
                      // visit is stored, and only the funnels routes write it,
@@ -3549,9 +3591,13 @@ service cloud.firestore {
           // list is the Admin-SDK-only set, and `screens` has a legitimate
           // client writer. Two different questions, two conditions.
           // defaultHomeScreenId (AGL-3408) picks what a publish at / unroutes.
+          // previewScreens (AGL-4086) decides whether a published page is
+          // shown to the public or to the site's team alone, so making one
+          // public is a publish and keeping one back is an unpublish: the same
+          // roles as the routing map.
           (canPublishHostContent(hostId) ||
             !request.resource.data.diff(resource.data).affectedKeys()
-              .hasAny(['screens', 'defaultHomeScreenId'])) &&
+              .hasAny(['screens', 'defaultHomeScreenId', 'previewScreens'])) &&
           routeRemovalAllowed());
       allow delete: if isStaff() ||
         (isVerified() && hostSiteRoleKey(hostId, 'site.manage', ['admin']) &&

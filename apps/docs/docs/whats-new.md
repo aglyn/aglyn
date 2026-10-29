@@ -27,6 +27,125 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — quote and invoice PDFs
+
+- **[Quote PDFs](commerce-and-bookings/commerce/quotes-and-proofs.md#pdf)** — download a
+  quote as a PDF in your site's look: your logo, contact details and primary color, the
+  items and totals, your notes and terms, and the pay link to click. Your customer can
+  download the same PDF from the quote page.
+- **[Invoice PDFs](commerce-and-bookings/commerce/orders-and-returns.md#invoices)** —
+  **Invoice** in an order's dialog now offers **Download PDF** beside **Print invoice**:
+  the order's invoice as a PDF file in the same look, with whether it is paid.
+
+## October 2026 — pay links for quotes
+
+- **[Quote pay links](commerce-and-bookings/commerce/quotes-and-proofs.md#pay-link)** — copy
+  a quote's pay link and send it to your customer. It opens the quote on your own site,
+  where they pay it; the paid quote becomes an order. **Replace link** retires a link you
+  sent before. Sending quotes is its own permission, **Send quotes and invoices to
+  customers**.
+- **Draft orders** — after paying a draft order's payment link, the buyer lands on the
+  order's status page on your site instead of a page they can't open.
+
+## October 2026 — quotes
+
+- **[Quotes](commerce-and-bookings/commerce/quotes-and-proofs.md)** — price a customer's
+  order before they buy, from the **Quotes** card on the **Orders** tab: your products with
+  their options and add-ons, items typed for the job, things included at no charge, a
+  discount, shipping, notes and terms, with tax worked out from your store's tax settings.
+  Making and editing quotes is its own permission, **Create and edit quotes**.
+
+## October 2026 — suppressions, lists and inbox replies are permissions
+
+- **[Email and inbox permissions](workspace-and-billing/teams-and-roles/custom-roles.md#email-and-inbox-permissions)** —
+  managing a site's suppressions, adding people to marketing lists from a site or from the
+  inbox, and replying from the inbox now each have a permission. A site's admins and editors
+  keep them, and a custom role or a per-member override can grant or deny each one.
+
+## October 2026 — org automations and the workspace's domains are permissions
+
+- **[Automation and domain permissions](workspace-and-billing/teams-and-roles/custom-roles.md#automation-and-domain-permissions)** —
+  managing the organization's automations, pausing one on a site and managing the
+  workspace's domains now each have a permission. Everyone keeps what their role allowed,
+  and a custom role or a per-member override can grant or deny each one.
+
+## October 2026 — installing and publishing on a site are permissions
+
+- **[Marketplace permissions on a site](workspace-and-billing/teams-and-roles/custom-roles.md#marketplace-site-permissions)** —
+  installing marketplace items into a site and publishing a site's items to the marketplace
+  now each have a permission on the site. A site's admins and editors keep them, and a custom
+  role or a per-member override can grant or deny either one.
+
+## October 2026 — funnels and email campaigns are permissions
+
+- **[Funnel and campaign permissions](workspace-and-billing/teams-and-roles/custom-roles.md#funnel-and-campaign-permissions)** —
+  managing a site's funnels and running its email campaigns now each have a permission,
+  **Manage funnels** and **Run email campaigns**. A site's admins and editors keep them, and a
+  custom role or a per-member override can grant or deny either one.
+
+## October 2026 — refunds, register approvals and order webhooks are permissions
+
+- **[Order permissions](workspace-and-billing/teams-and-roles/custom-roles.md#order-permissions)** —
+  refunding orders, approving a refund over the register's limit and managing order
+  webhooks now each have a permission: **Refund orders**, **Approve refunds over the
+  register's limit** and **Manage order webhooks**. As before, an admin of the site who
+  works across the whole workspace holds them and someone added to just one site doesn't,
+  and a custom role, a per-member override or the site can now grant or deny each one.
+
+## October 2026 — booking payments and refunds are permissions
+
+- **[Booking permissions](workspace-and-billing/teams-and-roles/custom-roles.md#booking-permissions)** —
+  taking a booking's payment in person and refunding a booking now each have a
+  permission, **Take booking payments in person** and **Refund bookings**. A site's admins
+  and editors keep the first and its admins the second, and a custom role or a
+  per-member override can grant or deny either one.
+
+## October 2026 — a warning before 4G turns off
+
+- **[The date 4G turns off, the day a charge is missed](commerce-and-bookings/commerce/pos-hardware.md#reader-4g)** —
+  when a month's 4G charge for your card readers doesn't go through, everyone
+  with **Manage billing** gets an email and a console notification that day. They
+  say how much is due and the date 4G turns off for your stores unless the
+  invoice is paid. Pay it on the **Billing** page before then and 4G stays on.
+
+## October 2026 — 4G for card readers: who turns it on, and unpaid months
+
+- **[Turning on 4G needs Manage billing](commerce-and-bookings/commerce/pos-hardware.md#reader-4g)** —
+  4G for your Stripe Reader S710s is charged to your workspace, so turning it on
+  now also needs the workspace's **Manage billing** permission. Turning it off
+  still needs only **Registers and devices**.
+- **[An unpaid 4G charge turns 4G off](commerce-and-bookings/commerce/pos-hardware.md#reader-4g)** —
+  if a month's 4G charge is still unpaid after a grace period, 4G is turned off
+  for your stores and everyone who manages billing gets an email. Pay it on the
+  **Billing** page, then turn 4G on again.
+- **[A deleted workspace's last month](commerce-and-bookings/commerce/pos-hardware.md#reader-4g)** —
+  when a deleted workspace is removed for good partway through a month, that
+  month's 4G is charged then, and 4G is turned off.
+
+## October 2026 — Bring my site and everyone's Sequences are permissions
+
+- **[Bring a site in](workspace-and-billing/teams-and-roles/custom-roles.md#ai-permissions)** and
+  **[Manage everyone's Sequences](content-and-data/crm/sequences.md)** — bringing an
+  existing site in, and managing a mailbox or sequence someone else connected, each
+  have a permission now. Owners and admins keep both, and a custom role or a
+  per-member override can grant or deny either one.
+
+## October 2026 — five more workspace permissions
+
+- **[Workspace permissions](workspace-and-billing/teams-and-roles/custom-roles.md#workspace-permissions)** —
+  exporting the workspace's data, its sending domains, its business profile, its
+  shared media library and deleting its shared records each have a permission now.
+  Everyone keeps what their role gave them, and a custom role or a per-member override
+  can grant or deny any of them.
+
+## October 2026 — payment methods and shipping apps are permissions
+
+- **[Order permissions](workspace-and-billing/teams-and-roles/custom-roles.md#order-permissions)** —
+  changing a store's payment methods and connecting its shipping apps now each have a
+  permission, **Manage payment methods** and **Connect shipping apps**. A site's admins
+  keep them, anyone with **Manage orders** still sees both cards, and a custom role or a
+  per-member override can grant or deny either one.
+
 ## October 2026 — editing together follows Edit site content
 
 - **[Edit site content decides who edits a site](workspace-and-billing/teams-and-roles/custom-roles.md#site-permissions)** —

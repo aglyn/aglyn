@@ -87,6 +87,38 @@ only register a reader to the Stripe account that ordered it.
   check that it is on and connected, cancel the payment, and take it again
   — or use **Card (QR)** or **Type card** for that sale.
 
+### 4G for the Stripe Reader S710 {#reader-4g}
+
+Where it's available, the **POS devices** card of a store with a Stripe
+Reader S710 shows **4G (cellular)**. Select **Turn on 4G** to give every
+S710 at that store Stripe's cellular service, which it uses whenever Wi-Fi
+and Ethernet aren't available. The card shows the monthly price for each
+reader, and you agree to it before 4G turns on.
+
+- **Who can turn it on.** 4G is charged to your workspace, so turning it on
+  needs both **Registers and devices** and the workspace's **Manage billing**
+  permission. Turning it off needs only **Registers and devices**. If your
+  role is missing **Manage billing**, the card tells you so.
+- **How it's charged.** At the start of each month, your workspace's card is
+  charged for each S710 that had 4G at any time in the month before.
+  Turning 4G off stops the charge from the next month.
+- **If a charge isn't paid.** It stays open on your workspace's **Billing**
+  page, and the same day everyone with the workspace's **Manage billing**
+  permission gets an email and a console notification. They say how much is due and the date 4G turns off
+  for your stores, in your workspace's time zone, unless the invoice is paid.
+  The grace period is two weeks unless your platform sets a different one.
+  Pay it on the **Billing** page before that date and 4G stays on, with
+  nothing else to do.
+- **If it's still unpaid on that date.** 4G is turned off for all of your
+  workspace's stores, and everyone with **Manage billing** gets another email
+  and notification. Your readers keep working on Wi-Fi or Ethernet. To get 4G
+  back, pay the open invoice on the **Billing** page, then select **Turn on
+  4G** again for each store. It doesn't come back on by itself.
+- **If you delete the workspace.** When the workspace is removed for good,
+  after the waiting period, 4G is turned off. The month it's removed in is
+  charged then, for each S710 that had 4G during that month, along with the
+  month before if that one hasn't been charged yet.
+
 
 ### Reader start-up screen {#reader-start-up-screen}
 
@@ -230,8 +262,27 @@ Then:
   one with the same address. Once you create your workspace, the reader is in it.
   There is nothing to accept.
 
-The reader then waits on **Products → Point of sale**, in a **Card readers to set
-up** card, which says what it still needs:
+The order is in your purchase history on the **Hardware** card, under **Your
+orders**, even before buying online is open for your workspace.
+
+**Returning one.** Returns follow the hardware terms of sale, and the return
+shipping is yours to pay. There are three ways:
+
+- Bring it to Aglyn's register at a later event. The refund goes back the way
+  you paid.
+- On the **Hardware** card, under **Your orders**, select **Request a return** on
+  the order and say why. Aglyn's team arranges the return with you, then refunds
+  it to the card you paid with, or tells you why it can't. The order shows
+  **Return requested**, then **Returned** or **Return declined**.
+- Aglyn's team can also refund it to the card you paid with at any time.
+
+A reader paid for in cash is refunded at Aglyn's register.
+
+#### Card readers to set up {#card-readers-to-set-up}
+
+A reader bought in person waits on **Products → Point of sale**, in a **Card
+readers to set up** card, until you set it up on a store. The card says what it
+still needs:
 
 1. **A plan that includes the point of sale.** A reader takes payments at the
    register, so the card asks you to add it first, with a link to the plans.
@@ -248,22 +299,6 @@ Staff can also add the reader to your store for you at the event, by its pairing
 code, while you are there. If your store has no address for card readers yet,
 they can enter it with you, and it is saved to your store as if you had added it
 on the **POS devices** card; a store that already has one keeps it.
-
-The order is in your purchase history on the **Hardware** card, under **Your
-orders**, even before buying online is open for your workspace.
-
-**Returning one.** Returns follow the hardware terms of sale, and the return
-shipping is yours to pay. There are three ways:
-
-- Bring it to Aglyn's register at a later event. The refund goes back the way
-  you paid.
-- On the **Hardware** card, under **Your orders**, select **Request a return** on
-  the order and say why. Aglyn's team arranges the return with you, then refunds
-  it to the card you paid with, or tells you why it can't. The order shows
-  **Return requested**, then **Returned** or **Return declined**.
-- Aglyn's team can also refund it to the card you paid with at any time.
-
-A reader paid for in cash is refunded at Aglyn's register.
 
 ### If the workspace or your account closes before an order ships {#hardware-orders-at-closure}
 

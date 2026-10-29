@@ -121,7 +121,9 @@ interface Line {
 function linesOf(order: OrderEventOrder): Line[] {
   const raw = Array.isArray(order.lineItems) ? (order.lineItems as Array<Record<string, unknown>>) : []
   return raw.map((line, index) => ({
-    id: String(line?.['productId'] ?? `line-${index}`),
+    // A line typed on a quote has an empty product id (AGL-4093): it is
+    // named by its place on the order, like a line with none.
+    id: String(line?.['productId'] || `line-${index}`),
     name: String(line?.['name'] ?? 'Item'),
     sku: typeof line?.['sku'] === 'string' ? (line['sku'] as string) : null,
     quantity: Math.max(0, Math.round(Number(line?.['quantity']) || 0)),

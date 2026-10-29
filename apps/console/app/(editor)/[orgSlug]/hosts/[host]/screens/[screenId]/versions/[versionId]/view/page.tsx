@@ -83,6 +83,7 @@ import {
   DialogContent,
   DialogContentText,
   DialogTitle,
+  FormControlLabel,
   IconButton,
   List,
   ListItem,
@@ -90,6 +91,7 @@ import {
   ListItemText,
   MenuItem,
   Stack,
+  Switch,
   TableBody,
   TableCell,
   TableHead,
@@ -167,6 +169,11 @@ import useFirestoreCollection from '../../../../../../../../../../hooks/use-fire
 import useFirestoreDoc from '../../../../../../../../../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../../../../../../../../../hooks/use-host-activity-logger'
 import useHostRole from '../../../../../../../../../../hooks/use-host-role'
+import { updateHostDocument } from '../../../../../../../../../../utils/host-document-writes'
+import {
+  isHostInPreview,
+  isScreenInPreview,
+} from '@aglyn/aglyn/app-utils/site-preview'
 import { useDeclareDocumentSubject } from '../../../../../../../../../../components/document-subject'
 
 const whiteSpace = '--'
@@ -1012,6 +1019,44 @@ function ScreenDetails() {
       publishedPath,
     ],
   )
+
+  /**
+   * One page in preview (AGL-4086), the twin of the site's switch: once
+   * published, only the site's team sees it, and the public gets the site's
+   * 404, until it is made public here. Kept on the host beside the routing
+   * map, because that is what the tenant middleware reads to route the team
+   * around the public answer; the drop is awaited, as the maintenance
+   * switch's is, because the snackbar is a claim about what visitors see.
+   */
+  const pageInPreview = isScreenInPreview(hostData, screenId)
+  const siteInPreview = isHostInPreview(hostData)
+  const handlePagePreviewChange = useCallback(
+    async (enabled: boolean) => {
+      await updateHostDocument(
+        firestore,
+        { user, hostId },
+        { [`previewScreens.${screenId}`]: enabled ? true : deleteField() },
+        { awaitAnnounce: true },
+      )
+        .then(() => {
+          enqueueSnackbar(
+            enabled
+              ? 'Only your team can see this page now'
+              : 'This page is public once it is published',
+            { variant: 'success', persist: false },
+          )
+          logActivity(enabled ? 'Put the page in preview' : 'Made the page public', {
+            type: 'screen',
+            id: screenId,
+            name: displayName,
+          })
+        })
+        .catch(() =>
+          enqueueSnackbar('An error has occurred', { variant: 'error' }),
+        )
+    },
+    [firestore, user, hostId, screenId, enqueueSnackbar, logActivity, displayName],
+  )
   /*==========================================
    * WHICH CAMPAIGNS THIS SCREEN IS PART OF.
    *
@@ -1827,6 +1872,30 @@ function ScreenDetails() {
                           </Button>
                         </Stack>
                       ) : null}
+                      <Tooltip title={canPublish ? '' : publishBlock}>
+                        <span>
+                          <FormControlLabel
+                            control={
+                              <Switch
+                                checked={pageInPreview}
+                                disabled={!canPublish}
+                                onChange={(event) =>
+                                  void handlePagePreviewChange(event.target.checked)
+                                }
+                              />
+                            }
+                            label="Preview — only your team can see this page"
+                          />
+                        </span>
+                      </Tooltip>
+                      <Typography variant="caption" color="text.secondary">
+                        {siteInPreview
+                          ? 'The whole site is in preview, so visitors see none of it yet. ' +
+                            'Make it public in Admin → Error pages.'
+                          : pageInPreview
+                            ? 'Visitors get your 404 page here until you switch this off.'
+                            : 'Switch it on to keep this page to your team after you publish it.'}
+                      </Typography>
                       <Typography variant="caption" color="text.secondary">
                         {'Per-user editor permissions arrive with the team ' +
                           'user manager.'}

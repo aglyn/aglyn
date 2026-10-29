@@ -74,7 +74,7 @@ const deps = (): OutreachEnrollRouteDeps => ({
       role: 'admin',
       isOwner: true,
       orgWide: true,
-      permissions: { [OUTREACH_USE_PERMISSION]: true },
+      permissions: { [OUTREACH_USE_PERMISSION]: true, 'outreach.manageAll': true },
     }),
     holdsOrgCatalogPermission: async () => true,
     readOrg: async () => ({ plan: 'pro', entitlements: { features: { outreach: true } } }),

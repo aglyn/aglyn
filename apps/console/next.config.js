@@ -105,11 +105,35 @@ const FONT_INSTALLER_WASM = [
 ]
 
 /**
+ * A production build writes no server source maps.
+ *
+ * Vercel builds the console on a 2-core, 8 GB machine, and beta.288's build
+ * was OOM-killed there twice: once at "Collecting page data", once in the
+ * compile. Nothing in 288 was large. Measured locally with the builder's two
+ * threads, the `next-build` process peaked at 8.29 GB on 287 and 8.35 GB on
+ * 288, so 287 had passed by a margin smaller than the noise.
+ *
+ * Turbopack writes a `.map` beside every server chunk: 10,757 files and
+ * 320 MB for the console, held in memory while it builds them. None of them
+ * ships. Not one of the build's 398 `.nft.json` function traces lists a
+ * `.map`, so no deployed function has ever had one to read. Turning them off
+ * took the `next-build` peak from 7.64 GB to 6.60 GB on the same tree, the
+ * two built side by side.
+ *
+ * Browser maps are a separate setting and stay on (`productionBrowserSourceMaps`
+ * in `with-aglyn.nextjs.config.js`). `next dev` keeps its server maps, which
+ * are what its error overlay reads. `specs/build-fits-the-8gb-builder.spec.ts`
+ * pins both halves.
+ */
+const PRODUCTION_BUILD_EXPERIMENTAL =
+  process.env.NODE_ENV === 'production' ? { serverSourceMaps: false } : {}
+
+/**
  * @type {import('/tools/nextjs-base.config').WithAglynOptions}
  **/
 module.exports = withAglyn({
   serverExternalPackages: FONT_INSTALLER_PACKAGES,
-  // experimental: { appDir: isProduction },
+  experimental: PRODUCTION_BUILD_EXPERIMENTAL,
   env: {
     AGLYN_SILOED_HOST: process.env.AGLYN_SILOED_HOST,
     // Which deployment this build IS, in the CLIENT bundle (AGL-2067).

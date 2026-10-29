@@ -53,6 +53,11 @@ import {
   requiredSitePlugins,
 } from '@aglyn/tenant-runtime/required-site-plugins'
 import { leavingNoticeConfig } from '@aglyn/tenant-data-admin/server/leaving-notice'
+// The leaf, not the barrel: two pure predicates with no imports (AGL-4086).
+import {
+  isHostInPreview,
+  isScreenInPreview,
+} from '@aglyn/aglyn/app-utils/site-preview'
 import { cache } from 'react'
 import { serverPluginLoader } from '../../../../utils/server-plugin-loader'
 import getHost, { CNAME_HOST_PREFIX } from '../../../../utils/get-host'
@@ -159,18 +164,27 @@ const mergePageData = (
   return { pageData: merged }
 }
 
+/**
+ * How a render sees a site in preview (AGL-4086): `''` is the public, which
+ * gets the preview notice; {@link SITE_PREVIEW_TEAM_VIEW} is the site's team,
+ * already verified by the uncached preview route, which gets the site.
+ */
+export const SITE_PREVIEW_TEAM_VIEW = 'preview'
+export type SiteOverride = '' | typeof SITE_PREVIEW_TEAM_VIEW
+
 const loadPageDataCached = cache(
   async (
     hostParam: string,
     slugKey: string,
     previewToken: string,
+    siteOverride: SiteOverride,
   ): Promise<LoadResult> => {
     // The site and its workspace as the body read them, for the one decision
     // that applies to every exit alike — a page, a redirect — rather than to
     // each of them by hand: the leaving notice (AGL-3452).
     const facts: LeavingNoticeFacts = {}
     return applyLeavingNotice(
-      await composePageResult(hostParam, slugKey, previewToken, facts),
+      await composePageResult(hostParam, slugKey, previewToken, facts, siteOverride),
       facts,
     )
   },
@@ -186,7 +200,10 @@ const composePageResult = async (
     slugKey: string,
     previewToken: string,
     facts: LeavingNoticeFacts,
+    siteOverride: SiteOverride = '',
   ): Promise<LoadResult> => {
+    // The site's team, verified by the preview route before it asked (AGL-4086).
+    const teamView = siteOverride === SITE_PREVIEW_TEAM_VIEW
     const slug = JSON.parse(slugKey) as string[]
     const context = { params: { host: hostParam, slug } }
 
@@ -277,6 +294,12 @@ const composePageResult = async (
     if (
       canonicalDomain &&
       !host.startsWith(CNAME_HOST_PREFIX) &&
+      // The team's view of a site in preview (AGL-4086) stays on the address
+      // it was asked on. It is uncached and `noindex`, so it splits no
+      // ranking, and the custom domain it would be sent to holds none of the
+      // `.aglyn.app` cookies that recognized the team here: redirecting would
+      // hand a team member the public notice for their own site.
+      !teamView &&
       // Any PRODUCTION deployment, not Vercel's alone (AGL-2180). Gated on
       // `VERCEL_ENV === 'production'`, this never fired on a self-host
       // container, so every site was served at BOTH its platform subdomain and
@@ -547,7 +570,14 @@ const composePageResult = async (
     // automation on a page that exists to say "not right now" is behavior the
     // owner did not ask for, and the containment notice would pay Firestore
     // reads to produce it in exactly the month the reads are the problem.
-    if ((hostRes.host as any)?.maintenance) {
+    /**
+     * The site's 503 answer: the assigned 503 page when one composes, else the
+     * built-in notice. Shared by maintenance and by preview, which differ only
+     * in what the built-in notice says (`sitePreview` words it "Coming soon").
+     */
+    const serveUnavailable = async (
+      flags: { sitePreview?: true } = {},
+    ): Promise<LoadResult> => {
       const unavailableId = (hostRes.host as any)?.errorScreens?.unavailable
       if (unavailableId) {
         const unavailable = await getScreen({
@@ -572,6 +602,7 @@ const composePageResult = async (
                   },
                   nodes: unavailableNodes,
                   maintenanceFallback: true,
+                  ...flags,
                 }),
               ),
               revalidate: 30,
@@ -585,10 +616,24 @@ const composePageResult = async (
             data: { host: hostRes.host },
             nodes: null,
             maintenanceFallback: true,
+            ...flags,
           }),
         ),
         revalidate: 30,
       }
+    }
+
+    if ((hostRes.host as any)?.maintenance) return serveUnavailable()
+
+    // Preview (AGL-4086): the public gets the 503 page, or the built-in notice
+    // worded "Coming soon", at every address — the maintenance answer, cached
+    // 30 s like it, `noindex` like it. Below maintenance on purpose: a site in
+    // both is in maintenance, for the team as for everyone, because that is
+    // the switch that means "nobody". The team's own view of a site in
+    // preview never reaches here; the uncached preview route verified it and
+    // asked with `teamView`.
+    if (isHostInPreview(hostRes.host as never) && !teamView) {
+      return serveUnavailable({ sitePreview: true })
     }
 
     // Everything between the lockdown scopes and here: the lockdown branches,
@@ -1335,6 +1380,12 @@ const composePageResult = async (
      *=========================================*/
 
     const screenId = screenEntry[0]
+    // One page in preview on a public site (AGL-4086): to the public it is
+    // what it was before it was published, a 404. Short revalidate, like the
+    // site-wide answer, so making it public shows within seconds of the drop.
+    if (isScreenInPreview(hostRes.host as never, screenId) && !teamView) {
+      return { notFound: true, revalidate: 30 }
+    }
     const screenRes = await getScreen({ hostId, screenId })
     timer.mark('getScreen')
 
@@ -1638,8 +1689,14 @@ export const loadPageData = (
    * one request that disagree about the grant are two different pages.
    */
   previewToken = '',
+  /**
+   * {@link SITE_PREVIEW_TEAM_VIEW} when the uncached preview route has
+   * verified the request as the site's team (AGL-4086). Every public caller
+   * omits it. Part of the `cache()` key for the reason the token is.
+   */
+  siteOverride: SiteOverride = '',
 ): Promise<LoadResult> =>
-  loadPageDataCached(hostParam, JSON.stringify(slug), previewToken)
+  loadPageDataCached(hostParam, JSON.stringify(slug), previewToken, siteOverride)
 
 // Still exported from here: this is the module the API route and the specs
 // name it by. It lives in `utils/not-found-screen-id.ts` (AGL-2648) so the

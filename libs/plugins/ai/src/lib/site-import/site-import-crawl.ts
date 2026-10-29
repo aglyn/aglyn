@@ -44,7 +44,17 @@
  *   index's children included), then same-site links found on the pages read,
  *   for whatever the sitemap missed.
  * - **Budgets.** Pages (the caller's, from the plan), bytes per page (a page
- *   over it is refused, not cut), bytes in total, and wall-clock time.
+ *   over it is refused, not cut), bytes in total, and wall-clock time. A
+ *   whole site's worth fits (AGL-4083): aglyn.com's 123 pages average 440 KB,
+ *   54 MB in all, so the total is 160 MB; a page is parsed and dropped as it
+ *   is read, so what is held is its blocks, never its bytes.
+ * - **Four at a time.** robots.txt, the sitemaps and the home page are read
+ *   one after another; the rest four at a time, and the inventory keeps the
+ *   order they were asked in, which is the sitemap's.
+ * - **Nothing vanishes.** An address a stop (the clock, the bytes, the page
+ *   budget) left unread is listed as `not-reached`, so the inventory's
+ *   counts add up to the site. A wave's own read leaves its unread pages for
+ *   its next pass instead.
  * - **No lookalikes.** A domain that wears a brand it is not
  *   (`lookalikeBrandForHost`) is refused before any request.
  * - **No sign-in pages.** A page with a password field is refused and
@@ -56,6 +66,7 @@ import { lookalikeBrandForHost } from '@aglyn/shared-util-email/outbound-phishin
 import { fenceUntrustedText } from '@aglyn/shared-util-tools/untrusted-text'
 import {
   fetchPublicTextDetailed,
+  type PublicFetchEdge,
   type PublicFetchOptions,
   type PublicFetchResult,
 } from '../jobs/ai-theme-brand-inputs'
@@ -63,9 +74,12 @@ import {
   extractSiteImportPage,
   readMetaValues,
   type SiteImportBlock,
+  type SiteImportBrandMark,
   type SiteImportForm,
+  type SiteImportIcon,
   type SiteImportImage,
   type SiteImportNavLink,
+  type SiteImportOrganization,
 } from './site-import-html'
 import {
   AGLYN_BOT_TOKEN,
@@ -96,18 +110,21 @@ export const AGLYN_BOT_USER_AGENT = `AglynBot/1.0 (+${AGLYN_BOT_INFO_URL})`
 
 export const SITE_IMPORT_DEFAULTS = {
   maxPageBytes: 2 * 1024 * 1024,
-  maxTotalBytes: 24 * 1024 * 1024,
+  /** A whole site's worth (AGL-4083): 54 MB for aglyn.com's 123 pages, with room. */
+  maxTotalBytes: 160 * 1024 * 1024,
   timeBudgetMs: 60_000,
   /** One request's own clock, inside the whole crawl's. */
   requestTimeoutMs: 8_000,
   robotsMaxBytes: 256 * 1024,
   sitemapMaxBytes: 4 * 1024 * 1024,
-  /** Sitemap documents read, an index's children included. */
-  maxSitemaps: 6,
+  /** Sitemap documents read, an index's children included: an index of six children is seven. */
+  maxSitemaps: 24,
   /** URLs a sitemap may contribute to the queue. */
   maxSitemapUrls: 2_000,
-  /** Reasons kept in `skipped` before the list stops growing. */
-  maxSkipped: 200,
+  /** Reasons kept in `skipped` before the list stops growing: every address a sitemap may name. */
+  maxSkipped: 2_000,
+  /** Pages read at once, after robots.txt, the sitemaps and the home page. */
+  concurrency: 4,
 } as const
 
 /** Never a page: files a link may point at that are not HTML. */
@@ -133,6 +150,8 @@ export type SiteImportSkipReason =
   | 'http-error'
   /** No answer, a private address, or a refused address. */
   | 'unreachable'
+  /** Never asked for: a stop (time, bytes, the page budget) came first (AGL-4083). */
+  | 'not-reached'
 
 export interface SiteImportSkipped {
   url: string
@@ -140,6 +159,8 @@ export interface SiteImportSkipped {
   status?: number
   /** Where an off-origin redirect pointed. */
   location?: string
+  /** Whose edge turned an error answer away, when it said (AGL-4083). */
+  edge?: PublicFetchEdge
 }
 
 export interface SiteImportPage {
@@ -152,6 +173,14 @@ export interface SiteImportPage {
   description: string
   lang: string | null
   canonical: string | null
+  /** The share card (AGL-4083). */
+  ogImage: string | null
+  /** The site's own name, as its head gives it. */
+  siteName: string
+  icons: SiteImportIcon[]
+  /** The header's link home: the brand's logo and words. */
+  brand: SiteImportBrandMark | null
+  organization: SiteImportOrganization | null
   blocks: SiteImportBlock[]
   images: SiteImportImage[]
   navLinks: SiteImportNavLink[]
@@ -215,18 +244,37 @@ export interface SiteImportCrawlSeams {
   fetch?: (url: string, options: PublicFetchOptions) => Promise<PublicFetchResult>
   now?: () => number
   /**
-   * Extra headers for one request, asked again on every redirect hop
-   * (AGL-4085). Absent, the crawl asks `siteImportEdgeHeadersFor` once for its
-   * two origins: Aglyn's edge secret where this platform serves the name,
-   * nothing anywhere else. Either way, nothing reaches an address off the
-   * site's two origins.
+   * Request headers for the site being read, asked once per crawl with its
+   * domain (AGL-4083, AGL-4085). Absent, the crawl asks the edge
+   * (`siteImportEdgeHeadersFor`): Aglyn's edge secret for each of the site's
+   * two origins this platform serves, decided origin by origin, and nothing
+   * anywhere else. Either way the headers go only to the site's two origins,
+   * and the fetch asks again on every redirect hop, so a hop anywhere else
+   * carries nothing. Always under the crawler's own `Accept` and `User-Agent`.
    */
-  headersFor?: SiteImportHeadersFor
+  headersFor?: (domain: string) => Promise<Readonly<Record<string, string>>> | Readonly<Record<string, string>>
 }
 
-/** The crawl's headers for its origins: the caller's, else the edge's; never any off the site. */
-async function siteHeadersFor(origins: readonly string[], seams: SiteImportCrawlSeams): Promise<SiteImportHeadersFor> {
-  const inner = seams.headersFor ?? (await siteImportEdgeHeadersFor(origins).catch(() => NO_SITE_IMPORT_HEADERS))
+/**
+ * The per-request headers of a crawl of `domain`: the seam's, else the edge's,
+ * and none for any address off the site's two origins. Never throws.
+ */
+async function siteRequestHeaders(
+  seams: SiteImportCrawlSeams,
+  domain: string,
+  origins: readonly string[],
+): Promise<SiteImportHeadersFor> {
+  let inner: SiteImportHeadersFor = NO_SITE_IMPORT_HEADERS
+  try {
+    if (seams.headersFor) {
+      const headers = await seams.headersFor(domain)
+      if (headers && Object.keys(headers).length) inner = () => headers
+    } else {
+      inner = await siteImportEdgeHeadersFor(origins)
+    }
+  } catch (error) {
+    console.warn('[site-import] the edge headers could not be read; reading without them', { domain, error })
+  }
   return (url: URL) => (origins.includes(url.origin) ? inner(url) : {})
 }
 
@@ -303,7 +351,8 @@ export async function crawlSiteForImport(
     return finish()
   }
 
-  const headersFor = await siteHeadersFor(origins, seams)
+  // Asked once, before anything else, and held to the site's two origins.
+  const headersFor = await siteRequestHeaders(seams, domain, origins)
   const maxPages = Math.max(0, Math.floor(options.maxPages))
   const maxPageBytes = options.maxPageBytes ?? SITE_IMPORT_DEFAULTS.maxPageBytes
   const maxTotalBytes = options.maxTotalBytes ?? SITE_IMPORT_DEFAULTS.maxTotalBytes
@@ -449,67 +498,63 @@ export async function crawlSiteForImport(
     }
     const maxAttempts = maxPages * 3 + 10
     let attempts = 0
-    while (queue.length) {
-      if (inventory.pages.length >= maxPages) {
-        inventory.stoppedBy = 'page-budget'
-        break
-      }
-      if (outOfTime()) {
-        inventory.stoppedBy = 'time'
-        break
-      }
-      if (remainingBytes() <= 0) {
-        inventory.stoppedBy = 'total-bytes'
-        break
-      }
-      if (attempts >= maxAttempts) {
-        inventory.stoppedBy = 'page-budget'
-        break
-      }
-      const next = queue.shift() as (typeof queue)[number]
-      const key = canon(next.key)
+    type Asked = { next: (typeof queue)[number]; key: string; cap: number; page: PublicFetchResult }
+    /** The pages asked for and not yet taken in, in the order they were asked. */
+    const window: Array<Promise<Asked>> = []
+    /** The bytes the asked pages may still read: what is left is shared, never promised twice. */
+    let reserved = 0
+    let stop: SiteImportStop | null = null
+    /** Asked for and never read, because a stop came first: listed as not reached. */
+    const cutOff: string[] = []
+    /** Home alone first, so its answer settles which of the site's two names the rest are read on. */
+    let homeIn = !!only
+    /** Why no more may be asked now: a stop, `wait` for an asked page to come in first, or nothing. */
+    const held = (): SiteImportStop | 'wait' | null => {
+      if (inventory.pages.length >= maxPages) return 'page-budget'
+      if (outOfTime()) return 'time'
+      if (remainingBytes() <= 0) return 'total-bytes'
+      if (attempts >= maxAttempts) return 'page-budget'
+      if (inventory.pages.length + window.length >= maxPages) return 'wait'
+      if (remainingBytes() - reserved <= 0) return 'wait'
+      return null
+    }
+    /** Takes one asked page in: the inventory's next page, a skip, or the reason the read must stop. */
+    const takeIn = ({ next, key, cap, page }: Asked): SiteImportStop | null => {
       const foundBy = next.foundBy
-      if (read.has(key)) continue
-      if (!allowed(key)) {
-        skip({ url: key, reason: 'robots' })
-        continue
-      }
-      attempts += 1
-      read.add(key)
-      const cap = Math.min(maxPageBytes, remainingBytes())
-      const page = await request(key, /text\/html|application\/xhtml\+xml/i, 'text/html, application/xhtml+xml;q=0.9', cap)
+      if (foundBy === 'home') homeIn = true
       if (!page.ok) {
         if (page.refusal === 'too-large' && cap < maxPageBytes) {
-          inventory.stoppedBy = 'total-bytes'
-          break
+          cutOff.push(key)
+          return 'total-bytes'
         }
         if (page.refusal === 'network' && outOfTime()) {
-          inventory.stoppedBy = 'time'
-          break
+          cutOff.push(key)
+          return 'time'
         }
         skip({
           url: key,
           reason: skipReasonFor(page),
           ...(page.status ? { status: page.status } : {}),
           ...(page.location ? { location: page.location } : {}),
+          ...(page.edge ? { edge: page.edge } : {}),
         })
-        continue
+        return null
       }
       inventory.bytesRead += page.bytes
       if (foundBy === 'home') preferred = new URL(page.url).origin
       const finalKey = canon(siteImportPageKey(new URL(page.url), origins) ?? page.url)
       if (finalKey !== key) {
-        if (read.has(finalKey)) continue
+        if (read.has(finalKey)) return null
         read.add(finalKey)
         if (!allowed(finalKey)) {
           skip({ url: finalKey, reason: 'robots' })
-          continue
+          return null
         }
       }
       const extract = extractSiteImportPage(page.text, page.url, sameSite)
       if (extract.loginForm) {
         skip({ url: finalKey, reason: 'login-form' })
-        continue
+        return null
       }
       const links: string[] = []
       for (const link of extract.links) {
@@ -529,6 +574,11 @@ export async function crawlSiteForImport(
         description: extract.description,
         lang: extract.lang,
         canonical: extract.canonical,
+        ogImage: extract.ogImage,
+        siteName: extract.siteName,
+        icons: extract.icons,
+        brand: extract.brand,
+        organization: extract.organization,
         blocks: extract.blocks,
         images: extract.images,
         navLinks: extract.navLinks,
@@ -536,6 +586,48 @@ export async function crawlSiteForImport(
         forms: extract.forms,
         bytes: page.bytes,
       })
+      return null
+    }
+    for (;;) {
+      const width = homeIn ? SITE_IMPORT_DEFAULTS.concurrency : 1
+      while (!stop && queue.length && window.length < width) {
+        const why = held()
+        if (why === 'wait') break
+        if (why) {
+          stop = why
+          break
+        }
+        const next = queue.shift() as (typeof queue)[number]
+        const key = canon(next.key)
+        if (read.has(key)) continue
+        if (!allowed(key)) {
+          skip({ url: key, reason: 'robots' })
+          if (next.foundBy === 'home') homeIn = true
+          continue
+        }
+        attempts += 1
+        read.add(key)
+        const cap = Math.min(maxPageBytes, remainingBytes() - reserved)
+        reserved += cap
+        window.push(
+          request(key, /text\/html|application\/xhtml\+xml/i, 'text/html, application/xhtml+xml;q=0.9', cap).then((page) => ({ next, key, cap, page })),
+        )
+      }
+      if (!window.length) break
+      const asked = await (window.shift() as Promise<Asked>)
+      reserved -= asked.cap
+      stop = takeIn(asked) ?? stop
+    }
+    inventory.stoppedBy = stop
+    // Whatever a stop left unread is said, never dropped; a wave's own read
+    // leaves its unread pages for its next pass instead.
+    if (stop && !only) {
+      const unread = [...cutOff]
+      for (const next of queue) {
+        const key = canon(next.key)
+        if (!read.has(key) && !unread.includes(key)) unread.push(key)
+      }
+      for (const url of unread) skip({ url, reason: 'not-reached' })
     }
     return finish()
   } finally {
@@ -564,7 +656,7 @@ export async function readSiteVerificationMeta(
     accept: /text\/html|application\/xhtml\+xml/i,
     acceptHeader: 'text/html, application/xhtml+xml;q=0.9',
     userAgent: AGLYN_BOT_USER_AGENT,
-    headersFor: await siteHeadersFor(origins, seams),
+    headersFor: await siteRequestHeaders(seams, bare, origins),
     timeoutMs: SITE_IMPORT_DEFAULTS.requestTimeoutMs,
     redirectAllowed: (_from, to) => to.protocol === 'https:' && origins.includes(to.origin),
   })
@@ -591,7 +683,10 @@ export function siteImportPagePromptText(page: SiteImportPage, maxChars = 12_000
     else if (block.kind === 'image') lines.push(`[image: ${block.alt || 'no description'}]`)
     else if (block.kind === 'list-item') lines.push(`- ${block.text}`)
     else if (block.kind === 'quote') lines.push(`> ${block.text}`)
-    else lines.push(block.text)
+    else if (block.kind === 'link') {
+      // A link inside a sentence is in its block's words already.
+      if (!block.inline) lines.push(block.text)
+    } else lines.push(block.text)
   }
   return fenceUntrustedText(`Page ${page.path} of the site being imported`, lines.join('\n'), { maxChars })
 }

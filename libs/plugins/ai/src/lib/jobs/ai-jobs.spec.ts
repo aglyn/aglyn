@@ -276,6 +276,7 @@ import { aiJobDraftId, aiPlanWithDraftIds } from './ai-job-draft-ids'
 import { createAiJobSiteStep } from './ai-job-site-step'
 import { createAiJobImportStep, SITE_IMPORT_WAVES_PER_ORG_PER_DAY } from './ai-job-import-step'
 import { AI_LAYOUT_IMPORTED_PAGE_INPUT } from './ai-job-page-language'
+import { AI_LAYOUT_IMPORTED_SECTIONS_INPUT, type AiSiteImportDocument } from './ai-site-import-document'
 import { AI_LAYOUT_PAGE_PHOTOS_INPUT } from './ai-layout-owner-photos'
 import type { SiteImportReviewInput } from '../site-import/site-import-review'
 import type { PluginMediaIngest, PluginMediaIngestRequest } from '@aglyn/aglyn/plugin-manager/plugin-media-ingest'
@@ -3466,7 +3467,11 @@ describe('a site import brings a proved site in, wave by wave, each started by a
     expect(new Set(pages.map((job) => job.$id)).size).toBe(6)
     expect(pages.every((job) => job.plan?.screens[0]?.layout === handed[0].$id)).toBe(true)
     const services = pages.find((job) => job.plan?.screens[0]?.slug === '/services') as AiJob
-    expect((services.inputs[AI_LAYOUT_IMPORTED_PAGE_INPUT] as { text: string }).text).toContain(HARBOR_INJECTION)
+    // Every block of its own, carried as data and never rewritten (AGL-4084); the old paraphrase input is not sent beside it.
+    const doc = services.inputs[AI_LAYOUT_IMPORTED_SECTIONS_INPUT] as AiSiteImportDocument
+    expect(doc.build).toBe('arranged')
+    expect(doc.blocks.map((block) => (block.kind === 'image' ? '' : block.text))).toContain(HARBOR_INJECTION)
+    expect(services.inputs[AI_LAYOUT_IMPORTED_PAGE_INPUT]).toBeUndefined()
     expect(services.plan?.screens[0]?.sections.map((section) => section.name)).toEqual(['Services', 'Preventive care', 'Restorative care', 'Cosmetic care'])
     const team = pages.find((job) => job.plan?.screens[0]?.slug === '/team') as AiJob
     expect((team.inputs[AI_LAYOUT_PAGE_PHOTOS_INPUT] as unknown[]).length).toBe(3)

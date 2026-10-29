@@ -19,7 +19,7 @@
 import { CONSOLE_WIDGET_SLOTS } from '@aglyn/aglyn'
 import { ICON_VARIANT_HOME } from '@aglyn/shared-data-enums'
 import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
-import { AppLink, Container } from '@aglyn/shared-ui-jsx'
+import { Container } from '@aglyn/shared-ui-jsx'
 import { Box, Stack } from '@mui/material'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useParams } from 'next/navigation'
@@ -34,6 +34,11 @@ import DashboardWidgetPrefsProvider, {
 } from '../../../../../components/dashboard-widget-prefs.context'
 import HostDisplayNameComponent from '../../../../../components/host-display-name.component'
 import SiteCareRequestButton from '../../../../../components/site-care/site-care-request-button.component'
+import SiteVisitButton from '../../../../../components/site-visit-button.component'
+import { isHostInPreview } from '@aglyn/aglyn/app-utils/site-preview'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { doc } from 'firebase/firestore'
+import useFirestoreDoc from '../../../../../hooks/use-firestore-doc'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { useHostId, useHostSubdomain } from '../../../../../components/host-id-provider'
 import { useOrgSlug } from '../../../../../hooks/use-org-scope'
@@ -53,6 +58,13 @@ function HostDashboard() {
   const host = useHostSubdomain()
   const hostId = useHostId()
   const { prefs, ready: prefsReady } = useDashboardWidgetPrefs()
+  const firestore = useFirestore()
+  const { data: hostDoc } = useFirestoreDoc<any>(
+    () => (hostId ? doc(firestore, 'hosts', hostId) : null),
+    [firestore, hostId],
+    { idField: '$id' },
+  )
+  const inPreview = isHostInPreview(hostDoc)
   const showAnalytics =
     prefsReady && !isDashboardWidgetHidden(prefs, HOST_ANALYTICS_WIDGET_ID)
 
@@ -79,16 +91,18 @@ function HostDashboard() {
           {/* Site Care (AGL-3959): disabled with the reason when the workspace lacks it. */}
           <SiteCareRequestButton hostId={hostId ?? null} />
           {host ? (
-            <AppLink
-              componentVariant="button"
+            // While the site is in preview (AGL-4086) the button enters it as
+            // the team, on whatever address it has.
+            <SiteVisitButton
+              newTab
+              hostId={hostId}
+              inPreview={inPreview}
               variant="contained"
               color="primary"
               href={`https://${host}.${TENANT_APEX}/?aglyn-edit`}
-              newTab
-              rel="nofollow"
             >
               {'Visit site'}
-            </AppLink>
+            </SiteVisitButton>
           ) : null}
         </Stack>
       }

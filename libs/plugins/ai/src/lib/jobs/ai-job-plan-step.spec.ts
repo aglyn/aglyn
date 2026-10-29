@@ -96,6 +96,7 @@ import {
   AI_JOB_PLAN_REVIEW_COPY,
   AI_JOB_PLAN_STEP_MINIMUM_MS,
   AI_JOB_PLAN_SCOPES,
+  AI_PLAN_BUILD_LEFT_OUT_SENTENCE,
   AI_PLAN_REUSE_WINDOW_MS,
   aiJobPlanKey,
   aiJobPlanMaxTokens,
@@ -1071,6 +1072,31 @@ describe('the plan step — a build from one request (AGL-3616)', () => {
       const [, second] = mockRunAiRequest.mock.calls.map(([request]) => request)
       expect(JSON.stringify(second.messages)).toContain('are listed on no page, so no visitor would see them')
     })
+  })
+
+  // AGL-4087: a Free build asked for a home and a "review helper" page that
+  // writes a review draft from a customer's choices; its plan held the home
+  // alone and nothing said the helper was left out.
+  it('keeps what a build says it leaves out, and tells only a build to say so (AGL-4087)', async () => {
+    const leftOut = [
+      {
+        asked: 'Review helper page',
+        why: 'The site cannot write a review draft from a customer’s choices or copy it for them.',
+      },
+    ]
+    mockRunAiRequest.mockResolvedValueOnce(planAnswer({ ...buildPlan(30), leftOut } as never))
+    const outcome = await planStep({ readOps: async () => OPS })({
+      job: job({ kind: 'build', brief: 'Two pages: a home, and a review helper page.' }),
+      stepIndex: 0,
+      now: NOW,
+      firestore,
+    })
+    const [first] = mockRunAiRequest.mock.calls.map(([request]) => request)
+    expect(first.tools[0].inputSchema.required).toContain('leftOut')
+    expect(first.messages[0].content).toContain(AI_PLAN_BUILD_LEFT_OUT_SENTENCE)
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(1)
+    expect(outcome.plan?.leftOut).toEqual(leftOut)
+    expect(aiJobPlanPrompt(job(), null, null, OPS)).not.toContain(AI_PLAN_BUILD_LEFT_OUT_SENTENCE)
   })
 
   it('tells a build, and only a build, the date its dated items fall after (AGL-3743)', () => {

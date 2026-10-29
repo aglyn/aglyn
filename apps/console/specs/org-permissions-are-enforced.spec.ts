@@ -174,6 +174,9 @@ const ENFORCED_AS: Record<OrgPermission, readonly string[]> = {
   // passes as `permission`.
   'ai.use': ["'ai.use'"],
   'ai.generate': ["'ai.generate'"],
+  // "Bring a site in" (AGL-4047): the site import doors and the import
+  // step's admission ask it through `memberHasOrgPermission`.
+  'ai.import': ["'ai.import'"],
   // The reservation keys (AGL-4047), commerce's, whose preset is the site
   // role: the rules' reservations and resources block asks "Manage
   // reservations" through `hostSiteRoleKey`, and the walk-in and guests
@@ -192,7 +195,67 @@ const ENFORCED_AS: Record<OrgPermission, readonly string[]> = {
   // Commerce's order keys (AGL-4047): the order routes ask "Manage orders"
   // and the gift cards route "Issue gift cards" through `holdsCommerceSiteKey`.
   'commerce.orders': ["'commerce.orders'"],
+  // Quotes (AGL-4093): the quote route asks "Create and edit quotes" through
+  // `holdsCommerceSiteKey`.
+  'commerce.quotes': ["'commerce.quotes'"],
+  // Sending quotes (AGL-4094): the quote route's pay-link and replace-link
+  // actions ask "Send quotes and invoices to customers" through
+  // `holdsCommerceSiteKey`.
+  'commerce.quotes.send': ["'commerce.quotes.send'"],
+  // Workspace acts that asked for roles (AGL-4047): `/api/orgs/export-data`,
+  // `/api/email/sending-domains`, the rules' business profile write, the
+  // media scope and the rules' workspace media library, and the erase
+  // route's workspace records.
+  'org.export': ["'org.export'"],
+  'org.sendingDomains': ["'org.sendingDomains'"],
+  'org.businessProfile': ["'org.businessProfile'"],
+  'org.media': ["'org.media'"],
+  'org.eraseRecords': ["'org.eraseRecords'"],
   'commerce.giftCards': ["'commerce.giftCards'"],
+  // Commerce's store settings (AGL-4047): the payment methods route asks
+  // "Manage payment methods" and the shipping connectors route "Connect
+  // shipping apps", each through `holdsCommerceSiteKey`.
+  'commerce.paymentMethods': ["'commerce.paymentMethods'"],
+  'commerce.shippingConnections': ["'commerce.shippingConnections'"],
+  // Bookings' keys (AGL-4047): the in-person payment route asks "Take
+  // booking payments in person" and the refund route "Refund bookings", each
+  // through `holdsBookingsSiteKey`.
+  'bookings.payments': ["'bookings.payments'"],
+  'bookings.refunds': ["'bookings.refunds'"],
+  // Commerce's keys for members of the whole workspace only (AGL-4047): the
+  // refund route asks "Refund orders", the register's gate, PIN and return
+  // doors "Approve refunds over the register's limit", and the order
+  // webhooks route "Manage order webhooks", each through
+  // `holdsCommerceWorkspaceSiteKey`.
+  'commerce.refunds': ["'commerce.refunds'"],
+  'commerce.posApprovals': ["'commerce.posApprovals'"],
+  'commerce.webhooks': ["'commerce.webhooks'"],
+  // Funnels and Marketing (AGL-4047): the funnels routes and draft writer ask
+  // "Manage funnels", the campaign routes and draft writer "Run email
+  // campaigns", each through `holdsStampedSiteKey` (and the organization
+  // hub's campaigns through `memberHasOrgPermission`).
+  'funnels.manage': ["'funnels.manage'"],
+  'marketing.campaigns': ["'marketing.campaigns'"],
+  // The marketplace on a site (AGL-4047): the seven install doors ask
+  // "Install marketplace items into a site" and the six publish doors
+  // "Publish a site's items to the marketplace", beside the workspace keys.
+  'marketplace.siteInstall': ["'marketplace.siteInstall'"],
+  'marketplace.sitePublish': ["'marketplace.sitePublish'"],
+  // Workflows and Domains (AGL-4047): `automations/manage`, the org
+  // automations import and the pause door's managers ask "Manage org
+  // automations", the pause door "Pause org automations on a site", and the
+  // domains gate's workspace arm "Manage the workspace's domains".
+  'workflows.orgAutomations': ["'workflows.orgAutomations'"],
+  'workflows.sitePause': ["'workflows.sitePause'"],
+  'domains.manage': ["'domains.manage'"],
+  // Email and the inbox (AGL-4047): the suppression routes ask "Manage the
+  // site's suppressions", the list routes "Add people to marketing lists from
+  // a site", the inbox's reply "Reply from the inbox" and its list assignment
+  // "Add people to lists from the inbox".
+  'email.suppressions': ["'email.suppressions'"],
+  'email.lists': ["'email.lists'"],
+  'inbox.reply': ["'inbox.reply'"],
+  'inbox.assign': ["'inbox.assign'"],
 }
 
 function serverFilesContaining(needle: string): string[] {
@@ -235,7 +298,7 @@ describe('every advertised org permission is enforced server-side (AGL-2444)', (
     expect([...CATALOG].sort()).toEqual(
       Object.keys(ENFORCED_AS).sort(),
     )
-    expect(CATALOG.length).toBe(23)
+    expect(CATALOG.length).toBe(49)
   })
 
   it('the search really searches — a key nobody uses finds nothing', () => {

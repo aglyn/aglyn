@@ -155,13 +155,13 @@ describe('who may start an import, and when: the admission both doors ask', () =
     createAiSiteImportAdmission({
       releaseFlagOn: async () => true,
       ownership: async () => ({ current: true, method: 'meta', provenAt: 1, detail: null }),
-      memberRole: async () => 'owner',
+      holdsSiteImport: async () => true,
       ...patch,
     })
 
   it('admits the owner or an admin of a paid workspace with a current proof', async () => {
     expect(await admission()(context())).toBeNull()
-    expect(await admission({ memberRole: async () => 'admin' })(context())).toBeNull()
+    expect(await admission({ holdsSiteImport: async () => true })(context())).toBeNull()
     // Asked before "Create site" makes the site, too.
     expect(await admission()(context({ hostId: null, siteToCome: true }))).toBeNull()
   })
@@ -175,7 +175,7 @@ describe('who may start an import, and when: the admission both doors ask', () =
   })
 
   it('refuses an editor, an address that is no website and a site that is not proved, before anything is spent', async () => {
-    expect(await admission({ memberRole: async () => 'editor' })(context())).toEqual({ status: 403, error: AI_SITE_IMPORT_COPY.role })
+    expect(await admission({ holdsSiteImport: async () => false })(context())).toEqual({ status: 403, error: AI_SITE_IMPORT_COPY.role })
     expect(await admission()(context({ inputs: { domain: 'not a website' } }))).toMatchObject({ status: 400 })
     expect(await admission({ ownership: async () => null })(context())).toEqual({
       status: 403,
@@ -350,11 +350,16 @@ describe('a wave reads its pages again, and leaves out what changed', () => {
       url.endsWith('/robots.txt') || url.endsWith('/sitemap.xml')
         ? harborFetch()(url, options)
         : harborFetch([], { [url]: { status, contentType: 'text/html', body: '' } })(url, options)
+    // The read's verdict words it (AGL-4084): no ledger, nothing quoted, Check again reads again.
     const blocked = await run(createAiJobImportStep(deps({ crawlSeams: { fetch: answering(403) } })), importJob())
-    expect(blocked.review).toEqual({ reason: 'wave', message: AI_SITE_IMPORT_COPY.blocked(HARBOR_DOMAIN), findings: [] })
-    expect(blocked.siteImport).toBeUndefined()
+    expect(blocked.review?.reason).toBe('blocked')
+    expect(blocked.review?.message).toContain('turned AglynBot away before it could read your home page')
+    expect(blocked.review?.message).toContain('no AI credits were used')
+    expect(blocked.items).toEqual([])
+    expect(blocked.siteImport?.waves).toEqual([])
     const down = await run(createAiJobImportStep(deps({ crawlSeams: { fetch: answering(500) } })), importJob())
-    expect(down.review).toEqual({ reason: 'wave', message: AI_SITE_IMPORT_COPY.nothing(HARBOR_DOMAIN), findings: [] })
+    expect(down.review?.reason).toBe('unreadable')
+    expect(down.review?.message).toContain(`Your home page could not be read (it answered with an error, 500)`)
   })
 
   it('refuses a lookalike address outright', async () => {

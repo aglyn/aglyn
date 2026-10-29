@@ -299,6 +299,10 @@ import {
   resetPluginMembershipDetachersForTests,
 } from '@aglyn/aglyn/plugin-manager/plugin-membership-detach'
 import { campaignManageHandler, campaignManageSubject } from './campaign-manage'
+import { registerMarketingDeclarations } from '../declarations'
+
+// The org hub asks "Run email campaigns" of the catalog (AGL-4047).
+beforeAll(() => registerMarketingDeclarations())
 
 const mockLogResourceDuplicated = jest.fn(async (..._args: unknown[]) => undefined)
 jest.mock('@aglyn/tenant-data-admin/server/duplicate-activity', () => ({

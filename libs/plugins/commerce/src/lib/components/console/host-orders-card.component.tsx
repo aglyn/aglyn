@@ -350,22 +350,28 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
    */
   const orderRows = useMemo(
     () =>
-      orders.map((order: any) => {
-        const lifted = CommerceModel.liftLegacyOrder(order)
-        return {
-          ...order,
-          orderLabel: CommerceModel.formatOrderNumber(lifted, order.$id),
-          itemName:
-            lifted.lineItems?.[0]?.name ??
-            productNames[order.productId] ??
-            order.productId ??
-            '',
-          statusKey: lifted.status,
-          channelKey: lifted.channel ?? 'online',
-          netCents: CommerceModel.orderNetCents(lifted),
-          disputeBadge: CommerceModel.describeOrderDispute(lifted),
-        }
-      }),
+      orders
+        // An unpaid quote is not an order (AGL-4093). It carries no
+        // `createdAtMs`, so the default order and every filter leave it out;
+        // the unfiltered Order, Channel and Status header sorts are the only
+        // queries that can reach one, and this keeps it off those pages too.
+        .filter((order: any) => !CommerceModel.isUnpaidQuote(order))
+        .map((order: any) => {
+          const lifted = CommerceModel.liftLegacyOrder(order)
+          return {
+            ...order,
+            orderLabel: CommerceModel.formatOrderNumber(lifted, order.$id),
+            itemName:
+              lifted.lineItems?.[0]?.name ??
+              productNames[order.productId] ??
+              order.productId ??
+              '',
+            statusKey: lifted.status,
+            channelKey: lifted.channel ?? 'online',
+            netCents: CommerceModel.orderNetCents(lifted),
+            disputeBadge: CommerceModel.describeOrderDispute(lifted),
+          }
+        }),
     [orders, productNames],
   )
   const columnSort = useListColumnSort({

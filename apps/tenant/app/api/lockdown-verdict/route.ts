@@ -85,6 +85,10 @@ import {
 // declares it.
 import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
 import {
+  isHostInPreview,
+  sitePreviewPaths,
+} from '@aglyn/aglyn/app-utils/site-preview'
+import {
   firebaseAdmin,
   getDomainLockdown,
   getPlatformLockdown,
@@ -175,6 +179,8 @@ function lockedVerdict(
     approvedFrameHosts?: string[]
     runsMeasurement?: boolean
     siteOrigins?: string[]
+    preview?: boolean
+    previewPaths?: string[]
   },
 ): Response {
   const notice = lockdownNotice(state)
@@ -193,6 +199,8 @@ function lockedVerdict(
       approvedFrameHosts: facts.approvedFrameHosts ?? [],
       runsMeasurement: facts.runsMeasurement ?? false,
       siteOrigins: facts.siteOrigins ?? [],
+      preview: facts.preview ?? false,
+      previewPaths: facts.previewPaths ?? [],
       mode: lockdownMode(state),
       reason: state.reason,
       title: notice.title,
@@ -431,6 +439,19 @@ export async function GET(request: Request): Promise<Response> {
       // exists to permit would have been the one thing refused.
       Object.keys(analytics?.adTags ?? {}).length > 0,
     )
+    /**
+     * Preview (AGL-4086): is the whole site, or any page of it, only for its
+     * team? A SEVENTH answer, riding here for the reason the others do — the
+     * host document is already in hand and only the middleware runs ahead of
+     * the cache, so only it can route a team member around the public answer
+     * before a cached page is served.
+     *
+     * Same disclosure posture as the rest: whether a public website shows
+     * itself to the public, and which of its addresses do not. Both are
+     * observable by loading the site.
+     */
+    const preview = isHostInPreview(hostRes.host as never)
+    const previewPaths = sitePreviewPaths(hostRes.host as never)
     const state = resolveLockdown(
       {
         platform: await getPlatformLockdown(),
@@ -455,6 +476,8 @@ export async function GET(request: Request): Promise<Response> {
           approvedFrameHosts,
           runsMeasurement,
           siteOrigins,
+          preview,
+          previewPaths,
         },
         { status: 200 },
       )
@@ -471,6 +494,8 @@ export async function GET(request: Request): Promise<Response> {
       approvedFrameHosts,
       runsMeasurement,
       siteOrigins,
+      preview,
+      previewPaths,
     })
   } catch (error) {
     console.error('[lockdown-verdict] failed', error)

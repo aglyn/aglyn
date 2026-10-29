@@ -17,6 +17,7 @@
 
 import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { DOMAINS_MANAGE_REFUSAL } from '../model/domains-permissions'
 import { checkPurchaseGatePreclearance } from '@aglyn/aglyn/plugin-manager/purchase-gate-preclearance'
 import { lookalikeBrandForHost } from '@aglyn/shared-util-email/outbound-phishing-screen'
 import {
@@ -177,12 +178,12 @@ export async function domainsGate(
     if (!orgSnapshot.exists) return domainsError(404, 'Unknown workspace')
     org = (orgSnapshot.data() ?? {}) as Record<string, unknown>
     if (!staff) {
+      // "Manage the workspace's domains" (AGL-4047): its default is the
+      // owner and admins this asked for before, then the member's custom
+      // role and their own permissions.
       const membership = await resolveOrgMembership(decoded.uid, orgId).catch(() => null)
-      const role = String(membership?.member?.role ?? '')
-      if (role !== 'owner' && role !== 'admin') {
-        return domainsError(403, 'Only a workspace owner or admin can manage its domains', {
-          code: 'workspace-admin',
-        })
+      if (!membership || !(await memberHasOrgPermission(orgId, membership.member, 'domains.manage' as never))) {
+        return domainsError(403, DOMAINS_MANAGE_REFUSAL, { code: 'workspace-admin' })
       }
     }
   }

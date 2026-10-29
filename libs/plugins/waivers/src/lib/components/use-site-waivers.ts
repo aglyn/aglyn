@@ -24,25 +24,33 @@ import { useWaiversFetch } from './waivers-api'
 
 /**
  * A site's waivers, read through the console route, with a way to read them
- * again, and the origin of the store's own site its share links open on
- * (`null` for a site with no public address).
+ * again, the origin of the store's own site its share links open on (`null`
+ * for a site with no public address), and how the e-sign consent tells
+ * signers to reach the business (`null` when the site names no way;
+ * `undefined` until read).
  */
 export function useSiteWaivers(hostId: string) {
   const { ready, request } = useWaiversFetch()
   const [waivers, setWaivers] = useState<WaiverTemplate[] | null>(null)
   const [signPageOrigin, setSignPageOrigin] = useState<string | null>(null)
+  const [businessContact, setBusinessContact] = useState<string | null | undefined>(undefined)
   const [error, setError] = useState<string | null>(null)
   const [revision, setRevision] = useState(0)
   useEffect(() => {
     if (!ready) return
     let live = true
-    void request<{ waivers: WaiverTemplate[]; signPageOrigin?: string | null }>(WAIVERS_API_ROUTES.templates, {
+    void request<{
+      waivers: WaiverTemplate[]
+      signPageOrigin?: string | null
+      businessContact?: string | null
+    }>(WAIVERS_API_ROUTES.templates, {
       query: { hostId },
     })
       .then((answer) => {
         if (!live) return
         setWaivers(answer.waivers)
         setSignPageOrigin(answer.signPageOrigin ?? null)
+        setBusinessContact(answer.businessContact ?? null)
         setError(null)
       })
       .catch((caught: Error) => {
@@ -53,5 +61,5 @@ export function useSiteWaivers(hostId: string) {
     }
   }, [ready, request, hostId, revision])
   const reload = useCallback(() => setRevision((value) => value + 1), [])
-  return { waivers, signPageOrigin, error, reload }
+  return { waivers, signPageOrigin, businessContact, error, reload }
 }

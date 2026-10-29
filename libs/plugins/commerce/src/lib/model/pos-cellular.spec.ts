@@ -22,15 +22,21 @@ import {
   parsePosCellularConfig,
   posCellularBilledInMonth,
   posCellularChargeCents,
+  posCellularDayLabel,
   posCellularMonthBounds,
   posCellularMonthKey,
+  posCellularGraceEndsAtMs,
   posCellularMonthLabel,
+  posCellularOverdue,
   posCellularPreviousMonthKey,
   posCellularReaderMonthlyCents,
   posCellularReadersByWorkspace,
   posCellularView,
+  posCellularWarningDue,
   POS_CELLULAR_DEFAULT_BILLING_COST_BPS,
+  POS_CELLULAR_DAY_MS,
   POS_CELLULAR_DEFAULT_BILLING_COST_FIXED_CENTS,
+  POS_CELLULAR_DEFAULT_GRACE_DAYS,
   POS_CELLULAR_ENV,
   POS_CELLULAR_MAX_PERIODS,
   type PosCellularConfig,
@@ -42,7 +48,13 @@ const ENV = {
   [POS_CELLULAR_ENV.monthlyCostCents]: '1000',
   [POS_CELLULAR_ENV.productId]: 'prod_cellular',
 }
-const CONFIG: PosCellularConfig = { monthlyCostCents: 1_000, billingCostBps: 290, billingCostFixedCents: 30, productId: 'prod_cellular' }
+const CONFIG: PosCellularConfig = {
+  monthlyCostCents: 1_000,
+  billingCostBps: 290,
+  billingCostFixedCents: 30,
+  productId: 'prod_cellular',
+  graceDays: 14,
+}
 
 describe('4G pricing is configuration (AGL-4038)', () => {
   it('is not offered without a monthly cost and a product, or with one that is not a whole number', () => {
@@ -63,6 +75,7 @@ describe('4G pricing is configuration (AGL-4038)', () => {
       billingCostBps: POS_CELLULAR_DEFAULT_BILLING_COST_BPS,
       billingCostFixedCents: POS_CELLULAR_DEFAULT_BILLING_COST_FIXED_CENTS,
       productId: 'prod_cellular',
+      graceDays: POS_CELLULAR_DEFAULT_GRACE_DAYS,
     })
     expect(POS_CELLULAR_DEFAULT_BILLING_COST_BPS).toBe(290)
     expect(POS_CELLULAR_DEFAULT_BILLING_COST_FIXED_CENTS).toBe(30)
@@ -73,6 +86,15 @@ describe('4G pricing is configuration (AGL-4038)', () => {
         [POS_CELLULAR_ENV.billingCostFixedCents]: '0',
       }),
     ).toMatchObject({ billingCostBps: 0, billingCostFixedCents: 0 })
+  })
+
+  it('takes the grace period before 4G is turned off from configuration, 14 days unless set', () => {
+    expect(POS_CELLULAR_DEFAULT_GRACE_DAYS).toBe(14)
+    expect(parsePosCellularConfig({ ...ENV, [POS_CELLULAR_ENV.graceDays]: '30' })).toMatchObject({ graceDays: 30 })
+    // A grace that is not a whole number of days from 1 to 90 hides 4G rather than guessing.
+    for (const bad of ['0', '-1', '7.5', 'two weeks', '91']) {
+      expect([bad, parsePosCellularConfig({ ...ENV, [POS_CELLULAR_ENV.graceDays]: bad })]).toEqual([bad, null])
+    }
   })
 
   it('charges Stripe’s price per reader plus what collecting it costs, in whole cents, rounded up', () => {
@@ -175,7 +197,71 @@ describe('the POS devices card’s 4G row (AGL-4038)', () => {
     const s710 = [{ deviceType: 'stripe_s710' }, { deviceType: 'stripe_s700' }]
     expect(posCellularView(null, { cellularEnabled: true }, s710)).toBeNull()
     expect(posCellularView(CONFIG, {}, [{ deviceType: 'stripe_s700' }])).toBeNull()
-    expect(posCellularView(CONFIG, {}, s710)).toEqual({ readerMonthlyCents: 1_061, enabled: false, readers: 1 })
-    expect(posCellularView(CONFIG, { cellularEnabled: true }, [])).toEqual({ readerMonthlyCents: 1_061, enabled: true, readers: 0 })
+    const view = { suspended: null, turnOnBlocked: null }
+    expect(posCellularView(CONFIG, {}, s710)).toEqual({ readerMonthlyCents: 1_061, enabled: false, readers: 1, ...view })
+    expect(posCellularView(CONFIG, { cellularEnabled: true }, [])).toEqual({ readerMonthlyCents: 1_061, enabled: true, readers: 0, ...view })
+  })
+
+  it('says which unpaid month turned it off, and why this viewer may not turn it on (AGL-4038)', () => {
+    const s710 = [{ deviceType: 'stripe_s710' }]
+    const suspended = { cellularEnabled: false, cellularSuspended: { month: '2026-10', invoiceId: 'in_1', atMs: 5 } }
+    expect(posCellularView(CONFIG, suspended, s710)?.suspended).toEqual({ month: 'October 2026', atMs: 5 })
+    // Turned on again since: the notice is done.
+    expect(posCellularView(CONFIG, { ...suspended, cellularEnabled: true }, s710)?.suspended).toBeNull()
+    expect(posCellularView(CONFIG, {}, s710, { turnOnBlocked: 'No billing key' })?.turnOnBlocked).toBe('No billing key')
+  })
+})
+
+describe('the grace period before 4G is turned off (AGL-4038)', () => {
+  const OPENED = Date.UTC(2026, 10, 2, 9)
+  const open = { state: 'open' as const, openedAtMs: OPENED, updatedAtMs: OPENED + 1 }
+
+  it('runs the configured days from the day the charge was left open', () => {
+    expect(posCellularGraceEndsAtMs(open, 14)).toBe(OPENED + 14 * POS_CELLULAR_DAY_MS)
+    expect(posCellularOverdue(open, 14, OPENED + 14 * POS_CELLULAR_DAY_MS - 1)).toBe(false)
+    expect(posCellularOverdue(open, 14, OPENED + 14 * POS_CELLULAR_DAY_MS)).toBe(true)
+    // A charge left open before the day was recorded counts from its last change.
+    expect(posCellularGraceEndsAtMs({ openedAtMs: null, updatedAtMs: OPENED }, 14)).toBe(OPENED + 14 * POS_CELLULAR_DAY_MS)
+  })
+
+  it('is only ever an open charge’s', () => {
+    for (const state of ['paid', 'suspended', 'voided', 'failed'] as const) {
+      expect(posCellularOverdue({ ...open, state }, 14, OPENED + 60 * POS_CELLULAR_DAY_MS)).toBe(false)
+    }
+  })
+})
+
+describe('the warning, the day a charge is left open (AGL-4038)', () => {
+  const OPENED = Date.UTC(2026, 10, 2, 9)
+  const open = { state: 'open' as const, warnedAtMs: null, openedAtMs: OPENED, updatedAtMs: OPENED }
+
+  it('is owed once, for an open charge only, and never for one made as the workspace was erased', () => {
+    expect(posCellularWarningDue(open)).toBe(true)
+    expect(posCellularWarningDue({ ...open, warnedAtMs: OPENED })).toBe(false)
+    expect(posCellularWarningDue({ ...open, final: true })).toBe(false)
+    for (const state of ['charging', 'paid', 'suspended', 'voided', 'failed', 'no-customer'] as const) {
+      expect(posCellularWarningDue({ ...open, state })).toBe(false)
+    }
+  })
+
+  it('names the day the grace runs out, in the workspace’s time zone', () => {
+    const endsAt = posCellularGraceEndsAtMs(open, 14)
+    expect(posCellularDayLabel(endsAt)).toBe('November 16, 2026')
+    expect(posCellularDayLabel(endsAt, 'America/Chicago')).toBe('November 16, 2026')
+    // At the edge of a day: 03:00 UTC is still the evening before in Chicago,
+    // and already the next morning in Tokyo.
+    const lateOpened = { ...open, openedAtMs: Date.UTC(2026, 10, 2, 3) }
+    const lateEnds = posCellularGraceEndsAtMs(lateOpened, 14)
+    expect(posCellularDayLabel(lateEnds)).toBe('November 16, 2026')
+    expect(posCellularDayLabel(lateEnds, 'America/Chicago')).toBe('November 15, 2026')
+    const eveningOpened = { ...open, openedAtMs: Date.UTC(2026, 10, 2, 20) }
+    expect(posCellularDayLabel(posCellularGraceEndsAtMs(eveningOpened, 14), 'Asia/Tokyo')).toBe('November 17, 2026')
+    // The last instant of the grace is still the stated day; the turn-off is due from then.
+    expect(posCellularOverdue(open, 14, endsAt - 1)).toBe(false)
+    expect(posCellularOverdue(open, 14, endsAt)).toBe(true)
+  })
+
+  it('reads a zone the runtime cannot format in as UTC, rather than throwing', () => {
+    expect(posCellularDayLabel(Date.UTC(2026, 10, 16, 1), 'Not/AZone')).toBe('November 16, 2026')
   })
 })

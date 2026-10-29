@@ -42,6 +42,7 @@ import {
   aiDatasetListedAsPast,
   aiDatasetRealRecords,
   aiDatasetSampleDates,
+  aiDatasetWithoutInstructions,
   aiDatasetWithoutPlaceholders,
   generateAiDataset,
   type AiDatasetSplit,
@@ -103,7 +104,11 @@ import type { AiJobStepContext, AiJobStepOutcome, AiJobStepRunner } from './ai-j
  *    the datasets collection — with every rule the console's datasets route
  *    has: the member's role and `data.manage`, `release_data_store`,
  *    `dataStore` (Starter and up), `datasetsPerOrg` counted inside the create,
- *    `recordsPerDataset` and the storage band.
+ *    `recordsPerDataset` and the storage band. Each seeded record's
+ *    reference and filter index is that writer's to stamp, with the data
+ *    plugin's `datasetIntegrityFields` (`server/dataset-drafts.ts`), so this
+ *    file writes no record of its own: its `'records'` is a listing's kind and
+ *    its `values` a section group's.
  *  - PICTURED where the plan lists it the way a gallery is listed (Zach,
  *    2026-10-10: a ceramic artist's "Selected work" came back as text-only
  *    cards, where it had been an image-led gallery): a portfolio's pieces, a
@@ -1031,10 +1036,16 @@ export function createAiSiteDatasetRunner(deps: AiSiteDatasetRunnerDeps = {}): A
     if (generation.status === 'refused') return { ...spent, refused: true }
     // An answer that still numbers placeholders after its re-ask is kept with
     // the records that name real things — none, as often as not — and written
-    // with its fields, for the owner to fill (AGL-4065).
+    // with its fields, for the owner to fill (AGL-4065). An instruction to the
+    // owner in it is taken out first, so a sample keeps the rest of what it
+    // says, and only a row nothing is left of goes (AGL-4092).
     const salvaged =
       generation.status === 'needs_input' && generation.violations.some((violation) => violation.code === AI_DATASET_PLACEHOLDER_CODE)
-        ? aiDatasetWithoutPlaceholders(generation.answer, { planned: creation.fields, merchantWords: job.brief, name: creation.name })
+        ? aiDatasetWithoutPlaceholders(aiDatasetWithoutInstructions(generation.answer), {
+            planned: creation.fields,
+            merchantWords: job.brief,
+            name: creation.name,
+          })
         : null
     if (generation.status === 'needs_input' && !salvaged) return { ...spent, failure: generation.message }
     // No placeholder record is ever written, whatever let it through (AGL-4065);
