@@ -246,6 +246,11 @@ A File upload field works in a form you saved on the Forms page (a form placed f
 Forms page always is). Files attached to a form nobody sends are deleted a day later.
 Deleting a submission, or erasing the person who sent it, deletes its files too.
 
+The files count toward your workspace's
+[storage](../../workspace-and-billing/billing-and-plans/overview.md#files-on-quotes-and-forms)
+like files in the media library, and deleting them frees the space. A visitor is never
+turned away because your storage is full.
+
 ### Labels and placeholders
 
 Three settings name or hint at an input, and they do different jobs:

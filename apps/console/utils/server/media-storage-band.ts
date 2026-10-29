@@ -17,6 +17,10 @@
 
 import { resolveOrgEntitlements } from '@aglyn/aglyn/server'
 import type { AglynOrgBilling } from '@aglyn/aglyn/server'
+import {
+  mediaLibraryBytes,
+  VISITOR_UPLOAD_COUNTER_BYTES,
+} from '@aglyn/aglyn/app-utils/visitor-upload'
 
 /**
  * The org's media band, and everything already stored against it (AGL-2075).
@@ -52,6 +56,14 @@ import type { AglynOrgBilling } from '@aglyn/aglyn/server'
  * A per-scope band cannot be fixed by capping the library alone: whichever
  * scope is filled first leaves the other its own full allowance, so the
  * effective total depends on upload order. One pooled figure has no order.
+ *
+ * ## Files kept outside the library (AGL-4096)
+ *
+ * A quote's proofs, a customer's files on a quote and a form's files are kept
+ * by the visitor upload pipeline and counted in the same site counter
+ * (`counters/media.bytes`), so they are in `usedBytes` like any library file.
+ * The counter's `uploadBytes` says how much of it they are, and `byScope`
+ * keeps them apart from the library they are not in.
  */
 export interface OrgMediaBand {
   /** Bytes already stored across every media scope the org owns. */
@@ -64,8 +76,9 @@ export interface OrgMediaBand {
   /**
    * Each library's share of `usedBytes`, keyed by its Firestore parent —
    * `hosts/{hostId}` or `orgs/{orgId}` — from the same `getAll`, so the parts
-   * always add up to the whole they were read with. Empty on an unlimited
-   * band, which reads nothing.
+   * always add up to the whole they were read with. A site's kept quote and
+   * form files are a part of their own, `hosts/{hostId}/uploads`, present
+   * only when there are some. Empty on an unlimited band, which reads nothing.
    */
   byScope: Record<string, number>
 }
@@ -173,7 +186,17 @@ export async function resolveOrgMediaBand(options: {
     const counted = Number.isFinite(bytes) && bytes > 0 ? bytes : 0
     usedBytes += counted
     const scope = scopes[index]
-    if (scope) byScope[scope] = (byScope[scope] ?? 0) + counted
+    if (!scope) return
+    // The library's own files, and apart from them what the site keeps
+    // outside it, so the parts still add up to `counted`.
+    const library = mediaLibraryBytes({
+      bytes: counted,
+      [VISITOR_UPLOAD_COUNTER_BYTES]: snapshot.get(VISITOR_UPLOAD_COUNTER_BYTES),
+    })
+    byScope[scope] = (byScope[scope] ?? 0) + library
+    if (counted > library) {
+      byScope[`${scope}/uploads`] = (byScope[`${scope}/uploads`] ?? 0) + counted - library
+    }
   })
   return { usedBytes, allowanceMb, byScope }
 }
