@@ -33,6 +33,7 @@ import type { DeliveryProvider } from '../providers/provider'
 import { createUberEatsProvider } from '../providers/uber-eats'
 import { offeredServices, readDeliveryAppsConfig } from './config'
 import { createEngine, type EngineDeps } from './engine'
+import { refusedRegisterKey } from './register-keys'
 import { createDeliveryRoutes, fail, type DeliveryGateKind, type DeliveryGateResult } from './routes'
 import { createFirestoreDeliveryStore, type DeliveryStore } from './store'
 
@@ -116,12 +117,13 @@ async function readBody(request: Request): Promise<Record<string, unknown>> {
 }
 
 /**
- * Who may use a route. `settings`: a verified ADMIN of the site. `register`:
- * a verified admin or editor of the site with `managePos`, the register's
- * own gate (an allowlist of roles, so a role added later is refused until
- * someone decides otherwise). Both: the `pos` entitlement, commerce and this
+ * Who may use a route, a verified member in every case. `settings`: "Manage
+ * site settings" for the site. `register` and `registerOrder`: the
+ * register's keys as `resolveOrgPermissions(uid, { hostId })` resolves them
+ * for the site, and nothing else (AGL-4047, `register-keys.ts`) — the site's
+ * `memberRoles` is not read. All: the `pos` entitlement, commerce and this
  * plugin on for the site, the site not locked, and a deployment that offers
- * a service. Staff pass the role checks, as on every console route.
+ * a service. Staff pass the permission checks, as on every console route.
  */
 export async function deliveryAppsGate(request: Request, kind: DeliveryGateKind): Promise<DeliveryGateResult | Response> {
   if (!offeredServices(readDeliveryAppsConfig()).length) return fail(404, 'Not found')
@@ -141,14 +143,14 @@ export async function deliveryAppsGate(request: Request, kind: DeliveryGateKind)
   const site = await siteContext(hostId)
   if (!site) return fail(404, 'That site was not found')
   const staff = decoded['staff'] === true
-  const memberRole = String((site.host['memberRoles'] as Record<string, unknown> | undefined)?.[decoded.uid] ?? '')
   if (!staff) {
     // "Manage site settings" (AGL-4047), whose preset is the site Admin this asked for.
     if (kind === 'settings' && !holdsSiteKey(site.host, decoded.uid, 'site.manage')) return fail(403, siteKeyRefusal('site.manage'))
-    if (kind === 'register') {
-      if (memberRole !== 'admin' && memberRole !== 'editor') return fail(403, 'Not permitted')
+    if (kind !== 'settings') {
+      // The register's keys for this site decide alone, as the register's own doors do.
       const membership = await resolveOrgPermissions(decoded.uid, { hostId })
-      if (!membership.permissions.managePos) return fail(403, 'Not permitted')
+      const refused = refusedRegisterKey(membership.permissions, kind)
+      if (refused) return fail(403, siteKeyRefusal(refused))
     }
   }
   if (!site.entitled) return fail(404, 'Delivery apps are not available for this site')
