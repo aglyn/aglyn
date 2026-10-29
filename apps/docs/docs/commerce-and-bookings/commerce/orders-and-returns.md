@@ -1,7 +1,7 @@
 ---
 sidebar_position: 3
 title: Fulfillment, returns and webhooks
-description: Ship an order in parts with tracking links, run returns from request to refund, print invoices, and send order events to your own systems.
+description: Ship an order in parts with tracking links, run returns from request to refund, print and send invoices, and send order events to your own systems.
 ---
 
 # Fulfillment, returns and webhooks
@@ -38,7 +38,7 @@ in the list and choosing **Mark as fulfilled** ships every remaining unit of eac
 
 ## Invoices and packing slips {#invoices}
 
-**Invoice** in the order's dialog has two choices:
+**Invoice** in the order's dialog has three choices:
 
 - **Print invoice** opens the order as a bill, ready to print: your business name,
   the date, who it is billed and shipped to, each line with its unit price, the
@@ -49,10 +49,85 @@ in the list and choosing **Mark as fulfilled** ships every remaining unit of eac
   invoice number, the order date and whether it is paid, then the lines and totals.
   A paid quote's invoice works the same way, with **Included** beside anything
   included at no charge.
+- **Send invoice** emails the invoice to your customer, with the PDF attached. See
+  [Send an invoice](#send-invoice).
 
 The PDF takes your logo and contact details from your site's settings, and its
 colors from your site's theme. Downloading it takes the **Manage orders**
 permission.
+
+### Send an invoice {#send-invoice}
+
+**Send invoice** opens a short form: **To** (your customer's email, filled in from
+the order), **Subject** and **Message**. Your message is shown at the top of the
+email, in your words. The email goes out in your site's look, from your site, with
+the invoice attached as a PDF. Replies go to your site's contact email, or to you
+when the site has none.
+
+What the email says depends on whether the order is paid:
+
+- **Unpaid**: "Invoice #1042 from" your business, the invoice number, its date, the
+  total and what is due, and a **Pay** button. The button opens the invoice on your
+  own site, where your customer pays it by card. The same link is printed on the PDF.
+- **Paid**: the same invoice, marked paid on the day it was paid, for your
+  customer's records. It has no button.
+
+Once it's sent, the order's dialog says when and to whom: "Invoice sent Oct 29,
+2026, 3:04 PM to jordan@example.com." Each invoice you send is also on the order's
+timeline. Sending it again sends it as a reply to the one before, so your customer
+sees one conversation. Keep the subject the same to keep it that way.
+
+### The invoice's pay link {#invoice-pay-link}
+
+An unpaid invoice's **Pay** button opens a page on your site at `/pay-quote`, the
+same page a [quote's pay link](quotes-and-proofs.md#pay-link) opens. For an order
+it says **Invoice #1042**: the items, the totals, who it's billed and shipped to,
+**Download PDF**, and **Pay**.
+
+The link doesn't expire. Each press of **Pay** opens a fresh payment, priced from
+the order as you saved it, so it works on any day until the order is paid. A draft
+order's first payment link, the Stripe page you copy when you make the draft, lapses
+after a day; send the invoice and your customer can pay whenever they're ready. When
+they press **Pay**, the draft's first payment link stops working, so the order can
+only be paid once.
+
+A draft order's invoice charges what the draft was priced at: its items, its
+discount and its tax. If the draft ships, your customer chooses from the same
+shipping rates the draft offered, and Stripe asks for the address. If your store
+uses Stripe Tax, the tax is worked out when they pay.
+
+When your customer pays:
+
+- the order is marked **Paid** and joins your orders on the day you made it;
+- your customer gets a receipt, and the invoice page shows **Paid** with a link to
+  their order;
+- you're notified, and stock goes down for your catalog products.
+
+A second payment, after the order was already paid, isn't counted as a sale. It's
+recorded on the order's timeline and you're notified, so you can refund it in
+Stripe.
+
+The order's status page on your site also shows **Pay** while the order is unpaid.
+
+### Which orders an invoice can be sent for {#invoice-which-orders}
+
+You can send an invoice for any paid order, and for an unpaid
+[draft order](overview.md#orders) or [quote](quotes-and-proofs.md#invoice). The
+form says why it can't be sent when:
+
+- the order was canceled or refunded;
+- the order has no items and no total;
+- the order isn't paid and can't be paid online from an invoice, such as a sale
+  still open at the register. Take its payment there, then send the invoice;
+- a draft order was made before invoices could charge its shipping. Make a new
+  draft order and send its invoice;
+- your store hasn't finished its sales tax settings, or the invoice is for less
+  than $0.50;
+- the address bounced or reported an email as spam. An invoice still goes to an
+  address that unsubscribed from your site's newsletter, as a receipt does.
+
+Sending an invoice takes the **Send quotes and invoices to customers** permission.
+See [Order permissions](../../workspace-and-billing/teams-and-roles/custom-roles.md#order-permissions).
 
 **Packing slip** prints what goes in the box — the shipping address and each line's
 quantity, name, option and SKU — with no prices.

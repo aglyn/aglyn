@@ -16,7 +16,7 @@
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { buildQuotePageView } from '../model'
+import { buildInvoicePageView, buildQuotePageView } from '../model'
 import QuotePage from './quote-page'
 
 /**
@@ -167,7 +167,7 @@ describe('the quote page', () => {
   it('says what to do without a link, and fetches nothing', async () => {
     window.history.replaceState({}, '', '/pay-quote')
     render(<QuotePage />)
-    expect(await screen.findByText('Open this page from the link you were sent with your quote.')).toBeTruthy()
+    expect(await screen.findByText('Open this page from the link you were sent with your quote or invoice.')).toBeTruthy()
     expect(mockSiteFetch).not.toHaveBeenCalled()
   })
 })
@@ -279,5 +279,56 @@ describe('the proofs on the quote page (AGL-4096)', () => {
     expect(await screen.findByText(/This quote was updated since you opened it/)).toBeTruthy()
     await waitFor(() => expect(mockSiteFetch).toHaveBeenCalledTimes(3))
     expect(mockSiteFetch.mock.calls[2][0]).toBe('/api/commerce/quote-view?hostId=host-1&q=q-1&t=1.tok')
+  })
+})
+
+describe('an invoice on the same page (AGL-4099)', () => {
+  const DRAFT = {
+    number: 2001,
+    status: 'pending',
+    channel: 'draft',
+    lineItems: [{ productId: 'canopy', name: 'Canopy 10x10', productType: 'physical', quantity: 1, unitAmountCents: 120_000 }],
+    totals: { itemsCents: 120_000, discountCents: 0, shippingCents: 0, taxCents: 0, feeCents: 0, totalCents: 120_000 },
+    taxMode: 'none',
+    customerName: 'Jordan Lee',
+    createdAtMs: Date.UTC(2026, 9, 20),
+    draftShipping: { countries: ['US'], options: [{ rateId: 'std', name: 'Standard', amountCents: 1_500 }] },
+  }
+  const invoice = (order: Record<string, unknown> = DRAFT) =>
+    buildInvoicePageView({ order: order as never, orderId: 'd-1', storeName: 'Acme Tents', currency: 'USD' })
+
+  beforeEach(() => window.history.replaceState({}, '', '/pay-quote?q=d-1&t=1.tok'))
+
+  it('says "invoice" where a quote’s page says "quote", with the shipping picked at payment', async () => {
+    mockSiteFetch.mockResolvedValue(json(invoice()))
+    render(<QuotePage heading="Your quote" />)
+    // An invoice always says its number, whatever heading the page was given.
+    expect(await screen.findByRole('heading', { name: 'Invoice #2001' })).toBeTruthy()
+    expect(screen.getByText('Shipping is chosen when you pay')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Pay $1,200.00 plus shipping' })).toBeTruthy()
+    expect(screen.getByText('Questions about this invoice? Contact Acme Tents.')).toBeTruthy()
+    expect(screen.queryByText(/proof/i)).toBeNull()
+  })
+
+  it('pays with no version to send back: an invoice is not edited', async () => {
+    mockSiteFetch
+      .mockResolvedValueOnce(json(invoice()))
+      .mockResolvedValueOnce(json({ url: 'https://checkout.stripe.com/c/pay/cs_test_1' }))
+    render(<QuotePage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Pay $1,200.00 plus shipping' }))
+    await waitFor(() => expect(mockSiteFetch).toHaveBeenCalledTimes(2))
+    const [url, init] = mockSiteFetch.mock.calls[1] as [string, RequestInit]
+    expect(url).toBe('/api/commerce/quote-pay')
+    expect(JSON.parse(String(init.body))).toEqual({ hostId: 'host-1', q: 'd-1', t: '1.tok', v: 0 })
+  })
+
+  it('names a closed invoice and a replaced link as an invoice’s', async () => {
+    mockSiteFetch.mockResolvedValue(json(invoice({ ...DRAFT, status: 'cancelled' })))
+    const { unmount } = render(<QuotePage />)
+    expect(await screen.findByText('This invoice is canceled.')).toBeTruthy()
+    unmount()
+    mockSiteFetch.mockResolvedValue(json({ state: 'replaced', kind: 'invoice', storeName: 'Acme Tents' }))
+    render(<QuotePage />)
+    expect(await screen.findByRole('heading', { name: 'This invoice was updated' })).toBeTruthy()
   })
 })

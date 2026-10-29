@@ -36,6 +36,7 @@ import {
 } from '@mui/material'
 import { doc } from 'firebase/firestore'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { InvoiceSendDialog, invoiceSentLine } from './invoice-send.component'
 
 const SEND_REFUSAL = commerceSitePermissionRefusal('commerce.quotes.send')
 
@@ -59,6 +60,10 @@ const sentAt = (atMs: number) =>
  * form (To, Subject, Message). The server writes the email in the site's
  * look with the proof, the PDF and the pay button, in the customer's
  * conversation with the business.
+ *
+ * Send invoice (AGL-4099) sits beside it: for an unpaid quote, an invoice for
+ * a customer who needs one to pay (with the same pay link); for a paid one,
+ * the invoice as their record. Both reply into the quote's conversation.
  */
 export function QuoteSendSection(props: QuoteSendSectionProps) {
   const { hostId, quoteId, quote, canSend, edited } = props
@@ -82,6 +87,9 @@ export function QuoteSendSection(props: QuoteSendSectionProps) {
   const contact = listed && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(listed) ? listed : null
 
   const [open, setOpen] = useState(false)
+  const [invoicing, setInvoicing] = useState(false)
+  const invoiceLine = invoiceSentLine(quote)
+  const closed = quote.status === 'cancelled' || quote.status === 'refunded'
   const [busy, setBusy] = useState(false)
   const [to, setTo] = useState('')
   const [subject, setSubject] = useState('')
@@ -153,16 +161,40 @@ export function QuoteSendSection(props: QuoteSendSectionProps) {
             {'Save your changes first: the email shows the quote as it was last saved.'}
           </Typography>
         ) : null}
+        {invoiceLine ? (
+          <Typography variant="body2" color="text.secondary">
+            {invoiceLine}
+          </Typography>
+        ) : null}
       </Stack>
-      {unpaid ? (
+      {!closed ? (
         <Stack direction="row" spacing={1}>
+          {unpaid ? (
+            <BlockedControl blocked={!canSend} reason={SEND_REFUSAL}>
+              <Button variant="contained" size="small" disabled={busy || edited} onClick={openForm}>
+                {label}
+              </Button>
+            </BlockedControl>
+          ) : null}
           <BlockedControl blocked={!canSend} reason={SEND_REFUSAL}>
-            <Button variant="contained" size="small" disabled={busy || edited} onClick={openForm}>
-              {label}
+            <Button
+              variant={unpaid ? 'outlined' : 'contained'}
+              size="small"
+              disabled={busy || (unpaid && edited)}
+              onClick={() => setInvoicing(true)}
+            >
+              {'Send invoice'}
             </Button>
           </BlockedControl>
         </Stack>
       ) : null}
+      <InvoiceSendDialog
+        open={invoicing}
+        onClose={() => setInvoicing(false)}
+        hostId={hostId}
+        orderId={quoteId}
+        order={quote}
+      />
       <Dialog open={open} onClose={busy ? undefined : () => setOpen(false)} maxWidth="sm" fullWidth aria-labelledby="quote-send-title">
         <DialogTitle id="quote-send-title">{`${label}: ${CommerceModel.formatQuoteNumber(quote, quoteId)}`}</DialogTitle>
         <DialogContent>

@@ -76,7 +76,8 @@ export type InvoiceOrder = Pick<
   | 'customerEmail'
   | 'shippingAddress'
   | 'billingAddress'
-> & { createdAtMs?: number; currency?: string; amountCents?: number }
+> &
+  Partial<Pick<HostOrder, 'quote'>> & { createdAtMs?: number; currency?: string; amountCents?: number }
 
 /** Money in the order's currency, integer cents in. */
 export function invoiceMoney(cents: number, currency: string): string {
@@ -206,16 +207,23 @@ export function buildOrderInvoiceData(input: {
     summary.push({ label: 'Net paid', cents: Math.max(0, totalCents - refundedCents), emphasis: true })
   }
 
+  // An unpaid quote keeps its customer, its addresses and its date in its
+  // quote section until it is paid (AGL-4093); its invoice (AGL-4099) reads
+  // them there.
+  const quote = order.quote
+  const billingAddress = order.billingAddress ?? quote?.billTo ?? null
+  const customerName = order.customerName ?? quote?.customer?.name ?? quote?.customer?.company ?? ''
+  const customerEmail = order.customerEmail ?? quote?.customer?.email ?? ''
   return {
     number: formatOrderNumber(order, orderId),
-    dateMs: orderCreatedAtMs(order as never),
+    dateMs: orderCreatedAtMs(order as never) || Number(quote?.updatedAtMs ?? quote?.createdAtMs) || 0,
     currency,
     paymentStatus: invoicePaymentStatus(order),
     billTo: [
-      ...(order.billingAddress ? addressLines(order.billingAddress) : [order.customerName ?? ''].filter(Boolean)),
-      order.customerEmail ?? '',
+      ...(billingAddress ? addressLines(billingAddress) : [customerName].filter(Boolean)),
+      customerEmail,
     ].filter(Boolean),
-    shipTo: addressLines(order.shippingAddress),
+    shipTo: addressLines(order.shippingAddress ?? quote?.shipTo ?? null),
     lines,
     summary,
     footer: String(store.footer ?? '').trim(),

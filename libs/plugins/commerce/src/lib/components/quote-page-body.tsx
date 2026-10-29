@@ -48,8 +48,18 @@ const StorefrontPaymentElement = lazy(() =>
 type LoadState =
   | { kind: 'loading' }
   | { kind: 'missing'; message: string }
-  | { kind: 'replaced'; storeName: string }
+  | { kind: 'replaced'; storeName: string; noun: string }
   | { kind: 'ready'; view: QuotePageView }
+
+/** `quote` or `invoice`, as the page says it (AGL-4099). */
+const nounOf = (kind: unknown) => (kind === 'invoice' ? 'invoice' : 'quote')
+
+/** What is added when the customer pays: `shipping`, `tax`, `shipping and tax`, or nothing. */
+function addedAtPayment(view: Pick<QuotePageView, 'shippingAtPayment' | 'taxAtPayment'>): string {
+  if (view.shippingAtPayment && view.taxAtPayment) return 'shipping and tax'
+  if (view.shippingAtPayment) return 'shipping'
+  return view.taxAtPayment ? 'tax' : ''
+}
 
 /** After a payment returns here, how often and how long the page asks whether it landed. */
 const CONFIRM_POLL_MS = 2_000
@@ -152,12 +162,14 @@ const QuotePageBody = forwardRef<HTMLDivElement, QuotePageProps>((props, ref) =>
       )
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
-        return { kind: 'missing', message: String(payload?.error ?? 'We could not find that quote.') }
+        return { kind: 'missing', message: String(payload?.error ?? 'We could not find that quote or invoice.') }
       }
-      if (payload?.state === 'replaced') return { kind: 'replaced', storeName: String(payload.storeName ?? '') }
+      if (payload?.state === 'replaced') {
+        return { kind: 'replaced', storeName: String(payload.storeName ?? ''), noun: nounOf(payload.kind) }
+      }
       return { kind: 'ready', view: payload as QuotePageView }
     } catch {
-      return { kind: 'missing', message: 'This quote could not be loaded. Check your connection and try again.' }
+      return { kind: 'missing', message: 'This page could not be loaded. Check your connection and try again.' }
     }
   }, [hostId, siteFetch])
 
@@ -170,7 +182,7 @@ const QuotePageBody = forwardRef<HTMLDivElement, QuotePageProps>((props, ref) =>
       sessionId: params.get('session_id') ?? '',
     }
     if (!link.current.quoteId || !link.current.token) {
-      setState({ kind: 'missing', message: 'Open this page from the link you were sent with your quote.' })
+      setState({ kind: 'missing', message: 'Open this page from the link you were sent with your quote or invoice.' })
       return
     }
     let live = true
@@ -250,7 +262,7 @@ const QuotePageBody = forwardRef<HTMLDivElement, QuotePageProps>((props, ref) =>
         return
       }
       if (payload?.replaced) {
-        setState({ kind: 'replaced', storeName: view.storeName })
+        setState({ kind: 'replaced', storeName: view.storeName, noun: nounOf(view.kind) })
         return
       }
       if (payload?.reason === 'paid' || payload?.reason === 'updated') {
@@ -282,7 +294,7 @@ const QuotePageBody = forwardRef<HTMLDivElement, QuotePageProps>((props, ref) =>
   if (state.kind === 'loading') {
     return (
       <Box ref={ref} {...rest} sx={[{ py: 6, textAlign: 'center' }, ...nodeSx]}>
-        <CircularProgress size={28} aria-label="Loading your quote" />
+        <CircularProgress size={28} aria-label="Loading" />
       </Box>
     )
   }
@@ -292,7 +304,7 @@ const QuotePageBody = forwardRef<HTMLDivElement, QuotePageProps>((props, ref) =>
       <Box ref={ref} {...rest} sx={nodeSx}>
         <Stack spacing={2}>
           <Typography variant="h4" component="h1">
-            {heading || 'Your quote'}
+            {heading || 'Your quote or invoice'}
           </Typography>
           <Alert severity="info">{state.message}</Alert>
         </Stack>
@@ -311,10 +323,10 @@ const QuotePageBody = forwardRef<HTMLDivElement, QuotePageProps>((props, ref) =>
             </Typography>
           ) : null}
           <Typography variant="h4" component="h1">
-            {'This quote was updated'}
+            {`This ${state.noun} was updated`}
           </Typography>
           <Typography variant="body1" color="text.secondary">
-            {`${business} updated this quote and sent you a newer link. Open their most recent message to see it.`}
+            {`${business} updated this ${state.noun} and sent you a newer link. Open their most recent message to see it.`}
           </Typography>
         </Stack>
       </Box>
@@ -328,6 +340,8 @@ const QuotePageBody = forwardRef<HTMLDivElement, QuotePageProps>((props, ref) =>
     `/api/commerce/quote-pdf?hostId=${encodeURIComponent(hostId)}` +
     `&q=${encodeURIComponent(link.current.quoteId)}&t=${encodeURIComponent(link.current.token)}`
   const unpaid = quote.status === 'unpaid'
+  const noun = nounOf(quote.kind)
+  const later = addedAtPayment(quote)
   const addresses = [
     quote.customerName || quote.company
       ? { label: 'Prepared for', lines: [quote.customerName, quote.company].filter((line): line is string => Boolean(line)) }
@@ -345,6 +359,8 @@ const QuotePageBody = forwardRef<HTMLDivElement, QuotePageProps>((props, ref) =>
       ],
       ['Shipping', money(quote.totals.shippingCents), quote.totals.shippingCents > 0],
       [quote.taxLabel, money(quote.totals.taxCents), quote.totals.taxCents > 0],
+      // The rate an invoiced draft's customer picks when they pay (AGL-4099).
+      ['Shipping is chosen when you pay', '', quote.shippingAtPayment === true],
       // `Tax is added at payment`, with no figure: Stripe works it out from the address.
       [quote.taxLabel, '', quote.taxAtPayment],
     ] as Array<[string, string, boolean]>
@@ -361,7 +377,8 @@ const QuotePageBody = forwardRef<HTMLDivElement, QuotePageProps>((props, ref) =>
           ) : null}
           <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
             <Typography variant="h4" component="h1">
-              {heading || quote.number}
+              {/* The element's own heading is a quote's; an invoice always says its number. */}
+              {(quote.kind !== 'invoice' && heading) || quote.number}
             </Typography>
             <Chip
               label={quote.statusLabel}
@@ -455,7 +472,7 @@ const QuotePageBody = forwardRef<HTMLDivElement, QuotePageProps>((props, ref) =>
           siteFetch={siteFetch}
           onView={(next) => setState({ kind: 'ready', view: next })}
           onReload={() => void load().then(setState)}
-          onReplaced={() => setState({ kind: 'replaced', storeName: quote.storeName })}
+          onReplaced={() => setState({ kind: 'replaced', storeName: quote.storeName, noun })}
         />
 
         {unpaid ? (
@@ -484,7 +501,7 @@ const QuotePageBody = forwardRef<HTMLDivElement, QuotePageProps>((props, ref) =>
                         clientSecret={nativeCheckout.clientSecret}
                         publishableKey={nativeCheckout.publishableKey}
                         wallets={nativeCheckout.wallets}
-                        payLabel={quote.taxAtPayment ? 'Pay now' : `Pay ${money(quote.totals.totalCents)}`}
+                        payLabel={later ? 'Pay now' : `Pay ${money(quote.totals.totalCents)}`}
                         defaultShippingAddress={stripeContact(quote.shipTo)}
                         // An expired or unloadable session is replaced by a new press.
                         onRestart={() => {
@@ -504,8 +521,8 @@ const QuotePageBody = forwardRef<HTMLDivElement, QuotePageProps>((props, ref) =>
                     >
                       {paying
                         ? 'Opening…'
-                        : quote.taxAtPayment
-                          ? `Pay ${money(quote.totals.totalCents)} plus tax`
+                        : later
+                          ? `Pay ${money(quote.totals.totalCents)} plus ${later}`
                           : `Pay ${money(quote.totals.totalCents)}`}
                     </Button>
                   )}
@@ -513,7 +530,7 @@ const QuotePageBody = forwardRef<HTMLDivElement, QuotePageProps>((props, ref) =>
                 </>
               ) : (
                 <Alert severity="info">
-                  {`Contact ${quote.storeName || 'the business'} to pay this quote.`}
+                  {`Contact ${quote.storeName || 'the business'} to pay this ${noun}.`}
                 </Alert>
               )}
             </Stack>
@@ -526,7 +543,7 @@ const QuotePageBody = forwardRef<HTMLDivElement, QuotePageProps>((props, ref) =>
                   ? quote.paidAtMs
                     ? `Paid ${dateLabel(quote.paidAtMs)}. Thank you.`
                     : 'Paid. Thank you.'
-                  : `This quote is ${quote.statusLabel.toLowerCase()}.`}
+                  : `This ${noun} is ${quote.statusLabel.toLowerCase()}.`}
               </Typography>
               {quote.receiptUrl ? (
                 <Button variant="outlined" href={quote.receiptUrl}>
@@ -538,7 +555,7 @@ const QuotePageBody = forwardRef<HTMLDivElement, QuotePageProps>((props, ref) =>
         )}
 
         <Typography variant="body2" color="text.secondary">
-          {`Questions about this quote? Contact ${quote.storeName || 'the business'}.`}
+          {`Questions about this ${noun}? Contact ${quote.storeName || 'the business'}.`}
         </Typography>
       </Stack>
     </Box>

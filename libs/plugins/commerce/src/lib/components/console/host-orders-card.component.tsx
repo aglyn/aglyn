@@ -142,6 +142,12 @@ const ORDER_HIDDEN_COLUMNS = hiddenFilterVisibility(
 
 export interface HostOrdersCardProps {
   hostId: string
+  /**
+   * Holds "Send quotes and invoices to customers" (`commerce.quotes.send`),
+   * which the order dialog's Send invoice asks (AGL-4099). Absent reads as
+   * held: the route decides.
+   */
+  canSendInvoices?: boolean
 }
 
 /** Total is computed from the refunds, so it sorts the page on screen (AGL-3680). */
@@ -166,7 +172,7 @@ const ORDER_PAGE_SORT_HEADERS = { netCents: 'Total' }
  * by name above the grid and never applied to some rows only.
  */
 export function HostOrdersCard(props: HostOrdersCardProps) {
-  const { hostId } = props
+  const { hostId, canSendInvoices } = props
   const firestore = useFirestore()
   const ordersRef = useMemo(
     () => collection(firestore, 'hosts', hostId, 'orders'),
@@ -1016,6 +1022,7 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
           hostId={hostId}
           order={selectedOrder}
           onClose={() => setSelectedId(null)}
+          canSendInvoices={canSendInvoices}
         />
       ) : null}
       <Dialog

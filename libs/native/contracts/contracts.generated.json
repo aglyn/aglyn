@@ -10347,6 +10347,115 @@
       "defaultBody": [
         {
           "block": "text",
+          "text": "{{host.businessName}} · Invoice {{invoice.number}}",
+          "variant": "eyebrow"
+        },
+        {
+          "block": "text",
+          "text": "{{invoice.heading}}",
+          "variant": "heading"
+        },
+        {
+          "block": "text",
+          "text": "{{invoice.intro}}",
+          "variant": "body"
+        },
+        {
+          "block": "text",
+          "text": "{{invoice.message}}",
+          "variant": "body"
+        },
+        {
+          "block": "text",
+          "text": "Invoice: {{invoice.number}}\nDate: {{invoice.date}}\nTotal: {{invoice.total}}\nStatus: {{invoice.status}}",
+          "variant": "details"
+        },
+        {
+          "block": "text",
+          "text": "{{invoice.nextStep}}",
+          "variant": "body"
+        },
+        {
+          "block": "button",
+          "href": "{{invoice.url}}",
+          "label": "{{invoice.buttonLabel}}"
+        },
+        {
+          "block": "text",
+          "text": "Reply to this email to reach {{host.businessName}}.",
+          "variant": "caption"
+        }
+      ],
+      "defaultSubject": "{{invoice.subject}}",
+      "description": "Sends an invoice for an order or a quote when you choose Send invoice: your message, the invoice as a PDF and, while it is unpaid, a button to pay it on your site. A paid invoice is the customer’s record. It arrives in the same conversation as the quote’s emails.",
+      "footerReason": "You’re receiving this because {{host.businessName}} sent you an invoice.",
+      "key": "order-invoice",
+      "mergeTokens": [
+        {
+          "description": "The subject typed when sending; it stays the same as the conversation it joins",
+          "name": "invoice.subject",
+          "sample": "Invoice #1042 from Northwind Signs"
+        },
+        {
+          "description": "The invoice number, which is the order number",
+          "name": "invoice.number",
+          "sample": "#1042"
+        },
+        {
+          "description": "The date of the order or quote",
+          "name": "invoice.date",
+          "sample": "October 28, 2026"
+        },
+        {
+          "description": "The invoice total; “before tax” or “before shipping” when those are added at payment",
+          "name": "invoice.total",
+          "sample": "$1,250.00"
+        },
+        {
+          "description": "“Paid on …”, or what is still due",
+          "name": "invoice.status",
+          "sample": "Unpaid, $1,250.00 due"
+        },
+        {
+          "description": "“Invoice #… from …”",
+          "name": "invoice.heading",
+          "sample": "Invoice #1042 from Northwind Signs"
+        },
+        {
+          "description": "One sentence on what this email is: an invoice to pay, or a paid one for the customer’s records",
+          "name": "invoice.intro",
+          "sample": "Northwind Signs sent you an invoice for your order. The details are below, and the invoice is attached as a PDF."
+        },
+        {
+          "description": "The message typed when sending; empty when none was typed",
+          "name": "invoice.message",
+          "sample": "Thanks again for your order. Here is the invoice we talked about."
+        },
+        {
+          "description": "What to do next: pay with the button, or keep a paid invoice for the records",
+          "name": "invoice.nextStep",
+          "sample": "Use the button below to pay it securely by card. The button keeps working until the invoice is paid."
+        },
+        {
+          "description": "“Pay” with the amount; empty on a paid invoice, which leaves the button out",
+          "name": "invoice.buttonLabel",
+          "sample": "Pay $1,250.00"
+        },
+        {
+          "description": "The invoice’s pay link on your site. Private to the customer; it needs no account. Empty once paid",
+          "name": "invoice.url",
+          "sample": "https://shop.example.com/pay-quote?q=order_123&t=…"
+        }
+      ],
+      "name": "Invoice",
+      "plugin": "Commerce",
+      "pluginId": "commerce"
+    },
+    {
+      "control": "besigner",
+      "defaultBody": [
+        {
+          "block": "text",
           "text": "{{site.name}} · New order",
           "variant": "eyebrow"
         },

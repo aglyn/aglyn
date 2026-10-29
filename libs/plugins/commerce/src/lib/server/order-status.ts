@@ -24,6 +24,8 @@ import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
 import { consumeRateLimit, firebaseAdmin } from '@aglyn/tenant-data-admin'
 import * as CommerceModel from '../model'
 import { verifyOrderStatusToken } from './order-status-token'
+import { mintQuoteLinkToken } from './quote-link-token'
+import { quotePageHref } from '../constants/quote-page'
 import { resolvePluginTrackingPages } from '@aglyn/aglyn/plugin-manager/plugin-tracking-pages'
 
 /** How long the page waits for a tracking service's own page link (AGL-3635). */
@@ -82,6 +84,30 @@ async function actionsFor(
 }
 
 /**
+ * Pay, on the status page of an order still to be paid that its lasting pay
+ * link can take payment for (AGL-4099): a draft order or a quote, opening the
+ * same `/pay-quote` page its invoice links to. None for anything else.
+ */
+export function orderStatusPayAction(input: {
+  hostId: string
+  orderId: string
+  order: CommerceModel.HostOrder
+  currency: string
+}): CommerceModel.OrderStatusAction | null {
+  const { hostId, orderId, order } = input
+  if (order.status !== 'pending' || !CommerceModel.orderPayLinkKind(order)) return null
+  if (CommerceModel.invoicePayRefusal(order, orderId)) return null
+  const token = mintQuoteLinkToken(hostId, orderId, CommerceModel.orderPayLinkVersion(order))
+  if (!token) return null
+  const charge = CommerceModel.invoiceCheckoutCharge(order, orderId)
+  const later = [charge.shippingOptions.length > 0 ? 'shipping' : '', charge.taxAtPayment ? 'tax' : '']
+    .filter(Boolean)
+    .join(' and ')
+  const amount = CommerceModel.formatOrderMoney(charge.totalCents, input.currency)
+  return { id: 'pay', label: later ? `Pay ${amount} plus ${later}` : `Pay ${amount}`, url: quotePageHref(orderId, token) }
+}
+
+/**
  * The guest order-status page's data (AGL-3610): `GET
  * /api/commerce/order-status?hostId=…&o=<orderId>&t=<token>` on the store.
  *
@@ -136,15 +162,17 @@ export const orderStatusHandler: PluginApiHandler = async (req, res) => {
     ])
     if (!hostSnapshot.exists || !orderSnapshot.exists) return notFound()
     const order = CommerceModel.liftLegacyOrder((orderSnapshot.data() ?? {}) as never)
+    const currency = String(settingsSnapshot.get('currency') ?? 'USD')
+    const pay = orderStatusPayAction({ hostId, orderId, order, currency })
     const view = CommerceModel.buildOrderStatusView({
       order,
       orderId,
       storeName: String(
         resolveHostToken('businessName', hostSnapshot.data() as HostTokenSource) ?? '',
       ),
-      currency: String(settingsSnapshot.get('currency') ?? 'USD'),
+      currency,
       number: CommerceModel.formatOrderNumber(order, orderId),
-      actions: await actionsFor({ hostId, orderId, order, token }),
+      actions: [...(pay ? [pay] : []), ...(await actionsFor({ hostId, orderId, order, token }))],
     })
     // A tracking service's own page for each parcel, where the merchant
     // follows them through one (AGL-3635); the carrier's link otherwise.

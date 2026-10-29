@@ -58,6 +58,16 @@ const LABEL = 'commerce person eraser'
 /** Where a quote keeps its customer's address (`commerce-quotes.ts`). */
 const QUOTE_EMAIL_FIELD = 'quote.customer.emailLower'
 
+/**
+ * Each time the order's invoice was emailed names where it went (AGL-4099);
+ * the record of the send stays, without the address.
+ */
+function erasedInvoiceSends(data: FirebaseFirestore.DocumentData | undefined): Record<string, unknown> {
+  return Array.isArray(data?.['invoiceSends'])
+    ? { invoiceSends: (data['invoiceSends'] as Array<Record<string, unknown>>).map((send) => ({ ...send, to: '' })) }
+    : {}
+}
+
 /** The patch that takes the buyer off one order, as it stands. */
 export function erasedOrderPatch(
   data: FirebaseFirestore.DocumentData | undefined,
@@ -67,6 +77,7 @@ export function erasedOrderPatch(
     Array.isArray(data?.['customerEmailTokens']) ? data['customerEmailTokens'] : [],
   )
   return {
+    ...erasedInvoiceSends(data),
     customerEmail: null,
     customerName: null,
     shippingAddress: FieldValue.delete(),
@@ -104,6 +115,7 @@ export function erasedQuotePatch(
     : {}
   return {
     quote: { ...quote, customer: {}, billTo: null, shipTo: null, ...sends },
+    ...erasedInvoiceSends(data),
     customerErasedAtMs: now,
   }
 }

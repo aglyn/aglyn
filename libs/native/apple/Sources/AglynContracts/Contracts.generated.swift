@@ -1318,8 +1318,11 @@ public struct HostOrder: Codable, Hashable, Sendable {
   public var customerPhone: String?
   public var customerRecord: HostOrderCustomerRecord?
   public var discountBy: String?
+  public var discountId: String?
   public var discountPct: Double?
   public var dispute: OrderDispute?
+  public var draftShipping: OrderDraftShipping?
+  public var emailThread: QuoteEmailThread?
   public var extras: [OrderExtra]?
   public var feeCents: Double?
   public var fulfillmentMethod: OrderFulfillmentMethod?
@@ -1331,6 +1334,7 @@ public struct HostOrder: Codable, Hashable, Sendable {
   public var hardwareTermsAcceptance: HostOrderHardwareTermsAcceptance?
   public var hardwareTermsRequest: HostOrderHardwareTermsRequest?
   public var invoiceId: String?
+  public var invoiceSends: [OrderInvoiceSendRecord]?
   public var kioskDeviceId: String?
   public var kioskQueuedAtMs: Double?
   public var kioskQueueRegisterId: String?
@@ -1340,6 +1344,7 @@ public struct HostOrder: Codable, Hashable, Sendable {
   public var note: String?
   public var number: Double?
   public var offline: PosOfflineOrderStamp?
+  public var payLink: OrderPayLink?
   public var paymentIntentId: String?
   public var paymentLinkUrl: String?
   public var paymentRisk: PaymentRisk?
@@ -1363,7 +1368,7 @@ public struct HostOrder: Codable, Hashable, Sendable {
   public var unresolvedLines: [OrderUnresolvedLine]?
   public var useDayKeys: [String]?
 
-  public init(amountCents: Double? = nil, billingAddress: OrderAddress? = nil, buyerNotifications: [String: HostOrderBuyerNotificationsValue]? = nil, cashierId: String? = nil, channel: OrderChannel? = nil, channelSource: OrderChannelSource? = nil, checkoutSessionId: String? = nil, couponCode: String? = nil, createdAtMs: Double? = nil, credits: [OrderCredit]? = nil, customerEmail: String? = nil, customerId: String? = nil, customerName: String? = nil, customerPhone: String? = nil, customerRecord: HostOrderCustomerRecord? = nil, discountBy: String? = nil, discountPct: Double? = nil, dispute: OrderDispute? = nil, extras: [OrderExtra]? = nil, feeCents: Double? = nil, fulfillmentMethod: OrderFulfillmentMethod? = nil, fulfillments: [OrderFulfillment]? = nil, hardwareBuyer: OrderHardwareBuyer? = nil, hardwareOrderId: String? = nil, hardwareSalePending: Bool? = nil, hardwareSerials: [String]? = nil, hardwareTermsAcceptance: HostOrderHardwareTermsAcceptance? = nil, hardwareTermsRequest: HostOrderHardwareTermsRequest? = nil, invoiceId: String? = nil, kioskDeviceId: String? = nil, kioskQueuedAtMs: Double? = nil, kioskQueueRegisterId: String? = nil, lineItems: [OrderLineItem]? = nil, localDelivery: OrderLocalDelivery? = nil, locationId: String? = nil, note: String? = nil, number: Double? = nil, offline: PosOfflineOrderStamp? = nil, paymentIntentId: String? = nil, paymentLinkUrl: String? = nil, paymentRisk: PaymentRisk? = nil, payments: [OrderPayment]? = nil, pickup: OrderPickup? = nil, posSource: String? = nil, productId: String? = nil, quote: OrderQuote? = nil, receiptRequest: HostOrderReceiptRequest? = nil, refundedCents: Double? = nil, refundedLineItemIds: [Double]? = nil, registerId: String? = nil, restockCheck: OrderRestockCheck? = nil, shiftId: String? = nil, shippingAddress: OrderAddress? = nil, status: OrderStatus? = nil, subscriptionId: String? = nil, taxMode: StorefrontTaxMode? = nil, timeline: [OrderTimelineEvent]? = nil, totals: OrderTotals? = nil, unresolvedLines: [OrderUnresolvedLine]? = nil, useDayKeys: [String]? = nil) {
+  public init(amountCents: Double? = nil, billingAddress: OrderAddress? = nil, buyerNotifications: [String: HostOrderBuyerNotificationsValue]? = nil, cashierId: String? = nil, channel: OrderChannel? = nil, channelSource: OrderChannelSource? = nil, checkoutSessionId: String? = nil, couponCode: String? = nil, createdAtMs: Double? = nil, credits: [OrderCredit]? = nil, customerEmail: String? = nil, customerId: String? = nil, customerName: String? = nil, customerPhone: String? = nil, customerRecord: HostOrderCustomerRecord? = nil, discountBy: String? = nil, discountId: String? = nil, discountPct: Double? = nil, dispute: OrderDispute? = nil, draftShipping: OrderDraftShipping? = nil, emailThread: QuoteEmailThread? = nil, extras: [OrderExtra]? = nil, feeCents: Double? = nil, fulfillmentMethod: OrderFulfillmentMethod? = nil, fulfillments: [OrderFulfillment]? = nil, hardwareBuyer: OrderHardwareBuyer? = nil, hardwareOrderId: String? = nil, hardwareSalePending: Bool? = nil, hardwareSerials: [String]? = nil, hardwareTermsAcceptance: HostOrderHardwareTermsAcceptance? = nil, hardwareTermsRequest: HostOrderHardwareTermsRequest? = nil, invoiceId: String? = nil, invoiceSends: [OrderInvoiceSendRecord]? = nil, kioskDeviceId: String? = nil, kioskQueuedAtMs: Double? = nil, kioskQueueRegisterId: String? = nil, lineItems: [OrderLineItem]? = nil, localDelivery: OrderLocalDelivery? = nil, locationId: String? = nil, note: String? = nil, number: Double? = nil, offline: PosOfflineOrderStamp? = nil, payLink: OrderPayLink? = nil, paymentIntentId: String? = nil, paymentLinkUrl: String? = nil, paymentRisk: PaymentRisk? = nil, payments: [OrderPayment]? = nil, pickup: OrderPickup? = nil, posSource: String? = nil, productId: String? = nil, quote: OrderQuote? = nil, receiptRequest: HostOrderReceiptRequest? = nil, refundedCents: Double? = nil, refundedLineItemIds: [Double]? = nil, registerId: String? = nil, restockCheck: OrderRestockCheck? = nil, shiftId: String? = nil, shippingAddress: OrderAddress? = nil, status: OrderStatus? = nil, subscriptionId: String? = nil, taxMode: StorefrontTaxMode? = nil, timeline: [OrderTimelineEvent]? = nil, totals: OrderTotals? = nil, unresolvedLines: [OrderUnresolvedLine]? = nil, useDayKeys: [String]? = nil) {
     self.amountCents = amountCents
     self.billingAddress = billingAddress
     self.buyerNotifications = buyerNotifications
@@ -1380,8 +1385,11 @@ public struct HostOrder: Codable, Hashable, Sendable {
     self.customerPhone = customerPhone
     self.customerRecord = customerRecord
     self.discountBy = discountBy
+    self.discountId = discountId
     self.discountPct = discountPct
     self.dispute = dispute
+    self.draftShipping = draftShipping
+    self.emailThread = emailThread
     self.extras = extras
     self.feeCents = feeCents
     self.fulfillmentMethod = fulfillmentMethod
@@ -1393,6 +1401,7 @@ public struct HostOrder: Codable, Hashable, Sendable {
     self.hardwareTermsAcceptance = hardwareTermsAcceptance
     self.hardwareTermsRequest = hardwareTermsRequest
     self.invoiceId = invoiceId
+    self.invoiceSends = invoiceSends
     self.kioskDeviceId = kioskDeviceId
     self.kioskQueuedAtMs = kioskQueuedAtMs
     self.kioskQueueRegisterId = kioskQueueRegisterId
@@ -1402,6 +1411,7 @@ public struct HostOrder: Codable, Hashable, Sendable {
     self.note = note
     self.number = number
     self.offline = offline
+    self.payLink = payLink
     self.paymentIntentId = paymentIntentId
     self.paymentLinkUrl = paymentLinkUrl
     self.paymentRisk = paymentRisk
@@ -2756,6 +2766,28 @@ public struct OrderDispute: Codable, Hashable, Sendable {
   }
 }
 
+public struct OrderDraftShipping: Codable, Hashable, Sendable {
+  public var countries: [String]
+  public var options: [OrderDraftShippingRate]
+
+  public init(countries: [String], options: [OrderDraftShippingRate]) {
+    self.countries = countries
+    self.options = options
+  }
+}
+
+public struct OrderDraftShippingRate: Codable, Hashable, Sendable {
+  public var amountCents: Double
+  public var name: String
+  public var rateId: String
+
+  public init(amountCents: Double, name: String, rateId: String) {
+    self.amountCents = amountCents
+    self.name = name
+    self.rateId = rateId
+  }
+}
+
 public struct OrderExtra: Codable, Hashable, Sendable {
   public var amountCents: Double
   public var id: String
@@ -2918,6 +2950,30 @@ public struct OrderHardwareBuyerAddress: Codable, Hashable, Sendable {
   }
 }
 
+public struct OrderInvoiceSendRecord: Codable, Hashable, Sendable {
+  public var atMs: Double
+  public var by: String
+  public var linkVersion: Double?
+  public var messageId: String
+  public var paid: Bool
+  public var providerId: String?
+  public var subject: String
+  public var to: String
+  public var totalCents: Double
+
+  public init(atMs: Double, by: String, linkVersion: Double? = nil, messageId: String, paid: Bool, providerId: String? = nil, subject: String, to: String, totalCents: Double) {
+    self.atMs = atMs
+    self.by = by
+    self.linkVersion = linkVersion
+    self.messageId = messageId
+    self.paid = paid
+    self.providerId = providerId
+    self.subject = subject
+    self.to = to
+    self.totalCents = totalCents
+  }
+}
+
 public struct OrderLineItem: Codable, Hashable, Sendable {
   public var custom: Bool?
   public var description: String?
@@ -3047,6 +3103,16 @@ public enum OrderLocalDeliveryStatus: String, Codable, CaseIterable, Hashable, S
   public init(from decoder: Decoder) throws {
     let raw = try decoder.singleValueContainer().decode(String.self)
     self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct OrderPayLink: Codable, Hashable, Sendable {
+  public var unmatchedPayments: [QuoteUnmatchedPayment]?
+  public var version: Double?
+
+  public init(unmatchedPayments: [QuoteUnmatchedPayment]? = nil, version: Double? = nil) {
+    self.unmatchedPayments = unmatchedPayments
+    self.version = version
   }
 }
 
