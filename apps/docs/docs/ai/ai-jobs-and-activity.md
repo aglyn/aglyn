@@ -53,7 +53,9 @@ step used. From there you can:
 - **Resume** a job that paused for credits, or **Get more AI credits**;
 - **Try again**, or **Try again what failed** to build only the parts that failed;
 - **Cancel** a job that is still running (see [Cancel a job](#cancel-a-job));
-- open what it built: **View your site**, **Edit your pages**, or the draft itself.
+- open what it built: for a job that changed one page, **Preview** (the new version, in a
+  new tab, where you can publish it) and **Open in Besigner**; otherwise **View your site**,
+  **Edit your pages**, or the draft itself.
 
 For a new site this is the **Building your site** page; see
 [Start a new site with AI](./start-with-ai.md#building-your-site).
