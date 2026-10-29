@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { hostContactEmail, resolveHostToken, type HostTokenSource } from '@aglyn/aglyn/app-utils/host-tokens'
+import { siteContactEmail, resolveHostToken, type HostTokenSource } from '@aglyn/aglyn/app-utils/host-tokens'
 import { resolveBrandingProfile } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   emailThreadAfterSend,
@@ -155,7 +155,7 @@ export function quoteBusinessName(host: Record<string, unknown>): string {
  * an inbox reply answers to them. Null only when neither is an address.
  */
 export function quoteReplyTo(host: Record<string, unknown>, senderEmail: string | null | undefined): string | null {
-  const contact = hostContactEmail(host as never)
+  const contact = siteContactEmail(host as never)
   if (contact && EMAIL.test(contact)) return contact
   const sender = String(senderEmail ?? '').trim()
   return EMAIL.test(sender) ? sender : null

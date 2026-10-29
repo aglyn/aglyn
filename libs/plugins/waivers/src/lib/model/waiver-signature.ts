@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { hostContactEmail } from '@aglyn/aglyn/app-utils/host-tokens'
+import { siteContactEmail } from '@aglyn/aglyn/app-utils/host-tokens'
 import {
   WAIVER_DEFAULT_ADULT_AGE,
   WAIVER_LIMITS,
@@ -115,7 +115,7 @@ export function waiverBusinessContact(host: {
   business?: { supportEmail?: unknown } | null
 } | null | undefined): string | null {
   const text = (value: unknown, max: number) => (typeof value === 'string' && value.trim() ? value.trim().slice(0, max) : '')
-  const email = hostContactEmail(host) ?? ''
+  const email = siteContactEmail(host) ?? ''
   const phone = text(host?.seo?.entity?.telephone, 64)
   return [email, phone].filter(Boolean).join(' or ') || null
 }

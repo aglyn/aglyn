@@ -405,7 +405,7 @@ export function hostTokenMerge(
  * email (AGL-4097). Trimmed, not validated; a caller putting it in a header
  * checks it is an address.
  */
-export function hostContactEmail(
+export function siteContactEmail(
   host:
     | {
         seo?: { entity?: { email?: unknown } | null } | null

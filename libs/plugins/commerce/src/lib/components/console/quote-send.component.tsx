@@ -19,7 +19,7 @@
 
 import * as CommerceModel from '../../model'
 import { commerceSitePermissionRefusal } from '../../model/plugin-permissions'
-import { hostContactEmail, resolveHostToken, type HostTokenSource } from '@aglyn/aglyn/app-utils/host-tokens'
+import { siteContactEmail, resolveHostToken, type HostTokenSource } from '@aglyn/aglyn/app-utils/host-tokens'
 import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
@@ -78,7 +78,7 @@ export function QuoteSendSection(props: QuoteSendSectionProps) {
   const replacesLink = CommerceModel.quoteSendReplacesLink(section)
   const approvalFirst = CommerceModel.quotePaymentBlockedByApproval(section)
   const proofCount = CommerceModel.currentQuoteProofs(section).length
-  const listed = hostContactEmail(host as never)
+  const listed = siteContactEmail(host as never)
   const contact = listed && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(listed) ? listed : null
 
   const [open, setOpen] = useState(false)
