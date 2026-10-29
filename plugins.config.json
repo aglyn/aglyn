@@ -287,7 +287,8 @@
         "site": {
           "components": [
             "form",
-            "formField"
+            "formField",
+            "formFileUpload"
           ]
         },
         "console": {
@@ -1083,7 +1084,8 @@
             "related-products",
             "return-request",
             "order-status",
-            "quote-page"
+            "quote-page",
+            "product-options-field"
           ]
         },
         "console": {
@@ -1095,7 +1097,9 @@
           "slots": [
             "commerceGlance",
             "consoleSearch",
+            "crmRecordActions",
             "hostDashboard",
+            "inboxSubmissionActions",
             "siteMember",
             "transferResources"
           ],

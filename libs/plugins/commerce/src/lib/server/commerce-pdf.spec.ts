@@ -195,6 +195,33 @@ describe('the customer’s download', () => {
     expect((await handleQuotePdf(deps, request({ hostId: 'site1', q: 'q-1', t: token() }))).status).toBe(404)
   })
 
+  it('answers an invoiced draft’s link with its invoice PDF, carrying the same link (AGL-4099)', async () => {
+    docs.set('hosts/site1/orders/d-1', {
+      number: 2001,
+      status: 'pending',
+      channel: 'draft',
+      lineItems: [{ productId: 'canopy', name: 'Canopy 10x10', productType: 'service', quantity: 1, unitAmountCents: 50_000 }],
+      totals: { itemsCents: 50_000, discountCents: 0, shippingCents: 0, taxCents: 0, feeCents: 0, totalCents: 50_000 },
+    })
+    const invoices: unknown[] = []
+    const draftToken = String(mintQuoteLinkToken('site1', 'd-1', 1))
+    const outcome = await handleQuotePdf(
+      {
+        ...deps,
+        invoicePdf: async (input) => {
+          invoices.push(input)
+          return { bytes: new Uint8Array([37]), filename: 'acme-tents-invoice-2001.pdf' }
+        },
+      },
+      request({ hostId: 'site1', q: 'd-1', t: draftToken }),
+    )
+    expect('pdf' in outcome && outcome.pdf.filename).toBe('acme-tents-invoice-2001.pdf')
+    expect(rendered).toHaveLength(0)
+    expect(invoices[0]).toEqual(
+      expect.objectContaining({ orderId: 'd-1', payUrl: `https://acme.aglyn.app/pay-quote?q=d-1&t=${encodeURIComponent(draftToken)}` }),
+    )
+  })
+
   it('is rate-limited before the token is checked', async () => {
     rateAllowed = false
     const outcome = await handleQuotePdf(deps, request({ hostId: 'site1', q: 'q-1', t: 'not-a-token' }))
@@ -303,5 +330,34 @@ describe('the files', () => {
     const pdf = text(file.bytes)
     expect(pdf).toContain('(Invoice #7) Tj')
     expect(pdf).toContain('(Thanks!) Tj')
+  })
+  it('prints an unpaid invoice’s pay link, and an unpaid quote’s customer from its quote (AGL-4099)', async () => {
+    const order = docs.get('hosts/site1/orders/q-1') as never
+    const file = await orderInvoicePdfFile(
+      { hostId: 'site1', orderId: 'q-1', order, host: HOST, store: { currency: 'USD' }, owner: null, payUrl: 'https://acme.aglyn.app/pay-quote?q=q-1&t=1.x' },
+      brandDeps,
+    )
+    const pdf = text(file.bytes)
+    expect(pdf).toContain('(Invoice #1042) Tj')
+    expect(pdf).toContain('(Pay this invoice) Tj')
+    expect(pdf).toContain('/URI (https://acme.aglyn.app/pay-quote?q=q-1&t=1.x)')
+    expect(pdf).toContain('(Jordan Lee) Tj')
+    expect(pdf).toContain('(Awaiting payment) Tj')
+  })
+
+  it('prints no pay link on a paid invoice, whatever it is handed', async () => {
+    const file = await orderInvoicePdfFile(
+      {
+        hostId: 'site1',
+        orderId: 'o-1',
+        order: { number: 7, status: 'paid', lineItems: [{ productId: 'p', name: 'Mug', quantity: 1, unitAmountCents: 900 }], totals: { itemsCents: 900, totalCents: 900, feeCents: 0 } } as never,
+        host: HOST,
+        store: { currency: 'USD' },
+        owner: null,
+        payUrl: 'https://acme.aglyn.app/pay-quote?q=o-1&t=1.x',
+      },
+      brandDeps,
+    )
+    expect(text(file.bytes)).not.toContain('pay-quote')
   })
 })

@@ -46,6 +46,8 @@ jest.mock('firebase/firestore', () => ({
   where: () => undefined,
   limit: () => undefined,
   doc: (_db: unknown, ...path: string[]) => ({ __path: path.join('/') }),
+  // The site, read once when Send invoice's form opens (AGL-4099).
+  getDoc: async () => ({ data: () => ({ displayName: 'Acme Tents' }) }),
   setDoc: jest.fn(),
 }))
 
@@ -242,16 +244,16 @@ describe('a quote’s pay link (AGL-4094)', () => {
     expect(JSON.parse(String(init.body))).toEqual({ action: 'replace-link', hostId: 'site1', quoteId: 'q-1' })
   })
 
-  it('holds both, and Send quote, behind "Send quotes and invoices to customers", whoever may edit', async () => {
+  it('holds both, Send quote and Send invoice behind "Send quotes and invoices to customers", whoever may edit', async () => {
     const dialog = await openQuote({ canEdit: true, canSend: false })
-    for (const name of ['Copy pay link', 'Replace link', 'Send quote']) {
+    for (const name of ['Copy pay link', 'Replace link', 'Send quote', 'Send invoice']) {
       expect((within(dialog).getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(true)
     }
     expect(
       within(dialog).getAllByLabelText(
         'Your role does not include "Send quotes and invoices to customers" — ask an organization admin',
       ),
-    ).toHaveLength(3)
+    ).toHaveLength(4)
   })
 
   it('offers no Replace on a paid quote, which is locked and says Paid', async () => {
@@ -340,9 +342,73 @@ describe('emailing a quote (AGL-4097)', () => {
     expect((within(dialog).getByRole('button', { name: 'Send quote' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
-  it('offers no send on a paid quote', async () => {
+  it('offers no quote send on a paid quote, only its invoice', async () => {
     const dialog = await openQuote({ ...QUOTE, status: 'paid', quote: { ...QUOTE.quote, sends: [send(1, 1, 5)] } })
-    expect(within(dialog).queryByRole('button', { name: /^Send/ })).toBeNull()
+    expect(within(dialog).queryByRole('button', { name: /^Send (quote|again|revision)/ })).toBeNull()
+    expect(within(dialog).getByRole('button', { name: 'Send invoice' })).toBeTruthy()
+  })
+})
+
+describe('a quote’s invoice (AGL-4099)', () => {
+  const invoiceSend = (atMs: number, paid: boolean) => ({
+    to: 'jordan@example.com',
+    subject: 'Quote #1042',
+    atMs,
+    by: 'owner@example.com',
+    messageId: `<invoice.${atMs}.a@acme.test>`,
+    providerId: null,
+    paid,
+    linkVersion: paid ? null : 1,
+    totalCents: 1_000,
+  })
+
+  beforeEach(() => {
+    mockFetch.mockImplementation(async () => ({ ok: true, json: async () => ({ sent: true, to: 'jordan@example.com', paid: true, linkVersion: null }) }))
+  })
+
+  afterEach(() => {
+    mockFetch.mockImplementation(async () => ({
+      ok: true,
+      json: async () => ({ quoteId: 'q-new', number: 1043, updatedAtMs: 5 }),
+    }))
+  })
+
+  async function openQuote(quote: Record<string, unknown>, canSend = true) {
+    mockQuotes = [quote]
+    render(<HostQuotesCard hostId="site1" canEdit canSend={canSend} />)
+    fireEvent.click(screen.getByText('Quote #1042'))
+    return screen.findByRole('dialog')
+  }
+
+  it('sends a paid quote’s invoice as the record, in the quote’s conversation', async () => {
+    const dialog = await openQuote({ ...QUOTE, status: 'paid' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Send invoice' }))
+    const form = await screen.findByRole('dialog', { name: 'Send invoice: Invoice #1042' })
+    await waitFor(() => expect((within(form).getByLabelText('Subject') as HTMLInputElement).value).toBe('Invoice #1042 from Acme Tents'))
+    expect((within(form).getByLabelText(/^To/) as HTMLInputElement).value).toBe('jordan@example.com')
+    expect(within(form).getByText(/shows the invoice as paid/)).toBeTruthy()
+    fireEvent.click(within(form).getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
+    const [, url, init] = mockFetch.mock.calls[0] as [unknown, string, RequestInit]
+    expect(url).toBe('/api/commerce/order-invoice-send')
+    expect(JSON.parse(String(init.body))).toMatchObject({ hostId: 'site1', orderId: 'q-1', to: 'jordan@example.com' })
+  })
+
+  it('offers an unpaid quote’s invoice beside Send quote, and says when one went out', async () => {
+    const dialog = await openQuote({ ...QUOTE, invoiceSends: [invoiceSend(Date.UTC(2026, 9, 29, 15), false)] })
+    expect(within(dialog).getByRole('button', { name: 'Send quote' })).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: 'Send invoice' })).toBeTruthy()
+    expect(within(dialog).getByText(/^Invoice sent Oct 29, 2026, .+ to jordan@example\.com\.$/)).toBeTruthy()
+  })
+
+  it('holds Send invoice behind "Send quotes and invoices to customers"', async () => {
+    const dialog = await openQuote({ ...QUOTE, status: 'paid' }, false)
+    expect((within(dialog).getByRole('button', { name: 'Send invoice' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('offers none on a canceled quote', async () => {
+    const dialog = await openQuote({ ...QUOTE, status: 'cancelled' })
+    expect(within(dialog).queryByRole('button', { name: 'Send invoice' })).toBeNull()
   })
 })
 

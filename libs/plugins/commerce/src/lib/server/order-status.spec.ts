@@ -185,6 +185,32 @@ describe('orderStatusHandler (AGL-3610)', () => {
     ])
   })
 
+  it('offers Pay on an unpaid draft order, to its invoice’s lasting pay link, before any other action (AGL-4099)', async () => {
+    docs.set(`hosts/${HOST}/orders/${ORDER}`, {
+      number: 1042,
+      status: 'pending',
+      channel: 'draft',
+      lineItems: [{ productId: 'p1', name: 'House Blend', quantity: 2, unitAmountCents: 1200, productType: 'service' }],
+      totals: { itemsCents: 2400, shippingCents: 0, taxCents: 0, discountCents: 0, totalCents: 2400, feeCents: 0 },
+      createdAtMs: 1_000,
+    })
+    registerOrderStatusActions(() => [{ id: 'return', label: 'Request a return', url: '/returns?o=order-1' }])
+    const result = await call({ hostId: HOST, o: ORDER, t: token() })
+    expect(result.body.statusLabel).toBe('Awaiting payment')
+    expect(result.body.actions[0]).toEqual({
+      id: 'pay',
+      label: 'Pay $24.00',
+      url: expect.stringMatching(new RegExp(`^/pay-quote\\?q=${ORDER}&t=1\\.[0-9a-f]{32}$`)),
+    })
+    expect(result.body.actions[1].id).toBe('return')
+  })
+
+  it('offers no Pay on a paid order, or on an unpaid one its link cannot take', async () => {
+    expect((await call({ hostId: HOST, o: ORDER, t: token() })).body.actions).toEqual([])
+    docs.set(`hosts/${HOST}/orders/${ORDER}`, { ...docs.get(`hosts/${HOST}/orders/${ORDER}`), status: 'pending', channel: 'pos' })
+    expect((await call({ hostId: HOST, o: ORDER, t: token() })).body.actions).toEqual([])
+  })
+
   it('sends each parcel to the store’s own tracking page where a plugin has one (AGL-3635)', async () => {
     resetPluginServicesForTests()
     registerPluginTrackingPage(

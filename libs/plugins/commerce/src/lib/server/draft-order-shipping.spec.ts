@@ -569,6 +569,22 @@ describe('draft-order shipping options (AGL-1792)', () => {
     expect(body?.get('metadata[orderId]')).toBe(String(result.body.orderId))
     expect(body?.get('line_items[0][price_data][unit_amount]')).toBe('3000')
   })
+
+  it('keeps the rates and countries it offered on the draft, for its invoice’s lasting link (AGL-4099)', async () => {
+    const { result } = await runDraft({ settings: { shipping }, shippingCountry: 'US' })
+    expect(result.status).toBe(200)
+    const [order] = writtenOrders()
+    expect(order.draftShipping).toEqual({
+      countries: ['US'],
+      options: [{ rateId: 'std', name: 'Standard', amountCents: 799 }],
+    })
+  })
+
+  it('records "ships nothing" too, so an invoice can tell it from a draft made before (AGL-4099)', async () => {
+    const { result } = await runDraft({ settings: null })
+    expect(result.status).toBe(200)
+    expect(writtenOrders()[0].draftShipping).toEqual({ countries: [], options: [] })
+  })
 })
 
 describe('draft-order payment links honor the merchant’s payment methods (AGL-3629)', () => {

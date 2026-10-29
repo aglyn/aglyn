@@ -25,7 +25,13 @@
  */
 
 import type { OrderLineModifier } from './product-modifiers'
-import type { OrderQuote } from './commerce-quotes'
+import type {
+  OrderDraftShipping,
+  OrderInvoiceSendRecord,
+  OrderPayLink,
+  OrderQuote,
+  QuoteEmailThread,
+} from './commerce-quotes'
 import { stripeIdIsTestMode } from '@aglyn/aglyn/app-utils/stripe-deployment-mode'
 import type { PaymentRisk } from '@aglyn/aglyn/app-utils/payment-risk'
 import type { ProductType } from './commerce'
@@ -648,8 +654,35 @@ export interface HostOrder {
    */
   subscriptionId?: string
   invoiceId?: string
-  /** Draft orders (AGL-287): the link sent to the buyer. */
+  /**
+   * Draft orders (AGL-287): the Stripe page the draft was first sent as. It
+   * lapses after a day; the order's invoice carries its lasting pay link
+   * instead (AGL-4099, `commerce-invoices.ts`).
+   */
   paymentLinkUrl?: string
+  /**
+   * The shipping a draft order offered when it was made (AGL-4099): the
+   * countries it ships to and the rates the buyer picks from, so its pay link
+   * offers the same ones on any later day. Empty `options` when it ships
+   * nothing; absent on a draft made before invoices, and on every other order.
+   */
+  draftShipping?: OrderDraftShipping
+  /** The promotion a draft order was priced with (AGL-4099), counted when its pay link is paid. */
+  discountId?: string
+  /**
+   * The lasting pay link of an order that is not a quote (AGL-4099): its
+   * version and the payments it could not take. A quote keeps both in its
+   * `quote` section, where slice 2 put them.
+   */
+  payLink?: OrderPayLink
+  /**
+   * The conversation an order's invoice emails keep in the customer's
+   * mailbox (AGL-4099), started by the first invoice. A quote's emails,
+   * invoices included, keep `quote.emailThread` instead.
+   */
+  emailThread?: QuoteEmailThread | null
+  /** Every time the order's invoice was emailed (AGL-4099), oldest first. */
+  invoiceSends?: OrderInvoiceSendRecord[]
   /** What only a quote has (channel `quote`, AGL-4093); see `commerce-quotes.ts`. */
   quote?: OrderQuote
   refundedCents?: number

@@ -71,6 +71,26 @@ export function quoteLinkVersion(quote: Pick<OrderQuote, 'linkVersion'> | null |
   return Number.isFinite(version) && version >= 1 ? version : 1
 }
 
+/**
+ * The pay link version any order is on (AGL-4099). A quote keeps its version
+ * where slice 2 put it, `quote.linkVersion`, so every link already sent keeps
+ * verifying; any other order keeps it as `payLink.version`. Absent reads as
+ * the first either way.
+ */
+export function orderPayLinkVersion(order: Partial<Pick<HostOrder, 'quote' | 'payLink'>> | null | undefined): number {
+  if (order?.quote) return quoteLinkVersion(order.quote)
+  const version = Math.floor(Number(order?.payLink?.version))
+  return Number.isFinite(version) && version >= 1 ? version : 1
+}
+
+/** Payments the order's pay link could not take: a quote's on the quote, any other order's on `payLink`. */
+export function orderPayLinkUnmatched(
+  order: Partial<Pick<HostOrder, 'quote' | 'payLink'>> | null | undefined,
+): QuoteUnmatchedPayment[] {
+  const list = order?.quote ? order.quote.unmatchedPayments : order?.payLink?.unmatchedPayments
+  return Array.isArray(list) ? list.filter((entry) => entry && typeof entry === 'object') : []
+}
+
 /*==========================================
  * THE CUSTOMER'S PAGE
  *=========================================*/
@@ -132,8 +152,14 @@ export interface QuotePageResponse {
  */
 export interface QuotePageView {
   state: 'quote'
+  /**
+   * What the page shows (AGL-4099): a quote, or an invoice for an order the
+   * business sent one for. An invoice has no proofs and no approval, and the
+   * page says "invoice" where a quote's says "quote".
+   */
+  kind: 'quote' | 'invoice'
   storeName: string
-  /** `Quote #1042`. */
+  /** `Quote #1042`, or `Invoice #1042`. */
   number: string
   /** When the quote was last written, which is the date it carries. */
   dateMs: number | null
@@ -161,6 +187,12 @@ export interface QuotePageView {
   taxLabel: string
   /** Stripe Tax works the tax out when the customer pays; `taxCents` is 0 until then. */
   taxAtPayment: boolean
+  /**
+   * The customer picks a shipping rate when they pay (an invoiced draft
+   * order, AGL-4099); `shippingCents` is 0 until then. A quote's shipping is
+   * priced on it, so this is false for every quote.
+   */
+  shippingAtPayment: boolean
   notes: string | null
   terms: string | null
   status: QuotePageStatus
@@ -198,7 +230,8 @@ const cents = (value: unknown): number => {
   return Number.isFinite(number) ? number : 0
 }
 
-function pageAddress(address: OrderAddress | null | undefined): QuotePageAddress | null {
+/** An address as the pay link's page prints it, or null when it says nothing. */
+export function quotePageAddress(address: OrderAddress | null | undefined): QuotePageAddress | null {
   if (!address) return null
   const view: QuotePageAddress = {
     name: text(address.name),
@@ -212,7 +245,8 @@ function pageAddress(address: OrderAddress | null | undefined): QuotePageAddress
   return Object.values(view).some(Boolean) ? view : null
 }
 
-function pageStatus(status: OrderStatus | string | undefined): { status: QuotePageStatus; label: string } {
+/** Where an order stands as the pay link's page says it. */
+export function quotePageStatus(status: OrderStatus | string | undefined): { status: QuotePageStatus; label: string } {
   if (status === 'pending') return { status: 'unpaid', label: 'Unpaid' }
   if (status === 'cancelled') return { status: 'canceled', label: 'Canceled' }
   if (status === 'refunded') return { status: 'refunded', label: 'Refunded' }
@@ -249,7 +283,7 @@ export function buildQuotePageView(input: {
   const { order } = input
   const quote = order.quote
   const lines = order.lineItems ?? []
-  const status = pageStatus(order.status)
+  const status = quotePageStatus(order.status)
   const unpaid = status.status === 'unpaid'
   const charge = quoteCheckoutCharge(order, input.orderId)
   const stored = order.totals
@@ -272,6 +306,7 @@ export function buildQuotePageView(input: {
   const taxAtPayment = unpaid && quote?.tax?.kind === 'at-payment'
   return {
     state: 'quote',
+    kind: 'quote',
     storeName: input.storeName,
     number: formatQuoteNumber(order, input.orderId),
     dateMs: Number(quote?.updatedAtMs ?? quote?.createdAtMs) || null,
@@ -279,28 +314,15 @@ export function buildQuotePageView(input: {
     currency: input.currency || 'USD',
     customerName: text(quote?.customer?.name) ?? text(quote?.customer?.company),
     company: text(quote?.customer?.name) ? text(quote?.customer?.company) : null,
-    billTo: pageAddress(quote?.billTo),
-    shipTo: pageAddress(quote?.shipTo),
-    lines: lines.map((line) => {
-      const included = line.included === true
-      const quantity = Math.max(0, cents(line.quantity))
-      const unitAmountCents = included ? 0 : Math.max(0, cents(line.unitAmountCents))
-      return {
-        name: String(line.name ?? ''),
-        variantLabel: text(line.variantLabel),
-        description: text(line.description),
-        sku: text(line.sku),
-        quantity,
-        unitAmountCents,
-        amountCents: unitAmountCents * quantity,
-        included,
-      }
-    }),
+    billTo: quotePageAddress(quote?.billTo),
+    shipTo: quotePageAddress(quote?.shipTo),
+    lines: quotePageLines(lines),
     totals,
     discountLabel: discountLabel(quote?.discount),
     // Once paid, the tax is what was charged: Stripe's figure under Stripe Tax.
     taxLabel: unpaid || quote?.tax?.kind !== 'at-payment' ? describeQuoteTax(quote?.tax) : 'Tax',
     taxAtPayment,
+    shippingAtPayment: false,
     notes: text(quote?.notes),
     terms: text(quote?.terms),
     status: status.status,
@@ -321,6 +343,25 @@ export function buildQuotePageView(input: {
     // The page is only ever a quote's, whatever the caller picked off the order.
     respondable: quoteRespondRefusal({ channel: 'quote', status: order.status, quote }) === null,
   }
+}
+
+/** Order lines as the pay link's page lists them: what each charges, nothing about stock or cost. */
+export function quotePageLines(lines: readonly OrderLineItem[]): QuotePageLine[] {
+  return lines.map((line) => {
+    const included = line.included === true
+    const quantity = Math.max(0, cents(line.quantity))
+    const unitAmountCents = included ? 0 : Math.max(0, cents(line.unitAmountCents))
+    return {
+      name: String(line.name ?? ''),
+      variantLabel: text(line.variantLabel),
+      description: text(line.description),
+      sku: text(line.sku),
+      quantity,
+      unitAmountCents,
+      amountCents: unitAmountCents * quantity,
+      included,
+    }
+  })
 }
 
 /** The latest answer, as the page may show it back to the link's holder: never the address or browser. */
@@ -409,13 +450,31 @@ export function quoteCheckoutCharge(
   order: Pick<HostOrder, 'number' | 'lineItems' | 'quote'>,
   orderId: string,
 ): QuoteCheckoutCharge {
-  const lineItems = order.lineItems ?? []
-  const tax: QuoteTaxBasis = order.quote?.tax ?? { kind: 'none', reason: 'not-collected' }
-  const discount = order.quote?.discount ?? null
-  const shippingCents = Math.max(0, cents(order.quote?.shipping?.amountCents))
+  return payLinkCheckoutCharge({
+    lineItems: order.lineItems ?? [],
+    tax: order.quote?.tax ?? { kind: 'none', reason: 'not-collected' },
+    discount: order.quote?.discount ?? null,
+    shippingCents: Math.max(0, cents(order.quote?.shipping?.amountCents)),
+    label: formatQuoteNumber(order, orderId),
+  })
+}
+
+/**
+ * What a pay link's Checkout Session charges for stored lines, a discount,
+ * fixed shipping and a tax basis, under a label (`Quote #1042`,
+ * `Invoice #1042`): {@link quoteCheckoutCharge}'s pricing, shared with an
+ * invoiced order's (AGL-4099), so both are charged the same way.
+ */
+export function payLinkCheckoutCharge(input: {
+  lineItems: readonly OrderLineItem[]
+  tax: QuoteTaxBasis
+  discount: QuoteDiscount | null
+  shippingCents: number
+  label: string
+}): QuoteCheckoutCharge {
+  const { lineItems, tax, discount, shippingCents, label } = input
   const totals = computeQuoteTotals({ lines: lineItems, discount, shippingCents, tax })
   const amounts = quoteLineAmounts(lineItems, discount)
-  const label = formatQuoteNumber(order, orderId)
   const groups = [true, false].map((taxable) => {
     const members = lineItems
       .map((line, index) => ({ line, net: amounts.netCents[index] }))
@@ -551,12 +610,14 @@ export interface QuotePaymentFacts {
 export type QuotePaymentDisposition = 'pay' | 'superseded' | 'already-paid' | 'redelivery'
 
 export function quotePaymentDisposition(
-  order: Pick<HostOrder, 'status' | 'quote' | 'checkoutSessionId' | 'paymentIntentId'>,
+  order: Pick<HostOrder, 'status' | 'quote' | 'checkoutSessionId' | 'paymentIntentId'> &
+    Partial<Pick<HostOrder, 'payLink'>>,
   payment: Pick<QuotePaymentFacts, 'sessionId' | 'paymentIntentId' | 'linkVersion' | 'quoteUpdatedAtMs'>,
 ): QuotePaymentDisposition {
-  const recorded = (order.quote?.unmatchedPayments ?? []).some(
-    (entry) => entry?.sessionId === payment.sessionId,
-  )
+  // Any order's pay link answers the same way (AGL-4099): an invoiced order
+  // reads its version and its recorded payments off `payLink`, and its
+  // session carries no quote edit to compare.
+  const recorded = orderPayLinkUnmatched(order).some((entry) => entry?.sessionId === payment.sessionId)
   if (recorded) return 'redelivery'
   if (order.status !== 'pending') {
     const same =
@@ -565,7 +626,7 @@ export function quotePaymentDisposition(
     return same ? 'redelivery' : 'already-paid'
   }
   const sentVersion = payment.linkVersion
-  if (sentVersion != null && sentVersion !== '' && Number(sentVersion) !== quoteLinkVersion(order.quote)) {
+  if (sentVersion != null && sentVersion !== '' && Number(sentVersion) !== orderPayLinkVersion(order)) {
     return 'superseded'
   }
   const sentEdit = payment.quoteUpdatedAtMs
@@ -589,14 +650,17 @@ export function quoteUnmatchedPayment(
   }
 }
 
-/** The timeline line for a payment the quote could not take. */
-export function quoteUnmatchedPaymentDetail(entry: QuoteUnmatchedPayment): string {
+/** The timeline line for a payment the quote (or an order's invoice, AGL-4099) could not take. */
+export function quoteUnmatchedPaymentDetail(
+  entry: QuoteUnmatchedPayment,
+  noun: 'quote' | 'invoice' = 'quote',
+): string {
   const amount = `$${(entry.amountCents / 100).toFixed(2)}`
   return entry.reason === 'superseded'
     ? `A payment of ${amount} came through a pay link that was replaced, or for an earlier ` +
-        'version of this quote. The money is in Stripe and this quote records no sale for it; ' +
+        `version of this ${noun}. The money is in Stripe and this ${noun} records no sale for it; ` +
         'refund it in Stripe, or reconcile it by hand.'
-    : `A second payment of ${amount} came in after this quote was paid. The money is in Stripe ` +
+    : `A second payment of ${amount} came in after this ${noun} was paid. The money is in Stripe ` +
         'and no second sale was recorded; refund it in Stripe, or reconcile it by hand.'
 }
 

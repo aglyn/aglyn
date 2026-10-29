@@ -45,7 +45,8 @@ import { ensureCheckoutDomain } from './payment-method-domains'
 import { verifyQuoteLinkToken } from './quote-link-token'
 
 /*==========================================
- * THE CUSTOMER'S QUOTE PAGE AND ITS PAY BUTTON (AGL-4094).
+ * THE CUSTOMER'S QUOTE PAGE AND ITS PAY BUTTON (AGL-4094), AND AN
+ * INVOICE'S (AGL-4099).
  *
  *   GET  /api/commerce/quote-view?hostId=&q=<quoteId>&t=<token>
  *        → 200 QuotePageView | 200 { state: 'replaced', storeName } | 404
@@ -68,6 +69,16 @@ import { verifyQuoteLinkToken } from './quote-link-token'
  *
  * The payment completes in `billing-webhook.ts`, which turns this same
  * document into the order (`paidQuoteOrder`); nothing here marks it paid.
+ *
+ * AN INVOICE'S LINK IS THIS ONE (AGL-4099). A draft order the business sent
+ * an invoice for opens on the same page from the same kind of link (its
+ * version on `payLink.version`, `commerce-invoices.ts`), as "Invoice #N" with
+ * no proofs or approval, and Pay opens the same kind of fresh session from
+ * its stored lines, discount, tax and the shipping rates it was made with.
+ * Its webhook is the draft branch it always completed through, which flips
+ * the draft to paid without restamping its list fields. The proof and answer
+ * routes stay a quote's alone: `loadLinkedQuote` opens an invoice only for
+ * the routes that ask (`{ invoices: true }`).
  *=========================================*/
 
 /** Lookups and presses one address may make per site, per ten minutes. */
@@ -130,6 +141,15 @@ const NOT_FOUND: QuoteLinkOutcome = {
   body: { error: 'We could not find that quote. Check the link you were sent.' },
 }
 
+/** The not-found answer of a route an invoice's link reaches too: it names neither. */
+const NOT_FOUND_ANY: QuoteLinkOutcome = {
+  status: 404,
+  body: { error: 'We could not find that quote or invoice. Check the link you were sent.' },
+}
+
+/** `quote` or `invoice`, as the customer reads it. */
+const nounOf = (kind: CommerceModel.OrderPayLinkKind) => (kind === 'invoice' ? 'invoice' : 'quote')
+
 function bodyOf(req: PluginApiRequest): Record<string, unknown> {
   const raw = req.body
   if (typeof raw === 'string') {
@@ -172,47 +192,54 @@ export interface LoadedQuote {
   order: CommerceModel.HostOrder
   storeName: string
   store: FirebaseFirestore.DocumentSnapshot
+  /** A quote, or an order's invoice (only for a route that opens invoices). */
+  kind: CommerceModel.OrderPayLinkKind
 }
 
 /**
  * The quote a link names, after its token: the quote, the replaced answer for
  * a link to an older version, or the one not-found answer for everything else.
+ * With `invoices`, a draft order's invoice too (AGL-4099).
  */
 export async function loadLinkedQuote(
   deps: QuotePayDeps,
   hostId: string,
   quoteId: string,
   token: string,
+  options: { invoices?: boolean } = {},
 ): Promise<{ loaded: LoadedQuote } | { outcome: QuoteLinkOutcome }> {
+  const notFound = options.invoices ? NOT_FOUND_ANY : NOT_FOUND
   const version = verifyQuoteLinkToken(hostId, quoteId, token)
-  if (version === null) return { outcome: NOT_FOUND }
+  if (version === null) return { outcome: notFound }
   const hostRef = deps.firestore().collection('hosts').doc(hostId)
   const [hostSnapshot, store, orderSnapshot] = await Promise.all([
     hostRef.get(),
     hostRef.collection('settings').doc('store').get(),
     hostRef.collection('orders').doc(quoteId).get(),
   ])
-  if (!hostSnapshot.exists || !orderSnapshot.exists) return { outcome: NOT_FOUND }
+  if (!hostSnapshot.exists || !orderSnapshot.exists) return { outcome: notFound }
   const order = orderSnapshot.data() as CommerceModel.HostOrder
-  if (!CommerceModel.isQuote(order) || !order.quote) return { outcome: NOT_FOUND }
+  const kind = CommerceModel.orderPayLinkKind(order)
+  if (kind === null || (kind === 'invoice' && !options.invoices)) return { outcome: notFound }
   const host = (hostSnapshot.data() ?? {}) as Record<string, unknown>
   const storeName = String(resolveHostToken('businessName', host as HostTokenSource) ?? '')
-  const current = CommerceModel.quoteLinkVersion(order.quote)
-  if (version > current) return { outcome: NOT_FOUND }
+  const current = CommerceModel.orderPayLinkVersion(order)
+  if (version > current) return { outcome: notFound }
   if (version < current) {
     return {
       outcome: {
         status: 410,
         body: {
           state: 'replaced',
+          kind,
           storeName,
           replaced: true,
-          error: `This quote was updated, and ${storeName || 'the business'} sent you a newer link.`,
+          error: `This ${nounOf(kind)} was updated, and ${storeName || 'the business'} sent you a newer link.`,
         },
       },
     }
   }
-  return { loaded: { hostRef, host, order, storeName, store } }
+  return { loaded: { hostRef, host, order, storeName, store, kind } }
 }
 
 /** The link's site, quote and token from a query or a body, and whether all three are there. */
@@ -231,32 +258,31 @@ export async function handleQuoteView(deps: QuotePayDeps, req: PluginApiRequest)
   if (!complete) return { status: 400, body: { error: 'This link is incomplete.' } }
   const refused = await limitedQuoteLink(deps, req, `commerce-quote-view:${hostId}`, QUOTE_VIEW_LOOKUPS_PER_WINDOW)
   if (refused) return refused
-  const linked = await loadLinkedQuote(deps, hostId, quoteId, token)
+  const linked = await loadLinkedQuote(deps, hostId, quoteId, token, { invoices: true })
   if ('outcome' in linked) {
     // The replaced page is a page, not a failure: answered as data.
     if (linked.outcome.status === 410) {
-      const { storeName } = linked.outcome.body as { storeName: string }
-      return { status: 200, body: { state: 'replaced', storeName } }
+      const { storeName, kind } = linked.outcome.body as { storeName: string; kind: CommerceModel.OrderPayLinkKind }
+      return { status: 200, body: { state: 'replaced', kind, storeName } }
     }
     return linked.outcome
   }
-  const { host, order, storeName, store } = linked.loaded
-  const view = CommerceModel.buildQuotePageView({
-    order,
-    orderId: quoteId,
-    storeName,
-    currency: String(store.get('currency') ?? 'USD'),
-    receiptUrl: CommerceModel.isUnpaidQuote(order) ? null : orderStatusUrl(host, hostId, quoteId),
-  })
+  const { host, order, storeName, store, kind } = linked.loaded
+  const currency = String(store.get('currency') ?? 'USD')
+  const receiptUrl = order.status === 'pending' ? null : orderStatusUrl(host, hostId, quoteId)
+  const view =
+    kind === 'quote'
+      ? CommerceModel.buildQuotePageView({ order, orderId: quoteId, storeName, currency, receiptUrl })
+      : CommerceModel.buildInvoicePageView({ order, orderId: quoteId, storeName, currency, receiptUrl })
   return { status: 200, body: view as unknown as Record<string, unknown> }
 }
 
-/** The Checkout Session a quote's Pay opens, as form params. Pure over its inputs. */
+/** The Checkout Session a quote's (or an invoice's) Pay opens, as form params. Pure over its inputs. */
 export function buildQuoteSessionParams(input: {
   hostId: string
   quoteId: string
   order: CommerceModel.HostOrder
-  charge: CommerceModel.QuoteCheckoutCharge
+  charge: CommerceModel.QuoteCheckoutCharge & Partial<Pick<CommerceModel.InvoiceCheckoutCharge, 'shippingOptions' | 'shippingCountries'>>
   accountId: string
   feeCents: number
   taxRateId: string
@@ -264,7 +290,8 @@ export function buildQuoteSessionParams(input: {
   paymentMethods: CommerceModel.StorefrontPaymentMethodControls
 }): URLSearchParams {
   const { charge, order } = input
-  const quote = order.quote as CommerceModel.OrderQuote
+  const invoice = CommerceModel.orderPayLinkKind(order) === 'invoice'
+  const quote = (order.quote ?? {}) as CommerceModel.OrderQuote
   const params = new URLSearchParams({
     mode: 'payment',
     ...checkoutSessionCardAuthenticationParams('payment'),
@@ -284,7 +311,16 @@ export function buildQuoteSessionParams(input: {
   // Shipping the business priced for the quote's ship-to, charged as the one
   // option, with the address asked for where it ships (and where Stripe Tax
   // reads the tax from). The quote's own address stands when it asks nothing.
-  if (charge.shippingCents > 0) {
+  // An invoiced draft offers the rates it was made with, and the buyer picks
+  // one, as on the draft's first link (AGL-4099).
+  const rates = charge.shippingOptions ?? []
+  if (rates.length > 0) {
+    CommerceModel.appendShippingAddressCollectionParams(
+      params,
+      charge.shippingCountries?.length ? charge.shippingCountries : CommerceModel.CHECKOUT_SHIPPING_COUNTRIES,
+    )
+    CommerceModel.appendCheckoutShippingParams(params, rates)
+  } else if (charge.shippingCents > 0) {
     const country = String(quote.shipTo?.country ?? '').toUpperCase()
     CommerceModel.appendShippingAddressCollectionParams(
       params,
@@ -294,7 +330,7 @@ export function buildQuoteSessionParams(input: {
       { rateId: 'quote', name: 'Shipping', amountCents: charge.shippingCents },
     ])
   }
-  const shippingFloorCents = charge.shippingCents
+  const shippingFloorCents = rates.length > 0 ? CommerceModel.shippingFloorCents(rates) : charge.shippingCents
   for (const [key, value] of Object.entries(
     CommerceModel.destinationChargeParams({
       accountId: input.accountId,
@@ -306,7 +342,7 @@ export function buildQuoteSessionParams(input: {
   )) {
     params.set(key, value)
   }
-  const email = String(quote.customer?.email ?? '').trim()
+  const email = String((invoice ? order.customerEmail : quote.customer?.email) ?? '').trim()
   if (email) params.set('customer_email', email)
   const separator = input.returnUrl.includes('?') ? '&' : '?'
   params.set('success_url', `${input.returnUrl}${separator}session_id={CHECKOUT_SESSION_ID}`)
@@ -317,9 +353,18 @@ export function buildQuoteSessionParams(input: {
   params.set('metadata[type]', 'commerce-draft')
   params.set('metadata[hostId]', input.hostId)
   params.set('metadata[orderId]', input.quoteId)
-  params.set('metadata[quoteId]', input.quoteId)
-  params.set('metadata[quoteLinkVersion]', String(CommerceModel.quoteLinkVersion(quote)))
-  params.set('metadata[quoteUpdatedAtMs]', String(Number(quote.updatedAtMs) || 0))
+  if (invoice) {
+    // An invoice's link version, which the draft branch compares as a
+    // quote's (AGL-4099), and the promotion the draft was priced with, which
+    // it counts once the draft is paid (no hold: the draft's lapsed with its
+    // first session).
+    params.set('metadata[payLinkVersion]', String(CommerceModel.orderPayLinkVersion(order)))
+    if (order.discountId) params.set('metadata[discountId]', String(order.discountId))
+  } else {
+    params.set('metadata[quoteId]', input.quoteId)
+    params.set('metadata[quoteLinkVersion]', String(CommerceModel.quoteLinkVersion(quote)))
+    params.set('metadata[quoteUpdatedAtMs]', String(Number(quote.updatedAtMs) || 0))
+  }
   params.set('metadata[feeCents]', String(input.feeCents))
   // A tax charged as its own line is invisible to Stripe's tax total; this
   // witness is what records it as the business's tax.
@@ -360,24 +405,26 @@ export async function handleQuotePay(deps: QuotePayDeps, req: PluginApiRequest):
   if (!idempotencyKey) return { status: 400, body: { error: 'Paying needs an Idempotency-Key header.' } }
   const refused = await limitedQuoteLink(deps, req, `commerce-quote-pay:${hostId}`, QUOTE_PAY_PRESSES_PER_WINDOW)
   if (refused) return refused
-  const linked = await loadLinkedQuote(deps, hostId, quoteId, token)
+  const linked = await loadLinkedQuote(deps, hostId, quoteId, token, { invoices: true })
   if ('outcome' in linked) return linked.outcome
-  const { hostRef, host, order, storeName, store } = linked.loaded
+  const { hostRef, host, order, storeName, store, kind } = linked.loaded
+  const noun = nounOf(kind)
 
   // Every refusal the customer can be given is above the claim, so none of
   // them spends the press. `v` is the edit of the quote the page showed: a
   // quote changed since is shown again before it is paid, never charged unseen.
+  // An invoice is not edited, so it sends none.
   const seen = Number(bodyOf(req)['v'])
-  if (Number.isFinite(seen) && seen > 0 && seen !== (Number(order.quote?.updatedAtMs) || 0)) {
+  if (kind === 'quote' && Number.isFinite(seen) && seen > 0 && seen !== (Number(order.quote?.updatedAtMs) || 0)) {
     return refusal(409, 'updated', QUOTE_UPDATED_MESSAGE)
   }
-  const blocked = CommerceModel.quotePayRefusal(order, quoteId)
-  if (blocked) return refusal(409, blocked, CommerceModel.quotePayRefusalMessage(blocked, storeName))
+  const blocked = CommerceModel.invoicePayRefusal(order, quoteId)
+  if (blocked) return refusal(409, blocked, CommerceModel.invoicePayRefusalMessage(blocked, storeName, kind))
   const owner = await deps.orgForHost(hostId)
   const unavailable = refusal(
     409,
     'payments-unavailable',
-    `${storeName || 'This business'} can’t take payments online right now. Contact them to pay this quote.`,
+    `${storeName || 'This business'} can’t take payments online right now. Contact them to pay this ${noun}.`,
   )
   if (!checkEntitlement(owner?.org as never, 'commerce')) return unavailable
   const ownerUid = owner?.org?.ownerUid
@@ -389,16 +436,24 @@ export async function handleQuotePay(deps: QuotePayDeps, req: PluginApiRequest):
       chargesEnabled: profile?.get('stripeChargesEnabled'),
       accountLivemode: profile?.get('stripeAccountLivemode'),
     },
-    { subject: `quote ${quoteId} on host ${hostId}` },
+    { subject: `${noun} ${quoteId} on host ${hostId}` },
   )
   if (!ready) return unavailable
   const taxSettings = (store.get('tax') ?? {}) as CommerceModel.TaxSettings
   if (CommerceModel.storefrontTaxDecision({ settings: taxSettings }).kind === 'undecided') {
-    return refusal(409, 'tax-undecided', CommerceModel.quotePayRefusalMessage('tax-undecided', storeName))
+    return refusal(409, 'tax-undecided', CommerceModel.invoicePayRefusalMessage('tax-undecided', storeName, kind))
   }
 
-  const charge = CommerceModel.quoteCheckoutCharge(order, quoteId)
-  const feeCents = resolveTransactionFeeCents(owner?.org as never, charge.feeProductType, charge.goodsCents, charge.totalCents)
+  const charge = CommerceModel.invoiceCheckoutCharge(order, quoteId)
+  // The fee is sized on the most the buyer can pay, as a draft's first link
+  // sized it on its dearest rate.
+  const dearestRateCents = charge.shippingOptions.reduce((most, rate) => Math.max(most, rate.amountCents), 0)
+  const feeCents = resolveTransactionFeeCents(
+    owner?.org as never,
+    charge.feeProductType,
+    charge.goodsCents,
+    charge.totalCents + dearestRateCents,
+  )
   const nativeMode = await deps.nativeMode(String(owner?.id ?? ''))
   const site = host as SiteReturnHost
   const origin = siteReturnOrigin({
@@ -407,8 +462,11 @@ export async function handleQuotePay(deps: QuotePayDeps, req: PluginApiRequest):
     requestHost: headerOf(req, 'host'),
   })
   const returnUrl = `${origin}${quotePageHref(quoteId, token)}`
+  // A draft's first session (the one its paymentLinkUrl opens) is closed
+  // here too, so the draft has one way to pay from the first press on.
   const openedFor = order.checkoutSessionId ?? ''
   const openedAtEdit = Number(order.quote?.updatedAtMs) || 0
+  const openedAtVersion = CommerceModel.orderPayLinkVersion(order)
 
   const claimed = await claimAttempt(deps.firestore(), {
     kind: 'commerce-quote-pay',
@@ -434,7 +492,7 @@ export async function handleQuotePay(deps: QuotePayDeps, req: PluginApiRequest):
       const previous = await deps.expireSession(openedFor)
       if (previous === 'complete') {
         await claim.release()
-        return refusal(409, 'paid', 'This quote has just been paid. Your receipt is on its way.', { confirming: true })
+        return refusal(409, 'paid', `This ${noun} has just been paid. Your receipt is on its way.`, { confirming: true })
       }
       if (previous === 'open') {
         await claim.release()
@@ -505,23 +563,28 @@ export async function handleQuotePay(deps: QuotePayDeps, req: PluginApiRequest):
     const settled = await deps.firestore().runTransaction(async (transaction) => {
       const snapshot = await transaction.get(orderRef)
       const current = snapshot.exists ? (snapshot.data() as CommerceModel.HostOrder) : null
-      if (!current || !CommerceModel.isQuote(current)) return { outcome: NOT_FOUND, displaced: '' }
-      if (!CommerceModel.isUnpaidQuote(current)) {
+      if (!current || CommerceModel.orderPayLinkKind(current) !== kind) return { outcome: NOT_FOUND_ANY, displaced: '' }
+      if (current.status !== 'pending') {
+        const closed = current.status === 'cancelled' || current.status === 'refunded'
         return {
-          outcome: refusal(409, 'paid', CommerceModel.quotePayRefusalMessage('paid', storeName)),
+          outcome: refusal(
+            409,
+            closed ? 'closed' : 'paid',
+            CommerceModel.invoicePayRefusalMessage(closed ? 'closed' : 'paid', storeName, kind),
+          ),
           displaced: '',
         }
       }
-      if (CommerceModel.quoteLinkVersion(current.quote) !== CommerceModel.quoteLinkVersion(order.quote)) {
+      if (CommerceModel.orderPayLinkVersion(current) !== openedAtVersion) {
         return {
           outcome: {
             status: 410,
-            body: { replaced: true, error: `This quote was updated, and ${storeName || 'the business'} sent you a newer link.` },
+            body: { replaced: true, error: `This ${noun} was updated, and ${storeName || 'the business'} sent you a newer link.` },
           },
           displaced: '',
         }
       }
-      if ((Number(current.quote?.updatedAtMs) || 0) !== openedAtEdit) {
+      if (kind === 'quote' && (Number(current.quote?.updatedAtMs) || 0) !== openedAtEdit) {
         return { outcome: refusal(409, 'updated', QUOTE_UPDATED_MESSAGE), displaced: '' }
       }
       transaction.set(orderRef, { checkoutSessionId: minted }, { merge: true })

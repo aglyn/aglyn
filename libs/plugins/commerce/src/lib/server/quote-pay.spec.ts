@@ -228,7 +228,7 @@ describe('the quote page’s data', () => {
   it('opens a link to an older version on the replaced page, with nothing of the quote', async () => {
     storeQuote({ linkVersion: 2 })
     const outcome = await handleQuoteView(deps, viewRequest({ hostId: 'site1', q: 'q-1', t: token(1) }))
-    expect(outcome).toEqual({ status: 200, body: { state: 'replaced', storeName: 'Acme Tents' } })
+    expect(outcome).toEqual({ status: 200, body: { state: 'replaced', kind: 'quote', storeName: 'Acme Tents' } })
     expect((await handleQuoteView(deps, viewRequest({ hostId: 'site1', q: 'q-1', t: token(2) }))).body['state']).toBe('quote')
   })
 
@@ -403,5 +403,169 @@ describe('Pay', () => {
     expect((await handleQuotePay(deps, payRequest({ hostId: 'site1', q: 'q-1' }))).status).toBe(400)
     delete process.env.STRIPE_SECRET_KEY
     expect((await press()).status).toBe(501)
+  })
+})
+
+describe('an invoiced draft order’s link (AGL-4099)', () => {
+  const DRAFT_PATH = 'hosts/site1/orders/d-1'
+  const draftToken = (version = 1) => String(mintQuoteLinkToken('site1', 'd-1', version))
+
+  /** A draft as `draft-order.ts` writes it: one product, a promotion, the store's rate, two rates to ship by. */
+  function storeDraft(overrides: Record<string, unknown> = {}) {
+    docs.set(DRAFT_PATH, {
+      number: 2001,
+      status: 'pending',
+      channel: 'draft',
+      lineItems: [{ productId: 'canopy', variantId: 'red', name: 'Canopy 10x10', productType: 'physical', quantity: 2, unitAmountCents: 120_000 }],
+      totals: { itemsCents: 240_000, discountCents: 24_000, shippingCents: 0, taxCents: 17_820, feeCents: 0, totalCents: 233_820 },
+      taxMode: 'manual',
+      customerEmail: 'jordan@example.com',
+      customerEmailLower: 'jordan@example.com',
+      createdAtMs: 1_000,
+      timeline: [{ atMs: 1_000, event: 'draft', detail: 'Draft created by owner@example.com' }],
+      checkoutSessionId: 'cs_draft_first',
+      paymentLinkUrl: 'https://checkout.stripe.com/c/pay/cs_draft_first',
+      discountId: 'spring',
+      draftShipping: {
+        countries: ['US', 'CA'],
+        options: [
+          { rateId: 'standard', name: 'Standard', amountCents: 1_500 },
+          { rateId: 'express', name: 'Express', amountCents: 4_000 },
+        ],
+      },
+      ...overrides,
+    })
+  }
+
+  const press = (body: Record<string, unknown> = {}, key = 'press-1') =>
+    handleQuotePay(deps, payRequest({ hostId: 'site1', q: 'd-1', t: draftToken(), ...body }, key))
+
+  beforeEach(() => storeDraft())
+
+  it('opens as "Invoice #N" with its lines and totals, and nothing a quote has', async () => {
+    const outcome = await handleQuoteView(deps, viewRequest({ hostId: 'site1', q: 'd-1', t: draftToken() }))
+    expect(outcome.status).toBe(200)
+    expect(outcome.body).toMatchObject({
+      state: 'quote',
+      kind: 'invoice',
+      number: 'Invoice #2001',
+      status: 'unpaid',
+      payable: true,
+      approvalRequired: false,
+      respondable: false,
+      proofs: [],
+      shippingAtPayment: true,
+      taxAtPayment: false,
+      dateMs: 1_000,
+      totals: { itemsCents: 240_000, discountCents: 24_000, shippingCents: 0, taxCents: 17_820, totalCents: 233_820 },
+    })
+    const wire = JSON.stringify(outcome.body)
+    expect(wire).not.toContain('jordan@example.com')
+    expect(wire).not.toContain('owner@example.com')
+    expect(wire).not.toContain('cs_draft_first')
+  })
+
+  it('opens the draft as paid with its receipt once it is paid', async () => {
+    storeDraft({ status: 'paid', timeline: [{ atMs: 1_000, event: 'draft' }, { atMs: 5_000, event: 'paid' }] })
+    const outcome = await handleQuoteView(deps, viewRequest({ hostId: 'site1', q: 'd-1', t: draftToken() }))
+    expect(outcome.body).toMatchObject({ kind: 'invoice', status: 'paid', paidAtMs: 5_000, payable: false })
+    expect(String(outcome.body['receiptUrl'])).toContain('/order-status?o=d-1&t=')
+  })
+
+  it('keeps its version on payLink: a link to an older one opens the replaced page, named an invoice', async () => {
+    storeDraft({ payLink: { version: 2 } })
+    expect(await handleQuoteView(deps, viewRequest({ hostId: 'site1', q: 'd-1', t: draftToken(1) }))).toEqual({
+      status: 200,
+      body: { state: 'replaced', kind: 'invoice', storeName: 'Acme Tents' },
+    })
+    expect((await handleQuoteView(deps, viewRequest({ hostId: 'site1', q: 'd-1', t: draftToken(2) }))).body['kind']).toBe('invoice')
+    expect((await handleQuoteView(deps, viewRequest({ hostId: 'site1', q: 'd-1', t: draftToken(3) }))).status).toBe(404)
+  })
+
+  it('opens no register sale or online order, whatever its token', async () => {
+    docs.set('hosts/site1/orders/pos-1', { status: 'pending', channel: 'pos', lineItems: [] })
+    const outcome = await handleQuoteView(deps, viewRequest({ hostId: 'site1', q: 'pos-1', t: String(mintQuoteLinkToken('site1', 'pos-1', 1)) }))
+    expect(outcome.status).toBe(404)
+  })
+
+  it('prices a fresh session from the stored draft: its discount, its frozen tax and the rates it was made with', async () => {
+    const outcome = await press({ amountCents: 1 })
+    expect(outcome).toEqual({ status: 200, body: { url: 'https://checkout.stripe.com/c/pay/cs_test_new10000' } })
+    const params = created[0].params
+    // The goods after the draft's discount, as one taxed line under the invoice's name.
+    expect(params.get('line_items[0][price_data][unit_amount]')).toBe('216000')
+    expect(params.get('line_items[0][price_data][product_data][name]')).toBe('Invoice #2001')
+    expect(params.get('line_items[1][price_data][unit_amount]')).toBeNull()
+    // Its frozen tax as the rate that yields it on that line.
+    expect(params.get('line_items[0][tax_rates][0]')).toBe('txr_store')
+    expect(taxRateId).toHaveBeenCalledWith(expect.objectContaining({ taxPct: 8.25, taxLabel: 'Sales tax' }))
+    // The rates the draft offered, and where they ship.
+    expect(params.get('shipping_options[0][shipping_rate_data][display_name]')).toBe('Standard')
+    expect(params.get('shipping_options[0][shipping_rate_data][fixed_amount][amount]')).toBe('1500')
+    expect(params.get('shipping_options[1][shipping_rate_data][display_name]')).toBe('Express')
+    expect(params.get('shipping_address_collection[allowed_countries][0]')).toBe('US')
+    expect(params.get('shipping_address_collection[allowed_countries][1]')).toBe('CA')
+    expect(params.get('customer_email')).toBe('jordan@example.com')
+    // What the draft branch reads: the order, its link version and its promotion; nothing of a quote.
+    expect(params.get('metadata[type]')).toBe('commerce-draft')
+    expect(params.get('metadata[orderId]')).toBe('d-1')
+    expect(params.get('metadata[payLinkVersion]')).toBe('1')
+    expect(params.get('metadata[discountId]')).toBe('spring')
+    expect(params.get('metadata[discountHoldKey]')).toBeNull()
+    expect(params.get('metadata[quoteId]')).toBeNull()
+    expect(params.get('metadata[productId]')).toBeNull()
+    expect(params.get('success_url')).toBe(`https://acme.aglyn.app/pay-quote?q=d-1&t=${encodeURIComponent(draftToken())}&session_id={CHECKOUT_SESSION_ID}`)
+  })
+
+  it('closes the draft’s first session before opening its own, and keeps the one it opened', async () => {
+    await press()
+    expect(expired).toEqual(['cs_draft_first'])
+    expect(docs.get(DRAFT_PATH)?.['checkoutSessionId']).toBe('cs_test_new10000')
+    await press({}, 'press-2')
+    expect(expired).toEqual(['cs_draft_first', 'cs_test_new10000'])
+    expect(docs.get(DRAFT_PATH)?.['checkoutSessionId']).toBe('cs_test_new20000')
+  })
+
+  it('asks Stripe Tax at payment for a draft composed under it', async () => {
+    storeDraft({ taxMode: 'stripe-automatic', totals: { itemsCents: 240_000, discountCents: 24_000, shippingCents: 0, taxCents: 0, feeCents: 0, totalCents: 216_000 } })
+    await press()
+    const params = created[0].params
+    expect(params.get('automatic_tax[enabled]')).toBe('true')
+    expect(params.get('line_items[0][tax_rates][0]')).toBeNull()
+  })
+
+  it('refuses a draft made before drafts kept their shipping, rather than charge none', async () => {
+    const legacy = docs.get(DRAFT_PATH) as Record<string, unknown>
+    delete legacy['draftShipping']
+    docs.set(DRAFT_PATH, legacy)
+    const outcome = await press()
+    expect(outcome).toEqual({
+      status: 409,
+      body: { reason: 'shipping-unknown', error: 'This invoice can’t be paid online. Contact Acme Tents to pay it.' },
+    })
+    expect(created).toHaveLength(0)
+  })
+
+  it('refuses a paid or canceled draft in the invoice’s words', async () => {
+    storeDraft({ status: 'paid' })
+    expect((await press()).body).toEqual({ reason: 'paid', error: 'This invoice has been paid.' })
+    storeDraft({ status: 'cancelled' })
+    expect((await press({}, 'press-2')).body).toEqual({
+      reason: 'closed',
+      error: 'This invoice is closed. Contact Acme Tents with any questions.',
+    })
+    expect(created).toHaveLength(0)
+  })
+
+  it('says "invoice" when the store cannot take payments', async () => {
+    docs.set('profiles/owner-1', { stripeAccountId: 'acct_merchant', stripeChargesEnabled: false, stripeAccountLivemode: false })
+    const outcome = await press()
+    expect(outcome.body['error']).toBe('Acme Tents can’t take payments online right now. Contact them to pay this invoice.')
+  })
+
+  it('serves no proof route: those stay a quote’s alone', async () => {
+    const { loadLinkedQuote } = await import('./quote-pay')
+    const linked = await loadLinkedQuote(deps, 'site1', 'd-1', draftToken())
+    expect('outcome' in linked && linked.outcome.status).toBe(404)
   })
 })

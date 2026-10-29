@@ -584,6 +584,13 @@ export function registerCommerceConsoleApi(): void {
   registerPluginApiRoute('commerce/quote', async (req, res) =>
     (await import('./server/quote')).quoteHandler(req, res),
   )
+  // Send invoice (AGL-4099) for an order or a quote, under "Send quotes and
+  // invoices to customers": an unpaid one with the order's lasting pay link,
+  // a paid one as the record. The email, the PDF and sharp load on first
+  // call only.
+  registerPluginApiRoute('commerce/order-invoice-send', async (req, res) =>
+    (await import('./server/order-invoice-send')).orderInvoiceSendHandler(req, res),
+  )
   // Fulfil + mark-delivered with the transition re-asked under the write
   // (AGL-1819) — the same stale-dialog hole cancel-order closes, minus the
   // stock release those two transitions never had. The customer REST API's

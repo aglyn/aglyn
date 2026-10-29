@@ -178,7 +178,7 @@ function sectionBody(
         <GridItems
           spacing={3}
           items={[
-            { size: { xs: 12 }, children: <HostOrdersCard hostId={hostId} /> },
+            { size: { xs: 12 }, children: <HostOrdersCard hostId={hostId} canSendInvoices={quotes.canSend} /> },
             // Prices put to a customer before they buy (AGL-4093), beside the
             // orders they become once paid.
             {

@@ -282,6 +282,11 @@ export interface OrderInvoicePdfInput {
   orderId: string
   /** The store's currency, receipt footer and terms address (`invoiceStoreFrom`). */
   store: OrderInvoiceStore
+  /**
+   * The order's pay link (AGL-4099), printed on an invoice still to be paid
+   * as Pay online with a button and the address; left off when absent.
+   */
+  payUrl?: string | null
 }
 
 function invoiceDocument(input: OrderInvoicePdfInput): CommerceDocument {
@@ -295,6 +300,7 @@ function invoiceDocument(input: OrderInvoicePdfInput): CommerceDocument {
   const sections: CommerceDocument['sections'] = []
   if (data.footer) sections.push({ heading: '', text: data.footer })
   if (data.termsUrl) sections.push({ heading: 'Terms', text: data.termsUrl, link: data.termsUrl })
+  const payUrl = input.order.status === 'pending' && input.payUrl ? input.payUrl : null
   return {
     kind: 'INVOICE',
     title: `Invoice ${data.number}`,
@@ -314,7 +320,9 @@ function invoiceDocument(input: OrderInvoicePdfInput): CommerceDocument {
       emphasis: row.emphasis,
     })),
     sections,
-    pay: null,
+    pay: payUrl
+      ? { url: payUrl, label: 'Pay this invoice', intro: 'Open the invoice on our site to pay it securely by card:' }
+      : null,
   }
 }
 

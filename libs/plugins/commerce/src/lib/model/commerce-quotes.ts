@@ -229,6 +229,48 @@ export interface QuoteSendRecord {
   linkVersion: number
 }
 
+/** One shipping rate a draft order offered (AGL-4099), as checkout's resolved rates name it. */
+export interface OrderDraftShippingRate {
+  rateId: string
+  name: string
+  amountCents: number
+}
+
+/** The shipping a draft order offered when it was made (AGL-4099); see `HostOrder.draftShipping`. */
+export interface OrderDraftShipping {
+  /** Where its rates ship; empty when it offers none. */
+  countries: string[]
+  /** The rates the buyer picks from at payment; empty when it ships nothing. */
+  options: OrderDraftShippingRate[]
+}
+
+/** The lasting pay link of an order that is not a quote (AGL-4099); see `HostOrder.payLink`. */
+export interface OrderPayLink {
+  /** The link's version, absent reading as 1. */
+  version?: number
+  /** Payments through the link the order could not take, as a quote records them. */
+  unmatchedPayments?: QuoteUnmatchedPayment[]
+}
+
+/** One time an order's (or a quote's) invoice was emailed to the customer (AGL-4099). */
+export interface OrderInvoiceSendRecord {
+  to: string
+  subject: string
+  atMs: number
+  /** Who sent it: an email, else a uid. */
+  by: string
+  /** The `Message-ID` the email was sent with. */
+  messageId: string
+  /** The mail provider's own id for the message, when it answered one. */
+  providerId: string | null
+  /** The invoice said it was paid (the record), rather than asking for payment. */
+  paid: boolean
+  /** The pay link version an unpaid invoice carried; null on a paid one. */
+  linkVersion: number | null
+  /** The total the invoice showed. */
+  totalCents: number
+}
+
 /** What only a quote has, on its order document. */
 export interface OrderQuote {
   stage: QuoteStage

@@ -32,7 +32,7 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
 }))
 jest.mock('firebase/firestore', () => ({
   doc: (_db: unknown, ...path: string[]) => ({ __path: path.join('/') }),
-  getDoc: async () => ({ data: () => ({ businessName: 'Juniper Street Co.', currency: 'USD' }) }),
+  getDoc: async () => ({ data: () => ({ businessName: 'Juniper Street Co.', displayName: 'Juniper Street Co.', currency: 'USD' }) }),
 }))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
@@ -93,4 +93,56 @@ it('says why when the server refuses', async () => {
     expect(mockSnack).toHaveBeenCalledWith('Your role does not include "Manage orders" — ask an organization admin', expect.anything()),
   )
   expect(click).not.toHaveBeenCalled()
+})
+
+describe('Send invoice (AGL-4099)', () => {
+  const PAID = {
+    number: 1042,
+    status: 'paid',
+    channel: 'online',
+    customerEmail: 'jordan@example.com',
+    lineItems: [{ productId: 'p1', name: 'Mug', quantity: 1, unitAmountCents: 900 }],
+    totals: { itemsCents: 900, totalCents: 900, feeCents: 0 },
+  } as never
+
+  const openForm = async (order: never = PAID, canSend?: boolean) => {
+    render(<OrderInvoiceButton hostId="h1" orderId="o1" order={order} canSend={canSend} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Invoice' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /Send invoice/ }))
+    await waitFor(() => expect((screen.getByLabelText(/Subject/) as HTMLInputElement).value).toBe('Invoice #1042 from Juniper Street Co.'))
+  }
+
+  it('emails the invoice to the order’s customer, once per attempt', async () => {
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ sent: true, to: 'jordan@example.com', paid: true }) })
+    await openForm()
+    expect((screen.getByLabelText(/^To/) as HTMLInputElement).value).toBe('jordan@example.com')
+    expect(screen.getByText(/shows the invoice as paid/)).toBeTruthy()
+    fireEvent.change(screen.getByLabelText(/Message/), { target: { value: 'Thanks!' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(mockSnack).toHaveBeenCalledWith('Invoice #1042 sent to jordan@example.com', expect.anything()))
+    const [, url, init] = mockFetch.mock.calls[0]
+    expect(url).toBe('/api/commerce/order-invoice-send')
+    expect(init.headers['Idempotency-Key']).toBeTruthy()
+    expect(JSON.parse(init.body)).toEqual({
+      hostId: 'h1',
+      orderId: 'o1',
+      to: 'jordan@example.com',
+      subject: 'Invoice #1042 from Juniper Street Co.',
+      message: 'Thanks!',
+    })
+  })
+
+  it('says up front why a canceled order has no invoice, and sends nothing', async () => {
+    await openForm({ ...(PAID as object), status: 'cancelled' } as never)
+    expect(screen.getByText('This order was canceled or refunded, so it has no invoice to send.')).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('is held, with the reason, without "Send quotes and invoices to customers"', () => {
+    render(<OrderInvoiceButton hostId="h1" orderId="o1" order={PAID} canSend={false} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Invoice' }))
+    const item = screen.getByRole('menuitem', { name: /Send invoice/ })
+    expect(item.getAttribute('aria-disabled')).toBe('true')
+    expect(item.textContent).toContain('Send quotes and invoices to customers')
+  })
 })

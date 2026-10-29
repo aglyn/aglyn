@@ -100,3 +100,20 @@ describe('the pay link', () => {
     expect(quotePayLinkUrl({}, 'site1', 'q-1', 1)).toBeNull()
   })
 })
+
+describe('an order’s invoice link (AGL-4099)', () => {
+  it('signs any order the same way, so a quote’s links already sent keep verifying unchanged', () => {
+    // The signature is over the order id, whatever its channel: a quote's
+    // token of before is byte-for-byte the token of now.
+    const quoteToken = String(mintQuoteLinkToken('site1', 'q-1', 3))
+    expect(quoteToken).toBe(String(mintQuoteLinkToken('site1', 'q-1', 3)))
+    expect(verifyQuoteLinkToken('site1', 'q-1', quoteToken)).toBe(3)
+    const draftToken = String(mintQuoteLinkToken('site1', 'draft-1', 1))
+    expect(verifyQuoteLinkToken('site1', 'draft-1', draftToken)).toBe(1)
+    // …and one order's link never opens another.
+    expect(verifyQuoteLinkToken('site1', 'q-1', draftToken)).toBeNull()
+    expect(quotePayLinkUrl({ subdomain: 'acme' }, 'site1', 'draft-1', 1)).toMatch(
+      /^https:\/\/acme\.[a-z.]+\/pay-quote\?q=draft-1&t=1\.[0-9a-f]{32}$/,
+    )
+  })
+})

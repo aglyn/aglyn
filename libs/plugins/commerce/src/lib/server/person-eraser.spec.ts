@@ -206,6 +206,21 @@ describe('commerce’s person eraser', () => {
     })
   })
 
+  it('keeps the invoices an order and a quote were emailed as on record, without the address (AGL-4099)', async () => {
+    const invoice = { to: 'Jane@Example.com', subject: 'Invoice #1045', atMs: 6, by: 'owner@example.com', messageId: '<invoice.1.a@acme.com>', providerId: null, paid: true, linkVersion: null, totalCents: 900 }
+    docs.set('hosts/h1/orders/o1', { ...docs.get('hosts/h1/orders/o1'), invoiceSends: [invoice] })
+    docs.set('hosts/h2/orders/q3', {
+      number: 1045,
+      status: 'pending',
+      channel: 'quote',
+      quote: { stage: 'sent', customer: { email: 'Jane@Example.com', emailLower: EMAIL } },
+      invoiceSends: [invoice],
+    })
+    await eraser(REQUEST)
+    expect(docs.get('hosts/h1/orders/o1')?.['invoiceSends']).toEqual([{ ...invoice, to: '' }])
+    expect(docs.get('hosts/h2/orders/q3')?.['invoiceSends']).toEqual([{ ...invoice, to: '' }])
+  })
+
   it('takes the customer off their check-ins at the window, and keeps who was checked in (AGL-4043)', async () => {
     docs.set('hosts/h1/checkIns/o_o1_0_0', {
       orderId: 'o1',

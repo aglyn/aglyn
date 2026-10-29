@@ -291,7 +291,9 @@ snapshots, totals, and a timeline:
   the note below — and a connected Stripe account, since the buyer pays on a
   Stripe page. Without one, the **Draft order** dialog says so and links to
   **Payments**. After paying, the buyer lands on the order's status page on
-  your site; if they back out, they land on your site's home page.
+  your site; if they back out, they land on your site's home page. The Stripe
+  page lapses after a day; [send the invoice](orders-and-returns.md#send-invoice)
+  for a pay link that keeps working.
 
 ### The Orders page {#orders-screen}
 

@@ -27,6 +27,15 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — Invoices
+
+- **[Send an invoice](commerce-and-bookings/commerce/orders-and-returns.md#send-invoice)**
+  — email an order's or a quote's invoice from **Invoice** in the order's dialog, or
+  from the quote. An unpaid one has a **Pay** button to a
+  [pay link that doesn't expire](commerce-and-bookings/commerce/orders-and-returns.md#invoice-pay-link),
+  so a draft order can be paid on any day; a paid one is your customer's record. A
+  quote's invoice arrives in the quote's conversation.
+
 ## October 2026 — Request a quote forms
 
 - **[A Request a quote form](commerce-and-bookings/commerce/quotes-and-proofs.md#a-request-a-quote-form)**
