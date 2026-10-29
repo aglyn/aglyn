@@ -92,8 +92,10 @@ function mockMakeFirestore() {
       mockDocs.set(path, applyData(mockDocs.get(path), data, true))
     },
   })
-  const makeCollection = (prefix: string) => ({
+  const makeCollection = (prefix: string): Record<string, unknown> => ({
     doc: (id?: string) => makeDoc(`${prefix}/${id ?? `auto-${++mockAutoId}`}`),
+    // A site's pages, as a page change lists them (AGL-4116).
+    select: () => makeCollection(prefix),
     // A site's remembered preferences (AGL-3661), listed whole.
     limit: () => ({
       get: async () => ({
@@ -466,6 +468,80 @@ describe('on the build rung (AGL-3616)', () => {
       await POST(post(buildBody(PRO_ORG, { question: 'Make the about page shorter', drafts }))),
     )
     expect(ghost.find((event) => event.type === 'done')?.proposal ?? null).toBeNull()
+  })
+
+  describe('a change to a page the site has (AGL-4116)', () => {
+    const changeCall = (input: Record<string, unknown>): Frame[] => [
+      { type: 'content_block_start', index: 1, content_block: { type: 'tool_use', name: 'change_page' } },
+      { type: 'content_block_delta', index: 1, delta: { type: 'input_json_delta', partial_json: JSON.stringify(input) } },
+      { type: 'content_block_stop', index: 1 },
+    ]
+    const changeBody = (orgId: string) =>
+      buildBody(orgId, { question: 'Make the image in the top of the home page fill the entire background' })
+    beforeEach(() => {
+      mockDocs.set('hosts/host-1', {
+        orgId: PRO_ORG,
+        name: 'Groomers',
+        defaultHomeScreenId: 'scr-home',
+        screens: { 'scr-home': '/' },
+      })
+      mockDocs.set('hosts/host-1/screens/scr-home', { displayName: 'Home', slug: '/' })
+      mockDocs.set('hosts/host-1/screens/scr-copy', { displayName: 'Home', slug: '/' })
+    })
+
+    it('offers change_page beside propose_build on a plan with version history, with the site’s pages as volatile data', async () => {
+      armStream([OPENING, text('I will make that change as a draft of Home.'), ...closing()])
+      await (await POST(post(changeBody(PRO_ORG)))).text()
+      const request = providerRequest()
+      expect(request.tools.map((tool: { name: string }) => tool.name)).toEqual(['propose_build', 'change_page'])
+      const system = request.system as SystemBlock[]
+      const protocol = system.find((block) => block.text.startsWith('Building on this site:'))
+      expect(protocol?.text).toContain('Changing a page the site already has:')
+      expect(protocol?.cache_control).toEqual({ type: 'ephemeral' })
+      const pages = system.find((block) => block.text.startsWith("The site's pages"))
+      expect(pages?.cache_control).toBeUndefined()
+      expect(pages?.text).toContain('- scr-home · Home · / · live, the home page')
+      expect(pages?.text).toContain('- scr-copy · Home · / · draft, not live')
+    })
+
+    it('a call comes back as an inert change of the named page, and nothing is changed', async () => {
+      armStream([
+        OPENING,
+        text('I will make that change as a draft of Home.'),
+        ...changeCall({ summary: 'Fill the hero on Home', page: 'scr-home', change: 'Make the top image fill the background.' }),
+        ...closing('tool_use'),
+      ])
+      const events = await readEvents(await POST(post(changeBody(PRO_ORG))))
+      const done = events.find((event) => event.type === 'done')
+      expect(done?.pageChange).toEqual({
+        id: 'page-change',
+        hostId: 'host-1',
+        pageId: 'scr-home',
+        pageName: 'Home',
+        brief: 'Make the top image fill the background.',
+        summary: 'Fill the hero on Home',
+      })
+      expect([...mockDocs.keys()].some((path) => /aiJobs|versions/.test(path))).toBe(false)
+    })
+
+    it('a page the site does not have proposes nothing, and says so', async () => {
+      armStream([
+        OPENING,
+        text('I will make that change.'),
+        ...changeCall({ summary: 'x', page: 'scr-nowhere', change: 'Make it blue.' }),
+        ...closing('tool_use'),
+      ])
+      const events = await readEvents(await POST(post(changeBody(PRO_ORG))))
+      expect(events.find((event) => event.type === 'done')?.pageChange ?? null).toBeNull()
+      expect(events.some((event) => event.type === 'error' && /could not be found on this site/.test(String(event.error)))).toBe(true)
+    })
+
+    it('is not offered without version history: Free plans the change as before', async () => {
+      mockDocs.set('hosts/host-1', { orgId: FREE_ORG, name: 'Groomers', screens: { 'scr-home': '/' } })
+      armStream([OPENING, text('I will plan that.'), ...closing()])
+      await (await POST(post(changeBody(FREE_ORG)))).text()
+      expect(providerRequest().tools.map((tool: { name: string }) => tool.name)).toEqual(['propose_build'])
+    })
   })
 
   it('stays closed off a site, without ai.generate, or with the switch off — and the provider never sees the tool', async () => {

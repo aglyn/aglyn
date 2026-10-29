@@ -34,6 +34,12 @@ the exact docs section and the console page where you do it.
   for a change to the page, component or layout you have open, and it shows
   exactly what would change before anything does. See
   [Edits in the Besigner](#edits-in-the-besigner).
+- **Change a page as a draft** (with AI generation on a paid plan) — ask for a
+  change to one of the site's pages from anywhere on the site, and it saves the
+  change as a draft of that page, with **Open in the Besigner** to check it and
+  publish it. See [Change a page](../ai/assist-builds.md#change-a-page).
+- **Keep one conversation per site** — each site has its own conversation, so
+  what you asked on one site never becomes part of a request on another.
 - **Answer in your language** — ask in any language and it answers in that
   language. It looks your question up in this documentation, which is in English,
   so its **Sources** are English pages.
@@ -101,9 +107,11 @@ the usual permission checks in place. If you'd rather stay where you are,
 choose **No thanks** and the card goes away.
 
 This is deliberate. A card that only opens a page cannot change your site by
-misunderstanding you, because it has no way to. The only changes the assistant
-can make are the [edits in the Besigner](#edits-in-the-besigner), and each of
-those waits for you to apply it.
+misunderstanding you, because it has no way to. The changes the assistant can
+make are the [edits in the Besigner](#edits-in-the-besigner), each of which waits
+for you to apply it, the [builds](../ai/assist-builds.md) you confirm, and
+[changes to a page](../ai/assist-builds.md#change-a-page) saved as a draft that
+visitors don't see until you publish it.
 
 ## Edits in the Besigner {#edits-in-the-besigner}
 

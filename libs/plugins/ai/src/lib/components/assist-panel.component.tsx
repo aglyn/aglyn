@@ -94,7 +94,13 @@ import {
   type AssistPendingFollowUp,
 } from '../model/assist-follow-up'
 import type { AiJobSummary } from '../model/ai-jobs.types'
-import { startAssistBuildRequest } from './ai-job-requests'
+import { cancelAiJobRequest, startAssistBuildRequest, startAssistPageChangeRequest } from './ai-job-requests'
+import {
+  assistPageChangeDraftVersion,
+  isAssistPageChangeProposal,
+  type AssistPageChangeProposal,
+} from '../model/assist-page-change'
+import { AssistPageChangeCard } from './assist-page-change-card.component'
 import { aiInsightSurfaceForPath } from '../model/ai-insight'
 import { AssistJobsDrawer } from './assist-jobs-drawer.component'
 import {
@@ -104,7 +110,7 @@ import {
   useAiJobsOpenRequest,
   type AiJobsOpenRequest,
 } from './ai-jobs-store'
-import { aiJobsActivity, aiJobsLauncherLabel } from '../model/ai-job-activity'
+import { aiJobPhase, aiJobsActivity, aiJobsLauncherLabel } from '../model/ai-job-activity'
 import { AI_SITE_BUILD_HREF } from '../model/ai-job-notice'
 import { AiModelSelector } from './ai-model-selector.component'
 import { AiUsageStrip } from './ai-usage-strip.component'
@@ -204,6 +210,20 @@ interface AssistMessage {
   buildJob?: AiJobSummary | null
   /** Why the build could not be planned or confirmed. */
   buildNotice?: string | null
+  /**
+   * A later turn's plan replaced this one before it was confirmed (AGL-4116):
+   * its job was canceled, and the card gives way to one line.
+   */
+  buildReplaced?: boolean
+  /**
+   * A change to a page the site already has (AGL-4116): the panel starts its
+   * `edit` job when the turn ends, and the card links the draft it makes.
+   */
+  pageChange?: AssistPageChangeProposal | null
+  /** The edit job the change started, as last seen. */
+  pageChangeJob?: AiJobSummary | null
+  /** Why the change could not be started. */
+  pageChangeNotice?: string | null
 }
 
 /** The key a follow-up waiting for its canvas is kept under, per org (AGL-3616). */
@@ -245,8 +265,31 @@ export function assistThreadDraftLinks(
   return assistBuildDraftLinks(jobs, orgSlug)
 }
 
+/**
+ * The builds in a thread whose plan is still waiting on the person
+ * (AGL-4116): queued, being planned, or planned and not yet confirmed. A new
+ * plan in the same thread replaces them, so a conversation that keeps
+ * changing a plan holds one plan, not one per message.
+ */
+export function assistUnconfirmedBuilds(
+  messages: ReadonlyArray<Pick<AssistMessage, 'build' | 'buildJob' | 'buildReplaced'>>,
+): Array<{ index: number; jobId: string }> {
+  return messages.flatMap((message, index) => {
+    const job = message.build && !message.buildReplaced ? message.buildJob : null
+    if (!job) return []
+    const phase = aiJobPhase(job)
+    return phase === 'queued' || phase === 'planning' || phase === 'plan-ready' ? [{ index, jobId: job.id }] : []
+  })
+}
+
+/** What a plan a later one replaced says in its card's place (AGL-4116). */
+export const ASSIST_BUILD_REPLACED_COPY = 'Replaced by the updated plan below. Nothing from this one was built.'
+
 /** What a stored build that never got its job says, rather than planning forever. */
 const BUILD_NOT_STARTED = 'This build was not started. Ask again to plan it.'
+
+/** What a stored page change that never got its job says (AGL-4116). */
+const PAGE_CHANGE_NOT_STARTED = 'This change was not started. Ask again to make it.'
 
 interface AssistQuotaInfo {
   period: 'day' | 'month'
@@ -293,10 +336,13 @@ function loadThread(key: string): AssistMessage[] {
     if (!Array.isArray(parsed)) return []
     // A build whose job was still being created when the page went away is
     // not started again from a stored thread (AGL-3616): it says so instead.
+    // A page change likewise (AGL-4116).
     return parsed.map((message) =>
       message.build && !message.buildJob && !message.buildNotice
         ? { ...message, buildNotice: BUILD_NOT_STARTED }
-        : message,
+        : message.pageChange && !message.pageChangeJob && !message.pageChangeNotice
+          ? { ...message, pageChangeNotice: PAGE_CHANGE_NOT_STARTED }
+          : message,
     )
   } catch {
     return []
@@ -900,6 +946,8 @@ export function AssistPanelComponent(props: AssistDockProps) {
     }
     /** The build this turn proposed, started once its stream ends (AGL-3616). */
     let proposedBuild: AssistBuildProposal | null = null
+    /** The page change this turn asked for, started once its stream ends (AGL-4116). */
+    let proposedChange: AssistPageChangeProposal | null = null
     try {
       // The canvas outline rides along from the besigner document the open
       // editor holds — ids, component ids and short values, never the stored
@@ -1031,6 +1079,9 @@ export function AssistPanelComponent(props: AssistDockProps) {
             // The build proposal (AGL-3616), shape-checked before it can start a job.
             const build = isAssistBuildProposal(event.build) ? event.build : null
             proposedBuild = build
+            // The page change (AGL-4116), shape-checked before it can start a job.
+            const pageChange = isAssistPageChangeProposal(event.pageChange) ? event.pageChange : null
+            proposedChange = pageChange
             patchAnswer((message) => ({
               ...message,
               exchangeId: (event.exchangeId as string | null) ?? null,
@@ -1038,6 +1089,7 @@ export function AssistPanelComponent(props: AssistDockProps) {
               proposal,
               edit,
               ...(build ? { build, buildJob: null, buildNotice: null } : {}),
+              ...(pageChange ? { pageChange, pageChangeJob: null, pageChangeNotice: null } : {}),
             }))
             if (event.quota) setQuota(event.quota as AssistQuotaInfo)
             publishMeter(event.meter)
@@ -1054,6 +1106,9 @@ export function AssistPanelComponent(props: AssistDockProps) {
             if (build) {
               trackEvent('assistant_proposal_shown', { action: build.id })
             }
+            if (pageChange) {
+              trackEvent('assistant_proposal_shown', { action: pageChange.id })
+            }
           } else if (event.type === 'error') {
             failAnswer(String(event.error ?? 'The assistant stream failed.'))
           }
@@ -1062,6 +1117,21 @@ export function AssistPanelComponent(props: AssistDockProps) {
       // One request, one build (AGL-3616): the job is created here, once,
       // through the job door, and plans inline; its card shows the plan.
       if (proposedBuild) {
+        // One plan per conversation (AGL-4116): a plan this thread proposed
+        // and the person has not confirmed is replaced by the new one, which
+        // the chat wrote from the whole request as it now stands. Its job is
+        // canceled, so it never builds and never warns another door.
+        for (const replaced of assistUnconfirmedBuilds(messages)) {
+          updateThread(askedIn, (prior) =>
+            prior.map((entry, i) => (i === replaced.index ? { ...entry, buildReplaced: true } : entry)),
+          )
+          void cancelAiJobRequest(user, scopedOrgId, replaced.jobId).then(({ job }) => {
+            if (!job) return
+            updateThread(askedIn, (prior) =>
+              prior.map((entry, i) => (i === replaced.index ? { ...entry, buildJob: job } : entry)),
+            )
+          })
+        }
         const decision = await startAssistBuildRequest(user, scopedOrgId, proposedBuild)
         // The plan the door ran inline has just spent (AGL-3722), so the strip
         // moves with it, to the figure the plan card quotes. Left to the jobs
@@ -1075,6 +1145,19 @@ export function AssistPanelComponent(props: AssistDockProps) {
           refreshAiUsageMeterFree(uid, scopedOrgId, decision.job?.review?.freeCredits, readAiUsageMeter(uid, scopedOrgId))
         }
         patchAnswer((message) => ({ ...message, buildJob: decision.job, buildNotice: decision.error }))
+      }
+      // A change to a page (AGL-4116): its edit job starts here, once, with
+      // no plan to confirm. A follow-up to a page this conversation already
+      // changed starts from the draft that change made.
+      if (proposedChange) {
+        const decision = await startAssistPageChangeRequest(
+          user,
+          scopedOrgId,
+          proposedChange,
+          assistPageChangeDraftVersion(messages, proposedChange.pageId),
+        )
+        publishMeter(decision.meter)
+        patchAnswer((message) => ({ ...message, pageChangeJob: decision.job, pageChangeNotice: decision.error }))
       }
     } catch (error) {
       console.error(error)
@@ -1215,6 +1298,35 @@ export function AssistPanelComponent(props: AssistDockProps) {
       setMessages((prior) => prior.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)))
     },
     [setMessages],
+  )
+
+  /** Keep what a page change card learned about its job on its own message (AGL-4116). */
+  const patchPageChange = useCallback(
+    (index: number, patch: Pick<AssistMessage, 'pageChangeJob' | 'pageChangeNotice'>) => {
+      setMessages((prior) => prior.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)))
+    },
+    [setMessages],
+  )
+
+  /** Start a page change again after it failed: a new edit job, from the same draft. */
+  const [retryingChange, setRetryingChange] = useState<number | null>(null)
+  const retryPageChange = useCallback(
+    async (index: number) => {
+      const proposal = messages[index]?.pageChange
+      if (!proposal || !scopedOrgId) return
+      setRetryingChange(index)
+      patchPageChange(index, { pageChangeJob: null, pageChangeNotice: null })
+      const decision = await startAssistPageChangeRequest(
+        user,
+        scopedOrgId,
+        proposal,
+        assistPageChangeDraftVersion(messages.slice(0, index), proposal.pageId),
+      )
+      publishMeter(decision.meter)
+      patchPageChange(index, { pageChangeJob: decision.job, pageChangeNotice: decision.error })
+      setRetryingChange(null)
+    },
+    [messages, patchPageChange, publishMeter, scopedOrgId, user],
   )
 
   /** Wave an edit card away. Nothing to tell the server: nothing happened. */
@@ -1500,7 +1612,25 @@ export function AssistPanelComponent(props: AssistDockProps) {
                         onDismiss={() => dismissEdit(index)}
                       />
                     )}
-                  {message.role === 'assistant' && message.build && scopedOrgId && (
+                  {message.role === 'assistant' && message.pageChange && scopedOrgId && (
+                    <AssistPageChangeCard
+                      proposal={message.pageChange}
+                      job={message.pageChangeJob ?? null}
+                      notice={message.pageChangeNotice ?? null}
+                      orgId={scopedOrgId}
+                      orgSlug={orgSlug}
+                      user={user}
+                      busy={retryingChange === index}
+                      onJob={(job) => patchPageChange(index, { pageChangeJob: job })}
+                      onRetry={() => void retryPageChange(index)}
+                    />
+                  )}
+                  {message.role === 'assistant' && message.build && message.buildReplaced && (
+                    <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 0.5 }}>
+                      {ASSIST_BUILD_REPLACED_COPY}
+                    </Typography>
+                  )}
+                  {message.role === 'assistant' && message.build && !message.buildReplaced && scopedOrgId && (
                     <AssistBuildCard
                       proposal={message.build}
                       job={message.buildJob ?? null}
