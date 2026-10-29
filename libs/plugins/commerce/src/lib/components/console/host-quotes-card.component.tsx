@@ -201,8 +201,8 @@ export function HostQuotesCard(props: HostQuotesCardProps) {
     <CardDisplay
       header={'Quotes'}
       subheader={'Prices for a customer’s order before they buy'}
-      help={pluginDocsHelp('commerce', {
-        anchor: '#orders',
+      help={pluginDocsHelp('quotes', {
+        anchor: '#make-a-quote',
         title: 'Quotes',
         excerpt:
           'Put a price to a customer with your products, items typed for the job and anything ' +

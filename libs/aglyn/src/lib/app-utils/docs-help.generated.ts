@@ -502,6 +502,11 @@ export const PLUGIN_DOCS = {
     title: 'Publisher handbook',
     excerpt: 'Publishing to the Aglyn marketplace — from profile setup through listing authoring, review, updates, and getting paid.',
   },
+  quotes: {
+    path: '/commerce-and-bookings/commerce/quotes-and-proofs',
+    title: 'Quotes',
+    excerpt: 'Price a customer\'s order before they buy, with products and their add-ons, items typed for the job, things included at no charge, a discount, shipping, notes and terms, and tax worked out as you go.',
+  },
   redirects: {
     path: '/building-sites/redirects/overview',
     title: 'Redirects',
@@ -671,6 +676,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   printOnDemand: ['#before-you-start', '#connect', '#import-products', '#costs-and-margins', '#orders', '#test-orders', '#canceling-and-refunding', '#shipments-and-tracking', '#disconnect', '#what-is-sent-to-the-service'],
   publishAPlugin: ['#the-publish-pipeline', '#private-plugins', '#paid-listings', '#your-publisher-profile', '#profile-card', '#listing-publisher-card', '#tips', '#related'],
   publisherHandbook: ['#before-your-first-publish', '#public-profile', '#the-publisher-agreement', '#where-to-publish-from', '#what-installing-each-type-does', '#rules-an-email-starter-has-to-meet', '#publishing-a-version', '#bundle-and-manifest', '#before-you-publish', '#review-what-happens-after-you-publish', '#the-two-badges-and-what-each-one-promises', '#asking-to-be-verified', '#testing-a-version-before-it-is-approved', '#watching-your-own-submission', '#disabled-versions', '#private-plugins', '#authoring-your-listing', '#edit-listing', '#your-listings', '#listing-links', '#what-your-listing-can-say-about-aglyn', '#versioning--updates', '#listing-changelog', '#version-history', '#shipping-a-new-version', '#how-installs-work-the-buyer-side', '#install-card', '#installed-from-the-marketplace', '#licenses', '#workspace-licenses', '#licenses-you-bought', '#getting-paid', '#set-up-payouts', '#purchases-and-fees', '#refund-reversals', '#low-prices-and-processing'],
+  quotes: ['#what-a-quote-holds', '#quote-defaults', '#make-a-quote', '#totals-and-tax', '#pay-link', '#customer-page', '#paying', '#paid', '#quotes-are-not-orders', '#permissions'],
   redirects: ['#manage-redirects', '#query-strings-pass-through', '#sending-visitors-to-another-site', '#import-and-export', '#columns', '#how-a-row-finds-an-existing-rule', '#conflicts-the-dry-run-and-undo', '#ask-aglyn-ai', '#metrics', '#match-modes-v2', '#related'],
   reviewPlatforms: ['#who-is-invited', '#trustpilot', '#trustpilot-invitation-address', '#trustpilot-api', '#yotpo-reviews', '#on-the-order', '#switching-it-off-for-a-site', '#related'],
   salesChannels: ['#set-up-sales-channels', '#turn-on-a-channel', '#keep-the-address-private', '#what-each-product-sends', '#brand-barcode-and-category', '#shipping', '#check-your-products', '#how-fresh-the-feed-is', '#earlier-merchant-center-address', '#turn-off', '#related'],
@@ -888,7 +894,6 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
     '#commerce-glance': 'Commerce at a glance',
     '#gift-cards': 'Gift cards & store credit',
     '#inventory-locations': 'Inventory locations',
-    '#orders': 'Orders',
     '#orders-screen': 'The Orders page',
     '#payment-methods': 'Payment methods',
     '#pickup-and-local-delivery': 'Pickup and local delivery',
@@ -1222,6 +1227,10 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
     '#where-to-publish-from': 'Where to publish from',
     '#workspace-licenses': 'This workspace',
     '#your-listings': 'Your listings',
+  },
+  quotes: {
+    '#make-a-quote': 'Make a quote',
+    '#quote-defaults': 'New-quote defaults',
   },
   redirects: {
     '#manage-redirects': 'Manage redirects',

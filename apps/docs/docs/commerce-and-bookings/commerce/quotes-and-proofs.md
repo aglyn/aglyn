@@ -34,11 +34,16 @@ Quotes are on your site's **Products** hub, on the **Orders** tab, in the
 - **Notes for the customer** and **Terms**.
 
 Each quote also keeps whether **Customers approve the proof before they can pay**.
-New quotes start with your store's setting, in the **Quotes** card on the
-**Checkout** settings page, and you can change it on each quote. When it is on and
-the quote has a proof the customer hasn't approved, the customer's page asks them to
-approve it instead of offering **Pay**, and a payment can't be started for it. A
-quote with no proof is never held.
+When it is on and the quote has a proof the customer hasn't approved, the customer's
+page asks them to approve it instead of offering **Pay**, and a payment can't be
+started for it. A quote with no proof is never held.
+
+## New-quote defaults {#quote-defaults}
+
+The **Quotes** card on the **Checkout** settings page sets what every new quote starts
+with: whether customers approve the proof before they can pay. Turn the switch on or
+off and choose **Save**. Each quote starts with this setting, and you can change it on
+the quote.
 
 ## Make a quote {#make-a-quote}
 
