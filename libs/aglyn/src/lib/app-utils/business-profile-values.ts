@@ -58,7 +58,11 @@ export const BUSINESS_TONE_LABELS: Readonly<Record<BusinessTone, string>> = {
   plain: 'Plain and direct',
 }
 
-/** The fields the profile document stores itself. */
+/**
+ * The fields the profile document stores itself. `founded` is the year the
+ * business started (AGL-4092): the guided start asks it, and every job that
+ * writes about the business reads it here rather than marking a gap for it.
+ */
 export const BUSINESS_PROFILE_FIELDS = [
   'whatYouDo',
   'services',
@@ -66,6 +70,7 @@ export const BUSINESS_PROFILE_FIELDS = [
   'audience',
   'tone',
   'toneNotes',
+  'founded',
 ] as const
 export type BusinessProfileField = (typeof BUSINESS_PROFILE_FIELDS)[number]
 
@@ -76,6 +81,8 @@ export const BUSINESS_PROFILE_MAX_CHARS: Readonly<Record<Exclude<BusinessProfile
   serviceArea: 120,
   audience: 160,
   toneNotes: 200,
+  /** A year, four digits, as the guided start asks it. */
+  founded: 4,
 }
 
 /** At most this many services are kept. */
@@ -89,6 +96,8 @@ export interface BusinessProfileDoc {
   audience?: string
   tone?: BusinessTone | null
   toneNotes?: string
+  /** The year the business started, four digits: `2019`. */
+  founded?: string
   /** Who wrote each stored value; a value without one is the owner's. */
   sources?: Partial<Record<BusinessProfileField, BusinessProfileSource>>
   updatedAt?: unknown
@@ -97,7 +106,7 @@ export interface BusinessProfileDoc {
 
 /** The values a write carries, before they are sanitized. */
 export type BusinessProfileValues = Partial<
-  Pick<BusinessProfileDoc, 'whatYouDo' | 'services' | 'serviceArea' | 'audience' | 'tone' | 'toneNotes'>
+  Pick<BusinessProfileDoc, 'whatYouDo' | 'services' | 'serviceArea' | 'audience' | 'tone' | 'toneNotes' | 'founded'>
 >
 
 export const text = (value: unknown, max: number): string =>
@@ -131,6 +140,20 @@ export function fieldValue(doc: BusinessProfileValues | null | undefined, field:
     default:
       return text(doc?.[field], BUSINESS_PROFILE_MAX_CHARS[field])
   }
+}
+
+/**
+ * What is wrong with a year founded as the owner typed it (AGL-4092), or
+ * `null` when nothing is: empty, or four digits no later than this year —
+ * the guided start's own rule.
+ */
+export function businessProfileFoundedProblem(value: unknown, now: Date = new Date()): string | null {
+  const year = typeof value === 'string' ? value.trim() : ''
+  if (!year) return null
+  const latest = now.getFullYear()
+  return /^\d{4}$/.test(year) && Number(year) >= 1000 && Number(year) <= latest
+    ? null
+    : `Enter the year as four digits, like ${latest - 10}.`
 }
 
 export const isEmpty = (value: unknown): boolean =>

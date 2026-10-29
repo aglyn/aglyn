@@ -59,9 +59,13 @@ export const AI_SITE_CONTEXT_MAX_CHARS = 1_600
 /** Pages, forms, components and layouts listed by name in the site index, each. */
 export const AI_SITE_CONTEXT_INDEX_PER_KIND = 8
 
-/** The rule every block closes with, whatever else it says. */
+/**
+ * The rule every block closes with, whatever else it says. A missing fact is
+ * left out, never a gap for the owner (AGL-4092): "[phone number]" here put
+ * "[email]" and "[phone]" in an Assist build's plan.
+ */
 export const AI_SITE_CONTEXT_RULE =
-  'Never invent a business name, a person’s name, an email address, a phone number, a street address, opening hours, prices, reviews or testimonials. Use only the facts above; where a page needs one that is missing, write around it or leave a bracketed placeholder such as [phone number] for the owner to fill.'
+  'Never invent a business name, a person’s name, an email address, a phone number, a street address, opening hours, prices, reviews or testimonials. Use only the facts above; where a page needs one that is missing, leave it out and write the sentence without it, never a placeholder for the owner to fill.'
 
 export interface AiSiteContextInput {
   /** The resolved business profile; `null` when the site has none to read. */
@@ -141,6 +145,8 @@ function contextGroups(input: AiSiteContextInput): string[][] {
         line('Business name', profile.name?.value, 120),
         line('What it does', profile.whatYouDo?.value),
         line('Business type', profile.businessType, 80),
+        // The year the business started (AGL-4092), which a plan once marked "[year founded]".
+        line('Founded', profile.founded?.value, 12),
         line('Services', profile.services?.value.join('; ')),
         line('Area served', profile.serviceArea?.value, 160),
         line('Audience', profile.audience?.value, 160),

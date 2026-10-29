@@ -2829,6 +2829,7 @@
           ],
           "result": {
             "audience": "",
+            "founded": "",
             "serviceArea": "",
             "services": [
               "a",
@@ -2876,6 +2877,7 @@
           ],
           "result": {
             "audience": "Owners",
+            "founded": "",
             "serviceArea": "",
             "services": [
               "Bath",
@@ -2920,6 +2922,7 @@
           ],
           "result": {
             "audience": "",
+            "founded": "",
             "serviceArea": "",
             "services": [
               "Bath",
@@ -2959,6 +2962,7 @@
           ],
           "result": {
             "audience": "",
+            "founded": "",
             "serviceArea": "",
             "services": [
               "Full groom",
@@ -2987,6 +2991,7 @@
           ],
           "result": {
             "audience": "",
+            "founded": "",
             "serviceArea": "",
             "services": [],
             "sources": {
@@ -3020,6 +3025,7 @@
           ],
           "result": {
             "audience": "Owners",
+            "founded": "",
             "serviceArea": "",
             "services": [
               "Bath",
@@ -3054,6 +3060,7 @@
           ],
           "result": {
             "audience": "",
+            "founded": "",
             "serviceArea": "North Austin",
             "services": [
               "Full groom",
@@ -3084,6 +3091,7 @@
           ],
           "result": {
             "audience": "",
+            "founded": "",
             "serviceArea": "",
             "services": [],
             "sources": {
@@ -3108,6 +3116,7 @@
           ],
           "result": {
             "audience": "",
+            "founded": "",
             "serviceArea": "",
             "services": [],
             "sources": {
@@ -3132,6 +3141,7 @@
           ],
           "result": {
             "audience": "",
+            "founded": "",
             "serviceArea": "",
             "services": [],
             "sources": {
@@ -3156,6 +3166,7 @@
           ],
           "result": {
             "audience": "",
+            "founded": "",
             "serviceArea": "",
             "services": [],
             "sources": {
@@ -3177,6 +3188,7 @@
           ],
           "result": {
             "audience": "",
+            "founded": "",
             "serviceArea": "",
             "services": [],
             "sources": {
@@ -3198,6 +3210,7 @@
           ],
           "result": {
             "audience": "",
+            "founded": "",
             "serviceArea": "Austin",
             "services": [
               "a",
@@ -3224,6 +3237,7 @@
           ],
           "result": {
             "audience": "",
+            "founded": "",
             "serviceArea": "",
             "services": [],
             "sources": {
@@ -3255,6 +3269,7 @@
           ],
           "result": {
             "audience": "",
+            "founded": "",
             "serviceArea": "",
             "services": [
               "A",
@@ -36946,6 +36961,7 @@
               "hours": null,
               "phone": null
             },
+            "founded": null,
             "logo": null,
             "name": null,
             "profiles": [],
@@ -36971,6 +36987,7 @@
               "hours": null,
               "phone": null
             },
+            "founded": null,
             "logo": null,
             "name": null,
             "profiles": [],
@@ -37037,6 +37054,7 @@
               "hours": "Mo-Fr 09:00-17:00",
               "phone": "(512) 555-0100"
             },
+            "founded": null,
             "logo": "https://cdn.example/logo.png",
             "name": {
               "origin": "site",
@@ -37079,6 +37097,7 @@
               "hours": null,
               "phone": null
             },
+            "founded": null,
             "logo": null,
             "name": {
               "origin": "site",
@@ -37168,6 +37187,7 @@
               "hours": "Mo-Fr 09:00-17:00",
               "phone": "(512) 555-0100"
             },
+            "founded": null,
             "logo": "https://cdn.example/logo.png",
             "name": {
               "origin": "site",
@@ -37250,6 +37270,7 @@
               "hours": null,
               "phone": null
             },
+            "founded": null,
             "logo": null,
             "name": {
               "origin": "site",
@@ -37319,6 +37340,7 @@
               "hours": null,
               "phone": null
             },
+            "founded": null,
             "logo": null,
             "name": {
               "origin": "site",
@@ -37374,6 +37396,7 @@
               "hours": null,
               "phone": null
             },
+            "founded": null,
             "logo": null,
             "name": {
               "origin": "site",
@@ -37421,6 +37444,7 @@
               "hours": null,
               "phone": null
             },
+            "founded": null,
             "logo": null,
             "name": {
               "origin": "site",
