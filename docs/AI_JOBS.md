@@ -2586,12 +2586,27 @@ whose passes each do one unit (`aiSiteImportNextWork`):
    "About"), the home page "Home".
 3. **The look** (no model, AGL-4084), before anything of the first wave is
    built (`jobs/ai-site-import-look.ts`): the owner's home page is read once
-   more as AglynBot, with the crawl's `headersFor` edge headers, and its first
-   stylesheets; the inspiration signals (`aiSiteInspirationSignals`, AGL-3975)
-   pin the look, the brand being the source's strongest color drawn SOLID
-   (`aiSiteImportBrandColors`: a translucent tint is not counted), and the look
-   is drawn and saved as a guided start's (`aiSiteStyleFor`, `aiSaveSiteTheme`,
-   which keeps a theme the owner chose). The header's logo
+   more as AglynBot, and its first stylesheets. Its edge headers are the
+   caller's `headersFor` where one is handed in, else the edge's own
+   (`aiSiteImportLookHeaders` → `siteImportEdgeHeadersFor(siteImportOrigins(domain))`,
+   exactly as the crawl asks it; AGL-4108: production registers the step with
+   no seams, so the 10/29 read went without the header, our own edge
+   challenged it, and the site kept the starter's theme). The inspiration
+   signals (`aiSiteInspirationSignals`, AGL-3975) pin the look, the brand being
+   the source's strongest color drawn SOLID (`aiSiteImportBrandColors`: a
+   translucent tint is not counted); the home page's look facts
+   (`siteImport.home.look`, AGL-4106) pin it closer (AGL-4108,
+   `aiSiteImportStyle`): the filled buttons' color is the brand and the links'
+   color the accent (`aiSiteImportBrandOf`), the buttons' radius the corners
+   and button shape where the signals said none, the page's background the
+   ground (`AiSiteStyle.page`), and the source's own body and heading families
+   where the theme font catalog has them (`themeFontFacts`, the fonts plugin's
+   Google Fonts catalog) or the page loads them from Google Fonts
+   (`AiSiteStyle.sourceFonts`, `aiSiteImportSourceFonts`), else the pairing of
+   its type mood. `aiSiteColors` still holds every color to the reading
+   checks: a brand too light for white words is drawn at its nearest shade
+   that reads. The look is drawn and saved as a guided start's
+   (`aiSiteStyleFor`, `aiSaveSiteTheme`, which keeps a theme the owner chose). The header's logo
    (`siteImportHeaderBrand`) is brought into the library once by its import
    key, an SVG drawn as a PNG 192 px tall (`rasterizeAiLogoSvg`, on Vercel the
    images function's `logo-raster` op). The home page's `<title>`,
@@ -2599,15 +2614,38 @@ whose passes each do one unit (`aiSiteImportNextWork`):
    still the seeded one (`aiSiteImportListingUpdates`, `aiSiteListingSeeded`).
    The result is `siteImport.look`; its seed and style ride every unit
    (`siteKind`, `siteStyle`).
-4. **The header and footer**, in the first wave: the layout step's own pass on
-   a derived `layout` job in the layout language, linking the wave's pages in
-   the menu's order. Its brand is the source's (`siteBrand`: the logo alone,
-   the logo and the name, or the name, drawn by `ai-layout-frame.ts`); its
-   prompt shows the source's own header and footer lines and description
+4. **The header and footer**, in the first wave, on a derived `layout` job in
+   the layout language. Where the reader found the home page's menu
+   (`aiSiteImportFrameIsRead`, AGL-4108), the job carries `siteFrame`
+   (`aiSiteImportFrameSource`): the menu's items and their entries, the
+   header's buttons with their styles, the header's ground, and the footer's
+   columns, links, words, profiles, address, phone, email and © line, every
+   link resolved by `aiSiteImportFrameLinkTo` (a page of the header's wave or
+   home by its draft id, a page of a later wave by its new path, since a link
+   by id to a page not yet live is taken out when a wave publishes, and
+   anything else by the source's own address). The layout step then draws the
+   frame with NO model (`aiLayoutSourceFrameBuild`,
+   `layout-language/ai-layout-frame-source.ts`): a menu whose entries carry a
+   line or sit in headed columns as a `muiMegaMenu` (each entry a
+   `muiLinkBox` with the source's own one-path icon), else a `muiNavMenu`;
+   the row `nowrap`, shown from the breakpoint `aiLayoutNavBreakpoint`
+   measures it to fit (`lg` past five items or 60 characters), the Menu
+   Button below it, the Drawer holding each menu as a heading over its
+   entries, then the links and the buttons; the footer as the source's
+   columns, profiles (`socialLinks`, any other network linked by its name)
+   and © line word for word. It is checked as the owner's own words
+   (`ownWords`, the own-words budget, rule 1 not asked), costs nothing and is
+   quoted at nothing (`aiSiteImportWaveOwed`). A source frame that does not
+   pass, or a source whose menu could not be read, takes the layout step's
+   own pass instead, linking the wave's pages in the menu's order: its prompt
+   shows the source's own header and footer lines and description
    (`siteFacts`), FENCED under `UNTRUSTED_TEXT_RULE`, in place of the brief,
-   and its contact check admits what they state. `businessName` is the
-   person's name for the site unless the source's differs from it only by
-   case or punctuation.
+   and its contact check admits what they state. Either way the brand is the
+   source's (`siteBrand`: the logo alone, the logo and the name, or the name,
+   drawn by `ai-layout-frame.ts`), the logo named by the source's own alt or
+   name (`alt`) and measured by its shape (`aspect`), and never narrower than
+   itself. `businessName` is the person's name for the site unless the
+   source's differs from it only by case or punctuation.
 5. **Each page**: its photos first (no model), through `pluginMediaIngest()
    .ingest` with `importedFrom` and the key `import:<sha256 of the address>`,
    asked of `findImportedPhoto` before anything is fetched, so a photo is stored
@@ -2656,7 +2694,7 @@ whose passes each do one unit (`aiSiteImportNextWork`):
   page text (`aiSiteImportWire`).
 - **Priced by how a page is built.** `AI_MEASURED_IMPORT_CREDITS`: an
   arranged page at `arranged`, a copied page at `copied` (its listing pass), the
-  header its layout; each wave is quoted before it starts
+  header its layout, or nothing where it is drawn from the source's menu; each wave is quoted before it starts
   (`aiSiteImportWaveCreditRange`), naming both. Both rows are provisional until
   the live check measures them.
 - **Published only into a preview.** A wave's pages go live only on a site in
