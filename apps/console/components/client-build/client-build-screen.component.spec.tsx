@@ -314,7 +314,8 @@ describe('the client build screen (AGL-3958)', () => {
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Use the starter site' }))
     })
-    expect(mockStarter).toHaveBeenCalledWith(mockUserObject, 'host-1')
+    // With no style chosen for it here, the starter keeps its default look (AGL-4049).
+    expect(mockStarter).toHaveBeenCalledWith(mockUserObject, 'host-1', { style: undefined })
     expect(await screen.findByRole('button', { name: /Email the preview/ })).toBeTruthy()
     // Recorded, so a reload (or a second phone) resumes at the send step.
     expect(posts('/api/admin/client-build', 'save').at(-1)?.body).toMatchObject({ starter: true })
