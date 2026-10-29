@@ -35,6 +35,7 @@ import PageBodyBoundary from '../[[...slug]]/page-body-boundary'
 import { getHostCached } from '../../host-data'
 import { sitePreviewViewer } from '../../../../utils/site-preview-viewer'
 import { isHostInPreview } from '@aglyn/aglyn/app-utils/site-preview'
+import { isHostInMaintenance } from '@aglyn/aglyn/app-utils/site-unavailable'
 import SearchResults from './search-results.component'
 
 // Reads ?q= per request, so it can never be statically cached.
@@ -98,9 +99,15 @@ export default async function SearchPage({
   // A site in preview (AGL-4086) answers its search to its team alone: the
   // results are the site's own words, which the public may not see yet. This
   // page is dynamic already, so asking who is here costs it no cache.
+  //
+  // A site in maintenance answers it to nobody (AGL-4111). Every other address
+  // serves the 503 page while maintenance is on, team included, and this one
+  // kept answering with the site's content: entry titles and excerpts, to
+  // anyone who typed a query. It answers as preview does for the public.
   if (
-    isHostInPreview(hostRes.host as never) &&
-    !(await sitePreviewViewer(String(hostRes.host.$id))).admitted
+    isHostInMaintenance(hostRes.host as never) ||
+    (isHostInPreview(hostRes.host as never) &&
+      !(await sitePreviewViewer(String(hostRes.host.$id))).admitted)
   ) {
     notFound()
   }

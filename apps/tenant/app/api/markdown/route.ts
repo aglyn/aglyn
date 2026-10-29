@@ -19,6 +19,7 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import { visitorContentRefusal } from '@aglyn/tenant-data-admin'
 import { resolveEntryLinkRoutes } from '@aglyn/tenant-runtime/entry-link-routes'
 import { getTemplateScreenRouting } from '@aglyn/tenant-runtime/template-screens'
+import { SITE_UNAVAILABLE_RETRY_AFTER_SECONDS } from '@aglyn/aglyn/app-utils/site-unavailable'
 import getHost from '../../../utils/get-host'
 import { loadPageData } from '../../[host]/[scheme]/[[...slug]]/load-page-data'
 import type { Props } from '../../[host]/[scheme]/[[...slug]]/types'
@@ -50,6 +51,16 @@ export const dynamic = 'force-dynamic'
  * falls out of the data rather than being special-cased, which is the property
  * to preserve: a new gate added to the loader is closed here on the day it
  * ships, without anyone remembering this file.
+ *
+ * ## The site's 503 answer is a 503 here too (AGL-4110)
+ *
+ * When the loader answers with the site's unavailable notice
+ * (`maintenanceFallback`: maintenance mode, a site in preview to the public, a
+ * contained site), the page's HTML goes out as a 503 with `Retry-After`, set
+ * by the middleware. This handler decides its own status, so it says the same
+ * thing itself: the Markdown of a page is that page, and a 200 here would tell
+ * an agent the notice is the content. Never cached, like `/api/locked`, so the
+ * answer stops the moment the site is back.
  */
 export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url)
@@ -125,6 +136,11 @@ export async function GET(request: Request): Promise<Response> {
     })
   }
 
+  if (result.props.maintenanceFallback) {
+    const { markdown } = await renderMarkdown(result.props, slug)
+    return markdownResponse(markdown, 503, { suffixForm, unavailable: true })
+  }
+
   const { markdown, canonicalUrl } = await renderMarkdown(result.props, slug)
   return markdownResponse(markdown, 200, { suffixForm, canonicalUrl })
 }
@@ -165,7 +181,12 @@ export async function HEAD(request: Request): Promise<Response> {
 function markdownResponse(
   body: string,
   status: number,
-  options?: { suffixForm?: boolean; canonicalUrl?: string },
+  options?: {
+    suffixForm?: boolean
+    canonicalUrl?: string
+    /** The site's unavailable notice (AGL-4110): `Retry-After`, never cached. */
+    unavailable?: boolean
+  },
 ): Response {
   const headers: Record<string, string> = {
     'Content-Type': Aglyn.MARKDOWN_CONTENT_TYPE,
@@ -174,7 +195,12 @@ function markdownResponse(
     // page it mirrors is itself cached. A publish busts the underlying data
     // cache, so a republished page's Markdown follows within that window
     // rather than waiting out this one.
-    'Cache-Control': 's-maxage=300, stale-while-revalidate=3600',
+    'Cache-Control': options?.unavailable
+      ? 'no-store'
+      : 's-maxage=300, stale-while-revalidate=3600',
+  }
+  if (options?.unavailable) {
+    headers['Retry-After'] = String(SITE_UNAVAILABLE_RETRY_AFTER_SECONDS)
   }
   if (options?.canonicalUrl) {
     headers['Link'] = `<${options.canonicalUrl}>; rel="canonical"`

@@ -1085,7 +1085,7 @@ export const DOCS_HELP_ANCHORS = {
   logicWithAi: ['#function', '#variable', '#change', '#broken-references', '#what-is-sent', '#who-can-use-it', '#related'],
   longFormMarkdown: ['#the-markdown-element', '#what-the-markdown-supports', '#links-that-survive-a-rename', '#the-table-of-contents-element', '#how-it-finds-the-markdown', '#heading-links', '#related'],
   maintenance: ['#maintenance-page', '#is-the-job-still-running', '#running-a-job-by-hand', '#the-jobs', '#audit-archive', '#plugin-artifact-reaper', '#plugin-verdict-re-verification', '#jobs-that-live-elsewhere', '#related'],
-  maintenanceMode: ['#turn-it-on', '#tips', '#related'],
+  maintenanceMode: ['#turn-it-on', '#search-engines-and-feeds', '#tips', '#related'],
   makeYourSitePrivate: ['#keep-it-to-your-team-with-preview', '#who-sees-what', '#open-your-site-while-its-in-preview', '#search-engines-stay-away', '#start-a-site-in-preview', '#keep-one-page-to-your-team', '#hide-the-whole-site-until-launch', '#keep-it-out-of-search-only', '#share-it-behind-a-password', '#only-signed-in-members', '#ask-aglyn-ai', '#check-whats-still-public', '#related'],
   manageAccount: ['#account-tabs', '#account', '#sign-in-methods', '#email-addresses', '#what-each-address-does', '#removing-an-address', '#if-your-organization-uses-single-sign-on', '#product-updates', '#profile-image', '#basic-info', '#contact-details', '#security', '#close-account', '#close-account-steps', '#close-account-in-the-apps', '#close-account-deleted', '#close-account-kept', '#close-account-help', '#delete-your-data', '#related'],
   manageDomains: ['#the-list', '#a-domain', '#connect', '#transfer-in', '#contact', '#dns', '#transfer-out'],

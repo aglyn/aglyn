@@ -87,6 +87,8 @@ export interface AiSiteListRecord {
   /** The library photo it shows, with its size and words; absent on a starter. */
   photo?: AiLayoutPicturePhoto
   refused?: AiStockRefusedPicks
+  /** A record of a thing of its own (AGL-4092): its own photo or its starter, never another record's or the job's. */
+  itsOwn?: true
 }
 
 /** A pictured list of the start, one of whose records holds a starter photo. */

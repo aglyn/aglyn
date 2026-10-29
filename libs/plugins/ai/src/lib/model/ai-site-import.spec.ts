@@ -51,8 +51,12 @@ import {
   aiSiteImportReadVerdictMessage,
   aiSiteImportReadVerdictReason,
   aiSiteImportRemainingCreditRange,
+  AI_SITE_IMPORT_MAX_PAGES,
   AI_SITE_IMPORT_READ_MAX_CHARS,
   AI_SITE_IMPORT_WAVE_READ_MAX_CHARS,
+  siteImportLayoutChars,
+  siteImportLayoutLines,
+  type SiteImportLayout,
   type AiSiteImportInventoryInput,
   type AiSiteImportListedPage,
   type AiSiteImportPageRead,
@@ -470,11 +474,71 @@ describe('the wave read keeps every block, inside the job document’s room', ()
   })
 })
 
+describe('the source’s layout rides the wave’s read, inside the same room (AGL-4106)', () => {
+  const lines = (count: number) => Array.from({ length: count }, (_, index) => ({ kind: 'paragraph' as const, text: `Line ${index}`, region: 'main' as const }))
+  const layout = (count: number, drawing = ''): SiteImportLayout => ({
+    v: 1,
+    sections: [
+      {
+        name: 'Introduction',
+        from: 'landmark',
+        band: 'plain',
+        background: '#ffffff',
+        align: 'start',
+        nodes: [{ kind: 'group', group: 'cards', columns: 3, boxed: true, items: Array.from({ length: count }, (_, index) => ({ lines: [index], title: index, icon: 0 })) }],
+        lines: Array.from({ length: count }, (_, index) => index),
+      },
+    ],
+    icons: [{ viewBox: '0 0 24 24', ...(drawing ? { svg: drawing } : { path: 'M0 0h24v24H0z' }) }],
+    look: { fonts: { body: null, headings: null, google: [] }, background: null, text: null, buttonFill: null, buttonText: null, buttonRadius: null, link: null, header: null },
+  })
+  const pageRead = (count: number, withLayout: SiteImportLayout): AiSiteImportPageRead => ({ at: 'x', title: 't', text: '', sections: ['t'], images: [], blocks: lines(count), words: count, layout: withLayout })
+
+  it('keeps a page’s layout with its blocks, and lets it go with them once the page is in', () => {
+    let state = inventory()
+    const slot = state.waves[0].slots[0]
+    state = aiSiteImportPagesRead(state, new Map([[slot, pageRead(6, layout(6))]]))
+    expect(state.pages.find((page) => page.slot === slot)?.read?.layout).toEqual(layout(6))
+    expect(aiSiteImportWire(state)?.pages.find((page) => page.slot === slot)?.read?.layout).toBeNull()
+    expect(aiSiteImportPageSettled(state, slot).pages.find((page) => page.slot === slot)?.read?.layout).toBeNull()
+  })
+
+  it('cuts a layout to the blocks a full wave kept, and drops its drawings before it drops it', () => {
+    let state = inventory()
+    const slots = state.waves[1].slots
+    const long = (chars: number): AiSiteImportPageRead => ({ ...pageRead(1, layout(1)), blocks: [{ kind: 'paragraph', text: 'x'.repeat(chars), region: 'main' }] })
+    // Four pages fill the wave's room but for a light layout's worth; a fifth has a few lines and a heavy drawing.
+    const heavy = layout(4, `<svg>${'<path d="M0 0"/>'.repeat(200)}</svg>`)
+    const light = siteImportLayoutChars(layout(4, '<svg/>')) - '<svg/>'.length
+    const lineChars = lines(4).reduce((total, line) => total + line.text.length, 0)
+    const small = siteImportLayoutChars(layout(1))
+    const rest = AI_SITE_IMPORT_WAVE_READ_MAX_CHARS - 3 * AI_SITE_IMPORT_READ_MAX_CHARS - 4 * small - lineChars - light - 100
+    const reads = new Map<string, AiSiteImportPageRead>(slots.slice(0, 3).map((slot) => [slot, long(AI_SITE_IMPORT_READ_MAX_CHARS)]))
+    reads.set(slots[3] as string, long(rest))
+    reads.set(slots[4] as string, pageRead(4, heavy))
+    state = aiSiteImportPagesRead(state, reads)
+    expect(siteImportLayoutChars(heavy)).toBeGreaterThan(light + 1_000)
+    const last = state.pages.find((page) => page.slot === slots[4])?.read
+    expect(last?.layout?.icons).toEqual([{ viewBox: '0 0 24 24' }])
+    expect(siteImportLayoutLines(last?.layout?.sections[0]?.nodes ?? [])).toEqual(last?.blocks?.map((_, index) => index))
+  })
+
+  it('reads up to 400 pages, and says a file is not a page', () => {
+    expect(AI_SITE_IMPORT_MAX_PAGES).toBe(400)
+    expect(AI_SITE_IMPORT_LEFT_OUT_REASONS).toContain('file')
+    expect(AI_SITE_IMPORT_LEFT_OUT_COPY.file).toBe('A file, not a page.')
+    const state = inventory({ skipped: [{ url: 'https://harbor-dental.com/brochure', reason: 'file' }] })
+    expect(state.leftOutCount).toEqual({ file: 1 })
+  })
+})
+
 describe('copied or arranged, and the quote that names both', () => {
-  it('copies every page of a collection and any long page; arranges the main pages', () => {
+  it('copies every page of a collection; arranges every main page, however long (AGL-4106)', () => {
     expect(AI_SITE_IMPORT_PROSE_WORDS).toBe(900)
     expect(aiSiteImportPageBuild({ group: 'c:blog', words: 120 })).toBe('copied')
-    expect(aiSiteImportPageBuild({ group: 'main', words: 901 })).toBe('copied')
+    expect(aiSiteImportPageBuild({ group: 'c:blog', words: 4_000 })).toBe('copied')
+    // aglyn.com's /product, 1,072 words, was copied as one column on 10/29.
+    expect(aiSiteImportPageBuild({ group: 'main', words: 1_072 })).toBe('arranged')
     expect(aiSiteImportPageBuild({ group: 'main', words: 900 })).toBe('arranged')
   })
 

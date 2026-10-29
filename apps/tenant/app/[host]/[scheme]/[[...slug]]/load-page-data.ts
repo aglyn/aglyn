@@ -58,6 +58,9 @@ import {
   isHostInPreview,
   isScreenInPreview,
 } from '@aglyn/aglyn/app-utils/site-preview'
+// The leaf as well: the maintenance test the middleware's verdict shares, so
+// the 503 status and the 503 page are one decision (AGL-4110).
+import { isHostInMaintenance } from '@aglyn/aglyn/app-utils/site-unavailable'
 import { cache } from 'react'
 import { serverPluginLoader } from '../../../../utils/server-plugin-loader'
 import getHost, { CNAME_HOST_PREFIX } from '../../../../utils/get-host'
@@ -623,11 +626,13 @@ const composePageResult = async (
       }
     }
 
-    if ((hostRes.host as any)?.maintenance) return serveUnavailable()
+    // Sent as a 503 by the middleware, which reads this same predicate off the
+    // verdict (AGL-4110): the page cannot set its own status.
+    if (isHostInMaintenance(hostRes.host as never)) return serveUnavailable()
 
     // Preview (AGL-4086): the public gets the 503 page, or the built-in notice
     // worded "Coming soon", at every address — the maintenance answer, cached
-    // 30 s like it, `noindex` like it. Below maintenance on purpose: a site in
+    // 30 s like it, `noindex` like it, and sent as a 503 like it (AGL-4110). Below maintenance on purpose: a site in
     // both is in maintenance, for the team as for everyone, because that is
     // the switch that means "nobody". The team's own view of a site in
     // preview never reaches here; the uncached preview route verified it and

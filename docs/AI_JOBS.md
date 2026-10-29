@@ -2556,7 +2556,15 @@ whose passes each do one unit (`aiSiteImportNextWork`):
 1. **Read** (no model): the crawler reads the site as AglynBot with
    `shallowFirst` (a sitemap's shallow addresses before its deep tail), up to
    the site's room under the plan's page count plus one wave, capped at
-   `AI_SITE_IMPORT_MAX_PAGES` (200). `aiSiteImportInventory` groups the pages
+   `AI_SITE_IMPORT_MAX_PAGES` (400; AGL-4106). A file is never a page: an
+   `/api/`, `/cdn-cgi/` or download address is never asked for, and an address
+   that answers with something other than HTML is left out as `file` and takes
+   nothing from the page budget. A wave's read keeps each page's LAYOUT
+   (`site-import/site-import-layout.ts`, no model): its sections and bands,
+   rows, groups by kind, tables, tabs, pictures, icons and buttons over the
+   read's blocks by index (`AiSiteImportPageRead.layout`), through the page's
+   own stylesheets (`site-import-css.ts`); every crawl reads the home page's
+   menu, footer and look (`site-import-nav.ts`). `aiSiteImportInventory` groups the pages
    (the MAIN pages: home, the home menu's, every top-level page and any page of
    no collection; then each COLLECTION, an address prefix with at least three
    pages, a dated archive as Posts), keeps them in that order until the room is
@@ -2610,11 +2618,11 @@ whose passes each do one unit (`aiSiteImportNextWork`):
    read's blocks, the photos and where the site's own links go. The plan's
    sections are the source's (its opening, then one at each h2). How the page
    is built is decided by code (`aiSiteImportBuildOf`):
-   - **copied** (a collection's page, any page past `AI_SITE_IMPORT_PROSE_WORDS`
-     words): `aiCompileImportedDocument` lays every line out in source order,
+   - **copied** (a collection's page, whatever its length; since AGL-4106 a
+     main page is never copied for its length): `aiCompileImportedDocument` lays every line out in source order,
      bands alternating plain and soft, with NO model; only the listing pass
      spends;
-   - **arranged** (the main pages, Home always): one answer on the page tier
+   - **arranged** (every main page, whatever its length): one answer on the page tier
      through `submit_arrangement` (`AI_LAYOUT_ARRANGE_TOOL`, which has no field
      for a word), told the numbered lines fenced (`aiLayoutArrangePrompt`). The
      compiler substitutes each line as written; a block naming a line already
@@ -3554,6 +3562,46 @@ AGL-3660), which fills every empty slot and takes the icon out of its frame:
   The replays are `ai-stock-photo-agl4092-{berm,pit,rut}.spec.ts` and
   `ai-layout-pictures-agl4092-roles.spec.ts`, over 40 searches re-asked of Pixabay
   on 2026-10-28 as the source asks them (`fixtures/ai-stock-photo-agl4092-recordings.ts`).
+- **Another city's street, a thing of its own, and a team (AGL-4092, 2026-10-29).**
+  The live check of beta.291 put a food truck under the Chicago skyscrapers, a man
+  with a cart in the rain and a woman with a bagel cart in Antalya in a taco
+  trailer's home gallery, tomatoes beside a bowl of salsa on its menu's "Bottled
+  Water", a model posing with a street bike in a garage in a motocross team's riders
+  band (searched "motorcycle workshop"), and a man in a motorcycle suit on a road
+  trip, tagged "motocross" third, in its sponsors band. Each is closed by its tags:
+  - *Another city's or country's street is never the business's,* whatever the
+    caption (`aiStockForeignStreet`): a hit with a street, town or city tag
+    (`STREET_HEADS`) that names a city, state or country (`NAMED_PLACES`) the site's
+    business type, audience and name never name is refused. Tacos tagged "mexico"
+    are a dish, not a street.
+  - *Street food is anyone's.* "street food" names the taco trailer's world only
+    beside its own food or its truck (`near`), and the taco group's `rivals` turn
+    down an ice cream van, a hot dog stand or a bagel cart tagged "food truck"
+    unless the hit names tacos too. The maker's searches (`making`) take only a hit
+    OF the business's own world (`leadOwn`), as its broad rungs do.
+  - *A thing of its own is a photo of itself* (`aiStockThingOfItsOwn`): a record's or
+    a product's object with kin (`OBJECT_KIN`: bottled water, a soda, an agua fresca
+    or horchata, now in every food world) where neither its words nor its kin name
+    the craft itself (`core`). It is searched by its own words and kin, unqualified,
+    never by the craft's broad searches or `aiStockCraftSearches`, and a record of
+    one takes no other record's photo, nor gives its own
+    (`aiSiteDatasetRecordsFromOwn`, `itsOwn` kept on the late pass's list). With no
+    photo of itself it takes a neutral starter. A soap shop's "Lavender Soap Bar"
+    names its soap and is not one.
+  - *A team is shown racing.* A group's `team` searches replace its repair shop's
+    `making` where the business's own clause names a team or a club: a motocross
+    team searches "motocross rider gear" and "dirt bike racing", and adds "motocross
+    track" to its broad searches (the library answers "motocross paddock" with horses
+    and "motocross pits" with fruit). A parts shop keeps its mechanic.
+  - *An off-road business's pictures are never a street bike's* (`wider.road` and
+    `wider.ground`, read from every tag, a product's excepted): a hit naming a road,
+    a street, a trip, travel, a motorcycle suit, a sportbike, a model or a studio is
+    refused unless it also names the ground a dirt bike rides (dirt, mud, sand, a
+    desert, a track, off-road, enduro). "Road, travel" beside "off-road, desert,
+    sand" is a dirt bike in the dunes.
+  The replays are `ai-stock-photo-agl4092-1029-{pit,rut}.spec.ts`, from production's
+  search cache for the searches the two sites sent and Pixabay re-asked read-only
+  for those the fixes send in their place (`fixtures/ai-stock-photo-agl4092-1029-recordings.ts`).
 - **One refused photo is that photo's (AGL-3923, #1770).** The provider names a
   download by its bytes (`sniffPhotoContentType`, the upload check's own
   signatures), never by its label. A media-library refusal of one photo's own bytes
