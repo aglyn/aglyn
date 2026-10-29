@@ -267,6 +267,13 @@ quote's link can open them, and never through a public address.
 To take a proof off, choose **Remove** under it. You can add and remove proofs until
 your customer answers. After that, start a new revision to send different proofs.
 
+Proofs, and the files your customer sends with an answer, count toward your workspace's
+[storage](../../workspace-and-billing/billing-and-plans/overview.md#files-on-quotes-and-forms)
+like files in the media library. Removing a proof or deleting the quote frees the space.
+A proof that would go past a storage cap you set, or past a full workspace on Free, is
+refused with the reason, as a media library upload would be. Your customer's files are
+always taken.
+
 Adding or removing a proof changes what your customer sees, so it counts as an edit:
 a customer who has the page open is asked to look again before they answer or pay.
 

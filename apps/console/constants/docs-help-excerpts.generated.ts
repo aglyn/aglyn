@@ -381,7 +381,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#outstanding': 'If a payment fails, the invoice stays open and the Outstanding card — on both the Plan and Invoices tabs of the Billing page — shows it with a Pay now button.',
     '#payment-methods': 'The cards your subscription and any usage overage are charged to.',
     '#seats': 'Team seats (workspace-wide) and per-site collaborator seats are metered and enforced per tier — seats cover the people who build and manage your sites.',
-    '#storage-overage': 'Your plan includes an amount of storage for each of its sites, and the workspace shares it as one allowance: every site\'s media library and the organization library draw on the same total.',
+    '#storage-overage': 'Your plan includes an amount of storage for each of its sites, and the workspace shares it as one allowance: every site\'s media library, the organization library, and the files kept with quotes and forms draw on the…',
     '#tax-ids': 'A business tax ID — VAT, ABN, GST, EIN and the rest — printed on the invoices we issue you.',
     '#upgrade-proposal': 'When the Aglyn team proposes a plan for your workspace, the owner gets an email, and everyone who manages billing sees a card on the workspace\'s home and at the top of the Billing page: "*Workspace*\'s Aglyn team…',
     '#usage-budget': 'A usage budget is a monthly amount you choose, plus the percentages of it you want to hear about — the same shape as a Google Cloud billing budget.',
