@@ -13,11 +13,11 @@ final class RailTooltipTests: XCTestCase {
     XCTAssertEqual(AglynRailTooltipTiming.wait(showing: "org-1"), .zero)
   }
 
-  func testAPointerRestingOnATileShowsItsNameThenMovingGlidesAndLeavingHides() async throws {
+  func testAPointerRestingOnATileShowsItsNameThenMovingGlidesAndLeavingHides() async {
     let state = AglynRailTooltipState()
     state.hover("org-1", inside: true)
     XCTAssertNil(state.shown)
-    try await Task.sleep(for: .milliseconds(260))
+    await state.pending?.value
     XCTAssertEqual(state.shown, "org-1")
     // Onto the next tile: the bubble moves at once.
     state.hover("org-1", inside: false)
@@ -25,15 +25,15 @@ final class RailTooltipTests: XCTestCase {
     XCTAssertEqual(state.shown, "org-2")
     // Off the rail: gone after the glide window.
     state.hover("org-2", inside: false)
-    try await Task.sleep(for: .milliseconds(260))
+    await state.pending?.value
     XCTAssertNil(state.shown)
   }
 
-  func testAQuickPassOverATileShowsNothing() async throws {
+  func testAQuickPassOverATileShowsNothing() async {
     let state = AglynRailTooltipState()
     state.hover("org-1", inside: true)
     state.hover("org-1", inside: false)
-    try await Task.sleep(for: .milliseconds(260))
+    await state.pending?.value
     XCTAssertNil(state.shown)
   }
 }
