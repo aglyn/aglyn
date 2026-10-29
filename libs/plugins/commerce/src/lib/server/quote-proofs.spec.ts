@@ -79,8 +79,18 @@ function docRef(path: string): any {
   }
 }
 
+/** Collections the routes listed, in order. */
+const listedCollections: string[] = []
+
 function collectionRef(path: string): any {
-  return { doc: (id: string) => docRef(`${path}/${id}`) }
+  return {
+    doc: (id: string) => docRef(`${path}/${id}`),
+    get: async () => {
+      listedCollections.push(path)
+      const children = [...docs.keys()].filter((key) => key.startsWith(`${path}/`) && !key.slice(path.length + 1).includes('/'))
+      return { docs: children.map((key) => snapshotOf(key)) }
+    },
+  }
 }
 
 const firestore: any = {
@@ -204,6 +214,7 @@ beforeEach(() => {
   docs.set('hosts/site1/settings/store', { currency: 'USD' })
   storeQuote()
   rateAllowed = true
+  listedCollections.length = 0
   limited.length = 0
   notified.length = 0
   minted.length = 0
@@ -224,16 +235,82 @@ describe('GET commerce/quote-proof', () => {
       file: { path: PROOF.path, name: 'banner.png', contentType: 'image/png' },
     })
     expect(limited).toEqual(['commerce-quote-proof:site1:203.0.113.9'])
+    // The current revision has it, so no earlier revision is read.
+    expect(listedCollections).toEqual([])
   })
 
-  it('answers a wrong token as a missing quote, a replaced link as replaced, and an earlier revision’s proof as gone', async () => {
-    expect((await handleQuoteProof(deps, get({ hostId: 'site1', q: 'q-1', t: '1.0000', file: 'p1' }))).status).toBe(404)
-    storeQuote({ linkVersion: 2 })
-    expect((await handleQuoteProof(deps, get({ hostId: 'site1', q: 'q-1', t: token(1), file: 'p1' }))).status).toBe(410)
-    storeQuote({ revision: 2 })
-    const gone = await handleQuoteProof(deps, get({ hostId: 'site1', q: 'q-1', t: token(), file: 'p1' }))
-    expect(gone.status).toBe(404)
-    expect(gone.file).toBeUndefined()
+  /** Revision 3 is current on link version 2; revision 1's proof is kept in its snapshot (AGL-4097). */
+  const PROOF_R3 = { ...PROOF, id: 'p3', revision: 3, name: 'banner-v3.png', path: 'hosts/site1/private/uploads/quote-proof/q-1/p3' }
+  function storeLaterRevision() {
+    storeQuote({ revision: 3, linkVersion: 2, proofs: [PROOF_R3] })
+    docs.set(`${QUOTE_PATH}/revisions/1`, { revision: 1, proofs: [PROOF], responses: [], approval: null })
+    docs.set(`${QUOTE_PATH}/revisions/2`, { revision: 2, proofs: [], responses: [], approval: null })
+  }
+
+  it('keeps serving an earlier email’s proof after a new revision and a replaced link', async () => {
+    storeLaterRevision()
+    // The first email's link (version 1) and its revision 1 proof.
+    const earlier = await handleQuoteProof(deps, get({ hostId: 'site1', q: 'q-1', t: token(1), file: 'p1' }))
+    expect(earlier).toEqual({ status: 200, body: {}, file: { path: PROOF.path, name: 'banner.png', contentType: 'image/png' } })
+    expect(listedCollections).toEqual([`${QUOTE_PATH}/revisions`])
+    // The same old link reaches the current revision's proof, and the new link the earlier one.
+    expect((await handleQuoteProof(deps, get({ hostId: 'site1', q: 'q-1', t: token(1), file: 'p3' }))).file?.path).toBe(PROOF_R3.path)
+    expect((await handleQuoteProof(deps, get({ hostId: 'site1', q: 'q-1', t: token(2), file: 'p1' }))).file?.path).toBe(PROOF.path)
+  })
+
+  it('answers a proof the business took off its revision as gone', async () => {
+    // Revision 1's only proof, removed before anyone answered.
+    storeQuote({ proofs: [] })
+    const removed = await handleQuoteProof(deps, get({ hostId: 'site1', q: 'q-1', t: token(), file: 'p1' }))
+    expect(removed).toEqual({ status: 404, body: { error: 'That proof is no longer on this quote.' } })
+    // p2 went on revision 3 and was removed: on neither the quote nor a snapshot, through any link.
+    storeLaterRevision()
+    for (const t of [token(1), token(2)]) {
+      const gone = await handleQuoteProof(deps, get({ hostId: 'site1', q: 'q-1', t, file: 'p2' }))
+      expect(gone.status).toBe(404)
+      expect(gone.file).toBeUndefined()
+    }
+  })
+
+  it('answers a forged token, a token for a version never sent and an invoice’s link as a missing quote', async () => {
+    storeLaterRevision()
+    const forged = [
+      '1.0000',
+      `1.${'0'.repeat(32)}`,
+      String(mintQuoteLinkToken('site1', 'q-2', 1)),
+      String(mintQuoteLinkToken('site2', 'q-1', 1)),
+      token(3),
+    ]
+    for (const t of forged) {
+      const outcome = await handleQuoteProof(deps, get({ hostId: 'site1', q: 'q-1', t, file: 'p1' }))
+      expect(outcome.status).toBe(404)
+      expect(outcome.file).toBeUndefined()
+    }
+    docs.set(QUOTE_PATH, { number: 1042, status: 'pending', channel: 'draft', lineItems: [], timeline: [], payLink: { version: 1 } })
+    expect((await handleQuoteProof(deps, get({ hostId: 'site1', q: 'q-1', t: token(1), file: 'p1' }))).status).toBe(404)
+    expect(listedCollections).toEqual([])
+  })
+
+  it('never serves another quote’s file through this quote’s link', async () => {
+    storeLaterRevision()
+    // Another quote's proof, named by its id: not in this quote's history.
+    docs.set('hosts/site1/orders/q-2/revisions/1', { revision: 1, proofs: [{ ...PROOF, id: 'other', path: 'hosts/site1/private/uploads/quote-proof/q-2/other' }] })
+    expect((await handleQuoteProof(deps, get({ hostId: 'site1', q: 'q-1', t: token(1), file: 'other' }))).status).toBe(404)
+    // A snapshot naming a file outside this quote's proofs is never streamed.
+    docs.set(`${QUOTE_PATH}/revisions/2`, {
+      revision: 2,
+      proofs: [{ ...PROOF, id: 'stray', path: 'hosts/site1/private/uploads/quote-artwork/q-1/stray' }],
+    })
+    const stray = await handleQuoteProof(deps, get({ hostId: 'site1', q: 'q-1', t: token(1), file: 'stray' }))
+    expect(stray.status).toBe(404)
+    expect(stray.file).toBeUndefined()
+  })
+
+  it('leaves pay, answers and uploads on the current link version', async () => {
+    storeLaterRevision()
+    expect((await handleQuoteUpload(deps, post({ action: 'ticket', file: {}, t: token(1) }))).status).toBe(410)
+    expect((await handleQuoteRespond(deps, post({ action: 'approve', name: 'Jordan Lee', v: 2_000, t: token(1) }))).status).toBe(410)
+    expect(minted).toEqual([])
   })
 
   it('is rate-limited before the token is looked at', async () => {

@@ -68,7 +68,8 @@ function setup(options: { config?: DeliveryAppsConfig; who?: { hostId: string; k
     ...(config.doordash ? { doordash: createDoordashProvider({ config: config.doordash, http: ddHttp.http, now: () => NOW }) } : {}),
     ...(config['uber-eats'] ? { 'uber-eats': createUberEatsProvider({ config: config['uber-eats'], http: uberHttp.http, now: () => NOW }) } : {}),
   }
-  const who = options.who === undefined ? { hostId: HOST, kinds: ['settings', 'register'] as DeliveryGateKind[] } : options.who
+  const who =
+    options.who === undefined ? { hostId: HOST, kinds: ['settings', 'register', 'registerOrder'] as DeliveryGateKind[] } : options.who
   const gate = async (request: Request, kind: DeliveryGateKind) => {
     if (!who) return fail(401, 'Unauthenticated')
     if (!who.kinds.includes(kind)) return fail(403, 'Not permitted')
@@ -260,5 +261,28 @@ describe('the register (AGL-3644)', () => {
     const admin = setup({ who: { hostId: HOST, kinds: ['settings'] } })
     expect((await admin.routes.queue(get('delivery-apps/queue'))).status).toBe(403)
     expect((await setup({ who: null }).routes.orderAction(send('delivery-apps/order-action', { orderId, action: 'accept' }))).status).toBe(401)
+  })
+
+  it('shows the queue at the register’s door, and asks the order door for every action (AGL-4047)', async () => {
+    const asked: DeliveryGateKind[] = []
+    const t = await withOrder()
+    const routes = createDeliveryRoutes({
+      now: () => NOW,
+      config: () => CONFIG,
+      store: t.store,
+      provider: () => null,
+      engine: { act: async () => ({ outcome: 'refused', message: 'unused' }) } as never,
+      gate: async (_request, kind) => {
+        asked.push(kind)
+        // Opens the register, may not sell at it.
+        return kind === 'register' ? { orgId: 'org1', hostId: HOST, uid: 'u1', body: {} } : fail(403, 'refused')
+      },
+    })
+    expect((await routes.queue(get('delivery-apps/queue'))).status).toBe(200)
+    for (const action of ['accept', 'reject', 'ready', 'picked_up', 'retry']) {
+      expect((await routes.orderAction(send('delivery-apps/order-action', { orderId: t.orderId, action }))).status).toBe(403)
+    }
+    expect(asked).toEqual(['register', 'registerOrder', 'registerOrder', 'registerOrder', 'registerOrder', 'registerOrder'])
+    expect(t.store.orders.get(t.orderId)!.status).toBe('new')
   })
 })

@@ -34,11 +34,12 @@ import { itemKey, orderView, storeDocId, storeView, type DeliveryStore, type Sto
  * The console routes (AGL-3644).
  *
  * - The store's settings — connect a store, send the menu, match items —
- *   are behind the `settings` gate: a verified ADMIN of the site.
- * - The register's queue and its actions are behind the `register` gate:
- *   an admin or editor of the site with `managePos` — the register's own
- *   gate. Both ask for the `pos` entitlement, commerce and this plugin on
- *   for the site, and a site not locked.
+ *   are behind the `settings` gate: "Manage site settings" for the site.
+ * - The register's queue is behind the `register` gate, and an action on
+ *   one of its orders behind the `registerOrder` gate: the register's own
+ *   keys as resolved for the site, never the site role (AGL-4047, see
+ *   `register-keys.ts`). Every gate asks for the `pos` entitlement,
+ *   commerce and this plugin on for the site, and a site not locked.
  * - Each service's webhook carries no session: it is the service's own
  *   signature that admits it ({@link DeliveryProvider.verify}).
  *
@@ -47,7 +48,12 @@ import { itemKey, orderView, storeDocId, storeView, type DeliveryStore, type Sto
  * buyer's first name and last initial only.
  */
 
-export type DeliveryGateKind = 'settings' | 'register'
+/**
+ * The doors: `settings`, the store's links and menu; `register`, the
+ * register's delivery queue; `registerOrder`, taking or working one of its
+ * orders.
+ */
+export type DeliveryGateKind = 'settings' | 'register' | 'registerOrder'
 
 export interface DeliveryGateResult {
   orgId: string
@@ -267,7 +273,7 @@ export function createDeliveryRoutes(deps: DeliveryRouteDeps) {
     /** POST { hostId, orderId, action, reason? } — accept, reject, ready, picked up, or send again. */
     async orderAction(request: Request): Promise<Response> {
       if (request.method !== 'POST') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'register')
+      const gate = await deps.gate(request, 'registerOrder')
       if (gate instanceof Response) return gate
       const orderId = param(gate.body, request, 'orderId')
       const action = gate.body['action'] as DeliveryOrderAction
