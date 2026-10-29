@@ -290,6 +290,21 @@ const TYPE_SIGNATURES: Readonly<Record<string, readonly Signature[]>> = {
 
   // A web font (AGL-3656): the theme's font installer stores WOFF2 only.
   'font/woff2': [{ magic: ascii('wOF2'), label: 'WOFF2' }],
+
+  // Design files a business and its customer trade as proofs and artwork
+  // (AGL-4096, `visitor-upload.ts`). Illustrator saves a PDF-compatible file
+  // by default and plain PostScript when that option is off; an EPS is
+  // PostScript, or PostScript inside the DOS EPS binary header; a Photoshop
+  // document opens `8BPS`.
+  'application/illustrator': [
+    { magic: ascii('%PDF-'), label: 'Illustrator' },
+    { magic: ascii('%!PS'), label: 'Illustrator' },
+  ],
+  'application/postscript': [
+    { magic: ascii('%!PS'), label: 'PostScript' },
+    { magic: [0xc5, 0xd0, 0xd3, 0xc6], label: 'PostScript' },
+  ],
+  'image/vnd.adobe.photoshop': [{ magic: ascii('8BPS'), label: 'Photoshop' }],
 }
 
 /** The OOXML document types whose archive is scanned for a macro project. */

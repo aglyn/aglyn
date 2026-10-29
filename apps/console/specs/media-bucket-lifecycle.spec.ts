@@ -116,6 +116,20 @@ describe('media bucket retention (AGL-1443)', () => {
     expect(rule?.condition?.age).toBeGreaterThan(0)
   })
 
+  it('reaps the visitor uploads nobody finalized (AGL-4096)', () => {
+    // The prefix as the upload policy names it, read from its source rather
+    // than restated: a rename there without a rule here leaves abandoned
+    // uploads in the bucket forever.
+    const policy = source('libs/aglyn/src/lib/app-utils/visitor-upload.ts')
+    const prefix = /VISITOR_UPLOAD_PENDING_PREFIX = '([\w-]+\/)'/.exec(policy)?.[1]
+    expect(prefix).toBe('visitor-uploads-pending/')
+    const rule = lifecycleRules().find((entry) =>
+      (entry.condition?.matchesPrefix ?? []).includes(String(prefix)),
+    )
+    expect(rule?.action?.type).toBe('Delete')
+    expect(rule?.condition?.age).toBe(1)
+  })
+
   it('and the erase path writes no object for it to expire', () => {
     // The behavioural proof lives in `erase-org-export.emulator.spec.ts`,
     // which only runs with an emulator. This is the guard that runs

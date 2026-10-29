@@ -111,6 +111,24 @@ describe('owner-widened tenant CSP directives (AGL-1152)', () => {
     )
   })
 
+  it('admits the visitor upload’s post to the site’s own bucket, by path, and no other bucket (AGL-4096)', () => {
+    const before = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    try {
+      delete process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+      expect(tenantConnectSrcDirective(true, [], false, SITE)).not.toContain('storage.googleapis.com')
+      process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET = 'demo-bucket.appspot.com'
+      const value = tenantConnectSrcDirective(true, [], false, SITE)
+      expect(value.split(' ')).toContain('https://storage.googleapis.com/demo-bucket.appspot.com/')
+      // Never the bare host: any bucket there would be a place to post to.
+      expect(value.split(' ')).not.toContain('https://storage.googleapis.com')
+      process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET = 'bad bucket/../x'
+      expect(tenantConnectSrcDirective(true, [], false, SITE)).not.toContain('storage.googleapis.com')
+    } finally {
+      if (before === undefined) delete process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+      else process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET = before
+    }
+  })
+
   it('admits a connection the owner approved, and refuses one it was not given', () => {
     // The widest of the owner lists in effect: a `srcdoc` iframe inherits
     // `connect-src`, so the Custom HTML block's Embed mode fetches under it.

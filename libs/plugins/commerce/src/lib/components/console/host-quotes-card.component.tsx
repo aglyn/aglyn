@@ -33,7 +33,7 @@ import {
 import { Button, Chip, Stack, Typography } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import { collection, limit, query, where } from 'firebase/firestore'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import QuoteEditorDialog, { type QuoteRow } from './quote-editor-dialog.component'
 
 export interface HostQuotesCardProps {
@@ -78,7 +78,12 @@ function quoteListRow(quote: QuoteRow): QuoteListRow {
     statusKey: status.key,
     statusLabel: status.label,
     totalCents: Number(quote.totals?.totalCents ?? 0),
-    updatedAtMs: Number(quote.quote?.updatedAtMs ?? 0),
+    // The customer's latest answer counts as an update (AGL-4096), so a quote
+    // they just approved or asked changes to sorts to the top.
+    updatedAtMs: Math.max(
+      Number(quote.quote?.updatedAtMs ?? 0),
+      Number(CommerceModel.latestQuoteResponse(quote.quote)?.atMs ?? 0),
+    ),
   }
 }
 
@@ -117,6 +122,17 @@ export function HostQuotesCard(props: HostQuotesCardProps) {
   /** The quote open in the editor: its id, or `new`. */
   const [openId, setOpenId] = useState<string | null>(null)
   const openQuote = openId && openId !== 'new' ? (quotes.rows.find((row) => row.$id === openId) ?? null) : null
+
+  // A manager notice opens its quote (AGL-4096): `?quote=<id>` on the Orders
+  // page, once that quote has loaded.
+  const [linkedId, setLinkedId] = useState(() =>
+    typeof window === 'undefined' ? '' : (new URLSearchParams(window.location.search).get('quote') ?? ''),
+  )
+  useEffect(() => {
+    if (!linkedId || !quotes.rows.some((row) => row.$id === linkedId)) return
+    setOpenId(linkedId)
+    setLinkedId('')
+  }, [linkedId, quotes.rows])
 
   const columns = useMemo<GridColDef[]>(
     () => [

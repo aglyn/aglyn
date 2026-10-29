@@ -3180,6 +3180,7 @@ public enum OrderPickupStatus: String, Codable, CaseIterable, Hashable, Sendable
 }
 
 public struct OrderQuote: Codable, Hashable, Sendable {
+  public var approval: QuoteApproval?
   public var approvedRevision: Double?
   public var billTo: OrderAddress?
   public var createdAtMs: Double
@@ -3189,8 +3190,9 @@ public struct OrderQuote: Codable, Hashable, Sendable {
   public var linkVersion: Double?
   public var notes: String?
   public var paidAtMs: Double?
-  public var proofs: [QuoteProofRef]?
+  public var proofs: [QuoteProof]?
   public var requireProofApproval: Bool?
+  public var responses: [QuoteCustomerResponse]?
   public var revision: Double
   public var shipping: QuoteShipping?
   public var shipTo: OrderAddress?
@@ -3201,7 +3203,8 @@ public struct OrderQuote: Codable, Hashable, Sendable {
   public var updatedAtMs: Double
   public var updatedBy: String
 
-  public init(approvedRevision: Double? = nil, billTo: OrderAddress? = nil, createdAtMs: Double, createdBy: String, customer: QuoteCustomer, discount: QuoteDiscount? = nil, linkVersion: Double? = nil, notes: String? = nil, paidAtMs: Double? = nil, proofs: [QuoteProofRef]? = nil, requireProofApproval: Bool? = nil, revision: Double, shipping: QuoteShipping? = nil, shipTo: OrderAddress? = nil, stage: QuoteStage, tax: QuoteTaxBasis, terms: String? = nil, unmatchedPayments: [QuoteUnmatchedPayment]? = nil, updatedAtMs: Double, updatedBy: String) {
+  public init(approval: QuoteApproval? = nil, approvedRevision: Double? = nil, billTo: OrderAddress? = nil, createdAtMs: Double, createdBy: String, customer: QuoteCustomer, discount: QuoteDiscount? = nil, linkVersion: Double? = nil, notes: String? = nil, paidAtMs: Double? = nil, proofs: [QuoteProof]? = nil, requireProofApproval: Bool? = nil, responses: [QuoteCustomerResponse]? = nil, revision: Double, shipping: QuoteShipping? = nil, shipTo: OrderAddress? = nil, stage: QuoteStage, tax: QuoteTaxBasis, terms: String? = nil, unmatchedPayments: [QuoteUnmatchedPayment]? = nil, updatedAtMs: Double, updatedBy: String) {
+    self.approval = approval
     self.approvedRevision = approvedRevision
     self.billTo = billTo
     self.createdAtMs = createdAtMs
@@ -3213,6 +3216,7 @@ public struct OrderQuote: Codable, Hashable, Sendable {
     self.paidAtMs = paidAtMs
     self.proofs = proofs
     self.requireProofApproval = requireProofApproval
+    self.responses = responses
     self.revision = revision
     self.shipping = shipping
     self.shipTo = shipTo
@@ -4882,6 +4886,22 @@ public struct ProductVariant: Codable, Hashable, Sendable {
   }
 }
 
+public struct QuoteApproval: Codable, Hashable, Sendable {
+  public var atMs: Double
+  public var ip: String?
+  public var name: String
+  public var revision: Double
+  public var userAgent: String?
+
+  public init(atMs: Double, ip: String? = nil, name: String, revision: Double, userAgent: String? = nil) {
+    self.atMs = atMs
+    self.ip = ip
+    self.name = name
+    self.revision = revision
+    self.userAgent = userAgent
+  }
+}
+
 public struct QuoteCustomer: Codable, Hashable, Sendable {
   public var company: String?
   public var email: String?
@@ -4907,6 +4927,40 @@ public struct QuoteCustomerRecord: Codable, Hashable, Sendable {
   public init(id: String, kind: String) {
     self.id = id
     self.kind = kind
+  }
+}
+
+public struct QuoteCustomerResponse: Codable, Hashable, Sendable {
+  public var action: QuoteCustomerResponseAction
+  public var atMs: Double
+  public var comment: String?
+  public var files: [QuoteResponseFile]?
+  public var ip: String?
+  public var name: String?
+  public var revision: Double
+  public var userAgent: String?
+
+  public init(action: QuoteCustomerResponseAction, atMs: Double, comment: String? = nil, files: [QuoteResponseFile]? = nil, ip: String? = nil, name: String? = nil, revision: Double, userAgent: String? = nil) {
+    self.action = action
+    self.atMs = atMs
+    self.comment = comment
+    self.files = files
+    self.ip = ip
+    self.name = name
+    self.revision = revision
+    self.userAgent = userAgent
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum QuoteCustomerResponseAction: String, Codable, CaseIterable, Hashable, Sendable {
+  case approve = "approve"
+  case changes = "changes"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
   }
 }
 
@@ -4948,13 +5002,41 @@ public enum QuoteNoTaxReason: String, Codable, CaseIterable, Hashable, Sendable 
   }
 }
 
-public struct QuoteProofRef: Codable, Hashable, Sendable {
+public struct QuoteProof: Codable, Hashable, Sendable {
+  public var addedAtMs: Double
+  public var addedBy: String
+  public var contentType: String
   public var id: String
+  public var name: String
+  public var path: String
   public var revision: Double
+  public var size: Double
 
-  public init(id: String, revision: Double) {
+  public init(addedAtMs: Double, addedBy: String, contentType: String, id: String, name: String, path: String, revision: Double, size: Double) {
+    self.addedAtMs = addedAtMs
+    self.addedBy = addedBy
+    self.contentType = contentType
     self.id = id
+    self.name = name
+    self.path = path
     self.revision = revision
+    self.size = size
+  }
+}
+
+public struct QuoteResponseFile: Codable, Hashable, Sendable {
+  public var contentType: String
+  public var id: String
+  public var name: String
+  public var path: String
+  public var size: Double
+
+  public init(contentType: String, id: String, name: String, path: String, size: Double) {
+    self.contentType = contentType
+    self.id = id
+    self.name = name
+    self.path = path
+    self.size = size
   }
 }
 

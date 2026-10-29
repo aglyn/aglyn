@@ -313,3 +313,123 @@ describe('a quote’s PDF (AGL-4095)', () => {
     expect(mockFetch).not.toHaveBeenCalled()
   })
 })
+
+describe('a quote’s proofs and revisions (AGL-4096)', () => {
+  const PROOF = { id: 'p1', revision: 1, name: 'Banner.pdf', contentType: 'application/pdf', size: 2_048, path: 'hosts/site1/private/uploads/quote-proof/q-1/p1', addedAtMs: 1, addedBy: 'a' }
+  const storageFetch = jest.fn(async (_url: string, _init?: RequestInit) => ({ ok: false, status: 0 }))
+  const realFetch = globalThis.fetch
+
+  beforeEach(() => {
+    storageFetch.mockClear()
+    Object.assign(globalThis, { fetch: storageFetch })
+    Object.assign(URL, { createObjectURL: jest.fn(() => 'blob:proof'), revokeObjectURL: jest.fn() })
+  })
+
+  afterEach(() => {
+    Object.assign(globalThis, { fetch: realFetch })
+    mockFetch.mockImplementation(async () => ({
+      ok: true,
+      json: async () => ({ quoteId: 'q-new', number: 1043, updatedAtMs: 5 }),
+    }))
+  })
+
+  async function openQuote(quote: Record<string, unknown>, canEdit = true) {
+    mockQuotes = [{ ...QUOTE, quote: { ...QUOTE.quote, ...quote } }]
+    render(<HostQuotesCard hostId="site1" canEdit={canEdit} canSend />)
+    fireEvent.click(screen.getByText('Quote #1042'))
+    return screen.findByRole('dialog')
+  }
+
+  it('lists the current revision’s proofs and what the customer asked to change', async () => {
+    const dialog = await openQuote({
+      stage: 'changes_requested',
+      proofs: [PROOF],
+      responses: [{ action: 'changes', revision: 1, atMs: Date.UTC(2026, 9, 29), comment: 'Make the logo bigger', ip: '203.0.113.9', userAgent: 'UA' }],
+    })
+    expect(within(dialog).getByText('Proofs · Revision 1')).toBeTruthy()
+    expect(within(dialog).getByText('Banner.pdf · 2 KB')).toBeTruthy()
+    expect(within(dialog).getByText('Make the logo bigger')).toBeTruthy()
+    expect(within(dialog).getAllByText('Changes requested').length).toBeGreaterThan(0)
+    // Answered: the proof can no longer be taken off or added to.
+    expect(within(dialog).queryByRole('button', { name: 'Remove Banner.pdf' })).toBeNull()
+    expect((within(dialog).getByRole('button', { name: 'Add proof' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('holds Add proof, Remove and Start revision behind "Create and edit quotes"', async () => {
+    const dialog = await openQuote({ proofs: [PROOF] }, false)
+    for (const name of ['Add proof', 'Remove Banner.pdf', 'Start revision 2']) {
+      expect((within(dialog).getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(true)
+    }
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('sends a proof straight to Storage through a ticket, then finalizes it', async () => {
+    mockFetch.mockImplementation(async (...args: unknown[]) => {
+      const body = JSON.parse(String((args[2] as RequestInit).body))
+      if (body.action === 'proof-ticket') {
+        return { ok: true, json: async () => ({ ticket: 'ticket-1', upload: { url: 'https://storage.example/b/', fields: { key: 'k', policy: 'p' } } }) }
+      }
+      return { ok: true, json: async () => ({ proof: { id: 'p2', name: 'Logo.png', contentType: 'image/png', size: 4 }, updatedAtMs: 7 }) }
+    })
+    const dialog = await openQuote({})
+    const file = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], 'Logo.png', { type: 'image/png' })
+    fireEvent.change(within(dialog).getByTestId('quote-proof-picker'), { target: { files: [file] } })
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2))
+    const bodies = mockFetch.mock.calls.map((call) => JSON.parse(String((call[2] as RequestInit).body)))
+    expect(bodies[0]).toEqual({ action: 'proof-ticket', hostId: 'site1', quoteId: 'q-1', file: { name: 'Logo.png', contentType: 'image/png', size: 4 } })
+    expect(bodies[1]).toEqual({ action: 'proof-finalize', hostId: 'site1', quoteId: 'q-1', ticket: 'ticket-1' })
+    expect(storageFetch).toHaveBeenCalledWith('https://storage.example/b/', expect.objectContaining({ method: 'POST', mode: 'no-cors' }))
+    const form = storageFetch.mock.calls[0][1]?.body as FormData
+    expect([...form.keys()]).toEqual(['key', 'policy', 'file'])
+  })
+
+  it('refuses a file it does not take before asking for anything', async () => {
+    const dialog = await openQuote({})
+    const file = new File(['<html>'], 'page.html', { type: 'text/html' })
+    fireEvent.change(within(dialog).getByTestId('quote-proof-picker'), { target: { files: [file] } })
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('starts the next revision only after saying what is kept', async () => {
+    mockFetch.mockImplementation(async () => ({ ok: true, json: async () => ({ revision: 2, updatedAtMs: 9 }) }))
+    const dialog = await openQuote({ proofs: [PROOF] })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Start revision 2' }))
+    const confirm = await screen.findByRole('dialog', { name: 'Start revision 2?' })
+    expect(within(confirm).getByText(/Revision 1 is kept as it is now/)).toBeTruthy()
+    expect(mockFetch).not.toHaveBeenCalled()
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Start revision 2' }))
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
+    expect(JSON.parse(String((mockFetch.mock.calls[0][2] as RequestInit).body))).toEqual({ action: 'start-revision', hostId: 'site1', quoteId: 'q-1' })
+  })
+
+  it('lists earlier revisions, read-only, with their status and answers', async () => {
+    mockFetch.mockImplementation(async () => ({
+      ok: true,
+      json: async () => ({
+        revisions: [
+          {
+            revision: 1,
+            stage: 'changes_requested',
+            closedAtMs: Date.UTC(2026, 9, 29),
+            proofs: [{ id: 'p1', name: 'First.pdf', contentType: 'application/pdf', size: 1_024 }],
+            responses: [{ action: 'changes', revision: 1, atMs: Date.UTC(2026, 9, 28), comment: 'Too small' }],
+          },
+        ],
+      }),
+    }))
+    const dialog = await openQuote({ revision: 2 })
+    expect(await within(dialog).findByText('Revision 1')).toBeTruthy()
+    expect(within(dialog).getByText('First.pdf · 1 KB')).toBeTruthy()
+    expect(within(dialog).getByText('Too small')).toBeTruthy()
+    expect(JSON.parse(String((mockFetch.mock.calls[0][2] as RequestInit).body))).toEqual({ action: 'revisions', hostId: 'site1', quoteId: 'q-1' })
+    expect(within(dialog).queryByRole('button', { name: 'Remove First.pdf' })).toBeNull()
+  })
+
+  it('opens the quote a manager notice links to', async () => {
+    window.history.replaceState(null, '', '/acme/hosts/shop/products/orders?quote=q-1')
+    mockQuotes = [QUOTE]
+    render(<HostQuotesCard hostId="site1" canEdit canSend />)
+    expect(await screen.findByRole('dialog')).toBeTruthy()
+    window.history.replaceState(null, '', '/')
+  })
+})

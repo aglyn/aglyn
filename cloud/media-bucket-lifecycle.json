@@ -4,7 +4,8 @@
   "$never": "NO rule here may omit matchesPrefix, and no prefix may name orgs/, hosts/ or users/. Those hold live customer media whose only correct deletion is the erasure path, which deletes by prefix under code that knows what it is deleting. Lifecycle matches on age and has no view of Firestore, so an age-based rule over orgs/ would delete the bytes behind media documents that still exist — broken assets across live workspaces, with nothing to say which. apps/console/specs/media-bucket-lifecycle.spec.ts fails the build if either invariant is broken.",
   "$periods": {
     "adminAudit-archive/": "365 days in the bucket, after the 90 days each entry already spent in Firestore — so an adminAudit entry is retained about 15 months end to end and is then gone. GCS ages an object from its own creation and the archive object is created at the END of the Firestore window, so 365 is the floor on every entry inside it, not an average.",
-    "erasures/": "30 days. Short on purpose: nothing writes this prefix any more, so an object appearing here is a regression, and the rule's job is that the regression expires rather than accumulating for the years it would take anyone to notice. It cannot delete a record we depend on — the record of an erasure is the adminAudit `org.erased` row, not an object."
+    "erasures/": "30 days. Short on purpose: nothing writes this prefix any more, so an object appearing here is a regression, and the rule's job is that the regression expires rather than accumulating for the years it would take anyone to notice. It cannot delete a record we depend on — the record of an erasure is the adminAudit `org.erased` row, not an object.",
+    "visitor-uploads-pending/": "1 day, the shortest age lifecycle has (AGL-4096). A file a site's visitor or member sends waits here between the browser's signed upload and the finalize that checks it and moves it under hosts/{hostId}/private/uploads/. A signed upload lapses after 15 minutes and a ticket can be finalized for an hour after that, so anything still here a day later was abandoned or never checked: a closed tab, a refused finalize that could not delete it. Nothing kept is ever here."
   },
   "lifecycle": {
     "rule": [
@@ -15,6 +16,10 @@
       {
         "action": { "type": "Delete" },
         "condition": { "age": 30, "matchesPrefix": ["erasures/"] }
+      },
+      {
+        "action": { "type": "Delete" },
+        "condition": { "age": 1, "matchesPrefix": ["visitor-uploads-pending/"] }
       }
     ]
   }

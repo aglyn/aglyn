@@ -1,7 +1,7 @@
 ---
 sidebar_position: 3.1
 title: Quotes
-description: Price a customer's order before they buy, with products and their add-ons, items typed for the job, things included at no charge, a discount, shipping, notes and terms, and tax worked out as you go.
+description: Price a customer's order before they buy, from your products and items typed for the job, with tax worked out as you go. Attach proofs to approve, and keep every revision.
 ---
 
 # Quotes
@@ -36,7 +36,8 @@ Quotes are on your site's **Products** hub, on the **Orders** tab, in the
 Each quote also keeps whether **Customers approve the proof before they can pay**.
 When it is on and the quote has a proof the customer hasn't approved, the customer's
 page asks them to approve it instead of offering **Pay**, and a payment can't be
-started for it. A quote with no proof is never held.
+started for it. A quote with no proof is never held. See
+[Proof approval and paying](#approval-and-paying).
 
 ## New-quote defaults {#quote-defaults}
 
@@ -113,6 +114,86 @@ email or phone number, your notes to yourself or who on your team wrote the quot
 **Download PDF** on the page saves the quote as a PDF file, so your customer can keep
 it, print it or pass it on. The download works only from the quote's current link.
 
+## Attach proofs {#proofs}
+
+A proof shows your customer what they're getting before you make it: the canopy with
+their logo on it, the sign laid out at size. Attach proofs to a saved quote, and your
+customer sees them on the quote page, where they approve them or ask for changes.
+
+1. Open the quote and find **Proofs** in the editor.
+2. Choose **Add proof** and pick one or more files.
+
+A proof can be a PNG, JPEG, WebP, GIF, PDF, SVG, AI, EPS, PSD or TIFF file, up to
+25 MB each, and a revision holds up to 10. Images show as pictures, and the other files
+as a chip with the file's name and size. Choose a picture or a chip to download the
+file.
+
+Every file is checked before it's kept: a file whose contents aren't what its name says,
+or that carries a program, isn't taken, and an SVG is stripped of anything that could
+run. Proofs are kept privately with the quote. Only your team and the holder of the
+quote's link can open them, and never through a public address.
+
+To take a proof off, choose **Remove** under it. You can add and remove proofs until
+your customer answers. After that, start a new revision to send different proofs.
+
+Adding or removing a proof changes what your customer sees, so it counts as an edit:
+a customer who has the page open is asked to look again before they answer or pay.
+
+## What your customer sees of the proofs {#customer-proofs}
+
+When the current revision has proofs, the quote page shows them under the quote: each
+image as a picture and every other file as a download. Beside them are two choices:
+
+- **Approve this proof.** Your customer types their name and chooses **Approve**. The
+  quote keeps their name, the time, and the address and browser it came from, as the
+  record of the approval, and moves to **Approved**.
+- **Request changes.** Your customer says what should change, and can attach their own
+  artwork: up to 10 files of the same kinds and size as proofs. The quote moves to
+  **Changes requested**, with their comment and files.
+
+The latest answer is the one that counts. A customer who asked for changes can still
+approve, and one who approved can still ask for changes, which withdraws the approval.
+The page tells them what they last said.
+
+You're notified of every answer, in the console and by email, with the quote, the
+customer, the revision and what they said. The notice opens the quote, and replying to
+the email reaches your customer.
+
+A paid quote still shows its proofs, with nothing to press. A link you replaced shows
+nothing of the quote, proofs included, and takes no answer.
+
+## Proof approval and paying {#approval-and-paying}
+
+Whether paying waits on the approval is up to you, quote by quote, with **Customers
+approve the proof before they can pay** (the [new-quote default](#quote-defaults) sets
+where each quote starts):
+
+- **On:** while the current revision has a proof your customer hasn't approved, the
+  quote page shows a short line asking them to approve it in place of **Pay**, and no
+  payment can be started. Approving brings **Pay** back. A new revision with new proofs
+  needs its own approval.
+- **Off:** **Pay** is always there. Your customer can approve or ask for changes, and
+  paying never waits on it.
+
+## Revisions {#revisions}
+
+A quote's revision is the version your customer is looking at, starting at
+**Revision 1**. When your customer asks for changes, or you want to send different
+proofs, start the next one:
+
+1. Open the quote and choose **Start revision 2** (or whichever comes next) under
+   **Proofs**.
+2. Confirm.
+
+The revision you had is kept exactly as it stood: its items and totals, notes and
+terms, its proofs, and every answer your customer gave it. The new revision starts with
+no proofs and no answer, back at **Draft**, ready for new proofs and any changes to the
+quote. Every earlier revision is listed under **Earlier revisions** in the quote, with
+its status, its proofs and your customer's comments and files, read-only.
+
+A paid quote takes no new revision. A quote that has earlier revisions can't be
+deleted, because your customer saw them.
+
 ## Download a quote as a PDF {#pdf}
 
 Open a saved quote and choose **Download PDF**. The PDF is the quote your customer
@@ -180,8 +261,9 @@ tools and the customer's account page.
 
 ## Who can make and send quotes {#permissions}
 
-Making, editing and deleting quotes, and downloading a quote's PDF, takes the
-**Create and edit quotes** permission. Copying and replacing a quote's pay link takes
+Making, editing and deleting quotes, adding and removing proofs, starting a revision,
+seeing earlier revisions and your customer's files, and downloading a quote's PDF, takes
+the **Create and edit quotes** permission. Copying and replacing a quote's pay link takes
 **Send quotes and invoices to customers**, and so does a PDF that carries the pay link. Everyone who can manage orders on the site has both to start with; a
 custom role or a per-member override can grant or deny each one. See
 [Order permissions](../../workspace-and-billing/teams-and-roles/custom-roles.md#order-permissions).

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { visitorUploadIsInline } from '@aglyn/aglyn/app-utils/visitor-upload'
 import type { ProductType } from './commerce'
 import {
   appendOrderEvent,
@@ -35,6 +36,7 @@ import {
   type QuoteTaxBasis,
   type QuoteUnmatchedPayment,
 } from './commerce-quotes'
+import { currentQuoteProofs, latestQuoteResponse, quoteRespondRefusal } from './commerce-quote-proofs'
 import type { StorefrontTaxMode } from './commerce-tax-decision'
 import { engineLineTaxPercentages } from './commerce-tax-engine'
 import { withOrderListFields, type OrderListFields } from './order-list-fields'
@@ -101,6 +103,27 @@ export interface QuotePageLine {
 /** Where the quote stands, as its customer sees it. */
 export type QuotePageStatus = 'unpaid' | 'paid' | 'canceled' | 'refunded'
 
+/** A proof as the quote page lists it: no storage path, nothing about who attached it. */
+export interface QuotePageProof {
+  id: string
+  name: string
+  contentType: string
+  size: number
+  /** Shown in the page as a picture; everything else is a download. */
+  inline: boolean
+}
+
+/** The customer's latest answer to the revision the page shows. */
+export interface QuotePageResponse {
+  action: 'approve' | 'changes'
+  atMs: number
+  /** With an approval: the name it was given under. */
+  name: string | null
+  comment: string | null
+  /** How many files came with it. */
+  files: number
+}
+
 /**
  * What the quote page shows. Allow-listed, never spread: the order document
  * carries the customer's email and phone, Stripe ids, the business's own
@@ -149,6 +172,14 @@ export interface QuotePageView {
   approvalRequired: boolean
   /** A Pay button belongs on the page. */
   payable: boolean
+  /** The revision the page shows (AGL-4096). */
+  revision: number
+  /** That revision's proofs. */
+  proofs: QuotePageProof[]
+  /** The customer's latest answer to it, if any. */
+  response: QuotePageResponse | null
+  /** Approve and Request changes belong on the page. */
+  respondable: boolean
 }
 
 /** What a signed link for an older version of the quote opens: nothing of the quote. */
@@ -278,6 +309,30 @@ export function buildQuotePageView(input: {
     receiptUrl: unpaid ? null : (input.receiptUrl ?? null),
     approvalRequired,
     payable: unpaid && !approvalRequired && quotePayRefusal(order, input.orderId) === null,
+    revision: Math.max(1, Number(quote?.revision ?? 1) || 1),
+    proofs: currentQuoteProofs(quote).map((proof) => ({
+      id: String(proof.id),
+      name: String(proof.name ?? 'Proof'),
+      contentType: String(proof.contentType ?? ''),
+      size: Math.max(0, cents(proof.size)),
+      inline: visitorUploadIsInline(String(proof.contentType ?? '')),
+    })),
+    response: pageResponse(quote),
+    // The page is only ever a quote's, whatever the caller picked off the order.
+    respondable: quoteRespondRefusal({ channel: 'quote', status: order.status, quote }) === null,
+  }
+}
+
+/** The latest answer, as the page may show it back to the link's holder: never the address or browser. */
+function pageResponse(quote: OrderQuote | null | undefined): QuotePageResponse | null {
+  const latest = latestQuoteResponse(quote)
+  if (!latest) return null
+  return {
+    action: latest.action === 'approve' ? 'approve' : 'changes',
+    atMs: Number(latest.atMs) || 0,
+    name: latest.action === 'approve' ? text(latest.name) : null,
+    comment: latest.action === 'changes' ? text(latest.comment) : null,
+    files: latest.files?.length ?? 0,
   }
 }
 
