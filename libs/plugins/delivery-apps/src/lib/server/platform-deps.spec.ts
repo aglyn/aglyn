@@ -42,6 +42,7 @@ jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => ({
       auth: () => ({
         verifyIdToken: async (token: string) => {
           if (token === 'expired') throw Object.assign(new Error('Firebase ID token has expired.'), { code: 'auth/id-token-expired' })
+          if (token === 'outage') throw Object.assign(new Error('Service unavailable'), { code: 'app/network-error' })
           return { uid: 'member-1', email_verified: true, ...mockClaims }
         },
       }),
@@ -160,11 +161,12 @@ describe('the delivery register’s gate (AGL-4047)', () => {
     expect(mockResolved).toEqual([])
   })
 
-  it('lets staff through without asking, and answers an expired sign-in 401', async () => {
+  it('lets staff through without asking, answers an expired sign-in 401, and never calls an outage a bad sign-in', async () => {
     mockClaims = { staff: true }
     expect(await ask('registerOrder')).toEqual({ status: 200 })
     expect(mockResolved).toEqual([])
     mockClaims = {}
     expect((await ask('register', 'expired')).status).toBe(401)
+    await expect(ask('register', 'outage')).rejects.toThrow('Service unavailable')
   })
 })

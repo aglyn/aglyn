@@ -133,7 +133,8 @@ export async function deliveryAppsGate(request: Request, kind: DeliveryGateKind)
   try {
     decoded = await firebaseAdmin.app().auth().verifyIdToken(authorization.slice('Bearer '.length))
   } catch (error) {
-    if (!isRefusedIdToken(error)) return fail(503, 'Sign-in could not be checked. Try again.')
+    // A token refused is a 401; anything else broke while checking it and stays a 5xx.
+    if (!isRefusedIdToken(error)) throw error
     return fail(401, 'Unauthenticated')
   }
   if (!isEmailVerified(decoded) && !isImpersonationSession(decoded)) return fail(403, 'Verify your email address first')
