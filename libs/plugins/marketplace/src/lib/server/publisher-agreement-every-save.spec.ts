@@ -281,6 +281,7 @@ const NOT_PUBLISHER_SAVES: Record<string, string> = {
   'marketplace/update-artifact': 'updating an installed copy (merchant)',
   'marketplace/listing-versions': 'reading a listing’s versions',
   'marketplace/starters': 'searching the site starters Create site offers (a read)',
+  'marketplace/starters/answers': 'reading the answers an AI starter fills the AI start with (a read)',
   'marketplace/report': 'anyone reporting a listing',
   'marketplace/reviews': 'a buyer rating and reviewing a listing (merchant)',
   'marketplace/admin/reports': 'staff moderation',
@@ -295,8 +296,9 @@ const serverSource = readFileSync(join(__dirname, '..', 'server.ts'), 'utf8')
 /** `route → handler file`, from the registrations and the imports beside them. */
 const registered = (() => {
   const imports = new Map<string, string>()
-  for (const match of serverSource.matchAll(/import \{ ([A-Za-z]+) \} from '\.\/server\/([a-z-]+)'/g)) {
-    imports.set(match[1], `${match[2]}.ts`)
+  // One handler or several from a file, each named to the file it comes from.
+  for (const match of serverSource.matchAll(/import \{ ([A-Za-z, ]+) \} from '\.\/server\/([a-z-]+)'/g)) {
+    for (const name of match[1].split(',')) imports.set(name.trim(), `${match[2]}.ts`)
   }
   const routes = new Map<string, string | null>()
   for (const match of serverSource.matchAll(

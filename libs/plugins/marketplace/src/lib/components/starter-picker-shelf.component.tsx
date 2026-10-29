@@ -40,6 +40,7 @@ import {
   type Theme,
 } from '@mui/material'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useStarterAnswers } from '../hooks/use-starter-answers'
 import { useStarterPurchase } from '../hooks/use-starter-purchase'
 import { useStarterSearch } from '../hooks/use-starter-search'
 import { starterCardFacts, starterPriceLabel, type StarterCardFact } from '../model/starter-query'
@@ -146,6 +147,13 @@ function emptyMessage(props: ConsoleHostStarterPickerZoneProps): string {
  * instead. The dialog's own `selected` wins over the shelf's pick: it is how
  * a pick restored after paying is shown chosen, and how one the create
  * refused is cleared.
+ *
+ * An AI starter the workspace may use — free, owned, or just bought — has
+ * the answers it carries read once it is picked (AGL-4049 phase 4), and
+ * handed to the dialog with it (`onPick(pick, { answers })`), which goes on
+ * to the AI start's questions with them. A priced one not yet bought is
+ * never read: its answers are what it sells, and the door would ask payment
+ * for them. A door that still asks is told back to the dialog as unowned.
  */
 export function StarterPickerShelf(props: ConsoleHostStarterPickerZoneProps) {
   const { orgId, mode, search, filter, onPick, ready, selected } = props
@@ -158,11 +166,20 @@ export function StarterPickerShelf(props: ConsoleHostStarterPickerZoneProps) {
   const [shown, setShown] = useState(false)
   // Starters a purchase attempt found this workspace already owns.
   const [ownedHere, setOwnedHere] = useState<ReadonlySet<string>>(() => new Set())
+  // AI starters whose answers the door still asked payment for (AGL-4049).
+  const [unpaidHere, setUnpaidHere] = useState<ReadonlySet<string>>(() => new Set())
   const purchase = useStarterPurchase(orgId)
+  const starterAnswers = useStarterAnswers(orgId)
   const value = selected !== undefined ? (selected?.listingId ?? null) : picked
   const pickedRow = value ? (found.rows.find((row) => row.listingId === value) ?? null) : null
   const ownedOverride = (row: SiteStarterSummary): boolean | undefined =>
-    ownedHere.has(row.listingId) ? true : selected?.listingId === row.listingId ? selected.owned : undefined
+    ownedHere.has(row.listingId)
+      ? true
+      : unpaidHere.has(row.listingId)
+        ? false
+        : selected?.listingId === row.listingId
+          ? selected.owned
+          : undefined
 
   const refused = found.error !== null && REFUSED.has(found.error.status)
   // `null` until the first answer, which is the only one that may decide
@@ -205,12 +222,51 @@ export function StarterPickerShelf(props: ConsoleHostStarterPickerZoneProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [restored, pickedRow])
 
+  // The picked AI starter's answers (AGL-4049), read once it is one the
+  // workspace may use; keyed on the listing and whether it is owned, so a
+  // purchase that makes it usable reads it, and nothing reads it twice.
+  const pickedOwned = pickedRow ? ownedOf(pickedRow, ownedOverride(pickedRow)) : false
+  const answersKey =
+    pickedRow && pickedRow.facets.mode === 'ai' && (pickedRow.priceUsd <= 0 || pickedOwned)
+      ? `${pickedRow.listingId}:${pickedOwned}`
+      : null
+  const [reading, setReading] = useState<{ key: string; failed: string | null } | null>(null)
+  const [readAttempt, setReadAttempt] = useState(0)
+  const askedAnswers = useRef<string | null>(null)
+  useEffect(() => {
+    if (!answersKey || !pickedRow || askedAnswers.current === answersKey) return
+    askedAnswers.current = answersKey
+    const row = pickedRow
+    const override = ownedOverride(row)
+    const handed = override === undefined ? row : { ...row, owned: override }
+    setReading({ key: answersKey, failed: null })
+    void starterAnswers.read(row.listingId).then((outcome) => {
+      if (askedAnswers.current !== answersKey) return
+      if (outcome.status === 'failed') return setReading({ key: answersKey, failed: outcome.message })
+      setReading(null)
+      if (outcome.status === 'ready') return onPickRef.current(handed, { answers: outcome.answers })
+      setUnpaidHere((current) => new Set(current).add(row.listingId))
+      onPickRef.current({ ...row, owned: false })
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [answersKey, readAttempt])
+  const readingPicked = reading !== null && reading.key === answersKey ? reading : null
+  const readAgain = () => {
+    askedAnswers.current = null
+    setReadAttempt((count) => count + 1)
+  }
+
   const options = useMemo(() => found.rows.map(cardOf), [found.rows])
 
   const buy = async (row: SiteStarterSummary) => {
     const outcome = await purchase.buy(row.listingId)
     if (outcome !== 'owned') return
     setOwnedHere((current) => new Set(current).add(row.listingId))
+    setUnpaidHere((current) => {
+      const next = new Set(current)
+      next.delete(row.listingId)
+      return next
+    })
     onPick({ ...row, owned: true })
   }
 
@@ -303,6 +359,21 @@ export function StarterPickerShelf(props: ConsoleHostStarterPickerZoneProps) {
         )
       ) : null}
       {purchase.error ? <Alert severity="error">{purchase.error}</Alert> : null}
+      {readingPicked?.failed ? (
+        <Alert
+          severity="error"
+          data-starter-answers-failed={pickedRow?.listingId}
+          action={
+            <Button color="inherit" size="small" onClick={readAgain}>
+              {'Try again'}
+            </Button>
+          }
+        >
+          {readingPicked.failed}
+        </Alert>
+      ) : readingPicked ? (
+        <LinearProgress aria-label="Reading this starter’s answers" />
+      ) : null}
     </Stack>
   )
 }

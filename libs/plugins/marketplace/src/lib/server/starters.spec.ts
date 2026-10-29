@@ -102,7 +102,12 @@ jest.mock('@aglyn/aglyn/plugin-manager/plugin-theme-presets', () => ({
 }))
 
 import { SITE_STARTER_SEARCH_MAX } from '../model/site-starter-listing'
-import { marketplaceStarters, SITE_STARTERS_UNAVAILABLE, SITE_STARTERS_UNRELEASED } from './starters'
+import {
+  marketplaceStarterAnswers,
+  marketplaceStarters,
+  SITE_STARTERS_UNAVAILABLE,
+  SITE_STARTERS_UNRELEASED,
+} from './starters'
 
 const MEMBER = { role: 'owner', allHosts: true }
 
@@ -351,5 +356,143 @@ describe('a pick restored on the way back from paying for it (AGL-4049 lane 3)',
 
   it('400s an id no listing can have', async () => {
     expect((await ask('orgId=org-1&include=a%2Fb')).status).toBe(400)
+  })
+})
+
+/**
+ * `GET /api/marketplace/starters/answers` (AGL-4049 phase 4): the answers an
+ * AI starter carries, which fill the AI start's questions. They are what a
+ * paid AI starter sells, so they come out of the seam's purchase-gated
+ * `resolve` only, behind every gate the search holds, in the same order.
+ */
+describe('an AI starter’s answers', () => {
+  const mockResolve = jest.fn()
+  const ANSWERS = { kind: 'restaurant', style: { base: 'starter' }, fonts: 'inter', brandColors: { primary: '#8a3b12' }, pages: 4, brief: '' }
+  const FACETS = { kind: 'restaurant', base: 'starter', fonts: 'inter', pages: 1, mode: 'ai' }
+  const PAYLOAD = {
+    mode: 'ai',
+    facets: FACETS,
+    theme: { kind: 'builtin', base: 'starter', brand: { light: {} }, fonts: 'inter' },
+    screens: [{ displayName: 'Home', slug: '/', nodes: { secret: { componentId: 'text' } } }],
+    layout: { displayName: 'Header and footer', nodes: {} },
+    answers: ANSWERS,
+  }
+  const askAnswers = (query = 'orgId=org-1&listingId=fp-starter-restaurant-ai', init: RequestInit & { token?: string | null } = {}) => {
+    const { token = 'member-token', ...rest } = init
+    return marketplaceStarterAnswers(
+      new Request(`https://console.aglyn.com/api/marketplace/starters/answers?${query}`, {
+        ...rest,
+        headers: token === null ? {} : { authorization: `Bearer ${token}` },
+      }),
+    )
+  }
+
+  beforeEach(() => {
+    mockResolve.mockReset().mockImplementation(async () => {
+      calls.push('resolve')
+      return PAYLOAD
+    })
+    mockResolveSource.mockReturnValue({ search: mockSearch, resolve: mockResolve })
+  })
+
+  it('answers the starter’s answers and facets, for the membership’s workspace and the caller, and nothing else', async () => {
+    const response = await askAnswers()
+    expect(response.status).toBe(200)
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    expect(await bodyOf(response)).toEqual({ answers: ANSWERS, facets: FACETS })
+    expect(mockResolve).toHaveBeenCalledWith({ listingId: 'fp-starter-restaurant-ai' }, { orgId: 'org-1', uid: 'member-1' })
+    expect(calls).toEqual(['token', 'membership', 'permission', 'flag', 'source', 'resolve'])
+  })
+
+  it('holds the search’s gates, in the same order, each before the next is read', async () => {
+    expect((await askAnswers(undefined, { token: null })).status).toBe(401)
+    expect(calls).toEqual([])
+
+    mockVerifyIdToken.mockResolvedValueOnce({ uid: 'member-1', email_verified: false })
+    expect((await askAnswers()).status).toBe(403)
+
+    calls.length = 0
+    const unnamed = await askAnswers('orgId=org-1')
+    expect(unnamed.status).toBe(400)
+    expect(await bodyOf(unnamed)).toEqual({ error: 'Unknown starter' })
+    expect((await askAnswers('listingId=fp-starter-restaurant-ai')).status).toBe(400)
+    expect((await askAnswers('orgId=org-1&listingId=a%2Fb')).status).toBe(400)
+    expect(calls).toEqual(['token', 'token', 'token'])
+
+    calls.length = 0
+    mockResolveOrgMembership.mockResolvedValueOnce(null)
+    expect((await askAnswers()).status).toBe(403)
+    expect(calls).toEqual(['token', 'membership'])
+
+    calls.length = 0
+    mockMemberHasOrgPermission.mockResolvedValueOnce(false)
+    const unpermitted = await askAnswers()
+    expect(unpermitted.status).toBe(403)
+    expect((await bodyOf(unpermitted)).error).toContain('"Create sites"')
+    expect(calls).toEqual(['token', 'membership', 'permission'])
+
+    calls.length = 0
+    mockFlagOn.mockResolvedValueOnce(false)
+    const unreleased = await askAnswers()
+    expect(unreleased.status).toBe(403)
+    expect(await bodyOf(unreleased)).toEqual({ error: SITE_STARTERS_UNRELEASED })
+    expect(calls).toEqual(['token', 'membership', 'permission', 'flag'])
+
+    calls.length = 0
+    mockResolveSource.mockReturnValue(null)
+    expect((await askAnswers()).status).toBe(503)
+    expect(mockResolve).not.toHaveBeenCalled()
+  })
+
+  it('lets staff past the flag without asking it', async () => {
+    mockVerifyIdToken.mockResolvedValue({ uid: 'staff-1', email_verified: true, staff: true })
+    mockFlagOn.mockResolvedValue(false)
+    expect((await askAnswers()).status).toBe(200)
+    expect(mockFlagOn).not.toHaveBeenCalled()
+  })
+
+  it('402s a priced starter this workspace has not bought, with its price, and hands over no answers', async () => {
+    mockResolve.mockResolvedValue({ error: 'Purchase required', status: 402, priceUsd: 12 })
+    const response = await askAnswers()
+    expect(response.status).toBe(402)
+    const body = await bodyOf(response)
+    expect(body).toEqual({
+      error: 'Purchase required',
+      code: 'purchase_required',
+      listingId: 'fp-starter-restaurant-ai',
+      priceUsd: 12,
+    })
+  })
+
+  it.each([403, 404] as const)('passes a %i from the source on', async (status) => {
+    mockResolve.mockResolvedValue({ error: 'No', status })
+    const response = await askAnswers()
+    expect(response.status).toBe(status)
+    expect(await bodyOf(response)).toEqual({ error: 'No', listingId: 'fp-starter-restaurant-ai' })
+  })
+
+  it('409s a starter site, which has no questions to fill', async () => {
+    mockResolve.mockResolvedValue({ ...PAYLOAD, mode: 'base', facets: { ...FACETS, mode: 'base' }, answers: undefined })
+    const response = await askAnswers()
+    expect(response.status).toBe(409)
+    expect(await bodyOf(response)).toEqual({
+      error: 'This starter is a ready-made site, with no questions to answer',
+      listingId: 'fp-starter-restaurant-ai',
+    })
+  })
+
+  it('never hands over a starter’s pages, layout or theme', async () => {
+    const raw = JSON.stringify(await bodyOf(await askAnswers()))
+    for (const leaked of ['screens', 'layout', 'secret', 'theme']) expect(raw).not.toContain(leaked)
+  })
+
+  it('refuses anything but GET, and 500s in its own words when the source fails', async () => {
+    expect((await askAnswers(undefined, { method: 'POST' })).status).toBe(405)
+    const quiet = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    mockResolve.mockRejectedValue(new Error('down'))
+    const response = await askAnswers()
+    expect(response.status).toBe(500)
+    expect(await bodyOf(response)).toEqual({ error: 'This starter could not be read' })
+    quiet.mockRestore()
   })
 })

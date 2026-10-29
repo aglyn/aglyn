@@ -60,7 +60,7 @@ import { publishEmailStarterHandler } from './server/publish-email-starter'
 import { publishEmailTemplateHandler } from './server/publish-email-template'
 import { publishLayoutHandler } from './server/publish-layout'
 import { publishStarterHandler } from './server/publish-starter'
-import { marketplaceStarters } from './server/starters'
+import { marketplaceStarterAnswers, marketplaceStarters } from './server/starters'
 import { publishTemplateHandler } from './server/publish-template'
 import { publishThemeHandler } from './server/publish-theme'
 import { updateArtifactHandler } from './server/update-artifact'
@@ -214,6 +214,16 @@ export function registerMarketplaceConsoleApi(): void {
   registerPluginApiRoute(
     'marketplace/starters',
     { web: marketplaceStarters },
+    { subject: (request) => ({ orgId: new URL(request.url).searchParams.get('orgId') || null }) },
+  )
+  /*
+   * And an AI starter's answers, once one is picked (AGL-4049 phase 4): what
+   * fills the AI start's questions, behind the same gates and the starter's
+   * purchase. The same shape and subject as the search.
+   */
+  registerPluginApiRoute(
+    'marketplace/starters/answers',
+    { web: marketplaceStarterAnswers },
     { subject: (request) => ({ orgId: new URL(request.url).searchParams.get('orgId') || null }) },
   )
   registerPluginApiRoute('marketplace/publish-theme', publishThemeHandler)

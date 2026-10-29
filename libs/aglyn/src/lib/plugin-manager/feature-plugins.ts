@@ -45,7 +45,7 @@ import type { ReleaseFlagKey } from '../app-utils/release-flags'
 import type { SeoAuditReport } from '../app-utils/seo-audit'
 import type { SeoListingFieldKey } from '../app-utils/seo-listing-fields'
 import type { SitePreviewStart } from '../app-utils/site-preview'
-import type { SiteStarterFacets, SiteStarterMode } from '../app-utils/site-starter'
+import type { SiteStarterChoice, SiteStarterFacets, SiteStarterMode } from '../app-utils/site-starter'
 import type { AglynOrgBilling, OrgFeatureFlags } from '../foundation'
 import type {
   ComponentSchema,
@@ -1341,10 +1341,16 @@ export interface ConsolePendingSite {
    * (AGL-4049): a `SITE_STYLES` id, or `SITE_STYLE_AUTO` for a card that lets
    * the answers pick. It is recorded on the site (`starterChoice`) and
    * changes nothing it is created with: the start builds the look.
+   *
+   * `starter` is the AI starter the questions were filled from
+   * ({@link ConsoleHostFirstRunZoneProps.starter}, AGL-4049): the site is
+   * created empty for the start, as ever, and records the starter it began
+   * from, so leaving the start gives it that starter's own pages.
    */
   create: (options?: {
     start?: 'import'
     style?: string
+    starter?: SiteStarterChoice
   }) => Promise<ConsoleCreatedSite | { error: string; address?: boolean }>
   /**
    * "Start in preview" (AGL-4086), as the shell draws it: the switch that
@@ -1451,10 +1457,31 @@ export interface ConsoleHostFirstRunZoneProps {
    */
   chooseStarter?: () => void
   /**
+   * An AI starter the person picked in "Choose your starter" (AGL-4049), with
+   * {@link pendingSite}: the widget's questions open filled in from it, every
+   * answer the person's to change, and {@link ConsolePendingSite.create} is
+   * handed its `choice` so the site records it. Absent, the questions start
+   * empty, as ever. Nothing is created by it.
+   */
+  starter?: ConsoleHostFirstRunStarter
+  /**
    * Present when staff build the site for a client (AGL-3958), from the
    * one-screen build. See {@link ConsoleClientBuildStart}.
    */
   clientBuild?: ConsoleClientBuildStart
+}
+
+/**
+ * An AI starter as the `hostFirstRun` zone hands it over (AGL-4049): the
+ * listing picked, its name as the picker showed it, and the answers it
+ * carries, as its listing stores them — an AI starter is answers and a look,
+ * never a copy of pages. Which of them a widget asks is the widget's to map;
+ * the core does not read them.
+ */
+export interface ConsoleHostFirstRunStarter {
+  choice: SiteStarterChoice
+  displayName: string
+  answers: Record<string, unknown>
 }
 
 /**
@@ -1717,8 +1744,14 @@ export interface ConsoleHostStarterPickerZoneProps {
    * same listing once the widget has read a pick the dialog restored through
    * {@link selected}, and with `owned: true` once the widget learns the
    * workspace owns it.
+   *
+   * For an AI starter (AGL-4049), called once more with `extra.answers` when
+   * the widget has read the answers it carries, which only a starter the
+   * workspace may use hands over: the dialog continues to the questions with
+   * them. A priced AI starter not yet bought is handed back unowned, with
+   * none.
    */
-  onPick: (pick: SiteStarterSummary) => void
+  onPick: (pick: SiteStarterSummary, extra?: { answers?: Record<string, unknown> }) => void
   /** Reports whether the widget drew a picker; `false` gives the dialog its own default. */
   ready: (shown: boolean) => void
   /**

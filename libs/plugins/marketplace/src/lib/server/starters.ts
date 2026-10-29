@@ -25,6 +25,7 @@ import {
   resolveSiteStarterSource,
   type PluginSiteStarterSource,
   type SiteStarterSummary,
+  type SiteStarterViewer,
 } from '@aglyn/aglyn/plugin-manager/plugin-site-starters'
 import { listServerThemePresets } from '@aglyn/aglyn/plugin-manager/plugin-theme-presets'
 import {
@@ -38,7 +39,9 @@ import {
 import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import {
   readStarterSummary,
+  starterAnswersQueryFrom,
   starterQueryFrom,
+  type StarterAnswersAnswer,
   type StarterSearchAnswer,
   type StarterSearchLabels,
 } from '../model/starter-query'
@@ -78,6 +81,22 @@ import {
  *
  * The dispatcher in front refuses an unverified account and a lockdown too;
  * the verification check is repeated here so the route stands on its own.
+ *
+ * AN AI STARTER'S ANSWERS (AGL-4049 phase 4).
+ *
+ * `GET /api/marketplace/starters/answers?orgId=&listingId=` answers
+ * `{ answers, facets }`: what an AI starter carries to fill the AI start's
+ * questions once a person picks it. Behind the same gates in the same order
+ * (its 400 is a listing id no listing can have), then the seam's `resolve`,
+ * which is where a priced starter is held to its purchase:
+ *
+ *   402  a priced starter the workspace has not bought, with its price and
+ *        `code: purchase_required`, as the create route words it
+ *   403  404  passed on from the source, naming the listing
+ *   409  a starter site, which is created as it is and asks nothing
+ *
+ * The answers and the facets only: never the starter's pages, its layout or
+ * its theme, which the site is created from, not the questions.
  */
 
 const NO_STORE = { 'Cache-Control': 'no-store' }
@@ -131,11 +150,23 @@ async function starterSource(): Promise<PluginSiteStarterSource | null> {
   return resolveSiteStarterSource()
 }
 
-async function handler(request: Request): Promise<Response> {
+/** A verified caller, as the token says it. */
+type Caller = { uid: string } & Record<string, unknown>
+
+/**
+ * Both doors' first gates and their failure handling: GET only, a bearer
+ * token the verifier accepts, a verified address (impersonation exempt).
+ * `run` answers the rest; whatever it throws is a 401 for a credential the
+ * verifier refused (AGL-1993) and a 500 in `failed`'s words otherwise.
+ */
+async function asVerifiedCaller(
+  request: Request,
+  failed: { log: string; error: string },
+  run: (caller: Caller) => Promise<Response>,
+): Promise<Response> {
   if (request.method !== 'GET') return refuse(405, 'Method not allowed')
   const authorization = request.headers.get('authorization') ?? ''
   if (!authorization.startsWith('Bearer ')) return refuse(401, 'Unauthenticated')
-
   try {
     const decoded = await firebaseAdmin
       .app()
@@ -144,53 +175,123 @@ async function handler(request: Request): Promise<Response> {
     if (!decoded.email_verified && !isImpersonationSession(decoded)) {
       return emailUnverifiedResponse()
     }
-    const asked = starterQueryFrom(new URL(request.url).searchParams)
-    if ('error' in asked) return refuse(400, asked.error)
-
-    // The membership's org, never the query's: every gate below asks about
-    // the workspace the caller actually belongs to.
-    const membership = await resolveOrgMembership(decoded.uid, asked.orgId)
-    if (!membership) return refuse(403, 'You are not a member of that organization')
-    const orgId = membership.orgId
-    if (!(await memberHasOrgPermission(orgId, membership.member, 'hosts.create'))) {
-      return refuse(403, permissionRefusalText('hosts.create'))
-    }
-    if (
-      decoded['staff'] !== true &&
-      !(await isServerReleaseFlagOnForOrg('release_site_starters', orgId))
-    ) {
-      return refuse(403, SITE_STARTERS_UNRELEASED)
-    }
-
-    const source = await starterSource()
-    if (!source) return refuse(503, SITE_STARTERS_UNAVAILABLE)
-    const viewer = { orgId, uid: decoded.uid }
-    const found = await source.search(
-      { word: asked.word, filter: asked.filter, limit: asked.limit },
-      viewer,
-    )
-    const rows: SiteStarterSummary[] = []
-    // The restored pick first, so the card the person chose is the one they
-    // see, wherever the search would have put it, or left it out.
-    const included = asked.include
-      ? readStarterSummary(await describeSiteStarter(source, { listingId: asked.include }, viewer))
-      : null
-    if (included) rows.push(included)
-    for (const value of Array.isArray(found) ? found : []) {
-      const row = readStarterSummary(value)
-      if (row && row.listingId !== included?.listingId) rows.push(row)
-      if (rows.length >= asked.limit + (included ? 1 : 0)) break
-    }
-    const body: StarterSearchAnswer = { rows, labels: starterSearchLabels() }
-    return answer(body)
+    return await run(decoded as unknown as Caller)
   } catch (error) {
     // An unverifiable credential is a 401, not a fault of ours (AGL-1993);
     // anything else keeps its 500.
     const unauthenticated = invalidIdTokenResponse(error)
     if (unauthenticated) return unauthenticated
-    console.error('[marketplace/starters] search failed', error)
-    return refuse(500, 'Starters could not be loaded')
+    console.error(failed.log, error)
+    return refuse(500, failed.error)
   }
 }
 
-export { handler as marketplaceStarters }
+/**
+ * The gates after the question is read, in order: a member of the workspace
+ * named, holding "Create sites", the release flag on for it (staff pass
+ * without it being asked), and a plugin that serves starters. Answers the
+ * viewer every source call is made for — the membership's workspace, never
+ * the query's — and the source, or the refusal.
+ */
+async function admitViewer(
+  caller: Caller,
+  askedOrgId: string,
+): Promise<{ viewer: SiteStarterViewer; source: PluginSiteStarterSource } | Response> {
+  // The membership's org, never the query's: every gate below asks about
+  // the workspace the caller actually belongs to.
+  const membership = await resolveOrgMembership(caller.uid, askedOrgId)
+  if (!membership) return refuse(403, 'You are not a member of that organization')
+  const orgId = membership.orgId
+  if (!(await memberHasOrgPermission(orgId, membership.member, 'hosts.create'))) {
+    return refuse(403, permissionRefusalText('hosts.create'))
+  }
+  if (
+    caller['staff'] !== true &&
+    !(await isServerReleaseFlagOnForOrg('release_site_starters', orgId))
+  ) {
+    return refuse(403, SITE_STARTERS_UNRELEASED)
+  }
+  const source = await starterSource()
+  if (!source) return refuse(503, SITE_STARTERS_UNAVAILABLE)
+  return { viewer: { orgId, uid: caller.uid }, source }
+}
+
+async function handler(request: Request): Promise<Response> {
+  return asVerifiedCaller(
+    request,
+    { log: '[marketplace/starters] search failed', error: 'Starters could not be loaded' },
+    async (caller) => {
+      const asked = starterQueryFrom(new URL(request.url).searchParams)
+      if ('error' in asked) return refuse(400, asked.error)
+      const admitted = await admitViewer(caller, asked.orgId)
+      if (admitted instanceof Response) return admitted
+      const { viewer, source } = admitted
+      const found = await source.search(
+        { word: asked.word, filter: asked.filter, limit: asked.limit },
+        viewer,
+      )
+      const rows: SiteStarterSummary[] = []
+      // The restored pick first, so the card the person chose is the one they
+      // see, wherever the search would have put it, or left it out.
+      const included = asked.include
+        ? readStarterSummary(await describeSiteStarter(source, { listingId: asked.include }, viewer))
+        : null
+      if (included) rows.push(included)
+      for (const value of Array.isArray(found) ? found : []) {
+        const row = readStarterSummary(value)
+        if (row && row.listingId !== included?.listingId) rows.push(row)
+        if (rows.length >= asked.limit + (included ? 1 : 0)) break
+      }
+      const body: StarterSearchAnswer = { rows, labels: starterSearchLabels() }
+      return answer(body)
+    },
+  )
+}
+
+/** What the answers door says of a starter site, which asks nothing. */
+export const STARTER_HAS_NO_QUESTIONS = 'This starter is a ready-made site, with no questions to answer'
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === 'object' && !Array.isArray(value)
+
+async function answersHandler(request: Request): Promise<Response> {
+  return asVerifiedCaller(
+    request,
+    { log: '[marketplace/starters/answers] read failed', error: 'This starter could not be read' },
+    async (caller) => {
+      const asked = starterAnswersQueryFrom(new URL(request.url).searchParams)
+      if ('error' in asked) return refuse(400, asked.error)
+      const admitted = await admitViewer(caller, asked.orgId)
+      if (admitted instanceof Response) return admitted
+      const { viewer, source } = admitted
+      const listingId = asked.listingId
+      const resolved = await source.resolve({ listingId }, viewer)
+      if (!resolved || typeof resolved !== 'object') {
+        return answer({ error: 'That starter is no longer available', listingId }, 404)
+      }
+      if ('error' in resolved) {
+        const status = resolved.status === 402 || resolved.status === 403 ? resolved.status : 404
+        return answer(
+          {
+            error: resolved.error,
+            ...(status === 402 ? { code: 'purchase_required' } : {}),
+            listingId,
+            ...(status === 402 && typeof resolved.priceUsd === 'number' ? { priceUsd: resolved.priceUsd } : {}),
+          },
+          status,
+        )
+      }
+      if (resolved.mode !== 'ai') return answer({ error: STARTER_HAS_NO_QUESTIONS, listingId }, 409)
+      // `resolve` refuses an AI starter without them; checked again, so a
+      // source that skipped the check hands over nothing.
+      if (!isRecord(resolved.answers)) return answer({ error: 'That starter is no longer available', listingId }, 404)
+      const body: StarterAnswersAnswer = {
+        answers: resolved.answers,
+        facets: readStarterSummary({ listingId, facets: resolved.facets })?.facets ?? resolved.facets,
+      }
+      return answer(body)
+    },
+  )
+}
+
+export { handler as marketplaceStarters, answersHandler as marketplaceStarterAnswers }
