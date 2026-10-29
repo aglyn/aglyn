@@ -96,6 +96,7 @@ holds the production value.
 | 13 | `APP_CHECK_DEBUG_TOKEN_FROM_CI` / `_FROM_CONSOLE` | project ×2 | standing App Check **attestation bypass** | **yes** | **delete**, do not rotate (AGL-2402) |
 | 14 | `RECAPTCHA_PRIVATE_KEY` | project ×2 | verify reCAPTCHA assertions — **read by no code in this repo** | **yes** | see the note below |
 | 15 | `AGLYN_VERCEL_BYPASS` | `cloud/functions/.env` + repo root `.env` | Vercel **Protection Bypass for Automation** on `aglyn-console` and `aglyn-tenant`: a request carrying it is past Deployment Protection, the bot-protection challenge **and Attack Challenge Mode** (AGL-3281) | n/a (functions only) | rotate in BOTH Vercel projects and both `.env` files together — one value by design |
+| 16 | `SITE_IMPORT_EDGE_TOKEN` | project, console (Production) | with the `AglynBot/` user agent, lifts `aglyn-tenant`'s bot challenge via the "Site import crawler bypass" rule (AGL-4085); the crawler sends it only to hosts the platform serves | no (production only) | rotate in the console env and the rule's value together, then deploy the console |
 
 **The single highest-consequence item is #1, and it was not in the original
 AGL-2403 table.** That audit compared values four ways across projects;

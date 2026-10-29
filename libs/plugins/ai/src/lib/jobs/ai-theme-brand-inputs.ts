@@ -473,22 +473,24 @@ export interface PublicFetchOptions {
   userAgent?: string
   /** Sent as `Accept`. */
   acceptHeader?: string
+  /**
+   * More request headers for one hop, asked again for EVERY hop's own address
+   * (AGL-4083, AGL-4085), so a header meant for one host never rides a
+   * redirect to another. Sent under `Accept` and `User-Agent`, and neither
+   * can be changed through here. The site import's edge header goes this
+   * way, and only to the hosts `siteImportEdgeHeadersFor` decided are ours.
+   */
+  headersFor?: (url: URL) => Readonly<Record<string, string>> | undefined
   /** Asked of every redirect hop before it is followed; the SSRF checks run as well. */
   redirectAllowed?: (from: URL, to: URL) => boolean
   /** Refuse a body over `maxBytes` rather than cut it. */
   refuseOver?: boolean
   /** Keep the body's bytes as `data` rather than decode them as text (a picture, AGL-3976). */
   binary?: boolean
-  /**
-   * More request headers (AGL-4083), sent under `Accept` and `User-Agent`:
-   * neither can be changed through here. The site import's edge header goes
-   * this way, and only to the hosts its caller names.
-   */
-  headers?: Readonly<Record<string, string>>
 }
 
 /** The caller's extra headers, without any that would say what the request is: those are the fetch's own. */
-function publicFetchExtraHeaders(headers: PublicFetchOptions['headers']): Record<string, string> {
+function publicFetchExtraHeaders(headers: Readonly<Record<string, string>> | undefined): Record<string, string> {
   const out: Record<string, string> = {}
   for (const [name, value] of Object.entries(headers ?? {})) {
     if (/^(?:accept|user-agent|host|cookie|authorization|content-length)$/i.test(name)) continue
@@ -538,7 +540,7 @@ export async function fetchPublicTextDetailed(
         signal: clock.signal,
         dispatcher,
         headers: {
-          ...publicFetchExtraHeaders(options.headers),
+          ...publicFetchExtraHeaders(options.headersFor?.(parsed)),
           Accept: options.acceptHeader ?? 'text/html, text/css;q=0.9',
           ...(options.userAgent ? { 'User-Agent': options.userAgent } : {}),
         },
@@ -595,7 +597,7 @@ export async function fetchPublicTextDetailed(
 /** {@link fetchPublicTextDetailed}, answering `null` for anything it refused. */
 export async function fetchPublicText(
   url: string,
-  options: { maxBytes: number; accept: RegExp; signal?: AbortSignal; timeoutMs?: number; headers?: PublicFetchOptions['headers'] },
+  options: { maxBytes: number; accept: RegExp; signal?: AbortSignal; timeoutMs?: number; headersFor?: PublicFetchOptions['headersFor'] },
 ): Promise<{ text: string; url: string } | null> {
   const result = await fetchPublicTextDetailed(url, options)
   return result.ok ? { text: result.text, url: result.url } : null
@@ -616,37 +618,31 @@ export interface AiReferencePage {
 
 /**
  * A page and its first stylesheets through {@link fetchPublicText}; `null` when the page cannot be read.
- * `headers` go with the page's own request and with a stylesheet's only when
- * it is on the page's host (AGL-4083): the site import's edge header is for
- * the site it was minted for, never a CDN's.
+ * `headersFor` is asked for every request and every redirect hop, the page's
+ * and each stylesheet's, by its own address (AGL-4083, AGL-4085): the site
+ * import's edge header, built by `siteImportEdgeHeadersFor`, answers only for
+ * the site's own origins we serve, so a hop or a stylesheet anywhere else (a
+ * CDN's, another site's) carries nothing.
  */
 export async function readReferencePage(
   url: URL,
   signal: AbortSignal,
-  headers?: PublicFetchOptions['headers'],
+  headersFor?: PublicFetchOptions['headersFor'],
 ): Promise<AiReferencePage | null> {
   const page = await fetchPublicText(url.toString(), {
     maxBytes: AI_THEME_REFERENCE_MAX_BYTES,
     accept: /text\/html|application\/xhtml\+xml/i,
     signal,
-    ...(headers ? { headers } : {}),
+    ...(headersFor ? { headersFor } : {}),
   })
   if (!page) return null
-  const host = new URL(page.url).host
   const stylesheets: string[] = []
   for (const sheet of stylesheetUrlsOf(page.text, page.url)) {
-    const sameHost = (() => {
-      try {
-        return new URL(sheet).host === host
-      } catch {
-        return false
-      }
-    })()
     const css = await fetchPublicText(sheet, {
       maxBytes: AI_THEME_STYLESHEET_MAX_BYTES,
       accept: /text\/css/i,
       signal,
-      ...(headers && sameHost ? { headers } : {}),
+      ...(headersFor ? { headersFor } : {}),
     })
     if (css) stylesheets.push(css.text)
   }
