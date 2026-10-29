@@ -40,6 +40,16 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 
 const docs = new Map<string, Record<string, any>>()
 
+/** A merge-set as Firestore applies it: nested maps merge key by key. */
+function merged(base: Record<string, any> | undefined, patch: Record<string, any>): Record<string, any> {
+  const next: Record<string, any> = { ...(base ?? {}) }
+  for (const [key, value] of Object.entries(patch)) {
+    const plain = (entry: unknown) => !!entry && typeof entry === 'object' && !Array.isArray(entry)
+    next[key] = plain(value) && plain(next[key]) ? merged(next[key], value) : value
+  }
+  return next
+}
+
 function snapshotOf(path: string) {
   const data = docs.get(path)
   return {
@@ -56,7 +66,7 @@ function docRef(path: string): any {
     path,
     get: async () => snapshotOf(path),
     set: async (value: Record<string, any>, options?: { merge?: boolean }) => {
-      docs.set(path, options?.merge ? { ...(docs.get(path) ?? {}), ...value } : JSON.parse(JSON.stringify(value)))
+      docs.set(path, options?.merge ? merged(docs.get(path), value) : JSON.parse(JSON.stringify(value)))
     },
     create: async (value: Record<string, any>) => {
       if (docs.has(path)) throw Object.assign(new Error('ALREADY_EXISTS'), { code: 6 })
@@ -89,6 +99,7 @@ const firestore: any = {
     fn({
       get: (ref: any) => ref.get(),
       set: (ref: any, value: any, options?: any) => void ref.set(value, options),
+      delete: (ref: any) => void ref.delete(),
     }),
 }
 
@@ -139,6 +150,8 @@ const deps: QuoteProofDeps = {
 }
 
 const QUOTE_PATH = 'hosts/site1/orders/q-1'
+const PENDING_PATH = `${QUOTE_PATH}/quoteUploadKeys/q-1`
+const DAY_MS = 24 * 60 * 60 * 1000
 const PROOF = {
   id: 'p1',
   revision: 1,
@@ -337,6 +350,16 @@ describe('POST commerce/quote-upload', () => {
     ])
   })
 
+  it('records each file as pending under its quote from its ticket on, swept a day after the latest', async () => {
+    docs.set(PENDING_PATH, { hostId: 'site1', quoteId: 'q-1', files: { b2: 4_000 }, sweepAtMs: 4_000 + DAY_MS })
+    expect((await handleQuoteUpload(deps, post({ action: 'ticket', file: { name: 'logo.ai', contentType: '', size: 900 } }))).status).toBe(200)
+    expect(docs.get(PENDING_PATH)).toEqual({ hostId: 'site1', quoteId: 'q-1', files: { b2: 4_000, a1: 10_000 }, sweepAtMs: 10_000 + DAY_MS })
+    docs.delete(PENDING_PATH)
+    // A finalize records it again, so a file kept with no ticket record is still swept.
+    expect((await handleQuoteUpload(deps, post({ action: 'finalize', ticket: 'ticket-1' }))).status).toBe(200)
+    expect(docs.get(PENDING_PATH)).toEqual({ hostId: 'site1', quoteId: 'q-1', files: { a1: 10_000 }, sweepAtMs: 10_000 + DAY_MS })
+  })
+
   it('takes no files for a paid quote, a replaced link or a wrong token', async () => {
     storeQuote({}, { status: 'paid' })
     expect((await handleQuoteUpload(deps, post({ action: 'ticket', file: {} }))).status).toBe(409)
@@ -345,6 +368,7 @@ describe('POST commerce/quote-upload', () => {
     storeQuote()
     expect((await handleQuoteUpload(deps, post({ action: 'ticket', file: {}, t: '1.bad' }))).status).toBe(404)
     expect(minted).toEqual([])
+    expect(docs.has(PENDING_PATH)).toBe(false)
   })
 
   it('pretends to a bot that filled the honeypot, and signs nothing', async () => {
@@ -407,6 +431,30 @@ describe('POST commerce/quote-respond', () => {
         { label: 'Files sent', value: 'logo.ai' },
       ]),
     )
+  })
+
+  it('keeps the files it sends: they leave the pending record, and a record left with none goes', async () => {
+    const file = (id: string) => ({ id, name: `${id}.ai`, contentType: 'application/illustrator', size: 900, path: `hosts/site1/private/uploads/quote-artwork/q-1/${id}`, uploadedAtMs: 9 })
+    kept.set('a1', file('a1'))
+    kept.set('b2', file('b2'))
+    docs.set(PENDING_PATH, { hostId: 'site1', quoteId: 'q-1', files: { a1: 9_000, b2: 9_500, c3: 9_600 }, sweepAtMs: 9_600 + DAY_MS })
+    expect((await handleQuoteRespond(deps, post({ v: 2_000, action: 'changes', comment: 'Bigger logo', fileIds: ['a1', 'b2'] }, 'k1'))).status).toBe(200)
+    // The file attached and left out of the answer is still pending.
+    expect(docs.get(PENDING_PATH)).toEqual({ hostId: 'site1', quoteId: 'q-1', files: { c3: 9_600 }, sweepAtMs: 9_600 + DAY_MS })
+
+    storeQuote()
+    kept.set('c3', file('c3'))
+    expect((await handleQuoteRespond(deps, post({ v: 2_000, action: 'changes', comment: 'And this', fileIds: ['c3'] }, 'k2'))).status).toBe(200)
+    expect(docs.has(PENDING_PATH)).toBe(false)
+  })
+
+  it('leaves the pending files alone for an approval, and for an answer that is refused', async () => {
+    const pending = { hostId: 'site1', quoteId: 'q-1', files: { a1: 9_000 }, sweepAtMs: 9_000 + DAY_MS }
+    docs.set(PENDING_PATH, pending)
+    kept.set('a1', { id: 'a1', name: 'logo.ai', contentType: 'application/illustrator', size: 900, path: 'hosts/site1/private/uploads/quote-artwork/q-1/a1', uploadedAtMs: 9 })
+    expect((await handleQuoteRespond(deps, post({ v: 1_000, action: 'changes', comment: 'x', fileIds: ['a1'] }, 'k1'))).status).toBe(409)
+    expect((await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee' }, 'k2'))).status).toBe(200)
+    expect(docs.get(PENDING_PATH)).toEqual(pending)
   })
 
   it('refuses a file id that is not this quote’s artwork', async () => {
