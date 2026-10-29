@@ -465,6 +465,22 @@ export function registerCommerceApi(): void {
     async (req, res) => (await import('./server/commerce-pdf')).quotePdfHandler(req, res),
     { recipientLink: true },
   )
+  // The quote's proofs (AGL-4096), by the same signed link and on the same
+  // terms as the page's data; and the customer's answer to them, with any
+  // artwork they send through the shared visitor upload. The two writes are
+  // ordinary visitor writes: the dispatcher's cross-origin check, lockdown
+  // and visitor-write limit stand in front of their own. Loaded on first call.
+  registerPluginApiRoute(
+    'commerce/quote-proof',
+    async (req, res) => (await import('./server/quote-proofs')).quoteProofHandler(req, res),
+    { recipientLink: true },
+  )
+  registerPluginApiRoute('commerce/quote-upload', async (req, res) =>
+    (await import('./server/quote-proofs')).quoteUploadHandler(req, res),
+  )
+  registerPluginApiRoute('commerce/quote-respond', async (req, res) =>
+    (await import('./server/quote-proofs')).quoteRespondHandler(req, res),
+  )
   // What became of a session the shopper was returned from (AGL-3606).
   registerPluginApiRoute('commerce/checkout-status', checkoutStatusHandler)
   registerPluginApiRoute('commerce/product', productHandler)

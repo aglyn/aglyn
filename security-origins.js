@@ -1366,6 +1366,39 @@ const TENANT_CONNECT_ORIGINS = [
   'https://fonts.googleapis.com',
 ]
 
+/**
+ * Where a visitor's file is posted (AGL-4096): the site's media bucket, by
+ * PATH, so the source admits our one bucket and no other on the shared host.
+ *
+ * Measured from the code that builds the request rather than off a page, as
+ * the feature is new: `mintVisitorUploadTicket`
+ * (`libs/tenant/data/admin/src/lib/server/visitor-upload.ts`) signs a V4 POST
+ * policy with `generateSignedPostPolicyV4`, whose form target is
+ * `https://storage.googleapis.com/<bucket>/`, and `sendVisitorUpload`
+ * (`libs/aglyn/src/lib/app-utils/visitor-upload-client.ts`) posts the file
+ * there from the page with `fetch(…, { mode: 'no-cors' })`. A no-cors request
+ * still answers to `connect-src`, so without this a customer's artwork for a
+ * quote never leaves the page.
+ *
+ * What it opens: a post to OUR bucket, which takes a write only under a
+ * policy our server signed, for one object under `visitor-uploads-pending/`,
+ * of a declared type and size, for fifteen minutes. A path-scoped source and
+ * not the host, because `storage.googleapis.com/<anyone's bucket>/` is an
+ * exfiltration address an injected script could choose; and not
+ * virtual-hosted (`<bucket>.storage.googleapis.com`), because a bucket name
+ * with dots, ours included, has no valid certificate there.
+ *
+ * Absent when the bucket is not configured, as in a spec or a self-hosted
+ * build without uploads.
+ */
+function visitorUploadConnectSource() {
+  const bucket = String(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || '')
+    .trim()
+    .toLowerCase()
+  if (!/^[a-z0-9][a-z0-9._-]{1,220}[a-z0-9]$/.test(bucket)) return undefined
+  return `https://storage.googleapis.com/${bucket}/`
+}
+
 function tenantConnectSrcDirective(
   isProduction,
   approvedConnectHosts,
@@ -1385,6 +1418,7 @@ function tenantConnectSrcDirective(
         'ws://127.0.0.1:*',
       ]
   const pluginOrigin = configuredOrigin(process.env.NEXT_PUBLIC_PLUGIN_ORIGIN)
+  const uploadSource = visitorUploadConnectSource()
   const sources = ["'self'"]
     // The site's own addresses, for the same reason `img-src` carries them: a
     // site with a custom domain attached has two origins and `'self'` is only
@@ -1392,6 +1426,7 @@ function tenantConnectSrcDirective(
     .concat(approvedImageHostSources(siteOrigins))
     .concat(TENANT_CONNECT_ORIGINS)
     .concat(pluginOrigin ? [pluginOrigin] : [])
+    .concat(uploadSource ? [uploadSource] : [])
     // Gated exactly as `img-src` gates the same vendors: a site with no
     // analytics has no reason to permit an ad network's endpoint, and one that
     // permits it anyway is describing our convenience instead of the site.
@@ -1754,6 +1789,7 @@ module.exports = {
   MEASUREMENT_CONNECT_ORIGINS,
   GOOGLE_CCTLD_ORIGINS,
   TENANT_CONNECT_ORIGINS,
+  visitorUploadConnectSource,
   tenantConnectSrcDirective,
   TENANT_FRAME_ORIGINS,
   tenantFrameSrcDirective,

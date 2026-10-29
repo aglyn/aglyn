@@ -57,6 +57,7 @@ import { doc } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { downloadCommercePdf } from './commerce-pdf-download'
 import { QuotePayLinkSection } from './quote-pay-link.component'
+import { QuoteProofsSection } from './quote-proofs.component'
 
 /** A quote as the list reads it: the order document and its id. */
 export type QuoteRow = CommerceModel.HostOrder & { $id: string }
@@ -281,8 +282,9 @@ export function QuoteEditorDialog(props: QuoteEditorDialogProps) {
   const [form, setForm] = useState<QuoteForm>(() => formFromQuote(quote, storeDefault))
   // The version this form was opened on. A change saved elsewhere while it is
   // open arrives on `quote`; the save still names this one, so the server
-  // refuses rather than overwrite that change.
-  const [baseUpdatedAtMs] = useState(() => quote?.quote?.updatedAtMs)
+  // refuses rather than overwrite that change. A proof added or a revision
+  // started here (AGL-4096) moves it, and the save names the new one.
+  const [baseUpdatedAtMs, setBaseUpdatedAtMs] = useState(() => quote?.quote?.updatedAtMs)
   const [busy, setBusy] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   /** Whether anything has been changed since the dialog opened. */
@@ -455,6 +457,17 @@ export function QuoteEditorDialog(props: QuoteEditorDialogProps) {
           ) : null}
           {quote ? (
             <QuotePayLinkSection hostId={hostId} quoteId={quote.$id} quote={quote} canSend={canSend} edited={edited} />
+          ) : null}
+          {quote ? (
+            <QuoteProofsSection
+              hostId={hostId}
+              quoteId={quote.$id}
+              quote={quote}
+              canEdit={canEdit}
+              onEdited={(updatedAtMs) => {
+                if (updatedAtMs) setBaseUpdatedAtMs(updatedAtMs)
+              }}
+            />
           ) : null}
           {taxBasis.kind === 'none' && taxBasis.reason === 'undecided' ? (
             <PrerequisiteNotice href={taxesHref ?? undefined} actionLabel="Open Taxes">

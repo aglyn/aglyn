@@ -243,7 +243,12 @@ describe('the customer’s page', () => {
         'number',
         'payable',
         'paidAtMs',
+        // The proofs and the customer's own answer (AGL-4096).
+        'proofs',
         'receiptUrl',
+        'respondable',
+        'response',
+        'revision',
         'shipTo',
         'state',
         'status',
