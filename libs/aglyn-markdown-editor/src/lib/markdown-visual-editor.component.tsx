@@ -134,6 +134,12 @@ export interface MarkdownVisualEditorProps {
   onContextChange?: (context: MarkdownEditorContext) => void
   minHeight?: number | string
   maxHeight?: number | string
+  /**
+   * Shown while the editor is empty, and never part of the value: a caller's
+   * starter guidance written into `value` instead would be saved, and
+   * published, as if the author had typed it.
+   */
+  placeholder?: string
 }
 
 type TextRowKind =
@@ -1022,6 +1028,7 @@ const MarkdownVisualEditor = forwardRef<
     onContextChange,
     minHeight = 280,
     maxHeight = 480,
+    placeholder = 'Start writing…',
   },
   ref,
 ) {
@@ -1981,14 +1988,17 @@ const MarkdownVisualEditor = forwardRef<
           <Typography
             variant="body1"
             color="text.disabled"
+            // Inset by the root's own padding on three sides, so a long
+            // placeholder wraps inside the box instead of running past it.
             sx={{
               position: 'absolute',
-              top: 12,
-              left: 16,
+              top: (theme) => theme.spacing(1.5),
+              left: (theme) => theme.spacing(2),
+              right: (theme) => theme.spacing(2),
               pointerEvents: 'none',
             }}
           >
-            {'Start writing…'}
+            {placeholder}
           </Typography>
         ) : null}
         {rows.map((row) =>

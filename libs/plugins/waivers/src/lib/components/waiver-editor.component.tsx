@@ -75,6 +75,11 @@ interface VersionRow {
   savedAtMs: number
 }
 
+/**
+ * Guidance for an empty waiver, shown as the editor's placeholder. It was
+ * once the new waiver's starting text, and a merchant who typed above it
+ * published it to signers as part of their waiver.
+ */
 const STARTER_BODY =
   'Write your waiver here in your own words: the activity, the risks a rider takes on, what they agree to, and anything they must tell you before they ride.'
 
@@ -127,7 +132,6 @@ export function WaiverEditor(props: WaiverEditorProps) {
   useEffect(() => {
     if (!ready) return
     if (!waiverId) {
-      setBody(STARTER_BODY)
       setCheckboxes([
         { id: 'read', label: 'I have read this waiver and I understand it.' },
       ])
@@ -280,6 +284,7 @@ export function WaiverEditor(props: WaiverEditorProps) {
               label="Waiver text"
               value={body}
               onChange={setBody}
+              placeholder={STARTER_BODY}
               helperText="Use the toolbar for headings, bold text and lists."
             />
             <Stack spacing={1.5}>
