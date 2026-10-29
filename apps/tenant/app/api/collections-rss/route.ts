@@ -23,6 +23,10 @@ import {
 import getCollectionContent from '@aglyn/tenant-runtime/get-collection-content'
 import getHost from '../../../utils/get-host'
 import { isHostInPreview } from '@aglyn/aglyn/app-utils/site-preview'
+import {
+  isHostInMaintenance,
+  SITE_UNAVAILABLE_RETRY_AFTER_SECONDS,
+} from '@aglyn/aglyn/app-utils/site-unavailable'
 
 export const dynamic = 'force-dynamic'
 
@@ -88,6 +92,20 @@ export async function GET(request: Request): Promise<Response> {
   // and a feed is read by machines that hold no team cookie.
   if (isHostInPreview(hostRes.host as never)) {
     return new Response('Not found', { status: 404 })
+  }
+  // A site in maintenance publishes no feed either (AGL-4111): every page of it
+  // serves the 503 page, and the feed kept carrying its entries to every
+  // reader. A 503, not preview's 404: the feed is coming back, and a reader
+  // that sees 404 may drop the subscription. Never cached, so the feed
+  // returns the moment maintenance mode is switched off.
+  if (isHostInMaintenance(hostRes.host as never)) {
+    return new Response('Temporarily unavailable', {
+      status: 503,
+      headers: {
+        'Retry-After': String(SITE_UNAVAILABLE_RETRY_AFTER_SECONDS),
+        'Cache-Control': 'no-store',
+      },
+    })
   }
 
   // The site's public origin, not the domain the request arrived on — see the
