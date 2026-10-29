@@ -121,6 +121,7 @@ Per project:
 | no **undeclared** bypass rule exists | an undeclared hole is an unreviewed hole |
 | every declared **rate-limit rule** is present, scoped, and carries its declared window, limit, key and past-the-limit action | a raised limit or a `challenge` past it changes who is refused |
 | every declared rate-limit rule sits **ahead of the bypass it precedes** | a matched bypass skips every later custom rule — see [the media CDN rate limit](#the-media-cdn-rate-limit-agl-2812) |
+| a bypass that declares `follows` sits **behind that rate-limit rule** | the same skip, from the other side: a bypass scoped by header and user agent matches the rate-limited path too — see [Bring my site's crawler](#bring-my-sites-crawler-agl-4085) |
 
 ### Why scope, not just presence
 
@@ -171,13 +172,21 @@ that value in the config. It is asserted as *non-empty*, never literally, and
 redacted in all output. This repository is public and Actions logs on a public
 repo are world-readable.
 
+The site import rule's secret is asserted by **length** (at least 32
+characters), so a value typed by hand into the dashboard is a finding, not a
+pass. And a finding that names what an offending group still matches never
+prints a live header value (only its length), except a regular expression,
+which is a pattern and not a secret: a group that kept the secret and lost its
+user-agent condition would otherwise print the secret into the public log
+(AGL-4085).
+
 ## Current posture
 
 Measured 2026-10-01.
 
 | Project | Serves | Posture |
 | --- | --- | --- |
-| `aglyn-tenant` | every customer site on `*.aglyn.app` + custom domains | ✅ protected — challenge, 11 scoped bypass rules, 1 rate limit (enforcing) |
+| `aglyn-tenant` | every customer site on `*.aglyn.app` + custom domains | ✅ protected — challenge, 11 scoped bypass rules, 1 rate limit (enforcing); a 12th, the [site import crawler bypass](#bring-my-sites-crawler-agl-4085), declared and applied after review |
 | `aglyn-docs` | `docs.aglyn.com` | ✅ protected — challenge, 5 scoped bypass rules |
 | `aglyn-console` | `app.aglyn.com` — sign-in, billing, staff surfaces, and every Sequences link domain | ✅ protected — challenge, 11 scoped bypass rules, 1 rate limit (enforcing) |
 | `aglyn-plugins` | `plugins.aglyn.com` — plugin loader origin | ⚠️ **no WAF config** — reviewed, deliberate |
@@ -226,6 +235,78 @@ rather than an `/api/` route, or a look-alike path such as
 `/api/auth/sso-lookupX` is still challenged. A new route the apps call before
 sign-in needs adding to the doors expression, here and in
 `tools/scripts/lib/firewall-posture.mjs`.
+
+### Bring my site's crawler (AGL-4085)
+
+Bring my site reads a site with a crawler that says it is
+`AglynBot/1.0 (+https://docs.aglyn.com/ai/bring-my-site)` and runs no
+JavaScript, so bot protection answered it with the challenge on every page of
+every site this project serves. An import of aglyn.com read `/contact` and
+nine `/legal/` pages, which are the paths the store-review bypass admits, and
+nothing else, not even the home page.
+
+The tenant rule **Site import crawler bypass** lifts the challenge, and
+nothing else, for a request carrying both of these, in one condition group:
+
+| Condition | Matches |
+| --- | --- |
+| header `x-aglyn-import`, equals | the secret, `SITE_IMPORT_EDGE_TOKEN`; asserted as at least 32 characters, never literally |
+| user agent, matches expression | `^AglynBot/` |
+
+- **Both halves are load-bearing.** AglynBot without the secret is challenged,
+  so the user agent is not a key anyone can copy. The secret with any other
+  user agent is challenged, so a leaked secret is not a general pass. The
+  checker holds every live group to both, so splitting them into two OR'd
+  groups is a finding.
+- **The secret goes only to hosts we serve.** The console holds it, and the
+  crawler sends it only when the hostname is ours: exactly one site carries it
+  as its subdomain under the tenant apex, or as its live custom domain or that
+  domain's `www.`/apex twin, AND, for a custom domain, the hosting platform
+  reports right now that the name is attached to this project, verified,
+  pointed here with no foreign record beside ours, and holding a certificate.
+  The check is made again on each redirect hop, so a hop to another host
+  carries nothing. The code is `site-import-edge.ts` in the AI plugin and
+  `platform-served-domain.ts` in `tenant-data-admin`.
+- **What stays.** Every route still does its own auth, lockdown still answers,
+  and the rule sits behind **Media CDN per-IP rate limit**, so AglynBot is
+  counted there like any caller. The checker asserts that order.
+
+#### Applying it
+
+Each step changes production. Do them in this order, in one sitting: between
+steps 3 and 5 the daily drift run would read the rule as undeclared.
+
+1. **Make the secret** into a scratch file outside the repo, never on screen:
+   `printf 'SITE_IMPORT_EDGE_TOKEN=%s\n' "$(openssl rand -hex 32)" > <scratch>/edge.env`.
+2. **The console's env.** Vercel → `aglyn-console` → Settings → Environment
+   Variables → add `SITE_IMPORT_EDGE_TOKEN`, **Production** only, marked
+   Sensitive, with the value from the scratch file. The crawler reads it from
+   the next production deployment of the console on.
+3. **The rule, in the dashboard, never `PUT`.** `aglyn-tenant` → Firewall →
+   Rules → Add Rule. Name `Site import crawler bypass`. If **Request Header**
+   `x-aglyn-import` **Equals** the same value, **and** **User Agent**
+   **Matches Expression** `^AglynBot/`, both in ONE group. Then **Bypass**.
+   Save Rule → Review → Publish. Set the value with the field's native input
+   setter rather than typing it, and zoom in to check the user-agent field:
+   typing fast into that form drops characters.
+4. **Read it back.** `npm run check:firewall-posture` answers OK for every
+   project, with bot protection `{active: true, action: "challenge"}`. A
+   finding that the rule is evaluated BEFORE the media limit names the
+   `PATCH rules.priority` value that moves it behind.
+5. **Merge the change that declares it**, so the table and the live rule agree
+   before the next daily run.
+6. **Prove it both ways.**
+   `node --env-file=<scratch>/edge.env tools/scripts/prove-site-import-edge.mjs`
+   exits 0: the secret with AglynBot passes on `https://aglyn.com/`, and
+   AglynBot with no secret, AglynBot with a wrong one, the secret with curl's
+   user agent, the secret with a browser user agent naming AglynBot later, and
+   a stranger are all still challenged. A control on `/robots.txt` comes first;
+   if it is challenged, the run exits 2, because nothing can be proved from that
+   network. Then delete the scratch file.
+
+**Rotation** is the same two places: a new value in the rule and in the
+console's env, then a console deployment. In between, imports of our own sites
+meet the challenge and say so; nothing else changes.
 
 ### How the console was closed, and why the order mattered
 
@@ -770,7 +851,8 @@ per-org byte cap wait on the delivery-platform decision (AGL-2824, AGL-2825).
 
 ## Guarding the guard
 
-`npm run test:firewall-posture` runs 81 cases, each damaging exactly one thing
+`npm run test:firewall-posture` runs 109 cases (99 for the checker, 10 for the
+site import proof), each damaging exactly one thing
 in a known-good config and asserting the **specific** finding — not merely that
 the result is false. A test that only checks `ok === false` passes just as
 happily when the detector has collapsed into `return false`.
