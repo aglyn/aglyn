@@ -26,8 +26,10 @@ import {
   USER_MARKETING_PROMPT_DISMISSED_AT_FIELD,
 } from '@aglyn/aglyn/app-utils/platform-marketing-consent'
 import {
+  PLATFORM_ACCOUNT_CREATED_SUMMARY,
   platformMarketingHostId,
   readPlatformMarketingConsentForUser,
+  recordPlatformAccountContact,
   recordPlatformMarketingConsent,
   snoozePlatformMarketingPrompt,
 } from './platform-marketing-consent'
@@ -267,6 +269,77 @@ describe('recordPlatformMarketingConsent', () => {
       recordPlatformMarketingConsent({ ...base, textVersion: '' }),
     ).rejects.toThrow('textVersion')
     expect(Object.keys(db.docs)).toEqual([])
+  })
+})
+
+describe('recordPlatformAccountContact', () => {
+  const CREATED = Date.UTC(2026, 9, 21, 15)
+
+  it('makes every new account a lead on the marketing host, with no consent either way', async () => {
+    const db = fakeFirestore({
+      [`users/${UID}`]: { firstName: 'Ada', lastName: 'Example' },
+    })
+    const result = await recordPlatformAccountContact({
+      uid: UID,
+      email: EMAIL,
+      name: 'Token Name',
+      createdAtMs: CREATED,
+      firestore: db,
+      hostId: HOST,
+      upsert,
+    })
+    expect(result).toEqual({ status: 'recorded', contactId: 'contact-1', created: true })
+    expect(upsertCalls).toHaveLength(1)
+    expect(upsertCalls[0]).toEqual({
+      hostId: HOST,
+      email: EMAIL,
+      name: 'Ada Example',
+      source: 'account',
+      interaction: { atMs: CREATED, summary: PLATFORM_ACCOUNT_CREATED_SUMMARY },
+      initialLifecycleStage: 'lead',
+    })
+    // The marketing box is the consent writer's, never this row's.
+    expect(upsertCalls[0]).not.toHaveProperty('marketingConsent')
+    expect(upsertCalls[0]).not.toHaveProperty('declineMarketingConsent')
+    // Nothing is written to the person's own document.
+    expect(db.docs[`users/${UID}`]).toEqual({ firstName: 'Ada', lastName: 'Example' })
+  })
+
+  it('takes the token’s name when the document holds none', async () => {
+    await recordPlatformAccountContact({
+      uid: UID,
+      email: EMAIL,
+      name: 'Token Name',
+      createdAtMs: CREATED,
+      firestore: fakeFirestore(),
+      hostId: HOST,
+      upsert,
+    })
+    expect(upsertCalls[0]?.name).toBe('Token Name')
+  })
+
+  it('records nothing without a marketing host or an address, and says which', async () => {
+    const db = fakeFirestore()
+    const base = { uid: UID, email: EMAIL, createdAtMs: CREATED, firestore: db, upsert }
+    expect(await recordPlatformAccountContact({ ...base, hostId: null })).toEqual({
+      status: 'unconfigured',
+    })
+    expect(await recordPlatformAccountContact({ ...base, hostId: HOST, email: ' ' })).toEqual({
+      status: 'no-email',
+    })
+    expect(upsertCalls).toHaveLength(0)
+  })
+
+  it('returns a refused row instead of throwing', async () => {
+    const result = await recordPlatformAccountContact({
+      uid: UID,
+      email: EMAIL,
+      createdAtMs: CREATED,
+      firestore: fakeFirestore(),
+      hostId: HOST,
+      upsert: (async () => ({ refused: 'erased' })) as never,
+    })
+    expect(result).toEqual({ status: 'refused', reason: 'erased' })
   })
 })
 

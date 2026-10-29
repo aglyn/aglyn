@@ -299,6 +299,69 @@ export async function recordPlatformMarketingConsent(
   return { atMs, contact, stream }
 }
 
+/** The timeline row an account's own contact opens with. */
+export const PLATFORM_ACCOUNT_CREATED_SUMMARY = 'Created an account'
+
+export interface RecordPlatformAccountContactInput {
+  uid: string
+  /** The account's address, from the verified token or the auth record. */
+  email: string | null | undefined
+  /** The name the token or auth record carries, for an account whose document holds none. */
+  name?: string | null
+  /** When the account was created, which is when its timeline row happened. */
+  createdAtMs: number
+  /** Injectable for tests; defaults to the admin app's Firestore. */
+  firestore?: any
+  /** Injectable for tests; defaults to {@link platformMarketingHostId}. */
+  hostId?: string | null
+  /** Injectable for tests; defaults to the real capture door. */
+  upsert?: typeof upsertHostContact
+}
+
+/**
+ * Makes the account a contact in the operator's own CRM, the moment it exists.
+ *
+ * The marketing box decides the person's marketing consent, not whether the
+ * operator knows them: an account is a lead for the platform's CRM either
+ * way. So the row is written at account creation, carrying no consent of its
+ * own, and a Yes or a No recorded later by
+ * {@link recordPlatformMarketingConsent} lands on this same row. Product email
+ * does not read this row's consent; the account's notification settings
+ * govern it.
+ *
+ * Quiet like the consent writer's contact half: a refused row is returned,
+ * never thrown, because nothing about creating an account should fail over
+ * the operator's CRM.
+ */
+export async function recordPlatformAccountContact(
+  input: RecordPlatformAccountContactInput,
+): Promise<PlatformMarketingContactOutcome> {
+  const uid = String(input.uid ?? '').trim()
+  if (!uid) throw new Error('recordPlatformAccountContact: uid is required')
+  const hostId =
+    input.hostId === undefined ? platformMarketingHostId() : input.hostId
+  if (!hostId) return { status: 'unconfigured' }
+  const email = String(input.email ?? '').trim()
+  if (!email) return { status: 'no-email' }
+
+  const snapshot = await (input.firestore ?? firestore())
+    .collection('users')
+    .doc(uid)
+    .get()
+  const name = accountName(snapshot, input.name)
+  const verdict = await (input.upsert ?? upsertHostContact)({
+    hostId,
+    email,
+    ...(name ? { name } : {}),
+    source: 'account',
+    interaction: { atMs: input.createdAtMs, summary: PLATFORM_ACCOUNT_CREATED_SUMMARY },
+    initialLifecycleStage: 'lead',
+  })
+  if ('refused' in verdict) return { status: 'refused', reason: verdict.refused }
+  await stampRecordOrigin({ hostId, email, origin: 'account', firstTouchOnly: true })
+  return { status: 'recorded', contactId: verdict.contactId, created: verdict.created }
+}
+
 /**
  * Stamps a prompt dismissal — no decision — so the console stays quiet for
  * the snooze window and asks once more after it.

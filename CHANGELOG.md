@@ -9,6 +9,37 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.289 — 2026-10-29
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.288...v1.0.0-beta.289)
+
+### Added
+
+- **ai:** import keeps every word, takes the site's look and lands in its preview ([AGL-4084](https://linear.app/aglyn/issue/AGL-4084), [AGL-4083](https://linear.app/aglyn/issue/AGL-4083), [AGL-4086](https://linear.app/aglyn/issue/AGL-4086))
+- **console:** the Preview switch, Start in preview at every create, page preview ([AGL-4086](https://linear.app/aglyn/issue/AGL-4086))
+- **tenant:** a site or page in preview shows the public its notice and its team the site ([AGL-4086](https://linear.app/aglyn/issue/AGL-4086))
+- **ai:** import reads the whole site and says what it found ([AGL-4083](https://linear.app/aglyn/issue/AGL-4083))
+
+### Fixed
+
+- the import and preview branches' reds, after main ([AGL-4084](https://linear.app/aglyn/issue/AGL-4084))
+- **ai:** a wave that lands in the preview says so in its review ([AGL-4084](https://linear.app/aglyn/issue/AGL-4084))
+- **ai:** import copy reads the configured brand name ([AGL-4083](https://linear.app/aglyn/issue/AGL-4083))
+
+### Documentation
+
+- **ai:** a reviewed wave is in the site's preview, public by the Preview switch ([AGL-4084](https://linear.app/aglyn/issue/AGL-4084))
+- **site-protection:** keep a site to your team with Preview; native switch and status ([AGL-4086](https://linear.app/aglyn/issue/AGL-4086))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **deps:** bump systeminformation from 5.33.14 to 5.33.18
+
+</details>
+
+6 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
 ## v1.0.0-beta.288 — 2026-10-29
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.287...v1.0.0-beta.288)
