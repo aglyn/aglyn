@@ -24,6 +24,11 @@ import {
   type PluginPersonRecord,
   type PluginPersonSearchRequest,
 } from '@aglyn/aglyn/plugin-manager/plugin-person-records'
+import {
+  pluginRecordFactsReader,
+  type PluginRecordFactsRead,
+  type PluginRecordFactsRequest,
+} from '@aglyn/aglyn/plugin-manager/plugin-record-facts'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import * as CommerceModel from '../model'
@@ -37,7 +42,8 @@ import {
 import { expireCheckoutSession, type CheckoutSessionExpiry } from './checkout-session-expiry'
 import type { quotePdfFile } from './commerce-pdf'
 import { sendPdf, type CommercePdfFile } from './pdf-response'
-import { quotePayLinkUrl } from './quote-link-token'
+import { quotePayLinkUrl, quoteProofLinkUrl } from './quote-link-token'
+import type { QuoteMailer } from './quote-email'
 import type { QuoteUploadCalls } from './quote-uploads'
 
 /*==========================================
@@ -50,6 +56,8 @@ import type { QuoteUploadCalls } from './quote-uploads'
  *   { action: 'pay-link', hostId, quoteId }                   → { url, linkVersion }
  *   { action: 'replace-link', hostId, quoteId }               → { url, linkVersion }
  *   { action: 'pdf', hostId, quoteId }                        → application/pdf
+ *   { action: 'send', hostId, quoteId, to?, subject?, message } + Idempotency-Key
+ *                                                             → { sent, to, atMs, revision, linkVersion, linkReplaced }
  *
  * Proofs and revisions (AGL-4096), all under "Create and edit quotes":
  *
@@ -59,7 +67,20 @@ import type { QuoteUploadCalls } from './quote-uploads'
  *   { action: 'proof-remove', hostId, quoteId, proofId }      → { removed: true, updatedAtMs }
  *   { action: 'start-revision', hostId, quoteId }             → { revision, updatedAtMs }
  *   { action: 'revisions', hostId, quoteId }                  → { revisions: QuoteRevisionView[] }
- *   { action: 'file', hostId, quoteId, fileId, revision? }    → the file (a proof, or the customer's)
+ *   { action: 'file', hostId, quoteId, fileId, revision? }    → the file (a proof, the customer's, or the request's)
+ *
+ * A quote from a request (AGL-4098), under "Create and edit quotes":
+ *
+ *   { action: 'start-from-request', hostId, submissionId }    → { prefill, request, files, threaded }
+ *   { action: 'create', hostId, quote, from: { kind: 'submission', id } }
+ *                                                             → as create, stamped from the request
+ *
+ * The request is a form submission another plugin keeps, read through the
+ * core's record-facts seam (`QUOTE_REQUEST_FACTS_RESOURCE`) for the member
+ * asking, on the Inbox's read rules — never from the request body. A create
+ * that names one re-reads it and stamps the quote with it: `quote.request`,
+ * its files as `quote.requestFiles`, and the conversation its confirmation
+ * started as `quote.emailThread`, so the quote's first email replies into it.
  *
  * A proof goes up the way a visitor's file does (`visitor-upload`): a ticket
  * for a signed upload straight to Storage, then finalize, which inspects the
@@ -68,11 +89,13 @@ import type { QuoteUploadCalls } from './quote-uploads'
  * of the quote: it moves `quote.updatedAtMs` (the page's version) and closes
  * the pay page's open session, as an edit does.
  *
- * Every action but the pay link's two asks "Create and edit quotes"
- * (`commerce.quotes`); the pay link's two ask "Send quotes and invoices to
- * customers" (`commerce.quotes.send`, AGL-4094). The PDF (AGL-4095) is the
- * document the customer would download from the quote page, and carries the
- * pay link only for someone who also holds `commerce.quotes.send`. Create and update take an
+ * Every action but the pay link's two and the send asks "Create and edit
+ * quotes" (`commerce.quotes`); those three ask "Send quotes and invoices to
+ * customers" (`commerce.quotes.send`, AGL-4094, AGL-4097). The send emails
+ * the quote to the customer (`quote-email.ts`, loaded only then). The PDF
+ * (AGL-4095) is the document the customer would download from the quote
+ * page, and carries the pay link only for someone who also holds
+ * `commerce.quotes.send`. Create and update take an
  * `Idempotency-Key` header, one per attempt, so a retried save replays its
  * answer instead of writing a second quote or failing its own change check;
  * delete is idempotent by nature, and so are the link's two (a replace bumps
@@ -102,10 +125,19 @@ export interface QuoteDeps {
   expireSession(sessionId: string): Promise<CheckoutSessionExpiry>
   /** The quote's pay link at a link version, or null when the site has no address or no signing secret. */
   payLinkUrl(host: Record<string, unknown>, hostId: string, quoteId: string, version: number): string | null
+  /** One of the current revision's proofs behind that link, for the email's pictures. */
+  proofLinkUrl(host: Record<string, unknown>, hostId: string, quoteId: string, version: number, proofId: string): string | null
   /** The quote's PDF; loads the PDF writer and sharp only when asked. */
   quotePdf(input: Parameters<typeof quotePdfFile>[0]): Promise<CommercePdfFile>
   /** The upload pipeline, loaded only by the proof actions. */
   uploads(): Promise<QuoteUploadCalls>
+  /** The quote email (AGL-4097): the renderer, the PDF and sharp, loaded only by the send. */
+  mailer(): Promise<QuoteMailer>
+  /**
+   * A request's facts (AGL-4098), from the plugin that keeps form submissions,
+   * through the core's seam; null when no plugin reads them in this process.
+   */
+  requestFacts(request: PluginRecordFactsRequest): Promise<PluginRecordFactsRead | null>
   now(): number
 }
 
@@ -121,10 +153,37 @@ export function defaultQuoteDeps(): QuoteDeps {
     quoteTax: (request) => quoteSaleTaxWithEngine(request),
     expireSession: (sessionId) => expireCheckoutSession(sessionId),
     payLinkUrl: (host, hostId, quoteId, version) => quotePayLinkUrl(host, hostId, quoteId, version),
+    proofLinkUrl: (host, hostId, quoteId, version, proofId) => quoteProofLinkUrl(host, hostId, quoteId, version, proofId),
     quotePdf: async (input) => (await import('./commerce-pdf')).quotePdfFile(input),
     uploads: async () => (await import('./quote-uploads')).quoteUploadCalls(),
+    mailer: async () => (await import('./quote-email')).quoteMailer(),
+    requestFacts: async (request) =>
+      (await pluginRecordFactsReader(CommerceModel.QUOTE_REQUEST_FACTS_RESOURCE)?.reader.read(request)) ?? null,
     now: () => Date.now(),
   }
+}
+
+/** A request's facts for the member asking, or the refusal to answer with. */
+async function readRequest(
+  deps: QuoteDeps,
+  input: { hostId: string; submissionId: string; uid: string; staff: boolean },
+): Promise<{ facts: CommerceModel.QuoteRequestFacts } | { outcome: Outcome }> {
+  if (!DOC_ID.test(input.submissionId)) return { outcome: refuse(400, 'Missing submissionId') }
+  const owner = await deps.orgForHost(input.hostId)
+  const read = await deps.requestFacts({
+    orgId: owner?.id ?? '',
+    hostId: input.hostId,
+    id: input.submissionId,
+    uid: input.uid,
+    staff: input.staff,
+    org: (owner?.org ?? null) as Readonly<Record<string, unknown>> | null,
+    now: new Date(deps.now()),
+  })
+  if (!read) return { outcome: refuse(404, 'Requests aren’t available on this site.') }
+  if ('error' in read) return { outcome: refuse(read.status, read.error) }
+  const facts = CommerceModel.readQuoteRequestFacts(read.facts)
+  if (!facts) return { outcome: refuse(404, 'That request is no longer in the Inbox.') }
+  return { facts }
 }
 
 /** Expires the session the pay page opened, when there is one; a failure is logged, never thrown. */
@@ -166,6 +225,9 @@ function headerOf(req: PluginApiRequest, name: string): string {
 }
 
 const DOC_ID = /^(?!__.*__$)[^/]{1,200}$/
+
+/** The actions under "Send quotes and invoices to customers" (`commerce.quotes.send`). */
+const SEND_ACTIONS = new Set(['pay-link', 'replace-link', 'send'])
 
 /** The ship-to as a tax service reads it, or `null` to tax at the store's address. */
 function serviceAddress(shipTo: CommerceModel.OrderAddress | null): PluginTaxAddress | null {
@@ -300,7 +362,7 @@ export async function handleQuote(deps: QuoteDeps, req: PluginApiRequest): Promi
   const action = String(body['action'] ?? '')
   if (!DOC_ID.test(hostId)) return refuse(400, 'Missing hostId')
 
-  let decoded: { uid: string; email?: string | null }
+  let decoded: { uid: string; email?: string | null; staff?: unknown }
   try {
     decoded = await deps.verifyIdToken(idToken)
   } catch (error) {
@@ -311,7 +373,7 @@ export async function handleQuote(deps: QuoteDeps, req: PluginApiRequest): Promi
   const hostRef = firestore.collection('hosts').doc(hostId)
   const host = await hostRef.get()
   if (!host.exists) return refuse(404, 'Unknown site')
-  const key = action === 'pay-link' || action === 'replace-link' ? 'commerce.quotes.send' : 'commerce.quotes'
+  const key = SEND_ACTIONS.has(action) ? 'commerce.quotes.send' : 'commerce.quotes'
   if (!holdsCommerceSiteKey(host, decoded.uid, key)) {
     return refuse(403, commerceSitePermissionRefusal(key))
   }
@@ -355,6 +417,42 @@ export async function handleQuote(deps: QuoteDeps, req: PluginApiRequest): Promi
     const url = deps.payLinkUrl((host.data() ?? {}) as Record<string, unknown>, hostId, quoteId, linkVersion)
     if (!url) return refuse(409, 'This site has no web address yet, so its quotes have no pay link. Publish the site first.')
     return { status: 200, body: { url, linkVersion } }
+  }
+
+  if (action === 'send') {
+    const quoteId = String(body['quoteId'] ?? '')
+    if (!DOC_ID.test(quoteId)) return refuse(400, 'Missing quoteId')
+    return handleSendAction(deps, {
+      req,
+      body,
+      hostId,
+      quoteId,
+      hostRef,
+      host: (host.data() ?? {}) as Record<string, unknown>,
+      firestore,
+      actor,
+      senderEmail: decoded.email ? String(decoded.email) : null,
+    })
+  }
+
+  if (action === 'start-from-request') {
+    const read = await readRequest(deps, {
+      hostId,
+      submissionId: String(body['submissionId'] ?? ''),
+      uid: decoded.uid,
+      staff: decoded.staff === true,
+    })
+    if ('outcome' in read) return read.outcome
+    const started = CommerceModel.quoteStartFromRequest(String(body['submissionId']), read.facts)
+    return {
+      status: 200,
+      body: {
+        prefill: started.prefill,
+        request: started.request,
+        files: CommerceModel.quoteRequestFileViews(started.files),
+        threaded: Boolean(started.emailThread),
+      },
+    }
   }
 
   if (PROOF_ACTIONS.has(action)) {
@@ -461,6 +559,24 @@ export async function handleQuote(deps: QuoteDeps, req: PluginApiRequest): Promi
   const parsed = CommerceModel.parseQuoteInput(body['quote'])
   if ('error' in parsed) return refuse(400, parsed.error)
   const input = parsed.input
+  /*
+   * A new quote from a request (AGL-4098): the request is read again, here,
+   * for the member saving, and what the quote takes from it — which request,
+   * its files, its conversation — comes from that read and never from the
+   * body. The editable fields (customer, lines, notes) are the editor's.
+   */
+  const from = (body['from'] ?? null) as { kind?: unknown; id?: unknown } | null
+  let started: ReturnType<typeof CommerceModel.quoteStartFromRequest> | null = null
+  if (action === 'create' && from?.kind === 'submission') {
+    const read = await readRequest(deps, {
+      hostId,
+      submissionId: String(from.id ?? ''),
+      uid: decoded.uid,
+      staff: decoded.staff === true,
+    })
+    if ('outcome' in read) return read.outcome
+    started = CommerceModel.quoteStartFromRequest(String(from.id), read.facts)
+  }
   const priced = await priceQuote(deps, hostRef, hostId, input)
   if ('status' in priced) return priced
 
@@ -493,6 +609,13 @@ export async function handleQuote(deps: QuoteDeps, req: PluginApiRequest): Promi
           ...editedQuoteFields(input),
           tax: priced.tax,
           requireProofApproval: input.requireProofApproval ?? priced.requireProofApprovalDefault,
+          ...(started
+            ? {
+                request: started.request,
+                ...(started.files.length ? { requestFiles: started.files } : {}),
+                ...(started.emailThread ? { emailThread: started.emailThread } : {}),
+              }
+            : {}),
           createdAtMs: now,
           updatedAtMs: now,
           createdBy: actor,
@@ -507,7 +630,15 @@ export async function handleQuote(deps: QuoteDeps, req: PluginApiRequest): Promi
           lineItems: priced.lineItems,
           totals: priced.totals,
           ...(priced.taxMode ? { taxMode: priced.taxMode } : {}),
-          timeline: [{ atMs: now, event: 'quote', detail: `Quote created by ${actor}` }],
+          timeline: [
+            {
+              atMs: now,
+              event: 'quote',
+              detail: started
+                ? `Quote created by ${actor} from a request sent through “${started.request.formName}”`
+                : `Quote created by ${actor}`,
+            },
+          ],
           quote,
         })
       })
@@ -662,6 +793,8 @@ async function handleProofAction(
     const files = [
       ...(source?.proofs ?? []),
       ...(source?.responses ?? []).flatMap((response) => response.files ?? []),
+      // The request's files (AGL-4098), on every revision: they came first.
+      ...(order.quote.requestFiles ?? []),
     ]
     const file = files.find((entry) => entry.id === fileId)
     if (!file?.path) return refuse(404, 'That file is no longer on this quote.')
@@ -775,6 +908,192 @@ async function handleProofAction(
   )
   await closeOpenSession(deps, answer.closeSession, 'quote revision started')
   return answer.outcome
+}
+
+/*==========================================
+ * SENDING THE QUOTE (AGL-4097)
+ *
+ *   { action: 'send', hostId, quoteId, to?, subject?, message } + Idempotency-Key
+ *
+ * Emails the quote to `to` (else the customer's email) under `subject` (else
+ * the conversation's, else "Quote #N from {business}"), with the business's
+ * message, the proof, the PDF and the pay link. Refused for a paid quote, one
+ * with nowhere to send it, and an address on a suppression list.
+ *
+ * When the customer was emailed an earlier revision and the link has not
+ * been replaced since, the link is replaced first (as Replace link does: the
+ * version moves on, the open payment closes) so the earlier email's link
+ * says the quote was updated. A resend of the same revision keeps it. Then
+ * the send is recorded (`quote.sends`), the conversation moves on
+ * (`quote.emailThread`), the quote moves to Sent unless the customer has
+ * answered this revision, and the timeline says so.
+ *
+ * One attempt per key: a retried press replays the answer and never sends a
+ * second email. A send that fails releases the key, and a retry finds the
+ * link already replaced, so it never replaces it twice.
+ *=========================================*/
+
+async function handleSendAction(
+  deps: QuoteDeps,
+  context: {
+    req: PluginApiRequest
+    body: Record<string, unknown>
+    hostId: string
+    quoteId: string
+    hostRef: FirebaseFirestore.DocumentReference
+    host: Record<string, unknown>
+    firestore: FirebaseFirestore.Firestore
+    actor: string
+    senderEmail: string | null
+  },
+): Promise<Outcome> {
+  const { req, body, hostId, quoteId, hostRef, host, firestore, actor } = context
+  const parsed = CommerceModel.parseQuoteSendInput(body)
+  if ('error' in parsed) return refuse(400, parsed.error)
+  const idempotencyKey = headerOf(req, 'idempotency-key').slice(0, 200)
+  if (!idempotencyKey) return refuse(400, 'Sending a quote needs an Idempotency-Key header.')
+
+  const ref = hostRef.collection('orders').doc(quoteId)
+  const [snapshot, store] = await Promise.all([ref.get(), hostRef.collection('settings').doc('store').get()])
+  const stored = snapshot.exists ? (snapshot.data() as CommerceModel.HostOrder) : null
+  const to = CommerceModel.quoteSendRecipient(stored, parsed.input.to)
+  const refused = CommerceModel.quoteSendRefusal(stored, to)
+  if (refused) {
+    return refuse(refused === 'not-a-quote' ? 404 : refused === 'paid' ? 409 : 400, CommerceModel.quoteSendRefusalMessage(refused))
+  }
+  if (!deps.payLinkUrl(host, hostId, quoteId, CommerceModel.quoteLinkVersion(stored?.quote))) {
+    return refuse(409, 'This site has no web address yet, so its quotes have no pay link. Publish the site first.')
+  }
+  const owner = await deps.orgForHost(hostId)
+  if (!checkEntitlement(owner?.org as never, 'commerce')) return refuse(403, 'Selling is not enabled')
+  const mailer = await deps.mailer()
+  if (!mailer.configured()) {
+    return refuse(503, 'Email isn’t set up here, so quotes can’t be emailed. Copy the pay link and send it yourself.')
+  }
+  // The bounce and complaint list only (AGL-4098): the customer asked for the
+  // quote, so unsubscribing from the site's newsletter does not refuse it.
+  if (await mailer.suppression(to)) {
+    return refuse(
+      409,
+      `${to} bounced or reported an email as spam, so it can’t be emailed. Copy the pay link and send it another way.`,
+    )
+  }
+
+  const claimed = await claimAttempt(firestore, {
+    kind: 'commerce-quote-send',
+    scopeId: `${hostId}:${quoteId}`,
+    orgId: owner?.id ?? '',
+    key: idempotencyKey,
+    busyMessage: 'This quote is already being sent',
+  })
+  if ('replay' in claimed) {
+    return { status: claimed.replay.status, body: claimed.replay.body as Record<string, unknown> }
+  }
+  const claim = claimed.claim
+  const now = deps.now()
+
+  let prepared:
+    | { outcome: Outcome }
+    | { order: CommerceModel.HostOrder; linkVersion: number; linkReplaced: boolean; closeSession?: string }
+  try {
+    // A new revision's first email replaces the link the customer was sent.
+    prepared = await firestore.runTransaction(async (transaction) => {
+      const current = await transaction.get(ref)
+      const order = current.exists ? (current.data() as CommerceModel.HostOrder) : null
+      const again = CommerceModel.quoteSendRefusal(order, to)
+      if (again || !order?.quote) {
+        const reason = again ?? 'not-a-quote'
+        return { outcome: refuse(reason === 'not-a-quote' ? 404 : 409, CommerceModel.quoteSendRefusalMessage(reason)) }
+      }
+      const version = CommerceModel.quoteLinkVersion(order.quote)
+      if (!CommerceModel.quoteSendReplacesLink(order.quote)) return { order, linkVersion: version, linkReplaced: false }
+      const rest: Partial<CommerceModel.HostOrder> = { ...order }
+      delete rest.checkoutSessionId
+      const replaced = {
+        ...rest,
+        timeline: CommerceModel.appendOrderEvent(
+          order,
+          'quote-link-replaced',
+          `Pay link replaced to send revision ${Number(order.quote.revision ?? 1)}; the earlier email's link no longer opens the quote`,
+          now,
+        ),
+        quote: { ...order.quote, linkVersion: version + 1 },
+      } as CommerceModel.HostOrder
+      transaction.set(ref, replaced)
+      return { order: replaced, linkVersion: version + 1, linkReplaced: true, closeSession: order.checkoutSessionId }
+    })
+  } catch (error) {
+    console.error('commerce quote send failed before sending', error)
+    await claim.release()
+    return refuse(500, 'The quote could not be sent. Try again.')
+  }
+  if ('outcome' in prepared) {
+    await claim.release()
+    return prepared.outcome
+  }
+  const { order, linkVersion, linkReplaced } = prepared
+  await closeOpenSession(deps, prepared.closeSession, 'quote link replaced to send a revision')
+
+  const payUrl = deps.payLinkUrl(host, hostId, quoteId, linkVersion) as string
+  let delivered: Awaited<ReturnType<QuoteMailer['deliver']>>
+  try {
+    delivered = await mailer.deliver({
+      hostId,
+      quoteId,
+      order,
+      host,
+      store: (store.data() ?? null) as Record<string, unknown> | null,
+      owner: owner ? { id: owner.id, org: owner.org } : null,
+      to,
+      subject: parsed.input.subject,
+      message: parsed.input.message,
+      payUrl,
+      proofUrl: (proofId) => deps.proofLinkUrl(host, hostId, quoteId, linkVersion, proofId),
+      linkReplaced,
+      senderEmail: context.senderEmail,
+      atMs: now,
+    })
+  } catch (error) {
+    console.error('commerce quote send failed', error)
+    await claim.release()
+    return refuse(502, 'The quote email could not be sent. Try again.')
+  }
+  // `strictNullChecks` is off, so the result does not narrow on `sent`.
+  if ('error' in delivered) {
+    await claim.release()
+    return refuse(delivered.status, delivered.error)
+  }
+  const done = delivered as Extract<typeof delivered, { sent: true }>
+
+  // The email is out: from here a failure is logged, never answered as one,
+  // so a retry does not send it twice.
+  const revision = Math.max(1, Number(order.quote?.revision ?? 1) || 1)
+  const send: CommerceModel.QuoteSendRecord = {
+    revision,
+    to,
+    subject: done.subject,
+    atMs: now,
+    by: actor,
+    messageId: done.messageId,
+    providerId: done.providerId,
+    linkVersion,
+  }
+  try {
+    await firestore.runTransaction(async (transaction) => {
+      const current = await transaction.get(ref)
+      const latest = current.exists ? (current.data() as CommerceModel.HostOrder) : null
+      if (!latest?.quote) return
+      transaction.set(ref, CommerceModel.quoteAfterSend(latest, send, done.thread))
+    })
+  } catch (error) {
+    console.error('commerce quote sent but not recorded', { hostId, quoteId, messageId: done.messageId, error })
+  }
+  const outcome: Outcome = {
+    status: 200,
+    body: { sent: true, to, atMs: now, revision, linkVersion, linkReplaced },
+  }
+  await claim.record(outcome.status, outcome.body)
+  return outcome
 }
 
 /** `POST /api/commerce/quote`. */

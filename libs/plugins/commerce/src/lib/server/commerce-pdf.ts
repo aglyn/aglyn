@@ -17,7 +17,7 @@
 
 import type { PluginApiHandler, PluginApiRequest } from '@aglyn/aglyn/server'
 import { resolveSiteTimeZone } from '@aglyn/aglyn/app-utils/collection-entry-date'
-import { resolveHostToken, type HostTokenSource } from '@aglyn/aglyn/app-utils/host-tokens'
+import { siteContactEmail, resolveHostToken, type HostTokenSource } from '@aglyn/aglyn/app-utils/host-tokens'
 import { resolveSiteTheme, type ThemeHostDocument } from '@aglyn/aglyn/app-utils/site-theme'
 import { buildEmailPalette, emailPaletteBaseForHost } from '@aglyn/shared-util-email'
 import { readJpeg, type PdfJpegImage } from '@aglyn/shared-util-tools/pdf/pdf-file'
@@ -61,7 +61,10 @@ import { locateImageSource, readImageSourceBytes } from './site-image-source'
  *
  *   POST commerce/quote { action: 'pdf' }                 the console's quote ("Create and edit quotes")
  *   GET  commerce/order-print?kind=invoice-pdf             the console's and the apps' invoice ("Manage orders")
- *   GET  commerce/quote-pdf?hostId=&q=&t=                  the customer's quote, by its signed link
+ *   GET  commerce/quote-pdf?hostId=&q=&t=                  the customer's quote, by its signed link,
+ *                                                          or an order's invoice by the same kind (AGL-4099)
+ *
+ * And the invoice email (AGL-4099, `invoice-email.ts`) attaches the invoice.
  *=========================================*/
 
 /** A logo source larger than this is not read. */
@@ -97,7 +100,7 @@ export function commercePdfContactLines(host: HostDocument | null | undefined): 
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
-  const email = trimmed(source.seo?.entity?.email) || trimmed(source.business?.supportEmail)
+  const email = siteContactEmail(source) ?? ''
   const phone = trimmed(source.seo?.entity?.telephone)
   const site = trimmed(resolveHostToken('url', source)).replace(/^https?:\/\//, '').replace(/\/$/, '')
   return [...address, email, phone, site].filter(Boolean)
@@ -236,7 +239,7 @@ export async function quotePdfFile(
   }
 }
 
-/** An order's invoice PDF, a paid quote's included. */
+/** An order's invoice PDF, a paid quote's included; an unpaid one carries its pay link when given (AGL-4099). */
 export async function orderInvoicePdfFile(
   input: {
     hostId: string
@@ -245,6 +248,8 @@ export async function orderInvoicePdfFile(
     host: HostDocument
     store: HostDocument | null | undefined
     owner?: { id?: string; org?: unknown } | null
+    /** Printed on an invoice still to be paid; absent or null leaves it off. */
+    payUrl?: string | null
   },
   deps?: CommercePdfBrandDeps,
 ): Promise<CommercePdfFile> {
@@ -255,6 +260,7 @@ export async function orderInvoicePdfFile(
       order: input.order,
       orderId: input.orderId,
       store: invoiceStoreFrom(input.host, input.store),
+      payUrl: input.payUrl ?? null,
     }),
     filename: commercePdfFilename(brand.businessName, 'invoice', input.order.number, input.orderId),
   }
@@ -275,6 +281,8 @@ export const QUOTE_PDF_DOWNLOADS_PER_WINDOW = 20
 
 export interface QuotePdfRouteDeps extends QuotePayDeps {
   quotePdf: typeof quotePdfFile
+  /** An invoice's PDF, for the link of an order that is not a quote (AGL-4099). */
+  invoicePdf?: typeof orderInvoicePdfFile
 }
 
 export async function handleQuotePdf(
@@ -286,13 +294,24 @@ export async function handleQuotePdf(
   if (!complete) return { status: 400, body: { error: 'This link is incomplete.' } }
   const refused = await limitedQuoteLink(deps, req, `commerce-quote-pdf:${hostId}`, QUOTE_PDF_DOWNLOADS_PER_WINDOW)
   if (refused) return refused
-  const linked = await loadLinkedQuote(deps, hostId, quoteId, token)
+  const linked = await loadLinkedQuote(deps, hostId, quoteId, token, { invoices: true })
   if ('outcome' in linked) return linked.outcome
-  const { host, order, store } = linked.loaded
-  const payUrl = CommerceModel.isUnpaidQuote(order)
-    ? quotePayLinkUrl(host, hostId, quoteId, CommerceModel.quoteLinkVersion(order.quote))
-    : null
+  const { host, order, store, kind } = linked.loaded
+  const payUrl =
+    order.status === 'pending' ? quotePayLinkUrl(host, hostId, quoteId, CommerceModel.orderPayLinkVersion(order)) : null
   const owner = await deps.orgForHost(hostId).catch(() => null)
+  if (kind === 'invoice') {
+    const pdf = await (deps.invoicePdf ?? orderInvoicePdfFile)({
+      hostId,
+      orderId: quoteId,
+      order,
+      host,
+      store: (store.data() ?? null) as HostDocument | null,
+      owner: owner ? { id: owner.id, org: owner.org } : null,
+      payUrl,
+    })
+    return { status: 200, pdf }
+  }
   const pdf = await deps.quotePdf({
     hostId,
     quoteId,

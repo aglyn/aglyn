@@ -32,7 +32,7 @@ The CRM is console-only. Its records live in Firestore and it has no canvas comp
 - A **CRM** nav item and hub at `/crm`, with the sections Contacts, Leads, Companies, Deals, Tasks, Reports, Fields and Settings as routes beneath it. The old `/contacts` address redirects to the hub. The hub is code-split, requires the `data.manage` permission, and sits behind the `crm` feature flag.
 - Dashboard widgets "Tasks due" and "CRM at a glance" in both the `hostDashboard` (one site) and `orgDashboard` (whole organization) slots.
 - A "Saves to contact fields" widget in the `formContactFields` slot, a zone the forms plugin hosts on a form's page.
-- Three zones the CRM hosts for other plugins to draw in: one for booking a meeting from a record, one that says which campaign or link a record came from, and one before a contact's or a lead's Send email for another way to write to the person, such as answering them in a sequence's thread.
+- Four zones the CRM hosts for other plugins to draw in: one for booking a meeting from a record, one that says which campaign or link a record came from, one before a contact's or a lead's Send email for another way to write to the person, such as answering them in a sequence's thread, and `crmRecordActions` (AGL-4098), any other act on a contact from its header, such as starting a quote.
 - The CRM's record routes, so other surfaces can link to a record.
 - Record count sources for `lead` (the leads a site captured) and `contact` (the organization's, a count that crosses sites) (`plugin-record-counts`), which a campaign's conversion report divides by.
 

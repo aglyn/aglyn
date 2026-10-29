@@ -632,6 +632,21 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
           taxCents,
         ),
         customerEmail: email || null,
+        // WHAT ITS INVOICE'S LASTING PAY LINK CHARGES LATER (AGL-4099). The
+        // session below lapses in a day; an invoice for this draft opens a
+        // fresh one from the stored order whenever the buyer presses Pay, and
+        // offers the same shipping rates this link does, and counts the same
+        // promotion once paid. Stored even when there are no rates, so an
+        // invoice can tell "ships nothing" from a draft made before this.
+        draftShipping: {
+          countries: shippingOptions.length > 0 ? Array.from(shippingPlan.countries ?? []) : [],
+          options: shippingOptions.map((option) => ({
+            rateId: String(option.rateId ?? ''),
+            name: String(option.name ?? ''),
+            amountCents: Math.max(0, Math.round(Number(option.amountCents ?? 0))),
+          })),
+        },
+        ...(appliedDiscountId ? { discountId: appliedDiscountId } : {}),
         timeline: [
           {
             atMs: Date.now(),

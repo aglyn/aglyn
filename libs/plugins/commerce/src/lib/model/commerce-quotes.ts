@@ -16,6 +16,7 @@
  */
 
 import type { HostProduct, ProductType } from './commerce'
+import type { QuoteRequestRef } from './commerce-quote-request'
 import { liftLegacyProduct, variantHasPrice } from './commerce'
 import type {
   HostOrder,
@@ -197,6 +198,79 @@ export interface QuoteUnmatchedPayment {
   reason: 'superseded' | 'already-paid'
 }
 
+/**
+ * The conversation the quote's emails keep in the customer's mailbox
+ * (AGL-4097): the latest message's `Message-ID`, every id in the
+ * conversation oldest first, and the subject it runs under. The shape of
+ * `EmailThread` (`@aglyn/shared-util-email`), spelled out so the model needs
+ * no email library. Started by the first email about the quote (a request's
+ * confirmation, or the quote itself); every later one replies into it.
+ */
+export interface QuoteEmailThread {
+  messageId: string
+  references: string[]
+  subject: string
+}
+
+/** One time the quote was emailed to the customer (AGL-4097). */
+export interface QuoteSendRecord {
+  /** The revision the email carried. */
+  revision: number
+  to: string
+  subject: string
+  atMs: number
+  /** Who sent it: an email, else a uid. */
+  by: string
+  /** The `Message-ID` the email was sent with. */
+  messageId: string
+  /** The mail provider's own id for the message, when it answered one. */
+  providerId: string | null
+  /** The pay link version the email carried. */
+  linkVersion: number
+}
+
+/** One shipping rate a draft order offered (AGL-4099), as checkout's resolved rates name it. */
+export interface OrderDraftShippingRate {
+  rateId: string
+  name: string
+  amountCents: number
+}
+
+/** The shipping a draft order offered when it was made (AGL-4099); see `HostOrder.draftShipping`. */
+export interface OrderDraftShipping {
+  /** Where its rates ship; empty when it offers none. */
+  countries: string[]
+  /** The rates the buyer picks from at payment; empty when it ships nothing. */
+  options: OrderDraftShippingRate[]
+}
+
+/** The lasting pay link of an order that is not a quote (AGL-4099); see `HostOrder.payLink`. */
+export interface OrderPayLink {
+  /** The link's version, absent reading as 1. */
+  version?: number
+  /** Payments through the link the order could not take, as a quote records them. */
+  unmatchedPayments?: QuoteUnmatchedPayment[]
+}
+
+/** One time an order's (or a quote's) invoice was emailed to the customer (AGL-4099). */
+export interface OrderInvoiceSendRecord {
+  to: string
+  subject: string
+  atMs: number
+  /** Who sent it: an email, else a uid. */
+  by: string
+  /** The `Message-ID` the email was sent with. */
+  messageId: string
+  /** The mail provider's own id for the message, when it answered one. */
+  providerId: string | null
+  /** The invoice said it was paid (the record), rather than asking for payment. */
+  paid: boolean
+  /** The pay link version an unpaid invoice carried; null on a paid one. */
+  linkVersion: number | null
+  /** The total the invoice showed. */
+  totalCents: number
+}
+
 /** What only a quote has, on its order document. */
 export interface OrderQuote {
   stage: QuoteStage
@@ -226,6 +300,19 @@ export interface OrderQuote {
    * as 1. Bumped when the business replaces the link.
    */
   linkVersion?: number
+  /** The conversation its emails keep in the customer's mailbox (AGL-4097). */
+  emailThread?: QuoteEmailThread | null
+  /** Every time it was emailed to the customer, oldest first (AGL-4097). */
+  sends?: QuoteSendRecord[]
+  /**
+   * The request it was started from (AGL-4098): a "Request a quote" form's
+   * submission, by id. Its files are listed on the quote as the customer's
+   * ({@link requestFiles}), and its confirmation's conversation is the
+   * quote's {@link emailThread} until the quote is first sent.
+   */
+  request?: QuoteRequestRef | null
+  /** The request's files, where the request keeps them; downloaded through the quote's own route. */
+  requestFiles?: QuoteResponseFile[]
   /** When the customer paid it. */
   paidAtMs?: number
   /** Payments the quote could not take; see {@link QuoteUnmatchedPayment}. */

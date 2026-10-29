@@ -66,6 +66,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   FORM_INPUT_ELEMENT_IDS,
+  FORM_PLUGIN_ANSWER_ELEMENTS,
   formFieldDeclsFromNodes,
   isMarketingConsentFieldName,
   MARKETING_CONSENT_FORM_FIELD,
@@ -245,7 +246,12 @@ describe('the field settings', () => {
       date: { componentId: 'muiDatePicker', props: { name: 'answer', disablePast: true } },
       time: { componentId: 'muiTimePicker', props: { name: 'answer', minutesStep: '15' } },
     }
-    expect(Object.keys(answers).sort()).toEqual([...declared].sort())
+    // A File upload and a Product and options field (AGL-4098) are other
+    // plugins' elements, not MUI's: a generated form is built from MUI's
+    // alone, so their two types are the ones it does not reach.
+    const otherPlugins = new Set<string>(Object.values(FORM_PLUGIN_ANSWER_ELEMENTS))
+    expect([...otherPlugins].sort()).toEqual(['file', 'product'])
+    expect(Object.keys(answers).sort()).toEqual(declared.filter((type) => !otherPlugins.has(type)).sort())
     for (const [fieldType, answer] of Object.entries(answers)) {
       const { nodes } = formOf(field('question', 'Question', answer))
       expect([fieldType, formFieldDeclsFromNodes(nodes, 'form')[0]?.fieldType]).toEqual([fieldType, fieldType])

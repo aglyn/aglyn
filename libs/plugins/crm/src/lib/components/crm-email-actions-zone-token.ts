@@ -46,3 +46,29 @@ export interface CrmRecordEmailActionsZoneProps {
 
 export const CRM_RECORD_EMAIL_ACTIONS_ZONE =
   definePluginZone<CrmRecordEmailActionsZoneProps>('crmRecordEmailActions')
+
+/**
+ * Something another plugin does WITH a person, drawn in a contact's header
+ * among its actions (AGL-4098): "Start a quote" from the plugin that makes
+ * quotes. The CRM may not import it, so the header hosts this zone and hands
+ * it the person as the page shows them; a widget decides for itself whether it
+ * has anything to offer and writes nothing through the CRM.
+ *
+ * Unlike `crmRecordEmailActions`, which is another way to WRITE to the person,
+ * this zone is for any other act on them.
+ */
+export interface CrmRecordActionsZoneProps {
+  /** The site the page is under, or the record's capturing site; `null` at the organization level for a record no site captured. */
+  hostId: string | null
+  /** The organization the record belongs to; `undefined` while it resolves. */
+  orgId: string | undefined
+  kind: 'contact' | 'lead'
+  recordId: string
+  /** The person as the page shows them; each empty when the record has none. */
+  name: string
+  email: string | null
+  phone: string
+  company: string
+}
+
+export const CRM_RECORD_ACTIONS_ZONE = definePluginZone<CrmRecordActionsZoneProps>('crmRecordActions')

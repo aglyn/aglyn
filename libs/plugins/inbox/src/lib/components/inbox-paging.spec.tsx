@@ -283,6 +283,11 @@ jest.mock('../model/submission-presenter', () => ({
     initial: 'S',
   }),
   submissionSummary: (submission: any) => submission.formName ?? '',
+  // A request's chip and its files (AGL-4098): none on these fixtures.
+  submissionFiles: () => [],
+  submissionFileSize: () => '1 KB',
+  submissionRequestKind: () => null,
+  submissionRequestLabel: () => null,
 }))
 
 beforeEach(() => {

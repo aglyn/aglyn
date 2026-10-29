@@ -662,7 +662,8 @@ async function composeQuotePage(hostId: string, host: unknown) {
             host,
             screen: {
               data: {
-                displayName: 'Your quote',
+                // The page is the same for a quote's link and an invoice's (AGL-4099).
+                displayName: 'Your quote or invoice',
                 visibility: Aglyn.HostScreenVisibility.UNLISTED,
               },
             },

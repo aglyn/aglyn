@@ -1,7 +1,7 @@
 ---
 sidebar_position: 3.1
 title: Quotes
-description: Price a customer's order before they buy, from your products and items typed for the job, with tax worked out as you go. Attach proofs to approve, and keep every revision.
+description: Price a customer's order before they buy, from your products and items typed for the job, with tax worked out as you go. Email it with its proof and PDF, have proofs approved, and keep every revision.
 ---
 
 # Quotes
@@ -62,6 +62,59 @@ anything and choose **Save**. A draft quote you no longer need can be deleted.
 The list shows each quote's customer, total, status and when it last changed, and
 sorts by any column.
 
+## A Request a quote form {#a-request-a-quote-form}
+
+Let customers ask for a quote on your site, with the product they want and their
+artwork:
+
+1. On the **Forms** page, make a form (or open one) and open it in the Besigner.
+2. Add the fields you need: a name, an email, a message, a **Product and options**
+   field from the element picker's **Forms** group, and a
+   [File upload](../../content-and-data/forms/overview.md#file-upload) field for logos
+   or artwork.
+3. On the form's page, under
+   [After someone sends it](../../content-and-data/forms/overview.md#after-someone-sends-it),
+   turn on **This form asks for a quote**. **Email the person a confirmation** turns on
+   with it.
+4. Publish the form and place it on a page.
+
+The **Product and options** field lists your store's products for the customer to pick
+from, then the product's options (size, color and so on). To quote one product only,
+pick it in the field's **Product** setting; the customer then picks just its options.
+The field sends the product and options in words, which is what your Inbox and your
+alert show, and keeps the exact product and option beside them for the quote.
+
+The customer gets a confirmation email with a copy of their request, and their request
+lands in your Inbox marked **Quote request**.
+
+## Start a quote from a request {#start-a-quote-from-a-request}
+
+Open a quote request in the **Inbox** and choose **Start a quote**. The quote editor
+opens with:
+
+- **the customer**: their name, email, phone and company, as the form gave them;
+- **a line for the product** they picked, with its options, priced from your catalog;
+- **their message** as the quote's notes, ready to edit;
+- **their files**, listed under **From the request**.
+
+Set the prices and anything else, and choose **Create quote**. The quote keeps the
+request's files as the customer's files, which you can download from the quote, and
+remembers which request it came from.
+
+When you [email the quote](#send), it is sent as a reply to the confirmation your
+customer got for their request, so the request, the quote and every revision after it
+are [one conversation](#conversation) in their inbox. Keep the subject the same so
+every inbox keeps them together.
+
+## Start a quote from a contact {#start-a-quote-from-a-contact}
+
+On a contact's page in the **CRM**, choose **Start a quote**. The quote editor opens
+with the contact as the customer: their name, email, phone and company. Add the lines
+and choose **Create quote**.
+
+Both need **Create and edit quotes**, and starting one from a request also needs a
+role that can read the site's Inbox.
+
 ## Totals and tax {#totals-and-tax}
 
 The totals add up the items (included items count nothing), take off the
@@ -80,10 +133,87 @@ discount, then add shipping and tax. Tax follows your store's
 If your store hasn't chosen how it handles sales tax, the quote shows no tax and
 says so, with a link to **Taxes**.
 
+## Email the quote {#send}
+
+Send the quote to your customer by email, from your site, with your own message:
+
+1. Open a saved quote and choose **Send quote** under **Email to customer**.
+2. Check **To**. It starts with the customer's email from the quote; type another
+   address to send it somewhere else.
+3. Check **Subject**. It starts as **Quote #1042 from** your business name.
+4. Type a **Message**: a few words to your customer, shown at the top of the email.
+5. Choose **Send**.
+
+The quote then shows **Sent** with the date and the address, and moves to **Sent**
+in the list (unless your customer has already approved it or asked for changes,
+which it keeps showing). The email shows the quote as it was last saved, so save
+your changes first.
+
+## What your customer gets {#quote-email}
+
+One email in your site's look, from your site's name, with:
+
+- **Your quote from** your business name as its heading, or **Your updated quote**
+  from the second revision on;
+- your message;
+- the quote number, its revision and its total;
+- the first three proof images, each opening the quote page, and the other proof
+  files by name, to see on the quote page (a WebP image is named rather than shown,
+  because some inboxes can't show one);
+- what to do next, and one button:
+  - **Review and approve** while
+    [the proof must be approved before paying](#approval-and-paying) and isn't yet;
+  - otherwise **View and pay** with the total;
+- the quote attached as a PDF, the same one as [Download PDF](#pdf), with the pay
+  link on it.
+
+The button opens the quote's [pay link](#pay-link). Replies go to your site's contact
+email, the one your business listing shows or else your support email, and to your
+own email when your site has neither. The email ends with a line saying so.
+
+The email is the **Quote** email under **Emails**, where you can change its wording
+and colors like your other site emails. It can use these tokens:
+
+| Token | Value |
+| -- | -- |
+| `{{quote.number}}`, `{{quote.revision}}`, `{{quote.total}}` | The quote number, like #1042, its revision, and its total (with "before tax" when Stripe Tax adds the tax at payment) |
+| `{{quote.heading}}`, `{{quote.intro}}` | The heading, and one sentence on whether this is a new quote or an updated revision |
+| `{{quote.message}}` | The message you typed; empty when you typed none |
+| `{{quote.proofImages}}`, `{{quote.proofFiles}}` | Up to three proof images, and the other proof files by name |
+| `{{quote.nextStep}}`, `{{quote.buttonLabel}}`, `{{quote.url}}` | What to do next, the button's words, and the pay link |
+| `{{quote.subject}}` | The subject you sent it under |
+
+A quote isn't emailed to an address that bounced or reported an email as spam. The
+quote says so; copy the [pay link](#pay-link) and send it another way. Your customer
+asked for the quote, so it still goes to an address that unsubscribed from your site's
+newsletter, as a receipt does.
+
+## One conversation in your customer's inbox {#conversation}
+
+Every email about a quote goes into the same conversation: the first one, sending it
+again and sending a new revision. Each one is sent as a reply to the one before, and
+the subject starts as the conversation's. Keep the subject the same when you send
+again: many inboxes group a conversation by its subject, so a new subject can start a
+new one.
+
+## Send it again, or send a revision {#send-again}
+
+After the first email, the button reads:
+
+- **Send again**, for the revision you already sent. The pay link stays the same.
+- **Send revision 2** (or whichever is current), once you've
+  [started a new revision](#revisions). Sending it gives your customer a new pay
+  link, and the link in your earlier email opens a page saying the quote was updated,
+  with nothing of the old revision. If you already replaced the link yourself, it
+  isn't replaced again.
+
+A paid quote isn't sent again.
+
 ## Send the pay link {#pay-link}
 
 Every quote has a pay link: an address on your own site, at `/pay-quote`, that opens
-the quote for your customer with a **Pay** button. Open the quote and, under
+the quote for your customer with a **Pay** button. [The quote email](#send) carries it
+for you. To send it some other way, open the quote and, under
 **Pay link**, choose **Copy pay link**. The link is copied and shown, ready to paste
 into an email or a text. It opens the quote as it was last saved, so save your changes
 before you copy it.
@@ -253,6 +383,25 @@ was already paid, or a payment comes through a link you had replaced, it isn't c
 as a sale: the quote's timeline records it and you're notified, so you can refund it in
 Stripe.
 
+## Send an invoice for a quote {#invoice}
+
+**Send invoice** sits beside **Send quote** in the quote's **Email to customer**
+section:
+
+- For a **paid** quote, it sends the invoice as your customer's record: marked paid,
+  with the date, and the invoice attached as a PDF.
+- For an **unpaid** quote, it sends an invoice for a customer who needs one to pay,
+  with a **Pay** button. The button is the quote's own [pay link](#pay-link), so it
+  opens the quote, and replacing the link retires it too.
+
+The invoice is sent in the same [conversation](#conversation) as the quote's emails,
+under the conversation's subject. Once it's sent, the section says when and to whom.
+An invoice for an unpaid quote that asks your customer to approve the proof can't be
+sent until they approve it: send the quote so they can.
+
+See [Send an invoice](orders-and-returns.md#send-invoice) for everything the email
+says.
+
 ## Quotes are not orders until they're paid {#quotes-are-not-orders}
 
 A quote shares your order numbers, but until it is paid it is not an order. It
@@ -263,7 +412,8 @@ tools and the customer's account page.
 
 Making, editing and deleting quotes, adding and removing proofs, starting a revision,
 seeing earlier revisions and your customer's files, and downloading a quote's PDF, takes
-the **Create and edit quotes** permission. Copying and replacing a quote's pay link takes
-**Send quotes and invoices to customers**, and so does a PDF that carries the pay link. Everyone who can manage orders on the site has both to start with; a
+the **Create and edit quotes** permission. Emailing a quote or its invoice, and copying and replacing
+its pay link, takes **Send quotes and invoices to customers**, and so does a PDF that
+carries the pay link. Everyone who can manage orders on the site has both to start with; a
 custom role or a per-member override can grant or deny each one. See
 [Order permissions](../../workspace-and-billing/teams-and-roles/custom-roles.md#order-permissions).

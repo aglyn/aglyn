@@ -27,6 +27,7 @@ import {
   INBOX_CAMPAIGNS_ZONE,
   INBOX_RECORD_ATTRIBUTION_ZONE,
 } from './components/inbox-attribution-zone'
+import { INBOX_SUBMISSION_ACTIONS_ZONE } from './components/inbox-submission-actions-zone'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { registerInboxRecordRoutes } from './model/inbox-record-routes'
 
@@ -66,6 +67,18 @@ export function registerInboxConsole(): void {
         'In a lead’s “Where this came from” dialog and under an open submission. A widget here says which campaign or link brought it; it is handed the site, what the record is and its id, and it writes nothing.',
     },
     // Named, because a spec calls this registrar without the loader.
+    { pluginId: BUNDLE_ID },
+  )
+  registerPluginZone(
+    {
+      zone: INBOX_SUBMISSION_ACTIONS_ZONE,
+      label: 'Act on an open submission',
+      surface: 'console',
+      // One button among the open submission's actions: the dialog lays them out.
+      layout: 'bare',
+      description:
+        'Among an open submission’s actions, before Delete. A widget here offers something to do with it, such as starting a quote from a quote request; it is handed the site, the submission’s id, what it asks for and its form’s name, reads anything more through the forms plugin’s facts, and writes nothing through the Inbox.',
+    },
     { pluginId: BUNDLE_ID },
   )
   registerPluginZone(

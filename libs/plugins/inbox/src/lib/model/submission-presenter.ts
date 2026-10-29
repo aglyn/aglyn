@@ -183,3 +183,63 @@ export function routingChips(routing: SubmissionRouting | undefined): RoutingChi
   }
   return chips
 }
+
+/**
+ * A file a submission carries (AGL-4098), as the Inbox lists it: its id, the
+ * field it answered, its name, type and size. The forms plugin records them;
+ * the Inbox reads them off the stored row defensively and downloads each
+ * through that plugin's route, never from storage itself.
+ */
+export interface SubmissionFile {
+  id: string
+  field: string
+  name: string
+  contentType: string
+  size: number
+}
+
+/** The most files a submission carries. */
+const SUBMISSION_FILES_MAX = 10
+
+/** The files a stored submission names, in order; none for a row without any. */
+export function submissionFiles(raw: unknown): SubmissionFile[] {
+  if (!Array.isArray(raw)) return []
+  return raw.slice(0, SUBMISSION_FILES_MAX).flatMap((entry) => {
+    const file = (entry && typeof entry === 'object' ? entry : {}) as Record<string, unknown>
+    const id = typeof file['id'] === 'string' ? file['id'] : ''
+    const name = typeof file['name'] === 'string' ? file['name'] : ''
+    if (!/^[A-Za-z0-9_-]{1,128}$/.test(id) || !name) return []
+    return [
+      {
+        id,
+        field: typeof file['field'] === 'string' ? file['field'] : '',
+        name,
+        contentType: typeof file['contentType'] === 'string' ? file['contentType'] : '',
+        size: Number(file['size']) || 0,
+      },
+    ]
+  })
+}
+
+/** `12 KB`, `3.4 MB`: a file's size as the Inbox shows it. */
+export function submissionFileSize(bytes: number): string {
+  if (!(bytes > 0)) return '0 KB'
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`
+  const mb = bytes / (1024 * 1024)
+  return `${mb >= 10 ? Math.round(mb) : Math.round(mb * 10) / 10} MB`
+}
+
+/**
+ * What a submission asks for, as a chip says it (AGL-4098): "Quote request"
+ * for a submission from a form marked as asking for a quote, else null.
+ */
+export function submissionRequestLabel(raw: unknown): string | null {
+  const kind = (raw as { kind?: unknown } | null | undefined)?.kind
+  return kind === 'quote' ? 'Quote request' : null
+}
+
+/** The kind of request a submission is, for a plugin that answers it, or null. */
+export function submissionRequestKind(raw: unknown): string | null {
+  const kind = (raw as { kind?: unknown } | null | undefined)?.kind
+  return typeof kind === 'string' && /^[a-z][a-z-]{0,31}$/.test(kind) ? kind : null
+}

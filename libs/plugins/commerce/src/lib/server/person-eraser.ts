@@ -58,6 +58,16 @@ const LABEL = 'commerce person eraser'
 /** Where a quote keeps its customer's address (`commerce-quotes.ts`). */
 const QUOTE_EMAIL_FIELD = 'quote.customer.emailLower'
 
+/**
+ * Each time the order's invoice was emailed names where it went (AGL-4099);
+ * the record of the send stays, without the address.
+ */
+function erasedInvoiceSends(data: FirebaseFirestore.DocumentData | undefined): Record<string, unknown> {
+  return Array.isArray(data?.['invoiceSends'])
+    ? { invoiceSends: (data['invoiceSends'] as Array<Record<string, unknown>>).map((send) => ({ ...send, to: '' })) }
+    : {}
+}
+
 /** The patch that takes the buyer off one order, as it stands. */
 export function erasedOrderPatch(
   data: FirebaseFirestore.DocumentData | undefined,
@@ -67,6 +77,7 @@ export function erasedOrderPatch(
     Array.isArray(data?.['customerEmailTokens']) ? data['customerEmailTokens'] : [],
   )
   return {
+    ...erasedInvoiceSends(data),
     customerEmail: null,
     customerName: null,
     shippingAddress: FieldValue.delete(),
@@ -88,16 +99,23 @@ export function erasedOrderPatch(
 /**
  * A quote's customer, erased (AGL-4093). An unpaid quote keeps its customer
  * in its `quote` section rather than on the order's own fields, so it is
- * found by `quote.customer.emailLower` and loses the person and both
- * addresses; its lines and totals stay, as an order's do.
+ * found by `quote.customer.emailLower` and loses the person, both
+ * addresses and the address each email went to; its lines and totals stay,
+ * as an order's do.
  */
 export function erasedQuotePatch(
   data: FirebaseFirestore.DocumentData | undefined,
   now: number,
 ): Record<string, unknown> {
   const quote = (data?.['quote'] ?? {}) as Record<string, unknown>
+  // Each time it was emailed names where it went (AGL-4097); the record of
+  // the send stays, without the address.
+  const sends = Array.isArray(quote['sends'])
+    ? { sends: (quote['sends'] as Array<Record<string, unknown>>).map((send) => ({ ...send, to: '' })) }
+    : {}
   return {
-    quote: { ...quote, customer: {}, billTo: null, shipTo: null },
+    quote: { ...quote, customer: {}, billTo: null, shipTo: null, ...sends },
+    ...erasedInvoiceSends(data),
     customerErasedAtMs: now,
   }
 }

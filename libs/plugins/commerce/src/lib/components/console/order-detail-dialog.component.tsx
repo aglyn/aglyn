@@ -64,6 +64,7 @@ import {
   ORDER_DETAIL_ZONE,
   ORDER_FULFILLMENT_ZONE,
 } from './order-zones'
+import { invoiceSentLine } from './invoice-send.component'
 import { OrderInvoiceButton } from './order-invoice.component'
 import { OrderReceiptResend } from './order-receipt-resend.component'
 import { OrderReturns } from './order-returns.component'
@@ -74,6 +75,11 @@ export interface OrderDetailDialogProps {
   hostId: string
   order: (CommerceModel.HostOrder & { $id: string }) | null
   onClose: () => void
+  /**
+   * Holds "Send quotes and invoices to customers" (`commerce.quotes.send`),
+   * for Send invoice (AGL-4099). Absent reads as held: the route decides.
+   */
+  canSendInvoices?: boolean
 }
 
 const STATUS_COLOR: Record<
@@ -134,7 +140,7 @@ const newAttemptKey = () =>
  * write), notes, printable packing slip.
  */
 export function OrderDetailDialog(props: OrderDetailDialogProps) {
-  const { hostId, order: rawOrder, onClose } = props
+  const { hostId, order: rawOrder, onClose, canSendInvoices = true } = props
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
@@ -1072,6 +1078,12 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
         ) : null}
         {/* The order's returns and "Start return" (AGL-3611). */}
         {orderId ? <OrderReturns hostId={hostId} orderId={orderId} order={order} /> : null}
+        {/* The last invoice emailed for the order (AGL-4099). */}
+        {invoiceSentLine(order) ? (
+          <Typography variant="body2" color="text.secondary">
+            {invoiceSentLine(order)}
+          </Typography>
+        ) : null}
         {order.paymentLinkUrl && order.status === 'pending' ? (
           <Button
             size="small"
@@ -1099,7 +1111,9 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
           </Button>
         ) : null}
         <Button onClick={handlePackingSlip}>{'Packing slip'}</Button>
-        {orderId ? <OrderInvoiceButton hostId={hostId} orderId={orderId} order={order} /> : null}
+        {orderId ? (
+          <OrderInvoiceButton hostId={hostId} orderId={orderId} order={order} canSend={canSendInvoices} />
+        ) : null}
         {orderId ? <OrderReceiptResend hostId={hostId} orderId={orderId} order={order} /> : null}
         {orderId && order.channel === 'pos' ? (
           // The register's 80mm receipt, its gift receipt and a reprint on

@@ -27,6 +27,36 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — Invoices
+
+- **[Send an invoice](commerce-and-bookings/commerce/orders-and-returns.md#send-invoice)**
+  — email an order's or a quote's invoice from **Invoice** in the order's dialog, or
+  from the quote. An unpaid one has a **Pay** button to a
+  [pay link that doesn't expire](commerce-and-bookings/commerce/orders-and-returns.md#invoice-pay-link),
+  so a draft order can be paid on any day; a paid one is your customer's record. A
+  quote's invoice arrives in the quote's conversation.
+
+## October 2026 — Request a quote forms
+
+- **[A Request a quote form](commerce-and-bookings/commerce/quotes-and-proofs.md#a-request-a-quote-form)**
+  — mark a form as asking for a quote, add a **Product and options** field and a
+  **[File upload](content-and-data/forms/overview.md#file-upload)** field for artwork, and
+  [start a quote](commerce-and-bookings/commerce/quotes-and-proofs.md#start-a-quote-from-a-request)
+  from the request in the Inbox, or from a contact, already filled in.
+- **[Email the person a confirmation](content-and-data/forms/overview.md#after-someone-sends-it)**
+  — a form can send the person a copy of what they sent, and the quote you send them later
+  arrives in the same conversation. A quote, like a receipt, now reaches someone who
+  unsubscribed from your newsletter.
+
+## October 2026 — email a quote
+
+- **[Email a quote](commerce-and-bookings/commerce/quotes-and-proofs.md#send)** — send a
+  quote to your customer from your site, with your message, the first proof images, the
+  quote as a PDF and a button to approve the proof or pay. Replies reach your business.
+- **[One conversation](commerce-and-bookings/commerce/quotes-and-proofs.md#conversation)**
+  — sending again or sending a new revision arrives in the same conversation in your
+  customer's inbox, and a new revision's email gives them a new pay link.
+
 ## October 2026 — proofs and revisions for quotes
 
 - **[Proofs on quotes](commerce-and-bookings/commerce/quotes-and-proofs.md#proofs)** —

@@ -57,7 +57,8 @@ import { doc } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { downloadCommercePdf } from './commerce-pdf-download'
 import { QuotePayLinkSection } from './quote-pay-link.component'
-import { QuoteProofsSection } from './quote-proofs.component'
+import { QuoteProofsSection, QuoteRequestFilesSection } from './quote-proofs.component'
+import { QuoteSendSection } from './quote-send.component'
 
 /** A quote as the list reads it: the order document and its id. */
 export type QuoteRow = CommerceModel.HostOrder & { $id: string }
@@ -72,7 +73,26 @@ export interface QuoteEditorDialogProps {
   canEdit: boolean
   /** Holds "Send quotes and invoices to customers" (`commerce.quotes.send`). */
   canSend: boolean
+  /**
+   * What a NEW quote opens with when it is started from a request or a
+   * contact (AGL-4098). The editable fields are filled in; a request's own
+   * parts (which request, its files, its conversation) are stamped by the
+   * server from `from` when the quote is created, never from here.
+   */
+  start?: QuoteEditorStart | null
   onClose: () => void
+}
+
+/** A new quote's start: from a request (with what it carried) or from a contact. */
+export interface QuoteEditorStart {
+  /** The request it is started from, which the server reads again on create; null for a contact. */
+  from: { kind: 'submission'; id: string } | null
+  prefill: CommerceModel.QuoteStartPrefill
+  /** The request, as the editor says where the quote came from. */
+  request?: { formName: string; receivedAtMs: number | null } | null
+  files?: ReadonlyArray<{ id: string; name: string; contentType: string; size: number }>
+  /** Whether the request started an email conversation the quote's first email will reply into. */
+  threaded?: boolean
 }
 
 const REFUSAL = commerceSitePermissionRefusal('commerce.quotes')
@@ -196,6 +216,35 @@ function formFromQuote(quote: QuoteRow | null, requireProofApproval: boolean): Q
   }
 }
 
+/** A new quote's form, filled in from where it was started (AGL-4098). */
+function formFromStart(start: QuoteEditorStart, requireProofApproval: boolean): QuoteForm {
+  const blank = formFromQuote(null, requireProofApproval)
+  const { customer, lines, notes } = start.prefill
+  return {
+    ...blank,
+    customer: {
+      record: customer.record ?? null,
+      name: customer.name ?? '',
+      company: customer.company ?? '',
+      email: customer.email ?? '',
+      phone: customer.phone ?? '',
+    },
+    lines: lines.map(
+      (line): LineForm => ({
+        key: nextLineKey(),
+        kind: 'catalog',
+        productId: line.productId,
+        variantId: line.variantId ?? '',
+        quantity: String(line.quantity || 1),
+        modifiers: line.modifiers ?? [],
+        description: line.description ?? '',
+        included: line.included === true,
+      }),
+    ),
+    notes: notes ?? '',
+  }
+}
+
 function lineRequest(line: LineForm): CommerceModel.QuoteLineRequest {
   const quantity = Number(line.quantity)
   if (line.kind === 'catalog') {
@@ -270,6 +319,7 @@ interface FoundCustomer {
  */
 export function QuoteEditorDialog(props: QuoteEditorDialogProps) {
   const { hostId, quote, products, canEdit, canSend, onClose } = props
+  const start = quote ? null : (props.start ?? null)
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
@@ -279,7 +329,9 @@ export function QuoteEditorDialog(props: QuoteEditorDialogProps) {
     [firestore, hostId],
   )
   const storeDefault = CommerceModel.quoteRequiresProofApprovalByDefault(store?.quotes)
-  const [form, setForm] = useState<QuoteForm>(() => formFromQuote(quote, storeDefault))
+  const [form, setForm] = useState<QuoteForm>(() =>
+    start ? formFromStart(start, storeDefault) : formFromQuote(quote, storeDefault),
+  )
   // The version this form was opened on. A change saved elsewhere while it is
   // open arrives on `quote`; the save still names this one, so the server
   // refuses rather than overwrite that change. A proof added or a revision
@@ -371,6 +423,8 @@ export function QuoteEditorDialog(props: QuoteEditorDialogProps) {
           action: quote ? 'update' : 'create',
           hostId,
           ...(quote ? { quoteId: quote.$id, baseUpdatedAtMs } : {}),
+          // A request's parts are read again by the server from here (AGL-4098).
+          ...(!quote && start?.from ? { from: start.from } : {}),
           quote: quoteBody({ ...form, requireProofApproval }),
         }),
       })
@@ -386,7 +440,7 @@ export function QuoteEditorDialog(props: QuoteEditorDialogProps) {
     } finally {
       setBusy(false)
     }
-  }, [user, quote, hostId, baseUpdatedAtMs, form, requireProofApproval, enqueueSnackbar, onClose])
+  }, [user, quote, hostId, baseUpdatedAtMs, start, form, requireProofApproval, enqueueSnackbar, onClose])
 
   const remove = useCallback(async () => {
     if (!quote) return
@@ -456,6 +510,9 @@ export function QuoteEditorDialog(props: QuoteEditorDialogProps) {
             </Alert>
           ) : null}
           {quote ? (
+            <QuoteSendSection hostId={hostId} quoteId={quote.$id} quote={quote} canSend={canSend} edited={edited} />
+          ) : null}
+          {quote ? (
             <QuotePayLinkSection hostId={hostId} quoteId={quote.$id} quote={quote} canSend={canSend} edited={edited} />
           ) : null}
           {quote ? (
@@ -468,6 +525,18 @@ export function QuoteEditorDialog(props: QuoteEditorDialogProps) {
                 if (updatedAtMs) setBaseUpdatedAtMs(updatedAtMs)
               }}
             />
+          ) : null}
+          {/* Where it came from (AGL-4098): the request, its files and its conversation. */}
+          {start?.request ? (
+            <QuoteStartedFromRequest
+              formName={start.request.formName}
+              receivedAtMs={start.request.receivedAtMs}
+              files={start.files ?? []}
+              threaded={start.threaded === true}
+            />
+          ) : null}
+          {quote?.quote?.request ? (
+            <QuoteRequestFilesSection hostId={hostId} quoteId={quote.$id} quote={quote} />
           ) : null}
           {taxBasis.kind === 'none' && taxBasis.reason === 'undecided' ? (
             <PrerequisiteNotice href={taxesHref ?? undefined} actionLabel="Open Taxes">
@@ -672,6 +741,43 @@ export function QuoteEditorDialog(props: QuoteEditorDialogProps) {
   )
 }
 QuoteEditorDialog.displayName = 'QuoteEditorDialog'
+
+/** A new quote's request (AGL-4098): which form sent it and when, its files by name, and its conversation. */
+function QuoteStartedFromRequest(props: {
+  formName: string
+  receivedAtMs: number | null
+  files: ReadonlyArray<{ id: string; name: string; size: number }>
+  threaded: boolean
+}) {
+  const { formName, receivedAtMs, files, threaded } = props
+  const when = receivedAtMs
+    ? ` on ${new Date(receivedAtMs).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}`
+    : ''
+  return (
+    <Alert severity="info">
+      <Stack spacing={1}>
+        <Typography variant="body2">{`From a request sent through “${formName}”${when}.`}</Typography>
+        {files.length ? (
+          <Stack spacing={0.5}>
+            <Typography variant="caption" color="text.secondary">
+              {'Their files, kept on the quote as the customer’s:'}
+            </Typography>
+            <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
+              {files.map((file) => (
+                <Chip key={file.id} size="small" variant="outlined" label={file.name} />
+              ))}
+            </Stack>
+          </Stack>
+        ) : null}
+        <Typography variant="caption" color="text.secondary">
+          {threaded
+            ? 'When you email the quote, it replies to the confirmation they were sent, in the same conversation.'
+            : 'They weren’t sent a confirmation, so the quote’s email starts the conversation.'}
+        </Typography>
+      </Stack>
+    </Alert>
+  )
+}
 
 /** Who the quote is for: a person the workspace keeps, or details typed here. */
 function QuoteCustomerSection(props: {

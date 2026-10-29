@@ -47,6 +47,7 @@ import ContactTimelineCard from './contact-timeline-card'
 import { AddToListButton } from './add-to-list-button'
 import { useBookingDoor } from './crm-booking-zone'
 import { CrmRecordEmailActionsZone } from './crm-email-actions-zone'
+import { CrmRecordActionsZone } from './crm-record-actions-zone'
 import { CrmSendEmailButton } from './crm-send-email-button'
 import { ContactDealsCard } from './contact-deals-card'
 import { CrmCallButton } from './crm-call-actions'
@@ -406,6 +407,17 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
                 name={record.name}
                 emailState={record.emailState}
                 suiteLocked={!suiteIncluded}
+              />
+              {/* What another plugin does with the person, such as start a quote (AGL-4098). */}
+              <CrmRecordActionsZone
+                hostId={siteHostId}
+                org={org}
+                kind="contact"
+                recordId={id}
+                name={record.name}
+                email={record.email || null}
+                phone={record.phone || record.mobilePhone || ''}
+                company={record.companyName || ''}
               />
             </>
           ) : null

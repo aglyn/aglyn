@@ -4455,6 +4455,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         // A payment a quote could not take (AGL-4094), reported below.
         let quoteUnmatched: CommerceModel.QuoteUnmatchedPayment | null = null
         let quoteLabel = ''
+        // What the money was for, as the alert says it (AGL-4099).
+        let unmatchedNoun: 'quote' | 'invoice' = 'quote'
         const flipped = await firestore.runTransaction(async (transaction) => {
           const snapshot = await transaction.get(orderRef)
           if (!snapshot.exists) return false
@@ -4527,6 +4529,59 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           const lifted = CommerceModel.liftLegacyOrder(
             (snapshot.data() as any) ?? {},
           )
+          // AN INVOICE'S PAY LINK (AGL-4099). A draft order paid through the
+          // lasting link its invoice carries answers as a quote's link does:
+          // a payment through a replaced link, or a second payment after the
+          // order was paid, is recorded on the order (`payLink`) and the
+          // business is told, never fulfilled and never lost. A payment for
+          // it as it stands falls through to the flip below, which is the
+          // draft's own: it restates the list fields from the document, so
+          // the draft's are not stamped twice, and moves stock for catalog
+          // lines only. A canceled order keeps AGL-2244's handling below.
+          const invoiceLinkVersion = object?.metadata?.payLinkVersion
+          if (
+            invoiceLinkVersion != null &&
+            invoiceLinkVersion !== '' &&
+            lifted.status !== 'cancelled'
+          ) {
+            const facts = {
+              sessionId: String(object?.id ?? ''),
+              paymentIntentId: String(object?.payment_intent ?? '') || null,
+              linkVersion: invoiceLinkVersion,
+              paidAtMs: Date.now(),
+              amountTotalCents: Number.isFinite(chargedTotalCents)
+                ? chargedTotalCents
+                : null,
+            }
+            const disposition = CommerceModel.quotePaymentDisposition(lifted, facts)
+            if (disposition === 'redelivery') return false
+            if (disposition !== 'pay') {
+              const entry = CommerceModel.quoteUnmatchedPayment(facts, disposition)
+              quoteUnmatched = entry
+              quoteLabel = CommerceModel.formatInvoiceNumber(lifted, String(orderId))
+              unmatchedNoun = 'invoice'
+              transaction.set(
+                orderRef,
+                {
+                  payLink: {
+                    ...(lifted.payLink ?? {}),
+                    unmatchedPayments: [
+                      ...CommerceModel.orderPayLinkUnmatched(lifted),
+                      entry,
+                    ],
+                  },
+                  timeline: CommerceModel.appendOrderEvent(
+                    lifted,
+                    'invoice-payment-unmatched',
+                    CommerceModel.quoteUnmatchedPaymentDetail(entry, 'invoice'),
+                    facts.paidAtMs,
+                  ),
+                },
+                { merge: true },
+              )
+              return false
+            }
+          }
           if (lifted.status !== 'pending') {
             // NOT ALL NON-`pending` ORDERS ARE REDELIVERIES (AGL-2244), and
             // returning false for both is how a real capture went unrecorded.
@@ -4666,7 +4721,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               unmatched.reason === 'already-paid'
                 ? `${quoteLabel} was paid twice`
                 : `A replaced link for ${quoteLabel} was paid`,
-            body: `${quoteLabel} on {site}: ${CommerceModel.quoteUnmatchedPaymentDetail(unmatched)}`,
+            body: `${quoteLabel} on {site}: ${CommerceModel.quoteUnmatchedPaymentDetail(unmatched, unmatchedNoun)}`,
             link: `/${hostId}/products/orders`,
           })
         }
@@ -4729,17 +4784,25 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             Number(object?.amount_total ?? 0) ||
             Number(order.totals?.totalCents ?? 0)
           const isQuotePayment = CommerceModel.isQuote(order)
+          // A draft paid through its invoice's link (AGL-4099).
+          const isInvoicePayment =
+            !isQuotePayment && String(object?.metadata?.payLinkVersion ?? '') !== ''
           void notifyHostManagers(String(hostId), {
             type: 'content.order',
             title: isQuotePayment
               ? `Quote paid — ${CommerceModel.formatQuoteNumber(order, String(orderId))}`
-              : `Draft order paid — ${draftLabel}`,
+              : isInvoicePayment
+                ? `Invoice paid — ${draftLabel}`
+                : `Draft order paid — ${draftLabel}`,
             // Who paid what, and where (AGL-3432).
             body: isQuotePayment
               ? `${draftPayer ?? 'The customer'} paid ${CommerceModel.formatQuoteNumber(order, String(orderId))} ` +
                 `on {site}: $${(draftPaidCents / 100).toFixed(2)}. It is order ${draftLabel} now.`
-              : `${draftPayer ?? 'The buyer'} paid draft order ${draftLabel} ` +
-                `on {site}: $${(draftPaidCents / 100).toFixed(2)}.`,
+              : isInvoicePayment
+                ? `${draftPayer ?? 'The buyer'} paid the invoice for draft order ${draftLabel} ` +
+                  `on {site}: $${(draftPaidCents / 100).toFixed(2)}.`
+                : `${draftPayer ?? 'The buyer'} paid draft order ${draftLabel} ` +
+                  `on {site}: $${(draftPaidCents / 100).toFixed(2)}.`,
             link: `/${hostId}/products`,
           })
           // Contacts ingestion (AGL-1748): this branch flipped the order,

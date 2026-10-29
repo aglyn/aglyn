@@ -897,8 +897,11 @@ data class HostOrder(
     val customerPhone: String? = null,
     val customerRecord: HostOrderCustomerRecord? = null,
     val discountBy: String? = null,
+    val discountId: String? = null,
     val discountPct: Double? = null,
     val dispute: OrderDispute? = null,
+    val draftShipping: OrderDraftShipping? = null,
+    val emailThread: QuoteEmailThread? = null,
     val extras: List<OrderExtra>? = null,
     val feeCents: Double? = null,
     val fulfillmentMethod: OrderFulfillmentMethod? = null,
@@ -910,6 +913,7 @@ data class HostOrder(
     val hardwareTermsAcceptance: HostOrderHardwareTermsAcceptance? = null,
     val hardwareTermsRequest: HostOrderHardwareTermsRequest? = null,
     val invoiceId: String? = null,
+    val invoiceSends: List<OrderInvoiceSendRecord>? = null,
     val kioskDeviceId: String? = null,
     val kioskQueuedAtMs: Double? = null,
     val kioskQueueRegisterId: String? = null,
@@ -919,6 +923,7 @@ data class HostOrder(
     val note: String? = null,
     val number: Double? = null,
     val offline: PosOfflineOrderStamp? = null,
+    val payLink: OrderPayLink? = null,
     val paymentIntentId: String? = null,
     val paymentLinkUrl: String? = null,
     val paymentRisk: PaymentRisk? = null,
@@ -1830,6 +1835,19 @@ data class OrderDispute(
 )
 
 @Serializable
+data class OrderDraftShipping(
+    val countries: List<String>,
+    val options: List<OrderDraftShippingRate>,
+)
+
+@Serializable
+data class OrderDraftShippingRate(
+    val amountCents: Double,
+    val name: String,
+    val rateId: String,
+)
+
+@Serializable
 data class OrderExtra(
     val amountCents: Double,
     val id: String,
@@ -1939,6 +1957,19 @@ data class OrderHardwareBuyerAddress(
 )
 
 @Serializable
+data class OrderInvoiceSendRecord(
+    val atMs: Double,
+    val by: String,
+    val linkVersion: Double? = null,
+    val messageId: String,
+    val paid: Boolean,
+    val providerId: String? = null,
+    val subject: String,
+    val to: String,
+    val totalCents: Double,
+)
+
+@Serializable
 data class OrderLineItem(
     val custom: Boolean? = null,
     val description: String? = null,
@@ -2013,6 +2044,12 @@ enum class OrderLocalDeliveryStatus(val raw: String) {
 
 internal object OrderLocalDeliveryStatusSerializer :
     RawEnumSerializer<OrderLocalDeliveryStatus>("com.aglyn.contracts.OrderLocalDeliveryStatus", OrderLocalDeliveryStatus.entries, OrderLocalDeliveryStatus.UNKNOWN, { it.raw })
+
+@Serializable
+data class OrderPayLink(
+    val unmatchedPayments: List<QuoteUnmatchedPayment>? = null,
+    val version: Double? = null,
+)
 
 @Serializable
 data class OrderPayment(
@@ -2109,13 +2146,17 @@ data class OrderQuote(
     val createdBy: String,
     val customer: QuoteCustomer,
     val discount: QuoteDiscount? = null,
+    val emailThread: QuoteEmailThread? = null,
     val linkVersion: Double? = null,
     val notes: String? = null,
     val paidAtMs: Double? = null,
     val proofs: List<QuoteProof>? = null,
+    val request: QuoteRequestRef? = null,
+    val requestFiles: List<QuoteResponseFile>? = null,
     val requireProofApproval: Boolean? = null,
     val responses: List<QuoteCustomerResponse>? = null,
     val revision: Double,
+    val sends: List<QuoteSendRecord>? = null,
     val shipping: QuoteShipping? = null,
     val shipTo: OrderAddress? = null,
     val stage: QuoteStage,
@@ -3254,6 +3295,13 @@ enum class QuoteDiscountKind(val raw: String) {
 internal object QuoteDiscountKindSerializer :
     RawEnumSerializer<QuoteDiscountKind>("com.aglyn.contracts.QuoteDiscountKind", QuoteDiscountKind.entries, QuoteDiscountKind.UNKNOWN, { it.raw })
 
+@Serializable
+data class QuoteEmailThread(
+    val messageId: String,
+    val references: List<String>,
+    val subject: String,
+)
+
 /** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
 @Serializable(with = QuoteNoTaxReasonSerializer::class)
 enum class QuoteNoTaxReason(val raw: String) {
@@ -3280,12 +3328,31 @@ data class QuoteProof(
 )
 
 @Serializable
+data class QuoteRequestRef(
+    val formName: String,
+    val receivedAtMs: Double? = null,
+    val submissionId: String,
+)
+
+@Serializable
 data class QuoteResponseFile(
     val contentType: String,
     val id: String,
     val name: String,
     val path: String,
     val size: Double,
+)
+
+@Serializable
+data class QuoteSendRecord(
+    val atMs: Double,
+    val by: String,
+    val linkVersion: Double,
+    val messageId: String,
+    val providerId: String? = null,
+    val revision: Double,
+    val subject: String,
+    val to: String,
 )
 
 @Serializable

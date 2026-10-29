@@ -86,6 +86,28 @@ export function registerFormsServerDeclarations(): void {
   registerPluginEventHandler(
     'host.records.removed',
     async (payload) => {
+      // A removed submission's files go with it (AGL-4098): the API's delete
+      // and a person's erasure both say so here. Its files are kept under
+      // its own id; the upload pipeline loads only for one that had files.
+      if (payload.collection === 'formSubmissions') {
+        const withFiles = payload.records.filter(
+          (record) => Array.isArray(record.data['files']) && (record.data['files'] as unknown[]).length > 0,
+        )
+        if (withFiles.length) {
+          const [{ formUploadCalls }, { formFileScope }] = await Promise.all([
+            import('./server/form-uploads'),
+            import('./model/form-request'),
+          ])
+          const uploads = formUploadCalls()
+          for (const record of withFiles) {
+            const hostId = typeof record.data['hostId'] === 'string' ? record.data['hostId'] : payload.hostIds[0]
+            if (!hostId) continue
+            await uploads
+              .removeAll(formFileScope(hostId, record.id))
+              .catch((error) => console.error(`[forms] files of ${hostId}/${record.id} were not deleted`, error))
+          }
+        }
+      }
       const targets = formsCountingRemovedRecords(payload)
       if (!targets.length) return
       const { recountFormStats } = await import('./server/form-stats')

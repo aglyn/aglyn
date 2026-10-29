@@ -12,6 +12,95 @@ import type { TenantEmailEntry } from './tenant-email-catalog'
 
 export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
   {
+    "key": "form-confirmation",
+    "name": "Form confirmation",
+    "description": "Sent to the person who filled in a form, when the form is set to email them a confirmation: what they sent, the files they attached, what happens next and how to reach you. Your reply, such as a quote, arrives in the same conversation.",
+    "pluginId": "forms",
+    "plugin": "Forms",
+    "control": "besigner",
+    "defaultSubject": "{{form.subject}}",
+    "mergeTokens": [
+      {
+        "name": "form.subject",
+        "description": "The subject: what they sent, to whom",
+        "sample": "We got your quote request — Northwind Signs"
+      },
+      {
+        "name": "form.name",
+        "description": "The form’s name",
+        "sample": "Request a quote"
+      },
+      {
+        "name": "form.heading",
+        "description": "“We got your request” for a request, else “Thanks, we got your message”",
+        "sample": "We got your request"
+      },
+      {
+        "name": "form.intro",
+        "description": "One sentence on what this email is",
+        "sample": "Thanks for asking Northwind Signs for a quote. Here is a copy of what you sent."
+      },
+      {
+        "name": "form.answers",
+        "description": "Their answers, one per line, under the form’s own labels",
+        "sample": "Name: Jane Doe\nProduct: Vinyl banner — 3 × 6 ft / Matte\nDetails: Two banners for the spring fair."
+      },
+      {
+        "name": "form.files",
+        "description": "The files they attached, by name; empty when there were none",
+        "sample": "Files you sent: logo.ai, banner-sketch.pdf"
+      },
+      {
+        "name": "form.nextStep",
+        "description": "What happens next",
+        "sample": "Northwind Signs will look over your request and email you a quote. Reply to this email if anything changes."
+      },
+      {
+        "name": "business.contact",
+        "description": "How to reach the business beyond a reply: its contact email, and its phone when it lists one",
+        "sample": "You can also reach Northwind Signs at hello@northwind.example or 555-0100."
+      }
+    ],
+    "defaultBody": [
+      {
+        "block": "text",
+        "text": "{{host.businessName}} · {{form.name}}",
+        "variant": "eyebrow"
+      },
+      {
+        "block": "text",
+        "text": "{{form.heading}}",
+        "variant": "heading"
+      },
+      {
+        "block": "text",
+        "text": "{{form.intro}}",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "{{form.answers}}",
+        "variant": "details"
+      },
+      {
+        "block": "text",
+        "text": "{{form.files}}",
+        "variant": "caption"
+      },
+      {
+        "block": "text",
+        "text": "{{form.nextStep}}",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "{{business.contact}}",
+        "variant": "caption"
+      }
+    ],
+    "footerReason": "You’re receiving this because you sent a form on the {{host.businessName}} website."
+  },
+  {
     "key": "booking-confirmed",
     "name": "Booking confirmed",
     "description": "Confirms a booking to the customer, for paid and free services.",
@@ -794,6 +883,238 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       }
     ],
     "footerReason": "You’re receiving this because you placed an order with {{host.businessName}}."
+  },
+  {
+    "key": "quote-sent",
+    "name": "Quote",
+    "description": "Sends a quote to the customer when you choose Send quote: your message, the proof, the quote as a PDF and a button to approve or pay it on your site. Later sends, such as a new revision, arrive in the same conversation.",
+    "pluginId": "commerce",
+    "plugin": "Commerce",
+    "control": "besigner",
+    "defaultSubject": "{{quote.subject}}",
+    "mergeTokens": [
+      {
+        "name": "quote.subject",
+        "description": "The subject typed when sending; it stays the same for every email about the quote",
+        "sample": "Quote #1042 from Northwind Signs"
+      },
+      {
+        "name": "quote.number",
+        "description": "The quote number",
+        "sample": "#1042"
+      },
+      {
+        "name": "quote.revision",
+        "description": "Which revision of the quote this is",
+        "sample": "2"
+      },
+      {
+        "name": "quote.total",
+        "description": "The quote total; “before tax” when tax is added at payment",
+        "sample": "$1,250.00"
+      },
+      {
+        "name": "quote.heading",
+        "description": "“Your quote from …”, or “Your updated quote” from the second revision on",
+        "sample": "Your quote from Northwind Signs"
+      },
+      {
+        "name": "quote.intro",
+        "description": "One sentence on what this email is: a new quote, or an updated revision",
+        "sample": "Here is your quote from Northwind Signs. The quote is attached as a PDF too."
+      },
+      {
+        "name": "quote.message",
+        "description": "The message typed when sending; empty when none was typed",
+        "sample": "Thanks for stopping by the shop. Here is the banner we talked about."
+      },
+      {
+        "name": "quote.proofImages",
+        "description": "Up to three proof images, each linked to the quote page; empty when the revision has none",
+        "sample": "<table role=\"presentation\"><tr><td><img src=\"https://shop.example.com/api/commerce/quote-proof?file=p1\" alt=\"Proof: banner.png\" width=\"552\" /></td></tr></table>"
+      },
+      {
+        "name": "quote.proofFiles",
+        "description": "The other proof files by name, to see on the quote page; empty when there are none",
+        "sample": "Also with this revision: banner.ai. See it on your quote page."
+      },
+      {
+        "name": "quote.nextStep",
+        "description": "What to do next: approve the proof first, or pay when ready",
+        "sample": "Look over the proof, then approve it on your quote page. Once you approve it, you can pay there."
+      },
+      {
+        "name": "quote.buttonLabel",
+        "description": "“Review and approve” while an approval is needed first, else “View and pay” with the total",
+        "sample": "View and pay $1,250.00"
+      },
+      {
+        "name": "quote.url",
+        "description": "The quote’s pay link on your site. Private to the customer; it needs no account",
+        "sample": "https://shop.example.com/pay-quote?q=quote_123&t=…"
+      }
+    ],
+    "defaultBody": [
+      {
+        "block": "text",
+        "text": "{{host.businessName}} · Quote {{quote.number}}",
+        "variant": "eyebrow"
+      },
+      {
+        "block": "text",
+        "text": "{{quote.heading}}",
+        "variant": "heading"
+      },
+      {
+        "block": "text",
+        "text": "{{quote.intro}}",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "{{quote.message}}",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "Quote: {{quote.number}}\nRevision: {{quote.revision}}\nTotal: {{quote.total}}",
+        "variant": "details"
+      },
+      {
+        "block": "html",
+        "html": "{{quote.proofImages}}"
+      },
+      {
+        "block": "text",
+        "text": "{{quote.proofFiles}}",
+        "variant": "caption"
+      },
+      {
+        "block": "text",
+        "text": "{{quote.nextStep}}",
+        "variant": "body"
+      },
+      {
+        "block": "button",
+        "label": "{{quote.buttonLabel}}",
+        "href": "{{quote.url}}"
+      },
+      {
+        "block": "text",
+        "text": "Reply to this email to reach {{host.businessName}}.",
+        "variant": "caption"
+      }
+    ],
+    "footerReason": "You’re receiving this because {{host.businessName}} prepared a quote for you."
+  },
+  {
+    "key": "order-invoice",
+    "name": "Invoice",
+    "description": "Sends an invoice for an order or a quote when you choose Send invoice: your message, the invoice as a PDF and, while it is unpaid, a button to pay it on your site. A paid invoice is the customer’s record. It arrives in the same conversation as the quote’s emails.",
+    "pluginId": "commerce",
+    "plugin": "Commerce",
+    "control": "besigner",
+    "defaultSubject": "{{invoice.subject}}",
+    "mergeTokens": [
+      {
+        "name": "invoice.subject",
+        "description": "The subject typed when sending; it stays the same as the conversation it joins",
+        "sample": "Invoice #1042 from Northwind Signs"
+      },
+      {
+        "name": "invoice.number",
+        "description": "The invoice number, which is the order number",
+        "sample": "#1042"
+      },
+      {
+        "name": "invoice.date",
+        "description": "The date of the order or quote",
+        "sample": "October 28, 2026"
+      },
+      {
+        "name": "invoice.total",
+        "description": "The invoice total; “before tax” or “before shipping” when those are added at payment",
+        "sample": "$1,250.00"
+      },
+      {
+        "name": "invoice.status",
+        "description": "“Paid on …”, or what is still due",
+        "sample": "Unpaid, $1,250.00 due"
+      },
+      {
+        "name": "invoice.heading",
+        "description": "“Invoice #… from …”",
+        "sample": "Invoice #1042 from Northwind Signs"
+      },
+      {
+        "name": "invoice.intro",
+        "description": "One sentence on what this email is: an invoice to pay, or a paid one for the customer’s records",
+        "sample": "Northwind Signs sent you an invoice for your order. The details are below, and the invoice is attached as a PDF."
+      },
+      {
+        "name": "invoice.message",
+        "description": "The message typed when sending; empty when none was typed",
+        "sample": "Thanks again for your order. Here is the invoice we talked about."
+      },
+      {
+        "name": "invoice.nextStep",
+        "description": "What to do next: pay with the button, or keep a paid invoice for the records",
+        "sample": "Use the button below to pay it securely by card. The button keeps working until the invoice is paid."
+      },
+      {
+        "name": "invoice.buttonLabel",
+        "description": "“Pay” with the amount; empty on a paid invoice, which leaves the button out",
+        "sample": "Pay $1,250.00"
+      },
+      {
+        "name": "invoice.url",
+        "description": "The invoice’s pay link on your site. Private to the customer; it needs no account. Empty once paid",
+        "sample": "https://shop.example.com/pay-quote?q=order_123&t=…"
+      }
+    ],
+    "defaultBody": [
+      {
+        "block": "text",
+        "text": "{{host.businessName}} · Invoice {{invoice.number}}",
+        "variant": "eyebrow"
+      },
+      {
+        "block": "text",
+        "text": "{{invoice.heading}}",
+        "variant": "heading"
+      },
+      {
+        "block": "text",
+        "text": "{{invoice.intro}}",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "{{invoice.message}}",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "Invoice: {{invoice.number}}\nDate: {{invoice.date}}\nTotal: {{invoice.total}}\nStatus: {{invoice.status}}",
+        "variant": "details"
+      },
+      {
+        "block": "text",
+        "text": "{{invoice.nextStep}}",
+        "variant": "body"
+      },
+      {
+        "block": "button",
+        "label": "{{invoice.buttonLabel}}",
+        "href": "{{invoice.url}}"
+      },
+      {
+        "block": "text",
+        "text": "Reply to this email to reach {{host.businessName}}.",
+        "variant": "caption"
+      }
+    ],
+    "footerReason": "You’re receiving this because {{host.businessName}} sent you an invoice."
   },
   {
     "key": "sale-notification",

@@ -60,6 +60,11 @@ import { COMMERCE_CONFIG_SCHEMA } from './plugin-config'
 
 /** Code-split: the Products console page only loads when opened. */
 const CommerceConsolePage = lazy(() => import('./components/commerce-console-page'))
+/** "Start a quote" on a quote request in the Inbox and on a contact in the CRM (AGL-4098). */
+const QuoteStartFromRequest = lazy(() => import('./components/console/quote-start.component'))
+const QuoteStartFromContact = lazy(() =>
+  import('./components/console/quote-start.component').then((module) => ({ default: module.QuoteStartFromContact })),
+)
 
 /**
  * Console half (AGL-395): registers the Products nav item in the
@@ -155,6 +160,21 @@ export function registerCommerceConsole(): void {
         widgetId: 'commerce-site-member-purchases',
         title: 'Purchases',
         Component: SiteMemberPurchases,
+      },
+      // Start a quote from a quote request, among an open submission's
+      // actions in the Inbox, and from a contact, in its header in the CRM
+      // (AGL-4098). Each zone is its host's; neither host imports this plugin.
+      {
+        slot: 'inboxSubmissionActions',
+        widgetId: 'commerce-quote-from-request',
+        title: 'Start a quote',
+        Component: QuoteStartFromRequest,
+      },
+      {
+        slot: 'crmRecordActions',
+        widgetId: 'commerce-quote-from-contact',
+        title: 'Start a quote',
+        Component: QuoteStartFromContact,
       },
     ],
     navItems: [
