@@ -16,6 +16,7 @@
  */
 
 import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import { memberCanSee } from '@aglyn/aglyn/app-utils/organizations'
 import { checkDatasetQuota, checkEntitlement, checkQuota } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { hostScopeToken, newResourceScopeFields } from '@aglyn/aglyn/app-utils/scope-tokens'
@@ -77,9 +78,9 @@ import {
  *    counts it; the records are held to `recordsPerDataset` and the dataset
  *    storage band.
  *  - THE PLAN is `dataStore` (Starter and up), THE FLAG `release_data_store`,
- *    and THE ROLE an org member who may edit org data (owner, admin or
- *    editor) with `data.manage`, whose access reaches the site — refused in
- *    the route's own words.
+ *    and THE MEMBER an org member holding "Manage data" (`data.manage`,
+ *    AGL-4047), whose access reaches the site — refused in the route's own
+ *    words.
  *  - THE CHECK holds every record to the model it is written under
  *    (`validateDocument`), so what is seeded is what a person could type.
  *  - A PHOTO is an `image` field (AGL-3616): text storage riding the
@@ -140,9 +141,8 @@ export type DatasetDraftFieldType = keyof typeof DATASET_DRAFT_FIELD_TYPES
 
 const DRAFT_TYPES = Object.keys(DATASET_DRAFT_FIELD_TYPES) as DatasetDraftFieldType[]
 
-/** The datasets route's refusals, word for word. */
-export const DATASET_DRAFT_ROLE_REFUSAL = 'Editing org data requires the editor role'
-export const DATASET_DRAFT_PERMISSION_REFUSAL = 'Your organization role does not allow editing organization data'
+/** The datasets route's refusals, word for word; the first names the permission, never a role (AGL-4047). */
+export const DATASET_DRAFT_PERMISSION_REFUSAL = permissionRefusalText('data.manage')
 export const DATASET_DRAFT_PLAN_REFUSAL = 'Datasets require a Starter plan or higher'
 export const DATASET_DRAFT_RELEASE_REFUSAL = 'Datasets are not available for this workspace yet'
 export const DATASET_DRAFT_SCOPE_REFUSAL = 'Your access to this organization does not reach that site'
@@ -403,9 +403,8 @@ export function checkDatasetDraftContent(content: Readonly<Record<string, unknow
   }
 }
 
-/** Who the member is in the org, as the writer asks: their role, and whether they may manage data. */
+/** Who the member is in the org, as the writer asks: whether they hold "Manage data". */
 export interface DatasetDraftMember {
-  role: string
   canManageData: boolean
   /** The membership itself, for whether their access reaches a site. */
   member: Readonly<Record<string, unknown>>
@@ -424,15 +423,11 @@ export interface DatasetDraftWriterDeps {
   storageFull?: (org: unknown, orgRef: FirebaseFirestore.DocumentReference) => Promise<boolean>
 }
 
-/** Roles allowed to create org data — the datasets route's, mirroring the rules' `canWriteOrgData()`. */
-const WRITER_ROLES = new Set(['owner', 'admin', 'editor'])
-
 async function platformMember(uid: string, orgId: string): Promise<DatasetDraftMember | null> {
   const membership = await resolveOrgMembership(uid, orgId)
   const member = membership?.member
   if (!member) return null
   return {
-    role: String(member.role ?? ''),
     canManageData: await memberHasOrgPermission(orgId, member, 'data.manage'),
     member: member as unknown as Readonly<Record<string, unknown>>,
   }
@@ -446,12 +441,11 @@ export function createDatasetDraftWriter(deps: DatasetDraftWriterDeps = {}): Plu
   const storageFull =
     deps.storageFull ?? (async (org: unknown, orgRef: FirebaseFirestore.DocumentReference) => Boolean(await dataStorageRefusal(org, orgRef)))
 
-  /** Everything but the room: the site is the org's, the member's role, the flag, the plan, the scope. */
+  /** Everything but the room: the site is the org's, the member's key, the flag, the plan, the scope. */
   const early = async (context: PluginDraftContext): Promise<PluginDraftRefusal | null> => {
     if ((await orgIdForHost(context.hostId)) !== context.orgId) return { status: 404, error: 'Unknown site' }
     const member = await memberOf(context.uid, context.orgId)
-    if (!member || !WRITER_ROLES.has(member.role)) return { status: 403, error: DATASET_DRAFT_ROLE_REFUSAL }
-    if (!member.canManageData) return { status: 403, error: DATASET_DRAFT_PERMISSION_REFUSAL }
+    if (!member?.canManageData) return { status: 403, error: DATASET_DRAFT_PERMISSION_REFUSAL }
     if (!(await released(context.orgId))) return { status: 403, error: DATASET_DRAFT_RELEASE_REFUSAL }
     if (!checkEntitlement(context.org as never, 'dataStore')) return { status: 403, error: DATASET_DRAFT_PLAN_REFUSAL }
     // A member scoped to some sites must be able to see what they create.

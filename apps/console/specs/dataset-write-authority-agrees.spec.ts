@@ -26,17 +26,19 @@
  * ## The direction the disagreement actually ran
  *
  * It is worth stating precisely, because it was easy to guess backwards. A
- * custom role has never been able to WIDEN dataset access: `/api/orgs/datasets`
- * gates on `WRITER_ROLES` FIRST, with no staff bypass, so a viewer whose
- * custom role grants `data.manage` is refused at the role check before the
- * permission is ever resolved — and the rules refused them too. The
- * disagreement was the other way. A custom role NARROWS, the API honored the
- * narrowing, and the rules did not: an editor whose `data.manage` was revoked
- * was refused a create by the API and permitted every dataset edit and record
- * delete by the rules, which are the only gate on those paths.
+ * custom role NARROWED, the API honored the narrowing, and the rules did not:
+ * an editor whose `data.manage` was revoked was refused a create by the API
+ * and permitted every dataset edit and record delete by the rules, which are
+ * the only gate on those paths. The rules were the leak.
  *
- * So the API was the more restrictive of the two, and the rules were the
- * leak — the opposite of what a reading of the route alone suggests.
+ * ## The key alone (AGL-4047)
+ *
+ * Both sides then gated on the owner, admin or editor role AND the key, so a
+ * grant could never WIDEN: a viewer whose custom role granted `data.manage`
+ * was refused by both. Every action is permission-checked and a role is only
+ * a preset, so both now ask the key and nothing else. Its default is exactly
+ * those three roles, which keeps every member nobody granted or refused it
+ * where they were; a grant now opens the route and the rules alike.
  *
  * ## Anti-vacuity
  *
@@ -77,15 +79,12 @@ const principals: Principal[] = JSON.parse(
 const shared = principals.filter((principal) => principal.rulesOnly !== true)
 
 /**
- * The route's own composite, rebuilt from its two gates.
+ * The route's own gate, rebuilt: the member's resolved `data.manage`.
  *
- * Both halves are asserted to still be in the route below, so this cannot
- * quietly go on describing a check that was removed.
+ * Asserted to still be the route's below, so this cannot quietly go on
+ * describing a check that was removed, or miss one that was added back.
  */
-const WRITER_ROLES = new Set(['owner', 'admin', 'editor'])
 const apiMayWriteDatasets = (principal: Principal): boolean => {
-  const member = principal.member as { role?: string }
-  if (!WRITER_ROLES.has(String(member.role))) return false
   const granted = resolveOrgPermissions(
     principal.member as never,
     principal.customRole
@@ -114,12 +113,38 @@ describe('the dataset write authority', () => {
     expect((revoked as Principal).mayWriteDatasets).toBe(false)
   })
 
-  it('a GRANTING custom role does not widen a viewer, on either side', () => {
-    // The mirror. The role gate leads and no permission map defeats it.
-    const granted = shared.find((p) => p.uid === 'uid-viewer-granted')
-    expect(granted).toBeDefined()
-    expect(apiMayWriteDatasets(granted as Principal)).toBe(false)
-    expect((granted as Principal).mayWriteDatasets).toBe(false)
+  it('a GRANTING custom role or override widens a viewer, on either side (AGL-4047)', () => {
+    // The mirror. The key decides; the role is only its preset.
+    for (const uid of ['uid-viewer-granted', 'uid-viewer-member-granted', 'uid-viewer-override-only-granted']) {
+      const granted = shared.find((p) => p.uid === uid)
+      expect(granted).toBeDefined()
+      expect(apiMayWriteDatasets(granted as Principal)).toBe(true)
+      expect((granted as Principal).mayWriteDatasets).toBe(true)
+    }
+  })
+
+  it('the presets keep today: owner, admin and editor yes; a viewer or a site author no', () => {
+    const verdicts = Object.fromEntries(
+      ['uid-owner', 'uid-admin-bare', 'uid-editor', 'uid-editor-bare', 'uid-viewer', 'uid-viewer-bare', 'uid-site-author'].map(
+        (uid) => [uid, apiMayWriteDatasets(shared.find((p) => p.uid === uid) as Principal)],
+      ),
+    )
+    expect(verdicts).toEqual({
+      'uid-owner': true,
+      'uid-admin-bare': true,
+      'uid-editor': true,
+      'uid-editor-bare': true,
+      'uid-viewer': false,
+      'uid-viewer-bare': false,
+      'uid-site-author': false,
+    })
+  })
+
+  it('an editor whose own permissions deny the key is refused, on either side', () => {
+    const denied = shared.find((p) => p.uid === 'uid-editor-member-denied')
+    expect(denied).toBeDefined()
+    expect(apiMayWriteDatasets(denied as Principal)).toBe(false)
+    expect((denied as Principal).mayWriteDatasets).toBe(false)
   })
 
   it('a per-member override beats the custom role, on either side', () => {
@@ -154,17 +179,17 @@ describe('the dataset write authority', () => {
     expect((bareViewer as Principal).mayWriteDatasets).toBe(false)
   })
 
-  it('the route still applies BOTH gates this file models', () => {
+  it('the route applies the one gate this file models, and no role gate', () => {
     /*
-     * A source assertion, because the composite above is a model of the
-     * route and a model drifts. If either gate is removed the modeling is
-     * wrong and every agreement claim here is worthless.
+     * A source assertion, because the function above is a model of the
+     * route and a model drifts. If the key's check is removed, or a role
+     * gate comes back beside it, every agreement claim here is worthless.
      */
     const source = readFileSync(ROUTE, 'utf8')
-    expect(source).toContain(
-      "const WRITER_ROLES = new Set(['owner', 'admin', 'editor'])",
-    )
-    expect(source).toContain("memberHasOrgPermission(orgId, member, 'data.manage')")
+    expect(source).toContain("const DATASETS_PERMISSION = 'data.manage'")
+    expect(source).toContain('memberHasOrgPermission(orgId, member, DATASETS_PERMISSION)')
+    expect(source).not.toContain('WRITER_ROLES')
+    expect(source).not.toMatch(/member\.role\b/)
   })
 
   it('the RULES read the denormalized map, not the role alone', () => {
@@ -178,12 +203,21 @@ describe('the dataset write authority', () => {
       join(__dirname, '../../../cloud/firebase-firestore.rules'),
       'utf8',
     )
-    expect(rules).toContain('function memberResolves(permission)')
-    expect(rules).toContain("memberResolves('data.manage')")
+    expect(rules).toContain('function memberKeyOrOverride(permission, presetRoles)')
+    expect(rules).toContain(
+      "memberKeyOrOverride('data.manage', ['owner', 'admin', 'editor'])",
+    )
     // The default chain, which is what stops an absent map answering either
     // "everything" or "nothing".
     expect(rules).toContain(
       "orgMember().get('permissions', {}))",
     )
+    // And no role gate beside it on the dataset writes.
+    const datasets = rules.slice(
+      rules.indexOf('function canWriteOrgDatasets()'),
+      rules.indexOf('function canReadTransferJobs()'),
+    )
+    expect(datasets).not.toContain('canWriteOrgData()')
+    expect(datasets).not.toMatch(/\.role\s+in\b/)
   })
 })

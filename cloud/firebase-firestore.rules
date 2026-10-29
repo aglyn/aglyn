@@ -1415,33 +1415,53 @@ service cloud.firestore {
           .get(permission, false) == true;
       }
       /**
-       * Dataset and record writes: the role, AND the resolved `data.manage`.
+       * Does this member hold a workspace key (AGL-4047), read down the same
+       * two maps `memberResolves` and `memberStamps` read?
        *
-       * The two halves are not redundant. The role list is what an absent or
-       * unstamped permission map falls through to, and the permission is the
-       * only thing here that a custom role's revocation can reach. Without
-       * it the same principal is refused by `/api/orgs/datasets` and
-       * permitted by these rules — which matters most where there is no API
-       * to disagree with, because a dataset UPDATE and a record
-       * update/delete go client-direct: an editor whose `data.manage` a
-       * custom role revokes otherwise keeps full edit and delete access to
-       * everything already stored.
+       *   - the key as written on `resolvedPermissions` (all three layers
+       *     applied), or, for a member the projection has never stamped, on
+       *     their own `permissions` override;
+       *   - else their role in `presetRoles`, the key's default.
+       *
+       * `memberKeyOr` with the per-member layer read too. A gate that asked
+       * "the role AND `memberResolves(key)`" asks this instead: for a role in
+       * the preset it gives that gate's verdict on every map, and for a role
+       * outside it an explicit grant now answers, which is what the key is
+       * for. One read, the member document `orgMember()` already paid for.
+       */
+      function memberKeyOrOverride(permission, presetRoles) {
+        let stamped = orgMember()
+          .get('resolvedPermissions', orgMember().get('permissions', {}))
+          .get(permission, null);
+        return stamped is bool ? stamped == true : orgMember().get('role', '') in presetRoles;
+      }
+      /**
+       * Dataset and record writes: "Manage data" (`data.manage`) and nothing
+       * about the role (AGL-4047).
+       *
+       * These asked the owner, admin or editor role AND the resolved key. The
+       * key's default is exactly those three roles, so with no grant written
+       * down every member answers as before; what changed is that a custom
+       * role or a per-member override deciding the key decides it for any
+       * role, the way `/api/orgs/datasets` decides it. A revocation still
+       * reaches the client-direct paths (a dataset UPDATE, a record
+       * update or delete), where these rules are the only gate, and a grant
+       * to a viewer now opens them as the route opens creates.
        *
        * NOT folded into `canWriteOrgData`, deliberately. That helper also
-       * gates contacts, segments, media and media folders, and `data.manage`
-       * is scoped to datasets — "Create, edit, and delete organization
-       * datasets". Applying it to the media library would refuse a member
-       * whom `media-scope.ts` permits, which is the same disagreement this
-       * closes, pointed the other way.
+       * gates contacts, segments and lists, and `data.manage` is scoped to
+       * datasets — "Create, edit, and delete organization datasets".
        */
       function canWriteOrgDatasets() {
-        return canWriteOrgData() && memberResolves('data.manage');
+        return isOrgMember() && isVerified() &&
+          memberKeyOrOverride('data.manage', ['owner', 'admin', 'editor']) &&
+          orgNotSuspended();
       }
-      // The org-wide members `/api/transfer/*` admits (AGL-3524).
+      // The org-wide members `/api/transfer/*` admits (AGL-3524): "Manage
+      // data", whose default is the owner, admin and editor (AGL-4047).
       function canReadTransferJobs() {
         return isOrgWideMember() && isVerified() &&
-          ((orgMember().role in ['owner', 'admin', 'editor'] && memberResolves('data.manage')) ||
-           memberStamps('data.manage'));
+          memberKeyOrOverride('data.manage', ['owner', 'admin', 'editor']);
       }
       /**
        * Write access to the org-wide records a site collaborator cannot read
@@ -1613,8 +1633,9 @@ service cloud.firestore {
       }
       // Dataset/record CREATES are API-only (AGL-473): the console route
       // enforces the dataStore entitlement and dataset/record quotas
-      // server-side. Record updates/deletes stay editor-writable — they
-      // don't consume quota.
+      // server-side. Record updates/deletes stay client-writable for a
+      // member holding "Manage data" (`canWriteOrgDatasets`) — they don't
+      // consume quota.
       // Deleting the DATASET doc is API-only too (AGL-945): the doc owns a
       // `records` subcollection and Firestore doesn't cascade, so a client
       // delete orphaned every record beneath it (still billed, still

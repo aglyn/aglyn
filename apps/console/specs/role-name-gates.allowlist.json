@@ -102,7 +102,7 @@
       "note": "The health probe picks a member of its own test site."
     },
     "cloud/firebase-firestore.deploy.rules": {
-      "count": 76,
+      "count": 72,
       "kind": "pending"
     },
     "libs/plugins/ai/src/lib/jobs/ai-layout-stock-photos.ts": {
@@ -169,14 +169,6 @@
     },
     "libs/plugins/crm/src/lib/server/task-routes.ts": {
       "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/data/src/lib/server/dataset-drafts.ts": {
-      "count": 2,
-      "kind": "pending"
-    },
-    "libs/plugins/data/src/lib/server/datasets-route.ts": {
-      "count": 2,
       "kind": "pending"
     },
     "libs/plugins/domains/src/lib/server/domain-emails.ts": {
