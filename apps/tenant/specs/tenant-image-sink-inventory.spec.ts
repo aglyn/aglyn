@@ -457,6 +457,16 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'platform',
     why: "The customer's quote page (AGL-4096): a proof image whose src this file builds itself, `/api/commerce/quote-proof?hostId=&q=&t=&file=`, a path on the page's own origin. That gated route checks the signed link and streams the quote's private object; no stored URL, author string or other host reaches the src.",
   },
+  'libs/plugins/commerce/src/lib/utils/quote-email-content.ts': {
+    markers: 1,
+    guard: 'off-tenant',
+    why: "The quote EMAIL (AGL-4097), never a tenant render: the composer of the `quote-sent` site email's tokens, called only by the console's Send quote route (server/quote-email.ts). Its `<img>` src is `quoteProofLinkUrl`'s, `{site origin}/api/commerce/quote-proof?hostId=&q=&t=&file=` on the business's own site, the same gated route the quote page draws its proofs from, which checks the signed link and streams the quote's private object. The reader is the customer in their mailbox, whose image proxy fetches it from our site; no stored or author URL and no third-party host reaches the src, and the file name it prints is escaped.",
+  },
+  'libs/plugins/commerce/src/lib/tenant-emails.ts': {
+    markers: 1,
+    guard: 'off-tenant',
+    why: "Email catalog copy, never a tenant render (AGL-4097): the marker is the `quote.proofImages` merge token's SAMPLE, an `<img>` on the reserved example host shop.example.com that the console's Emails page shows as what the token holds. It is a documentation string compiled into the tenant email catalog; nothing renders it on a site page, and the real value comes from utils/quote-email-content.ts.",
+  },
   'libs/plugins/commerce/src/lib/components/console/product-editor-dialog.component.tsx': {
     markers: 1,
     guard: 'off-tenant',
