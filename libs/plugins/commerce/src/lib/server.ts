@@ -457,6 +457,14 @@ export function registerCommerceApi(): void {
     { recipientLink: true },
   )
   registerPluginApiRoute('commerce/quote-pay', quotePayDoor, CARD_PAYMENT_DOOR)
+  // The quote as a PDF (AGL-4095), by the same signed link and on the same
+  // terms as the page's data. Loaded on first call, with sharp and the PDF
+  // writer behind it.
+  registerPluginApiRoute(
+    'commerce/quote-pdf',
+    async (req, res) => (await import('./server/commerce-pdf')).quotePdfHandler(req, res),
+    { recipientLink: true },
+  )
   // What became of a session the shopper was returned from (AGL-3606).
   registerPluginApiRoute('commerce/checkout-status', checkoutStatusHandler)
   registerPluginApiRoute('commerce/product', productHandler)
@@ -617,7 +625,9 @@ export function registerCommerceConsoleApi(): void {
   )
   // The order dialog's Packing slip and Invoice for the native apps
   // (AGL-3841): the console's own two pages over the stored order, which the
-  // apps print on the device's print sheet. Loaded on first call.
+  // apps print on the device's print sheet; and the invoice as a PDF file
+  // (`kind=invoice-pdf`, AGL-4095) for the console and the apps. Loaded on
+  // first call.
   registerPluginApiRoute('commerce/order-print', async (req, res) =>
     (await import('./server/order-print')).orderPrintHandler(req, res),
   )

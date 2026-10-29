@@ -55,6 +55,7 @@ import {
 } from '@mui/material'
 import { doc } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { downloadCommercePdf } from './commerce-pdf-download'
 import { QuotePayLinkSection } from './quote-pay-link.component'
 
 /** A quote as the list reads it: the order document and its id. */
@@ -406,6 +407,27 @@ export function QuoteEditorDialog(props: QuoteEditorDialogProps) {
     }
   }, [user, quote, hostId, enqueueSnackbar, onClose])
 
+  const [downloading, setDownloading] = useState(false)
+  const downloadPdf = useCallback(async () => {
+    if (!quote) return
+    setDownloading(true)
+    try {
+      const refused = await downloadCommercePdf(
+        user,
+        '/api/commerce/quote',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'pdf', hostId, quoteId: quote.$id }),
+        },
+        `quote-${quote.number ?? quote.$id.slice(-6)}.pdf`,
+      )
+      if (refused) enqueueSnackbar(refused, { variant: 'error', allowDuplicate: true })
+    } finally {
+      setDownloading(false)
+    }
+  }, [user, quote, hostId, enqueueSnackbar])
+
   const readOnly = !canEdit || busy
   const paid = quote ? !CommerceModel.isUnpaidQuote(quote) : false
   const title = quote ? CommerceModel.formatQuoteNumber(quote, quote.$id) : 'New quote'
@@ -591,6 +613,16 @@ export function QuoteEditorDialog(props: QuoteEditorDialogProps) {
           <BlockedControl blocked={!canEdit} reason={REFUSAL}>
             <Button color="error" disabled={busy} onClick={() => setConfirmingDelete(true)} sx={{ mr: 'auto' }}>
               {'Delete'}
+            </Button>
+          </BlockedControl>
+        ) : null}
+        {quote ? (
+          <BlockedControl
+            blocked={!canEdit || edited}
+            reason={edited ? 'Save your changes first: the PDF shows the quote as it was last saved.' : REFUSAL}
+          >
+            <Button disabled={busy || downloading} onClick={() => void downloadPdf()}>
+              {downloading ? 'Making PDF…' : 'Download PDF'}
             </Button>
           </BlockedControl>
         ) : null}

@@ -265,3 +265,51 @@ describe('a quote’s pay link (AGL-4094)', () => {
     expect(within(dialog).queryByRole('button', { name: 'Save' })).toBeNull()
   })
 })
+
+describe('a quote’s PDF (AGL-4095)', () => {
+  const createObjectURL = jest.fn((_blob: Blob) => 'blob:quote')
+  const click = jest.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+
+  beforeEach(() => {
+    createObjectURL.mockClear()
+    click.mockClear()
+    Object.assign(URL, { createObjectURL, revokeObjectURL: jest.fn() })
+    mockFetch.mockImplementation(async () => ({
+      ok: true,
+      headers: { get: (name: string) => (name === 'content-disposition' ? 'attachment; filename="acme-quote-1042.pdf"' : null) },
+      blob: async () => new Blob(['%PDF-']),
+      json: async () => ({}),
+    }))
+  })
+
+  afterEach(() => {
+    mockFetch.mockImplementation(async () => ({
+      ok: true,
+      json: async () => ({ quoteId: 'q-new', number: 1043, updatedAtMs: 5 }),
+    }))
+  })
+
+  afterAll(() => click.mockRestore())
+
+  it('asks the server for the saved quote’s PDF and saves it under the name it gives', async () => {
+    mockQuotes = [QUOTE]
+    render(<HostQuotesCard hostId="site1" canEdit canSend={false} />)
+    fireEvent.click(screen.getByText('Quote #1042'))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Download PDF' }))
+    await waitFor(() => expect(click).toHaveBeenCalled())
+    const [, url, init] = mockFetch.mock.calls[0] as [unknown, string, RequestInit]
+    expect(url).toBe('/api/commerce/quote')
+    expect(JSON.parse(String(init.body))).toEqual({ action: 'pdf', hostId: 'site1', quoteId: 'q-1' })
+    expect((click.mock.contexts[0] as HTMLAnchorElement).download).toBe('acme-quote-1042.pdf')
+  })
+
+  it('holds it behind "Create and edit quotes"', async () => {
+    mockQuotes = [QUOTE]
+    render(<HostQuotesCard hostId="site1" canEdit={false} canSend />)
+    fireEvent.click(screen.getByText('Quote #1042'))
+    const dialog = await screen.findByRole('dialog')
+    expect((within(dialog).getByRole('button', { name: 'Download PDF' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+})

@@ -38,11 +38,21 @@ in the list and choosing **Mark as fulfilled** ships every remaining unit of eac
 
 ## Invoices and packing slips {#invoices}
 
-**Invoice** in the order's dialog opens the order as a bill, ready to print: your
-business name, the date, who it is billed and shipped to, each line with its unit
-price, the subtotal, discount, shipping, tax and total, and anything refunded. Your
-store's receipt footer and terms address print at the foot. To keep a PDF, choose
-**Save as PDF** in the print dialog.
+**Invoice** in the order's dialog has two choices:
+
+- **Print invoice** opens the order as a bill, ready to print: your business name,
+  the date, who it is billed and shipped to, each line with its unit price, the
+  subtotal, discount, shipping, tax and total, and anything refunded. Your store's
+  receipt footer and terms address print at the foot.
+- **Download PDF** saves the same invoice as a PDF file in your site's look: your
+  logo and contact details at the top, a band in your site's primary color, the
+  invoice number, the order date and whether it is paid, then the lines and totals.
+  A paid quote's invoice works the same way, with **Included** beside anything
+  included at no charge.
+
+The PDF takes your logo and contact details from your site's settings, and its
+colors from your site's theme. Downloading it takes the **Manage orders**
+permission.
 
 **Packing slip** prints what goes in the box — the shipping address and each line's
 quantity, name, option and SKU — with no prices.

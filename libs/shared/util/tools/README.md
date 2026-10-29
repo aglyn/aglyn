@@ -1,6 +1,6 @@
 # @aglyn/shared-util-tools
 
-General-purpose TypeScript helpers: type guards, array and object utilities, deep get/set, cloning, JSON and base64 serialization, plus a few larger standalone modules (a linear-time regex engine, an AES-GCM secret box, WCAG contrast math, HTML escaping). It is a dependency of most Aglyn packages and is usable on its own.
+General-purpose TypeScript helpers: type guards, array and object utilities, deep get/set, cloning, JSON and base64 serialization, plus a few larger standalone modules (a linear-time regex engine, an AES-GCM secret box, WCAG contrast math, HTML escaping, a PDF writer). It is a dependency of most Aglyn packages and is usable on its own.
 
 > Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
 
@@ -50,6 +50,9 @@ By subpath only (kept off the root so they are not pulled into every consumer's 
 - `@aglyn/shared-util-tools/escape-html` - `escapeHtml(value)`, escaping `& < > " '`.
 - `@aglyn/shared-util-tools/contrast` - `relativeLuminanceOfRgb`, `rgbChannelsOfHex`, `prefersDarkInk` and related sRGB helpers.
 - `@aglyn/shared-util-tools/serialize/php-serial-*` - wrappers over `php-serialize`.
+- `@aglyn/shared-util-tools/pdf/pdf-writer` - `PdfWriter`, a PDF page layout with no PDF library under it: text in the standard Helvetica faces (left, right or centered, in any RGB color), paragraphs that wrap and run onto new pages, filled and stroked rectangles and rules, JPEG images fitted to a box, clickable links, tables whose cells wrap and whose header row repeats on every page, and a footer with page numbers. `pdfRgbFromHex` turns `#rrggbb` into its color.
+- `@aglyn/shared-util-tools/pdf/pdf-text` - the text half: `toWinAnsiText` (any string as characters the standard fonts can draw: look-alikes swapped in, accents dropped, emoji removed, `?` for other scripts), `pdfString`, `measureText` and `wrapLines` by Adobe's Helvetica widths, and the quicker `textWidth`/`wrapText` estimate.
+- `@aglyn/shared-util-tools/pdf/pdf-file` - the file half: `buildPdfFile` (pages of drawing operators, JPEG images as DCTDecode streams and URI links into a PDF with a correct cross-reference table, the same bytes for the same input), `readJpeg` (a JPEG's size and channels from its header) and `pdfNumber`/`pdfUri`.
 
 ## Usage
 
