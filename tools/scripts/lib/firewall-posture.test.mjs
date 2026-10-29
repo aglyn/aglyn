@@ -306,6 +306,16 @@ function healthyTenantConfig() {
           },
         ],
       },
+      // AGL-4097: the quote email's inline proofs, fetched by mailbox image
+      // proxies. One exact path, appended last as it was inserted live.
+      {
+        name: 'Quote proof image bypass',
+        id: 'rule_quote_proof_image_bypass',
+        active: true,
+        valid: true,
+        action: bypass(),
+        conditionGroup: [{ conditions: [{ type: 'path', op: 'eq', value: '/api/commerce/quote-proof' }] }],
+      },
     ],
   }
 }

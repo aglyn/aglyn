@@ -630,6 +630,35 @@ export const EXPECTED_POSTURE = Object.freeze([
         ]),
       }),
       Object.freeze({
+        name: 'Quote proof image bypass',
+        why: 'the quote email shows each proof inline from this route, and a challenge left it broken for every mailbox image proxy that cannot solve one',
+        // ADDED 2026-10-29 (AGL-4097). The quote email (`quote-sent`) puts up
+        // to three proof images inline, each loaded from
+        // `/api/commerce/quote-proof` on the business's own site. Mail clients
+        // fetch those from their own image proxies, with no browser and no
+        // cookie jar. MEASURED 10/29 on import-check-1020.aglyn.app: Gmail's
+        // proxy user agent reached the app (404 for a made-up quote), while
+        // Yahoo's proxy and a plain fetcher were answered 429
+        // `x-vercel-mitigated: challenge`, the same as every other
+        // `/api/commerce/*` path. A challenged proxy shows the image broken.
+        //
+        // WHY PATH-ONLY IS CORRECT HERE, as for the asset delivery rule above:
+        // the callers are mailbox proxies we do not configure. The
+        // authorization lives IN THE URL: `handleQuoteProof`
+        // (`libs/plugins/commerce/src/lib/server/quote-proofs.ts`) answers a
+        // wrong or forged `t` exactly like a missing quote, rate-limits per
+        // address before it checks the token, answers only GET, and serves
+        // only a proof on the quote's CURRENT revision. Bypassing the
+        // challenge removes a proof of work the real callers cannot perform;
+        // it does not remove the check that decides what is served.
+        //
+        // EXACT PATH, NOT A PREFIX. The rest of `/api/commerce/*` (checkout,
+        // cart, quote-pay, quote-respond, quote-upload) stays challenged.
+        conditions: Object.freeze([
+          Object.freeze({ type: 'path', op: 'eq', value: '/api/commerce/quote-proof' }),
+        ]),
+      }),
+      Object.freeze({
         name: 'Crawler metadata bypass',
         why: 'robots.txt and sitemap.xml answered 429, so the exclusions and the URL set a crawler is meant to read were both unreachable',
         // EXACT PATHS, NOT A PREFIX. `/api/manifest` and `/api/collections-rss`
