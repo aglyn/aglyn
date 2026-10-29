@@ -1492,7 +1492,12 @@ export interface ConsoleClientBuildStart {
  * widget that does not publish a kind draws nothing for it.
  */
 export interface ConsolePublishableArtifact {
-  /** What the thing is: `layout`, `component`, `theme`, `site`, … */
+  /**
+   * What the thing is: `layout`, `component`, `theme`, `site`, … A whole
+   * site as a site starter people create a new site from is `siteStarter`
+   * (AGL-4049), with the `hostId` it is, and the site's name and description
+   * to seed the listing.
+   */
   kind: string
   /** The site it belongs to, where the kind belongs to one. */
   hostId?: string | null

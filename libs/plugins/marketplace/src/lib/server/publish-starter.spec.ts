@@ -46,6 +46,7 @@ const state = {
   writes: [] as Array<{ path: string; data: Data }>,
   publisher: null as Data | null,
   canPublish: true,
+  selling: true,
   staff: false,
 }
 
@@ -57,7 +58,7 @@ jest.mock('./publisher-agreement-acceptance', () => ({
 }))
 jest.mock('@aglyn/aglyn/server', () => ({
   CANVAS_ROOT_ELEMENT_ID: '_@_',
-  checkEntitlement: () => true,
+  checkEntitlement: () => state.selling,
   createResourceUid: () => 'listing-new',
   // The REAL decoder: the besigner's compressed form is half of what this
   // door has to read.
@@ -187,6 +188,7 @@ beforeEach(() => {
   state.docs.clear()
   state.writes = []
   state.canPublish = true
+  state.selling = true
   state.staff = false
   state.publisher = {
     orgId: 'pub-org',
@@ -562,6 +564,13 @@ describe('what a starter publish refuses (AGL-4049)', () => {
     expect(res.statusCode).toBe(428)
     expect(state.writes).toEqual([])
     await refused({ priceUsd: 29 }, 412, 'Set up payouts first — Marketplace → Payouts — to sell site starters.')
+  })
+
+  it('refuses a plan that does not sell as a setup step, as the profile and payouts are (412)', async () => {
+    // A setup step the workspace fixes elsewhere, so the publish dialog shows
+    // it as a warning with where to fix it, beside the other two.
+    state.selling = false
+    await refused({}, 412, 'Publishing to the marketplace requires a Pro plan')
   })
 
   it('refuses a site with no published Home page, in the validity check’s words', async () => {
