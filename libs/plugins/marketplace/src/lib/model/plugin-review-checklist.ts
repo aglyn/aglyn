@@ -162,27 +162,106 @@ export const REQUIRED_CHECKLIST_IDS = PLUGIN_REVIEW_CHECKLIST.filter(
   (item) => item.required,
 ).map((item) => item.id)
 
-/** A stored tick: who, when, and against which bytes. */
+/** An item both lists ask, word for word: one object, so neither can drift. */
+const sharedItem = (id: string): ReviewChecklistItem => {
+  const item = PLUGIN_REVIEW_CHECKLIST.find((entry) => entry.id === id)
+  if (!item) throw new Error(`No plugin checklist item "${id}" to share`)
+  return item
+}
+
+/**
+ * What a staff reviewer must do before a SITE STARTER is listed (AGL-4049).
+ *
+ * A starter is not code. It is the published pages of the site it was
+ * published from, the layout they sit in and a theme, copied into every site
+ * a person creates from it the moment they pick it, with no step between to
+ * catch what its publisher got wrong. So the plugin list — repositories,
+ * capabilities, bundles — has nothing to ask of it, and these do.
+ *
+ * Every item is something a reviewer can do from the review page: it lists
+ * the pages with a link to each on the site it came from, the theme with its
+ * brand colors in both schemes, and the publisher. A starter still in review
+ * cannot be picked by anyone but its publisher (`site-starter-source.ts`), so
+ * "create a site from it" is not on the list: the source site is where its
+ * pages are read. All required: listing a starter puts it in front of every
+ * person creating a site.
+ */
+export const SITE_STARTER_REVIEW_CHECKLIST: readonly ReviewChecklistItem[] = [
+  {
+    id: 'starter-pages',
+    label: 'Opened every page on the site it was published from',
+    detail:
+      'The starter is that site’s published pages as they stood when it was published, and every site created from it starts with them. Open each page the Pages card lists, from its link or from the site’s staff page: each one has to open, look finished, and work without anything the new site will not have.',
+    required: true,
+  },
+  {
+    id: 'starter-content',
+    label:
+      'Every page’s words and images are the publisher’s to publish; nothing bound to another site’s data',
+    detail:
+      'Read every page as the person creating a site would. Photos, logos and copy are copied into each site made from it, so they have to be the publisher’s own or licensed for that use. Nothing may present another business’s name, address or details as the new site’s, or lean on another site’s forms, products or members.',
+    required: true,
+  },
+  {
+    id: 'starter-theme',
+    label: 'The theme reads in light and dark',
+    detail:
+      'A site shows each visitor the scheme their device asks for. Check the brand colors in the Theme card, then the pages with your device in light mode and again in dark: text has to read against its background, and buttons and links have to stand out from the text around them.',
+    required: true,
+  },
+  sharedItem('publisher'),
+  sharedItem('positioning'),
+]
+
+/** The artifact types the review queue reviews, each with its own list. */
+export type ReviewedArtifactType = 'plugin' | 'siteStarter'
+
+/** The checklist for an artifact type: a starter's own, else the plugin list. */
+export function reviewChecklistFor(
+  artifactType?: string | null,
+): readonly ReviewChecklistItem[] {
+  return artifactType === 'siteStarter'
+    ? SITE_STARTER_REVIEW_CHECKLIST
+    : PLUGIN_REVIEW_CHECKLIST
+}
+
+/** The ids an artifact type's verdict waits for. */
+export function requiredChecklistIds(artifactType?: string | null): string[] {
+  return reviewChecklistFor(artifactType)
+    .filter((item) => item.required)
+    .map((item) => item.id)
+}
+
+/**
+ * A stored tick: who, when, and what it was made against — a plugin
+ * version's bytes (`sha256`), or a starter's version (`version`).
+ */
 export interface ChecklistEntry {
   by?: string
   at?: unknown
   sha256?: string
+  version?: string
 }
 
 /**
- * Which required items are still outstanding for a given bundle.
+ * Which required items are still outstanding for what is under review.
  *
- * Ticks are keyed to the version's sha256 on purpose: a checklist is a
- * statement about specific bytes, so a republish under the same version
- * string invalidates it exactly like it invalidates the verifier verdict
- * (AGL-962). Silently carrying ticks across a rebuild would let a publisher
- * inherit someone else's review.
+ * Ticks are pinned on purpose: a checklist is a statement about specific
+ * content. A plugin's are keyed to the version's sha256, so a republish under
+ * the same version string invalidates them exactly like it invalidates the
+ * verifier verdict (AGL-962); silently carrying ticks across a rebuild would
+ * let a publisher inherit someone else's review. A starter's are keyed to its
+ * version, which every publish of it writes anew (AGL-4049). `pin` is the
+ * sha256 or the version, as the type keeps it.
  */
 export function outstandingChecklistItems(
   checklist: Record<string, ChecklistEntry> | null | undefined,
-  sha256: string,
+  pin: string,
+  artifactType?: string | null,
 ): string[] {
-  return REQUIRED_CHECKLIST_IDS.filter(
-    (id) => checklist?.[id]?.sha256 !== sha256 || !sha256,
+  const pinOf = (entry: ChecklistEntry | undefined) =>
+    artifactType === 'siteStarter' ? entry?.version : entry?.sha256
+  return requiredChecklistIds(artifactType).filter(
+    (id) => pinOf(checklist?.[id]) !== pin || !pin,
   )
 }

@@ -46,8 +46,12 @@ import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token
 import { buildRoute, Route } from '@aglyn/aglyn/server'
 import {
   outstandingChecklistItems,
-  PLUGIN_REVIEW_CHECKLIST,
+  reviewChecklistFor,
 } from '../model/plugin-review-checklist'
+import {
+  SITE_STARTER_ARTIFACT_TYPE,
+  siteStarterFacetsOf,
+} from '@aglyn/aglyn/app-utils/site-starter'
 import {
   pluginRejectionCategory,
   rejectionHeadline,
@@ -55,7 +59,7 @@ import {
 } from '../model/plugin-rejection-categories'
 import { attestationsForBytes } from '../model/publisher-attestation'
 import { VERIFICATION_DECLINE_COOLDOWN_DAYS } from '../model/listing-verification'
-import { isPrivateListing } from '../model/listing-visibility'
+import { isPrivateListing, listingArtifactType } from '../model/listing-visibility'
 import {
   PUBLISHER_AGREEMENT_VERSION,
   publisherAgreementState,
@@ -74,6 +78,7 @@ import {
   type ReviewQueueSection,
   reviewQueueBase,
   reviewQueueStatusClauses,
+  STARTER_REVIEW_QUEUE_QUERY,
 } from '../model/listing-query'
 /*
  * The publisher fan-out lives beside the usage-alert one in `_lib` rather
@@ -102,10 +107,19 @@ import { compareArtifactVersions } from '../model/update-state'
  * listing/verifying here never signs anything. Every action lands in
  * adminAudit.
  */
-/** Every id the checklist route will accept (AGL-963). */
-const REQUIRED_OR_OPTIONAL = new Set(
-  PLUGIN_REVIEW_CHECKLIST.map((item) => item.id),
-)
+/**
+ * What staff may do to a site starter (AGL-4049): List it or Reject it, tick
+ * its checklist, take it down or restore it. Everything else this route
+ * does is about code — versions approved byte for byte, realm trust, a kill
+ * switch, the Verified badge — and has nothing to act on in a starter.
+ */
+const STARTER_ACTIONS: ReadonlySet<string> = new Set([
+  'list',
+  'reject',
+  'checklist',
+  'hide',
+  'unhide',
+])
 
 const ACTIONS: Record<string, string> = {
   'start-review': 'in_review',
@@ -269,6 +283,209 @@ function listingVerdictBody(input: {
 }
 
 /**
+ * The body of a site starter's verdict (AGL-4049), for the console
+ * notification and the email. A starter is copied into each site created
+ * from it, so neither verdict reaches a site that already exists, and the
+ * copy never borrows a plugin's installs and versions on offer.
+ */
+function starterVerdictBody(input: {
+  action: 'list' | 'reject'
+  name: string
+  version: string
+  category: string
+  reason: string
+}): string {
+  const { name } = input
+  if (input.action === 'list') {
+    return (
+      `${name} passed review and is now listed in the marketplace, where ` +
+      'people creating a site can choose it.'
+    )
+  }
+  const why = rejectionReasonText(input.category, input.reason)
+  return [
+    `${pluginAndVersion(name, input.version)} was rejected${why ? `: ${why}` : '.'}`,
+    'It is not offered to anyone while it is rejected. Sites already ' +
+      'created from it keep everything they have. To send it back for ' +
+      'review, publish it again from its site.',
+  ].join('\n\n')
+}
+
+const isRecord = (value: unknown): value is Record<string, any> =>
+  !!value && typeof value === 'object' && !Array.isArray(value)
+
+/** A Firestore timestamp as JSON, or `null`. */
+const isoOf = (value: unknown): string | null =>
+  (value as { toDate?: () => Date } | null)?.toDate?.()?.toISOString() ?? null
+
+/** Which terms a publisher org is under (AGL-1077), as the detail pages say it. */
+async function publisherAgreementOf(
+  firestore: FirebaseFirestore.Firestore,
+  publisherId: string,
+) {
+  const profile = publisherId
+    ? await firestore.collection('publisherProfiles').doc(publisherId).get()
+    : null
+  const acceptance = profile?.get('publisherAgreement') as
+    | { version?: string; acceptedBy?: string; acceptedAt?: { toDate?: () => Date } }
+    | undefined
+  return {
+    version: acceptance?.version ?? null,
+    acceptedAt: acceptance?.acceptedAt?.toDate?.()?.toISOString() ?? null,
+    required: PUBLISHER_AGREEMENT_VERSION,
+    state: publisherAgreementState(acceptance),
+  }
+}
+
+/**
+ * One site starter in full, for its review page (AGL-4049): what a site
+ * created from it gets — every page with whether it is published, the layout
+ * they sit in, the theme in its shape, the facets a search finds it by, its
+ * picture and price — then who publishes it, the site it was published from,
+ * its versions, and the starter checklist ticked against the version under
+ * review. That version is the one asked for, else the newest: a re-publish
+ * is a new version, so a listed starter's newest bytes are always the ones a
+ * reviewer reads first.
+ */
+async function starterDetail(
+  firestore: FirebaseFirestore.Firestore,
+  listingId: string,
+  listing: Record<string, any>,
+  requestedVersion?: string,
+): Promise<Response> {
+  const listingRef = firestore.collection('marketplaceListings').doc(listingId)
+  const versionsSnapshot = await listingRef
+    .collection('versions')
+    .orderBy('publishedAt', 'desc')
+    .limit(25)
+    .get()
+  const versions = versionsSnapshot.docs
+    .map((doc) => {
+      const data = (doc.data() ?? {}) as Record<string, any>
+      const starter = isRecord(data['starter']) ? data['starter'] : {}
+      return {
+        version: String(doc.id),
+        publishedAt: isoOf(data['publishedAt']),
+        pages: Array.isArray(starter['screens']) ? starter['screens'].length : 0,
+        starter,
+        reviewChecklist: (data['reviewChecklist'] ?? null) as Record<
+          string,
+          { by?: string; version?: string }
+        > | null,
+      }
+    })
+    // Numbered by the publish, so newest first however they were read.
+    .sort((a, b) => Number(b.version) - Number(a.version))
+  const latestVersion = String(listing['latestVersion'] ?? '')
+  const reviewVersion =
+    (requestedVersion &&
+      versions.find((entry) => entry.version === requestedVersion)?.version) ||
+    latestVersion
+  const review = versions.find((entry) => entry.version === reviewVersion)
+  const starter = review?.starter ?? {}
+
+  const screens: unknown[] = Array.isArray(starter['screens']) ? starter['screens'] : []
+  const pages = screens.filter(isRecord).map((screen) => {
+    const slug = typeof screen['slug'] === 'string' && screen['slug'] ? screen['slug'] : null
+    return {
+      name: String(screen['displayName'] ?? 'Page'),
+      slug,
+      // A page with no route is unpublished in the site it creates.
+      published: Boolean(slug) && screen['published'] !== false,
+    }
+  })
+  const layout = isRecord(starter['layout'])
+    ? { name: String(starter['layout']['displayName'] ?? 'Site header and footer') }
+    : null
+  const storedTheme = isRecord(starter['theme']) ? starter['theme'] : {}
+  const theme =
+    storedTheme['kind'] === 'builtin'
+      ? {
+          kind: 'builtin' as const,
+          base: String(storedTheme['base'] ?? ''),
+          fonts: typeof storedTheme['fonts'] === 'string' ? storedTheme['fonts'] : null,
+          brand: {
+            light: isRecord(storedTheme['brand']?.light) ? storedTheme['brand'].light : {},
+            ...(isRecord(storedTheme['brand']?.dark) ? { dark: storedTheme['brand'].dark } : {}),
+          },
+        }
+      : storedTheme['kind'] === 'full'
+        ? { kind: 'full' as const }
+        : null
+
+  const publisherId = String(listing['profileId'] ?? '')
+  const publisher = publisherId
+    ? await firestore.collection('orgs').doc(publisherId).get()
+    : null
+  // The site the pages were captured from, where a reviewer reads them.
+  const sourceHostId = String(listing['sourceStarterHostId'] ?? '')
+  const source = sourceHostId
+    ? await firestore.collection('hosts').doc(sourceHostId).get()
+    : null
+  const textOf = (value: unknown) => (typeof value === 'string' && value ? value : null)
+
+  return Response.json(
+    {
+      artifactType: SITE_STARTER_ARTIFACT_TYPE,
+      listingId,
+      displayName: listing['displayName'] ?? listingId,
+      description: listing['description'] ?? '',
+      category: textOf(listing['category']),
+      previewImageUrl: textOf(listing['previewImageUrl']),
+      priceUsd: Number(listing['priceUsd'] ?? 0),
+      official: listing['official'] === true,
+      reviewStatus: listing['reviewStatus'] ?? 'submitted',
+      rejectionReason: listing['rejectionReason'] ?? '',
+      rejectionCategory: listing['rejectionCategory'] ?? '',
+      // The version the last List or Reject was given on, so a listed
+      // starter published again since says so.
+      reviewedVersion:
+        listing['reviewedVersion'] != null ? String(listing['reviewedVersion']) : null,
+      hidden: Boolean(listing['hiddenAt']),
+      hiddenReason: String(listing['hiddenReason'] ?? ''),
+      unpublished: Boolean(listing['deletedAt']),
+      createdAt: isoOf(listing['createdAt']),
+      latestVersion,
+      reviewVersion,
+      mode: starter['mode'] === 'ai' ? 'ai' : 'base',
+      facets: siteStarterFacetsOf(listing),
+      pages,
+      layout,
+      theme,
+      publisherId,
+      publisherName: publisher?.get('name') ?? publisherId,
+      publisherSlug: publisher?.get('slug') ?? null,
+      publisherAgreement: await publisherAgreementOf(firestore, publisherId),
+      sourceSite: sourceHostId
+        ? {
+            hostId: sourceHostId,
+            name: textOf(source?.get('name')),
+            subdomain: textOf(source?.get('subdomain')),
+            cname: textOf(source?.get('cname')),
+          }
+        : null,
+      versions: versions.map(({ version, publishedAt, pages: count }) => ({
+        version,
+        publishedAt,
+        pages: count,
+      })),
+      // Ticks made on another version do not count: a re-publish starts clean.
+      checklist: Object.fromEntries(
+        Object.entries(review?.reviewChecklist ?? {})
+          .filter(([, entry]) => entry?.version === reviewVersion)
+          .map(([id, entry]) => [id, { by: entry.by ?? null }]),
+      ),
+      checklistOutstanding: outstandingChecklistItems(
+        review?.reviewChecklist as never,
+        reviewVersion,
+        SITE_STARTER_ARTIFACT_TYPE,
+      ),
+    },
+    { status: 200 },
+  )
+}
+
+/**
  * One listing in full, for the detail page (AGL-959). The index deals in
  * rows; everything a reviewer needs to actually decide — manifest,
  * capabilities, ABI, verifier findings, per-version trust, takedown state —
@@ -284,6 +501,11 @@ async function listingDetail(
   const listing = snapshot.data()
   if (!listing) {
     return Response.json({ error: 'Unknown listing' }, { status: 404 })
+  }
+  // A site starter is pages and a theme, not code (AGL-4049): its page reads
+  // what a site created from it gets, and none of the manifest below.
+  if (listingArtifactType(listing) === SITE_STARTER_ARTIFACT_TYPE) {
+    return starterDetail(firestore, listingId, listing, requestedVersion)
   }
 
   const versionsSnapshot = await listingRef
@@ -470,6 +692,7 @@ async function listingDetail(
 
   return Response.json(
     {
+      artifactType: listingArtifactType(listing),
       listingId,
       displayName: listing.displayName ?? listingId,
       description: listing.description ?? '',
@@ -648,7 +871,7 @@ const queryParam = (value: unknown): string =>
 /**
  * The staff review index (AGL-961), every section on its query (AGL-3321).
  *
- * Three sections, each its own query over live plugin listings:
+ * Four sections, each its own query; three over live plugin listings:
  *
  *   - Awaiting review: the newest bytes have no approval. Read from the
  *     listing's `latestVersionReviewState` summary, whose `pending` and
@@ -658,6 +881,9 @@ const queryParam = (value: unknown): string =>
  *     version never re-enters the queue looking unread (AGL-1121).
  *   - Listed: `reviewStatus` listed or verified.
  *   - Verification requested: the publisher's standing ask (AGL-1217).
+ *
+ * and one over live site starter listings (AGL-4049), those waiting for
+ * review — or, under a Status, those it names — newest first.
  *
  * The Status select and the search (`?status=`, `?q=`) are clauses on every
  * section's query, planned once by `REVIEW_QUEUE_QUERY`; search reads the
@@ -684,13 +910,15 @@ async function reviewQueue(
     queue: false,
     listed: false,
     verification: false,
+    starters: false,
   }
   const read = async (section: ReviewQueueSection) => {
     const base = reviewQueueBase(section, clauses)
     // A Status the section cannot hold: empty by definition, never queried.
     if (!base) return []
     const plan = planListQuery(
-      REVIEW_QUEUE_QUERY,
+      // Site starters read newest first; the plugin sections in id order.
+      section === 'starters' ? STARTER_REVIEW_QUEUE_QUERY : REVIEW_QUEUE_QUERY,
       { clauses, search: words, base },
       nameSearchNormalizers,
     )
@@ -702,10 +930,11 @@ async function reviewQueue(
     more[section] = snapshot.docs.length > pageLimit
     return snapshot.docs.slice(0, pageLimit)
   }
-  const [queueDocs, listedDocs, verificationDocs] = await Promise.all([
+  const [queueDocs, listedDocs, verificationDocs, starterDocs] = await Promise.all([
     read('queue'),
     read('listed'),
     read('verification'),
+    read('starters'),
   ])
 
   // Rows only (AGL-961). This used to DOWNLOAD every queued bundle to re-run
@@ -781,11 +1010,34 @@ async function reviewQueue(
     }),
   )
 
+  // Site starters (AGL-4049), a section of their own: a starter is not code,
+  // so a reviewer scans it by its pages, price and when it was submitted
+  // rather than a version's review state, and every row is the listing alone.
+  const starters = starterDocs.map((doc) => {
+    const listing = doc.data()
+    return {
+      listingId: doc.id,
+      displayName: listing.displayName ?? doc.id,
+      profileId: listing.profileId,
+      reviewStatus: listing.reviewStatus ?? 'submitted',
+      priceUsd: Number(listing.priceUsd ?? 0),
+      pages: Number(listing.screenCount ?? listing.starterPages ?? 0),
+      version: String(listing.latestVersion ?? ''),
+      // The version the last verdict was given on, so a listed starter
+      // published again since can say so.
+      reviewedVersion:
+        listing.reviewedVersion != null ? String(listing.reviewedVersion) : null,
+      submittedAt: isoOf(listing.createdAt),
+      hidden: Boolean(listing.hiddenAt),
+      official: listing.official === true,
+    }
+  })
+
   // Publisher names for scanning (AGL-961) — a listing id tells a reviewer
   // nothing. One batched read for every section.
   const publisherIds = [
     ...new Set(
-      [...queue, ...listed, ...verificationRequests]
+      [...queue, ...listed, ...verificationRequests, ...starters]
         .map((entry) => String(entry.profileId ?? ''))
         .filter(Boolean),
     ),
@@ -805,6 +1057,7 @@ async function reviewQueue(
       listed,
       publishers,
       verificationRequests,
+      starters,
       refused,
       notices,
       more,
@@ -848,6 +1101,21 @@ async function handler(request: Request): Promise<Response> {
     }
     const listingId = String(body?.listingId ?? '')
     const action = String(body?.action ?? '')
+
+    // A site starter takes only what applies to it (AGL-4049). Read here, ahead
+    // of every branch, so a plugin action can never write a plugin's state —
+    // a version verdict, a kill switch, a badge — onto a starter.
+    const reviewed = listingId
+      ? (await firestore.collection('marketplaceListings').doc(listingId).get()).data()
+      : undefined
+    const isStarter =
+      Boolean(reviewed) && listingArtifactType(reviewed ?? {}) === SITE_STARTER_ARTIFACT_TYPE
+    if (isStarter && !STARTER_ACTIONS.has(action)) {
+      return Response.json(
+        { error: 'A site starter is listed or rejected, or taken down; that action is for plugins' },
+        { status: 400 },
+      )
+    }
 
     // Takedown (AGL-658) is separate from the review verdict: it applies to
     // EVERY artifact type, not just plugins, and it must not overwrite a
@@ -1056,28 +1324,34 @@ async function handler(request: Request): Promise<Response> {
       const version = String(body?.version ?? '')
       const itemId = String(body?.itemId ?? '')
       const checked = body?.checked !== false
-      if (!listingId || !version || !REQUIRED_OR_OPTIONAL.has(itemId)) {
+      // Each type's own items (AGL-4049): a plugin item means nothing on a
+      // starter's pages, and a starter item nothing on a bundle.
+      const items = reviewChecklistFor(isStarter ? SITE_STARTER_ARTIFACT_TYPE : 'plugin')
+      if (!listingId || !version || !items.some((item) => item.id === itemId)) {
         return Response.json({ error: 'Unknown checklist item' }, { status: 400 })
       }
+      // A starter's versions are `versions/{n}`, each written once by the
+      // publish that made it; a plugin's are `pluginVersions/{semver}`.
+      const versionsCollection = isStarter ? 'versions' : 'pluginVersions'
       const versionRef = firestore
         .collection('marketplaceListings')
         .doc(listingId)
-        .collection('pluginVersions')
+        .collection(versionsCollection)
         .doc(version)
       const versionSnapshot = await versionRef.get()
       if (!versionSnapshot.exists) {
         return Response.json({ error: 'Unknown version' }, { status: 404 })
       }
+      // Pins the tick to what it was made against: a plugin's bytes, or the
+      // starter version, which a re-publish replaces with the next one.
+      const pin = isStarter
+        ? { version }
+        : { sha256: String(versionSnapshot.get('sha256') ?? '') }
       await versionRef.set(
         {
           reviewChecklist: {
             [itemId]: checked
-              ? {
-                  by: decoded.uid,
-                  at: FieldValue.serverTimestamp(),
-                  // Pins the tick to the bytes it was made against.
-                  sha256: String(versionSnapshot.get('sha256') ?? ''),
-                }
+              ? { by: decoded.uid, at: FieldValue.serverTimestamp(), ...pin }
               : FieldValue.delete(),
           },
         },
@@ -1089,12 +1363,8 @@ async function handler(request: Request): Promise<Response> {
       await addAdminAudit(firestore, {
         actorUid: decoded.uid,
         action: `plugins.review.checklist.${checked ? 'check' : 'uncheck'}`,
-        target: `marketplaceListings/${listingId}/pluginVersions/${version}`,
-        after: {
-          itemId,
-          checked,
-          sha256: String(versionSnapshot.get('sha256') ?? ''),
-        },
+        target: `marketplaceListings/${listingId}/${versionsCollection}/${version}`,
+        after: { itemId, checked, ...pin },
         at: FieldValue.serverTimestamp(),
       })
       return Response.json({ ok: true, itemId, checked }, { status: 200 })
@@ -1595,13 +1865,21 @@ async function handler(request: Request): Promise<Response> {
     const reason = String(body?.reason ?? '').slice(0, 500)
     const category = String(body?.category ?? '')
     if (action === 'reject') {
-      const invalid = rejectionInputError(category, reason)
+      // A starter is rejected for a starter's reasons (AGL-4049).
+      const invalid = rejectionInputError(
+        category,
+        reason,
+        isStarter ? SITE_STARTER_ARTIFACT_TYPE : 'plugin',
+      )
       if (invalid) return Response.json({ error: invalid }, { status: 400 })
     }
 
     const listingRef = firestore.collection('marketplaceListings').doc(listingId)
     const listing = (await listingRef.get()).data()
     if (!listing) return Response.json({ error: 'Unknown listing' }, { status: 404 })
+    // The version a starter's verdict is given on: its newest, the one a
+    // reviewer read (AGL-4049).
+    const starterVersion = isStarter ? String(listing.latestVersion ?? '') : ''
 
     // Both gates that expose a plugin to customers require a completed
     // checklist (AGL-963).
@@ -1615,16 +1893,26 @@ async function handler(request: Request): Promise<Response> {
     // `start-review` and `reject` stay ungated on purpose: a reviewer must
     // be able to throw something out without first ticking eight boxes
     // about a bundle they have already decided against.
+    //
+    // A site starter's List waits for the starter checklist, ticked against
+    // its newest version (AGL-4049): listing it puts it in front of everyone
+    // creating a site.
     if (action === 'verify' || action === 'list') {
       const version = String(listing.latestVersion ?? '')
       const versionSnapshot = await listingRef
-        .collection('pluginVersions')
+        .collection(isStarter ? 'versions' : 'pluginVersions')
         .doc(version)
         .get()
-      const outstanding = outstandingChecklistItems(
-        versionSnapshot.get('reviewChecklist'),
-        String(versionSnapshot.get('sha256') ?? ''),
-      )
+      const outstanding = isStarter
+        ? outstandingChecklistItems(
+            versionSnapshot.get('reviewChecklist'),
+            version,
+            SITE_STARTER_ARTIFACT_TYPE,
+          )
+        : outstandingChecklistItems(
+            versionSnapshot.get('reviewChecklist'),
+            String(versionSnapshot.get('sha256') ?? ''),
+          )
       if (outstanding.length) {
         return Response.json(
           {
@@ -1666,6 +1954,10 @@ async function handler(request: Request): Promise<Response> {
               rejectionReason: FieldValue.delete(),
               rejectionCategory: FieldValue.delete(),
             }),
+        // Which version a starter's verdict was given on (AGL-4049). A listed
+        // starter stays listed when it is published again, so this is how the
+        // queue tells a reviewer its newest version came after the review.
+        ...(isStarter ? { reviewedVersion: starterVersion } : {}),
       },
       { merge: true },
     )
@@ -1690,16 +1982,25 @@ async function handler(request: Request): Promise<Response> {
         const isPrivate = isPrivateListing(listing)
         // One body for the feed and the email (AGL-3432): it names the
         // plugin and what happened to it, and a rejection carries its
-        // category and what to fix (AGL-977).
-        const verdict = listingVerdictBody({
-          action,
-          name: String(listing.displayName ?? ''),
-          version: String(listing.latestVersion ?? ''),
-          offeredVersion: String(listing.latestApprovedVersion ?? ''),
-          isPrivate,
-          category,
-          reason,
-        })
+        // category and what to fix (AGL-977). A starter's says so as a
+        // starter (AGL-4049); its verdicts are only List and Reject.
+        const verdict = isStarter
+          ? starterVerdictBody({
+              action: action === 'reject' ? 'reject' : 'list',
+              name: String(listing.displayName ?? ''),
+              version: starterVersion,
+              category,
+              reason,
+            })
+          : listingVerdictBody({
+              action,
+              name: String(listing.displayName ?? ''),
+              version: String(listing.latestVersion ?? ''),
+              offeredVersion: String(listing.latestApprovedVersion ?? ''),
+              isPrivate,
+              category,
+              reason,
+            })
         await notifyOrgAdmins(publisherOrgId, {
           type: 'marketplace.review',
           level: action === 'reject' || action === 'delist' ? 'warning' : 'success',
@@ -1731,17 +2032,24 @@ async function handler(request: Request): Promise<Response> {
               : `${listing.displayName} is now ${nextStatus}`,
           verdict,
           {
-            frame: {
-              plugin: String(listing.displayName ?? ''),
-              outcome:
-                action === 'reject'
-                  ? 'Rejected'
-                  : action === 'delist'
-                    ? isPrivate
-                      ? 'Back in review'
-                      : 'Removed from the marketplace'
-                    : `Now ${nextStatus}`,
-            },
+            frame: isStarter
+              ? {
+                  noun: 'Site starter',
+                  plugin: String(listing.displayName ?? ''),
+                  version: starterVersion,
+                  outcome: action === 'reject' ? 'Rejected' : 'Listed',
+                }
+              : {
+                  plugin: String(listing.displayName ?? ''),
+                  outcome:
+                    action === 'reject'
+                      ? 'Rejected'
+                      : action === 'delist'
+                        ? isPrivate
+                          ? 'Back in review'
+                          : 'Removed from the marketplace'
+                        : `Now ${nextStatus}`,
+                },
           },
         )
       }
@@ -1751,7 +2059,13 @@ async function handler(request: Request): Promise<Response> {
       actorUid: decoded.uid,
       action: `plugins.review.${action}`,
       target: `marketplaceListings/${listingId}`,
-      after: { reviewStatus: nextStatus, ...(reason ? { reason } : {}) },
+      after: {
+        reviewStatus: nextStatus,
+        ...(reason ? { reason } : {}),
+        ...(isStarter
+          ? { artifactType: SITE_STARTER_ARTIFACT_TYPE, version: starterVersion }
+          : {}),
+      },
       at: FieldValue.serverTimestamp(),
     })
 

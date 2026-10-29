@@ -517,9 +517,18 @@ export const publishStarterHandler: PluginApiHandler = async (req, res) => {
         latestVersion: version,
         deletedAt: null,
         // A starter creates a whole site the moment it is picked, so a new one
-        // waits for review (AGL-4049); a re-publish keeps the verdict it has.
-        // `official` is never written here: it is the platform's to set.
+        // waits for review (AGL-4049); a re-publish keeps the verdict it has,
+        // except a rejection: publishing it again is how its publisher sends it
+        // back for review, as the rejection told them, and the queue's Starters
+        // section reads `submitted`. `official` is never written here: it is
+        // the platform's to set.
         ...(existing.empty && { reviewStatus: 'submitted', createdAt: now }),
+        ...(!existing.empty &&
+          existing.docs[0].get('reviewStatus') === 'rejected' && {
+            reviewStatus: 'submitted',
+            rejectionReason: firebaseAdmin.firestore.FieldValue.delete(),
+            rejectionCategory: firebaseAdmin.firestore.FieldValue.delete(),
+          }),
         ...siteStarterFacetFields(facets),
         updatedAt: now,
         versionHistory: firebaseAdmin.firestore.FieldValue.arrayUnion({

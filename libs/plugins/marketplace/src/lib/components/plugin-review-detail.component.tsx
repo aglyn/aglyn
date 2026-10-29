@@ -64,6 +64,9 @@ import {
 import { PUBLISHER_ATTESTATION } from '../model/publisher-attestation'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { reviewStatusMeaning } from '../model/plugin-review-status'
+import SiteStarterReviewBody, {
+  type SiteStarterReviewDetail,
+} from './site-starter-review-detail.component'
 
 interface VersionEntry {
   version: string
@@ -94,6 +97,8 @@ interface VersionEntry {
 }
 
 interface ListingDetail {
+  /** `plugin` here; a site starter's page is {@link SiteStarterReviewDetail}. */
+  artifactType?: string
   listingId: string
   displayName: string
   description: string
@@ -198,7 +203,16 @@ export function PluginReviewDetail({
   const listingId = String(params?.listingId ?? '')
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
-  const [detail, setDetail] = useState<ListingDetail | null>(null)
+  const [loadedDetail, setDetail] = useState<
+    ListingDetail | SiteStarterReviewDetail | null
+  >(null)
+  // A site starter is read by its own page (AGL-4049); everything below the
+  // branch in the render is about a plugin's code.
+  const starter =
+    loadedDetail?.artifactType === 'siteStarter'
+      ? (loadedDetail as SiteStarterReviewDetail)
+      : null
+  const detail = starter ? null : (loadedDetail as ListingDetail | null)
   // Rendered by default (AGL-989) — the reviewer's first question is what a
   // buyer sees; Source is for auditing exactly what was submitted.
   const [readmeView, setReadmeView] = useState<'rendered' | 'source'>(
@@ -561,16 +575,28 @@ export function PluginReviewDetail({
         headed "Plugin reviews" reads identically on every submission, and
         two reviewers with two tabs open would share one title.
       */}
-      <PageHeaderRecord title={detail?.displayName ?? ''} />
-      <PageHeaderHelp
-        topic="publisherHandbook"
-        anchor="#review-what-happens-after-you-publish"
-      />
+      <PageHeaderRecord title={loadedDetail?.displayName ?? ''} />
+      {starter ? (
+        <PageHeaderHelp topic="staffConsole" anchor="#plugin-reviews-site-starters" />
+      ) : (
+        <PageHeaderHelp
+          topic="publisherHandbook"
+          anchor="#review-what-happens-after-you-publish"
+        />
+      )}
           {!loaded ? (
             <Stack spacing={2}>
               <Skeleton variant="rounded" height={120} />
               <Skeleton variant="rounded" height={220} />
             </Stack>
+          ) : starter ? (
+            <SiteStarterReviewBody
+              detail={starter}
+              busy={busy}
+              post={post}
+              onSelectVersion={setSelectedVersion}
+              staffPaths={staffPaths}
+            />
           ) : !detail ? (
             <Alert severity="warning">
               {'That listing no longer exists.'}
