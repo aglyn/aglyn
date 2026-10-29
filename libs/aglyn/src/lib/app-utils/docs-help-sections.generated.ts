@@ -224,6 +224,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#commerce-glance': 'The Commerce card on your site\'s overview and Analytics pages shows the last 30 days of sales at a glance: revenue, orders, average order value, and how many products are low on stock.',
     '#gift-cards': 'Gift cards lists every card your store has issued, what is left on each one, and what that adds up to.',
     '#inventory-locations': 'The Inventory locations card, on Products → Shipping & delivery, splits your stock across warehouses or storefronts: add a location for each place you keep stock, then set each variant\'s count per location.',
+    '#orders': 'Every paid checkout becomes an order with a sequential number, line-item snapshots, totals, and a timeline: Statuses: pending → paid → fulfilled (or partially) → delivered, with cancel/refund exits guarded by a…',
     '#orders-screen': 'Open your site\'s Products hub and choose the Orders tab. Before your first sale the tab is an invitation rather than a table: it explains where orders come from and offers Draft order, so you can invoice a customer…',
     '#payment-methods': 'The Payment methods card, on Products → Payments, chooses what shoppers may pay with besides a card, once your Stripe account is connected on the Payments card.',
     '#pickup-and-local-delivery': 'Buyers can choose to pick up an order at one of your locations, or have your own driver deliver it, instead of shipping.',

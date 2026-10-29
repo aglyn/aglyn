@@ -47,6 +47,8 @@ interface OrderLineFields {
   name?: unknown
   variantLabel?: unknown
   unitAmountCents?: unknown
+  /** A line typed on a quote, which no stocked product stands behind. */
+  custom?: unknown
 }
 
 /** An envelope as the outbox hands it over. */
@@ -100,7 +102,9 @@ export function orderLines(order: Pick<OrderEventOrder, 'lineItems'>): { lines: 
     if (!quantity) return
     const name = [item?.name, item?.variantLabel].filter(Boolean).join(' — ') || 'Item'
     const sku = String(item?.sku ?? '').trim()
-    if (!sku) {
+    // A typed line's SKU is the business's own reference, never stock the
+    // inventory system counts.
+    if (!sku || item?.custom === true) {
       skipped.push(name)
       return
     }

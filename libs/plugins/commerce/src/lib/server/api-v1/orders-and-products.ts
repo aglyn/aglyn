@@ -31,6 +31,7 @@ import {
 import { BUNDLE_ID } from '../../constants/bundle-common'
 import { type OrderFulfilmentTarget, recordOrderShipment } from '../fulfill-order'
 import { orderViewFromData } from './order-view'
+import { isUnpaidQuote } from '../../model/commerce-quotes'
 
 /**
  * A site's orders and products on the customer REST API,
@@ -116,7 +117,8 @@ export async function handleOrders(
 
   if (orderId) {
     const snap = await collection.doc(orderId).get()
-    if (!snap.exists) {
+    // An unpaid quote is not an order yet (AGL-4093).
+    if (!snap.exists || isUnpaidQuote(snap.data())) {
       return ApiErrors.notFound({ message: 'No such order', headers: ctx.headers })
     }
     return apiJson(orderView(snap), { headers: ctx.headers })
@@ -135,7 +137,10 @@ export async function handleOrders(
   // `has_more`, never a page's length).
   if (channel && channel !== 'online') query = query.where('channel', '==', channel)
   const { docs, nextCursor } = await paginate(query, url)
+  // Unpaid quotes share the collection and are not orders yet (AGL-4093);
+  // left out after the read, like `online` above, so a page can be short.
   const data = docs
+    .filter((doc) => !isUnpaidQuote(doc.data()))
     .map(orderView)
     .filter((order) => (channel === 'online' ? order.channel === 'online' : true))
   return listResponse(data, nextCursor, ctx.headers)
