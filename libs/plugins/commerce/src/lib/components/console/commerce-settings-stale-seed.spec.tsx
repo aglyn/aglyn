@@ -374,6 +374,28 @@ describe('TaxSettingsCard (AGL-1358)', () => {
     expect(payload.tax.mode).toBe('manual')
     expect(payload.tax.rates[0].pct).toBe(7.5)
   })
+
+  it('saves an undecided store’s choice as shown, with no edit first', async () => {
+    // The select fires no change for the option already on screen, so a
+    // Save that waited for an edit could never record "Manual rates".
+    const decided = storeDoc.tax
+    ;(storeDoc as { tax?: unknown }).tax = undefined
+    try {
+      render(<TaxSettingsCard hostId="host-1" />)
+      fireEvent.click(screen.getByRole('button', { name: 'Save tax settings' }))
+      await waitFor(() => expect(setDoc).toHaveBeenCalledTimes(1))
+      expect((setDoc as jest.Mock).mock.calls[0][1].tax).toEqual({ mode: 'manual' })
+    } finally {
+      storeDoc.tax = decided
+    }
+  })
+
+  it('keeps Save off for a decided store until something changes', () => {
+    render(<TaxSettingsCard hostId="host-1" />)
+    expect(
+      (screen.getByRole('button', { name: 'Save tax settings' }) as HTMLButtonElement).disabled,
+    ).toBe(true)
+  })
 })
 
 describe('ReservationsCard (AGL-1358)', () => {
