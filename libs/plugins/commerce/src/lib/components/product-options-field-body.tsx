@@ -143,7 +143,14 @@ const ProductOptionsFieldBody = forwardRef<HTMLDivElement, ProductOptionsFieldPr
   }, [answer])
 
   const listed = useMemo(() => products ?? [], [products])
-  const placeholder = products === null ? 'Loading products…' : listed.length ? 'Choose a product' : 'No products to choose from yet'
+  // On the canvas there is no site to list from: it says what the visitor will pick from.
+  const placeholder = !hostId
+    ? 'Your store’s products'
+    : products === null
+      ? 'Loading products…'
+      : listed.length
+        ? 'Choose a product'
+        : 'No products to choose from yet'
 
   return (
     <FormControl ref={ref} fullWidth required={Boolean(required)} {...rest}>
