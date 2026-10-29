@@ -766,6 +766,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propsSchema: {
       type: 'object',
       properties: {
+        rows: {
+          type: 'string',
+          maxLength: 20000,
+        },
         headerRow: {
           type: 'boolean',
         },
@@ -778,13 +782,16 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       additionalProperties: false,
     },
     propRoles: {
+      rows: 'text',
       emphasizeColumn: 'text',
     },
     propFields: {
+      rows: 'data-table',
       headerRow: 'checkbox',
       emphasizeColumn: 'text-field',
     },
     textLimits: {
+      rows: 20000,
       emphasizeColumn: 200,
     },
     presets: ['Table'],
@@ -5690,7 +5697,6 @@ export const AI_NODE_CAPABILITIES: Record<string, AiNodeCapability> = {
 export const AI_UNDECLARED_FIELD_KINDS: readonly string[] = [
   'category-select',
   'collection-select',
-  'data-table',
   'dataset-field-select',
   'dataset-select',
   'form-select',
@@ -5754,6 +5760,10 @@ export const AI_SURFACES: Record<AiSurface, AiSurfaceDefinition> = {
       'product-reviews',
       'newsletter-signup',
       'eventList',
+      'muiTabs',
+      'muiTabPanel',
+      'muiLinkBox',
+      'muiPaper',
     ],
   },
   email: {
@@ -6007,6 +6017,7 @@ export const AI_SX_TOKENS: AiSxTokens = {
 export const AI_CODE_ONLY_PROPS: Readonly<Record<string, readonly string[]>> = {
   section: ['underHeader'],
   muiAppBar: ['overHero'],
+  dataTable: ['rows'],
 }
 
 /** The prompt catalog of each surface. */

@@ -262,7 +262,15 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
           {state.waves.map((wave) => (
             <Typography component="li" variant="body2" key={wave.index}>
               {`${wave.label}: ${wave.slots.length} ${wave.slots.length === 1 ? 'page' : 'pages'}${wave.frame ? ', with your header and footer' : ''}${
-                wave.status === 'done' || wave.status === 'review' ? ' (in)' : wave.status === 'running' ? ' (running)' : ''
+                wave.status === 'done' || wave.status === 'review'
+                  ? ' (in)'
+                  : wave.status === 'running'
+                    ? ' (running)'
+                    : wave.status === 'stopped'
+                      ? wave.startedAt
+                        ? ' (stopped)'
+                        : ' (not started)'
+                      : ''
               }`}
             </Typography>
           ))}

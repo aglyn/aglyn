@@ -24,6 +24,7 @@ import {
   type AiIconLibraryEntry,
 } from '../runtime/ai-icon-library'
 import { AI_INSTANCE_REF_PROP } from '../runtime/ai-node-tree'
+import { AI_TEXT_LIMITS } from '../runtime/ai-palette'
 import { aiPageScrollInteraction } from '../runtime/ai-page-links'
 import {
   aiLayoutFitText,
@@ -36,7 +37,10 @@ import {
   AI_LAYOUT_MAX_ITEMS,
   type AiLayoutBand,
   type AiLayoutBlock,
+  type AiLayoutGroupStyle,
   type AiLayoutItem,
+  type AiLayoutLink,
+  type AiLayoutPicture,
   type AiLayoutSection,
   type AiLayoutSettlement,
 } from './ai-layout-language'
@@ -152,6 +156,23 @@ export interface AiLayoutCompileOptions {
    * one `ai-layout-labels.ts` lists. Absent, English.
    */
   language?: string
+  /**
+   * A page brought in from its owner's own website (AGL-4107): every word is
+   * the source's and is drawn exactly as given — never fitted, cut, guarded
+   * or left out — and so is every item of every group, every picture (the
+   * source's own, never a stand-in), every band and every link. The page's
+   * structure is the source's, read by code (`ai-site-import-compile.ts`), so
+   * none of the moves that rearrange a model's design applies: no rhythm, no
+   * like columns folded into cards, no third strong band settled soft, no
+   * contact lines added. Only its opening may take a hero around the
+   * source's own picture, as its design answer chose.
+   */
+  verbatim?: boolean
+}
+
+/** Words exactly as given, one space between them: how a page brought in shows them (AGL-4107). */
+export function aiLayoutAsWritten(value: unknown): string {
+  return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : ''
 }
 
 /**
@@ -189,6 +210,9 @@ export interface AiLayoutCompiledPage {
 
 /** The most pictures a page carries; each beyond it is one more empty slot to fill. */
 export const AI_LAYOUT_MAX_IMAGES = 3
+
+/** The most characters a heading style holds; a longer heading of a page brought in is set as a subtitle (AGL-4107). */
+export const AI_LAYOUT_HEADLINE_MAX_CHARS = AI_TEXT_LIMITS.headline
 
 /** The most `brand` or `dark` bands a page shows; more and none stands out. */
 export const AI_LAYOUT_MAX_STRONG_BANDS = 2
@@ -311,8 +335,9 @@ export function aiCompileLayoutPage(
   const tree = new AiLayoutTreeBuilder()
   const formSection = formSectionOf(designed, plan, targets)
   // The page a visitor opens to get in touch shows the phone and email the
-  // business gave, as links, wherever the design did not (AGL-3979).
-  const sections = aiLayoutWithContactLines(designed, formSection, targets.contact)
+  // business gave, as links, wherever the design did not (AGL-3979). A page
+  // brought in shows what its source shows, and nothing more (AGL-4107).
+  const sections = options.verbatim ? designed : aiLayoutWithContactLines(designed, formSection, targets.contact)
   const page: PageScope = {
     tree,
     plan,
@@ -422,9 +447,11 @@ function rhythmBand(page: PageScope, index: number, band: AiLayoutBand): AiLayou
 function sectionScope(page: PageScope, raw: AiLayoutSection, index: number): SectionScope {
   const at = `sections[${index}]`
   const asked = raw.band ?? 'plain'
-  const ruled = rhythmBand(page, index, asked)
+  // A page brought in keeps the source's bands, every one (AGL-4107).
+  const verbatim = page.options.verbatim === true
+  const ruled = verbatim ? asked : rhythmBand(page, index, asked)
   if (ruled !== asked) page.settled.push({ at: `${at}.band`, what: `drawn ${ruled}: the page's ${page.design?.choices.bandRhythm} band rhythm` })
-  const band = settleBand(page, ruled, at)
+  const band = verbatim ? asked : settleBand(page, ruled, at)
   return {
     page,
     index,
@@ -433,7 +460,7 @@ function sectionScope(page: PageScope, raw: AiLayoutSection, index: number): Sec
     centered: raw.align === 'center',
     level: index === 0 ? 1 : 2,
     headed: false,
-    itemsLeft: AI_LAYOUT_MAX_ITEMS,
+    itemsLeft: verbatim ? Number.POSITIVE_INFINITY : AI_LAYOUT_MAX_ITEMS,
     link: {
       sections: page.plan.sections.map((section) => section.name),
       from: index,
@@ -454,27 +481,37 @@ function drawSection(
   scope: SectionScope,
 ): string {
   const { at, band } = scope
-  // A quote is a gap the owner fills, and a published page shows no gap (AGL-3660).
+  const verbatim = page.options.verbatim === true
+  // A quote is a gap the owner fills, and a published page shows no gap
+  // (AGL-3660); a page brought in quotes its own customers' words (AGL-4107).
   const blocks = placePlanned(scope, raw).filter((block) => {
-    if (block.kind !== 'quotes') return true
+    if (block.kind !== 'quotes' || verbatim) return true
     page.settled.push({ at, what: 'a quotes group left out: a published page shows no customer words the brief did not give' })
     return false
   })
   // A section whose only items were those quotes has none left to show, and is
   // not asked for them again: no answer can give words the brief did not (AGL-3676).
-  if (raw.blocks.some((block) => block.kind === 'quotes') && !blocks.some((block) => AI_LAYOUT_GROUP_KINDS.has(block.kind) || block.kind === 'component')) {
+  if (
+    !verbatim &&
+    raw.blocks.some((block) => block.kind === 'quotes') &&
+    !blocks.some((block) => AI_LAYOUT_GROUP_KINDS.has(block.kind) || block.kind === 'component')
+  ) {
     page.quotesOnly.push(index)
   }
   // A store's Shop page opens on its grid (AGL-3676): its first section is a
   // short title bar, never a hero, so the products start above the fold.
-  if (index === 0 && shopGridAt(page) > 0) return shopTitle(scope, blocks)
+  if (!verbatim && index === 0 && shopGridAt(page) > 0) return shopTitle(scope, blocks)
   // A section the site's records fill — its catalog, its blog — shows them
   // through the element that keeps them, around the words the design gave it (AGL-3676).
-  const listed = aiLayoutListingAt(page.targets.listings ?? [], page.targets.pageId, index)
+  const listed = verbatim ? null : aiLayoutListingAt(page.targets.listings ?? [], page.targets.pageId, index)
   if (listed) return listingSection(scope, blocks, listed)
   // The site's design draws the sections it has an arrangement for (AGL-3660),
-  // the third band in a row with no picture beside one (AGL-4065).
-  if (page.design) {
+  // the third band in a row with no picture beside one (AGL-4065). A page
+  // brought in takes only its hero, around the source's own picture (AGL-4107).
+  if (verbatim) {
+    const opening = index === 0 && raw.hero ? importedHero(scope, raw, blocks) : null
+    if (opening) return opening
+  } else if (page.design) {
     const beside = rhythmSection(scope, raw, blocks)
     if (beside) return beside
     const designed = designSection(scope, raw, blocks)
@@ -509,6 +546,7 @@ function drawSection(
   ).flat()
   const repeated = placedHere[0]?.kind === 'component' ? componentOf(page.targets, placedHere[0].to) : null
   if (
+    !verbatim &&
     filled.length >= 2 &&
     repeated &&
     placedHere.every((block) => block.kind === 'component' && block.to === repeated.id)
@@ -521,6 +559,7 @@ function drawSection(
   // is that group, laid out by the compiler rather than column by column.
   const groups = filled.flatMap((entry) => entry.column)
   if (
+    !verbatim &&
     filled.length >= 2 &&
     groups.every(
       (block) => isItemGroup(block) && block.kind === groups[0].kind && block.to === groups[0].to,
@@ -532,7 +571,7 @@ function drawSection(
   }
   // A row whose columns all say the same kind of thing, three or more across,
   // is a group of cards: one design, the words the columns gave.
-  if (filled.length >= 3 && sameShape(filled.map((entry) => entry.column))) {
+  if (!verbatim && filled.length >= 3 && sameShape(filled.map((entry) => entry.column))) {
     head.push(...columnsAsCards(filled.map((entry) => entry.column)))
     page.settled.push({
       at,
@@ -555,7 +594,7 @@ function drawSection(
     )
   const speaks = (block: AiLayoutBlock) =>
     block.kind === 'heading' &&
-    !!aiLayoutWords(block.text, 'heading', page.targets.facts, page.options.language)
+    !!(verbatim ? aiLayoutAsWritten(block.text) : aiLayoutWords(block.text, 'heading', page.targets.facts, page.options.language))
   for (const list of [head, tail, ...filled.map((entry) => entry.column)]) {
     for (let at = list.length - 1; at >= 0; at -= 1)
       if (list[at].kind === 'heading' && !speaks(list[at])) list.splice(at, 1)
@@ -570,6 +609,7 @@ function drawSection(
   const order = inOrder()
   const first = order.findIndex(speaks)
   if (
+    !verbatim &&
     first > 0 &&
     order
       .slice(0, first)
@@ -712,14 +752,17 @@ function isItemGroup(block: AiLayoutBlock): boolean {
   return block.kind === 'cards' || block.kind === 'steps' || block.kind === 'stats' || block.kind === 'quotes'
 }
 
-/** Whether a block spans more than a reading column: a row of several items. */
+/** Whether a block spans more than a reading column: a row of several items, or a table, tabs or logos of a page brought in. */
 function isWideGroup(block: AiLayoutBlock): boolean {
+  if (block.kind === 'table' || block.kind === 'tabs' || block.kind === 'logos') return true
   return (
     (block.kind === 'cards' ||
       block.kind === 'steps' ||
       block.kind === 'stats' ||
       block.kind === 'quotes') &&
-    (block.items?.length ?? 0) >= 2
+    (block.items?.length ?? 0) >= 2 &&
+    // A page brought in lays a group out as its source does: one to a row reads at a reading width.
+    block.columns !== 1
   )
 }
 
@@ -1075,7 +1118,7 @@ function compileBlock(
     case 'component':
       return component(scope, block)
     case 'list':
-      return list(scope, block)
+      return list(scope, block, room)
     case 'faq':
       return faq(scope, block)
     case 'cards':
@@ -1083,6 +1126,12 @@ function compileBlock(
     case 'stats':
     case 'quotes':
       return group(scope, block, room)
+    case 'table':
+      return table(scope, block)
+    case 'tabs':
+      return tabs(scope, block, room)
+    case 'logos':
+      return logos(scope, block)
     default:
       return null
   }
@@ -1111,6 +1160,15 @@ function align(scope: SectionScope): Record<string, unknown> {
   return scope.centered ? { align: 'center' } : {}
 }
 
+/**
+ * Words as a page shows them: fitted to their place at a clean boundary, or,
+ * on a page brought in (AGL-4107), exactly as the source wrote them.
+ */
+function say(scope: SectionScope, value: unknown, place: AiLayoutTextPlace): string {
+  if (scope.page.options.verbatim) return aiLayoutAsWritten(value)
+  return aiLayoutWords(value, place, scope.page.targets.facts, scope.page.options.language)
+}
+
 function words(
   scope: SectionScope,
   block: AiLayoutBlock,
@@ -1119,7 +1177,7 @@ function words(
   props: Record<string, unknown>,
   sx: Record<string, unknown> | null,
 ): string | null {
-  const text = aiLayoutWords(block.text, place, scope.page.targets.facts, scope.page.options.language)
+  const text = say(scope, block.text, place)
   if (!text) return null
   return scope.page.tree.add(
     'muiTypography',
@@ -1158,11 +1216,15 @@ function heading(scope: SectionScope, block: AiLayoutBlock): string | null {
   const level = own ? scope.level : scope.level + 1
   const place: AiLayoutTextPlace =
     level === 1 ? 'title' : own ? 'heading' : 'itemTitle'
-  const text = aiLayoutWords(block.text, place, scope.page.targets.facts, scope.page.options.language)
+  const text = say(scope, block.text, place)
   if (!text) return null
   scope.headed = scope.headed || own
-  const variant =
-    level === 1
+  // A source's heading longer than a heading style holds is set in a subtitle
+  // style, still a heading at its level (AGL-4107): every word of it is kept.
+  const long = scope.page.options.verbatim === true && text.length > AI_LAYOUT_HEADLINE_MAX_CHARS
+  const variant = long
+    ? 'subtitle1'
+    : level === 1
       ? block.style === 'large'
         ? 'displayXl'
         : 'h1'
@@ -1192,18 +1254,24 @@ function compileButton(
   scope: SectionScope,
   block: AiLayoutBlock,
 ): string | null {
+  const verbatim = scope.page.options.verbatim === true
   // Words that carry the phone or the email are kept whole (AGL-3979).
-  const asked =
-    aiLayoutContactLabel(block.text, scope.page.targets.contact) ||
-    aiLayoutFitText(block.text, 'label', scope.page.options.language)
+  const asked = verbatim
+    ? aiLayoutAsWritten(block.text)
+    : aiLayoutContactLabel(block.text, scope.page.targets.contact) ||
+      aiLayoutFitText(block.text, 'label', scope.page.options.language)
   if (!asked) return null
-  const destination = aiLayoutResolveLink(
-    block.to,
-    asked,
-    scope.link,
-    scope.page.targets,
-  )
+  const destination = verbatim
+    ? aiLayoutImportedDestination(block.to, scope.page.plan.sections.length)
+    : aiLayoutResolveLink(
+        block.to,
+        asked,
+        scope.link,
+        scope.page.targets,
+      )
   if (!destination) {
+    // A page brought in keeps the words of a link that goes nowhere here (AGL-4107).
+    if (verbatim) return words(scope, block, 'text', 'body1', {}, muted(scope))
     scope.page.settled.push({
       at: scope.at,
       what: `the button "${asked}" has nowhere to go; left out`,
@@ -1211,7 +1279,7 @@ function compileButton(
     return null
   }
   // A button to a page merged into the blog names the blog (AGL-3676).
-  const label = aiLayoutRenamedLabel(asked, destination)
+  const label = verbatim ? asked : aiLayoutRenamedLabel(asked, destination)
   if (label !== asked) scope.page.settled.push({ at: scope.at, what: `the button "${asked}" named for the blog: "${label}"` })
   const style = block.style ?? 'primary'
   // Over a photo, a quiet or outlined button takes the words' own color, as on a brand band.
@@ -1238,6 +1306,32 @@ function compileButton(
   )
   linkTo(scope, id, destination)
   return id
+}
+
+/**
+ * Where a link of a page brought in goes (AGL-4107), as its compile wrote it:
+ * `page:<id>` a page of the site by its id — any page the import plans, which
+ * a visitor reaches once that page is live and sees as words until then —
+ * `#<n>` section n of this page, a `mailto:` or `tel:` link, or the
+ * `https:` address the source linked. Anything else goes nowhere.
+ */
+export function aiLayoutImportedDestination(to: string | undefined, sections: number): AiLayoutDestination | null {
+  const value = (to ?? '').trim()
+  if (!value) return null
+  const page = /^page:([A-Za-z0-9_-]{1,128})$/.exec(value)
+  if (page) return { kind: 'page', screenId: page[1] }
+  const section = /^#(\d{1,3})$/.exec(value)
+  if (section) {
+    const index = Number(section[1]) - 1
+    return index >= 0 && index < sections ? { kind: 'section', index } : null
+  }
+  if (/^mailto:[^\s@]+@[^\s@]+$/i.test(value) || /^tel:\+?[\d\s().-]{3,}$/i.test(value)) return { kind: 'contact', href: value }
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' ? { kind: 'href', href: url.toString() } : null
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -1321,6 +1415,8 @@ function image(
   room: Room,
 ): string | null {
   const { page } = scope
+  // A page brought in places the source's own picture, as the library holds it (AGL-4107).
+  if (page.options.verbatim) return block.picture ? sourcePicture(scope, block.picture, room) : null
   const alt = aiLayoutFitText(block.text, 'alt', scope.page.options.language)
   if (!alt) return null
   if (page.images >= maxImages(page)) {
@@ -1596,6 +1692,7 @@ function group(
   block: AiLayoutBlock,
   room: Room,
 ): string | null {
+  if (scope.page.options.verbatim) return importedGroup(scope, block, room)
   const items = takeItems(scope, cleanItems(scope, block.items ?? []))
   if (!items.length) return null
   const perRow = across(items.length, room, block.kind)
@@ -1943,7 +2040,8 @@ function quote(scope: SectionScope, item: AiLayoutItem): string {
 }
 
 /** A list: check-marked lines, or plain lines where rule 1 holds and the list is long. */
-function list(scope: SectionScope, block: AiLayoutBlock): string | null {
+function list(scope: SectionScope, block: AiLayoutBlock, room: Room = 'full'): string | null {
+  if (scope.page.options.verbatim) return importedList(scope, block, room)
   const tree = scope.page.tree
   const facts = scope.page.targets.facts
   // A list whose lines go somewhere is a list of links: each line that
@@ -2030,6 +2128,7 @@ function list(scope: SectionScope, block: AiLayoutBlock): string | null {
 
 /** Questions and answers: an accordion each, or question-over-answer pairs where rule 1 holds. */
 function faq(scope: SectionScope, block: AiLayoutBlock): string | null {
+  if (scope.page.options.verbatim) return importedFaq(scope, block)
   const tree = scope.page.tree
   const facts = scope.page.targets.facts
   const items = takeItems(
@@ -2131,7 +2230,7 @@ function picturesLeft(page: PageScope): number {
 
 /** Whether a heading block has words left once fitted: one with none is no heading. */
 function speaksHeading(scope: SectionScope, block: AiLayoutBlock): boolean {
-  return block.kind === 'heading' && !!aiLayoutWords(block.text, 'heading', scope.page.targets.facts, scope.page.options.language)
+  return block.kind === 'heading' && !!say(scope, block.text, 'heading')
 }
 
 /** The section root every designed section is written under, as `compileSection` writes its own. */
@@ -2159,6 +2258,13 @@ function designedRoot(
   )
 }
 
+/** A picture a design places: what it shows, whether anyone described it, and the source's own copy on a page brought in (AGL-4107). */
+interface DesignedPicture {
+  alt: string
+  given: boolean
+  src?: string
+}
+
 /**
  * A picture the design places: the model's own where it described one, else
  * a stand-in — marked decorative, since no one described it, with the
@@ -2167,7 +2273,7 @@ function designedRoot(
  */
 function designPicture(
   scope: SectionScope,
-  picture: { alt: string; given: boolean },
+  picture: DesignedPicture,
   frameSx: Record<string, unknown>,
   role = 'designFrame',
   imageSx: Record<string, unknown> = {},
@@ -2185,16 +2291,21 @@ function designPicture(
  */
 function designImage(
   scope: SectionScope,
-  picture: { alt: string; given: boolean },
+  picture: DesignedPicture,
   props: Record<string, unknown>,
   sx: Record<string, unknown> | null,
 ): string {
   const { page } = scope
   if (picture.given) page.images += 1
   else page.pictures += 1
+  // A page brought in places the source's own picture (AGL-4107), described as
+  // the source described it, and decorative where it was not described.
+  const described = picture.alt ? { alt: picture.alt } : { decorative: true }
   return page.tree.add(
     'image',
-    { alt: picture.alt, objectFit: 'cover', ...(picture.given ? {} : { decorative: true }), ...props },
+    picture.src
+      ? { src: picture.src, ...described, objectFit: 'cover', ...(page.images > 1 ? { loading: 'lazy' } : {}), ...props }
+      : { alt: picture.alt, objectFit: 'cover', ...(picture.given ? {} : { decorative: true }), ...props },
     sx,
     null,
     'image',
@@ -2300,15 +2411,18 @@ function designSection(scope: SectionScope, raw: AiLayoutSection, blocks: readon
 function hero(
   scope: SectionScope,
   flow: readonly AiLayoutBlock[],
-  picture: { alt: string; given: boolean },
+  picture: DesignedPicture,
+  /** The hero a page brought in opens as (AGL-4107), over the site's own. */
+  asked?: AiLayoutHeroVariant,
 ): string {
   const { page } = scope
   const tree = page.tree
   const design = page.design as NonNullable<PageScope['design']>
   const home = design.input.home
-  // A collage holds two pictures: on a page with room for one, it is drawn split.
-  const chosen: AiLayoutHeroVariant = design.choices.hero
-  const variant: AiLayoutHeroVariant = chosen === 'collage' && picturesLeft(page) < 2 ? 'split' : chosen
+  // A collage holds two pictures: on a page with room for one, it is drawn
+  // split, and so it is on a page brought in, which shows only its own.
+  const chosen: AiLayoutHeroVariant = asked ?? design.choices.hero
+  const variant: AiLayoutHeroVariant = chosen === 'collage' && (picturesLeft(page) < 2 || page.options.verbatim) ? 'split' : chosen
   page.settled.push({ at: scope.at, what: `drawn as a ${variant} hero` })
   if (variant === 'cover' || variant === 'poster') {
     scope.band = 'dark'
@@ -2381,7 +2495,7 @@ function hero(
 function cover(
   scope: SectionScope,
   flow: readonly AiLayoutBlock[],
-  picture: { alt: string; given: boolean },
+  picture: DesignedPicture,
   minHeight: Record<string, string>,
 ): string {
   const tree = scope.page.tree
@@ -2429,7 +2543,7 @@ function bandSurface(band: AiLayoutBand): string {
  * them edge to edge, top to bottom, and the words in the other, centered in
  * its height. On a phone the photo sits over the words.
  */
-function bleedHero(scope: SectionScope, flow: readonly AiLayoutBlock[], picture: { alt: string; given: boolean }, home: boolean): string {
+function bleedHero(scope: SectionScope, flow: readonly AiLayoutBlock[], picture: DesignedPicture, home: boolean): string {
   const { page } = scope
   const tree = page.tree
   const design = page.design as NonNullable<PageScope['design']>
@@ -2456,7 +2570,7 @@ function bleedHero(scope: SectionScope, flow: readonly AiLayoutBlock[], picture:
  * A masthead (AGL-3985): the words centered in a narrow column, as a journal
  * or a quiet practice opens, and a wide photo under them.
  */
-function columnHero(scope: SectionScope, flow: readonly AiLayoutBlock[], picture: { alt: string; given: boolean }, home: boolean): string {
+function columnHero(scope: SectionScope, flow: readonly AiLayoutBlock[], picture: DesignedPicture, home: boolean): string {
   const tree = scope.page.tree
   const band = scope.band
   scope.centered = true
@@ -2476,7 +2590,7 @@ function columnHero(scope: SectionScope, flow: readonly AiLayoutBlock[], picture
  * smaller one laid over its lower corner, edged in the band's own surface, as
  * a shop shows two of its things or an event two moments of its day.
  */
-function collageHero(scope: SectionScope, flow: readonly AiLayoutBlock[], picture: { alt: string; given: boolean }, home: boolean): string {
+function collageHero(scope: SectionScope, flow: readonly AiLayoutBlock[], picture: DesignedPicture, home: boolean): string {
   const { page } = scope
   const tree = page.tree
   const design = page.design as NonNullable<PageScope['design']>
@@ -2519,7 +2633,7 @@ function collageHero(scope: SectionScope, flow: readonly AiLayoutBlock[], pictur
  * agent's listing or a firm's office opens. The card carries its own colors,
  * so the words read whatever the photo is.
  */
-function panelHero(scope: SectionScope, flow: readonly AiLayoutBlock[], picture: { alt: string; given: boolean }, home: boolean): string {
+function panelHero(scope: SectionScope, flow: readonly AiLayoutBlock[], picture: DesignedPicture, home: boolean): string {
   const tree = scope.page.tree
   // The words sit on the card, never on the band the model chose.
   scope.band = 'plain'
@@ -2546,7 +2660,7 @@ function panelHero(scope: SectionScope, flow: readonly AiLayoutBlock[], picture:
  * A portrait hero (AGL-3985): a person's own page opens on their round
  * photo, the words centered under it.
  */
-function portraitHero(scope: SectionScope, flow: readonly AiLayoutBlock[], picture: { alt: string; given: boolean }): string {
+function portraitHero(scope: SectionScope, flow: readonly AiLayoutBlock[], picture: DesignedPicture): string {
   const tree = scope.page.tree
   const band = scope.band
   scope.centered = true
@@ -3462,6 +3576,388 @@ function recordsElement(scope: SectionScope, listing: AiLayoutListing, limit: nu
     [card],
     'records',
   )
+}
+
+// ── A page brought in (AGL-4107) ──────────────────────────────────────────
+//
+// What a page brought in from its owner's own website draws that a designed
+// page never does: the source's own pictures and icons, every item of every
+// group with all its parts (its figure, its paragraphs, its bullet points,
+// its own links), its tables, its tabs and its strips of logos. Every word is
+// the source's, as written, and every element is the palette's with the
+// theme's tokens, as the rest of the compiler draws: a card is the theme's
+// Card, a question the Accordion, a link the Button. One style key on each
+// repeated element, so a page of many items repeats no inline style (rule 16).
+
+/** The source's picture, at its own shape, rounded as the theme rounds a frame. */
+function sourcePicture(scope: SectionScope, picture: AiLayoutPicture, role = 'image'): string {
+  const { page } = scope
+  page.images += 1
+  const destination = picture.to ? aiLayoutImportedDestination(picture.to, page.plan.sections.length) : null
+  return page.tree.add(
+    'image',
+    {
+      src: picture.src,
+      ...(picture.alt ? { alt: picture.alt } : { decorative: true }),
+      objectFit: 'cover',
+      // A byline's portrait is drawn at a portrait's size, round.
+      ...(picture.small ? { width: AI_LAYOUT_PORTRAIT_SIZE, height: AI_LAYOUT_PORTRAIT_SIZE } : {}),
+      // The first picture of the page loads at once, the rest as they are reached.
+      ...(page.images > 1 ? { loading: 'lazy' } : {}),
+      ...(destination ? destinationProps(destination) : {}),
+    },
+    { borderRadius: picture.small ? '50%' : 2 },
+    null,
+    role,
+  )
+}
+
+/** The size a byline's portrait is drawn at on a page brought in (AGL-4107): the Image element's own size field, as an author sets it. */
+export const AI_LAYOUT_PORTRAIT_SIZE = '4rem'
+
+/** An item's picture, over its words: the card's own top, at one shape across its group. */
+function itemPicture(scope: SectionScope, picture: AiLayoutPicture): string {
+  const { page } = scope
+  page.images += 1
+  return page.tree.add(
+    'image',
+    {
+      src: picture.src,
+      ...(picture.alt ? { alt: picture.alt } : { decorative: true }),
+      objectFit: 'cover',
+      ...(page.images > 1 ? { loading: 'lazy' } : {}),
+    },
+    { aspectRatio: '16 / 9' },
+    null,
+    'itemPicture',
+  )
+}
+
+/** An icon of a page brought in: the source's own drawing, else the library icon its word names. */
+function sourceIcon(scope: SectionScope, own: { iconPath?: string; icon?: string }, size: string, sx: Record<string, unknown> | null, role = 'icon'): string | null {
+  const tree = scope.page.tree
+  if (own.iconPath) return tree.add(AI_ICON_COMPONENT_ID, { iconPath: own.iconPath, size }, sx, null, role)
+  const icon = aiIconOfWord(own.icon)
+  return icon ? tree.add(AI_ICON_COMPONENT_ID, { iconId: icon.id, size }, sx, null, role) : null
+}
+
+/** Lines of words as paragraphs of one style, each its own element. */
+function paragraphs(scope: SectionScope, lines: readonly (string | undefined)[], variant: string, sx: Record<string, unknown> | null, role = 'text'): string[] {
+  const tree = scope.page.tree
+  return lines
+    .map((line) => aiLayoutAsWritten(line))
+    .filter(Boolean)
+    .map((line) => tree.add('muiTypography', { children: line, variant, ...align(scope) }, sx, null, role))
+}
+
+/** An item's bullet points: each led by the source's mark where it drew one, else a plain list. */
+function bullets(scope: SectionScope, lines: readonly string[], iconPath: string | undefined): string | null {
+  const tree = scope.page.tree
+  const said = lines.map((line) => aiLayoutAsWritten(line)).filter(Boolean)
+  if (!said.length) return null
+  if (!iconPath) {
+    const rows = said.map((line) =>
+      tree.add('muiListItem', { disableGutters: true }, null, [tree.add('muiListItemText', { primary: line }, null, null, 'line')], 'row'),
+    )
+    return tree.add('muiList', { disablePadding: true, dense: true }, null, rows, 'bullets')
+  }
+  const rows = said.map((line) =>
+    tree.add(
+      'muiStack',
+      { direction: 'row', spacing: '1', alignItems: 'flex-start' },
+      null,
+      [sourceIcon(scope, { iconPath }, '20', accent(scope), 'check'), tree.add('muiTypography', { children: line, variant: 'body2' }, null, null, 'line')],
+      'row',
+    ),
+  )
+  return tree.add('muiStack', { spacing: '1' }, null, rows, 'bullets')
+}
+
+/** An item's own calls to action, side by side, each as the source drew it. */
+function itemLinks(scope: SectionScope, links: readonly AiLayoutLink[]): string | null {
+  const tree = scope.page.tree
+  const ids = links
+    .map((link) => compileButton(scope, { kind: 'button', text: link.text, ...(link.to ? { to: link.to } : {}), style: link.style ?? 'quiet' }))
+    .filter((id): id is string => !!id)
+  if (!ids.length) return null
+  if (ids.length === 1) return ids[0]
+  return tree.add('muiStack', { direction: 'row', spacing: '2', useFlexGap: true, flexWrap: 'wrap' }, null, ids, 'actions')
+}
+
+/** How many items of a page brought in sit side by side: as the source lays them out, within the room. */
+function importedAcross(block: AiLayoutBlock, count: number, room: Room): number {
+  const source = block.columns && block.columns > 0 ? block.columns : count <= 3 ? count : 3
+  const wide = Math.max(1, Math.min(4, source, count))
+  if (room === 'narrow') return 1
+  if (room === 'half') return Math.min(2, wide)
+  return wide
+}
+
+/** Whether an item has anything to show. */
+function itemShows(item: AiLayoutItem): boolean {
+  return Boolean(
+    item.title.trim() || item.text.trim() || item.figure?.trim() || item.more?.length || item.list?.length || item.links?.length || item.picture || item.iconPath,
+  )
+}
+
+/**
+ * A group of a page brought in: every item of it, each with all its parts,
+ * laid out in the source's columns and drawn the way its design answer chose
+ * (`variant`): the theme's cards, open columns under a rule, open columns led
+ * by their icons, or pictures over their words.
+ */
+function importedGroup(scope: SectionScope, block: AiLayoutBlock, room: Room): string | null {
+  const items = (block.items ?? []).filter(itemShows)
+  if (!items.length) return null
+  const perRow = importedAcross(block, items.length, room)
+  const ids = items.map((item) => importedItem(scope, block, item))
+  return layOut(scope, noted(scope, ids), perRow, block.kind === 'stats' ? '4' : '3', block.kind === 'cards' ? 'cards' : block.kind)
+}
+
+/** The style an item of a group is drawn in: the design answer's, else the source's own box or none. */
+function itemStyle(block: AiLayoutBlock): AiLayoutGroupStyle | 'open' {
+  if (block.variant) return block.variant
+  if (block.kind === 'stats') return 'open'
+  return block.style === 'quiet' ? 'open' : 'cards'
+}
+
+/** One item of a group of a page brought in, every part of it in the source's order. */
+function importedItem(scope: SectionScope, block: AiLayoutBlock, item: AiLayoutItem): string {
+  const tree = scope.page.tree
+  const style = itemStyle(block)
+  const kind = block.kind
+  const parts: Array<string | null> = []
+  const title = aiLayoutAsWritten(item.title)
+  const figure = aiLayoutAsWritten(item.figure)
+  const titleNode = () =>
+    title ? tree.add('muiTypography', { children: title, variant: itemTitleVariant(scope, 'h5'), component: itemElement(scope), ...align(scope) }, null, null, 'title') : null
+  if (kind === 'quotes') {
+    parts.push(tree.add(AI_ICON_COMPONENT_ID, { iconId: AI_ICON_LIBRARY.quote.id, size: '32' }, { color: 'primary.main' }, null, 'quoteMark'))
+    parts.push(...paragraphs(scope, [item.text, ...(item.more ?? [])], 'body1', null, 'quote'))
+    if (title) parts.push(tree.add('muiTypography', { children: title, variant: 'subtitle2', component: 'p', ...align(scope) }, null, null, 'attribution'))
+  } else if (kind === 'stats') {
+    const lead = figure || title
+    if (lead) parts.push(tree.add('muiTypography', { children: lead, variant: 'h2', component: 'p', ...align(scope) }, accent(scope), null, 'figure'))
+    if (figure && title) parts.push(titleNode())
+    parts.push(...paragraphs(scope, [item.text, ...(item.more ?? [])], 'body2', muted(scope), 'label'))
+  } else {
+    if (item.picture) parts.push(itemPicture(scope, item.picture))
+    parts.push(sourceIcon(scope, item, '32', style === 'cards' ? { color: 'primary.main' } : accent(scope)))
+    const number = figure ? tree.add('muiTypography', { children: figure, variant: kind === 'steps' ? 'h3' : 'h4', component: 'p', ...align(scope) }, accent(scope), null, kind === 'steps' ? 'number' : 'figure') : null
+    // A step's number leads it; a plan's price follows its name.
+    if (kind === 'steps') parts.push(number, titleNode())
+    else parts.push(titleNode(), number)
+    parts.push(...paragraphs(scope, [item.text, ...(item.more ?? [])], 'body1', muted(scope)))
+    if (item.list?.length) parts.push(bullets(scope, item.list, item.listIconPath))
+    if (item.links?.length) parts.push(itemLinks(scope, item.links))
+  }
+  const shown = parts.filter((id): id is string => !!id)
+  // The picture of a card is its top, edge to edge; the rest sit in its padding.
+  const picture = style === 'cards' || style === 'articles' ? (shown[0] && tree.nodes[shown[0]]?.componentId === 'image' ? shown.shift() : null) : null
+  const stack = tree.add('muiStack', { spacing: '1.5', ...(scope.centered && (kind === 'stats' || style === 'icons') ? { alignItems: 'center' } : {}) }, null, shown, kind === 'steps' ? 'step' : kind === 'stats' ? 'stat' : 'cardStack')
+  let drawn: string
+  if (style === 'cards' || style === 'articles') {
+    const content = tree.add('muiCardContent', null, { p: 3 }, [stack], 'cardContent')
+    drawn = tree.add('muiCard', null, { height: '100%' }, picture ? [picture, content] : [content], kind === 'quotes' ? 'quoteCard' : 'card')
+  } else if (style === 'ruled') {
+    drawn = tree.add('muiBox', null, { borderTop: 1 }, [tree.add('muiBox', null, { pt: 2.5 }, [stack], 'ruledWords')], 'ruled')
+  } else {
+    drawn = stack
+  }
+  // An item the source made one link as a whole is one here (AGL-4107): its
+  // words keep their places, and pressing anywhere on it goes where it went.
+  const whole = !item.links?.length && item.to ? aiLayoutImportedDestination(item.to, scope.page.plan.sections.length) : null
+  if (!whole || whole.kind === 'section') return drawn
+  return tree.add(
+    'muiLinkBox',
+    { ...destinationProps(whole), ...(title ? { ariaLabel: title.slice(0, 200) } : {}), ...(whole.kind === 'href' ? { newTab: true } : {}) },
+    { height: '100%' },
+    [drawn],
+    'linked',
+  )
+}
+
+/** A list of a page brought in: each line as written, led by the source's mark where it drew one, a link where it was one. */
+function importedList(scope: SectionScope, block: AiLayoutBlock, room: Room): string | null {
+  const tree = scope.page.tree
+  const items = (block.items ?? []).filter((item) => aiLayoutAsWritten(item.title || item.text))
+  if (!items.length) return null
+  const rows = items.map((item) => {
+    const line = aiLayoutAsWritten([item.title, item.text].filter((part) => part.trim()).join(' '))
+    const destination = item.to ? aiLayoutImportedDestination(item.to, scope.page.plan.sections.length) : null
+    const words = destination
+      ? tree.add('muiScreenLink', { children: line, renderAs: 'link', color: 'inherit', ...destinationProps(destination) }, null, null, 'link')
+      : tree.add('muiTypography', { children: line, variant: 'body1' }, null, null, 'line')
+    if (destination) linkTo(scope, words, destination)
+    const mark = item.iconPath || item.icon ? sourceIcon(scope, item, '22', accent(scope), 'check') : null
+    return mark ? tree.add('muiStack', { direction: 'row', spacing: '1.5', alignItems: 'flex-start' }, null, [mark, words], 'row') : words
+  })
+  noted(scope, rows)
+  const perRow = importedAcross({ ...block, columns: block.columns ?? 1 }, rows.length, room)
+  if (perRow > 1) return layOut(scope, rows, perRow, '2', 'list')
+  return tree.add('muiStack', { spacing: '1.5' }, null, rows, 'list')
+}
+
+/** Questions and answers of a page brought in: an accordion each, the first open, every answer's paragraphs in it. */
+function importedFaq(scope: SectionScope, block: AiLayoutBlock): string | null {
+  const tree = scope.page.tree
+  const items = (block.items ?? []).filter((item) => aiLayoutAsWritten(item.title))
+  if (!items.length) return null
+  const panels = items.map((item, position) => {
+    const answer = paragraphs(scope, [item.text, ...(item.more ?? [])], 'body1', { color: 'text.secondary' }, 'answer')
+    if (item.list?.length) answer.push(bullets(scope, item.list, item.listIconPath) as string)
+    if (item.links?.length) {
+      const links = itemLinks(scope, item.links)
+      if (links) answer.push(links)
+    }
+    const shown = answer.filter(Boolean)
+    return tree.add(
+      'muiAccordion',
+      { disableGutters: true, ...(position === 0 ? { defaultExpanded: true } : {}) },
+      null,
+      [
+        tree.add('muiAccordionSummary', { children: aiLayoutAsWritten(item.title) }, null, null, 'question'),
+        shown.length
+          ? tree.add('muiAccordionDetails', null, null, [shown.length === 1 ? shown[0] : tree.add('muiStack', { spacing: '1.5' }, null, shown, 'answerStack')], 'details')
+          : null,
+      ],
+      'panel',
+    )
+  })
+  noted(scope, panels)
+  return tree.add('muiStack', { spacing: '1.5' }, null, panels, 'faq')
+}
+
+/** A table's cell as the Table element's grid holds it: one line, its pipes escaped. */
+function tableCell(text: string): string {
+  return aiLayoutAsWritten(text).replace(/\|/g, '\\|')
+}
+
+/** A table of a page brought in: the theme's Table element, every cell's words as written. */
+function table(scope: SectionScope, block: AiLayoutBlock): string | null {
+  const rows = (block.rows ?? []).filter((row) => row.cells.some((cell) => aiLayoutAsWritten(cell)))
+  if (!rows.length) return null
+  const width = Math.max(...rows.map((row) => row.cells.length))
+  const grid = rows.map((row) => `| ${Array.from({ length: width }, (_, at) => tableCell(row.cells[at] ?? '')).join(' | ')} |`).join('\n')
+  return scope.page.tree.add('dataTable', { rows: grid, headerRow: block.header === true }, null, null, 'table')
+}
+
+/** A label the Tabs element can name a panel by: its words on one line, with no comma it would split at. */
+function tabLabel(label: string): string | null {
+  const text = aiLayoutAsWritten(label)
+  return text && !text.includes(',') && text.length <= AI_TEXT_LIMITS.label ? text : null
+}
+
+/**
+ * Tabs of a page brought in: the Tabs element with a panel for each tab,
+ * opening on the one the source shows open, where every tab has its panel.
+ * A source whose script draws its other panels only when clicked gives a
+ * page the open one alone (aglyn.com's plan tabs): then its labels are drawn
+ * as the strip they are — the open one filled, the rest outlined — over the
+ * panel the source showed, so every label and every word is on the page and
+ * no tab opens onto nothing.
+ */
+function tabs(scope: SectionScope, block: AiLayoutBlock, room: Room): string | null {
+  const tree = scope.page.tree
+  const given = (block.tabs ?? []).filter((tab) => aiLayoutAsWritten(tab.label) || tab.blocks.length)
+  if (!given.length) return null
+  const labels = given.map((tab) => tabLabel(tab.label))
+  const panels = given.map((tab) => (tab.blocks.length ? compileFlow(scope, tab.blocks, room) : null))
+  const whole =
+    given.length >= 2 &&
+    given.length <= 8 &&
+    labels.every((label): label is string => !!label) &&
+    new Set(labels.map((label) => label.toLowerCase())).size === labels.length &&
+    panels.every(Boolean)
+  if (whole) {
+    const open = given.findIndex((tab) => tab.selected)
+    return tree.add(
+      'muiTabs',
+      { labels: (labels as string[]).join('\n'), variant: 'scrollable', ...(open > 0 ? { opensOn: labels[open] } : {}) },
+      null,
+      given.map((_, at) => tree.add('muiTabPanel', { label: labels[at] }, null, [panels[at] as string], 'tabPanel')),
+      'tabs',
+    )
+  }
+  const strip = given
+    .map((tab) => ({ text: aiLayoutAsWritten(tab.label), selected: tab.selected === true }))
+    .filter((tab) => tab.text)
+    .map((tab) =>
+      tab.selected
+        ? tree.add(
+            'muiPaper',
+            { variant: 'elevation', elevation: '0' },
+            { bgcolor: 'primary.main' },
+            [tree.add('muiBox', null, { py: 0.75, color: 'primary.contrastText' }, [tree.add('muiTypography', { children: tab.text, variant: 'body2' }, { px: 2 }, null, 'tabLabel')], 'tabWords')],
+            'tab',
+          )
+        : chip(scope, tab.text, 'tab'),
+    )
+  const parts = [
+    strip.length ? tree.add('muiStack', { direction: 'row', spacing: '1', useFlexGap: true, flexWrap: 'wrap', ...(scope.centered ? { justifyContent: 'center' } : {}) }, null, strip, 'tabStrip') : null,
+    ...panels,
+  ].filter((id): id is string => !!id)
+  if (!parts.length) return null
+  return parts.length === 1 ? parts[0] : tree.add('muiStack', { spacing: '4' }, null, parts, 'tabs')
+}
+
+/** A short line on an outlined surface of the theme's own shape: a label, a tag, a tab the source draws as one. */
+function chip(scope: SectionScope, words: string, role: string): string {
+  const tree = scope.page.tree
+  return tree.add('muiPaper', { variant: 'outlined' }, { py: 0.75 }, [tree.add('muiTypography', { children: words, variant: 'body2' }, { px: 2 }, null, `${role}Label`)], role)
+}
+
+/** A strip of logos of a page brought in: each picture at one height, or each short line as a label on an outlined surface. */
+function logos(scope: SectionScope, block: AiLayoutBlock): string | null {
+  const tree = scope.page.tree
+  const ids = (block.items ?? []).flatMap((item): string[] => {
+    if (item.picture) {
+      scope.page.images += 1
+      return [
+        tree.add(
+          'image',
+          { src: item.picture.src, ...(item.picture.alt ? { alt: item.picture.alt } : { decorative: true }), objectFit: 'contain', width: 'auto', ...(scope.page.images > 1 ? { loading: 'lazy' } : {}) },
+          { height: { xs: 32, md: 40 } },
+          null,
+          'logo',
+        ),
+      ]
+    }
+    const words = aiLayoutAsWritten([item.title, item.text].filter((part) => part.trim()).join(' '))
+    return words ? [chip(scope, words, 'chip')] : []
+  })
+  if (!ids.length) return null
+  return tree.add(
+    'muiStack',
+    { direction: 'row', spacing: block.items?.some((item) => item.picture) ? '5' : '1.5', useFlexGap: true, flexWrap: 'wrap', alignItems: 'center', ...(scope.centered ? { justifyContent: 'center' } : {}) },
+    null,
+    noted(scope, ids),
+    'logos',
+  )
+}
+
+/**
+ * The opening of a page brought in, as the hero its design answer chose
+ * around the source's own picture (AGL-4107): its words and one picture of
+ * the source's, nothing else. Any other opening is drawn as its source lays
+ * it out, its picture where the source placed it.
+ */
+function importedHero(scope: SectionScope, raw: AiLayoutSection, blocks: readonly AiLayoutBlock[]): string | null {
+  const { page } = scope
+  if (!page.design || !raw.hero) return null
+  const pictures = blocks.filter((block) => block.kind === 'image' && block.picture)
+  if (pictures.length !== 1) return null
+  const flow = blocks.filter((block) => block.kind !== 'image')
+  if (!flow.length || !flow.every((block) => WORD_KINDS.has(block.kind))) return null
+  if (!flow.some((block) => speaksHeading(scope, block))) {
+    flow.unshift({ kind: 'heading', text: page.plan.title })
+    page.settled.push({ at: scope.at, what: "no heading; the page's title written as its h1" })
+  }
+  const lead = flow.findIndex((block) => speaksHeading(scope, block))
+  const { style: _style, ...title } = flow[lead]
+  flow[lead] = AI_LAYOUT_HALF_HEROES.has(raw.hero) ? title : { ...title, style: 'large' }
+  const picture = pictures[0].picture as AiLayoutPicture
+  return hero(scope, flow, { alt: picture.alt, given: true, src: picture.src }, raw.hero)
 }
 
 /** The id the compiled page's root is stored under. */

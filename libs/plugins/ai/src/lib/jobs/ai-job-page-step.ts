@@ -123,6 +123,7 @@ import {
   type AiLayoutStartPage,
 } from './ai-job-page-language'
 import { aiSiteImportDocumentOf } from './ai-site-import-document'
+import { aiImportPageModel, aiSiteImportLinkablePages } from './ai-site-import-compile'
 import { aiWithSiteMotion } from '../layout-language/ai-layout-motion'
 import {
   aiCreationUnit,
@@ -534,8 +535,14 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
     const { job, now, signal, firestore, modelFor } = stepContext
     const hostId = job.hostId
     if (!hostId) throw new Error('a page job names no site, and its admission refuses one')
+    // A page brought in from its owner's site (AGL-4084, AGL-4107).
+    const imported = aiSiteImportDocumentOf(job.inputs)
     // The switch's answer for this job, else the routing table's (AGL-2942).
-    const model = modelFor?.('job.page') ?? aiModelForStep('job.page')
+    // A page brought in asks its design answer on the page step's own tier,
+    // whatever the deployment's default model is (AGL-4107): the 10/29 import
+    // ran every page on a smaller model the environment named, and laid them
+    // out wrong.
+    const model = imported ? aiImportPageModel(modelFor) : (modelFor?.('job.page') ?? aiModelForStep('job.page'))
     const confirmed = aiConfirmedPlan(job)
     if (!confirmed) return { ...aiUnspentOutcome(model), failure: AI_JOB_PAGE_NO_PLAN_COPY }
     // The resume door refuses such a plan at confirmation; one confirmed
@@ -701,7 +708,10 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
     const embeds = aiPlanEmbedsFor(plan, { slug: screen.slug })
     // The site's other pages a link may go to, built or minted on a guided
     // start's plan, and the one a link that names none can only mean (AGL-3596).
-    const { linkablePages, linkTarget } = aiPageLinkablePages(inventory, aiLayoutSitePages(job.inputs), [screen.id, draftId])
+    // A page brought in links every page its import plans (AGL-4107), each by
+    // the id its draft is written under, which a visitor reaches once it is live.
+    const planned = [...aiLayoutSitePages(job.inputs), ...aiSiteImportLinkablePages(imported)]
+    const { linkablePages, linkTarget } = aiPageLinkablePages(inventory, planned, [screen.id, draftId])
     // A page unit of a guided start or a build is designed in the layout
     // language and compiled (AGL-3660); a record template keeps the raw tree,
     // since its copy binds fields the language does not name.
@@ -720,7 +730,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       // its check and was refused at the last pass (live run, 2026-10-09).
       ...(language ? { codeBuilt: true, repeatsCompiled: true } : {}),
       // A page brought in word for word is its owner's own words (AGL-4084), checked as such.
-      ...(language && aiSiteImportDocumentOf(job.inputs) ? { ownWords: true } : {}),
+      ...(language && imported ? { ownWords: true } : {}),
     }
     // And a post's card in a section listing the blog links its post and shows
     // its cover by the tokens the page fills per post (AGL-3676), as its check admitted.
@@ -830,12 +840,19 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         const seoModel = modelFor?.('job.seo') ?? aiModelForStep('job.seo')
         // The plan's own listing, held to the editor's guidance, when the
         // listing cannot be written inside this pass's time on the model the
-        // job runs.
-        let values = {
-          title: aiClipAtWord(screen.seoTitle, SCREEN_SEO_TEXT_GUIDANCE.title, plan.language),
-          description: aiClipAtWord(screen.seoDescription, SCREEN_SEO_TEXT_GUIDANCE.description, plan.language),
-        }
+        // job runs. A page brought in keeps its source's title and description
+        // word for word (AGL-4107): never clipped, never rewritten.
+        let values = imported
+          ? { title: screen.seoTitle.trim(), description: screen.seoDescription.trim() }
+          : {
+              title: aiClipAtWord(screen.seoTitle, SCREEN_SEO_TEXT_GUIDANCE.title, plan.language),
+              description: aiClipAtWord(screen.seoDescription, SCREEN_SEO_TEXT_GUIDANCE.description, plan.language),
+            }
+        // Only what the source does not say is written: a page brought in with
+        // its own title and description asks for no listing at all.
+        const owed = !imported || !values.title || !values.description
         if (
+          owed &&
           // A listing is written from the page's own text, with no inventory
           // and so no lookup round.
           aiGenerationWorstCaseMs({ maxTokens: AI_SEO_FIELDS_MAX_TOKENS, model: seoModel, lookups: 0 }) <=
@@ -864,10 +881,12 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
             // the plan's own check already held to rule 14 (AGL-3827).
             const usable = (text: string | null | undefined): string =>
               text?.trim() && !aiHasPlaceholderToken(text) ? text.trim() : ''
-            values = {
-              title: usable(result.value.title) || values.title,
-              description: usable(result.value.description) || values.description,
-            }
+            values = imported
+              ? { title: values.title || usable(result.value.title), description: values.description || usable(result.value.description) }
+              : {
+                  title: usable(result.value.title) || values.title,
+                  description: usable(result.value.description) || values.description,
+                }
           }
         }
         // Never written once the job is canceled (AGL-3616).

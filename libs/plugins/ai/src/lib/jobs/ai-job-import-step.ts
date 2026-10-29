@@ -112,7 +112,8 @@ import {
 } from '../site-import/site-import-page'
 import { aiSiteKindFor } from '../model/ai-site-kinds'
 import { AI_LAYOUT_SITE_BRAND_INPUT, AI_LAYOUT_SITE_FACTS_INPUT } from './ai-job-layout-language'
-import { AI_LAYOUT_IMPORTED_SECTIONS_INPUT, aiSiteImportDocLines, type AiSiteImportDocument } from './ai-site-import-document'
+import { AI_LAYOUT_IMPORTED_SECTIONS_INPUT, type AiSiteImportDocument } from './ai-site-import-document'
+import { aiSiteImportSectionNames } from './ai-site-import-compile'
 import { aiRunSiteImportLook, type AiSiteImportLookDeps } from './ai-site-import-look'
 import { aiPublishImportedWave } from './ai-site-import-publish'
 import { fileSiteImportReview } from '../site-import/site-import-review'
@@ -378,9 +379,13 @@ export function aiSiteImportDocumentFor(state: AiSiteImportState, page: AiSiteIm
     url: page.url,
     blocks,
     photos: page.photos?.assets ?? [],
-    // Home's own links are words: a link home says home, which the source's words may not.
+    // Every page the import plans, in any wave (AGL-4107): a link to one still
+    // to come shows its words until it is live. Home's own links are words: a
+    // link home says home, which the source's words may not.
     links: state.pages.filter((entry) => entry.slug !== '/' && !entry.refused).map((entry) => ({ path: entry.path.replace(/\/+$/, '') || '/', id: entry.draftId })),
     origins: [`https://${state.domain}`, `https://www.${state.domain.replace(/^www\./, '')}`],
+    // How the source lays it out (AGL-4106), which the site compiler builds it from (AGL-4107).
+    ...(page.read?.layout ? { layout: page.read.layout } : {}),
   }
 }
 
@@ -392,8 +397,9 @@ export function aiSiteImportPageJob(
   items: readonly AiJobItemLedger[],
 ): AiJob {
   const doc = aiSiteImportDocumentFor(state, page)
-  // The page's sections are the source's own (AGL-4084): its opening, then one at each second-level heading.
-  const names = doc ? aiSiteImportDocLines(doc.blocks, doc.title).sections.map((section) => section.name) : page.read?.sections ?? []
+  // The page's sections are the source's own (AGL-4107): as its layout names
+  // them, else its opening and one at each second-level heading.
+  const names = doc ? aiSiteImportSectionNames(doc) : page.read?.sections ?? []
   const sections = (names.length ? names : ['Introduction']).map((name) => ({
     name: name.slice(0, AI_SITE_IMPORT_LABEL_MAX_CHARS),
     uses: [],
@@ -407,8 +413,9 @@ export function aiSiteImportPageJob(
     template: null,
     duplicateOf: null,
     nav: false,
-    seoTitle: page.title,
-    seoDescription: '',
+    // The source's own title and description, word for word (AGL-4107).
+    seoTitle: page.read?.meta?.title || page.title,
+    seoDescription: page.read?.meta?.description ?? '',
     sections,
     record: null,
     id: page.draftId,
