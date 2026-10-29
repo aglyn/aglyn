@@ -76,6 +76,8 @@ export function assistBuildBlock(): string {
     '- brief: everything they asked for, in their words, with each page, form and other part named and what each is for. Include what the conversation already settled. Do not invent parts they did not ask for beyond what their request plainly needs (a page that shows a form needs that form).',
     '- publish: true only when they asked for the new pages to go live or be published; otherwise false. New work is an unpublished draft by default.',
     '- summary: one short sentence, such as "Plan three pages, a contact form and a booking service".',
+    // AGL-4092: a brief the chat wrote asked the build to "use bracketed placeholders where details are missing".
+    '- Never ask the build for placeholders, brackets or "to be added" text. Where the user gave no fact, say nothing of it: the build reads the site’s business profile and contact details itself.',
     '- Nothing is built when you call the tool: the user is shown a plan with its price and confirms it. Never say anything is made, and never quote a price.',
     '- Only offer what the "A build here can make" block lists. If they ask for something it does not list, say plainly it cannot be built here from the chat and build the rest.',
     '- A change to the site’s theme or look (its colors, fonts or corners) is offered only where the "A build here can make" block lists it, which it does on paid plans. When it is asked for and not listed, say a build cannot change the theme on this workspace’s plan and that they can change it in Setup → Theme, where the Theme assistant can propose one; then build the rest.',
@@ -89,20 +91,67 @@ export function assistBuildIntentsBlock(intents: readonly string[]): string {
 }
 
 /**
+ * Where a build's facts come from, said once at the end of every brief the
+ * chat proposes (AGL-4092): never a placeholder for one it lacks.
+ */
+export const ASSIST_BUILD_FACTS_LINE =
+  'Facts: use the site’s business profile and contact details on file; where a fact is missing, leave it out — no placeholders, no brackets.'
+
+/**
+ * A clause of a brief that asks for a gap instead of a fact: "use bracketed
+ * placeholders where details are missing", "mark it in square brackets",
+ * "show TBD". A shop's "shelf brackets" asks for none.
+ */
+const ASKS_FOR_GAPS = /\b(?:placeholders?|bracketed|in (?:square )?brackets|to be (?:added|filled|confirmed)|tbd)\b/i
+
+/**
+ * The brief with every clause that asks for placeholders, brackets or "to be
+ * added" text taken out (AGL-4092): "Do not invent names; use bracketed
+ * placeholders where details are missing." keeps "Do not invent names." A
+ * sentence nothing is left of goes. Pure.
+ */
+export function assistBuildBriefWithoutGaps(brief: string): string {
+  return brief
+    .split('\n')
+    .map((line) =>
+      line
+        .split(/(?<=[.!?])\s+/)
+        .map((sentence) => {
+          if (!ASKS_FOR_GAPS.test(sentence)) return sentence
+          const kept = sentence
+            .replace(/[.!?]$/, '')
+            .split(/\s*;\s*/)
+            .filter((clause) => !ASKS_FOR_GAPS.test(clause))
+            .join('; ')
+            .trim()
+          return kept ? `${kept}.` : ''
+        })
+        .filter(Boolean)
+        .join(' '),
+    )
+    .filter((line) => line.trim())
+    .join('\n')
+    .trim()
+}
+
+/**
  * The tool call held to what a build job accepts, or `null` when it is
  * unusable. The site is the request's own, never the model's; the brief is
  * clamped to the job door's limit, with a line naming the console page it
- * was asked from so the plan step can read "this page" against it.
+ * was asked from so the plan step can read "this page" against it. Before
+ * it, the brief asks for no placeholder and says where facts come from
+ * (AGL-4092).
  */
 export function resolveAssistBuild(
   input: Record<string, unknown> | null,
   scope: { hostId: string; screen: string | null },
 ): AssistBuildProposal | null {
   if (!input) return null
-  const asked = typeof input['brief'] === 'string' ? input['brief'].trim() : ''
+  const asked = typeof input['brief'] === 'string' ? assistBuildBriefWithoutGaps(input['brief'].trim()) : ''
   if (!asked) return null
   const where = scope.screen ? `\nAsked from the console page: ${scope.screen}` : ''
-  const brief = `${asked.slice(0, AI_JOB_BRIEF_MAX_CHARS - where.length)}${where}`.trim()
+  const facts = `\n${ASSIST_BUILD_FACTS_LINE}`
+  const brief = `${asked.slice(0, AI_JOB_BRIEF_MAX_CHARS - facts.length - where.length).trim()}${facts}${where}`.trim()
   const summary =
     typeof input['summary'] === 'string' && input['summary'].trim()
       ? input['summary'].trim().slice(0, ASSIST_BUILD_SUMMARY_MAX_CHARS)
