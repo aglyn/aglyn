@@ -60,6 +60,7 @@ import { publishEmailStarterHandler } from './server/publish-email-starter'
 import { publishEmailTemplateHandler } from './server/publish-email-template'
 import { publishLayoutHandler } from './server/publish-layout'
 import { publishStarterHandler } from './server/publish-starter'
+import { marketplaceStarters } from './server/starters'
 import { publishTemplateHandler } from './server/publish-template'
 import { publishThemeHandler } from './server/publish-theme'
 import { updateArtifactHandler } from './server/update-artifact'
@@ -203,6 +204,18 @@ export function registerMarketplaceConsoleApi(): void {
   registerPluginApiRoute('marketplace/publish-template', publishTemplateHandler)
   // A whole site as a site starter, picked in "Create site" (AGL-4049).
   registerPluginApiRoute('marketplace/publish-starter', publishStarterHandler)
+  /*
+   * And the search "Choose your starter" lists them from (AGL-4049):
+   * summaries only, behind `hosts.create` and `release_site_starters`. `web:`
+   * because it is a plain GET from this plugin's own widget that names a
+   * workspace rather than a site; the subject is that workspace, so the
+   * release gate in front asks about the right organization.
+   */
+  registerPluginApiRoute(
+    'marketplace/starters',
+    { web: marketplaceStarters },
+    { subject: (request) => ({ orgId: new URL(request.url).searchParams.get('orgId') || null }) },
+  )
   registerPluginApiRoute('marketplace/publish-theme', publishThemeHandler)
   registerPluginApiRoute(
     'marketplace/publish-dataset-schema',

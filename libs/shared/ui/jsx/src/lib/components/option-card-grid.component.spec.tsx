@@ -18,7 +18,7 @@
 import React, { useState } from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { ThemeProvider, alpha, createTheme, decomposeColor, getContrastRatio, type Theme } from '@mui/material/styles'
-import { OptionCardGrid, optionCardSx, type OptionCard } from './option-card-grid.component'
+import { OptionCardGrid, optionCardLabel, optionCardSx, type OptionCard } from './option-card-grid.component'
 
 /**
  * The option card grid (AGL-3985): every card a surface with an outline that
@@ -96,6 +96,33 @@ describe('OptionCardGrid', () => {
   it('rings a card with the keyboard’s focus in the primary color', () => {
     const theme = createTheme()
     expect(optionCardSx(false)(theme)['&:has(.Mui-focusVisible)']).toEqual({ outline: `2px solid ${theme.palette.primary.main}`, outlineOffset: '2px' })
+  })
+
+  it('draws a card’s facts as chips under its line, and reads them in its name (AGL-4049)', () => {
+    const options: OptionCard[] = [
+      {
+        id: 'bistro',
+        title: 'Corner bistro',
+        description: 'By Aglyn',
+        icon: 'M0 0h24v24H0z',
+        chips: [{ label: '$12', color: 'primary', variant: 'filled' }, { label: '4 pages' }],
+      },
+      { id: 'plain', title: 'Plain', description: 'No facts' },
+    ]
+    const { container } = render(
+      <OptionCardGrid label="Starters" options={options} value={null} onChange={() => undefined} />,
+    )
+    const card = screen.getByRole('radio', { name: 'Corner bistro: By Aglyn ($12, 4 pages)' })
+    const chips = card.querySelectorAll('[data-option-card-chips] .MuiChip-root')
+    expect([...chips].map((chip) => chip.textContent)).toEqual(['$12', '4 pages'])
+    expect(chips[0].className).toContain('MuiChip-filled')
+    expect(chips[0].className).toContain('MuiChip-colorPrimary')
+    expect(chips[1].className).toContain('MuiChip-outlined')
+    expect(chips[1].className).toContain('MuiChip-colorDefault')
+    // A card with none draws no chip row, and its name is as it always was.
+    expect(screen.getByRole('radio', { name: 'Plain: No facts' }).querySelector('[data-option-card-chips]')).toBeNull()
+    expect(container.querySelectorAll('[data-option-card-chips]')).toHaveLength(1)
+    expect(optionCardLabel({ title: 'Only a title' })).toBe('Only a title')
   })
 
   it.each(['light', 'dark'] as const)('keeps the title and the line at AA on the card in %s mode', (mode) => {

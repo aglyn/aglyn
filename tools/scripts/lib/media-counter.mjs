@@ -162,6 +162,14 @@ export async function putMediaDocument({
  * is worth being able to assert directly — after a seed run, and against
  * production read-only.
  *
+ * A site's counter also holds the files kept outside its library — a quote's
+ * proofs, a customer's files on a quote, a form's files (AGL-4096) — in
+ * `bytes`, so they count toward storage, and says how much of `bytes` they
+ * are in `uploadBytes`. The library's own share, `bytes - uploadBytes`, is
+ * what the media documents add up to, and `counter.bytes` below is that
+ * share. A reconciliation that rewrites `bytes` from the media documents
+ * alone must add `uploadBytes` back.
+ *
  * @param {any} scopeRef `hosts/{id}` or `orgs/{id}` DocumentReference
  */
 export async function measureMediaCounterDrift(scopeRef) {
@@ -174,9 +182,13 @@ export async function measureMediaCounterDrift(scopeRef) {
   }
   const counterSnapshot = await scopeRef.collection('counters').doc('media').get()
   const stored = counterSnapshot.exists ? (counterSnapshot.data() ?? {}) : {}
+  const keptUploadBytes = Math.min(
+    toBytes(stored['bytes']),
+    toBytes(stored['uploadBytes']),
+  )
   const counter = {
     count: Number(stored['count'] ?? 0),
-    bytes: Number(stored['bytes'] ?? 0),
+    bytes: Number(stored['bytes'] ?? 0) - keptUploadBytes,
   }
   const countDrift = counter.count - count
   const bytesDrift = counter.bytes - bytes

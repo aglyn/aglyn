@@ -995,7 +995,7 @@ async function seedGuideFixtures() {
     { name: 'heading', label: 'Heading', type: 'text', defaultValue: 'Get product updates' },
     {
       name: 'description', label: 'Description', type: 'text',
-      defaultValue: 'New features, guides, and early-access news — straight to your inbox. No spam.',
+      defaultValue: 'New features, guides, and product news — straight to your inbox. No spam.',
     },
   ]
   const bandRef = hostRef.collection('components').doc(NEWSLETTER_BAND)
@@ -1048,7 +1048,7 @@ async function seedGuideFixtures() {
           name: 'Newsletter band',
           propValues: {
             heading: 'Get product updates',
-            description: 'New features, guides, and early-access news — straight to your inbox. No spam.',
+            description: 'New features, guides, and product news — straight to your inbox. No spam.',
           },
         },
       },

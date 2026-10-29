@@ -16,7 +16,7 @@
  */
 
 import { mdiCheckCircle } from '@aglyn/shared-data-mdi'
-import { Box, Card, CardActionArea, Stack, Typography } from '@mui/material'
+import { Box, Card, CardActionArea, Chip, Stack, Typography, type ChipProps } from '@mui/material'
 import { alpha, type Theme } from '@mui/material/styles'
 import { useRef, type KeyboardEvent } from 'react'
 import { MdiIcon } from './mdi-icon/mdi-icon'
@@ -34,6 +34,19 @@ export interface OptionCardImage {
   height: number
 }
 
+/**
+ * A short fact about a choice, drawn as a small chip under its line: a price,
+ * who made it, how many pages it has. Theme colors only; the label is read
+ * with the card's name, so a chip is never the only place a fact is said.
+ */
+export interface OptionCardChip {
+  label: string
+  /** A theme palette color; `default` when absent. */
+  color?: ChipProps['color']
+  /** `outlined` when absent. */
+  variant?: 'filled' | 'outlined'
+}
+
 /** One choice in an {@link OptionCardGrid}. */
 export interface OptionCard<T extends string = string> {
   id: T
@@ -43,6 +56,19 @@ export interface OptionCard<T extends string = string> {
   icon?: string
   /** A picture of the choice, drawn above its title. */
   image?: OptionCardImage
+  /** Facts drawn as chips under its line, in this order. */
+  chips?: readonly OptionCardChip[]
+}
+
+/**
+ * What a card is called for assistive technology: its title, its line after a
+ * colon, and its chips in parentheses — every word the card shows, since the
+ * card is one control and its name is all a screen reader says of it.
+ */
+export function optionCardLabel(option: Pick<OptionCard, 'title' | 'description' | 'chips'>): string {
+  const named = option.description ? `${option.title}: ${option.description}` : option.title
+  const chips = (option.chips ?? []).map((chip) => chip.label).filter(Boolean)
+  return chips.length ? `${named} (${chips.join(', ')})` : named
 }
 
 export interface OptionCardGridProps<T extends string = string> {
@@ -115,7 +141,8 @@ export function OptionCardCheck() {
 
 /**
  * A grid of cards to pick one from (AGL-3660): a radio group drawn as cards,
- * each with an icon or a picture (AGL-3898), a title and a line under it. Each
+ * each with an icon or a picture (AGL-3898), a title, a line under it and any
+ * facts as chips under that (AGL-4049), which its accessible name reads too. Each
  * card is a surface with an outline that reads on a gray page, its title in
  * the text color and its line in the secondary text color, both at AA on the
  * card (AGL-3985). The picked card is outlined 2px in the primary color and
@@ -176,7 +203,7 @@ export function OptionCardGrid<T extends string = string>({
               }}
               role="radio"
               aria-checked={selected}
-              aria-label={option.description ? `${option.title}: ${option.description}` : option.title}
+              aria-label={optionCardLabel(option)}
               tabIndex={index === focusable ? 0 : -1}
               onClick={() => onChange(option.id)}
               onKeyDown={(event) => onKeyDown(event, index)}
@@ -236,6 +263,27 @@ export function OptionCardGrid<T extends string = string>({
                     <Typography variant="body2" component="span" sx={{ display: 'block', color: 'text.secondary', mt: 0.25 }}>
                       {option.description}
                     </Typography>
+                  )}
+                  {option.chips && option.chips.length > 0 && (
+                    <Stack
+                      component="span"
+                      direction="row"
+                      useFlexGap
+                      aria-hidden
+                      data-option-card-chips=""
+                      sx={{ flexWrap: 'wrap', gap: 0.5, mt: 1 }}
+                    >
+                      {option.chips.map((chip, chipIndex) => (
+                        <Chip
+                          key={`${chipIndex}-${chip.label}`}
+                          component="span"
+                          size="small"
+                          label={chip.label}
+                          color={chip.color ?? 'default'}
+                          variant={chip.variant ?? 'outlined'}
+                        />
+                      ))}
+                    </Stack>
                   )}
                 </Box>
               </Stack>

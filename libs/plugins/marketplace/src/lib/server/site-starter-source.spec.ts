@@ -280,7 +280,11 @@ describe('search (AGL-4049)', () => {
   })
 
   it('answers each card in the seam’s shape, with the author read once per publisher', async () => {
-    listing('a', { priceUsd: 29, previewImageUrl: 'https://cdn.example/a.png' })
+    listing('a', {
+      priceUsd: 29,
+      previewImageUrl: 'https://cdn.example/a.png',
+      category: ' Restaurant & café ',
+    })
     listing('b', { createdAt: 50 })
     listing('c', { createdAt: 60, profileId: 'other-org', browseAudience: ['*'] })
     state.docs.set('publisherProfiles/other-org', { handle: 'other' })
@@ -294,7 +298,11 @@ describe('search (AGL-4049)', () => {
       priceUsd: 29,
       previewImageUrl: 'https://cdn.example/a.png',
       facets: { kind: 'restaurant', base: 'starter', fonts: null, pages: 1, mode: 'base' },
+      // The listing's "What kind of site is it?", trimmed; the card shows it.
+      category: 'Restaurant & café',
     })
+    // A listing that names no kind in words answers null, never ''.
+    expect(found.find((row) => row.listingId === 'b')?.category).toBeNull()
     // A profile with no display name shows its handle.
     expect(found.find((row) => row.listingId === 'c')?.authorName).toBe('other')
     expect(found.find((row) => row.listingId === 'b')?.previewImageUrl).toBeNull()
