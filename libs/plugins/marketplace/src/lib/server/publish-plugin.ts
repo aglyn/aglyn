@@ -37,6 +37,7 @@ import {
   resolvePublisherProfile,
 } from './publisher-profile'
 import { publishPreconditionRefusal } from './publish-preconditions'
+import { recordPublisherAgreementAcceptance } from './publisher-agreement-acceptance'
 import { listingSubmissionRefusal } from './listing-screen'
 import { refreshListingQueryFields } from './listing-query-fields'
 import {
@@ -56,6 +57,9 @@ import {
   missingPublicListingContent,
   validateListingContent,
 } from '../model/marketplace'
+import { publisherAgreementConsentRefusal } from '../model/publisher-agreement'
+import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
+import type { DecodedIdToken } from 'firebase-admin/auth'
 
 // Base64 bundle bodies: a small JS plugin bundle, capped generously.
 const MAX_BUNDLE_BYTES = 5 * 1024 * 1024
@@ -76,6 +80,11 @@ const MAX_BUNDLE_BYTES = 5 * 1024 * 1024
 const updateListingContent: PluginApiHandler = async (req, res) => {
   const listingId = String(req.body?.listingId ?? '')
   if (!listingId) return res.status(400).json({ error: 'Missing listingId' })
+  // The publisher agreement, agreed to on this save (AGL-4105).
+  const agreementRefusal = publisherAgreementConsentRefusal(req.body?.agreement)
+  if (agreementRefusal) {
+    return res.status(agreementRefusal.status).json(agreementRefusal.body)
+  }
   const authorization = String(req.headers.authorization ?? '')
   const idToken = authorization.startsWith('Bearer ')
     ? authorization.slice('Bearer '.length)
@@ -83,13 +92,18 @@ const updateListingContent: PluginApiHandler = async (req, res) => {
   if (!idToken) return res.status(401).json({ error: 'Unauthenticated' })
   const verdict = validateListingContent(req.body ?? {})
   if (!verdict.ok) return res.status(400).json({ error: verdict.error })
+  let decoded: DecodedIdToken
   try {
-    const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
-    const listingRef = firebaseAdmin
-      .app()
-      .firestore()
-      .collection('marketplaceListings')
-      .doc(listingId)
+    decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
+  } catch (error) {
+    // Only a refused credential is the caller's 401; failing to check it is
+    // ours and keeps the dispatcher's 5xx (AGL-2852).
+    if (!isRefusedIdToken(error)) throw error
+    return res.status(401).json({ error: 'Unauthenticated' })
+  }
+  try {
+    const firestore = firebaseAdmin.app().firestore()
+    const listingRef = firestore.collection('marketplaceListings').doc(listingId)
     const listing = (await listingRef.get()).data()
     if (!listing || listing.deletedAt) {
       return res.status(404).json({ error: 'Unknown listing' })
@@ -97,7 +111,7 @@ const updateListingContent: PluginApiHandler = async (req, res) => {
     // Org-owned listings (AGL-652): a uid never equals an org id, so the
     // old identity comparison would lock publishers out of their own listing.
     const isPublisher = await canActAsPublisher(
-      firebaseAdmin.app().firestore(),
+      firestore,
       decoded.uid,
       listing.profileId,
     )
@@ -133,6 +147,17 @@ const updateListingContent: PluginApiHandler = async (req, res) => {
       official: decoded['staff'] === true,
     })
     if (screened) return res.status(screened.status).json(screened.body)
+    // The agreement this save was sent with, recorded before it writes
+    // (AGL-4105).
+    await recordPublisherAgreementAcceptance({
+      firestore,
+      request: req,
+      orgId: String(listing.profileId ?? ''),
+      uid: decoded.uid,
+      staff: decoded['staff'] === true,
+      action: 'update-listing',
+      targetId: listingId,
+    })
     await listingRef.set(
       {
         ...verdict.content,
@@ -172,13 +197,26 @@ const setListingVisibility: PluginApiHandler = async (req, res) => {
   const listingId = String(req.body?.listingId ?? '')
   const visibility = req.body?.visibility === 'private' ? 'private' : 'public'
   if (!listingId) return res.status(400).json({ error: 'Missing listingId' })
+  // The publisher agreement, agreed to on this save (AGL-4105).
+  const agreementRefusal = publisherAgreementConsentRefusal(req.body?.agreement)
+  if (agreementRefusal) {
+    return res.status(agreementRefusal.status).json(agreementRefusal.body)
+  }
   const authorization = String(req.headers.authorization ?? '')
   const idToken = authorization.startsWith('Bearer ')
     ? authorization.slice('Bearer '.length)
     : undefined
   if (!idToken) return res.status(401).json({ error: 'Unauthenticated' })
+  let decoded: DecodedIdToken
   try {
-    const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
+    decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
+  } catch (error) {
+    // Only a refused credential is the caller's 401; failing to check it is
+    // ours and keeps the dispatcher's 5xx (AGL-2852).
+    if (!isRefusedIdToken(error)) throw error
+    return res.status(401).json({ error: 'Unauthenticated' })
+  }
+  try {
     const firestore = firebaseAdmin.app().firestore()
     const listingRef = firestore.collection('marketplaceListings').doc(listingId)
     const listing = (await listingRef.get()).data()
@@ -205,6 +243,17 @@ const setListingVisibility: PluginApiHandler = async (req, res) => {
         })
       }
     }
+    // The agreement this save was sent with, recorded before it writes
+    // (AGL-4105).
+    await recordPublisherAgreementAcceptance({
+      firestore,
+      request: req,
+      orgId: String(listing.profileId ?? ''),
+      uid: decoded.uid,
+      staff: decoded['staff'] === true,
+      action: 'set-visibility',
+      targetId: listingId,
+    })
     await listingRef.set(
       {
         visibility,
@@ -237,13 +286,26 @@ const setListingPublished: PluginApiHandler = async (req, res) => {
   const listingId = String(req.body?.listingId ?? '')
   const published = req.body?.published === true
   if (!listingId) return res.status(400).json({ error: 'Missing listingId' })
+  // The publisher agreement, agreed to on this save (AGL-4105).
+  const agreementRefusal = publisherAgreementConsentRefusal(req.body?.agreement)
+  if (agreementRefusal) {
+    return res.status(agreementRefusal.status).json(agreementRefusal.body)
+  }
   const authorization = String(req.headers.authorization ?? '')
   const idToken = authorization.startsWith('Bearer ')
     ? authorization.slice('Bearer '.length)
     : undefined
   if (!idToken) return res.status(401).json({ error: 'Unauthenticated' })
+  let decoded: DecodedIdToken
   try {
-    const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
+    decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
+  } catch (error) {
+    // Only a refused credential is the caller's 401; failing to check it is
+    // ours and keeps the dispatcher's 5xx (AGL-2852).
+    if (!isRefusedIdToken(error)) throw error
+    return res.status(401).json({ error: 'Unauthenticated' })
+  }
+  try {
     const firestore = firebaseAdmin.app().firestore()
     const listingRef = firestore.collection('marketplaceListings').doc(listingId)
     const listing = (await listingRef.get()).data()
@@ -256,6 +318,17 @@ const setListingPublished: PluginApiHandler = async (req, res) => {
     if (!isPublisher && decoded['staff'] !== true) {
       return res.status(403).json({ error: 'Not your listing' })
     }
+    // The agreement this save was sent with, recorded before it writes
+    // (AGL-4105).
+    await recordPublisherAgreementAcceptance({
+      firestore,
+      request: req,
+      orgId: String(listing.profileId ?? ''),
+      uid: decoded.uid,
+      staff: decoded['staff'] === true,
+      action: 'set-published',
+      targetId: listingId,
+    })
     await listingRef.set(
       {
         deletedAt: published
@@ -329,8 +402,16 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
     : undefined
   if (!idToken) return res.status(401).json({ error: 'Unauthenticated' })
 
+  let decoded: DecodedIdToken
   try {
-    const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
+    decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
+  } catch (error) {
+    // Only a refused credential is the caller's 401; failing to check it is
+    // ours and keeps the dispatcher's 5xx (AGL-2852).
+    if (!isRefusedIdToken(error)) throw error
+    return res.status(401).json({ error: 'Unauthenticated' })
+  }
+  try {
     // Act on the org the client is in (AGL-868), not a guessed first-org — a
     // member can belong to several, and the plugin publishes under one of them.
     const requestedOrgId = String(body?.orgId ?? '').trim() || undefined
@@ -389,6 +470,7 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
     const refusal = publishPreconditionRefusal(publisher, {
       priceUsd,
       sells: 'plugins',
+      agreement: body?.agreement,
     })
     if (refusal) return res.status(refusal.status).json(refusal.body)
 
@@ -528,6 +610,18 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
       org,
     })
     if (screened) return res.status(screened.status).json(screened.body)
+
+    // The agreement this version was sent with, recorded before it is stored
+    // or listed (AGL-4105).
+    await recordPublisherAgreementAcceptance({
+      firestore,
+      request: req,
+      orgId: publisher.orgId,
+      uid: decoded.uid,
+      staff: decoded['staff'] === true,
+      action: 'publish-plugin',
+      targetId: listingRef.id,
+    })
 
     // Claimed only once everything a publisher can fix has passed, so a
     // refused submission never takes an identity it then cannot use.

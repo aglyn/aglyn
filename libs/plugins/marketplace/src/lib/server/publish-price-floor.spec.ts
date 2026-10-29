@@ -52,7 +52,7 @@ import {
   marketplaceMinPriceUsd,
   marketplaceSaleEconomics,
 } from '../model/listing-price-floor'
-import { PUBLISHER_AGREEMENT_VERSION } from '../model/publisher-agreement'
+import { PUBLISHER_AGREEMENT_VERSION, publisherAgreementConsent } from '../model/publisher-agreement'
 import {
   MARKETPLACE_MAX_PRICE_USD,
   MARKETPLACE_MIN_PRICE_USD,
@@ -95,6 +95,12 @@ let store: Record<string, Record<string, any>> = {}
 /** Every `set` the handlers performed, in order. */
 let writes: Array<{ path: string; data: any }> = []
 
+// Each save's agreement is recorded through its own module (AGL-4105),
+// faked here so the route's Firestore double does not have to model it.
+jest.mock('./publisher-agreement-acceptance', () => ({
+  recordPublisherAgreementAcceptance: jest.fn(async () => ({})),
+  publisherAgreementNote: () => ({ version: 'noted' }),
+}))
 jest.mock('@aglyn/aglyn/server', () => ({
   CANVAS_ROOT_ELEMENT_ID: '_@_',
   checkEntitlement: () => true,
@@ -236,7 +242,7 @@ async function publishTemplateAt(priceUsd: unknown) {
     {
       method: 'POST',
       headers: { authorization: 'Bearer token' },
-      body: { hostId: 'host-1', displayName: 'Starter site', priceUsd },
+      body: { hostId: 'host-1', displayName: 'Starter site', priceUsd, agreement: publisherAgreementConsent() },
     } as never,
     res as never,
   )
@@ -254,6 +260,7 @@ async function publishLayoutAt(priceUsd: unknown) {
         layoutId: 'layout-1',
         displayName: 'Shell',
         priceUsd,
+        agreement: publisherAgreementConsent(),
       },
     } as never,
     res as never,
@@ -330,7 +337,7 @@ describe('the price floor decision (AGL-2343)', () => {
         stripeChargesEnabled: true,
         agreement: { version: PUBLISHER_AGREEMENT_VERSION },
       } as never,
-      { priceUsd: 1, sells: 'themes' },
+      { priceUsd: 1, sells: 'themes', agreement: publisherAgreementConsent() },
     )
     expect(refusal?.status).toBe(400)
     expect(String(refusal?.body.error)).toContain(`$${FLOOR}`)
@@ -342,6 +349,7 @@ describe('the price floor decision (AGL-2343)', () => {
     const refusal = publishPreconditionRefusal(null, {
       priceUsd: 1,
       sells: 'themes',
+      agreement: undefined,
     })
     expect(refusal?.status).toBe(400)
     expect(String(refusal?.body.error)).toContain(`$${FLOOR}`)

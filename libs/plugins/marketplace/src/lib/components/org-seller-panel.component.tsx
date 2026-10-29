@@ -35,8 +35,10 @@ import {
 } from '@mui/material'
 import {
   PUBLISHER_AGREEMENT_TITLE,
+  PUBLISHER_AGREEMENT_VERSION,
   publisherAgreementPresentation,
   publisherAgreementState,
+  type PublisherAgreementConsent,
 } from '../model/publisher-agreement'
 /*
   THE LEGAL NAME, not `useBranding().branding.productName` (AGL-2351).
@@ -60,7 +62,11 @@ import { pluginDocsHelp, useMediaPicker } from '@aglyn/aglyn'
 import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
 import { useFirestoreDoc } from '@aglyn/tenant-feature-instance'
 import EditListingDialog from './edit-listing-dialog.component'
-import { acceptPublisherAgreement } from './publisher-agreement-client'
+import {
+  PublisherAgreementCheckbox,
+  usePublisherAgreementConsent,
+} from './publisher-agreement-checkbox.component'
+import PublisherAgreementConfirmDialog from './publisher-agreement-confirm-dialog.component'
 import PublisherAgreementSummary from './publisher-agreement-summary.component'
 import { listingPath, publishPluginPath } from '../model/marketplace-paths'
 import { payoutReadiness } from '../model/payout-readiness'
@@ -319,9 +325,14 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
   ])
 
   const validHandle = HANDLE_PATTERN.test(handle)
+  // The publisher agreement, agreed to on this save (AGL-4105).
+  const profileAgreement = usePublisherAgreementConsent()
+  const [profileBusy, setProfileBusy] = useState(false)
 
   const handleSave = useCallback(async () => {
     if (!orgId || !validHandle || !displayName.trim()) return
+    if (!profileAgreement.consent) return
+    setProfileBusy(true)
     try {
       // Server-owned (AGL-652): the handle must be claimed transactionally in
       // publisherHandles, which a client write cannot do — two orgs racing
@@ -347,6 +358,7 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
             githubUrl: githubUrl.trim(),
             xUrl: xUrl.trim(),
             linkedinUrl: linkedinUrl.trim(),
+            agreement: profileAgreement.consent,
           }),
         },
       )
@@ -358,12 +370,16 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
         })
       }
       enqueueSnackbar('Profile saved', { variant: 'success', persist: false })
+      // Each save is its own agreement: the next one ticks the box again.
+      profileAgreement.reset()
     } catch (error) {
       console.error(error)
       enqueueSnackbar('An error has occurred', {
         variant: 'error',
         allowDuplicate: true,
       })
+    } finally {
+      setProfileBusy(false)
     }
   }, [
     orgId,
@@ -378,6 +394,7 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
     githubUrl,
     xUrl,
     linkedinUrl,
+    profileAgreement,
     user,
     enqueueSnackbar,
   ])
@@ -397,36 +414,6 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
     const date = at?.toDate?.()
     return date ? date.toLocaleDateString() : ''
   })()
-  const [agreementBusy, setAgreementBusy] = useState(false)
-  const handleAcceptAgreement = useCallback(async () => {
-    if (!orgId) return
-    setAgreementBusy(true)
-    try {
-      // Server-owned, like the handle: an acceptance the accepting party can
-      // write itself is not evidence of anything, and the rules block the
-      // field outright. The same request the agreement dialog a refused
-      // publish opens makes (AGL-3407), so both record one acceptance.
-      const refused = await acceptPublisherAgreement(user, orgId)
-      if (refused) {
-        return void enqueueSnackbar(refused, {
-          variant: 'warning',
-          persist: false,
-        })
-      }
-      enqueueSnackbar('Agreement accepted — you can publish now', {
-        variant: 'success',
-        persist: false,
-      })
-    } catch (error) {
-      console.error(error)
-      enqueueSnackbar('An error has occurred', {
-        variant: 'error',
-        allowDuplicate: true,
-      })
-    } finally {
-      setAgreementBusy(false)
-    }
-  }, [orgId, user, enqueueSnackbar])
 
   // The listing open in the full editor (AGL-862), or null when closed.
   const [editListing, setEditListing] = useState<any | null>(null)
@@ -449,55 +436,24 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
   // write: making a listing public is gated on it actually carrying the docs
   // a stranger needs, and that check has to live somewhere a client can't
   // skip. No re-review either way — the bytes are unchanged.
-  const [visibilityBusy, setVisibilityBusy] = useState('')
-  const handleVisibility = useCallback(
-    (listing: any) => async () => {
-      const next = listing.visibility === 'private' ? 'public' : 'private'
-      setVisibilityBusy(listing.$id)
-      try {
-        const response = await authorizedFetch(
-          user,
-          '/api/marketplace/publish-plugin',
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              action: 'set-visibility',
-              listingId: listing.$id,
-              visibility: next,
-            }),
-          },
-        )
-        const payload = await response.json().catch(() => ({}))
-        if (!response.ok) {
-          return void enqueueSnackbar(
-            payload?.error ?? 'Visibility change failed',
-            { variant: 'error', allowDuplicate: true },
-          )
-        }
-        enqueueSnackbar(
-          next === 'private'
-            ? 'Now private — only your sites can install it'
-            : 'Published to the marketplace',
-          { variant: 'success', persist: false },
-        )
-      } catch (error) {
-        console.error(error)
-        enqueueSnackbar('An error has occurred', {
-          variant: 'error',
-          allowDuplicate: true,
-        })
-      } finally {
-        setVisibilityBusy('')
-      }
-    },
-    [user, enqueueSnackbar],
-  )
+  //
   // Unpublish ⇄ republish goes through the API too (AGL-3321). It was a
   // client write of `deletedAt`, but browse queries each listing's audience,
   // which only the server re-derives — so the rules now deny the field here.
-  const handleUnpublish = useCallback(
-    (listing: any) => async () => {
+  //
+  // Both were saves on the click; each now asks first, with the publisher
+  // agreement above its button (AGL-4105), and is made from that dialog.
+  const [listingChange, setListingChange] = useState<{
+    kind: 'visibility' | 'published'
+    listing: any
+  } | null>(null)
+  const changeListing = useCallback(
+    async (
+      change: { kind: 'visibility' | 'published'; listing: any },
+      agreement: PublisherAgreementConsent,
+    ): Promise<string | null> => {
+      const { kind, listing } = change
+      const nextVisibility = listing.visibility === 'private' ? 'public' : 'private'
       try {
         const response = await authorizedFetch(
           user,
@@ -505,34 +461,82 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              action: 'set-published',
-              listingId: listing.$id,
-              published: Boolean(listing.deletedAt),
-            }),
+            body: JSON.stringify(
+              kind === 'visibility'
+                ? {
+                    action: 'set-visibility',
+                    listingId: listing.$id,
+                    visibility: nextVisibility,
+                    agreement,
+                  }
+                : {
+                    action: 'set-published',
+                    listingId: listing.$id,
+                    published: Boolean(listing.deletedAt),
+                    agreement,
+                  },
+            ),
           },
         )
         const payload = await response.json().catch(() => ({}))
         if (!response.ok) {
-          return void enqueueSnackbar(
-            payload?.error ?? 'Publishing change failed',
-            { variant: 'error', allowDuplicate: true },
+          return String(
+            payload?.error ??
+              (kind === 'visibility'
+                ? 'Visibility change failed'
+                : 'Publishing change failed'),
           )
         }
-        enqueueSnackbar(listing.deletedAt ? 'Republished' : 'Unpublished', {
-          variant: 'success',
-          persist: false,
-        })
+        enqueueSnackbar(
+          kind === 'visibility'
+            ? nextVisibility === 'private'
+              ? 'Now private — only your sites can install it'
+              : 'Published to the marketplace'
+            : listing.deletedAt
+              ? 'Republished'
+              : 'Unpublished',
+          { variant: 'success', persist: false },
+        )
+        return null
       } catch (error) {
         console.error(error)
-        enqueueSnackbar('An error has occurred', {
-          variant: 'error',
-          allowDuplicate: true,
-        })
+        return 'An error has occurred'
       }
     },
     [user, enqueueSnackbar],
   )
+  const listingChangeCopy = (() => {
+    const listing = listingChange?.listing
+    const name = listing?.displayName || 'this listing'
+    if (listingChange?.kind === 'visibility') {
+      return listing?.visibility === 'private'
+        ? {
+            title: 'Make public?',
+            body: `${name} is offered in the marketplace, not only to your organization’s sites.`,
+            confirmLabel: 'Make public',
+            destructive: false,
+          }
+        : {
+            title: 'Make private?',
+            body: `Only your organization’s sites can install ${name}. Private plugins never appear in the marketplace.`,
+            confirmLabel: 'Make private',
+            destructive: false,
+          }
+    }
+    return listing?.deletedAt
+      ? {
+          title: 'Republish?',
+          body: `${name} goes back on the marketplace.`,
+          confirmLabel: 'Republish',
+          destructive: false,
+        }
+      : {
+          title: 'Unpublish?',
+          body: `${name} comes off the marketplace. You can republish it later.`,
+          confirmLabel: 'Unpublish',
+          destructive: true,
+        }
+  })()
 
   const cards: Record<OrgSellerSection, ReactElement> = {
     profile: (
@@ -652,86 +656,74 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
             size="small"
             helperText="https://linkedin.com/…"
           />
+          {/* Directly above Save profile (AGL-4105), which waits for it. */}
+          <PublisherAgreementCheckbox
+            checked={profileAgreement.agreed}
+            onChange={profileAgreement.setAgreed}
+            disabled={profileBusy}
+          />
           <Button
             variant="contained"
             color="primary"
-            disabled={!validHandle || !displayName.trim()}
+            disabled={
+              profileBusy ||
+              !validHandle ||
+              !displayName.trim() ||
+              !profileAgreement.agreed
+            }
             onClick={handleSave}
           >
-            {'Save profile'}
+            {profileBusy ? 'Saving…' : 'Save profile'}
           </Button>
         </Stack>
       </CardDisplay>
 
-      {/* The publisher agreement (AGL-1077). Its own card, directly under
-          the identity it belongs to, rather than a seventh checkbox on the
-          publish form — an agreement accepted in the same breath as six
-          per-bundle confirmations is an agreement nobody read. Publishing
-          then simply requires it, so the first publish is where it STOPS
-          you rather than where it hides. */}
+      {/* The publisher agreement (AGL-1077). Agreed to on every save since
+          AGL-4105 — the box above Save profile, above each listing's save,
+          above every Publish — so this card says what the terms are and
+          when the organization last agreed, and asks for nothing itself. */}
       <CardDisplay
         header={PUBLISHER_AGREEMENT_TITLE}
         help={pluginDocsHelp('publisherHandbook', {
           anchor: '#the-publisher-agreement',
           excerpt:
-            'The terms your organization publishes under — accepted once, ' +
-            're-asked when they change.',
+            'The terms your organization publishes under — agreed to on ' +
+            'every save in the marketplace.',
         })}
         contentGutterX
         contentGutterY
       >
         <Stack spacing={2}>
-          {agreementState === 'current' ? (
-            <Alert severity="success">
-              {`Accepted — version ${profile?.publisherAgreement?.version}` +
-                (acceptedOn ? ` on ${acceptedOn}` : '')}
-            </Alert>
-          ) : null}
-          {/* An unpublished document replaces the state copy rather than
-              sitting beside it (AGL-1660): "you have not accepted these
-              terms" reads as something the publisher failed to do, and while
-              there is no page to read, the omission is entirely ours. */}
+          {/* An unpublished document replaces the rest (AGL-1660): while
+              there is no page to read there is nothing to agree to, and the
+              omission is entirely ours. */}
           {agreementPresentation.unavailableNotice ? (
             <Alert severity="warning">
               {agreementPresentation.unavailableNotice}
             </Alert>
-          ) : agreementState === 'current' ? null : (
-            <Alert severity={agreementState === 'outdated' ? 'warning' : 'info'}>
-              {agreementState === 'outdated'
-                ? 'These terms have changed since your organization accepted ' +
-                  `them (you accepted ${profile?.publisherAgreement?.version}). ` +
-                  'Publishing is paused until someone who can bind the ' +
-                  'organization accepts the current version.'
-                : 'Your organization has not accepted these terms. You can ' +
-                  'set up a profile without them, but you cannot publish.'}
-            </Alert>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              {'Every save in the marketplace — this profile, a listing, its ' +
+                'price or visibility, a new version, a component, template ' +
+                `or layout — asks you to tick “I agree to the ${PUBLISHER_AGREEMENT_TITLE}” ` +
+                'first. We record who agreed, to which version, and when.'}
+            </Typography>
           )}
-          {/* The summary and the link, shared with the dialog a refused
-              publish opens (AGL-3407), so both show the same terms. */}
+          {agreementState === 'none' ? null : (
+            <Typography variant="body2">
+              {`Last agreed to: version ${profile?.publisherAgreement?.version}` +
+                (acceptedOn ? `, on ${acceptedOn}` : '') +
+                (agreementState === 'outdated'
+                  ? `. The current version is ${PUBLISHER_AGREEMENT_VERSION}, ` +
+                    'which your next save agrees to.'
+                  : '.')}
+            </Typography>
+          )}
+          {/* The summary and the link, from the same presentation helper the
+              box reads, so this card can never link an unreadable document. */}
           <PublisherAgreementSummary
             documentUrl={agreementPresentation.documentUrl}
           />
-          {agreementPresentation.canAccept ? (
-            <Button
-              variant="contained"
-              color="primary"
-              disabled={agreementBusy}
-              onClick={() => void handleAcceptAgreement()}
-              sx={{ alignSelf: 'flex-start' }}
-            >
-              {agreementBusy
-                ? 'Recording…'
-                : agreementState === 'outdated'
-                  ? 'Accept the current version'
-                  : 'Accept on behalf of this organization'}
-            </Button>
-          ) : null}
-          {agreementPresentation.canAccept ? (
-            <Typography variant="caption" color="text.secondary">
-              {'Accepting binds the organization, not you personally — only ' +
-                'an owner or admin can do it, and we record who did and when.'}
-            </Typography>
-          ) : null}
         </Stack>
       </CardDisplay>
       </Stack>
@@ -878,16 +870,15 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
           {(rowMenu?.listing?.artifactType ?? rowMenu?.listing?.type) ===
           'plugin' ? (
             <MenuItem
-              disabled={visibilityBusy === rowMenu?.listing?.$id}
               onClick={() => {
                 const listing = rowMenu?.listing
                 closeRowMenu()
-                if (listing) void handleVisibility(listing)()
+                if (listing) setListingChange({ kind: 'visibility', listing })
               }}
             >
               {rowMenu?.listing?.visibility === 'private'
                 ? 'Make public…'
-                : 'Make private'}
+                : 'Make private…'}
             </MenuItem>
           ) : null}
           <Divider />
@@ -898,12 +889,25 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
             onClick={() => {
               const listing = rowMenu?.listing
               closeRowMenu()
-              if (listing) void handleUnpublish(listing)()
+              if (listing) setListingChange({ kind: 'published', listing })
             }}
           >
-            {rowMenu?.listing?.deletedAt ? 'Republish' : 'Unpublish'}
+            {rowMenu?.listing?.deletedAt ? 'Republish…' : 'Unpublish…'}
           </MenuItem>
         </Menu>
+        <PublisherAgreementConfirmDialog
+          open={Boolean(listingChange)}
+          title={listingChangeCopy.title}
+          body={listingChangeCopy.body}
+          confirmLabel={listingChangeCopy.confirmLabel}
+          destructive={listingChangeCopy.destructive}
+          onConfirm={(agreement) =>
+            listingChange
+              ? changeListing(listingChange, agreement)
+              : Promise.resolve(null)
+          }
+          onClose={() => setListingChange(null)}
+        />
         <EditListingDialog
           orgId={orgId}
           listing={editListing}

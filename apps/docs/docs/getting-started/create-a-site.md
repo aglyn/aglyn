@@ -25,14 +25,24 @@ settings. Everything you build lives under a site, and you can own several.
    for the name and address and how you want to start: **Start from the starter
    site**, or **Start with AI**, which plans your pages from a few questions — see
    [Start a new site with AI](../ai/start-with-ai.md). Nothing is created until you
-   choose: **Start from the starter site** or **Skip** creates the site with the
-   starter described below and publishes it at once, and the console says so: **Your
-   site is live**, with the site's address, **View your site** and **Edit your
-   pages**. Closing the window creates nothing.
+   choose, and nothing is chosen for you.
 
-   Otherwise **Create site** asks for the name and address and creates the site with
-   the starter straight away. The starter is a complete website, published and open
-   to search engines from the first visit:
+   **Start from the starter site** asks you to **Choose a style** first: 21 cards,
+   each with a picture of an example home page in that style — Business & services,
+   Home services & trades, Restaurant & café, Photography and more. No card is
+   selected until you click one, and **Create site** stays unavailable until you do.
+   Choosing **Create site** then creates the site with the starter described below,
+   in the style you chose — its built-in theme, brand color and fonts — and
+   publishes it at once. The console says so: **Your site is live**, with the
+   site's address, **View your site** and **Edit your pages**. **Back** returns to
+   the first step, and closing the window creates nothing.
+
+   ![Start your site's Choose a style step: style cards for Business & services, Home services & trades, Law, finance & consulting and more, each with a picture of an example home page and a line about the look, none of them selected, with Back, and Create site unavailable beside Choose a style to continue](/img/getting-started/create-site-choose-style.png)
+
+   Otherwise **Create site** asks for the name, the address and the style in one
+   window: choose a style card, then **Create site**, which stays unavailable until a
+   style is chosen. The starter is a complete website, published and open to search
+   engines from the first visit:
 
    - a **Home** page at the site root with the sections an ordinary business site
      has — a hero with your site's name, what you offer, an about section, a photo
@@ -42,8 +52,10 @@ settings. Everything you build lives under a site, and you can own several.
    - a shared **header and footer** layout every page you add renders inside, with
      your site's name, search, a light/dark switch and a Contact button. It is the
      site's one shared layout on the Free plan;
-   - a **theme** (colors and fonts) under **Setup → Theme**, and a title,
-     description and sharing image under **Setup → SEO**.
+   - a **theme** in the style you chose — a built-in theme with that style's brand
+     color and fonts — under **Setup → Theme**, where you can pick another or
+     change its colors and fonts any time, and a title, description and sharing
+     image under **Setup → SEO**.
 
    Open the Home page from **Pages** to make it your own: once you publish your
    changes it is your home page like any other, and a starter applied later adds

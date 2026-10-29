@@ -129,6 +129,19 @@ function guidedStartTo(step) {
   return [...actions, { settleMs: 1500 }]
 }
 
+/**
+ * Sites → Create site → Start from the starter site (AGL-4049): the style
+ * cards, none chosen, and Create site waiting for one. It stops there, so
+ * nothing is created.
+ */
+function starterStyleStep() {
+  return [
+    { click: 'role=button[name=/Create site/] >> nth=0', waitFor: 'How do you want to start?', settleMs: 1500 },
+    { fill: ['role=textbox[name=/Site name/]', 'Hillside Dog Grooming'], settleMs: 1200 },
+    { click: 'role=button[name="Start from the starter site"]', waitFor: 'Choose a style', settleMs: 2500 },
+  ]
+}
+
 const shots = [
   {
     out: 'getting-started/console-dashboard.png',
@@ -360,6 +373,14 @@ const shots = [
     waitFor: 'Demo Bakery',
   },
   {
+    out: 'getting-started/create-site-choose-style.png',
+    path: `/${ORG_SLUG}/hosts`,
+    waitFor: 'Demo Bakery',
+    // Start your site is the AI plugin's window, drawn while it admits the org.
+    orgReleaseFlags: { release_ai_generative: true },
+    actions: starterStyleStep(),
+  },
+  {
     out: 'getting-started/screens-list.png',
     // The bare `…/screens` is canonical; `…/screens/list` is a legacy alias
     // kept only so browsers holding a cached 308 land on a real page, and its
@@ -459,7 +480,8 @@ const shots = [
     actions: [{ scroll: 'text=Languages', settleMs: 1000 }],
   },
   // The guided start's steps (AGL-3898): Sites → Create site → Start with AI,
-// walked with Next to the style step and to the review. It stops there:
+// walked with Next to the style step (no card chosen, AGL-4049) and, with a
+// style clicked, to the review. It stops there:
 // nothing presses Plan my site, and the emulated console holds no AI key.
 // The jobs route admits the seeded org only with the AI release flag on.
   {

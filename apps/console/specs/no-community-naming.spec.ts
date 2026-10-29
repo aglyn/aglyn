@@ -110,6 +110,24 @@ const ALLOWED = new Map<string, string>([
     'libs/plugins/ai/src/lib/model/ai-site-kinds.spec.ts',
     'Table-spec briefs for that kind ("a community food bank", "a community center") — AGL-3660.',
   ],
+  // The same kind as a style a new site can start in (AGL-4049): core's list
+  // every Create site door asks, and the native apps' copy of it.
+  [
+    'libs/aglyn/src/lib/app-utils/site-styles.ts',
+    'The "Nonprofit & community" style a new site can start in, the AI start\'s kind of the same name — AGL-4049.',
+  ],
+  [
+    'libs/native/contracts/derived-values.generated.json',
+    'Generated from site-styles.ts: the "Nonprofit & community" style for the native Create site — AGL-4049.',
+  ],
+  [
+    'libs/native/apple/Sources/AglynCore/DerivedValues.generated.swift',
+    'Generated from site-styles.ts: the "Nonprofit & community" style for the native Create site — AGL-4049.',
+  ],
+  [
+    'libs/native/kotlin/core/src/commonMain/kotlin/com/aglyn/core/DerivedValues.generated.kt',
+    'Generated from site-styles.ts: the "Nonprofit & community" style for the native Create site — AGL-4049.',
+  ],
   // ---- The forum. This is the meaning the rename exists to protect. ----
   [
     'apps/console/app/api/support/forum/route.ts',

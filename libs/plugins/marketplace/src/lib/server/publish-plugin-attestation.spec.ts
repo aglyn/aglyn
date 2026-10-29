@@ -18,6 +18,7 @@
  */
 
 import { requiredAttestationIds } from '../model/publisher-attestation'
+import { publisherAgreementConsent } from '../model/publisher-agreement'
 
 /** A valid subject for the `repository` attestation (AGL-1076). */
 const REPO_URL = 'https://github.com/acme/widget'
@@ -34,6 +35,12 @@ const REPO_URL = 'https://github.com/acme/widget'
  * so a republish re-asks.
  */
 
+// Each save's agreement is recorded through its own module (AGL-4105),
+// faked here so the route's Firestore double does not have to model it.
+jest.mock('./publisher-agreement-acceptance', () => ({
+  recordPublisherAgreementAcceptance: jest.fn(async () => ({})),
+  publisherAgreementNote: () => ({ version: 'noted' }),
+}))
 jest.mock('@aglyn/aglyn/server', () => ({
   checkEntitlement: () => true,
   checkPluginBundle: () => ({ ok: true, problems: [] }),
@@ -60,17 +67,6 @@ jest.mock('./publisher-profile', () => ({
     orgId: 'org-1',
     handle: 'acme',
     stripeChargesEnabled: true,
-    // The org-level publisher agreement (AGL-1077) is a separate gate with
-    // its own spec; hold it satisfied here so these assertions stay about
-    // the per-bundle attestation.
-    agreement: {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      version: (
-        jest.requireActual(
-          '../model/publisher-agreement',
-        ) as { PUBLISHER_AGREEMENT_VERSION: string }
-      ).PUBLISHER_AGREEMENT_VERSION,
-    },
   }),
 }))
 
@@ -182,6 +178,9 @@ async function publish(
         displayName: 'Widget',
         bundle: Buffer.from('export function register() {}').toString('base64'),
         manifest: { id: 'acme.widget', version: '1.0.0' },
+        // The publisher agreement (AGL-4105) is a separate gate with its own
+        // spec; ticked here so these assertions stay about the attestation.
+        agreement: publisherAgreementConsent(),
         ...(attestation ? { attestation } : {}),
         ...overrides,
       },

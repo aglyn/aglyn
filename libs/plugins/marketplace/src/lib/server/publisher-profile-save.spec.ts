@@ -31,6 +31,12 @@
 const mockDeleteSentinel = Symbol('delete')
 const mockTimestampSentinel = Symbol('serverTimestamp')
 
+// Each save's agreement is recorded through its own module (AGL-4105),
+// faked here so the route's Firestore double does not have to model it.
+jest.mock('./publisher-agreement-acceptance', () => ({
+  recordPublisherAgreementAcceptance: jest.fn(async () => ({})),
+  publisherAgreementNote: () => ({ version: 'noted' }),
+}))
 jest.mock('./publisher-profile', () => ({
   PUBLISHER_PROFILES: 'publisherProfiles',
   canActAsPublisher: async () => true,
@@ -69,6 +75,14 @@ jest.mock('@aglyn/tenant-data-admin', () => {
 })
 
 import { publisherProfileSaveHandler } from './publisher-profile-save'
+import {
+  PUBLISHER_AGREEMENT_CONSENT_REQUIRED,
+  publisherAgreementConsent,
+} from '../model/publisher-agreement'
+
+const acceptanceMock = jest.requireMock('./publisher-agreement-acceptance') as {
+  recordPublisherAgreementAcceptance: jest.Mock
+}
 
 const writes = () =>
   (jest.requireMock('@aglyn/tenant-data-admin') as {
@@ -95,6 +109,7 @@ const baseBody = {
   orgId: 'acme',
   handle: 'acme',
   displayName: 'Acme',
+  agreement: publisherAgreementConsent(),
 }
 
 function makeReq(body: Record<string, unknown>) {
@@ -108,6 +123,7 @@ function makeReq(body: Record<string, unknown>) {
 describe('publisherProfileSaveHandler contact/link fields (AGL-1009)', () => {
   beforeEach(() => {
     writes().length = 0
+    acceptanceMock.recordPublisherAgreementAcceptance.mockClear()
   })
 
   it('refuses a hostile avatar and an http website before any write', async () => {
@@ -200,5 +216,55 @@ describe('publisherProfileSaveHandler contact/link fields (AGL-1009)', () => {
       expect(res.statusCode).toBe(200)
       expect('bio' in writes()[0]).toBe(false)
     })
+  })
+})
+
+/**
+ * The profile is a publisher save like any other (AGL-4105): the publisher
+ * agreement is ticked on it, the route refuses one without it before
+ * anything is claimed or written, records the one it carries, and notes it on
+ * the profile in the same write. The once-per-organization accept action is
+ * retired, and says so to an app that still sends it.
+ */
+describe('publisherProfileSaveHandler and the publisher agreement (AGL-4105)', () => {
+  beforeEach(() => {
+    writes().length = 0
+    acceptanceMock.recordPublisherAgreementAcceptance.mockClear()
+  })
+
+  it('refuses a save that did not tick the box, before any write or record', async () => {
+    const res = makeRes()
+    await publisherProfileSaveHandler(makeReq({ agreement: undefined }), res)
+    expect(res.statusCode).toBe(428)
+    expect(res.body.error).toBe(PUBLISHER_AGREEMENT_CONSENT_REQUIRED)
+    expect(writes()).toHaveLength(0)
+    expect(acceptanceMock.recordPublisherAgreementAcceptance).not.toHaveBeenCalled()
+  })
+
+  it('records the agreement and notes it on the profile in the same write', async () => {
+    const res = makeRes()
+    await publisherProfileSaveHandler(makeReq({}), res)
+    expect(res.statusCode).toBe(200)
+    expect(acceptanceMock.recordPublisherAgreementAcceptance).toHaveBeenCalledTimes(1)
+    expect(acceptanceMock.recordPublisherAgreementAcceptance.mock.calls[0][0]).toMatchObject({
+      orgId: 'acme',
+      uid: 'user-1',
+      action: 'save-profile',
+      targetId: 'acme',
+      noteOnProfile: false,
+    })
+    expect(writes()[0]['publisherAgreement']).toEqual({ version: 'noted' })
+  })
+
+  it('answers the retired accept action with what to do instead', async () => {
+    const res = makeRes()
+    await publisherProfileSaveHandler(
+      makeReq({ action: 'accept-agreement', version: publisherAgreementConsent().version }),
+      res,
+    )
+    expect(res.statusCode).toBe(410)
+    expect(String(res.body.error)).toMatch(/on each save/)
+    expect(writes()).toHaveLength(0)
+    expect(acceptanceMock.recordPublisherAgreementAcceptance).not.toHaveBeenCalled()
   })
 })

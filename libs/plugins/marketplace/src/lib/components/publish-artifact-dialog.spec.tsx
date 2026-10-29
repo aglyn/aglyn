@@ -39,16 +39,14 @@
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import PublishArtifactDialog from './publish-artifact-dialog.component'
+import {
+  PUBLISHER_AGREEMENT_TITLE,
+  PUBLISHER_AGREEMENT_VERSION,
+} from '../model/publisher-agreement'
 
 const posted: Array<{ url: string; body: Record<string, unknown> }> = []
-/** Requests that are not publishes: the roster and the agreement acceptance. */
-const asked: string[] = []
 let responseStatus = 200
 let responseBody: Record<string, unknown> = { listingId: 'listing-1', version: 1 }
-/** Answers for the next publishes, before falling back to the two above. */
-let queued: Array<{ status: number; body: Record<string, unknown> }> = []
-/** The org's publisher profile, as the agreement gate reads it. */
-let profileDoc: Record<string, unknown> | undefined
 
 jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
   authorizedFetch: async (
@@ -61,19 +59,8 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
       status,
       json: async () => body,
     })
-    if (url.startsWith('/api/orgs/members')) {
-      asked.push(url)
-      return reply(200, { members: [{ $id: 'me', role: 'owner' }] })
-    }
-    if (url === '/api/marketplace/publisher-profile') {
-      asked.push(url)
-      return reply(200, { ok: true })
-    }
     posted.push({ url, body: JSON.parse(String(init?.body)) })
-    const next = queued.shift()
-    return next
-      ? reply(next.status, next.body)
-      : reply(responseStatus, responseBody)
+    return reply(responseStatus, responseBody)
   },
 }))
 
@@ -84,24 +71,25 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => ({ data: { uid: 'me', getIdToken: async () => 'token' } }),
-  useFirestore: () => ({}),
-  useFirestoreDoc: () => ({ data: profileDoc, status: 'success' }),
 }))
 
 beforeEach(() => {
   posted.length = 0
-  asked.length = 0
-  queued = []
-  profileDoc = undefined
   responseStatus = 200
   responseBody = { listingId: 'listing-1', version: 1 }
   enqueueSnackbar.mockClear()
 })
 
-/** Opens the dialog for one artifact and presses Publish. */
+/** Ticks the publisher agreement above Publish (AGL-4105). */
+function agree(): void {
+  fireEvent.click(screen.getByRole('checkbox', { name: `Agree to the ${PUBLISHER_AGREEMENT_TITLE}` }))
+}
+
+/** Opens the dialog for one artifact, agrees, and presses Publish. */
 async function publish(artifact: Record<string, unknown>): Promise<void> {
   const onClose = jest.fn()
   render(<PublishArtifactDialog artifact={artifact as never} onClose={onClose} />)
+  agree()
   fireEvent.click(screen.getByRole('button', { name: 'Publish' }))
   await waitFor(() => expect(posted.length).toBeGreaterThan(0))
 }
@@ -175,6 +163,7 @@ describe('every kind the console can hand over', () => {
     const name = screen.getByLabelText('Listing name') as HTMLInputElement
     expect(name.value).toBe('Docs')
     fireEvent.change(name, { target: { value: 'Docs, rebuilt' } })
+    agree()
     fireEvent.click(screen.getByRole('button', { name: 'Publish' }))
     await waitFor(() => expect(posted).toHaveLength(1))
     expect(posted[0].body['displayName']).toBe('Docs, rebuilt')
@@ -224,69 +213,50 @@ describe('what the server says is what the publisher reads', () => {
 })
 
 /**
- * THE PUBLISHER AGREEMENT, ASKED FOR IN THIS DIALOG (AGL-3407).
+ * THE PUBLISHER AGREEMENT, AGREED TO ON EVERY PUBLISH (AGL-4105).
  *
  * Every kind above is published through this one form, so wiring it once
- * wires the seven: a refusal for the agreement opens the agreement over the
- * form, and accepting sends the publish again with what was typed.
+ * wires the seven: the box sits above Publish, unticked, Publish waits for
+ * it, the publish carries it, and it is unticked again for the next one.
  */
 describe('the publisher agreement', () => {
-  const REFUSAL = {
-    error: 'Your organization has not accepted the Marketplace Publisher Agreement.',
-    agreement: { required: 'x', accepted: null, state: 'none', orgId: 'org-1' },
-  }
+  const artifact = { kind: 'layout', hostId: 'h', orgId: 'org-1', artifactId: 'l', displayName: 'Docs' }
 
-  it.each(['layout', 'component', 'site', 'theme', 'emailTemplate'])(
-    'a refused %s publish opens it, and accepting publishes the same listing',
+  it('starts unticked, and Publish waits for it', () => {
+    render(<PublishArtifactDialog artifact={artifact as never} onClose={jest.fn()} />)
+    const box = screen.getByRole('checkbox', { name: `Agree to the ${PUBLISHER_AGREEMENT_TITLE}` }) as HTMLInputElement
+    expect(box.checked).toBe(false)
+    expect((screen.getByRole('button', { name: 'Publish' }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Publish' }))
+    expect(posted).toHaveLength(0)
+    agree()
+    expect((screen.getByRole('button', { name: 'Publish' }) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('links the agreement from its title', () => {
+    render(<PublishArtifactDialog artifact={artifact as never} onClose={jest.fn()} />)
+    const link = screen.getByRole('link', { name: PUBLISHER_AGREEMENT_TITLE }) as HTMLAnchorElement
+    expect(link.href).toMatch(/\/legal\/marketplace-publisher-agreement$/)
+  })
+
+  it.each(['layout', 'component', 'site', 'theme', 'emailTemplate', 'emailStarter', 'datasetSchema'])(
+    'a %s publish carries the version it agreed to',
     async (kind) => {
-      queued = [{ status: 412, body: REFUSAL }]
-      const onClose = jest.fn()
-      render(
-        <PublishArtifactDialog
-          artifact={{ kind, hostId: 'host-1', artifactId: 'a-1', displayName: 'Named' } as never}
-          onClose={onClose}
-        />,
-      )
-      fireEvent.change(screen.getByLabelText('Listing name'), {
-        target: { value: 'Typed by hand' },
-      })
-      fireEvent.click(screen.getByRole('button', { name: 'Publish' }))
-      fireEvent.click(await screen.findByRole('button', { name: 'Accept and publish' }))
-      await waitFor(() => expect(onClose).toHaveBeenCalled())
-      expect(posted).toHaveLength(2)
-      expect(posted[1]).toEqual(posted[0])
-      expect(posted[1].body['displayName']).toBe('Typed by hand')
-      expect(asked).toContain('/api/marketplace/publisher-profile')
-      // The route's prose never reached a toast: the dialog said it.
-      expect(enqueueSnackbar).not.toHaveBeenCalledWith(
-        REFUSAL.error,
-        expect.anything(),
-      )
+      await publish({ kind, hostId: 'host-1', orgId: 'org-1', artifactId: 'a-1', displayName: 'Named' })
+      expect(posted[0].body['agreement']).toEqual({ version: PUBLISHER_AGREEMENT_VERSION, accepted: true })
     },
   )
 
-  it('is offered as the form opens when the org is known to need it', async () => {
-    profileDoc = { handle: 'acme', publisherAgreement: { version: '2026-08-18.1' } }
-    render(
-      <PublishArtifactDialog
-        artifact={{ kind: 'layout', hostId: 'h', orgId: 'org-1', artifactId: 'l', displayName: 'Docs' } as never}
-        onClose={jest.fn()}
-      />,
+  it('is unticked again for the next artifact the dialog opens on', async () => {
+    const onClose = jest.fn()
+    const { rerender } = render(<PublishArtifactDialog artifact={artifact as never} onClose={onClose} />)
+    agree()
+    fireEvent.click(screen.getByRole('button', { name: 'Publish' }))
+    await waitFor(() => expect(onClose).toHaveBeenCalled())
+    rerender(
+      <PublishArtifactDialog artifact={{ ...artifact, artifactId: 'l2', displayName: 'Next' } as never} onClose={onClose} />,
     )
-    expect(
-      await screen.findByText('What changed since version 2026-08-18.1'),
-    ).toBeTruthy()
-    expect(posted).toHaveLength(0)
-  })
-
-  it('is not offered to an org with no publisher profile, whose refusal is the profile', () => {
-    profileDoc = undefined
-    render(
-      <PublishArtifactDialog
-        artifact={{ kind: 'layout', hostId: 'h', orgId: 'org-1', artifactId: 'l' } as never}
-        onClose={jest.fn()}
-      />,
-    )
-    expect(screen.queryByText('Marketplace Publisher Agreement')).toBeNull()
+    const box = screen.getByRole('checkbox', { name: `Agree to the ${PUBLISHER_AGREEMENT_TITLE}` }) as HTMLInputElement
+    expect(box.checked).toBe(false)
   })
 })

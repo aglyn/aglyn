@@ -1,5 +1,6 @@
 package com.aglyn.plugins.marketplace
 
+import com.aglyn.contracts.Contracts
 import com.aglyn.contracts.PayoutReadiness
 import com.aglyn.core.ApiMethod
 import com.aglyn.core.ConsoleApiClient
@@ -121,14 +122,31 @@ fun payoutsButton(readiness: PayoutReadiness): String = when (readiness) {
   else -> "Set up payouts"
 }
 
+/**
+ * The Marketplace Publisher Agreement a save agrees to (AGL-4105), sent as the console sends it, `{ version, accepted: true }`.
+ * A seller screen makes one only once its box is ticked, and each save makes its own.
+ */
+data class PublisherAgreementConsent(val version: String) {
+  val body: Map<String, Any?> get() = mapOf("version" to version, "accepted" to true)
+
+  companion object {
+    /** The version in force, as the contracts carry the console's `PUBLISHER_AGREEMENT_VERSION`. */
+    val current: PublisherAgreementConsent get() = PublisherAgreementConsent(Contracts.publisherAgreementVersion)
+  }
+}
+
 /** What `/api/marketplace/connect` answers. */
 data class ConnectAnswer(val chargesEnabled: Boolean, val payoutsEnabled: Boolean?, val url: String?, val dashboardUrl: String?)
 
 /** The routes the seller cards call: the console's own, each answering in the sentence the card shows. */
 class SellerApi(private val api: ConsoleApiClient, private val orgId: String) {
   /** Saves the public profile; the handle is claimed on the server, so two workspaces cannot both win it. */
-  suspend fun saveProfile(fields: Map<String, String>) {
-    api.request("/api/marketplace/publisher-profile", ApiMethod.POST, jsonBody("orgId" to orgId, *fields.map { it.key to it.value }.toTypedArray()))
+  suspend fun saveProfile(fields: Map<String, String>, agreement: PublisherAgreementConsent) {
+    api.request(
+      "/api/marketplace/publisher-profile",
+      ApiMethod.POST,
+      jsonBody("orgId" to orgId, *fields.map { it.key to it.value }.toTypedArray(), "agreement" to agreement.body),
+    )
   }
 
   /** Starts, or rechecks, Stripe Connect onboarding; null where the deployment holds no Connect key (a 501). */
@@ -142,17 +160,25 @@ class SellerApi(private val api: ConsoleApiClient, private val orgId: String) {
     )
   }
 
-  suspend fun setVisibility(listingId: String, visibility: String) {
-    api.request("/api/marketplace/publish-plugin", ApiMethod.POST, jsonBody("action" to "set-visibility", "listingId" to listingId, "visibility" to visibility))
+  suspend fun setVisibility(listingId: String, visibility: String, agreement: PublisherAgreementConsent) {
+    api.request(
+      "/api/marketplace/publish-plugin",
+      ApiMethod.POST,
+      jsonBody("action" to "set-visibility", "listingId" to listingId, "visibility" to visibility, "agreement" to agreement.body),
+    )
   }
 
   /** Unpublishes, or republishes, a listing: server-side, because browse reads each listing's audience, which only the server derives. */
-  suspend fun setPublished(listingId: String, published: Boolean) {
-    api.request("/api/marketplace/publish-plugin", ApiMethod.POST, jsonBody("action" to "set-published", "listingId" to listingId, "published" to published))
+  suspend fun setPublished(listingId: String, published: Boolean, agreement: PublisherAgreementConsent) {
+    api.request(
+      "/api/marketplace/publish-plugin",
+      ApiMethod.POST,
+      jsonBody("action" to "set-published", "listingId" to listingId, "published" to published, "agreement" to agreement.body),
+    )
   }
 
   /** The listing's words, links and screenshots; a field left out is left as it is, and so is the preview. */
-  suspend fun updateListing(listingId: String, fields: Map<String, String>, category: String, screenshots: List<String>) {
+  suspend fun updateListing(listingId: String, fields: Map<String, String>, category: String, screenshots: List<String>, agreement: PublisherAgreementConsent) {
     api.request(
       "/api/marketplace/publish-plugin",
       ApiMethod.POST,
@@ -162,6 +188,7 @@ class SellerApi(private val api: ConsoleApiClient, private val orgId: String) {
         *fields.map { it.key to it.value }.toTypedArray(),
         "categories" to if (category.isNotEmpty()) listOf(category) else emptyList<String>(),
         "screenshots" to screenshots,
+        "agreement" to agreement.body,
       ),
     )
   }
@@ -170,11 +197,11 @@ class SellerApi(private val api: ConsoleApiClient, private val orgId: String) {
    * Sets the preview image to a file from the media library, or removes it when [url] is empty: the route of its own the
    * console's editor calls, because the preview is not a content field.
    */
-  suspend fun setPreviewImage(listingId: String, url: String) {
+  suspend fun setPreviewImage(listingId: String, url: String, agreement: PublisherAgreementConsent) {
     if (url.isEmpty()) {
-      api.request("/api/marketplace/preview-image", ApiMethod.DELETE, jsonBody("listingId" to listingId))
+      api.request("/api/marketplace/preview-image", ApiMethod.DELETE, jsonBody("listingId" to listingId, "agreement" to agreement.body))
     } else {
-      api.request("/api/marketplace/preview-image", ApiMethod.POST, jsonBody("listingId" to listingId, "url" to url))
+      api.request("/api/marketplace/preview-image", ApiMethod.POST, jsonBody("listingId" to listingId, "url" to url, "agreement" to agreement.body))
     }
   }
 }

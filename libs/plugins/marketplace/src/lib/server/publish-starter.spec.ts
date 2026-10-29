@@ -37,7 +37,7 @@ import { starterLinksBySlug } from '@aglyn/aglyn/app-utils/site-starter-links'
 import { setRegisteringPluginId } from '@aglyn/aglyn/app-utils/registering-plugin'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { registerPluginThemePresets } from '@aglyn/aglyn/plugin-manager/plugin-theme-presets'
-import { PUBLISHER_AGREEMENT_VERSION } from '../model/publisher-agreement'
+import { PUBLISHER_AGREEMENT_VERSION, publisherAgreementConsent } from '../model/publisher-agreement'
 
 type Data = Record<string, any>
 
@@ -49,6 +49,12 @@ const state = {
   staff: false,
 }
 
+// Each save's agreement is recorded through its own module (AGL-4105),
+// faked here so the route's Firestore double does not have to model it.
+jest.mock('./publisher-agreement-acceptance', () => ({
+  recordPublisherAgreementAcceptance: jest.fn(async () => ({})),
+  publisherAgreementNote: () => ({ version: 'noted' }),
+}))
 jest.mock('@aglyn/aglyn/server', () => ({
   CANVAS_ROOT_ELEMENT_ID: '_@_',
   checkEntitlement: () => true,
@@ -221,7 +227,7 @@ async function publish(body: Data = {}, headers: Data = { authorization: 'Bearer
     {
       method: 'POST',
       headers,
-      body: { hostId: 'h1', displayName: 'Corner bistro', theme: BUILTIN, ...body },
+      body: { hostId: 'h1', displayName: 'Corner bistro', theme: BUILTIN, agreement: publisherAgreementConsent(), ...body },
     } as any,
     res,
   )
@@ -549,12 +555,12 @@ describe('what a starter publish refuses (AGL-4049)', () => {
     await refused({}, 403, 'Your role does not include "Publish site content" — ask an organization admin')
   })
 
-  it('refuses without a current publisher agreement, and a priced starter without payouts', async () => {
-    state.publisher = { ...state.publisher, agreement: undefined }
-    const res = await publish()
-    expect(res.statusCode).toBe(412)
+  it('refuses without the publisher agreement ticked on this publish, and a priced starter without payouts', async () => {
+    // AGL-4105: the org agreed before (its note is current), and that no
+    // longer lets a publish through without the box.
+    const res = await publish({ agreement: undefined })
+    expect(res.statusCode).toBe(428)
     expect(state.writes).toEqual([])
-    state.publisher = { ...state.publisher, agreement: { version: PUBLISHER_AGREEMENT_VERSION } }
     await refused({ priceUsd: 29 }, 412, 'Set up payouts first — Marketplace → Payouts — to sell site starters.')
   })
 

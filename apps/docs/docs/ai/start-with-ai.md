@@ -28,17 +28,19 @@ type: if it is taken, the field says so and offers available ones to pick. Then 
 offers two cards:
 
 - **Start from the starter site** gives the site a ready-made home page with a header,
-  footer and contact form, live at its address, for you to edit.
+  footer and contact form, live at its address, for you to edit, in a style you choose:
+  it asks you to **Choose a style** from the same cards as the [Style](#style) step,
+  without **Pick for me**, and **Create site** creates the site once you click one.
 - **Start with AI** (marked **Recommended**) asks the questions below and builds the site
   for you. On the Free plan the card says how many pages a Free start makes.
 
 **Bring my site** is a third card for moving the website
 you have now into Aglyn. See [Bring my site](./bring-my-site.md).
 
-No site exists until you choose. **Start from the starter site** and **Skip** (in the
-bar at the top) create the site with the starter home page and open it. **Plan my site**
-creates the site and starts planning it. The close control and the Escape key create
-nothing: the window closes and no site is made. If you have typed or picked something,
+No site exists until you choose, and nothing is chosen for you. **Create site**, after
+you choose a style for the starter site, creates the site with the starter home page in
+that style and opens it. **Plan my site** creates the site and starts planning it. The
+close control and the Escape key create nothing: the window closes and no site is made. If you have typed or picked something,
 the window first asks **Leave without your answers?**, because what you typed is not
 saved. Once the site is being planned, closing only closes the window; the job carries on.
 
@@ -55,8 +57,8 @@ leaving then gives that site the starter home page, so it is never left empty.
 **Start**, **Your site**, **Audience**, **Style**, **Details** and **Review** (on a phone,
 *Step 3 of 6* and a progress bar). **Next** moves on and **Back** goes back; your answers
 are kept either way. Pressing Enter in a text answer is the same as **Next**. If a step
-cannot move on, the reason shows under the field and the cursor goes to it. **Skip** and
-the close control stay in the bar at the top on every step.
+cannot move on, the reason shows under the field and the cursor goes to it. The close
+control stays in the bar at the top on every step.
 
 Every question step also has **More details**, a closed section under its answers with
 optional extras that fit the step. Open it to tell the site more about your business, or
@@ -102,8 +104,10 @@ estate site's on a card over a photo of a home, so you can see each style's colo
 fonts, buttons and corners, and the shape of its pages, before you pick. The picked card
 is outlined in color and carries a check. See
 [each style's layout](./site-looks.md#each-styles-layout).
-**Pick for me** comes first and is chosen unless you choose another. It names the style
-your first answer suggests, such as *From your answer: Home services & trades*. The style
+Nothing is chosen until you pick a card, and **Next** waits until you do: it says
+*Choose a style, or Pick for me* under the cards. **Pick for me** comes first and is a card
+you choose like the others. It names the style your first answer suggests, such as
+*From your answer: Home services & trades*, and uses it. The style
 decides how the site looks and which pages it usually has: an online store, a portfolio,
 a restaurant, a blog and so on. Each site gets its own variation, so two sites with the
 same style still look different, and yours will not match the picture exactly. See
@@ -113,7 +117,7 @@ same style still look different, and yours will not match the picture exactly. S
 site's main color, kept readable everywhere it is used. **Let the style choose** leaves it
 to the style.
 
-![The Style step: Pick for me chosen, naming the style the answer suggests, beside cards for Business & services, Home services & trades and more, each with a picture of an example home page of that kind and a line about the look](/img/ai/start-with-ai-style.png)
+![The Style step with no card chosen yet: Pick for me, naming the style the answer suggests, beside cards for Business & services, Home services & trades and more, each with a picture of an example home page of that kind and a line about the look](/img/ai/start-with-ai-style.png)
 
 ### Sites you like {#sites-you-like}
 

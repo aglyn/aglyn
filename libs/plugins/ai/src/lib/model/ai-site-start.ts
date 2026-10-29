@@ -16,6 +16,7 @@
  */
 
 import type { ClientBuildIntake } from '@aglyn/aglyn/app-utils/client-build'
+import { SITE_STYLE_AUTO } from '@aglyn/aglyn/app-utils/site-styles'
 import { weeklyHoursFromText, weeklyHoursToText } from '@aglyn/shared-ui-jsx/utils/weekly-hours'
 import {
   AI_SITE_DETAIL_KEYS,
@@ -157,9 +158,16 @@ export interface AiSiteStartAnswers extends AiSiteDetails {
   /** The example they liked, by {@link AiSiteStartExample.id}; `null` for none. */
   example: string | null
   /**
+   * The style card they clicked (AGL-4049): a kind's id, or
+   * `SITE_STYLE_AUTO` for "Pick for me"; `null` while they have clicked none.
+   * Nothing is chosen for a person, so the Style step does not go forward on
+   * `null` ({@link aiSiteStartStyleAnswer} sets this and {@link kind} together).
+   */
+  style: string | null
+  /**
    * The kind of site they picked (AGL-3660), by its `AI_SITE_KINDS` id;
-   * `null` until they pick one, when the kind their first answer suggests is
-   * the one used ({@link aiSiteStartKind}).
+   * `null` for "Pick for me", or before a style is chosen, when the kind
+   * their first answer suggests is the one used ({@link aiSiteStartKind}).
    */
   kind: string | null
   /** How many pages to plan. */
@@ -190,6 +198,7 @@ export const AI_SITE_START_ANSWERS: AiSiteStartAnswers = {
   siteType: '',
   audience: '',
   example: null,
+  style: null,
   kind: null,
   pages: 5,
   submissions: 'inbox',
@@ -198,6 +207,15 @@ export const AI_SITE_START_ANSWERS: AiSiteStartAnswers = {
   brand: '',
   ...AI_SITE_NO_DETAILS,
 }
+
+/**
+ * Why the Style step does not go forward before a card is clicked (AGL-4049),
+ * and why the review does not plan: nothing is chosen for a person, and
+ * "Pick for me" is a card too. The door itself admits a start without one
+ * ({@link aiSiteStartRefusal} is what it would refuse), so this is the
+ * questions' rule, held by `aiSiteStartStepErrors` and the card.
+ */
+export const AI_SITE_START_STYLE_REQUIRED = 'Choose a style, or Pick for me.'
 
 /** The answers a person may give beyond the ones each step asks, by key (AGL-3979). */
 export type AiSiteStartExtraKey = AiSiteDetailKey | 'city' | 'brand'
@@ -237,6 +255,15 @@ export function aiSiteStartExtraProblem(
 /** The extras a person gave, in the review's order: what "More details" was used for. */
 export function aiSiteStartExtrasGiven(answers: AiSiteStartAnswers): AiSiteStartExtraKey[] {
   return AI_SITE_START_EXTRA_KEYS.filter((key) => (answers[key] ?? '').trim() !== '')
+}
+
+/**
+ * A style card clicked (AGL-4049), as the answers hold it: the card's id as
+ * the style, and the kind it names — none for "Pick for me", which leaves the
+ * kind to what the site is and who it is for.
+ */
+export function aiSiteStartStyleAnswer(id: string): Pick<AiSiteStartAnswers, 'style' | 'kind'> {
+  return { style: id, kind: id === SITE_STYLE_AUTO ? null : (aiSiteKind(id)?.id ?? null) }
 }
 
 /** The kind of site the answers pick, else the one what the site is and who it is for suggest. */
@@ -439,7 +466,8 @@ export function aiSiteStartAnswersFromInputs(
     siteType,
     audience: text('audience'),
     example: AI_SITE_START_EXAMPLES.some((entry) => entry.id === starter) ? starter : null,
-    kind: aiSiteKind(text('siteKind'))?.id ?? null,
+    // A start that ran had its style chosen: its kind, or "Pick for me".
+    ...aiSiteStartStyleAnswer(aiSiteKind(text('siteKind'))?.id ?? SITE_STYLE_AUTO),
     pages: Math.min(band.max, Math.max(band.min, pages)),
     submissions: (AI_SITE_SUBMISSIONS as readonly string[]).includes(submissions)
       ? (submissions as AiSiteSubmissions)
@@ -524,6 +552,10 @@ export function aiSiteStartAnswersFromClientBuild(intake: ClientBuildIntake): Ai
   return {
     ...AI_SITE_START_ANSWERS,
     siteType: bounded(intake.whatTheyDo, AI_SITE_INPUT_MAX_CHARS),
+    // The site exists already and the intake answered for it: what the
+    // business does picks its style, as "Pick for me" does, and staff change
+    // it on the review like any answer.
+    ...aiSiteStartStyleAnswer(SITE_STYLE_AUTO),
     phone: details.phone,
     email: details.email,
     serviceArea: details.serviceArea,

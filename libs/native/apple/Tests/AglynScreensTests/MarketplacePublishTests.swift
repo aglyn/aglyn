@@ -9,8 +9,8 @@ import XCTest
 @testable import AglynScreens
 
 /// Publishing the site as a template (`libs/plugins/marketplace/src/android/screens/marketplace.screens.json`):
-/// the zone it fills on Backup & restore, the agreement the publish needs accepted, and the two routes it calls.
-/// Kotlin replays the same cases (MarketplacePublishTest).
+/// the zone it fills on Backup & restore, the publisher agreement every publish agrees to with its own box (AGL-4105), and
+/// the routes it calls. Kotlin replays the same cases (MarketplacePublishTest).
 @MainActor
 final class MarketplacePublishTests: XCTestCase {
   private func spec(_ id: String) throws -> ScreenSpec {
@@ -41,6 +41,16 @@ final class MarketplacePublishTests: XCTestCase {
     return (context, screen.blocks.filter { ScreenValues.condition($0.when, in: context) })
   }
 
+  /// `scope` with the screen's constants under `const`, as the model's own context carries them.
+  private func withConstants(_ scope: JSONValue, _ screen: ScreenSpec) -> JSONValue {
+    ScreenContext.with(scope, "const", screen.raw["constants"] ?? [:])
+  }
+
+  /// The version in force, as the screens' constants carry it.
+  private func agreementVersion(_ screen: ScreenSpec) -> JSONValue {
+    ScreenValues.lookup("const.agreement.version", in: withConstants(["x": 1], screen)) ?? .null
+  }
+
   private func texts(_ blocks: [BlockSpec], _ context: JSONValue) -> [String] {
     blocks.filter { $0.type == "notice" }.compactMap { $0["text"]?.stringValue.map { ScreenValues.render($0, in: context) } }
   }
@@ -53,35 +63,32 @@ final class MarketplacePublishTests: XCTestCase {
     XCTAssertEqual(backup.blocks.filter { $0.type == "zone" }.compactMap { $0["name"]?.stringValue }, ["siteTemplate"])
   }
 
-  func testTheAgreementIsOfferedUntilTheOrganizationHasAcceptedTheCurrentVersion() throws {
-    let publish = try spec("marketplace.publishTemplate")
-    let version = ScreenValues.lookup("const.agreement.version", in: ScreenContext.with(["x": 1], "const", publish.raw["constants"] ?? [:]))
-    let review = "Review the Marketplace Publisher Agreement"
-    func offered(_ profile: JSONValue?) -> (notices: [String], review: Bool) {
-      let (context, blocks) = shown(publish, profile: profile)
-      let links = blocks.filter { $0.type == "links" }.flatMap { $0["items"].array }.compactMap { $0["title"]?.stringValue }
-      return (texts(blocks, context).filter { $0.contains("terms") }, links.contains(review))
+  func testEveryPublishAsksForTheAgreementInABoxAboveItsButton() throws {
+    for id in [
+      "marketplace.publishTemplate", "marketplace.publishLayout", "marketplace.publishComponent", "marketplace.publishTheme",
+      "marketplace.publishDatasetSchema", "marketplace.publishEmailTemplate", "marketplace.publishEmailStarter", "marketplace.publishPlugin",
+    ] {
+      let publish = try spec(id)
+      let form = try XCTUnwrap(publish.blocks.first { $0.type == "form" })
+      let fields = form["fields"].array.compactMap(FieldSpec.init)
+      // The last field, nearest the button: one choice, which must be chosen before the form can send.
+      let box = try XCTUnwrap(fields.last, id)
+      XCTAssertEqual(box.key, "agreement", id)
+      XCTAssertEqual(box.options.map { $0.label }, ["I agree to the Marketplace Publisher Agreement"], id)
+      XCTAssertTrue(box.unmet(.array([]), in: [:]), id)
+      XCTAssertFalse(box.unmet(["agreed"], in: [:]), id)
+      // Whatever the organization agreed to before, every publish asks: no notice about its standing, and the agreement is
+      // always a link away.
+      for profile: JSONValue? in [nil, ["handle": "studio"], ["handle": "studio", "publisherAgreement": ["version": agreementVersion(publish)]]] {
+        let (context, blocks) = shown(publish, profile: profile)
+        XCTAssertEqual(texts(blocks, context).filter { $0.contains("terms") }, [], id)
+        let links = blocks.filter { $0.type == "links" }.flatMap { $0["items"].array }.compactMap { $0["title"]?.stringValue }
+        XCTAssertTrue(links.contains("Read the Marketplace Publisher Agreement"), id)
+      }
     }
-    // No publisher profile yet: the publish is refused for the profile first, so the agreement is not asked for.
-    XCTAssertEqual(offered(nil).notices, [])
-    XCTAssertFalse(offered(nil).review)
-    // A profile that never accepted.
-    let never = offered(["handle": "studio"])
-    XCTAssertEqual(never.notices, ["Your organization has not accepted these terms. They must be accepted before anything is published."])
-    XCTAssertTrue(never.review)
-    // One that accepted an earlier version.
-    let old = offered(["handle": "studio", "publisherAgreement": ["version": "2026-08-18.1"]])
-    XCTAssertEqual(
-      old.notices,
-      ["These terms have changed since your organization accepted version 2026-08-18.1. Publishing is paused until the current version is accepted."])
-    XCTAssertTrue(old.review)
-    // The current version needs nothing.
-    let current = offered(["handle": "studio", "publisherAgreement": ["version": version ?? .null]])
-    XCTAssertEqual(current.notices, [])
-    XCTAssertFalse(current.review)
   }
 
-  func testTheAgreementShowsWhatChangedSinceTheVersionAcceptedAndWhoMayAccept() throws {
+  func testTheAgreementShowsWhatChangedSinceTheVersionLastAgreedToAndAsksForNothingItself() throws {
     let agreement = try spec("marketplace.publisherAgreement")
     let changes = try XCTUnwrap(agreement.blocks.first { $0.title?.hasPrefix("What changed") == true })
     func changed(since accepted: String) -> [String] {
@@ -89,64 +96,53 @@ final class MarketplacePublishTests: XCTestCase {
       return ScreenValues.scopes(items: changes["items"]?.stringValue ?? "", within: changes["within"]?.stringValue, filter: changes["filter"]?.stringValue, in: context)
         .map { ScreenValues.render(changes["secondary"]?.stringValue ?? "", in: $0) }
     }
-    // Only the versions after the one accepted, each change under the version that made it.
+    // Only the versions after the one last agreed to, each change under the version that made it.
     XCTAssertEqual(changed(since: "2026-08-18.1"), ["Version 2026-08-24.1"])
     XCTAssertEqual(changed(since: "2026-01-01.1").count, 5)
     XCTAssertEqual(changed(since: "2026-08-24.1"), [])
 
-    // An owner or admin is offered the accept, per what the standing is; anyone else is told who to ask.
-    let stale: JSONValue = ["handle": "s", "publisherAgreement": ["version": "2026-08-18.1"]]
-    let accept = try XCTUnwrap(agreement.blocks.first { $0["id"]?.stringValue == nil && $0.type == "actions" && $0.when == "is.canAccept" })
-    let actions = accept["items"].array.compactMap(ActionSpec.init)
-    let (manager, managerBlocks) = shown(agreement, profile: stale)
-    XCTAssertEqual(actions.filter { ScreenValues.condition($0.when, in: manager) }.map(\.label), ["Accept the current version"])
-    XCTAssertTrue(managerBlocks.contains { $0.type == "actions" && $0.when == "is.canAccept" })
-    let (first, _) = shown(agreement, profile: ["handle": "s"])
-    XCTAssertEqual(actions.filter { ScreenValues.condition($0.when, in: first) }.map(\.label), ["Accept on behalf of this organization"])
-    let members: JSONValue = ["members": [["$id": "u1", "role": "owner", "displayName": "Dana", "email": "dana@example.test"], ["$id": "u2", "role": "viewer"]]]
-    let (member, memberBlocks) = shown(agreement, profile: stale, manager: false, members: members)
-    XCTAssertFalse(memberBlocks.contains { $0.when == "is.canAccept" })
+    // It says every save asks, and when the organization last agreed; there is nothing to accept here.
+    let everySave =
+      "Every save in the marketplace — your profile, a listing, its price or visibility, a new version, a component, template or layout — asks you to tick “I agree to the Marketplace Publisher Agreement” first. We record who agreed, to which version, and when."
+    let (stale, staleBlocks) = shown(agreement, profile: ["handle": "s", "publisherAgreement": ["version": "2026-08-18.1"]])
     XCTAssertEqual(
-      texts(memberBlocks, member).last, "Only an owner or admin of your organization can accept on its behalf. Ask one of them to accept it, then try again.")
-    let who = try XCTUnwrap(memberBlocks.first { $0.title == "Who can accept" })
-    XCTAssertEqual(
-      ScreenValues.scopes(items: who["items"]?.stringValue ?? "", within: nil, filter: who["filter"]?.stringValue, in: member)
-        .map { ScreenValues.render(who["primary"]?.stringValue ?? "", in: $0) },
-      ["Dana"])
+      texts(staleBlocks, stale),
+      [everySave, "Your organization last agreed to version 2026-08-18.1. Your next save agrees to version 2026-08-24.1."])
+    let (never, neverBlocks) = shown(agreement, profile: ["handle": "s"])
+    XCTAssertEqual(texts(neverBlocks, never), [everySave])
+    XCTAssertFalse(agreement.blocks.contains { block in block["items"].array.contains { $0["url"] != nil } })
   }
 
-  func testPublishingSendsTheListingTheRouteTakesAndAcceptingSendsTheVersionInForce() async throws {
+  func testPublishingSendsTheListingTheRouteTakesAndTheAgreementItWasTickedFor() async throws {
     let publish = try spec("marketplace.publishTemplate")
     let form = try XCTUnwrap(publish.blocks.first { $0.type == "form" })
     let submit = try XCTUnwrap(form["submit"].flatMap(ActionSpec.init))
     let transport = RecordingTransport(responses: [(200, #"{"ok":true,"version":3}"#), (200, #"{"ok":true,"version":1}"#)])
     let model = ScreenModel(spec: publish, context: [:], api: api(transport))
-    let paid: JSONValue = ["site": ["id": "h1"], "form": ["name": "Studio", "description": "A portfolio", "category": "Portfolio", "price": 5]]
+    let paid = withConstants(
+      ["site": ["id": "h1"], "form": ["name": "Studio", "description": "A portfolio", "category": "Portfolio", "price": 5, "agreement": ["agreed"]]],
+      publish)
     let outcome = await model.run(submit, in: paid)
     XCTAssertEqual(outcome, .done(message: "Published v3 to the marketplace", response: ["ok": true, "version": 3]))
     XCTAssertEqual(transport.requests[0].url?.path, "/api/marketplace/publish-template")
     let body = try XCTUnwrap(transport.requests[0].httpBody.flatMap(JSONValue.decode))
-    XCTAssertEqual(body, ["hostId": "h1", "displayName": "Studio", "description": "A portfolio", "category": "Portfolio", "priceUsd": 5])
-    // A price left blank is not sent as a number: the route reads it as free.
-    _ = await model.run(submit, in: ["site": ["id": "h1"], "form": ["name": "Free one"]])
+    XCTAssertEqual(
+      body,
+      [
+        "hostId": "h1", "displayName": "Studio", "description": "A portfolio", "category": "Portfolio", "priceUsd": 5,
+        "agreement": ["version": agreementVersion(publish), "accepted": true],
+      ])
+    // A price left blank is not sent as a number: the route reads it as free. Unticked, the agreement says only its version,
+    // which the route refuses.
+    _ = await model.run(submit, in: withConstants(["site": ["id": "h1"], "form": ["name": "Free one"]], publish))
     let free = try XCTUnwrap(transport.requests[1].httpBody.flatMap(JSONValue.decode))
     XCTAssertEqual(free["displayName"], "Free one")
     XCTAssertNil(free["priceUsd"]?.numberValue)
+    XCTAssertEqual(free["agreement"], ["version": agreementVersion(publish)])
     // The name is required; the price field states the floor.
     XCTAssertTrue(try XCTUnwrap(form["fields"].array.compactMap(FieldSpec.init).first { $0.key == "name" }).required)
     let price = try XCTUnwrap(form["fields"].array.compactMap(FieldSpec.init).first { $0.key == "price" })
     XCTAssertTrue(try XCTUnwrap(price.help).hasPrefix("0 for free, or $"))
-
-    let agreement = try spec("marketplace.publisherAgreement")
-    let block = try XCTUnwrap(agreement.blocks.first { $0.when == "is.canAccept" })
-    let accept = try XCTUnwrap(block["items"].array.first.flatMap(ActionSpec.init))
-    let accepting = RecordingTransport(responses: [(200, #"{"ok":true}"#)])
-    let session = ScreenModel(spec: agreement, context: [:], api: api(accepting))
-    let version = ScreenValues.lookup("const.agreement.version", in: ScreenContext.with(["x": 1], "const", agreement.raw["constants"] ?? [:]))
-    _ = await session.run(accept, in: ScreenContext.with(["org": ["id": "o1"]], "const", agreement.raw["constants"] ?? [:]))
-    XCTAssertEqual(accepting.requests[0].url?.path, "/api/marketplace/publisher-profile")
-    let sent = try XCTUnwrap(accepting.requests[0].httpBody.flatMap(JSONValue.decode))
-    XCTAssertEqual(sent, ["action": "accept-agreement", "orgId": "o1", "version": version ?? .null])
   }
 
   func testEveryOtherKindPublishesWithWhatItIsAndTheListingTheRouteTakes() async throws {
@@ -165,14 +161,15 @@ final class MarketplacePublishTests: XCTestCase {
       let submit = try XCTUnwrap(form["submit"].flatMap(ActionSpec.init))
       let transport = RecordingTransport(responses: [(200, #"{"ok":true,"version":2}"#)])
       let model = ScreenModel(spec: publish, context: [:], api: api(transport))
-      let context: JSONValue = [
-        "org": ["id": "o1"], "site": ["id": "h1"], "params": ["id": "x1"],
-        "form": ["name": "Hero", "description": "A hero", "category": "Hero", "price": 0],
-      ]
+      let context = withConstants(
+        [
+          "org": ["id": "o1"], "site": ["id": "h1"], "params": ["id": "x1"],
+          "form": ["name": "Hero", "description": "A hero", "category": "Hero", "price": 0, "agreement": ["agreed"]],
+        ], publish)
       let outcome = await model.run(submit, in: context)
       XCTAssertEqual(outcome, .done(message: "Published v2 to the marketplace", response: ["ok": true, "version": 2]), id)
-      // Refused for the agreement, it opens the agreement and sends the same publish once it is accepted.
-      XCTAssertEqual(submit.gate?["screen"]?.stringValue, "marketplace.publisherAgreement", id)
+      // A route refusal opens nothing any more: the agreement is the box in the form.
+      XCTAssertNil(submit.gate, id)
       XCTAssertEqual(transport.requests[0].url?.path, route, id)
       let body = try XCTUnwrap(transport.requests[0].httpBody.flatMap(JSONValue.decode))
       var expected = identity
@@ -180,6 +177,7 @@ final class MarketplacePublishTests: XCTestCase {
       expected["description"] = "A hero"
       expected["category"] = "Hero"
       expected["priceUsd"] = 0
+      expected["agreement"] = ["version": agreementVersion(publish), "accepted": true]
       XCTAssertEqual(body, .object(expected), id)
       // The form opens with the name and description the thing already has, handed over as the screen's parameters.
       let fields = form["fields"].array.compactMap(FieldSpec.init)
@@ -188,11 +186,6 @@ final class MarketplacePublishTests: XCTestCase {
         ["name", "description"].map { key in ScreenValues.render(fields.first { $0.key == key }?.initial ?? "", in: params) },
         ["Hero band", "The top of the page"], id)
       XCTAssertTrue(try XCTUnwrap(fields.first { $0.key == "name" }).required, id)
-      // The agreement is asked for exactly as the site template asks.
-      let (offered, blocks) = shown(publish, profile: ["handle": "studio"])
-      XCTAssertEqual(
-        texts(blocks, offered).filter { $0.contains("terms") },
-        ["Your organization has not accepted these terms. They must be accepted before anything is published."], id)
     }
     XCTAssertEqual(try spec("marketplace.publishDatasetSchema").scope, "org")
     XCTAssertEqual(try spec("marketplace.publishLayout").scope, "site")
@@ -237,31 +230,14 @@ final class MarketplacePublishTests: XCTestCase {
       links["items"].array.compactMap { $0["screen"]?.stringValue }, ["marketplace.publishTemplate", "marketplace.publishTheme", "marketplace.publishPlugin"])
   }
 
-  func testAPublishRefusedForTheAgreementOpensItAndAcceptingIsWhatSendsThePublishAgain() async throws {
+  func testAPublishRefusedForTheAgreementSaysWhyInTheRoutesWords() async throws {
     let publish = try spec("marketplace.publishTemplate")
     let submit = try XCTUnwrap(publish.blocks.first { $0.type == "form" }?["submit"].flatMap(ActionSpec.init))
-    let refusal =
-      #"{"error":"Accept the Marketplace Publisher Agreement before publishing.","agreement":{"required":"2026-08-24.1","accepted":null,"state":"none","orgId":"o1"}}"#
-    let transport = RecordingTransport(responses: [(412, refusal), (412, #"{"error":"Set up your publisher profile first."}"#), (200, #"{"ok":true,"version":2}"#)])
+    let refusal = #"{"error":"Tick 'I agree to the Marketplace Publisher Agreement' to save","agreement":{"required":"2026-08-24.1","state":"missing"}}"#
+    let transport = RecordingTransport(responses: [(428, refusal)])
     let model = ScreenModel(spec: publish, context: [:], api: api(transport))
-    let scope: JSONValue = ["site": ["id": "h1"], "form": ["name": "Studio"]]
-    // The route's structured refusal (not its prose) names the screen that settles it.
-    let first = await model.run(submit, in: scope)
-    XCTAssertEqual(
-      first, .gated(screen: "marketplace.publisherAgreement", message: "Accept the Marketplace Publisher Agreement before publishing."))
-    // Any other refusal is a failure, as it was.
-    let second = await model.run(submit, in: scope)
-    XCTAssertEqual(second, .failed("Set up your publisher profile first."))
-    // Sent again after the agreement is accepted, it is the same request.
-    _ = await model.run(submit, in: scope)
-    XCTAssertEqual(transport.requests[0].httpBody, transport.requests[2].httpBody)
-
-    let agreement = try spec("marketplace.publisherAgreement")
-    let block = try XCTUnwrap(agreement.blocks.first { $0.when == "is.canAccept" })
-    let accepts = block["items"].array.compactMap(ActionSpec.init)
-    XCTAssertEqual(accepts.map(\.id), ["accept", "acceptCurrent"])
-    XCTAssertTrue(accepts.allSatisfy(\.resume))
-    XCTAssertTrue(accepts.allSatisfy(\.back))
+    let outcome = await model.run(submit, in: withConstants(["site": ["id": "h1"], "form": ["name": "Studio"]], publish))
+    XCTAssertEqual(outcome, .failed("Tick 'I agree to the Marketplace Publisher Agreement' to save"))
   }
 
   func testAPluginPublishesItsBundleBytesManifestListingAndEveryStatementThroughThePublishRoute() async throws {
@@ -291,9 +267,9 @@ final class MarketplacePublishTests: XCTestCase {
     let base: [String: JSONValue] = [
       "bundle": "Y29uc3QA/w==", "manifest": ["id": "acme-widget", "name": "Widget"], "name": "", "description": "Counts down",
       "category": "", "readme": "", "changelog": "First", "repositoryUrl": "https://github.com/acme/widget", "license": "MIT",
-      "visibility": "public", "price": 5, "attested": attested,
+      "visibility": "public", "price": 5, "attested": attested, "agreement": ["agreed"],
     ]
-    let outcome = await model.run(submit, in: ["org": ["id": "o1"], "params": [:], "form": .object(base)])
+    let outcome = await model.run(submit, in: withConstants(["org": ["id": "o1"], "params": [:], "form": .object(base)], publish))
     XCTAssertEqual(outcome, .done(message: "Published v1.0.0 — it is queued for review", response: ["ok": true, "version": "1.0.0", "listingId": "l9"]))
     XCTAssertEqual(transport.requests[0].url?.path, "/api/marketplace/publish-plugin")
     let body = try XCTUnwrap(transport.requests[0].httpBody.flatMap(JSONValue.decode))
@@ -304,28 +280,28 @@ final class MarketplacePublishTests: XCTestCase {
         "orgId": "o1", "bundle": "Y29uc3QA/w==", "manifest": ["id": "acme-widget", "name": "Widget"], "displayName": "Widget",
         "description": "Counts down", "changelog": "First", "priceUsd": 5, "visibility": "public", "attestation": attested,
         "license": "MIT", "repositoryUrl": "https://github.com/acme/widget",
+        "agreement": ["version": agreementVersion(publish), "accepted": true],
       ])
     // A private plugin is free whatever the price field held.
     var privately = base
     privately["visibility"] = "private"
-    _ = await model.run(submit, in: ["org": ["id": "o1"], "params": [:], "form": .object(privately)])
+    _ = await model.run(submit, in: withConstants(["org": ["id": "o1"], "params": [:], "form": .object(privately)], publish))
     XCTAssertEqual(try XCTUnwrap(transport.requests[1].httpBody.flatMap(JSONValue.decode))["priceUsd"], 0)
     // Opens the listing it published.
     XCTAssertEqual(submit.navigate?.screen, "marketplace.listing")
     XCTAssertEqual(submit.navigate?.params, ["listing": "{response.listingId}"])
   }
 
-  func testAPluginRefusedByTheVerifierSaysWhatItFoundAndTheAgreementGatesItLikeEveryPublish() async throws {
+  func testAPluginRefusedByTheVerifierSaysWhatItFoundAndTheAgreementLikeEveryPublish() async throws {
     let publish = try spec("marketplace.publishPlugin")
     let submit = try XCTUnwrap(publish.blocks.first { $0.type == "form" }?["submit"].flatMap(ActionSpec.init))
-    let refusal =
-      #"{"error":"Accept the Marketplace Publisher Agreement before publishing.","agreement":{"required":"2026-08-24.1","accepted":null,"state":"none","orgId":"o1"}}"#
+    let refusal = #"{"error":"Tick 'I agree to the Marketplace Publisher Agreement' to save","agreement":{"required":"2026-08-24.1","state":"missing"}}"#
     let problems = #"{"error":"Bundle rejected","problems":[{"level":"error","check":"network","message":"Calls an undeclared host"},{"level":"error","message":"Too large"}]}"#
-    let transport = RecordingTransport(responses: [(412, refusal), (422, problems)])
+    let transport = RecordingTransport(responses: [(428, refusal), (422, problems)])
     let model = ScreenModel(spec: publish, context: [:], api: api(transport))
-    let scope: JSONValue = ["org": ["id": "o1"], "params": [:], "form": ["bundle": "eA==", "manifest": ["id": "w"], "name": "W"]]
-    let gated = await model.run(submit, in: scope)
-    XCTAssertEqual(gated, .gated(screen: "marketplace.publisherAgreement", message: "Accept the Marketplace Publisher Agreement before publishing."))
+    let scope = withConstants(["org": ["id": "o1"], "params": [:], "form": ["bundle": "eA==", "manifest": ["id": "w"], "name": "W"]], publish)
+    let refused = await model.run(submit, in: scope)
+    XCTAssertEqual(refused, .failed("Tick 'I agree to the Marketplace Publisher Agreement' to save"))
     let failed = await model.run(submit, in: scope)
     XCTAssertEqual(failed, .failed("Bundle rejected\nBundle failed verification\nnetwork: Calls an undeclared host\nToo large"))
   }

@@ -20,6 +20,10 @@ import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import { checkQuota } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
 import {
+  hostCreatedEventParams,
+  readHostStarterChoice,
+} from '@aglyn/aglyn/app-utils/site-styles'
+import {
   sitePreviewStartsOn,
   type SitePreviewStart,
 } from '@aglyn/aglyn/app-utils/site-preview'
@@ -57,6 +61,7 @@ import {
 import PluginWidgetSlot, { useSlotWidgets } from './plugin-widget-slot.component'
 import StartInPreviewSwitch from './start-in-preview-switch.component'
 import { useSiteAddress } from './site-address-fields.component'
+import SiteStylePicker from './site-style-picker.component'
 
 /** The zone "Create site" draws its start through (AGL-3761). */
 const START_ZONE = 'hostFirstRun'
@@ -108,12 +113,14 @@ type CreateOutcome =
  * "Create site" (user request 2026-07-07), opened straight on how the site
  * should start (AGL-3761).
  *
- * Nothing is created while the person decides. The site's name and address
- * are asked inside the start itself, and the site is created by
- * `POST /api/hosts/create` only when a choice needs it:
+ * Nothing is created while the person decides, and nothing is chosen for
+ * them (AGL-4049): a site is created only once they have picked a style. The
+ * site's name and address are asked inside the start itself, and the site is
+ * created by `POST /api/hosts/create` only when a choice needs it:
  *
- * - the starter site, or Skip: created with the starter, in one request, and
- *   the person lands on it with "Your site is live";
+ * - the starter site, in the style they chose: created with the starter in
+ *   that style's look, in one request, and the person lands on it with "Your
+ *   site is live";
  * - a start the `hostFirstRun` zone's widget begins (the guided AI start's
  *   Plan my site): created empty, and the widget starts its job on it.
  *
@@ -123,8 +130,9 @@ type CreateOutcome =
  * behind.
  *
  * A workspace with no start to offer — no widget on the zone, or one that
- * answers it draws nothing — gets the plain name-and-address dialog, which
- * creates the site with the starter. A guided start the person was not offered
+ * answers it draws nothing — gets the plain dialog, which asks the name, the
+ * address and the style, and creates the site with the starter in that
+ * style; Create site waits until a style is chosen. A guided start the person was not offered
  * here is still offered on the site, which has its starter until it is
  * answered (AGL-3859).
  *
@@ -247,7 +255,7 @@ function CreateSiteFlow({ onClose }: { onClose: () => void }) {
   )
 
   const requestCreate = useCallback(
-    (start?: 'starter' | 'import'): Promise<CreateOutcome> => {
+    (start?: 'starter' | 'import', options: { style?: string } = {}): Promise<CreateOutcome> => {
       if (inFlight.current) return inFlight.current
       setMadeHere(true)
       const request = (async (): Promise<CreateOutcome> => {
@@ -263,6 +271,9 @@ function CreateSiteFlow({ onClose }: { onClose: () => void }) {
               // The starter, chosen before the site exists (AGL-3761), or a
               // site brought in from somewhere else (AGL-4086).
               ...(start ? { start } : {}),
+              // The style the person chose (AGL-4049): the starter's look,
+              // and what the site records it was created with.
+              ...(options.style ? { style: options.style } : {}),
               // Start in preview (AGL-4086), as the switch reads for this start.
               preview: previewForRef.current(start ?? 'ai'),
               // A first site can provision the workspace too, which records
@@ -292,7 +303,9 @@ function CreateSiteFlow({ onClose }: { onClose: () => void }) {
           // publishing. After the `payload.hostId` guard, so a rejected
           // subdomain is not counted as a site, and here, where the site is
           // actually created: never when the start merely opened (AGL-3761).
-          trackEvent('host_created', {})
+          // With what it was started with, as the site records it (AGL-4049),
+          // so which styles people choose can be counted.
+          trackEvent('host_created', hostCreatedEventParams(readHostStarterChoice(payload.starterChoice)))
           enqueueSnackbar(`Created "${address.name}"`, { variant: 'success', persist: false })
           const site: ConsoleCreatedSite = {
             hostId: String(payload.hostId),
@@ -321,15 +334,17 @@ function CreateSiteFlow({ onClose }: { onClose: () => void }) {
   )
 
   // ── The plain dialog ──────────────────────────────────────────────────────
+  // The style it asks (AGL-4049): none until a card is clicked.
+  const [formStyle, setFormStyle] = useState<string | null>(null)
   const submitForm = useCallback(async () => {
-    if (busy || !address.check()) return
+    if (busy || !address.check() || !formStyle) return
     setBusy(true)
     try {
       // Always with the starter (AGL-3859). Without it the server makes the
       // site empty for a guided start this dialog never offered, and a person
       // who leaves before that start is answered is left with a site that has
-      // nothing on it.
-      const outcome = await requestCreate('starter')
+      // nothing on it. In the style they chose (AGL-4049).
+      const outcome = await requestCreate('starter', { style: formStyle })
       if ('error' in outcome) {
         return void enqueueSnackbar(outcome.error, {
           variant: outcome.address ? 'warning' : 'error',
@@ -344,7 +359,7 @@ function CreateSiteFlow({ onClose }: { onClose: () => void }) {
     } finally {
       setBusy(false)
     }
-  }, [address, busy, dashboardOf, enqueueSnackbar, land, onClose, requestCreate])
+  }, [address, busy, dashboardOf, enqueueSnackbar, formStyle, land, onClose, requestCreate])
 
   // ── The start, before the site exists ─────────────────────────────────────
   const createdRef = useRef(created)
@@ -356,12 +371,12 @@ function CreateSiteFlow({ onClose }: { onClose: () => void }) {
       dirty: address.dirty,
       created,
       ready: (shown: boolean) => setVerdict(shown),
-      create: async (options?: { start?: 'import' }) => {
+      create: async (options?: { start?: 'import'; style?: string }) => {
         if (createdRef.current) return createdRef.current
         if (!address.check()) {
           return { error: 'Name your site and choose its address first.', address: true }
         }
-        const outcome = await requestCreate(options?.start)
+        const outcome = await requestCreate(options?.start, { style: options?.style })
         if ('error' in outcome) return outcome
         setCreated(outcome.site)
         return outcome.site
@@ -377,20 +392,28 @@ function CreateSiteFlow({ onClose }: { onClose: () => void }) {
     [address, created, requestCreate, previewFor],
   )
 
-  // The starter site, or Skip. Before the site exists this creates it WITH
-  // the starter, in the one request; after a start created it and then could
-  // not begin, it gives that site the starter, so no site is left empty.
-  const startBlank = useCallback(async (): Promise<boolean> => {
+  // The starter site, in the style the person chose. Before the site exists
+  // this creates it WITH the starter, in the one request, and only with a
+  // style (AGL-4049): nothing is chosen for anyone, so without one nothing
+  // is created. After a start created it and then could not begin, it gives
+  // that site the starter, in the style its questions took when they took
+  // one, so no site is left empty.
+  const startBlank = useCallback(async (options?: { style?: string }): Promise<boolean> => {
+    const style = options?.style
     const existing = createdRef.current
     if (existing) {
-      const provisioned = await requestStarterSite(userRef.current, existing.hostId)
+      const provisioned = await requestStarterSite(userRef.current, existing.hostId, { style })
       onClose()
       const dashboard = dashboardOf(existing)
       land(provisioned ? `${dashboard}?${SITE_START_PARAM}=${SITE_START_LIVE_VALUE}` : dashboard)
       return true
     }
+    if (!style) {
+      enqueueSnackbar('Choose a style for your site first.', { variant: 'warning', allowDuplicate: true })
+      return false
+    }
     if (!address.check()) return false
-    const outcome = await requestCreate('starter')
+    const outcome = await requestCreate('starter', { style })
     if ('error' in outcome) {
       enqueueSnackbar(outcome.error, {
         variant: outcome.address ? 'warning' : 'error',
@@ -462,9 +485,17 @@ function CreateSiteFlow({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <Dialog open onClose={() => (busy ? null : onClose())} maxWidth="xs" fullWidth>
-      <DialogTitle>{'Create a new site'}</DialogTitle>
-      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+    <Dialog
+      open
+      onClose={() => (busy ? null : onClose())}
+      // Wide enough for the style cards (AGL-4049), scrolling inside.
+      maxWidth="md"
+      fullWidth
+      scroll="paper"
+      aria-labelledby="create-site-title"
+    >
+      <DialogTitle id="create-site-title">{'Create a new site'}</DialogTitle>
+      <DialogContent dividers sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <Typography variant="body2" color="text.secondary">
           {previewFor('starter')
             ? `Your site starts in preview on its ${TENANT_APEX} subdomain; ` +
@@ -472,8 +503,15 @@ function CreateSiteFlow({ onClose }: { onClose: () => void }) {
             : `Your site goes live on its ${TENANT_APEX} subdomain ` +
               'immediately; connect a custom domain any time from Setup.'}
         </Typography>
-        {/* The dialog is narrow, so its fields stack. */}
-        {address.stackedFields}
+        {address.fields}
+        <Typography variant="subtitle1" component="h2" sx={{ mt: 1 }}>
+          {'Choose a style'}
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          {'Your site starts with a home page, a header and a footer in the style you choose. ' +
+            'You can change everything later.'}
+        </Typography>
+        <SiteStylePicker value={formStyle} onChange={setFormStyle} />
         <StartInPreviewSwitch
           checked={previewFor('starter')}
           onChange={setPreviewChoice}
@@ -481,13 +519,18 @@ function CreateSiteFlow({ onClose }: { onClose: () => void }) {
         />
       </DialogContent>
       <DialogActions>
+        {formStyle ? null : (
+          <Typography variant="body2" color="text.secondary" sx={{ mr: 'auto', pl: 1 }}>
+            {'Choose a style to create your site.'}
+          </Typography>
+        )}
         <Button disabled={busy} onClick={onClose}>
           {'Cancel'}
         </Button>
         <Button
           variant="contained"
           color="primary"
-          disabled={!address.usable || busy}
+          disabled={!address.usable || !formStyle || busy}
           onClick={() => void submitForm()}
         >
           {busy ? 'Creating…' : 'Create site'}

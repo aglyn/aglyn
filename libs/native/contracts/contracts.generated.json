@@ -8778,6 +8778,10 @@
     "status",
     "type"
   ],
+  "PUBLISHER_AGREEMENT_CONSENT_LABEL": "I agree to the Marketplace Publisher Agreement",
+  "PUBLISHER_AGREEMENT_TITLE": "Marketplace Publisher Agreement",
+  "PUBLISHER_AGREEMENT_URL": "https://aglyn.com/legal/marketplace-publisher-agreement",
+  "PUBLISHER_AGREEMENT_VERSION": "2026-08-24.1",
   "RAIL_RECENT_ORGS": 3,
   "RECENT_ORGS_FIELD": "recentOrgs",
   "RECENT_ORGS_MAX": 8,
