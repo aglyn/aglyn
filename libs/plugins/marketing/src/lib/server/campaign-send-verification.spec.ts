@@ -220,7 +220,7 @@ describe('an unverified account cannot reach a send (AGL-2589)', () => {
     const result = await post({ audience: 'leads' })
     expect(result.status).toBe(403)
     expect(result.body?.reason).toBeUndefined()
-    expect(result.body?.error).toBe('Not a site admin or editor')
+    expect(result.body?.error).toBe('Your role does not include "Run email campaigns" — ask an organization admin')
     // Reaching the role gate means the verification gate let it through.
     expect(firestoreReads).toBeGreaterThan(0)
   })
@@ -237,7 +237,7 @@ describe('an unverified account cannot reach a send (AGL-2589)', () => {
     }
     const result = await post({ audience: 'leads' })
     expect(result.body?.reason).toBeUndefined()
-    expect(result.body?.error).toBe('Not a site admin or editor')
+    expect(result.body?.error).toBe('Your role does not include "Run email campaigns" — ask an organization admin')
     expect(firestoreReads).toBeGreaterThan(0)
   })
 

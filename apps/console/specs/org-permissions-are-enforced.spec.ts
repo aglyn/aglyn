@@ -215,6 +215,40 @@ const ENFORCED_AS: Record<OrgPermission, readonly string[]> = {
   // through `holdsBookingsSiteKey`.
   'bookings.payments': ["'bookings.payments'"],
   'bookings.refunds': ["'bookings.refunds'"],
+  // Commerce's keys for members of the whole workspace only (AGL-4047): the
+  // refund route asks "Refund orders", the register's gate, PIN and return
+  // doors "Approve refunds over the register's limit", and the order
+  // webhooks route "Manage order webhooks", each through
+  // `holdsCommerceWorkspaceSiteKey`.
+  'commerce.refunds': ["'commerce.refunds'"],
+  'commerce.posApprovals': ["'commerce.posApprovals'"],
+  'commerce.webhooks': ["'commerce.webhooks'"],
+  // Funnels and Marketing (AGL-4047): the funnels routes and draft writer ask
+  // "Manage funnels", the campaign routes and draft writer "Run email
+  // campaigns", each through `holdsStampedSiteKey` (and the organization
+  // hub's campaigns through `memberHasOrgPermission`).
+  'funnels.manage': ["'funnels.manage'"],
+  'marketing.campaigns': ["'marketing.campaigns'"],
+  // The marketplace on a site (AGL-4047): the seven install doors ask
+  // "Install marketplace items into a site" and the six publish doors
+  // "Publish a site's items to the marketplace", beside the workspace keys.
+  'marketplace.siteInstall': ["'marketplace.siteInstall'"],
+  'marketplace.sitePublish': ["'marketplace.sitePublish'"],
+  // Workflows and Domains (AGL-4047): `automations/manage`, the org
+  // automations import and the pause door's managers ask "Manage org
+  // automations", the pause door "Pause org automations on a site", and the
+  // domains gate's workspace arm "Manage the workspace's domains".
+  'workflows.orgAutomations': ["'workflows.orgAutomations'"],
+  'workflows.sitePause': ["'workflows.sitePause'"],
+  'domains.manage': ["'domains.manage'"],
+  // Email and the inbox (AGL-4047): the suppression routes ask "Manage the
+  // site's suppressions", the list routes "Add people to marketing lists from
+  // a site", the inbox's reply "Reply from the inbox" and its list assignment
+  // "Add people to lists from the inbox".
+  'email.suppressions': ["'email.suppressions'"],
+  'email.lists': ["'email.lists'"],
+  'inbox.reply': ["'inbox.reply'"],
+  'inbox.assign': ["'inbox.assign'"],
 }
 
 function serverFilesContaining(needle: string): string[] {
@@ -257,7 +291,7 @@ describe('every advertised org permission is enforced server-side (AGL-2444)', (
     expect([...CATALOG].sort()).toEqual(
       Object.keys(ENFORCED_AS).sort(),
     )
-    expect(CATALOG.length).toBe(33)
+    expect(CATALOG.length).toBe(47)
   })
 
   it('the search really searches — a key nobody uses finds nothing', () => {

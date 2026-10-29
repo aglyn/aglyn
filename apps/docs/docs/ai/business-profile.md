@@ -8,7 +8,8 @@ description: Tell Aglyn AI what your business does, who it is for and how it sou
 
 Every AI job for a site starts from what the site already knows about the
 business: its name, what it does, its services, the area it serves, who it is
-for, its tone of voice, and the contact details you entered. Aglyn AI writes
+for, its tone of voice, the year it was founded, and the contact details you
+entered. Aglyn AI writes
 for **this** business instead of guessing, and it never makes up a way to reach
 you.
 
@@ -31,14 +32,17 @@ The **Business profile** card holds what Aglyn AI writes for:
 - **Services**, one per line, up to 12;
 - **Who it is for** and **Area served**;
 - **Tone of voice**: Friendly and warm, Professional and clear, Playful and upbeat,
-  Premium and refined, or Plain and direct, and **Notes on tone** for anything else.
+  Premium and refined, or Plain and direct, and **Notes on tone** for anything else;
+- **Year founded**, as four digits, such as 2015. An About page or a "Since" line uses it
+  instead of leaving a gap where the year would go.
 
 Aglyn AI reads it on every job for the site and never replaces what you write here.
 
 ## Where the values come from {#where-the-values-come-from}
 
 When a site is started with Aglyn AI, the profile is filled from your answers
-to the guided start, and from what the plan wrote about the business. Each
+to the guided start, including the **Year founded** from **More details**, and
+from what the plan wrote about the business. Each
 field says where its value came from:
 
 - **Your answers when the site was started**, or **Suggested by Aglyn AI**: a
@@ -53,16 +57,16 @@ never overwrites one you wrote, and a field you cleared stays clear.
 
 **Settings → Profile** has a **Business profile defaults** card. A site uses
 those values wherever its own profile is empty, so a workspace that runs many
-sites for one business writes them once. Only managers can change them.
+sites for one business writes them once. Only managers can change them. The
+year founded is set on each site's own card.
 
 ## Contact details are never invented {#contact-details-are-never-invented}
 
 The name, business type, email, phone, address, opening hours and social
 profiles come only from **Setup → Basic details** and **Setup → SEO**, exactly
 as entered. A detail you have not entered reads **Not entered**, and Aglyn AI
-writes around it, or leaves a bracketed placeholder such as `[phone number]`
-for you to fill, instead of making one up. The same goes for prices, reviews
-and testimonials.
+writes the sentence without it instead of making one up or leaving a gap for
+you to fill. The same goes for prices, reviews and testimonials.
 
 ## What Aglyn AI learned {#what-aglyn-ai-learned}
 

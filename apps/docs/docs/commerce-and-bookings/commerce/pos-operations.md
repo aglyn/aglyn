@@ -225,9 +225,9 @@ instead of signing out.
 - A PIN **never grants more than your role**: the register checks your role
   and your Manage POS permission each time it is used, so removing someone's
   access takes effect on their next tap.
-- **Five wrong PINs** in a row lock that person out for 15 minutes. A
-  workspace admin can reset or remove anyone's PIN, which also lifts a
-  lockout.
+- **Five wrong PINs** in a row lock that person out for 15 minutes. Anyone with
+  **Approve refunds over the register's limit** can reset or remove anyone's PIN,
+  which also lifts a lockout.
 - **Lock the register after (minutes idle)** in Admin → Plugins → Commerce locks the
   register after that long without a tap, so the next person has to enter
   their PIN. Tap **Lock** to lock it yourself.
@@ -286,8 +286,10 @@ sale for the same customer.
 **Cashier refund limit ($)** in Admin → Plugins → Commerce is the largest return a
 cashier may refund without a manager. It is **$0 by default**, so every
 register refund needs a manager until you raise it. Above the limit the
-register asks a **workspace admin** to enter their PIN to approve that one
-refund. Workspace admins have no limit.
+register asks someone with **Approve refunds over the register's limit** to enter
+their PIN to approve that one refund, and anyone who holds it has no limit. By default
+that's an admin of the whole workspace who is also the site's admin. See
+[Order permissions](../../workspace-and-billing/teams-and-roles/custom-roles.md#order-permissions).
 
 ## Printed receipts
 

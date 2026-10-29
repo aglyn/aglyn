@@ -54,8 +54,8 @@ To start from a description instead, choose **Create with AI** in the card's hea
 AI drafts one and opens it in the editor, switched off, for you to place on sites and save.
 See [Automations with AI](../../ai/automations-with-ai.md#org-automations).
 
-Only an organization **owner**, **admin** or **editor** creates and edits org
-automations. An organization holds up to 100 of them; deleting one frees its place.
+Creating and editing org automations takes the **Manage org automations** permission,
+which a workspace's owners, admins and editors have. An organization holds up to 100 of them; deleting one frees its place.
 
 ### Triggers
 
@@ -93,9 +93,9 @@ organization and is always offered.
 
 Each site's **Automation → Actions** section shows **Org automations on this site**:
 the ones placed on it, whether each runs here, and **Pause here** / **Resume here**.
-A site's **admins** and **editors** can pause an org automation on their own site —
-only their own; the organization's editors can pause it on any of its sites from the
-organization hub, with **Pause on…** and the **Paused on** chips.
+Anyone with **Pause org automations on a site** (a site's admins and editors, by default)
+can pause an org automation on that site — only there; anyone with **Manage org
+automations** can pause it on any of the organization's sites from the organization hub, with **Pause on…** and the **Paused on** chips.
 
 Pausing stops it on that site, including for anyone waiting inside it there, and leaves
 every other site running it.

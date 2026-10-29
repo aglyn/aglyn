@@ -67,6 +67,8 @@ import {
   isEmailSuppressed,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
+import { holdsStampedSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
+import { EMAIL_SITE_ROLE_PRESET, emailSitePermissionRefusal } from './model/email-permissions'
 
 /**
  * The `reason` a hand-added entry carries.
@@ -156,9 +158,10 @@ export const emailSuppressionAddHandler: PluginApiHandler = async (req, res) => 
      * honor an opt-out about their own site's mail, which is the opposite of
      * what a suppression is for.
      */
-    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (memberRole !== 'admin' && memberRole !== 'editor') {
-      return res.status(403).json({ error: 'Not a site admin or editor' })
+    // "Manage the site's suppressions" (AGL-4047): the site's stamp, else the
+    // preset of the member's site role, the Admin and Editor this asked for.
+    if (!holdsStampedSiteKey(hostSnapshot, decoded.uid, 'email.suppressions', EMAIL_SITE_ROLE_PRESET)) {
+      return res.status(403).json({ error: emailSitePermissionRefusal('email.suppressions') })
     }
 
     const note = String(body.note ?? '')
@@ -278,9 +281,10 @@ export const emailSuppressionStatusHandler: PluginApiHandler = async (
     if (!hostSnapshot.exists) {
       return res.status(404).json({ error: 'Unknown site' })
     }
-    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (memberRole !== 'admin' && memberRole !== 'editor') {
-      return res.status(403).json({ error: 'Not a site admin or editor' })
+    // "Manage the site's suppressions" (AGL-4047): the site's stamp, else the
+    // preset of the member's site role, the Admin and Editor this asked for.
+    if (!holdsStampedSiteKey(hostSnapshot, decoded.uid, 'email.suppressions', EMAIL_SITE_ROLE_PRESET)) {
+      return res.status(403).json({ error: emailSitePermissionRefusal('email.suppressions') })
     }
 
     const addresses = readSuppressionAddresses(body.emails ?? body.email)

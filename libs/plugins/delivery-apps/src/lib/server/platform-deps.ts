@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { resolveHostEnabledPlugins } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
 import { pluginChannelOrders } from '@aglyn/aglyn/plugin-manager/plugin-channel-orders'
@@ -142,7 +143,8 @@ export async function deliveryAppsGate(request: Request, kind: DeliveryGateKind)
   const staff = decoded['staff'] === true
   const memberRole = String((site.host['memberRoles'] as Record<string, unknown> | undefined)?.[decoded.uid] ?? '')
   if (!staff) {
-    if (kind === 'settings' && memberRole !== 'admin') return fail(403, 'Not permitted')
+    // "Manage site settings" (AGL-4047), whose preset is the site Admin this asked for.
+    if (kind === 'settings' && !holdsSiteKey(site.host, decoded.uid, 'site.manage')) return fail(403, siteKeyRefusal('site.manage'))
     if (kind === 'register') {
       if (memberRole !== 'admin' && memberRole !== 'editor') return fail(403, 'Not permitted')
       const membership = await resolveOrgPermissions(decoded.uid, { hostId })

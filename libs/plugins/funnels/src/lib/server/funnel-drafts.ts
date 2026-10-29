@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { holdsStampedSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   registerPluginResourceDraftWriter,
@@ -32,11 +33,11 @@ import { normalizeFunnelDefinition } from '../model/funnel-definition'
 import { labelStepFromInventory, stepInventoryProblem } from '../model/funnel-inventory'
 import {
   FUNNEL_FEATURE,
-  FUNNEL_MANAGING_ROLES,
   FUNNELS_MAX_PER_SITE,
   isFunnelDraft,
   type FunnelDefinition,
 } from '../model/funnels.types'
+import { FUNNELS_MANAGE_REFUSAL, FUNNELS_MANAGE_SITE_ROLE_PRESET } from '../model/funnels-permissions'
 import { readFunnelInventory } from './funnel-inventory.server'
 
 /**
@@ -79,8 +80,8 @@ type Firestore = any
 /** The resource name this writer is registered under. */
 export const FUNNEL_DRAFT_RESOURCE = 'funnel'
 
-/** The save door's refusal for a member who may not change funnels. */
-export const FUNNEL_ROLE_REFUSAL = 'Only a site admin or editor can change its funnels'
+/** The save door's refusal for a member without "Manage funnels" (AGL-4047): names the permission. */
+export const FUNNEL_ROLE_REFUSAL = FUNNELS_MANAGE_REFUSAL
 /** The save door's refusal for a plan without the analytics tier. */
 export const FUNNEL_PLAN_REFUSAL =
   "Funnels come with per-page analytics, which this workspace's plan does not include"
@@ -148,8 +149,11 @@ function recordOf(snapshot: { id: string; data(): any }): PluginDraftRecord {
 }
 
 function roleRefusal(host: { get(field: string): unknown }, uid: string): PluginDraftRefusal | null {
-  const role = ((host.get('memberRoles') ?? {}) as Record<string, unknown>)[uid]
-  return FUNNEL_MANAGING_ROLES.has(String(role)) ? null : { status: 403, error: FUNNEL_ROLE_REFUSAL }
+  // "Manage funnels" (AGL-4047): the site's stamp, else the preset of the
+  // member's site role, the Admin and Editor this asked for before.
+  return holdsStampedSiteKey(host, uid, 'funnels.manage', FUNNELS_MANAGE_SITE_ROLE_PRESET)
+    ? null
+    : { status: 403, error: FUNNEL_ROLE_REFUSAL }
 }
 
 function planRefusal(org: PluginDraftContext['org']): PluginDraftRefusal | null {

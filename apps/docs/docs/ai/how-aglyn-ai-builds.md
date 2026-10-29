@@ -155,9 +155,12 @@ lists each job with where it stands.
 14. **Your voice, with no filler.** Copy follows your site's tone and the brief,
     with no lorem ipsum, and every heading, subhead and paragraph is finished rather
     than cut off mid-sentence. Where the brief leaves out a fact, such as a phone number
-    or a price, the AI marks the gap in square brackets instead of inventing it, and
-    **AI jobs** lists those gaps beside the draft so you can fill them before you
-    publish.
+    or a price, the AI writes the sentence without it instead of inventing it or leaving
+    a gap, and uses the facts in your [business profile](./business-profile.md). If a
+    draft still shows a fact in square brackets, **AI jobs** lists it beside the draft so
+    you can fill it before you publish. Only an email, an automation or a product
+    description marks a missing fact in square brackets on purpose, for you to fill
+    before it is sent or saved.
 15. **Start from a duplicate of the nearest thing.** When your site has a similar
     page, template or email, the job starts from a copy of it, which keeps its
     bindings and SEO.

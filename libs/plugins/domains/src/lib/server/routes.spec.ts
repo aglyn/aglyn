@@ -41,7 +41,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
   resolveOrgMembership: async (_uid: string, orgId: string) =>
     mockRole.current ? { orgId, member: { role: mockRole.current } } : null,
-  memberHasOrgPermission: async () => true,
+  // Billing as granted; "Manage the workspace's domains" (AGL-4047) as its
+  // default, the owner and admins.
+  memberHasOrgPermission: async (_orgId: string, member: { role?: string }, permission: string) =>
+    permission === 'domains.manage' ? member?.role === 'owner' || member?.role === 'admin' : true,
   logHostActivity: async (_hostId: string, _actor: unknown, action: string) => void mockActivity.push(action),
 }))
 jest.mock('@aglyn/tenant-data-admin/server/organizations', () => ({

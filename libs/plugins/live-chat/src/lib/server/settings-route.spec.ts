@@ -36,8 +36,8 @@ function deps(overrides: Partial<LiveChatSettingsDeps> = {}): LiveChatSettingsDe
       return { uid: token, staff: token === 'staff' }
     }),
     isEmailUnverified: (error) => error instanceof Unverified,
-    readMemberRoles: jest.fn(async (hostId: string) =>
-      hostId === 'h1' ? { admin: 'admin', editor: 'editor' } : null,
+    readSiteAccess: jest.fn(async (hostId: string) =>
+      hostId === 'h1' ? { memberRoles: { admin: 'admin', editor: 'editor' } } : null,
     ),
     siteLocked: jest.fn(async () => false),
     readSettings: jest.fn(async () => SETTINGS),
@@ -115,7 +115,7 @@ describe('/api/live-chat/settings (AGL-3698)', () => {
   })
 
   it('lets staff save, and says so when the cache could not be dropped', async () => {
-    const handlerDeps = deps({ readMemberRoles: jest.fn(async () => ({})), dropSiteCache: jest.fn(async () => false) })
+    const handlerDeps = deps({ readSiteAccess: jest.fn(async () => ({ memberRoles: {} })), dropSiteCache: jest.fn(async () => false) })
     const answer = await call(handlerDeps, { method: 'POST', token: 'staff', body: { hostId: 'h1', settings: SETTINGS } })
     expect(answer.statusCode).toBe(200)
     expect((answer.body as { refreshed: boolean }).refreshed).toBe(false)
@@ -139,5 +139,21 @@ describe('/api/live-chat/settings (AGL-3698)', () => {
     expect(junk.statusCode).toBe(400)
     expect((junk.body as { error: string }).error).toContain('Tidio public key')
     expect(handlerDeps.writeSettings).not.toHaveBeenCalled()
+  })
+
+  it('asks "Manage site settings", so the site’s stamp decides either way (AGL-4047)', async () => {
+    const handlerDeps = deps({
+      readSiteAccess: jest.fn(async () => ({
+        memberRoles: { admin: 'admin', editor: 'editor' },
+        memberPermissions: { admin: { 'site.manage': false }, editor: { 'site.manage': true } },
+      })),
+    })
+    const refused = await call(handlerDeps, { method: 'POST', token: 'admin', body: { hostId: 'h1', settings: SETTINGS } })
+    expect([refused.statusCode, refused.body]).toEqual([
+      403,
+      { error: 'Your role does not include "Manage site settings" — ask an organization admin' },
+    ])
+    const granted = await call(handlerDeps, { method: 'POST', token: 'editor', body: { hostId: 'h1', settings: SETTINGS } })
+    expect(granted.statusCode).toBe(200)
   })
 })

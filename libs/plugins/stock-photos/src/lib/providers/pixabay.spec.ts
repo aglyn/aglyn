@@ -102,6 +102,20 @@ describe('a Pixabay answer', () => {
     expect(parsePixabayAnswer(PIXABAY_CERAMIC_POTTERY_ANSWER)).toHaveLength(4)
   })
 
+  it('keeps a hit’s late tags, where a maker is often named, up to 30 (AGL-4092)', () => {
+    const base = PIXABAY_YOGA_STUDIO_ANSWER.hits[0]
+    // A street bike's 25 tags as Pixabay gives them: the maker, misspelled, is the 21st.
+    const tags = [
+      'man', 'model', 'motorcycle', 'motorcyclist', 'moto', 'biker', 'young guy', 'young', 'jacket', 'motorcycle team',
+      'motorcycle gear', 'team', 'equipment', 'helmet', 'reflection', 'lights', 'visor', 'viewer', 'protection', 'rgv',
+      'susuki', 'susuki rgv', 'race motorcycle', 'urban motorcycle', 'career',
+    ]
+    const [hit] = parsePixabayAnswer({ hits: [{ ...base, tags: tags.join(', ') }] })
+    expect(hit?.tags).toEqual(tags)
+    const [capped] = parsePixabayAnswer({ hits: [{ ...base, tags: Array.from({ length: 40 }, (_unused, index) => `tag ${index}`).join(', ') }] })
+    expect(capped?.tags).toHaveLength(30)
+  })
+
   it("keeps a hit's small copy at the preview size, only on Pixabay's hosts (AGL-4066)", () => {
     const base = PIXABAY_YOGA_STUDIO_ANSWER.hits[0]
     const [offHost, unsized, none] = parsePixabayAnswer({

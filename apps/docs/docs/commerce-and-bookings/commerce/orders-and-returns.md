@@ -101,7 +101,7 @@ is written to [Stock movements](overview.md#stock-movements) beside the sale.
 **Refund…** suggests what the items are worth — each line's paid price, after the
 order's discount, for the units coming back — and you can change it, for example to
 add the shipping. The money goes back to the original payment through the order's own
-refund, so the refund rules are the same: it needs an admin of the whole workspace,
+refund, so the refund rules are the same: it needs the **Refund orders** permission,
 and it cannot refund more than is left on the order. Asking twice refunds once. The
 buyer is emailed the amount, and the order's restock question is answered by what the
 return already put back.
@@ -114,8 +114,9 @@ declined** and **Return refunded** — are designed like your other store emails
 
 An order webhook posts each order event to an address you choose, as it happens: a
 warehouse system, an ERP, a spreadsheet script. Add them under **Notifications** →
-**Order webhooks** in the Products hub. Managing webhooks needs the **admin** role
-*and* organization-wide membership, the same as refunds.
+**Order webhooks** in the Products hub. Managing webhooks needs the **Manage order
+webhooks** permission. By default, as with refunds, that's an admin of the whole
+workspace who is also the site's admin.
 
 **Add endpoint** asks for:
 

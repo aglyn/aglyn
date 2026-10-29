@@ -19,9 +19,11 @@
 // this at boot, and the barrel reaches the client contexts.
 import { registerInteractionStepChecks } from '@aglyn/aglyn/plugin-manager/interaction-step-checks'
 import { registerPluginActivityActions } from '@aglyn/aglyn/plugin-manager/plugin-activity-actions'
+import { registerPluginEntitlements } from '@aglyn/aglyn/plugin-manager/plugin-entitlements'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { hostActionStepProblem, SERVER_ACTION_STEP_TYPES } from './model/host-actions'
 import { describeAutomationRunAction } from './model/run-activity-words'
+import { WORKFLOWS_PERMISSIONS } from './model/workflows-permissions'
 
 /**
  * The automation editor's DECLARATIONS: what another surface reads of this
@@ -35,6 +37,9 @@ import { describeAutomationRunAction } from './model/run-activity-words'
  * checks are pure, and nothing here reaches Firestore or React.
  */
 export function registerWorkflowsDeclarations(): void {
+  // The org automations' keys (AGL-4047): the one permission catalog lists
+  // them beside the core keys.
+  registerPluginEntitlements({ pluginId: BUNDLE_ID, orgPermissions: WORKFLOWS_PERMISSIONS })
   registerInteractionStepChecks(SERVER_ACTION_STEP_TYPES, hostActionStepProblem, { pluginId: BUNDLE_ID })
   // The run lines the engine files in a site's activity read in words in every feed and the apps' activity rows (AGL-3892).
   registerPluginActivityActions({

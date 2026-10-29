@@ -98,6 +98,10 @@ export const PIXABAY_LARGE_EDGE = 1280
  */
 export const PIXABAY_PER_PAGE = 40
 
+/** The tags kept of a hit, and how much of its tag list is read (AGL-4092). */
+export const PIXABAY_TAGS_KEPT = 30
+export const PIXABAY_TAGS_MAX_CHARS = 600
+
 /** Requests kept in hand before the window resets, for other instances. */
 export const PIXABAY_RATE_MARGIN = 5
 
@@ -284,11 +288,14 @@ export function parsePixabayAnswer(body: unknown): PixabayPhoto[] {
             photographerUrl: `https://pixabay.com/users/${encodeURIComponent(user)}-${userId}/`,
           }
         : {}),
-      tags: text(hit['tags'], 300)
+      // Every tag a photo is given, up to 30 (AGL-4092): a maker's name is
+      // often a late one ("susuki" was a street bike's 21st), and the caller
+      // turns down a photo by what its tags name.
+      tags: text(hit['tags'], PIXABAY_TAGS_MAX_CHARS)
         .split(',')
         .map((tag) => tag.trim().toLowerCase())
         .filter(Boolean)
-        .slice(0, 20),
+        .slice(0, PIXABAY_TAGS_KEPT),
       downloadUrl,
       ...(previewUrl ? { previewUrl } : {}),
     })

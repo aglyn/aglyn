@@ -18,6 +18,7 @@
 import { registerPluginEntitlements } from '@aglyn/aglyn/plugin-manager/plugin-entitlements'
 import { registerPluginPermissions } from '@aglyn/aglyn/plugin-manager/plugin-permissions'
 import { COMMERCE_PERMISSIONS, COMMERCE_SITE_PERMISSIONS } from './model/plugin-permissions'
+import { COMMERCE_WORKSPACE_SITE_PERMISSIONS } from './model/workspace-site-permissions'
 
 let declared = false
 
@@ -35,7 +36,10 @@ let declared = false
 export function registerCommerceDeclarations(): void {
   if (declared) return
   declared = true
-  registerPluginEntitlements({ pluginId: 'commerce', orgPermissions: COMMERCE_SITE_PERMISSIONS })
+  registerPluginEntitlements({
+    pluginId: 'commerce',
+    orgPermissions: [...COMMERCE_SITE_PERMISSIONS, ...COMMERCE_WORKSPACE_SITE_PERMISSIONS],
+  })
   registerPluginPermissions(COMMERCE_PERMISSIONS)
 }
 

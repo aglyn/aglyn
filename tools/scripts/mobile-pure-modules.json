@@ -534,6 +534,38 @@
       "why": "The commerce plugin's permission keys (managePos) and their tier defaults, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
     },
     {
+      "path": "libs/plugins/commerce/src/lib/model/workspace-site-permissions.ts",
+      "why": "The commerce plugin's keys for members of the whole workspace only (refunds, the register's approvals, order webhooks), assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
+      "path": "libs/plugins/funnels/src/lib/model/funnels-permissions.ts",
+      "why": "The funnels plugin's site key (Manage funnels) and its site-role preset, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
+      "path": "libs/plugins/marketing/src/lib/model/marketing-permissions.ts",
+      "why": "The marketing plugin's site key (Run email campaigns) and its site-role preset, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
+      "path": "libs/plugins/marketplace/src/lib/model/marketplace-site-permissions.ts",
+      "why": "The marketplace plugin's site keys (install into a site, publish from one) and their site-role preset, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
+      "path": "libs/plugins/workflows/src/lib/model/workflows-permissions.ts",
+      "why": "The workflows plugin's keys (manage the organization's automations, pause one on a site) and their presets, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
+      "path": "libs/plugins/domains/src/lib/model/domains-permissions.ts",
+      "why": "The domains plugin's workspace key (manage the workspace's domains) and its role defaults, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
+      "path": "libs/plugins/email/src/lib/model/email-permissions.ts",
+      "why": "The email plugin's site keys (suppressions, list membership) and their site-role preset, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
+      "path": "libs/plugins/inbox/src/lib/model/inbox-permissions.ts",
+      "why": "The inbox plugin's site keys (reply, add to lists) and their site-role preset, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
       "path": "libs/plugins/commerce/src/lib/model/product-channel.ts",
       "why": "A product's shopping-channel facts (brand, GTIN, MPN, condition, category) and their normalizing, imports nothing; commerce.ts stages them in the product editor (AGL-3637)."
     },

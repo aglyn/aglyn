@@ -272,11 +272,11 @@ snapshots, totals, and a timeline:
   [Returns](orders-and-returns.md#returns). **Order webhooks** send each order
   event to your own systems — see [Order webhooks](orders-and-returns.md#order-webhooks).
 - **Refunds** (full or partial) go through Stripe and reverse the platform
-  fee. Refunding needs the **admin** role *and* organization-wide membership —
-  a workspace owner or admin, or a member given access to every site. A
-  collaborator invited to this one site is an admin **of the site**, which is
-  enough to run the till and fulfill orders but not to send money back out of
-  the business.
+  fee. Refunding needs the **Refund orders** permission. By default, that's an
+  admin of the site who is also a member of the whole workspace: a workspace owner
+  or admin, or a member given access to every site. A collaborator invited to this
+  one site as its admin can run the till and fulfill orders, but can't send money
+  back out of the business unless the site grants them **Refund orders**.
 - **Chargebacks** are shown apart from refunds. When a shopper disputes a
   charge with their bank, the order gets a **Chargeback open** badge and the
   list warns you with the date Stripe needs your evidence by — answer it in

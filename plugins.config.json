@@ -1113,6 +1113,7 @@
         "console": "registerMarketplaceConsole",
         "staff": "registerMarketplaceConsole",
         "consoleApi": "registerMarketplaceConsoleApi",
+        "declarations": "registerMarketplaceDeclarations",
         "serverDeclarations": "registerMarketplaceServerDeclarations",
         "planEntitlements": "marketplacePlanEntitlements"
       },
@@ -1852,6 +1853,7 @@
         "site": "registerEmailPlugin",
         "console": "registerEmailConsole",
         "tenantApi": "registerEmailApi",
+        "declarations": "registerEmailDeclarations",
         "consoleApi": "registerEmailConsoleApi",
         "consoleServerDeclarations": "registerEmailConsoleServerDeclarations"
       },
@@ -2110,6 +2112,7 @@
       "package": "@aglyn/plugins-inbox",
       "register": {
         "console": "registerInboxConsole",
+        "declarations": "registerInboxDeclarations",
         "consoleApi": "registerInboxConsoleApi"
       },
       "apiPrefixes": [
@@ -2261,6 +2264,7 @@
         "tenantApi": "registerMarketingApi",
         "consoleApi": "registerMarketingConsoleApi",
         "site": "registerMarketingPlugin",
+        "declarations": "registerMarketingDeclarations",
         "serverDeclarations": "registerMarketingServerDeclarations",
         "tenantEmails": "marketingTenantEmails"
       },
@@ -4166,6 +4170,7 @@
       "register": {
         "console": "registerFunnelsConsole",
         "consoleApi": "registerFunnelsConsoleApi",
+        "declarations": "registerFunnelsDeclarations",
         "serverDeclarations": "registerFunnelsServerDeclarations",
         "consoleServerDeclarations": "registerFunnelsConsoleServerDeclarations"
       },
@@ -4431,6 +4436,7 @@
       "register": {
         "console": "registerDomainsConsole",
         "consoleApi": "registerDomainsConsoleApi",
+        "declarations": "registerDomainsDeclarations",
         "consoleServerDeclarations": "registerDomainsConsoleServerDeclarations",
         "subprocessors": "domainsSubprocessors"
       },

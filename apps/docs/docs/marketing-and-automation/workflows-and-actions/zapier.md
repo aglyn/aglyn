@@ -76,8 +76,8 @@ contact; or a submission with every field — so a later step can use any field.
 
 The **Zapier** card in a site's **Setup → Integrations** lists every Zap that takes the site's
 records: what it takes, the API key it connected with, and when it was last sent
-something. A site admin can **Disconnect** one there, and it stops receiving events at
-once.
+something. Anyone with **Manage site settings** (a site's admins, by default) can
+**Disconnect** one there, and it stops receiving events at once.
 
 A Zap also stops receiving events when:
 

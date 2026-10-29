@@ -117,9 +117,9 @@ Four permissions decide what someone may do on a site:
 | Permission | What it opens | Admin | Editor | Author | Viewer |
 |---|---|---|---|---|---|
 | **Edit site content** (`site.edit`) | Create and change pages, layouts, components, entries, media and the rest of a site's content, without making it live; edit alongside others in the Besigner, and open the edit bar on the live site | Yes | Yes | Yes | No |
-| **Publish site content** (`site.publish`) | Publish, unpublish and schedule pages and entries, delete pages and content, change redirects, choose a theme from the library, publish forms and members-only posts, and test an automation's actions | Yes | Yes | No | No |
-| **See orders and webhooks** (`site.sensitive`) | Read the site's orders and returns, and set up its webhooks | Yes | Yes | No | No |
-| **Manage site settings** (`site.manage`) | Manage the site's people, custom domain, address and plugins, change its plugin settings and security allow-lists, import and export it, and delete it or a collection (deleting the site also needs **Delete sites**) | Yes | No | No | No |
+| **Publish site content** (`site.publish`) | Publish, unpublish and schedule pages and entries, delete pages and content, change redirects, choose a theme from the library, change the site's fonts, publish forms and members-only posts, and test an automation's actions | Yes | Yes | No | No |
+| **See orders and webhooks** (`site.sensitive`) | Read the site's orders and returns and the address its mail is sent from, and set up its webhooks | Yes | Yes | No | No |
+| **Manage site settings** (`site.manage`) | Manage the site's people, custom domain, address and plugins, change its plugin settings (such as live chat) and security allow-lists, disconnect a Zap, import and export it, and delete it or a collection (deleting the site also needs **Delete sites**) | Yes | No | No | No |
 
 Each starts from the member's role on the site, the columns above, so nobody's access
 changed when they became permissions. Owners and admins are admins of every site, and
@@ -138,10 +138,17 @@ only, set them for that site in its **Users** card: choose **Permissions** besid
 | **Issue gift cards** (`commerce.giftCards`) | Issue, adjust and void the store's gift cards | Yes | Yes | No | No |
 | **Manage payment methods** (`commerce.paymentMethods`) | Turn the store's payment methods on and off (anyone with **Manage orders** sees them) | Yes | No | No | No |
 | **Connect shipping apps** (`commerce.shippingConnections`) | Connect, sync and disconnect ShipStation and ShippingEasy, and show or replace their credentials (anyone with **Manage orders** sees whether they're connected) | Yes | No | No | No |
+| **Refund orders** (`commerce.refunds`) | Refund any order, online or at the register, with no register limit | Yes* | No | No | No |
+| **Approve refunds over the register's limit** (`commerce.posApprovals`) | Refund at the register above its limit, approve a cashier's refund over it with a PIN, and set or clear other staff members' PINs | Yes* | No | No | No |
+| **Manage order webhooks** (`commerce.webhooks`) | Add, change, test and remove order webhooks, roll their secrets and resend deliveries | Yes* | No | No | No |
 
 Like the site permissions, each starts from the member's role on the site, so nobody's
 access changed when they became permissions, and a custom role, a per-member override
 or the site's **Permissions** dialog can grant or deny any of them.
+
+\* Only for a member of the whole workspace. These three move money or the store's
+order data out of the business, so someone added to just one site as its admin doesn't
+hold them unless that site grants them in its **Permissions** dialog.
 
 ### Reservation permissions {#reservation-permissions}
 
@@ -174,6 +181,56 @@ Checking guests in and moving bookings follow **Edit site content**, as editing 
 booking always has. Like the site permissions, both start from the member's role on
 the site, so nobody's access changed when they became permissions, and a custom role,
 a per-member override or the site's **Permissions** dialog can grant or deny either one.
+
+### Funnel and campaign permissions {#funnel-and-campaign-permissions}
+
+| Permission | What it opens | Admin | Editor | Author | Viewer |
+|---|---|---|---|---|---|
+| **Manage funnels** (`funnels.manage`) | Create, change, activate and remove a site's funnels, and draft them with AI | Yes | Yes | No | No |
+| **Run email campaigns** (`marketing.campaigns`) | Draft, send, duplicate and manage email campaigns, and see who a send reached | Yes | Yes | No | No |
+
+Both start from the member's role on the site, so nobody's access changed when they became
+permissions. In the organization hub, with no site picked, **Run email campaigns** starts from
+the workspace role instead: owners, admins and editors of the whole workspace hold it. A custom
+role, a per-member override or the site's **Permissions** dialog can grant or deny either one.
+
+### Marketplace permissions on a site {#marketplace-site-permissions}
+
+| Permission | What it opens | Admin | Editor | Author | Viewer |
+|---|---|---|---|---|---|
+| **Install marketplace items into a site** (`marketplace.siteInstall`) | Install templates, themes, layouts, components, email designs and plugins from the marketplace into the site | Yes | Yes | No | No |
+| **Publish a site's items to the marketplace** (`marketplace.sitePublish`) | Publish the site's templates, themes, layouts, components and email designs to the marketplace | Yes | Yes | No | No |
+
+Each works beside the workspace's own marketplace permission (installing from the
+marketplace, publishing to it), which is still asked too. Both start from the member's role
+on the site, so nobody's access changed when they became permissions, and a custom role, a
+per-member override or the site's **Permissions** dialog can grant or deny either one.
+
+### Automation and domain permissions {#automation-and-domain-permissions}
+
+| Permission | What it opens | Owner | Admin | Editor | Viewer |
+|---|---|---|---|---|---|
+| **Manage org automations** (`workflows.orgAutomations`) | Create, change, switch on and off, remove and import the organization's automations | Yes | Yes | Yes | No |
+| **Manage the workspace's domains** (`domains.manage`) | The workspace's **Domains** page: buy, transfer in, unlock and renew domains, and change their contacts and DNS (paying also needs **Manage billing**) | Yes | Yes | No | No |
+
+Both are for members of the whole workspace. **Pause org automations on a site**
+(`workflows.sitePause`) starts from the member's role on the site instead: a site's admins
+and editors hold it. Nobody's access changed when these became permissions, and a custom
+role or a per-member override can grant or deny each one.
+
+### Email and inbox permissions {#email-and-inbox-permissions}
+
+| Permission | What it opens | Admin | Editor | Author | Viewer |
+|---|---|---|---|---|---|
+| **Manage the site's suppressions** (`email.suppressions`) | Add addresses to the site's suppression list and check addresses against it | Yes | Yes | No | No |
+| **Add people to marketing lists from a site** (`email.lists`) | Add and remove people on the organization's marketing lists from a site | Yes | Yes | No | No |
+| **Reply from the inbox** (`inbox.reply`) | Reply by email to a form submission | Yes | Yes | No | No |
+| **Add people to lists from the inbox** (`inbox.assign`) | Add a submission's person to the organization's marketing lists | Yes | Yes | No | No |
+
+Each starts from the member's role on the site, so nobody's access changed when they became
+permissions, and a custom role, a per-member override or the site's **Permissions** dialog
+can grant or deny any of them. Marketing lists belong to the whole organization, so changing
+who is on one also still needs an owner, admin or editor of the whole workspace.
 
 ### API keys, privacy requests, and holds {#api-keys-privacy-and-holds}
 

@@ -125,6 +125,8 @@ const state = {
   versionExists: true,
   revocation: undefined as Record<string, unknown> | undefined,
   writes: [] as Written[],
+  /** The site's access fields (AGL-4047): the buyer is its Admin, and no stamp unless a case sets one. */
+  host: { memberRoles: { 'buyer-1': 'admin' } } as Record<string, unknown>,
 }
 
 jest.mock('@aglyn/tenant-data-admin', () => {
@@ -137,7 +139,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     path,
     get: async () => {
       if (path === 'hosts/host-1') {
-        return snapshotOf({ memberRoles: { 'buyer-1': 'admin' } })
+        return snapshotOf(state.host)
       }
       if (path === 'marketplaceListings/listing-1') {
         return snapshotOf(state.listing)
@@ -226,6 +228,7 @@ beforeEach(() => {
   state.versionExists = true
   state.revocation = undefined
   state.writes = []
+  state.host = { memberRoles: { 'buyer-1': 'admin' } }
   state.listing = {
     artifactType: 'emailStarter',
     profileId: 'seller-org',
@@ -239,6 +242,25 @@ beforeEach(() => {
     subject: 'Spring is here',
     preheader: '20% off',
   }
+})
+
+describe('who may install into the site (AGL-4047)', () => {
+  it('asks "Install marketplace items into a site", so the site’s stamp decides either way', async () => {
+    state.host = { memberRoles: { 'buyer-1': 'admin' }, memberPermissions: { 'buyer-1': { 'marketplace.siteInstall': false } } }
+    const refused = await install()
+    expect(refused.statusCode).toBe(403)
+    expect(refused.body).toEqual({
+      error: 'Your role does not include "Install marketplace items into a site" — ask an organization admin',
+    })
+    expect(siteWrites()).toEqual([])
+    state.host = { memberRoles: { 'buyer-1': 'author' }, memberPermissions: { 'buyer-1': { 'marketplace.siteInstall': true } } }
+    expect((await install()).statusCode).toBe(200)
+  })
+
+  it('refuses a site Author the stamp says nothing about, as before', async () => {
+    state.host = { memberRoles: { 'buyer-1': 'author' } }
+    expect((await install()).statusCode).toBe(403)
+  })
 })
 
 describe('a clean install lands as an ordinary email of the site’s own', () => {

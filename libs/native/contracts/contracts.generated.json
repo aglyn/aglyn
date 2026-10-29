@@ -193,10 +193,12 @@
     "serviceArea",
     "audience",
     "tone",
-    "toneNotes"
+    "toneNotes",
+    "founded"
   ],
   "BUSINESS_PROFILE_MAX_CHARS": {
     "audience": 160,
+    "founded": 4,
     "serviceArea": 120,
     "services": 60,
     "toneNotes": 200,
@@ -7359,6 +7361,7 @@
         "ai.use",
         "ai.generate",
         "ai.import",
+        "funnels.manage",
         "bookings.payments",
         "bookings.refunds",
         "commerce.reservations",
@@ -7367,6 +7370,9 @@
         "commerce.giftCards",
         "commerce.paymentMethods",
         "commerce.shippingConnections",
+        "commerce.refunds",
+        "commerce.posApprovals",
+        "commerce.webhooks",
         "managePos",
         "posSell",
         "posRefund",
@@ -7374,11 +7380,21 @@
         "posCashDrawer",
         "posDevices",
         "posBuyHardware",
+        "marketplace.siteInstall",
+        "marketplace.sitePublish",
         "outreach.use",
         "outreach.manageAll",
+        "email.suppressions",
+        "email.lists",
+        "inbox.reply",
+        "inbox.assign",
+        "marketing.campaigns",
+        "workflows.orgAutomations",
+        "workflows.sitePause",
         "accounting.manage",
         "manageWaivers",
-        "collectWaivers"
+        "collectWaivers",
+        "domains.manage"
       ],
       "editor": [
         "data.manage",
@@ -7391,6 +7407,7 @@
         "site.sensitive",
         "ai.use",
         "ai.generate",
+        "funnels.manage",
         "bookings.payments",
         "commerce.reservations",
         "commerce.walkIns",
@@ -7403,6 +7420,15 @@
         "posCashDrawer",
         "posDevices",
         "posBuyHardware",
+        "marketplace.siteInstall",
+        "marketplace.sitePublish",
+        "email.suppressions",
+        "email.lists",
+        "inbox.reply",
+        "inbox.assign",
+        "marketing.campaigns",
+        "workflows.orgAutomations",
+        "workflows.sitePause",
         "manageWaivers",
         "collectWaivers"
       ],
@@ -7432,6 +7458,7 @@
         "ai.use",
         "ai.generate",
         "ai.import",
+        "funnels.manage",
         "bookings.payments",
         "bookings.refunds",
         "commerce.reservations",
@@ -7440,6 +7467,9 @@
         "commerce.giftCards",
         "commerce.paymentMethods",
         "commerce.shippingConnections",
+        "commerce.refunds",
+        "commerce.posApprovals",
+        "commerce.webhooks",
         "managePos",
         "posSell",
         "posRefund",
@@ -7447,11 +7477,21 @@
         "posCashDrawer",
         "posDevices",
         "posBuyHardware",
+        "marketplace.siteInstall",
+        "marketplace.sitePublish",
         "outreach.use",
         "outreach.manageAll",
+        "email.suppressions",
+        "email.lists",
+        "inbox.reply",
+        "inbox.assign",
+        "marketing.campaigns",
+        "workflows.orgAutomations",
+        "workflows.sitePause",
         "accounting.manage",
         "manageWaivers",
-        "collectWaivers"
+        "collectWaivers",
+        "domains.manage"
       ],
       "viewer": []
     },
@@ -7485,6 +7525,10 @@
         "label": "AI"
       },
       {
+        "id": "funnels",
+        "label": "Funnels"
+      },
+      {
         "id": "bookings",
         "label": "Bookings"
       },
@@ -7494,9 +7538,29 @@
         "pluginId": "commerce"
       },
       {
+        "id": "marketplace",
+        "label": "Marketplace"
+      },
+      {
         "id": "outreach",
         "label": "Sequences",
         "pluginId": "outreach"
+      },
+      {
+        "id": "email",
+        "label": "Email"
+      },
+      {
+        "id": "inbox",
+        "label": "Inbox"
+      },
+      {
+        "id": "marketing",
+        "label": "Marketing"
+      },
+      {
+        "id": "workflows",
+        "label": "Workflows"
       },
       {
         "id": "accounting",
@@ -7507,6 +7571,10 @@
         "id": "waivers",
         "label": "Waivers",
         "pluginId": "waivers"
+      },
+      {
+        "id": "domains",
+        "label": "Domains"
       }
     ],
     "permissions": [
@@ -7596,21 +7664,21 @@
         "scope": "site"
       },
       {
-        "description": "Make pages and content live, take them down or schedule them, and change redirects.",
+        "description": "Make pages and content live, take them down or schedule them, change redirects and change the site’s fonts.",
         "group": "sites",
         "key": "site.publish",
         "label": "Publish site content",
         "scope": "site"
       },
       {
-        "description": "Read a site’s orders and returns, and set up its webhooks.",
+        "description": "Read a site’s orders, returns and sending address, and set up its webhooks.",
         "group": "sites",
         "key": "site.sensitive",
         "label": "See orders and webhooks",
         "scope": "site"
       },
       {
-        "description": "Manage a site’s people, domain, address and plugins, change its plugin settings and security allow-lists, import, export and delete it.",
+        "description": "Manage a site’s people, domain, address and plugins, change its plugin settings (live chat, Zapier) and security allow-lists, import, export and delete it.",
         "group": "sites",
         "key": "site.manage",
         "label": "Manage site settings",
@@ -7668,6 +7736,13 @@
         "scope": "org"
       },
       {
+        "description": "Create, change and remove a site’s funnels, and draft them with AI. Follows the site role unless a role or member sets it.",
+        "group": "funnels",
+        "key": "funnels.manage",
+        "label": "Manage funnels",
+        "scope": "site"
+      },
+      {
         "description": "Take a booking’s payment at the desk on a card reader. Follows the site role unless a role or member sets it.",
         "group": "bookings",
         "key": "bookings.payments",
@@ -7722,6 +7797,27 @@
         "group": "commerce",
         "key": "commerce.shippingConnections",
         "label": "Connect shipping apps",
+        "scope": "site"
+      },
+      {
+        "description": "Refund any order, online or at the register, in full or in part, with no register limit. A member of the whole workspace who is the site’s admin holds it unless a role or member sets it; someone added to just this site holds it only when the site grants it.",
+        "group": "commerce",
+        "key": "commerce.refunds",
+        "label": "Refund orders",
+        "scope": "site"
+      },
+      {
+        "description": "Refund at the register above its refund limit, approve a cashier’s refund over it with a PIN, and set or clear other staff members’ PINs. A member of the whole workspace who is the site’s admin holds it unless a role or member sets it; someone added to just this site holds it only when the site grants it.",
+        "group": "commerce",
+        "key": "commerce.posApprovals",
+        "label": "Approve refunds over the register’s limit",
+        "scope": "site"
+      },
+      {
+        "description": "Add, change, test and remove the store’s order webhooks, roll their secrets and resend deliveries. A member of the whole workspace who is the site’s admin holds it unless a role or member sets it; someone added to just this site holds it only when the site grants it.",
+        "group": "commerce",
+        "key": "commerce.webhooks",
+        "label": "Manage order webhooks",
         "scope": "site"
       },
       {
@@ -7787,6 +7883,20 @@
         "scope": "org"
       },
       {
+        "description": "Install templates, themes, layouts, components, email designs and plugins from the marketplace into a site (with \"Install from the marketplace\"). Follows the site role unless a role or member sets it.",
+        "group": "marketplace",
+        "key": "marketplace.siteInstall",
+        "label": "Install marketplace items into a site",
+        "scope": "site"
+      },
+      {
+        "description": "Publish a site’s templates, themes, layouts, components and email designs to the marketplace (with \"Publish to the marketplace\"). Follows the site role unless a role or member sets it.",
+        "group": "marketplace",
+        "key": "marketplace.sitePublish",
+        "label": "Publish a site’s items to the marketplace",
+        "scope": "site"
+      },
+      {
         "description": "Open Sequences, and work its email sequences and connected mailboxes.",
         "group": "outreach",
         "key": "outreach.use",
@@ -7801,6 +7911,55 @@
         "label": "Manage everyone’s Sequences",
         "pluginId": "outreach",
         "scope": "org"
+      },
+      {
+        "description": "Add addresses to the site’s suppression list and check addresses against it. Follows the site role unless a role or member sets it.",
+        "group": "email",
+        "key": "email.suppressions",
+        "label": "Manage the site’s suppressions",
+        "scope": "site"
+      },
+      {
+        "description": "Add and remove people on the organization’s marketing lists from a site (only for a member of the whole workspace who may write its lists, as the lists are the organization’s). Follows the site role unless a role or member sets it.",
+        "group": "email",
+        "key": "email.lists",
+        "label": "Add people to marketing lists from a site",
+        "scope": "site"
+      },
+      {
+        "description": "Reply by email to a form submission in the site’s inbox. Follows the site role unless a role or member sets it.",
+        "group": "inbox",
+        "key": "inbox.reply",
+        "label": "Reply from the inbox",
+        "scope": "site"
+      },
+      {
+        "description": "Add the person behind a form submission to the organization’s marketing lists (members of the whole workspace who may write its lists only). Follows the site role unless a role or member sets it.",
+        "group": "inbox",
+        "key": "inbox.assign",
+        "label": "Add people to lists from the inbox",
+        "scope": "site"
+      },
+      {
+        "description": "Draft, send, duplicate and manage email campaigns, and see who a send reached. Follows the site role on a site, and the workspace role in the organization hub, unless a role or member sets it.",
+        "group": "marketing",
+        "key": "marketing.campaigns",
+        "label": "Run email campaigns",
+        "scope": "site"
+      },
+      {
+        "description": "Create, change, switch on and off, remove and import the organization’s automations. Members of the whole workspace only.",
+        "group": "workflows",
+        "key": "workflows.orgAutomations",
+        "label": "Manage org automations",
+        "scope": "org"
+      },
+      {
+        "description": "Pause or resume one of the organization’s automations on a site. Follows the site role unless a role or member sets it; \"Manage org automations\" also allows it.",
+        "group": "workflows",
+        "key": "workflows.sitePause",
+        "label": "Pause org automations on a site",
+        "scope": "site"
       },
       {
         "description": "Connect QuickBooks Online, Xero or other accounting software through Codat, choose the accounts sales are posted to, and retry a sync.",
@@ -7824,6 +7983,13 @@
         "key": "collectWaivers",
         "label": "Collect waivers",
         "pluginId": "waivers",
+        "scope": "org"
+      },
+      {
+        "description": "Buy, transfer in, unlock and renew the workspace’s domains, and change their contacts and DNS. Paying for one also needs \"Manage billing\".",
+        "group": "domains",
+        "key": "domains.manage",
+        "label": "Manage the workspace’s domains",
         "scope": "org"
       }
     ]

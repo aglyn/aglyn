@@ -31,6 +31,8 @@ import { reverseOrderConversion } from '@aglyn/aglyn/plugin-manager/plugin-conve
 import { createStripeRefund } from './stripe-refund'
 import { posRegisterRefundAuthority } from './pos-refund-authority'
 import { holdsPosPermission } from '../model/plugin-permissions'
+import { commerceWorkspacePermissionRefusal } from '../model/workspace-site-permissions'
+import { holdsCommerceWorkspaceSiteKey } from './commerce-site-keys'
 import { posOrderRefundRecord, POS_ORDER_REFUNDS_COLLECTION } from '../model/commerce-pos-day-report'
 import type { PosTenderSource } from '../model/commerce-pos-ops'
 import { posOrderRefundDialogId } from './pos-order-refund-ids'
@@ -192,56 +194,33 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
     if (!hostSnapshot.exists) {
       return res.status(404).json({ error: 'Unknown site' })
     }
-    // TWO CHECKS, and they answer different questions (AGL-2372).
-    //
-    // The first is the HOST-level fact the Firestore rules also enforce, and
-    // it stays: `memberRoles` is the projection the rules read, so dropping it
-    // here would let this route and the database disagree.
-    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    // The second is WHOSE admin, and it is the one this gate was missing.
-    //
-    // `memberRoles` is a per-host projection of `hostAccess`, and
-    // `/api/hosts/members` will grant a SITE COLLABORATOR `admin` on one site
-    // (`hostAccess: { [hostId]: 'admin' }`, `allHosts: false`). That writes the
-    // literal string `'admin'` into `memberRoles[uid]` — byte-identical to an
-    // org owner's. So the check above cannot tell a contractor invited to run
-    // one microsite from the person who owns the business, and refunding is
-    // money leaving that business.
-    //
-    // `orgWide` is the discriminator, and it needs no new role: it is
-    // `isOrgWideMember` (AGL-1026) — owner/admin of the org, an explicit
-    // `allHosts` member, or the legacy pre-`allHosts` shape — and it is false
-    // for every scoped collaborator. Same pairing `pos-order.ts` uses.
-    //
-    // BOTH halves are required. `hostRole` is re-tested rather than assumed
-    // from `memberRole`: an org-wide member can still be scoped down to
-    // `editor` on this host, and `resolveOrgPermissions` is the resolver that
-    // knows it. It fails CLOSED on a lookup error when a host is named
-    // (AGL-506), and `denied()` returns `orgWide: false` / `hostRole: null`,
-    // so an absent membership refuses rather than folding to permitted.
+    // "Refund orders" (`commerce.refunds`, AGL-4047). Its preset is the gate
+    // this asked before, both halves (AGL-2372): the site's Admin, AND a
+    // member of the WHOLE workspace. `/api/hosts/members` can make a site
+    // collaborator the admin of one site, which writes the same `'admin'`
+    // into `memberRoles` as an owner's, and refunding is money leaving the
+    // business, so the key's site-role preset holds for members of the whole
+    // workspace only (`workspaceMembersOnly`). `resolveOrgPermissions` is the
+    // resolver that knows `orgWide` and this site's role now; it fails CLOSED
+    // on a lookup error when a host is named (AGL-506). The site's stamp,
+    // when the projection wrote one, carries a custom role's, an override's
+    // or the site's grant either way.
     const membership = await resolveOrgPermissions(decoded.uid, { hostId })
-    const workspaceAdmin =
-      memberRole === 'admin' &&
-      membership.orgWide === true &&
-      membership.hostRole === 'admin'
+    const refunder = holdsCommerceWorkspaceSiteKey(hostSnapshot, decoded.uid, 'commerce.refunds', membership)
     // THE REGISTER'S OWN REFUNDS (AGL-3609). A member who works the register
     // — `managePos` with the register's refund key, as resolved for this site
     // (AGL-4047), whatever their site role — may refund a POS order up to the
-    // site's cashier refund limit, and above it with a workspace admin's PIN.
-    // Decided below, once the order and the amount are known; every other
-    // refund still needs the workspace admin above.
+    // site's cashier refund limit, and above it with the PIN of someone who
+    // holds "Approve refunds over the register's limit". Decided below, once
+    // the order and the amount are known; every other refund still needs
+    // "Refund orders" above.
     const registerStaff =
-      !workspaceAdmin &&
+      !refunder &&
       // The register's refund key (AGL-4047), which follows `managePos`
       // unless a role or the member sets it, and is never held without it.
       holdsPosPermission(membership.permissions, 'posRefund')
-    if (!workspaceAdmin && !registerStaff) {
-      return res.status(403).json({
-        error:
-          memberRole !== 'admin'
-            ? 'Refunds require a site admin'
-            : 'Refunds require an admin of the whole workspace',
-      })
+    if (!refunder && !registerStaff) {
+      return res.status(403).json({ error: commerceWorkspacePermissionRefusal('commerce.refunds') })
     }
     const orderRef = hostRef.collection('orders').doc(orderId)
     const orderSnapshot = await orderRef.get()
@@ -260,6 +239,9 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
           : null,
         registerId: String(body.registerId ?? (order as { registerId?: string }).registerId ?? ''),
         managerAssertion: body.managerAssertion,
+        // Their own approval, when a role or the site grants it without
+        // "Refund orders" (AGL-4047); under the presets the two go together.
+        isManager: holdsCommerceWorkspaceSiteKey(hostSnapshot, decoded.uid, 'commerce.posApprovals', membership),
       })
       if ('body' in authority) return res.status(403).json(authority.body)
     }

@@ -49,11 +49,6 @@ export const FUNNEL_MAX_STEPS = 8
 /** The most funnels one site keeps, drafts included. */
 export const FUNNELS_MAX_PER_SITE = 20
 
-/**
- * The site roles that change what a site measures: its funnels. The `author`
- * role edits content and does not decide what the site measures.
- */
-export const FUNNEL_MANAGING_ROLES: ReadonlySet<string> = new Set(['admin', 'editor'])
 export const FUNNEL_NAME_MAX = 80
 export const FUNNEL_LABEL_MAX = 80
 

@@ -107,9 +107,12 @@ import { claimAttempt, createResourceUid } from '@aglyn/aglyn/server'
  */
 import {
   getOrgDoc,
+  memberHasOrgPermission,
   resolveOrgIdForHost,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin/server/organizations'
+import { holdsStampedSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
+import { MARKETING_CAMPAIGNS_REFUSAL, MARKETING_CAMPAIGNS_SITE_ROLE_PRESET } from '../model/marketing-permissions'
 import {
   isOrgWideMember,
   type AglynOrgMember,
@@ -735,10 +738,8 @@ export const CAMPAIGN_DRAFT_HEADER_MAX_CHARS = 200
 /** The most alternative subject lines or preheaders a drafted email keeps. */
 export const CAMPAIGN_DRAFT_MAX_VARIANTS = 10
 
-/** The site roles that may compose this site's mail. */
-export const CAMPAIGN_DRAFT_ROLES = ['admin', 'editor'] as const
-/** The send route's refusal for a member who may not compose this site's mail. */
-export const CAMPAIGN_DRAFT_ROLE_REFUSAL = 'Not a site admin or editor'
+/** The refusal for a member without "Run email campaigns" here (AGL-4047): names the permission. */
+export const CAMPAIGN_DRAFT_ROLE_REFUSAL = MARKETING_CAMPAIGNS_REFUSAL
 
 /** The id of the one email inside a drafted campaign. */
 export function campaignDraftEmailId(campaignId: string): string {
@@ -821,8 +822,9 @@ function campaignDraftRoleRefusal(
   host: FirebaseFirestore.DocumentSnapshot,
   uid: string,
 ): PluginDraftRefusal | null {
-  const role = (host.get('memberRoles') ?? {})[uid]
-  return CAMPAIGN_DRAFT_ROLES.includes(role)
+  // "Run email campaigns" (AGL-4047): the site's stamp, else the preset of
+  // the member's site role, the Admin and Editor this asked for before.
+  return holdsStampedSiteKey(host, uid, 'marketing.campaigns', MARKETING_CAMPAIGNS_SITE_ROLE_PRESET)
     ? null
     : { status: 403, error: CAMPAIGN_DRAFT_ROLE_REFUSAL }
 }
@@ -984,9 +986,6 @@ export function registerCampaignDraftWriter(): void {
   })
 }
 
-/** The org roles that may manage campaigns from the organization hub. */
-const ORG_MANAGE_ROLES = ['owner', 'admin', 'editor'] as const
-
 /**
  * The organization a `campaigns/manage` request from the organization hub is
  * for, read off its JSON body, so the dispatcher's release gate asks about the
@@ -1066,9 +1065,8 @@ export const campaignManageHandler: PluginApiHandler = async (req, res) => {
       if (!hostSnapshot.exists) {
         return res.status(404).json({ error: 'Unknown site' })
       }
-      const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-      if (memberRole !== 'admin' && memberRole !== 'editor') {
-        return res.status(403).json({ error: 'Not a site admin or editor' })
+      if (!holdsStampedSiteKey(hostSnapshot, decoded.uid, 'marketing.campaigns', MARKETING_CAMPAIGNS_SITE_ROLE_PRESET)) {
+        return res.status(403).json({ error: MARKETING_CAMPAIGNS_REFUSAL })
       }
       orgId = (await resolveOrgIdForHost(hostId)) ?? ''
       if (!orgId) {
@@ -1087,14 +1085,16 @@ export const campaignManageHandler: PluginApiHandler = async (req, res) => {
     } else {
       const membership = await resolveOrgMembership(decoded.uid, requestedOrgId)
       const member = membership?.member as Partial<AglynOrgMember> | undefined
+      // A member of the whole workspace holding "Run email campaigns" with
+      // no site named (AGL-4047): its default is the owner, admins and
+      // editors this asked for before, then their custom role and their own
+      // permissions.
       if (
         !member ||
         !isOrgWideMember(member) ||
-        !(ORG_MANAGE_ROLES as readonly string[]).includes(String(member.role ?? ''))
+        !(await memberHasOrgPermission(requestedOrgId, member, 'marketing.campaigns' as never))
       ) {
-        return res
-          .status(403)
-          .json({ error: 'Not an organization owner, admin or editor' })
+        return res.status(403).json({ error: MARKETING_CAMPAIGNS_REFUSAL })
       }
       /*
        * The site door is refused by the dispatcher when Marketing is off for

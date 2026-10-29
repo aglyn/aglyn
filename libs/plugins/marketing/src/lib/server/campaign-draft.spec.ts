@@ -228,6 +228,18 @@ describe('the campaign draft writer', () => {
     expect(commits).toEqual([])
   })
 
+  it('asks "Run email campaigns", so the site’s stamp decides either way (AGL-4047)', async () => {
+    store.set('hosts/host-1', {
+      memberRoles: { 'uid-1': 'editor', 'uid-2': 'author' },
+      memberPermissions: { 'uid-1': { 'marketing.campaigns': false }, 'uid-2': { 'marketing.campaigns': true } },
+    })
+    expect(await writer.refusal({ orgId: 'org-1', hostId: 'host-1', uid: 'uid-1', org: null, now: NOW })).toEqual({
+      status: 403,
+      error: 'Your role does not include "Run email campaigns" — ask an organization admin',
+    })
+    expect(await writer.refusal({ orgId: 'org-1', hostId: 'host-1', uid: 'uid-2', org: null, now: NOW })).toBeNull()
+  })
+
   it('refuses where the send route refuses, and a design that is not an email design', async () => {
     expect(await writer.refusal({ orgId: 'org-1', hostId: 'host-9', uid: 'uid-1', org: null, now: NOW })).toEqual({
       status: 404,
@@ -239,7 +251,9 @@ describe('the campaign draft writer', () => {
     })
     expect(await writer.write(request({ uid: 'uid-2' }))).toEqual({ ok: false, status: 403, error: CAMPAIGN_DRAFT_ROLE_REFUSAL })
     const manage = readFileSync(join(__dirname, 'campaign-manage.ts'), 'utf8')
-    expect(manage).toContain("memberRole !== 'admin' && memberRole !== 'editor'")
+    // The send route's site door and this writer ask the same key (AGL-4047).
+    expect(manage).toContain("holdsStampedSiteKey(hostSnapshot, decoded.uid, 'marketing.campaigns', MARKETING_CAMPAIGNS_SITE_ROLE_PRESET)")
+    expect(manage).toContain("holdsStampedSiteKey(host, uid, 'marketing.campaigns', MARKETING_CAMPAIGNS_SITE_ROLE_PRESET)")
 
     store.set('hosts/host-1/screens/page-1', { displayName: 'Home' })
     expect(await writer.write(request({ content: { ...CONTENT, templateScreenId: 'page-1' } }))).toEqual({

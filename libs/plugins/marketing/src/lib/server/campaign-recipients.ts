@@ -15,7 +15,9 @@
  * limitations under the License.
  */
 
+import { holdsStampedSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
+import { MARKETING_CAMPAIGNS_REFUSAL, MARKETING_CAMPAIGNS_SITE_ROLE_PRESET } from '../model/marketing-permissions'
 import { firebaseAdmin, resolveOrgIdForHost } from '@aglyn/tenant-data-admin'
 // Leaf imports, for the reason `email-events.ts` records: a spec that mocks
 // the `@aglyn/tenant-data-admin` barrel would otherwise replace the real
@@ -132,9 +134,10 @@ export const campaignRecipientsHandler: PluginApiHandler = async (req, res) => {
     if (!hostSnapshot.exists) {
       return res.status(404).json({ error: 'Unknown site' })
     }
-    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (memberRole !== 'admin' && memberRole !== 'editor') {
-      return res.status(403).json({ error: 'Not a site admin or editor' })
+    // "Run email campaigns" (AGL-4047): the site's stamp, else the preset of
+    // the member's site role, the Admin and Editor this asked for before.
+    if (!holdsStampedSiteKey(hostSnapshot, decoded.uid, 'marketing.campaigns', MARKETING_CAMPAIGNS_SITE_ROLE_PRESET)) {
+      return res.status(403).json({ error: MARKETING_CAMPAIGNS_REFUSAL })
     }
     /*
      * The messages are the organization's, one collection for every site, so

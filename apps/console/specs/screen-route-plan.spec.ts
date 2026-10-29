@@ -62,10 +62,10 @@ describe('the routing writes share the plan', () => {
     expect(read('constants/screen-publishing.ts')).toContain('planScreenRouteWrite(state, entries, published)')
   })
 
-  it('is what the native pages route stages, under the publishing roles', () => {
+  it('is what the native pages route stages, under "Publish site content" (AGL-4047)', () => {
     const route = read('app/api/hosts/pages/route.ts')
     expect(route).toContain('planScreenRouteWrite(state, entries, published)')
-    expect(route).toContain("new Set(['admin', 'editor'])")
+    expect(route).toContain("holdsSiteKey(hostSnapshot, decoded.uid, 'site.publish')")
     expect(route).toContain('getLockdownVerdict')
   })
 })

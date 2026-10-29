@@ -107,7 +107,8 @@ and erasing a person from your workspace deletes every visit tied to them.
 
 1. Open your site's **Analytics** page and find **Funnels**.
 2. Select **New funnel**, name it, and add steps with the pickers.
-3. **Save**. Saving needs a site admin or editor.
+3. **Save**. Saving needs the **Manage funnels** permission, which a site's admins and
+   editors have.
 
 ### Create with AI {#create-with-ai}
 
@@ -127,8 +128,8 @@ services, products or bars and popups your site has — including ones the same 
 
 Select the draft to review its steps, edit it if you like (it stays a draft), then select
 **Activate**. Activating checks every step against your site again, makes the funnel live and
-turns recording on if it was off, so it counts visits from then on. Activating needs a site
-admin or editor. A draft counts towards the 20 funnels a site keeps.
+turns recording on if it was off, so it counts visits from then on. Activating needs
+**Manage funnels**. A draft counts towards the 20 funnels a site keeps.
 
 ## Act on a drop-off {#act-on-drop-off}
 
@@ -154,7 +155,7 @@ Who it reaches:
   included; earlier ones are not.
 
 Aglyn checks for drop-offs every 15 minutes, so a follow-up can arrive up to a quarter of an
-hour after its wait. Drafting needs a site admin or editor and a plan that includes
+hour after its wait. Drafting needs **Manage funnels** and a plan that includes
 automations. Add an **Email from the site** step after the step you follow up on to see in the
 funnel how many people the follow-up brought back.
 
