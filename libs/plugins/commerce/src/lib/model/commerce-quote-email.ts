@@ -72,24 +72,32 @@ export function lastQuoteSend(quote: Pick<OrderQuote, 'sends'> | null | undefine
 }
 
 /**
+ * Whether emailing the quote now hands the customer a new revision of a quote
+ * they were already emailed: an earlier revision went out, and this one has
+ * not yet. The quote's first email (whatever revision it is at, since
+ * revisions nobody was sent replace nothing) and a resend of the revision
+ * already sent are neither, so their email does not call itself an update.
+ */
+export function quoteSendIsNewRevision(quote: Pick<OrderQuote, 'sends' | 'revision'> | null | undefined): boolean {
+  const last = lastQuoteSend(quote)
+  return Boolean(last) && Number(last.revision) < Number(quote?.revision ?? 1)
+}
+
+/**
  * Whether emailing the quote now gives the customer a new pay link: they were
  * emailed an earlier revision, and the link has not been replaced since.
  */
 export function quoteSendReplacesLink(
   quote: Pick<OrderQuote, 'sends' | 'revision' | 'linkVersion'> | null | undefined,
 ): boolean {
-  const last = lastQuoteSend(quote)
-  if (!last) return false
-  if (!(Number(last.revision) < Number(quote?.revision ?? 1))) return false
-  return Number(last.linkVersion) === quoteLinkVersion(quote)
+  if (!quoteSendIsNewRevision(quote)) return false
+  return Number(lastQuoteSend(quote)?.linkVersion) === quoteLinkVersion(quote)
 }
 
 /** What the console's Send button says: `Send quote`, `Send again`, or `Send revision 2`. */
 export function quoteSendLabel(quote: Pick<OrderQuote, 'sends' | 'revision'> | null | undefined): string {
-  const last = lastQuoteSend(quote)
-  if (!last) return 'Send quote'
-  const revision = Number(quote?.revision ?? 1)
-  return Number(last.revision) < revision ? `Send revision ${revision}` : 'Send again'
+  if (!lastQuoteSend(quote)) return 'Send quote'
+  return quoteSendIsNewRevision(quote) ? `Send revision ${Number(quote?.revision ?? 1)}` : 'Send again'
 }
 
 /** Where the quote goes: what was typed in the dialog, else the customer's email. */
@@ -98,6 +106,15 @@ export function quoteSendRecipient(
   typed: string | null | undefined,
 ): string {
   return String(typed ?? '').trim() || String(order?.quote?.customer?.email ?? '').trim()
+}
+
+/**
+ * Who the console's send form starts addressed to: the customer's email, else
+ * where the quote was last emailed, so Send again and Send revision N go
+ * where the last one went when the quote names no email.
+ */
+export function quoteSendPrefill(order: Pick<HostOrder, 'quote'> | null | undefined): string {
+  return quoteSendRecipient(order, null) || String(lastQuoteSend(order?.quote)?.to ?? '').trim()
 }
 
 export type QuoteSendRefusal = 'not-a-quote' | 'paid' | 'no-address' | 'bad-address'

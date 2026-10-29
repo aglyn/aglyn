@@ -17,7 +17,7 @@
 
 import { sanitizeAuthorHtml } from '@aglyn/aglyn/app-utils/author-html'
 import { buildDefaultEmailNodeMap, EMAIL_NODE_ROOT_ID, renderEmailHtml } from '@aglyn/shared-util-email'
-import type { HostOrder, QuoteProof } from '../model'
+import type { HostOrder, QuoteProof, QuoteSendRecord } from '../model'
 import { commerceTenantEmails } from '../tenant-emails'
 import { QUOTE_EMAIL_KEY, quoteEmailContent, type QuoteEmailContentInput } from './quote-email-content'
 
@@ -57,6 +57,18 @@ function order(quote: Partial<NonNullable<HostOrder['quote']>> = {}): HostOrder 
     },
   } as HostOrder
 }
+
+/** An email of `revision` already sent. */
+const sent = (revision: number): QuoteSendRecord => ({
+  revision,
+  to: 'jane@example.com',
+  subject: 'Quote #1042 from Northwind Signs',
+  atMs: revision,
+  by: 'owner@example.com',
+  messageId: `<q.${revision}@northwind.example>`,
+  providerId: null,
+  linkVersion: 1,
+})
 
 const PAY_URL = 'https://northwind.example/pay-quote?q=q1&t=1.abc'
 
@@ -155,9 +167,9 @@ describe('the quote email says what it is and what to do next (AGL-4097)', () =>
     expect(render(bare).text).toContain('Look over your quote, and pay it on your quote page whenever you’re ready.')
   })
 
-  it('revision 2 and later: says the quote was updated, and that the earlier link stopped working when it did', () => {
+  it('a new revision of a quote already emailed: says it was updated, and that the earlier link stopped working when it did', () => {
     const replaced = render(
-      quoteEmailContent(input({ order: order({ revision: 2 }), linkReplaced: true, message: '' })),
+      quoteEmailContent(input({ order: order({ revision: 2, sends: [sent(1)] }), linkReplaced: true, message: '' })),
     ).text
     expect(replaced).toContain('Your updated quote')
     expect(replaced).toContain(
@@ -168,9 +180,25 @@ describe('the quote email says what it is and what to do next (AGL-4097)', () =>
     // No message typed: no empty paragraph for it.
     expect(replaced).not.toMatch(/\n\s*\n\s*\n/)
 
-    const kept = render(quoteEmailContent(input({ order: order({ revision: 3 }), linkReplaced: false }))).text
+    const kept = render(
+      quoteEmailContent(input({ order: order({ revision: 3, linkVersion: 2, sends: [sent(1)] }), linkReplaced: false })),
+    ).text
     expect(kept).toContain('This is revision 3, and it replaces the one sent before. The new version is attached as a PDF.')
     expect(kept).not.toContain('no longer opens')
+  })
+
+  it('a first email at a later revision, and a resend of the revision sent: a quote, not an update', () => {
+    // Revisions 1 and 2 were never emailed, so revision 3 replaces nothing the customer has.
+    const first = render(quoteEmailContent(input({ order: order({ revision: 3 }) }))).text
+    // Revision 2 already went out, and this is the same revision again.
+    const again = render(quoteEmailContent(input({ order: order({ revision: 2, sends: [sent(1), sent(2)] }) }))).text
+    for (const text of [first, again]) {
+      expect(text).toContain('Your quote from Northwind Signs')
+      expect(text).toContain('Northwind Signs put together a quote for you.')
+      expect(text).not.toContain('updated')
+      expect(text).not.toContain('replaces')
+    }
+    expect(first).toContain('Revision: 3')
   })
 
   it('draws three pictures at most, names the rest, and leaves WebP to the quote page', () => {
