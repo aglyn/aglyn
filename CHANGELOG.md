@@ -23,6 +23,7 @@ content on the marketing site and is written separately.
 - **console:** Create site waits under the console loading overlay, not a spinner dialog ([AGL-4103](https://linear.app/aglyn/issue/AGL-4103))
 - **commerce:** a fresh pay link after a new quote version, and the "updated quote" wording only for a new revision ([AGL-4097](https://linear.app/aglyn/issue/AGL-4097))
 - **forms:** the request confirmation names the conversation, not the form's name ([AGL-4098](https://linear.app/aglyn/issue/AGL-4098))
+- **console:** a preview whose read is slow says so, never that the page has nothing saved ([AGL-4101](https://linear.app/aglyn/issue/AGL-4101))
 
 ### Documentation
 
