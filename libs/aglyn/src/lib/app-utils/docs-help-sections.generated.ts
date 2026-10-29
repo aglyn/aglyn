@@ -102,6 +102,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
   },
   aiImport: {
     '#prove-it-is-yours': 'Use one of these three ways. The status at the top shows Verified once one of them works.',
+    '#turned-away': 'Many hosts protect a site with bot protection or a firewall that turns away visitors it takes for robots.',
     '#waves': 'The first wave brings in your main pages: home, then the pages in your menu, then your other top-level pages.',
     '#your-current-website': 'Under Website address, type the address people use to reach your site today, for example example.com, and choose Next.',
   },

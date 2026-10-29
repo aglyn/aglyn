@@ -339,6 +339,20 @@ export const COOKIE_WRITERS: Record<string, CookieWriter> = {
       },
     ],
   },
+  'apps/tenant/app/api/site-preview/enter/route.ts': {
+    note: 'Preview (AGL-4086): lets a site\'s team see a site that is still private to the public.',
+    cookies: [
+      {
+        name: 'aglyn_site_preview',
+        token: 'SITE_PREVIEW_COOKIE',
+        surface: 'the site\'s own address, on that host only',
+        purpose:
+          `Signed proof, bound to one site, that you are on its team and may see it while it is in preview; set when you open the site from the ${PLATFORM_BRAND_NAME} console`,
+        duration: '12 hours',
+        httpOnly: true,
+      },
+    ],
+  },
   'apps/tenant/middleware.ts': {
     note: 'Carries a `?tenantHost=` preview override across a browsing session.',
     cookies: [

@@ -126,6 +126,15 @@ export const AI_MEASURED_PAID_SITE_CREDITS = {
 export const AI_MEASURED_IMPORT_CREDITS = {
   page: AI_MEASURED_PAID_SITE_CREDITS.page,
   frame: AI_MEASURED_PAID_SITE_CREDITS.layout,
+  /**
+   * A main page Aglyn AI arranges from its old page's own lines (AGL-4083):
+   * one frame-sized structured answer, no prose, and its listing.
+   * PROVISIONAL until the first live import measures it; it prices nothing
+   * until the step marks a page `arranged`.
+   */
+  arranged: { median: 12, p90: 20 },
+  /** A page copied as it is (AGL-4083): its listing pass alone. Provisional, as `arranged`. */
+  copied: { median: 1, p90: 2 },
 } as const satisfies Record<string, AiMeasuredCredits>
 
 /**

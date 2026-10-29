@@ -94,6 +94,7 @@ function HostDashboard() {
             // While the site is in preview (AGL-4086) the button enters it as
             // the team, on whatever address it has.
             <SiteVisitButton
+              newTab
               hostId={hostId}
               inPreview={inPreview}
               variant="contained"
