@@ -232,6 +232,31 @@ describe('a quote’s pay link (AGL-4094)', () => {
     expect((within(dialog).getByLabelText('Pay link') as HTMLInputElement).value).toBe(LINK)
   })
 
+  it('drops the link on screen when the quote’s link moves on, and shows and copies the new one', async () => {
+    const NEXT = 'https://acme.aglyn.app/pay-quote?q=q-1&t=2.fedcba9876543210fedcba9876543210'
+    mockQuotes = [QUOTE]
+    const card = <HostQuotesCard hostId="site1" canEdit canSend />
+    const { rerender } = render(card)
+    fireEvent.click(screen.getByText('Quote #1042'))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Copy pay link' }))
+    await waitFor(() => expect((within(dialog).getByLabelText('Pay link') as HTMLInputElement).value).toBe(LINK))
+
+    // A revision was emailed (or the link replaced elsewhere): the stored version moves to 2.
+    mockFetch.mockImplementation(async () => ({ ok: true, json: async () => ({ url: NEXT, linkVersion: 2 }) }))
+    mockQuotes = [{ ...QUOTE, quote: { ...QUOTE.quote, linkVersion: 2 } }]
+    rerender(<HostQuotesCard hostId="site1" canEdit canSend />)
+    await waitFor(() => expect((within(dialog).getByLabelText('Pay link') as HTMLInputElement).value).toBe(NEXT))
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+    expect(JSON.parse(String((mockFetch.mock.calls[1] as [unknown, string, RequestInit])[2].body))).toMatchObject({
+      action: 'pay-link',
+    })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Copy pay link' }))
+    await waitFor(() => expect(writeText).toHaveBeenLastCalledWith(NEXT))
+    // Copying the link already current asks the server nothing more.
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+  })
+
   it('replaces the link only after saying the old one stops working', async () => {
     const dialog = await openQuote()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Replace link' }))
@@ -330,6 +355,21 @@ describe('emailing a quote (AGL-4097)', () => {
     expect(within(dialog).getByRole('button', { name: 'Send again' })).toBeTruthy()
   })
 
+  it('starts Send again addressed to where the last email went when the quote names no email', async () => {
+    const dialog = await openQuote({
+      ...QUOTE,
+      quote: {
+        ...QUOTE.quote,
+        stage: 'sent',
+        customer: { name: 'Jordan Lee', email: '' },
+        sends: [{ ...send(1, 1, 5), to: 'buyer@example.org' }],
+      },
+    })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Send again' }))
+    const form = await screen.findByRole('dialog', { name: 'Send again: Quote #1042' })
+    expect((within(form).getByLabelText(/^To/) as HTMLInputElement).value).toBe('buyer@example.org')
+  })
+
   it('offers Send revision 2 after a new revision, and says it gives the customer a new link', async () => {
     const dialog = await openQuote({ ...QUOTE, quote: { ...QUOTE.quote, revision: 2, sends: [send(1, 1, 5)] } })
     expect(within(dialog).getByRole('button', { name: 'Send revision 2' })).toBeTruthy()
@@ -399,6 +439,17 @@ describe('a quote’s invoice (AGL-4099)', () => {
     expect(within(dialog).getByRole('button', { name: 'Send quote' })).toBeTruthy()
     expect(within(dialog).getByRole('button', { name: 'Send invoice' })).toBeTruthy()
     expect(within(dialog).getByText(/^Invoice sent Oct 29, 2026, .+ to jordan@example\.com\.$/)).toBeTruthy()
+  })
+
+  it('starts Send invoice addressed to where the last invoice went when the quote names no email', async () => {
+    const dialog = await openQuote({
+      ...QUOTE,
+      quote: { ...QUOTE.quote, customer: { name: 'Jordan Lee', email: '' } },
+      invoiceSends: [{ ...invoiceSend(5, false), to: 'billing@example.org' }],
+    })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Send invoice' }))
+    const form = await screen.findByRole('dialog', { name: 'Send invoice: Invoice #1042' })
+    expect((within(form).getByLabelText(/^To/) as HTMLInputElement).value).toBe('billing@example.org')
   })
 
   it('holds Send invoice behind "Send quotes and invoices to customers"', async () => {

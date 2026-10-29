@@ -91,7 +91,7 @@ export function InvoiceSendDialog(props: InvoiceSendDialogProps) {
   useEffect(() => {
     if (!open) return
     let live = true
-    setTo(CommerceModel.invoiceSendRecipient(order, ''))
+    setTo(CommerceModel.invoiceSendPrefill(order))
     setSubject(CommerceModel.invoiceEmailDefaultSubject(order, '', orderId))
     setMessage('')
     void getDoc(doc(firestore, 'hosts', hostId))

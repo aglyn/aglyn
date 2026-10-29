@@ -20,6 +20,7 @@ import {
   formatOrderMoney,
   formatQuoteNumber,
   quotePaymentBlockedByApproval,
+  quoteSendIsNewRevision,
   type HostOrder,
   type OrderQuote,
 } from '../model'
@@ -29,7 +30,9 @@ import { escapeHtml } from './escape-html'
  * WHAT THE QUOTE EMAIL SAYS (AGL-4097).
  *
  * The `quote-sent` catalog email's tokens, composed per send: its heading,
- * what this email is (a new quote, or an updated revision), the business's
+ * what this email is (a quote, or an updated revision of one the customer was
+ * already emailed: `quoteSendIsNewRevision`, read off the sends on record
+ * before this one, so a first email or a resend never says "updated"), the business's
  * own message, the quote's number, revision and total, up to three proof
  * images, the other proof files by name, what to do next and the button. The
  * next step and the button follow the business's approval control
@@ -75,6 +78,7 @@ export interface QuoteEmailColors {
 }
 
 export interface QuoteEmailContentInput {
+  /** The quote as this email finds it: its `quote.sends` are the emails before this one. */
   order: HostOrder
   quoteId: string
   businessName: string
@@ -144,13 +148,13 @@ export function quoteEmailContent(input: QuoteEmailContentInput): QuoteEmailCont
   const radius = Math.max(0, Math.round(Number(input.radius ?? 4)) || 0)
   const proofImages = proofImagesHtml(pictured, input.payUrl, input.colors, radius)
 
-  const heading = revision >= 2 ? 'Your updated quote' : businessName.trim() ? `Your quote from ${businessName.trim()}` : 'Your quote'
-  const intro =
-    revision >= 2
-      ? `${capitalize(business)} updated your quote. This is revision ${revision}, and it replaces the one sent before.` +
-        (input.linkReplaced ? ' The link in the earlier email no longer opens the quote, so use the button below.' : '') +
-        ' The new version is attached as a PDF.'
-      : `${capitalize(business)} put together a quote for you. The details are below, and the quote is attached as a PDF.`
+  const updated = quoteSendIsNewRevision(quote)
+  const heading = updated ? 'Your updated quote' : businessName.trim() ? `Your quote from ${businessName.trim()}` : 'Your quote'
+  const intro = updated
+    ? `${capitalize(business)} updated your quote. This is revision ${revision}, and it replaces the one sent before.` +
+      (input.linkReplaced ? ' The link in the earlier email no longer opens the quote, so use the button below.' : '') +
+      ' The new version is attached as a PDF.'
+    : `${capitalize(business)} put together a quote for you. The details are below, and the quote is attached as a PDF.`
 
   const proofed = proofs.length > 0
   const approved = proofed && Number(quote.approvedRevision) === revision

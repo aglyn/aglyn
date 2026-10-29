@@ -34,14 +34,14 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 const SEND_REFUSAL = commerceSitePermissionRefusal('commerce.quotes.send')
 
 export interface QuotePayLinkSectionProps {
   hostId: string
   quoteId: string
-  quote: Pick<CommerceModel.HostOrder, 'status' | 'channel' | 'number'>
+  quote: Pick<CommerceModel.HostOrder, 'status' | 'channel' | 'number' | 'quote'>
   /** Holds "Send quotes and invoices to customers" (`commerce.quotes.send`). */
   canSend: boolean
   /** The editor holds changes not saved yet, which the link does not show. */
@@ -54,15 +54,25 @@ export interface QuotePayLinkSectionProps {
  * button. "Copy pay link" asks the server for it (it is signed there) and puts
  * it on the clipboard and on screen; "Replace link" makes a new one and the
  * one sent before stops opening the quote.
+ *
+ * The link shown is kept with the version it was made at, and drops as soon
+ * as the quote's stored version (`quote.linkVersion`) moves past it: a
+ * revision's first email and Replace link (here or anywhere else) both move
+ * it, and the link from before then opens only "This quote was updated". A
+ * link already on screen is fetched again at the new version; Copy pay link
+ * never copies one older than the quote's.
  */
 export function QuotePayLinkSection(props: QuotePayLinkSectionProps) {
   const { hostId, quoteId, quote, canSend, edited } = props
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
-  const [url, setUrl] = useState('')
+  const [signed, setSigned] = useState<{ url: string; version: number } | null>(null)
   const [busy, setBusy] = useState(false)
   const [confirmingReplace, setConfirmingReplace] = useState(false)
   const unpaid = CommerceModel.isUnpaidQuote(quote)
+  const version = CommerceModel.quoteLinkVersion(quote.quote)
+  // A link the server made at a version the stored quote has not caught up to yet is the newest one.
+  const url = signed && signed.version >= version ? signed.url : ''
 
   const ask = useCallback(
     async (action: 'pay-link' | 'replace-link'): Promise<string | null> => {
@@ -78,14 +88,24 @@ export function QuotePayLinkSection(props: QuotePayLinkSectionProps) {
           enqueueSnackbar(payload?.error ?? 'The pay link could not be made', { variant: 'error', allowDuplicate: true })
           return null
         }
-        setUrl(String(payload.url))
+        const made = Math.floor(Number(payload.linkVersion))
+        setSigned({ url: String(payload.url), version: Number.isFinite(made) && made >= 1 ? made : version })
         return String(payload.url)
       } finally {
         setBusy(false)
       }
     },
-    [user, hostId, quoteId, enqueueSnackbar],
+    [user, hostId, quoteId, version, enqueueSnackbar],
   )
+
+  // The quote's link moved on (a revision was emailed, or the link replaced):
+  // the one on screen opens nothing now, so fetch the current one in its place.
+  const stale = signed !== null && signed.version < version
+  useEffect(() => {
+    if (stale) void ask('pay-link')
+    // Once per version the quote moves to; `ask` changing does not ask again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stale, version])
 
   const copy = useCallback(
     async (link: string, done: string) => {
