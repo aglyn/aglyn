@@ -101,6 +101,7 @@ import {
   postPlatformMarketingConsent,
 } from '../../../utils/marketing-opt-in'
 import {
+  claimSignUpWorkspace,
   createSignUpWorkspace,
   personalWorkspaceName,
   rememberPendingSignUpWorkspace,
@@ -384,6 +385,20 @@ async function provisionAndLandSignUp(
     ])
     return
   }
+  // Claim provisioning first (AGL-4079). Without the stamp, a second console
+  // tab reaching the chooser seconds later reads zero workspaces, finds no
+  // claim, and its backstop makes a second, suffixed workspace — a Google
+  // sign-up on 10/29 got `name` and `name-xxxx` 22 s apart. A tab that already
+  // claimed is creating it; this one stands down to the chooser. A claim that
+  // does not answer inside the deadline is no reason to withhold the
+  // workspace, so it provisions as before.
+  const claim = await Promise.race([
+    claimSignUpWorkspace(firestore, credential.user, { backstop: true }),
+    new Promise<null>((resolve) =>
+      setTimeout(() => resolve(null), SIGN_UP_WRITES_DEADLINE_MS),
+    ),
+  ])
+  if (claim?.claimedElsewhere) return
   const slug = await provisionSignUpOrg(credential, orgName)
   if (slug) hardNavigate(onboardingDestination(slug, planIntent))
 }
