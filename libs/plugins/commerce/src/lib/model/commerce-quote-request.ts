@@ -138,6 +138,8 @@ export interface QuoteRequestFacts {
   createdAtMs: number | null
   requestKind: string | null
   person: { name: string; email: string; phone: string; company: string }
+  /** The lead or contact the request was filed as, which the quote's customer links to. */
+  capturedRecord: { kind: string; id: string } | null
   message: string
   fieldData: Record<string, string>
   files: Array<QuoteResponseFile>
@@ -151,6 +153,7 @@ export function readQuoteRequestFacts(raw: Readonly<Record<string, unknown>> | n
   const request = (raw['request'] ?? null) as { kind?: unknown } | null
   const files = Array.isArray(raw['files']) ? (raw['files'] as unknown[]) : []
   const thread = (raw['emailThread'] ?? null) as Record<string, unknown> | null
+  const captured = (raw['capturedRecord'] ?? null) as { kind?: unknown; id?: unknown } | null
   const references = Array.isArray(thread?.['references']) ? (thread?.['references'] as unknown[]).map(String) : []
   return {
     hostId: text(raw['hostId']),
@@ -163,6 +166,10 @@ export function readQuoteRequestFacts(raw: Readonly<Record<string, unknown>> | n
       phone: text(person['phone'], 40),
       company: text(person['company']),
     },
+    capturedRecord:
+      (captured?.kind === 'lead' || captured?.kind === 'contact') && ID.test(text(captured.id))
+        ? { kind: captured.kind, id: text(captured.id) }
+        : null,
     message: text(raw['message'], 5000),
     fieldData: Object.fromEntries(
       Object.entries((raw['fieldData'] ?? {}) as Record<string, unknown>)
@@ -193,7 +200,7 @@ export function readQuoteRequestFacts(raw: Readonly<Record<string, unknown>> | n
 
 /** What the quote editor opens with when a quote is started from a request. */
 export interface QuoteStartPrefill {
-  customer: Pick<QuoteCustomer, 'name' | 'email' | 'phone' | 'company'>
+  customer: Pick<QuoteCustomer, 'record' | 'name' | 'email' | 'phone' | 'company'>
   lines: QuoteCatalogLineRequest[]
   notes: string
 }
@@ -228,6 +235,7 @@ export function quoteStartFromRequest(
   return {
     prefill: {
       customer: {
+        ...(facts.capturedRecord ? { record: facts.capturedRecord } : {}),
         ...(facts.person.name ? { name: facts.person.name } : {}),
         ...(facts.person.email ? { email: facts.person.email } : {}),
         ...(facts.person.phone ? { phone: facts.person.phone } : {}),

@@ -45,6 +45,8 @@ import { memberMayReadSubmissions } from './submission-access'
  *   hostId, formId (null when no form entity filed it), formName, createdAtMs
  *   request: { kind: 'quote' } | null
  *   person: { name, email, phone, company } — each '' when the form had none
+ *   capturedRecord: { kind: 'lead' | 'contact', id } | null — the person the
+ *            CRM filed the submission as, when it filed one
  *   message: the request's own words (a message, details or notes field,
  *            else the form's first multi-line field), or ''
  *   answers: [{ field, label, value }] in the order they were sent
@@ -116,6 +118,14 @@ export function submissionMessage(fields: Record<string, string>, decls: readonl
   return multiline ? String(fields[multiline.fieldName]).trim().slice(0, 5000) : ''
 }
 
+/** The lead or contact the submission was filed as, or null. */
+function capturedRecordOf(raw: unknown): { kind: 'lead' | 'contact'; id: string } | null {
+  const record = (raw ?? null) as { kind?: unknown; id?: unknown } | null
+  return (record?.kind === 'lead' || record?.kind === 'contact') && typeof record.id === 'string' && record.id
+    ? { kind: record.kind, id: record.id }
+    : null
+}
+
 export async function readSubmissionFacts(
   deps: SubmissionFactsDeps,
   request: PluginRecordFactsRequest,
@@ -163,6 +173,7 @@ export async function readSubmissionFacts(
       createdAtMs: typeof createdAt?.toMillis === 'function' ? createdAt.toMillis() : null,
       request: readSubmissionRequest(data['request']),
       person: submissionPerson(fields),
+      capturedRecord: capturedRecordOf(data['capturedRecord']),
       message: submissionMessage(fields, decls),
       answers: Object.entries(fields).map(([field, value]) => ({ field, label: label(field), value })),
       fieldData,

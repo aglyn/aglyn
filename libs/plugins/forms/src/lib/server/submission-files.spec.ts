@@ -50,6 +50,7 @@ function seed() {
       files: FILES,
       request: { kind: 'quote' },
       emailThread: { messageId: '<form.1@mail.test>', references: ['<form.1@mail.test>'], subject: 'We got your quote request — Acme' },
+      capturedRecord: { kind: 'contact', id: 'c1' },
       createdAt: { toMillis: () => 1_234 },
     },
     'hosts/site1/forms/quote-form': {
@@ -153,6 +154,7 @@ describe('a submission’s facts for another plugin', () => {
         createdAtMs: 1_234,
         request: { kind: 'quote' },
         person: { name: 'Jane Doe', email: 'jane@example.com', phone: '', company: 'Acme' },
+        capturedRecord: { kind: 'contact', id: 'c1' },
         message: 'Two banners.',
         answers: [
           { field: 'name', label: 'Your name', value: 'Jane Doe' },

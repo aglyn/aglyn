@@ -87,7 +87,7 @@ export interface QuoteEditorDialogProps {
 export interface QuoteEditorStart {
   /** The request it is started from, which the server reads again on create; null for a contact. */
   from: { kind: 'submission'; id: string } | null
-  prefill: CommerceModel.QuoteStartPrefill & { customer: { record?: { kind: string; id: string } | null } }
+  prefill: CommerceModel.QuoteStartPrefill
   /** The request, as the editor says where the quote came from. */
   request?: { formName: string; receivedAtMs: number | null } | null
   files?: ReadonlyArray<{ id: string; name: string; contentType: string; size: number }>

@@ -95,6 +95,7 @@ describe('a request’s facts, and the quote started from them', () => {
     createdAtMs: 7,
     request: { kind: 'quote' },
     person: { name: 'Jane Doe', email: 'jane@example.com', phone: '555', company: '' },
+    capturedRecord: { kind: 'lead', id: 'lead-1' },
     message: 'Two banners.',
     fieldData: { product: encodeProductFieldValue({ productId: 'p1', options: { Finish: 'Matte' } }) },
     files: [
@@ -117,7 +118,7 @@ describe('a request’s facts, and the quote started from them', () => {
     if (!facts) throw new Error('no facts')
     expect(quoteStartFromRequest('s1', facts)).toEqual({
       prefill: {
-        customer: { name: 'Jane Doe', email: 'jane@example.com', phone: '555' },
+        customer: { record: { kind: 'lead', id: 'lead-1' }, name: 'Jane Doe', email: 'jane@example.com', phone: '555' },
         lines: [{ kind: 'catalog', productId: 'p1', quantity: 1 }],
         notes: 'Two banners.',
       },
