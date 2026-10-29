@@ -90,8 +90,9 @@ export function hostIsBlankSite(
 export async function requestStarterSite(
   user: Parameters<typeof authorizedFetch>[0],
   hostId: string,
+  options: { style?: string } = {},
 ): Promise<boolean> {
-  return (await requestStarterSiteOutcome(user, hostId)) === 'provisioned'
+  return (await requestStarterSiteOutcome(user, hostId, options)) === 'provisioned'
 }
 
 /**
@@ -104,13 +105,15 @@ export async function requestStarterSite(
 export async function requestStarterSiteOutcome(
   user: Parameters<typeof authorizedFetch>[0],
   hostId: string,
+  options: { style?: string } = {},
 ): Promise<'provisioned' | 'unchanged' | 'failed'> {
   if (!hostId) return 'failed'
   try {
     const response = await authorizedFetch(user, '/api/hosts/starter', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ hostId }),
+      // The style the person chose (AGL-4049): the starter wears its look.
+      body: JSON.stringify({ hostId, ...(options.style ? { style: options.style } : {}) }),
     })
     if (!response.ok) return 'failed'
     const payload = (await response.json().catch(() => null)) as { provisioned?: boolean } | null

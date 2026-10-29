@@ -48,7 +48,8 @@
  * to load. `render-layout-shots.mts` renders each page with the real
  * component bundles in headless Chrome.
  *
- * WHAT IT WRITES, per kind, into `libs/plugins/ai/src/lib/assets/site-styles/`:
+ * WHAT IT WRITES, per kind, into `apps/console/public/_static/starter/styles/`
+ * (the console serves them to every style card, AGL-4049):
  * `<kind>.webp`, the top 1024 × 1024 of the page drawn in a 1024 × 480 window
  * (a short window keeps a cover hero short, so the section that shows the
  * kind's shape is in the picture), scaled to 800 × 800. At the width a card
@@ -64,7 +65,7 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../../..')
 const require = createRequire(join(ROOT, 'package.json'))
-const OUT = join(ROOT, 'libs/plugins/ai/src/lib/assets/site-styles')
+const OUT = join(ROOT, 'apps/console/public/_static/starter/styles')
 const FIXTURE = join(ROOT, 'libs/plugins/ai/scripts/site-style-previews.json')
 const MUG = join(ROOT, 'tools/ai-eval/fixtures/product/stoneware-mug.jpg')
 /** The starter photos (`default-site.ts`), by the keys `AI_LAYOUT_STARTER_PHOTOS` names them. */

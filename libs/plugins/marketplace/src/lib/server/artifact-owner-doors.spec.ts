@@ -46,6 +46,12 @@
 
 let mockDeclared: unknown = undefined
 
+// Each save's agreement is recorded through its own module (AGL-4105),
+// faked here so the route's Firestore double does not have to model it.
+jest.mock('./publisher-agreement-acceptance', () => ({
+  recordPublisherAgreementAcceptance: jest.fn(async () => ({})),
+  publisherAgreementNote: () => ({ version: 'noted' }),
+}))
 jest.mock('@aglyn/aglyn/plugin-manager/first-party-plugins.generated', () => {
   const actual = jest.requireActual('@aglyn/aglyn/plugin-manager/first-party-plugins.generated')
   return {

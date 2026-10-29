@@ -6086,5 +6086,154 @@
       "summary": "Business, billed yearly",
       "bundled": true
     }
+  ],
+  "siteStyles": [
+    {
+      "id": "business",
+      "name": "Business & services",
+      "blurb": "Say what you do, why choose you, and how to reach you",
+      "preview": "/_static/starter/styles/business.webp",
+      "alt": "A cleaning company's home page: its heading beside a photo of gloved hands wiping a desk, then its services as cards"
+    },
+    {
+      "id": "trades",
+      "name": "Home services & trades",
+      "blurb": "Roofers, plumbers, towing, landscaping: bold, direct, built on trust",
+      "preview": "/_static/starter/styles/trades.webp",
+      "alt": "A roofer's home page: a bold heading over a full-width photo of a roofer carrying shingles, then roofing services"
+    },
+    {
+      "id": "professional",
+      "name": "Law, finance & consulting",
+      "blurb": "Law firms, accountants, advisers: calm, established, credible",
+      "preview": "/_static/starter/styles/professional.webp",
+      "alt": "A consulting firm's home page: its heading on a white card over a full-width photo of a team at a planning board"
+    },
+    {
+      "id": "wellness",
+      "name": "Health & wellness",
+      "blurb": "Therapists, clinics, dentists, coaches: warm, reassuring, clear",
+      "preview": "/_static/starter/styles/wellness.webp",
+      "alt": "A therapy practice's home page: half the page a photo of a calm, sunlit room, its heading in the other half, then its sessions"
+    },
+    {
+      "id": "restaurant",
+      "name": "Restaurant & café",
+      "blurb": "Warm, photo-led pages for food, drink and a place to visit",
+      "preview": "/_static/starter/styles/restaurant.webp",
+      "alt": "A café's home page: its heading centered over a photo of the owner at the counter, then menu highlights"
+    },
+    {
+      "id": "store",
+      "name": "Online store",
+      "blurb": "Product-first pages for things you sell",
+      "preview": "/_static/starter/styles/store.webp",
+      "alt": "A handmade goods shop's home page: its heading beside two overlapping photos of wax seals, then featured products"
+    },
+    {
+      "id": "portfolio",
+      "name": "Portfolio",
+      "blurb": "Minimal, image-led pages that put the work first",
+      "preview": "/_static/starter/styles/portfolio.webp",
+      "alt": "A prop stylist's home page: a large heading over a grid of three styled sets"
+    },
+    {
+      "id": "studio",
+      "name": "Design studio & agency",
+      "blurb": "Bold type and case studies for creative teams",
+      "preview": "/_static/starter/styles/studio.webp",
+      "alt": "A design studio's home page: an oversized heading on black over a wide photo of the team at a brand board"
+    },
+    {
+      "id": "photography",
+      "name": "Photography",
+      "blurb": "Galleries first, words second",
+      "preview": "/_static/starter/styles/photography.webp",
+      "alt": "A photographer's home page: its heading on black over a gallery of a wedding, a portrait and a maker"
+    },
+    {
+      "id": "blog",
+      "name": "Blog & writing",
+      "blurb": "Reading-first pages with a calm serif voice",
+      "preview": "/_static/starter/styles/blog.webp",
+      "alt": "A food journal's home page: its heading centered in a narrow column over a wide photo of vegetables on a cutting board"
+    },
+    {
+      "id": "events",
+      "name": "Events & weddings",
+      "blurb": "Dates, places and the details guests need",
+      "preview": "/_static/starter/styles/events.webp",
+      "alt": "A festival's home page: two overlapping photos of a lantern-lit night market beside its dates, then the program"
+    },
+    {
+      "id": "fitness",
+      "name": "Fitness & sports",
+      "blurb": "Gyms, trainers and studios with energy",
+      "preview": "/_static/starter/styles/fitness.webp",
+      "alt": "A gym's home page: a bold heading on black beside a photo of rows of dumbbells, then this week's classes"
+    },
+    {
+      "id": "yoga",
+      "name": "Yoga & mindfulness",
+      "blurb": "Calm, spacious pages for classes and retreats",
+      "preview": "/_static/starter/styles/yoga.webp",
+      "alt": "A yoga studio's home page: a quiet centered heading over a wide photo of a class stretching on mats"
+    },
+    {
+      "id": "beauty",
+      "name": "Beauty & salon",
+      "blurb": "Salons, barbers, spas and studios with style",
+      "preview": "/_static/starter/styles/beauty.webp",
+      "alt": "A hair salon's home page: its heading beside two overlapping photos of a stylist at work and the salon's chairs"
+    },
+    {
+      "id": "realestate",
+      "name": "Real estate",
+      "blurb": "Agents, brokers and property: polished and local",
+      "preview": "/_static/starter/styles/realestate.webp",
+      "alt": "A real estate agent's home page: its heading on a white card over a photo of a white house, then new listings"
+    },
+    {
+      "id": "education",
+      "name": "Courses & education",
+      "blurb": "Tutors, schools and courses, clear and encouraging",
+      "preview": "/_static/starter/styles/education.webp",
+      "alt": "A tutoring center's home page: a photo of a tutor at the whiteboard beside its heading, then its courses"
+    },
+    {
+      "id": "nonprofit",
+      "name": "Nonprofit & community",
+      "blurb": "A cause, its impact and how to help",
+      "preview": "/_static/starter/styles/nonprofit.webp",
+      "alt": "A food bank's home page: its heading over a full-width photo of volunteers sorting donations, then the ways to help"
+    },
+    {
+      "id": "music",
+      "name": "Music & bands",
+      "blurb": "Artists, bands and DJs, loud and visual",
+      "preview": "/_static/starter/styles/music.webp",
+      "alt": "A band's home page: its name in large type over a photo of a band under stage lights, then its tour dates"
+    },
+    {
+      "id": "personal",
+      "name": "Personal & resume",
+      "blurb": "A simple page about you and your work",
+      "preview": "/_static/starter/styles/personal.webp",
+      "alt": "A product manager's personal page: a round portrait over her centered introduction, then her experience"
+    },
+    {
+      "id": "landing",
+      "name": "Landing page",
+      "blurb": "One page that leads to one action",
+      "preview": "/_static/starter/styles/landing.webp",
+      "alt": "A budgeting app's landing page: its pitch centered on a colored band over a photo of a couple planning on a phone"
+    },
+    {
+      "id": "coming-soon",
+      "name": "Coming soon",
+      "blurb": "A placeholder that collects interest",
+      "preview": "/_static/starter/styles/coming-soon.webp",
+      "alt": "A café's coming soon page: its heading and notify button centered over a photo of the café's coffee shelves"
+    }
   ]
 }

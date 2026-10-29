@@ -722,6 +722,14 @@
         "LISTING_CATEGORIES"
       ]
     },
+    "libs/plugins/marketplace/src/lib/model/publisher-agreement.ts": {
+      "values": [
+        "PUBLISHER_AGREEMENT_VERSION",
+        "PUBLISHER_AGREEMENT_TITLE",
+        "PUBLISHER_AGREEMENT_URL",
+        "PUBLISHER_AGREEMENT_CONSENT_LABEL"
+      ]
+    },
     "libs/plugins/commerce/src/lib/model/commerce-pos.ts": {
       "types": [
         "PosDisplayMode",

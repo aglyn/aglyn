@@ -601,9 +601,8 @@ function Layouts(props) {
                       setPublishTarget({
                         kind: 'layout',
                         hostId,
-                        // The org rides too, so the zone can offer the
-                        // publisher agreement before the form is filled when
-                        // the org's acceptance is missing (AGL-3407).
+                        // The org rides too: the zone's publish is the org's,
+                        // as the publisher agreement it carries is (AGL-4105).
                         orgId: orgId ?? null,
                         artifactId: layoutId,
                         displayName: row.displayName,

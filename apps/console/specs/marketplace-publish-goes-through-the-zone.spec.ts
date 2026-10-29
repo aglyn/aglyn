@@ -18,17 +18,15 @@
 /**
  * THE CONSOLE NEVER POSTS A MARKETPLACE PUBLISH ITSELF (AGL-3407).
  *
- * A publish can be refused for the Marketplace Publisher Agreement, and the
- * marketplace answers that refusal by presenting the agreement over the form
- * and sending the publish again once it is accepted. That answer lives in the
- * marketplace plugin's publish widget, drawn through the `hostArtifactPublish`
- * zone — which an app may not import, only draw.
+ * Every publish carries the Marketplace Publisher Agreement, ticked in the
+ * box above Publish (AGL-4105), and the routes refuse one that does not. The
+ * box lives in the marketplace plugin's publish widget, drawn through the
+ * `hostArtifactPublish` zone — which an app may not import, only draw.
  *
  * So a console file that posted to a publish route itself would be a publish
- * that meets the agreement as a sentence naming a tab again: exactly the
- * detour this issue removed. The components card and the site template card
- * each did, until they were moved onto the zone. This holds the line for the
- * next one.
+ * with no box, refused on every attempt. The components card and the site
+ * template card each posted their own, until they were moved onto the zone
+ * (AGL-3407). This holds the line for the next one.
  */
 
 import { readdirSync, readFileSync, statSync } from 'node:fs'

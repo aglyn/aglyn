@@ -29,6 +29,12 @@
 const mockVerifyIdToken = jest.fn()
 const mockListingGet = jest.fn()
 
+// Each save's agreement is recorded through its own module (AGL-4105),
+// faked here so the route's Firestore double does not have to model it.
+jest.mock('./publisher-agreement-acceptance', () => ({
+  recordPublisherAgreementAcceptance: jest.fn(async () => ({})),
+  publisherAgreementNote: () => ({ version: 'noted' }),
+}))
 jest.mock('@aglyn/tenant-data-admin', () => ({
   firebaseAdmin: {
     app: () => ({
@@ -45,10 +51,11 @@ jest.mock('firebase-admin/firestore', () => ({
 jest.mock('./publisher-profile', () => ({ canActAsPublisher: async () => true }))
 
 import { verificationRequestHandler } from './verification-request'
+import { publisherAgreementConsent } from '../model/publisher-agreement'
 
 const authError = (code: string, message = 'x') => Object.assign(new Error(message), { code })
 
-async function call(token: string | null = 'token') {
+async function call(token: string | null = 'token', agreement: unknown = publisherAgreementConsent()) {
   let status = 0
   let body: unknown
   const res: any = {
@@ -65,7 +72,7 @@ async function call(token: string | null = 'token') {
     {
       method: 'POST',
       query: {},
-      body: { listingId: 'listing-1', action: 'request' },
+      body: { listingId: 'listing-1', action: 'request', agreement },
       headers: token ? { authorization: `Bearer ${token}` } : {},
       cookies: {},
       socket: {},
@@ -94,11 +101,13 @@ describe('verification-request tells a refused credential from a failure (AGL-28
     expect((await call(null)).status).toBe(401)
   })
 
-  it('answers 500 when the certificates cannot be fetched', async () => {
+  it('throws to the dispatcher, which answers 5xx, when the certificates cannot be fetched', async () => {
+    // A failure to CHECK the credential is ours, so it is rethrown rather than
+    // read as the caller's bad sign-in (AGL-2852).
     mockVerifyIdToken.mockRejectedValueOnce(
       authError('auth/argument-error', 'Error fetching public keys for Google certs: ETIMEDOUT'),
     )
-    expect((await call()).status).toBe(500)
+    await expect(call()).rejects.toThrow(/public keys/)
   })
 
   it('answers 500 when the listing read fails after the caller verified', async () => {
@@ -108,5 +117,14 @@ describe('verification-request tells a refused credential from a failure (AGL-28
 
   it('CONTROL: a verified caller asking about a listing that is not there hears 404', async () => {
     expect((await call()).status).toBe(404)
+  })
+})
+
+describe('verification-request carries the publisher agreement (AGL-4105)', () => {
+  it('refuses an ask that did not tick the box, before reading anything', async () => {
+    const answer = await call('token', null)
+    expect(answer.status).toBe(428)
+    expect(mockVerifyIdToken).not.toHaveBeenCalled()
+    expect(mockListingGet).not.toHaveBeenCalled()
   })
 })

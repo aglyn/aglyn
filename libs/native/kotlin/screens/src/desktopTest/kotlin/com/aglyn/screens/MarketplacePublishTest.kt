@@ -23,8 +23,8 @@ import kotlin.test.assertTrue
 
 /**
  * Publishing the site as a template (`libs/plugins/marketplace/src/android/screens/marketplace.screens.json`): the zone it fills
- * on Backup & restore, the agreement the publish needs accepted, and the two routes it calls. Apple replays the same cases
- * (MarketplacePublishTests).
+ * on Backup & restore, the publisher agreement every publish agrees to with its own box (AGL-4105), and the routes it calls.
+ * Apple replays the same cases (MarketplacePublishTests).
  */
 class MarketplacePublishTest {
   private val root: File = generateSequence(File("").absoluteFile) { it.parentFile }.first { File(it, "libs/native/screens").isDirectory }
@@ -51,7 +51,7 @@ class MarketplacePublishTest {
     var context = json("""{"org":{"id":"o1","manager":$manager},"site":{"id":"h1"},"data":{"profile":${profile ?: "null"},"members":${members ?: "null"}}}""")
     context = ScreenContext.with(context, "const", screen.raw.obj("constants")!!)
     val flags = linkedMapOf<String, JsonElement>()
-    for (entry in screen.raw.obj("derive") as JsonArray) {
+    for (entry in (screen.raw.obj("derive") as? JsonArray).orEmpty()) {
       val seen = ScreenContext.with(context, "is", JsonObject(flags.toMap()))
       flags[entry.str("name")!!] = JsonPrimitive(ScreenValues.condition(entry.str("when"), seen))
     }
@@ -64,6 +64,12 @@ class MarketplacePublishTest {
 
   private fun constants(screen: ScreenSpec) = ScreenContext.with(json("""{"x":1}"""), "const", screen.raw.obj("constants")!!)
 
+  /** [scope] with the screen's constants under `const`, as the model's own context carries them. */
+  private fun withConstants(scope: JsonElement, screen: ScreenSpec) = ScreenContext.with(scope, "const", screen.raw.obj("constants")!!)
+
+  /** The version in force, as the screens' constants carry it. */
+  private fun agreementVersion(screen: ScreenSpec) = (ScreenValues.lookup("const.agreement.version", constants(screen)) as JsonPrimitive).content
+
   @Test
   fun theSiteTemplateIsAContributionToTheBackupScreensZone() {
     val contribution = spec("marketplace.publishTemplate")
@@ -74,37 +80,35 @@ class MarketplacePublishTest {
   }
 
   @Test
-  fun theAgreementIsOfferedUntilTheOrganizationHasAcceptedTheCurrentVersion() {
-    val publish = spec("marketplace.publishTemplate")
-    val version = (ScreenValues.lookup("const.agreement.version", constants(publish)) as JsonPrimitive).content
-    val review = "Review the Marketplace Publisher Agreement"
-    fun offered(profile: String?): Pair<List<String>, Boolean> {
-      val (context, blocks) = shown(publish, profile)
-      val links = blocks.filter { it.type == "links" }.flatMap { (it.raw.obj("items") as JsonArray).mapNotNull { link -> link.str("title") } }
-      return texts(blocks, context).filter { "terms" in it } to (review in links)
+  fun everyPublishAsksForTheAgreementInABoxAboveItsButton() {
+    for (
+      id in listOf(
+        "marketplace.publishTemplate", "marketplace.publishLayout", "marketplace.publishComponent", "marketplace.publishTheme",
+        "marketplace.publishDatasetSchema", "marketplace.publishEmailTemplate", "marketplace.publishEmailStarter", "marketplace.publishPlugin",
+      )
+    ) {
+      val publish = spec(id)
+      val form = publish.blocks.first { it.type == "form" }
+      val fields = (form.raw.obj("fields") as JsonArray).mapNotNull { FieldSpec.parse(it) }
+      // The last field, nearest the button: one choice, which must be chosen before the form can send.
+      val box = fields.last()
+      assertEquals("agreement", box.key, id)
+      assertEquals(listOf("I agree to the Marketplace Publisher Agreement"), box.options.map { it.second }, id)
+      assertTrue(box.unmet(JsonArray(emptyList()), JsonObject(emptyMap())), id)
+      assertFalse(box.unmet(JsonArray(listOf(JsonPrimitive("agreed"))), JsonObject(emptyMap())), id)
+      // Whatever the organization agreed to before, every publish asks: no notice about its standing, and the agreement is
+      // always a link away.
+      for (profile in listOf(null, """{"handle":"studio"}""", """{"handle":"studio","publisherAgreement":{"version":"${agreementVersion(publish)}"}}""")) {
+        val (context, blocks) = shown(publish, profile)
+        assertEquals(emptyList(), texts(blocks, context).filter { "terms" in it }, id)
+        val links = blocks.filter { it.type == "links" }.flatMap { (it.raw.obj("items") as JsonArray).mapNotNull { link -> link.str("title") } }
+        assertTrue("Read the Marketplace Publisher Agreement" in links, id)
+      }
     }
-    // No publisher profile yet: the publish is refused for the profile first, so the agreement is not asked for.
-    assertEquals(emptyList(), offered(null).first)
-    assertFalse(offered(null).second)
-    // A profile that never accepted.
-    val never = offered("""{"handle":"studio"}""")
-    assertEquals(listOf("Your organization has not accepted these terms. They must be accepted before anything is published."), never.first)
-    assertTrue(never.second)
-    // One that accepted an earlier version.
-    val old = offered("""{"handle":"studio","publisherAgreement":{"version":"2026-08-18.1"}}""")
-    assertEquals(
-      listOf("These terms have changed since your organization accepted version 2026-08-18.1. Publishing is paused until the current version is accepted."),
-      old.first,
-    )
-    assertTrue(old.second)
-    // The current version needs nothing.
-    val current = offered("""{"handle":"studio","publisherAgreement":{"version":"$version"}}""")
-    assertEquals(emptyList(), current.first)
-    assertFalse(current.second)
   }
 
   @Test
-  fun theAgreementShowsWhatChangedSinceTheVersionAcceptedAndWhoMayAccept() {
+  fun theAgreementShowsWhatChangedSinceTheVersionLastAgreedToAndAsksForNothingItself() {
     val agreement = spec("marketplace.publisherAgreement")
     val changes = agreement.blocks.first { it.title?.startsWith("What changed") == true }
     fun changed(since: String): List<String> {
@@ -112,64 +116,50 @@ class MarketplacePublishTest {
       return ScreenValues.scopes(changes.string("items").orEmpty(), changes.string("within"), changes.string("filter"), context)
         .map { ScreenValues.render(changes.string("secondary").orEmpty(), it) }
     }
-    // Only the versions after the one accepted, each change under the version that made it.
+    // Only the versions after the one last agreed to, each change under the version that made it.
     assertEquals(listOf("Version 2026-08-24.1"), changed("2026-08-18.1"))
     assertEquals(5, changed("2026-01-01.1").size)
     assertEquals(emptyList(), changed("2026-08-24.1"))
 
-    // An owner or admin is offered the accept, per what the standing is; anyone else is told who to ask.
-    val stale = """{"handle":"s","publisherAgreement":{"version":"2026-08-18.1"}}"""
-    val accept = agreement.blocks.first { it.type == "actions" && it.whenCondition == "is.canAccept" }
-    val actions = (accept.raw.obj("items") as JsonArray).mapNotNull { ActionSpec.parse(it) }
-    val (manager, managerBlocks) = shown(agreement, stale)
-    assertEquals(listOf("Accept the current version"), actions.filter { ScreenValues.condition(it.whenCondition, manager) }.map { it.label })
-    assertTrue(managerBlocks.any { it.type == "actions" && it.whenCondition == "is.canAccept" })
-    val (first, _) = shown(agreement, """{"handle":"s"}""")
-    assertEquals(listOf("Accept on behalf of this organization"), actions.filter { ScreenValues.condition(it.whenCondition, first) }.map { it.label })
-    val members = """{"members":[{"${'$'}id":"u1","role":"owner","displayName":"Dana","email":"dana@example.test"},{"${'$'}id":"u2","role":"viewer"}]}"""
-    val (member, memberBlocks) = shown(agreement, stale, manager = false, members = members)
-    assertFalse(memberBlocks.any { it.whenCondition == "is.canAccept" })
-    assertEquals(
-      "Only an owner or admin of your organization can accept on its behalf. Ask one of them to accept it, then try again.",
-      texts(memberBlocks, member).last(),
-    )
-    val who = memberBlocks.first { it.title == "Who can accept" }
-    assertEquals(
-      listOf("Dana"),
-      ScreenValues.scopes(who.string("items").orEmpty(), null, who.string("filter"), member).map { ScreenValues.render(who.string("primary").orEmpty(), it) },
-    )
+    // It says every save asks, and when the organization last agreed; there is nothing to accept here.
+    val everySave =
+      "Every save in the marketplace — your profile, a listing, its price or visibility, a new version, a component, template or layout — asks you to tick “I agree to the Marketplace Publisher Agreement” first. We record who agreed, to which version, and when."
+    val (stale, staleBlocks) = shown(agreement, """{"handle":"s","publisherAgreement":{"version":"2026-08-18.1"}}""")
+    assertEquals(listOf(everySave, "Your organization last agreed to version 2026-08-18.1. Your next save agrees to version 2026-08-24.1."), texts(staleBlocks, stale))
+    val (never, neverBlocks) = shown(agreement, """{"handle":"s"}""")
+    assertEquals(listOf(everySave), texts(neverBlocks, never))
+    assertFalse(agreement.blocks.any { block -> (block.raw.obj("items") as? JsonArray).orEmpty().any { it.str("url") != null } })
   }
 
   @Test
-  fun publishingSendsTheListingTheRouteTakesAndAcceptingSendsTheVersionInForce() = runTest {
+  fun publishingSendsTheListingTheRouteTakesAndTheAgreementItWasTickedFor() = runTest {
     val publish = spec("marketplace.publishTemplate")
     val form = publish.blocks.first { it.type == "form" }
     val submit = ActionSpec.parse(form["submit"])!!
     val sent = mutableListOf<HttpRequestData>()
     val model = ScreenModel(publish, JsonObject(emptyMap()), client(200 to """{"ok":true,"version":3}""", 200 to """{"ok":true,"version":1}""", sent = sent))
-    val outcome = model.run(submit, json("""{"site":{"id":"h1"},"form":{"name":"Studio","description":"A portfolio","category":"Portfolio","price":5}}"""))
+    val version = agreementVersion(publish)
+    val outcome = model.run(
+      submit,
+      withConstants(json("""{"site":{"id":"h1"},"form":{"name":"Studio","description":"A portfolio","category":"Portfolio","price":5,"agreement":["agreed"]}}"""), publish),
+    )
     assertEquals(ActionOutcome.Done("Published v3 to the marketplace", json("""{"ok":true,"version":3}""")), outcome)
     assertEquals("/api/marketplace/publish-template", sent[0].url.encodedPath)
-    assertEquals(json("""{"hostId":"h1","displayName":"Studio","description":"A portfolio","category":"Portfolio","priceUsd":5}"""), body(sent, 0))
-    // A price left blank is not sent as a number: the route reads it as free.
-    model.run(submit, json("""{"site":{"id":"h1"},"form":{"name":"Free one"}}"""))
+    assertEquals(
+      json("""{"hostId":"h1","displayName":"Studio","description":"A portfolio","category":"Portfolio","priceUsd":5,"agreement":{"version":"$version","accepted":true}}"""),
+      body(sent, 0),
+    )
+    // A price left blank is not sent as a number: the route reads it as free. Unticked, the agreement says only its version,
+    // which the route refuses.
+    model.run(submit, withConstants(json("""{"site":{"id":"h1"},"form":{"name":"Free one"}}"""), publish))
     val free = body(sent, 1)
     assertEquals(JsonPrimitive("Free one"), free["displayName"])
     assertTrue(free["priceUsd"] == null || free["priceUsd"] == JsonNull)
+    assertEquals(json("""{"version":"$version"}"""), free["agreement"])
     // The name is required; the price field states the floor.
     val fields = (form.raw.obj("fields") as JsonArray).mapNotNull { FieldSpec.parse(it) }
     assertTrue(fields.first { it.key == "name" }.required)
     assertTrue(fields.first { it.key == "price" }.help.orEmpty().startsWith("0 for free, or $"))
-
-    val agreement = spec("marketplace.publisherAgreement")
-    val block = agreement.blocks.first { it.whenCondition == "is.canAccept" }
-    val accept = ActionSpec.parse((block.raw.obj("items") as JsonArray).first())!!
-    val acceptingSent = mutableListOf<HttpRequestData>()
-    val session = ScreenModel(agreement, JsonObject(emptyMap()), client(200 to """{"ok":true}""", sent = acceptingSent))
-    val version = (ScreenValues.lookup("const.agreement.version", constants(agreement)) as JsonPrimitive).content
-    session.run(accept, ScreenContext.with(json("""{"org":{"id":"o1"}}"""), "const", agreement.raw.obj("constants")!!))
-    assertEquals("/api/marketplace/publisher-profile", acceptingSent[0].url.encodedPath)
-    assertEquals(json("""{"action":"accept-agreement","orgId":"o1","version":"$version"}"""), body(acceptingSent, 0))
   }
 
   @Test
@@ -189,21 +179,29 @@ class MarketplacePublishTest {
       val submit = ActionSpec.parse(form["submit"])!!
       val sent = mutableListOf<HttpRequestData>()
       val model = ScreenModel(publish, JsonObject(emptyMap()), client(200 to """{"ok":true,"version":2}""", sent = sent))
-      val context = json("""{"org":{"id":"o1"},"site":{"id":"h1"},"params":{"id":"x1"},"form":{"name":"Hero","description":"A hero","category":"Hero","price":0}}""")
+      val context = withConstants(
+        json("""{"org":{"id":"o1"},"site":{"id":"h1"},"params":{"id":"x1"},"form":{"name":"Hero","description":"A hero","category":"Hero","price":0,"agreement":["agreed"]}}"""),
+        publish,
+      )
       val outcome = model.run(submit, context)
       assertEquals(ActionOutcome.Done("Published v2 to the marketplace", json("""{"ok":true,"version":2}""")), outcome, id)
-      // Refused for the agreement, it opens the agreement and sends the same publish once it is accepted.
-      assertEquals("marketplace.publisherAgreement", submit.gate.str("screen"), id)
+      // A route refusal opens nothing any more: the agreement is the box in the form.
+      assertEquals(null, submit.gate.str("screen"), id)
       assertEquals(route, sent[0].url.encodedPath, id)
-      assertEquals(JsonObject(json(identity).let { it as JsonObject } + mapOf("displayName" to JsonPrimitive("Hero"), "description" to JsonPrimitive("A hero"), "category" to JsonPrimitive("Hero"), "priceUsd" to JsonPrimitive(0))), body(sent, 0), id)
+      val agreed = json("""{"version":"${agreementVersion(publish)}","accepted":true}""")
+      assertEquals(
+        JsonObject(
+          json(identity).let { it as JsonObject } +
+            mapOf("displayName" to JsonPrimitive("Hero"), "description" to JsonPrimitive("A hero"), "category" to JsonPrimitive("Hero"), "priceUsd" to JsonPrimitive(0), "agreement" to agreed),
+        ),
+        body(sent, 0),
+        id,
+      )
       // The form opens with the name and description the thing already has, handed over as the screen's parameters.
       val fields = (form.raw.obj("fields") as JsonArray).mapNotNull { FieldSpec.parse(it) }
       val params = json("""{"params":{"name":"Hero band","description":"The top of the page"}}""")
       assertEquals(listOf("Hero band", "The top of the page"), listOf("name", "description").map { key -> ScreenValues.render(fields.first { it.key == key }.initial.orEmpty(), params) }, id)
       assertTrue(fields.first { it.key == "name" }.required, id)
-      // The agreement is asked for exactly as the site template asks.
-      val (offeredContext, blocks) = shown(publish, """{"handle":"studio"}""")
-      assertEquals(listOf("Your organization has not accepted these terms. They must be accepted before anything is published."), texts(blocks, offeredContext).filter { "terms" in it }, id)
     }
     assertEquals("org", spec("marketplace.publishDatasetSchema").scope)
     assertEquals("site", spec("marketplace.publishLayout").scope)
@@ -246,32 +244,16 @@ class MarketplacePublishTest {
   }
 
   @Test
-  fun aPublishRefusedForTheAgreementOpensItAndAcceptingIsWhatSendsThePublishAgain() = runTest {
+  fun aPublishRefusedForTheAgreementSaysWhyInTheRoutesWords() = runTest {
     val publish = spec("marketplace.publishTemplate")
     val submit = ActionSpec.parse(publish.blocks.first { it.type == "form" }["submit"])!!
-    val refusal = """{"error":"Accept the Marketplace Publisher Agreement before publishing.","agreement":{"required":"2026-08-24.1","accepted":null,"state":"none","orgId":"o1"}}"""
+    val refusal = """{"error":"Tick 'I agree to the Marketplace Publisher Agreement' to save","agreement":{"required":"2026-08-24.1","state":"missing"}}"""
     val sent = mutableListOf<HttpRequestData>()
-    val model = ScreenModel(
-      publish, JsonObject(emptyMap()),
-      client(412 to refusal, 412 to """{"error":"Set up your publisher profile first."}""", 200 to """{"ok":true,"version":2}""", sent = sent),
-    )
-    val scope = json("""{"site":{"id":"h1"},"form":{"name":"Studio"}}""")
-    // The route's structured refusal (not its prose) names the screen that settles it.
+    val model = ScreenModel(publish, JsonObject(emptyMap()), client(428 to refusal, sent = sent))
     assertEquals(
-      ActionOutcome.Gated("marketplace.publisherAgreement", "Accept the Marketplace Publisher Agreement before publishing."),
-      model.run(submit, scope),
+      ActionOutcome.Failed("Tick 'I agree to the Marketplace Publisher Agreement' to save"),
+      model.run(submit, withConstants(json("""{"site":{"id":"h1"},"form":{"name":"Studio"}}"""), publish)),
     )
-    // Any other refusal is a failure, as it was.
-    assertEquals(ActionOutcome.Failed("Set up your publisher profile first."), model.run(submit, scope))
-    // Sent again after the agreement is accepted, it is the same request.
-    model.run(submit, scope)
-    assertEquals(body(sent, 0), body(sent, 2))
-
-    val agreement = spec("marketplace.publisherAgreement")
-    val block = agreement.blocks.first { it.whenCondition == "is.canAccept" }
-    val accepts = (block.raw.obj("items") as JsonArray).mapNotNull { ActionSpec.parse(it) }
-    assertEquals(listOf("accept", "acceptCurrent"), accepts.map { it.id })
-    assertTrue(accepts.all { it.resume && it.back })
   }
 
   @Test
@@ -306,16 +288,18 @@ class MarketplacePublishTest {
       "bundle" to JsonPrimitive("Y29uc3QA/w=="), "manifest" to json("""{"id":"acme-widget","name":"Widget"}"""), "name" to JsonPrimitive(""),
       "description" to JsonPrimitive("Counts down"), "category" to JsonPrimitive(""), "readme" to JsonPrimitive(""), "changelog" to JsonPrimitive("First"),
       "repositoryUrl" to JsonPrimitive("https://github.com/acme/widget"), "license" to JsonPrimitive("MIT"), "visibility" to JsonPrimitive("public"),
-      "price" to JsonPrimitive(5), "attested" to attested,
+      "price" to JsonPrimitive(5), "attested" to attested, "agreement" to JsonArray(listOf(JsonPrimitive("agreed"))),
     )
-    fun scope(form: Map<String, JsonElement>) = JsonObject(mapOf("org" to json("""{"id":"o1"}"""), "params" to JsonObject(emptyMap()), "form" to JsonObject(form)))
+    fun scope(form: Map<String, JsonElement>) =
+      withConstants(JsonObject(mapOf("org" to json("""{"id":"o1"}"""), "params" to JsonObject(emptyMap()), "form" to JsonObject(form))), publish)
     assertEquals(ActionOutcome.Done("Published v1.0.0 — it is queued for review", json(answer)), model.run(submit, scope(base)))
     assertEquals("/api/marketplace/publish-plugin", sent[0].url.encodedPath)
     // The listing name falls back to the manifest's; an empty README and category are left out, as the console leaves them.
     assertEquals(
       json(
         """{"orgId":"o1","bundle":"Y29uc3QA/w==","manifest":{"id":"acme-widget","name":"Widget"},"displayName":"Widget","description":"Counts down",
-        "changelog":"First","priceUsd":5,"visibility":"public","attestation":$attested,"license":"MIT","repositoryUrl":"https://github.com/acme/widget"}""",
+        "changelog":"First","priceUsd":5,"visibility":"public","attestation":$attested,"license":"MIT","repositoryUrl":"https://github.com/acme/widget",
+        "agreement":{"version":"${agreementVersion(publish)}","accepted":true}}""",
       ),
       body(sent, 0),
     )
@@ -328,15 +312,15 @@ class MarketplacePublishTest {
   }
 
   @Test
-  fun aPluginRefusedByTheVerifierSaysWhatItFoundAndTheAgreementGatesItLikeEveryPublish() = runTest {
+  fun aPluginRefusedByTheVerifierSaysWhatItFoundAndTheAgreementLikeEveryPublish() = runTest {
     val publish = spec("marketplace.publishPlugin")
     val submit = ActionSpec.parse(publish.blocks.first { it.type == "form" }["submit"])!!
-    val refusal = """{"error":"Accept the Marketplace Publisher Agreement before publishing.","agreement":{"required":"2026-08-24.1","accepted":null,"state":"none","orgId":"o1"}}"""
+    val refusal = """{"error":"Tick 'I agree to the Marketplace Publisher Agreement' to save","agreement":{"required":"2026-08-24.1","state":"missing"}}"""
     val problems = """{"error":"Bundle rejected","problems":[{"level":"error","check":"network","message":"Calls an undeclared host"},{"level":"error","message":"Too large"}]}"""
     val sent = mutableListOf<HttpRequestData>()
-    val model = ScreenModel(publish, JsonObject(emptyMap()), client(412 to refusal, 422 to problems, sent = sent))
-    val scope = json("""{"org":{"id":"o1"},"params":{},"form":{"bundle":"eA==","manifest":{"id":"w"},"name":"W"}}""")
-    assertEquals(ActionOutcome.Gated("marketplace.publisherAgreement", "Accept the Marketplace Publisher Agreement before publishing."), model.run(submit, scope))
+    val model = ScreenModel(publish, JsonObject(emptyMap()), client(428 to refusal, 422 to problems, sent = sent))
+    val scope = withConstants(json("""{"org":{"id":"o1"},"params":{},"form":{"bundle":"eA==","manifest":{"id":"w"},"name":"W"}}"""), publish)
+    assertEquals(ActionOutcome.Failed("Tick 'I agree to the Marketplace Publisher Agreement' to save"), model.run(submit, scope))
     assertEquals(ActionOutcome.Failed("Bundle rejected\nBundle failed verification\nnetwork: Calls an undeclared host\nToo large"), model.run(submit, scope))
   }
 

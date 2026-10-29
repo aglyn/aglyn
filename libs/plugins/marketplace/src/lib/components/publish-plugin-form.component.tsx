@@ -56,7 +56,10 @@ import { pluginDocsHelp } from '@aglyn/aglyn'
 import { inheritedMediaAlt } from '@aglyn/aglyn/app-utils/media-metadata'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { listingPath } from '../model/marketplace-paths'
-import usePublisherAgreementGate from './use-publisher-agreement-gate'
+import {
+  PublisherAgreementCheckbox,
+  usePublisherAgreementConsent,
+} from './publisher-agreement-checkbox.component'
 
 // Mirrors the server taxonomy; the server re-validates (the console cannot
 // import the marketplace plugin's model — scope:app may not reach aglyn:addons).
@@ -366,12 +369,11 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
   // Normalized on arrival so a plain string from anywhere else still reads.
   const [problems, setProblems] = useState<PublishProblem[]>([])
   const [missingAttestations, setMissingAttestations] = useState<string[]>([])
+  // The publisher agreement, agreed to on this publish (AGL-4105): the box
+  // above the button. Never part of the draft — a draft restored after a
+  // reload asks again, as every publish does.
+  const agreement = usePublisherAgreementConsent()
   const [agreementProblem, setAgreementProblem] = useState('')
-  // The publisher agreement (AGL-3407), asked for HERE rather than on the
-  // Publisher Profile tab: offered as the form opens when the org's
-  // acceptance is missing or stale, and presented again if the publish is
-  // refused for it — accepting sends the same bundle and fields again.
-  const agreement = usePublisherAgreementGate({ orgId, offer: true })
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
   const set = <K extends keyof PublishDraft>(key: K) =>
@@ -494,6 +496,7 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
     setMissingAttestations([])
     setAgreementProblem('')
     setFieldErrors({})
+    if (!agreement.consent) return
     if (!bundleFile) {
       setFieldErrors({ bundle: 'Choose a plugin bundle (.js) to upload.' })
       return
@@ -508,8 +511,6 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
     setBusy(true)
     try {
       const bundle = await fileToBase64(bundleFile)
-      // Serialized once: a retry after the agreement is accepted sends the
-      // bytes this attempt did, not whatever the form holds by then.
       const body = JSON.stringify({
         orgId,
         bundle,
@@ -534,14 +535,14 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
         ...(draft.repositoryUrl.trim()
           ? { repositoryUrl: draft.repositoryUrl.trim() }
           : {}),
+        agreement: agreement.consent,
       })
-      const { response, payload, declined } = await agreement.send(() =>
-        authorizedFetch(user, '/api/marketplace/publish-plugin', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body,
-        }),
-      )
+      const response = await authorizedFetch(user, '/api/marketplace/publish-plugin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+      })
+      const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
         if (Array.isArray(payload?.problems)) {
           setProblems(
@@ -563,10 +564,9 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
         if (Array.isArray(payload?.missingAttestations)) {
           setMissingAttestations(payload.missingAttestations)
         }
-        // The agreement was presented and closed without accepting
-        // (AGL-3407). Held as an alert with the way back to it, not a toast:
-        // the dialog already said why, and the form keeps everything.
-        if (declined) {
+        // Refused for the agreement (AGL-4105): said under the box it is
+        // about, not in a toast, and the form keeps everything.
+        if (payload?.agreement) {
           return void setAgreementProblem(String(payload.error ?? ''))
         }
         // A rejected subject names its field (AGL-1076), so put the message
@@ -590,6 +590,7 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
       // opened from, which said nothing about what had just happened; the
       // listing shows the version now queued for review.
       clearDraft()
+      agreement.reset()
       enqueueSnackbar(
         `Published v${payload?.version ?? '1'} — it is queued for review`,
         { variant: 'success' },
@@ -621,7 +622,8 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
     unfilledSubjects.length > 0 ||
     repositoryInvalid ||
     manifestIdMismatch ||
-    priceBelowFloor
+    priceBelowFloor ||
+    !agreement.agreed
 
   return (
     <Stack spacing={2}>
@@ -669,19 +671,6 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
         </Alert>
       ) : null}
 
-      {agreementProblem ? (
-        <Alert
-          severity="warning"
-          action={
-            <Button color="inherit" size="small" onClick={agreement.review}>
-              {'Review the agreement'}
-            </Button>
-          }
-        >
-          {agreementProblem}
-        </Alert>
-      ) : null}
-      {agreement.dialog}
 
       <CardDisplay
         header={isUpdate ? 'The new bundle and manifest' : 'Bundle and manifest'}
@@ -1055,6 +1044,16 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
         </Stack>
       </CardDisplay>
 
+      {/* Directly above the button (AGL-4105), which waits for it. */}
+      <PublisherAgreementCheckbox
+        checked={agreement.agreed}
+        onChange={(checked) => {
+          agreement.setAgreed(checked)
+          setAgreementProblem('')
+        }}
+        disabled={busy}
+        error={agreementProblem || null}
+      />
       <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
         <Button
           variant="contained"
@@ -1070,6 +1069,8 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
               ? `Confirm ${unattested.length} more`
             : unfilledSubjects.length || repositoryInvalid
               ? 'Add a repository URL'
+            : !agreement.agreed
+              ? 'Agree to publish'
             : isUpdate
               ? 'Publish new version'
             : draft.visibility === 'private'

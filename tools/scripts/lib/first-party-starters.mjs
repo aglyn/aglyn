@@ -149,6 +149,9 @@ export async function loadFirstPartyStarterSources(importModule = importWorkspac
   if (typeof links.starterLinksBySlug !== 'function') {
     throw new Error(`${paths.links} does not export starterLinksBySlug`)
   }
+  if (typeof look.aiSiteKindDefaultLook !== 'function') {
+    throw new Error(`${paths.look} does not export aiSiteKindDefaultLook`)
+  }
   if (typeof starterNodes.sanitizeSiteStarterNodes !== 'function') {
     throw new Error(`${paths.starterNodes} does not export sanitizeSiteStarterNodes`)
   }
@@ -163,8 +166,7 @@ export async function loadFirstPartyStarterSources(importModule = importWorkspac
       sanitizeSiteStarterNodes: starterNodes.sanitizeSiteStarterNodes,
       layoutSlotId: starterNodes.SITE_STARTER_LAYOUT_SLOT_ID,
       canvasRootId: canvas.CANVAS_ROOT_ELEMENT_ID,
-      aiSiteColors: look.aiSiteColors,
-      aiSiteSeed: look.aiSiteSeed,
+      aiSiteKindDefaultLook: look.aiSiteKindDefaultLook,
     },
     kinds: kinds.AI_SITE_KINDS,
     pairings: fontPairings.SITE_FONT_PAIRINGS,
@@ -246,55 +248,16 @@ function starterNodesWhole(core, what, nodes, options) {
   return sanitized.nodes
 }
 
-/** The midpoint of a kind's first hue range, or `null` when it spans the whole wheel (any hue suits it). */
-function firstHue(hues) {
-  const [from, to] = hues?.[0] ?? [0, 360]
-  const span = from <= to ? to - from : 360 - from + to
-  if (span >= 360) return null
-  return Math.round(from + span / 2) % 360
-}
-
 /**
  * A kind's look as a starter names it: its first base theme the platform has
  * (`starter`, or a built-in preset), its first font pairing, and a brand
- * primary from its first hue range, colored as the look module colors one.
+ * primary from its first hue range. One derivation, the AI plugin's
+ * `aiSiteKindDefaultLook`, which is also the look a site created in that
+ * style starts with (AGL-4049), so the two never drift apart.
  */
 function kindLook(kind, { core, presetIds, pairingIds }) {
-  const family = kind.look
-  const base = family.bases.find((name) => name === 'starter' || presetIds.has(`theme-presets.${name}`)) ?? 'starter'
-  const fonts = family.fonts.find((id) => pairingIds.has(id)) ?? null
-  const hue = firstHue(family.hues)
-  const style = {
-    v: 1,
-    kind: kind.id,
-    base,
-    seed: core.aiSiteSeed(kind.id),
-    hue: hue ?? 0,
-    accent: hue ?? 0,
-    chroma: family.chroma,
-    ground: family.grounds[0],
-    fonts,
-    corners: family.corners[0],
-    buttons: family.buttons,
-    brand: null,
-  }
-  const colors = hue === null ? null : core.aiSiteColors(style)
-  const brand = colors
-    ? { light: { primary: colors.light.primary.main }, dark: { primary: colors.dark.primary.main } }
-    : { light: {} }
-  return {
-    base,
-    fonts,
-    brand,
-    answerStyle: {
-      base,
-      ...(hue === null ? {} : { hue }),
-      ground: style.ground,
-      fonts,
-      corners: style.corners,
-      buttons: style.buttons,
-    },
-  }
+  const look = core.aiSiteKindDefaultLook(kind, { presetIds, pairingIds })
+  return { base: look.theme.base, fonts: look.theme.fonts, brand: look.theme.brand, answerStyle: look.answerStyle }
 }
 
 /**

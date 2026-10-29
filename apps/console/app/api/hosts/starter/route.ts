@@ -16,6 +16,8 @@
  */
 
 import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
+import { isSiteStyleId } from '@aglyn/aglyn/app-utils/site-styles'
+import { resolveSiteStyleLooks } from '@aglyn/aglyn/plugin-manager/plugin-site-style-looks'
 import { dropPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
@@ -26,6 +28,7 @@ import {
   lockdownRefusal,
   logHostActivity,
 } from '@aglyn/tenant-data-admin'
+import { registerPluginServerDeclarations } from '../../../../constants/plugins.declarations.server.generated'
 import { provisionStarterSite } from '../../../../utils/server/provision-host'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
@@ -41,6 +44,10 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
  * site born with the starter answers `provisioned: false` and changes
  * nothing.
  *
+ * A `style` (AGL-4049) is the style the person chose, a `SITE_STYLES` id:
+ * the starter wears that style's look and the site records it. Without one
+ * the site keeps the theme it was born with.
+ *
  * The same gate as the site's other setup writes: a site admin or editor, or
  * staff, and the lockdown verdict.
  */
@@ -52,6 +59,10 @@ async function handler(request: Request): Promise<Response> {
   }
   const hostId = String(body?.hostId ?? '').trim()
   if (!hostId) return Response.json({ error: 'Missing hostId' }, { status: 400 })
+  const styleId = body?.style == null ? null : String(body.style)
+  if (styleId !== null && !isSiteStyleId(styleId)) {
+    return Response.json({ error: 'Unknown style' }, { status: 400 })
+  }
 
   const authorization = headers.authorization ?? ''
   const idToken = authorization.startsWith('Bearer ')
@@ -84,7 +95,25 @@ async function handler(request: Request): Promise<Response> {
     })
     if (locked) return locked
 
-    const result = await provisionStarterSite(firestore, hostId)
+    // The chosen style's look, from the plugin that designed the looks; no
+    // plugin, and the starter keeps the site's theme with the style recorded.
+    let theme = null
+    if (styleId !== null) {
+      await registerPluginServerDeclarations().catch((error: unknown) => {
+        console.error('[hosts/starter] plugin declarations failed', error)
+      })
+      theme = await (resolveSiteStyleLooks()?.look(styleId) ?? Promise.resolve(null)).catch(
+        (error: unknown) => {
+          console.error('[hosts/starter] style look failed', error)
+          return null
+        },
+      )
+    }
+    const result = await provisionStarterSite(
+      firestore,
+      hostId,
+      styleId === null ? {} : { style: { id: styleId, theme } },
+    )
     if (result.missing) return Response.json({ error: 'Unknown site' }, { status: 404 })
     if (result.provisioned) {
       // The holding page `/` answered until now is cached; the Home page is

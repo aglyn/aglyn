@@ -32,9 +32,10 @@
 import { isPublishedLegalUrl } from '@aglyn/aglyn/app-utils/published-legal-pages'
 import {
   PUBLISHER_AGREEMENT_URL,
+  publisherAgreementConsentPresentation,
+  publisherAgreementConsentRefusal,
   publisherAgreementIsPublished,
   publisherAgreementPresentation,
-  publisherAgreementRefusal,
 } from './publisher-agreement'
 
 describe('the publisher agreement is only acceptable once it is readable', () => {
@@ -66,14 +67,27 @@ describe('the publisher agreement is only acceptable once it is readable', () =>
     ).toBe(PUBLISHER_AGREEMENT_URL)
   })
 
-  it('does not send a blocked publisher to a control that is not there', () => {
-    // The publish refusal used to say "accept it in Marketplace → Publisher
-    // Profile". While the document is unpublished that is a dead end, and a
-    // dead end reads as a broken console rather than as our omission.
-    const refusal = publisherAgreementRefusal('none', false)
-    expect(refusal).not.toMatch(/Publisher Profile/)
-    expect(refusal).toMatch(/not published yet/)
-    expect(publisherAgreementRefusal('none', true)).toMatch(/Publisher Profile/)
+  it('cannot be agreed to on a save while it is unpublished (AGL-4105)', () => {
+    // The per-save box reads its link and whether it can be ticked from the
+    // same published set, and the routes refuse a save's agreement whatever
+    // it says while there is no page behind it.
+    expect(publisherAgreementConsentPresentation(false)).toEqual({
+      documentUrl: null,
+      canAgree: false,
+      unavailableNotice: expect.any(String),
+    })
+    expect(publisherAgreementConsentPresentation(true)).toEqual({
+      documentUrl: PUBLISHER_AGREEMENT_URL,
+      canAgree: true,
+      unavailableNotice: null,
+    })
+    const refusal = publisherAgreementConsentRefusal(
+      { version: 'any', accepted: true },
+      { published: false },
+    )
+    expect(refusal?.status).toBe(409)
+    expect(refusal?.body.agreement).toMatchObject({ state: 'unavailable' })
+    expect(String(refusal?.body.error)).toMatch(/not published yet/)
   })
 
   it('gates the live constant on the live published set', () => {
@@ -84,8 +98,10 @@ describe('the publisher agreement is only acceptable once it is readable', () =>
     if (!isPublishedLegalUrl(PUBLISHER_AGREEMENT_URL)) {
       expect(publisherAgreementPresentation('none').canAccept).toBe(false)
       expect(publisherAgreementPresentation('none').documentUrl).toBeNull()
+      expect(publisherAgreementConsentPresentation().canAgree).toBe(false)
     } else {
       expect(publisherAgreementPresentation('none').canAccept).toBe(true)
+      expect(publisherAgreementConsentPresentation().canAgree).toBe(true)
     }
   })
 })
