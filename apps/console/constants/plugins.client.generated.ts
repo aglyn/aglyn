@@ -49,7 +49,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'commerce',
     apiPrefixes: ["commerce","membership"],
     register: {"site":"registerCommercePlugin","console":"registerCommerceConsole","staff":"registerCommerceConsole"},
-    contributes: {"console":{"shell":true,"routes":["/pos","/products"],"slots":["commerceGlance","consoleSearch","hostDashboard","siteMember","transferResources"],"publicRoutes":["/pos-display","/pos-kiosk","/hardware-terms","/hardware-terms-sign"]}},
+    contributes: {"console":{"shell":true,"routes":["/pos","/products"],"slots":["commerceGlance","consoleSearch","crmRecordActions","hostDashboard","inboxSubmissionActions","siteMember","transferResources"],"publicRoutes":["/pos-display","/pos-kiosk","/hardware-terms","/hardware-terms-sign"]}},
     load: () => import('@aglyn/plugins-commerce'),
     loads: {
       site: () => import('@aglyn/plugins-commerce/site'),

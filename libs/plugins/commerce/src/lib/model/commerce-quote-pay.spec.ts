@@ -238,6 +238,9 @@ describe('the customer’s page', () => {
         'customerName',
         'dateMs',
         'discountLabel',
+        // A quote's page or an invoice's (AGL-4099), and whether shipping is picked at payment.
+        'kind',
+        'shippingAtPayment',
         'lines',
         'notes',
         'number',

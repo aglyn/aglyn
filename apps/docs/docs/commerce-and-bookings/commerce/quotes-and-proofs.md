@@ -383,6 +383,25 @@ was already paid, or a payment comes through a link you had replaced, it isn't c
 as a sale: the quote's timeline records it and you're notified, so you can refund it in
 Stripe.
 
+## Send an invoice for a quote {#invoice}
+
+**Send invoice** sits beside **Send quote** in the quote's **Email to customer**
+section:
+
+- For a **paid** quote, it sends the invoice as your customer's record: marked paid,
+  with the date, and the invoice attached as a PDF.
+- For an **unpaid** quote, it sends an invoice for a customer who needs one to pay,
+  with a **Pay** button. The button is the quote's own [pay link](#pay-link), so it
+  opens the quote, and replacing the link retires it too.
+
+The invoice is sent in the same [conversation](#conversation) as the quote's emails,
+under the conversation's subject. Once it's sent, the section says when and to whom.
+An invoice for an unpaid quote that asks your customer to approve the proof can't be
+sent until they approve it: send the quote so they can.
+
+See [Send an invoice](orders-and-returns.md#send-invoice) for everything the email
+says.
+
 ## Quotes are not orders until they're paid {#quotes-are-not-orders}
 
 A quote shares your order numbers, but until it is paid it is not an order. It
@@ -393,7 +412,7 @@ tools and the customer's account page.
 
 Making, editing and deleting quotes, adding and removing proofs, starting a revision,
 seeing earlier revisions and your customer's files, and downloading a quote's PDF, takes
-the **Create and edit quotes** permission. Emailing a quote, and copying and replacing
+the **Create and edit quotes** permission. Emailing a quote or its invoice, and copying and replacing
 its pay link, takes **Send quotes and invoices to customers**, and so does a PDF that
 carries the pay link. Everyone who can manage orders on the site has both to start with; a
 custom role or a per-member override can grant or deny each one. See

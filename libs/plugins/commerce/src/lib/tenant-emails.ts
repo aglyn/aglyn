@@ -463,6 +463,85 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
       footerReason: 'You’re receiving this because {{host.businessName}} prepared a quote for you.',
     },
     {
+      // The invoice email (AGL-4099), sent when the business chooses Send
+      // invoice on an order or a quote. Its tokens are composed per send by
+      // `utils/invoice-email-content.ts`: unpaid, it asks for payment through
+      // the order's lasting pay link; paid, it is the record and draws no
+      // button (an empty `invoice.url` leaves the button out).
+      key: 'order-invoice',
+      name: 'Invoice',
+      description:
+        'Sends an invoice for an order or a quote when you choose Send ' +
+        'invoice: your message, the invoice as a PDF and, while it is ' +
+        'unpaid, a button to pay it on your site. A paid invoice is the ' +
+        'customer’s record. It arrives in the same conversation as the ' +
+        'quote’s emails.',
+      pluginId: 'commerce',
+      plugin: 'Commerce',
+      control: 'besigner',
+      defaultSubject: '{{invoice.subject}}',
+      mergeTokens: [
+        {
+          name: 'invoice.subject',
+          description: 'The subject typed when sending; it stays the same as the conversation it joins',
+          sample: 'Invoice #1042 from Northwind Signs',
+        },
+        { name: 'invoice.number', description: 'The invoice number, which is the order number', sample: '#1042' },
+        { name: 'invoice.date', description: 'The date of the order or quote', sample: 'October 28, 2026' },
+        {
+          name: 'invoice.total',
+          description: 'The invoice total; “before tax” or “before shipping” when those are added at payment',
+          sample: '$1,250.00',
+        },
+        {
+          name: 'invoice.status',
+          description: '“Paid on …”, or what is still due',
+          sample: 'Unpaid, $1,250.00 due',
+        },
+        {
+          name: 'invoice.heading',
+          description: '“Invoice #… from …”',
+          sample: 'Invoice #1042 from Northwind Signs',
+        },
+        {
+          name: 'invoice.intro',
+          description: 'One sentence on what this email is: an invoice to pay, or a paid one for the customer’s records',
+          sample: 'Northwind Signs sent you an invoice for your order. The details are below, and the invoice is attached as a PDF.',
+        },
+        {
+          name: 'invoice.message',
+          description: 'The message typed when sending; empty when none was typed',
+          sample: 'Thanks again for your order. Here is the invoice we talked about.',
+        },
+        {
+          name: 'invoice.nextStep',
+          description: 'What to do next: pay with the button, or keep a paid invoice for the records',
+          sample: 'Use the button below to pay it securely by card. The button keeps working until the invoice is paid.',
+        },
+        {
+          name: 'invoice.buttonLabel',
+          description: '“Pay” with the amount; empty on a paid invoice, which leaves the button out',
+          sample: 'Pay $1,250.00',
+        },
+        {
+          name: 'invoice.url',
+          description: 'The invoice’s pay link on your site. Private to the customer; it needs no account. Empty once paid',
+          sample: 'https://shop.example.com/pay-quote?q=order_123&t=…',
+        },
+      ],
+      defaultBody: [
+        { block: 'text', text: '{{host.businessName}} · Invoice {{invoice.number}}', variant: 'eyebrow' },
+        { block: 'text', text: '{{invoice.heading}}', variant: 'heading' },
+        { block: 'text', text: '{{invoice.intro}}', variant: 'body' },
+        { block: 'text', text: '{{invoice.message}}', variant: 'body' },
+        { block: 'text', text: 'Invoice: {{invoice.number}}\nDate: {{invoice.date}}\nTotal: {{invoice.total}}\nStatus: {{invoice.status}}', variant: 'details' },
+        { block: 'text', text: '{{invoice.nextStep}}', variant: 'body' },
+        { block: 'button', label: '{{invoice.buttonLabel}}', href: '{{invoice.url}}' },
+        { block: 'text', text: 'Reply to this email to reach {{host.businessName}}.', variant: 'caption' },
+      ],
+      footerReason: 'You’re receiving this because {{host.businessName}} sent you an invoice.',
+    },
+    {
       key: 'sale-notification',
       name: 'New sale',
       description: 'Notifies the seller when an order is placed.',

@@ -19,17 +19,24 @@
 
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
-import { Button, Menu, MenuItem } from '@mui/material'
+import { Button, ListItemText, Menu, MenuItem } from '@mui/material'
 import { doc, getDoc } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
 import type * as CommerceModel from '../../model'
+import { commerceSitePermissionRefusal } from '../../model/plugin-permissions'
 import { buildOrderInvoiceHtml, invoiceStoreFrom } from '../../utils/order-invoice'
 import { downloadCommercePdf } from './commerce-pdf-download'
+import { InvoiceSendDialog } from './invoice-send.component'
 
 export interface OrderInvoiceButtonProps {
   hostId: string
   orderId: string
   order: CommerceModel.HostOrder
+  /**
+   * Holds "Send quotes and invoices to customers" (`commerce.quotes.send`),
+   * which Send invoice asks (AGL-4099). Absent reads as held: the route decides.
+   */
+  canSend?: boolean
 }
 
 /**
@@ -39,14 +46,19 @@ export interface OrderInvoiceButtonProps {
  * its logo (`commerce/order-print?kind=invoice-pdf`, "Manage orders"). The
  * store's name, currency and footer are read when one is clicked, not while
  * the dialog is open, so the dialog listens to nothing more.
+ *
+ * "Send invoice" (AGL-4099) emails it to the customer with the PDF attached:
+ * an unpaid order's with a Pay button to its lasting pay link, a paid one's
+ * as the record (`invoice-send.component.tsx`).
  */
 export function OrderInvoiceButton(props: OrderInvoiceButtonProps) {
-  const { hostId, orderId, order } = props
+  const { hostId, orderId, order, canSend = true } = props
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const [busy, setBusy] = useState(false)
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
+  const [sending, setSending] = useState(false)
 
   const handleDownload = useCallback(async () => {
     setAnchor(null)
@@ -110,7 +122,26 @@ export function OrderInvoiceButton(props: OrderInvoiceButtonProps) {
       <Menu anchorEl={anchor} open={Boolean(anchor)} onClose={() => setAnchor(null)}>
         <MenuItem onClick={() => void handleInvoice()}>{'Print invoice'}</MenuItem>
         <MenuItem onClick={() => void handleDownload()}>{'Download PDF'}</MenuItem>
+        <MenuItem
+          disabled={!canSend}
+          onClick={() => {
+            setAnchor(null)
+            setSending(true)
+          }}
+        >
+          <ListItemText
+            primary="Send invoice"
+            secondary={canSend ? undefined : commerceSitePermissionRefusal('commerce.quotes.send')}
+          />
+        </MenuItem>
       </Menu>
+      <InvoiceSendDialog
+        open={sending}
+        onClose={() => setSending(false)}
+        hostId={hostId}
+        orderId={orderId}
+        order={order}
+      />
     </>
   )
 }

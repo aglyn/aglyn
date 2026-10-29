@@ -92,7 +92,7 @@ describe('/pay-quote', () => {
   it('is unlisted, so it is never indexed', async () => {
     const result = await resolve('/pay-quote')
     expect(result.props.data.screen.data).toEqual({
-      displayName: 'Your quote',
+      displayName: 'Your quote or invoice',
       visibility: Aglyn.HostScreenVisibility.UNLISTED,
     })
     expect(result.props.data.host).toEqual(HOST)

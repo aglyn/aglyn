@@ -445,7 +445,7 @@ export const PLUGIN_DOCS = {
   ordersAndReturns: {
     path: '/commerce-and-bookings/commerce/orders-and-returns',
     title: 'Fulfillment, returns and webhooks',
-    excerpt: 'Ship an order in parts with tracking links, run returns from request to refund, print invoices, and send order events to your own systems.',
+    excerpt: 'Ship an order in parts with tracking links, run returns from request to refund, print and send invoices, and send order events to your own systems.',
   },
   orgAutomations: {
     path: '/marketing-and-automation/workflows-and-actions/org-automations',
@@ -664,7 +664,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   marketplaces: ['#connect-a-marketplace', '#listings', '#orders', '#activity'],
   membersOnly: ['#let-visitors-sign-up', '#sign-in-sign-up-and-recovery-pages', '#forgotten-passwords', '#gate-a-screen', '#manage-your-members', '#suspend-or-reactivate-a-member', '#tips', '#related'],
   orderNotifications: ['#customer-emails', '#tracking-links', '#turning-emails-off', '#changing-the-wording-and-colors', '#who-is-told', '#switch-off-team-notices', '#order-status-page', '#resend-receipt', '#text-messages', '#related'],
-  ordersAndReturns: ['#fulfillment', '#invoices', '#returns', '#buyer-requests', '#run-a-return', '#order-webhooks', '#when-an-endpoint-is-down', '#related'],
+  ordersAndReturns: ['#fulfillment', '#invoices', '#send-invoice', '#invoice-pay-link', '#invoice-which-orders', '#returns', '#buyer-requests', '#run-a-return', '#order-webhooks', '#when-an-endpoint-is-down', '#related'],
   orgAutomations: ['#what-an-org-automation-is', '#create-one', '#triggers', '#steps', '#pause-it-on-one-site', '#waiting-switching-off-and-deleting', '#every-sites-own-automations', '#related'],
   ownShippingAccounts: ['#before-you-start', '#connect-an-account', '#easyship', '#sendcloud', '#shipperhq', '#tracking-webhooks', '#what-changes', '#disconnect', '#troubleshooting', '#related'],
   pickupAndDelivery: ['#set-up-pickup', '#set-up-local-delivery', '#queue', '#ask-aglyn-ai', '#related'],
@@ -676,7 +676,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   printOnDemand: ['#before-you-start', '#connect', '#import-products', '#costs-and-margins', '#orders', '#test-orders', '#canceling-and-refunding', '#shipments-and-tracking', '#disconnect', '#what-is-sent-to-the-service'],
   publishAPlugin: ['#the-publish-pipeline', '#private-plugins', '#paid-listings', '#your-publisher-profile', '#profile-card', '#listing-publisher-card', '#tips', '#related'],
   publisherHandbook: ['#before-your-first-publish', '#public-profile', '#the-publisher-agreement', '#where-to-publish-from', '#what-installing-each-type-does', '#rules-an-email-starter-has-to-meet', '#publishing-a-version', '#bundle-and-manifest', '#before-you-publish', '#review-what-happens-after-you-publish', '#the-two-badges-and-what-each-one-promises', '#asking-to-be-verified', '#testing-a-version-before-it-is-approved', '#watching-your-own-submission', '#disabled-versions', '#private-plugins', '#authoring-your-listing', '#edit-listing', '#your-listings', '#listing-links', '#what-your-listing-can-say-about-aglyn', '#versioning--updates', '#listing-changelog', '#version-history', '#shipping-a-new-version', '#how-installs-work-the-buyer-side', '#install-card', '#installed-from-the-marketplace', '#licenses', '#workspace-licenses', '#licenses-you-bought', '#getting-paid', '#set-up-payouts', '#purchases-and-fees', '#refund-reversals', '#low-prices-and-processing'],
-  quotes: ['#what-a-quote-holds', '#quote-defaults', '#make-a-quote', '#a-request-a-quote-form', '#start-a-quote-from-a-request', '#start-a-quote-from-a-contact', '#totals-and-tax', '#send', '#quote-email', '#conversation', '#send-again', '#pay-link', '#customer-page', '#proofs', '#customer-proofs', '#approval-and-paying', '#revisions', '#pdf', '#paying', '#paid', '#quotes-are-not-orders', '#permissions'],
+  quotes: ['#what-a-quote-holds', '#quote-defaults', '#make-a-quote', '#a-request-a-quote-form', '#start-a-quote-from-a-request', '#start-a-quote-from-a-contact', '#totals-and-tax', '#send', '#quote-email', '#conversation', '#send-again', '#pay-link', '#customer-page', '#proofs', '#customer-proofs', '#approval-and-paying', '#revisions', '#pdf', '#paying', '#paid', '#invoice', '#quotes-are-not-orders', '#permissions'],
   redirects: ['#manage-redirects', '#query-strings-pass-through', '#sending-visitors-to-another-site', '#import-and-export', '#columns', '#how-a-row-finds-an-existing-rule', '#conflicts-the-dry-run-and-undo', '#ask-aglyn-ai', '#metrics', '#match-modes-v2', '#related'],
   reviewPlatforms: ['#who-is-invited', '#trustpilot', '#trustpilot-invitation-address', '#trustpilot-api', '#yotpo-reviews', '#on-the-order', '#switching-it-off-for-a-site', '#related'],
   salesChannels: ['#set-up-sales-channels', '#turn-on-a-channel', '#keep-the-address-private', '#what-each-product-sends', '#brand-barcode-and-category', '#shipping', '#check-your-products', '#how-fresh-the-feed-is', '#earlier-merchant-center-address', '#turn-off', '#related'],
