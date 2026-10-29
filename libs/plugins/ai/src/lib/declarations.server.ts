@@ -34,6 +34,8 @@ import {
 import { registerPluginUsageMeter } from '@aglyn/aglyn/plugin-manager/plugin-usage-meters'
 import { registerOperatorAlerts } from '@aglyn/aglyn/plugin-manager/operator-alerts'
 import { registerStockPhotoPicker } from '@aglyn/aglyn/plugin-manager/stock-photo-provider'
+import { registerPluginSiteStyleLooks } from '@aglyn/aglyn/plugin-manager/plugin-site-style-looks'
+import { listServerThemePresets } from '@aglyn/aglyn/plugin-manager/plugin-theme-presets'
 import { AI_PLUGIN_ID, AI_USAGE_METER_ID } from './constants'
 import { AI_BUILD_PARTLY_FAILED, AI_JOB_FAILED, AI_PROVIDER_UNAVAILABLE } from './operator-alerts'
 import { registerAiDeclarations } from './declarations'
@@ -188,6 +190,25 @@ export function registerAiServerDeclarations(): void {
       pick: async (request) => {
         const { aiStockPhotoPick } = await import('./jobs/ai-stock-photo-picker')
         return aiStockPhotoPick(request)
+      },
+    },
+    { pluginId: AI_PLUGIN_ID },
+  )
+  // The look each style starts a new site in (AGL-4049): Create site asks a
+  // style before it creates anything, and the 21 styles are this plugin's
+  // kinds of site. Asked on the create, so the look module loads then; the
+  // built-in themes this deployment has are read at that moment too.
+  registerPluginSiteStyleLooks(
+    {
+      look: async (styleId) => {
+        const [{ aiSiteKind }, { aiSiteKindDefaultLook }] = await Promise.all([
+          import('./model/ai-site-kinds'),
+          import('./model/ai-site-look'),
+        ])
+        const kind = aiSiteKind(styleId)
+        if (!kind) return null
+        const presetIds = new Set(listServerThemePresets().map((preset) => preset.id))
+        return aiSiteKindDefaultLook(kind, { presetIds }).theme
       },
     },
     { pluginId: AI_PLUGIN_ID },

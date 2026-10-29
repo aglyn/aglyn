@@ -63,8 +63,13 @@ import {
   runPluginEventHandlers,
   runPluginUserErasers,
 } from '@aglyn/aglyn/server'
+import { resolveSiteStyleLooks } from '@aglyn/aglyn/plugin-manager/plugin-site-style-looks'
+import { registerPluginThemePresets } from '@aglyn/aglyn/plugin-manager/plugin-theme-presets'
+import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { AI_PLUGIN_ENTITLEMENTS, registerAiDeclarations } from './declarations'
 import { registerAiServerDeclarations } from './declarations.server'
+import { aiSiteKind } from './model/ai-site-kinds'
+import { aiSiteKindDefaultLook } from './model/ai-site-look'
 
 const ACTOR = { uid: 'u1', email: 'owner@example.test' }
 
@@ -170,5 +175,25 @@ describe('the server declarations register the AI usage eraser', () => {
     ])
     expect(mockEraseAllotments).toHaveBeenCalledWith(mockFirestore, 'person-1', ['org-a', 'org-b'])
     expect(reports).toEqual({ ai: { orgs: 2, sweptMonths: 1, allotments: 3 } })
+  })
+})
+
+describe('the server declarations answer each style\'s look (AGL-4049)', () => {
+  it('answers a style with its kind\'s first look, and null for no style', async () => {
+    resetPluginServicesForTests()
+    registerPluginThemePresets([{ id: 'theme-presets.bootstrap', name: 'Bootstrap', theme: {} } as never], {
+      pluginId: 'themes',
+    })
+    registerAiServerDeclarations()
+    const source = resolveSiteStyleLooks()
+    expect(source).not.toBeNull()
+    const trades = await source?.look('trades')
+    expect(trades).toEqual(
+      aiSiteKindDefaultLook(aiSiteKind('trades')!, { presetIds: new Set(['theme-presets.bootstrap']) }).theme,
+    )
+    // Home services & trades starts on Bootstrap, the first of its bases this deployment has.
+    expect(trades).toMatchObject({ kind: 'builtin', base: 'bootstrap', fonts: 'oswald' })
+    await expect(source?.look('auto')).resolves.toBeNull()
+    await expect(source?.look('nope')).resolves.toBeNull()
   })
 })

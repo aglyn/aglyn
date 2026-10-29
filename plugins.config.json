@@ -1194,6 +1194,7 @@
           "shell": true,
           "slots": [
             "hostArtifactPublish",
+            "hostStarterPicker",
             "orgPluginInstalls",
             "pluginInstallStatus",
             "pluginSiteSet",

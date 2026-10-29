@@ -274,6 +274,9 @@ async function createSite(request: Request, ctx: ApiV1Context): Promise<Response
       displayName,
       subdomain,
       org: ctx.org as never,
+      // A program, not a person choosing (AGL-4049): the default starter, no
+      // style, recorded as made through the API.
+      start: 'api',
     })
     // Lost the subdomain to a concurrent create between the pre-check above
     // and the transaction's commit (AGL-2465). Same 409 the pre-check answers,

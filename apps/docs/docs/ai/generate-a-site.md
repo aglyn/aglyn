@@ -29,7 +29,8 @@ first step asks the site's name and address, and one question: **how do you want
 start?**
 
 - **Start from the starter site** gives the site a ready-made home page with a
-  header, footer and contact form, live at its address, for you to edit.
+  header, footer and contact form, live at its address, for you to edit, in a
+  style you choose first.
 - **Start with AI** asks a few questions instead: what kind of site you are
   creating, who it is for, which of the starter shapes you like, and where your
   contact form's submissions should go. It writes the brief for you and plans the
@@ -41,9 +42,10 @@ Where submissions go is the form's routing: **the Inbox**, or the Inbox and a
 lead in CRM for every message that carries an email address. You can change that
 on the form itself afterwards.
 
-Nothing is created until you choose. The starter card and **Skip** (in the bar at
-the top on both steps) create the site with the starter home page. **Plan my site**
-creates the site and starts planning it. The close control and the Escape key create
+Nothing is created until you choose, and nothing is chosen for you. The starter
+card asks you to choose a style, and its **Create site** creates the site with the
+starter home page in that style. **Plan my site** creates the site and starts
+planning it. The close control and the Escape key create
 nothing: the window closes and no site is made. Once the site is being planned,
 closing only closes the window; the job carries on.
 

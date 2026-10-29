@@ -42,6 +42,10 @@ describe('the guided start for a client build (AGL-3958)', () => {
     expect(aiSiteStartAnswersFromClientBuild(INTAKE)).toEqual({
       ...AI_SITE_START_ANSWERS,
       siteType: 'a family plumbing business',
+      // The site exists and the intake answered for it: what the business
+      // does picks its style, as "Pick for me" does (AGL-4049).
+      style: 'auto',
+      kind: null,
       phone: '(512) 555-0123',
       email: 'owner@example.com',
       serviceArea: 'Austin\nRound Rock',

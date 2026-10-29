@@ -6,7 +6,9 @@
 // screenshots) go in Config/Local.xcconfig, which git ignores.
 
 AGLYN_CONSOLE_URL = http:/$()/localhost:4200
-AGLYN_FIREBASE_API_KEY = emulator-api-key
+// Not a real key, and the emulators accept any. It has a real key's shape (39 characters, starting with "A"), because
+// Firebase Installations, which Analytics starts at launch, refuses any other and the app would end there (AGL-4104).
+AGLYN_FIREBASE_API_KEY = Aemulator-api-key-not-a-real-key-000000
 AGLYN_FIREBASE_AUTH_DOMAIN = localhost
 AGLYN_FIREBASE_PROJECT_ID = demo-aglyn
 AGLYN_FIREBASE_APP_ID = 1:000000000000:ios:0000000000000000

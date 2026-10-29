@@ -14,113 +14,48 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 import type { OptionCardImage } from '@aglyn/shared-ui-jsx/components/option-card-grid.component'
+import {
+  SITE_STYLE_PREVIEW_SIZE,
+  SITE_STYLES,
+  siteStyleOf,
+} from '@aglyn/aglyn/app-utils/site-styles'
 import { AI_SITE_KINDS } from '../model/ai-site-kinds'
-import businessPreview from '../assets/site-styles/business.webp'
-import tradesPreview from '../assets/site-styles/trades.webp'
-import professionalPreview from '../assets/site-styles/professional.webp'
-import wellnessPreview from '../assets/site-styles/wellness.webp'
-import restaurantPreview from '../assets/site-styles/restaurant.webp'
-import storePreview from '../assets/site-styles/store.webp'
-import portfolioPreview from '../assets/site-styles/portfolio.webp'
-import studioPreview from '../assets/site-styles/studio.webp'
-import photographyPreview from '../assets/site-styles/photography.webp'
-import blogPreview from '../assets/site-styles/blog.webp'
-import eventsPreview from '../assets/site-styles/events.webp'
-import fitnessPreview from '../assets/site-styles/fitness.webp'
-import yogaPreview from '../assets/site-styles/yoga.webp'
-import beautyPreview from '../assets/site-styles/beauty.webp'
-import realestatePreview from '../assets/site-styles/realestate.webp'
-import educationPreview from '../assets/site-styles/education.webp'
-import nonprofitPreview from '../assets/site-styles/nonprofit.webp'
-import musicPreview from '../assets/site-styles/music.webp'
-import personalPreview from '../assets/site-styles/personal.webp'
-import landingPreview from '../assets/site-styles/landing.webp'
-import comingSoonPreview from '../assets/site-styles/coming-soon.webp'
 
 /**
- * The picture on each style card of the guided start (AGL-3898): an example
- * home page of that kind of site, in its own shape — a café's menu, a
- * store's products, a photographer's gallery, a band's tour dates — drawn in
- * the kind's look by `libs/plugins/ai/scripts/render-site-style-previews.mts`
- * from the stand-in pages in `site-style-previews.json`, with the real
- * compiler and node renderer, the starter photos and the previews' own
- * credited photos (`scripts/style-preview-photos/`). Each opens on its kind's
- * signature hero (`aiLayoutKindSignature`, AGL-3985) with a photo of its own
- * kind of business.
- * Each is 800 × 800; regenerate them all with that script when a kind's look
- * or layout changes.
+ * The picture on each style card (AGL-3898): an example home page of that
+ * kind of site, in its own shape — a café's menu, a store's products, a
+ * photographer's gallery, a band's tour dates — drawn in the kind's look by
+ * `libs/plugins/ai/scripts/render-site-style-previews.mts` from the stand-in
+ * pages in `site-style-previews.json`, with the real compiler and node
+ * renderer, the starter photos and the previews' own credited photos
+ * (`scripts/style-preview-photos/`). Each opens on its kind's signature hero
+ * (`aiLayoutKindSignature`, AGL-3985) with a photo of its own kind of
+ * business.
+ *
+ * The pictures are the console's (`apps/console/public/_static/starter/styles/`,
+ * AGL-4049): the starter site's style choice draws the same ones without this
+ * plugin, so they are served from one place and named by core's
+ * `SITE_STYLES`. Each is 800 × 800; regenerate them all with that script when
+ * a kind's look or layout changes.
  */
-const PREVIEWS: Readonly<Record<string, unknown>> = {
-  business: businessPreview,
-  trades: tradesPreview,
-  professional: professionalPreview,
-  wellness: wellnessPreview,
-  restaurant: restaurantPreview,
-  store: storePreview,
-  portfolio: portfolioPreview,
-  studio: studioPreview,
-  photography: photographyPreview,
-  blog: blogPreview,
-  events: eventsPreview,
-  fitness: fitnessPreview,
-  yoga: yogaPreview,
-  beauty: beautyPreview,
-  realestate: realestatePreview,
-  education: educationPreview,
-  nonprofit: nonprofitPreview,
-  music: musicPreview,
-  personal: personalPreview,
-  landing: landingPreview,
-  'coming-soon': comingSoonPreview,
-}
 
 /** What each picture shows, as its alt text: the example page and what leads it. */
-export const AI_SITE_STYLE_PREVIEW_ALTS: Readonly<Record<string, string>> = {
-  business: "A cleaning company's home page: its heading beside a photo of gloved hands wiping a desk, then its services as cards",
-  trades: "A roofer's home page: a bold heading over a full-width photo of a roofer carrying shingles, then roofing services",
-  professional: "A consulting firm's home page: its heading on a white card over a full-width photo of a team at a planning board",
-  wellness: "A therapy practice's home page: half the page a photo of a calm, sunlit room, its heading in the other half, then its sessions",
-  restaurant: "A café's home page: its heading centered over a photo of the owner at the counter, then menu highlights",
-  store: "A handmade goods shop's home page: its heading beside two overlapping photos of wax seals, then featured products",
-  portfolio: "A prop stylist's home page: a large heading over a grid of three styled sets",
-  studio: "A design studio's home page: an oversized heading on black over a wide photo of the team at a brand board",
-  photography: "A photographer's home page: its heading on black over a gallery of a wedding, a portrait and a maker",
-  blog: "A food journal's home page: its heading centered in a narrow column over a wide photo of vegetables on a cutting board",
-  events: "A festival's home page: two overlapping photos of a lantern-lit night market beside its dates, then the program",
-  fitness: "A gym's home page: a bold heading on black beside a photo of rows of dumbbells, then this week's classes",
-  yoga: "A yoga studio's home page: a quiet centered heading over a wide photo of a class stretching on mats",
-  beauty: "A hair salon's home page: its heading beside two overlapping photos of a stylist at work and the salon's chairs",
-  realestate: "A real estate agent's home page: its heading on a white card over a photo of a white house, then new listings",
-  education: "A tutoring center's home page: a photo of a tutor at the whiteboard beside its heading, then its courses",
-  nonprofit: "A food bank's home page: its heading over a full-width photo of volunteers sorting donations, then the ways to help",
-  music: "A band's home page: its name in large type over a photo of a band under stage lights, then its tour dates",
-  personal: "A product manager's personal page: a round portrait over her centered introduction, then her experience",
-  landing: "A budgeting app's landing page: its pitch centered on a colored band over a photo of a couple planning on a phone",
-  'coming-soon': "A café's coming soon page: its heading and notify button centered over a photo of the café's coffee shelves",
-}
+export const AI_SITE_STYLE_PREVIEW_ALTS: Readonly<Record<string, string>> = Object.fromEntries(
+  SITE_STYLES.map((style) => [style.id, style.alt]),
+)
 
 /** The width and height every preview is drawn at. */
-export const AI_SITE_STYLE_PREVIEW_SIZE = { width: 800, height: 800 } as const
-
-/** A bundler hands an imported picture over as its URL, or as an object carrying it. */
-function urlOf(imported: unknown): string | null {
-  if (typeof imported === 'string') return imported
-  if (imported && typeof imported === 'object' && typeof (imported as { src?: unknown }).src === 'string') {
-    return (imported as { src: string }).src
-  }
-  return null
-}
+export const AI_SITE_STYLE_PREVIEW_SIZE = SITE_STYLE_PREVIEW_SIZE
 
 /** The style card picture for a kind of site, by its `AI_SITE_KINDS` id; `null` for a kind with none. */
 export function aiSiteStylePreview(kindId: string): OptionCardImage | null {
-  const src = urlOf(PREVIEWS[kindId])
+  const style = siteStyleOf(kindId)
   const kind = AI_SITE_KINDS.find((entry) => entry.id === kindId)
-  if (!src || !kind) return null
+  if (!style || !kind) return null
   return {
-    src,
-    alt: AI_SITE_STYLE_PREVIEW_ALTS[kindId] ?? `An example home page in the ${kind.label} style`,
-    ...AI_SITE_STYLE_PREVIEW_SIZE,
+    src: style.preview,
+    alt: style.alt || `An example home page in the ${kind.label} style`,
+    ...SITE_STYLE_PREVIEW_SIZE,
   }
 }

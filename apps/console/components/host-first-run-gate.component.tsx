@@ -128,11 +128,12 @@ function HostFirstRunOffer({ hostId }: { hostId: string }) {
     setOpen(false)
     leaveUrl()
   }, [leaveUrl])
-  // Leaving the guided start for the starter site (AGL-3594). The `start`
-  // parameter stays until the notice is closed: dropping it unmounts this.
-  const startBlank = useCallback(() => {
+  // Leaving the guided start for the starter site (AGL-3594), in the style
+  // the person chose for it (AGL-4049). The `start` parameter stays until the
+  // notice is closed: dropping it unmounts this.
+  const startBlank = useCallback((options?: { style?: string }) => {
     setOpen(false)
-    void requestStarterSite(userRef.current, hostId).then((provisioned) => {
+    void requestStarterSite(userRef.current, hostId, { style: options?.style }).then((provisioned) => {
       if (provisioned) setLive(true)
       else leaveUrl()
     })

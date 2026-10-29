@@ -135,6 +135,16 @@ usage and apiUsage rollups, installs, activity, `pluginSettings`, and the
 churn-funnel `retention` subcollection. No per-collection period; they live as
 long as the workspace does and die with `recursiveDelete(orgRef)`.
 
+That includes `orgs/{orgId}/publisherAgreementAcceptances` (AGL-4105): one
+document for every publisher save in the marketplace, each an agreement to the
+Marketplace Publisher Agreement — the version and its snapshot's sha256 and
+length, the uid who ticked the box and whether they acted as staff, the save
+(`update-listing`, `publish-plugin`, …) and what it wrote, the time, and the
+device's IP address and user agent. Server-written and append-only; the rules
+deny every client read and write. The workspace export carries them with the
+rest of the org's subtree. The profile's `publisherAgreement` is only the note
+of the last one.
+
 Two exceptions now sit under the org and DO have a period, both created by
 splitting a document rather than by shortening one: `assistExchanges` (below)
 and `churnSurveyDetails`, which holds the churn survey's free text so that it

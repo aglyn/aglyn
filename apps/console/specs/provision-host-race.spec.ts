@@ -578,6 +578,18 @@ describe('a site born for the guided AI start, and its starter on request (AGL-3
     expect([docsOf(hostId, 'screens'), docsOf(hostId, 'layouts')].map((rows) => rows.length)).toEqual([1, 1])
   })
 
+  it('gets the starter in a chosen style: its look over the theme, and the style beside how it was started (AGL-4049)', async () => {
+    const hostId = await bare()
+    expect(mockDocs.get(`hosts/${hostId}`)?.['starterChoice']).toMatchObject({ kind: null, start: 'ai' })
+    const look = { kind: 'builtin' as const, base: 'starter', brand: { light: { primary: '#B3261E' } }, fonts: null }
+    const result = await provisionStarterSite(mockFirestore, hostId, { style: { id: 'trades', theme: look } })
+    expect(result.provisioned).toBe(true)
+    const host = mockDocs.get(`hosts/${hostId}`)
+    expect(JSON.stringify(host['themeOverride'])).toContain('#B3261E')
+    expect(host['starterChoice']).toEqual({ listingId: null, version: null, kind: 'trades', mode: 'base', start: 'ai' })
+    expect(Object.values(host['screens'] as object)).toEqual(['/'])
+  })
+
   it('two requests racing commit one starter', async () => {
     const hostId = await bare()
     const results = await Promise.all([

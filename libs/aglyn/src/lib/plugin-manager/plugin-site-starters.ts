@@ -52,6 +52,12 @@ export interface SiteStarterSummary {
   priceUsd: number
   previewImageUrl: string | null
   facets: SiteStarterFacets
+  /**
+   * What kind of site it is, in words a card shows ("Restaurant & café"), or
+   * `null` where it names none. Optional: a source with no such words still
+   * satisfies the seam, and `facets.kind` stays the id a search filters on.
+   */
+  category?: string | null
 }
 
 /** Who is asking: the workspace the site will belong to, and the person. */

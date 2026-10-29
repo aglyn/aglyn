@@ -18,24 +18,32 @@
  */
 
 import {
+  PUBLISHER_AGREEMENT_CONSENT_REQUIRED,
   PUBLISHER_AGREEMENT_VERSION,
-  publisherAgreementIsPublished,
+  publisherAgreementConsent,
   publisherAgreementState,
 } from '../model/publisher-agreement'
 import { requiredAttestationIds } from '../model/publisher-attestation'
 
 /**
- * The publish route's publisher-agreement gate (AGL-1077).
+ * The plugin publish route's publisher agreement (AGL-1077), agreed to on
+ * every publish since AGL-4105.
  *
- * The point of versioning an agreement is that changing it re-asks. That
- * only holds if the refusal happens where the bytes are stored — a console
- * that hides the publish button is not a gate, it is a suggestion. These
- * cover the three properties the document's version string is worth
- * anything for: no acceptance refuses, a STALE acceptance refuses too, and
- * the refusal is distinguishable from the per-bundle 428 so a publisher is
- * not sent back to re-tick a checklist that is already complete.
+ * The refusal has to happen where the bytes are stored — a console that
+ * disables the publish button is not a gate, it is a suggestion. These cover
+ * what the per-save box is worth: a publish without it is refused whatever
+ * the org agreed before, a box ticked for an older version is refused too,
+ * the refusal names the box rather than the per-bundle checklist, and a
+ * publish with it is recorded, as the plugin publish, before anything is
+ * stored.
  */
 
+// Each save's agreement is recorded through its own module (AGL-4105),
+// faked here so the route's Firestore double does not have to model it.
+jest.mock('./publisher-agreement-acceptance', () => ({
+  recordPublisherAgreementAcceptance: jest.fn(async () => ({})),
+  publisherAgreementNote: () => ({ version: 'noted' }),
+}))
 jest.mock('@aglyn/aglyn/server', () => ({
   checkEntitlement: () => true,
   checkPluginBundle: () => ({ ok: true, problems: [] }),
@@ -151,13 +159,14 @@ function respond() {
   return { res, result }
 }
 
-async function publish() {
+async function publish(agreement: unknown = publisherAgreementConsent()) {
   const { res, result } = respond()
   await publishPluginHandler(
     {
       method: 'POST',
       headers: { authorization: 'Bearer token' },
       body: {
+        agreement,
         orgId: 'org-1',
         displayName: 'Widget',
         repositoryUrl: 'https://github.com/acme/widget',
@@ -171,7 +180,12 @@ async function publish() {
   return result
 }
 
-describe('publish-plugin publisher-agreement gate (AGL-1077)', () => {
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const acceptanceMock = jest.requireMock('./publisher-agreement-acceptance') as {
+  recordPublisherAgreementAcceptance: jest.Mock
+}
+
+describe('publish-plugin publisher agreement, on every publish (AGL-1077, AGL-4105)', () => {
   const ORIGINAL_BUCKET = process.env.PLUGIN_ARTIFACTS_BUCKET
 
   beforeAll(() => {
@@ -182,53 +196,52 @@ describe('publish-plugin publisher-agreement gate (AGL-1077)', () => {
   })
   beforeEach(() => {
     adminMock.__versionWrites.length = 0
+    acceptanceMock.recordPublisherAgreementAcceptance.mockClear()
+    // The org agreed before: a note, which no longer lets a publish through.
     profileMock.__agreement = { version: PUBLISHER_AGREEMENT_VERSION }
   })
 
-  it('refuses an org that has never accepted the agreement', async () => {
-    profileMock.__agreement = undefined
-    const result = await publish()
-    expect(result.status).toBe(412)
-    expect(result.body.agreement.state).toBe('none')
-    // Nothing published under terms nobody agreed to.
+  it('refuses a publish that did not tick the box, even from an org that agreed before', async () => {
+    const result = await publish(null)
+    expect(result.status).toBe(428)
+    expect(result.body.error).toBe(PUBLISHER_AGREEMENT_CONSENT_REQUIRED)
+    expect(result.body.agreement).toEqual({ required: PUBLISHER_AGREEMENT_VERSION, state: 'missing' })
+    // Nothing published, and nothing recorded as agreed.
+    expect(adminMock.__versionWrites).toHaveLength(0)
+    expect(acceptanceMock.recordPublisherAgreementAcceptance).not.toHaveBeenCalled()
+  })
+
+  it('refuses a box ticked for a version no longer in force', async () => {
+    const result = await publish({ version: '1999-01-01.1', accepted: true })
+    expect(result.status).toBe(409)
+    expect(result.body.agreement).toMatchObject({ state: 'outdated', required: PUBLISHER_AGREEMENT_VERSION })
     expect(adminMock.__versionWrites).toHaveLength(0)
   })
 
-  it('refuses a STALE acceptance rather than carrying it forward', async () => {
-    // The failure this whole mechanism exists to prevent: an agreement we
-    // rewrote, and a publisher who never saw the rewrite.
-    profileMock.__agreement = { version: '1999-01-01.1' }
-    const result = await publish()
-    expect(result.status).toBe(412)
-    expect(result.body.agreement.state).toBe('outdated')
-    expect(result.body.agreement.accepted).toBe('1999-01-01.1')
-    expect(result.body.agreement.required).toBe(PUBLISHER_AGREEMENT_VERSION)
-    expect(adminMock.__versionWrites).toHaveLength(0)
-  })
-
-  it('is a different refusal from the per-bundle attestation 428', async () => {
-    // "You did not confirm the checklist" and "your org never agreed to our
-    // terms" are fixed in different places. One status for both sends a
-    // publisher to re-tick six boxes that are already ticked.
-    profileMock.__agreement = undefined
-    const result = await publish()
-    expect(result.status).not.toBe(428)
+  it('names the box, not the per-bundle checklist', async () => {
+    // "You did not confirm the checklist" and "you did not agree to the
+    // terms" are fixed in different places; the refusal says which.
+    const result = await publish({ version: PUBLISHER_AGREEMENT_VERSION, accepted: false })
     expect(result.body.missingAttestations).toBeUndefined()
-    // Where it sends them depends on whether the agreement has a page yet
-    // (AGL-1660): while it does not, "accept it in Marketplace → Publisher
-    // Profile" is a dead end, because the accept control is gated off.
-    expect(String(result.body.error)).toMatch(
-      publisherAgreementIsPublished() ? /Publisher Profile/ : /not published yet/,
-    )
+    expect(result.body.agreement).toMatchObject({ state: 'missing' })
   })
 
-  it('publishes once the current version is accepted', async () => {
+  it('publishes with the box ticked, recording it first, from an org that never agreed before', async () => {
+    profileMock.__agreement = undefined
     const result = await publish()
     expect(result.status).toBe(200)
     expect(adminMock.__versionWrites).toHaveLength(1)
+    expect(acceptanceMock.recordPublisherAgreementAcceptance).toHaveBeenCalledTimes(1)
+    expect(acceptanceMock.recordPublisherAgreementAcceptance.mock.calls[0][0]).toMatchObject({
+      orgId: 'org-1',
+      uid: 'uid-1',
+      action: 'publish-plugin',
+      targetId: 'listing-1',
+      staff: false,
+    })
   })
 
-  it('reads state from the accepted version, not from presence', async () => {
+  it('reads the org\'s note from the accepted version, not from presence', async () => {
     // A record with no version is not an acceptance of anything.
     expect(publisherAgreementState({ acceptedBy: 'uid-1' })).toBe('none')
     expect(publisherAgreementState({ version: '' })).toBe('none')

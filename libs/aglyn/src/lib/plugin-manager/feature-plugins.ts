@@ -898,10 +898,12 @@ export const CONSOLE_WIDGET_SLOTS = {
    *
    * "Create site" draws this zone first, with `pendingSite` and no site: the
    * name and address are asked inside the widget's own first step, and the
-   * site is created only by a choice that needs it — the starter, Skip, or a
-   * start the widget begins. A dismissal there is `leave`, and creates
-   * nothing. A zone with no widget, or a widget that answers `ready(false)`,
-   * gets the shell's plain name-and-address dialog instead.
+   * site is created only by a choice that needs it — the starter in a style
+   * the person chose (AGL-4049: nothing is chosen for them, so there is no
+   * Skip), or a start the widget begins. A dismissal there is `leave`, and
+   * creates nothing. A zone with no widget, or a widget that answers
+   * `ready(false)`, gets the shell's plain dialog instead, which asks the
+   * name, the address and the style.
    */
   hostFirstRun: 'hostFirstRun',
   /**
@@ -1329,9 +1331,15 @@ export interface ConsolePendingSite {
    * `start: 'import'` names a site brought in from somewhere else (AGL-4086),
    * which starts in preview unless the person switched {@link previewControl}
    * off.
+   *
+   * `style` is the style the person chose in the widget's questions
+   * (AGL-4049): a `SITE_STYLES` id, or `SITE_STYLE_AUTO` for a card that lets
+   * the answers pick. It is recorded on the site (`starterChoice`) and
+   * changes nothing it is created with: the start builds the look.
    */
   create: (options?: {
     start?: 'import'
+    style?: string
   }) => Promise<ConsoleCreatedSite | { error: string; address?: boolean }>
   /**
    * "Start in preview" (AGL-4086), as the shell draws it: the switch that
@@ -1398,8 +1406,14 @@ export interface ConsoleHostFirstRunZoneProps {
    * rather than after them, and — for a widget that takes the screen — what
    * every way of dismissing it does BEFORE it has started anything. See
    * `hostFirstRun` in {@link CONSOLE_WIDGET_SLOTS}.
+   *
+   * `style` is the style the person chose for it (AGL-4049), a `SITE_STYLES`
+   * id: the starter's pages start in that style's look. With
+   * {@link pendingSite} and no site created yet a style is REQUIRED — nothing
+   * in Create site is chosen for a person, so the shell creates nothing
+   * without one and resolves `false`.
    */
-  startBlank: () => void | Promise<boolean>
+  startBlank: (options?: { style?: string }) => void | Promise<boolean>
   /**
    * Closes the zone after its widget STARTED the site some other way — a
    * guided start whose job is running (AGL-3594). The shell records that the
@@ -1414,8 +1428,9 @@ export interface ConsoleHostFirstRunZoneProps {
   leave?: () => void
   /**
    * Present when the zone is drawn by "Create site" before the site exists
-   * (AGL-3761). `startBlank` then CREATES the site with the starter, and
-   * resolves `false` when it could not, with the reason shown.
+   * (AGL-3761). `startBlank` then CREATES the site with the starter, in the
+   * style it is handed (AGL-4049), and resolves `false` when it could not,
+   * with the reason shown.
    */
   pendingSite?: ConsolePendingSite
   /**

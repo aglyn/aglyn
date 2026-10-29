@@ -28,6 +28,7 @@ import PluginSiteSetPanel from './components/plugin-site-set-panel.component'
 import OrgPluginInstallsCard from './components/org-plugin-installs-card.component'
 import PluginInstallStatus from './components/plugin-install-status.component'
 import StaffMarketplaceOverview from './components/staff-marketplace-overview.component'
+import StarterPickerShelf from './components/starter-picker-shelf.component'
 import TemplateGalleryShelf from './components/template-gallery-shelf.component'
 import TemplateInstallStatus from './components/template-install-status.component'
 import PublishArtifactDialog from './components/publish-artifact-dialog.component'
@@ -117,6 +118,17 @@ export function registerMarketplaceConsole(): void {
         slot: 'templateInstallStatus',
         widgetId: 'marketplace-template-install-status',
         Component: TemplateInstallStatus,
+      },
+      // "Choose your starter" in Create site (AGL-4049): the marketplace's
+      // site starters, searched and picked before the site exists. It lists
+      // and picks; the dialog creates. Searching is the first step of
+      // creating a site, so it takes the create's permission, as its route
+      // does; the route also answers the release flag.
+      {
+        slot: 'hostStarterPicker',
+        widgetId: 'marketplace-starter-picker',
+        permission: 'hosts.create',
+        Component: StarterPickerShelf,
       },
     ],
     /**

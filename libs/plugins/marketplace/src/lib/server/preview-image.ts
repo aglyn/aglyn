@@ -28,6 +28,10 @@ import { inspectUploadBytes, type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin, isImpersonationSession } from '@aglyn/tenant-data-admin'
 import { randomUUID } from 'crypto'
 import { canActAsPublisher } from './publisher-profile'
+import { recordPublisherAgreementAcceptance } from './publisher-agreement-acceptance'
+import { publisherAgreementConsentRefusal } from '../model/publisher-agreement'
+import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
+import type { DecodedIdToken } from 'firebase-admin/auth'
 
 // Base64 JSON payloads: 2MB of image encodes to ~2.7MB of body.
 const MAX_FILE_BYTES = 2 * 1024 * 1024
@@ -59,6 +63,11 @@ export const previewImageHandler: PluginApiHandler = async (req, res) => {
   }
   const listingId = String(req.body?.listingId ?? '')
   if (!listingId) return res.status(400).json({ error: 'Missing listingId' })
+  // The publisher agreement, agreed to on this save (AGL-4105).
+  const agreementRefusal = publisherAgreementConsentRefusal(req.body?.agreement)
+  if (agreementRefusal) {
+    return res.status(agreementRefusal.status).json(agreementRefusal.body)
+  }
 
   const authorization = String(req.headers.authorization ?? '')
   const idToken = authorization.startsWith('Bearer ')
@@ -66,8 +75,16 @@ export const previewImageHandler: PluginApiHandler = async (req, res) => {
     : undefined
   if (!idToken) return res.status(401).json({ error: 'Unauthenticated' })
 
+  let decoded: DecodedIdToken
   try {
-    const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
+    decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
+  } catch (error) {
+    // Only a refused credential is the caller's 401; failing to check it is
+    // ours and keeps the dispatcher's 5xx (AGL-2852).
+    if (!isRefusedIdToken(error)) throw error
+    return res.status(401).json({ error: 'Unauthenticated' })
+  }
+  try {
     if (!decoded.email_verified && !isImpersonationSession(decoded)) {
       return res.status(403).json({
         error: 'Verify your email to continue',
@@ -91,6 +108,18 @@ export const previewImageHandler: PluginApiHandler = async (req, res) => {
     if (!canEdit) {
       return res.status(403).json({ error: 'Not your listing' })
     }
+    // The agreement this save was sent with, recorded before the picture
+    // changes (AGL-4105). One record for whichever of the three ways in this
+    // is: removed, picked from the library, or uploaded.
+    await recordPublisherAgreementAcceptance({
+      firestore,
+      request: req,
+      orgId: String(listingSnapshot.get('profileId') ?? ''),
+      uid: decoded.uid,
+      staff: decoded['staff'] === true,
+      action: req.method === 'DELETE' ? 'remove-preview-image' : 'set-preview-image',
+      targetId: listingId,
+    })
     const bucket = firebaseAdmin
       .app()
       .storage()

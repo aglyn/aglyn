@@ -160,7 +160,8 @@ describe('the start a new site is offered', () => {
     mockHost = { subdomain: 'shop' }
     render(<HostFirstRunGate />)
     fireEvent.click(await screen.findByText('Skip and start blank'))
-    expect(mockRequestStarter).toHaveBeenCalledWith(mockUser, 'host-1')
+    // No style was chosen on the way out, so the site keeps its theme (AGL-4049).
+    expect(mockRequestStarter).toHaveBeenCalledWith(mockUser, 'host-1', { style: undefined })
     expect(screen.queryByText('guided start')).toBeNull()
     // The starter is published the moment it is chosen; nothing else says so.
     expect(await screen.findByText('Your site is live')).toBeTruthy()

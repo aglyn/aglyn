@@ -23,8 +23,9 @@
  *
  * - the dialog opens on the start zone with no site, and creates nothing on
  *   opening, closing or leaving;
- * - the starter (and Skip) creates the site WITH the starter, in one request,
- *   and lands on it with "Your site is live";
+ * - the starter creates the site WITH the starter, in one request, only in a
+ *   style the person chose (AGL-4049: nothing is chosen for anyone), and
+ *   lands on it with "Your site is live";
  * - a start the widget begins creates the site empty, once, and leaves the
  *   navigation to the widget;
  * - refusals the console can see coming — a role without `hosts.create`, a
@@ -32,7 +33,10 @@
  *   created;
  * - a site created for a start that then could not begin is given the
  *   starter on the way out, so none is left empty;
- * - a workspace with no start to offer gets the plain dialog, unchanged.
+ * - a workspace with no start to offer gets the plain dialog, which asks the
+ *   style too and creates nothing until one is chosen (AGL-4049);
+ * - `host_created` carries how the site was started and its style, from the
+ *   create's own answer.
  */
 
 import { act, fireEvent, render, screen } from '@testing-library/react'
@@ -131,13 +135,13 @@ jest.mock('../components/host-first-run-gate.component', () => ({
 /** What the start zone was handed, as its one widget would receive it. */
 type ZoneProps = {
   hostId: string | null
-  startBlank: () => void | Promise<boolean>
+  startBlank: (options?: { style?: string }) => void | Promise<boolean>
   leave: () => void
   pendingSite: {
     fields: React.ReactNode
     check: () => boolean
     dirty: boolean
-    create: () => Promise<Record<string, unknown>>
+    create: (options?: { start?: 'import'; style?: string }) => Promise<Record<string, unknown>>
     created: Record<string, unknown> | null
     ready: (shown: boolean) => void
   }
@@ -200,6 +204,7 @@ beforeEach(() => {
       orgSlug: 'acme',
       guidedStart: true,
       orgCreated: false,
+      starterChoice: { listingId: null, version: null, kind: 'trades', mode: 'base', start: 'starter' },
     },
   }
 })
@@ -230,7 +235,7 @@ describe('AGL-3761 · Create site opens on the start, with nothing created', () 
     expect(screen.getByLabelText('Subdomain')).toBeTruthy()
     // Red before the fix: the create was the dialog's first act.
     expect(createCalls()).toHaveLength(0)
-    expect(mockTrack).not.toHaveBeenCalledWith('host_created', {})
+    expect(mockTrack.mock.calls.filter(([name]) => name === 'host_created')).toHaveLength(0)
   })
 
   it('creates nothing when the start is closed, with or without a name typed', async () => {
@@ -244,12 +249,12 @@ describe('AGL-3761 · Create site opens on the start, with nothing created', () 
 })
 
 describe('AGL-3761 · the starter creates the site with the starter', () => {
-  it('creates it once, with the starter, and lands on it saying it is live', async () => {
+  it('creates it once, with the starter in the style chosen, lands on it live, and reports both (AGL-4049)', async () => {
     const { onClose } = await openStart()
     typeName()
     let done: boolean | void = undefined
     await act(async () => {
-      done = await mockZone?.startBlank()
+      done = await mockZone?.startBlank({ style: 'trades' })
     })
     expect(done).toBe(true)
     expect(createCalls()).toHaveLength(1)
@@ -258,18 +263,40 @@ describe('AGL-3761 · the starter creates the site with the starter', () => {
       subdomain: 'royal-styles',
       orgId: 'org-1',
       start: 'starter',
+      style: 'trades',
     })
-    expect(mockTrack.mock.calls.filter(([name]) => name === 'host_created')).toHaveLength(1)
+    // How it was started and its style, from the create's own answer.
+    expect(mockTrack.mock.calls.filter(([name]) => name === 'host_created')).toEqual([
+      ['host_created', { start: 'starter', starter_kind: 'trades', starter_listing: 'none' }],
+    ])
     expect(mockTrack).toHaveBeenCalledWith('site_published', { first_publish: true })
     expect(onClose).toHaveBeenCalled()
     expect(mockPush).toHaveBeenCalledWith('/acme/hosts/royal-styles?start=live')
+  })
+
+  it('the starter path asks for a style and creates nothing until one is chosen (AGL-4049)', async () => {
+    const { onClose } = await openStart()
+    typeName()
+    let done: boolean | void = undefined
+    await act(async () => {
+      done = await mockZone?.startBlank()
+    })
+    // Red before the fix: the starter was created in the default look.
+    expect(done).toBe(false)
+    expect(createCalls()).toHaveLength(0)
+    expect(mockSnackbar).toHaveBeenCalledWith(
+      'Choose a style for your site first.',
+      expect.objectContaining({ variant: 'warning' }),
+    )
+    expect(onClose).not.toHaveBeenCalled()
+    expect(mockTrack.mock.calls.filter(([name]) => name === 'host_created')).toHaveLength(0)
   })
 
   it('creates nothing without a name, and says what is missing', async () => {
     await openStart()
     let done: boolean | void = undefined
     await act(async () => {
-      done = await mockZone?.startBlank()
+      done = await mockZone?.startBlank({ style: 'trades' })
     })
     expect(done).toBe(false)
     expect(createCalls()).toHaveLength(0)
@@ -284,14 +311,14 @@ describe('AGL-3761 · the starter creates the site with the starter', () => {
     const { onClose } = await openStart()
     typeName()
     await act(async () => {
-      await mockZone?.startBlank()
+      await mockZone?.startBlank({ style: 'trades' })
     })
     expect(mockSnackbar).toHaveBeenCalledWith(
       'Site limit reached (1) — upgrade or add extra sites from Billing',
       expect.objectContaining({ variant: 'error' }),
     )
     expect(onClose).not.toHaveBeenCalled()
-    expect(mockTrack).not.toHaveBeenCalledWith('host_created', {})
+    expect(mockTrack.mock.calls.filter(([name]) => name === 'host_created')).toHaveLength(0)
   })
 })
 
@@ -305,6 +332,7 @@ describe('AGL-3761 · a start the widget begins creates the site, empty, once', 
     })
     expect(site).toEqual({ hostId: 'host-1', host: 'royal-styles', orgSlug: 'acme' })
     expect(createBody()).not.toHaveProperty('start')
+    expect(createBody()).not.toHaveProperty('style')
     expect(mockPush).not.toHaveBeenCalled()
     expect(mockZone?.pendingSite.created).toEqual(site)
     // Asked again — a job that could not start, retried — it is the same site.
@@ -313,6 +341,18 @@ describe('AGL-3761 · a start the widget begins creates the site, empty, once', 
     })
     expect(createCalls()).toHaveLength(1)
     expect(mockTrack.mock.calls.filter(([name]) => name === 'host_created')).toHaveLength(1)
+  })
+
+  it('posts the style the questions took, for the site to record (AGL-4049)', async () => {
+    mockCreateAnswer.body.starterChoice = { listingId: null, version: null, kind: 'auto', mode: 'base', start: 'ai' }
+    await openStart()
+    typeName()
+    await act(async () => {
+      await mockZone?.pendingSite.create({ style: 'auto' })
+    })
+    expect(createBody()).toMatchObject({ style: 'auto' })
+    expect(createBody()).not.toHaveProperty('start')
+    expect(mockTrack).toHaveBeenCalledWith('host_created', { start: 'ai', starter_kind: 'auto', starter_listing: 'none' })
   })
 
   it('reports a workspace the create made on its way, before the site', async () => {
@@ -349,9 +389,10 @@ describe('AGL-3761 · a start the widget begins creates the site, empty, once', 
       await mockZone?.pendingSite.create()
     })
     await act(async () => {
-      await mockZone?.startBlank()
+      await mockZone?.startBlank({ style: 'yoga' })
     })
-    expect(mockStarter).toHaveBeenCalledWith({ uid: 'u-1' }, 'host-1')
+    // In the style its questions took (AGL-4049).
+    expect(mockStarter).toHaveBeenCalledWith({ uid: 'u-1' }, 'host-1', { style: 'yoga' })
     expect(createCalls()).toHaveLength(1)
     expect(onClose).toHaveBeenCalled()
     expect(mockPush).toHaveBeenCalledWith('/acme/hosts/royal-styles?start=live')
@@ -434,17 +475,21 @@ describe('AGL-3761 · what the create would refuse is said first', () => {
 })
 
 describe('AGL-3761 · a workspace with no start to offer gets the plain dialog', () => {
-  const submit = async () => {
+  /** The style card the plain dialog draws (AGL-4049), by its name. */
+  const styleCard = (name: RegExp) => screen.getByRole('radio', { name })
+  const createButton = () => screen.getByRole('button', { name: 'Create site' }) as HTMLButtonElement
+  const submit = async (style: RegExp | null = /^Home services & trades/) => {
     typeName()
+    if (style) fireEvent.click(styleCard(style))
     await act(async () => {
-      fireEvent.click(screen.getByText('Create site'))
+      fireEvent.click(createButton())
       await Promise.resolve()
       await Promise.resolve()
       await Promise.resolve()
     })
   }
 
-  it('creates the site with the starter on Create site, and lands on it', async () => {
+  it('creates the site with the starter in the style chosen on Create site, and lands on it', async () => {
     mockWidgets = []
     mockCreateAnswer.body.guidedStart = false
     render(<CreateHostDialog open onClose={() => undefined} />)
@@ -452,8 +497,31 @@ describe('AGL-3761 · a workspace with no start to offer gets the plain dialog',
     expect(screen.getByText('Create a new site')).toBeTruthy()
     await submit()
     // Never empty for a start this dialog did not offer (AGL-3859).
-    expect(createBody()).toMatchObject({ start: 'starter' })
+    expect(createBody()).toMatchObject({ start: 'starter', style: 'trades' })
     expect(mockPush).toHaveBeenCalledWith('/acme/hosts/royal-styles')
+  })
+
+  it('the plain form requires a style: nothing chosen, and Create is disabled without one (AGL-4049)', async () => {
+    mockWidgets = []
+    render(<CreateHostDialog open onClose={() => undefined} />)
+    await flush()
+    expect(screen.getByText('Choose a style')).toBeTruthy()
+    const cards = screen.getAllByRole('radio')
+    expect(cards).toHaveLength(21)
+    for (const card of cards) expect(card.getAttribute('aria-checked')).toBe('false')
+    typeName()
+    // Red before the fix: a name was all Create site needed.
+    expect(createButton().disabled).toBe(true)
+    expect(screen.getByText('Choose a style to create your site.')).toBeTruthy()
+    await submit(null)
+    expect(createCalls()).toHaveLength(0)
+    fireEvent.click(styleCard(/^Yoga & mindfulness/))
+    expect(styleCard(/^Yoga & mindfulness/).getAttribute('aria-checked')).toBe('true')
+    expect(createButton().disabled).toBe(false)
+    expect(screen.queryByText('Choose a style to create your site.')).toBeNull()
+    // Each card shows its example home page.
+    const picture = styleCard(/^Yoga & mindfulness/).querySelector('img')
+    expect(picture?.getAttribute('src')).toBe('/_static/starter/styles/yoga.webp')
   })
 
   it('is what a widget that will not draw falls back to', async () => {

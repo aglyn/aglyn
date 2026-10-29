@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -36,7 +37,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withLink
 import com.aglyn.contracts.PayoutReadiness
 import com.aglyn.contracts.isPublisherHandle
 import com.aglyn.contracts.payoutReadiness
@@ -121,6 +130,8 @@ private fun ProfileSection(context: NativePluginContext, orgId: String, stored: 
   val api = remember(context.api, orgId) { SellerApi(context.api, orgId) }
   val initial = remember(stored) { (listOf("handle") + PROFILE_FIELDS.map { it.first }).associateWith { (stored?.get(it) as? String).orEmpty() } }
   var fields by remember(initial) { mutableStateOf(initial) }
+  // The publisher agreement, agreed to on this save (AGL-4105): unticked again after each one.
+  var agreed by remember(orgId) { mutableStateOf(false) }
   val valid = isPublisherHandle(fields.getValue("handle")) && fields.getValue("displayName").trim().isNotEmpty()
   SectionCard("Public profile") {
     Text("How your workspace shows to people browsing the marketplace.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -144,22 +155,24 @@ private fun ProfileSection(context: NativePluginContext, orgId: String, stored: 
     )
     runner.error?.let { NoticeBanner(it, StatusTone.WARNING) }
     runner.notice?.let { NoticeBanner(it, StatusTone.SUCCESS) }
+    // Directly above Save profile, which waits for it (AGL-4105).
+    PublisherAgreementCheckbox(agreed, { agreed = it }, enabled = canManage && loaded && !runner.busy)
     Button(
       onClick = {
         // Trimmed as the console sends them: an empty field explicitly clears what is stored.
         val body = fields.mapValues { it.value.trim() }
-        runner.run("Profile saved") { api.saveProfile(body) }
+        runner.run("Profile saved", onDone = { agreed = false }) { api.saveProfile(body, PublisherAgreementConsent.current) }
       },
-      enabled = canManage && loaded && valid && fields != initial && !runner.busy,
+      enabled = canManage && loaded && valid && fields != initial && agreed && !runner.busy,
       modifier = Modifier.testTag("seller-save"),
     ) { Text("Save profile") }
   }
   val accepted = ((stored?.get("publisherAgreement") as? Map<*, *>)?.get("version") as? String)
   SectionCard("Marketplace Publisher Agreement") {
-    Text(
-      if (accepted == null) "Your workspace has not accepted the agreement. It must be accepted before anything is published." else "Your workspace accepted version $accepted.",
-      style = MaterialTheme.typography.bodyMedium,
-    )
+    Text(PUBLISHER_AGREEMENT_EVERY_SAVE, style = MaterialTheme.typography.bodyMedium)
+    if (accepted != null) {
+      Text("Last agreed to: version $accepted.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
     OutlinedButton(onClick = { context.navigate("marketplace.publisherAgreement") }, modifier = Modifier.testTag("seller-agreement")) { Text("Review the agreement") }
   }
 }
@@ -171,9 +184,11 @@ private fun ListingsSection(context: NativePluginContext, orgId: String, canMana
   val api = remember(context.api, orgId) { SellerApi(context.api, orgId) }
   val live by remember(orgId, context.firestore) { context.firestore.observe(sellerListingsQuery(orgId)) }.collectAsState(Live.Loading)
   var editing by remember { mutableStateOf<SellerListing?>(null) }
+  // Making a plugin private or public, or unpublishing or republishing a listing: asked first, with the agreement (AGL-4105).
+  var change by remember { mutableStateOf<SellerListingChange?>(null) }
   val listings = (live as? Live.Ready)?.value?.map(SellerListing::from)?.sortedBy { it.displayName.lowercase() }
   runner.notice?.let { NoticeBanner(it, StatusTone.SUCCESS) }
-  runner.error?.let { if (editing == null) NoticeBanner(it, StatusTone.ERROR) }
+  runner.error?.let { if (editing == null && change == null) NoticeBanner(it, StatusTone.ERROR) }
   when {
     live is Live.Failed -> EmptyState("Could not load your listings", body = "Check the connection and try again.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
     listings == null -> SkeletonList(rows = 4)
@@ -201,15 +216,14 @@ private fun ListingsSection(context: NativePluginContext, orgId: String, canMana
                     null
                   },
                   if (listing.isPlugin) {
-                    MenuAction("visibility-${listing.id}", if (listing.isPrivate) "Make public" else "Make private", "lock", enabled = canManage) {
-                      val next = if (listing.isPrivate) "public" else "private"
-                      runner.run(if (next == "private") "Now private — only your sites can install it" else "Published to the marketplace") { api.setVisibility(listing.id, next) }
+                    MenuAction("visibility-${listing.id}", if (listing.isPrivate) "Make public…" else "Make private…", "lock", enabled = canManage) {
+                      runner.clear(); change = SellerListingChange(listing, SellerListingChange.Kind.VISIBILITY)
                     }
                   } else {
                     null
                   },
-                  MenuAction("published-${listing.id}", if (listing.unpublished) "Republish" else "Unpublish", if (listing.unpublished) "refresh" else "delete", destructive = !listing.unpublished, enabled = canManage) {
-                    runner.run(if (listing.unpublished) "Republished" else "Unpublished") { api.setPublished(listing.id, published = listing.unpublished) }
+                  MenuAction("published-${listing.id}", if (listing.unpublished) "Republish…" else "Unpublish…", if (listing.unpublished) "refresh" else "delete", destructive = !listing.unpublished, enabled = canManage) {
+                    runner.clear(); change = SellerListingChange(listing, SellerListingChange.Kind.PUBLISHED)
                   },
                 ),
               )
@@ -222,6 +236,63 @@ private fun ListingsSection(context: NativePluginContext, orgId: String, canMana
     }
   }
   editing?.let { listing -> EditListingDialog(context, listing, runner, api) { editing = null } }
+  change?.let { pending -> ListingChangeDialog(pending, runner, api) { change = null } }
+}
+
+/** A one-click change to a listing, asked first now that every publisher save agrees to the Publisher Agreement (AGL-4105). */
+internal data class SellerListingChange(val listing: SellerListing, val kind: Kind) {
+  enum class Kind { VISIBILITY, PUBLISHED }
+
+  /** The console's dialog: its title, sentence, button, and whether it takes the listing off the marketplace. */
+  val title: String get() = when (kind) {
+    Kind.VISIBILITY -> if (listing.isPrivate) "Make public?" else "Make private?"
+    Kind.PUBLISHED -> if (listing.unpublished) "Republish?" else "Unpublish?"
+  }
+  val message: String get() {
+    val name = listing.displayName.ifEmpty { "this listing" }
+    return when (kind) {
+      Kind.VISIBILITY ->
+        if (listing.isPrivate) "$name is offered in the marketplace, not only to your organization’s sites."
+        else "Only your organization’s sites can install $name. Private plugins never appear in the marketplace."
+      Kind.PUBLISHED -> if (listing.unpublished) "$name goes back on the marketplace." else "$name comes off the marketplace. You can republish it later."
+    }
+  }
+  val confirmLabel: String get() = title.removeSuffix("?")
+  val destructive: Boolean get() = kind == Kind.PUBLISHED && !listing.unpublished
+
+  /** What the change says once it is made, as the console's snackbar does. */
+  val success: String get() = when (kind) {
+    Kind.VISIBILITY -> if (listing.isPrivate) "Published to the marketplace" else "Now private — only your sites can install it"
+    Kind.PUBLISHED -> if (listing.unpublished) "Republished" else "Unpublished"
+  }
+}
+
+/** The confirmation for a [SellerListingChange], with the agreement box above its button (the console's `PublisherAgreementConfirmDialog`). */
+@Composable
+internal fun ListingChangeDialog(change: SellerListingChange, runner: ActionRunner, api: SellerApi, close: () -> Unit) {
+  var agreed by remember(change) { mutableStateOf(false) }
+  ActionDialog(
+    title = change.title,
+    body = change.message,
+    icon = if (change.kind == SellerListingChange.Kind.VISIBILITY) "lock" else if (change.destructive) "delete" else "refresh",
+    confirmLabel = change.confirmLabel,
+    confirmEnabled = agreed,
+    destructive = change.destructive,
+    busy = runner.busy,
+    error = runner.error,
+    onDismiss = { runner.clear(); close() },
+    onConfirm = {
+      val listing = change.listing
+      runner.run(change.success, onDone = close) {
+        when (change.kind) {
+          SellerListingChange.Kind.VISIBILITY -> api.setVisibility(listing.id, if (listing.isPrivate) "public" else "private", PublisherAgreementConsent.current)
+          SellerListingChange.Kind.PUBLISHED -> api.setPublished(listing.id, published = listing.unpublished, agreement = PublisherAgreementConsent.current)
+        }
+      }
+    },
+  ) {
+    PublisherAgreementCheckbox(agreed, { agreed = it }, enabled = !runner.busy)
+  }
 }
 
 /**
@@ -241,11 +312,13 @@ internal fun EditListingDialog(context: NativePluginContext, listing: SellerList
   var preview by remember(listing.id) { mutableStateOf(listing.text("previewImageUrl")) }
   var screenshots by remember(listing.id) { mutableStateOf(listing.screenshots) }
   var choosingScreenshot by remember { mutableStateOf(false) }
+  // The publisher agreement, agreed to on this save (AGL-4105).
+  var agreed by remember(listing.id) { mutableStateOf(false) }
   ActionDialog(
     title = "Edit listing",
     icon = "edit",
     confirmLabel = "Save listing",
-    confirmEnabled = values.getValue("displayName").isNotBlank(),
+    confirmEnabled = values.getValue("displayName").isNotBlank() && agreed,
     busy = runner.busy,
     error = runner.error,
     onDismiss = { runner.clear(); close() },
@@ -254,9 +327,10 @@ internal fun EditListingDialog(context: NativePluginContext, listing: SellerList
       val sentPreview = preview
       val sentScreenshots = screenshots
       runner.run("Listing updated", onDone = close) {
-        // The preview is not a content field, so it has its own route, touched only when it changed.
-        if (previewChanged) api.setPreviewImage(listing.id, sentPreview)
-        api.updateListing(listing.id, values.filterKeys { it != "category" }, values.getValue("category"), sentScreenshots)
+        // The preview is not a content field, so it has its own route, touched only when it changed. Both carry this save's one
+        // agreement (AGL-4105).
+        if (previewChanged) api.setPreviewImage(listing.id, sentPreview, PublisherAgreementConsent.current)
+        api.updateListing(listing.id, values.filterKeys { it != "category" }, values.getValue("category"), sentScreenshots, PublisherAgreementConsent.current)
       }
     },
   ) {
@@ -306,6 +380,8 @@ internal fun EditListingDialog(context: NativePluginContext, listing: SellerList
     // A category the list no longer offers stays chosen rather than silently changing.
     val categories = Contracts.listingCategories + listOfNotNull(stored.takeIf { it.isNotEmpty() && it !in Contracts.listingCategories })
     SelectField("Category", categories.map { SelectOption(it, listingCategoryLabel(it)) }, stored.ifEmpty { null }, { values = values + ("category" to it.orEmpty()) }, Modifier.testTag("listing-category"), noneLabel = "None")
+    // The last field, directly above Save listing, which waits for it (AGL-4105).
+    PublisherAgreementCheckbox(agreed, { agreed = it }, enabled = !runner.busy)
   }
   if (choosingScreenshot) {
     MediaChooserDialog(
@@ -422,5 +498,36 @@ private fun SalesSection(context: NativePluginContext, orgId: String, profile: M
         )
       }
     }
+  }
+}
+
+/** What the agreement card says, as the console's seller panel does (AGL-4105). */
+internal val PUBLISHER_AGREEMENT_EVERY_SAVE: String
+  get() = "Every save in the marketplace — this profile, a listing, its price or visibility, a new version, a component, template or layout — " +
+    "asks you to tick “${Contracts.publisherAgreementConsentLabel}” first. We record who agreed, to which version, and when."
+
+/**
+ * "I agree to the Marketplace Publisher Agreement" (AGL-4105): the box every publisher save carries, right above its button, as
+ * the console's `PublisherAgreementCheckbox` does — unticked until ticked, and the agreement's title the link to it. The Swift
+ * plugin's `PublisherAgreementCheckbox`.
+ */
+@Composable
+internal fun PublisherAgreementCheckbox(checked: Boolean, onChange: (Boolean) -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
+  val links = TextLinkStyles(SpanStyle(color = MaterialTheme.colorScheme.primary, textDecoration = TextDecoration.Underline))
+  Row(modifier, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(0.5f))) {
+    Checkbox(
+      checked = checked,
+      onCheckedChange = onChange,
+      enabled = enabled,
+      modifier = Modifier.testTag("publisher-agreement").semantics { contentDescription = "Agree to the ${Contracts.publisherAgreementTitle}" },
+    )
+    Text(
+      buildAnnotatedString {
+        append("I agree to the ")
+        withLink(LinkAnnotation.Url(Contracts.publisherAgreementUrl, links)) { append(Contracts.publisherAgreementTitle) }
+      },
+      style = MaterialTheme.typography.bodyMedium,
+      modifier = Modifier.weight(1f),
+    )
   }
 }
