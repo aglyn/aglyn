@@ -47,7 +47,8 @@ public final class AglynRailTooltipState {
   /// The tile whose bubble is drawn.
   public private(set) var shown: String?
   private var hovered: String?
-  private var pending: Task<Void, Never>?
+  /// The wait now running, if any. Internal so tests can await it instead of sleeping on the wall clock.
+  var pending: Task<Void, Never>?
 
   public init() {}
 
