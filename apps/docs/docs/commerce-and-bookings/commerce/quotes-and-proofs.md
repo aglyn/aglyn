@@ -110,6 +110,36 @@ The pay link opens the quote inside your site's own header and footer:
 The page is private: search engines don't list it, and it never shows the customer's
 email or phone number, your notes to yourself or who on your team wrote the quote.
 
+**Download PDF** on the page saves the quote as a PDF file, so your customer can keep
+it, print it or pass it on. The download works only from the quote's current link.
+
+## Download a quote as a PDF {#pdf}
+
+Open a saved quote and choose **Download PDF**. The PDF is the quote your customer
+sees, set out as a document in your site's look:
+
+- your logo, business name, address, email, phone and web address at the top, under a
+  band in your site's primary color;
+- **Quote #** with its number, the date it was last saved and its revision;
+- the bill-to and ship-to addresses;
+- each item with its option and add-ons, description, SKU, quantity, unit price and
+  amount, and **Included** beside anything included at no charge;
+- the discount, shipping, tax and total, or **Tax is added at payment** when Stripe
+  Tax works the tax out;
+- the pay link, as a button and as an address your customer can click, while the
+  quote is still to be paid;
+- your notes and terms.
+
+Once the quote is paid, the PDF says **Paid** with the date, and has no pay link.
+
+The logo and contact details come from your site's settings, and the colors from your
+site's theme. A quote with more items than fit on a page runs onto the next, with the
+item headings repeated and each page numbered. The PDF shows the quote as it was last
+saved, so save your changes first.
+
+The pay link is printed on the PDF only for someone who can also send quotes (see
+[who can make and send quotes](#permissions)); for anyone else the PDF leaves it off.
+
 ## How your customer pays {#paying}
 
 **Pay** charges the quote as you saved it, priced from its items, discount, shipping
@@ -150,8 +180,8 @@ tools and the customer's account page.
 
 ## Who can make and send quotes {#permissions}
 
-Making, editing and deleting quotes takes the **Create and edit quotes** permission.
-Copying and replacing a quote's pay link takes **Send quotes and invoices to
-customers**. Everyone who can manage orders on the site has both to start with; a
+Making, editing and deleting quotes, and downloading a quote's PDF, takes the
+**Create and edit quotes** permission. Copying and replacing a quote's pay link takes
+**Send quotes and invoices to customers**, and so does a PDF that carries the pay link. Everyone who can manage orders on the site has both to start with; a
 custom role or a per-member override can grant or deny each one. See
 [Order permissions](../../workspace-and-billing/teams-and-roles/custom-roles.md#order-permissions).

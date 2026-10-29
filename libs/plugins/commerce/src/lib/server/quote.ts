@@ -34,6 +34,8 @@ import {
   type SaleTaxEngineResult,
 } from './tax-engine-quote'
 import { expireCheckoutSession, type CheckoutSessionExpiry } from './checkout-session-expiry'
+import type { quotePdfFile } from './commerce-pdf'
+import { sendPdf, type CommercePdfFile } from './pdf-response'
 import { quotePayLinkUrl } from './quote-link-token'
 
 /*==========================================
@@ -45,10 +47,13 @@ import { quotePayLinkUrl } from './quote-link-token'
  *   { action: 'search-customers', hostId, text }              → { available, customers }
  *   { action: 'pay-link', hostId, quoteId }                   → { url, linkVersion }
  *   { action: 'replace-link', hostId, quoteId }               → { url, linkVersion }
+ *   { action: 'pdf', hostId, quoteId }                        → application/pdf
  *
- * The first four ask "Create and edit quotes" (`commerce.quotes`); the pay
- * link's two ask "Send quotes and invoices to customers"
- * (`commerce.quotes.send`, AGL-4094). Create and update take an
+ * Every action but the pay link's two asks "Create and edit quotes"
+ * (`commerce.quotes`); the pay link's two ask "Send quotes and invoices to
+ * customers" (`commerce.quotes.send`, AGL-4094). The PDF (AGL-4095) is the
+ * document the customer would download from the quote page, and carries the
+ * pay link only for someone who also holds `commerce.quotes.send`. Create and update take an
  * `Idempotency-Key` header, one per attempt, so a retried save replays its
  * answer instead of writing a second quote or failing its own change check;
  * delete is idempotent by nature, and so are the link's two (a replace bumps
@@ -78,6 +83,8 @@ export interface QuoteDeps {
   expireSession(sessionId: string): Promise<CheckoutSessionExpiry>
   /** The quote's pay link at a link version, or null when the site has no address or no signing secret. */
   payLinkUrl(host: Record<string, unknown>, hostId: string, quoteId: string, version: number): string | null
+  /** The quote's PDF; loads the PDF writer and sharp only when asked. */
+  quotePdf(input: Parameters<typeof quotePdfFile>[0]): Promise<CommercePdfFile>
   now(): number
 }
 
@@ -93,6 +100,7 @@ export function defaultQuoteDeps(): QuoteDeps {
     quoteTax: (request) => quoteSaleTaxWithEngine(request),
     expireSession: (sessionId) => expireCheckoutSession(sessionId),
     payLinkUrl: (host, hostId, quoteId, version) => quotePayLinkUrl(host, hostId, quoteId, version),
+    quotePdf: async (input) => (await import('./commerce-pdf')).quotePdfFile(input),
     now: () => Date.now(),
   }
 }
@@ -106,7 +114,7 @@ async function closeOpenSession(deps: QuoteDeps, sessionId: string | undefined, 
   }
 }
 
-type Outcome = { status: number; body: Record<string, unknown> }
+type Outcome = { status: number; body: Record<string, unknown>; pdf?: CommercePdfFile }
 
 const refuse = (status: number, error: string): Outcome => ({ status, body: { error } })
 
@@ -320,6 +328,37 @@ export async function handleQuote(deps: QuoteDeps, req: PluginApiRequest): Promi
     return { status: 200, body: { url, linkVersion } }
   }
 
+  if (action === 'pdf') {
+    const quoteId = String(body['quoteId'] ?? '')
+    if (!DOC_ID.test(quoteId)) return refuse(400, 'Missing quoteId')
+    const [snapshot, store] = await Promise.all([
+      hostRef.collection('orders').doc(quoteId).get(),
+      hostRef.collection('settings').doc('store').get(),
+    ])
+    const order = snapshot.exists ? (snapshot.data() as CommerceModel.HostOrder) : null
+    if (!order || !CommerceModel.isQuote(order) || !order.quote) return refuse(404, 'Unknown quote')
+    const hostData = (host.data() ?? {}) as Record<string, unknown>
+    // The pay link is "Send quotes and invoices to customers"; without it the PDF leaves the link off.
+    const payUrl =
+      CommerceModel.isUnpaidQuote(order) && holdsCommerceSiteKey(host, decoded.uid, 'commerce.quotes.send')
+        ? deps.payLinkUrl(hostData, hostId, quoteId, CommerceModel.quoteLinkVersion(order.quote))
+        : null
+    try {
+      const pdf = await deps.quotePdf({
+        hostId,
+        quoteId,
+        order,
+        host: hostData,
+        store: (store.data() ?? null) as Record<string, unknown> | null,
+        payUrl,
+      })
+      return { status: 200, body: {}, pdf }
+    } catch (error) {
+      console.error('commerce quote pdf failed', error)
+      return refuse(500, 'The PDF could not be made. Try again.')
+    }
+  }
+
   if (action === 'search-customers') {
     const text = String(body['text'] ?? '').trim().slice(0, 120)
     if (text.length < 2) return { status: 200, body: { available: true, customers: [] } }
@@ -488,5 +527,6 @@ export async function handleQuote(deps: QuoteDeps, req: PluginApiRequest): Promi
 /** `POST /api/commerce/quote`. */
 export const quoteHandler: PluginApiHandler = async (req, res) => {
   const outcome = await handleQuote(defaultQuoteDeps(), req)
+  if (outcome.pdf) return sendPdf(res, outcome.pdf)
   return res.status(outcome.status).json(outcome.body)
 }

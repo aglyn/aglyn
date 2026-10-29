@@ -206,7 +206,7 @@ marked where it sits.
 | `shared-util-next` | `@aglyn/shared-util-next` | `libs/shared/util/next` | `scope:shared` `type:util` | `.`, `./*` |
 | `shared-util-rest-api` | `@aglyn/shared-util-rest-api` | `libs/shared/util/rest-api` | `scope:shared` `type:util` | `.`, `./*` |
 | `shared-util-timestamp` | `@aglyn/shared-util-timestamp` | `libs/shared/util/timestamp` | `scope:shared` `type:util` | `.`, `./*` |
-| `shared-util-tools` | `@aglyn/shared-util-tools` | `libs/shared/util/tools` | `scope:shared` `type:util` | `.`, `./*` — also the pure list filter grammar under `./list-query/*` (`list-filter`, `list-query-plan`, `list-filter-codecs`, `list-filter-sentence`, `list-query-refusals`): no React, no MUI, so the native app plans the same Firestore queries the console does (AGL-3622) |
+| `shared-util-tools` | `@aglyn/shared-util-tools` | `libs/shared/util/tools` | `scope:shared` `type:util` | `.`, `./*` — also the pure list filter grammar under `./list-query/*` (`list-filter`, `list-query-plan`, `list-filter-codecs`, `list-filter-sentence`, `list-query-refusals`): no React, no MUI, so the native app plans the same Firestore queries the console does (AGL-3622); and the hand-written PDF writer under `./pdf/*` (`pdf-writer`, `pdf-text`, `pdf-file`): standard Helvetica in WinAnsi, JPEG images, links and paged tables with no PDF library, which the waivers plugin's signed copy and the commerce plugin's quote and invoice both draw with (AGL-4095) |
 | `shared-util-vendor` | `@aglyn/shared-util-vendor` | `libs/shared/util/vendor` | `scope:shared` `type:util` | `.`, `./*` |
 
 ### Native (Kotlin)

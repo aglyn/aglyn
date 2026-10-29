@@ -120,11 +120,12 @@ export function defaultQuotePayDeps(): QuotePayDeps {
   }
 }
 
-type Outcome = { status: number; body: Record<string, unknown>; headers?: Record<string, string> }
+/** A link route's answer: a status, a JSON body and any extra headers. */
+export type QuoteLinkOutcome = { status: number; body: Record<string, unknown>; headers?: Record<string, string> }
 
 const DOC_ID = /^(?!__.*__$)[^/]{1,200}$/
 
-const NOT_FOUND: Outcome = {
+const NOT_FOUND: QuoteLinkOutcome = {
   status: 404,
   body: { error: 'We could not find that quote. Check the link you were sent.' },
 }
@@ -148,12 +149,13 @@ function headerOf(req: PluginApiRequest, name: string): string {
   return String(Array.isArray(value) ? (value[0] ?? '') : (value ?? '')).trim()
 }
 
-async function limited(
+/** The rate limit a link route spends per address per site, BEFORE the token is checked. */
+export async function limitedQuoteLink(
   deps: QuotePayDeps,
   req: PluginApiRequest,
   key: string,
   limit: number,
-): Promise<Outcome | null> {
+): Promise<QuoteLinkOutcome | null> {
   const ip = readClientIp(req.headers as never, { remoteAddress: req.socket?.remoteAddress }) ?? 'no-address'
   const rate = await deps.consumeRateLimit(`${key}:${ip}`, { limit, windowMs: QUOTE_WINDOW_MS })
   if (rate.allowed) return null
@@ -164,7 +166,7 @@ async function limited(
   }
 }
 
-interface LoadedQuote {
+export interface LoadedQuote {
   hostRef: FirebaseFirestore.DocumentReference
   host: Record<string, unknown>
   order: CommerceModel.HostOrder
@@ -176,12 +178,12 @@ interface LoadedQuote {
  * The quote a link names, after its token: the quote, the replaced answer for
  * a link to an older version, or the one not-found answer for everything else.
  */
-async function loadLinkedQuote(
+export async function loadLinkedQuote(
   deps: QuotePayDeps,
   hostId: string,
   quoteId: string,
   token: string,
-): Promise<{ loaded: LoadedQuote } | { outcome: Outcome }> {
+): Promise<{ loaded: LoadedQuote } | { outcome: QuoteLinkOutcome }> {
   const version = verifyQuoteLinkToken(hostId, quoteId, token)
   if (version === null) return { outcome: NOT_FOUND }
   const hostRef = deps.firestore().collection('hosts').doc(hostId)
@@ -213,7 +215,8 @@ async function loadLinkedQuote(
   return { loaded: { hostRef, host, order, storeName, store } }
 }
 
-function linkParams(req: PluginApiRequest, source: Record<string, unknown>) {
+/** The link's site, quote and token from a query or a body, and whether all three are there. */
+export function quoteLinkParams(source: Record<string, unknown>) {
   const hostId = String(source['hostId'] ?? '')
   const quoteId = String(source['q'] ?? '').slice(0, 200)
   const token = String(source['t'] ?? '').slice(0, 200)
@@ -222,11 +225,11 @@ function linkParams(req: PluginApiRequest, source: Record<string, unknown>) {
 }
 
 /** `GET /api/commerce/quote-view`: the quote page's data. */
-export async function handleQuoteView(deps: QuotePayDeps, req: PluginApiRequest): Promise<Outcome> {
+export async function handleQuoteView(deps: QuotePayDeps, req: PluginApiRequest): Promise<QuoteLinkOutcome> {
   if (req.method !== 'GET') return { status: 405, body: { error: 'Method not allowed' } }
-  const { hostId, quoteId, token, complete } = linkParams(req, (req.query ?? {}) as Record<string, unknown>)
+  const { hostId, quoteId, token, complete } = quoteLinkParams((req.query ?? {}) as Record<string, unknown>)
   if (!complete) return { status: 400, body: { error: 'This link is incomplete.' } }
-  const refused = await limited(deps, req, `commerce-quote-view:${hostId}`, QUOTE_VIEW_LOOKUPS_PER_WINDOW)
+  const refused = await limitedQuoteLink(deps, req, `commerce-quote-view:${hostId}`, QUOTE_VIEW_LOOKUPS_PER_WINDOW)
   if (refused) return refused
   const linked = await loadLinkedQuote(deps, hostId, quoteId, token)
   if ('outcome' in linked) {
@@ -342,20 +345,20 @@ export function buildQuoteSessionParams(input: {
 
 const QUOTE_UPDATED_MESSAGE = 'This quote was updated since you opened it. Reload the page to see it before you pay.'
 
-const refusal = (status: number, reason: string, error: string, extra: Record<string, unknown> = {}): Outcome => ({
+const refusal = (status: number, reason: string, error: string, extra: Record<string, unknown> = {}): QuoteLinkOutcome => ({
   status,
   body: { error, reason, ...extra },
 })
 
 /** `POST /api/commerce/quote-pay`: a fresh Checkout Session for the quote. */
-export async function handleQuotePay(deps: QuotePayDeps, req: PluginApiRequest): Promise<Outcome> {
+export async function handleQuotePay(deps: QuotePayDeps, req: PluginApiRequest): Promise<QuoteLinkOutcome> {
   if (req.method !== 'POST') return { status: 405, body: { error: 'Method not allowed' } }
   if (!process.env.STRIPE_SECRET_KEY) return { status: 501, body: { error: 'Payments are not configured.' } }
-  const { hostId, quoteId, token, complete } = linkParams(req, bodyOf(req))
+  const { hostId, quoteId, token, complete } = quoteLinkParams(bodyOf(req))
   if (!complete) return { status: 400, body: { error: 'This link is incomplete.' } }
   const idempotencyKey = headerOf(req, 'idempotency-key').slice(0, 200)
   if (!idempotencyKey) return { status: 400, body: { error: 'Paying needs an Idempotency-Key header.' } }
-  const refused = await limited(deps, req, `commerce-quote-pay:${hostId}`, QUOTE_PAY_PRESSES_PER_WINDOW)
+  const refused = await limitedQuoteLink(deps, req, `commerce-quote-pay:${hostId}`, QUOTE_PAY_PRESSES_PER_WINDOW)
   if (refused) return refused
   const linked = await loadLinkedQuote(deps, hostId, quoteId, token)
   if ('outcome' in linked) return linked.outcome
@@ -541,7 +544,8 @@ export async function handleQuotePay(deps: QuotePayDeps, req: PluginApiRequest):
   }
 }
 
-function send(res: Parameters<PluginApiHandler>[1], outcome: Outcome) {
+/** Sends a link route's answer, never cached or indexed. */
+export function sendQuoteLinkOutcome(res: Parameters<PluginApiHandler>[1], outcome: QuoteLinkOutcome) {
   res.setHeader('Cache-Control', 'private, no-store')
   res.setHeader('X-Robots-Tag', 'noindex, nofollow')
   for (const [name, value] of Object.entries(outcome.headers ?? {})) res.setHeader(name, value)
@@ -551,13 +555,13 @@ function send(res: Parameters<PluginApiHandler>[1], outcome: Outcome) {
 /** `GET /api/commerce/quote-view`. */
 export const quoteViewHandler: PluginApiHandler = async (req, res) => {
   try {
-    return send(res, await handleQuoteView(defaultQuotePayDeps(), req))
+    return sendQuoteLinkOutcome(res, await handleQuoteView(defaultQuotePayDeps(), req))
   } catch (error) {
     console.error('quote view failed', error)
-    return send(res, { status: 500, body: { error: 'This quote could not be loaded. Try again.' } })
+    return sendQuoteLinkOutcome(res, { status: 500, body: { error: 'This quote could not be loaded. Try again.' } })
   }
 }
 
 /** `POST /api/commerce/quote-pay`. */
 export const quotePayHandler: PluginApiHandler = async (req, res) =>
-  send(res, await handleQuotePay(defaultQuotePayDeps(), req))
+  sendQuoteLinkOutcome(res, await handleQuotePay(defaultQuotePayDeps(), req))

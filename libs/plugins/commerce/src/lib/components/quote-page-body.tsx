@@ -322,6 +322,10 @@ const QuotePageBody = forwardRef<HTMLDivElement, QuotePageProps>((props, ref) =>
 
   const quote = state.view
   const money = (cents: number) => formatOrderMoney(cents, quote.currency)
+  // The same signed link as the page's data; the server makes the PDF from the same view.
+  const pdfHref =
+    `/api/commerce/quote-pdf?hostId=${encodeURIComponent(hostId)}` +
+    `&q=${encodeURIComponent(link.current.quoteId)}&t=${encodeURIComponent(link.current.token)}`
   const unpaid = quote.status === 'unpaid'
   const addresses = [
     quote.customerName || quote.company
@@ -369,6 +373,11 @@ const QuotePageBody = forwardRef<HTMLDivElement, QuotePageProps>((props, ref) =>
               {`Dated ${dateLabel(quote.dateMs)}`}
             </Typography>
           ) : null}
+          <Box>
+            <Button variant="outlined" size="small" href={pdfHref} download>
+              {'Download PDF'}
+            </Button>
+          </Box>
         </Stack>
 
         {addresses.length ? (

@@ -93,6 +93,11 @@ const expireSession = jest.fn<ReturnType<QuoteDeps['expireSession']>, Parameters
   async () => 'expired',
 )
 
+const quotePdf = jest.fn<ReturnType<QuoteDeps['quotePdf']>, Parameters<QuoteDeps['quotePdf']>>(async (input) => ({
+  bytes: new Uint8Array([37, 80, 68, 70]),
+  filename: `quote-${String(input.order.number)}.pdf`,
+}))
+
 const deps: QuoteDeps = {
   verifyIdToken: async (token) => ({ uid: token, email: `${token}@example.com` }),
   firestore: () => firestore,
@@ -102,6 +107,7 @@ const deps: QuoteDeps = {
   expireSession,
   payLinkUrl: (host, hostId, quoteId, version) =>
     host['subdomain'] ? `https://${String(host['subdomain'])}.aglyn.app/pay-quote?q=${quoteId}&t=${version}.sig-${hostId}` : null,
+  quotePdf,
   now: () => nowMs,
 }
 
@@ -130,6 +136,7 @@ beforeEach(() => {
   quoteTax.mockClear()
   searchPeople.mockClear()
   expireSession.mockClear()
+  quotePdf.mockClear()
   docs.set('hosts/site1', {
     subdomain: 'acme',
     memberRoles: { admin: 'admin', editor: 'editor', author: 'author', viewer: 'viewer', granted: 'author', sender: 'author', editsOnly: 'editor' },
@@ -679,5 +686,74 @@ describe('the pay link in the console (AGL-4094)', () => {
   it('answers no link for an order that is not a quote', async () => {
     docs.set('hosts/site1/orders/order-9', { status: 'pending', channel: 'draft', lineItems: [] })
     expect((await link('admin', 'pay-link', 'order-9')).status).toBe(404)
+  })
+})
+
+describe('the quote’s PDF in the console (AGL-4095)', () => {
+  async function created(): Promise<{ quoteId: string; path: string }> {
+    const outcome = await handleQuote(deps, request('admin', { action: 'create', hostId: 'site1', quote: { lines: [CUSTOM] } }, 'c'))
+    const quoteId = String(outcome.body['quoteId'])
+    return { quoteId, path: `hosts/site1/orders/${quoteId}` }
+  }
+  const pdf = (uid: string, quoteId: string) => handleQuote(deps, request(uid, { action: 'pdf', hostId: 'site1', quoteId }))
+
+  it('answers the file, with the pay link for someone who may send it', async () => {
+    const { quoteId } = await created()
+    const outcome = await pdf('admin', quoteId)
+    expect(outcome.status).toBe(200)
+    expect(outcome.pdf?.filename).toMatch(/^quote-\d+\.pdf$/)
+    expect(quotePdf).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hostId: 'site1',
+        quoteId,
+        payUrl: `https://acme.aglyn.app/pay-quote?q=${quoteId}&t=1.sig-site1`,
+        store: expect.objectContaining({ tax: expect.objectContaining({ mode: 'manual' }) }),
+      }),
+    )
+  })
+
+  it('leaves the pay link off for someone who may edit quotes but not send them', async () => {
+    const { quoteId } = await created()
+    for (const uid of ['granted', 'editsOnly']) {
+      quotePdf.mockClear()
+      expect((await pdf(uid, quoteId)).status).toBe(200)
+      expect(quotePdf.mock.calls[0][0].payUrl).toBeNull()
+    }
+  })
+
+  it('prints no pay link once the quote is paid', async () => {
+    const { quoteId, path } = await created()
+    docs.set(path, { ...docs.get(path), status: 'paid' })
+    expect((await pdf('admin', quoteId)).status).toBe(200)
+    expect(quotePdf.mock.calls[0][0].payUrl).toBeNull()
+  })
+
+  it.each([
+    ['author', 403],
+    ['viewer', 403],
+    ['stranger', 403],
+  ])('a site %s without "Create and edit quotes" is refused', async (uid, status) => {
+    const { quoteId } = await created()
+    expect(await pdf(uid, quoteId)).toEqual({
+      status,
+      body: { error: 'Your role does not include "Create and edit quotes" — ask an organization admin' },
+    })
+    expect(quotePdf).not.toHaveBeenCalled()
+  })
+
+  it('answers no file for an order that is not a quote, or a quote that is gone', async () => {
+    docs.set('hosts/site1/orders/order-9', { status: 'paid', channel: 'web', lineItems: [] })
+    expect((await pdf('admin', 'order-9')).status).toBe(404)
+    expect((await pdf('admin', 'missing')).status).toBe(404)
+    expect((await pdf('admin', '')).status).toBe(400)
+    expect(quotePdf).not.toHaveBeenCalled()
+  })
+
+  it('says the PDF could not be made when making it fails', async () => {
+    const { quoteId } = await created()
+    quotePdf.mockRejectedValueOnce(new Error('sharp exploded'))
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    expect(await pdf('admin', quoteId)).toEqual({ status: 500, body: { error: 'The PDF could not be made. Try again.' } })
+    spy.mockRestore()
   })
 })

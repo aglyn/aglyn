@@ -17,12 +17,14 @@
 
 'use client'
 
-import { useFirestore } from '@aglyn/tenant-feature-instance'
-import { Button } from '@mui/material'
+import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { Button, Menu, MenuItem } from '@mui/material'
 import { doc, getDoc } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
 import type * as CommerceModel from '../../model'
 import { buildOrderInvoiceHtml, invoiceStoreFrom } from '../../utils/order-invoice'
+import { downloadCommercePdf } from './commerce-pdf-download'
 
 export interface OrderInvoiceButtonProps {
   hostId: string
@@ -31,17 +33,40 @@ export interface OrderInvoiceButtonProps {
 }
 
 /**
- * "Invoice" (AGL-3611), beside "Packing slip" in the order dialog: the order
- * as a printable bill, which the print dialog also saves as a PDF. The store's
- * name, currency and footer are read when it is clicked, not while the dialog
- * is open, so the dialog listens to nothing more.
+ * "Invoice" (AGL-3611), beside "Packing slip" in the order dialog: a menu of
+ * "Print invoice", the order as a printable bill, and "Download PDF"
+ * (AGL-4095), the branded invoice the server makes in the site's colors with
+ * its logo (`commerce/order-print?kind=invoice-pdf`, "Manage orders"). The
+ * store's name, currency and footer are read when one is clicked, not while
+ * the dialog is open, so the dialog listens to nothing more.
  */
 export function OrderInvoiceButton(props: OrderInvoiceButtonProps) {
   const { hostId, orderId, order } = props
   const firestore = useFirestore()
+  const { data: user } = useUser()
+  const { enqueueSnackbar } = useSnackbar()
   const [busy, setBusy] = useState(false)
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null)
+
+  const handleDownload = useCallback(async () => {
+    setAnchor(null)
+    setBusy(true)
+    try {
+      const query = new URLSearchParams({ hostId, orderId, kind: 'invoice-pdf' })
+      const refused = await downloadCommercePdf(
+        user,
+        `/api/commerce/order-print?${query.toString()}`,
+        { method: 'GET' },
+        `invoice-${order.number ?? orderId.slice(-6)}.pdf`,
+      )
+      if (refused) enqueueSnackbar(refused, { variant: 'error', allowDuplicate: true })
+    } finally {
+      setBusy(false)
+    }
+  }, [user, hostId, orderId, order.number, enqueueSnackbar])
 
   const handleInvoice = useCallback(async () => {
+    setAnchor(null)
     // Opened before the reads, inside the click, so a popup blocker sees the
     // user's gesture.
     const win = window.open('', '_blank', 'width=720,height=900')
@@ -73,9 +98,20 @@ export function OrderInvoiceButton(props: OrderInvoiceButtonProps) {
   }, [firestore, hostId, orderId, order])
 
   return (
-    <Button disabled={busy} onClick={handleInvoice}>
-      {'Invoice'}
-    </Button>
+    <>
+      <Button
+        disabled={busy}
+        aria-haspopup="menu"
+        aria-expanded={anchor ? 'true' : undefined}
+        onClick={(event) => setAnchor(event.currentTarget)}
+      >
+        {'Invoice'}
+      </Button>
+      <Menu anchorEl={anchor} open={Boolean(anchor)} onClose={() => setAnchor(null)}>
+        <MenuItem onClick={() => void handleInvoice()}>{'Print invoice'}</MenuItem>
+        <MenuItem onClick={() => void handleDownload()}>{'Download PDF'}</MenuItem>
+      </Menu>
+    </>
   )
 }
 OrderInvoiceButton.displayName = 'OrderInvoiceButton'

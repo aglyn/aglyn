@@ -15,7 +15,9 @@
  * limitations under the License.
  */
 
-import { renderWaiverPdf, textWidth, wrapText, type WaiverPdfInput } from './waiver-pdf'
+import { createHash } from 'node:crypto'
+import { textWidth, wrapText } from '@aglyn/shared-util-tools/pdf/pdf-text'
+import { renderWaiverPdf, type WaiverPdfInput } from './waiver-pdf'
 
 /** The hand-written signed copy (AGL-4042): a well-formed PDF a reader opens, holding what was signed. */
 
@@ -84,5 +86,56 @@ describe('the signed copy PDF', () => {
     expect(lines.length).toBeGreaterThan(1)
     for (const line of lines) expect(textWidth(line, 10)).toBeLessThanOrEqual(60)
     expect(wrapText('x'.repeat(200), 10, 100).length).toBeGreaterThan(1)
+  })
+
+  it('prints a character Helvetica cannot draw as the nearest one it can, never as a broken byte', () => {
+    const pdf = text(renderWaiverPdf({ ...INPUT, signerLines: [['Name', 'Łukasz Nowak 🎉']] }))
+    expect(pdf).toContain('(Lukasz Nowak ) Tj')
+    expect([...pdf.slice(pdf.indexOf('stream'), pdf.lastIndexOf('endstream'))].every((char) => char.charCodeAt(0) < 128)).toBe(true)
+  })
+})
+
+/**
+ * The signed copy's exact bytes for a spread of signatures, measured from the
+ * writer as it stood inside this plugin before it became the shared one
+ * (`@aglyn/shared-util-tools/pdf/*`). A copy made again from the same record
+ * must be the same file, so these never change unless the layout does.
+ */
+describe('the signed copy is the same file it always was', () => {
+  const BASE: WaiverPdfInput = {
+    ...INPUT,
+    signature: { kind: 'drawn', strokes: [[[0, 0], [500, 500], [1000, 1000]], [[250, 250]]] },
+    signerLines: [['Name', 'Jordan Lee'], ['Date of birth', '1990-04-02']],
+  }
+  const CASES: Record<string, [WaiverPdfInput, string]> = {
+    drawn: [BASE, 'b15f5e866cbcbad27ddc1691026887d041d3f7a6e5b3a06bfa385265bd26b254'],
+    typed: [
+      { ...BASE, signature: { kind: 'typed', text: 'Jordan Lee' }, minors: [], relationship: null },
+      'fe77622c2841fa71913c2f814a787c1401e19e878f27ea58e78e4eb2ded9ab9b',
+    ],
+    paper: [
+      { ...BASE, signature: { kind: 'paper' }, consentText: null, checkboxes: [] },
+      '9c76b7cf62a2bda3f94c2ba5bd3705da3bc12db763fea84f83e521c505f6bc1e',
+    ],
+    voided: [
+      { ...BASE, voidedText: 'VOIDED on 2026-10-01: signed for the wrong rider' },
+      'eb9f4092cfe5de6b9866b91abd67d9f5aa1e7f149d64451c4424b75055c90615',
+    ],
+    long: [
+      { ...BASE, bodyText: Array(140).fill('A paragraph of the waiver that goes on (and on) \\ with a backslash.').join('\n\n') },
+      'b92c79c85a88ffaf743af9ebc836e17743638d5e78895124447a6bb595fd7e4c',
+    ],
+    latin: [
+      {
+        ...BASE,
+        businessName: 'Café Zoë © Señor’s “Best” — Résumé… €5 ™',
+        bodyText: 'Ångström façade naïve coöperate déjà vu ¿Qué? ¡Sí! ½ ¼ ° ± × ÷ ß æ ø Ø',
+        signerLines: [['Name', 'Zoë Ærøskøbing'], ['Note', 'It’s ‘fine’']],
+      },
+      'd5bb8e187837723f9fbb154d56bcdf802b20623006569dc2711cd037e88a621c',
+    ],
+  }
+  it.each(Object.entries(CASES))('%s', (_, [input, sha256]) => {
+    expect(createHash('sha256').update(renderWaiverPdf(input)).digest('hex')).toBe(sha256)
   })
 })

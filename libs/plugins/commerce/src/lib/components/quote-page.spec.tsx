@@ -88,6 +88,14 @@ describe('the quote page', () => {
     expect(screen.getByRole('button', { name: 'Pay $2,675.48' })).toBeTruthy()
   })
 
+  it('downloads the quote’s PDF by the same signed link (AGL-4095)', async () => {
+    mockSiteFetch.mockResolvedValue(json(view()))
+    render(<QuotePage />)
+    const download = await screen.findByRole('link', { name: 'Download PDF' })
+    expect(download.getAttribute('href')).toBe('/api/commerce/quote-pdf?hostId=host-1&q=q-1&t=1.tok')
+    expect(download.hasAttribute('download')).toBe(true)
+  })
+
   // The redirect to Stripe's page is a real `window.location.assign`, which
   // jsdom refuses and reports on its console; the button stays busy behind it.
   it('pays for the version it shows, carrying no price, and goes to Stripe’s page', async () => {
