@@ -471,10 +471,12 @@ describe('the wave read keeps every block, inside the job document’s room', ()
 })
 
 describe('copied or arranged, and the quote that names both', () => {
-  it('copies every page of a collection and any long page; arranges the main pages', () => {
+  it('copies every page of a collection; arranges every main page, however long (AGL-4106)', () => {
     expect(AI_SITE_IMPORT_PROSE_WORDS).toBe(900)
     expect(aiSiteImportPageBuild({ group: 'c:blog', words: 120 })).toBe('copied')
-    expect(aiSiteImportPageBuild({ group: 'main', words: 901 })).toBe('copied')
+    expect(aiSiteImportPageBuild({ group: 'c:blog', words: 4_000 })).toBe('copied')
+    // aglyn.com's /product, 1,072 words, was copied as one column on 10/29.
+    expect(aiSiteImportPageBuild({ group: 'main', words: 1_072 })).toBe('arranged')
     expect(aiSiteImportPageBuild({ group: 'main', words: 900 })).toBe('arranged')
   })
 
