@@ -17,7 +17,7 @@
 
 import { claimAttempt, type PluginApiHandler, type PluginApiRequest } from '@aglyn/aglyn/server'
 import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
-import { VISITOR_UPLOAD_HONEYPOT_FIELD, visitorUploadFileView } from '@aglyn/aglyn/app-utils/visitor-upload'
+import { VISITOR_UPLOAD_HONEYPOT_FIELD, visitorUploadFileView, visitorUploadFolder } from '@aglyn/aglyn/app-utils/visitor-upload'
 import { notifyHostManagers } from '@aglyn/tenant-data-admin'
 import * as CommerceModel from '../model'
 import { orderStatusUrl } from './order-status-token'
@@ -37,8 +37,8 @@ import { quoteUploadCalls, type QuoteUploadCalls } from './quote-uploads'
  * the quote's signed pay link like the page itself:
  *
  *   GET  /api/commerce/quote-proof?hostId=&q=&t=&file=<proofId>
- *        → the current revision's proof (a picture inline, anything else as a
- *          download) | 404 | 410 replaced | 429
+ *        → a proof from any revision, for a link to any version of this quote
+ *          (a picture inline, anything else as a download) | 404 | 429
  *   POST /api/commerce/quote-upload  { hostId, q, t, action: 'ticket', file: { name, contentType, size } }
  *        → { ticket, upload: { url, fields }, file }
  *   POST /api/commerce/quote-upload  { hostId, q, t, action: 'finalize', ticket }
@@ -48,8 +48,9 @@ import { quoteUploadCalls, type QuoteUploadCalls } from './quote-uploads'
  *        + Idempotency-Key → 200 { view } | 409 { error, reason } | 410 { replaced } | 404 | 400 | 429
  *
  * Every route spends a per-address rate limit on the site BEFORE the token is
- * checked, answers a wrong token exactly as a missing quote, and answers a
- * link to an older version as replaced. The uploads are the shared visitor
+ * checked, answers a wrong token exactly as a missing quote, and (but for a
+ * proof, which an earlier email still draws) answers a link to an older
+ * version as replaced. The uploads are the shared visitor
  * upload (`@aglyn/tenant-data-admin/server/visitor-upload`), scoped to this
  * quote's artwork; the answer names the files by id and the server reads
  * them back from that scope, so nothing else can be attached.
@@ -108,7 +109,17 @@ const reasonRefusal = (status: number, reason: string, error: string): QuoteLink
 /** What a proof route answers: a JSON outcome, or a file to stream. */
 export type QuoteProofOutcome = QuoteLinkOutcome & { file?: { path: string; name: string; contentType: string } }
 
-/** `GET /api/commerce/quote-proof`: one of the current revision's proofs. */
+const PROOF_GONE: QuoteProofOutcome = { status: 404, body: { error: 'That proof is no longer on this quote.' } }
+
+/**
+ * `GET /api/commerce/quote-proof`: one of the proofs in the quote's history
+ * (AGL-4097). An email is a record the customer keeps, so the proof it draws
+ * keeps showing after the business starts the next revision or replaces the
+ * link: any link signed for this quote, an older version's too, is served the
+ * current revision's proofs and every earlier revision's as its snapshot kept
+ * them. A proof taken off its revision, another quote's file and a wrong token
+ * are not found.
+ */
 export async function handleQuoteProof(deps: QuoteProofDeps, req: PluginApiRequest): Promise<QuoteProofOutcome> {
   if (req.method !== 'GET') return { status: 405, body: { error: 'Method not allowed' } }
   const query = (req.query ?? {}) as Record<string, unknown>
@@ -117,10 +128,19 @@ export async function handleQuoteProof(deps: QuoteProofDeps, req: PluginApiReque
   if (!complete || !fileId) return { status: 400, body: { error: 'This link is incomplete.' } }
   const limited = await limitedQuoteLink(deps, req, `commerce-quote-proof:${hostId}`, QUOTE_PROOF_LOADS_PER_WINDOW)
   if (limited) return limited
-  const linked = await loadLinkedQuote(deps, hostId, quoteId, token)
+  const linked = await loadLinkedQuote(deps, hostId, quoteId, token, { history: true })
   if ('outcome' in linked) return linked.outcome
-  const proof = CommerceModel.currentQuoteProofs(linked.loaded.order.quote).find((entry) => entry.id === fileId)
-  if (!proof?.path) return { status: 404, body: { error: 'That proof is no longer on this quote.' } }
+  const quote = linked.loaded.order.quote
+  // The earlier revisions are read only when the current one lacks the proof.
+  let proof = CommerceModel.quoteProofInHistory(quote, [], fileId)
+  if (!proof) {
+    const listed = await linked.loaded.hostRef.collection('orders').doc(quoteId).collection('revisions').get()
+    const snapshots = listed.docs.map((entry) => entry.data() as Partial<CommerceModel.QuoteRevisionSnapshot>)
+    proof = CommerceModel.quoteProofInHistory(quote, snapshots, fileId)
+  }
+  // A proof is kept under this quote's own folder; a path anywhere else is never served.
+  const folder = visitorUploadFolder({ hostId, purpose: CommerceModel.QUOTE_PROOF_PURPOSE, purposeId: quoteId })
+  if (!proof?.path || !proof.path.startsWith(folder)) return PROOF_GONE
   return { status: 200, body: {}, file: { path: proof.path, name: proof.name, contentType: proof.contentType } }
 }
 

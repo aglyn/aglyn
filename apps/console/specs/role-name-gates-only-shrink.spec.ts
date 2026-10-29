@@ -89,9 +89,10 @@ export const TS_ROLE_GATE = [
  * The deployed rules: a role helper called, or a role compared with a literal
  * or a literal list. `canWriteHostContent`, `canPublishHostContent` and
  * `canReadHostSensitive` are not on it: they ask the site keys (AGL-4047).
+ * Nor is `canReadTransferJobs`, which asks "Manage data" alone.
  */
 export const RULES_ROLE_GATE = [
-  String.raw`\b(canManageOrg|canWriteOrgData|canWriteOrgWideData|isOrgWideAudienceManager|publisherManager|listingManager|canReadTransferJobs|canReadScopedPeople|canReadOutreach)\(`,
+  String.raw`\b(canManageOrg|canWriteOrgData|canWriteOrgWideData|isOrgWideAudienceManager|publisherManager|listingManager|canReadScopedPeople|canReadOutreach)\(`,
   String.raw`hostMemberRole\(hostId\)\s*(==|in)\s*['\[]`,
   String.raw`\brole\s*(==|in)\s*['\[]`,
   String.raw`\.role\s+in\b`,

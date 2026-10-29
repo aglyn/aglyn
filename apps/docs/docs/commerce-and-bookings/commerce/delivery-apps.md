@@ -72,6 +72,12 @@ should take stock from; later orders use it.
 Delivery orders appear on the register, oldest first, and a short message
 announces each new one.
 
+Anyone with the **Use the point of sale** permission for the site sees them.
+Accepting, rejecting and moving an order along also takes **Sell at the
+register**. Owners, admins and editors hold both by default and viewers don't,
+and a custom role or a member's own permissions can allow or deny either — see
+[Who can do what at the register](pos-and-reservations.md#who-can-do-what-at-the-register).
+
 1. **Accept** records the order in your store and tells the service. Its
    items come off your shelf; if the service sold more than you had, the
    order still comes in and the register says how many are short. **Reject**
