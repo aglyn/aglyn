@@ -136,22 +136,26 @@ describe('the quote email’s send (AGL-4097)', () => {
     expect(quoteReplyTo({}, null)).toBeNull()
   })
 
-  it('starts the conversation, then replies into it, minting each id on the sending domain', async () => {
+  it('starts the conversation under its root, then replies into it, minting each id on the sending domain', async () => {
     const mailer = quoteMailer(deps())
     const first = await mailer.deliver(delivery())
     if (!('thread' in first)) throw new Error('not sent')
     expect(first.messageId).toMatch(/@mail\.northwind\.test>$/)
-    expect(sent[0].headers).toEqual({ 'Message-ID': first.messageId })
+    // The root every message of the conversation shares, even when the
+    // provider replaces the Message-ID it was handed.
+    const root = `<thread.${first.messageId.slice(1)}`
+    expect(sent[0].headers).toEqual({ 'Message-ID': first.messageId, References: root })
+    expect(first.thread.references).toEqual([root, first.messageId])
     const order = { ...ORDER, quote: { ...ORDER.quote, emailThread: first.thread } } as HostOrder
     const second = await mailer.deliver(delivery({ order }))
     if (!('thread' in second)) throw new Error('not sent')
     expect(sent[1].headers).toEqual({
       'Message-ID': second.messageId,
       'In-Reply-To': first.messageId,
-      References: first.messageId,
+      References: `${root} ${first.messageId}`,
     })
     expect(sent[1].subject).toBe('Quote #1042 from Northwind Signs')
-    expect(second.thread.references).toEqual([first.messageId, second.messageId])
+    expect(second.thread.references).toEqual([root, first.messageId, second.messageId])
   })
 
   it('takes the site’s own domain for the id when the identity names none', async () => {

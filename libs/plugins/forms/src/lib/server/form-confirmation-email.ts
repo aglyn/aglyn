@@ -22,6 +22,7 @@ import {
   emailThreadAfterSend,
   isEmailConfigured,
   mintEmailMessageId,
+  nextThreadHeaders,
   sendEmail,
   type EmailThread,
   type RenderedHostEmail,
@@ -54,7 +55,8 @@ import { formConfirmationContent } from '../utils/form-confirmation-content'
  *   - FROM the site's sending identity, under the site's name;
  *   - REPLY-TO the site's contact email (its listing's, else its support
  *     email), so a reply reaches the business; none when the site has none;
- *   - STARTING A CONVERSATION: a `Message-ID` minted on the sending domain,
+ *   - STARTING A CONVERSATION: a `Message-ID` minted on the sending domain
+ *     and the conversation's root in `References` (`nextThreadHeaders`),
  *     answered as the thread the submission keeps (`emailThread`), so a
  *     quote started from the request later replies into it;
  *   - TRANSACTIONAL: the person asked for it by sending the form, so only an
@@ -171,7 +173,8 @@ export async function sendFormConfirmation(
     const identity = await deps.sendingIdentity(input.hostId)
     const rendered = await deps.render(input.hostId, FORM_CONFIRMATION_EMAIL_KEY, content.tokens)
     const siteHost = String(input.host['cname'] ?? '').trim() || null
-    // The first message of the conversation: it carries its own id only.
+    // The first message of the conversation: its own id, and the root every
+    // later message shares in `References`.
     const messageId = mintEmailMessageId([identity?.domain, identity?.from, siteHost], {
       label: 'form',
       atMs: input.atMs,
@@ -182,7 +185,7 @@ export async function sendFormConfirmation(
       subject,
       text: rendered?.text || content.text,
       ...(rendered?.html ? { html: rendered.html } : {}),
-      headers: { 'Message-ID': messageId },
+      headers: nextThreadHeaders(null, messageId),
       ...(contact && EMAIL.test(contact) ? { replyTo: contact } : {}),
       fromName: resolveBrandingProfile(input.org as never).fromName,
       sendingIdentity: identity,
