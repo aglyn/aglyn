@@ -94,6 +94,9 @@ export interface ChooseStarterDialogProps {
  * handed in as `picker` — the `hostStarterPicker` zone, or the style cards in
  * its place. Close leaves with nothing created; Back returns to the start it
  * was opened from.
+ *
+ * Figma: "Aglyn Console (web)" → page "Sites · Create site" → section
+ * "✅ CURRENT · Choose your starter, behind release_site_starters".
  */
 export function ChooseStarterDialog(props: ChooseStarterDialogProps) {
   const {
