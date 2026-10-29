@@ -42,6 +42,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
 }))
 
+// The record is named by the platform's id, never Firestore's auto-id.
+jest.mock('@aglyn/aglyn/server', () => ({
+  createResourceUid: () => 'acceptanceUid',
+}))
+
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import {
@@ -104,7 +109,6 @@ describe('publisherAgreementConsentRefusal (AGL-4105)', () => {
 function firestoreDouble(profile: Record<string, unknown> | null) {
   const created: Array<{ path: string; data: Record<string, unknown> }> = []
   const profileWrites: Array<{ data: Record<string, unknown>; options: unknown }> = []
-  let ids = 0
   const firestore = {
     collection: (top: string) => ({
       doc: (id: string) => {
@@ -121,8 +125,9 @@ function firestoreDouble(profile: Record<string, unknown> | null) {
         }
         return {
           collection: (sub: string) => ({
-            doc: () => {
-              const path = `${top}/${id}/${sub}/acceptance-${++ids}`
+            doc: (docId?: string) => {
+              if (!docId) throw new Error('an acceptance is named by createResourceUid(), never an auto-id')
+              const path = `${top}/${id}/${sub}/${docId}`
               return {
                 create: async (data: Record<string, unknown>) => {
                   created.push({ path, data })
@@ -159,7 +164,7 @@ describe('recordPublisherAgreementAcceptance (AGL-4105)', () => {
     })
     expect(double.created).toEqual([
       {
-        path: `orgs/org-1/${PUBLISHER_AGREEMENT_ACCEPTANCES}/acceptance-1`,
+        path: `orgs/org-1/${PUBLISHER_AGREEMENT_ACCEPTANCES}/acceptanceUid`,
         data: {
           version: PUBLISHER_AGREEMENT_VERSION,
           sha256: PUBLISHER_AGREEMENT_SHA256,
