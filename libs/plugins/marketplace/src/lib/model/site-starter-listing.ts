@@ -87,6 +87,12 @@ export function siteStarterSummaryOf(
         ? listing.previewImageUrl
         : null,
     facets: siteStarterFacetsOf(listing),
+    // The listing's own "What kind of site is it?": the seed writes the
+    // kind's name there, a publisher their own words.
+    category:
+      typeof listing.category === 'string' && listing.category.trim()
+        ? listing.category.trim()
+        : null,
   }
 }
 

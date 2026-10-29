@@ -27,9 +27,10 @@ import { Link, Stack, Typography } from '@mui/material'
  * What the agreement commits a publisher to, and where to read all of it
  * (AGL-1077).
  *
- * One rendering for both places the agreement is accepted — the Publisher
- * Profile card and the dialog a refused action opens (AGL-3407) — so the two
- * can never show a publisher different terms for the same acceptance.
+ * Rendered on the Publisher Profile card, beside the note of when the
+ * organization last agreed. Since AGL-4105 every publisher save agrees to the
+ * agreement with its own box (`PublisherAgreementCheckbox`), so this is what
+ * that box links to, in short, and asks for nothing itself.
  *
  * @param documentUrl the page to link, from `publisherAgreementPresentation`
  *   and never from the constant: while the document is unpublished that

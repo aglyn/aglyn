@@ -158,6 +158,7 @@ import { settleMediaPageRead } from './media-page-read'
 import { imageEditCopyName } from '@aglyn/aglyn/app-utils/image-edit'
 import { mediaSrc, mediaThumbnailSrc } from '@aglyn/aglyn/app-utils/media-src'
 import { mediaOriginalSrc } from '@aglyn/aglyn/app-utils/media-ref'
+import { mediaLibraryBytes } from '@aglyn/aglyn/app-utils/visitor-upload'
 import { probeVideoFile } from '../../utils/video-probe'
 import PluginWidgetSlot from '../plugin-widget-slot.component'
 import { MediaFileInfo } from './media-file-info.component'
@@ -1008,12 +1009,14 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     () => (mediaDocs as any[]).filter((item: any) => !item.deletedAt),
     [mediaDocs],
   )
-  // Usage + total from the counter doc — accurate past pagination.
+  // Usage + total from the counter doc — accurate past pagination. The same
+  // counter also holds the site's kept quote and form files (AGL-4096),
+  // which count toward the workspace's storage but are not in this library.
   const { data: mediaCounter } = useFirestoreDoc<any>(
     () => doc(firestore, scopeCollection, scopeId, 'counters', 'media'),
     [firestore, scopeId],
   )
-  const usedBytes = Number(mediaCounter?.['bytes'] ?? 0)
+  const usedBytes = mediaLibraryBytes(mediaCounter)
   const totalCount = Number(mediaCounter?.['count'] ?? 0)
   /**
    * The org's storage band (AGL-3470): one allowance across every site's

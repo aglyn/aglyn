@@ -114,7 +114,7 @@ import {
   aiCustomerSafeReview,
 } from '../model/ai-job-failure-copy'
 import { aiSiteStartInputsOf } from '../model/ai-site-start'
-import { aiSiteImportWire, type AiSiteImportState } from '../model/ai-site-import'
+import { aiSiteImportCanceled, aiSiteImportWire, type AiSiteImportState } from '../model/ai-site-import'
 import type { AiSitePhotos } from '../model/ai-site-photos'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 import {
@@ -828,6 +828,8 @@ function aiJobCanceledPatch(job: AiJob, now: Date, request: AiJobCancelRequest):
       step.status === 'running' ? { ...step, status: 'pending', endedAt: null } : step,
     ),
     ...(job.items?.length ? { items: aiCanceledItems(job.items) } : {}),
+    // An import's waves are settled with it (AGL-4107): none still reads running.
+    ...(job.kind === 'import' && job.siteImport ? { siteImport: aiSiteImportCanceled(job.siteImport, now.toISOString()) } : {}),
     updatedAt: now,
   }
 }
@@ -1273,6 +1275,10 @@ export async function recordStep(
             error: null,
             steps: steps.map((step) => (step.status === 'running' ? { ...step, status: 'pending' as const } : step)),
             ...((items ?? job.items)?.length ? { items: aiCanceledItems(items ?? job.items ?? []) } : {}),
+            // An import's waves are settled with it (AGL-4107), the step's own state included.
+            ...(job.kind === 'import' && (input.siteImport ?? job.siteImport)
+              ? { siteImport: aiSiteImportCanceled((input.siteImport ?? job.siteImport) as AiSiteImportState, now.toISOString()) }
+              : {}),
           }
         : {}),
     }

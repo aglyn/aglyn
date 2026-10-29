@@ -73,14 +73,29 @@ final class SellerTests: XCTestCase {
     XCTAssertTrue(payoutsSentence(.disconnected).hasPrefix("Connect a Stripe account"))
   }
 
+  /// The publisher agreement a save agrees to (AGL-4105), as each seller save sends it.
+  private let agreed = PublisherAgreementConsent(version: "2026-08-24.1")
+
+  private func assertAgreed(_ body: [String: Any], file: StaticString = #filePath, line: UInt = #line) {
+    let agreement = body["agreement"] as? [String: Any]
+    XCTAssertEqual(agreement?["version"] as? String, "2026-08-24.1", file: file, line: line)
+    XCTAssertEqual(agreement?["accepted"] as? Bool, true, file: file, line: line)
+  }
+
+  func testEverySellerSaveAgreesToTheVersionTheContractsCarry() {
+    XCTAssertEqual(PublisherAgreementConsent.current.version, ContractValues.shared.publisherAgreementVersion)
+    XCTAssertEqual(PublisherAgreementConsent.current.body["accepted"] as? Bool, true)
+  }
+
   func testTheProfileIsSavedThroughTheRouteWithTheOrganization() async throws {
     let transport = SellerTransport()
-    try await SellerAPI(api: client(transport), orgID: "o1").saveProfile(["handle": "studio", "displayName": "Studio", "bio": ""])
+    try await SellerAPI(api: client(transport), orgID: "o1").saveProfile(["handle": "studio", "displayName": "Studio", "bio": ""], agreement: agreed)
     XCTAssertEqual(transport.seen.first?.path, "/api/marketplace/publisher-profile")
     let body = try XCTUnwrap(transport.seen.first?.body)
     XCTAssertEqual(body["orgId"] as? String, "o1")
     XCTAssertEqual(body["handle"] as? String, "studio")
     XCTAssertEqual(body["bio"] as? String, "")
+    assertAgreed(body)
   }
 
   func testPayoutsStartThroughConnectAndADeploymentWithoutItAnswers501() async throws {
@@ -104,12 +119,12 @@ final class SellerTests: XCTestCase {
   func testAListingIsChangedThroughThePublishRouteOneActionAtATime() async throws {
     let transport = SellerTransport()
     let api = SellerAPI(api: client(transport), orgID: "o1")
-    try await api.setVisibility("l1", "private")
-    try await api.setPublished("l1", published: false)
+    try await api.setVisibility("l1", "private", agreement: agreed)
+    try await api.setPublished("l1", published: false, agreement: agreed)
     try await api.updateListing(
       "l1", fields: ["displayName": "Hero", "description": "A hero", "readme": "About it", "homepageUrl": "https://x.test"], category: "Marketing",
-      screenshots: ["/api/media/cdn/org:o1/a", "/api/media/cdn/org:o1/b"])
-    try await api.updateListing("l1", fields: ["displayName": "Hero"], category: "", screenshots: [])
+      screenshots: ["/api/media/cdn/org:o1/a", "/api/media/cdn/org:o1/b"], agreement: agreed)
+    try await api.updateListing("l1", fields: ["displayName": "Hero"], category: "", screenshots: [], agreement: agreed)
     XCTAssertEqual(transport.seen.map(\.path), Array(repeating: "/api/marketplace/publish-plugin", count: 4))
     XCTAssertEqual(transport.seen[0].body["action"] as? String, "set-visibility")
     XCTAssertEqual(transport.seen[0].body["visibility"] as? String, "private")
@@ -123,17 +138,22 @@ final class SellerTests: XCTestCase {
     XCTAssertNil(update["previewImageUrl"])
     XCTAssertEqual(transport.seen[3].body["categories"] as? [String], [])
     XCTAssertEqual(transport.seen[3].body["screenshots"] as? [String], [])
+    // Each one agrees to the publisher agreement on its own (AGL-4105).
+    for seen in transport.seen { assertAgreed(seen.body) }
   }
 
   func testThePreviewImageIsSetAndRemovedThroughItsOwnRoute() async throws {
     let transport = SellerTransport()
     let api = SellerAPI(api: client(transport), orgID: "o1")
-    try await api.setPreviewImage("l1", url: "/api/media/cdn/org:o1/m1")
-    try await api.setPreviewImage("l1", url: "")
+    try await api.setPreviewImage("l1", url: "/api/media/cdn/org:o1/m1", agreement: agreed)
+    try await api.setPreviewImage("l1", url: "", agreement: agreed)
     XCTAssertEqual(transport.seen.map(\.path), ["/api/marketplace/preview-image", "/api/marketplace/preview-image"])
     XCTAssertEqual(transport.methods, ["POST", "DELETE"])
-    XCTAssertEqual(transport.seen[0].body as? [String: String], ["listingId": "l1", "url": "/api/media/cdn/org:o1/m1"])
-    XCTAssertEqual(transport.seen[1].body as? [String: String], ["listingId": "l1"])
+    XCTAssertEqual(transport.seen[0].body["listingId"] as? String, "l1")
+    XCTAssertEqual(transport.seen[0].body["url"] as? String, "/api/media/cdn/org:o1/m1")
+    XCTAssertEqual(transport.seen[1].body["listingId"] as? String, "l1")
+    XCTAssertNil(transport.seen[1].body["url"])
+    for seen in transport.seen { assertAgreed(seen.body) }
   }
 
   func testTheGalleryHoldsSixDistinctScreenshotsAndAListingReadsItsOwn() {

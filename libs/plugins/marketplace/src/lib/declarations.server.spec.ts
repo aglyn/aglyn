@@ -24,6 +24,10 @@ import {
   PLUGIN_REQUIRED_ORG_ERASERS,
   resetPluginOrgErasersForTests,
 } from '@aglyn/aglyn/plugin-manager/plugin-org-erasure'
+import {
+  resolveSiteStarterSource,
+  type PluginSiteStarterSource,
+} from '@aglyn/aglyn/plugin-manager/plugin-site-starters'
 import { registerMarketplaceServerDeclarations } from './declarations.server'
 
 /**
@@ -62,5 +66,30 @@ describe('the marketplace’s share of a workspace erasure', () => {
     registerMarketplaceServerDeclarations()
     registerMarketplaceServerDeclarations()
     expect(listPluginOrgErasers()).toEqual(['marketplace'])
+  })
+})
+
+/**
+ * The site starters "Create site" offers (AGL-4049) register through a lazy
+ * stand-in, so the server code loads only when a starter is asked for. The
+ * stand-in has to carry every method the source answers: one left off is a
+ * method the seam reads as absent, which is how `describe` once went
+ * unanswered and every site was recorded as made from "Starter" (lane 3).
+ */
+describe('the site starter source it registers', () => {
+  // Every method of the seam: the marketplace source answers all of them
+  // (`Required<PluginSiteStarterSource>`), so the stand-in must too.
+  const SEAM_METHODS: ReadonlyArray<keyof Required<PluginSiteStarterSource>> = [
+    'search',
+    'resolve',
+    'installed',
+    'describe',
+  ]
+
+  it('forwards every method the marketplace source answers', () => {
+    registerMarketplaceServerDeclarations()
+    const registered = resolveSiteStarterSource() as unknown as Record<string, unknown>
+    expect(Object.keys(registered).sort()).toEqual([...SEAM_METHODS].sort())
+    for (const method of SEAM_METHODS) expect(typeof registered[method]).toBe('function')
   })
 })

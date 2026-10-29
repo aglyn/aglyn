@@ -66,9 +66,11 @@ export const AI_SITE_IMPORT_WAVE_PAGES = 10
 /**
  * The most pages one import reads, whatever the plan allows: an unlimited
  * plan is still one crawl's worth, and the crawl's own time budget may stop
- * sooner (the inventory then says so).
+ * sooner (the inventory then says so). Only pages count: a file a link
+ * points at is never fetched as one (AGL-4106), so aglyn.com's 209 pages fit
+ * with room where 136 press-kit files once took 136 of 200.
  */
-export const AI_SITE_IMPORT_MAX_PAGES = 200
+export const AI_SITE_IMPORT_MAX_PAGES = 400
 
 /** The fewest pages under one address prefix that make it a collection. */
 export const AI_SITE_IMPORT_COLLECTION_MIN = 3
@@ -92,8 +94,11 @@ export const AI_SITE_IMPORT_READ_MAX_BLOCKS = 2_000
 /** The most characters of one page's blocks a wave's read keeps: a long policy is 40,000. */
 export const AI_SITE_IMPORT_READ_MAX_CHARS = 120_000
 
+/** The most characters one page's layout keeps on the job document (AGL-4106): its icons' drawings go first. */
+export const AI_SITE_IMPORT_LAYOUT_MAX_CHARS = 48_000
+
 /**
- * The most characters of blocks the reads of one import hold at once: they
+ * The most characters of blocks (and their layouts, AGL-4106) the reads of one import hold at once: they
  * ride the job document, which Firestore caps at 1 MiB, beside the
  * inventory and the ledger. A wave's later page past it keeps what fits and
  * says it was cut.
@@ -101,8 +106,11 @@ export const AI_SITE_IMPORT_READ_MAX_CHARS = 120_000
 export const AI_SITE_IMPORT_WAVE_READ_MAX_CHARS = 400_000
 
 /**
- * A page with more words of its own than this is copied as it is, never
- * arranged (AGL-4083): a policy, an article, a long story.
+ * A collection's page longer than this is prose: a policy, an article, a
+ * long story (AGL-4083). A collection's page is copied as it is whatever its
+ * length, and since AGL-4106 a main page is arranged whatever its length:
+ * `/product` at 1,072 words is laid out as its source lays it out, not copied
+ * as one column.
  */
 export const AI_SITE_IMPORT_PROSE_WORDS = 900
 
@@ -171,6 +179,8 @@ export type AiSiteImportLeftOutReason =
   | 'off-site'
   /** The read stopped (its clock, its bytes, its page count) before it got to it (AGL-4083). */
   | 'not-reached'
+  /** A link to a file (a download, a PDF with no extension), not a page (AGL-4106). */
+  | 'file'
 
 export const AI_SITE_IMPORT_LEFT_OUT_REASONS: readonly AiSiteImportLeftOutReason[] = [
   'plan-limit',
@@ -182,6 +192,7 @@ export const AI_SITE_IMPORT_LEFT_OUT_REASONS: readonly AiSiteImportLeftOutReason
   'too-large',
   'off-site',
   'not-reached',
+  'file',
 ]
 
 /** The reasons that mean the page was there and AglynBot could not read it: the "could not be read" of what was found. */
@@ -203,6 +214,358 @@ export interface AiSiteImportPhoto {
   alt?: string
   /** The address on the old site it was read from, where a page that is copied places it (AGL-4084). */
   from?: string
+}
+
+/*------------------------------------------
+ * The source's layout, as the reader reads it (AGL-4106)
+ *-----------------------------------------*/
+
+/**
+ * One line of a page, by its index in the page's main-region blocks
+ * (`AiSiteImportPageRead.blocks`, 0-based). The layout holds no words of
+ * its own: every word is a block's, placed once.
+ */
+export type SiteImportLineRef = number
+
+/** A section's background, in the layout language's bands. */
+export type SiteImportBand = 'plain' | 'soft' | 'brand' | 'dark'
+
+/** How the source draws a button: filled, outlined, or as a link with button padding. */
+export type SiteImportButtonStyle = 'primary' | 'secondary' | 'quiet'
+
+/** What a repeated group of the source is. */
+export type SiteImportGroupKind = 'cards' | 'steps' | 'stats' | 'faq' | 'quotes' | 'logos' | 'pricing' | 'list' | 'text'
+
+export const SITE_IMPORT_GROUP_KINDS: readonly SiteImportGroupKind[] = ['cards', 'steps', 'stats', 'faq', 'quotes', 'logos', 'pricing', 'list', 'text']
+
+/** One line in place. `role` only where the source's own styling says it (an uppercase eyebrow, a large lede, a small note). */
+export interface SiteImportLayoutLine {
+  kind: 'line'
+  line: SiteImportLineRef
+  role?: 'eyebrow' | 'lede' | 'note'
+  /** The source draws this line (a link, or a `<button>`'s words) as a button. Its destination is the link block's `href`. */
+  button?: SiteImportButtonStyle
+}
+
+/** A picture in place: an image block. */
+export interface SiteImportLayoutPicture {
+  kind: 'picture'
+  line: SiteImportLineRef
+  /** Where clicking it goes, when it sits in a link. */
+  href?: string
+  /** It sits in a `<button>` (a video's poster, a lightbox): the picture is kept, the button is not a destination. */
+  button?: true
+}
+
+/** An icon standing on its own, by index into `SiteImportLayout.icons`. */
+export interface SiteImportLayoutIcon {
+  kind: 'icon'
+  icon: number
+}
+
+/** Where one of the page's forms sat, by index into `AiSiteImportPageRead.forms`. */
+export interface SiteImportLayoutForm {
+  kind: 'form'
+  form: number
+}
+
+/**
+ * A row of columns side by side; `cols` are relative widths in twelfths
+ * (`[4, 8]`, `[1, 1, 1]`). Every list of lists is a list of objects: the
+ * layout rides a Firestore document, which holds no array inside an array.
+ */
+export interface SiteImportLayoutRow {
+  kind: 'row'
+  cols: number[]
+  cells: Array<{ nodes: SiteImportLayoutNode[] }>
+}
+
+/**
+ * One item of a group. Every line of the item is in `lines`, in order, and
+ * in exactly one of the named parts.
+ */
+export interface SiteImportLayoutItem {
+  lines: SiteImportLineRef[]
+  /** The item's name: its heading, its title link, or its first short line. */
+  title?: SiteImportLineRef
+  /** A stat's figure, a step's number, a plan's price. */
+  figure?: SiteImportLineRef
+  text?: SiteImportLineRef[]
+  /** Its bullet points (a plan's features). */
+  list?: SiteImportLineRef[]
+  /** Its own call to action: a "See … →" link or a button, last in the item. */
+  link?: SiteImportLineRef[]
+  image?: SiteImportLineRef
+  /** The icon that leads it, by index into `SiteImportLayout.icons`. */
+  icon?: number
+  /** The icon each of its bullet points carries (a check mark), when they share one. */
+  listIcon?: number
+  /** Where the item goes as a whole: its title link's address. */
+  to?: string
+}
+
+export interface SiteImportLayoutGroup {
+  kind: 'group'
+  group: SiteImportGroupKind
+  /** Columns the source lays the items out in on a wide screen. */
+  columns: number
+  /** Each item is drawn as a box (a border, a shadow or a fill of its own). */
+  boxed: boolean
+  items: SiteImportLayoutItem[]
+}
+
+/** A table: rows of cells, each cell its lines (objects, not nested arrays, for Firestore). */
+export interface SiteImportLayoutTable {
+  kind: 'table'
+  /** Whether the first row names the columns. */
+  header: boolean
+  rows: Array<{ cells: Array<{ lines: SiteImportLineRef[] }> }>
+}
+
+/** A tab strip and its panels; a panel the source did not draw is empty. */
+export interface SiteImportLayoutTabs {
+  kind: 'tabs'
+  tabs: Array<{ label: SiteImportLineRef | null; selected?: true; panel: SiteImportLayoutNode[] }>
+}
+
+export type SiteImportLayoutNode =
+  | SiteImportLayoutLine
+  | SiteImportLayoutPicture
+  | SiteImportLayoutIcon
+  | SiteImportLayoutForm
+  | SiteImportLayoutRow
+  | SiteImportLayoutGroup
+  | SiteImportLayoutTable
+  | SiteImportLayoutTabs
+
+/** Where the hero's picture sits against its words. */
+export type SiteImportHeroPicture = 'beside' | 'behind' | 'below' | 'above'
+
+export interface SiteImportLayoutSection {
+  /** Its `aria-label`, its heading, or "Section n": neutralized, cut to a label. */
+  name: string
+  /** How its edges were found: a landmark (`<section>`), a container of its own, or its headings. */
+  from: 'landmark' | 'container' | 'heading'
+  band: SiteImportBand
+  /** Its background color as `#rrggbb`, when it has one. */
+  background: string | null
+  /** A gradient or a photo behind it. */
+  backdrop?: { kind: 'gradient' } | { kind: 'picture'; url: string }
+  align: 'start' | 'center'
+  /** Set on the section holding the page's first `<h1>`. */
+  hero?: { picture: SiteImportHeroPicture | null }
+  nodes: SiteImportLayoutNode[]
+  /** Every line of the section, in order. */
+  lines: SiteImportLineRef[]
+}
+
+/** An icon the page draws, once however often it repeats. */
+export interface SiteImportIconShape {
+  viewBox: string
+  /** One path, for the Besigner's icon element (`iconPath`, drawn on a 24-unit square). */
+  path?: string
+  /** A small drawing of several shapes, geometry only, for a picture of it. */
+  svg?: string
+}
+
+/** What the source's look is made of (AGL-4106), read from its stylesheets. */
+export interface SiteImportLookFacts {
+  fonts: {
+    /** The family its body text is set in, as named, when it is not a system font. */
+    body: string | null
+    /** The family its headings are set in. */
+    headings: string | null
+    /** The families it loads from Google Fonts, in order. */
+    google: string[]
+  }
+  /** The page's own background, `#rrggbb`. */
+  background: string | null
+  /** Its body text color. */
+  text: string | null
+  /** The fill of its filled buttons, the most used first. */
+  buttonFill: string | null
+  /** The text color on them. */
+  buttonText: string | null
+  /** Its buttons' corner radius, px. */
+  buttonRadius: number | null
+  /** The color its text links are drawn in. */
+  link: string | null
+  /** Its header bar's background. */
+  header: string | null
+}
+
+/** A page's layout, as the source lays it out (AGL-4106). */
+export interface SiteImportLayout {
+  v: 1
+  sections: SiteImportLayoutSection[]
+  icons: SiteImportIconShape[]
+  look: SiteImportLookFacts
+}
+
+/** One entry of a menu, as the source's header shows it. */
+export interface SiteImportNavEntry {
+  label: string
+  /** The line under it in a mega menu. */
+  text?: string
+  /** Where it goes: absolute http(s), `mailto:` or `tel:`. */
+  href: string
+  /** Its icon, when it has a one-path icon. */
+  iconPath?: string
+  viewBox?: string
+  /** The heading of the menu's column it sits in ("By team"). */
+  column?: string
+}
+
+/** A top-level item of the source's menu: a link, or a menu of entries under a name. */
+export interface SiteImportNavGroup {
+  label: string
+  /** Where the name itself goes; `null` when it only opens its menu. */
+  href: string | null
+  /** Empty for a plain link. */
+  items: SiteImportNavEntry[]
+}
+
+/** A button in the source's header outside its menu ("Sign in", "Start free"). */
+export interface SiteImportNavCta {
+  label: string
+  href: string | null
+  style: SiteImportButtonStyle
+}
+
+/** The source's header menu (AGL-4106). Untrusted data from the owner's site. */
+export interface SiteImportNavTree {
+  items: SiteImportNavGroup[]
+  ctas: SiteImportNavCta[]
+  /** The source shows a menu button on phones. */
+  phoneMenu: boolean
+  /** The header bar's background, `#rrggbb`. */
+  background: string | null
+}
+
+export interface SiteImportFooterLink {
+  label: string
+  href: string
+}
+
+/** The source's footer (AGL-4106): its columns, profiles and facts, as written. */
+export interface SiteImportFooter {
+  columns: Array<{ heading: string; links: SiteImportFooterLink[] }>
+  /** Its links to profiles on other sites. */
+  social: Array<SiteImportFooterLink & { network: string }>
+  /** Links outside any column and not a profile (Privacy, Terms, Status). */
+  links: SiteImportFooterLink[]
+  /** Its lines of text outside links (a tagline), as written. */
+  text: string[]
+  address: string | null
+  phone: string | null
+  email: string | null
+  /** Its © line, word for word. */
+  copyright: string | null
+}
+
+/** Every line a layout's nodes place, in order. */
+export function siteImportLayoutLines(nodes: readonly SiteImportLayoutNode[]): SiteImportLineRef[] {
+  const out: SiteImportLineRef[] = []
+  const visit = (list: readonly SiteImportLayoutNode[]) => {
+    for (const node of list) {
+      switch (node.kind) {
+        case 'line':
+        case 'picture':
+          out.push(node.line)
+          break
+        case 'row':
+          for (const cell of node.cells) visit(cell.nodes)
+          break
+        case 'group':
+          for (const item of node.items) out.push(...item.lines)
+          break
+        case 'table':
+          for (const row of node.rows) for (const cell of row.cells) out.push(...cell.lines)
+          break
+        case 'tabs':
+          for (const tab of node.tabs) {
+            if (tab.label !== null) out.push(tab.label)
+            visit(tab.panel)
+          }
+          break
+        default:
+          break
+      }
+    }
+  }
+  visit(nodes)
+  return out
+}
+
+/** How many characters a layout weighs on the job document. */
+export function siteImportLayoutChars(layout: SiteImportLayout | null | undefined): number {
+  return layout ? JSON.stringify(layout).length : 0
+}
+
+/**
+ * A layout over only the first `count` lines (a read the wave's budget cut
+ * short): references past the cut are dropped, and what is left empty goes.
+ */
+export function siteImportLayoutWithin(layout: SiteImportLayout, count: number): SiteImportLayout {
+  const keep = (ref: SiteImportLineRef) => ref >= 0 && ref < count
+  const sections = layout.sections
+    .map((section) => ({ ...section, nodes: siteImportFilterNodes(section.nodes, keep), lines: section.lines.filter(keep) }))
+    .filter((section) => section.lines.length)
+  return { ...layout, sections }
+}
+
+/** Nodes with only the lines `keep` keeps; what is left empty goes. */
+export function siteImportFilterNodes(list: readonly SiteImportLayoutNode[], keep: (ref: SiteImportLineRef) => boolean): SiteImportLayoutNode[] {
+  const nodes = (list: readonly SiteImportLayoutNode[]): SiteImportLayoutNode[] =>
+    list.flatMap((node): SiteImportLayoutNode[] => {
+      switch (node.kind) {
+        case 'line':
+        case 'picture':
+          return keep(node.line) ? [node] : []
+        case 'icon':
+        case 'form':
+          return [node]
+        case 'row': {
+          const cells = node.cells.map((cell) => ({ nodes: nodes(cell.nodes) }))
+          return cells.some((cell) => cell.nodes.length) ? [{ ...node, cells }] : []
+        }
+        case 'group': {
+          const items = node.items
+            .map((item) => trimItem(item, keep))
+            .filter((item) => item.lines.length || item.icon !== undefined)
+          return items.length ? [{ ...node, items }] : []
+        }
+        case 'table': {
+          const rows = node.rows
+            .map((row) => ({ cells: row.cells.map((cell) => ({ lines: cell.lines.filter(keep) })) }))
+            .filter((row) => row.cells.some((cell) => cell.lines.length))
+          return rows.length ? [{ ...node, rows }] : []
+        }
+        case 'tabs': {
+          const tabs = node.tabs.map((tab) => ({ ...tab, label: tab.label !== null && keep(tab.label) ? tab.label : null, panel: nodes(tab.panel) }))
+          return tabs.some((tab) => tab.label !== null || tab.panel.length) ? [{ ...node, tabs }] : []
+        }
+        default:
+          return []
+      }
+    })
+  return nodes(list)
+}
+
+function trimItem(item: SiteImportLayoutItem, keep: (ref: SiteImportLineRef) => boolean): SiteImportLayoutItem {
+  const out: SiteImportLayoutItem = { ...item, lines: item.lines.filter(keep) }
+  for (const key of ['title', 'figure', 'image'] as const) if (out[key] !== undefined && !keep(out[key] as number)) delete out[key]
+  for (const key of ['text', 'list', 'link'] as const) {
+    const list = out[key]?.filter(keep)
+    if (list?.length) out[key] = list
+    else delete out[key]
+  }
+  return out
+}
+
+/** A layout with its icons' drawings dropped, for a page that must be lighter. */
+export function siteImportLayoutWithoutDrawings(layout: SiteImportLayout): SiteImportLayout {
+  return { ...layout, icons: layout.icons.map((icon) => (icon.svg ? { viewBox: icon.viewBox } : icon)) }
 }
 
 /** What a wave's read found on one page, for its model answer. Never on the wire. */
@@ -229,6 +592,18 @@ export interface AiSiteImportPageRead {
   words?: number
   /** The forms the page asks visitors to fill in, by their fields. */
   forms?: SiteImportForm[]
+  /**
+   * How the source lays the page out (AGL-4106): its sections, bands, rows,
+   * groups, pictures, icons and buttons, over `blocks` by index. Absent on a
+   * read made before the reader, or when it did not fit the wave's budget.
+   */
+  layout?: SiteImportLayout | null
+  /**
+   * The page's browser title and meta description as the source writes them
+   * (AGL-4107), which the new page's listing keeps word for word. Absent on a
+   * read made before they were kept.
+   */
+  meta?: { title: string; description: string }
 }
 
 /** How a page is built from its old page, as the step chose: its words copied as they are, or arranged by Aglyn AI. */
@@ -266,7 +641,12 @@ export interface AiSiteImportPage {
   } | null
 }
 
-export type AiSiteImportWaveStatus = 'waiting' | 'running' | 'review' | 'done'
+/**
+ * A wave's place in its import: waiting to start, running, in and waiting for
+ * the person's review, in, or `stopped` — the import was canceled before the
+ * wave was in, while it ran or before it started (AGL-4107).
+ */
+export type AiSiteImportWaveStatus = 'waiting' | 'running' | 'review' | 'done' | 'stopped'
 
 export interface AiSiteImportWave {
   index: number
@@ -304,8 +684,6 @@ export interface AiSiteImportState {
   leftOutCount: Partial<Record<AiSiteImportLeftOutReason, number>>
   /** The header and footer's draft id, built in the first wave; `null` when there are no main pages. */
   frame: { draftId: string } | null
-  /** The Trust & Safety row this import is logged under. */
-  reviewId: string | null
   /**
    * "Start every remaining wave" (AGL-4083): each wave closes and the next
    * starts with no review between them; the last wave's close is the stop.
@@ -352,6 +730,27 @@ export interface AiSiteImportHome {
     social: string[]
     address: string
   }
+  /**
+   * The source's header menu as its home page builds it (AGL-4108): its
+   * items, their menus, its buttons. The header and footer are drawn from it
+   * with no model; absent on a read made before the reader, or where the home
+   * page has no menu the reader can find.
+   */
+  nav?: SiteImportNavTree | null
+  /** The source's footer as its home page builds it (AGL-4108): its columns, profiles, facts and © line. */
+  footer?: SiteImportFooter | null
+  /** What the source's look is made of (AGL-4108): its colors, its button fill and corners, its fonts. */
+  look?: SiteImportLookFacts | null
+}
+
+/**
+ * Whether the site's header and footer are built from the source's own menu
+ * (AGL-4108), with no model: the home page's menu was read. Then the frame
+ * costs nothing and is quoted at nothing.
+ */
+export function aiSiteImportFrameIsRead(state: Pick<AiSiteImportState, 'home'> | null | undefined): boolean {
+  const nav = state?.home?.nav
+  return !!nav && (nav.items.length > 0 || nav.ctas.length > 0)
 }
 
 /** What the look pass did (AGL-4084): no model is asked. */
@@ -732,7 +1131,6 @@ export interface AiSiteImportInventoryInput {
   existingPages: number
   /** Mints one draft id; the inventory names every page's draft before any is written. */
   mintId: () => string
-  reviewId?: string | null
   wavePages?: number
 }
 
@@ -781,7 +1179,6 @@ export function aiSiteImportInventory(input: AiSiteImportInventoryInput): AiSite
       leftOut,
       leftOutCount,
       frame: null,
-      reviewId: input.reviewId ?? null,
       verdict,
     }
   }
@@ -855,7 +1252,6 @@ export function aiSiteImportInventory(input: AiSiteImportInventoryInput): AiSite
     leftOut,
     leftOutCount,
     frame: waves[0]?.frame ? { draftId: input.mintId() } : null,
-    reviewId: input.reviewId ?? null,
     verdict,
   }
 }
@@ -1000,7 +1396,22 @@ export function aiSiteImportCapBlocks(
 }
 
 const readChars = (read: AiSiteImportPageRead | null | undefined) =>
-  (read?.blocks ?? []).reduce((total, block) => total + aiSiteImportBlockChars(block), 0)
+  (read?.blocks ?? []).reduce((total, block) => total + aiSiteImportBlockChars(block), 0) + siteImportLayoutChars(read?.layout)
+
+/**
+ * A page's layout in the room the wave has left after its blocks (AGL-4106):
+ * cut to the blocks kept, its drawings dropped when it would not fit with
+ * them, and left off when it would not fit at all (the page is then laid out
+ * from its lines alone).
+ */
+function layoutWithin(layout: SiteImportLayout | null | undefined, blocks: number, left: number): SiteImportLayout | null {
+  if (!layout) return null
+  const room = Math.min(left, AI_SITE_IMPORT_LAYOUT_MAX_CHARS)
+  const cut = siteImportLayoutWithin(layout, blocks)
+  if (siteImportLayoutChars(cut) <= room) return cut
+  const light = siteImportLayoutWithoutDrawings(cut)
+  return siteImportLayoutChars(light) <= room ? light : null
+}
 
 /**
  * More of a running wave's pages, read now. Their blocks share
@@ -1024,6 +1435,11 @@ export function aiSiteImportPagesRead(
       const capped = aiSiteImportCapBlocks(read.blocks, room)
       held += capped.chars
       kept = { ...read, blocks: capped.blocks, ...(capped.cut || read.cut ? { cut: true } : {}) }
+      if (read.layout) {
+        const layout = layoutWithin(read.layout, capped.blocks.length, Math.max(0, AI_SITE_IMPORT_WAVE_READ_MAX_CHARS - held))
+        held += siteImportLayoutChars(layout)
+        kept = { ...kept, layout }
+      }
     }
     next = withPage(next, slot, { read: kept, refused: null, title: clipLabel(read.title) || next.pages.find((page) => page.slot === slot)?.title || '' })
   }
@@ -1043,7 +1459,7 @@ export function aiSiteImportPhotosIn(
 export function aiSiteImportPageSettled(state: AiSiteImportState, slot: string): AiSiteImportState {
   const page = state.pages.find((entry) => entry.slot === slot)
   if (!page?.read) return state
-  return withPage(state, slot, { read: { ...page.read, text: '', blocks: [] } })
+  return withPage(state, slot, { read: { ...page.read, text: '', blocks: [], layout: null } })
 }
 
 /** A wave is in: waiting for its review, or done when no wave follows it. */
@@ -1056,13 +1472,31 @@ export function aiSiteImportWaveClosed(state: AiSiteImportState, index: number, 
   return next
 }
 
+/**
+ * The state of an import a person canceled (AGL-4107): every wave settled. A
+ * wave that ran, or was waiting to, is stopped; one already in, for review or
+ * done, is in. On 10/29 a canceled import still showed its second wave as
+ * running, with nothing running it.
+ */
+export function aiSiteImportCanceled(state: AiSiteImportState, at: string): AiSiteImportState {
+  return {
+    ...state,
+    autoContinue: false,
+    waves: state.waves.map((wave): AiSiteImportWave => {
+      if (wave.status === 'running' || wave.status === 'waiting') return { ...wave, status: 'stopped', finishedAt: wave.status === 'running' ? at : wave.finishedAt }
+      if (wave.status === 'review') return { ...wave, status: 'done' }
+      return wave
+    }),
+  }
+}
+
 /** The state as the console reads it: every page's read text left off. */
 export function aiSiteImportWire(state: AiSiteImportState | null | undefined): AiSiteImportState | null {
   if (!state) return null
   return {
     ...state,
     pages: state.pages.map((page) =>
-      page.read ? { ...page, read: { ...page.read, text: '', images: [], blocks: [], forms: [] } } : page,
+      page.read ? { ...page, read: { ...page.read, text: '', images: [], blocks: [], forms: [], layout: null } } : page,
     ),
   }
 }
@@ -1073,12 +1507,12 @@ export function aiSiteImportWire(state: AiSiteImportState | null | undefined): A
 
 /**
  * How a page is built (AGL-4083), decided by code: every page of a collection
- * (a blog, the legal pages, news) and any page longer than
- * `AI_SITE_IMPORT_PROSE_WORDS` is copied as it is; the main pages are
- * arranged by Aglyn AI, their words kept as written.
+ * (a blog, the legal pages, news) is copied as it is; every main page is
+ * arranged by Aglyn AI whatever its length (AGL-4106), its words kept as
+ * written. Both are laid out from the source's own layout.
  */
 export function aiSiteImportPageBuild(page: Pick<AiSiteImportPage, 'group' | 'words'>): AiSiteImportBuild {
-  return page.group !== 'main' || page.words > AI_SITE_IMPORT_PROSE_WORDS ? 'copied' : 'arranged'
+  return page.group !== 'main' ? 'copied' : 'arranged'
 }
 
 const whole = (value: number | undefined) => Math.max(0, Math.floor(Number.isFinite(value) ? (value as number) : 0))
@@ -1116,7 +1550,8 @@ export function aiSiteImportWaveOwed(
   items?: readonly AiJobItemLedger[] | null,
 ): { pages: number; arranged: number; copied: number; frame: boolean } {
   const owed = (slot: string) => (items ? aiSiteImportItemOpen(items, slot) : true)
-  const counts = { pages: 0, arranged: 0, copied: 0, frame: wave.frame && !!state.frame && owed(AI_SITE_IMPORT_FRAME_SLOT) }
+  // A header and footer drawn from the source's own menu ask no model (AGL-4108), so are owed nothing.
+  const counts = { pages: 0, arranged: 0, copied: 0, frame: wave.frame && !!state.frame && !aiSiteImportFrameIsRead(state) && owed(AI_SITE_IMPORT_FRAME_SLOT) }
   for (const slot of wave.slots) {
     const page = state.pages.find((entry) => entry.slot === slot)
     if (!owed(slot) || page?.refused) continue
@@ -1182,6 +1617,7 @@ export const AI_SITE_IMPORT_LEFT_OUT_COPY: Readonly<Record<AiSiteImportLeftOutRe
   'too-large': 'Larger than a page can be to bring in.',
   'off-site': 'It sends visitors to another website.',
   'not-reached': 'Not reached: the read stopped before it got to this page.',
+  file: 'A file, not a page.',
 }
 
 /** "3 pages" / "1 page". */

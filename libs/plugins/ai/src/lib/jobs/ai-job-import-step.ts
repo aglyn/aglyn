@@ -22,8 +22,8 @@
  *
  *   1. READ the proved site (no model): the crawler reads it as AglynBot,
  *      main pages first, up to the plan's page count; the inventory is cut
- *      into waves (`model/ai-site-import.ts`), every page gets a ledger row,
- *      and Trust & Safety gets its row. The job then WAITS (`needs_review`,
+ *      into waves (`model/ai-site-import.ts`) and every page gets a ledger
+ *      row. The job then WAITS (`needs_review`,
  *      reason `wave`): nothing is brought in until the person starts wave 1.
  *   2. START A WAVE (no model), on the person's say-so: the proof is still
  *      current, the day's limit has room, the plan still has room; the
@@ -32,9 +32,13 @@
  *   3. THE LOOK, in the first wave (no model, AGL-4084): the theme drawn
  *      from the owner's own home page, its logo into the library, the site's
  *      listing from the home page's own words (`ai-site-import-look.ts`).
- *   4. THE HEADER AND FOOTER, in the first wave: the layout step's own pass,
- *      with the source's brand as its header draws it, its own header and
- *      footer words as the footer's facts, and the site's menu order.
+ *   4. THE HEADER AND FOOTER, in the first wave: the source's own menu, its
+ *      menus, its buttons and its footer as its home page builds them
+ *      (AGL-4108, `aiSiteImportFrameSource`), drawn by the layout step with
+ *      no model; for a source whose menu could not be read, the layout
+ *      step's own pass, with the source's brand as its header draws it, its
+ *      own header and footer words as the footer's facts, and the site's
+ *      menu order.
  *   5. EACH PAGE: its photos into the media library (no model, deduped by
  *      source key), then the page step's own passes, NEVER REWRITTEN
  *      (AGL-4084, `ai-site-import-document.ts`): a collection's page or a
@@ -73,6 +77,7 @@ import {
   AI_SITE_IMPORT_MAX_PAGES,
   AI_SITE_IMPORT_MIN_WORDS,
   AI_SITE_IMPORT_WAVE_PAGES,
+  aiSiteImportFrameIsRead,
   aiSiteImportInventory,
   aiSiteImportItemOpen,
   aiSiteImportLedger,
@@ -98,7 +103,7 @@ import {
 } from '../model/ai-site-import'
 import { aiModelForStep } from '../providers/routing'
 import { SITE_IMPORT_RELEASE_FLAG } from '../site-import/site-import-flag'
-import { crawlSiteForImport, type SiteImportCrawlSeams, type SiteImportInventory } from '../site-import/site-import-crawl'
+import { crawlSiteForImport, siteImportOrigins, type SiteImportCrawlSeams, type SiteImportInventory } from '../site-import/site-import-crawl'
 import { bringInSiteImportPhotos, type SiteImportPhotosDeps } from '../site-import/site-import-images'
 import {
   siteImportHeaderBrand,
@@ -111,11 +116,13 @@ import {
   siteImportSiteName,
 } from '../site-import/site-import-page'
 import { aiSiteKindFor } from '../model/ai-site-kinds'
-import { AI_LAYOUT_SITE_BRAND_INPUT, AI_LAYOUT_SITE_FACTS_INPUT } from './ai-job-layout-language'
-import { AI_LAYOUT_IMPORTED_SECTIONS_INPUT, aiSiteImportDocLines, type AiSiteImportDocument } from './ai-site-import-document'
+import { AI_LAYOUT_SITE_BRAND_INPUT, AI_LAYOUT_SITE_FACTS_INPUT, AI_LAYOUT_SITE_FRAME_INPUT } from './ai-job-layout-language'
+import { aiLayoutTelHref, type AiLayoutFrameSource, type AiLayoutFrameSourceGround, type AiLayoutFrameSourceTo } from '../layout-language/ai-layout-frame-source'
+import { aiHexOklch } from '../model/ai-site-look'
+import { AI_LAYOUT_IMPORTED_SECTIONS_INPUT, type AiSiteImportDocument } from './ai-site-import-document'
+import { aiSiteImportSectionNames } from './ai-site-import-compile'
 import { aiRunSiteImportLook, type AiSiteImportLookDeps } from './ai-site-import-look'
 import { aiPublishImportedWave } from './ai-site-import-publish'
-import { fileSiteImportReview } from '../site-import/site-import-review'
 import { aiUnitErrorRetryable, aiUnitFailure, aiUnitSpend } from './ai-build-unit-outcome'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
 import { AI_JOB_STEP_OVERHEAD_MS } from './ai-job-budget'
@@ -215,7 +222,6 @@ export interface AiSiteImportStepDeps {
   fetchImage?: SiteImportPhotosDeps['fetch']
   readRoom?: typeof readAiScreenRoom
   readSiteName?: (firestore: FirebaseFirestore.Firestore, hostId: string) => Promise<string>
-  fileReview?: typeof fileSiteImportReview
   pageWritten?: typeof aiSitePageWritten
   mintId?: () => string
   clock?: () => number
@@ -329,6 +335,121 @@ function aiSiteImportDesignInputs(state: AiSiteImportState): Record<string, unkn
   }
 }
 
+/**
+ * Where a link of the source's header or footer goes on the new site
+ * (AGL-4108): a page the import brings in by its id, once its wave is the
+ * header's or before it; a page of a later wave by its address on the new
+ * site, which the page takes when its wave lands, since a link by id to a
+ * page not yet live is taken out when a wave goes live; and anywhere else by
+ * the source's own address, so a button that leaves the source leaves the
+ * new site too. `null` for an address no link may carry.
+ */
+export function aiSiteImportFrameLinkTo(state: Pick<AiSiteImportState, 'domain' | 'pages'>, wave: number): (href: string | null | undefined) => AiLayoutFrameSourceTo | null {
+  const origins = new Set(siteImportOrigins(state.domain))
+  const key = (path: string) => path.replace(/\/+$/, '') || '/'
+  const pages = new Map(state.pages.filter((page) => !page.refused).map((page) => [key(page.path), page]))
+  return (href) => {
+    const raw = String(href ?? '').trim()
+    if (!raw) return null
+    if (/^tel:/i.test(raw)) return aiLayoutTelHref(raw.slice(4))
+    if (/^mailto:/i.test(raw)) return /^mailto:[^\s@<>?#"]+@[^\s@<>?#"]+\.[^\s@<>?#".]{2,}$/i.test(raw) ? raw : null
+    let url: URL
+    try {
+      url = new URL(raw)
+    } catch {
+      return null
+    }
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return null
+    if (origins.has(`https://${url.host}`)) {
+      const page = pages.get(key(decodeURIComponent(url.pathname)))
+      if (page) return page.slug === '/' || page.wave <= wave ? `page:${page.draftId}` : `/${page.slug}`
+    }
+    // Anywhere else stays where the source sends it, over https.
+    url.protocol = 'https:'
+    return url.toString()
+  }
+}
+
+/** The ground a source's header bar sits on (AGL-4108): dark, the brand's color, the page's own, or paper. */
+export function aiSiteImportHeaderGround(background: string | null, look: AiSiteImportHome['look']): AiLayoutFrameSourceGround {
+  const hex = /^#[0-9a-f]{6}$/i.test(background ?? '') ? (background as string) : null
+  if (!hex) return 'paper'
+  const own = aiHexOklch(hex)
+  if (own.L < 0.4) return 'dark'
+  const near = (other: string | null | undefined, within: number) => {
+    if (!other || !/^#[0-9a-f]{6}$/i.test(other)) return false
+    const them = aiHexOklch(other)
+    const a = own.C * Math.cos((own.h * Math.PI) / 180) - them.C * Math.cos((them.h * Math.PI) / 180)
+    const b = own.C * Math.sin((own.h * Math.PI) / 180) - them.C * Math.sin((them.h * Math.PI) / 180)
+    return Math.hypot(own.L - them.L, a, b) <= within
+  }
+  if (near(look?.buttonFill, 0.05)) return 'brand'
+  // The page's own ground, unless that ground is white, which paper is.
+  if (near(look?.background, 0.02) && own.L < 0.99) return 'page'
+  return 'paper'
+}
+
+/**
+ * The site's header and footer as the source builds them (AGL-4108): its
+ * menu with its menus and their entries, its buttons with their own
+ * addresses and how they are drawn, and its footer, every link resolved
+ * (`aiSiteImportFrameLinkTo`). Every label is the source's, as written.
+ * `null` where the reader found no menu on the home page.
+ */
+export function aiSiteImportFrameSource(state: AiSiteImportState, wave: Pick<AiSiteImportWave, 'index'>): AiLayoutFrameSource | null {
+  const home = state.home
+  const nav = home?.nav
+  if (!home || !nav || !aiSiteImportFrameIsRead(state)) return null
+  const to = aiSiteImportFrameLinkTo(state, wave.index)
+  const link = (label: string, href: string | null | undefined) => {
+    const target = to(href)
+    return label && target ? { label, to: target } : null
+  }
+  const present = <T,>(value: T | null): value is T => value !== null
+  const footer = home.footer ?? null
+  return {
+    nav: nav.items
+      .map((group) => ({
+        label: group.label,
+        to: to(group.href),
+        items: group.items
+          .map((entry) => {
+            const target = link(entry.label, entry.href)
+            if (!target) return null
+            return {
+              ...target,
+              ...(entry.text ? { text: entry.text } : {}),
+              // The icon element draws on a 24-unit square: an icon drawn on another is left out.
+              ...(entry.iconPath && (entry.viewBox ?? '0 0 24 24') === '0 0 24 24' ? { iconPath: entry.iconPath } : {}),
+              ...(entry.column ? { column: entry.column } : {}),
+            }
+          })
+          .filter(present),
+      }))
+      .filter((group) => group.items.length || group.to),
+    ctas: nav.ctas.map((cta) => {
+      const target = link(cta.label, cta.href)
+      return target ? { ...target, style: cta.style } : null
+    }).filter(present),
+    header: aiSiteImportHeaderGround(nav.background, home.look ?? null),
+    footer: footer
+      ? {
+          columns: footer.columns
+            .map((column) => ({ heading: column.heading, links: column.links.map((entry) => link(entry.label, entry.href)).filter(present) }))
+            .filter((column) => column.links.length),
+          links: footer.links.map((entry) => link(entry.label, entry.href)).filter(present),
+          text: footer.text,
+          social: footer.social.map((entry) => (/^https:\/\//i.test(entry.href) ? { label: entry.label, to: entry.href, network: entry.network } : null)).filter(present),
+          address: footer.address,
+          phone: footer.phone,
+          email: footer.email,
+          // The © line as the source writes it; where it writes none, the source's own name.
+          copyright: footer.copyright ?? (home.siteName ? `© ${home.siteName}` : null),
+        }
+      : null,
+  }
+}
+
 /** The header and footer's job: a layout of the site's brand, linking the wave's pages, in the layout language. */
 export function aiSiteImportFrameJob(job: AiJob, state: AiSiteImportState, wave: AiSiteImportWave, items: readonly AiJobItemLedger[]): AiJob {
   const draftId = state.frame?.draftId ?? `${job.$id}-${AI_SITE_IMPORT_FRAME_SLOT}`
@@ -343,7 +464,18 @@ export function aiSiteImportFrameJob(job: AiJob, state: AiSiteImportState, wave:
   const home = state.home ?? null
   const logo = state.look?.logo ?? null
   // The brand as the source's header draws it; with no logo in the library, its name.
-  const brand = home ? { ...(logo && home.brand.kind !== 'name-only' ? { logo: { src: logo.src } } : {}), name: !logo || home.brand.kind !== 'logo-only' } : null
+  // The logo is named as the source names it, never by the host's name (AGL-4108).
+  const withLogo = !!logo && !!home && home.brand.kind !== 'name-only'
+  const alt = home ? (home.brand.logo?.alt || home.siteName || home.brand.text).replace(/\s+/g, ' ').trim().slice(0, 120) : ''
+  const aspect = logo?.width && logo.height ? Math.round((logo.width / logo.height) * 1000) / 1000 : null
+  const brand = home
+    ? {
+        ...(withLogo ? { logo: { src: (logo as NonNullable<typeof logo>).src }, ...(alt ? { alt } : {}), ...(aspect ? { aspect } : {}) } : {}),
+        name: !logo || home.brand.kind !== 'logo-only',
+      }
+    : null
+  // The source's own menu, buttons and footer, drawn with no model (AGL-4108).
+  const source = aiSiteImportFrameSource(state, wave)
   return {
     ...job,
     $id: draftId,
@@ -360,6 +492,7 @@ export function aiSiteImportFrameJob(job: AiJob, state: AiSiteImportState, wave:
       [AI_LAYOUT_SITE_PAGES_INPUT]: aiSiteImportLinkedPages(state, items, wave.index),
       ...aiSiteImportDesignInputs(state),
       ...(brand ? { [AI_LAYOUT_SITE_BRAND_INPUT]: brand } : {}),
+      ...(source ? { [AI_LAYOUT_SITE_FRAME_INPUT]: source } : {}),
       // The source's own header and footer words, fenced where the prompt shows them (AGL-4084).
       ...(home ? { [AI_LAYOUT_SITE_FACTS_INPUT]: { url: home.url, description: home.description, lines: home.facts.lines } } : {}),
     },
@@ -378,9 +511,13 @@ export function aiSiteImportDocumentFor(state: AiSiteImportState, page: AiSiteIm
     url: page.url,
     blocks,
     photos: page.photos?.assets ?? [],
-    // Home's own links are words: a link home says home, which the source's words may not.
+    // Every page the import plans, in any wave (AGL-4107): a link to one still
+    // to come shows its words until it is live. Home's own links are words: a
+    // link home says home, which the source's words may not.
     links: state.pages.filter((entry) => entry.slug !== '/' && !entry.refused).map((entry) => ({ path: entry.path.replace(/\/+$/, '') || '/', id: entry.draftId })),
     origins: [`https://${state.domain}`, `https://www.${state.domain.replace(/^www\./, '')}`],
+    // How the source lays it out (AGL-4106), which the site compiler builds it from (AGL-4107).
+    ...(page.read?.layout ? { layout: page.read.layout } : {}),
   }
 }
 
@@ -392,8 +529,9 @@ export function aiSiteImportPageJob(
   items: readonly AiJobItemLedger[],
 ): AiJob {
   const doc = aiSiteImportDocumentFor(state, page)
-  // The page's sections are the source's own (AGL-4084): its opening, then one at each second-level heading.
-  const names = doc ? aiSiteImportDocLines(doc.blocks, doc.title).sections.map((section) => section.name) : page.read?.sections ?? []
+  // The page's sections are the source's own (AGL-4107): as its layout names
+  // them, else its opening and one at each second-level heading.
+  const names = doc ? aiSiteImportSectionNames(doc) : page.read?.sections ?? []
   const sections = (names.length ? names : ['Introduction']).map((name) => ({
     name: name.slice(0, AI_SITE_IMPORT_LABEL_MAX_CHARS),
     uses: [],
@@ -407,8 +545,9 @@ export function aiSiteImportPageJob(
     template: null,
     duplicateOf: null,
     nav: false,
-    seoTitle: page.title,
-    seoDescription: '',
+    // The source's own title and description, word for word (AGL-4107).
+    seoTitle: page.read?.meta?.title || page.title,
+    seoDescription: page.read?.meta?.description ?? '',
     sections,
     record: null,
     id: page.draftId,
@@ -481,6 +620,10 @@ export function aiSiteImportHomeOf(crawled: Pick<SiteImportInventory, 'pages'>):
       social: facts.social,
       address: facts.organization?.address ?? '',
     },
+    // The source's menu, footer and look as its home page builds them (AGL-4108).
+    ...(page.nav ? { nav: page.nav } : {}),
+    ...(page.footer ? { footer: page.footer } : {}),
+    ...(page.look ? { look: page.look } : {}),
   }
 }
 
@@ -585,7 +728,6 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
   const ingestOf = deps.ingest ?? pluginMediaIngest
   const readRoom = deps.readRoom ?? readAiScreenRoom
   const siteNameOf = deps.readSiteName ?? readSiteName
-  const fileReview = deps.fileReview ?? fileSiteImportReview
   const pageWritten = deps.pageWritten ?? aiSitePageWritten
   const mintId = deps.mintId ?? createResourceUid
   const clock = deps.clock ?? Date.now
@@ -605,8 +747,6 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
     const items = job.items ?? []
     const work = aiSiteImportNextWork(state, items)
     const nowIso = now.toISOString()
-    const review = (event: 'read' | 'wave-started' | 'wave-finished', next: AiSiteImportState, ledger: readonly AiJobItemLedger[], wave?: number) =>
-      fileReview(firestore, { orgId: job.orgId, hostId, jobId: job.$id, state: next, items: ledger, event, nowMs: now.getTime(), ...(wave !== undefined ? { wave } : {}) })
 
     /** Closes the wave when this pass settled its last row: the review, or the job's end after the last wave. */
     const closing = async (
@@ -633,7 +773,6 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
         console.error('ai site import: a wave could not be published into the preview', { orgId: job.orgId, jobId: job.$id, wave: wave.index, error })
       }
       const published = sitePublish ? { sitePublish } : {}
-      await review('wave-finished', closed, ledger, wave.index)
       const waiting = closed.waves.find((entry) => entry.index === wave.index)?.status === 'review'
       if (waiting) {
         const message = sitePublish?.published.length ? aiSiteImportPreviewMessage(closed, wave, sitePublish.published.length) : aiSiteImportWaveMessage(closed, ledger)
@@ -713,9 +852,7 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
       )
       const planned = { ...aiSiteImportWithBuilds(inventory, mainWords), home: aiSiteImportHomeOf(crawled) }
       const ledger = aiSiteImportLedger(planned)
-      const reviewId = await review('read', planned, ledger)
-      const next = { ...planned, reviewId }
-      return unspent({ items: ledger, siteImport: next, review: waveReview(aiSiteImportWaveMessage(next, ledger)) })
+      return unspent({ items: ledger, siteImport: planned, review: waveReview(aiSiteImportWaveMessage(planned, ledger)) })
     }
 
     if (!state) return unspent({ failure: AI_SITE_IMPORT_COPY.badDomain })
@@ -772,7 +909,6 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
         )
       }
       const started = aiSiteImportWithBuilds(aiSiteImportWaveStarted(state, wave.index, nowIso, reads))
-      await review('wave-started', started, ledger, wave.index)
       const running = started.waves.find((entry) => entry.index === wave.index) as AiSiteImportWave
       return closing(started, ledger, running, unspent({ items: ledger }))
     }

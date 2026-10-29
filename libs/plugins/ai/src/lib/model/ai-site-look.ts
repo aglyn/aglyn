@@ -23,6 +23,7 @@ import { DEFAULT_SITE_THEME } from '@aglyn/aglyn/app-utils/default-site'
 import type {
   HostTheme,
   HostThemeComponentOverride,
+  HostThemeFontCategory,
   HostThemeSchemeColors,
   HostThemeTypographyVariant,
   HostThemeTypographyVariantKey,
@@ -131,6 +132,35 @@ export interface AiSiteStyle {
    * pages move in its kind's mood.
    */
   motion?: AiSiteMotionStyle
+  /**
+   * A site brought in's own page ground (AGL-4108), `#rrggbb`: the color its
+   * source's pages sit on, where it is light enough for the theme's text.
+   * Absent, the ground is drawn as `ground` says.
+   */
+  page?: string
+  /**
+   * A site brought in's own type (AGL-4108): the families its source sets
+   * its body and its headings in, where the theme font catalog has them,
+   * loaded in place of the pairing's. The pairing still sets the weights and
+   * the scale they are drawn at. Absent on every other site, whose type is
+   * the pairing's alone.
+   */
+  sourceFonts?: { body: AiSiteSourceFont; heading: AiSiteSourceFont | null } | null
+}
+
+/** A family a site brought in is set in (AGL-4108), with the weights the catalog says it has. */
+export interface AiSiteSourceFont {
+  family: string
+  category: HostThemeFontCategory
+  /** The upright weights the family offers. */
+  weights: number[]
+}
+
+/** The weights of `wanted` a family offers, each the nearest it has where it lacks one. */
+export function aiSiteFontWeightsIn(wanted: readonly number[], offered: readonly number[]): number[] {
+  if (!offered.length) return [...new Set(wanted)].sort((a, b) => a - b)
+  const nearest = (weight: number) => offered.reduce((best, each) => (Math.abs(each - weight) < Math.abs(best - weight) ? each : best), offered[0] as number)
+  return [...new Set(wanted.map(nearest))].sort((a, b) => a - b)
 }
 
 /** What the model may choose, every field optional. */
@@ -591,7 +621,9 @@ export function aiSiteColors(style: AiSiteStyle): { light: HostThemeSchemeColors
     tinted: { L: 0.968, C: 0.02, h, paper: [0.994, 0.006] },
   }
   const ground = grounds[style.ground]
-  const background = aiOklchHex(ground.L, ground.C * groundChroma, ground.h)
+  // A site brought in keeps the ground its source's pages sit on (AGL-4108), where its text reads on it.
+  const own = style.page && /^#[0-9a-f]{6}$/i.test(style.page) && aiHexOklch(style.page).L >= 0.9 ? style.page.toLowerCase() : null
+  const background = own ?? aiOklchHex(ground.L, ground.C * groundChroma, ground.h)
   const paper = aiOklchHex(ground.paper[0], ground.paper[1] * groundChroma, ground.h)
 
   // The brand color: a button label reads on it, so it reads on the page too.
@@ -937,23 +969,28 @@ export function aiSiteTheme(style: AiSiteStyle, base: HostTheme): HostTheme {
     components: merged(base.components ?? {}, componentsFor(style)),
   }
   delete theme.darkScheme
-  const sameFamily = pairing.heading.family === pairing.body.family
+  // A site brought in is set in its source's own families (AGL-4108), at the
+  // weights the pairing draws with, as near as each family has them.
+  const headingWeights = [pairing.heading.weight, pairing.heading.sub]
+  const source = style.sourceFonts ?? null
+  const body = source?.body
+    ? { family: source.body.family, category: source.body.category, weights: aiSiteFontWeightsIn(pairing.body.weights, source.body.weights) }
+    : { family: pairing.body.family, category: pairing.body.category, weights: [...pairing.body.weights] }
+  const heading = source
+    ? source.heading
+      ? { family: source.heading.family, category: source.heading.category, weights: aiSiteFontWeightsIn(headingWeights, source.heading.weights) }
+      : { ...body, weights: aiSiteFontWeightsIn(headingWeights, source.body.weights) }
+    : { family: pairing.heading.family, category: pairing.heading.category, weights: [...new Set(headingWeights)].sort((a, b) => a - b) }
+  const sameFamily = heading.family.toLowerCase() === body.family.toLowerCase()
   theme = writeThemeFonts(theme, {
-    body: { family: pairing.body.family, category: pairing.body.category, weights: [...pairing.body.weights], source: 'google' },
-    heading: sameFamily
-      ? null
-      : {
-          family: pairing.heading.family,
-          category: pairing.heading.category,
-          weights: [...new Set([pairing.heading.weight, pairing.heading.sub])].sort((a, b) => a - b),
-          source: 'google',
-        },
+    body: { ...body, source: 'google' },
+    heading: sameFamily ? null : { ...heading, source: 'google' },
   })
-  // A pairing whose heading is the body family loads the heading weights too.
+  // A heading in the body's family loads the heading weights too.
   if (sameFamily && theme.fonts?.[0]) {
     theme.fonts[0] = {
       ...theme.fonts[0],
-      weights: [...new Set([...(theme.fonts[0].weights ?? []), pairing.heading.weight, pairing.heading.sub])].sort((a, b) => a - b),
+      weights: [...new Set([...(theme.fonts[0].weights ?? []), ...heading.weights])].sort((a, b) => a - b),
     }
   }
   if (!themeReads(theme)) {
@@ -961,4 +998,106 @@ export function aiSiteTheme(style: AiSiteStyle, base: HostTheme): HostTheme {
     theme = { ...theme, colorSchemes: DEFAULT_SITE_THEME.colorSchemes }
   }
   return theme
+}
+
+// ── A kind's first look (AGL-4049) ──────────────────────────────────────────
+
+/** The midpoint of a kind's first hue range, or `null` when it spans the whole wheel (any hue suits it). */
+function firstHueOf(hues: AiSiteKind['look']['hues']): number | null {
+  const [from, to] = hues?.[0] ?? [0, 360]
+  const span = from <= to ? to - from : 360 - from + to
+  if (span >= 360) return null
+  return Math.round(from + span / 2) % 360
+}
+
+/** A kind's first look as a built-in theme with a brand over it, and the style answers that say the same. */
+export interface AiSiteKindDefaultLook {
+  /** The `builtin` starter theme a site created in this style starts with. */
+  theme: {
+    kind: 'builtin'
+    base: string
+    brand: { light: Record<string, string>; dark?: Record<string, string> }
+    fonts: string | null
+  }
+  /** The same look as the AI start's style answers name it (`fp-starter-{kind}-ai`). */
+  answerStyle: {
+    base: string
+    hue?: number
+    ground: AiSiteGround
+    fonts: string | null
+    corners: AiSiteCorners
+    buttons: AiSiteButtons
+  }
+}
+
+/**
+ * A kind of site's FIRST look (AGL-4049), the one a site created in that
+ * style starts with and the one the platform's own starter listings carry:
+ * the kind's first base theme the deployment has (`starter`, or a built-in
+ * whose preset `known.presetIds` holds), its first font pairing the platform
+ * has, and a brand primary from the midpoint of its first hue range, colored
+ * as {@link aiSiteColors} colors one. A kind that suits any hue keeps the
+ * base's own colors. One derivation, so the style a person picks in Create
+ * site and the seeded `fp-starter-{kind}-base` listing look the same.
+ *
+ * Deterministic: no draw, the seed is the kind's id.
+ */
+export function aiSiteKindDefaultLook(
+  kind: AiSiteKind,
+  known: { presetIds: ReadonlySet<string>; pairingIds?: ReadonlySet<string> },
+): AiSiteKindDefaultLook {
+  const family = kind.look
+  const pairingIds = known.pairingIds ?? new Set(AI_SITE_FONT_PAIRINGS.map((pairing) => pairing.id))
+  const base =
+    family.bases.find((name) => name === 'starter' || known.presetIds.has(`theme-presets.${name}`)) ?? 'starter'
+  const fonts = family.fonts.find((id) => pairingIds.has(id)) ?? null
+  const hue = firstHueOf(family.hues)
+  const ground = family.grounds[0] as AiSiteGround
+  const corners = family.corners[0] as AiSiteCorners
+  const colors =
+    hue === null
+      ? null
+      : aiSiteColors({
+          v: 1,
+          kind: kind.id,
+          base,
+          seed: aiSiteSeed(kind.id),
+          hue,
+          accent: hue,
+          chroma: family.chroma,
+          ground,
+          fonts: fonts ?? '',
+          corners,
+          buttons: family.buttons,
+          // Not read by the colors; named so the style is whole.
+          cards: 'flat',
+          fields: 'outlined',
+          eyebrow: 'caps',
+          header: 'line',
+          headerAlign: 'start',
+          rhythm: 'calm',
+          headingScale: family.headingScale,
+          density: family.density,
+          brand: null,
+        })
+  const primary = (scheme: 'light' | 'dark') => {
+    const value = colors?.[scheme]?.primary
+    return value && typeof value === 'object' && typeof (value as { main?: unknown }).main === 'string'
+      ? (value as { main: string }).main
+      : null
+  }
+  const light = primary('light')
+  const dark = primary('dark')
+  const brand = light && dark ? { light: { primary: light }, dark: { primary: dark } } : { light: {} }
+  return {
+    theme: { kind: 'builtin', base, brand, fonts },
+    answerStyle: {
+      base,
+      ...(hue === null ? {} : { hue }),
+      ground,
+      fonts,
+      corners,
+      buttons: family.buttons,
+    },
+  }
 }

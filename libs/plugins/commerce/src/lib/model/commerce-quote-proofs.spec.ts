@@ -22,6 +22,7 @@ import {
   latestQuoteResponse,
   parseQuoteResponseInput,
   quoteProofChangeRefusal,
+  quoteProofInHistory,
   quoteRespondRefusal,
   startQuoteRevision,
   withQuoteProofAdded,
@@ -182,6 +183,30 @@ describe('startQuoteRevision', () => {
     // The next revision needs its own approval before a gated Pay comes back.
     const next = { ...started.order.quote, requireProofApproval: true, proofs: [proof('p2', 2)] }
     expect(quotePaymentBlockedByApproval(next)).toBe(true)
+  })
+})
+
+describe('quoteProofInHistory (AGL-4097)', () => {
+  it('finds a proof on the current revision, then in the earlier revisions’ snapshots', () => {
+    const started = startQuoteRevision(order({ proofs: [proof('p1')] }), BY)
+    if (!('snapshot' in started)) throw new Error('refused')
+    const quote = { ...started.order.quote, proofs: [proof('p2', 2)] } as OrderQuote
+    expect(quoteProofInHistory(quote, [started.snapshot], 'p2')).toEqual(proof('p2', 2))
+    expect(quoteProofInHistory(quote, [started.snapshot], 'p1')).toEqual(proof('p1'))
+    // Without the snapshots, only the current revision's.
+    expect(quoteProofInHistory(quote, [], 'p1')).toBeNull()
+  })
+
+  it('finds nothing for a removed proof, an empty id or a malformed snapshot', () => {
+    const removed = withQuoteProofRemoved(order({ proofs: [proof('p1'), proof('p2')] }), 'p2', BY)
+    if (!('order' in removed)) throw new Error('refused')
+    expect(quoteProofInHistory(removed.order.quote, [], 'p2')).toBeNull()
+    expect(quoteProofInHistory(removed.order.quote, [], '')).toBeNull()
+    expect(quoteProofInHistory(null, [null, {}, { proofs: 'nope' as never }], 'p1')).toBeNull()
+  })
+
+  it('reads a proof left on the quote from another revision as not on it', () => {
+    expect(quoteProofInHistory(order({ revision: 2, proofs: [proof('p1', 1)] }).quote, [], 'p1')).toBeNull()
   })
 })
 

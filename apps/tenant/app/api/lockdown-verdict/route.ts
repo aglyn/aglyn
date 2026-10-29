@@ -88,6 +88,7 @@ import {
   isHostInPreview,
   sitePreviewPaths,
 } from '@aglyn/aglyn/app-utils/site-preview'
+import { isHostInMaintenance } from '@aglyn/aglyn/app-utils/site-unavailable'
 import {
   firebaseAdmin,
   getDomainLockdown,
@@ -181,6 +182,7 @@ function lockedVerdict(
     siteOrigins?: string[]
     preview?: boolean
     previewPaths?: string[]
+    maintenance?: boolean
   },
 ): Response {
   const notice = lockdownNotice(state)
@@ -201,6 +203,7 @@ function lockedVerdict(
       siteOrigins: facts.siteOrigins ?? [],
       preview: facts.preview ?? false,
       previewPaths: facts.previewPaths ?? [],
+      maintenance: facts.maintenance ?? false,
       mode: lockdownMode(state),
       reason: state.reason,
       title: notice.title,
@@ -452,6 +455,18 @@ export async function GET(request: Request): Promise<Response> {
      */
     const preview = isHostInPreview(hostRes.host as never)
     const previewPaths = sitePreviewPaths(hostRes.host as never)
+    /**
+     * Maintenance mode (AGL-4110): an EIGHTH answer, so the middleware can send
+     * the 503 page as a 503. The loader already serves the page at every
+     * address; only the middleware can set the status, since a page has no
+     * status lever, and it runs ahead of the cache. Read with the loader's own
+     * predicate, so the status and the body agree on what "in maintenance"
+     * means.
+     *
+     * Same disclosure posture as preview: whether a public website is in
+     * maintenance is what every one of its addresses says.
+     */
+    const maintenance = isHostInMaintenance(hostRes.host as never)
     const state = resolveLockdown(
       {
         platform: await getPlatformLockdown(),
@@ -478,6 +493,7 @@ export async function GET(request: Request): Promise<Response> {
           siteOrigins,
           preview,
           previewPaths,
+          maintenance,
         },
         { status: 200 },
       )
@@ -496,6 +512,7 @@ export async function GET(request: Request): Promise<Response> {
       siteOrigins,
       preview,
       previewPaths,
+      maintenance,
     })
   } catch (error) {
     console.error('[lockdown-verdict] failed', error)

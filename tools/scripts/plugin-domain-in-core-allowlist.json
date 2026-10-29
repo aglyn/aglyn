@@ -251,6 +251,14 @@
       "why": "Aglyn's own console and docs surfaces, not a tenant feature: the consent default the operator's own tags start from (the console's analytics SDK, and a verbatim copy in the docs site), swapped with the operator identity on a self-host. Tenant sites answer to visitor-consent.ts and a vendor's adapter."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/site-styles.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "stays",
+      "why": "`'music'` here is a STYLE ID, not the music plugin: the Music & bands style a new site can start in (AGL-4049), one of the 21 kinds of site the AI start already offers (`AI_SITE_KINDS`, held to this list id for id by `ai-site-kinds.spec.ts`). The list is core's because every Create site door asks it before a site exists, the native apps included (the derived-values generator emits it), whether or not any plugin is installed; the look each style gives a site stays the AI plugin's, behind `core.site-style-looks`. The id is persisted on `hosts/{id}.starterChoice.kind` and on GA4, so renaming it would orphan every recorded choice."
+    },
+    {
       "path": "libs/aglyn/src/lib/foundation/definitions/contact.types.ts",
       "rules": [
         "domain-name"

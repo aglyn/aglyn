@@ -35,6 +35,9 @@ import {
 
 type GtagCall = [string, string, Record<string, unknown>]
 
+/** A site created from the starter in a style (AGL-4049). */
+const HOST_CREATED = { start: 'starter', starter_kind: 'trades', starter_listing: 'none' }
+
 function installGtag(): GtagCall[] {
   const calls: GtagCall[] = []
   ;(window as unknown as { gtag?: unknown }).gtag = (...args: unknown[]) => {
@@ -126,7 +129,7 @@ describe('analytics-events (AGL-1561)', () => {
         throw new Error('gtag exploded')
       })
 
-      expect(() => trackEvent('host_created', {})).not.toThrow()
+      expect(() => trackEvent('host_created', HOST_CREATED)).not.toThrow()
     })
 
     it('a throwing transport takes the event DOWN WITH IT — gtag is not a safety net', () => {
@@ -148,7 +151,7 @@ describe('analytics-events (AGL-1561)', () => {
         throw new TypeError("Cannot read properties of undefined (reading 'app')")
       })
 
-      trackEvent('host_created', {})
+      trackEvent('host_created', HOST_CREATED)
 
       expect(calls).toHaveLength(0)
     })
@@ -158,7 +161,7 @@ describe('analytics-events (AGL-1561)', () => {
       // unavailable, rather than registering one that cannot deliver.
       const calls = installGtag()
 
-      trackEvent('host_created', {})
+      trackEvent('host_created', HOST_CREATED)
 
       expect(calls).toHaveLength(1)
       expect(calls[0][1]).toBe('host_created')
@@ -574,7 +577,7 @@ describe('analytics-events (AGL-1561)', () => {
 
       // ...then the visitor grants consent and gtag appears.
       const calls = installGtag()
-      trackEvent('host_created', {})
+      trackEvent('host_created', HOST_CREATED)
 
       // Only the post-grant event exists. A queue that flushed here would
       // send hits carrying the pre-consent page and timestamp, which is the

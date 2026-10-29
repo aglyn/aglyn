@@ -33,9 +33,17 @@
  * A picked starter writes its pages, its layout and its theme in the same
  * transaction, routes every published page and names its Home the
  * placeholder.
+ *
+ * AGL-4049 · every create records what it was created with,
+ * `starterChoice`, in the host's own write: the one field the default and
+ * guided creates gained, updated in the pinned bytes below deliberately. A
+ * chosen style gives the default starter's pages that style's look, planned
+ * as a starter's built-in theme is.
  */
 
 import { DEFAULT_SITE_THEME, defaultSiteSeo } from '@aglyn/aglyn/app-utils/default-site'
+import { registerPluginThemePresets } from '@aglyn/aglyn/plugin-manager/plugin-theme-presets'
+import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 
 let mockUid = 0
 const mockNextUid = () => `uid-${++mockUid}`
@@ -102,7 +110,10 @@ function recordingFirestore(writes: Write[]) {
   }
 }
 
-async function claim(starter: unknown): Promise<{ writes: Write[]; hostId: string }> {
+async function claim(
+  starter: unknown,
+  extra: Record<string, unknown> = {},
+): Promise<{ writes: Write[]; hostId: string; starterChoice: unknown }> {
   const writes: Write[] = []
   mockUid = 0
   const result = await claimHostForOrg({
@@ -111,12 +122,26 @@ async function claim(starter: unknown): Promise<{ writes: Write[]; hostId: strin
     displayName: 'Royal Styles',
     subdomain: 'royal-styles',
     ...(starter === undefined ? {} : { starter: starter as never }),
+    ...extra,
   })
-  expect(result).toEqual({ allowed: true, hostId: 'uid-1' })
-  return { writes, hostId: 'uid-1' }
+  expect(result).toEqual({ allowed: true, hostId: 'uid-1', starterChoice: expect.any(Object) })
+  return { writes, hostId: 'uid-1', starterChoice: result.starterChoice }
 }
 
-/** The host document a create has always written, key order included. */
+/** What a site records it was created with (AGL-4049). */
+const choice = (patch: Record<string, unknown> = {}) => ({
+  listingId: null,
+  version: null,
+  kind: null,
+  mode: 'base',
+  start: 'starter',
+  ...patch,
+})
+
+/**
+ * The host document a create has always written, key order included, and
+ * the one field every create gained (AGL-4049): `starterChoice`, after `seo`.
+ */
 function defaultHostDoc(routed: boolean, homeId: string) {
   return {
     displayName: 'Royal Styles',
@@ -126,6 +151,8 @@ function defaultHostDoc(routed: boolean, homeId: string) {
     ...(routed ? { defaultHomeScreenId: homeId } : {}),
     theme: DEFAULT_SITE_THEME,
     seo: defaultSiteSeo('Royal Styles'),
+    // Born with the starter, it was started from it; born empty, for the AI start.
+    starterChoice: choice({ start: routed ? 'starter' : 'ai' }),
     enabledPlugins: [...NEW_SITE_ENABLED_PLUGINS],
     suspended: false,
     createdAt: 'ts',
@@ -281,5 +308,93 @@ describe('claimHostForOrg: a picked starter (AGL-4049)', () => {
       artifactType: 'siteStarter',
     })
     expect(writes[writes.length - 1]).toEqual(ORG_CLAIM)
+  })
+})
+
+describe('claimHostForOrg: what the site was created with (AGL-4049)', () => {
+  const BOOTSTRAP = {
+    id: 'theme-presets.bootstrap',
+    name: 'Bootstrap',
+    theme: { colorSchemes: { light: { primary: { main: '#0d6efd' } }, dark: { primary: { main: '#6ea8fe' } } } },
+  }
+  const LOOK = { kind: 'builtin', base: 'bootstrap', brand: { light: { primary: '#B3261E' } }, fonts: null }
+
+  beforeEach(() => {
+    resetPluginServicesForTests()
+    registerPluginThemePresets([BOOTSTRAP as never], { pluginId: 'themes' })
+  })
+
+  it('gives the default starter the chosen style\'s look, its pages unchanged, and records the style', async () => {
+    const { writes, starterChoice } = await claim(true, { style: { id: 'trades', theme: LOOK } })
+    const host = writes[0][1] as Record<string, unknown>
+    // The built-in picked as a preset, the style's brand as the override over it.
+    expect(host['themeSelection']).toEqual({ kind: 'preset', id: 'preset--theme-presets.bootstrap', name: 'Bootstrap' })
+    expect(host['theme']).toEqual(BOOTSTRAP.theme)
+    expect(JSON.stringify(host['themeOverride'])).toContain('#B3261E')
+    expect(host['starterChoice']).toEqual(choice({ kind: 'trades' }))
+    expect(starterChoice).toEqual(choice({ kind: 'trades' }))
+    // The default starter's documents, as ever: a Home page and a layout.
+    expect(writes.map(([path]) => path)).toEqual([
+      'hosts/uid-1',
+      'hosts/uid-1/screens/uid-2',
+      'hosts/uid-1/screens/uid-2/versions/uid-3',
+      'hosts/uid-1/layouts/uid-4',
+      'hosts/uid-1/layouts/uid-4/versions/uid-5',
+      'orgs/org-1',
+    ])
+  })
+
+  it('keeps the default theme for a style no plugin has a look for, and still records it', async () => {
+    const { writes } = await claim(true, { style: { id: 'yoga', theme: null } })
+    const host = writes[0][1] as Record<string, unknown>
+    expect(host['theme']).toEqual(DEFAULT_SITE_THEME)
+    expect(host).not.toHaveProperty('themeOverride')
+    expect(host['starterChoice']).toEqual(choice({ kind: 'yoga' }))
+  })
+
+  it('records a guided start\'s style, its look left to the start', async () => {
+    const { writes } = await claim(false, { style: { id: 'auto', theme: null } })
+    const host = writes[0][1] as Record<string, unknown>
+    expect(host['theme']).toEqual(DEFAULT_SITE_THEME)
+    expect(host['starterChoice']).toEqual(choice({ kind: 'auto', start: 'ai' }))
+  })
+
+  it('records how every other create was started', async () => {
+    const host = async (starter: unknown, extra: Record<string, unknown>) =>
+      (await claim(starter, extra)).writes[0][1] as Record<string, unknown>
+    expect((await host(undefined, { start: 'api' }))['starterChoice']).toEqual(choice({ start: 'api' }))
+    expect((await host(false, { start: 'import' }))['starterChoice']).toEqual(choice({ start: 'import' }))
+  })
+
+  it('records a picked starter\'s listing, version, kind and mode', async () => {
+    const { writes } = await claim({
+      payload: {
+        mode: 'base',
+        facets: { kind: 'trades', base: 'starter', fonts: null, pages: 1, mode: 'base' },
+        theme: { kind: 'builtin', base: 'starter', brand: { light: {} }, fonts: null },
+        screens: [{ displayName: 'Home', slug: '/', nodes: {} }],
+        layout: { displayName: 'Header and footer', nodes: {}, props: [] },
+      },
+      listing: { listingId: 'listing-1', version: 3, displayName: 'Starter' },
+    })
+    expect((writes[0][1] as Record<string, unknown>)['starterChoice']).toEqual(
+      choice({ listingId: 'listing-1', version: '3', kind: 'trades' }),
+    )
+  })
+
+  it('records the kind the listing names over the stored pages’ own (AGL-4049 lane 3)', async () => {
+    const { writes } = await claim({
+      payload: {
+        mode: 'base',
+        facets: { kind: null, base: 'starter', fonts: null, pages: 1, mode: 'base' },
+        theme: { kind: 'builtin', base: 'starter', brand: { light: {} }, fonts: null },
+        screens: [{ displayName: 'Home', slug: '/', nodes: {} }],
+        layout: { displayName: 'Header and footer', nodes: {}, props: [] },
+      },
+      listing: { listingId: 'listing-1', version: 3, displayName: 'Corner bistro', kind: 'restaurant' },
+    })
+    expect((writes[0][1] as Record<string, unknown>)['starterChoice']).toEqual(
+      choice({ listingId: 'listing-1', version: '3', kind: 'restaurant' }),
+    )
   })
 })

@@ -218,6 +218,8 @@ async function answerTo(target: Exclude<QuestionStep, 'kind'>, siteType = 'a nei
     pressNext()
     await onStep(step)
     if (step === target) return
+    // Nothing is chosen for a person (AGL-4049): the walk clicks "Pick for me".
+    if (step === 'style') fireEvent.click(pickForMe())
   }
 }
 
@@ -624,10 +626,16 @@ describe('the questions become a site scaffold', () => {
     pressNext()
     await onStep('style')
     AI_SITE_KINDS.forEach((_kind, index) => expect(kindCard(index)).toBeTruthy())
-    // "Pick for me" is picked until the person picks a style, and names the one
-    // the answer suggests (AGL-3660, AGL-3898).
-    expect(pickForMe().getAttribute('aria-checked')).toBe('true')
+    // Nothing is chosen until the person clicks a card (AGL-4049): not a
+    // style, and not "Pick for me", which names the one the answer suggests
+    // (AGL-3660, AGL-3898).
+    expect(pickForMe().getAttribute('aria-checked')).toBe('false')
+    AI_SITE_KINDS.forEach((_kind, index) => expect(kindCard(index).getAttribute('aria-checked')).toBe('false'))
     expect(pickForMe().getAttribute('aria-label')).toBe('Pick for me: From your answer: Home services & trades')
+    // Next does not go forward without one, and says why.
+    pressNext()
+    expect(await screen.findByText('Choose a style, or Pick for me.')).toBeTruthy()
+    await onStep('style')
     fireEvent.click(kindCard(0))
     expect(kindCard(0).getAttribute('aria-checked')).toBe('true')
     expect(pickForMe().getAttribute('aria-checked')).toBe('false')
@@ -1066,11 +1074,36 @@ describe('step 1: how the site starts (AGL-3594)', () => {
     expect(screen.queryByLabelText(/What kind of site are you creating\?/)).toBeNull()
   })
 
-  it('takes the starter site through the zone’s startBlank, once', async () => {
+  it('takes the starter site through the zone’s startBlank, once, in the style chosen (AGL-4049)', async () => {
     await openChoice()
     fireEvent.click(screen.getByRole('button', { name: 'Start from the starter site' }))
-    expect(mockStartBlank).toHaveBeenCalledTimes(1)
     expect(mockTrack).toHaveBeenCalledWith('site_start_choice', { choice: 'starter' })
+    // It asks a style first, with nothing chosen and nothing started.
+    expect(await screen.findByRole('heading', { level: 1, name: 'Choose a style' })).toBeTruthy()
+    expect(mockStartBlank).not.toHaveBeenCalled()
+    AI_SITE_KINDS.forEach((_kind, index) => expect(kindCard(index).getAttribute('aria-checked')).toBe('false'))
+    // No "Pick for me" here: the starter has no answers to pick from.
+    expect(screen.queryByRole('radio', { name: /^Pick for me/ })).toBeNull()
+    const use = screen.getByRole('button', { name: 'Use this style' })
+    expect((use as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(use)
+    expect(mockStartBlank).not.toHaveBeenCalled()
+    const trades = AI_SITE_KINDS.findIndex((kind) => kind.id === 'trades')
+    fireEvent.click(kindCard(trades))
+    expect(kindCard(trades).getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: 'Use this style' }))
+    expect(mockStartBlank).toHaveBeenCalledTimes(1)
+    expect(mockStartBlank).toHaveBeenCalledWith({ style: 'trades' })
+  })
+
+  it('goes Back from the style to the choice, starting nothing', async () => {
+    await openChoice()
+    fireEvent.click(screen.getByRole('button', { name: 'Start from the starter site' }))
+    await screen.findByRole('heading', { level: 1, name: 'Choose a style' })
+    fireEvent.click(kindCard(0))
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    expect(await screen.findByText('How do you want to start?')).toBeTruthy()
+    expect(mockStartBlank).not.toHaveBeenCalled()
   })
 
   it('takes AI to the questions, and Back returns to the choice', async () => {
@@ -1330,13 +1363,56 @@ describe('before the site exists (AGL-3761)', () => {
     expect(screen.getByText('How do you want to start?')).toBeTruthy()
   })
 
-  it('takes the starter through startBlank, and frees the card when the shell could not create it', async () => {
+  it('takes the starter through startBlank in the style chosen, and frees the card when the shell could not create it', async () => {
     mockStartBlank.mockResolvedValueOnce(false)
     await openChoice(pendingProps(pendingSite()))
-    const starter = screen.getByRole('button', { name: 'Start from the starter site' })
-    fireEvent.click(starter)
+    fireEvent.click(screen.getByRole('button', { name: 'Start from the starter site' }))
+    await screen.findByRole('heading', { level: 1, name: 'Choose a style' })
+    // Nothing is chosen, and Create site waits for a style (AGL-4049).
+    const create = screen.getByRole('button', { name: 'Create site' }) as HTMLButtonElement
+    expect(create.disabled).toBe(true)
+    expect(screen.getByText('Choose a style to continue.')).toBeTruthy()
+    fireEvent.click(create)
+    expect(mockStartBlank).not.toHaveBeenCalled()
+    const yoga = AI_SITE_KINDS.findIndex((kind) => kind.id === 'yoga')
+    fireEvent.click(kindCard(yoga))
+    fireEvent.click(screen.getByRole('button', { name: 'Create site' }))
     expect(mockStartBlank).toHaveBeenCalledTimes(1)
+    expect(mockStartBlank).toHaveBeenCalledWith({ style: 'yoga' })
+    // The shell could not: back on step 1, where the name and address are.
+    expect(await screen.findByText('How do you want to start?')).toBeTruthy()
+    const starter = screen.getByRole('button', { name: 'Start from the starter site' })
     await waitFor(() => expect(starter.getAttribute('aria-busy')).toBeNull())
+  })
+
+  it('hands the starter path to the shell’s Choose your starter where it is offered, asking no style itself (AGL-4049 lane 3)', async () => {
+    const chooseStarter = jest.fn()
+    await openChoice({ ...pendingProps(pendingSite()), chooseStarter })
+    // Its words say where the starters come from.
+    const starter = screen.getByRole('button', { name: 'Start from a starter site' })
+    expect(screen.getByText('A ready-made website from the marketplace, in a style you choose.')).toBeTruthy()
+    fireEvent.click(starter)
+    expect(chooseStarter).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('heading', { level: 1, name: 'Choose a style' })).toBeNull()
+    expect(mockStartBlank).not.toHaveBeenCalled()
+  })
+
+  it('asks the style itself where the shell offers no picker (AGL-4049 lane 3)', async () => {
+    await openChoice(pendingProps(pendingSite()))
+    expect(screen.queryByRole('button', { name: 'Start from a starter site' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Start from the starter site' }))
+    expect(await screen.findByRole('heading', { level: 1, name: 'Choose a style' })).toBeTruthy()
+  })
+
+  it('has no Skip before the site exists, and its style view closes with nothing created (AGL-4049)', async () => {
+    await openChoice(pendingProps(pendingSite()))
+    expect(screen.queryByRole('button', { name: 'Skip and start blank' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Start from the starter site' }))
+    await screen.findByRole('heading', { level: 1, name: 'Choose a style' })
+    expect(screen.queryByRole('button', { name: 'Skip and start blank' })).toBeNull()
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape', code: 'Escape' })
+    expect(leave).toHaveBeenCalledTimes(1)
+    expect(mockStartBlank).not.toHaveBeenCalled()
   })
 
   it('creates the site on Plan my site, then starts the job on it and opens its build page', async () => {
@@ -1352,6 +1428,8 @@ describe('before the site exists (AGL-3761)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
     await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/acme/hosts/royal-styles/ai-jobs/job-1'))
     expect(site.create).toHaveBeenCalledTimes(1)
+    // With the style card the questions took, "Pick for me", for the site to record (AGL-4049).
+    expect(site.create).toHaveBeenCalledWith({ style: 'auto' })
     // Checked first, with no site yet (AGL-3859), then started on the site made.
     expect(checkCalls()).toHaveLength(1)
     expect(JSON.parse(checkCalls()[0][1].body)).toEqual(expect.objectContaining({ hostId: null, kind: 'site', check: true }))
@@ -1613,6 +1691,7 @@ describe('the job’s inputs are unchanged by the steps (AGL-3898)', () => {
     for (const step of ['audience', 'style', 'details', 'review'] as const) {
       pressNext()
       await onStep(step)
+      if (step === 'style') fireEvent.click(pickForMe())
     }
     const body = await plannedBody()
     expect(body.inputs.businessType).toBe('a restaurant or cafe')
@@ -1807,6 +1886,7 @@ describe('the business details a start may be given (AGL-3979)', () => {
       const more = screen.getByRole('button', { name: /More details/ })
       expect(more.getAttribute('aria-expanded')).toBe('false')
       if (step === 'kind') typeAnswer(/What kind of site are you creating\?/, 'a family plumbing company')
+      if (step === 'style') fireEvent.click(pickForMe())
       pressNext()
     }
     await onStep('review')

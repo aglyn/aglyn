@@ -9,6 +9,76 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.293 — 2026-10-29
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.292...v1.0.0-beta.293)
+
+### Added
+
+- **ai:** an imported header is the source's menu, menus and buttons, drawn with no model ([AGL-4108](https://linear.app/aglyn/issue/AGL-4108))
+- **ai:** build every imported page through the site compiler ([AGL-4107](https://linear.app/aglyn/issue/AGL-4107))
+- **console:** offer Choose your starter only where its picker has starters to show ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **console:** Choose your starter in Create site, the create from it, the way back ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **marketplace:** the starter seed carries each style's picture and name ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **native:** seller and publish screens tick the publisher agreement ([AGL-4105](https://linear.app/aglyn/issue/AGL-4105))
+- **marketplace:** an agreement box above every publisher save button ([AGL-4105](https://linear.app/aglyn/issue/AGL-4105))
+- **marketplace:** every publisher route requires and records the agreement ([AGL-4105](https://linear.app/aglyn/issue/AGL-4105))
+- **ai:** Bring my site reads the source's layout, menu and footer ([AGL-4106](https://linear.app/aglyn/issue/AGL-4106), [AGL-4109](https://linear.app/aglyn/issue/AGL-4109))
+- **console:** Create site asks a style before it creates anything ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **marketplace:** starter search route, query model and Create site shelf ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **permissions:** datasets ask Manage data alone, in routes and rules ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **native:** Year founded in a site's Business profile, checked by the console's rule ([AGL-4102](https://linear.app/aglyn/issue/AGL-4102))
+- **permissions:** the delivery register asks the POS keys alone ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+
+### Fixed
+
+- **console:** /signin holds the auth layout until a new Google account's consent bounce has run ([AGL-4113](https://linear.app/aglyn/issue/AGL-4113), [AGL-1497](https://linear.app/aglyn/issue/AGL-1497), [AGL-3578](https://linear.app/aglyn/issue/AGL-3578))
+- **native:** the Mac card's hairline takes no clicks, so Delete site opens its confirm ([AGL-4112](https://linear.app/aglyn/issue/AGL-4112), [AGL-4113](https://linear.app/aglyn/issue/AGL-4113))
+- **marketplace:** read the measurement id by name so the browser bundle gets it ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **console:** the sign-up page claims provisioning before it creates, so a second tab's backstop stands down ([AGL-4079](https://linear.app/aglyn/issue/AGL-4079))
+- **ai:** the import's look reads past our edge and wears the source's colors and font ([AGL-4108](https://linear.app/aglyn/issue/AGL-4108))
+- **marketplace:** the registered starter source answers describe too ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **marketplace:** agreement acceptances take a platform-minted id ([AGL-4105](https://linear.app/aglyn/issue/AGL-4105))
+- **marketplace:** a publisher agreement acceptance is named by a platform id ([AGL-4105](https://linear.app/aglyn/issue/AGL-4105))
+- **ai:** a page's layout is a value the Firestore job document holds ([AGL-4106](https://linear.app/aglyn/issue/AGL-4106))
+- **ai:** the style look source imports core statically, and the guards know the style ids ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **ai:** photos refuse another city's street, keep a drink its own, show a team racing ([AGL-4092](https://linear.app/aglyn/issue/AGL-4092))
+- **apple:** emulator debug builds launch again, placeholder API key in a real key's shape ([AGL-4104](https://linear.app/aglyn/issue/AGL-4104))
+- **tenant:** site search and collection feeds close while a site is in maintenance ([AGL-4111](https://linear.app/aglyn/issue/AGL-4111), [AGL-4110](https://linear.app/aglyn/issue/AGL-4110))
+- **tenant:** maintenance mode and preview send the 503 page as an HTTP 503 ([AGL-4110](https://linear.app/aglyn/issue/AGL-4110))
+- **marketplace:** the starter card names the platform's own by its brand name ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **commerce:** a customer's unsent quote files are swept a day later ([AGL-4096](https://linear.app/aglyn/issue/AGL-4096))
+- **delivery-apps:** a sign-in check that breaks stays a 5xx, rethrown ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+
+### Changed
+
+- **ai:** a source's icon is admitted by the icon library's own path check ([AGL-4108](https://linear.app/aglyn/issue/AGL-4108), [AGL-4107](https://linear.app/aglyn/issue/AGL-4107))
+
+### Documentation
+
+- **console:** name the Figma section Choose your starter is drawn in, and refresh the Assist index ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **ai:** Bring my site brings your menu, buttons, footer, colors and font ([AGL-4108](https://linear.app/aglyn/issue/AGL-4108))
+- **console:** shoot Choose your starter on the seeded emulator, its starters listed for the shot ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **guides:** the newsletter band example offers product news, not early-access news
+- **console:** Choose a style shot, and the AI Style step reshot with nothing chosen ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **delivery-apps:** the register keys that take delivery orders ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+
+<details>
+<summary>Also in this release: 8 test</summary>
+
+- **tenant:** declare Bring my site's compiler and frame source in the image-sink inventory ([AGL-1725](https://linear.app/aglyn/issue/AGL-1725), [AGL-4107](https://linear.app/aglyn/issue/AGL-4107))
+- **ai:** the import compile over the recorded pages; listing, card copy and guide ([AGL-4107](https://linear.app/aglyn/issue/AGL-4107))
+- **ai:** classify the layout reader's image fields and its aglyn.com fixture origin ([AGL-4106](https://linear.app/aglyn/issue/AGL-4106))
+- **console:** the client build screen expects the starter's style option ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **console:** the client build screen's starter call carries its style option ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **console:** the client build's starter call carries the style it was given ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **ai:** pin the layout, menu and stylesheet readers over recorded pages ([AGL-4106](https://linear.app/aglyn/issue/AGL-4106))
+- **marketplace:** classify main's starter search route as no publisher save ([AGL-4105](https://linear.app/aglyn/issue/AGL-4105))
+
+</details>
+
+5 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
 ## v1.0.0-beta.292 — 2026-10-29
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.291...v1.0.0-beta.292)

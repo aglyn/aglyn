@@ -120,6 +120,17 @@ func payoutsButton(_ readiness: PayoutReadiness) -> String {
   }
 }
 
+/// The Marketplace Publisher Agreement a save agrees to (AGL-4105), sent as the console sends it, `{ version, accepted: true }`.
+/// A seller screen makes one only once its box is ticked, and each save makes its own.
+struct PublisherAgreementConsent: Equatable {
+  let version: String
+
+  /// The version in force, as the contracts carry the console's `PUBLISHER_AGREEMENT_VERSION`.
+  static var current: PublisherAgreementConsent { PublisherAgreementConsent(version: ContractValues.shared.publisherAgreementVersion) }
+
+  var body: [String: Any] { ["version": version, "accepted": true] }
+}
+
 /// What `/api/marketplace/connect` answers.
 struct ConnectAnswer: Equatable {
   let chargesEnabled: Bool
@@ -134,8 +145,8 @@ struct SellerAPI {
   let orgID: String
 
   /// Saves the public profile; the handle is claimed on the server, so two workspaces cannot both win it.
-  func saveProfile(_ fields: [String: String]) async throws {
-    var body: [String: Any?] = ["orgId": orgID]
+  func saveProfile(_ fields: [String: String], agreement: PublisherAgreementConsent) async throws {
+    var body: [String: Any?] = ["orgId": orgID, "agreement": agreement.body]
     for (key, value) in fields { body[key] = value }
     try await api.request("/api/marketplace/publisher-profile", method: .post, body: JSONValue.from(body))
   }
@@ -148,23 +159,30 @@ struct SellerAPI {
       url: answer?["url"]?.stringValue, dashboardURL: answer?["dashboardUrl"]?.stringValue)
   }
 
-  func setVisibility(_ listingID: String, _ visibility: String) async throws {
+  func setVisibility(_ listingID: String, _ visibility: String, agreement: PublisherAgreementConsent) async throws {
     try await api.request(
       "/api/marketplace/publish-plugin", method: .post,
-      body: JSONValue.from(["action": "set-visibility", "listingId": listingID, "visibility": visibility]))
+      body: JSONValue.from([
+        "action": "set-visibility", "listingId": listingID, "visibility": visibility, "agreement": agreement.body,
+      ]))
   }
 
   /// Unpublishes, or republishes, a listing: server-side, because browse reads each listing's audience, which only the server derives.
-  func setPublished(_ listingID: String, published: Bool) async throws {
+  func setPublished(_ listingID: String, published: Bool, agreement: PublisherAgreementConsent) async throws {
     try await api.request(
       "/api/marketplace/publish-plugin", method: .post,
-      body: JSONValue.from(["action": "set-published", "listingId": listingID, "published": published]))
+      body: JSONValue.from([
+        "action": "set-published", "listingId": listingID, "published": published, "agreement": agreement.body,
+      ]))
   }
 
   /// The listing's words, links and screenshots; a field left out is left as it is, and so is the preview.
-  func updateListing(_ listingID: String, fields: [String: String], category: String, screenshots: [String]) async throws {
+  func updateListing(
+    _ listingID: String, fields: [String: String], category: String, screenshots: [String], agreement: PublisherAgreementConsent
+  ) async throws {
     var body: [String: Any?] = [
       "action": "update-listing", "listingId": listingID, "categories": category.isEmpty ? [String]() : [category], "screenshots": screenshots,
+      "agreement": agreement.body,
     ]
     for (key, value) in fields { body[key] = value }
     try await api.request("/api/marketplace/publish-plugin", method: .post, body: JSONValue.from(body))
@@ -172,11 +190,14 @@ struct SellerAPI {
 
   /// Sets the preview image to a file from the media library, or removes it when `url` is empty: the route of its own
   /// the console's editor calls, because the preview is not a content field.
-  func setPreviewImage(_ listingID: String, url: String) async throws {
+  func setPreviewImage(_ listingID: String, url: String, agreement: PublisherAgreementConsent) async throws {
     if url.isEmpty {
-      try await api.request("/api/marketplace/preview-image", method: .delete, body: JSONValue.from(["listingId": listingID]))
+      try await api.request(
+        "/api/marketplace/preview-image", method: .delete, body: JSONValue.from(["listingId": listingID, "agreement": agreement.body]))
     } else {
-      try await api.request("/api/marketplace/preview-image", method: .post, body: JSONValue.from(["listingId": listingID, "url": url]))
+      try await api.request(
+        "/api/marketplace/preview-image", method: .post,
+        body: JSONValue.from(["listingId": listingID, "url": url, "agreement": agreement.body]))
     }
   }
 }

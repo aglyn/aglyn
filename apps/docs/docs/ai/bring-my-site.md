@@ -1,7 +1,7 @@
 ---
 sidebar_position: 2.75
 title: Bring my site
-description: Bring the website you have now into Aglyn, its pages, words and photos, in waves you review and start yourself, once you have proved the site is yours.
+description: Bring the website you have now into Aglyn, every word as you wrote it, laid out as your pages are, in waves you review and start yourself, once you have proved the site is yours.
 ---
 
 # Bring my site
@@ -13,10 +13,11 @@ while how it reads and rebuilds your pages, and the steps on this page, may
 still change.
 :::
 
-**Bring my site** moves the website you have now into a new Aglyn site. Aglyn AI
-reads each of its pages and rewrites it in your new site's design, keeping its words,
-facts and photos. Pages come in a few at a time, in **waves**. You review each wave
-before you start the next.
+**Bring my site** moves the website you have now into a new Aglyn site. Each page keeps
+every word as you wrote it and is laid out as your page is: its sections and their
+backgrounds, its columns, cards, icons, pictures, tables and tabs, drawn with Aglyn's own
+elements in your site's look. Pages come in a few at a time, in **waves**, into your new
+site's preview. You review each wave before you start the next.
 
 It is included on every paid plan. On the Free plan the card is shown but turned off,
 with a link to upgrade.
@@ -68,7 +69,18 @@ Choose **Read my site**. Aglyn then:
   sitemap, then your home page, then every other page, and only on your own domain.
   Your current site is not changed.
 
+Aglyn reads up to 400 pages. A link to a file, such as a download or a PDF, is not a page,
+so it is never read as one and never counts toward that number.
+
 Reading uses no AI credits.
+
+**What is read.** For each page Aglyn reads its words and how your site lays them out: its
+sections and their background colors, its columns, its cards and the icons on them, its
+numbered steps, figures, questions and answers, quotes, logo strips, price cards, tables
+and tabs, its pictures where they sit, and which links your site shows as buttons. From
+your home page it also reads your menu, with each dropdown and its entries, the buttons
+beside it, and your footer's columns, profiles and copyright line, plus your site's fonts
+and colors. Your new pages are built from this, with every word as you wrote it.
 
 **Your home page comes first.** If AglynBot cannot read your home page, nothing is
 planned and no AI credits are used. The import waits and says why:
@@ -98,6 +110,7 @@ Each page left out is listed under one of these reasons:
 - **Turned away by your site's bot protection or firewall.** See
   [When your site turns AglynBot away](#turned-away).
 - **Not reached.** The read stopped before it got to the page.
+- **A file, not a page.** The link led to a file, such as a PDF, rather than a page.
 - **No text could be read.** The page shows its words only once a browser runs it, so it
   cannot be brought in yet.
 - **Could not be read just now**, **a sign-in page**, **robots.txt asks AglynBot not to
@@ -110,26 +123,43 @@ top. You can still start the first wave.
 
 - **The first wave** brings in your main pages: home, then the pages in your menu,
   then your other top-level pages. Before any page, it gives your new site your current
-  site's look: your colors, read from your home page, on one of Aglyn's built-in themes,
-  with type in the same style as yours. If you already chose a theme for the new site, it
-  is kept. The first wave also builds your header and footer: your logo, your name, or both,
-  as your current site's header shows them, your menu linking your pages, and the address,
-  phone, email and profiles your current header and footer show. Your home page's title and
-  description become your new site's search listing, unless you already changed it.
+  site's look, on one of Aglyn's built-in themes: your buttons' color as its main color and
+  your links' color beside it, your pages' background color, the rounding of your buttons,
+  and your own font when Google Fonts has it, or a font in the same style when it does not.
+  Colors are kept readable, so a color too light for white words is used a shade deeper. If
+  you already chose a theme for the new site, it is kept.
+- **Your header and footer** come in with the first wave, as your current site shows them:
+  your logo, your name, or both; your menu, each dropdown as a **Dropdown Menu** or a
+  **Mega Menu** with its entries, their icons and the line under each; and your buttons,
+  such as **Sign in** or **Start free**, going where they go now. Every label stays on one
+  line, and on a screen too narrow for the whole menu it becomes a menu button that opens
+  every menu and button. Your footer keeps its columns and headings, its profiles, its
+  address, phone and email, and its copyright line as written. When your menu can be read,
+  the header and footer use no AI credits. See
+  [Menus & navigation](../building-sites/menus-and-navigation/overview.md) to change them
+  later. Your home page's title and description become your new site's search listing,
+  unless you already changed it.
 - **Each later wave** brings in up to 10 pages of one collection, for example
   **Blog, 1 of 3**.
 - **Never past your plan.** Your main pages are kept first. If your site has more pages
   than your plan allows, the last pages of your collections are the ones left out, each
   listed with **Past your plan's page count**. **See plans** opens Billing.
 
-Your words are never rewritten. Each page is built one of two ways, and the wave's row for
-the page says which:
+Your words are never rewritten. Every page is laid out as your page is: its sections in
+their own backgrounds, its columns, its cards with their icons and links, its numbered
+steps, figures, questions and answers, quotes, logo strips, price cards, tables and tabs,
+and its pictures where your page shows them. Each heading, paragraph, list, link and button
+keeps the words your page has, and every link goes to the page it went to: to that page on
+your new site, once it is in. Each page also keeps your page's own title and description as
+its search listing.
 
-- **Copied as it is**: a page of a collection, such as a blog post or a policy, and any
-  long page. Every heading, paragraph, list and link comes in, in order, laid out in your
-  new site's theme.
-- **Arranged by Aglyn AI**: your main pages. Aglyn AI chooses how each section is laid
-  out, such as its columns and background, and every line keeps the words your page has.
+Each page is built one of two ways, and the wave's row for the page says which:
+
+- **Copied as it is**: a page of a collection, such as a blog post or a policy. It is laid
+  out as your page is, in your new site's look, with no AI.
+- **Arranged by Aglyn AI**: your main pages. They are laid out as your pages are, and
+  Aglyn AI chooses only their finish: how the first section opens around its picture, how
+  each group of cards is drawn, and a background where your page has none.
 
 To start a wave, choose its **Start** button, for example **Start Main pages**. Each wave
 shows its cost before you start it, and how many of its pages are arranged and how many are
@@ -181,7 +211,8 @@ the next wave's **Start** button. Nothing starts the next wave except you, unles
 **Start every remaining wave**.
 
 **Cancel** stops the import. The pages already brought in stay where they are: in the
-preview, or as drafts.
+preview, or as drafts. Under **Every wave**, a wave that was running reads **stopped**, and a
+wave that had not started reads **not started**.
 
 ## Photos {#photos}
 
@@ -197,7 +228,9 @@ your new site's share image unless you already chose one.
 
 - **Sign-in pages.** A page that asks for a password is left out, and so is a page AglynBot
   is asked not to read by robots.txt.
-- **Code and forms.** Scripts, embedded frames and forms are never brought in.
+- **Code and forms.** Scripts, embedded frames and forms are never brought in. Where your
+  page had a form and your new site already has one saved form, that form is placed where
+  your page had its own.
 - **Other websites.** Only pages on your own domain are read. A page that sends visitors to
   another website is left out.
 
@@ -214,7 +247,6 @@ your new site's share image unless you already chose one.
   planned and no AI credits were used. Fix what the page names, then choose **Check again**.
 - **Out of AI credits.** The import pauses. Choose **Get more AI credits**, then **Resume**.
 
-Every import is also logged for the Trust & Safety team's review.
 
 ## When your site turns AglynBot away {#turned-away}
 

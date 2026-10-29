@@ -31,7 +31,9 @@
  *   labelled `text/html` is nothing;
  * - where its bytes live ({@link visitorUploadPendingPath} while it is on its
  *   way, {@link visitorUploadFinalPath} once it is checked);
- * - the record a finished upload is ({@link VisitorUploadFile}).
+ * - the record a finished upload is ({@link VisitorUploadFile});
+ * - how a kept file counts toward the workspace's storage
+ *   ({@link VISITOR_UPLOAD_COUNTER_BYTES}).
  *
  * The server half (`@aglyn/tenant-data-admin/server/visitor-upload`) signs the
  * upload, inspects the bytes and moves them; the browser half
@@ -329,6 +331,41 @@ export function visitorUploadFolder(scope: VisitorUploadScope): string {
 /** Where a checked file is kept: private to the site, with no download token. */
 export function visitorUploadFinalPath(scope: VisitorUploadScope, uploadId: string): string {
   return `${visitorUploadFolder(scope)}${uploadId}`
+}
+
+/*------------------------------------------
+ * Storage
+ *-----------------------------------------*/
+
+/**
+ * A kept file counts toward its workspace's storage the way a media library
+ * file does. Its bytes are added to the site's storage counter,
+ * `hosts/{hostId}/counters/media`, whose `bytes` is the one figure the
+ * storage band, the Billing meter, the usage alerts and the invoice all read.
+ * So a proof, a customer's file on a quote and a form's file are measured,
+ * warned about and billed exactly as a library upload is, and no reader of
+ * storage can leave them out.
+ *
+ * The same counter says how much of `bytes` is these files, in the two fields
+ * below. That keeps `count` the number of library files and lets the media
+ * library show its own share ({@link mediaLibraryBytes}).
+ */
+export const VISITOR_UPLOAD_COUNTER_BYTES = 'uploadBytes'
+export const VISITOR_UPLOAD_COUNTER_FILES = 'uploadCount'
+
+const counterBytes = (value: unknown): number => {
+  const bytes = Number(value)
+  return Number.isFinite(bytes) && bytes > 0 ? bytes : 0
+}
+
+/** The bytes of kept files a site's storage counter holds, never more than its `bytes`. */
+export function visitorUploadCounterBytes(counter: Record<string, unknown> | null | undefined): number {
+  return Math.min(counterBytes(counter?.['bytes']), counterBytes(counter?.[VISITOR_UPLOAD_COUNTER_BYTES]))
+}
+
+/** The media library's own files: the counter's `bytes` less the kept files counted beside them. */
+export function mediaLibraryBytes(counter: Record<string, unknown> | null | undefined): number {
+  return counterBytes(counter?.['bytes']) - visitorUploadCounterBytes(counter)
 }
 
 /**

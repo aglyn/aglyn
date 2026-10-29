@@ -30,6 +30,16 @@ import {
 } from '@aglyn/aglyn/app-utils/default-site'
 import { encodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import {
+  hostStarterChoice,
+  readHostStarterChoice,
+  siteStyleOf,
+  type HostStarterChoice,
+  type HostStarterStart,
+} from '@aglyn/aglyn/app-utils/site-styles'
+import { planSiteStarterTheme } from '@aglyn/aglyn/app-utils/site-starter-theme'
+import type { SiteStyleLook } from '@aglyn/aglyn/plugin-manager/plugin-site-style-looks'
+import { listServerThemePresets } from '@aglyn/aglyn/plugin-manager/plugin-theme-presets'
+import {
   firebaseAdmin,
   registerOrgHost,
 } from '@aglyn/tenant-data-admin'
@@ -133,6 +143,44 @@ export interface ClaimHostInput {
    * else, off for every other start, unless the person chose otherwise.
    */
   preview?: boolean
+  /**
+   * The style the person chose (AGL-4049): its id, recorded on the site, and
+   * its look (`core.site-style-looks`), which a site born with the default
+   * starter wears instead of the default theme. `theme: null` when no plugin
+   * answers for the style: the site keeps the default theme, and the choice
+   * is still recorded.
+   */
+  style?: SiteStyleInstall
+  /**
+   * How the site was started, recorded in `starterChoice`: `starter` for the
+   * starter site (the default when the site is born with it), `ai` for the
+   * AI start (the default for a site born without it), `import` for a site
+   * brought in from somewhere else, `api` for the public API.
+   */
+  start?: HostStarterStart
+}
+
+/** A chosen style as the create writes it: its id, and the look it starts the site in. */
+export interface SiteStyleInstall {
+  id: string
+  theme: SiteStyleLook | null
+}
+
+/**
+ * The host theme fields a style's look writes on a new site: the built-in
+ * picked through the theme library, with the look's brand and fonts as the
+ * override over it, planned against the empty host as a starter's built-in
+ * theme is (`planSiteStarterTheme`). `null` for a style with no look, which
+ * keeps the default theme.
+ */
+export function siteStyleThemeFields(style: SiteStyleInstall | null | undefined): Record<string, unknown> | null {
+  if (!style?.theme) return null
+  return planSiteStarterTheme({
+    theme: style.theme,
+    presets: listServerThemePresets(),
+    listing: { listingId: '', version: '', displayName: siteStyleOf(style.id)?.name ?? 'Style' },
+    newId: createResourceUid,
+  }).host
 }
 
 /**
@@ -160,6 +208,8 @@ export interface ClaimHostResult {
    * drift into the collision branch by accident.
    */
   conflict?: boolean
+  /** What the site was created with (AGL-4049), as written. Present only when `allowed`. */
+  starterChoice?: HostStarterChoice
 }
 
 /**
@@ -294,8 +344,12 @@ export interface ProvisionStarterResult {
 export async function provisionStarterSite(
   firestore: FirebaseFirestore.Firestore,
   hostId: string,
+  options: { style?: SiteStyleInstall | null } = {},
 ): Promise<ProvisionStarterResult> {
   const hostRef = firestore.collection('hosts').doc(hostId)
+  // Planned before the transaction: it reads no document, and a retry of the
+  // transaction writes the same fields.
+  const styled = siteStyleThemeFields(options.style)
   return firestore.runTransaction(async (tx): Promise<ProvisionStarterResult> => {
     const [host, screens, layouts] = await Promise.all([
       tx.get(hostRef),
@@ -310,15 +364,28 @@ export async function provisionStarterSite(
       return { provisioned: false }
     }
     const home = defaultSiteWrites(String(host.get('displayName') ?? '') || 'My site')
+    // A style chosen for it (AGL-4049) is recorded beside how the site was
+    // started; a site created before the record existed starts one here.
+    const choice = options.style
+      ? {
+          starterChoice: {
+            ...(readHostStarterChoice(host.get('starterChoice')) ?? hostStarterChoice({ start: 'starter' })),
+            kind: options.style.id,
+          },
+        }
+      : {}
     tx.update(hostRef, {
       [`screens.${home.screenId}`]: home.path,
       defaultHomeScreenId: home.screenId,
       // The site has chosen: the guided start is not offered again.
       starterProvisionedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-      // A site born before its theme or listing existed gets them too; one
-      // that has its own keeps it.
-      ...(host.get('theme') ? {} : { theme: home.host.theme }),
+      // A style the person chose (AGL-4049) is the look the starter wears,
+      // in place of the theme the site was born with; without one, a site
+      // born before its theme or listing existed gets them too, and one that
+      // has its own keeps it.
+      ...(styled ?? (host.get('theme') ? {} : { theme: home.host.theme })),
       ...(host.get('seo') ? {} : { seo: home.host.seo }),
+      ...choice,
       updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
     })
     queueStarterPages(tx, hostRef, hostId, home)
@@ -361,6 +428,19 @@ export async function claimHostForOrg(
   // The default site's documents, or none for a site born from a picked
   // starter, whose own replace them.
   const home = install ? null : defaultSiteWrites(displayName)
+  // The chosen style's look (AGL-4049), for a site born with the default
+  // starter: a picked starter brings its own theme, and a site born for the
+  // AI start gets its look from the start.
+  const styled = !install && starter ? siteStyleThemeFields(input.style) : null
+  // What the site was created with (AGL-4049), on the host itself.
+  const picked = input.starter && typeof input.starter === 'object' ? input.starter : null
+  const starterChoice: HostStarterChoice = hostStarterChoice({
+    listingId: picked ? picked.listing.listingId : null,
+    version: picked ? String(picked.listing.version) : null,
+    kind: input.style?.id ?? (picked ? (picked.listing.kind ?? picked.payload.facets?.kind ?? null) : null),
+    mode: picked ? picked.payload.mode : 'base',
+    start: input.start ?? (starter ? 'starter' : 'ai'),
+  })
   // Annotated rather than inferred. The body has three exits and an inferred
   // union of object literals does not narrow reliably with `strictNullChecks`
   // off — the same reason `ClaimHostResult` is one interface with optional
@@ -439,8 +519,12 @@ export async function claimHostForOrg(
       // A picked starter's theme is planned against this empty host
       // (`planSiteStarterTheme`): the built-in or full theme it names, its
       // brand and fonts as the override, and the library entry it files.
-      ...(install ? install.host : { theme: home.host.theme }),
+      // A chosen style's look is the same plan for a built-in theme, over the
+      // default starter's pages (AGL-4049).
+      ...(install ? install.host : (styled ?? { theme: home.host.theme })),
       seo: install ? defaultSiteSeo(displayName) : home.host.seo,
+      // What it was created with (AGL-4049): server-owned, in this same write.
+      starterChoice,
       /*
        * A new site starts with User Accounts ON. The catalog still marks
        * `accounts` default-off per site, so a host doc with no opt-in list —
@@ -507,7 +591,7 @@ export async function claimHostForOrg(
    * card, by somebody who chose it.
    */
 
-  return { allowed: true, hostId }
+  return { allowed: true, hostId, starterChoice }
 }
 
 /**
@@ -619,7 +703,12 @@ export async function resumeUnfinishedCreate(
   orgId: string,
   subdomain: string,
   now: number = Date.now(),
-): Promise<{ hostId: string; displayName: string; guidedStart: boolean } | null> {
+): Promise<{
+  hostId: string
+  displayName: string
+  guidedStart: boolean
+  starterChoice: HostStarterChoice | null
+} | null> {
   const taken = await firestore
     .collection('hosts')
     .where('subdomain', '==', subdomain)
@@ -644,5 +733,7 @@ export async function resumeUnfinishedCreate(
     // Born without the starter means it was born for the guided start
     // (AGL-3594): an empty route map is exactly that.
     guidedStart: !screens || Object.keys(screens).length === 0,
+    // What the claim recorded it was created with (AGL-4049).
+    starterChoice: readHostStarterChoice(host.get('starterChoice')),
   }
 }

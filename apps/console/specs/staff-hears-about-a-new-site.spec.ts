@@ -204,6 +204,8 @@ describe('AGL-3491 · /api/hosts/create announces what it creates', () => {
       createdBy: 'owner@example.com',
       // How it was started, for the staff email (AGL-3897).
       start: 'starter',
+      // The style the person chose (AGL-4049): none was asked of this create.
+      style: null,
     })
   })
 

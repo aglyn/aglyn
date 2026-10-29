@@ -2556,7 +2556,15 @@ whose passes each do one unit (`aiSiteImportNextWork`):
 1. **Read** (no model): the crawler reads the site as AglynBot with
    `shallowFirst` (a sitemap's shallow addresses before its deep tail), up to
    the site's room under the plan's page count plus one wave, capped at
-   `AI_SITE_IMPORT_MAX_PAGES` (200). `aiSiteImportInventory` groups the pages
+   `AI_SITE_IMPORT_MAX_PAGES` (400; AGL-4106). A file is never a page: an
+   `/api/`, `/cdn-cgi/` or download address is never asked for, and an address
+   that answers with something other than HTML is left out as `file` and takes
+   nothing from the page budget. A wave's read keeps each page's LAYOUT
+   (`site-import/site-import-layout.ts`, no model): its sections and bands,
+   rows, groups by kind, tables, tabs, pictures, icons and buttons over the
+   read's blocks by index (`AiSiteImportPageRead.layout`), through the page's
+   own stylesheets (`site-import-css.ts`); every crawl reads the home page's
+   menu, footer and look (`site-import-nav.ts`). `aiSiteImportInventory` groups the pages
    (the MAIN pages: home, the home menu's, every top-level page and any page of
    no collection; then each COLLECTION, an address prefix with at least three
    pages, a dated archive as Posts), keeps them in that order until the room is
@@ -2578,12 +2586,27 @@ whose passes each do one unit (`aiSiteImportNextWork`):
    "About"), the home page "Home".
 3. **The look** (no model, AGL-4084), before anything of the first wave is
    built (`jobs/ai-site-import-look.ts`): the owner's home page is read once
-   more as AglynBot, with the crawl's `headersFor` edge headers, and its first
-   stylesheets; the inspiration signals (`aiSiteInspirationSignals`, AGL-3975)
-   pin the look, the brand being the source's strongest color drawn SOLID
-   (`aiSiteImportBrandColors`: a translucent tint is not counted), and the look
-   is drawn and saved as a guided start's (`aiSiteStyleFor`, `aiSaveSiteTheme`,
-   which keeps a theme the owner chose). The header's logo
+   more as AglynBot, and its first stylesheets. Its edge headers are the
+   caller's `headersFor` where one is handed in, else the edge's own
+   (`aiSiteImportLookHeaders` → `siteImportEdgeHeadersFor(siteImportOrigins(domain))`,
+   exactly as the crawl asks it; AGL-4108: production registers the step with
+   no seams, so the 10/29 read went without the header, our own edge
+   challenged it, and the site kept the starter's theme). The inspiration
+   signals (`aiSiteInspirationSignals`, AGL-3975) pin the look, the brand being
+   the source's strongest color drawn SOLID (`aiSiteImportBrandColors`: a
+   translucent tint is not counted); the home page's look facts
+   (`siteImport.home.look`, AGL-4106) pin it closer (AGL-4108,
+   `aiSiteImportStyle`): the filled buttons' color is the brand and the links'
+   color the accent (`aiSiteImportBrandOf`), the buttons' radius the corners
+   and button shape where the signals said none, the page's background the
+   ground (`AiSiteStyle.page`), and the source's own body and heading families
+   where the theme font catalog has them (`themeFontFacts`, the fonts plugin's
+   Google Fonts catalog) or the page loads them from Google Fonts
+   (`AiSiteStyle.sourceFonts`, `aiSiteImportSourceFonts`), else the pairing of
+   its type mood. `aiSiteColors` still holds every color to the reading
+   checks: a brand too light for white words is drawn at its nearest shade
+   that reads. The look is drawn and saved as a guided start's
+   (`aiSiteStyleFor`, `aiSaveSiteTheme`, which keeps a theme the owner chose). The header's logo
    (`siteImportHeaderBrand`) is brought into the library once by its import
    key, an SVG drawn as a PNG 192 px tall (`rasterizeAiLogoSvg`, on Vercel the
    images function's `logo-raster` op). The home page's `<title>`,
@@ -2591,45 +2614,103 @@ whose passes each do one unit (`aiSiteImportNextWork`):
    still the seeded one (`aiSiteImportListingUpdates`, `aiSiteListingSeeded`).
    The result is `siteImport.look`; its seed and style ride every unit
    (`siteKind`, `siteStyle`).
-4. **The header and footer**, in the first wave: the layout step's own pass on
-   a derived `layout` job in the layout language, linking the wave's pages in
-   the menu's order. Its brand is the source's (`siteBrand`: the logo alone,
-   the logo and the name, or the name, drawn by `ai-layout-frame.ts`); its
-   prompt shows the source's own header and footer lines and description
+4. **The header and footer**, in the first wave, on a derived `layout` job in
+   the layout language. Where the reader found the home page's menu
+   (`aiSiteImportFrameIsRead`, AGL-4108), the job carries `siteFrame`
+   (`aiSiteImportFrameSource`): the menu's items and their entries, the
+   header's buttons with their styles, the header's ground, and the footer's
+   columns, links, words, profiles, address, phone, email and © line, every
+   link resolved by `aiSiteImportFrameLinkTo` (a page of the header's wave or
+   home by its draft id, a page of a later wave by its new path, since a link
+   by id to a page not yet live is taken out when a wave publishes, and
+   anything else by the source's own address). The layout step then draws the
+   frame with NO model (`aiLayoutSourceFrameBuild`,
+   `layout-language/ai-layout-frame-source.ts`): a menu whose entries carry a
+   line or sit in headed columns as a `muiMegaMenu` (each entry a
+   `muiLinkBox` with the source's own one-path icon), else a `muiNavMenu`;
+   the row `nowrap`, shown from the breakpoint `aiLayoutNavBreakpoint`
+   measures it to fit (`lg` past five items or 60 characters), the Menu
+   Button below it, the Drawer holding each menu as a heading over its
+   entries, then the links and the buttons; the footer as the source's
+   columns, profiles (`socialLinks`, any other network linked by its name)
+   and © line word for word. It is checked as the owner's own words
+   (`ownWords`, the own-words budget, rule 1 not asked), costs nothing and is
+   quoted at nothing (`aiSiteImportWaveOwed`). A source frame that does not
+   pass, or a source whose menu could not be read, takes the layout step's
+   own pass instead, linking the wave's pages in the menu's order: its prompt
+   shows the source's own header and footer lines and description
    (`siteFacts`), FENCED under `UNTRUSTED_TEXT_RULE`, in place of the brief,
-   and its contact check admits what they state. `businessName` is the
-   person's name for the site unless the source's differs from it only by
-   case or punctuation.
+   and its contact check admits what they state. Either way the brand is the
+   source's (`siteBrand`: the logo alone, the logo and the name, or the name,
+   drawn by `ai-layout-frame.ts`), the logo named by the source's own alt or
+   name (`alt`) and measured by its shape (`aspect`), and never narrower than
+   itself. `businessName` is the person's name for the site unless the
+   source's differs from it only by case or punctuation.
 5. **Each page**: its photos first (no model), through `pluginMediaIngest()
    .ingest` with `importedFrom` and the key `import:<sha256 of the address>`,
    asked of `findImportedPhoto` before anything is fetched, so a photo is stored
    once per site (an ingest that cannot answer stores nothing), each kept with
    the address it was read from (`from`); then the page step's own passes on a
-   derived `page` job, NEVER REWRITTEN (AGL-4084,
-   `jobs/ai-site-import-document.ts`). The job carries `importedSections`: the
-   read's blocks, the photos and where the site's own links go. The plan's
-   sections are the source's (its opening, then one at each h2). How the page
-   is built is decided by code (`aiSiteImportBuildOf`):
-   - **copied** (a collection's page, any page past `AI_SITE_IMPORT_PROSE_WORDS`
-     words): `aiCompileImportedDocument` lays every line out in source order,
-     bands alternating plain and soft, with NO model; only the listing pass
-     spends;
-   - **arranged** (the main pages, Home always): one answer on the page tier
-     through `submit_arrangement` (`AI_LAYOUT_ARRANGE_TOOL`, which has no field
-     for a word), told the numbered lines fenced (`aiLayoutArrangePrompt`). The
-     compiler substitutes each line as written; a block naming a line already
-     placed is dropped, a line of another section is not taken, and every line
-     the answer left out is added at the end of its section.
+   derived `page` job, NEVER REWRITTEN (AGL-4084), built by the SITE COMPILER
+   (AGL-4107, `jobs/ai-site-import-compile.ts`). The job carries
+   `importedSections`: the read's blocks, its layout (`AiSiteImportPageRead.
+   layout`, AGL-4106), the photos and where the site's own links go — every
+   page the import plans, in any wave, by its draft id
+   (`aiSiteImportLinkablePages` admits them on the check's `screenIds`). The
+   plan's sections are the layout's own, by name (`aiSiteImportSectionNames`);
+   a read with no layout is read into one from its lines, one section at each
+   h2 (`aiSiteImportLayoutOfLines`). The screen's `seoTitle` and
+   `seoDescription` are the source's `<title>` and meta description word for
+   word (`read.meta`), and the last pass writes them as they are
+   (`aiImportedPageListing`); the listing generator runs only for a part the
+   source left empty.
+   - **The compile.** `aiSiteImportDesignedSections` turns the layout into the
+     layout language: each section in its source band (a design answer's band
+     only where the source drew none), its first row as `cols` (a byline row —
+     a lone portrait beside a few words — is the portrait, small), each group a
+     `cards`/`steps`/`stats`/`faq`/`quotes`/`list` block whose items carry every
+     part (`iconPath`, `picture`, `figure`, `more`, `list`, `listIconPath`,
+     `links`, `to`), and the import-only kinds `table`, `tabs` and `logos`.
+     Every line is taken once; a line the layout placed nowhere goes at its
+     section's end. `aiCompileLayoutPage` draws it with `verbatim: true`: words
+     as written (never fitted, guarded, gapped or cut; a heading past the
+     headline style a subtitle; a link longer than a button's label a Link
+     Container around its words), every item of a group, the source's own
+     pictures (`src`, never a stand-in), its icons as paths on the icon
+     element's 24-unit square (`aiSiteImportIconPath`; a stroke drawing is left
+     out), its bands, and only the hero among the design moves: the opening
+     around its one picture as `split`, `bleed`, `cover`, `poster`, `panel`,
+     `column` or `editorial` (`importedHero`; `beside` → split, `behind` →
+     cover, `below` → column by default). A table is the `dataTable` element
+     (`rows`, code-only); tabs whose every panel the source drew are `muiTabs`
+     with a `muiTabPanel` each, else the labels as a strip, the open one
+     filled, over the panel the source drew. A page past
+     `AI_SITE_IMPORT_DOC_MAX_NODES` keeps its last sections by name, `cut`.
+   - **copied** (a collection's page): the compile alone, NO model, nothing
+     spent but a listing the source left empty;
+   - **arranged** (every main page, whatever its length): the same compile
+     first; one DESIGN answer on the page step's balanced tier, pinned against
+     `AI_DEFAULT_MODEL` (`aiImportPageModel` → `aiModelAtLeastStepTier`),
+     through `submit_design` (`AI_LAYOUT_DESIGN_TOOL`: per section `hero`,
+     `band`, `align` and per group `kind` and `style`, no field for a word, a
+     line or a block), told the page's structure (`aiSiteImportDesignText`,
+     the section names fenced; about 1,000–1,300 tokens in on aglyn.com's
+     pages). An answer whose design cannot be drawn is set aside and the page
+     is drawn from its layout, never re-asked; a page whose layout cannot be
+     built is reviewed before anything is spent.
    Both are checked as the owner's own words (`ownWords` on the doctrine
-   context): rule 8 asks no dataset of their lists, rule 14's copy checks do
-   not judge them, and the page budget is `AI_OWN_WORDS_PAGE_BUDGET`. A
-   paragraph longer than a text element holds is split between sentences. The
-   words on the stored draft are counted into the page's `brought`.
+   context): rule 1 asks no component of their repeats, rule 8 no dataset of
+   their lists, rule 14's copy checks do not judge them, and the page budget is
+   `AI_OWN_WORDS_PAGE_BUDGET`. The words on the stored draft are counted into
+   the page's `brought`.
 6. **Close the wave**: its pages go live INTO THE PREVIEW
    (`jobs/ai-site-import-publish.ts`, `aiPublishImportedWave` on
    `aiPublishGuidedSite`) when the site is in preview (`host.preview`,
    AGL-4086): Home takes `/` in the first wave, later waves join what is live
-   (`retry`), links to a page not in come out, and `site_published` is not
+   (`retry`), a link to a page that will never come in (left out, failed)
+   loses its destination and keeps its words (`keepLinkWords`), a link to a
+   page of a later wave keeps its place — a visitor sees its words until that
+   page is live, then it goes there — and `site_published` is not
    sent (the switch sends it). A site not in preview keeps the drafts. The job
    then parks again, reason `wave`, until the next wave is started, or, with
    `siteImport.autoContinue` (the resume door's `startAll`,
@@ -2646,19 +2727,21 @@ whose passes each do one unit (`aiSiteImportNextWork`):
   row says why, and the wave goes on. The machine keeps `siteImport` on the job
   from the outcome in the pass's own write; the summary carries it without any
   page text (`aiSiteImportWire`).
+- **A cancel settles every wave** (AGL-4107): `aiSiteImportCanceled`, in the
+  cancel's own write and in a step's write a pending cancel ends, marks a
+  running or waiting wave `stopped` and a wave in review `done`.
 - **Priced by how a page is built.** `AI_MEASURED_IMPORT_CREDITS`: an
-  arranged page at `arranged`, a copied page at `copied` (its listing pass), the
-  header its layout; each wave is quoted before it starts
+  arranged page at `arranged` (its design answer), a copied page at `copied`, the
+  header its layout, or nothing where it is drawn from the source's menu; each wave is quoted before it starts
   (`aiSiteImportWaveCreditRange`), naming both. Both rows are provisional until
   the live check measures them.
 - **Published only into a preview.** A wave's pages go live only on a site in
   preview, where the public sees the notice; `sitePublish` carries what went
   live. On a site not in preview every output stays a draft.
-- **Trust & Safety.** Every import files one `abuseReports` row
-  (`site-import/site-import-review.ts`, `source: 'site-import'`, category
-  `impersonation`, severity `normal`, the outbound screen's shape), rewritten
-  at the read and at each wave's start and finish, `reportCount` counting the
-  waves. It holds nothing.
+- **Trust & Safety.** An import files nothing in the abuse queue: proving
+  the domain is the control, and an import that passed it is not a report.
+  Until 2026-10-29 every import filed a `source: 'site-import'` row; the
+  admin page still labels the rows filed before then.
 - **Admission.** `createAiSiteImportAdmission`, asked by the create and resume
   doors: the flag, a site (or one about to be created), a paid plan, the
   owner or an admin, and a current proof for `inputs.domain`.
@@ -3554,6 +3637,46 @@ AGL-3660), which fills every empty slot and takes the icon out of its frame:
   The replays are `ai-stock-photo-agl4092-{berm,pit,rut}.spec.ts` and
   `ai-layout-pictures-agl4092-roles.spec.ts`, over 40 searches re-asked of Pixabay
   on 2026-10-28 as the source asks them (`fixtures/ai-stock-photo-agl4092-recordings.ts`).
+- **Another city's street, a thing of its own, and a team (AGL-4092, 2026-10-29).**
+  The live check of beta.291 put a food truck under the Chicago skyscrapers, a man
+  with a cart in the rain and a woman with a bagel cart in Antalya in a taco
+  trailer's home gallery, tomatoes beside a bowl of salsa on its menu's "Bottled
+  Water", a model posing with a street bike in a garage in a motocross team's riders
+  band (searched "motorcycle workshop"), and a man in a motorcycle suit on a road
+  trip, tagged "motocross" third, in its sponsors band. Each is closed by its tags:
+  - *Another city's or country's street is never the business's,* whatever the
+    caption (`aiStockForeignStreet`): a hit with a street, town or city tag
+    (`STREET_HEADS`) that names a city, state or country (`NAMED_PLACES`) the site's
+    business type, audience and name never name is refused. Tacos tagged "mexico"
+    are a dish, not a street.
+  - *Street food is anyone's.* "street food" names the taco trailer's world only
+    beside its own food or its truck (`near`), and the taco group's `rivals` turn
+    down an ice cream van, a hot dog stand or a bagel cart tagged "food truck"
+    unless the hit names tacos too. The maker's searches (`making`) take only a hit
+    OF the business's own world (`leadOwn`), as its broad rungs do.
+  - *A thing of its own is a photo of itself* (`aiStockThingOfItsOwn`): a record's or
+    a product's object with kin (`OBJECT_KIN`: bottled water, a soda, an agua fresca
+    or horchata, now in every food world) where neither its words nor its kin name
+    the craft itself (`core`). It is searched by its own words and kin, unqualified,
+    never by the craft's broad searches or `aiStockCraftSearches`, and a record of
+    one takes no other record's photo, nor gives its own
+    (`aiSiteDatasetRecordsFromOwn`, `itsOwn` kept on the late pass's list). With no
+    photo of itself it takes a neutral starter. A soap shop's "Lavender Soap Bar"
+    names its soap and is not one.
+  - *A team is shown racing.* A group's `team` searches replace its repair shop's
+    `making` where the business's own clause names a team or a club: a motocross
+    team searches "motocross rider gear" and "dirt bike racing", and adds "motocross
+    track" to its broad searches (the library answers "motocross paddock" with horses
+    and "motocross pits" with fruit). A parts shop keeps its mechanic.
+  - *An off-road business's pictures are never a street bike's* (`wider.road` and
+    `wider.ground`, read from every tag, a product's excepted): a hit naming a road,
+    a street, a trip, travel, a motorcycle suit, a sportbike, a model or a studio is
+    refused unless it also names the ground a dirt bike rides (dirt, mud, sand, a
+    desert, a track, off-road, enduro). "Road, travel" beside "off-road, desert,
+    sand" is a dirt bike in the dunes.
+  The replays are `ai-stock-photo-agl4092-1029-{pit,rut}.spec.ts`, from production's
+  search cache for the searches the two sites sent and Pixabay re-asked read-only
+  for those the fixes send in their place (`fixtures/ai-stock-photo-agl4092-1029-recordings.ts`).
 - **One refused photo is that photo's (AGL-3923, #1770).** The provider names a
   download by its bytes (`sniffPhotoContentType`, the upload check's own
   signatures), never by its label. A media-library refusal of one photo's own bytes

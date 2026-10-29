@@ -30,6 +30,7 @@ jest.mock('next/navigation', () => ({
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { AiJobItemLedger, AiJobSummary } from '../model/ai-jobs.types'
 import {
+  aiSiteImportCanceled,
   aiSiteImportInventory,
   aiSiteImportLedger,
   aiSiteImportWaveClosed,
@@ -115,6 +116,17 @@ const view = (job: AiJobSummary, onResume = jest.fn(), onStartAll?: () => void) 
     />,
   )
 
+describe('a canceled import (AGL-4107)', () => {
+  it('lists its running wave as stopped and the next as not started, never as running', () => {
+    const state = aiSiteImportCanceled(aiSiteImportWaveStarted(harbor(), 0, 'x', new Map()), 'y')
+    view(summary({ status: 'canceled', review: null, siteImport: state, items: aiSiteImportLedger(state) }))
+    fireEvent.click(screen.getByText(/^Every wave/))
+    expect(screen.getByText(/\(stopped\)$/)).toBeTruthy()
+    expect(screen.getByText(/\(not started\)$/)).toBeTruthy()
+    expect(screen.queryByText(/\(running\)$/)).toBeNull()
+  })
+})
+
 describe('an import job’s page', () => {
   it('says the site is read, what was found, and starts the first wave only when asked, quoting it first', () => {
     const state = harbor()
@@ -123,7 +135,7 @@ describe('an import job’s page', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Your site is read' })).toBeTruthy()
     expect(screen.getByText('Found 6 pages on harbor-dental.com: Main pages (2) and Blog (4).')).toBeTruthy()
     expect(screen.getByText('First: Main pages')).toBeTruthy()
-    expect(screen.getByText('About 83 credits (up to 250), from your AI credits. Every page is a draft until you publish it.')).toBeTruthy()
+    expect(screen.getByText('About 83 credits (up to 250), from your AI credits. Its pages land in your site’s preview, or as drafts where the site is not in preview.')).toBeTruthy()
     expect(onResume).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Start Main pages' }))
     expect(onResume).toHaveBeenCalledTimes(1)

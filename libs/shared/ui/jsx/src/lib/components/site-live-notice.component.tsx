@@ -33,7 +33,13 @@ export interface SiteLiveNoticeProps {
   pagesHref: string | null
   /** The heading's level, for the page or dialog it sits in. */
   headingComponent?: 'h1' | 'h2' | 'h3'
+  /** The starter the site was made from, when it was made from one, named under the heading. */
+  starterName?: string | null
 }
+
+/** The line that names the starter a site was made from. */
+export const siteLiveNoticeStarterLine = (name: string): string =>
+  `Made from the starter "${name}". Change anything under Pages and Setup → Theme.`
 
 /**
  * What a person sees the moment their site goes live: that it is live, the
@@ -46,7 +52,7 @@ export interface SiteLiveNoticeProps {
  * it is chosen, and a person who was never told read their analytics window
  * ("14 days") as a countdown to launch.
  */
-export function SiteLiveNotice({ liveUrl, pagesHref, headingComponent = 'h2' }: SiteLiveNoticeProps) {
+export function SiteLiveNotice({ liveUrl, pagesHref, headingComponent = 'h2', starterName = null }: SiteLiveNoticeProps) {
   return (
     <Stack spacing={2}>
       <Stack spacing={0.5}>
@@ -56,6 +62,11 @@ export function SiteLiveNotice({ liveUrl, pagesHref, headingComponent = 'h2' }: 
         <Typography variant="body1" color="text.secondary">
           {SITE_LIVE_NOTICE_BODY}
         </Typography>
+        {starterName ? (
+          <Typography variant="body2" color="text.secondary">
+            {siteLiveNoticeStarterLine(starterName)}
+          </Typography>
+        ) : null}
         {liveUrl ? (
           <Link href={liveUrl} target="_blank" rel="noopener noreferrer" variant="body1" sx={{ wordBreak: 'break-all' }}>
             {liveUrl.replace(/^https?:\/\//, '')}

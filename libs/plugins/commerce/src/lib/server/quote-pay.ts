@@ -199,14 +199,17 @@ export interface LoadedQuote {
 /**
  * The quote a link names, after its token: the quote, the replaced answer for
  * a link to an older version, or the one not-found answer for everything else.
- * With `invoices`, a draft order's invoice too (AGL-4099).
+ * With `invoices`, a draft order's invoice too (AGL-4099). With `history`, a
+ * link to an older version opens the quote as well: only for a route that
+ * serves the quote's record and acts on nothing (its proofs, which an earlier
+ * email draws, AGL-4097); pay, answers and uploads keep the current version.
  */
 export async function loadLinkedQuote(
   deps: QuotePayDeps,
   hostId: string,
   quoteId: string,
   token: string,
-  options: { invoices?: boolean } = {},
+  options: { invoices?: boolean; history?: boolean } = {},
 ): Promise<{ loaded: LoadedQuote } | { outcome: QuoteLinkOutcome }> {
   const notFound = options.invoices ? NOT_FOUND_ANY : NOT_FOUND
   const version = verifyQuoteLinkToken(hostId, quoteId, token)
@@ -225,7 +228,7 @@ export async function loadLinkedQuote(
   const storeName = String(resolveHostToken('businessName', host as HostTokenSource) ?? '')
   const current = CommerceModel.orderPayLinkVersion(order)
   if (version > current) return { outcome: notFound }
-  if (version < current) {
+  if (version < current && !options.history) {
     return {
       outcome: {
         status: 410,

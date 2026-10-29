@@ -42,10 +42,15 @@ public enum AglynRadius {
 
 extension View {
   /// The kit's card surface: paper, a hairline in the divider color, the card radius.
+  ///
+  /// The hairline only draws. Over the card's rows it took the pointer along the card's middle on the Mac, a line one
+  /// point high that ran through the center of a one-row card's only row: a click there never reached the row, so
+  /// Danger zone's Delete site opened no confirm (AGL-4112).
   public func aglynCardSurface() -> some View {
     background(AglynColor.paper, in: RoundedRectangle(cornerRadius: AglynRadius.card, style: .continuous))
       .overlay(
         RoundedRectangle(cornerRadius: AglynRadius.card, style: .continuous).strokeBorder(AglynColor.divider)
+          .allowsHitTesting(false)
       )
   }
 }

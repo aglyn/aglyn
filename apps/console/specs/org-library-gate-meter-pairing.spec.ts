@@ -289,8 +289,10 @@ describe('every ingress door passes the pairing (AGL-2003)', () => {
     // `utils/api-v1-resources.ts`, and `/api/media/metadata`, whose write
     // rewrites a file's own details and so changes its size (AGL-3331), and
     // the server's media door, `utils/server/media-ingest.ts`, which keeps a
-    // stock photo in a site's library (AGL-3660): eight.
-    expect(callSites.length).toBe(8)
+    // stock photo in a site's library (AGL-3660), and the upload storage gate,
+    // `utils/server/upload-storage-gate.ts`, which a quote's proof meets
+    // before it is kept on its site outside the library (AGL-4096): nine.
+    expect(callSites.length).toBe(9)
     for (const site of callSites) {
       expect(site).toContain('billsOverage')
       // The scope, not a hardcoded literal: a route that passed `true` would

@@ -29,6 +29,10 @@ import {
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { pluginDocsHelp } from '@aglyn/aglyn'
+import {
+  PublisherAgreementCheckbox,
+  usePublisherAgreementConsent,
+} from './publisher-agreement-checkbox.component'
 
 export interface ListingVerificationRequestProps {
   listingId: string
@@ -81,6 +85,9 @@ export function ListingVerificationRequest(
   // Optimistically reflects the action just taken, so the card does not sit
   // unchanged while the listing snapshot catches up.
   const [justDid, setJustDid] = useState<'pending' | 'withdrawn' | null>(null)
+  // The publisher agreement, agreed to on this save (AGL-4105): asking for
+  // the badge and taking the ask back are publisher saves like any other.
+  const agreement = usePublisherAgreementConsent()
 
   const request = listing?.verificationRequest
   const state = justDid ?? request?.state
@@ -91,6 +98,7 @@ export function ListingVerificationRequest(
   })
 
   const post = async (action: 'request' | 'withdraw') => {
+    if (!agreement.consent) return
     setBusy(true)
     setError(null)
     try {
@@ -100,7 +108,7 @@ export function ListingVerificationRequest(
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ listingId, action }),
+          body: JSON.stringify({ listingId, action, agreement: agreement.consent }),
         },
       )
       const data = (await response.json().catch(() => ({}))) as {
@@ -113,6 +121,7 @@ export function ListingVerificationRequest(
         return
       }
       setJustDid(action === 'request' ? 'pending' : 'withdrawn')
+      agreement.reset()
     } catch {
       setError('That did not work. Try again.')
     } finally {
@@ -161,11 +170,16 @@ export function ListingVerificationRequest(
               {'Your request is with the review team. Your plugin stays ' +
                 'listed and installable while they look.'}
             </Alert>
+            <PublisherAgreementCheckbox
+              checked={agreement.agreed}
+              onChange={agreement.setAgreed}
+              disabled={busy}
+            />
             <Stack direction="row">
               <Button
                 variant="outlined"
                 color="inherit"
-                disabled={busy}
+                disabled={busy || !agreement.agreed}
                 onClick={() => void post('withdraw')}
               >
                 {'Withdraw request'}
@@ -188,16 +202,23 @@ export function ListingVerificationRequest(
             </Stack>
           </Alert>
         ) : (
-          <Stack direction="row">
-            <Button
-              variant="contained"
-              color="primary"
+          <>
+            <PublisherAgreementCheckbox
+              checked={agreement.agreed}
+              onChange={agreement.setAgreed}
               disabled={busy || block !== null}
-              onClick={() => void post('request')}
-            >
-              {'Request verification'}
-            </Button>
-          </Stack>
+            />
+            <Stack direction="row">
+              <Button
+                variant="contained"
+                color="primary"
+                disabled={busy || block !== null || !agreement.agreed}
+                onClick={() => void post('request')}
+              >
+                {'Request verification'}
+              </Button>
+            </Stack>
+          </>
         )}
 
         {error ? <Alert severity="error">{error}</Alert> : null}

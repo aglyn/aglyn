@@ -180,7 +180,6 @@ function harness(patch: Partial<AiSiteImportStepDeps> = {}, theme: 'applied' | '
     ingest: () => lib,
     readRoom: async () => ({ limit: null, used: 0 }),
     readSiteName: async () => SITE_NAME,
-    fileReview: async () => 'row',
     pageWritten: async () => true,
     draftWords: async () => 120,
     publishWave: async (_firestore, input) => {
@@ -313,7 +312,8 @@ describe('the first wave: the look before the frame, the brand as the source, th
     expect(h.lib.stored.filter((entry) => entry.contentType === 'image/png')).toHaveLength(1)
     await pass(step, job) // the frame
     const frame = h.frames[0]
-    expect(aiLayoutSiteBrandOf(frame.inputs)).toEqual({ logo: { src: job.siteImport?.look?.logo?.src }, name: false })
+    // Named as the source names its logo, never by the host's name (AGL-4108).
+    expect(aiLayoutSiteBrandOf(frame.inputs)).toEqual({ logo: { src: job.siteImport?.look?.logo?.src }, name: false, alt: 'Aglyn' })
     // The header and footer the frame compiles: an image links home, and no name is printed beside it.
     const check = aiLayoutFrameCheck({
       siteName: SITE_NAME,
@@ -330,7 +330,7 @@ describe('the first wave: the look before the frame, the brand as the source, th
     expect(built.violations).toEqual([])
     const nodes = Object.values(built.value?.nodes as unknown as Record<string, { componentId: string; props?: Record<string, unknown> }>)
     const logo = nodes.find((node) => node.componentId === 'image')
-    expect(logo?.props).toMatchObject({ src: job.siteImport?.look?.logo?.src, alt: SITE_NAME, screenId: 'home-id' })
+    expect(logo?.props).toMatchObject({ src: job.siteImport?.look?.logo?.src, alt: 'Aglyn', screenId: 'home-id' })
     expect(nodes.some((node) => node.props?.['children'] === SITE_NAME)).toBe(false)
   })
 
@@ -386,7 +386,6 @@ describe('a wave’s close lands in the site’s preview (AGL-4084, on AGL-4086�
     leftOut: [],
     leftOutCount: {},
     frame: { draftId: 'd-frame' },
-    reviewId: 'row',
     look: { at: NOW.toISOString(), theme: 'applied', colors: [], logo: null, seo: false, seed: 1 },
   })
   const ledger = (): AiJobItemLedger[] =>
@@ -421,8 +420,9 @@ describe('a wave’s close lands in the site’s preview (AGL-4084, on AGL-4086�
     )
     expect(result?.published.map((page) => page.path)).toEqual(['/'])
     expect((calls[0].input['outputs'] as AiJobOutput[]).map((output) => output.id)).toEqual(['d-home', 'd-contact'])
-    // The pages still to come are no link's destination yet.
-    expect(calls[0].input['unbuiltScreenIds']).toEqual(['d-privacy'])
+    // A page of a wave still to come keeps its links (AGL-4107): its words show until it is live.
+    expect(calls[0].input['unbuiltScreenIds']).toEqual([])
+    expect(calls[0].input['keepLinkWords']).toBe(true)
     // The first wave takes the home address; nothing announces the site.
     expect(calls[0].input['retry']).toBeUndefined()
     expect(await (calls[0].deps['sendSitePublished'] as () => Promise<unknown>)()).toBeUndefined()

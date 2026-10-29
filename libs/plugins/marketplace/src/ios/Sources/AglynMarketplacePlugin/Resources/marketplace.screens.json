@@ -1,5 +1,5 @@
 {
-  "$comment": "The Marketplace plugin's spec screens (AGL-3671, AGL-3668): the publish hub and its take-rate notice, publishing the site as a template, a layout, a component, the theme, a dataset schema, an email template or starter, and a plugin (its bundle and manifest, the listing and the publisher's statements), and the Marketplace Publisher Agreement that publishing needs accepted. Built from the plugin's own publisher-agreement, publisher-attestation, marketplace-catalog and listing-price-floor models and held to them and to the console's publish dialog and form by libs/plugins/marketplace/src/lib/model/publish-native.spec.ts. Routes: /api/marketplace/publish-template, /api/marketplace/publish, /api/marketplace/publish-layout, /api/marketplace/publish-theme, /api/marketplace/publish-dataset-schema, /api/marketplace/publish-email-template, /api/marketplace/publish-email-starter, /api/marketplace/publish-plugin, /api/marketplace/publisher-profile (accept-agreement), /api/orgs/members; the profile is the org's publisherProfiles document. Grammar: docs/mobile/native-architecture.md §13.",
+  "$comment": "The Marketplace plugin's spec screens (AGL-3671, AGL-3668): the publish hub and its take-rate notice, publishing the site as a template, a layout, a component, the theme, a dataset schema, an email template or starter, and a plugin (its bundle and manifest, the listing and the publisher's statements), and the Marketplace Publisher Agreement that every publish agrees to with its own box above the button (AGL-4105). Built from the plugin's own publisher-agreement, publisher-attestation, marketplace-catalog and listing-price-floor models and held to them and to the console's publish dialog and form by libs/plugins/marketplace/src/lib/model/publish-native.spec.ts. Routes: /api/marketplace/publish-template, /api/marketplace/publish, /api/marketplace/publish-layout, /api/marketplace/publish-theme, /api/marketplace/publish-dataset-schema, /api/marketplace/publish-email-template, /api/marketplace/publish-email-starter, /api/marketplace/publish-plugin, each sending the agreement it was ticked for; the profile is the org's publisherProfiles document, read for the last agreement. Grammar: docs/mobile/native-architecture.md §13.",
   "screens": [
     {
       "id": "marketplace.publishTemplate",
@@ -80,12 +80,6 @@
           ]
         }
       },
-      "derive": [
-        {
-          "name": "current",
-          "when": "data.profile.publisherAgreement.version == @const.agreement.version"
-        }
-      ],
       "blocks": [
         {
           "type": "notice",
@@ -93,24 +87,11 @@
           "text": "Publishes the current published version of this site template so other organizations can install it. Your site is unaffected. Re-publishing bumps the version."
         },
         {
-          "type": "notice",
-          "tone": "warning",
-          "when": "data.profile.handle && const.agreement.published && !is.current && data.profile.publisherAgreement.version",
-          "text": "These terms have changed since your organization accepted version {data.profile.publisherAgreement.version}. Publishing is paused until the current version is accepted."
-        },
-        {
-          "type": "notice",
-          "tone": "info",
-          "when": "data.profile.handle && const.agreement.published && !is.current && !data.profile.publisherAgreement.version",
-          "text": "Your organization has not accepted these terms. They must be accepted before anything is published."
-        },
-        {
           "type": "links",
-          "when": "data.profile.handle && const.agreement.published && !is.current",
           "items": [
             {
-              "title": "Review the Marketplace Publisher Agreement",
-              "subtitle": "You can also accept it when Publish asks",
+              "title": "Read the Marketplace Publisher Agreement",
+              "subtitle": "Every publish asks you to agree to it",
               "icon": "doc.text|description",
               "screen": "marketplace.publisherAgreement"
             }
@@ -144,6 +125,19 @@
               "kind": "number",
               "placeholder": "0 = free",
               "help": "0 for free, or $3 and up for a paid listing. Paid listings need payouts set up on your marketplace profile."
+            },
+            {
+              "key": "agreement",
+              "label": "Marketplace Publisher Agreement",
+              "kind": "multiselect",
+              "coversAll": true,
+              "options": [
+                {
+                  "value": "agreed",
+                  "label": "I agree to the Marketplace Publisher Agreement",
+                  "detail": "Version {const.agreement.version}, at {const.agreement.url}. Asked on every save, and recorded with who agreed and when."
+                }
+              ]
             }
           ],
           "submit": {
@@ -154,14 +148,17 @@
               "displayName": "{form.name}",
               "description": "{form.description}",
               "category": "{form.category}",
-              "priceUsd": "{form.price}"
+              "priceUsd": "{form.price}",
+              "agreement": {
+                "version": "{const.agreement.version}",
+                "accepted": {
+                  "$if": "form.agreement",
+                  "then": true
+                }
+              }
             },
             "success": "Published v{response.version} to the marketplace",
-            "back": true,
-            "gate": {
-              "when": "error.agreement.required && error.agreement.state == none,outdated",
-              "screen": "marketplace.publisherAgreement"
-            }
+            "back": true
           }
         }
       ]
@@ -169,17 +166,13 @@
     {
       "id": "marketplace.publisherAgreement",
       "title": "Marketplace Publisher Agreement",
-      "subtitle": "Accept it for your organization, then publish",
+      "subtitle": "What your organization agrees to on every save in the marketplace",
       "icon": "doc.text|description",
       "scope": "site",
       "order": 51,
       "load": {
         "profile": {
           "doc": "publisherProfiles/{org.id}",
-          "optional": true
-        },
-        "members": {
-          "url": "/api/orgs/members?orgId={org.id}&filters=%5B%7B%22field%22%3A%22role%22%2C%22op%22%3A%22isAnyOf%22%2C%22value%22%3A%22owner%2Cadmin%22%7D%5D",
           "optional": true
         }
       },
@@ -254,10 +247,6 @@
         {
           "name": "outdated",
           "when": "data.profile.publisherAgreement.version && !is.current"
-        },
-        {
-          "name": "canAccept",
-          "when": "const.agreement.published && !is.current && org.manager"
         }
       ],
       "blocks": [
@@ -269,21 +258,21 @@
         },
         {
           "type": "notice",
-          "tone": "warning",
-          "when": "const.agreement.published && is.outdated",
-          "text": "These terms have changed since your organization accepted version {data.profile.publisherAgreement.version}. Publishing is paused until the current version is accepted."
-        },
-        {
-          "type": "notice",
           "tone": "info",
-          "when": "const.agreement.published && !is.current && !is.outdated",
-          "text": "Your organization has not accepted these terms. They must be accepted before anything is published."
+          "when": "const.agreement.published",
+          "text": "Every save in the marketplace — your profile, a listing, its price or visibility, a new version, a component, template or layout — asks you to tick “I agree to the Marketplace Publisher Agreement” first. We record who agreed, to which version, and when."
         },
         {
           "type": "notice",
           "tone": "info",
           "when": "is.current",
-          "text": "Your organization has accepted version {const.agreement.version}. There is nothing left to do."
+          "text": "Your organization last agreed to version {const.agreement.version}, the version in force."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "is.outdated",
+          "text": "Your organization last agreed to version {data.profile.publisherAgreement.version}. Your next save agrees to version {const.agreement.version}."
         },
         {
           "type": "list",
@@ -325,60 +314,6 @@
           "tone": "info",
           "when": "!const.agreement.published",
           "text": "Version {const.agreement.version} has no published page yet, so there is no full text to link to."
-        },
-        {
-          "type": "actions",
-          "when": "is.canAccept",
-          "footer": "Accepting version {const.agreement.version} binds the organization, not you personally, and we record who accepted and when.",
-          "items": [
-            {
-              "id": "accept",
-              "label": "Accept on behalf of this organization",
-              "icon": "checkmark|check",
-              "when": "!is.outdated",
-              "url": "/api/marketplace/publisher-profile",
-              "body": {
-                "action": "accept-agreement",
-                "orgId": "{org.id}",
-                "version": "{const.agreement.version}"
-              },
-              "success": "Agreement accepted",
-              "back": true,
-              "resume": true
-            },
-            {
-              "id": "acceptCurrent",
-              "label": "Accept the current version",
-              "icon": "checkmark|check",
-              "when": "is.outdated",
-              "url": "/api/marketplace/publisher-profile",
-              "body": {
-                "action": "accept-agreement",
-                "orgId": "{org.id}",
-                "version": "{const.agreement.version}"
-              },
-              "success": "Agreement accepted",
-              "back": true,
-              "resume": true
-            }
-          ]
-        },
-        {
-          "type": "notice",
-          "tone": "info",
-          "when": "const.agreement.published && !is.current && !org.manager",
-          "text": "Only an owner or admin of your organization can accept on its behalf. Ask one of them to accept it, then try again."
-        },
-        {
-          "type": "list",
-          "title": "Who can accept",
-          "when": "const.agreement.published && !is.current && !org.manager && data.members.members",
-          "items": "data.members.members",
-          "filter": "item.role == owner,admin",
-          "count": false,
-          "primary": "{item.displayName|item.email|item.$id}",
-          "secondary": "{item.email}",
-          "icon": "person|person"
         }
       ]
     },
@@ -458,12 +393,6 @@
           ]
         }
       },
-      "derive": [
-        {
-          "name": "current",
-          "when": "data.profile.publisherAgreement.version == @const.agreement.version"
-        }
-      ],
       "blocks": [
         {
           "type": "notice",
@@ -471,24 +400,11 @@
           "text": "Publishes the current published version of this layout so other organizations can install it. Your site is unaffected. Re-publishing bumps the version."
         },
         {
-          "type": "notice",
-          "tone": "warning",
-          "when": "data.profile.handle && const.agreement.published && !is.current && data.profile.publisherAgreement.version",
-          "text": "These terms have changed since your organization accepted version {data.profile.publisherAgreement.version}. Publishing is paused until the current version is accepted."
-        },
-        {
-          "type": "notice",
-          "tone": "info",
-          "when": "data.profile.handle && const.agreement.published && !is.current && !data.profile.publisherAgreement.version",
-          "text": "Your organization has not accepted these terms. They must be accepted before anything is published."
-        },
-        {
           "type": "links",
-          "when": "data.profile.handle && const.agreement.published && !is.current",
           "items": [
             {
-              "title": "Review the Marketplace Publisher Agreement",
-              "subtitle": "Accepting continues the publish",
+              "title": "Read the Marketplace Publisher Agreement",
+              "subtitle": "Every publish asks you to agree to it",
               "icon": "doc.text|description",
               "screen": "marketplace.publisherAgreement"
             }
@@ -524,6 +440,19 @@
               "kind": "number",
               "placeholder": "0 = free",
               "help": "0 for free, or $3 and up for a paid listing. Paid listings need payouts set up on your marketplace profile."
+            },
+            {
+              "key": "agreement",
+              "label": "Marketplace Publisher Agreement",
+              "kind": "multiselect",
+              "coversAll": true,
+              "options": [
+                {
+                  "value": "agreed",
+                  "label": "I agree to the Marketplace Publisher Agreement",
+                  "detail": "Version {const.agreement.version}, at {const.agreement.url}. Asked on every save, and recorded with who agreed and when."
+                }
+              ]
             }
           ],
           "submit": {
@@ -535,14 +464,17 @@
               "displayName": "{form.name}",
               "description": "{form.description}",
               "category": "{form.category}",
-              "priceUsd": "{form.price}"
+              "priceUsd": "{form.price}",
+              "agreement": {
+                "version": "{const.agreement.version}",
+                "accepted": {
+                  "$if": "form.agreement",
+                  "then": true
+                }
+              }
             },
             "success": "Published v{response.version} to the marketplace",
-            "back": true,
-            "gate": {
-              "when": "error.agreement.required && error.agreement.state == none,outdated",
-              "screen": "marketplace.publisherAgreement"
-            }
+            "back": true
           }
         }
       ]
@@ -623,12 +555,6 @@
           ]
         }
       },
-      "derive": [
-        {
-          "name": "current",
-          "when": "data.profile.publisherAgreement.version == @const.agreement.version"
-        }
-      ],
       "blocks": [
         {
           "type": "notice",
@@ -636,24 +562,11 @@
           "text": "Publishes the current published version of this component so other organizations can install it. Your site is unaffected. Re-publishing bumps the version."
         },
         {
-          "type": "notice",
-          "tone": "warning",
-          "when": "data.profile.handle && const.agreement.published && !is.current && data.profile.publisherAgreement.version",
-          "text": "These terms have changed since your organization accepted version {data.profile.publisherAgreement.version}. Publishing is paused until the current version is accepted."
-        },
-        {
-          "type": "notice",
-          "tone": "info",
-          "when": "data.profile.handle && const.agreement.published && !is.current && !data.profile.publisherAgreement.version",
-          "text": "Your organization has not accepted these terms. They must be accepted before anything is published."
-        },
-        {
           "type": "links",
-          "when": "data.profile.handle && const.agreement.published && !is.current",
           "items": [
             {
-              "title": "Review the Marketplace Publisher Agreement",
-              "subtitle": "Accepting continues the publish",
+              "title": "Read the Marketplace Publisher Agreement",
+              "subtitle": "Every publish asks you to agree to it",
               "icon": "doc.text|description",
               "screen": "marketplace.publisherAgreement"
             }
@@ -689,6 +602,19 @@
               "kind": "number",
               "placeholder": "0 = free",
               "help": "0 for free, or $3 and up for a paid listing. Paid listings need payouts set up on your marketplace profile."
+            },
+            {
+              "key": "agreement",
+              "label": "Marketplace Publisher Agreement",
+              "kind": "multiselect",
+              "coversAll": true,
+              "options": [
+                {
+                  "value": "agreed",
+                  "label": "I agree to the Marketplace Publisher Agreement",
+                  "detail": "Version {const.agreement.version}, at {const.agreement.url}. Asked on every save, and recorded with who agreed and when."
+                }
+              ]
             }
           ],
           "submit": {
@@ -700,14 +626,17 @@
               "displayName": "{form.name}",
               "description": "{form.description}",
               "category": "{form.category}",
-              "priceUsd": "{form.price}"
+              "priceUsd": "{form.price}",
+              "agreement": {
+                "version": "{const.agreement.version}",
+                "accepted": {
+                  "$if": "form.agreement",
+                  "then": true
+                }
+              }
             },
             "success": "Published v{response.version} to the marketplace",
-            "back": true,
-            "gate": {
-              "when": "error.agreement.required && error.agreement.state == none,outdated",
-              "screen": "marketplace.publisherAgreement"
-            }
+            "back": true
           }
         }
       ]
@@ -788,12 +717,6 @@
           ]
         }
       },
-      "derive": [
-        {
-          "name": "current",
-          "when": "data.profile.publisherAgreement.version == @const.agreement.version"
-        }
-      ],
       "blocks": [
         {
           "type": "notice",
@@ -801,24 +724,11 @@
           "text": "Publishes the current published version of this theme so other organizations can install it. Your site is unaffected. Re-publishing bumps the version."
         },
         {
-          "type": "notice",
-          "tone": "warning",
-          "when": "data.profile.handle && const.agreement.published && !is.current && data.profile.publisherAgreement.version",
-          "text": "These terms have changed since your organization accepted version {data.profile.publisherAgreement.version}. Publishing is paused until the current version is accepted."
-        },
-        {
-          "type": "notice",
-          "tone": "info",
-          "when": "data.profile.handle && const.agreement.published && !is.current && !data.profile.publisherAgreement.version",
-          "text": "Your organization has not accepted these terms. They must be accepted before anything is published."
-        },
-        {
           "type": "links",
-          "when": "data.profile.handle && const.agreement.published && !is.current",
           "items": [
             {
-              "title": "Review the Marketplace Publisher Agreement",
-              "subtitle": "Accepting continues the publish",
+              "title": "Read the Marketplace Publisher Agreement",
+              "subtitle": "Every publish asks you to agree to it",
               "icon": "doc.text|description",
               "screen": "marketplace.publisherAgreement"
             }
@@ -854,6 +764,19 @@
               "kind": "number",
               "placeholder": "0 = free",
               "help": "0 for free, or $3 and up for a paid listing. Paid listings need payouts set up on your marketplace profile."
+            },
+            {
+              "key": "agreement",
+              "label": "Marketplace Publisher Agreement",
+              "kind": "multiselect",
+              "coversAll": true,
+              "options": [
+                {
+                  "value": "agreed",
+                  "label": "I agree to the Marketplace Publisher Agreement",
+                  "detail": "Version {const.agreement.version}, at {const.agreement.url}. Asked on every save, and recorded with who agreed and when."
+                }
+              ]
             }
           ],
           "submit": {
@@ -864,14 +787,17 @@
               "displayName": "{form.name}",
               "description": "{form.description}",
               "category": "{form.category}",
-              "priceUsd": "{form.price}"
+              "priceUsd": "{form.price}",
+              "agreement": {
+                "version": "{const.agreement.version}",
+                "accepted": {
+                  "$if": "form.agreement",
+                  "then": true
+                }
+              }
             },
             "success": "Published v{response.version} to the marketplace",
-            "back": true,
-            "gate": {
-              "when": "error.agreement.required && error.agreement.state == none,outdated",
-              "screen": "marketplace.publisherAgreement"
-            }
+            "back": true
           }
         }
       ]
@@ -952,12 +878,6 @@
           ]
         }
       },
-      "derive": [
-        {
-          "name": "current",
-          "when": "data.profile.publisherAgreement.version == @const.agreement.version"
-        }
-      ],
       "blocks": [
         {
           "type": "notice",
@@ -965,24 +885,11 @@
           "text": "Publishes the current published version of this dataset schema so other organizations can install it. Your site is unaffected. Re-publishing bumps the version."
         },
         {
-          "type": "notice",
-          "tone": "warning",
-          "when": "data.profile.handle && const.agreement.published && !is.current && data.profile.publisherAgreement.version",
-          "text": "These terms have changed since your organization accepted version {data.profile.publisherAgreement.version}. Publishing is paused until the current version is accepted."
-        },
-        {
-          "type": "notice",
-          "tone": "info",
-          "when": "data.profile.handle && const.agreement.published && !is.current && !data.profile.publisherAgreement.version",
-          "text": "Your organization has not accepted these terms. They must be accepted before anything is published."
-        },
-        {
           "type": "links",
-          "when": "data.profile.handle && const.agreement.published && !is.current",
           "items": [
             {
-              "title": "Review the Marketplace Publisher Agreement",
-              "subtitle": "Accepting continues the publish",
+              "title": "Read the Marketplace Publisher Agreement",
+              "subtitle": "Every publish asks you to agree to it",
               "icon": "doc.text|description",
               "screen": "marketplace.publisherAgreement"
             }
@@ -1018,6 +925,19 @@
               "kind": "number",
               "placeholder": "0 = free",
               "help": "0 for free, or $3 and up for a paid listing. Paid listings need payouts set up on your marketplace profile."
+            },
+            {
+              "key": "agreement",
+              "label": "Marketplace Publisher Agreement",
+              "kind": "multiselect",
+              "coversAll": true,
+              "options": [
+                {
+                  "value": "agreed",
+                  "label": "I agree to the Marketplace Publisher Agreement",
+                  "detail": "Version {const.agreement.version}, at {const.agreement.url}. Asked on every save, and recorded with who agreed and when."
+                }
+              ]
             }
           ],
           "submit": {
@@ -1029,14 +949,17 @@
               "displayName": "{form.name}",
               "description": "{form.description}",
               "category": "{form.category}",
-              "priceUsd": "{form.price}"
+              "priceUsd": "{form.price}",
+              "agreement": {
+                "version": "{const.agreement.version}",
+                "accepted": {
+                  "$if": "form.agreement",
+                  "then": true
+                }
+              }
             },
             "success": "Published v{response.version} to the marketplace",
-            "back": true,
-            "gate": {
-              "when": "error.agreement.required && error.agreement.state == none,outdated",
-              "screen": "marketplace.publisherAgreement"
-            }
+            "back": true
           }
         }
       ]
@@ -1117,12 +1040,6 @@
           ]
         }
       },
-      "derive": [
-        {
-          "name": "current",
-          "when": "data.profile.publisherAgreement.version == @const.agreement.version"
-        }
-      ],
       "blocks": [
         {
           "type": "notice",
@@ -1130,24 +1047,11 @@
           "text": "Publishes the current published version of this email template so other organizations can install it. Your site is unaffected. Re-publishing bumps the version."
         },
         {
-          "type": "notice",
-          "tone": "warning",
-          "when": "data.profile.handle && const.agreement.published && !is.current && data.profile.publisherAgreement.version",
-          "text": "These terms have changed since your organization accepted version {data.profile.publisherAgreement.version}. Publishing is paused until the current version is accepted."
-        },
-        {
-          "type": "notice",
-          "tone": "info",
-          "when": "data.profile.handle && const.agreement.published && !is.current && !data.profile.publisherAgreement.version",
-          "text": "Your organization has not accepted these terms. They must be accepted before anything is published."
-        },
-        {
           "type": "links",
-          "when": "data.profile.handle && const.agreement.published && !is.current",
           "items": [
             {
-              "title": "Review the Marketplace Publisher Agreement",
-              "subtitle": "Accepting continues the publish",
+              "title": "Read the Marketplace Publisher Agreement",
+              "subtitle": "Every publish asks you to agree to it",
               "icon": "doc.text|description",
               "screen": "marketplace.publisherAgreement"
             }
@@ -1183,6 +1087,19 @@
               "kind": "number",
               "placeholder": "0 = free",
               "help": "0 for free, or $3 and up for a paid listing. Paid listings need payouts set up on your marketplace profile."
+            },
+            {
+              "key": "agreement",
+              "label": "Marketplace Publisher Agreement",
+              "kind": "multiselect",
+              "coversAll": true,
+              "options": [
+                {
+                  "value": "agreed",
+                  "label": "I agree to the Marketplace Publisher Agreement",
+                  "detail": "Version {const.agreement.version}, at {const.agreement.url}. Asked on every save, and recorded with who agreed and when."
+                }
+              ]
             }
           ],
           "submit": {
@@ -1194,14 +1111,17 @@
               "displayName": "{form.name}",
               "description": "{form.description}",
               "category": "{form.category}",
-              "priceUsd": "{form.price}"
+              "priceUsd": "{form.price}",
+              "agreement": {
+                "version": "{const.agreement.version}",
+                "accepted": {
+                  "$if": "form.agreement",
+                  "then": true
+                }
+              }
             },
             "success": "Published v{response.version} to the marketplace",
-            "back": true,
-            "gate": {
-              "when": "error.agreement.required && error.agreement.state == none,outdated",
-              "screen": "marketplace.publisherAgreement"
-            }
+            "back": true
           }
         }
       ]
@@ -1282,12 +1202,6 @@
           ]
         }
       },
-      "derive": [
-        {
-          "name": "current",
-          "when": "data.profile.publisherAgreement.version == @const.agreement.version"
-        }
-      ],
       "blocks": [
         {
           "type": "notice",
@@ -1295,24 +1209,11 @@
           "text": "Publishes the current published version of this email starter so other organizations can install it. Your site is unaffected. Re-publishing bumps the version."
         },
         {
-          "type": "notice",
-          "tone": "warning",
-          "when": "data.profile.handle && const.agreement.published && !is.current && data.profile.publisherAgreement.version",
-          "text": "These terms have changed since your organization accepted version {data.profile.publisherAgreement.version}. Publishing is paused until the current version is accepted."
-        },
-        {
-          "type": "notice",
-          "tone": "info",
-          "when": "data.profile.handle && const.agreement.published && !is.current && !data.profile.publisherAgreement.version",
-          "text": "Your organization has not accepted these terms. They must be accepted before anything is published."
-        },
-        {
           "type": "links",
-          "when": "data.profile.handle && const.agreement.published && !is.current",
           "items": [
             {
-              "title": "Review the Marketplace Publisher Agreement",
-              "subtitle": "Accepting continues the publish",
+              "title": "Read the Marketplace Publisher Agreement",
+              "subtitle": "Every publish asks you to agree to it",
               "icon": "doc.text|description",
               "screen": "marketplace.publisherAgreement"
             }
@@ -1348,6 +1249,19 @@
               "kind": "number",
               "placeholder": "0 = free",
               "help": "0 for free, or $3 and up for a paid listing. Paid listings need payouts set up on your marketplace profile."
+            },
+            {
+              "key": "agreement",
+              "label": "Marketplace Publisher Agreement",
+              "kind": "multiselect",
+              "coversAll": true,
+              "options": [
+                {
+                  "value": "agreed",
+                  "label": "I agree to the Marketplace Publisher Agreement",
+                  "detail": "Version {const.agreement.version}, at {const.agreement.url}. Asked on every save, and recorded with who agreed and when."
+                }
+              ]
             }
           ],
           "submit": {
@@ -1359,14 +1273,17 @@
               "displayName": "{form.name}",
               "description": "{form.description}",
               "category": "{form.category}",
-              "priceUsd": "{form.price}"
+              "priceUsd": "{form.price}",
+              "agreement": {
+                "version": "{const.agreement.version}",
+                "accepted": {
+                  "$if": "form.agreement",
+                  "then": true
+                }
+              }
             },
             "success": "Published v{response.version} to the marketplace",
-            "back": true,
-            "gate": {
-              "when": "error.agreement.required && error.agreement.state == none,outdated",
-              "screen": "marketplace.publisherAgreement"
-            }
+            "back": true
           }
         }
       ]
@@ -1473,10 +1390,6 @@
       },
       "derive": [
         {
-          "name": "current",
-          "when": "data.profile.publisherAgreement.version == @const.agreement.version"
-        },
-        {
           "name": "revoked",
           "when": "data.revocation.versions == all || data.revocation.versions ~= @data.listing.latestApprovedVersion"
         }
@@ -1501,24 +1414,11 @@
           "text": "This version enters review. Nothing installs until a reviewer approves it."
         },
         {
-          "type": "notice",
-          "tone": "warning",
-          "when": "data.profile.handle && const.agreement.published && !is.current && data.profile.publisherAgreement.version",
-          "text": "These terms have changed since your organization accepted version {data.profile.publisherAgreement.version}. Publishing is paused until the current version is accepted."
-        },
-        {
-          "type": "notice",
-          "tone": "info",
-          "when": "data.profile.handle && const.agreement.published && !is.current && !data.profile.publisherAgreement.version",
-          "text": "Your organization has not accepted these terms. They must be accepted before anything is published."
-        },
-        {
           "type": "links",
-          "when": "data.profile.handle && const.agreement.published && !is.current",
           "items": [
             {
-              "title": "Review the Marketplace Publisher Agreement",
-              "subtitle": "Accepting continues the publish",
+              "title": "Read the Marketplace Publisher Agreement",
+              "subtitle": "Every publish asks you to agree to it",
               "icon": "doc.text|description",
               "screen": "marketplace.publisherAgreement"
             }
@@ -1719,6 +1619,19 @@
                 }
               ],
               "help": "Recorded against this exact bundle, with your name and the date, and shown to the reviewer. Republishing the same version number asks again — the bytes changed."
+            },
+            {
+              "key": "agreement",
+              "label": "Marketplace Publisher Agreement",
+              "kind": "multiselect",
+              "coversAll": true,
+              "options": [
+                {
+                  "value": "agreed",
+                  "label": "I agree to the Marketplace Publisher Agreement",
+                  "detail": "Version {const.agreement.version}, at {const.agreement.url}. Asked on every save, and recorded with who agreed and when."
+                }
+              ]
             }
           ],
           "submit": {
@@ -1760,6 +1673,13 @@
               "repositoryUrl": {
                 "$if": "form.repositoryUrl",
                 "then": "{form.repositoryUrl}"
+              },
+              "agreement": {
+                "version": "{const.agreement.version}",
+                "accepted": {
+                  "$if": "form.agreement",
+                  "then": true
+                }
               }
             },
             "success": "Published v{response.version} — it is queued for review",
@@ -1784,10 +1704,6 @@
               "params": {
                 "listing": "{response.listingId}"
               }
-            },
-            "gate": {
-              "when": "error.agreement.required && error.agreement.state == none,outdated",
-              "screen": "marketplace.publisherAgreement"
             }
           }
         }

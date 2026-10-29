@@ -28,6 +28,7 @@ import {
 } from './listing-price-floor'
 import {
   PUBLISHER_AGREEMENT_CHANGES,
+  PUBLISHER_AGREEMENT_CONSENT_LABEL,
   PUBLISHER_AGREEMENT_POINTS,
   PUBLISHER_AGREEMENT_TITLE,
   PUBLISHER_AGREEMENT_UNAVAILABLE_NOTICE,
@@ -43,8 +44,9 @@ import {
  *
  * `marketplace.screens.json` is generated from this plugin's own models, so the agreement's version, title, link, summary
  * points and per-version changes are held to them here, along with the price floor the listing form states, the sentences
- * the console's dialogs show, and the routes and body the console's publish dialog sends. The flow itself is replayed by both
- * renderers (MarketplacePublishTests, MarketplacePublishTest).
+ * the console's dialogs show, and the routes and body the console's publish dialog sends — the publisher agreement box
+ * every publish carries above its button (AGL-4105) included. The flow itself is replayed by both renderers
+ * (MarketplacePublishTests, MarketplacePublishTest).
  */
 interface Screen {
   id: string
@@ -53,10 +55,11 @@ interface Screen {
   constants?: { agreement?: Record<string, unknown> }
   blocks: Array<{
     type: string
+    when?: string
     text?: string
     title?: string
-    fields?: Array<{ key: string; label?: string; help?: string; required?: boolean; options?: Array<{ value: string; label: string; detail?: string }> }>
-    submit?: { url: string; body: Record<string, string> }
+    fields?: Array<{ key: string; label?: string; kind?: string; coversAll?: boolean; help?: string; required?: boolean; options?: Array<{ value: string; label: string; detail?: string }> }>
+    submit?: { url: string; body: Record<string, unknown>; gate?: unknown }
     items?: Array<{ id?: string; url?: string; body?: Record<string, string>; label?: string }>
     filter?: string
   }>
@@ -66,11 +69,21 @@ const root = join(__dirname, '../../../../../..')
 const read = (path: string) => readFileSync(join(root, path), 'utf8')
 const screens = (JSON.parse(read('libs/plugins/marketplace/src/android/screens/marketplace.screens.json')) as { screens: Screen[] }).screens
 const screen = (id: string) => screens.find((one) => one.id === id) as Screen
-const dialog = read('libs/plugins/marketplace/src/lib/components/publisher-agreement-dialog.component.tsx')
+const sellerPanel = read('libs/plugins/marketplace/src/lib/components/org-seller-panel.component.tsx')
 const publishDialog = read('libs/plugins/marketplace/src/lib/components/publish-artifact-dialog.component.tsx')
 /** Source with string concatenation joined and whitespace collapsed, so a sentence the dialog builds in pieces reads whole. */
 const flat = (source: string) => source.replace(/\s+/g, ' ').replace(/[`'"] \+ [`'"]/g, '')
-const agreementClient = read('libs/plugins/marketplace/src/lib/components/publisher-agreement-client.ts')
+/** Every screen that publishes: the site template, each other kind, and a plugin. */
+const PUBLISH_SCREENS = [
+  'marketplace.publishTemplate',
+  'marketplace.publishLayout',
+  'marketplace.publishComponent',
+  'marketplace.publishTheme',
+  'marketplace.publishDatasetSchema',
+  'marketplace.publishEmailTemplate',
+  'marketplace.publishEmailStarter',
+  'marketplace.publishPlugin',
+]
 
 describe('native publishing to the marketplace', () => {
   it('holds the agreement the console presents, and links it only while it is published', () => {
@@ -102,37 +115,42 @@ describe('native publishing to the marketplace', () => {
     expect(list?.filter).toBe('parent.version > data.profile.publisherAgreement.version && parent.version <= const.agreement.version')
   })
 
-  it('says what the console says about where the organization stands', () => {
-    const texts = [...screen('marketplace.publishTemplate').blocks, ...screen('marketplace.publisherAgreement').blocks]
-      .map((block) => block.text)
-      .filter(Boolean) as string[]
-    // The dialog builds each sentence from two pieces, so the pieces are what the source holds.
-    for (const piece of [
-      'These terms have changed since your organization accepted ',
-      'Publishing is paused until the current version is accepted.',
-      'Your organization has not accepted these terms. ',
-      'They must be accepted before anything is published.',
-      'Only an owner or admin of your organization can accept ',
-    ]) {
-      expect(flat(dialog).includes(piece.trim())).toBe(true)
-      expect(texts.some((text) => text.includes(piece.trim()))).toBe(true)
+  it('asks every publish for the agreement with the console\'s box, last in the form, and sends what it was ticked for', () => {
+    for (const id of PUBLISH_SCREENS) {
+      const form = screen(id).blocks.find((block) => block.type === 'form')
+      const fields = form?.fields ?? []
+      // The last field, directly above the button, which a form holds until every field is met.
+      const box = fields[fields.length - 1]
+      expect([id, box?.key, box?.kind, box?.coversAll]).toEqual([id, 'agreement', 'multiselect', true])
+      expect(box?.options?.map((option) => [option.value, option.label])).toEqual([['agreed', PUBLISHER_AGREEMENT_CONSENT_LABEL]])
+      // The version it agrees to, and that it was ticked — the body the console sends, `publisherAgreementConsent()`.
+      expect([id, form?.submit?.body['agreement']]).toEqual([
+        id,
+        { version: '{const.agreement.version}', accepted: { $if: 'form.agreement', then: true } },
+      ])
+      // No route refusal opens an agreement any more: there is nothing to accept separately.
+      expect([id, form?.submit?.gate]).toEqual([id, undefined])
+      expect([id, screen(id).blocks.some((block) => block.when?.includes('is.current'))]).toEqual([id, false])
     }
-    const accepting = `Accepting version {const.agreement.version} binds the organization, not you personally, and we record who accepted and when.`
-    expect(flat(dialog).includes('binds the organization, not you personally, and we record who accepted and when.')).toBe(true)
-    expect(JSON.stringify(screen('marketplace.publisherAgreement'))).toContain(accepting)
+    expect(publishDialog).toContain('agreement: agreement.consent,')
   })
 
-  it('accepts through the route and version the console sends', () => {
-    const accept = screen('marketplace.publisherAgreement')
-      .blocks.flatMap((block) => block.items ?? [])
-      .filter((item) => item.id === 'accept' || item.id === 'acceptCurrent')
-    expect(accept.map((item) => item.url)).toEqual(['/api/marketplace/publisher-profile', '/api/marketplace/publisher-profile'])
-    for (const item of accept) {
-      expect(item.body).toEqual({ action: 'accept-agreement', orgId: '{org.id}', version: '{const.agreement.version}' })
-    }
-    expect(agreementClient).toContain("'/api/marketplace/publisher-profile'")
-    expect(agreementClient).toContain("action: 'accept-agreement'")
-    expect(agreementClient).toContain('version: PUBLISHER_AGREEMENT_VERSION')
+  it('says on the agreement screen what the console\'s seller panel says', () => {
+    const texts = screen('marketplace.publisherAgreement').blocks.map((block) => block.text ?? '')
+    const everySave = texts.find((text) => text.startsWith('Every save in the marketplace'))
+    expect(everySave).toBeDefined()
+    // The panel names "this profile" where the screen, opened from a publish, names "your profile"; the rest is word for word.
+    const panel = flat(sellerPanel)
+    const [head, tail] = (everySave as string).replace('your profile', 'this profile').split(`“${PUBLISHER_AGREEMENT_CONSENT_LABEL}”`)
+    expect(panel).toContain(head)
+    expect(panel).toContain(tail)
+    expect(panel).toContain('asks you to tick “I agree to the ${PUBLISHER_AGREEMENT_TITLE}” first.')
+  })
+
+  it('no screen accepts the agreement once per organization any more', () => {
+    const all = JSON.stringify(screens)
+    expect(all).not.toContain('accept-agreement')
+    expect(all).not.toContain('/api/orgs/members')
   })
 
   it('publishes a site template through the route and listing the console sends', () => {
@@ -142,8 +160,8 @@ describe('native publishing to the marketplace', () => {
     expect(form?.submit?.url).toBe('/api/marketplace/publish-template')
     expect(publishDialog).toContain("endpoint: 'marketplace/publish-template'")
     expect(publishDialog).toContain('payload: { hostId }')
-    // The listing: name, description, category, price, under the keys the dialog uses.
-    expect(Object.keys(form?.submit?.body ?? {}).sort()).toEqual(['category', 'description', 'displayName', 'hostId', 'priceUsd'])
+    // The listing: name, description, category, price and the agreement, under the keys the dialog uses.
+    expect(Object.keys(form?.submit?.body ?? {}).sort()).toEqual(['agreement', 'category', 'description', 'displayName', 'hostId', 'priceUsd'])
     for (const key of ['displayName', 'description', 'category', 'priceUsd']) expect(publishDialog).toContain(key)
     expect(publishDialog).toContain('Published v${payload.version} to the marketplace')
     expect(form?.submit && (form.submit as { success?: string }).success).toBe('Published v{response.version} to the marketplace')
@@ -173,7 +191,7 @@ describe('native publishing to the marketplace', () => {
       expect(payload).not.toBeNull()
       const named = (payload?.[1] ?? '').split(',').map((entry) => entry.trim().split(':')[0].trim())
       expect(named).toEqual(keys)
-      expect(Object.keys(form?.submit?.body ?? {}).sort()).toEqual([...keys, 'category', 'description', 'displayName', 'priceUsd'].sort())
+      expect(Object.keys(form?.submit?.body ?? {}).sort()).toEqual([...keys, 'agreement', 'category', 'description', 'displayName', 'priceUsd'].sort())
       // The same agreement, price floor and success sentence as the site template's.
       expect(one.constants?.agreement).toEqual(screen('marketplace.publishTemplate').constants?.agreement)
       const price = form?.fields?.find((field) => field.key === 'price')
@@ -206,6 +224,31 @@ describe('native publishing to the marketplace', () => {
     expect(editor).toContain('screenshots,')
   })
 
+  it('sends the publisher agreement from every native seller save, ticked in the console\'s box', () => {
+    const native = {
+      swift: read('libs/plugins/marketplace/src/ios/Sources/AglynMarketplacePlugin/Seller.swift'),
+      kotlin: read('libs/plugins/marketplace/src/android/src/commonMain/kotlin/com/aglyn/plugins/marketplace/Seller.kt'),
+    }
+    const screensOf = {
+      swift: read('libs/plugins/marketplace/src/ios/Sources/AglynMarketplacePlugin/SellerScreens.swift'),
+      kotlin: read('libs/plugins/marketplace/src/android/src/commonMain/kotlin/com/aglyn/plugins/marketplace/SellerScreens.kt'),
+    }
+    // The profile, visibility, unpublish ⇄ republish, the listing's content, and the preview set and removed: six requests,
+    // each carrying `{ version, accepted: true }` for the version the contracts carry.
+    expect(native.swift.match(/"agreement": agreement\.body/g)).toHaveLength(6)
+    expect(native.kotlin.match(/"agreement" to agreement\.body/g)).toHaveLength(6)
+    expect(native.swift).toContain('ContractValues.shared.publisherAgreementVersion')
+    expect(native.kotlin).toContain('Contracts.publisherAgreementVersion')
+    for (const source of Object.values(native)) expect(source).toMatch(/"version"[^\n]*"accepted"[^\n]*true/)
+    // The box: above Save profile, as the edit sheet's last field, and in the confirmation each one-click change now asks.
+    expect(screensOf.swift.match(/PublisherAgreementCheckbox\(isOn: \$agreed/g)).toHaveLength(3)
+    expect(screensOf.kotlin.match(/PublisherAgreementCheckbox\(agreed, \{ agreed = it \}/g)).toHaveLength(3)
+    for (const source of Object.values(screensOf)) {
+      expect(source).toContain('I agree to the ')
+      expect(source).not.toContain('It must be accepted before anything is published')
+    }
+  })
+
   it('publishes a plugin through the route, fields, statements and price the console form uses', () => {
     const form = read('libs/plugins/marketplace/src/lib/components/publish-plugin-form.component.tsx')
     const source = flat(form)
@@ -219,7 +262,7 @@ describe('native publishing to the marketplace', () => {
     // The body the form serializes, key for key.
     const keys = Object.keys(block?.submit?.body ?? {}).sort()
     expect(keys).toEqual(
-      ['attestation', 'bundle', 'category', 'changelog', 'description', 'displayName', 'license', 'manifest', 'orgId', 'priceUsd', 'readme', 'repositoryUrl', 'visibility'],
+      ['agreement', 'attestation', 'bundle', 'category', 'changelog', 'description', 'displayName', 'license', 'manifest', 'orgId', 'priceUsd', 'readme', 'repositoryUrl', 'visibility'],
     )
     for (const key of keys) expect(source).toMatch(new RegExp(`\\b${key}\\b`))
     // Every statement, in the model's words; the changelog only on a new version.
@@ -233,7 +276,10 @@ describe('native publishing to the marketplace', () => {
     // The sentences the page shows are the form's own.
     const sentences = [
       ...publish.blocks.map((one) => one.text ?? ''),
-      ...(block?.fields ?? []).flatMap((one) => [one.label ?? '', one.help ?? '', ...(one.options ?? []).filter((option) => !option.detail).map((option) => option.label)]),
+      ...(block?.fields ?? [])
+        // The agreement box is the shared component's, held above, not the form's own.
+        .filter((one) => one.key !== 'agreement')
+        .flatMap((one) => [one.label ?? '', one.help ?? '', ...(one.options ?? []).filter((option) => !option.detail).map((option) => option.label)]),
     ].filter((text) => text && !text.includes('{') && text !== 'None')
     const agreementTexts = new Set(screen('marketplace.publishTemplate').blocks.map((one) => one.text))
     for (const text of sentences.filter((one) => !agreementTexts.has(one) && !one.startsWith('0 for free'))) {

@@ -24,6 +24,9 @@ import {
   verificationRequestBlock,
 } from '../model/marketplace'
 import { canActAsPublisher } from './publisher-profile'
+import { recordPublisherAgreementAcceptance } from './publisher-agreement-acceptance'
+import { publisherAgreementConsentRefusal } from '../model/publisher-agreement'
+import type { DecodedIdToken } from 'firebase-admin/auth'
 
 /**
  * A publisher asking for — or taking back — the Verified badge (AGL-1217).
@@ -49,6 +52,12 @@ export const verificationRequestHandler: PluginApiHandler = async (req, res) => 
   if (action !== 'request' && action !== 'withdraw') {
     return res.status(400).json({ error: 'Unknown action' })
   }
+  // The publisher agreement, agreed to on this save (AGL-4105): asking for
+  // the badge, and taking the ask back, are publisher saves like any other.
+  const agreementRefusal = publisherAgreementConsentRefusal(req.body?.agreement)
+  if (agreementRefusal) {
+    return res.status(agreementRefusal.status).json(agreementRefusal.body)
+  }
 
   const authorization = String(req.headers.authorization ?? '')
   const idToken = authorization.startsWith('Bearer ')
@@ -56,8 +65,16 @@ export const verificationRequestHandler: PluginApiHandler = async (req, res) => 
     : ''
   if (!idToken) return res.status(401).json({ error: 'Unauthenticated' })
 
+  let decoded: DecodedIdToken
   try {
-    const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
+    decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
+  } catch (error) {
+    // Only a refused credential is the caller's 401; failing to check it is
+    // ours and keeps the dispatcher's 5xx (AGL-2852).
+    if (!isRefusedIdToken(error)) throw error
+    return res.status(401).json({ error: 'Unauthenticated' })
+  }
+  try {
     const firestore = firebaseAdmin.app().firestore()
     const listingRef = firestore.collection('marketplaceListings').doc(listingId)
 
@@ -76,6 +93,18 @@ export const verificationRequestHandler: PluginApiHandler = async (req, res) => 
       // confirmed to exist by the shape of the refusal.
       return res.status(404).json({ error: 'Unknown listing' })
     }
+
+    // The agreement this save was sent with, recorded before it writes
+    // (AGL-4105).
+    await recordPublisherAgreementAcceptance({
+      firestore,
+      request: req,
+      orgId: publisherOrgId,
+      uid: decoded.uid,
+      staff: decoded['staff'] === true,
+      action: action === 'withdraw' ? 'withdraw-verification' : 'request-verification',
+      targetId: listingId,
+    })
 
     if (action === 'withdraw') {
       if (listing.verificationRequest?.state !== 'pending') {
@@ -150,10 +179,8 @@ export const verificationRequestHandler: PluginApiHandler = async (req, res) => 
     }
     return res.status(200).json({ ok: true, state: 'pending' })
   } catch (error) {
-    // Only a refused credential is the caller's 401. The same try reads the
-    // listing and runs the transaction, and a failure there — or in checking
-    // the token at all — is ours and keeps a 5xx, so it pages (AGL-2852).
-    if (isRefusedIdToken(error)) return res.status(401).json({ error: 'Unauthenticated' })
+    // Reading the listing and running the transaction: a failure here is ours
+    // and keeps a 5xx, so it pages (AGL-2852).
     console.error('verification-request failed', error)
     return res.status(500).json({ error: 'The verification request could not be saved' })
   }

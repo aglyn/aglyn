@@ -722,6 +722,14 @@
         "LISTING_CATEGORIES"
       ]
     },
+    "libs/plugins/marketplace/src/lib/model/publisher-agreement.ts": {
+      "values": [
+        "PUBLISHER_AGREEMENT_VERSION",
+        "PUBLISHER_AGREEMENT_TITLE",
+        "PUBLISHER_AGREEMENT_URL",
+        "PUBLISHER_AGREEMENT_CONSENT_LABEL"
+      ]
+    },
     "libs/plugins/commerce/src/lib/model/commerce-pos.ts": {
       "types": [
         "PosDisplayMode",
@@ -14417,6 +14425,33 @@
               "value": ""
             }
           }
+        ]
+      ]
+    },
+    "businessProfileFoundedProblem": {
+      "module": "libs/aglyn/src/lib/app-utils/business-profile.ts",
+      "argsProduct": [
+        [
+          "",
+          "   ",
+          "2019",
+          " 2019 ",
+          "1999",
+          "2026",
+          "2027",
+          "19",
+          "20155",
+          "0999",
+          "1000",
+          "twenty",
+          "Since 2015",
+          "founded 2015!",
+          null,
+          2019
+        ],
+        [
+          1781524800000,
+          1940760000000
         ]
       ]
     },

@@ -33,6 +33,7 @@
 // Each shot waits for seeded content, strips the emulator warning
 // banner and the Next dev indicator, and lets images/fonts settle.
 
+import { execFileSync } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -44,6 +45,7 @@ import {
 } from './lib/staff-only-chrome.mjs'
 import { optimizePng } from './lib/optimize-png.mjs'
 import { chromeExecutable } from './lib/chrome-executable.mjs'
+import { loadFirstPartyStarterSources } from '../scripts/lib/first-party-starters.mjs'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const IMG_ROOT = join(repoRoot, 'apps/docs/static/img')
@@ -86,7 +88,10 @@ const TIMEOUT_MS = Number(process.env.E2E_TIMEOUT_MS ?? 60_000)
  *
  * `orgReleaseFlags: { <flag key>: boolean }` writes a per-org release-flag
  * override onto the seeded org in the Firestore emulator for that one shot,
- * and restores the org after it. `assertAbsent: [selector, …]` (or a single
+ * and restores the org after it. `siteStarters: true` lists the platform's
+ * own site starters in the emulator's marketplace for that one shot (the
+ * first-party seed, under a publisher of its own) and removes them after it,
+ * so no other shot of Create site meets them. `assertAbsent: [selector, …]` (or a single
  * selector) fails the shot when any of them is visible at the shutter.
  * A step may carry only `settleMs`, which is how a shot waits for the
  * canvas to finish laying out before its first click.
@@ -127,6 +132,19 @@ function guidedStartTo(step) {
   actions.push(next('A few details'))
   actions.push(next('Review your site'))
   return [...actions, { settleMs: 1500 }]
+}
+
+/**
+ * Sites → Create site → Start from the starter site (AGL-4049): the style
+ * cards, none chosen, and Create site waiting for one. It stops there, so
+ * nothing is created.
+ */
+function starterStyleStep() {
+  return [
+    { click: 'role=button[name=/Create site/] >> nth=0', waitFor: 'How do you want to start?', settleMs: 1500 },
+    { fill: ['role=textbox[name=/Site name/]', 'Hillside Dog Grooming'], settleMs: 1200 },
+    { click: 'role=button[name="Start from the starter site"]', waitFor: 'Choose a style', settleMs: 2500 },
+  ]
 }
 
 const shots = [
@@ -360,6 +378,30 @@ const shots = [
     waitFor: 'Demo Bakery',
   },
   {
+    out: 'getting-started/create-site-choose-style.png',
+    path: `/${ORG_SLUG}/hosts`,
+    waitFor: 'Demo Bakery',
+    // Start your site is the AI plugin's window, drawn while it admits the org.
+    orgReleaseFlags: { release_ai_generative: true },
+    actions: starterStyleStep(),
+  },
+  {
+    // "Choose your starter" (AGL-4049 lane 3), behind `release_site_starters`:
+    // the platform's styles as starters, nothing chosen. Staff see the flagged
+    // surface; its staff note is marked staff-only and stripped like any other.
+    out: 'getting-started/create-site-choose-starter.png',
+    path: `/${ORG_SLUG}/hosts`,
+    waitFor: 'Demo Bakery',
+    orgReleaseFlags: { release_ai_generative: true, release_site_starters: true },
+    siteStarters: true,
+    viewport: { width: 1440, height: 1100 },
+    actions: [
+      { click: 'role=button[name=/Create site/] >> nth=0', waitFor: 'How do you want to start?', settleMs: 1500 },
+      { fill: ['role=textbox[name=/Site name/]', 'Hillside Dog Grooming'], settleMs: 1200 },
+      { click: 'role=button[name="Start from a starter site"]', waitFor: 'Choose your starter', settleMs: 4000 },
+    ],
+  },
+  {
     out: 'getting-started/screens-list.png',
     // The bare `…/screens` is canonical; `…/screens/list` is a legacy alias
     // kept only so browsers holding a cached 308 land on a real page, and its
@@ -459,7 +501,8 @@ const shots = [
     actions: [{ scroll: 'text=Languages', settleMs: 1000 }],
   },
   // The guided start's steps (AGL-3898): Sites → Create site → Start with AI,
-// walked with Next to the style step and to the review. It stops there:
+// walked with Next to the style step (no card chosen, AGL-4049) and, with a
+// style clicked, to the review. It stops there:
 // nothing presses Plan my site, and the emulated console holds no AI key.
 // The jobs route admits the seeded org only with the AI release flag on.
   {
@@ -1516,6 +1559,84 @@ async function applyOrgReleaseFlags(flags) {
     patch(['releaseFlags'], previous ? { releaseFlags: previous } : {})
 }
 
+/** The publisher the emulator's first-party starters are listed under for a shot. */
+const STARTER_PUBLISHER_ORG = 'docs-starter-publisher'
+const documentUrl = (path) =>
+  `http://${FIRESTORE_HOST}/v1/projects/${FIRESTORE_PROJECT}/databases/(default)/documents/${path}`
+const EMULATOR_ADMIN = { Authorization: 'Bearer owner', 'Content-Type': 'application/json' }
+
+/**
+ * Lists the platform's own site starters in the emulator's marketplace for a
+ * shot (AGL-4049), and returns the function that takes them out again.
+ *
+ * The seed itself does the listing, as it does for production, under a
+ * publisher of its own with the Publisher Agreement in force, which is what
+ * the seed requires of any publisher. Removed after the shot — listings,
+ * their versions, the profile and the org — because a starter in the
+ * marketplace changes the starter path of every other Create site shot.
+ */
+async function listSiteStarters() {
+  const { agreement } = await loadFirstPartyStarterSources()
+  const write = async (path, fields) => {
+    const response = await fetch(documentUrl(path), {
+      method: 'PATCH',
+      headers: EMULATOR_ADMIN,
+      body: JSON.stringify({ fields }),
+    })
+    if (!response.ok) throw new Error(`${path} not written (${response.status}) at ${FIRESTORE_HOST}`)
+  }
+  await write(`orgs/${STARTER_PUBLISHER_ORG}`, {
+    name: { stringValue: 'Aglyn' },
+    slug: { stringValue: STARTER_PUBLISHER_ORG },
+  })
+  await write(`publisherProfiles/${STARTER_PUBLISHER_ORG}`, {
+    handle: { stringValue: 'aglyn' },
+    displayName: { stringValue: 'Aglyn' },
+    publisherAgreement: { mapValue: { fields: { version: { stringValue: agreement.version } } } },
+  })
+  execFileSync(
+    process.execPath,
+    [join(repoRoot, 'tools/scripts/seed-first-party-starters.mjs'), '--org', STARTER_PUBLISHER_ORG, '--write'],
+    {
+      cwd: repoRoot,
+      env: { ...process.env, FIREBASE_PROJECT_ID: FIRESTORE_PROJECT, E2E_BASE_URL: BASE_URL },
+      stdio: 'pipe',
+    },
+  )
+  return async () => {
+    const query = await fetch(`http://${FIRESTORE_HOST}/v1/projects/${FIRESTORE_PROJECT}/databases/(default)/documents:runQuery`, {
+      method: 'POST',
+      headers: EMULATOR_ADMIN,
+      body: JSON.stringify({
+        structuredQuery: {
+          from: [{ collectionId: 'marketplaceListings' }],
+          where: {
+            fieldFilter: {
+              field: { fieldPath: 'profileId' },
+              op: 'EQUAL',
+              value: { stringValue: STARTER_PUBLISHER_ORG },
+            },
+          },
+        },
+      }),
+    })
+    if (!query.ok) throw new Error(`starters not found to remove (${query.status})`)
+    const names = (await query.json()).map((row) => row.document?.name).filter(Boolean)
+    const remove = async (name) => {
+      const response = await fetch(`http://${FIRESTORE_HOST}/v1/${name}`, { method: 'DELETE', headers: EMULATOR_ADMIN })
+      if (!response.ok) throw new Error(`${name} not removed (${response.status})`)
+    }
+    for (const name of names) {
+      const versions = await fetch(`http://${FIRESTORE_HOST}/v1/${name}/versions`, { headers: EMULATOR_ADMIN })
+      for (const version of (versions.ok ? (await versions.json()).documents ?? [] : [])) await remove(version.name)
+      await remove(name)
+    }
+    const prefix = `projects/${FIRESTORE_PROJECT}/databases/(default)/documents`
+    await remove(`${prefix}/publisherProfiles/${STARTER_PUBLISHER_ORG}`)
+    await remove(`${prefix}/orgs/${STARTER_PUBLISHER_ORG}`)
+  }
+}
+
 let failures = 0
 const skipped = []
 /**
@@ -1606,6 +1727,7 @@ async function resolveClipTo(page, clipTo) {
 for (const shot of selected) {
   const page = await context.newPage()
   let restoreOrgReleaseFlags = null
+  let removeSiteStarters = null
   try {
     // A taller window for a surface that is genuinely taller than 900px.
     // `clip` is clamped to the viewport, so a dialog that overflows gets
@@ -1633,6 +1755,7 @@ for (const shot of selected) {
     if (shot.orgReleaseFlags) {
       restoreOrgReleaseFlags = await applyOrgReleaseFlags(shot.orgReleaseFlags)
     }
+    if (shot.siteStarters) removeSiteStarters = await listSiteStarters()
     await page.goto(`${BASE_URL}${shot.path}`, {
       waitUntil: 'domcontentloaded',
       timeout: TIMEOUT_MS,
@@ -1746,6 +1869,12 @@ for (const shot of selected) {
         console.error(
           `FAIL  ${shot.out}: org release flags not restored: ${error.message}`,
         )
+      })
+    }
+    if (removeSiteStarters) {
+      await removeSiteStarters().catch((error) => {
+        failures += 1
+        console.error(`FAIL  ${shot.out}: site starters not removed: ${error.message}`)
       })
     }
   }

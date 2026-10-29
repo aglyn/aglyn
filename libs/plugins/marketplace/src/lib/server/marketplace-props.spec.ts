@@ -37,6 +37,12 @@ import { sanitizeMarketplaceProps } from '../model/marketplace-props'
 
 const ROOT = '_@_'
 
+// Each save's agreement is recorded through its own module (AGL-4105),
+// faked here so the route's Firestore double does not have to model it.
+jest.mock('./publisher-agreement-acceptance', () => ({
+  recordPublisherAgreementAcceptance: jest.fn(async () => ({})),
+  publisherAgreementNote: () => ({ version: 'noted' }),
+}))
 jest.mock('@aglyn/aglyn/server', () => {
   let uid = 0
   return {

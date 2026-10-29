@@ -77,7 +77,7 @@ describe('legal links the console presents (AGL-1660)', () => {
     // instructed, until the page was published and verified serving on
     // 2026-08-14 (AGL-1674). It is kept rather than deleted because the
     // interesting failure has simply reversed: an agreement that drops back
-    // out of the published set while the console still offers an Accept button
+    // out of the published set while the console still offers a box to tick
     // is the AGL-1660 defect again, and this is where it is caught.
     expect(PUBLISHED_LEGAL_PATHS).toContain(
       '/legal/marketplace-publisher-agreement',
@@ -86,10 +86,12 @@ describe('legal links the console presents (AGL-1660)', () => {
 })
 
 /*
- * The link itself is drawn by the summary both acceptance surfaces share —
- * the seller panel and the dialog a refused publish opens (AGL-3407) — so the
- * property now spans three files: the summary links only the href it is
- * handed, and each surface hands it the presentation helper's.
+ * The link is drawn in two places: the summary on the seller panel's
+ * agreement card, and the box every publisher save carries (AGL-4105), whose
+ * title is the link. So the property spans three files: the summary links
+ * only the href it is handed, the panel hands it the presentation helper's,
+ * and the box reads its own from the per-save helper and cannot be ticked
+ * while there is nothing to read.
  */
 const marketplaceComponent = (file: string) =>
   readFileSync(
@@ -111,26 +113,26 @@ const marketplaceComponent = (file: string) =>
 const agreementSummary = marketplaceComponent(
   'publisher-agreement-summary.component.tsx',
 )
-const agreementDialog = marketplaceComponent(
-  'publisher-agreement-dialog.component.tsx',
+// The per-save box (AGL-4105), which replaced the once-per-version dialog.
+const agreementCheckbox = marketplaceComponent(
+  'publisher-agreement-checkbox.component.tsx',
 )
 
 describe('the seller panel cannot link an unreadable agreement', () => {
   it('never reads the URL constant directly', () => {
     expect(sellerPanel).not.toContain('PUBLISHER_AGREEMENT_URL')
     expect(agreementSummary).not.toContain('PUBLISHER_AGREEMENT_URL')
-    expect(agreementDialog).not.toContain('PUBLISHER_AGREEMENT_URL')
+    expect(agreementCheckbox).not.toContain('PUBLISHER_AGREEMENT_URL')
   })
 
-  it('takes the href and the accept control from the presentation helper', () => {
+  it('takes the href, and whether the box can be ticked, from the presentation helpers', () => {
     expect(sellerPanel).toContain('publisherAgreementPresentation')
     expect(sellerPanel).toContain(
       'documentUrl={agreementPresentation.documentUrl}',
     )
-    expect(sellerPanel).toContain('agreementPresentation.canAccept ? (')
     expect(agreementSummary).toContain('href={documentUrl}')
-    expect(agreementDialog).toContain('publisherAgreementPresentation')
-    expect(agreementDialog).toContain('documentUrl={presentation.documentUrl}')
-    expect(agreementDialog).toContain('presentation.canAccept &&')
+    expect(agreementCheckbox).toContain('publisherAgreementConsentPresentation()')
+    expect(agreementCheckbox).toContain('href={presentation.documentUrl ?? undefined}')
+    expect(agreementCheckbox).toContain('if (!presentation.canAgree) {')
   })
 })

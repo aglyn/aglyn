@@ -88,6 +88,7 @@ export function registerMarketplaceServerDeclarations(): void {
       search: async (input, viewer) => (await starters()).search(input, viewer),
       resolve: async (choice, viewer) => (await starters()).resolve(choice, viewer),
       installed: async (choice, viewer, site) => (await starters()).installed(choice, viewer, site),
+      describe: async (choice, viewer) => (await starters()).describe(choice, viewer),
     },
     { pluginId: BUNDLE_ID },
   )

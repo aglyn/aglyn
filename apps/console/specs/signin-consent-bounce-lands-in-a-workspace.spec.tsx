@@ -205,6 +205,7 @@ jest.mock('../utils/legal-consent', () => ({
   sendToConsentGate: () => mockSendToGate(),
 }))
 jest.mock('../utils/interactive-signin', () => ({
+  hasPendingInteractiveSignIn: () => false,
   markInteractiveSignIn: jest.fn(),
   markInteractiveSignOut: jest.fn(),
 }))

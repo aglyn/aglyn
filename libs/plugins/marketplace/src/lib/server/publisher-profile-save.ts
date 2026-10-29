@@ -18,11 +18,9 @@
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
-  PUBLISHER_AGREEMENT_BYTES,
-  PUBLISHER_AGREEMENT_SHA256,
-  PUBLISHER_AGREEMENT_UNAVAILABLE_NOTICE,
-  PUBLISHER_AGREEMENT_VERSION,
-  publisherAgreementIsPublished,
+  PUBLISHER_AGREEMENT_CONSENT_LABEL,
+  PUBLISHER_AGREEMENT_TITLE,
+  publisherAgreementConsentRefusal,
 } from '../model/publisher-agreement'
 import {
   isValidPublisherHandle,
@@ -38,94 +36,12 @@ import {
   listingSubmissionRefusal,
   publisherIdentityImpersonation,
 } from './listing-screen'
-
-/**
- * Record an org's acceptance of the marketplace publisher agreement
- * (AGL-1077).
- *
- * Server-owned, like the handle and the payout keys: an acceptance a client
- * could write is not evidence of anything. The rules block the field, and
- * this is the only path that sets it.
- *
- * The submitted version must be the one currently in force. A client that
- * echoes back some other string is refused rather than recorded — otherwise
- * "accepted v1 forever" becomes a way to never see a changed agreement, and
- * the whole point of versioning it is that a change re-asks.
- *
- * And the document must exist (AGL-1660). The console hides the control while
- * it does not, but the console is UI: this route is the only writer, so this
- * is the only place the refusal is a fact. Recording an acceptance of text we
- * never served would put a signature in the record with nothing behind it,
- * which is strictly worse than having no record — it looks like evidence.
- */
-const acceptPublisherAgreement: PluginApiHandler = async (req, res) => {
-  const orgId = String(req.body?.orgId ?? '')
-  const version = String(req.body?.version ?? '')
-  if (!orgId) return res.status(400).json({ error: 'Missing orgId' })
-  if (!publisherAgreementIsPublished()) {
-    // 409, the same conflict-with-current-state answer a version mismatch
-    // gets: the request is well-formed, the world is not ready for it.
-    return res.status(409).json({
-      error: PUBLISHER_AGREEMENT_UNAVAILABLE_NOTICE,
-      unavailable: true,
-      currentVersion: PUBLISHER_AGREEMENT_VERSION,
-    })
-  }
-  if (version !== PUBLISHER_AGREEMENT_VERSION) {
-    return res.status(409).json({
-      error:
-        'The agreement changed while you were reading it. Reload and read ' +
-        'the current version before accepting.',
-      currentVersion: PUBLISHER_AGREEMENT_VERSION,
-    })
-  }
-  const authorization = String(req.headers.authorization ?? '')
-  const idToken = authorization.startsWith('Bearer ')
-    ? authorization.slice('Bearer '.length)
-    : undefined
-  if (!idToken) return res.status(401).json({ error: 'Unauthenticated' })
-  try {
-    const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
-    const firestore = firebaseAdmin.app().firestore()
-    // The ORG is the party (AGL-652), and only someone who can bind it may
-    // say so — the same gate that owns the profile's public identity.
-    if (!(await canActAsPublisher(firestore, decoded.uid, orgId))) {
-      return res.status(403).json({
-        error:
-          'Only an organization owner or admin can accept the publisher ' +
-          'agreement on its behalf',
-      })
-    }
-    await firestore
-      .collection(PUBLISHER_PROFILES)
-      .doc(orgId)
-      .set(
-        {
-          publisherAgreement: {
-            version: PUBLISHER_AGREEMENT_VERSION,
-            // The snapshot pin (AGL-1678): the version is a label we control
-            // and can reuse, so the record also carries the sha256 and byte
-            // length of the archived snapshot of the text the publisher was
-            // shown — self-contained evidence of content, same machinery as
-            // the signup clickwrap (AGL-1497).
-            sha256: PUBLISHER_AGREEMENT_SHA256,
-            bytes: PUBLISHER_AGREEMENT_BYTES,
-            // A uid, not the org: "this organization agreed" is not a fact
-            // anybody can be held to. A named person on a date is.
-            acceptedBy: decoded.uid,
-            acceptedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-          },
-        },
-        { merge: true },
-      )
-    return res
-      .status(200)
-      .json({ ok: true, version: PUBLISHER_AGREEMENT_VERSION })
-  } catch (error) {
-    console.error(error)
-    return res.status(500).json({ error: 'Could not record the acceptance' })
-  }
-}
+import {
+  publisherAgreementNote,
+  recordPublisherAgreementAcceptance,
+} from './publisher-agreement-acceptance'
+import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
+import type { DecodedIdToken } from 'firebase-admin/auth'
 
 /**
  * Save an org's publisher profile (AGL-652).
@@ -143,11 +59,16 @@ export const publisherProfileSaveHandler: PluginApiHandler = async (req, res) =>
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
-  // Accepting the agreement (AGL-1077) is not a profile edit — it writes a
-  // field the profile save must never touch, so it takes its own branch
-  // rather than riding along with a name change.
+  // Accepting the agreement once per organization (AGL-1077) is retired
+  // (AGL-4105): every save agrees to it on its own, ticked in the form. An app
+  // from before that still sends this, and is told what to do instead rather
+  // than having it read as a profile save with no name.
   if (req.body?.action === 'accept-agreement') {
-    return acceptPublisherAgreement(req, res)
+    return res.status(410).json({
+      error:
+        `The ${PUBLISHER_AGREEMENT_TITLE} is now agreed to on each save: tick ` +
+        `'${PUBLISHER_AGREEMENT_CONSENT_LABEL}' above Save or Publish.`,
+    })
   }
   const orgId = String(req.body?.orgId ?? '')
   const handle = String(req.body?.handle ?? '').trim().toLowerCase()
@@ -163,6 +84,11 @@ export const publisherProfileSaveHandler: PluginApiHandler = async (req, res) =>
         'hyphens, starting and ending alphanumeric.',
     })
   }
+  // The publisher agreement, agreed to on this save (AGL-4105).
+  const agreementRefusal = publisherAgreementConsentRefusal(req.body?.agreement)
+  if (agreementRefusal) {
+    return res.status(agreementRefusal.status).json(agreementRefusal.body)
+  }
 
   const authorization = String(req.headers.authorization ?? '')
   const idToken = authorization.startsWith('Bearer ')
@@ -170,8 +96,16 @@ export const publisherProfileSaveHandler: PluginApiHandler = async (req, res) =>
     : undefined
   if (!idToken) return res.status(401).json({ error: 'Unauthenticated' })
 
+  let decoded: DecodedIdToken
   try {
-    const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
+    decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
+  } catch (error) {
+    // Only a refused credential is the caller's 401; failing to check it is
+    // ours and keeps the dispatcher's 5xx (AGL-2852).
+    if (!isRefusedIdToken(error)) throw error
+    return res.status(401).json({ error: 'Unauthenticated' })
+  }
+  try {
     const firestore = firebaseAdmin.app().firestore()
     if (!(await canActAsPublisher(firestore, decoded.uid, orgId))) {
       return res.status(403).json({
@@ -204,6 +138,20 @@ export const publisherProfileSaveHandler: PluginApiHandler = async (req, res) =>
 
     const ref = firestore.collection(PUBLISHER_PROFILES).doc(orgId)
     const previousHandle = (await ref.get()).get('handle') as string | undefined
+
+    // The agreement this save was sent with, recorded before anything is
+    // claimed or written (AGL-4105). The profile's note of it rides the
+    // profile write below, which may be the one that creates the profile.
+    const acceptance = await recordPublisherAgreementAcceptance({
+      firestore,
+      request: req,
+      orgId,
+      uid: decoded.uid,
+      staff: official,
+      action: 'save-profile',
+      targetId: orgId,
+      noteOnProfile: false,
+    })
 
     // Claim first: if the handle is taken there must be no profile write, or
     // the org would show a handle it doesn't actually hold.
@@ -255,6 +203,7 @@ export const publisherProfileSaveHandler: PluginApiHandler = async (req, res) =>
             }
           : {}),
         ...extraWrites,
+        publisherAgreement: publisherAgreementNote(acceptance),
         updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
       },
       { merge: true },

@@ -1051,6 +1051,15 @@ allow read, write: if false;
 
 
 
+match /publisherAgreementAcceptances/{acceptanceId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
 
 
 
@@ -1429,19 +1438,39 @@ return orgMember()
 
 
 
+function memberKeyOrOverride(permission, presetRoles) {
+let stamped = orgMember()
+.get('resolvedPermissions', orgMember().get('permissions', {}))
+.get(permission, null);
+return stamped is bool ? stamped == true : orgMember().get('role', '') in presetRoles;
+}
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
 
 
 function canWriteOrgDatasets() {
-return canWriteOrgData() && memberResolves('data.manage');
+return isOrgMember() && isVerified() &&
+memberKeyOrOverride('data.manage', ['owner', 'admin', 'editor']) &&
+orgNotSuspended();
 }
+
 
 function canReadTransferJobs() {
 return isOrgWideMember() && isVerified() &&
-((orgMember().role in ['owner', 'admin', 'editor'] && memberResolves('data.manage')) ||
-memberStamps('data.manage'));
+memberKeyOrOverride('data.manage', ['owner', 'admin', 'editor']);
 }
 
 
@@ -1611,6 +1640,7 @@ return !('mediaIds' in request.resource.data) ||
 (request.resource.data.mediaIds is list &&
 request.resource.data.mediaIds.size() <= 20);
 }
+
 
 
 
@@ -3493,6 +3523,11 @@ allow update: if isStaff() ||
 
 
 
+'starterChoice',
+
+
+
+
 
 'preview', 'publicSinceMs',
 
@@ -5152,7 +5187,6 @@ request.resource.data.displayName.size() <= 80;
 
 
 
-
 allow create: if false;
 
 
@@ -5312,8 +5346,18 @@ allow update: if isStaff() ||
 
 
 'official', 'starterKind', 'starterBase', 'starterFonts',
-'starterPages', 'starterMode', 'sourceStarterHostId']));
-allow delete: if isStaff() || listingManager();
+'starterPages', 'starterMode', 'sourceStarterHostId',
+
+
+
+
+
+
+'category', 'categories', 'pluginId']));
+
+
+
+allow delete: if isStaff();
 
 
 

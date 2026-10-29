@@ -48,6 +48,12 @@ import {
 // Deep import for the same reason: the leaving notice's path, from a leaf
 // with no imports of its own (AGL-3452).
 import { LEAVING_NOTICE_PATH } from '@aglyn/aglyn/app-utils/leaving-notice'
+// Deep import for the same reason: which page requests answer the site's 503
+// page as a 503, from a leaf with no imports of its own (AGL-4110).
+import {
+  SITE_UNAVAILABLE_RETRY_AFTER_SECONDS,
+  siteUnavailableForRequest,
+} from '@aglyn/aglyn/app-utils/site-unavailable'
 // Deep import for the same reason: one pure function with no imports, the
 // merge a site redirect applies to the visitor's query string.
 import { withVisitorQuery } from '@aglyn/aglyn/app-utils/redirect-query'
@@ -329,6 +335,7 @@ const lockdownVerdicts = new Map<
     siteOrigins: string[]
     preview: boolean
     previewPaths: string[]
+    maintenance: boolean
   }
 >()
 
@@ -364,6 +371,7 @@ async function hostVerdict(
   siteOrigins: string[]
   preview: boolean
   previewPaths: string[]
+  maintenance: boolean
 }> {
   const cached = lockdownVerdicts.get(tenantHost)
   if (cached && Date.now() - cached.at < LOCKDOWN_VERDICT_TTL_MS) {
@@ -382,6 +390,7 @@ async function hostVerdict(
       siteOrigins: cached.siteOrigins,
       preview: cached.preview,
       previewPaths: cached.previewPaths,
+      maintenance: cached.maintenance,
     }
   }
   let blocked = false
@@ -462,6 +471,12 @@ async function hostVerdict(
   // site in preview to a stranger nor hide a public one.
   let preview: boolean = cached?.preview ?? false
   let previewPaths: string[] = cached?.previewPaths ?? []
+  // Maintenance mode (AGL-4110) starts FALSE, with `blocked`, and is not
+  // stale-retentive: it only decides whether the 503 page the loader already
+  // serves goes out as a 503. An unreachable verdict therefore sends it as it
+  // always went, a 200, rather than holding a 503 on a site that may have come
+  // back while the verdict was away. An outage is not a maintenance window.
+  let maintenance = false
   try {
     // The body is read inside the deadline too: a verdict that never answers,
     // or answers with a body that never ends, is the outage case below — not
@@ -495,6 +510,7 @@ async function hostVerdict(
         siteOrigins?: unknown
         preview?: unknown
         previewPaths?: unknown
+        maintenance?: unknown
       } | null
       blocked = data?.locked === true && data?.mode !== 'read-only'
       attribution = data?.attribution === true
@@ -537,6 +553,7 @@ async function hostVerdict(
         )
       }
       if (typeof data?.preview === 'boolean') preview = data.preview
+      maintenance = data?.maintenance === true
       if (Array.isArray(data?.previewPaths)) {
         previewPaths = strings(data.previewPaths)
       }
@@ -560,6 +577,7 @@ async function hostVerdict(
     siteOrigins,
     preview,
     previewPaths,
+    maintenance,
   })
   return {
     blocked,
@@ -576,6 +594,7 @@ async function hostVerdict(
     siteOrigins,
     preview,
     previewPaths,
+    maintenance,
   }
 }
 
@@ -1359,7 +1378,49 @@ export const middleware: NextMiddleware = async (req, event) => {
   // What DOES enforce here: the base directives below — `object-src 'none'`,
   // `base-uri 'self'`, `frame-ancestors` — the six owner-widened directives,
   // and the plugin sandbox.
-  const response = NextResponse.rewrite(new URL(rewrite, req.url))
+  /**
+   * THE SITE'S 503 PAGE GOES OUT AS A 503 (AGL-4110).
+   *
+   * In maintenance mode, and in preview for anyone the cache answers, the
+   * loader renders the site's 503 page (or the built-in notice, or "Coming
+   * soon") at every address. Sent as a 200, that told crawlers the notice WAS
+   * each page, and a live site left in maintenance could be re-indexed as one
+   * page saying "Temporarily unavailable". A 503 with `Retry-After` says the
+   * site is briefly down and to come back.
+   *
+   * Set HERE, on the rewrite, because nothing else can: an App Router page has
+   * no status lever (`/api/locked` is a route handler for the same reason, but
+   * a route handler cannot render the site's own designed page), and this is
+   * the one layer that runs ahead of the cache on every request. The rewrite
+   * target, and therefore the cached body, is exactly what it was.
+   *
+   * Measured against `next start`: a rewrite's status replaces a 200 render's,
+   * served from the ISR cache or rendered fresh, and the cache entry keeps no
+   * status of its own, so the same entry answers 200 again the moment this
+   * stops asking for a 503. A render that sets its own status keeps it: a 404
+   * stays a 404 and a redirect stays a redirect.
+   *
+   * The cache is split the way it already was. The team's view of a site in
+   * preview is the uncached route (`no-store` below) and never answers 503;
+   * the public's answer is the cached catch-all, whose body is the 503 page for
+   * as long as the site is in preview. Their keys never meet, so neither
+   * population can be served the other's page, and the status is decided per
+   * request, never read back from a cache.
+   */
+  const unavailable = siteUnavailableForRequest(verdict, {
+    entryPreview: previewing,
+    teamPreview,
+  })
+  const response = NextResponse.rewrite(
+    new URL(rewrite, req.url),
+    unavailable ? { status: 503 } : undefined,
+  )
+  if (unavailable) {
+    response.headers.set(
+      'Retry-After',
+      String(SITE_UNAVAILABLE_RETRY_AFTER_SECONDS),
+    )
+  }
   if (uncached) {
     /**
      * Said out loud rather than inherited (AGL-3205).

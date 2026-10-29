@@ -47,6 +47,10 @@ import {
   AI_SITE_IMPORT_PAGE_TEXT_MAX_CHARS,
   AI_SITE_IMPORT_READ_MAX_CHARS,
   aiSiteImportCapBlocks,
+  AI_SITE_IMPORT_LAYOUT_MAX_CHARS,
+  siteImportLayoutChars,
+  siteImportLayoutWithin,
+  siteImportLayoutWithoutDrawings,
   type AiSiteImportLeftOutReason,
   type AiSiteImportListedPage,
   type AiSiteImportPageRead,
@@ -156,10 +160,17 @@ export function siteImportPageText(page: Pick<SiteImportPage, 'title' | 'descrip
   return text.length > AI_SITE_IMPORT_PAGE_TEXT_MAX_CHARS ? text.slice(0, AI_SITE_IMPORT_PAGE_TEXT_MAX_CHARS) : text
 }
 
-/** The page as a wave reads it: its main region's blocks whole, within the read's budget. */
+/**
+ * The page as a wave reads it: its main region's blocks whole, within the
+ * read's budget, and how the source lays them out (AGL-4106) over the blocks
+ * kept, its icons' drawings dropped first when it runs past its own budget.
+ */
 export function siteImportPageRead(page: SiteImportPage, at: string): AiSiteImportPageRead {
   const main = page.blocks.filter((block) => block.region === 'main')
   const capped = aiSiteImportCapBlocks(main, AI_SITE_IMPORT_READ_MAX_CHARS)
+  let layout = page.layout ? siteImportLayoutWithin(page.layout, capped.blocks.length) : null
+  if (layout && siteImportLayoutChars(layout) > AI_SITE_IMPORT_LAYOUT_MAX_CHARS) layout = siteImportLayoutWithoutDrawings(layout)
+  if (layout && siteImportLayoutChars(layout) > AI_SITE_IMPORT_LAYOUT_MAX_CHARS) layout = null
   return {
     at,
     title: siteImportPageTitle(page),
@@ -170,7 +181,19 @@ export function siteImportPageRead(page: SiteImportPage, at: string): AiSiteImpo
     ...(capped.cut ? { cut: true } : {}),
     words: siteImportPageWords({ title: '', blocks: main }),
     forms: page.forms.kept,
+    ...(layout ? { layout } : {}),
+    // The source's own title and description, for the page's listing (AGL-4107).
+    meta: { title: siteImportMetaText(page.title, SITE_IMPORT_META_TITLE_MAX_CHARS), description: siteImportMetaText(page.description, SITE_IMPORT_META_DESCRIPTION_MAX_CHARS) },
   }
+}
+
+/** The most characters of a source's title and description a read keeps: far past what any listing shows. */
+export const SITE_IMPORT_META_TITLE_MAX_CHARS = 300
+export const SITE_IMPORT_META_DESCRIPTION_MAX_CHARS = 1_000
+
+/** A title or a description as the source writes it, one line, neutralized; a longer one is kept to its ceiling. */
+function siteImportMetaText(text: string | null | undefined, max: number): string {
+  return neutralizeUntrustedText(String(text ?? '')).replace(/\s+/g, ' ').trim().slice(0, max)
 }
 
 /*------------------------------------------
@@ -289,6 +312,8 @@ export function siteImportLeftOutReason(reason: SiteImportSkipReason, status?: n
       return status !== undefined && AI_SITE_IMPORT_BLOCKED_STATUSES.has(status) ? 'blocked' : 'unreadable'
     case 'not-reached':
       return 'not-reached'
+    case 'not-html':
+      return 'file'
     default:
       return 'unreadable'
   }

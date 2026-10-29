@@ -30,6 +30,7 @@
  *   publisher whose tracking pixel was silently removed learns nothing.
  */
 
+import { publisherAgreementConsent } from '../model/publisher-agreement'
 import { compress } from '@aglyn/aglyn/app-utils/compress'
 
 const ROOT = '_@_'
@@ -42,6 +43,12 @@ const state = {
   writes: [] as Array<{ path: string; data: Record<string, unknown> }>,
 }
 
+// Each save's agreement is recorded through its own module (AGL-4105),
+// faked here so the route's Firestore double does not have to model it.
+jest.mock('./publisher-agreement-acceptance', () => ({
+  recordPublisherAgreementAcceptance: jest.fn(async () => ({})),
+  publisherAgreementNote: () => ({ version: 'noted' }),
+}))
 jest.mock('@aglyn/aglyn/server', () => ({
   CANVAS_ROOT_ELEMENT_ID: '_@_',
   createResourceUid: () => 'listing-new',
@@ -140,7 +147,7 @@ async function publish() {
     {
       method: 'POST',
       headers: { authorization: 'Bearer token' },
-      body: { hostId: 'host-1', screenId: 'screen-1', displayName: 'Spring sale' },
+      body: { hostId: 'host-1', screenId: 'screen-1', displayName: 'Spring sale', agreement: publisherAgreementConsent() },
     } as any,
     res,
   )

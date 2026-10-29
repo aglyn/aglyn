@@ -166,6 +166,17 @@ describe('a frame with nothing hollow in it (AGL-3735)', () => {
     expect(fixed['nav'].nodes).toEqual(['a'])
   })
 
+  it('keeps a mega menu whose entries are each a Link Container, its icon and words inside (AGL-4108)', () => {
+    const nodes: Record<string, Node> = {
+      bar: { componentId: 'muiAppBar', props: { component: 'header' }, nodes: ['nav'] },
+      nav: { componentId: 'muiStack', props: { component: 'nav' }, nodes: ['menu'] },
+      menu: { componentId: 'muiMegaMenu', props: { label: 'Product' }, nodes: ['entry'] },
+      entry: { componentId: 'muiLinkBox', props: { href: '/besigner', ariaLabel: 'Besigner' }, nodes: ['name'] },
+      name: { componentId: 'muiTypography', props: { children: 'Besigner', variant: 'subtitle2' } },
+    }
+    expect(aiLayoutFrameHollows(nodes).headerMenus).toEqual([])
+  })
+
   it('keeps a header dropdown that holds a link, and takes only the empty one out', () => {
     const nodes: Record<string, Node> = {
       bar: { componentId: 'section', props: { element: 'header' }, nodes: ['nav'] },
