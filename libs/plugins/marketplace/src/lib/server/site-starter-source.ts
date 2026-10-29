@@ -49,7 +49,7 @@ import {
   siteStarterSummaryOf,
 } from '../model/site-starter-listing'
 import { canActAsPublisher, PUBLISHER_PROFILES } from './publisher-profile'
-import { requirePurchase } from './purchase-entitlement'
+import { hasLivePurchase, requirePurchase } from './purchase-entitlement'
 import { isPublisherSecurityLocked } from './sale-risk'
 import { recordVersionMove } from './version-stats'
 
@@ -106,11 +106,92 @@ async function authorNames(
 }
 
 /**
+ * Whether the viewer acts for the listing's publisher, in the publisher's
+ * own workspace: it picks its own starter free, and only into itself — the
+ * waiver is about the publisher's OWN sites (AGL-2484), so a person who
+ * administers the publisher and creates a site elsewhere is a buyer like
+ * anyone else there.
+ */
+async function viewerPublishes(
+  firestore: FirebaseFirestore.Firestore,
+  listing: ListingDoc,
+  viewer: SiteStarterViewer,
+): Promise<boolean> {
+  const publisherOrgId = String(listing.profileId ?? '')
+  const viewerOrgId = String(viewer?.orgId ?? '')
+  return viewerOrgId
+    ? publisherOrgId !== '' &&
+        viewerOrgId === publisherOrgId &&
+        canActAsPublisher(firestore, String(viewer?.uid ?? ''), listing.profileId)
+    : false
+}
+
+/**
+ * A starter listing this viewer may pick, with whether they publish it, or
+ * `null` when it is gone as far as they are concerned: deleted, taken down,
+ * from a publisher under a security lock, not a starter, or private or not
+ * yet listed and not theirs.
+ */
+async function pickableListing(
+  firestore: FirebaseFirestore.Firestore,
+  listingId: string,
+  viewer: SiteStarterViewer,
+): Promise<{ listing: ListingDoc; publishes: boolean } | null> {
+  const listing = (await firestore.collection(LISTINGS).doc(listingId).get()).data() as ListingDoc | undefined
+  if (
+    !listing ||
+    listing.deletedAt ||
+    // A staff takedown hands nothing over, to anyone (AGL-2290).
+    listing.hiddenAt ||
+    // Nor does a publisher under a security lock (AGL-3365).
+    (await isPublisherSecurityLocked(firestore, listing.profileId)) ||
+    listingArtifactType(listing) !== SITE_STARTER_ARTIFACT_TYPE
+  ) {
+    return null
+  }
+  const ownsListing = await viewerPublishes(firestore, listing, viewer)
+  // Private means its own workspace only (AGL-968).
+  if (isPrivateListing(listing) && !ownsListing) return null
+  // A starter still in review, or rejected, is its publisher's to try.
+  if (!isListingBrowsable(listing) && !ownsListing) return null
+  return { listing, publishes: ownsListing }
+}
+
+/**
+ * For a priced starter, whether the asking workspace may create from it
+ * without paying (AGL-4049): its own, or bought and not refunded — the same
+ * answer `resolve` gives, so a card never says "owned" for a pick the create
+ * then asks payment for. `undefined` for a free starter, which needs no
+ * purchase, and `false` for a viewer naming nobody.
+ */
+async function ownedBy(
+  firestore: FirebaseFirestore.Firestore,
+  listingId: string,
+  listing: ListingDoc,
+  viewer: SiteStarterViewer,
+  publishes?: boolean,
+): Promise<boolean | undefined> {
+  if (!(Number(listing.priceUsd ?? 0) > 0)) return undefined
+  const buyerOrgId = String(viewer?.orgId ?? '')
+  const buyerUid = String(viewer?.uid ?? '')
+  if (!buyerOrgId && !buyerUid) return false
+  if (publishes ?? (await viewerPublishes(firestore, listing, viewer))) return true
+  return hasLivePurchase({ firestore, buyerUid, buyerOrgId, listingId })
+}
+
+/** A summary with `owned` set where the listing has a price, and left out where it has none. */
+const withOwned = (summary: SiteStarterSummary, owned: boolean | undefined): SiteStarterSummary =>
+  owned === undefined ? summary : { ...summary, owned }
+
+/**
  * What anyone may see: the search asks the public audience only, so who is
- * asking changes nothing about the answer and the viewer is not read.
+ * asking changes nothing about WHICH starters it lists. The viewer is read
+ * for one thing, on the priced ones: whether their workspace already owns
+ * it, so a card can say so rather than offer to sell it again.
  */
 async function search(
   input: { word: string; filter: Partial<SiteStarterFacets>; limit: number },
+  viewer?: SiteStarterViewer,
 ): Promise<SiteStarterSummary[]> {
   const limit = siteStarterSearchLimit(input?.limit)
   if (!limit) return []
@@ -151,9 +232,35 @@ async function search(
     firestore,
     ordered.map(({ listing }) => String(listing['profileId'] ?? '')),
   )
-  return ordered.map(({ id, listing }) =>
-    siteStarterSummaryOf(id, listing, names.get(String(listing['profileId'] ?? '')) ?? ''),
+  const owned = await Promise.all(
+    ordered.map(({ id, listing }) => ownedBy(firestore, id, listing, viewer ?? { orgId: null, uid: '' })),
   )
+  return ordered.map(({ id, listing }, index) =>
+    withOwned(siteStarterSummaryOf(id, listing, names.get(String(listing['profileId'] ?? '')) ?? ''), owned[index]),
+  )
+}
+
+/**
+ * One starter as a search would list it for this viewer (AGL-4049), or
+ * `null` when it is not one they may pick: the same gates `resolve` holds,
+ * answered from the listing, never from its stored pages. The create path
+ * records and names a site's starter from this, and "Choose your starter"
+ * restores a pick with it.
+ */
+async function describe(
+  choice: SiteStarterChoice,
+  viewer: SiteStarterViewer,
+): Promise<SiteStarterSummary | null> {
+  const listingId = typeof choice?.listingId === 'string' ? choice.listingId : ''
+  if (!listingId) return null
+  const firestore = firestoreOf()
+  const found = await pickableListing(firestore, listingId, viewer)
+  if (!found) return null
+  const { listing, publishes } = found
+  const profileId = String(listing['profileId'] ?? '')
+  const names = await authorNames(firestore, [profileId])
+  const owned = await ownedBy(firestore, listingId, listing, viewer, publishes)
+  return withOwned(siteStarterSummaryOf(listingId, listing, names.get(profileId) ?? ''), owned)
 }
 
 async function resolve(
@@ -164,34 +271,10 @@ async function resolve(
   if (!listingId) return gone()
   const firestore = firestoreOf()
   const listingRef = firestore.collection(LISTINGS).doc(listingId)
-  const listing = (await listingRef.get()).data() as ListingDoc | undefined
-  if (
-    !listing ||
-    listing.deletedAt ||
-    // A staff takedown hands nothing over, to anyone (AGL-2290).
-    listing.hiddenAt ||
-    // Nor does a publisher under a security lock (AGL-3365).
-    (await isPublisherSecurityLocked(firestore, listing.profileId)) ||
-    listingArtifactType(listing) !== SITE_STARTER_ARTIFACT_TYPE
-  ) {
-    return gone()
-  }
-
-  // The publisher's own workspace picks its own starter free, and only into
-  // itself: the waiver is about the publisher's OWN sites (AGL-2484), so a
-  // person who administers the publisher and creates a site elsewhere is a
-  // buyer like anyone else there.
-  const publisherOrgId = String(listing.profileId ?? '')
+  const found = await pickableListing(firestore, listingId, viewer)
+  if (!found) return gone()
+  const { listing, publishes: ownsListing } = found
   const viewerOrgId = String(viewer?.orgId ?? '')
-  const ownsListing = viewerOrgId
-    ? publisherOrgId !== '' &&
-      viewerOrgId === publisherOrgId &&
-      (await canActAsPublisher(firestore, String(viewer?.uid ?? ''), listing.profileId))
-    : false
-  // Private means its own workspace only (AGL-968).
-  if (isPrivateListing(listing) && !ownsListing) return gone()
-  // A starter still in review, or rejected, is its publisher's to try.
-  if (!isListingBrowsable(listing) && !ownsListing) return gone()
 
   const priceUsd = Number(listing.priceUsd ?? 0)
   const unpaid = await requirePurchase({
@@ -251,4 +334,5 @@ export const marketplaceSiteStarterSource: Required<PluginSiteStarterSource> = {
   search,
   resolve,
   installed,
+  describe,
 }

@@ -400,6 +400,24 @@ export const FLAG_DOC_PAGES: Partial<
   // admonition, whole-file. They are also `unlisted: true` until the flag is
   // on, which keeps them out of the sidebar and the help registry; the
   // disclosure is what covers a reader who arrives by direct link.
+  // AGL-4049. The flag opens "Choose your starter" in Create site and the
+  // starter search route behind it. The guide about it is ABOUT the feature,
+  // so it takes the admonition, whole-file; it names prices only in words
+  // ("a card with a price"), never an amount. Create a site covers every way
+  // a site starts, so it discloses beside its own mention, tied to it by the
+  // window.
+  release_site_starters: [
+    {
+      path: 'docs/building-sites/site-templates/site-starters.md',
+      disclosure: 'admonition',
+      checkNoPriceClaim: true,
+    },
+    {
+      path: 'docs/getting-started/create-a-site.md',
+      disclosure: [/\*\*Choose your starter is rolling out\*\*,[\s\S]{0,40}may not have it yet\./],
+      checkNoPriceClaim: true,
+    },
+  ],
   release_accounting: [
     {
       path: 'docs/commerce-and-bookings/commerce/connect-quickbooks-online.md',
@@ -435,12 +453,6 @@ export const FLAGS_WITHOUT_DOCS: Partial<Record<ReleaseFlagKey, string>> = {
   // less than they say, never more, so there is no rollout to disclose.
   release_crm_assist_whole_record:
     'Widens what CRM assistance sends the model provider without opening any surface. The legal pages (v10, October 5, 2026) and the docs describe the whole record, which is what the flag can send; with it off a record sends less than they say, never more.',
-  // AGL-4049. Phase 1 lands the vocabulary, the starter source seam and the
-  // picker zone, and nothing reads the flag yet, so there is no surface to
-  // document. The guide that names the starter picker lands with the picker,
-  // and moves this flag into FLAG_DOC_PAGES.
-  release_site_starters:
-    'Declares the starter picker ahead of its surface: nothing reads the flag yet and no page describes starters from the marketplace, so there is nothing to disclose until the picker ships with its guide.',
 }
 
 /**

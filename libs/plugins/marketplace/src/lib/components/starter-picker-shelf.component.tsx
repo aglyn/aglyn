@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import type { SiteStarterFacets } from '@aglyn/aglyn/app-utils/site-starter'
 import type { ConsoleHostStarterPickerZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
@@ -27,10 +28,36 @@ import {
   type OptionCardChip,
   type OptionCardImage,
 } from '@aglyn/shared-ui-jsx/components/option-card-grid.component'
-import { Alert, Box, Button, LinearProgress, Skeleton, Stack } from '@mui/material'
+import {
+  Alert,
+  Box,
+  Button,
+  Link,
+  LinearProgress,
+  Skeleton,
+  Stack,
+  type SxProps,
+  type Theme,
+} from '@mui/material'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useStarterPurchase } from '../hooks/use-starter-purchase'
 import { useStarterSearch } from '../hooks/use-starter-search'
-import { starterCardFacts, type StarterCardFact } from '../model/starter-query'
+import { starterCardFacts, starterPriceLabel, type StarterCardFact } from '../model/starter-query'
+
+/**
+ * What a picked starter's price or licence says, held at the foot of the
+ * visible cards while the shelf is in view, so "Buy and continue" is beside
+ * whichever card was clicked rather than below all of them.
+ */
+const PICK_NOTE_SX: SxProps<Theme> = {
+  position: 'sticky',
+  bottom: (theme) => theme.spacing(2),
+  zIndex: 1,
+  boxShadow: 3,
+}
+
+/** The guide to site starters, linked from what the shelf says when it has nothing to show. */
+const STARTERS_HELP = pluginDocsHelp('siteStarters')
 
 /**
  * A starter's preview as the card draws it: the size the platform's own
@@ -83,6 +110,10 @@ function cardOf(row: SiteStarterSummary): OptionCard {
 const narrowed = (filter: Partial<SiteStarterFacets>): boolean =>
   (['kind', 'base', 'fonts'] as const).some((key) => typeof filter[key] === 'string' && filter[key] !== '')
 
+/** A row with what the dialog or a purchase knows about owning it laid over the search's answer. */
+const ownedOf = (row: SiteStarterSummary, override: boolean | undefined): boolean =>
+  override ?? row.owned === true
+
 /** What an answer with no starters says, in the words of what was asked. */
 function emptyMessage(props: ConsoleHostStarterPickerZoneProps): string {
   if (props.search.trim()) return 'No starters match — try fewer words'
@@ -108,12 +139,30 @@ function emptyMessage(props: ConsoleHostStarterPickerZoneProps): string {
  * nothing in it answers `false`, and the dialog offers its own choice
  * instead. Once shown, a later refusal hands back the same way; a later
  * failure is said here with a way to ask again.
+ *
+ * A picked starter with a price the workspace has not paid says so under
+ * the cards, with "Buy and continue": the marketplace's payment, which brings
+ * the person back to Create site on the same pick. One it owns says that
+ * instead. The dialog's own `selected` wins over the shelf's pick: it is how
+ * a pick restored after paying is shown chosen, and how one the create
+ * refused is cleared.
  */
 export function StarterPickerShelf(props: ConsoleHostStarterPickerZoneProps) {
-  const { orgId, mode, search, filter, onPick, ready } = props
-  const found = useStarterSearch({ orgId, mode, word: search, filter })
+  const { orgId, mode, search, filter, onPick, ready, selected } = props
+  // The pick the dialog opened on, restored after paying for it: asked for
+  // by every search from then on, so it is listed (first) wherever the
+  // search would have put it, and never moves under the person's cursor.
+  const [restored] = useState(() => selected?.listingId ?? null)
+  const found = useStarterSearch({ orgId, mode, word: search, filter, include: restored })
   const [picked, setPicked] = useState<string | null>(null)
   const [shown, setShown] = useState(false)
+  // Starters a purchase attempt found this workspace already owns.
+  const [ownedHere, setOwnedHere] = useState<ReadonlySet<string>>(() => new Set())
+  const purchase = useStarterPurchase(orgId)
+  const value = selected !== undefined ? (selected?.listingId ?? null) : picked
+  const pickedRow = value ? (found.rows.find((row) => row.listingId === value) ?? null) : null
+  const ownedOverride = (row: SiteStarterSummary): boolean | undefined =>
+    ownedHere.has(row.listingId) ? true : selected?.listingId === row.listingId ? selected.owned : undefined
 
   const refused = found.error !== null && REFUSED.has(found.error.status)
   // `null` until the first answer, which is the only one that may decide
@@ -143,7 +192,27 @@ export function StarterPickerShelf(props: ConsoleHostStarterPickerZoneProps) {
     readyRef.current(verdict)
   }, [verdict])
 
+  // A pick the dialog restored is handed back once the shelf has read it,
+  // so the dialog holds the starter as the search describes it.
+  const onPickRef = useRef(onPick)
+  onPickRef.current = onPick
+  const handedBack = useRef(false)
+  useEffect(() => {
+    if (!restored || handedBack.current || !pickedRow || pickedRow.listingId !== restored) return
+    handedBack.current = true
+    const override = ownedOverride(pickedRow)
+    onPickRef.current(override === undefined ? pickedRow : { ...pickedRow, owned: override })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restored, pickedRow])
+
   const options = useMemo(() => found.rows.map(cardOf), [found.rows])
+
+  const buy = async (row: SiteStarterSummary) => {
+    const outcome = await purchase.buy(row.listingId)
+    if (outcome !== 'owned') return
+    setOwnedHere((current) => new Set(current).add(row.listingId))
+    onPick({ ...row, owned: true })
+  }
 
   if (verdict === false) return null
   if (verdict === null) {
@@ -175,23 +244,65 @@ export function StarterPickerShelf(props: ConsoleHostStarterPickerZoneProps) {
           {found.error.message}
         </Alert>
       ) : options.length === 0 ? (
-        // TODO(AGL-4049 phase 3 lane 3): link the site starters docs page
-        // here once it is written.
-        <Alert severity="info">{emptyMessage(props)}</Alert>
+        <Alert
+          severity="info"
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              component={Link}
+              href={STARTERS_HELP.href}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {'How starters work'}
+            </Button>
+          }
+        >
+          {emptyMessage(props)}
+        </Alert>
       ) : (
         <OptionCardGrid
           label={mode === 'ai' ? 'AI starters' : 'Starters'}
           options={options}
-          value={picked}
+          value={value}
           columns={{ xs: 1, sm: 2, md: 3 }}
           onChange={(listingId) => {
             const row = found.rows.find((candidate) => candidate.listingId === listingId)
             if (!row) return
             setPicked(listingId)
-            onPick(row)
+            const override = ownedOverride(row)
+            onPick(override === undefined ? row : { ...row, owned: override })
           }}
         />
       )}
+      {pickedRow && pickedRow.priceUsd > 0 ? (
+        ownedOf(pickedRow, ownedOverride(pickedRow)) ? (
+          <Alert severity="success" data-starter-owned={pickedRow.listingId} sx={PICK_NOTE_SX}>
+            {'You own this starter. Create your site from it whenever you are ready.'}
+          </Alert>
+        ) : (
+          <Alert
+            severity="info"
+            data-starter-buy={pickedRow.listingId}
+            sx={PICK_NOTE_SX}
+            action={
+              <Button
+                color="inherit"
+                size="small"
+                disabled={purchase.busy || !orgId}
+                onClick={() => void buy(pickedRow)}
+              >
+                {purchase.busy ? 'Opening…' : 'Buy and continue'}
+              </Button>
+            }
+          >
+            {`${pickedRow.displayName || 'This starter'} costs ${starterPriceLabel(pickedRow.priceUsd)}. ` +
+              'Buy it first; once paid, you come back here to create your site from it.'}
+          </Alert>
+        )
+      ) : null}
+      {purchase.error ? <Alert severity="error">{purchase.error}</Alert> : null}
     </Stack>
   )
 }

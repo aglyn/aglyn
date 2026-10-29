@@ -1385,6 +1385,25 @@ describe('before the site exists (AGL-3761)', () => {
     await waitFor(() => expect(starter.getAttribute('aria-busy')).toBeNull())
   })
 
+  it('hands the starter path to the shell’s Choose your starter where it is offered, asking no style itself (AGL-4049 lane 3)', async () => {
+    const chooseStarter = jest.fn()
+    await openChoice({ ...pendingProps(pendingSite()), chooseStarter })
+    // Its words say where the starters come from.
+    const starter = screen.getByRole('button', { name: 'Start from a starter site' })
+    expect(screen.getByText('A ready-made website from the marketplace, in a style you choose.')).toBeTruthy()
+    fireEvent.click(starter)
+    expect(chooseStarter).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('heading', { level: 1, name: 'Choose a style' })).toBeNull()
+    expect(mockStartBlank).not.toHaveBeenCalled()
+  })
+
+  it('asks the style itself where the shell offers no picker (AGL-4049 lane 3)', async () => {
+    await openChoice(pendingProps(pendingSite()))
+    expect(screen.queryByRole('button', { name: 'Start from a starter site' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Start from the starter site' }))
+    expect(await screen.findByRole('heading', { level: 1, name: 'Choose a style' })).toBeTruthy()
+  })
+
   it('has no Skip before the site exists, and its style view closes with nothing created (AGL-4049)', async () => {
     await openChoice(pendingProps(pendingSite()))
     expect(screen.queryByRole('button', { name: 'Skip and start blank' })).toBeNull()

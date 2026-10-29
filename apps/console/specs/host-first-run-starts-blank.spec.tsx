@@ -190,3 +190,22 @@ describe('the start a new site is offered', () => {
     expect(screen.queryByText('guided start')).toBeNull()
   })
 })
+
+describe('"Your site is live" names the starter a site was made from (AGL-4049 lane 3)', () => {
+  it('names it on a site whose own record says it came from a starter listing', () => {
+    mockSearch = 'start=live&starterName=Corner%20bistro'
+    mockHost = { subdomain: 'shop', starterChoice: { listingId: 'listing-1', version: null, kind: 'restaurant', mode: 'base', start: 'starter' } }
+    render(<HostFirstRunGate />)
+    expect(screen.getByText('Your site is live')).toBeTruthy()
+    // Red before the fix: the notice said nothing of what it was made from.
+    expect(screen.getByText('Made from the starter "Corner bistro". Change anything under Pages and Setup → Theme.')).toBeTruthy()
+  })
+
+  it('names nothing an address claims for a site made from no listing', () => {
+    mockSearch = 'start=live&starterName=Anything%20at%20all'
+    mockHost = { subdomain: 'shop', starterChoice: { listingId: null, version: null, kind: 'yoga', mode: 'base', start: 'starter' } }
+    render(<HostFirstRunGate />)
+    expect(screen.getByText('Your site is live')).toBeTruthy()
+    expect(screen.queryByText(/Made from the starter/)).toBeNull()
+  })
+})

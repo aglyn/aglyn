@@ -27,6 +27,7 @@ import useCurrentOrg from '../hooks/use-current-org'
 import { useHost } from '../hooks/use-host'
 import { useOrgSlug } from '../hooks/use-org-scope'
 import { buildRoute, Route } from '../constants/route-links'
+import { readHostStarterChoice } from '@aglyn/aglyn/app-utils/site-styles'
 import { hostIsBlankSite, hostLiveUrl, requestStarterSite } from '../utils/host-first-run'
 import { useHostId, useHostSubdomain } from './host-id-provider'
 import PluginWidgetSlot from './plugin-widget-slot.component'
@@ -43,6 +44,13 @@ export const SITE_START_VALUE = 'site'
  * once, as choosing the starter on a created site always has.
  */
 export const SITE_START_LIVE_VALUE = 'live'
+/**
+ * Beside `?start=live`, the name of the starter a site was made from
+ * (AGL-4049), as the create answered it, so "Your site is live" says what it
+ * was made from. Shown only on a site whose own record says it was made from
+ * a starter listing.
+ */
+export const SITE_LIVE_STARTER_PARAM = 'starterName'
 
 /**
  * The guided start, offered where a new site LANDS and nowhere else.
@@ -63,13 +71,15 @@ export function HostFirstRunGate() {
   const searchParams = useSearchParams()
   const asked = searchParams?.get(SITE_START_PARAM)
   if (!hostId) return null
-  if (asked === SITE_START_LIVE_VALUE) return <HostLiveLanding hostId={hostId} />
+  if (asked === SITE_START_LIVE_VALUE) {
+    return <HostLiveLanding hostId={hostId} starterName={searchParams?.get(SITE_LIVE_STARTER_PARAM) ?? null} />
+  }
   if (asked !== SITE_START_VALUE) return null
   return <HostFirstRunOffer hostId={hostId} />
 }
 
 /** "Your site is live", for a site born with the starter it was created for. */
-function HostLiveLanding({ hostId }: { hostId: string }) {
+function HostLiveLanding({ hostId, starterName }: { hostId: string; starterName: string | null }) {
   const router = useRouter()
   const pathname = usePathname()
   const [open, setOpen] = useState(true)
@@ -78,14 +88,26 @@ function HostLiveLanding({ hostId }: { hostId: string }) {
     if (pathname) router.replace(pathname)
   }, [pathname, router])
   if (!open) return null
-  return <HostLiveNotice hostId={hostId} onClose={close} />
+  return <HostLiveNotice hostId={hostId} onClose={close} starterName={starterName} />
 }
 
 /** The notice itself, read off the site's own document. */
-function HostLiveNotice({ hostId, onClose }: { hostId: string; onClose: () => void }) {
+function HostLiveNotice({
+  hostId,
+  onClose,
+  starterName = null,
+}: {
+  hostId: string
+  onClose: () => void
+  starterName?: string | null
+}) {
   const {
     doc: { data: host },
   } = useHost({ hostId })
+  // The starter's name only for a site whose own record says it came from a
+  // starter listing (AGL-4049): an address can say anything.
+  const madeFromListing = Boolean(readHostStarterChoice(host?.['starterChoice'])?.listingId)
+  const madeFrom = madeFromListing && starterName?.trim() ? starterName.trim().slice(0, 120) : null
   const orgSlug = useOrgSlug()
   const params = useParams<{ host?: string }>()
   const routeHost = params?.host ?? hostId
@@ -95,6 +117,7 @@ function HostLiveNotice({ hostId, onClose }: { hostId: string; onClose: () => vo
         <SiteLiveNotice
           liveUrl={hostLiveUrl(host)}
           pagesHref={orgSlug ? buildRoute(Route.HOST_SCREENS, { orgSlug, host: routeHost }) : null}
+          starterName={madeFrom}
         />
       </DialogContent>
     </Dialog>

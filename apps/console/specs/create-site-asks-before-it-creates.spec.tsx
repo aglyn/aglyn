@@ -36,7 +36,12 @@
  * - a workspace with no start to offer gets the plain dialog, which asks the
  *   style too and creates nothing until one is chosen (AGL-4049);
  * - `host_created` carries how the site was started and its style, from the
- *   create's own answer.
+ *   create's own answer;
+ * - with `release_site_starters` visible, the starter path is "Choose your
+ *   starter" (AGL-4049 lane 3): nothing chosen, Create waits for a pick it
+ *   may create from, a free pick creates from its listing and lands naming
+ *   it, a 402 keeps the pick for Buy, a refused pick is cleared in words,
+ *   Close creates nothing, and the way back from paying reopens the pick.
  */
 
 import { act, fireEvent, render, screen } from '@testing-library/react'
@@ -62,9 +67,20 @@ jest.mock('next/navigation', () => {
   return {
     useRouter: () => router,
     usePathname: () => '/acme/hosts',
-    useSearchParams: () => new URLSearchParams(),
+    useSearchParams: () => mockSearchParams,
   }
 })
+let mockSearchParams = new URLSearchParams()
+let mockStartersVisible = false
+jest.mock('../hooks/use-release-flags', () => ({
+  useReleaseFlag: () => ({
+    released: false,
+    visible: mockStartersVisible,
+    staffPreview: mockStartersVisible,
+    isStaff: mockStartersVisible,
+    ready: true,
+  }),
+}))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => ({ data: { uid: 'u-1' } }),
 }))
@@ -130,6 +146,7 @@ jest.mock('../components/host-first-run-gate.component', () => ({
   SITE_START_PARAM: 'start',
   SITE_START_VALUE: 'site',
   SITE_START_LIVE_VALUE: 'live',
+  SITE_LIVE_STARTER_PARAM: 'starterName',
 }))
 
 /** What the start zone was handed, as its one widget would receive it. */
@@ -137,6 +154,7 @@ type ZoneProps = {
   hostId: string | null
   startBlank: (options?: { style?: string }) => void | Promise<boolean>
   leave: () => void
+  chooseStarter?: () => void
   pendingSite: {
     fields: React.ReactNode
     check: () => boolean
@@ -146,14 +164,36 @@ type ZoneProps = {
     ready: (shown: boolean) => void
   }
 }
+/** What the starter picker zone was handed (AGL-4049 lane 3). */
+type PickerProps = {
+  mode: 'base' | 'ai'
+  search: string
+  filter: Record<string, string>
+  onPick: (pick: Record<string, unknown>) => void
+  ready: (shown: boolean) => void
+  selected?: { listingId: string; owned?: boolean } | null
+}
 let mockZone: ZoneProps | null = null
+let mockPicker: PickerProps | null = null
 let mockWidgets: unknown[] = [{ widgetId: 'ai-site-start' }]
+let mockPickerWidgets: unknown[] = []
+const mockSlotZones: string[][] = []
 jest.mock('../components/plugin-widget-slot.component', () => ({
   __esModule: true,
-  useSlotWidgets: () => ({ widgets: mockWidgets, ready: true }),
+  useSlotWidgets: (zones: string[]) => {
+    mockSlotZones.push([...zones])
+    return {
+      widgets: zones.includes('hostStarterPicker') ? mockPickerWidgets : zones.length ? mockWidgets : [],
+      ready: true,
+    }
+  },
   // The widget, as a probe: it draws the shell's fields where a real one
   // would, on its first step.
-  default: (props: ZoneProps) => {
+  default: (props: ZoneProps & PickerProps & { slot: string }) => {
+    if (props.slot === 'hostStarterPicker') {
+      mockPicker = props
+      return <div data-testid="starter-picker" />
+    }
     mockZone = props
     return <div data-testid="start-zone">{props.pendingSite?.fields}</div>
   },
@@ -189,7 +229,12 @@ const typeName = (name = 'Royal Styles') =>
 beforeEach(() => {
   jest.clearAllMocks()
   mockZone = null
+  mockPicker = null
   mockWidgets = [{ widgetId: 'ai-site-start' }]
+  mockPickerWidgets = []
+  mockSlotZones.length = 0
+  mockStartersVisible = false
+  mockSearchParams = new URLSearchParams()
   mockOrg = { plan: 'business', slug: 'acme' }
   mockCan = true
   mockLanding = (url) => url
@@ -552,5 +597,238 @@ describe('AGL-3761 · a workspace with no start to offer gets the plain dialog',
     const { container } = render(<CreateHostDialog open={false} onClose={() => undefined} />)
     expect(container.innerHTML).toBe('')
     expect(mockZone).toBeNull()
+  })
+})
+
+describe('AGL-4049 lane 3 · Choose your starter, behind release_site_starters', () => {
+  const FREE = {
+    listingId: 'fp-starter-restaurant-base',
+    displayName: 'Restaurant & café',
+    description: '',
+    authorName: 'Aglyn',
+    official: true,
+    priceUsd: 0,
+    previewImageUrl: null,
+    facets: { kind: 'restaurant', base: 'starter', fonts: null, pages: 4, mode: 'base' },
+  }
+  const PAID = { ...FREE, listingId: 'northwind-studio', displayName: 'Studio North', official: false, priceUsd: 12 }
+  const createButton = () => screen.getByRole('button', { name: 'Create site' }) as HTMLButtonElement
+  const create = async () => {
+    await act(async () => {
+      fireEvent.click(createButton())
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+  }
+  const pick = (row: Record<string, unknown>) => act(() => mockPicker?.onPick(row))
+  /** Opens the start with the picker offered, and takes its starter path. */
+  const openChoose = async (onClose = jest.fn()) => {
+    const view = await openStart(onClose)
+    act(() => mockZone?.chooseStarter?.())
+    act(() => mockPicker?.ready(true))
+    return view
+  }
+
+  beforeEach(() => {
+    mockStartersVisible = true
+    mockPickerWidgets = [{ widgetId: 'marketplace-starter-picker' }]
+    mockCreateAnswer.body = {
+      ...mockCreateAnswer.body,
+      guidedStart: false,
+      starterChoice: {
+        listingId: FREE.listingId,
+        version: null,
+        kind: 'restaurant',
+        mode: 'base',
+        start: 'starter',
+      },
+      starter: { listingId: FREE.listingId, version: null, displayName: 'Restaurant & café' },
+    }
+  })
+
+  it('with the flag off, asks no picker and offers the start nothing new', async () => {
+    mockStartersVisible = false
+    await openStart()
+    // Red before the fix would be no change: this pins that off stays off.
+    expect(mockZone?.chooseStarter).toBeUndefined()
+    expect(mockSlotZones.some((zones) => zones.includes('hostStarterPicker'))).toBe(false)
+  })
+
+  it('with the flag on, the starter path opens Choose your starter with nothing chosen', async () => {
+    await openStart()
+    // Red before the fix: the start was never handed a way to the picker.
+    expect(typeof mockZone?.chooseStarter).toBe('function')
+    act(() => mockZone?.chooseStarter?.())
+    expect(screen.getByRole('heading', { name: 'Choose your starter' })).toBeTruthy()
+    expect(screen.getByTestId('starter-picker')).toBeTruthy()
+    expect(mockPicker?.selected).toBeNull()
+    expect(mockPicker?.mode).toBe('base')
+    // The AI starters tab, beside the start that fills them.
+    expect(screen.getByRole('tab', { name: 'AI starters' })).toBeTruthy()
+    // It takes the start's place: the name and address are asked once.
+    expect(screen.queryByTestId('start-zone')).toBeNull()
+    expect(screen.getAllByLabelText('Site name')).toHaveLength(1)
+    expect(createCalls()).toHaveLength(0)
+  })
+
+  it('Create is disabled until a pick, and until a priced pick is owned', async () => {
+    await openChoose()
+    typeName()
+    expect(createButton().disabled).toBe(true)
+    expect(screen.getByText('Choose a starter to create your site.')).toBeTruthy()
+    pick(PAID)
+    expect(createButton().disabled).toBe(true)
+    expect(screen.getByText('Buy this starter to create your site from it.')).toBeTruthy()
+    pick({ ...PAID, owned: true })
+    expect(createButton().disabled).toBe(false)
+    pick(FREE)
+    expect(createButton().disabled).toBe(false)
+    expect(mockPicker?.selected).toEqual({ listingId: FREE.listingId })
+  })
+
+  it('a free pick posts `starter` and lands live naming it', async () => {
+    const { onClose } = await openChoose()
+    typeName()
+    pick(FREE)
+    await create()
+    expect(createCalls()).toHaveLength(1)
+    expect(createBody()).toMatchObject({ start: 'starter', starter: { listingId: FREE.listingId } })
+    expect(createBody()).not.toHaveProperty('style')
+    expect(mockTrack).toHaveBeenCalledWith('host_created', {
+      start: 'starter',
+      starter_kind: 'restaurant',
+      starter_listing: FREE.listingId,
+    })
+    expect(onClose).toHaveBeenCalled()
+    expect(mockPush).toHaveBeenCalledWith('/acme/hosts/royal-styles?start=live&starterName=Restaurant+%26+caf%C3%A9')
+  })
+
+  it('a 402 keeps the pick and shows Buy', async () => {
+    mockCreateAnswer = {
+      status: 402,
+      body: { error: 'Purchase required', code: 'purchase_required', listingId: PAID.listingId, priceUsd: 12 },
+    }
+    await openChoose()
+    typeName()
+    pick({ ...PAID, owned: true })
+    await create()
+    expect(screen.getByText('Purchase required')).toBeTruthy()
+    // Kept, now unowned, so the picker offers Buy and continue again.
+    expect(mockPicker?.selected).toEqual({ listingId: PAID.listingId, owned: false })
+    expect(createButton().disabled).toBe(true)
+    expect(mockPush).not.toHaveBeenCalled()
+  })
+
+  it('a 402 straight after paying says the payment is being confirmed, and offers no second purchase', async () => {
+    mockCreateAnswer = {
+      status: 402,
+      body: { error: 'Purchase required', code: 'purchase_required', listingId: PAID.listingId, priceUsd: 12 },
+    }
+    render(<CreateHostDialog open onClose={jest.fn()} initialStarter={{ listingId: PAID.listingId, purchase: 'success' }} />)
+    await flush()
+    act(() => mockZone?.pendingSite.ready(true))
+    pick(PAID)
+    typeName()
+    await create()
+    expect(screen.getByText('Your payment is still being confirmed. Try Create site again in a moment.')).toBeTruthy()
+    expect(mockPicker?.selected).toEqual({ listingId: PAID.listingId, owned: true })
+  })
+
+  it.each([
+    [403, 'Site starters are not available for this workspace yet'],
+    [404, 'That starter is no longer available'],
+    [409, 'This starter needs the AI start, which is coming soon'],
+  ])('a %i is shown in words, and the pick cleared', async (status, error) => {
+    mockCreateAnswer = { status, body: { error, listingId: FREE.listingId } }
+    await openChoose()
+    typeName()
+    pick(FREE)
+    await create()
+    expect(screen.getByText(error)).toBeTruthy()
+    expect(mockPicker?.selected).toBeNull()
+    expect(createButton().disabled).toBe(true)
+    // Not read as a taken address.
+    expect(screen.queryByText('royal-styles-2')).toBeNull()
+  })
+
+  it('Close creates nothing, and Back returns to the start', async () => {
+    const { onClose } = await openChoose()
+    typeName()
+    pick(FREE)
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    expect(screen.queryByRole('heading', { name: 'Choose your starter' })).toBeNull()
+    expect(screen.getByTestId('start-zone')).toBeTruthy()
+    act(() => mockZone?.chooseStarter?.())
+    fireEvent.click(screen.getByRole('button', { name: 'Close Create site' }))
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(createCalls()).toHaveLength(0)
+  })
+
+  it('`?create=site&starter=` reopens the pick', async () => {
+    mockSearchParams = new URLSearchParams('create=site&starter=northwind-studio&purchase=success')
+    const { CreateSiteFromUrl } = jest.requireActual(
+      '../components/create-host-dialog.component',
+    ) as typeof import('../components/create-host-dialog.component')
+    const onOpen = jest.fn()
+    render(<CreateSiteFromUrl onOpen={onOpen} />)
+    expect(onOpen).toHaveBeenCalledWith({ listingId: 'northwind-studio', purchase: 'success' })
+    expect(mockReplace).toHaveBeenCalledWith('/acme/hosts')
+
+    // The dialog opens straight on Choose your starter, that card chosen, owned.
+    render(<CreateHostDialog open onClose={jest.fn()} initialStarter={{ listingId: 'northwind-studio', purchase: 'success' }} />)
+    await flush()
+    act(() => mockZone?.pendingSite.ready(true))
+    expect(screen.getByRole('heading', { name: 'Choose your starter' })).toBeTruthy()
+    expect(mockPicker?.selected).toEqual({ listingId: 'northwind-studio', owned: true })
+    // The picker hands it back once read; Create waits only for the name.
+    pick(PAID)
+    typeName()
+    expect(createButton().disabled).toBe(false)
+  })
+
+  it('a pick restored after cancelling shows Buy again', async () => {
+    render(<CreateHostDialog open onClose={jest.fn()} initialStarter={{ listingId: 'northwind-studio', purchase: 'canceled' }} />)
+    await flush()
+    act(() => mockZone?.pendingSite.ready(true))
+    expect(mockPicker?.selected).toEqual({ listingId: 'northwind-studio' })
+    pick(PAID)
+    typeName()
+    expect(createButton().disabled).toBe(true)
+  })
+
+  it('with no start to offer, Create site is Choose your starter, without the AI tab, and the styles when the picker has none', async () => {
+    mockWidgets = []
+    render(<CreateHostDialog open onClose={jest.fn()} />)
+    await flush()
+    expect(screen.getByRole('heading', { name: 'Choose your starter' })).toBeTruthy()
+    expect(screen.queryByRole('tab', { name: 'AI starters' })).toBeNull()
+    act(() => mockPicker?.ready(false))
+    // The plain dialog, as with the flag off.
+    expect(screen.getByText('Create a new site')).toBeTruthy()
+    expect(screen.getAllByRole('radio')).toHaveLength(21)
+  })
+
+  it('the styles stand in for a picker with nothing to offer on the start’s path', async () => {
+    await openStart()
+    act(() => mockZone?.chooseStarter?.())
+    act(() => mockPicker?.ready(false))
+    expect(screen.getByRole('heading', { name: 'Choose a style' })).toBeTruthy()
+    typeName()
+    fireEvent.click(screen.getByRole('radio', { name: /^Yoga & mindfulness/ }))
+    await create()
+    expect(createBody()).toMatchObject({ start: 'starter', style: 'yoga' })
+  })
+
+  it('narrows the picker to a kind and a search, and changing the tab clears the pick', async () => {
+    await openChoose()
+    fireEvent.click(screen.getByRole('button', { name: 'Photography' }))
+    expect(mockPicker?.filter).toEqual({ kind: 'photography' })
+    fireEvent.change(screen.getByLabelText('Search starters'), { target: { value: 'bistro' } })
+    expect(mockPicker?.search).toBe('bistro')
+    pick(FREE)
+    fireEvent.click(screen.getByRole('tab', { name: 'AI starters' }))
+    expect(mockPicker?.mode).toBe('ai')
+    expect(mockPicker?.selected).toBeNull()
   })
 })

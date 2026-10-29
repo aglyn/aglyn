@@ -73,6 +73,7 @@ import CreateHostDialog, {
 import EmptyState from '../../../../components/empty-state.component'
 import SiteVisitButton from '../../../../components/site-visit-button.component'
 import { isHostInPreview } from '@aglyn/aglyn/app-utils/site-preview'
+import type { SiteCreateStarterReturn } from '@aglyn/aglyn/app-utils/site-create-return'
 import HostIcon from '../../../../components/host-icon.component'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import PlatformMarketingConsentPrompt from '../../../../components/marketing-consent-prompt.component'
@@ -550,7 +551,12 @@ function HostsContent() {
     ? 'loading'
     : readOutcome({ ready: hostsReady, error: hostsError })
   const [creating, setCreating] = useState(false)
-  const openCreate = useCallback(() => setCreating(true), [])
+  // The starter Create site reopens on after the person paid for it (AGL-4049).
+  const [createStarter, setCreateStarter] = useState<SiteCreateStarterReturn | null>(null)
+  const openCreateFromUrl = useCallback((starter: SiteCreateStarterReturn | null) => {
+    setCreateStarter(starter)
+    setCreating(true)
+  }, [])
   const { permissions } = useOrgPermissions()
   /**
    * `6 of 10 sites · Business plan` (AGL-2166). The console mockup puts
@@ -704,9 +710,16 @@ function HostsContent() {
       {/* A first site from the empty console lands here, in the workspace
           made for it, with "Create site" open (AGL-3761). */}
       <Suspense fallback={null}>
-        <CreateSiteFromUrl onOpen={openCreate} />
+        <CreateSiteFromUrl onOpen={openCreateFromUrl} />
       </Suspense>
-      <CreateHostDialog open={creating} onClose={() => setCreating(false)} />
+      <CreateHostDialog
+        open={creating}
+        onClose={() => {
+          setCreating(false)
+          setCreateStarter(null)
+        }}
+        initialStarter={createStarter}
+      />
     </DashboardLayout>
   )
 }

@@ -467,11 +467,11 @@ function mountedZones(): Set<string> {
 const read = (file: string) => readFileSync(resolve(REPO_ROOT, file), 'utf8')
 
 /**
- * Zones in the catalog before the page that draws them ships: the starter
- * picker is declared with its props in phase 1 of AGL-4049 and mounted by the
- * Create site dialog in a later phase, behind `release_site_starters`.
+ * Zones in the catalog before the page that draws them ships. Empty: the
+ * starter picker, declared in phase 1 of AGL-4049, is mounted by Create site's
+ * "Choose your starter" since phase 3, behind `release_site_starters`.
  */
-const DECLARED_AHEAD_OF_MOUNT: ReadonlySet<string> = new Set(['hostStarterPicker'])
+const DECLARED_AHEAD_OF_MOUNT: ReadonlySet<string> = new Set<string>([])
 
 describe('AGL-2940 · the new zones are in the catalog and mounted', () => {
   it('names every new zone in CONSOLE_WIDGET_SLOTS', () => {

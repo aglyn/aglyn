@@ -38,7 +38,11 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
   authorizedFetch: (...args: unknown[]) => mockFetch(...args),
 }))
+jest.mock('@aglyn/aglyn/app-utils/analytics-events', () => ({
+  readGaClientId: async () => null,
+}))
 
+import { starterPurchaseNavigation } from '../hooks/use-starter-purchase'
 import { StarterPickerShelf } from './starter-picker-shelf.component'
 
 const OFFICIAL = {
@@ -206,5 +210,106 @@ describe('what each card says', () => {
     const card = await screen.findByRole('radio', { name: /written for you/ })
     expect(within(card).getByText('AI')).toBeTruthy()
     expect(mockFetch.mock.calls[0][1]).toContain('mode=ai')
+  })
+})
+
+describe('a pick with a price, and the way back to it (AGL-4049 lane 3)', () => {
+  const assign = jest.spyOn(starterPurchaseNavigation, 'assign').mockImplementation(() => undefined)
+  /** Answers the search with `rows`, and the checkout with `checkout`. */
+  const answeringWith = (rows: unknown[], checkout: { status: number; body: unknown }) =>
+    mockFetch.mockImplementation((_user: unknown, url: string) =>
+      url === '/api/marketplace/checkout'
+        ? respond(checkout.status, checkout.body)
+        : respond(200, { rows, labels: { base: {}, fonts: {} } }),
+    )
+  const checkoutCalls = () => mockFetch.mock.calls.filter(([, url]) => url === '/api/marketplace/checkout')
+
+  beforeEach(() => assign.mockClear())
+
+  it('says the price of a paid pick, and opens its payment with Create site as the way back', async () => {
+    answeringWith([OFFICIAL, PAID], { status: 200, body: { url: 'https://checkout.stripe.test/c/1' } })
+    const { props } = shelf()
+    // Nothing to buy until a priced starter is picked.
+    await screen.findAllByRole('radio')
+    expect(screen.queryByRole('button', { name: 'Buy and continue' })).toBeNull()
+    fireEvent.click(screen.getByRole('radio', { name: /^Studio North/ }))
+    expect(props.onPick).toHaveBeenCalledWith(PAID)
+    const note = document.querySelector('[data-starter-buy="northwind-studio"]') as HTMLElement
+    expect(note.textContent).toContain('Studio North costs $12.')
+    fireEvent.click(within(note).getByRole('button', { name: 'Buy and continue' }))
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('https://checkout.stripe.test/c/1'))
+    const [, , init] = checkoutCalls()[0] as [unknown, string, { body: string; headers: Record<string, string> }]
+    expect(JSON.parse(init.body)).toEqual({ listingId: 'northwind-studio', orgId: 'org-1', return: 'create-site' })
+    expect(init.headers['Idempotency-Key']).toBeTruthy()
+  })
+
+  it('says a free pick needs nothing bought', async () => {
+    shelf()
+    fireEvent.click(await screen.findByRole('radio', { name: /^Corner bistro/ }))
+    expect(screen.queryByRole('button', { name: 'Buy and continue' })).toBeNull()
+    expect(screen.queryByText(/You own this starter/)).toBeNull()
+  })
+
+  it('says "You own this starter" for a priced one the workspace owns, with nothing to buy', async () => {
+    answering([OFFICIAL, { ...PAID, owned: true }])
+    shelf()
+    fireEvent.click(await screen.findByRole('radio', { name: /^Studio North/ }))
+    expect(screen.getByText(/You own this starter/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Buy and continue' })).toBeNull()
+  })
+
+  it('learns from the payment that the workspace owns it already, and tells the dialog', async () => {
+    answeringWith([OFFICIAL, PAID], { status: 409, body: { code: 'already_purchased', error: 'owned' } })
+    const { props } = shelf()
+    fireEvent.click(await screen.findByRole('radio', { name: /^Studio North/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Buy and continue' }))
+    await screen.findByText(/You own this starter/)
+    expect(props.onPick).toHaveBeenLastCalledWith({ ...PAID, owned: true })
+    expect(assign).not.toHaveBeenCalled()
+  })
+
+  it('says why a payment did not open, and stays on the pick', async () => {
+    answeringWith([OFFICIAL, PAID], { status: 409, body: { error: 'The publisher has not enabled payouts yet' } })
+    shelf()
+    fireEvent.click(await screen.findByRole('radio', { name: /^Studio North/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Buy and continue' }))
+    expect(await screen.findByText('The publisher has not enabled payouts yet')).toBeTruthy()
+    expect(screen.getByRole('radio', { name: /^Studio North/ }).getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('shows the pick the dialog restored as chosen, asks for it by name, and hands it back once', async () => {
+    const { props } = shelf({ selected: { listingId: 'northwind-studio', owned: true } })
+    const card = await screen.findByRole('radio', { name: /^Studio North/ })
+    expect(card.getAttribute('aria-checked')).toBe('true')
+    expect(String(mockFetch.mock.calls[0][1])).toContain('include=northwind-studio')
+    await waitFor(() => expect(props.onPick).toHaveBeenCalledWith({ ...PAID, owned: true }))
+    expect(props.onPick).toHaveBeenCalledTimes(1)
+    // Just paid: owned, whatever the search has not caught up with yet.
+    expect(screen.getByText(/You own this starter/)).toBeTruthy()
+  })
+
+  it('shows Buy again for a restored pick the person did not pay for', async () => {
+    shelf({ selected: { listingId: 'northwind-studio' } })
+    await screen.findByRole('radio', { name: /^Studio North/ })
+    expect(screen.getByRole('button', { name: 'Buy and continue' })).toBeTruthy()
+  })
+
+  it('follows the dialog’s pick: nothing chosen while it holds none, whatever was clicked', async () => {
+    const { props, rerender } = shelf({ selected: null })
+    const card = await screen.findByRole('radio', { name: /^Studio North/ })
+    fireEvent.click(card)
+    expect(props.onPick).toHaveBeenCalledWith(PAID)
+    expect(card.getAttribute('aria-checked')).toBe('false')
+    rerender(<StarterPickerShelf {...props} selected={{ listingId: 'northwind-studio' }} />)
+    expect(screen.getByRole('radio', { name: /^Studio North/ }).getAttribute('aria-checked')).toBe('true')
+    // A pick the dialog holds is not asked for by name: only one it opened on is.
+    expect(mockFetch.mock.calls.every(([, url]) => !String(url).includes('include='))).toBe(true)
+  })
+
+  it('links the site starters guide from a search that found nothing', async () => {
+    answering([])
+    shelf({ search: 'zzz quantum bakery' })
+    const link = await screen.findByRole('link', { name: 'How starters work' })
+    expect(link.getAttribute('href')).toMatch(/\/building-sites\/site-templates\/site-starters$/)
   })
 })
