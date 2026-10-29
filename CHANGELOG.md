@@ -9,6 +9,23 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.290 — 2026-10-29
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.289...v1.0.0-beta.290)
+
+### Fixed
+
+- **crm:** every new account becomes a contact in the operator's own CRM
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **tools:** backfill the operator's CRM contact for existing accounts
+
+</details>
+
+2 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
 ## v1.0.0-beta.289 — 2026-10-29
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.288...v1.0.0-beta.289)
