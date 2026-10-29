@@ -165,8 +165,9 @@ describe('a page as an import keeps it', () => {
     for (const status of [401, 403, 429]) expect(siteImportLeftOutReason('http-error', status)).toBe('blocked')
     for (const status of [404, 410, 500, 503]) expect(siteImportLeftOutReason('http-error', status)).toBe('unreadable')
     expect(siteImportLeftOutReason('http-error')).toBe('unreadable')
-    // Only an error answer is a refusal: a 2xx that is not a page is not.
-    expect(siteImportLeftOutReason('not-html', 403)).toBe('unreadable')
+    // Only an error answer is a refusal: a 2xx that is not a page is a file (AGL-4106).
+    expect(siteImportLeftOutReason('not-html', 403)).toBe('file')
+    expect(siteImportLeftOutReason('not-html')).toBe('file')
     expect(siteImportLeftOutReason('unreachable')).toBe('unreadable')
     expect(siteImportLeftOutReason('login-form')).toBe('login-form')
     expect(siteImportLeftOutReason('off-origin-redirect')).toBe('off-site')

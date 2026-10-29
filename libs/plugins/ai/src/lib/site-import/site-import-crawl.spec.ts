@@ -38,11 +38,14 @@ import {
   AGLYN_BOT_USER_AGENT,
   crawlSiteForImport,
   readSiteVerificationMeta,
+  siteImportPageKey,
   siteImportPagePromptText,
   type SiteImportInventory,
 } from './site-import-crawl'
+import { siteImportLeftOutReason } from './site-import-page'
+import { SITE_LAYOUT_PAGES, siteLayoutRecording } from './fixtures/site-layout-recordings'
 import { SITE_IMPORT_RECORDINGS } from './fixtures/site-import-crawl-recordings'
-import { aiSiteImportReadVerdict } from '../model/ai-site-import'
+import { AI_SITE_IMPORT_MAX_PAGES, aiSiteImportReadVerdict } from '../model/ai-site-import'
 import {
   AGLYN_DOMAIN,
   AGLYN_ORIGIN,
@@ -498,5 +501,106 @@ describe('aglyn.com, the whole site', () => {
     expect(inventory.skipped[0]).toEqual({ url: `${AGLYN_ORIGIN}/`, reason: 'http-error', status: 429, edge: 'vercel' })
     const verdict = aiSiteImportReadVerdict(inventory)
     expect(verdict).toMatchObject({ kind: 'home-blocked', blocked: 113, total: 123, homeStatus: 429, edge: 'vercel' })
+  })
+})
+
+/*------------------------------------------
+ * The 10/29 read: files are not pages (AGL-4106)
+ *-----------------------------------------*/
+
+describe('a page address, never a file', () => {
+  const origins = ['https://aglyn.com', 'https://www.aglyn.com']
+  const key = (raw: string) => siteImportPageKey(new URL(raw), origins)
+
+  it('refuses an API’s, a CDN’s or a download’s address, whatever its extension', () => {
+    expect(key('https://aglyn.com/api/media/cdn/org:FixtureOrg:FixtureHst/AbC123?download=1')).toBeNull()
+    expect(key('https://aglyn.com/api/health')).toBeNull()
+    expect(key('https://aglyn.com/cdn-cgi/l/email-protection')).toBeNull()
+    expect(key('https://aglyn.com/wp-json/wp/v2/pages')).toBeNull()
+    expect(key('https://aglyn.com/press/kit?download=true')).toBeNull()
+  })
+
+  it('keeps a page whose name only starts like one, and drops its tracking', () => {
+    expect(key('https://aglyn.com/apiary')).toBe('https://aglyn.com/apiary')
+    expect(key('https://aglyn.com/api-docs')).toBe('https://aglyn.com/api-docs')
+    expect(key('https://aglyn.com/product?utm_source=x')).toBe('https://aglyn.com/product')
+  })
+})
+
+describe('the 10/29 inventory: 209 pages and a press kit of 136 files', () => {
+  const ORIGIN = 'https://press-kit-site.com'
+  const PAGES = Array.from({ length: 207 }, (_, index) => `${ORIGIN}/page-${index + 1}`)
+  const FILES = Array.from({ length: 136 }, (_, index) => `/api/media/cdn/org:FixtureOrg:FixtureHst/file${index}?download=1`)
+  const html = (body: string) => new Response(`<!DOCTYPE html><html><head><title>A page</title></head><body><main>${body}</main></body></html>`, { status: 200, headers: { 'content-type': 'text/html' } })
+
+  beforeEach(() => {
+    fetchSpy.mockImplementation(async (input, init) => {
+      const url = String(input)
+      calls.push({ url, headers: ((init as RequestInit | undefined)?.headers ?? {}) as Record<string, string> })
+      const { pathname } = new URL(url)
+      if (pathname === '/robots.txt') return new Response(`User-agent: *\nAllow: /\nSitemap: ${ORIGIN}/sitemap.xml`, { status: 200, headers: { 'content-type': 'text/plain' } })
+      if (pathname === '/sitemap.xml') {
+        const locations = [...PAGES, `${ORIGIN}/press`].map((page) => `<url><loc>${page}</loc></url>`).join('')
+        return new Response(`<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${locations}</urlset>`, { status: 200, headers: { 'content-type': 'application/xml' } })
+      }
+      if (pathname === '/') return html('<h1>Home</h1><p>Every page of the site, one link away.</p><a href="/press">Press</a>')
+      if (pathname === '/press') return html(`<h1>Press kit</h1><p>Logos, photos and the brand guide.</p>${FILES.map((file) => `<a href="${file}">Download</a>`).join('')}<a href="/brochure">Brochure</a>`)
+      if (pathname === '/brochure') return new Response('%PDF-1.7', { status: 200, headers: { 'content-type': 'application/pdf' } })
+      if (pathname.startsWith('/page-')) return html(`<h1>${pathname.slice(1)}</h1><p>The words of ${pathname.slice(1)} of the site.</p>`)
+      return new Response('Not found', { status: 404, headers: { 'content-type': 'text/html' } })
+    })
+  })
+
+  it('reads all 209 pages, never asks for a file, and leaves out the one file a link hid as a file', async () => {
+    const inventory = await crawlSiteForImport({ domain: 'press-kit-site.com', maxPages: AI_SITE_IMPORT_MAX_PAGES, timeBudgetMs: 120_000 })
+    expect(calls.some((call) => new URL(call.url).pathname.startsWith('/api/'))).toBe(false)
+    expect(inventory.pages).toHaveLength(209)
+    expect(inventory.stoppedBy).toBeNull()
+    expect(inventory.skipped).toEqual([{ url: `${ORIGIN}/brochure`, reason: 'not-html', status: 200 }])
+    const reasons = inventory.skipped.map((entry) => siteImportLeftOutReason(entry.reason, entry.status))
+    expect(reasons).toEqual(['file'])
+    expect(reasons).not.toContain('not-reached')
+  })
+})
+
+describe('reading how pages are laid out', () => {
+  function serveLayout() {
+    const origin = SITE_LAYOUT_PAGES.pottery.url.replace(/\/$/, '')
+    fetchSpy.mockImplementation(async (input, init) => {
+      const url = String(input)
+      calls.push({ url, headers: ((init as RequestInit | undefined)?.headers ?? {}) as Record<string, string> })
+      const { pathname, hostname } = new URL(url)
+      if (hostname === 'static1.squarespace.com') return new Response('.summary-item{border:1px solid #e3d9cc}', { status: 200, headers: { 'content-type': 'text/css' } })
+      if (hostname === 'fonts.googleapis.com') return new Response('@font-face{font-family:Fraunces}', { status: 200, headers: { 'content-type': 'text/css' } })
+      if (pathname === '/robots.txt') return new Response('User-agent: *\nAllow: /', { status: 200, headers: { 'content-type': 'text/plain' } })
+      if (pathname === '/' || pathname === '/visit') return new Response(siteLayoutRecording('pottery'), { status: 200, headers: { 'content-type': 'text/html' } })
+      return new Response('Not found', { status: 404, headers: { 'content-type': 'text/html' } })
+    })
+    return origin
+  }
+
+  it('reads a wave’s pages with their layout, each linked stylesheet asked once, Google Fonts’ never', async () => {
+    const origin = serveLayout()
+    const inventory = await crawlSiteForImport({ domain: 'tidewater-pottery.example', maxPages: 2, only: [`${origin}/`, `${origin}/visit`] })
+    expect(inventory.pages).toHaveLength(2)
+    for (const page of inventory.pages) {
+      expect(page.layout?.sections.map((section) => section.band)).toEqual(['dark', 'plain', 'soft', 'plain', 'soft', 'plain', 'plain', 'brand'])
+    }
+    expect(calls.filter((call) => call.url === 'https://static1.squarespace.com/static/versioned-site-css/site.css')).toHaveLength(1)
+    expect(calls.some((call) => call.url.includes('fonts.googleapis.com'))).toBe(false)
+    // The edge's headers never go to another host.
+    const css = calls.find((call) => call.url.includes('static1.squarespace.com'))
+    expect(css?.headers['User-Agent']).toBe(AGLYN_BOT_USER_AGENT)
+    expect(css?.headers['Accept']).toMatch(/text\/css/)
+  })
+
+  it('reads the home page’s menu, footer and look on the inventory’s read, and no layout', async () => {
+    serveLayout()
+    const inventory = await crawlSiteForImport({ domain: 'tidewater-pottery.example', maxPages: 1 })
+    const [home] = inventory.pages
+    expect(home?.layout).toBeUndefined()
+    expect(home?.nav?.items.map((item) => item.label)).toEqual(['Classes', 'Gallery', 'Visit', 'Shop'])
+    expect(home?.footer?.copyright).toBe('© 2026 Tidewater Pottery Studio')
+    expect(home?.look?.fonts).toEqual({ body: 'Work Sans', headings: 'Fraunces', google: ['Fraunces', 'Work Sans'] })
   })
 })

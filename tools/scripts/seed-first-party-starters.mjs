@@ -31,8 +31,16 @@
 //   --dry        print every listing and what a write would do (the default)
 //   --write      write the listings and their versions
 //   --verify     read every planned listing back: its stored version must
-//                start a site, its seed-owned fields must match the plan, and
-//                staff edits are reported, never changed
+//                start a site, its seed-owned fields (its picture among them)
+//                must match the plan, and staff edits are reported, never
+//                changed
+//
+// Each kind's base and AI starter is pictured with its style's example home
+// page, which the console serves (`/_static/starter/styles/<kind>.webp`), and
+// filed under the style's name as its category. The picture is an absolute
+// URL on this deployment's console: `NEXT_PUBLIC_CONSOLE_URL` from the env
+// file (core's `platformConsoleOrigin`); against the emulator, the local
+// console instead, `E2E_BASE_URL` or localhost on the console's serve port.
 //
 // Before a write, the org must exist and have a publisher profile with a
 // handle and the current Publisher Agreement accepted, as any publisher must:
@@ -54,6 +62,7 @@ import { parseDeployArgs } from './lib/deploy-args.mjs'
 import {
   FIRST_PARTY_STARTER_SEED_SOURCE,
   buildFirstPartyStarterPlan,
+  firstPartyStarterConsoleOrigin,
   loadFirstPartyStarterSources,
   reconcileFirstPartyStarter,
 } from './lib/first-party-starters.mjs'
@@ -125,9 +134,11 @@ const target = emulator ? `the emulator at ${emulator}` : `project ${projectId}`
 
 // ── The plan ───────────────────────────────────────────────────────────────
 const sources = await loadFirstPartyStarterSources()
+let consoleOrigin
 let plan
 try {
-  plan = buildFirstPartyStarterPlan({ orgId, ...sources })
+  consoleOrigin = firstPartyStarterConsoleOrigin(process.env, sources.console)
+  plan = buildFirstPartyStarterPlan({ orgId, consoleOrigin, ...sources })
 } catch (error) {
   fail(`the plan was refused: ${error.message}`)
 }
@@ -196,13 +207,19 @@ const orphans = seeded.docs.filter((doc) => doc.get('profileId') === orgId && !p
 
 // ── Report ─────────────────────────────────────────────────────────────────
 const cell = (value, width) => String(value ?? '-').slice(0, width).padEnd(width)
+/** Each seed-owned field a run rewrites, as `field: stored → planned`. */
+const seedChangesText = (row, stored) =>
+  row.seedChanges
+    .map((field) => `${field}: ${JSON.stringify(stored?.[field] ?? null)} → ${JSON.stringify(row.entry.listing[field])}`)
+    .join('; ')
 function printPlan() {
-  console.log(`\n${plan.length} first-party starter listings for org ${orgId} in ${target}:\n`)
+  console.log(`\n${plan.length} first-party starter listings for org ${orgId} in ${target}:`)
+  console.log(`Pictures are served by the console at ${consoleOrigin}.\n`)
   console.log(
     [
       cell('action', 9),
       cell('listing', 28),
-      cell('name', 30),
+      cell('name', 34),
       cell('mode', 4),
       cell('kind', 12),
       cell('base', 11),
@@ -211,7 +228,9 @@ function printPlan() {
       cell('theme', 7),
       cell('price', 5),
       cell('status', 9),
-      'version',
+      cell('category', 26),
+      cell('version', 10),
+      'preview',
     ].join(' '),
   )
   for (const row of reconciled) {
@@ -225,7 +244,7 @@ function printPlan() {
       [
         cell(row.action, 9),
         cell(entry.listingId, 28),
-        cell(shown.displayName, 30),
+        cell(shown.displayName, 34),
         cell(entry.listing.starterMode, 4),
         cell(entry.listing.starterKind, 12),
         cell(entry.listing.starterBase, 11),
@@ -234,10 +253,13 @@ function printPlan() {
         cell(entry.version.starter.theme.kind, 7),
         cell(`$${Number(shown.priceUsd ?? 0)}`, 5),
         cell(shown.reviewStatus, 9),
-        versionText,
+        cell(shown.category, 26),
+        cell(versionText, 10),
+        // Seed-owned: the planned picture, which a write puts in place.
+        entry.listing.previewImageUrl ?? '-',
       ].join(' '),
     )
-    if (row.action === 'update' && row.seedChanges.length) console.log(`          rewrites ${row.seedChanges.join(', ')}`)
+    if (row.action === 'update' && row.seedChanges.length) console.log(`          rewrites ${seedChangesText(row, stored)}`)
     for (const drift of row.staffDrift) {
       console.log(`          staff set ${drift.field} to ${JSON.stringify(drift.stored)} (plan: ${JSON.stringify(drift.planned)}); kept`)
     }
@@ -298,7 +320,7 @@ async function verify() {
       problems.push(error.message)
       continue
     }
-    if (row.seedChanges.length) problems.push(`${entry.listingId}: out of date: ${row.seedChanges.join(', ')}`)
+    if (row.seedChanges.length) problems.push(`${entry.listingId}: out of date: ${seedChangesText({ ...row, entry }, listing)}`)
     if (row.versionWrite) problems.push(`${entry.listingId}: versions/${latest} is not the planned content (a write makes v${row.version})`)
     const queryPatch = listingQueryFieldsPatch(listing)
     if (queryPatch) problems.push(`${entry.listingId}: stale query fields: ${Object.keys(queryPatch).join(', ')}`)

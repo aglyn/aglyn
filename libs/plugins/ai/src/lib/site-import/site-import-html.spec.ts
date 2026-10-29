@@ -29,6 +29,7 @@ import {
   type SiteImportBlock,
 } from './site-import-html'
 import { AGLYN_ORIGIN, aglynPage } from './fixtures/aglyn-com-recordings'
+import { SITE_LAYOUT_PAGES, siteLayoutRecording, siteLayoutSameSite } from './fixtures/site-layout-recordings'
 import { siteImportHeaderBrand, siteImportPageRead, siteImportPageSections, siteImportSiteFacts } from './site-import-page'
 import { siteImportLogoCandidates } from './site-import-images'
 import type { SiteImportPage } from './site-import-crawl'
@@ -305,5 +306,92 @@ describe('aglyn.com: the facts its header and footer carry', () => {
     expect(facts.header.every((block) => block.region === 'header')).toBe(true)
     expect(facts.emails).toEqual(['support@example.com'])
     expect(facts.phones).toEqual(['+1-512-555-0142'])
+  })
+})
+
+/*------------------------------------------
+ * How a page is built (AGL-4106)
+ *-----------------------------------------*/
+
+const structured = (html: string) => {
+  const page = extractSiteImportPage(html, PAGE, sameSite, { structure: true })
+  if (!page.structure) throw new Error('no structure')
+  return { page, structure: page.structure }
+}
+const words = (blocks: SiteImportBlock[]) => blocks.map((block) => (block.kind === 'image' ? `[${block.alt}]` : block.text))
+
+describe('what the layout reader needs kept', () => {
+  it('keeps a button’s words as a line and the picture inside it, outside a form; a form’s button goes with the form', () => {
+    const page = extract(
+      '<main><button type="button">Watch the 40-second film</button><button aria-label="Play video"><img src="/poster.jpg" alt="The film’s first frame"></button>' +
+        '<form><input name="email"><button type="submit">Subscribe</button></form><p>After</p></main>',
+    )
+    expect(words(page.blocks)).toEqual(['Watch the 40-second film', '[The film’s first frame]', 'After'])
+  })
+
+  it('keeps the words of aglyn.com’s film button and pricing tabs, which 10/29 lost', () => {
+    const home = extractSiteImportPage(siteLayoutRecording('home'), SITE_LAYOUT_PAGES.home.url, siteLayoutSameSite('home'))
+    expect(home.blocks.some((block) => block.kind === 'paragraph' && block.text === 'Watch the 40-second film')).toBe(true)
+    const pricing = extractSiteImportPage(siteLayoutRecording('pricing'), SITE_LAYOUT_PAGES.pricing.url, siteLayoutSameSite('pricing'))
+    for (const label of ['Monthly', 'Annual · save up to 35%', 'Enterprise']) {
+      expect(pricing.blocks.some((block) => block.kind === 'paragraph' && block.text === label)).toBe(true)
+    }
+  })
+
+  it('keeps an inline icon as a drawing at its place, never as words, once however often it repeats', () => {
+    const icon = '<svg viewBox="0 0 24 24" aria-hidden="true"><title>Check</title><path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"></path></svg>'
+    const drawing = '<svg width="32" height="32"><circle cx="16" cy="16" r="15" fill="#c4622d" onclick="steal()"/><rect x="8" y="8" width="16" height="16" fill="url(#g)"/></svg>'
+    const { page, structure } = structured(`<main><ul><li>${icon} One</li><li>${icon} Two</li></ul><span>${drawing}</span><svg><image href="x.png"/></svg></main>`)
+    expect(words(page.blocks)).toEqual(['One', 'Two'])
+    expect(structure.icons).toEqual([
+      { viewBox: '0 0 24 24', path: 'M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z' },
+      { viewBox: '0 0 32 32', svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="15" fill="#c4622d"/><rect x="8" y="8" width="16" height="16"/></svg>' },
+    ])
+    const marked = structure.elements.filter((element) => element.icon !== undefined)
+    expect(marked.map((element) => [element.icon, structure.elements[element.parent]?.tag])).toEqual([
+      [0, 'li'],
+      [0, 'li'],
+      [1, 'span'],
+    ])
+  })
+
+  it('knows every block’s element and its ancestors: table cells, a disclosure, a tab', () => {
+    const { page, structure } = structured(
+      '<main><section aria-label="Plans"><div role="tablist"><button role="tab" id="tab-a">Monthly</button><button role="tab">Yearly</button></div>' +
+        '<table><tr><th>Plan</th><th>Price</th></tr><tr><td>Pro<td>$39</table>' +
+        '<details><summary>Can I cancel?</summary><p>Any time.</p></details></section></main>',
+    )
+    expect(words(page.blocks)).toEqual(['Monthly', 'Yearly', 'Plan', 'Price', 'Pro', '$39', 'Can I cancel?', 'Any time.'])
+    const tags = page.blocks.map((_, index) => structure.elements[structure.blockElement[index] as number]?.tag)
+    expect(tags).toEqual(['button', 'button', 'th', 'th', 'td', 'td', 'summary', 'p'])
+    // The unclosed cells close themselves, as a browser reads them.
+    const cells = structure.elements.filter((element) => element.tag === 'td')
+    expect(cells.map((cell) => structure.elements[cell.parent]?.tag)).toEqual(['tr', 'tr'])
+    const section = structure.elements.find((element) => element.tag === 'section')
+    expect(section?.attrs).toEqual({ label: 'Plans' })
+    expect(structure.elements.find((element) => element.attrs.role === 'tab')?.attrs).toEqual({ role: 'tab', id: 'tab-a' })
+  })
+
+  it('marks where a kept form sat, and reads the page’s own style sheets and the ones it links', () => {
+    const { structure } = structured(
+      '<html><head><style>.a{color:red}</style><style media="print">.a{color:black}</style><link rel="stylesheet" href="/site.css"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter"></head>' +
+        '<body><main><h2>Write to us</h2><form><input name="email"></form></main></body></html>',
+    )
+    expect(structure.styles).toEqual(['.a{color:red}'])
+    expect(structure.stylesheets).toEqual(['https://example.com/site.css', 'https://fonts.googleapis.com/css2?family=Inter'])
+    const form = structure.elements.find((element) => element.form !== undefined)
+    expect(form).toMatchObject({ tag: 'aglyn-form', form: 0, region: 'main' })
+  })
+
+  it('keeps a menu’s own words, outside its links, where they sit: a column’s heading', () => {
+    const { structure } = structured(
+      '<header><nav><div><a href="/solutions">Solutions</a><div><span>By team</span><a href="/agencies"><p>Agencies</p><p>Every client site</p></a><p>By use case</p><a href="/stores">Stores</a></div></div></nav></header>',
+    )
+    expect(structure.texts.map((entry) => entry.text)).toEqual(['By team', 'By use case'])
+    expect(structure.anchors.map((anchor) => [anchor.label, anchor.text, anchor.nav])).toEqual([
+      ['Solutions', '', true],
+      ['Agencies', 'Every client site', true],
+      ['Stores', '', true],
+    ])
   })
 })
