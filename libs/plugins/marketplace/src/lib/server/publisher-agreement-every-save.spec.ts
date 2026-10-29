@@ -275,6 +275,7 @@ const NOT_PUBLISHER_SAVES: Record<string, string> = {
   'marketplace/install-email-template': 'installing an email template (merchant)',
   'marketplace/update-artifact': 'updating an installed copy (merchant)',
   'marketplace/listing-versions': 'reading a listing’s versions',
+  'marketplace/starters': 'searching the site starters Create site offers (a read)',
   'marketplace/report': 'anyone reporting a listing',
   'marketplace/reviews': 'a buyer rating and reviewing a listing (merchant)',
   'marketplace/admin/reports': 'staff moderation',
