@@ -346,8 +346,8 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
    * Publishing a component (AGL-44) is the marketplace's, drawn through the
    * `hostArtifactPublish` zone (AGL-3080) like the layouts page's: this card
    * says it has a component, which site holds it and what it is called, and
-   * the widget owns the route, the form and the publisher agreement it may
-   * need to ask for (AGL-3407). The menu entry is left out when nothing draws
+   * the widget owns the route, the form and the publisher agreement box every
+   * publish carries (AGL-3407, AGL-4105). The menu entry is left out when nothing draws
    * the zone, so a workspace without a marketplace is not offered a publish
    * that opens nothing.
    */

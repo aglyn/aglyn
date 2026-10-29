@@ -17,10 +17,9 @@ the marketplace side.
 1. **Publisher profile** (Marketplace → Profile) — your handle and
    display name appear on every listing. Publishing is **organization-owned**:
    the listing belongs to your organization, not your personal account.
-2. **Publisher agreement** — accept it once, on behalf of the
-   organization. It is offered wherever you start a publish, and it is
-   always on Marketplace → Profile. See
-   [The publisher agreement](#the-publisher-agreement).
+2. **Publisher agreement** — every save in the marketplace asks you to
+   tick **I agree to the Marketplace Publisher Agreement** above its
+   button first. See [The publisher agreement](#the-publisher-agreement).
 3. **Plan**: publishing requires a Pro plan.
 4. **Payouts** (paid listings only): complete Stripe Connect onboarding
    from **Marketplace → Payouts**. The platform fee is 20% (30% on free
@@ -37,26 +36,43 @@ GitHub, X and LinkedIn, so buyers know where to ask for help.
 
 ## The publisher agreement
 
-Your **organization** — not you personally — is the publishing party, so
-the organization accepts the **Marketplace Publisher Agreement** once.
-Only an owner or admin can accept it, because only they can bind the
-organization, and we record who accepted it and when.
+Your **organization** — not you personally — is the publishing party, and
+the **Marketplace Publisher Agreement** is the set of terms it publishes
+under.
 
-You do not have to go looking for it. When your organization has not
-accepted the current version, the agreement opens in a dialog wherever
-you are publishing — the plugin publish page, or the publish dialog for a
-component, layout, site template, theme, email template or dataset
-schema — as soon as you open it, and again if you submit without
-accepting. Accepting there records the same acceptance as
-**Marketplace → Profile** does, and the publish you started then goes
-ahead with everything you filled in. If you are not an owner or admin,
-the dialog names the people in your organization who can accept it.
+**Every save in the marketplace asks for it.** Above the button of every
+publisher form and dialog there is a box, unticked:
+
+> ☐ I agree to the [Marketplace Publisher Agreement](https://aglyn.com/legal/marketplace-publisher-agreement)
+
+The button stays off until you tick it, and the box is unticked again
+after each save, so the next save asks again. That covers everything a
+publisher does in the marketplace:
+
+- saving your public profile;
+- publishing a plugin, or a new version of one, from the plugin publish
+  page;
+- publishing a component, layout, site template, theme, email template,
+  email starter or dataset schema from its publish dialog;
+- saving a listing in **Edit listing** — its words, pictures, categories
+  and links;
+- making a plugin private or public, and unpublishing or republishing a
+  listing (each asks first, in a small dialog with the same box);
+- asking for the Verified badge, or withdrawing the ask.
+
+Installing or buying from the marketplace is not a publisher save, and the
+[Terms of Service](https://aglyn.com/legal/terms) cover it instead.
+
+Each agreement is recorded with your organization: the version you agreed
+to, who ticked the box, when, which save it was for, and the device's
+address and browser. **Marketplace → Profile** shows when your
+organization last agreed and to which version.
 
 You can read the agreement in full at
 [aglyn.com/legal/marketplace-publisher-agreement](https://aglyn.com/legal/marketplace-publisher-agreement),
 alongside the rest of the [legal center](https://aglyn.com/legal). The
 version in force is stated at the top of that page, and it is the same
-string the panel records against your acceptance.
+string each save records.
 
 It is a different thing from the
 [pre-publish checklist](#before-you-publish), and they are not
@@ -66,9 +82,9 @@ interchangeable:
 | --- | --- | --- |
 | About | The relationship | The bytes in this bundle |
 | Scope | Your organization | One version |
-| Asked | Once, and again when the terms change | Every publish, including a republish of the same version number |
+| Asked | Every save in the marketplace | Every publish, including a republish of the same version number |
 
-The summary shown above the accept button is the part that tends to
+The summary on **Marketplace → Profile** is the part that tends to
 surprise people later — the license you grant us to host, verify and
 distribute; what you warrant about each version; that you cannot recall
 code already installed; that we can disable a version everywhere without
@@ -76,15 +92,13 @@ notice if it looks dangerous; that review is a safety screen and not an
 endorsement; and that on paid listings we process the sale, pay your
 share into your own Stripe Connect account less a platform fee, and
 collect and remit sales tax — while refunds, chargebacks and support on
-your artifacts stay with you. Read the full agreement before accepting.
+your artifacts stay with you. Read the full agreement before you agree.
 
-**If we change the agreement, publishing stops** until someone who can
-bind your organization reads and accepts the new version. The dialog lists
-what changed since the version your organization accepted, so you can read
-the edited sections rather than the whole document again. An older
-acceptance is never carried forward — that is the whole reason the
-agreement is versioned. Nothing already published is affected, and
-reviewers can see which version each publisher is under.
+**If we change the agreement**, your next save agrees to the new version.
+A form left open across the change says so when you save: reload it, read
+the current version, and tick the box again. Nothing already published is
+affected, and reviewers can see which version each publisher last agreed
+to.
 
 ## Where to publish from
 
@@ -277,7 +291,8 @@ against — say what the plugin does instead, or leave it empty.
 
 The last section of the page asks you to confirm a short checklist, in
 full view of the publish button, and **publishing is blocked until you
-do**:
+do** (and until you tick the [publisher agreement](#the-publisher-agreement)
+box directly above the button):
 
 - The repository URL is public and contains the source for this bundle
 - A license is included and you have the right to publish this code
@@ -373,6 +388,8 @@ What happens next:
 - Your plugin **stays listed and installable** the whole time. A verification
   request never changes what your buyers can do.
 - One request at a time. You can **withdraw** it while it is waiting.
+- Asking and withdrawing are saves like any other: tick the
+  [publisher agreement](#the-publisher-agreement) box above the button first.
 - If it is **granted**, the Verified publisher badge appears on your listing.
 - If it is **declined**, you are told why, and you can ask again 30 days after
   the decision. A decline is a refusal of the badge, not a verdict on your
@@ -493,8 +510,10 @@ same detail page you install from.
 **Going public later** takes no re-review: the bytes were already
 approved, and who may install them was never part of that approval. It
 does ask for what any marketplace listing needs first — a description, a
-README, and a license — via **Make public** on the Listings row. Going
-back to private is always available and takes effect immediately.
+README, and a license — via **Make public…** on the Listings row. Going
+back to private is always available and takes effect immediately. Either
+way you confirm it in a small dialog, with the
+[publisher agreement](#the-publisher-agreement) box above its button.
 
 ## Authoring your listing
 
@@ -519,16 +538,19 @@ whole page becomes the editor), or use the **Edit** action on
 ### Edit a listing {#edit-listing}
 
 Select **Edit listing** on your own listing's detail page and the page becomes the
-editor for what buyers see: name, summary, rich-text body and media. Save, and the
-listing changes at once — no new version, and no new review, because review is about
-the bundle's bytes rather than the words around them.
+editor for what buyers see: name, summary, rich-text body and media. Tick the
+[publisher agreement](#the-publisher-agreement) box above **Save listing** and save,
+and the listing changes at once — no new version, and no new review, because review is
+about the bundle's bytes rather than the words around them.
 
 ### Your listings {#your-listings}
 
 **Marketplace → Listings** lists everything your organization has published, with its
-preview image; a row's menu is where you **Publish new version…**, **Edit listing**, or
-switch a plugin between private and public. Private plugins never appear in Browse, so
-this list — and **View** on a row — is where you find them.
+preview image; a row's menu is where you **Publish new version…**, **Edit listing**,
+switch a plugin between private and public, or **Unpublish…** (and later
+**Republish…**) a listing. Each of those saves asks for the
+[publisher agreement](#the-publisher-agreement) first. Private plugins never appear in
+Browse, so this list — and **View** on a row — is where you find them.
 
 ### The Links card {#listing-links}
 
