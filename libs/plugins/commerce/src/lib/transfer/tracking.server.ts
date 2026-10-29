@@ -43,6 +43,7 @@ import type {
 import { firebaseAdmin, getOrgForHost, memberHasPermissionOnHost, resolveOrgMembership } from '@aglyn/tenant-data-admin'
 import { TransferEngineError } from '@aglyn/tenant-data-admin/server/transfer-jobs'
 import { normalizeTrackingNumber, parseShippingOrderRef } from '../model/order-shipping-export'
+import { isUnpaidQuote } from '../model/commerce-quotes'
 import { commerceSitePermissionRefusal } from '../model/plugin-permissions'
 import {
   cancelOrderFulfillment,
@@ -137,6 +138,11 @@ async function findOrders(
     for (const doc of await firestore.getAll(...idList.slice(at, at + 100).map((id) => collection.doc(id)))) {
       if (doc.exists) found.set(doc.id, doc)
     }
+  }
+  // An unpaid quote holds an order number but is not an order yet (AGL-4093):
+  // a file naming that number matches nothing to ship.
+  for (const [id, doc] of found) {
+    if (isUnpaidQuote(doc.data())) found.delete(id)
   }
   return found
 }

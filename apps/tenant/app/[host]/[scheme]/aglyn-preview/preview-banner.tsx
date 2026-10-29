@@ -47,13 +47,25 @@ const BAR_HEIGHT_PX = 44
  * preview whose site plugins fail to load still carries its warning.
  */
 export function PreviewBanner({
-  status,
-  publishAtSeconds,
+  status = 'draft',
+  publishAtSeconds = null,
+  sentence,
+  link,
 }: {
   /** The entry's stored status — `scheduled` or `draft`. */
-  status: string
+  status?: string
   /** When it is due, or null when nothing is scheduled. */
-  publishAtSeconds: number | null
+  publishAtSeconds?: number | null
+  /**
+   * The whole line, for a preview that is not an entry's (AGL-4086): a site,
+   * or one page of it, that only its team can see. Replaces the entry's
+   * sentence; the bar, its colors and its place on the page are the same,
+   * because the hazard is the same — a screenshot of the team's view must
+   * say it is not what the public sees.
+   */
+  sentence?: string
+  /** Where the switch that ends the preview lives, in the console. */
+  link?: { href: string; label: string } | null
 }) {
   const bar: CSSProperties = {
     position: 'fixed',
@@ -100,7 +112,17 @@ export function PreviewBanner({
         >
           {'PREVIEW'}
         </span>
-        <span>{previewSentence(status, publishAtSeconds)}</span>
+        <span>{sentence ?? previewSentence(status, publishAtSeconds)}</span>
+        {link ? (
+          <a
+            href={link.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: 'inherit', textDecoration: 'underline' }}
+          >
+            {link.label}
+          </a>
+        ) : null}
       </div>
       {/* Normal flow, so a site header that is not itself fixed starts below
           the bar rather than under it. */}

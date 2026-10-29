@@ -57,6 +57,8 @@ const DOORS = [
   'commerce/src/lib/server/cart-checkout.ts',
   'commerce/src/lib/server/reserve.ts',
   'commerce/src/lib/server/draft-order.ts',
+  // A quote's Pay button on the business's site (AGL-4094).
+  'commerce/src/lib/server/quote-pay.ts',
   'commerce/src/lib/server/pos-order.ts',
   // The register's card tenders (AGL-3607): reader, typed card and QR link.
   'commerce/src/lib/server/pos-terminal.ts',

@@ -111,6 +111,7 @@ describe('3-D Secure is requested by every card payment, at one seam', () => {
       'libs/plugins/commerce/src/lib/server/checkout.ts',
       'libs/plugins/commerce/src/lib/server/draft-order.ts',
       'libs/plugins/commerce/src/lib/server/pos-order.ts',
+      'libs/plugins/commerce/src/lib/server/quote-pay.ts',
       'libs/plugins/commerce/src/lib/server/reserve.ts',
       'libs/plugins/marketplace/src/lib/server/checkout.ts',
     ]) {
@@ -205,6 +206,12 @@ const PAYMENT_DOORS: Record<string, DoorClass> = {
     surface: 'visitor',
     barrel: 'libs/plugins/bookings/src/lib/server.ts',
     paths: ['bookings/book'],
+  },
+  // A quote's Pay button (AGL-4094), for whoever holds the signed pay link.
+  'libs/plugins/commerce/src/lib/server/quote-pay.ts': {
+    surface: 'visitor',
+    barrel: 'libs/plugins/commerce/src/lib/server.ts',
+    paths: ['commerce/quote-pay'],
   },
   'libs/plugins/commerce/src/lib/server/draft-order.ts': {
     surface: 'signed-in',

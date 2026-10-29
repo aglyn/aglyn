@@ -130,6 +130,20 @@ describe('the order-event intake (AGL-3642)', () => {
     expect(store.orders.get(ID)).toMatchObject({ cancelRequested: true, active: true })
   })
 
+  it('never sends a line typed on a quote, whatever SKU it was given (AGL-4093)', () => {
+    expect(
+      orderLines({
+        lineItems: [
+          { sku: 'CAN-R', name: 'Canopy', quantity: 1, unitAmountCents: 100 },
+          { productId: '', custom: true, sku: 'CAN-R', name: 'Installation', quantity: 1, unitAmountCents: 500 },
+        ],
+      }),
+    ).toEqual({
+      lines: [{ lineIndex: 0, sku: 'CAN-R', name: 'Canopy', quantity: 1, unitAmountCents: 100 }],
+      skipped: ['Installation'],
+    })
+  })
+
   it('reads lines and addresses defensively', () => {
     expect(orderLines({ lineItems: 'nonsense' })).toEqual({ lines: [], skipped: [] })
     expect(systemAddress({ name: 'Only a name' })).toBeNull()

@@ -33,6 +33,7 @@ import DiscountsCard from './console/discounts-card.component'
 import GiftCardsCard from './console/gift-cards-card.component'
 import HostCouponsCard from './console/host-coupons-card.component'
 import HostOrdersCard from './console/host-orders-card.component'
+import HostQuotesCard from './console/host-quotes-card.component'
 import LocationsCard from './console/locations-card.component'
 import LocalDeliverySettingsCard from './console/local-delivery-settings-card.component'
 import PickupDeliveryQueueCard from './console/pickup-delivery-queue-card.component'
@@ -45,6 +46,7 @@ import PosShiftHistoryCard from './console/pos-ops/pos-shift-history-card.compon
 import PosStaffPinsCard from './console/pos-ops/pos-staff-pins-card.component'
 import PaymentMethodsCard from './console/payment-methods-card.component'
 import ProductsHubCard from './console/products-hub-card.component'
+import QuoteSettingsCard from './console/quote-settings-card.component'
 import RecoveryQueueCard from './console/recovery-queue-card.component'
 import RegistersCard from './console/registers-card.component'
 import RegisterHardwareCards from './console/register-hardware-card.component'
@@ -145,6 +147,8 @@ function sectionBody(
   },
   /** The reservation keys this site decides for the member (AGL-4047). */
   reservations: { canManage: boolean; canWalkIn: boolean } = { canManage: true, canWalkIn: true },
+  /** "Create and edit quotes" and "Send quotes and invoices to customers" on this site (AGL-4093, AGL-4094). */
+  quotes: { canEdit: boolean; canSend: boolean } = { canEdit: true, canSend: true },
 ): ReactNode {
   switch (section) {
     case 'catalog':
@@ -175,6 +179,12 @@ function sectionBody(
           spacing={3}
           items={[
             { size: { xs: 12 }, children: <HostOrdersCard hostId={hostId} /> },
+            // Prices put to a customer before they buy (AGL-4093), beside the
+            // orders they become once paid.
+            {
+              size: { xs: 12 },
+              children: <HostQuotesCard hostId={hostId} canEdit={quotes.canEdit} canSend={quotes.canSend} />,
+            },
             // What to prepare, hand over and drive out (AGL-3624). Renders
             // nothing for a store with no pickup and no local delivery.
             {
@@ -264,6 +274,8 @@ function sectionBody(
         // Whether buyers may ask for a return online (AGL-3611): the store's
         // policy, beside the terms and guest-checkout rules above it.
         <ReturnSettingsCard key="returns" hostId={hostId} />,
+        // What a new quote starts with (AGL-4093).
+        <QuoteSettingsCard key="quotes" hostId={hostId} />,
       ])
     case 'taxes':
       return settingsPage(section, hostId, [
@@ -412,6 +424,12 @@ export function CommerceConsolePage(props: ConsolePluginPageProps) {
     canManage: permissions?.['commerce.reservations'] !== false,
     canWalkIn: permissions?.['commerce.walkIns'] !== false,
   }
+  // "Create and edit quotes" (AGL-4093), read the same way; the quote route
+  // decides.
+  const quotes = {
+    canEdit: permissions?.['commerce.quotes'] !== false,
+    canSend: permissions?.['commerce.quotes.send'] !== false,
+  }
 
   /*
    * Nothing, deliberately, while the redirect is in flight.
@@ -424,7 +442,7 @@ export function CommerceConsolePage(props: ConsolePluginPageProps) {
 
   return (
     <HubSections sections={sections}>
-      {sectionBody(section as CommerceConsoleSectionId, hostId, canManagePos, pos, reservations)}
+      {sectionBody(section as CommerceConsoleSectionId, hostId, canManagePos, pos, reservations, quotes)}
     </HubSections>
   )
 }

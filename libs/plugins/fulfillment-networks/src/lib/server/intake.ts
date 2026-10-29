@@ -49,6 +49,8 @@ interface OrderLineFields {
   quantity?: unknown
   name?: unknown
   variantLabel?: unknown
+  /** A line typed on a quote, which no stocked product stands behind. */
+  custom?: unknown
 }
 
 /** An envelope as the outbox hands it over. */
@@ -73,7 +75,9 @@ function estimatedLines(order: OrderEventOrderView, stock: Record<string, number
   items.forEach((item, lineIndex) => {
     const sku = String(item?.sku ?? '').trim()
     const quantity = Math.max(0, Math.floor(Number(item?.quantity) || 0))
-    if (!sku || !quantity) return
+    // A typed line's SKU is the business's own reference, never stock a
+    // network holds.
+    if (!sku || !quantity || item?.custom === true) return
     // A network that has been counted holds only the SKUs it reported.
     if (known && !(sku in stock)) return
     lines.push({

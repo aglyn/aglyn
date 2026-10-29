@@ -333,9 +333,19 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     why: "Not a sink, and never on a tenant render: the multi-wave synthetic site the Bring my site wave specs (AGL-3976) read through the crawler's fetch stub, imported only by site-import-waves.spec.ts and ai-job-import-step.spec.ts. Every marker is an `<img src>` inside a recorded HTML string for an invented business (cdn.harbor-dental.com), served to a spec by the crawler's fetch stub and never fetched; no deployment reads the file and nothing here renders a page.",
   },
   'libs/plugins/ai/src/lib/site-import/site-import-crawl.ts': {
+    markers: 3,
+    guard: 'off-tenant',
+    why: "Not a sink, and never on a tenant render: the AglynBot crawler for Bring my site (AGL-3974, AGL-3976), run only by the console's import door (server/ai-site-import-route.ts) and the import job step (jobs/ai-job-import-step.ts) on the console's AI job runner. One marker is `siteImportPagePromptText`'s `[image: <alt>]` placeholder, the text line the model reads in place of a crawled picture; it carries the alt text, never the address. The other two are the crawled page's `icons` field and its copy from the extract (AGL-4083): addresses the crawler READ, kept as data for the logo candidates. The crawled pictures, the logo among them, reach a site only through the media library's ingest (site-import-images.ts, jobs/ai-site-import-look.ts), never as a remote URL.",
+  },
+  'libs/plugins/ai/src/lib/site-import/site-import-html.ts': {
+    markers: 9,
+    guard: 'off-tenant',
+    why: "Not a sink, and never on a tenant render: the Bring my site page extractor (AGL-3974, AGL-4083), imported only by the crawler above on the console's AI job runner. Every marker READS an old page: the `icons` and `og:image` fields of the extract, their caps, and the `<picture>` reader, which rewrites a picture's first `<source>` into an `<img>` inside the extractor's own working string so the tokenizer reads one shape. Nothing it returns is rendered: a picture it finds reaches a site only through the media library's ingest (site-import-images.ts), never as a remote URL.",
+  },
+  'libs/plugins/ai/src/lib/jobs/ai-site-import-look.ts': {
     markers: 1,
     guard: 'off-tenant',
-    why: "Not a sink, and never on a tenant render: the AglynBot crawler for Bring my site (AGL-3974, AGL-3976), run only by the console's import door (server/ai-site-import-route.ts) and the import job step (jobs/ai-job-import-step.ts) on the console's AI job runner. The marker is `siteImportPagePromptText`'s `[image: <alt>]` placeholder, the text line the model reads in place of a crawled picture; it carries the alt text, never the address, and the crawled pictures reach a site only through the media library's ingest (site-import-images.ts), never as a remote URL.",
+    why: "Not a sink, and never on a tenant render: Bring my site's look pass (AGL-4084), run only by the import job step on the console's AI job runner. The marker writes the site's share picture, `seo.image`, and the value is the `src` the media library's ingest returned for the home page's `og:image` it just copied in (`bringInSiteImportPhotos`): the site's own library reference, never the old site's address. The tenant renders it as it renders a share picture the SEO card sets.",
   },
   'libs/plugins/ai/src/lib/jobs/ai-site-inspiration-signals.ts': {
     markers: 4,

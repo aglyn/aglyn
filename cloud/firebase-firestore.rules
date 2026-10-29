@@ -3489,6 +3489,12 @@ service cloud.firestore {
                      // whether the guided AI start is still offered, and only
                      // the starter route writes it.
                      'starterProvisionedAt',
+                     // Preview (AGL-4086): whether only the site's team can
+                     // see it, and whether it has been public before. Making
+                     // a site public is a launch — it drops every cached page
+                     // and reports the first publish — so only
+                     // /api/hosts/preview and /api/hosts/create write them.
+                     'preview', 'publicSinceMs',
                      // Whether the site records visitor journeys (AGL-3605).
                      // The tenant's collector reads it to decide whether a
                      // visit is stored, and only the funnels routes write it,
@@ -3585,9 +3591,13 @@ service cloud.firestore {
           // list is the Admin-SDK-only set, and `screens` has a legitimate
           // client writer. Two different questions, two conditions.
           // defaultHomeScreenId (AGL-3408) picks what a publish at / unroutes.
+          // previewScreens (AGL-4086) decides whether a published page is
+          // shown to the public or to the site's team alone, so making one
+          // public is a publish and keeping one back is an unpublish: the same
+          // roles as the routing map.
           (canPublishHostContent(hostId) ||
             !request.resource.data.diff(resource.data).affectedKeys()
-              .hasAny(['screens', 'defaultHomeScreenId'])) &&
+              .hasAny(['screens', 'defaultHomeScreenId', 'previewScreens'])) &&
           routeRemovalAllowed());
       allow delete: if isStaff() ||
         (isVerified() && hostSiteRoleKey(hostId, 'site.manage', ['admin']) &&

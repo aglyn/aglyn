@@ -77,13 +77,15 @@ import type { AiJobStepRunner } from './ai-job-text-step'
 import { AI_LAYOUT_FRAME_TOOL } from '../layout-language/ai-layout-language'
 import {
   AI_JOB_LAYOUT_LANGUAGE_BUDGET,
-  AI_JOB_LAYOUT_LANGUAGE_INSTRUCTIONS,
   AI_LAYOUT_FRAME_KIND,
+  aiJobLayoutLanguageInstructions,
   aiLayoutFrameCheck,
   aiLayoutFramePrompt,
   aiLayoutFrameTargets,
   aiLayoutHomeId,
   aiLayoutNavPages,
+  aiLayoutSiteBrandOf,
+  aiLayoutSiteFactsText,
   aiLayoutSiteName,
   type AiLayoutFrameBuilt,
 } from './ai-job-layout-language'
@@ -406,7 +408,7 @@ export function createAiJobLayoutStep(deps: AiJobLayoutStepDeps = {}): AiJobStep
       const result = await runValidatedGeneration<AiLayoutFrameBuilt>(AI_LAYOUT_FRAME_KIND, {
         step: 'job.layout',
         model,
-        instructions: AI_JOB_LAYOUT_LANGUAGE_INSTRUCTIONS,
+        instructions: aiJobLayoutLanguageInstructions(job),
         inventory,
         messages: [{ role: 'user', content: aiLayoutFramePrompt({ job, siteName, pages, targets }) }],
         tool: AI_LAYOUT_FRAME_TOOL,
@@ -418,8 +420,10 @@ export function createAiJobLayoutStep(deps: AiJobLayoutStepDeps = {}): AiJobStep
           homeId: aiLayoutHomeId(pages, inventory),
           pages,
           targets,
-          extend: aiLayoutChecks(inventory, plan, job.brief),
+          // A site brought in may state what its own header and footer state (AGL-4084).
+          extend: aiLayoutChecks(inventory, plan, [job.brief, aiLayoutSiteFactsText(job.inputs)].filter(Boolean).join('\n')),
           design: aiLayoutDesignOf(job, '/'),
+          brand: aiLayoutSiteBrandOf(job.inputs),
           storeLinks: aiStoreFrameLinksOf(job.inputs),
           // The frame's own words in the site's language (AGL-3760).
           ...(job.plan?.language ? { language: job.plan.language } : {}),

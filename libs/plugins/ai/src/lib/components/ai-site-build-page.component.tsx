@@ -396,6 +396,8 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
         busy={busy}
         notice={notice}
         onResume={() => void confirmPlan(ready)}
+        // Start every remaining wave (AGL-4084): the same door, told to go on after each wave.
+        onStartAll={() => void confirmPlan(ready, { startAll: true })}
         onJob={setJob}
       />
     )

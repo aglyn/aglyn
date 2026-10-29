@@ -9,6 +9,10 @@ description: Temporarily take your site offline behind a designed 503 page.
 Need to pause your live site while you make changes? **Maintenance mode** serves your
 designed **503** page to visitors until you switch it back.
 
+To keep building while only your team can see the site, use
+[Preview](make-your-site-private.md#keep-it-to-your-team-with-preview) instead: visitors
+see the same 503 page, and your team sees the whole site.
+
 ![The Error pages card, with the four error-page pickers and the "Maintenance mode — show the 503 page at every address" switch beneath them](/img/site-protection/setup-error-pages.png)
 
 ## Turn it on

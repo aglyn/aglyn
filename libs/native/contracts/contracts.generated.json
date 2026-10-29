@@ -7006,6 +7006,7 @@
     "marketplace": "Marketplace",
     "online": "Online",
     "pos": "POS",
+    "quote": "Quote",
     "subscription": "Subscription"
   },
   "ORDER_CHANNEL_OPTIONS": [
@@ -7028,6 +7029,10 @@
     {
       "label": "Marketplace",
       "value": "marketplace"
+    },
+    {
+      "label": "Quote",
+      "value": "quote"
     }
   ],
   "ORDER_COURIER_STATE_LABELS": {
@@ -7367,6 +7372,8 @@
         "commerce.reservations",
         "commerce.walkIns",
         "commerce.orders",
+        "commerce.quotes",
+        "commerce.quotes.send",
         "commerce.giftCards",
         "commerce.paymentMethods",
         "commerce.shippingConnections",
@@ -7412,6 +7419,8 @@
         "commerce.reservations",
         "commerce.walkIns",
         "commerce.orders",
+        "commerce.quotes",
+        "commerce.quotes.send",
         "commerce.giftCards",
         "managePos",
         "posSell",
@@ -7464,6 +7473,8 @@
         "commerce.reservations",
         "commerce.walkIns",
         "commerce.orders",
+        "commerce.quotes",
+        "commerce.quotes.send",
         "commerce.giftCards",
         "commerce.paymentMethods",
         "commerce.shippingConnections",
@@ -7776,6 +7787,20 @@
         "group": "commerce",
         "key": "commerce.orders",
         "label": "Manage orders",
+        "scope": "site"
+      },
+      {
+        "description": "Create, edit and delete quotes for customers. Follows the site role unless a role or member sets it.",
+        "group": "commerce",
+        "key": "commerce.quotes",
+        "label": "Create and edit quotes",
+        "scope": "site"
+      },
+      {
+        "description": "Copy a quote’s pay link to send to the customer, and replace it so the old link stops working. Follows the site role unless a role or member sets it.",
+        "group": "commerce",
+        "key": "commerce.quotes.send",
+        "label": "Send quotes and invoices to customers",
         "scope": "site"
       },
       {

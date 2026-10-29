@@ -438,12 +438,28 @@ export interface PublicFetchResult {
   location?: string
   /** The body's bytes, with `binary`; absent otherwise. */
   data?: Uint8Array
+  /**
+   * Whose edge refused an error answer, when its headers say (AGL-4083): the
+   * bot protection a site owner opens for AglynBot is that edge's setting.
+   */
+  edge?: PublicFetchEdge
+}
+
+/** An edge network that names itself on the answers it refuses with. */
+export type PublicFetchEdge = 'vercel' | 'cloudflare'
+
+/** The edge an answer came through, from the headers each one sets; `null` for neither. */
+export function publicFetchEdgeOf(headers: Pick<Headers, 'get'>): PublicFetchEdge | null {
+  const server = (headers.get('server') ?? '').toLowerCase()
+  if (headers.get('x-vercel-mitigated') || headers.get('x-vercel-id') || server === 'vercel') return 'vercel'
+  if (headers.get('cf-mitigated') || headers.get('cf-ray') || server === 'cloudflare') return 'cloudflare'
+  return null
 }
 
 function refusedFetch(
   refusal: PublicFetchRefusal,
   url: string,
-  extra: { status?: number; location?: string } = {},
+  extra: { status?: number; location?: string; edge?: PublicFetchEdge } = {},
 ): PublicFetchResult {
   return { ok: false, url, text: '', bytes: 0, truncated: false, contentType: '', refusal, ...extra }
 }
@@ -463,6 +479,22 @@ export interface PublicFetchOptions {
   refuseOver?: boolean
   /** Keep the body's bytes as `data` rather than decode them as text (a picture, AGL-3976). */
   binary?: boolean
+  /**
+   * More request headers (AGL-4083), sent under `Accept` and `User-Agent`:
+   * neither can be changed through here. The site import's edge header goes
+   * this way, and only to the hosts its caller names.
+   */
+  headers?: Readonly<Record<string, string>>
+}
+
+/** The caller's extra headers, without any that would say what the request is: those are the fetch's own. */
+function publicFetchExtraHeaders(headers: PublicFetchOptions['headers']): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const [name, value] of Object.entries(headers ?? {})) {
+    if (/^(?:accept|user-agent|host|cookie|authorization|content-length)$/i.test(name)) continue
+    if (typeof value === 'string') out[name] = value
+  }
+  return out
 }
 
 /**
@@ -506,6 +538,7 @@ export async function fetchPublicTextDetailed(
         signal: clock.signal,
         dispatcher,
         headers: {
+          ...publicFetchExtraHeaders(options.headers),
           Accept: options.acceptHeader ?? 'text/html, text/css;q=0.9',
           ...(options.userAgent ? { 'User-Agent': options.userAgent } : {}),
         },
@@ -531,7 +564,8 @@ export async function fetchPublicTextDetailed(
       }
       if (!response.ok || !response.body) {
         await response.body?.cancel().catch(() => undefined)
-        return refusedFetch('http-status', parsed.toString(), { status: response.status })
+        const edge = publicFetchEdgeOf(response.headers)
+        return refusedFetch('http-status', parsed.toString(), { status: response.status, ...(edge ? { edge } : {}) })
       }
       const contentType = response.headers.get('content-type') ?? ''
       if (!options.accept.test(contentType)) {
@@ -561,7 +595,7 @@ export async function fetchPublicTextDetailed(
 /** {@link fetchPublicTextDetailed}, answering `null` for anything it refused. */
 export async function fetchPublicText(
   url: string,
-  options: { maxBytes: number; accept: RegExp; signal?: AbortSignal; timeoutMs?: number },
+  options: { maxBytes: number; accept: RegExp; signal?: AbortSignal; timeoutMs?: number; headers?: PublicFetchOptions['headers'] },
 ): Promise<{ text: string; url: string } | null> {
   const result = await fetchPublicTextDetailed(url, options)
   return result.ok ? { text: result.text, url: result.url } : null
@@ -580,20 +614,39 @@ export interface AiReferencePage {
   stylesheets: string[]
 }
 
-/** A page and its first stylesheets through {@link fetchPublicText}; `null` when the page cannot be read. */
-export async function readReferencePage(url: URL, signal: AbortSignal): Promise<AiReferencePage | null> {
+/**
+ * A page and its first stylesheets through {@link fetchPublicText}; `null` when the page cannot be read.
+ * `headers` go with the page's own request and with a stylesheet's only when
+ * it is on the page's host (AGL-4083): the site import's edge header is for
+ * the site it was minted for, never a CDN's.
+ */
+export async function readReferencePage(
+  url: URL,
+  signal: AbortSignal,
+  headers?: PublicFetchOptions['headers'],
+): Promise<AiReferencePage | null> {
   const page = await fetchPublicText(url.toString(), {
     maxBytes: AI_THEME_REFERENCE_MAX_BYTES,
     accept: /text\/html|application\/xhtml\+xml/i,
     signal,
+    ...(headers ? { headers } : {}),
   })
   if (!page) return null
+  const host = new URL(page.url).host
   const stylesheets: string[] = []
   for (const sheet of stylesheetUrlsOf(page.text, page.url)) {
+    const sameHost = (() => {
+      try {
+        return new URL(sheet).host === host
+      } catch {
+        return false
+      }
+    })()
     const css = await fetchPublicText(sheet, {
       maxBytes: AI_THEME_STYLESHEET_MAX_BYTES,
       accept: /text\/css/i,
       signal,
+      ...(headers && sameHost ? { headers } : {}),
     })
     if (css) stylesheets.push(css.text)
   }

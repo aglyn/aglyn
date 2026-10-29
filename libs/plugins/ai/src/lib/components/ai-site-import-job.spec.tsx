@@ -98,7 +98,7 @@ beforeEach(() => {
   global.fetch = mockFetch as unknown as typeof fetch
 })
 
-const view = (job: AiJobSummary, onResume = jest.fn()) =>
+const view = (job: AiJobSummary, onResume = jest.fn(), onStartAll?: () => void) =>
   render(
     <AiSiteImportJob
       job={job}
@@ -110,6 +110,7 @@ const view = (job: AiJobSummary, onResume = jest.fn()) =>
       busy={false}
       notice={null}
       onResume={onResume}
+      {...(onStartAll ? { onStartAll } : {})}
       onJob={jest.fn()}
     />,
   )
@@ -193,5 +194,38 @@ describe('an import job’s page', () => {
   it('says the site is being read before anything else', () => {
     view(summary({ status: 'running', review: null }))
     expect(screen.getByRole('heading', { level: 1, name: 'Reading your site' })).toBeTruthy()
+  })
+
+  it('holds a site whose home page bot protection turned away, says so, and checks again on the person’s say-so (AGL-4083)', () => {
+    const onResume = jest.fn()
+    const message =
+      'Your site’s bot protection or firewall turned AglynBot away before it could read your home page, and 110 other pages. Nothing was brought in and no AI credits were used. Allow AglynBot in your site’s bot or firewall settings, then choose Check again.'
+    view(summary({ review: { reason: 'blocked', message, findings: [] } }), onResume)
+    expect(screen.getByRole('heading', { level: 1, name: 'AglynBot was turned away' })).toBeTruthy()
+    expect(screen.getByText(message)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /^Start / })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Check again' }))
+    expect(onResume).toHaveBeenCalledTimes(1)
+  })
+
+  it('offers every remaining wave beside the next one only where the page can start them, quoting them all (AGL-4083)', () => {
+    const state = harbor()
+    const job = summary({ siteImport: state, items: aiSiteImportLedger(state) })
+    const { unmount } = view(job)
+    expect(screen.queryByRole('button', { name: 'Start every remaining wave' })).toBeNull()
+    unmount()
+    const onStartAll = jest.fn()
+    view(job, jest.fn(), onStartAll)
+    fireEvent.click(screen.getByRole('button', { name: 'Start every remaining wave' }))
+    expect(onStartAll).toHaveBeenCalledTimes(1)
+    expect(screen.getByText(/^About \d+ credits \(up to [\d,]+\) for every remaining wave/)).toBeTruthy()
+  })
+
+  it('links each page to its old page on the source site (AGL-4083)', () => {
+    const state = harbor()
+    view(summary({ siteImport: state, items: aiSiteImportLedger(state) }))
+    const old = screen.getAllByRole('link', { name: /Old page/ })
+    expect(old[0].getAttribute('href')).toBe('https://harbor-dental.com/')
+    expect(old[0].getAttribute('target')).toBe('_blank')
   })
 })

@@ -258,6 +258,13 @@ describe("plugins: a console card's write of something a page renders carries th
           'Writes only `settings/store.tax`, which checkout reads per ' +
           'request; no cached page renders the rates.',
       },
+    'libs/plugins/commerce/src/lib/components/console/quote-settings-card.component.tsx':
+      {
+        writes: /\{\s*quotes:\s*\{\s*requireProofApproval:\s*current\s*\}\s*\}/,
+        why:
+          'Writes only `settings/store.quotes` (AGL-4093), which the quote ' +
+          'route reads when it creates a quote; no cached page renders it.',
+      },
     'libs/plugins/commerce/src/lib/components/console/local-delivery-settings-card.component.tsx':
       {
         writes: /\{\s*localDelivery:\s*value\s*\}/,

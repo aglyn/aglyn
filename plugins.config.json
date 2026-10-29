@@ -1081,7 +1081,8 @@
             "product-reviews",
             "related-products",
             "return-request",
-            "order-status"
+            "order-status",
+            "quote-page"
           ]
         },
         "console": {

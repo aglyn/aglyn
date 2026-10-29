@@ -42,6 +42,14 @@ import {
   type SiteImportInventory,
 } from './site-import-crawl'
 import { SITE_IMPORT_RECORDINGS } from './fixtures/site-import-crawl-recordings'
+import { aiSiteImportReadVerdict } from '../model/ai-site-import'
+import {
+  AGLYN_DOMAIN,
+  AGLYN_ORIGIN,
+  aglynAnswer,
+  aglynSitemapUrls,
+  type AglynSiteOptions,
+} from './fixtures/aglyn-com-recordings'
 
 type FetchCall = { url: string; headers: Record<string, string> }
 let calls: FetchCall[] = []
@@ -159,9 +167,22 @@ describe('a Wix-style small-business site', () => {
       ['quote', 'The best rye in the county. — Springfield Gazette'],
       ['heading', 'Say hello'],
       ['paragraph', 'See the gallery or email us. Follow us on Instagram.'],
+      // A link inside a sentence follows its block, its address kept (AGL-4083).
+      ['link', 'See the gallery'],
+      ['link', 'email us'],
+      ['link', 'Instagram'],
       ['paragraph', 'Your cart · Printable menu'],
+      ['link', 'Your cart'],
+      ['link', 'Printable menu'],
       ['paragraph', 'Rosie’s Bakery · 12 Main St, Springfield'],
       ['paragraph', 'Open Tue–Sun, 7am – 3pm'],
+    ])
+    expect(home.blocks.filter((block) => block.kind === 'link').map((block) => (block.kind === 'link' ? [block.href, block.inline] : []))).toEqual([
+      ['https://www.rosies-bakery.com/gallery', true],
+      ['mailto:hi@rosies-bakery.com', true],
+      ['https://instagram.com/rosiesbakery', true],
+      ['https://www.rosies-bakery.com/cart', true],
+      ['https://www.rosies-bakery.com/files/menu.pdf', true],
     ])
     expect(home.blocks.find((block) => block.kind === 'heading')).toMatchObject({ level: 1, region: 'main' })
     expect(home.blocks[home.blocks.length - 1].region).toBe('footer')
@@ -170,8 +191,9 @@ describe('a Wix-style small-business site', () => {
         url: 'https://static.wixstatic.com/media/loaf.jpg/v1/fill/w_980,h_600/loaf.jpg',
         alt: 'A sourdough loaf on a board',
         sameSite: false,
+        region: 'main',
       },
-      { url: 'https://www.rosies-bakery.com/images/storefront.webp', alt: 'Our storefront', sameSite: true },
+      { url: 'https://www.rosies-bakery.com/images/storefront.webp', alt: 'Our storefront', sameSite: true, region: 'main' },
     ])
     expect(home.navLinks).toEqual([
       { text: 'Home', url: 'https://www.rosies-bakery.com/' },
@@ -343,5 +365,138 @@ describe('readSiteVerificationMeta', () => {
       answered: false,
       values: [],
     })
+  })
+})
+
+/*------------------------------------------
+ * aglyn.com, as recorded on 10/28 (AGL-4083)
+ *-----------------------------------------*/
+
+describe('aglyn.com, the whole site', () => {
+  /** Serves aglyn.com's recordings under the real fetch, one request at a time or `delayMs` apart. */
+  function serveAglyn(options: AglynSiteOptions & { delayMs?: number } = {}) {
+    let inFlight = 0
+    let most = 0
+    fetchSpy.mockImplementation(async (input, init) => {
+      const url = String(input)
+      calls.push({ url, headers: ((init as RequestInit | undefined)?.headers ?? {}) as Record<string, string> })
+      inFlight += 1
+      most = Math.max(most, inFlight)
+      try {
+        if (options.delayMs) await new Promise((resolve) => setTimeout(resolve, options.delayMs))
+        const answer = aglynAnswer(url, options)
+        return new Response(answer.body || null, { status: answer.status, headers: answer.headers })
+      } finally {
+        inFlight -= 1
+      }
+    })
+    return { most: () => most }
+  }
+
+  const SITEMAP = aglynSitemapUrls()
+
+  it('lists 123 pages across the index and all six of its children', async () => {
+    serveAglyn({ pageBytes: 2_000 })
+    const inventory = await crawlSiteForImport({ domain: AGLYN_DOMAIN, maxPages: 200 })
+    expect(new Set(SITEMAP).size).toBe(123)
+    // The index and its six children: a seventh document past the old cap of six.
+    expect(calls.some((call) => call.url === `${AGLYN_ORIGIN}/sitemaps/authors/1.xml`)).toBe(true)
+    expect(inventory.sitemapUrls).toBe(123)
+  })
+
+  it('reads 123 pages of their measured sizes, 54 MB, without stopping', async () => {
+    serveAglyn()
+    const inventory = await crawlSiteForImport({ domain: AGLYN_DOMAIN, maxPages: 200, timeBudgetMs: 120_000 })
+    expect(inventory.stoppedBy).toBeNull()
+    expect(inventory.pages).toHaveLength(123)
+    expect(inventory.bytesRead).toBeGreaterThan(50 * 1024 * 1024)
+    expect(inventory.skipped).toEqual([])
+  })
+
+  it('reads four pages at a time, and lists them in the order the sitemap does', async () => {
+    const served = serveAglyn({ pageBytes: 2_000, delayMs: 5 })
+    const inventory = await crawlSiteForImport({ domain: AGLYN_DOMAIN, maxPages: 200, timeBudgetMs: 60_000 })
+    expect(served.most()).toBe(4)
+    expect(inventory.pages.map((page) => page.url)).toEqual(SITEMAP)
+    // robots.txt, then the index and its children one at a time, then home alone.
+    expect(calls.slice(0, 9).map((call) => new URL(call.url).pathname)).toEqual([
+      '/robots.txt',
+      '/sitemap.xml',
+      '/sitemaps/pages/1.xml',
+      '/sitemaps/content-blog/1.xml',
+      '/sitemaps/content-changelog/1.xml',
+      '/sitemaps/content-videos/1.xml',
+      '/sitemaps/content-newsroom/1.xml',
+      '/sitemaps/authors/1.xml',
+      '/',
+    ])
+  })
+
+  it('lists every address a stop left unread as not reached, so the count adds up', async () => {
+    serveAglyn()
+    const inventory = await crawlSiteForImport({ domain: AGLYN_DOMAIN, maxPages: 200, maxTotalBytes: 8 * 1024 * 1024 })
+    expect(inventory.stoppedBy).toBe('total-bytes')
+    expect(inventory.pages.length).toBeGreaterThan(5)
+    expect(inventory.pages.length).toBeLessThan(123)
+    const notReached = inventory.skipped.filter((entry) => entry.reason === 'not-reached').map((entry) => entry.url)
+    expect(inventory.pages.length + notReached.length).toBe(123)
+    expect(inventory.skipped.length).toBe(notReached.length)
+    expect(notReached).toContain(SITEMAP[SITEMAP.length - 1])
+    expect(notReached.some((url) => inventory.pages.some((page) => page.url === url))).toBe(false)
+  })
+
+  it('leaves a wave’s unread pages for its next pass, never as not reached', async () => {
+    serveAglyn()
+    const only = aglynSitemapUrls().slice(1, 30)
+    const inventory = await crawlSiteForImport({ domain: AGLYN_DOMAIN, maxPages: only.length, only, maxTotalBytes: 4 * 1024 * 1024 })
+    expect(inventory.stoppedBy).toBe('total-bytes')
+    expect(inventory.skipped.some((entry) => entry.reason === 'not-reached')).toBe(false)
+  })
+
+  it('sends the headers its seam names for the site on every request, under its own Accept and user agent', async () => {
+    serveAglyn({ pageBytes: 2_000 })
+    const asked: string[] = []
+    await crawlSiteForImport(
+      { domain: AGLYN_DOMAIN, maxPages: 3 },
+      {
+        headersFor: async (domain) => {
+          asked.push(domain)
+          return { 'x-aglyn-import': 'secret', 'User-Agent': 'NotAglynBot', Accept: '*/*' }
+        },
+      },
+    )
+    expect(asked).toEqual([AGLYN_DOMAIN])
+    expect(calls.length).toBeGreaterThan(3)
+    for (const call of calls) {
+      expect(call.headers['x-aglyn-import']).toBe('secret')
+      expect(call.headers['User-Agent']).toBe(AGLYN_BOT_USER_AGENT)
+      expect(call.headers['Accept']).not.toBe('*/*')
+    }
+  })
+
+  it('sends no extra header at all without the seam', async () => {
+    serveAglyn({ pageBytes: 2_000 })
+    await crawlSiteForImport({ domain: AGLYN_DOMAIN, maxPages: 3 })
+    for (const call of calls) expect(Object.keys(call.headers).sort()).toEqual(['Accept', 'User-Agent'])
+  })
+
+  it('the 10/20 shape: Home turned away by bot protection, so the read says stop before a credit is spent', async () => {
+    serveAglyn({ challenged: true, pageBytes: 2_000 })
+    const inventory = await crawlSiteForImport({ domain: AGLYN_DOMAIN, maxPages: 200, shallowFirst: true })
+    expect(inventory.pages.map((page) => page.path).sort()).toEqual([
+      '/contact',
+      '/legal/acceptable-use',
+      '/legal/cookies',
+      '/legal/dmca',
+      '/legal/dpa',
+      '/legal/eula',
+      '/legal/marketplace-publisher-agreement',
+      '/legal/privacy',
+      '/legal/subprocessors',
+      '/legal/terms',
+    ])
+    expect(inventory.skipped[0]).toEqual({ url: `${AGLYN_ORIGIN}/`, reason: 'http-error', status: 429, edge: 'vercel' })
+    const verdict = aiSiteImportReadVerdict(inventory)
+    expect(verdict).toMatchObject({ kind: 'home-blocked', blocked: 113, total: 123, homeStatus: 429, edge: 'vercel' })
   })
 })

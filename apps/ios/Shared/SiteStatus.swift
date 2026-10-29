@@ -41,6 +41,8 @@ final class SiteStatus {
     switch status.kind {
     case .live: return (status.label, .success)
     case .draft: return (status.label, .neutral)
+    // In preview (AGL-4086): only the site's team sees it, the same tone the sites list gives it.
+    case .preview: return (status.label, .neutral)
     case .maintenance: return (status.label, .warning)
     case .suspended: return (status.label, .error)
     }

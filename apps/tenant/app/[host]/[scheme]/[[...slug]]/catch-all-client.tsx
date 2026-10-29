@@ -36,6 +36,7 @@ import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 // badge needs the brand, not the plan table.
 import { PLATFORM_BRANDING_PROFILE } from '@aglyn/aglyn/app-utils/platform-brand'
 import { installLeavingNoticeInterceptor } from '@aglyn/aglyn/app-utils/leaving-notice'
+import { sitePreviewNotice } from '@aglyn/aglyn/app-utils/site-preview'
 import { ScreenLinkContext } from '@aglyn/aglyn/app-utils/screen-link-context-value'
 // The leaf, not the barrel: a published page pays for what it names.
 import { parseEntryLinkValue } from '@aglyn/aglyn/app-utils/screen-link-value'
@@ -564,15 +565,17 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
     )
   }
 
-  // The holding page (AGL-3594): a site that routes no page yet.
-  if (props.holdingPage && !nodes) {
-    const name = String((props.data?.host as { displayName?: unknown } | undefined)?.displayName ?? '').trim()
+  // The holding page (AGL-3594): a site that routes no page yet. And a site in
+  // preview with no 503 page assigned (AGL-4086), which to the public is the
+  // same thing — a site on its way — so it says the same words.
+  if ((props.holdingPage || (props.sitePreview && props.maintenanceFallback)) && !nodes) {
+    const notice = sitePreviewNotice(
+      String((props.data?.host as { displayName?: unknown } | undefined)?.displayName ?? ''),
+    )
     return (
       <div style={{ maxWidth: 480, margin: '15vh auto', padding: 24, textAlign: 'center' }}>
-        <h1 style={{ fontSize: 28 }}>{name || 'Coming soon'}</h1>
-        <p style={{ opacity: 0.8 }}>
-          {name ? 'This site is coming soon. Check back shortly.' : 'This site is on its way. Check back shortly.'}
-        </p>
+        <h1 style={{ fontSize: 28 }}>{notice.title}</h1>
+        <p style={{ opacity: 0.8 }}>{notice.body}</p>
       </div>
     )
   }

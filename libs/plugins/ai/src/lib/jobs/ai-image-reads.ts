@@ -64,8 +64,8 @@ export const AI_IMAGE_READS_SIGNATURE = 'x-aglyn-images-signature'
 /** How far a signed request's moment may be from the function's clock. */
 export const AI_IMAGE_READS_WINDOW_MS = 5 * 60 * 1000
 
-/** The two reads the function makes. */
-export type AiImageReadsOp = 'product-photo' | 'logo-colors'
+/** The reads the function makes; `logo-raster` turns a site import's SVG logo into a PNG (AGL-4084). */
+export type AiImageReadsOp = 'product-photo' | 'logo-colors' | 'logo-raster'
 
 /** One request's body: the asset by its media reference, and whose read it is. */
 export interface AiImageReadsRequest {
@@ -185,4 +185,62 @@ export async function requestAiImageReads<T>(
   })
   if (!response.ok) throw new Error(`the AI image reads function answered ${response.status}`)
   return (await response.json()) as T
+}
+
+/*------------------------------------------
+ * A site import's SVG logo, as a picture (AGL-4084)
+ *-----------------------------------------*/
+
+/** The largest SVG turned into a picture. */
+export const AI_LOGO_RASTER_MAX_BYTES = 512 * 1024
+
+/** The tallest picture an SVG logo is drawn at. */
+export const AI_LOGO_RASTER_MAX_HEIGHT = 512
+
+/** The request for an SVG logo drawn as a PNG: the drawing itself, never an address, and the height. */
+export interface AiLogoRasterRequest {
+  op: 'logo-raster'
+  svg: string
+  height: number
+}
+
+interface SharpSvg {
+  (input: Buffer, options?: { limitInputPixels?: number; density?: number }): {
+    resize(options: { height: number; withoutEnlargement?: boolean }): { png(): { toBuffer(): Promise<Buffer> } }
+  }
+}
+
+/**
+ * An SVG logo drawn as a PNG of the height asked, in this process (AGL-4084).
+ * `sharp`'s SVG reader loads nothing the drawing links to, so only its own
+ * shapes are drawn. `null` for what is not a drawing, or is too large.
+ */
+export async function rasterizeAiLogoSvg(svg: Uint8Array, height: number): Promise<Uint8Array | null> {
+  if (!svg.byteLength || svg.byteLength > AI_LOGO_RASTER_MAX_BYTES) return null
+  const text = Buffer.from(svg).toString('utf8')
+  if (!/<svg[\s>]/i.test(text)) return null
+  const { loadAiMediaSharp } = await import('./ai-media-asset')
+  const sharp = (await loadAiMediaSharp()) as SharpSvg
+  const size = Math.max(16, Math.min(AI_LOGO_RASTER_MAX_HEIGHT, Math.round(height)))
+  const png = await sharp(Buffer.from(svg), { limitInputPixels: 64_000_000, density: 300 }).resize({ height: size }).png().toBuffer()
+  return new Uint8Array(png)
+}
+
+/** An SVG logo drawn as a PNG by the images function (AGL-4084); `null` on anything but a picture. */
+export async function requestAiLogoRaster(origin: string, svg: Uint8Array, height: number): Promise<Uint8Array | null> {
+  if (!svg.byteLength || svg.byteLength > AI_LOGO_RASTER_MAX_BYTES) return null
+  const body = JSON.stringify({ op: 'logo-raster', svg: Buffer.from(svg).toString('base64'), height } satisfies AiLogoRasterRequest)
+  try {
+    const response = await fetch(`${origin}/api/${PLUGIN_IMAGES_API_PREFIX}/${AI_IMAGE_READS_PATH}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', [AI_IMAGE_READS_SIGNATURE]: signAiImageReadsRequest(body), ...edgeBypassHeaders() },
+      body,
+      signal: AbortSignal.timeout(15_000),
+    })
+    if (!response.ok) return null
+    const answer = (await response.json()) as { png?: unknown }
+    return typeof answer.png === 'string' && answer.png ? new Uint8Array(Buffer.from(answer.png, 'base64')) : null
+  } catch {
+    return null
+  }
 }

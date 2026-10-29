@@ -24,6 +24,7 @@ import {
   type WaiverTemplate,
 } from '../model/waiver'
 import { waiverSiteOrigin } from '../model/waiver-share'
+import { waiverBusinessContact } from '../model/waiver-signature'
 import { isDocumentId, newWaiversId, waiversDb, waiversRefs } from './db'
 import { json, refuse, waiversGate } from './gate'
 
@@ -90,6 +91,10 @@ export async function templatesRoute(request: Request): Promise<Response> {
       // Where a share link opens: the store's own site (AGL-4042), or `null`
       // for a site with no public address, whose link stays the console's.
       signPageOrigin: waiverSiteOrigin(staff.host),
+      // How the consent tells signers to reach the business, worked out the
+      // way the signing page does; `null` is a site that names no way at all,
+      // which the console says so the staff can add one.
+      businessContact: waiverBusinessContact(staff.host as never),
     })
   }
   if (request.method !== 'POST') return refuse(405, 'Method not allowed')

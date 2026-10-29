@@ -195,6 +195,13 @@ const ENFORCED_AS: Record<OrgPermission, readonly string[]> = {
   // Commerce's order keys (AGL-4047): the order routes ask "Manage orders"
   // and the gift cards route "Issue gift cards" through `holdsCommerceSiteKey`.
   'commerce.orders': ["'commerce.orders'"],
+  // Quotes (AGL-4093): the quote route asks "Create and edit quotes" through
+  // `holdsCommerceSiteKey`.
+  'commerce.quotes': ["'commerce.quotes'"],
+  // Sending quotes (AGL-4094): the quote route's pay-link and replace-link
+  // actions ask "Send quotes and invoices to customers" through
+  // `holdsCommerceSiteKey`.
+  'commerce.quotes.send': ["'commerce.quotes.send'"],
   // Workspace acts that asked for roles (AGL-4047): `/api/orgs/export-data`,
   // `/api/email/sending-domains`, the rules' business profile write, the
   // media scope and the rules' workspace media library, and the erase
@@ -291,7 +298,7 @@ describe('every advertised org permission is enforced server-side (AGL-2444)', (
     expect([...CATALOG].sort()).toEqual(
       Object.keys(ENFORCED_AS).sort(),
     )
-    expect(CATALOG.length).toBe(47)
+    expect(CATALOG.length).toBe(49)
   })
 
   it('the search really searches — a key nobody uses finds nothing', () => {

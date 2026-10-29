@@ -290,7 +290,8 @@ snapshots, totals, and a timeline:
   payment link (Shopify parity). Requires an active plan with commerce — see
   the note below — and a connected Stripe account, since the buyer pays on a
   Stripe page. Without one, the **Draft order** dialog says so and links to
-  **Payments**.
+  **Payments**. After paying, the buyer lands on the order's status page on
+  your site; if they back out, they land on your site's home page.
 
 ### The Orders page {#orders-screen}
 
@@ -310,7 +311,7 @@ in the order number (`1042` or `#1042`), the buyer's email address (`jane`, `acm
 | **Product** | One or more products — matched against every line item, so carts, POS and draft orders are found too. The choices are your first 100 products. |
 | **Date** | On, before or after a day — the order date. |
 | **Status** | One or more of the seven below. |
-| **Channel** | One or more of the four below. |
+| **Channel** | One or more of the six below. |
 | **Customer** | **is** a whole email address, or **contains** part of one — `acme.com` finds every buyer at a company. Filled in for you when you arrive from a contact's page in the CRM. |
 | **Disputes** | **Open dispute**, **Charged back**, **Dispute won** or **Dispute closed**. |
 
@@ -337,7 +338,7 @@ The table has six columns:
 | --- | --- |
 | **Order** | The order number, with the first line item underneath — `Blue Mug +2 more` when there is more than one. |
 | **Customer** | The buyer's email, or `—` when there isn't one. |
-| **Channel** | Online, POS, Draft or Subscription. |
+| **Channel** | Online, POS, Draft, Subscription, Marketplace or Quote. |
 | **Total** | The **net** amount — what you charged, **less anything refunded**. |
 | **Status** | The status pill, plus a dispute chip and its evidence deadline when there is one. |
 | **Date** | The order date, with the time underneath. |
@@ -378,7 +379,7 @@ Red and gray are reserved deliberately. Canceled and refunded are the states wor
 spotting in a scan of fifty rows, and coloring pending as a warning would spend that
 attention on orders that are merely young.
 
-Four channels say where the sale came through:
+Six channels say where the sale came through:
 
 | Channel | Label |
 | --- | --- |
@@ -386,6 +387,8 @@ Four channels say where the sale came through:
 | `pos` | **POS** — the in-person register. |
 | `draft` | **Draft** — an order you built and invoiced. |
 | `subscription` | **Subscription** — one order per paid cycle of a *physical* subscription product. |
+| `marketplace` | **Marketplace** — an order from an outside marketplace you sell on. |
+| `quote` | **Quote** — a [quote](quotes-and-proofs.md) the customer paid. An unpaid quote is not listed. |
 
 ### The money tiles {#order-money-tiles}
 

@@ -102,6 +102,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
   },
   aiImport: {
     '#prove-it-is-yours': 'Use one of these three ways. The status at the top shows Verified once one of them works.',
+    '#turned-away': 'Many hosts protect a site with bot protection or a firewall that turns away visitors it takes for robots.',
     '#waves': 'The first wave brings in your main pages: home, then the pages in your menu, then your other top-level pages.',
     '#your-current-website': 'Under Website address, type the address people use to reach your site today, for example example.com, and choose Next.',
   },
@@ -557,6 +558,10 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#where-to-publish-from': 'Publishing lives at the organization level — Marketplace → Publish.',
     '#workspace-licenses': 'This workspace lists the marketplace licenses this workspace owns — installable by any member with install permission, whoever on the team paid for it.',
     '#your-listings': 'Marketplace → Listings lists everything your organization has published, with its preview image; a row\'s menu is where you Publish new version…, Edit listing, or switch a plugin between private and public.',
+  },
+  quotes: {
+    '#make-a-quote': 'On the Orders tab, choose New quote in the Quotes card. The quote gets the next number from your store\'s order numbers and is listed as Quote #1042, for example.',
+    '#quote-defaults': 'The Quotes card on the Checkout settings page sets what every new quote starts with: whether customers approve the proof before they can pay.',
   },
   redirects: {
     '#manage-redirects': 'Create, edit, and delete redirect rules from the redirect manager page.',
