@@ -85,7 +85,6 @@ export interface FormConfirmationInput {
   host: Record<string, unknown>
   org: unknown
   to: string
-  formName: string
   request: FormRequest | null
   answers: Readonly<Record<string, string>>
   decls: readonly FormFieldDecl[]
@@ -161,7 +160,6 @@ export async function sendFormConfirmation(
     const contact = siteContactEmail(input.host as never)
     const content = formConfirmationContent({
       businessName,
-      formName: input.formName,
       request: input.request,
       answers: input.answers,
       decls: input.decls,
