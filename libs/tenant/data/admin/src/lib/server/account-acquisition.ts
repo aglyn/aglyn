@@ -32,6 +32,7 @@ import {
 } from '@aglyn/aglyn/app-utils/request-geo'
 import { findUserByUidAcrossPools } from './auth-pools'
 import firebaseAdmin from './firebase-admin'
+import { recordPlatformAccountContact } from './platform-marketing-consent'
 
 /**
  * Write where an account came from, ONCE, at account creation (AGL-3289).
@@ -128,10 +129,11 @@ export async function recordAccountAcquisition(
 ): Promise<RecordAccountAcquisitionResult> {
   const firestore = input.firestore ?? firebaseAdmin.app().firestore()
   const nowMs = input.nowMs ?? Date.now()
+  const createdAtMs = input.accountCreatedAtMs
   if (
-    input.accountCreatedAtMs === null ||
-    !Number.isFinite(input.accountCreatedAtMs) ||
-    nowMs - input.accountCreatedAtMs > ACCOUNT_ACQUISITION_WINDOW_MS
+    createdAtMs === null ||
+    !Number.isFinite(createdAtMs) ||
+    nowMs - createdAtMs > ACCOUNT_ACQUISITION_WINDOW_MS
   ) {
     return { status: 'not-new' }
   }
@@ -148,12 +150,12 @@ export async function recordAccountAcquisition(
     provider: input.provider,
     geo: requestGeography(input.headers),
     invitedToOrgId,
-    accountCreatedAtMs: input.accountCreatedAtMs,
+    accountCreatedAtMs: createdAtMs,
     recordedBy: input.recordedBy,
     nowMs,
   })
   const userRef = firestore.collection('users').doc(input.uid)
-  return firestore.runTransaction(async (tx) => {
+  const result = await firestore.runTransaction(async (tx) => {
     const snapshot = await tx.get(userRef)
     const existing = snapshot.exists ? snapshot.get(ACCOUNT_ACQUISITION_FIELD) : undefined
     if (existing !== undefined && existing !== null) {
@@ -162,6 +164,20 @@ export async function recordAccountAcquisition(
     tx.set(userRef, { [ACCOUNT_ACQUISITION_FIELD]: record }, { merge: true })
     return { status: 'recorded', record } as const
   })
+  // Every door that creates an account passes here exactly once, so this is
+  // where the account becomes a contact in the operator's own CRM, whatever
+  // it said about marketing email. A failure there never fails the sign-up.
+  if (result.status === 'recorded') {
+    await recordPlatformAccountContact({
+      uid: input.uid,
+      email: input.email,
+      createdAtMs,
+      firestore,
+    }).catch((error) => {
+      console.error('[account-acquisition] platform contact failed', error)
+    })
+  }
+  return result
 }
 
 /** What a sign-up door knows about the account it is recording. */
