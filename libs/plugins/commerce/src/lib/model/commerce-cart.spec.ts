@@ -167,3 +167,46 @@ describe('a quantity that is not a number (AGL-2285)', () => {
   })
 })
 
+
+/*
+ * A product configured with add-ons (AGL-4100): the same canopy with other
+ * walls is another line, the same walls in another order are the same line,
+ * and a cart stored before add-ons keeps the keys it had.
+ */
+describe('a line with add-ons (AGL-4100)', () => {
+  const walls = [
+    { groupId: 'frame', optionId: 'alu' },
+    { groupId: 'walls', optionId: 'back' },
+  ]
+
+  it('keys a line by its add-ons, in any order, and leaves a line without any keyed as before', () => {
+    expect(cartLineKey({ productId: 'canopy', variantId: '10x10' })).toBe('canopy:10x10:')
+    expect(cartLineKey({ productId: 'canopy', variantId: '10x10', modifiers: [] })).toBe('canopy:10x10:')
+    expect(cartLineKey({ productId: 'canopy', variantId: '10x10', modifiers: walls })).toBe(
+      cartLineKey({ productId: 'canopy', variantId: '10x10', modifiers: [...walls].reverse() }),
+    )
+    expect(cartLineKey({ productId: 'canopy', variantId: '10x10', modifiers: walls })).not.toBe(
+      cartLineKey({ productId: 'canopy', variantId: '10x10' }),
+    )
+  })
+
+  it('never merges two configurations, and merges the same one', () => {
+    let lines = upsertCartLine({ lines: [] }, { productId: 'canopy', variantId: '10x10', quantity: 1, modifiers: walls })
+    lines = upsertCartLine({ lines }, { productId: 'canopy', variantId: '10x10', quantity: 1 })
+    lines = upsertCartLine(
+      { lines },
+      { productId: 'canopy', variantId: '10x10', quantity: 2, modifiers: [...walls].reverse() },
+    )
+    expect(lines).toEqual([
+      { productId: 'canopy', variantId: '10x10', quantity: 3, modifiers: walls },
+      { productId: 'canopy', variantId: '10x10', quantity: 1 },
+    ])
+    expect(removeCartLine({ lines }, { productId: 'canopy', variantId: '10x10', modifiers: walls })).toEqual([
+      lines[1],
+    ])
+    expect(mergeCarts({ lines }, { lines: [{ productId: 'canopy', variantId: '10x10', quantity: 1 }] })).toEqual([
+      lines[0],
+      { ...lines[1], quantity: 2 },
+    ])
+  })
+})

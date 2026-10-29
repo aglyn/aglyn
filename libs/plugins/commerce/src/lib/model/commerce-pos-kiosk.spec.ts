@@ -88,4 +88,29 @@ describe('posKioskEstimateCents', () => {
       posKioskEstimateCents([{ productId: 'p1', quantity: 2, modifiers: [{ groupId: 'g', optionId: 'o' }] }], [product]),
     ).toBe(900)
   })
+
+  it('adds a choice priced by variant at its price on the variant picked (AGL-4100)', () => {
+    const product: PosKioskProduct = {
+      id: 'p1',
+      name: 'Latte',
+      categoryIds: [],
+      options: [{ name: 'Size', values: ['Small', 'Large'] }],
+      variants: [
+        { id: 'small', options: { Size: 'Small' }, priceCents: 400, soldOut: false },
+        { id: 'large', options: { Size: 'Large' }, priceCents: 500, soldOut: false },
+      ],
+      modifierGroups: [
+        {
+          id: 'g',
+          name: 'Milk',
+          min: 0,
+          max: 1,
+          options: [{ id: 'o', name: 'Oat', priceCents: 50, priceCentsByVariant: { large: 80 } }],
+        },
+      ],
+    }
+    const oat = [{ groupId: 'g', optionId: 'o' }]
+    expect(posKioskEstimateCents([{ productId: 'p1', variantId: 'small', quantity: 1, modifiers: oat }], [product])).toBe(450)
+    expect(posKioskEstimateCents([{ productId: 'p1', variantId: 'large', quantity: 1, modifiers: oat }], [product])).toBe(580)
+  })
 })

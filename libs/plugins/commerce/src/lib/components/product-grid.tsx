@@ -127,13 +127,23 @@ interface CatalogItem {
   variantCount?: number
   /** The one variant a quick add puts in the cart. */
   defaultVariantId?: string
+  /** Its page asks a required add-on first (AGL-4100). */
+  requiresChoices?: boolean
 }
 
-/** What a card's quick add offers for one product. */
+/**
+ * What a card's quick add offers for one product. A product whose page asks
+ * a required add-on (AGL-4100) sends the shopper there to choose it, even
+ * with one variant: the cart refuses the line without the choice.
+ */
 export function quickAddAction(
-  item: Pick<CatalogItem, 'priceComingSoon' | 'soldOut' | 'variantCount' | 'defaultVariantId'>,
+  item: Pick<
+    CatalogItem,
+    'priceComingSoon' | 'soldOut' | 'variantCount' | 'defaultVariantId' | 'requiresChoices'
+  >,
 ): 'add' | 'options' | null {
   if (item.priceComingSoon || item.soldOut) return null
+  if (item.requiresChoices) return 'options'
   if (item.defaultVariantId) return 'add'
   if ((item.variantCount ?? 0) > 1) return 'options'
   return null

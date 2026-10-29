@@ -98,6 +98,9 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
   // The day the buyer chose to use a check-in item (AGL-4043); checked below
   // against the product and the store's calendar.
   const useDayKey = typeof body.useDayKey === 'string' ? body.useDayKey.trim() : ''
+  // The add-ons chosen on the product's page (AGL-4100), ids only: priced
+  // below from the product, never from the request.
+  const requestedModifiers = CommerceModel.modifierSelectionFrom(body.modifiers)
   const couponCode = String(body.couponCode ?? '')
     .trim()
     .toUpperCase()
@@ -180,6 +183,29 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     if (!(priceUsd > 0) || priceUsd > CommerceModel.COMMERCE_MAX_PRICE_USD) {
       return res.status(400).json({ error: 'Product is not purchasable' })
     }
+    // Add-ons (AGL-4100): the groups the website shows, each required one
+    // answered, priced on the variant sold. Refused before anything is held.
+    const chosenModifiers = CommerceModel.resolveWebsiteLineModifiers(lifted, requestedModifiers, variant.id)
+    if (!chosenModifiers.ok) {
+      return res.status(400).json({ error: chosenModifiers.error })
+    }
+    // Carried to the webhook as ids so the order line names them; a payment
+    // processor holds 500 characters a value, which only a pathological
+    // number of choices on one item could pass. The cart has no such limit.
+    const modifiersMetadata = CommerceModel.encodeModifierSelection(
+      CommerceModel.modifierSelectionOf(chosenModifiers.modifiers),
+    )
+    if (modifiersMetadata.length > 500) {
+      return res.status(400).json({
+        error: 'This item has too many choices to buy on its own. Add it to your cart instead.',
+      })
+    }
+    const lineLabel = CommerceModel.lineLabelWithModifiers(
+      Object.keys(variant.options ?? {}).length
+        ? Object.values(variant.options ?? {}).join(' / ')
+        : undefined,
+      chosenModifiers.modifiers,
+    )
     // Inventory (AGL-281): variant-aware, honoring the product's oversell
     // policy (backorder products keep selling at zero). Enforced here (the
     // block's display is cosmetic) and decremented by the webhook.
@@ -347,7 +373,8 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     // The list price per unit, before any coupon (AGL-1711). This is what the
     // order's line-item snapshot records, and it is carried in the session
     // metadata so the webhook never has to re-price from the product doc.
-    const listUnitAmountCents = Math.round(priceUsd * 100)
+    // The add-ons are part of it (AGL-4100): what one configured unit costs.
+    const listUnitAmountCents = Math.round(priceUsd * 100) + chosenModifiers.extraCents
     let amountCents = listUnitAmountCents * quantity
     // THE DISCOUNTS HUB, ON THIS PATH TOO.
     //
@@ -967,7 +994,10 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     const chargedQuantity = remainderCents === 0 ? quantity : 1
     const chargedUnitAmountCents =
       remainderCents === 0 ? evenUnitAmountCents : amountCents
+    // The variant and its add-ons in the name (AGL-4100), as the order prints them.
     const chargedLineName = `${String(product.name ?? 'Product')}${
+      lineLabel ? ` (${lineLabel})` : ''
+    }${
       remainderCents === 0 ? '' : ` × ${quantity}`
     }`.slice(0, 120)
     // What was ACTUALLY discounted, now that the charge and `amountCents` are
@@ -1116,6 +1146,9 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       'metadata[productId]': productId,
       ...(variantId ? { 'metadata[variantId]': variantId } : {}),
       ...(useDayKey ? { 'metadata[useDayKey]': useDayKey } : {}),
+      // The add-ons the order line names (AGL-4100); their price is already
+      // in `unitAmountCents` below.
+      ...(modifiersMetadata ? { 'metadata[modifiers]': modifiersMetadata } : {}),
       'metadata[quantity]': String(quantity),
       'metadata[feeCents]': String(feeCents),
       // The postal code live carrier rates were quoted for (AGL-3612).

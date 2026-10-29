@@ -797,7 +797,7 @@ export function priceQuoteCatalogLine(
   if (!request.included && !variantHasPrice(variant)) {
     return { ok: false, error: `Set a price for ${product.name} before quoting it.` }
   }
-  const chosen = resolveLineModifiers(product, request.modifiers)
+  const chosen = resolveLineModifiers(product, request.modifiers, variant.id)
   if (!chosen.ok) return { ok: false, error: chosen.error ?? `Check the choices on ${product.name}.` }
   const variantLabel = lineLabelWithModifiers(variantOptionsLabel(variant.options), chosen.modifiers)
   return {

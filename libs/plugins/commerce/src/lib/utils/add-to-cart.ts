@@ -22,6 +22,7 @@ import {
 } from '@aglyn/aglyn/app-utils/analytics-events'
 import { recordSiteJourneyStep } from '@aglyn/aglyn/app-utils/site-journey'
 import { CART_UPDATED_EVENT } from '../constants/cart-events'
+import type { ModifierSelection } from '../model/product-modifiers'
 
 export interface AddToCartRequest {
   hostId: string
@@ -32,8 +33,15 @@ export interface AddToCartRequest {
   quantity: number
   /** The day the shopper chose to use a check-in item (AGL-4043), `YYYY-MM-DD`. */
   useDayKey?: string
+  /**
+   * The add-ons chosen on the product's page (AGL-4100), ids only; the
+   * server checks them against the product and prices them.
+   */
+  modifiers?: ModifierSelection[]
   /** The GA4 line: product id (never the variant's), name, price, quantity. */
   item: AnalyticsItem
+  /** Told the server's reason when it refuses the line, e.g. a choice now required. */
+  onRefused?: (message: string) => void
 }
 
 /**
@@ -44,13 +52,27 @@ export interface AddToCartRequest {
  * server took the line; the server prices it, never the caller.
  */
 export async function addToCart(request: AddToCartRequest): Promise<boolean> {
-  const { hostId, siteFetch, productId, variantId, quantity, useDayKey, item } = request
+  const { hostId, siteFetch, productId, variantId, quantity, useDayKey, modifiers, item } = request
   const response = await siteFetch('/api/commerce/cart', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ hostId, action: 'add', productId, variantId, quantity, ...(useDayKey ? { useDayKey } : {}) }),
+    body: JSON.stringify({
+      hostId,
+      action: 'add',
+      productId,
+      variantId,
+      quantity,
+      ...(useDayKey ? { useDayKey } : {}),
+      ...(modifiers?.length ? { modifiers } : {}),
+    }),
   }).catch(() => null)
-  if (!response?.ok) return false
+  if (!response?.ok) {
+    if (response && request.onRefused) {
+      const payload = (await response.json().catch(() => null)) as { error?: unknown } | null
+      if (typeof payload?.error === 'string' && payload.error) request.onRefused(payload.error)
+    }
+    return false
+  }
   recordSiteJourneyStep('cart', productId)
   // `value` describes what was JUST ADDED, not the cart's new total — see
   // `buildAddToCartParams`.

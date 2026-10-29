@@ -129,8 +129,9 @@ export interface OrderLineItem {
   /** Per-unit price in cents at purchase time, its modifiers included. */
   unitAmountCents: number
   /**
-   * Choices added at the register (AGL-3607), as sold. Already folded into
-   * `variantLabel` and `unitAmountCents`; kept for reports and reorders.
+   * Choices added at the register (AGL-3607) or on the website (AGL-4100),
+   * as sold. Already folded into `variantLabel` and `unitAmountCents`; kept
+   * for reports and reorders.
    */
   modifiers?: OrderLineModifier[]
   /** Supplier at purchase time (dropship routing, AGL-289). */
@@ -1082,11 +1083,13 @@ export interface BuyNowSessionSource extends CheckoutSessionTotalsSource {
 export interface BuyNowProductSnapshot {
   /** Product name at purchase time. */
   name: string
-  /** Joined variant options, e.g. `Large / Blue`. */
+  /** Joined variant options, then any add-ons, e.g. `Large / Blue / Walls`. */
   variantLabel?: string
   sku?: string
   productType?: ProductType
   supplierId?: string
+  /** The add-ons bought with it (AGL-4100), already in `unitAmountCents` and the label. */
+  modifiers?: OrderLineModifier[]
 }
 
 /**
@@ -1211,6 +1214,7 @@ export function computeBuyNowOrder(
       ...(snapshot.sku ? { sku: snapshot.sku } : {}),
       ...(snapshot.productType ? { productType: snapshot.productType } : {}),
       ...(snapshot.supplierId ? { supplierId: snapshot.supplierId } : {}),
+      ...(snapshot.modifiers?.length ? { modifiers: snapshot.modifiers } : {}),
       quantity,
       unitAmountCents,
     },

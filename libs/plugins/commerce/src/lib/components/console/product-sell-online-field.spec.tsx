@@ -45,7 +45,7 @@ describe('the Sell online switch', () => {
   })
 
   it('sits beside the quick key in the register settings', () => {
-    render(<ProductRegisterFields posQuickKey={false} sellOnline modifierGroups={[]} update={jest.fn()} />)
+    render(<ProductRegisterFields posQuickKey={false} sellOnline update={jest.fn()} />)
     expect(screen.getByRole('switch', { name: 'Quick key at the register' })).toBeTruthy()
     expect((screen.getByRole('switch', { name: 'Sell online' }) as HTMLInputElement).checked).toBe(true)
   })
@@ -85,7 +85,6 @@ describe('the Reviews on your site choice', () => {
         posQuickKey={false}
         sellOnline={false}
         inStoreReviews="hide"
-        modifierGroups={[]}
         update={jest.fn()}
       />,
     )

@@ -95,12 +95,16 @@ interface CartLineView {
   variantId?: string
   /** The day the shopper chose to use a check-in item (AGL-4043). */
   useDayKey?: string
+  /** The add-ons chosen with it (AGL-4100), ids only: part of the line's identity. */
+  modifiers?: CommerceModel.ModifierSelection[]
   quantity: number
   name: string
   variantLabel?: string
   unitAmountCents: number
   imageUrl?: string
   unavailable?: boolean
+  /** What to do about an unavailable line, when the server can say (AGL-4100). */
+  problem?: string
 }
 
 interface CartView {
@@ -233,6 +237,7 @@ function CartLines(props: {
       productId: line.productId,
       variantId: line.variantId,
       ...(line.useDayKey ? { useDayKey: line.useDayKey } : {}),
+      ...(line.modifiers?.length ? { modifiers: line.modifiers } : {}),
       quantity,
     }).finally(settle)
   }
@@ -255,6 +260,8 @@ function CartLines(props: {
           line.productId,
           line.variantId ?? '',
           line.useDayKey ?? '',
+          // Different add-ons are a different basket (AGL-4100).
+          CommerceModel.modifierSelectionKey(line.modifiers),
           line.quantity,
         ]),
       ),
@@ -492,7 +499,7 @@ function CartLines(props: {
             ) : null}
             <Typography variant="caption" color="text.secondary">
               {line.unavailable
-                ? 'No longer available'
+                ? (line.problem ?? 'No longer available')
                 : usd(line.unitAmountCents)}
             </Typography>
           </Box>
@@ -521,6 +528,7 @@ function CartLines(props: {
                 productId: line.productId,
                 variantId: line.variantId,
                 ...(line.useDayKey ? { useDayKey: line.useDayKey } : {}),
+                ...(line.modifiers?.length ? { modifiers: line.modifiers } : {}),
               })
             }
           >

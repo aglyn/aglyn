@@ -112,7 +112,8 @@ describe('the product page', () => {
     }
     render(<ProductDetail />)
     expect(screen.getByRole('combobox').textContent).toBe('Cedar')
-    expect(screen.getByText('$27')).toBeTruthy()
+    // In the store's money, cents and all (AGL-4100): never "$27" or "$29.5".
+    expect(screen.getByText('$27.00')).toBeTruthy()
   })
 
   it('draws the Details and Shipping & returns folds only when asked', () => {

@@ -65,6 +65,49 @@ export interface PublicProductDetail {
   subscription?: { interval: 'month' | 'year'; trialDays?: number }
   /** Buyer may choose one-time OR subscribe (AGL-545). */
   subscriptionOptional?: boolean
+  /**
+   * The add-ons the page offers (AGL-4100): ONLY the groups switched to
+   * "Show on the website". A register-only group never leaves the server, so
+   * a shop's in-person choices and prices are not published. Absent: none.
+   * Display-only like the prices above; every sale door prices them again
+   * from the product.
+   */
+  modifierGroups?: PublicModifierGroup[]
+}
+
+/** An add-on group as the product page shows it (AGL-4100). */
+export interface PublicModifierGroup {
+  id: string
+  name: string
+  min: number
+  max: number
+  options: Array<{
+    id: string
+    name: string
+    priceCents: number
+    /** What the choice adds on a variant priced differently, by variant id. */
+    priceCentsByVariant?: Record<string, number>
+  }>
+}
+
+/** The website add-on groups of a product, in the page's shape (AGL-4100). */
+export function publicModifierGroups(
+  product: { modifierGroups?: unknown },
+): PublicModifierGroup[] {
+  return CommerceModel.websiteModifierGroups(product).map((group) => ({
+    id: group.id,
+    name: group.name,
+    min: group.min,
+    max: group.max,
+    options: group.options.map((option) => ({
+      id: option.id,
+      name: option.name,
+      priceCents: option.priceCents,
+      ...(option.priceCentsByVariant && Object.keys(option.priceCentsByVariant).length
+        ? { priceCentsByVariant: { ...option.priceCentsByVariant } }
+        : {}),
+    })),
+  }))
 }
 
 /**
@@ -85,6 +128,7 @@ export function toPublicProductDetail(
   options: { timeZone?: string | null } = {},
 ): PublicProductDetail {
   const asksUseDate = productAsksUseDateAnywhere(product)
+  const modifierGroups = publicModifierGroups(product)
   return {
     id,
     name: product.name,
@@ -115,6 +159,7 @@ export function toPublicProductDetail(
     ...(product.subscription && product.subscriptionOptional
       ? { subscriptionOptional: true }
       : {}),
+    ...(modifierGroups.length ? { modifierGroups } : {}),
   }
 }
 

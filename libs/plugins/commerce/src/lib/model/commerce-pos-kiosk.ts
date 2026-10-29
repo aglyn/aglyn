@@ -16,7 +16,7 @@
  */
 
 import { posTipFromPercent, posTipProblem, type PosReceiptChannel } from './commerce-pos'
-import type { ModifierSelection, ProductModifierGroup } from './product-modifiers'
+import { modifierOptionPriceCents, type ModifierSelection, type ProductModifierGroup } from './product-modifiers'
 
 /*==========================================
  * THE SELF-SERVICE KIOSK (AGL-3623).
@@ -265,7 +265,8 @@ export function posKioskEstimateCents(
     const extra = (line.modifiers ?? []).reduce((sum, pick) => {
       const group = product.modifierGroups.find((candidate) => candidate.id === pick.groupId)
       const option = group?.options.find((candidate) => candidate.id === pick.optionId)
-      return sum + (option?.priceCents ?? 0)
+      // A choice priced by variant adds its price on this one (AGL-4100).
+      return sum + (option ? modifierOptionPriceCents(option, variant.id) : 0)
     }, 0)
     total += (variant.priceCents + extra) * line.quantity
   }

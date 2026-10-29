@@ -27,6 +27,19 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — Add-ons on your website
+
+- **[Add-ons on the product's page](commerce-and-bookings/commerce/catalog.md#add-ons)**
+  — one product page can configure a custom product, like a canopy's size, frame,
+  walls and printing, with the price adding up as your customer chooses. A required
+  add-on is asked before the item goes in the cart, and the order names every choice.
+  Add-ons are on every plan, and each group says whether the website offers it.
+- **[Price an add-on by size](commerce-and-bookings/commerce/catalog.md#price-by-size)**
+  — walls can cost more on a larger canopy.
+- **[More than 100 combinations](commerce-and-bookings/commerce/catalog.md#more-than-100-combinations)**
+  — the product editor now says how many variants your options would make, instead
+  of keeping the first 100 without a word, and points you to add-ons.
+
 ## October 2026 — Invoices
 
 - **[Send an invoice](commerce-and-bookings/commerce/orders-and-returns.md#send-invoice)**
