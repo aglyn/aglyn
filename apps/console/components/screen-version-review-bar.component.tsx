@@ -35,9 +35,6 @@ import useHostActivityLogger from '../hooks/use-host-activity-logger'
 import useHostRole from '../hooks/use-host-role'
 import { describeRevalidateShortfall, revalidateLivePages } from '../utils/revalidate-live-pages'
 
-/** Above the previewed page and its own chrome, as the consent panel sits. */
-export const SCREEN_VERSION_REVIEW_Z_INDEX = 2147483500
-
 /** Said on Publish where the member's role on the site cannot make content live (AGL-2334). */
 export const REVIEW_PUBLISH_ROLE_REASON = 'Your role on this site can edit content but not publish it.'
 
@@ -146,6 +143,8 @@ export function ScreenVersionReviewBar(props: ScreenVersionReviewBarProps) {
           ? `Visitors will see this version at ${url} in place of the one they see now.`
           : `This page goes live at ${url}, with this version.`,
       confirmationText: 'Publish',
+      // Over the preview's own chrome, this bar and the consent panel included.
+      dialogProps: { sx: { zIndex: 'max' } },
     })
       .then(() => true)
       .catch(() => false)
@@ -212,7 +211,9 @@ export function ScreenVersionReviewBar(props: ScreenVersionReviewBarProps) {
         position: 'fixed',
         left: theme.spacing(1.5),
         bottom: theme.spacing(1.5),
-        zIndex: SCREEN_VERSION_REVIEW_Z_INDEX,
+        // Above the previewed page and its modals, under the console's toasts,
+        // which open at this corner and say what Publish did.
+        zIndex: theme.zIndex.snackbar - 1,
         p: 1.5,
         maxWidth: `min(${theme.spacing(52)}, calc(100vw - ${theme.spacing(3)}))`,
       })}
