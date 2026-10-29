@@ -31,8 +31,10 @@ import { registerPluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
 import { registerPluginTransferResourceUi } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { CRM_RECORD_ATTRIBUTION_ZONE } from './components/crm-attribution-zone'
 import { CRM_RECORD_BOOKING_ZONE } from './components/crm-booking-zone'
-import { CRM_RECORD_EMAIL_ACTIONS_ZONE } from './components/crm-email-actions-zone-token'
-import { CRM_RECORD_ACTIONS_ZONE } from './components/crm-record-actions-zone-token'
+import {
+  CRM_RECORD_ACTIONS_ZONE,
+  CRM_RECORD_EMAIL_ACTIONS_ZONE,
+} from './components/crm-email-actions-zone-token'
 
 /** Code-split: the CRM hub only loads when opened. */
 const CrmConsolePage = lazy(
@@ -113,12 +115,11 @@ export function registerCrmConsole(): void {
   registerPluginZone(
     {
       zone: CRM_RECORD_ACTIONS_ZONE,
-      label: 'Act on a CRM record',
+      label: 'Act on a contact',
       surface: 'console',
       // One control in a contact's header, among its actions.
       layout: 'bare',
-      description:
-        'Among the actions in a contact’s header. A widget here offers something to do with the person, such as starting a quote for them; it is handed the site, org, record and the person’s name, email, phone and company, and writes nothing through the CRM.',
+      description: 'Another act on the person, such as a quote. Writes nothing here.',
     },
     { pluginId: BUNDLE_ID },
   )

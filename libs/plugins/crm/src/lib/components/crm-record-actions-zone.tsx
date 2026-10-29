@@ -22,15 +22,15 @@ import {
   useConsoleWidgetSlot,
 } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import { useCrmScope, type CrmOrgDoc } from '../hooks/use-crm-scope'
-import { CRM_RECORD_ACTIONS_ZONE, type CrmRecordActionsZoneProps } from './crm-record-actions-zone-token'
+import { CRM_RECORD_ACTIONS_ZONE, type CrmRecordActionsZoneProps } from './crm-email-actions-zone-token'
 
 /*
  * The `crmRecordActions` zone a contact's header hosts among its actions
- * (AGL-4098). The token and its props live in
- * `./crm-record-actions-zone-token`, which the plugin's register module
+ * (AGL-4098). The token and its props live beside the email actions zone's,
+ * in `./crm-email-actions-zone-token`, which the plugin's register module
  * declares without loading this component.
  */
-export { CRM_RECORD_ACTIONS_ZONE, type CrmRecordActionsZoneProps } from './crm-record-actions-zone-token'
+export { CRM_RECORD_ACTIONS_ZONE, type CrmRecordActionsZoneProps } from './crm-email-actions-zone-token'
 
 type CrmRecordActionsZoneInput = Omit<CrmRecordActionsZoneProps, 'orgId'> & { org?: CrmOrgDoc }
 
