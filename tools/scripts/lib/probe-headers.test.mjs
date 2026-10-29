@@ -116,6 +116,16 @@ test('withProbeHeaders — the bypass header', async (t) => {
  * accident, the three files this guard was born for still fail rather than
  * quietly leaving the derived set empty.
  */
+/**
+ * Scripts that must NOT send the probe bypass, because what they prove is
+ * that the bot challenge still answers a request without it (AGL-4085):
+ * `prove-site-import-edge.mjs` checks that AglynBot with the import secret
+ * passes and that every near miss, the probe-less request included, is still
+ * challenged. Each entry names its reason; a script lands here only when the
+ * bypass would make its own assertion vacuous.
+ */
+const PROVES_THE_CHALLENGE = new Set(['prove-site-import-edge.mjs'])
+
 function scriptsThatFetchAnAglynHost(scripts, { readFileSync, readdirSync, join }) {
   const withoutComments = (source) =>
     source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
@@ -156,6 +166,7 @@ test('every script that fetches an Aglyn host uses the helper', async () => {
   )
 
   for (const name of names) {
+    if (PROVES_THE_CHALLENGE.has(name)) continue
     const source = readFileSync(join(scripts, name), 'utf8')
     assert.match(
       source,
