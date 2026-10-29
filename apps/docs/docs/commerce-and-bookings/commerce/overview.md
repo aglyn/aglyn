@@ -38,7 +38,8 @@ Business, 1% on Scale and 0% from Advanced up.
 The **Products** page is the catalog manager:
 
 - **Products** with up to 3 options and 100 variants each — per-variant SKU,
-  barcode, price, compare-at (sale badge), weight, and stock. See
+  barcode, price, compare-at (sale badge), weight, and stock — and
+  [add-ons](catalog.md#add-ons) priced on the product's page. See
   [Product catalog](catalog.md).
 - **Categories & collections** — a category tree plus manual and smart
   (rule-based) collections with a live match preview.

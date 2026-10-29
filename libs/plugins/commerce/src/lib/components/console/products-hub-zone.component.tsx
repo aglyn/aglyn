@@ -197,6 +197,12 @@ export function ProductsHubZone(props: ProductsHubZoneProps) {
         return true
       })
       if (!fresh.length) return []
+      // A proposal whose options make more variants than a product holds is
+      // refused by name (AGL-4100), never built short of its values.
+      for (const proposal of fresh) {
+        const tooMany = CommerceModel.variantMatrixProblem(proposal.options)
+        if (tooMany) throw new Error(`“${proposal.name}”: ${tooMany}`)
+      }
       const room = roomFor(fresh.length)
       if (!room) throw new Error(PLAN_LOADING_COPY)
       if (!room.allowed) {

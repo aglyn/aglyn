@@ -566,6 +566,10 @@ export const localFulfillmentOptionsHandler: PluginApiHandler = async (req, res)
           {
             productId: buyNowProductId,
             ...(typeof body.variantId === 'string' && body.variantId ? { variantId: body.variantId } : {}),
+            // The add-ons chosen on the page (AGL-4100), priced below.
+            ...(Array.isArray(body.modifiers)
+              ? { modifiers: CommerceModel.modifierSelectionFrom(body.modifiers) }
+              : {}),
             quantity: Math.min(99, Math.max(1, Math.round(Number(body.quantity) || 1))),
           },
         ],
@@ -594,7 +598,11 @@ export const localFulfillmentOptionsHandler: PluginApiHandler = async (req, res)
       const variant = line.variantId
         ? product.variants.find((item) => item.id === line.variantId)
         : product.variants[0]
-      itemsCents += Math.round(Number(variant?.priceUsd ?? 0) * 100) * (Number(line.quantity) || 0)
+      // With its add-ons (AGL-4100), as checkout prices the line.
+      const chosen = CommerceModel.resolveWebsiteLineModifiers(product, line.modifiers, variant?.id)
+      itemsCents +=
+        (Math.round(Number(variant?.priceUsd ?? 0) * 100) + (chosen.ok ? chosen.extraCents : 0)) *
+        (Number(line.quantity) || 0)
       if ((product.type ?? 'physical') === 'physical') hasPhysicalLine = true
     }
     if (!hasPhysicalLine) return res.status(200).json(nothing)

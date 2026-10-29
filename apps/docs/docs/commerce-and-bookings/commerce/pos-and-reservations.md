@@ -112,21 +112,22 @@ have only one):
 ### Modifiers
 
 Modifiers are choices added to an item as it is rung up, such as a milk, an
-extra shot or "no onions", that are not stocked variants. Set them in the
-product editor under **At the register**:
+extra shot or "no onions", that are not stocked variants. They're the product's
+[add-ons](catalog.md#add-ons), set in the product editor under **Add-ons**:
 
-1. **Add modifier group** and name it (for example "Milk").
-2. Set **At least** — 0 makes the group optional, 1 or more makes it
-   required — and **At most**, the number of choices that can be picked (1
+1. Click **New add-on group** and name it (for example "Milk").
+2. Set **At least**: 0 makes the group optional, and 1 or more makes it
+   required. Set **At most** to the number of choices that can be picked (1
    for "pick one").
-3. **Add choice** for each option, with what it **Adds** to the price
+3. Click **Add choice** for each choice, with what it **Adds** to the price
    (blank is free).
 
 The register adds each chosen modifier's price to the item, and the choices
 print after the item's name on the receipt, the order and the customer
-display. Modifiers are offered at the register only; the online store does
-not show them. The **At the register** section shows only on plans that
-include POS.
+display. The register offers every group. A group with **Show on the website**
+on is offered on the product's page too. Turn it off for a choice that only
+makes sense at the counter. **Quick key at the register** is under **At the
+register**, which shows only on plans that include POS.
 
 POS sales create normal orders tagged `pos`, decrement the same inventory
 as your online store (per location if you use locations), and appear in

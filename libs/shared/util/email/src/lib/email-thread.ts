@@ -21,13 +21,25 @@
  * A site that writes to one customer about one thing more than once (a
  * request's confirmation, the quote, a revised quote, the invoice) keeps those
  * messages in a single conversation by sending each one as a reply to the one
- * before:
+ * before, all of them under one ROOT:
  *
- *   - the first message carries a `Message-ID` minted here, and the record it
- *     is about keeps it as an {@link EmailThread};
+ *   - the first message carries a `Message-ID` minted here and, in
+ *     `References`, the conversation's root: an id derived from that one
+ *     (`<thread.…@…>`, {@link emailThreadRootId}) which no message carries as
+ *     its own. The record it is about keeps both as an {@link EmailThread},
+ *     the root first;
  *   - every later message carries its own `Message-ID`, `In-Reply-To` naming
- *     the last one, and `References` naming the chain, and keeps the thread's
- *     subject ({@link nextThreadHeaders}, {@link emailThreadAfterSend}).
+ *     the last one, and `References` naming the root and the chain, and keeps
+ *     the thread's subject ({@link nextThreadHeaders}, {@link emailThreadAfterSend}).
+ *
+ * Why a root no message carries: a provider may replace the `Message-ID` a
+ * caller hands it, and in production one does. The ids a later message then
+ * replies to name no message the mailbox ever received, and on those alone
+ * the first message splits off into a conversation of its own. What every
+ * message still shares is the root in `References`: clients that thread by
+ * those headers group the messages under it as a missing parent, and clients
+ * that group on a shared reference (with the subject) group them by it. When
+ * a provider does keep the caller's id, the chain links them directly too.
  *
  * How clients group (what is documented or widely reported, not measured
  * here): Apple Mail and Thunderbird thread by `In-Reply-To`/`References`;
@@ -36,9 +48,12 @@
  * Outlook writes. Keeping the subject the same is what every one of them
  * honors, which is why the thread remembers it.
  *
- * Whether a provider keeps a caller's `Message-ID` is the provider's call:
- * both built-in providers hand the header over unchanged, and the sender
- * records the provider's own id beside it so a replaced one can be traced.
+ * The sender records the provider's own id beside the one minted here, so a
+ * replaced one can be traced.
+ *
+ * A thread stored before roots were added has none: its later messages keep
+ * sharing its first message's id in `References`, as they always did, and
+ * nothing is migrated.
  *
  * Pure, and free of Node built-ins: this barrel is reached from the browser.
  *=========================================*/
@@ -47,7 +62,11 @@
 export interface EmailThread {
   /** The latest message's `Message-ID`, angle brackets included: `<a.b@example.com>`. */
   messageId: string
-  /** Every `Message-ID` in the conversation, oldest first; the last is {@link messageId}. */
+  /**
+   * The conversation's root ({@link emailThreadRootId}; a thread stored
+   * before roots has none), then every message's `Message-ID`, oldest first;
+   * the last is {@link messageId}.
+   */
   references: string[]
   /** The subject the conversation runs under, without any `Re:`. */
   subject: string
@@ -108,6 +127,21 @@ export function mintEmailMessageId(
   return `<${label}.${time}.${random}@${domain}>`
 }
 
+/**
+ * The root a conversation started by the message `messageId` runs under:
+ * `<thread.quote.k3x9m1.9f2c4e1a0b7d3e65@mail.acme.com>` for
+ * `<quote.k3x9m1.9f2c4e1a0b7d3e65@mail.acme.com>`. Derived, so the headers
+ * the first message goes out with and the thread kept after it agree without
+ * either being handed the other; distinct from every id a message carries,
+ * so a provider that replaces `Message-ID` cannot replace it. Null when
+ * `messageId` is not a `Message-ID`, or the root would be too long for one.
+ */
+export function emailThreadRootId(messageId: string): string | null {
+  if (!isEmailMessageId(messageId)) return null
+  const root = `<thread.${messageId.slice(1)}`
+  return isEmailMessageId(root) ? root : null
+}
+
 /** The root and the latest ids, at most {@link EMAIL_THREAD_MAX_REFERENCES}. */
 function capReferences(ids: readonly string[]): string[] {
   const unique = ids.filter((id, index) => ids.indexOf(id) === index)
@@ -140,8 +174,9 @@ export function emailThreadSubject(thread: EmailThread | null | undefined, fallb
 /**
  * The headers that send a message with `Message-ID` `messageId` into
  * `thread`: the id itself, and, when the thread has begun, `In-Reply-To` the
- * latest message and `References` the chain. With no thread, the message
- * starts one and carries only its own id.
+ * latest message and `References` the root and the chain. With no thread, the
+ * message starts one: its own id, and the root it starts
+ * ({@link emailThreadRootId}) in `References`.
  */
 export function nextThreadHeaders(
   thread: EmailThread | null | undefined,
@@ -149,7 +184,10 @@ export function nextThreadHeaders(
 ): Record<string, string> {
   if (!isEmailMessageId(messageId)) throw new Error('nextThreadHeaders: not a Message-ID')
   const current = readEmailThread(thread)
-  if (!current) return { 'Message-ID': messageId }
+  if (!current) {
+    const root = emailThreadRootId(messageId)
+    return root ? { 'Message-ID': messageId, References: root } : { 'Message-ID': messageId }
+  }
   return {
     'Message-ID': messageId,
     'In-Reply-To': current.messageId,
@@ -159,8 +197,9 @@ export function nextThreadHeaders(
 
 /**
  * The thread once a message went out in it: the message is the latest, the
- * chain grows by it, and the subject stays the thread's (or becomes this
- * message's, when it started the thread).
+ * chain grows by it, and the subject stays the thread's. A message that
+ * started the thread gives it its root (the one {@link nextThreadHeaders}
+ * sent it with) ahead of its own id, and its subject.
  */
 export function emailThreadAfterSend(
   thread: EmailThread | null | undefined,
@@ -168,9 +207,10 @@ export function emailThreadAfterSend(
 ): EmailThread {
   if (!isEmailMessageId(sent.messageId)) throw new Error('emailThreadAfterSend: not a Message-ID')
   const current = readEmailThread(thread)
+  const before = current ? current.references : [emailThreadRootId(sent.messageId)].filter(isEmailMessageId)
   return {
     messageId: sent.messageId,
-    references: capReferences([...(current?.references ?? []), sent.messageId]),
+    references: capReferences([...before, sent.messageId]),
     subject: emailThreadSubject(current, sent.subject).slice(0, MAX_SUBJECT),
   }
 }

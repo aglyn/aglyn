@@ -575,9 +575,41 @@ export function productStockFields(
 }
 
 /**
+ * How many variants a product's options make (AGL-4100): the product of
+ * each usable option's value count, 1 with none. Counted, never built, so
+ * an answer past the ceiling costs nothing to reach.
+ */
+export function variantCombinationCount(options: ProductOption[] | undefined): number {
+  return (options ?? [])
+    .filter((option) => option.name && (option.values?.length ?? 0) > 0)
+    .reduce((count, option) => count * option.values.length, 1)
+}
+
+/**
+ * Why a product's options cannot be saved as variants, or null when they can
+ * (AGL-4100): more combinations than a product holds. Said with the count and
+ * the way out, because the choices a merchant typed are kept, not dropped —
+ * {@link expandVariantMatrix} would stop at the ceiling, and a product whose
+ * options name values no variant sells offers combinations it cannot sell.
+ */
+export function variantMatrixProblem(options: ProductOption[] | undefined): string | null {
+  const count = variantCombinationCount(options)
+  if (count <= COMMERCE_MAX_VARIANTS) return null
+  return (
+    `These options make ${count.toLocaleString('en-US')} combinations, and a product holds at most ` +
+    `${COMMERCE_MAX_VARIANTS}. Remove some values, or move choices that don’t need their own stock ` +
+    '(walls, printing, extras) to Add-ons, priced by option where they cost more on a larger size.'
+  )
+}
+
+/**
  * Cartesian product of option values → the variant option combinations
  * the products hub materializes into a variants matrix. Empty/absent
  * options yield a single default combination ({}).
+ *
+ * Stops at {@link COMMERCE_MAX_VARIANTS}: ask {@link variantMatrixProblem}
+ * first, and refuse rather than build when it answers (AGL-4100) — the
+ * matrix past the ceiling is dropped here, silently.
  */
 export function expandVariantMatrix(
   options: ProductOption[] | undefined,

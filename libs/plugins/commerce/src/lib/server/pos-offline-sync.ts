@@ -761,7 +761,7 @@ async function syncOne(context: SyncContext, raw: unknown): Promise<PosOfflineSa
       }
     }
     const variant = product.variants.find((item) => item.id === line.variantId) ?? product.variants[0]
-    const chosen = CommerceModel.resolveLineModifiers(product, line.modifiers)
+    const chosen = CommerceModel.resolveLineModifiers(product, line.modifiers, variant?.id)
     const currentCents =
       variant && CommerceModel.variantHasPrice(variant) && chosen.ok
         ? Math.round(Number(variant.priceUsd) * 100) + chosen.extraCents

@@ -729,6 +729,27 @@ describe('the card a catalog item draws', () => {
     expect(many).toMatchObject({ variantCount: 2 })
     expect(many).not.toHaveProperty('defaultVariantId')
   })
+
+  it('says when the page asks a required add-on first, so a quick add opens it (AGL-4100)', async () => {
+    const group = (patch: Record<string, unknown>) => ({
+      id: 'frame',
+      name: 'Frame',
+      min: 1,
+      max: 1,
+      options: [{ id: 'steel', name: 'Steel', priceCents: 0 }],
+      ...patch,
+    })
+    seedProduct('canopy', { name: 'Canopy', modifierGroups: [group({ online: true })] })
+    seedProduct('walls', { name: 'Walls', modifierGroups: [group({ online: true, min: 0 })] })
+    seedProduct('latte', { name: 'Latte', modifierGroups: [group({})] })
+    const result = await run({ ids: 'canopy,walls,latte' })
+    const [canopy, walls, latte] = result.body.items
+    expect(canopy).toMatchObject({ requiresChoices: true })
+    // An optional website group, or a required one at the register only, adds straight in.
+    expect(walls).not.toHaveProperty('requiresChoices')
+    expect(latte).not.toHaveProperty('requiresChoices')
+    expect(latte).toMatchObject({ defaultVariantId: 'default' })
+  })
 })
 
 describe('a product sold in person only (AGL-4060)', () => {

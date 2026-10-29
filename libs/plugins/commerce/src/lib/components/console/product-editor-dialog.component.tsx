@@ -84,6 +84,7 @@ import {
 } from './paid-media'
 import { ProductCheckInFields } from './product-check-in-fields.component'
 import { ProductRegisterFields, ProductSellOnlineField } from './product-register-fields.component'
+import { ProductAddOnsFields } from './product-add-ons-fields.component'
 import { ProductKioskOfferField } from './product-kiosk-offer-field.component'
 
 /**
@@ -1477,7 +1478,14 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
     description: current.seo?.description ?? '',
   })
 
-  const error = current.name ? CommerceModel.validateProduct(current) : null
+  /**
+   * More combinations than a product holds (AGL-4100): said with the count
+   * beside the options, the values kept as typed, and Save refused — the
+   * matrix used to stop at 100 and drop the rest without a word.
+   */
+  const matrixProblem = CommerceModel.variantMatrixProblem(current.options)
+  const error =
+    matrixProblem ?? (current.name ? CommerceModel.validateProduct(current) : null)
 
   /**
    * Stock tracking is inert on a subscription-only product (AGL-1744) —
@@ -1554,6 +1562,11 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
         const options = [...(at.options ?? [])]
         if (patch === null) options.splice(index, 1)
         else options[index] = { name: '', values: [], ...options[index], ...patch }
+        // Past the variant ceiling (AGL-4100) the options are kept as typed
+        // and the variants left as they are: nothing is built short, nothing
+        // dropped, and Save stays refused (`matrixProblem`) until values are
+        // removed — when the matrix is rebuilt from them as below.
+        if (CommerceModel.variantMatrixProblem(options)) return { options }
         // Regenerate the matrix, carrying data over by option-combo key so
         // edits to prices/SKUs survive option tweaks.
         const previous = new Map(
@@ -1840,6 +1853,7 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
           onChange={handleOptionsChange}
           onValues={setOptionValues}
         />
+        {matrixProblem ? <Alert severity="warning">{matrixProblem}</Alert> : null}
         <ProductVariantsTable
           variants={current.variants}
           stockApplies={stockApplies}
@@ -1919,13 +1933,24 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
           update={update}
           replaceDraft={replaceDraft}
         />
+        {/*
+          Add-ons (AGL-4100): on every store, point of sale or not — the
+          website's product page offers the groups switched on for it, and
+          the register offers them all.
+        */}
+        <Divider textAlign="left">{'Add-ons'}</Divider>
+        <ProductAddOnsFields
+          modifierGroups={current.modifierGroups ?? NO_MODIFIER_GROUPS}
+          options={current.options ?? NO_OPTIONS}
+          variants={current.variants}
+          update={update}
+        />
         {pos.ready && pos.entitled ? (
           <>
             <ProductRegisterFields
               posQuickKey={Boolean(current.posQuickKey)}
               sellOnline={CommerceModel.productSellsOnline(current)}
               inStoreReviews={current.inStoreReviews}
-              modifierGroups={current.modifierGroups ?? NO_MODIFIER_GROUPS}
               update={update}
             />
             <ProductKioskOfferField
@@ -1941,7 +1966,7 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
         ) : pos.ready ? (
           <>
             <EntitlementUpsell planLabel={pos.planLabel} upgradeHref={pos.upgradeHref}>
-              {'Register quick keys, modifier groups (sizes, add-ons), check-in at the window and selling a product in person only come with the point of sale.'}
+              {'Register quick keys, check-in at the window and selling a product in person only come with the point of sale.'}
             </EntitlementUpsell>
             {/* A product already set to in person only (AGL-4060) can always be put back online. */}
             {!CommerceModel.productSellsOnline(current) ? (
@@ -1999,7 +2024,8 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
           />
         ) : null}
 
-        {error ? <Alert severity="warning">{error}</Alert> : null}
+        {/* The ceiling's own warning sits beside the options (AGL-4100). */}
+        {error && error !== matrixProblem ? <Alert severity="warning">{error}</Alert> : null}
         {product?.$id ? (
           <Typography variant="caption" color="text.secondary">
             {`id: ${product.$id}`}

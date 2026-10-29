@@ -1077,7 +1077,9 @@ describe('sending the quote by email (AGL-4097)', () => {
     })
     const messageId = String(email.headers?.['Message-ID'])
     expect(messageId).toMatch(/^<quote\.[a-z0-9]+\.[0-9a-f]{16}@mail\.acme\.test>$/)
-    expect(email.headers).toEqual({ 'Message-ID': messageId })
+    // The first email carries the conversation's root, which every later one shares.
+    const root = `<thread.${messageId.slice(1)}`
+    expect(email.headers).toEqual({ 'Message-ID': messageId, References: root })
     expect(renderedTokens[0]).toMatchObject({
       'quote.message': 'Here is the banner.',
       'quote.url': `https://acme.aglyn.app/pay-quote?q=${quoteId}&t=1.sig-site1`,
@@ -1097,7 +1099,7 @@ describe('sending the quote by email (AGL-4097)', () => {
         linkVersion: 1,
       },
     ])
-    expect(quote['emailThread']).toEqual({ messageId, references: [messageId], subject: 'Quote #1042 from Acme Signs' })
+    expect(quote['emailThread']).toEqual({ messageId, references: [root, messageId], subject: 'Quote #1042 from Acme Signs' })
     expect(quote['updatedAtMs']).toBe(1_000)
     expect(stored(path)['timeline'].at(-1)).toMatchObject({ event: 'quote-sent', atMs: 7_000 })
   })
@@ -1113,7 +1115,9 @@ describe('sending the quote by email (AGL-4097)', () => {
     await send('admin', quoteId)
     await send('admin', quoteId, { subject: 'A different subject' })
     const [first, second] = sentEmails.map((email) => String(email.headers?.['Message-ID']))
-    expect(sentEmails[1].headers).toEqual({ 'Message-ID': second, 'In-Reply-To': first, References: first })
+    const root = `<thread.${first.slice(1)}`
+    expect(sentEmails[0].headers).toEqual({ 'Message-ID': first, References: root })
+    expect(sentEmails[1].headers).toEqual({ 'Message-ID': second, 'In-Reply-To': first, References: `${root} ${first}` })
     expect(stored(path)['quote']['linkVersion']).toBeUndefined()
     expect(expireSession).not.toHaveBeenCalled()
 
@@ -1122,7 +1126,11 @@ describe('sending the quote by email (AGL-4097)', () => {
     nowMs = 9_000
     expect((await send('admin', quoteId)).body).toMatchObject({ revision: 2, linkVersion: 2, linkReplaced: true })
     const third = String(sentEmails[2].headers?.['Message-ID'])
-    expect(sentEmails[2].headers).toEqual({ 'Message-ID': third, 'In-Reply-To': second, References: `${first} ${second}` })
+    expect(sentEmails[2].headers).toEqual({
+      'Message-ID': third,
+      'In-Reply-To': second,
+      References: `${root} ${first} ${second}`,
+    })
     // The conversation keeps the subject it started with.
     expect(sentEmails[2].subject).toBe('Quote #1042 from Acme Signs')
     expect(renderedTokens[2]['quote.url']).toBe(`https://acme.aglyn.app/pay-quote?q=${quoteId}&t=2.sig-site1`)
@@ -1131,17 +1139,28 @@ describe('sending the quote by email (AGL-4097)', () => {
     const after = stored(path)
     expect(after['checkoutSessionId']).toBeUndefined()
     expect(after['quote']['linkVersion']).toBe(2)
-    expect(after['quote']['emailThread']['references']).toEqual([first, second, third])
+    expect(after['quote']['emailThread']['references']).toEqual([root, first, second, third])
     expect(after['timeline'].map((entry: { event: string }) => entry.event)).toEqual(
       expect.arrayContaining(['quote-link-replaced', 'quote-sent']),
     )
 
-    // Sending revision 2 again keeps its link.
+    // Sending revision 2 again keeps its link, and is not called an update a second time.
     expect((await send('admin', quoteId)).body).toMatchObject({ revision: 2, linkVersion: 2, linkReplaced: false })
     expect(stored(path)['quote']['sends'].map((entry: { linkVersion: number }) => entry.linkVersion)).toEqual([1, 1, 2, 2])
+    expect(renderedTokens[1]['quote.heading']).toBe('Your quote from Acme Signs')
+    expect(renderedTokens[3]['quote.heading']).toBe('Your quote from Acme Signs')
+    expect(renderedTokens[3]['quote.intro']).not.toContain('replaces')
   })
 
-  it('replies into the conversation a request already started, under its subject', async () => {
+  it('a quote first emailed at a later revision is a quote, not an update, and keeps its link', async () => {
+    const { quoteId } = await created()
+    expect((await startRevision(quoteId)).status).toBe(200)
+    expect((await send('admin', quoteId)).body).toMatchObject({ revision: 2, linkVersion: 1, linkReplaced: false })
+    expect(renderedTokens[0]['quote.heading']).toBe('Your quote from Acme Signs')
+    expect(renderedTokens[0]['quote.intro']).toContain('Acme Signs put together a quote for you.')
+  })
+
+  it('replies into the conversation a request already started, under its subject (a thread stored before roots)', async () => {
     const { quoteId, path } = await created()
     const request1 = '<request.1.a@mail.acme.test>'
     docs.set(path, {
@@ -1264,9 +1283,10 @@ describe('sending the quote by email (AGL-4097)', () => {
 })
 
 describe('a quote started from a request (AGL-4098)', () => {
+  // As the request's confirmation keeps it: the conversation's root, then its own id.
   const THREAD = {
     messageId: '<form.k1.0123456789abcdef@mail.acme.test>',
-    references: ['<form.k1.0123456789abcdef@mail.acme.test>'],
+    references: ['<thread.form.k1.0123456789abcdef@mail.acme.test>', '<form.k1.0123456789abcdef@mail.acme.test>'],
     subject: 'We got your quote request — Acme Signs',
   }
   const FACTS = {
@@ -1370,7 +1390,7 @@ describe('a quote started from a request (AGL-4098)', () => {
     expect(sent.status).toBe(200)
     const headers = sentEmails[sentEmails.length - 1].headers as Record<string, string>
     expect(headers['In-Reply-To']).toBe(THREAD.messageId)
-    expect(headers['References']).toBe(THREAD.messageId)
+    expect(headers['References']).toBe(`<thread.form.k1.0123456789abcdef@mail.acme.test> ${THREAD.messageId}`)
     expect(sentEmails[sentEmails.length - 1].subject).toBe(THREAD.subject)
   })
 

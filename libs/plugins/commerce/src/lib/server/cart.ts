@@ -30,6 +30,11 @@ export interface ResolvedCartLine extends CommerceModel.CartLine {
   imageUrl?: string
   /** Line no longer purchasable (deleted/draft/sold out). */
   unavailable?: boolean
+  /**
+   * What the shopper must do about an unavailable line, when the cart can say
+   * (AGL-4100): its add-ons no longer answer the product's choices.
+   */
+  problem?: string
 }
 
 /**
@@ -96,10 +101,14 @@ export const cartHandler: PluginApiHandler = async (req, res) => {
       // The day the shopper chose to use a check-in item (AGL-4043): part of
       // the line's identity, so two days of one pass are two lines.
       const useDayKey = typeof body.useDayKey === 'string' ? body.useDayKey.trim() : ''
+      // The add-ons chosen on the product's page (AGL-4100), ids only: part
+      // of the line's identity, priced from the product, never from here.
+      const requestedModifiers = CommerceModel.modifierSelectionFrom(body.modifiers)
       const line: CommerceModel.CartLine = {
         productId: String(body.productId ?? ''),
         ...(body.variantId ? { variantId: String(body.variantId) } : {}),
         ...(useDayKey ? { useDayKey } : {}),
+        ...(requestedModifiers.length ? { modifiers: requestedModifiers } : {}),
         // Clamped at the door as well as in the model (AGL-2285): the route
         // used `Math.round(Number(...))` alone, which yields `NaN` for
         // `{"quantity":"x"}` and slipped past `upsertCartLine`'s `<= 0` guard.
@@ -136,14 +145,29 @@ export const cartHandler: PluginApiHandler = async (req, res) => {
           const isNewLine = !cart.lines.some(
             (held) => CommerceModel.cartLineKey(held) === CommerceModel.cartLineKey(line),
           )
+          const product = productSnapshot.exists ? CommerceModel.liftLegacyProduct(productSnapshot.data() as any) : null
           if (useDayKey && (action === 'add' || isNewLine)) {
-            const product = productSnapshot.exists ? CommerceModel.liftLegacyProduct(productSnapshot.data() as any) : null
             const variantId = line.variantId ?? product?.variants[0]?.id
             if (!product || !CommerceModel.productAsksUseDate(product, variantId)) {
               return res.status(400).json({ error: 'This item has no day to choose.' })
             }
             const problem = CommerceModel.checkInUseDayProblem(useDayKey, (await readStoreDay(hostRef)).todayKey)
             if (problem) return res.status(400).json({ error: problem })
+          }
+          // Add-ons (AGL-4100): asked of the groups the website shows, every
+          // required one answered, and kept as ids in the product's order. A
+          // required group left unanswered is refused here, so no line goes
+          // in a basket that checkout would have to turn away.
+          if (product && (action === 'add' || isNewLine)) {
+            const chosen = CommerceModel.resolveWebsiteLineModifiers(
+              product,
+              line.modifiers,
+              line.variantId ?? product.variants[0]?.id,
+            )
+            if (!chosen.ok) return res.status(400).json({ error: chosen.error })
+            const selection = CommerceModel.modifierSelectionOf(chosen.modifiers)
+            if (selection.length) line.modifiers = selection
+            else delete line.modifiers
           }
         }
         cart.lines = CommerceModel.upsertCartLine(
@@ -211,13 +235,29 @@ export const cartHandler: PluginApiHandler = async (req, res) => {
           unavailable: true,
         }
       }
+      const variantLabel = Object.keys(variant.options ?? {}).length
+        ? Object.values(variant.options ?? {}).join(' / ')
+        : undefined
+      // Add-ons priced from the product on every read (AGL-4100), on this
+      // variant. Choices the product no longer offers, or a required one
+      // now unanswered, make the line unavailable with what to do.
+      const chosen = CommerceModel.resolveWebsiteLineModifiers(product, line.modifiers, variant.id)
+      if (!chosen.ok) {
+        return {
+          ...line,
+          name: product.name,
+          ...(variantLabel ? { variantLabel } : {}),
+          unitAmountCents: 0,
+          unavailable: true,
+          problem: CommerceModel.cartLineModifierProblem(chosen.error),
+        }
+      }
+      const label = CommerceModel.lineLabelWithModifiers(variantLabel, chosen.modifiers)
       return {
         ...line,
         name: product.name,
-        ...(Object.keys(variant.options ?? {}).length
-          ? { variantLabel: Object.values(variant.options ?? {}).join(' / ') }
-          : {}),
-        unitAmountCents: Math.round(Number(variant.priceUsd) * 100),
+        ...(label ? { variantLabel: label } : {}),
+        unitAmountCents: Math.round(Number(variant.priceUsd) * 100) + chosen.extraCents,
         ...(variant.imageUrl || product.mediaUrls?.[0] || product.imageUrl
           ? {
               imageUrl:

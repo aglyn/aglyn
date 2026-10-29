@@ -319,7 +319,7 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
       const quantity = Math.max(1, Math.min(99, Math.round(Number(raw.quantity ?? 1))))
       // Modifiers are priced from the product, never from the register
       // (AGL-3607): the line names option ids and nothing else.
-      const chosen = CommerceModel.resolveLineModifiers(product, raw.modifiers)
+      const chosen = CommerceModel.resolveLineModifiers(product, raw.modifiers, variant?.id)
       if (!chosen.ok) return res.status(400).json({ error: chosen.error })
       const variantLabel = CommerceModel.lineLabelWithModifiers(
         Object.keys(variant.options ?? {}).length

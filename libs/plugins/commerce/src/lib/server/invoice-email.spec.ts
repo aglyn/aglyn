@@ -183,13 +183,18 @@ describe('the invoice email’s send (AGL-4099)', () => {
     const first = await mailer.deliver(delivery())
     if (!('thread' in first)) throw new Error('not sent')
     expect(first.messageId).toMatch(/^<invoice\.[a-z0-9]+\.[a-z0-9]+@mail\.northwind\.test>$/)
-    expect(sent[0].headers).toEqual({ 'Message-ID': first.messageId })
+    const root = `<thread.${first.messageId.slice(1)}`
+    expect(sent[0].headers).toEqual({ 'Message-ID': first.messageId, References: root })
     const order = { ...DRAFT, emailThread: first.thread } as HostOrder
     const second = await mailer.deliver(delivery({ order }))
     if (!('thread' in second)) throw new Error('not sent')
-    expect(sent[1].headers).toEqual({ 'Message-ID': second.messageId, 'In-Reply-To': first.messageId, References: first.messageId })
+    expect(sent[1].headers).toEqual({
+      'Message-ID': second.messageId,
+      'In-Reply-To': first.messageId,
+      References: `${root} ${first.messageId}`,
+    })
     expect(sent[1].subject).toBe('Invoice #2001 from Northwind Signs')
-    expect(second.thread.references).toEqual([first.messageId, second.messageId])
+    expect(second.thread.references).toEqual([root, first.messageId, second.messageId])
   })
 
   it('replies into a quote’s conversation: the quote email, then its invoice, one thread', async () => {
@@ -213,16 +218,19 @@ describe('the invoice email’s send (AGL-4099)', () => {
     const quoted = { ...QUOTE, quote: { ...QUOTE.quote, emailThread: quoteSend.thread } } as HostOrder
     const invoice = await invoiceMailer(deps()).deliver(delivery({ orderId: 'q1', order: quoted }))
     if (!('thread' in invoice)) throw new Error('not sent')
+    // The root the quote email started the conversation under, then the chain.
+    const root = `<thread.${quoteSend.messageId.slice(1)}`
+    expect(sent[0].headers).toEqual({ 'Message-ID': quoteSend.messageId, References: root })
     expect(sent[1].headers).toEqual({
       'Message-ID': invoice.messageId,
       'In-Reply-To': quoteSend.messageId,
-      References: quoteSend.messageId,
+      References: `${root} ${quoteSend.messageId}`,
     })
     // The conversation's subject, so every mailbox keeps it one conversation.
     expect(sent[1].subject).toBe('Quote #1042 from Northwind Signs')
     expect(invoice.thread).toEqual({
       messageId: invoice.messageId,
-      references: [quoteSend.messageId, invoice.messageId],
+      references: [root, quoteSend.messageId, invoice.messageId],
       subject: 'Quote #1042 from Northwind Signs',
     })
     // The invoice still says what it is.

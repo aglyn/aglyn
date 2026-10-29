@@ -22,13 +22,13 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
     "mergeTokens": [
       {
         "name": "form.subject",
-        "description": "The subject: what they sent, to whom",
-        "sample": "We got your quote request — Northwind Signs"
+        "description": "The subject, which the conversation keeps: “Your quote request with” the business for a request, else “We got your message”",
+        "sample": "Your quote request with Northwind Signs"
       },
       {
         "name": "form.name",
-        "description": "The form’s name",
-        "sample": "Request a quote"
+        "description": "What they sent, as they would call it: “Quote request”, else “Your message”",
+        "sample": "Quote request"
       },
       {
         "name": "form.heading",

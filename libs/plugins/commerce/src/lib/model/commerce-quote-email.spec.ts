@@ -21,7 +21,9 @@ import {
   parseQuoteSendInput,
   quoteAfterSend,
   quoteEmailDefaultSubject,
+  quoteSendIsNewRevision,
   quoteSendLabel,
+  quoteSendPrefill,
   quoteSendRecipient,
   quoteSendRefusal,
   quoteSendReplacesLink,
@@ -73,6 +75,20 @@ describe('when a send replaces the pay link', () => {
   })
 })
 
+describe('when a send hands the customer an updated quote', () => {
+  it('only on a new revision’s first email, after an earlier revision was emailed', () => {
+    expect(quoteSendIsNewRevision(quote({ revision: 2, sends: [record(1, 1)] }))).toBe(true)
+    expect(quoteSendIsNewRevision(quote({ revision: 4, sends: [record(3, 1)] }))).toBe(true)
+  })
+
+  it('never on the quote’s first email, whatever revision it is at, nor on a resend of the same revision', () => {
+    expect(quoteSendIsNewRevision(quote())).toBe(false)
+    expect(quoteSendIsNewRevision(quote({ revision: 3 }))).toBe(false)
+    expect(quoteSendIsNewRevision(quote({ revision: 3, sends: [record(3, 1)] }))).toBe(false)
+    expect(quoteSendIsNewRevision(quote({ revision: 2, sends: [record(1, 1), record(2, 2)] }))).toBe(false)
+  })
+})
+
 describe('the Send button and the form', () => {
   it('says Send quote, Send again or Send revision N', () => {
     expect(quoteSendLabel(quote())).toBe('Send quote')
@@ -91,6 +107,16 @@ describe('the Send button and the form', () => {
   it('sends to what was typed, else the customer’s email', () => {
     expect(quoteSendRecipient(order(), ' buyer@example.org ')).toBe('buyer@example.org')
     expect(quoteSendRecipient(order(), '')).toBe('jane@example.com')
+  })
+
+  it('starts the form addressed to the customer’s email, else where the quote was last emailed', () => {
+    expect(quoteSendPrefill(order({ sends: [{ ...record(1, 1), to: 'buyer@example.org' }] }))).toBe('jane@example.com')
+    expect(
+      quoteSendPrefill(
+        order({ customer: { email: '' }, sends: [record(1, 1), { ...record(1, 1, 2), to: 'buyer@example.org' }] }),
+      ),
+    ).toBe('buyer@example.org')
+    expect(quoteSendPrefill(order({ customer: { email: '' } }))).toBe('')
   })
 
   it('refuses a paid quote, an order, nowhere to send and a bad address', () => {

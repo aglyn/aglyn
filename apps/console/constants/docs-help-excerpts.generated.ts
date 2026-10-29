@@ -438,7 +438,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#orders-screen': 'Open your site\'s Products hub and choose the Orders tab. Before your first sale the tab is an invitation rather than a table: it explains where orders come from and offers Draft order, so you can invoice a customer…',
     '#payment-methods': 'The Payment methods card, on Products → Payments, chooses what shoppers may pay with besides a card, once your Stripe account is connected on the Payments card.',
     '#pickup-and-local-delivery': 'Buyers can choose to pick up an order at one of your locations, or have your own driver deliver it, instead of shipping.',
-    '#products-hub': 'The Products page is the catalog manager: Products with up to 3 options and 100 variants each — per-variant SKU, barcode, price, compare-at (sale badge), weight, and stock.',
+    '#products-hub': 'The Products page is the catalog manager: Products with up to 3 options and 100 variants each — per-variant SKU, barcode, price, compare-at (sale badge), weight, and stock — and add-ons priced on the product\'s page.',
     '#recovery-and-alerts': 'The Recovery & alerts card, in the Orders section of the products hub, shows the abandoned-checkout reminders and back-in-stock alerts Aglyn sends for you.',
     '#stock-movements': 'Inventory → Stock movements is the history behind every tracked count — the answer to "the shelf says four and the console says six, what happened?"',
     '#store-settings': 'The Store settings card, on Products → Checkout, sets the pages product and collection links open, the currency prices show in, guest checkout, your terms link and the receipt footer.',

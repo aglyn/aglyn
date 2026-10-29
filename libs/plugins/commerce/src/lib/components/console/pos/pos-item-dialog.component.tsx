@@ -138,7 +138,7 @@ export function PosItemDialog(props: PosItemDialogProps) {
     options.length > 0
       ? variantFor(product, picked)
       : product.variants.find((item) => item.id === variantId)
-  const chosen = CommerceModel.resolveLineModifiers(product, modifiers)
+  const chosen = CommerceModel.resolveLineModifiers(product, modifiers, variant?.id)
   const unitCents = variant
     ? Math.round(Number(variant.priceUsd) * 100) + (chosen.ok ? chosen.extraCents : 0)
     : 0
@@ -245,7 +245,12 @@ export function PosItemDialog(props: PosItemDialogProps) {
                     return (
                       <Chip
                         key={option.id}
-                        label={option.priceCents ? `${option.name} +${money(option.priceCents)}` : option.name}
+                        label={
+                          // A choice priced by variant shows its price on this one (AGL-4100).
+                          CommerceModel.modifierOptionPriceCents(option, variant?.id)
+                            ? `${option.name} +${money(CommerceModel.modifierOptionPriceCents(option, variant?.id))}`
+                            : option.name
+                        }
                         color={selected ? 'primary' : 'default'}
                         variant={selected ? 'filled' : 'outlined'}
                         aria-pressed={selected}

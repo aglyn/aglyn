@@ -34,6 +34,8 @@ import {
   transferVariantInventory,
   validateCollection,
   validateProduct,
+  variantCombinationCount,
+  variantMatrixProblem,
   type HostCollection,
   type HostProduct,
 } from './commerce'
@@ -78,6 +80,35 @@ describe('expandVariantMatrix', () => {
       { name: 'B', values: many },
     ])
     expect(combos.length).toBeLessThanOrEqual(100)
+  })
+})
+
+/*
+ * Past the 100-variant ceiling (AGL-4100): a canopy sold by size, frame and
+ * print colour makes more combinations than a product holds. The count is
+ * said, never built, and the way out is named — the choices that need no
+ * stock of their own are add-ons.
+ */
+describe('more combinations than a product holds (AGL-4100)', () => {
+  const canopy = [
+    { name: 'Size', values: ['10x10', '10x15', '10x20', '20x20', '20x30'] },
+    { name: 'Frame', values: ['Steel', 'Aluminum', 'Heavy duty', 'Hex', 'Pop-up'] },
+    { name: 'Print', values: ['None', 'One color', 'Two colors', 'Full color', 'Dye sublimation', 'Logo only'] },
+  ]
+
+  it('counts the combinations without building them', () => {
+    expect(variantCombinationCount(undefined)).toBe(1)
+    expect(variantCombinationCount([{ name: 'Size', values: ['S', 'M'] }, { name: '', values: ['x'] }])).toBe(2)
+    expect(variantCombinationCount(canopy)).toBe(150)
+  })
+
+  it('says how many, and points to add-ons', () => {
+    expect(variantMatrixProblem(canopy.slice(0, 2))).toBeNull()
+    expect(variantMatrixProblem([{ name: 'Size', values: Array.from({ length: 25 }, (_, at) => `s${at}`) }, { name: 'Color', values: ['a', 'b', 'c', 'd'] }])).toBeNull()
+    const problem = variantMatrixProblem(canopy)
+    expect(problem).toContain('150 combinations')
+    expect(problem).toContain('at most 100')
+    expect(problem).toContain('Add-ons')
   })
 })
 

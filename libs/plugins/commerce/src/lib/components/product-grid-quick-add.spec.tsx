@@ -113,6 +113,28 @@ describe('quick add', () => {
     expect(badge).toHaveBeenCalled()
     window.removeEventListener(CART_UPDATED_EVENT, badge)
   })
+
+  /*
+   * A product whose page asks a required add-on (AGL-4100) — a canopy's
+   * frame — opens the page to choose it, even with one variant: the cart
+   * would refuse the line without the choice.
+   */
+  it('sends the shopper to the product page when a website add-on is required', async () => {
+    expect(
+      quickAddAction({ variantCount: 1, defaultVariantId: 'v', soldOut: false, requiresChoices: true }),
+    ).toBe('options')
+    ITEMS.push(item('Event Canopy', { requiresChoices: true }))
+    try {
+      render(<ProductGrid cardStyle="photo" quickAdd />)
+      await screen.findByText('Event Canopy')
+      expect(screen.queryByRole('button', { name: 'Add Event Canopy to cart' })).toBeNull()
+      const links = screen.getAllByText('Choose options').map((link) => link.closest('a')?.getAttribute('href'))
+      expect(links).toContain('/products/event-canopy')
+      expect(fetchMock.mock.calls.some((call) => call[0] === '/api/commerce/cart')).toBe(false)
+    } finally {
+      ITEMS.pop()
+    }
+  })
 })
 
 describe('a shop page opened from a link', () => {

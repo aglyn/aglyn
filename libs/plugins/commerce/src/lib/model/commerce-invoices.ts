@@ -36,6 +36,7 @@ import {
   type QuotePageView,
   type QuotePayRefusal,
 } from './commerce-quote-pay'
+import { lastQuoteSend } from './commerce-quote-email'
 import {
   isQuote,
   type OrderInvoiceSendRecord,
@@ -376,6 +377,20 @@ export function invoiceSendRecipient(
     String(typed ?? '').trim() ||
     String(order?.customerEmail ?? '').trim() ||
     String(order?.quote?.customer?.email ?? '').trim()
+  )
+}
+
+/**
+ * Who the console's Send invoice form starts addressed to: the customer's
+ * email, else where the last invoice went, else (for a quote) where the quote
+ * was last emailed, so an order or quote that names no email still opens
+ * addressed to the customer it was already sent to.
+ */
+export function invoiceSendPrefill(order: Pick<HostOrder, 'customerEmail' | 'quote' | 'invoiceSends'> | null | undefined): string {
+  return (
+    invoiceSendRecipient(order, null) ||
+    String(lastInvoiceSend(order)?.to ?? '').trim() ||
+    String(lastQuoteSend(order?.quote)?.to ?? '').trim()
   )
 }
 

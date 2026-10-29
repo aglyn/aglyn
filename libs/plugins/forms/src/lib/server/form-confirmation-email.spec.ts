@@ -47,7 +47,6 @@ function input(over: Partial<FormConfirmationInput> = {}): FormConfirmationInput
     host: HOST,
     org: null,
     to: 'jane@example.com',
-    formName: 'Request a quote',
     request: { kind: 'quote' },
     answers: { name: 'Jane Doe', email: 'jane@example.com', message: 'Two banners, please.' },
     decls: [{ fieldName: 'name', fieldType: 'text', label: 'Your name' }],
@@ -87,18 +86,25 @@ function harness(over: Partial<FormConfirmationDeps> = {}) {
 }
 
 describe('the form confirmation', () => {
-  it('starts the conversation: its own Message-ID and nothing to reply to, kept as the thread the quote replies into', async () => {
+  it('starts the conversation: its own Message-ID, the root in References, kept as the thread the quote replies into', async () => {
     const { deps, sent, metered } = harness()
     const result = await sendFormConfirmation(input(), deps)
     expect(result.sent).toBe(true)
     const done = result as Extract<typeof result, { sent: true }>
     expect(isEmailMessageId(done.messageId)).toBe(true)
     expect(done.messageId).toMatch(/@mail\.northwind\.example>$/)
-    expect(sent[0].headers).toEqual({ 'Message-ID': done.messageId })
-    expect(done.thread).toEqual({ messageId: done.messageId, references: [done.messageId], subject: 'We got your quote request — Northwind Signs' })
+    // Nothing to reply to; the root every later message shares, even when the
+    // provider replaces the Message-ID it was handed.
+    const root = `<thread.${done.messageId.slice(1)}`
+    expect(sent[0].headers).toEqual({ 'Message-ID': done.messageId, References: root })
+    expect(done.thread).toEqual({
+      messageId: done.messageId,
+      references: [root, done.messageId],
+      subject: 'Your quote request with Northwind Signs',
+    })
     expect(sent[0]).toMatchObject({
       to: 'jane@example.com',
-      subject: 'We got your quote request — Northwind Signs',
+      subject: 'Your quote request with Northwind Signs',
       replyTo: 'hello@northwind.example',
       audience: 'tenant',
       context: 'form confirmation',

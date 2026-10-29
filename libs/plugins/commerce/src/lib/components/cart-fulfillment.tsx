@@ -27,6 +27,7 @@ import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { PickupLocationOption } from '../model/local-fulfillment-settings'
+import type { ModifierSelection } from '../model/product-modifiers'
 import { pickupReadyWithinLabel } from '../model/local-fulfillment-settings'
 
 /**
@@ -83,7 +84,13 @@ export function useCartFulfillment(
    * A product's Buy button asks for that product rather than the cart; `null`
    * asks nothing (a subscription, a download).
    */
-  buyNow?: { productId: string; variantId?: string; quantity: number } | null,
+  buyNow?: {
+    productId: string
+    variantId?: string
+    quantity: number
+    /** The add-ons chosen (AGL-4100): a delivery minimum counts them. */
+    modifiers?: ModifierSelection[]
+  } | null,
 ) {
   const buyNowKey = buyNow === undefined ? '' : JSON.stringify(buyNow)
   const [options, setOptions] = useState<CartFulfillmentOptions>(EMPTY)

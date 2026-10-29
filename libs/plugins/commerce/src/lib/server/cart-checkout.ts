@@ -297,6 +297,16 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
           visible: `"${product.name}": ${useDayProblem} Remove it and add it again with a new day.`,
         })
       }
+      // Add-ons (AGL-4100), priced HERE from the product on the variant
+      // sold — the cart holds their ids and nothing else. A line whose
+      // choices no longer answer the product (a required group unanswered, a
+      // choice removed) is refused with what to do, never charged short.
+      const chosen = CommerceModel.resolveWebsiteLineModifiers(product, line.modifiers, variant.id)
+      if (!chosen.ok) {
+        throw Object.assign(new Error('unavailable'), {
+          visible: CommerceModel.cartLineModifierProblem(chosen.error),
+        })
+      }
       // Gift cards are a Business+ entitlement, checked per sale (AGL-470).
       if (
         product.giftCard &&
@@ -324,7 +334,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
           quantity: line.quantity,
         })
       }
-      const unitCents = Math.round(Number(variant.priceUsd) * 100)
+      const unitCents = Math.round(Number(variant.priceUsd) * 100) + chosen.extraCents
       itemsCents += unitCents * line.quantity
       extrasLines.push({
         productId: line.productId,
@@ -383,13 +393,16 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         `line_items[${index}][price_data][unit_amount]`,
         String(unitCents),
       )
+      // The variant, then the add-ons, as the order line will print them.
+      const lineLabel = CommerceModel.lineLabelWithModifiers(
+        Object.keys(variant.options ?? {}).length
+          ? Object.values(variant.options ?? {}).join(' / ')
+          : undefined,
+        chosen.modifiers,
+      )
       params.set(
         `line_items[${index}][price_data][product_data][name]`,
-        `${product.name}${
-          Object.keys(variant.options ?? {}).length
-            ? ` (${Object.values(variant.options ?? {}).join(' / ')})`
-            : ''
-        }`.slice(0, 120),
+        `${product.name}${lineLabel ? ` (${lineLabel})` : ''}`.slice(0, 120),
       )
     })
 
