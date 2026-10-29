@@ -86,6 +86,7 @@ import {
   AI_SITE_START_ANSWERS,
   AI_SITE_START_STYLE_REQUIRED,
   aiSiteStartAnswersFromClientBuild,
+  aiSiteStartAnswersFromStarter,
   aiSiteStartBrief,
   aiSiteStartClientBrief,
   aiSiteStartClientInputs,
@@ -394,6 +395,7 @@ export function AiSiteStartCard({
   leave,
   pendingSite,
   chooseStarter: chooseStarterInShell,
+  starter,
   clientBuild,
   initialAnswers = null,
 }: AiSiteStartCardProps) {
@@ -409,7 +411,16 @@ export function AiSiteStartCard({
   // Create site with that start's answers: read once, and only here, where
   // the site does not exist yet. It opens on the first question, where the
   // site's name and address are asked, with every answer after it filled in.
-  const [handedOff] = useState(() => (pendingSite && !initialAnswers ? readAiSiteStartAnswers() : null))
+  const [handedOff] = useState(() =>
+    pendingSite && !initialAnswers && !starter ? readAiSiteStartAnswers() : null,
+  )
+  // An AI starter picked in "Choose your starter" (AGL-4049): its answers
+  // fill the questions, read once, and the start opens on the first one.
+  // The style it names arrives chosen — the person chose it by picking the
+  // starter — and every answer is theirs to change.
+  const [starterAnswers] = useState(() =>
+    starter && !initialAnswers && !clientBuild ? aiSiteStartAnswersFromStarter(starter.answers) : null,
+  )
   // A site staff are building for a client (AGL-3958): the intake answered
   // the questions already, so the start opens on the review with them, and
   // stays on this screen once it has started. Read once, like a reopened start.
@@ -420,12 +431,22 @@ export function AiSiteStartCard({
   const clientBuildRef = useRef(clientBuild)
   clientBuildRef.current = clientBuild
   // Read once: a start reopened on its answers stays one while it is open.
-  const reopened = useRef(initialAnswers !== null || handedOff !== null || clientAnswers !== null)
-  // A start reopened on its answers opens on the review, every answer there to change.
-  const [step, setStep] = useState<AiSiteStartStep>(initialAnswers || clientAnswers ? 'review' : 'choose')
-  const [answers, setAnswers] = useState<AiSiteStartAnswers>(
-    initialAnswers ?? clientAnswers ?? handedOff ?? AI_SITE_START_ANSWERS,
+  const reopened = useRef(
+    initialAnswers !== null || handedOff !== null || clientAnswers !== null || starterAnswers !== null,
   )
+  // A start reopened on its answers opens on the review, every answer there
+  // to change; one filled in from a starter, on the first question.
+  const [step, setStep] = useState<AiSiteStartStep>(
+    initialAnswers || clientAnswers ? 'review' : starterAnswers ? 'kind' : 'choose',
+  )
+  const [answers, setAnswers] = useState<AiSiteStartAnswers>(
+    initialAnswers ?? clientAnswers ?? starterAnswers ?? handedOff ?? AI_SITE_START_ANSWERS,
+  )
+  // The starter the answers came from, for the site to record (AGL-4049),
+  // and the style card that says so.
+  const starterChoice = starterAnswers && starter ? starter.choice : null
+  const pickedStarterStyle =
+    starterAnswers?.kind && starter ? { id: starterAnswers.kind, name: starter.displayName } : null
   // The steps whose reasons not to go forward are shown: the ones Next was refused on.
   const [checked, setChecked] = useState<ReadonlySet<AiSiteStartStep>>(() => new Set())
   // A step opened from the review's Edit goes back to the review on Next.
@@ -614,8 +635,16 @@ export function AiSiteStartCard({
       let site = { hostId, host, orgSlug }
       if (!hostId && pendingSite) {
         if (!pendingSite.created && !(await refused(await requestJob(null, true)))) return
-        // The style the questions took (AGL-4049), recorded on the site.
-        const made = await pendingSite.create(asked.style ? { style: asked.style } : undefined)
+        // The style the questions took (AGL-4049), recorded on the site, and
+        // the AI starter they were filled in from, when they were.
+        const made = await pendingSite.create(
+          asked.style || starterChoice
+            ? {
+                ...(asked.style ? { style: asked.style } : {}),
+                ...(starterChoice ? { starter: starterChoice } : {}),
+              }
+            : undefined,
+        )
         if ('error' in made) {
           setNotice(made.error)
           if (made.address) setStep('choose')
@@ -667,7 +696,7 @@ export function AiSiteStartCard({
     } finally {
       setBusy(false)
     }
-  }, [orgId, hostId, answers, answer, freeTaste, freeCredits, noneLeft, orgSlug, host, leave, router, pickedModel, pendingSite, siteKind, tracker, clientIntake, siteInspiration])
+  }, [orgId, hostId, answers, answer, freeTaste, freeCredits, noneLeft, orgSlug, host, leave, router, pickedModel, pendingSite, siteKind, tracker, clientIntake, siteInspiration, starterChoice])
 
   // The zone's `startBlank`, with the style chosen for the starter (AGL-4049).
   // Before the site exists it creates it with the starter, and answers
@@ -1159,11 +1188,18 @@ export function AiSiteStartCard({
               </Card>
             ) : (
               <Box component="section">
+                {/* Where the answers came from (AGL-4049), on the first question. */}
+                {step === 'kind' && starter && starterAnswers ? (
+                  <Alert severity="info" variant="outlined" data-start-area="starter-note" sx={{ mb: 3 }}>
+                    {`Filled in from ${starter.displayName}. Change any answer you like.`}
+                  </Alert>
+                ) : null}
                 {step === 'kind' && <KindStep {...stepProps} />}
                 {step === 'audience' && <AudienceStep {...stepProps} />}
                 {step === 'style' && (
                   <StyleStep
                     {...stepProps}
+                    starterStyle={pickedStarterStyle}
                     inspiration={
                       siteInspiration
                         ? { limit: aiSiteInspirationLimit(freeTaste), upgradeHref: orgSlug ? aiCreditsBillingHref(orgSlug) : null }

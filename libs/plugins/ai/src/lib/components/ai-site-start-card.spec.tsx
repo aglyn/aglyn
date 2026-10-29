@@ -1957,3 +1957,143 @@ describe('the business details a start may be given (AGL-3979)', () => {
     for (const key of ['phone', 'email', 'street', 'hours', 'social', 'tagline']) expect(inputs).not.toHaveProperty(key)
   })
 })
+
+/**
+ * An AI starter picked in "Choose your starter" (AGL-4049 phase 4): the
+ * shell hands the start the starter, and the questions open filled in from
+ * the answers it carries — on the first question, every answer there to
+ * change, nothing created until Plan my site, which records the starter on
+ * the site it creates.
+ */
+describe('an AI starter fills the questions (AGL-4049)', () => {
+  const NAME = 'Restaurant & café with AI'
+  const STARTER = {
+    choice: { listingId: 'fp-starter-restaurant-ai' },
+    displayName: NAME,
+    answers: {
+      kind: 'restaurant',
+      style: { base: 'starter', ground: 'warm', fonts: 'fraunces-inter', corners: 'soft', buttons: 'rounded' },
+      fonts: 'fraunces-inter',
+      brandColors: { primary: '#8A3B12' },
+      pages: 6,
+      brief: 'a corner bistro',
+    },
+  }
+  let leave: jest.Mock
+  const pendingSite = (patch: Record<string, unknown> = {}) => ({
+    fields: <div>{'The site’s name and address'}</div>,
+    check: jest.fn(() => true),
+    dirty: true,
+    create: jest.fn(async () => ({ hostId: 'host-new', host: 'royal-styles', orgSlug: 'acme' })),
+    created: null,
+    ready: jest.fn(),
+    ...patch,
+  })
+  const restaurant = AI_SITE_KINDS.findIndex((kind) => kind.id === 'restaurant')
+  const starterCard = () =>
+    screen.getByRole('radio', { name: `${AI_SITE_KINDS[restaurant].label}: From ${NAME}. Change it if you like.` })
+
+  /** Draws the start the way the shell does after an AI pick. */
+  async function openFromStarter(site: ReturnType<typeof pendingSite>, verdict: Record<string, unknown> = { jobs: [] }) {
+    const Widget = widget()
+    mockFetch.mockResolvedValueOnce(json(verdict))
+    render(<Widget {...zoneProps({ hostId: null, host: null, leave, pendingSite: site, starter: STARTER })} />)
+    await onStep('kind')
+  }
+
+  beforeEach(() => {
+    leave = jest.fn()
+    mockPush.mockReset()
+  })
+
+  it('opens on the first question, filled in from the starter, with nothing created', async () => {
+    const site = pendingSite()
+    await openFromStarter(site)
+    // Red before: the start opened on its first step, every answer empty.
+    expect((screen.getByLabelText(/What kind of site are you creating\?/) as HTMLInputElement).value).toBe('a corner bistro')
+    expect(screen.getByText(`Filled in from ${NAME}. Change any answer you like.`)).toBeTruthy()
+    expect(site.create).not.toHaveBeenCalled()
+    expect(mockStartBlank).not.toHaveBeenCalled()
+    // The name and address are still a Back away, where they are typed.
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    expect(await screen.findByText('How do you want to start?')).toBeTruthy()
+    expect(screen.getByText('The site’s name and address')).toBeTruthy()
+  })
+
+  it('shows the starter’s style chosen on the Style step, says where it came from, and lets it change', async () => {
+    await openFromStarter(pendingSite())
+    pressNext()
+    await onStep('audience')
+    pressNext()
+    await onStep('style')
+    expect(starterCard().getAttribute('aria-checked')).toBe('true')
+    expect(pickForMe().getAttribute('aria-checked')).toBe('false')
+    // Chosen, so Next goes on without asking for one.
+    pressNext()
+    await onStep('details')
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    await onStep('style')
+    const yoga = AI_SITE_KINDS.findIndex((kind) => kind.id === 'yoga')
+    fireEvent.click(kindCard(yoga))
+    expect(kindCard(yoga).getAttribute('aria-checked')).toBe('true')
+    expect(starterCard().getAttribute('aria-checked')).toBe('false')
+  })
+
+  it('keeps the starter’s brand color and page count as answers the review shows and can change', async () => {
+    await openFromStarter(pendingSite())
+    for (const step of ['audience', 'style', 'details', 'review'] as const) {
+      pressNext()
+      await onStep(step)
+    }
+    const review = screen.getByRole('list', { name: 'Your answers' }).textContent ?? ''
+    expect(review).toMatch(/Kind of sitea corner bistro/)
+    expect(review).toMatch(new RegExp(`Style${AI_SITE_KINDS[restaurant].label}Edit`))
+    expect(review).toMatch(/Pages6/)
+    // A color the swatches do not name is shown as chosen, never as a code.
+    expect(review).toMatch(/Brand colorChosen color/)
+    expect(review).not.toContain('#8a3b12')
+    fireEvent.click(screen.getByRole('button', { name: 'Edit brand color' }))
+    await onStep('style')
+    expect(screen.getByRole('radio', { name: 'Chosen color' }).getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(screen.getByRole('radio', { name: 'Navy' }))
+    expect(screen.getByRole('radio', { name: 'Navy' }).getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('Plan my site creates the site with the starter recorded, then starts the job from the answers', async () => {
+    const site = pendingSite()
+    await openFromStarter(site)
+    for (const step of ['audience', 'style', 'details', 'review'] as const) {
+      pressNext()
+      await onStep(step)
+    }
+    mockFetch.mockResolvedValueOnce(json({ ok: true }))
+    mockFetch.mockResolvedValueOnce(json({ job: siteJob({ hostId: 'host-new' }) }))
+    fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/acme/hosts/royal-styles/ai-jobs/job-1'))
+    expect(site.create).toHaveBeenCalledWith({ style: 'restaurant', starter: { listingId: 'fp-starter-restaurant-ai' } })
+    const { inputs, brief } = JSON.parse(postCall()[1].body)
+    expect(inputs).toEqual(
+      expect.objectContaining({ businessType: 'a corner bistro', siteKind: 'restaurant', pages: 6, brand: '#8a3b12' }),
+    )
+    // Answers and a look, never the starter's pages: the job is the one the questions always start.
+    expect(brief).toBe(
+      aiSiteStartBrief({
+        ...AI_SITE_START_ANSWERS,
+        siteType: 'a corner bistro',
+        style: 'restaurant',
+        kind: 'restaurant',
+        pages: 6,
+        brand: '#8a3b12',
+      }),
+    )
+  })
+
+  it('holds a Free start to its band, the starter’s page count included', async () => {
+    await openFromStarter(pendingSite(), { jobs: [], freeTaste: true })
+    for (const step of ['audience', 'style', 'details', 'review'] as const) {
+      pressNext()
+      await onStep(step)
+    }
+    expect(screen.getByRole('list', { name: 'Your answers' }).textContent).toMatch(/Pages2/)
+  })
+})
