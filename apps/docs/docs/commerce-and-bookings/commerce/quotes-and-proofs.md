@@ -280,7 +280,8 @@ image as a picture and every other file as a download. Beside them are two choic
   record of the approval, and moves to **Approved**.
 - **Request changes.** Your customer says what should change, and can attach their own
   artwork: up to 10 files of the same kinds and size as proofs. The quote moves to
-  **Changes requested**, with their comment and files.
+  **Changes requested**, with their comment and files. Files they attach and never send
+  are deleted a day later.
 
 The latest answer is the one that counts. A customer who asked for changes can still
 approve, and one who approved can still ask for changes, which withdraws the approval.

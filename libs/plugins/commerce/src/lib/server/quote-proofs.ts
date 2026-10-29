@@ -30,6 +30,7 @@ import {
   type QuoteLinkOutcome,
   type QuotePayDeps,
 } from './quote-pay'
+import { keepSentQuoteUploads, quoteUploadKeyRef, recordPendingQuoteUpload } from './quote-upload-keys'
 import { quoteUploadCalls, type QuoteUploadCalls } from './quote-uploads'
 
 /*==========================================
@@ -57,6 +58,10 @@ import { quoteUploadCalls, type QuoteUploadCalls } from './quote-uploads'
  *
  * `v` is the edit of the quote the page showed, as Pay sends it: an answer to
  * proofs the customer has not seen is refused and the page is shown again.
+ *
+ * A file goes up before the answer does, so each one is recorded as pending
+ * under its quote from its ticket on, and the answer that sends it takes it
+ * off; one never sent is deleted a day later (`quote-upload-keys.ts`).
  *=========================================*/
 
 /** Proofs one address may load per site, per ten minutes: every thumbnail of a few visits. */
@@ -174,11 +179,15 @@ export async function handleQuoteUpload(deps: QuoteProofDeps, req: PluginApiRequ
         ...(minted.retryAfterSeconds ? { headers: { 'Retry-After': String(minted.retryAfterSeconds) } } : {}),
       }
     }
+    // Pending before a byte can arrive, so a file kept and never sent is always swept.
+    await recordPendingQuoteUpload(deps.firestore(), { hostId, quoteId, fileId: minted.file.id, nowMs: deps.now() })
     return { status: 200, body: { ticket: minted.ticket, upload: minted.upload, file: minted.file } }
   }
   if (body['action'] === 'finalize') {
     const kept = await uploads.finalize({ scope, ticket: body['ticket'], caller })
     if ('error' in kept) return { status: kept.status, body: { error: kept.error, code: kept.code } }
+    // Its day starts again from the latest file.
+    await recordPendingQuoteUpload(deps.firestore(), { hostId, quoteId, fileId: kept.file.id, nowMs: deps.now() })
     return { status: 200, body: { file: visitorUploadFileView(kept.file) } }
   }
   return { status: 400, body: { error: 'Unknown action' } }
@@ -316,9 +325,12 @@ export async function handleQuoteRespond(deps: QuoteProofDeps, req: PluginApiReq
   const now = deps.now()
   try {
     const ref = hostRef.collection('orders').doc(quoteId)
+    const pendingRef = quoteUploadKeyRef(deps.firestore(), hostId, quoteId)
     const settled = await deps.firestore().runTransaction(
       async (transaction): Promise<{ outcome: QuoteLinkOutcome; order?: CommerceModel.HostOrder; response?: CommerceModel.QuoteCustomerResponse }> => {
         const snapshot = await transaction.get(ref)
+        // The files this answer sends leave the pending record with it.
+        const pending = files.length ? await transaction.get(pendingRef) : null
         const current = snapshot.exists ? (snapshot.data() as CommerceModel.HostOrder) : null
         if (!current || !CommerceModel.isQuote(current) || !current.quote) {
           return { outcome: { status: 404, body: { error: 'We could not find that quote. Check the link you were sent.' } } }
@@ -345,6 +357,7 @@ export async function handleQuoteRespond(deps: QuoteProofDeps, req: PluginApiReq
           }
         }
         transaction.set(ref, answered.order)
+        if (pending) keepSentQuoteUploads(transaction, pending, pendingRef, files.map((file) => file.id))
         return { outcome: { status: 200, body: {} }, order: answered.order, response: answered.response }
       },
     )
