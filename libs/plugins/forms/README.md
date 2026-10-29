@@ -18,6 +18,7 @@ The plugin declares two registrars in `plugins.config.json`, plus a `site` modul
 
 - `form`: the form itself, with what happens after a submit (a message, a redirect or a reveal).
 - `formField`: a field inside a form. It ships with the form rather than with the generic elements because it reports its name and dataset mapping to the enclosing form; a field with no form around it submits nowhere.
+- `formFileUpload`: a File upload field (AGL-4098). Its files go up as they are picked, through the shared visitor upload, under a pending key its form minted, and the form sends them by id; its body is a lazily loaded chunk.
 
 Presets for both, including a composed contact section, appear in the Besigner's element picker. `FORMS_BUNDLE` is the list of entries the bundle registers.
 
@@ -27,7 +28,16 @@ Presets for both, including a composed contact section, appear in the Besigner's
 - Two zones the plugin hosts on a form's page for other plugins to fill, registered with `registerPluginZone`: `formSubmissions`, where a reader of that form's submissions is drawn, and a zone for mapping a form's fields onto a person's fields.
 - The `formSubmission` kind on the record seams: a console list source (`plugin-record-lists`) — the newest of a site's, the base the Inbox walks, one submission's document, and a site's submissions by name — a server record index (`plugin-record-index`), and a count source (`plugin-record-counts`) for how many a site received. The Inbox and a campaign's conversion report read submissions through these instead of the collection.
 
-**Ids are persisted.** `componentId` (`form`, `formField`) is stored in every screen document and does not change. `pluginId` is stored beside it and is `forms` (`BUNDLE_ID`); the renderer reads it to decide which bundles must register before first paint, so a page with no form on it does not wait for this package.
+**Requests (AGL-4098).** A form can be marked as asking for a quote (`request: { kind: 'quote' }` on its document) and can email the person a confirmation (`confirmationEmail`, on by default for a request). Its server parts:
+
+- `POST /api/forms/upload` (tenant): `ticket`, `finalize` and `remove` for a File upload field, held to the field's kinds and number, scoped to `form-file/{key}`; each key is recorded at `forms/{formId}/formUploadKeys/{key}`.
+- `POST /api/forms/submit` reads each file back from the key's scope, records `files`, `request` and `fieldData` (a field's machine value, `{name}__data`), takes the key as the submission's id, and sends the `form-confirmation` catalog email (`tenant-emails.ts`), keeping its thread as `emailThread`.
+- `POST /api/forms/submission-file` (console): `download` a file a submission names, for a member who may read the site's submissions, and `release` a deleted submission's files.
+- A `forms.submission` reader on the core's record-facts seam, through which commerce starts a quote from a request.
+- `forms-upload-sweep`, a console job that deletes the files of forms never sent, a day after their last upload.
+- `host.records.removed` deletes a removed submission's files (the API's delete and a person's erasure).
+
+**Ids are persisted.** `componentId` (`form`, `formField`, `formFileUpload`) is stored in every screen document and does not change. `pluginId` is stored beside it and is `forms` (`BUNDLE_ID`); the renderer reads it to decide which bundles must register before first paint, so a page with no form on it does not wait for this package.
 
 **What is not here.** The plugin has no server entry. The form model and the publish-time contract check live in `@aglyn/aglyn`, and the submit endpoint belongs to the tenant app, which resolves a form through `@aglyn/tenant-runtime`. They sit on the core side because the core may not import a plugin. Switching Forms off for a site is therefore not a property of this bundle: every half, including the submit route and the publish check, asks the site's plugin set about the `forms` id. Submissions are read through the zone above by whichever plugin registers a reader there.
 

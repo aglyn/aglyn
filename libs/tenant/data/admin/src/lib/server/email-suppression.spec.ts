@@ -27,9 +27,11 @@ import {
   listEmailSuppressions,
   releaseEmail,
   releaseEmailForConfirmedOptIn,
+  siteAddressSuppression,
   suppressEmail,
   suppressionCursorFrom,
   suppressionCursorTimestamp,
+  transactionalAddressSuppression,
 } from './email-suppression'
 import { fakeFirestore } from './test-firestore'
 import { readFileSync } from 'node:fs'
@@ -268,6 +270,34 @@ describe('isEmailSuppressed', () => {
   it('FAILS CLOSED on a value it cannot key', async () => {
     const firestore = fakeFirestore()
     await expect(isEmailSuppressed('nonsense', firestore)).resolves.toBe(true)
+  })
+})
+
+describe('mail the person asked for, and mail the site starts (AGL-4098)', () => {
+  const HOST = 'host-1'
+  const hostList = `hosts/${HOST}/suppressions`
+
+  it('refuses a transactional send only for a bounce or a complaint', async () => {
+    const firestore = fakeFirestore()
+    await expect(transactionalAddressSuppression(ADDRESS, { firestore })).resolves.toBeNull()
+    await suppressEmail({ email: ADDRESS, reason: 'complaint', firestore })
+    await expect(transactionalAddressSuppression(ADDRESS, { firestore })).resolves.toBe('suppressed-platform')
+  })
+
+  it('sends a transactional email to an address that unsubscribed from the site, where a site-started one is refused', async () => {
+    const firestore = fakeFirestore({
+      [hostList]: { [KEY]: { email: ADDRESS, reason: 'unsubscribe' } },
+    })
+    // A quote they asked for, a form confirmation: the unsubscribe was about the newsletter.
+    await expect(transactionalAddressSuppression(ADDRESS, { firestore })).resolves.toBeNull()
+    // A message the site starts on its own still honors it.
+    await expect(siteAddressSuppression(HOST, ADDRESS, { firestore })).resolves.toBe('suppressed-host')
+  })
+
+  it('fails closed on a value it cannot key', async () => {
+    await expect(transactionalAddressSuppression('nonsense', { firestore: fakeFirestore() })).resolves.toBe(
+      'suppressed-platform',
+    )
   })
 })
 

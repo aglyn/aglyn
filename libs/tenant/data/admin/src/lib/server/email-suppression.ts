@@ -755,13 +755,16 @@ export async function isEmailSuppressed(
 }
 
 /**
- * Whether a site may write to one address, person to person (AGL-4097):
- * `suppressed-platform` when it bounced or reported mail as spam anywhere,
- * `suppressed-host` when it unsubscribed from this site or any site of its
- * consent group, else null. Both lists, the same two the inbox's reply reads
- * (`addressSuppression` in the inbox plugin), shared from here so a plugin
- * that sends a customer one message, such as a quote, asks the same question
- * without importing another plugin.
+ * Whether a site may write to one address, person to person, about something
+ * the site starts (AGL-4097): `suppressed-platform` when it bounced or
+ * reported mail as spam anywhere, `suppressed-host` when it unsubscribed from
+ * this site or any site of its consent group, else null. Both lists, the same
+ * two the inbox's reply reads (`addressSuppression` in the inbox plugin).
+ *
+ * NOT for mail the person asked for. A quote they requested, the confirmation
+ * of a form they just sent, a receipt: those ask
+ * {@link transactionalAddressSuppression}, because unsubscribing from a
+ * site's newsletter must never stop the site answering a request (AGL-4098).
  *
  * Fails closed like {@link isEmailSuppressed}: an address it cannot key, or a
  * platform list it cannot read, is `suppressed-platform`.
@@ -785,6 +788,31 @@ export async function siteAddressSuppression(
     hostIds.map((id) => db.collection('hosts').doc(id).collection('suppressions').doc(key).get()),
   )
   return docs.some((doc: { exists: boolean }) => doc.exists) ? 'suppressed-host' : null
+}
+
+/**
+ * Whether a site may send one address something THEY ASKED FOR (AGL-4098):
+ * a quote they requested, the confirmation of a form they just sent.
+ * `suppressed-platform` when the address bounced for good or reported mail as
+ * spam (the platform list, {@link isEmailSuppressed}), else null.
+ *
+ * The site's own list is deliberately NOT read. It holds marketing
+ * unsubscribes, and an unsubscribe is a preference about a site's newsletter,
+ * not a request to stop being answered — the reasoning the member password
+ * reset already follows (`membership-recover.ts` in commerce), and the reason
+ * an order receipt is never refused for one. A bounce or a complaint is a fact
+ * about the mailbox and the sending domain every site shares, so it still
+ * refuses.
+ *
+ * Fails closed like {@link isEmailSuppressed}: an address it cannot key, or a
+ * list it cannot read, is `suppressed-platform`.
+ */
+export async function transactionalAddressSuppression(
+  email: string,
+  options: { firestore?: any } = {},
+): Promise<'suppressed-platform' | null> {
+  if (!emailSuppressionKey(email)) return 'suppressed-platform'
+  return (await isEmailSuppressed(email, options.firestore)) ? 'suppressed-platform' : null
 }
 
 /**

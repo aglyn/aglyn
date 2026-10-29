@@ -481,3 +481,59 @@ export function QuoteProofsSection(props: QuoteProofsSectionProps) {
 QuoteProofsSection.displayName = 'QuoteProofsSection'
 
 export default QuoteProofsSection
+
+/**
+ * The files a quote's request came with (AGL-4098), as the customer's files:
+ * a picture for an image, a chip naming anything else, each downloaded
+ * through the quote's own route. They stay where the request keeps them, so a
+ * request deleted from the Inbox takes them with it.
+ */
+export function QuoteRequestFilesSection(props: { hostId: string; quoteId: string; quote: CommerceModel.HostOrder }) {
+  const { hostId, quoteId, quote } = props
+  const { data: user } = useUser()
+  const { enqueueSnackbar } = useSnackbar()
+  const request = quote.quote?.request
+  const files = CommerceModel.quoteRequestFileViews(quote.quote?.requestFiles)
+  const download = useCallback(
+    async (file: ListedFile) => {
+      const blob = await fetchQuoteFile(user, { hostId, quoteId, fileId: file.id })
+      if (!blob) {
+        return void enqueueSnackbar('The file could not be downloaded. The request may have been deleted from the Inbox.', {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      }
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = file.name
+      link.click()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+    },
+    [user, hostId, quoteId, enqueueSnackbar],
+  )
+  if (!request || !user) return null
+  const when = request.receivedAtMs ? ` on ${dateTime(request.receivedAtMs)}` : ''
+  return (
+    <Stack spacing={1}>
+      <Typography variant="subtitle2">{'From the request'}</Typography>
+      <Typography variant="body2" color="text.secondary">
+        {`Sent through “${request.formName}”${when}.` + (files.length ? ' The files they sent:' : ' They sent no files.')}
+      </Typography>
+      {files.length ? (
+        <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
+          {files.map((file) => (
+            <QuoteFileTile
+              key={file.id}
+              user={user}
+              hostId={hostId}
+              quoteId={quoteId}
+              file={file}
+              onDownload={(picked) => void download(picked)}
+            />
+          ))}
+        </Stack>
+      ) : null}
+    </Stack>
+  )
+}

@@ -5,8 +5,10 @@
     "budget": 27648
   },
   "forms": {
-    "baseline": 20665,
-    "budget": 26624
+    "baseline": 28718,
+    "budget": 31744,
+    "headroom": 1.1,
+    "note": "Re-baselined 2026-10-29 at 28.0 KB eager for the File upload field (AGL-4098): its schema, presets and the shell that registers it must load with the bundle so the element picker and a page can place it, while its body, with the upload code, is a lazy chunk (`form-file-upload-body.tsx`); the Form gained the pending submission key its files go up under. Was 20.2 KB at the 2026-10-07 baseline against a 26.0 KB budget. Headroom is cut to 10% so the next growth is looked at, not absorbed."
   },
   "bookings": {
     "baseline": 22576,

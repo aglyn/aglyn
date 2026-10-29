@@ -16,6 +16,7 @@
  */
 
 import type { HostProduct, ProductType } from './commerce'
+import type { QuoteRequestRef } from './commerce-quote-request'
 import { liftLegacyProduct, variantHasPrice } from './commerce'
 import type {
   HostOrder,
@@ -261,6 +262,15 @@ export interface OrderQuote {
   emailThread?: QuoteEmailThread | null
   /** Every time it was emailed to the customer, oldest first (AGL-4097). */
   sends?: QuoteSendRecord[]
+  /**
+   * The request it was started from (AGL-4098): a "Request a quote" form's
+   * submission, by id. Its files are listed on the quote as the customer's
+   * ({@link requestFiles}), and its confirmation's conversation is the
+   * quote's {@link emailThread} until the quote is first sent.
+   */
+  request?: QuoteRequestRef | null
+  /** The request's files, where the request keeps them; downloaded through the quote's own route. */
+  requestFiles?: QuoteResponseFile[]
   /** When the customer paid it. */
   paidAtMs?: number
   /** Payments the quote could not take; see {@link QuoteUnmatchedPayment}. */

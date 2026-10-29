@@ -1327,6 +1327,72 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     },
     presets: [],
   },
+  formFileUpload: {
+    pluginId: 'forms',
+    kind: 'element',
+    category: 'Forms',
+    displayName: 'File upload',
+    summary:
+      'Lets a person attach files to the form, such as a logo or a sketch.',
+    acceptsChildren: false,
+    propsSchema: {
+      type: 'object',
+      properties: {
+        label: {
+          type: 'string',
+          maxLength: 200,
+        },
+        name: {
+          type: 'string',
+          maxLength: 200,
+        },
+        helperText: {
+          type: 'string',
+          maxLength: 200,
+        },
+        required: {
+          type: 'boolean',
+        },
+        kinds: {
+          type: 'string',
+          enum: [
+            'images,pdf,design',
+            'images',
+            'pdf',
+            'design',
+            'images,pdf',
+            'images,design',
+            'pdf,design',
+          ],
+        },
+        maxFiles: {
+          type: 'string',
+          enum: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'],
+        },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+    propRoles: {
+      label: 'text',
+      name: 'text',
+      helperText: 'text',
+    },
+    propFields: {
+      label: 'text-field',
+      name: 'text-field',
+      helperText: 'text-field',
+      required: 'switch',
+      kinds: 'select',
+      maxFiles: 'select',
+    },
+    textLimits: {
+      label: 200,
+      name: 200,
+      helperText: 200,
+    },
+    presets: ['File upload'],
+  },
   gate: {
     pluginId: 'commerce',
     kind: 'element',
@@ -4857,6 +4923,47 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       pageSize: 200,
     },
     presets: ['Product grid', 'Shop catalog'],
+  },
+  'product-options-field': {
+    pluginId: 'commerce',
+    kind: 'element',
+    category: 'Forms',
+    displayName: 'Product and options',
+    summary:
+      'A form field: the person picks one of your products and its options, such as size and finish.',
+    acceptsChildren: false,
+    propsSchema: {
+      type: 'object',
+      properties: {
+        label: {
+          type: 'string',
+          maxLength: 200,
+        },
+        name: {
+          type: 'string',
+          maxLength: 200,
+        },
+        required: {
+          type: 'boolean',
+        },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+    propRoles: {
+      label: 'text',
+      name: 'text',
+    },
+    propFields: {
+      label: 'text-field',
+      name: 'text-field',
+      required: 'switch',
+    },
+    textLimits: {
+      label: 200,
+      name: 200,
+    },
+    presets: ['Product and options'],
   },
   'product-reviews': {
     pluginId: 'commerce',

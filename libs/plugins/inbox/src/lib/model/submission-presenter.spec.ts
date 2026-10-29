@@ -28,6 +28,10 @@
 import {
   initialsOf,
   relativeTime,
+  submissionFiles,
+  submissionFileSize,
+  submissionRequestKind,
+  submissionRequestLabel,
   routingChips,
   senderHue,
   submissionSender,
@@ -205,5 +209,28 @@ describe('routingChips', () => {
   it('still reports a refusal with no dataset name or reasons', () => {
     const chips = routingChips({ datasetRefused: { id: 'd1' } })
     expect(chips[1].label).toBe('Not added to the dataset')
+  })
+})
+
+describe('a request’s chip and its files (AGL-4098)', () => {
+  it('marks a quote request, and nothing else', () => {
+    expect(submissionRequestLabel({ kind: 'quote' })).toBe('Quote request')
+    expect(submissionRequestLabel(undefined)).toBeNull()
+    expect(submissionRequestLabel({ kind: 'other' })).toBeNull()
+    expect(submissionRequestKind({ kind: 'quote' })).toBe('quote')
+    expect(submissionRequestKind({ kind: 'Not A Kind!' })).toBeNull()
+  })
+
+  it('lists the files a row names, read defensively, with their sizes', () => {
+    expect(
+      submissionFiles([
+        { id: 'f1', field: 'artwork', name: 'logo.ai', contentType: 'application/illustrator', size: 2_621_440 },
+        { id: '../escape', name: 'x' },
+        { id: 'f2' },
+      ]),
+    ).toEqual([{ id: 'f1', field: 'artwork', name: 'logo.ai', contentType: 'application/illustrator', size: 2_621_440 }])
+    expect(submissionFiles(undefined)).toEqual([])
+    expect(submissionFileSize(2_621_440)).toBe('2.5 MB')
+    expect(submissionFileSize(900)).toBe('1 KB')
   })
 })

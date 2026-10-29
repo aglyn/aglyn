@@ -403,6 +403,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#manage-events': 'The console Events page lists your site\'s events, newest start first.',
   },
   forms: {
+    '#after-someone-sends-it': 'Two switches decide what follows a submission. This form asks for a quote marks the form as a request.',
     '#every-sites-inbox-at-once': 'Your organization has an Inbox of its own, beside CRM and Marketing, for the people who span the whole organization — owners, admins, and members with access to every site.',
     '#field-types': 'A field is not one element but a few, each one you can select, move and style on its own.',
     '#filter-the-inbox': 'Every Inbox table filters and searches through its toolbar, and every filter and the search reach everything the site holds, not only the page on screen: the table asks for the matches, newest first, and paging…',

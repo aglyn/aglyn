@@ -191,6 +191,8 @@ in the element picker's **Forms** group:
 | **Rating** | Stars a visitor picks. | **Field name**, **Maps to schema field**, **Stars** (how many to show) |
 | **Date Picker** | A date a visitor picks from a calendar, or types. | **Field name**, **Maps to schema field**, **Required?**, **No past dates?**, **No future dates?**, **Earliest date**, **Latest date**, **Start on today?**, **Size**, **Full width?**, **Accessible label** |
 | **Time Picker** | A time of day a visitor picks from a clock, or types. | **Field name**, **Maps to schema field**, **Required?**, **Minutes in steps of** (1, 5, 10, 15 or 30), **Earliest time**, **Latest time**, **Clock** (Automatic, 12-hour or 24-hour), **Size**, **Full width?**, **Accessible label** |
+| **File upload** | Files a visitor attaches, such as a logo or a sketch. See [File upload](#file-upload). | **Label**, **Field name**, **Hint**, **Required?**, **Kinds of file**, **Most files** |
+| **Product and options** | A product from your store and its options, picked from a list. Offered when [Commerce](../../commerce-and-bookings/commerce/quotes-and-proofs.md#a-request-a-quote-form) is on. | **Label**, **Field name**, **Product** (one product, or leave it empty to let the visitor pick), **Required?** |
 
 What each one sends:
 
@@ -203,6 +205,8 @@ What each one sends:
 | **Rating** | The number of stars (e.g. `4`) |
 | **Date Picker** | The day as year-month-day (e.g. `2026-10-15`), whatever language the visitor reads it in |
 | **Time Picker** | The time in 24-hour form (e.g. `14:30`), even when the visitor sees 2:30 PM |
+| **File upload** | The names of the attached files (e.g. `logo.ai, sketch.pdf`); the files themselves arrive with the submission |
+| **Product and options** | The product and its options in words (e.g. `Vinyl banner — 3 × 6 ft / Matte`) |
 
 The **Field name** is the key the answer is stored under, so two inputs in one form need
 two names. The exception is a multi-choice question: give several Checkboxes the **same
@@ -217,6 +221,30 @@ under; see [Where submissions go](#where-submissions-go).
 
 Forms built before these elements used a single all-in-one **Form Field**. Those pages
 keep working and were converted to the separate elements, so you edit them the same way.
+
+### File upload {#file-upload}
+
+A **File upload** field lets a visitor attach files to the form: a logo with a quote
+request, a photo of the job, a sketch. Drop it into a Form from the element picker's
+**Forms** group, and set:
+
+- **Label** and **Hint** — the question above the button and a line under it saying what
+  to attach.
+- **Kinds of file** — images (PNG, JPEG, WebP, GIF), PDFs, design files (SVG, AI, EPS, PSD,
+  TIFF), or a mix. A file of another kind is turned away before it is sent.
+- **Most files** — from 1 to 10. Each file can be up to 25 MB.
+- **Required?** — the form can't be sent until at least one file is attached.
+
+Files go up as soon as the visitor picks them; each shows that it is uploading, then its
+size, with **Remove** beside it. The form waits for every file to finish before it sends.
+Each file is checked: its contents must match its kind, an SVG has any script taken out,
+and a file that fails is refused with a reason. Files are private to your site: they open
+only from the submission in your Inbox, for the people who can read your Inbox, and
+never at a public address.
+
+A File upload field works in a form you saved on the Forms page (a form placed from the
+Forms page always is). Files attached to a form nobody sends are deleted a day later.
+Deleting a submission, or erasing the person who sent it, deletes its files too.
 
 ### Labels and placeholders
 
@@ -474,6 +502,19 @@ be one without the other:
 
 Each campaign is a link to its page.
 
+#### Files and quote requests {#files-and-quote-requests}
+
+A submission that came with files lists them under its fields, each with its size. Press
+one to download it. Pictures and PDFs open the same way: the file is saved to your
+computer rather than shown inside the console.
+
+A submission from a form that [asks for a quote](#after-someone-sends-it) carries a
+**Quote request** chip, in the list and when you open it. With
+[Commerce](../../commerce-and-bookings/commerce/quotes-and-proofs.md#start-a-quote-from-a-request)
+on, an open quote request offers **Start a quote**: the quote editor opens with the
+person, the product they picked, their message as the notes and their files, ready for
+you to price and send.
+
 #### Where this one went {#where-this-one-went}
 
 Open a submission and, under its fields, chips report what actually happened to it:
@@ -621,6 +662,31 @@ so make the form say plainly what the person is signing up for. A sign-up form s
 For a full walkthrough — the form, a live audience of everyone who submits it, and a
 reusable band that places it on any page — see
 [Build a newsletter sign-up band](../../guides/newsletter-sign-up-band.md).
+
+#### After someone sends it {#after-someone-sends-it}
+
+Two switches decide what follows a submission.
+
+**This form asks for a quote** marks the form as a request. Every submission arrives in
+the Inbox with a **Quote request** chip and any files attached, the person is added to
+Contacts as with any form, and your managers' alert says "New quote request". With
+Commerce on, you can [start a quote](../../commerce-and-bookings/commerce/quotes-and-proofs.md#start-a-quote-from-a-request)
+from the submission in one step. Add a **Product and options** field to let the person
+pick what they want priced, and a [File upload](#file-upload) field for their artwork.
+
+**Email the person a confirmation** sends the address they gave a copy of what they
+sent: their answers under your labels, the names of their files, what happens next and
+how to reach you. It is off for a form until you turn it on, and on by default for a form
+that asks for a quote. It uses your site's email style, and you can redesign it under
+**Emails → Form confirmation**. The email comes from your site, replies go to your
+site's contact email, and a quote you send them later arrives in the same conversation
+in their inbox. Links typed into an answer are left out of the copy. It needs an email
+field in the design; a submission with no address gets no confirmation.
+
+The confirmation is part of answering what they asked for, so it still goes to an address
+that unsubscribed from your site's newsletter. It is not sent to an address that bounced
+or reported your email as spam, and one address gets at most three confirmations an hour
+from your site.
 
 #### Versions {#form-versions}
 

@@ -56,6 +56,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react'
@@ -66,6 +67,14 @@ import {
   type StoredFormNode,
 } from '../model/form-field-elements'
 import { generatePresetId } from '../utils/generate-preset-id'
+import {
+  FORM_FILE_INPUT,
+  FORM_FILES_BODY_KEY,
+  FORM_FILES_REFUSAL_CODE,
+  formFileRefsFromInputs,
+  mintFormUploadKey,
+} from '../model/form-request'
+import { FormUploadContext, type FormUploadContextValue } from './form-upload-context'
 
 /*
  * The heading and the stack this block's form sits inside are mui elements,
@@ -405,6 +414,8 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
   }, [hostId, formId, suppressNavigation])
   /** The read-only lockdown's own words (AGL-1511); never a hardcoded line. */
   const [pausedMessage, setPausedMessage] = useState('')
+  /** What the server said about the files sent (AGL-4098), shown in place of the generic failure. */
+  const [filesMessage, setFilesMessage] = useState('')
   /** The abuse ceiling's visitor notice (AGL-1666); see `unavailable` below. */
   const [unavailable, setUnavailable] =
     useState<FormUnavailableNotice | null>(null)
@@ -444,6 +455,21 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
     formRef,
     disclosure?.fieldName,
   )
+  /*
+   * THE PENDING SUBMISSION KEY its File upload fields send files under
+   * (AGL-4098). Minted on first use, in the browser, once per open form: a
+   * form with no file field never mints one, and the files a visitor attached
+   * stay attached to this form until it is sent.
+   */
+  const uploadKeyRef = useRef('')
+  const uploads = useMemo<FormUploadContextValue>(
+    () => ({
+      formId,
+      uploadKey: () => (uploadKeyRef.current ||= mintFormUploadKey()),
+      live: Boolean(hostId) && !suppressNavigation,
+    }),
+    [formId, hostId, suppressNavigation],
+  )
 
   const handleSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
@@ -453,10 +479,16 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
       const fields: Record<string, string> = {}
       let website = ''
       let consentGroup = ''
+      const fileInputs: string[] = []
       for (const [key, value] of data.entries()) {
         if (typeof value !== 'string') continue
         if (key === 'website') {
           website = value
+          continue
+        }
+        // A kept file a File upload field posted (AGL-4098), as `field:id`.
+        if (key === FORM_FILE_INPUT) {
+          fileInputs.push(value)
           continue
         }
         // The key the consent field posted beside the sentence it rendered.
@@ -499,6 +531,16 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
               : {}),
             path: window.location.pathname,
             fields,
+            // The files sent before the form, by id under its pending key
+            // (AGL-4098); the server reads each back and refuses one it lacks.
+            ...(fileInputs.length && uploadKeyRef.current
+              ? {
+                  [FORM_FILES_BODY_KEY]: {
+                    key: uploadKeyRef.current,
+                    refs: formFileRefsFromInputs(fileInputs),
+                  },
+                }
+              : {}),
             website,
             // Only when the consent field rendered the site's consent-group
             // sentence; the route pools the opt-in on nothing else.
@@ -613,7 +655,15 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
             setStatus('unavailable')
             return
           }
+          // A file that did not arrive, or no longer can be sent (AGL-4098):
+          // the server's own sentence says which and what to do.
+          if (body?.code === FORM_FILES_REFUSAL_CODE && typeof body?.error === 'string') {
+            setFilesMessage(body.error)
+            setStatus('error')
+            return
+          }
         }
+        setFilesMessage('')
         setStatus(response.ok ? 'sent' : 'error')
       } catch {
         setStatus('error')
@@ -676,7 +726,9 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
         <style>{`${revealSelector}{display:none !important}`}</style>
       ) : null}
       <FormConsentDisclosureContext.Provider value={disclosure}>
-        {children}
+        <FormUploadContext.Provider value={uploads}>
+          {children}
+        </FormUploadContext.Provider>
       </FormConsentDisclosureContext.Provider>
       {/*
         The sentence for a form built from MUI's form elements: shown when the
@@ -704,7 +756,7 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
       />
       {status === 'error' ? (
         <Alert severity="error">
-          {'Something went wrong — please try again.'}
+          {filesMessage || 'Something went wrong — please try again.'}
         </Alert>
       ) : null}
       {status === 'paused' ? (

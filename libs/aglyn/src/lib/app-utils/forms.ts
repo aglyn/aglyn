@@ -36,6 +36,7 @@ import { containerMembershipValue } from './container-membership'
 import type { PlacementKind } from './compose-reusable-components'
 import { utcMonthKey } from './utc-month'
 import { displayNameSearchFields, nameSearchTokens } from './name-search'
+import { readVisitorUploadKinds, VISITOR_UPLOAD_MAX_FILES, type VisitorUploadKind } from './visitor-upload'
 
 /**
  * The `componentId` of the node that RENDERS a form, and of the node that
@@ -134,7 +135,12 @@ export function formPropsOnBind(
  */
 export const FORMS_MAX_PER_HOST = 1000
 
-/** Field types a `FormField` node offers; the form declares the same set. */
+/**
+ * Field types a form declares: what a `FormField` node offers, MUI's form
+ * elements, and the answer elements other plugins draw inside a form
+ * ({@link FORM_PLUGIN_ANSWER_ELEMENTS}): `file`, files the person attaches,
+ * and `product`, a product and its options picked from the site's catalog.
+ */
 export type FormFieldType =
   | 'text'
   | 'email'
@@ -145,6 +151,8 @@ export type FormFieldType =
   | 'rating'
   | 'date'
   | 'time'
+  | 'file'
+  | 'product'
 
 /**
  * What a declared field MEANS, where the meaning is one the platform reads.
@@ -168,6 +176,14 @@ export interface FormFieldDecl {
   /** Stable dataset model fieldId this value is stored under (AGL-556). */
   datasetFieldId?: string
   role?: FormFieldRole
+  /**
+   * For a `file` field: the kinds of file it takes (every kind when absent)
+   * and how many, at most {@link VISITOR_UPLOAD_MAX_FILES}. Read off the
+   * File upload element, so the upload route holds a visitor to what the
+   * author set (AGL-4098).
+   */
+  fileKinds?: VisitorUploadKind[]
+  maxFiles?: number
   /**
    * The custom contact field this value is saved under (AGL-2601) — a
    * `ContactFieldDefinition.key` in the org that owns the site.
@@ -219,6 +235,21 @@ export interface FormDocument<N = AglynNodeSchema> {
    * records the opt-in and makes the person at least a subscriber.
    */
   optInOnSubmit?: boolean
+  /**
+   * What the form asks for, when it is a request a business answers with
+   * something of its own (AGL-4098): `{ kind: 'quote' }` for a "Request a
+   * quote" form. Its submissions carry the same `request`, the Inbox marks
+   * them, and a plugin that answers that kind of request (a quote) offers to
+   * start one from the submission. Set on the form's page, never inferred.
+   */
+  request?: FormRequest | null
+  /**
+   * Whether the person who sends the form is emailed a confirmation of what
+   * they sent (AGL-4098). Absent takes the default for the form's kind
+   * ({@link formSendsConfirmation}): on for a request, off for every other
+   * form, so no form that existed before this setting starts emailing.
+   */
+  confirmationEmail?: boolean
   routing?: FormRouting
   legacyMatch?: FormLegacyMatch
   stats?: FormStats
@@ -286,6 +317,34 @@ export interface FormDocument<N = AglynNodeSchema> {
    * `versionId` key for components and this document is governed the same way.
    */
   versionId?: string
+}
+
+/** What a form asks for (AGL-4098); the one kind today is a quote. */
+export type FormRequestKind = 'quote'
+
+export interface FormRequest {
+  kind: FormRequestKind
+}
+
+export const FORM_REQUEST_KIND_LABELS: Readonly<Record<FormRequestKind, string>> = {
+  quote: 'Quote request',
+}
+
+/** The form's request, read off a stored document, or null for an ordinary form. */
+export function readFormRequest(form: { request?: unknown } | null | undefined): FormRequest | null {
+  const request = form?.request as { kind?: unknown } | null | undefined
+  return request?.kind === 'quote' ? { kind: 'quote' } : null
+}
+
+/**
+ * Whether a form emails the person who sends it a confirmation: what the
+ * form says, else on for a request and off for every other form.
+ */
+export function formSendsConfirmation(
+  form: { confirmationEmail?: unknown; request?: unknown } | null | undefined,
+): boolean {
+  if (typeof form?.confirmationEmail === 'boolean') return form.confirmationEmail
+  return readFormRequest(form) !== null
 }
 
 /**
@@ -944,6 +1003,8 @@ const FORM_FIELD_TYPES = new Set<FormFieldType>([
   'rating',
   'date',
   'time',
+  'file',
+  'product',
 ])
 
 /**
@@ -987,6 +1048,45 @@ export const FORM_INPUT_ELEMENT_IDS = {
   choiceLabel: 'muiFormControlLabel',
 } as const
 
+/**
+ * Answer elements OTHER plugins draw inside a form, by id, with the field type
+ * each declares (AGL-4098). Restated here for the reason MUI's are above: the
+ * foundation layer reads a form's fields off its nodes and may import no
+ * plugin. Each carries its own `name`, `label` and `required` props, and posts
+ * plain strings under its name like any input:
+ *
+ *  - `formFileUpload` (forms): files the person attaches, uploaded before the
+ *    form is sent; it posts their names, and the form sends the files by id.
+ *    Its `kinds` and `maxFiles` are declared with it.
+ *  - `product-options-field` (commerce): a product from the site's catalog and
+ *    its options; it posts a readable line under its name and a machine value
+ *    beside it ({@link FORM_FIELD_DATA_SUFFIX}).
+ *
+ * Persisted ids; never rename. Deliberately apart from
+ * {@link FORM_INPUT_ELEMENT_IDS}, which is MUI's set and what a generated
+ * form is built from.
+ */
+export const FORM_PLUGIN_ANSWER_ELEMENTS: Readonly<Record<string, FormFieldType>> = {
+  formFileUpload: 'file',
+  'product-options-field': 'product',
+}
+
+/**
+ * The suffix of a field that carries a machine value for the field it is
+ * named after (AGL-4098): `product__data` beside `product`. The form posts it
+ * like any field; the submit route keeps it apart from the answers a person
+ * reads (`fieldData`), so the Inbox, the notification email and an export
+ * show the readable line, and the plugin that wrote the value reads it back.
+ */
+export const FORM_FIELD_DATA_SUFFIX = '__data'
+
+/** The field a machine value belongs to, or null when the key is an ordinary answer. */
+export function formFieldDataOwner(key: string): string | null {
+  if (!key.endsWith(FORM_FIELD_DATA_SUFFIX)) return null
+  const owner = key.slice(0, -FORM_FIELD_DATA_SUFFIX.length)
+  return owner && !owner.startsWith('__') ? owner : null
+}
+
 const ANSWER_ELEMENT_IDS = new Set<string>([
   FORM_INPUT_ELEMENT_IDS.input,
   FORM_INPUT_ELEMENT_IDS.select,
@@ -995,7 +1095,13 @@ const ANSWER_ELEMENT_IDS = new Set<string>([
   FORM_INPUT_ELEMENT_IDS.rating,
   FORM_INPUT_ELEMENT_IDS.datePicker,
   FORM_INPUT_ELEMENT_IDS.timePicker,
+  ...Object.keys(FORM_PLUGIN_ANSWER_ELEMENTS),
 ])
+
+/** Whether a node is one of the answer elements another plugin draws. */
+function isPluginAnswerElement(node: AglynNodeSchema | undefined | null): boolean {
+  return Object.prototype.hasOwnProperty.call(FORM_PLUGIN_ANSWER_ELEMENTS, String(node?.componentId ?? ''))
+}
 
 /** Whether a node carries an answer the form submits. */
 export function isFormInputNode(
@@ -1035,6 +1141,7 @@ export function formInputType(node: AglynNodeSchema | undefined | null): FormFie
     case FORM_INPUT_ELEMENT_IDS.timePicker:
       return 'time'
     default: {
+      if (isPluginAnswerElement(node)) return FORM_PLUGIN_ANSWER_ELEMENTS[String(node?.componentId)]
       const raw = String(props['fieldType'] ?? 'text') as FormFieldType
       return FORM_FIELD_TYPES.has(raw) ? raw : 'text'
     }
@@ -1058,6 +1165,10 @@ function answerElementLabel(
 ): string {
   const node = nodes[id]
   const props = (node?.props ?? {}) as Record<string, unknown>
+  // An element another plugin draws carries its own words.
+  if (isPluginAnswerElement(node) && String(props['label'] ?? '').trim()) {
+    return String(props['label']).trim()
+  }
   // A Choice Label names its own box; a Form Label in the Form Control
   // around a GROUP of boxes names the question, and wins.
   let choiceWords = ''
@@ -1255,9 +1366,10 @@ export function formFieldDeclsFromNodes(
       ? String(props['label'] ?? '').trim()
       : answerElementLabel(nodes as Record<NodeId, AglynNodeSchema | undefined>, id)
     const datasetFieldId = String(props['datasetFieldId'] ?? '').trim()
+    const fieldType = formInputType(node)
     const declaration: FormFieldDecl = {
       fieldName,
-      fieldType: formInputType(node),
+      fieldType,
       ...(label ? { label } : {}),
       ...((isFormField
         ? props['required'] === true
@@ -1266,11 +1378,28 @@ export function formFieldDeclsFromNodes(
         : {}),
       ...(options.length ? { options } : {}),
       ...(datasetFieldId ? { datasetFieldId } : {}),
+      ...(fieldType === 'file' && !isFormField ? formFileFieldLimits(props) : {}),
     }
     byName.set(fieldName, declaration)
     declarations.push(declaration)
   }
   return declarations
+}
+
+/**
+ * What a File upload element takes, as its declaration carries it: the kinds
+ * the author picked (every kind when none) and at most how many files, from 1
+ * to {@link VISITOR_UPLOAD_MAX_FILES} (that many when unset).
+ */
+export function formFileFieldLimits(props: Record<string, unknown>): {
+  fileKinds: VisitorUploadKind[]
+  maxFiles: number
+} {
+  const max = Math.floor(Number(props['maxFiles']))
+  return {
+    fileKinds: readVisitorUploadKinds(props['kinds']),
+    maxFiles: Number.isFinite(max) && max >= 1 ? Math.min(max, VISITOR_UPLOAD_MAX_FILES) : VISITOR_UPLOAD_MAX_FILES,
+  }
 }
 
 /** One `form` node found by the discovery scan, with where it was found. */

@@ -106,17 +106,63 @@ export const VISITOR_UPLOAD_TYPES: readonly VisitorUploadType[] = [
 /** Types a browser sends when it does not know; the name decides then. */
 const UNKNOWN_TYPES = new Set(['', 'application/octet-stream', 'binary/octet-stream', 'application/unknown'])
 
-/** `PNG, JPEG, WebP, GIF, PDF, SVG, AI, EPS, PSD or TIFF`. */
-export function describeVisitorUploadTypes(): string {
-  const labels = VISITOR_UPLOAD_TYPES.map((type) => type.label)
+/**
+ * The kinds of file a business can ask for, as a person picks them: photos and
+ * pictures, PDFs, and design files. Each kind is a set of the types above, so
+ * a field that takes only PDFs takes only `application/pdf` (AGL-4098).
+ */
+export type VisitorUploadKind = 'images' | 'pdf' | 'design'
+
+export const VISITOR_UPLOAD_KINDS: readonly VisitorUploadKind[] = ['images', 'pdf', 'design']
+
+/** What a person calls each kind. */
+export const VISITOR_UPLOAD_KIND_LABELS: Readonly<Record<VisitorUploadKind, string>> = {
+  images: 'Images (PNG, JPEG, WebP, GIF)',
+  pdf: 'PDF',
+  design: 'Design files (SVG, AI, EPS, PSD, TIFF)',
+}
+
+const KIND_TYPES: Readonly<Record<VisitorUploadKind, readonly string[]>> = {
+  images: ['image/png', 'image/jpeg', 'image/webp', 'image/gif'],
+  pdf: ['application/pdf'],
+  design: ['image/svg+xml', 'application/illustrator', 'application/postscript', 'image/vnd.adobe.photoshop', 'image/tiff'],
+}
+
+/** The kinds a stored list names, in order and without repeats; empty or unreadable is every kind. */
+export function readVisitorUploadKinds(raw: unknown): VisitorUploadKind[] {
+  const listed = Array.isArray(raw) ? raw : typeof raw === 'string' ? raw.split(',') : []
+  const kinds = VISITOR_UPLOAD_KINDS.filter((kind) => listed.some((entry) => String(entry).trim() === kind))
+  return kinds.length ? kinds : [...VISITOR_UPLOAD_KINDS]
+}
+
+/** The types the kinds take, or every type when none are named. */
+function typesOfKinds(kinds: readonly VisitorUploadKind[] | undefined): readonly VisitorUploadType[] {
+  if (!kinds?.length) return VISITOR_UPLOAD_TYPES
+  const wanted = new Set(kinds.flatMap((kind) => KIND_TYPES[kind] ?? []))
+  return VISITOR_UPLOAD_TYPES.filter((type) => wanted.has(type.contentType))
+}
+
+/** Whether a stored type is one of the kinds; true for any type when no kinds are named. */
+export function visitorUploadTypeInKinds(contentType: string, kinds?: readonly VisitorUploadKind[]): boolean {
+  return typesOfKinds(kinds).some((type) => type.contentType === contentType)
+}
+
+/** `PNG, JPEG, WebP, GIF, PDF, SVG, AI, EPS, PSD or TIFF`, or the labels of the kinds named. */
+export function describeVisitorUploadTypes(kinds?: readonly VisitorUploadKind[]): string {
+  const labels = typesOfKinds(kinds).map((type) => type.label)
+  if (labels.length === 1) return labels[0]
   return `${labels.slice(0, -1).join(', ')} or ${labels[labels.length - 1]}`
 }
 
+/** The file picker's `accept` for the kinds named: every extension and type they take. */
+export function visitorUploadAccept(kinds?: readonly VisitorUploadKind[]): string {
+  return typesOfKinds(kinds)
+    .flatMap((type) => [...type.extensions, type.contentType])
+    .join(',')
+}
+
 /** The file picker's `accept`: every extension and type taken. */
-export const VISITOR_UPLOAD_ACCEPT = VISITOR_UPLOAD_TYPES.flatMap((type) => [
-  ...type.extensions,
-  type.contentType,
-]).join(',')
+export const VISITOR_UPLOAD_ACCEPT = visitorUploadAccept()
 
 /** `25 MB`. */
 export function formatVisitorUploadBytes(bytes: number): string {
@@ -201,18 +247,18 @@ export interface CheckedVisitorUpload {
  */
 export function checkVisitorUploadRequest(
   raw: unknown,
-  options: { maxBytes?: number } = {},
+  options: { maxBytes?: number; kinds?: readonly VisitorUploadKind[] } = {},
 ): { ok: true; upload: CheckedVisitorUpload } | { ok: false; error: string; code: 'type' | 'size' | 'empty' } {
   const source = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
   const name = typeof source['name'] === 'string' ? source['name'].slice(0, 400) : ''
   const size = Number(source['size'])
   const shown = name.split(/[\\/]/).pop()?.trim() || 'This file'
   const type = resolveVisitorUploadType(name, typeof source['contentType'] === 'string' ? source['contentType'] : '')
-  if (!type) {
+  if (!type || !visitorUploadTypeInKinds(type.contentType, options.kinds)) {
     return {
       ok: false,
       code: 'type',
-      error: `${shown} can't be sent. Send a ${describeVisitorUploadTypes()} file.`,
+      error: `${shown} can't be sent. Send a ${describeVisitorUploadTypes(options.kinds)} file.`,
     }
   }
   if (!Number.isSafeInteger(size) || size <= 0) {
@@ -293,12 +339,13 @@ export function checkVisitorUploadSelection(
   files: ReadonlyArray<{ name: string; type: string; size: number }>,
   already = 0,
   maxFiles = VISITOR_UPLOAD_MAX_FILES,
+  kinds?: readonly VisitorUploadKind[],
 ): string | null {
   if (already + files.length > maxFiles) {
-    return `Send up to ${maxFiles} files at a time.`
+    return maxFiles === 1 ? 'Send one file.' : `Send up to ${maxFiles} files at a time.`
   }
   for (const file of files) {
-    const checked = checkVisitorUploadRequest({ name: file.name, contentType: file.type, size: file.size })
+    const checked = checkVisitorUploadRequest({ name: file.name, contentType: file.type, size: file.size }, { kinds })
     if ('error' in checked) return checked.error
   }
   return null

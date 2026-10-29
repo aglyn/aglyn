@@ -206,6 +206,9 @@ export function FormDetailCard(props: FormDetailCardProps) {
   const [lead, setLead] = useState<boolean | null>(null)
   const [consentField, setConsentField] = useState<string | null>(null)
   const [optInOnSubmit, setOptInOnSubmit] = useState<boolean | null>(null)
+  /** "This form asks for a quote" and "Email the person a confirmation" as edited (AGL-4098); null while the stored value stands. */
+  const [asksForQuote, setAsksForQuote] = useState<boolean | null>(null)
+  const [confirms, setConfirms] = useState<boolean | null>(null)
   /**
    * The campaigns picked on screen, or null while the stored value stands.
    *
@@ -238,6 +241,16 @@ export function FormDetailCard(props: FormDetailCardProps) {
   const effectiveLead = lead ?? form?.routing?.lead === true
   const effectiveConsent = consentField ?? String(form?.consentFieldName ?? '')
   const effectiveOptInOnSubmit = optInOnSubmit ?? form?.optInOnSubmit === true
+  const storedAsksForQuote = Aglyn.readFormRequest(form)?.kind === 'quote'
+  const effectiveAsksForQuote = asksForQuote ?? storedAsksForQuote
+  // A confirmation follows the request's default until it is set by hand.
+  const storedConfirms = Aglyn.formSendsConfirmation(form)
+  const effectiveConfirms =
+    confirms ??
+    (typeof form?.confirmationEmail === 'boolean'
+      ? form.confirmationEmail
+      : Aglyn.formSendsConfirmation({ request: effectiveAsksForQuote ? { kind: 'quote' } : null }))
+  const hasFileField = declaredFields.some((field) => field.fieldType === 'file')
   /*
    * Whether lead routing COULD work on this design — the two preconditions
    * `checkFormContract` applies at publish, asked here so the switch says so
@@ -416,6 +429,32 @@ export function FormDetailCard(props: FormDetailCardProps) {
     recountFormStats,
   ])
 
+  /**
+   * What happens after someone sends the form (AGL-4098): whether it asks
+   * for a quote, and whether the person is emailed a confirmation. Saved
+   * together, as one card's two answers.
+   */
+  const handleSaveResponses = useCallback(async () => {
+    const dequeue = queueLoading()
+    setSaving('responses')
+    try {
+      await updateDoc(doc(firestore, 'hosts', hostId, 'forms', formId), {
+        ...(asksForQuote != null ? { request: asksForQuote ? { kind: 'quote' } : null } : {}),
+        ...(confirms != null ? { confirmationEmail: confirms } : {}),
+        updatedAt: Timestamp.now(),
+      })
+      setAsksForQuote(null)
+      setConfirms(null)
+      enqueueSnackbar('Saved', { variant: 'success', persist: false })
+    } catch (error) {
+      console.error(error)
+      enqueueSnackbar('An error has occurred', { variant: 'error', allowDuplicate: true })
+    } finally {
+      setSaving(null)
+      dequeue()
+    }
+  }, [firestore, hostId, formId, asksForQuote, confirms, queueLoading, enqueueSnackbar])
+
   /*
    * Whether each card holds a change, measured against what is stored rather
    * than against "was touched": flipping the switch and flipping it back is
@@ -430,7 +469,10 @@ export function FormDetailCard(props: FormDetailCardProps) {
     (consentField != null &&
       consentField.trim() !== String(form?.consentFieldName ?? '')) ||
     (optInOnSubmit != null && optInOnSubmit !== (form?.optInOnSubmit === true))
-  const dirty = detailsDirty || routingDirty
+  const responsesDirty =
+    (asksForQuote != null && asksForQuote !== storedAsksForQuote) ||
+    (confirms != null && confirms !== storedConfirms)
+  const dirty = detailsDirty || routingDirty || responsesDirty
   /**
    * Read from inside handlers that must not re-subscribe on every keystroke:
    * `beforeunload` and the besigner buttons need the CURRENT answer.
@@ -844,6 +886,67 @@ export function FormDetailCard(props: FormDetailCardProps) {
             </CardDisplay>
           ),
         },
+        {
+          size: { xs: 12, lg: 7 },
+          children: (
+            <CardDisplay
+              header="After someone sends it"
+              help={pluginDocsHelp('forms', { anchor: '#after-someone-sends-it' })}
+              HeaderProps={{
+                action: (
+                  <FormDetailCardActions
+                    section="responses"
+                    dirty={responsesDirty}
+                    saving={saving}
+                    onDiscard={() => {
+                      setAsksForQuote(null)
+                      setConfirms(null)
+                    }}
+                    onSave={handleSaveResponses}
+                  />
+                ),
+              }}
+              contentGutterX
+              contentGutterY
+            >
+              <Stack spacing={2}>
+                <Stack spacing={0.5}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={effectiveAsksForQuote}
+                        onChange={(event) => setAsksForQuote(event.target.checked)}
+                      />
+                    }
+                    label="This form asks for a quote"
+                  />
+                  <Typography variant="caption" color="text.secondary">
+                    {'Each submission arrives in the Inbox marked as a quote request, with any files ' +
+                      'attached, and you can start a quote from it in one step. The person is added to ' +
+                      'Contacts as with any form.' +
+                      (hasFileField ? '' : ' Add a File upload field in the design to take logos or artwork.')}
+                  </Typography>
+                </Stack>
+                <Stack spacing={0.5}>
+                  <FormControlLabel
+                    control={
+                      <Switch checked={effectiveConfirms} onChange={(event) => setConfirms(event.target.checked)} />
+                    }
+                    label="Email the person a confirmation"
+                  />
+                  <Typography variant="caption" color="text.secondary">
+                    {hasEmailField
+                      ? 'Sends the address they give a copy of what they sent, the names of their files and ' +
+                        'what happens next, in your site’s email style (Emails → Form confirmation). Replies ' +
+                        'come to your site’s contact email, and a quote you send them later arrives in the ' +
+                        'same conversation.'
+                      : 'Needs an email field in the published design: without an address there is no one to send it to.'}
+                  </Typography>
+                </Stack>
+              </Stack>
+            </CardDisplay>
+          ),
+        },
         // Where each field saves on the person: another plugin's card, in a
         // zone this page hosts. No item at all where nothing fills it, so the
         // grid keeps no empty cell.
@@ -1084,7 +1187,7 @@ export function FormDetailCard(props: FormDetailCardProps) {
 FormDetailCard.displayName = 'FormDetailCard'
 
 /** The cards on this page that hold an edit of their own. */
-type FormDetailSection = 'details' | 'routing'
+type FormDetailSection = 'details' | 'routing' | 'responses'
 
 /**
  * One card's Discard and Save, in that card's header (AGL-3508).

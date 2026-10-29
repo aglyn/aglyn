@@ -35,6 +35,7 @@ import {
   VISITOR_UPLOAD_MAX_BYTES,
   VISITOR_UPLOAD_TICKET_TTL_MS,
   type VisitorUploadFile,
+  type VisitorUploadKind,
   type VisitorUploadScope,
 } from '@aglyn/aglyn/app-utils/visitor-upload'
 import firebaseAdmin from './firebase-admin'
@@ -269,7 +270,8 @@ export interface VisitorUploadTicket {
  * A ticket and a signed upload for ONE file, after the caller's route has
  * decided the caller may upload for `scope`. Spends the rate limits; refused
  * while the platform's uploads are paused. `maxBytes` narrows the 25 MB
- * ceiling, never widens it.
+ * ceiling, never widens it; `kinds` narrows the types taken (a form field
+ * that asks for PDFs only), never widens them.
  */
 export async function mintVisitorUploadTicket(
   deps: VisitorUploadDeps,
@@ -279,11 +281,12 @@ export async function mintVisitorUploadTicket(
     caller: VisitorUploadCaller
     limits?: VisitorUploadLimits
     maxBytes?: number
+    kinds?: readonly VisitorUploadKind[]
   },
 ): Promise<VisitorUploadTicket | VisitorUploadRefusal> {
   const { scope } = input
   if (!isVisitorUploadScope(scope)) return refusal(400, 'scope', 'This upload is missing what it is for.')
-  const checked = checkVisitorUploadRequest(input.request, { maxBytes: input.maxBytes })
+  const checked = checkVisitorUploadRequest(input.request, { maxBytes: input.maxBytes, kinds: input.kinds })
   if ('error' in checked) return refusal(checked.code === 'size' ? 413 : 400, checked.code, checked.error)
   if (await deps.uploadsPaused()) {
     return refusal(423, 'paused', 'Uploads are paused for a moment. Try again a little later.')

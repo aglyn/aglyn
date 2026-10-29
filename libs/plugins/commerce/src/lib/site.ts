@@ -32,6 +32,7 @@ import * as ReservationWidget from './components/reservation-widget'
 import * as ProductGrid from './components/product-grid'
 import * as ProductReviews from './components/product-reviews'
 import * as QuotePage from './components/quote-page'
+import * as ProductOptionsField from './components/product-options-field'
 import * as RelatedProducts from './components/related-products'
 import * as ReturnRequest from './components/return-request'
 import * as Wishlist from './components/wishlist'
@@ -135,6 +136,13 @@ export const COMMERCE_BUNDLE: Aglyn.FeatureBundleEntry[] = [
     component: QuotePage.default,
     schema: QuotePage.schema,
     presets: QuotePage.presets,
+  },
+  {
+    // A form field (AGL-4098): a product and its options, for a quote
+    // request. Its picker is a chunk of its own.
+    component: ProductOptionsField.default,
+    schema: ProductOptionsField.schema,
+    presets: ProductOptionsField.presets,
   },
 ]
 

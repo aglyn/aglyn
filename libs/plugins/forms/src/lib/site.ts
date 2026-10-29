@@ -18,6 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiEmailFastOutline } from '@aglyn/shared-data-mdi'
 import * as FormComponents from './components/form'
+import * as FileUpload from './components/form-file-upload'
 import { BUNDLE_ID } from './constants/bundle-common'
 
 /**
@@ -41,6 +42,13 @@ export const FORMS_BUNDLE: Aglyn.FeatureBundleEntry[] = [
     // off the FIELD entry only because the registry reads presets per entry;
     // what it places is the form above.
     presets: FormComponents.formBlockPresets,
+  },
+  {
+    // Files a person attaches to a form (AGL-4098). Its body, with the
+    // upload code, is a chunk of its own that loads where the field draws.
+    component: FileUpload.FormFileUpload,
+    schema: FileUpload.formFileUploadSchema,
+    presets: FileUpload.formFileUploadPresets,
   },
 ]
 

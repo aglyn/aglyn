@@ -28,6 +28,13 @@ jest.mock('./server/form-stats', () => ({
   },
 }))
 
+const mockRemovedScopes: unknown[] = []
+jest.mock('./server/form-uploads', () => ({
+  formUploadCalls: () => ({
+    removeAll: async (scope: unknown) => void mockRemovedScopes.push(scope),
+  }),
+}))
+
 import {
   listPluginEventHandlers,
   resetPluginEventHandlersForTests,
@@ -37,6 +44,7 @@ import { formsCountingRemovedRecords, registerFormsServerDeclarations } from './
 
 beforeEach(() => {
   mockRecounts.length = 0
+  mockRemovedScopes.length = 0
   resetPluginEventHandlersForTests()
 })
 
@@ -94,5 +102,32 @@ describe('registerFormsServerDeclarations', () => {
     })
     expect(result).toEqual({ handled: 1, failed: [] })
     expect(mockRecounts).toEqual([{ hostId: 'host-1', formId: 'form-1' }])
+  })
+})
+
+describe('a removed submission’s files (AGL-4098)', () => {
+  it('are deleted with it when the API or a person’s erasure removes it, and only for a submission that had files', async () => {
+    registerFormsServerDeclarations()
+    await runPluginEventHandlers('host.records.removed', {
+      orgId: 'org-1',
+      hostIds: ['host-1'],
+      collection: 'formSubmissions',
+      records: [
+        { id: 'with-files', data: { hostId: 'host-1', files: [{ id: 'f1', name: 'logo.ai' }] } },
+        { id: 'without', data: { hostId: 'host-1' } },
+      ],
+    })
+    expect(mockRemovedScopes).toEqual([{ hostId: 'host-1', purpose: 'form-file', purposeId: 'with-files' }])
+  })
+
+  it('leaves files alone for a collection that is not submissions', async () => {
+    registerFormsServerDeclarations()
+    await runPluginEventHandlers('host.records.removed', {
+      orgId: 'org-1',
+      hostIds: ['host-1'],
+      collection: 'leads',
+      records: [{ id: 'p1', data: { files: [{ id: 'f1' }] } }],
+    })
+    expect(mockRemovedScopes).toEqual([])
   })
 })
