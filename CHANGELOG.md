@@ -9,6 +9,45 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.288 — 2026-10-29
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.287...v1.0.0-beta.288)
+
+### Added
+
+- **ai:** the year founded is a business profile field ([AGL-4092](https://linear.app/aglyn/issue/AGL-4092))
+- **permissions:** suppressions, lists, inbox replies and sender ask keys ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **permissions:** org automations and workspace domains are plugin keys ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **permissions:** installing and publishing on a site are marketplace keys ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **permissions:** funnels and email campaigns are plugin keys ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **permissions:** fonts, page publishing, live chat and Zapier ask site keys ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **permissions:** refunds, POS approvals and webhooks are workspace-only keys ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+
+### Fixed
+
+- **ai:** stock photos fit the thing, the place and the trade ([AGL-4092](https://linear.app/aglyn/issue/AGL-4092))
+- **ai:** rule 14 and a plan's section names leave a missing fact out ([AGL-4092](https://linear.app/aglyn/issue/AGL-4092))
+- **stock-photos:** keep up to 30 of a Pixabay hit's tags ([AGL-4092](https://linear.app/aglyn/issue/AGL-4092))
+- **ai:** an Assist build never asks for placeholders ([AGL-4092](https://linear.app/aglyn/issue/AGL-4092))
+- **ai:** a dataset sample never tells the owner what to add ([AGL-4092](https://linear.app/aglyn/issue/AGL-4092))
+
+### Performance
+
+- **console:** a new tab skips the wait once another has seen the Firestore cache locked ([AGL-4090](https://linear.app/aglyn/issue/AGL-4090), [AGL-3428](https://linear.app/aglyn/issue/AGL-3428), [AGL-3788](https://linear.app/aglyn/issue/AGL-3788))
+
+### Documentation
+
+- **ai:** reshoot Setup -> Business profile with the Year founded field ([AGL-4092](https://linear.app/aglyn/issue/AGL-4092))
+- **ai:** no bracket, no instruction, and the year founded ([AGL-4092](https://linear.app/aglyn/issue/AGL-4092))
+
+<details>
+<summary>Also in this release: 1 test, 1 chore</summary>
+
+- **console:** the community-naming spec reads boot declarations from declarations.ts ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **deps:** bump re2js from 2.8.6 to 2.9.1
+
+</details>
+
 ## v1.0.0-beta.287 — 2026-10-28
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.286...v1.0.0-beta.287)
