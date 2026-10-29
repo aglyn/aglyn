@@ -3519,6 +3519,11 @@ service cloud.firestore {
                      // whether the guided AI start is still offered, and only
                      // the starter route writes it.
                      'starterProvisionedAt',
+                     // What the site was created with (AGL-4049): its style,
+                     // the starter picked and how it was started. A record of
+                     // the person's choice that the create and starter routes
+                     // write; one a client could rewrite would count nothing.
+                     'starterChoice',
                      // Preview (AGL-4086): whether only the site's team can
                      // see it, and whether it has been public before. Making
                      // a site public is a launch — it drops every cached page

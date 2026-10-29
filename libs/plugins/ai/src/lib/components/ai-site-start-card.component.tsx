@@ -25,6 +25,7 @@ import { mdiCreation, mdiPageLayoutHeaderFooter, mdiWebSync } from '@aglyn/share
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { HelpTip, MdiIcon } from '@aglyn/shared-ui-jsx'
 import BlockedControl from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { OptionCardGrid } from '@aglyn/shared-ui-jsx/components/option-card-grid.component'
 import { PrerequisiteNotice } from '@aglyn/shared-ui-jsx/components/prerequisite-notice.component'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
@@ -83,6 +84,7 @@ import {
 import { AiCreditsPromptNotice } from './ai-credits-prompt.component'
 import {
   AI_SITE_START_ANSWERS,
+  AI_SITE_START_STYLE_REQUIRED,
   aiSiteStartAnswersFromClientBuild,
   aiSiteStartBrief,
   aiSiteStartClientBrief,
@@ -90,6 +92,7 @@ import {
   aiSiteStartClientNote,
   aiSiteStartExtrasGiven,
   aiSiteStartInputs,
+  aiSiteStartKind,
   aiSiteStartRefusal,
   type AiSiteStartAnswers,
 } from '../model/ai-site-start'
@@ -110,6 +113,7 @@ import type { AiJobSummary } from '../model/ai-jobs.types'
 import { aiSiteKindOfInputs } from '../model/ai-site-kinds'
 import { aiSiteStartClickOf, useAiSiteStartTracking } from './ai-site-start-tracking'
 import {
+  aiSiteStyleCards,
   AudienceStep,
   DetailsStep,
   KindStep,
@@ -136,35 +140,41 @@ import { aiSiteImportOfferOf, type AiSiteImportAvailability } from '../model/ai-
  * ── Two steps (AGL-3594) ─────────────────────────────────────────────────
  *
  * Step 1 asks how to start, as two equal cards: the starter site — a
- * ready-made home page with a header and footer — or AI. The starter card is
- * the zone's `startBlank`, which gives a site born for the guided start the
- * starter every other new site is born with. The AI card moves on to the
+ * ready-made home page with a header and footer — or AI. The starter card
+ * asks a style first (AGL-4049), from the same 21 cards the AI start's Style
+ * step shows, with nothing chosen; its Create site is the zone's
+ * `startBlank` with that style, which gives the site the starter every other
+ * new site is born with, in that style's look. The AI card moves on to the
  * questions, one decision a step (AGL-3898; see {@link AiSiteStartCard}).
  *
  * ── A full screen dialog, and therefore three ways out ───────────────────
  *
  * The questions take the whole screen, which is the only presentation that
  * gets them read — but a surface that takes the screen and cannot be left is
- * a funnel, so leaving is drawn first and works three ways on both steps:
+ * a funnel, so leaving is drawn first and works on every step:
  *
  *  - the close control at the start of the header,
- *  - "Skip" at the end of it, named "Skip and start blank",
+ *  - on a site that already exists, "Skip" at the end of it, named "Skip and
+ *    start blank",
  *  - Escape, which `Dialog` reports through `onClose`.
  *
- * Before a job is started all three are the zone's own `startBlank`: the
- * starter site, and no job, no draft, no record of a site half begun. After,
- * they close through `leave`, and the job builds the site.
+ * On a site that exists, before a job is started, all of them are the zone's
+ * own `startBlank`: the starter site, and no job, no draft, no record of a
+ * site half begun. After, they close through `leave`, and the job builds the
+ * site.
  *
  * ── Or before the site exists (AGL-3761) ─────────────────────────────────
  *
  * "Create site" draws this straight away, with the zone's `pendingSite` and
  * no site. Step 1 then asks the site's name and address (the shell's own
  * fields) above the two cards, and the site is created only by a choice that
- * needs one: the starter card or Skip (`startBlank`, which creates it with the
- * starter), or Plan my site, which creates it and then starts the job on it.
- * The close control and Escape create nothing there: they are `leave`. If the
- * site was created and its job could not start, the site is a real one, and
- * every way out gives it the starter as above, so none is left empty.
+ * needs one: the starter card's Create site, once a style is chosen
+ * (`startBlank`, which creates it with the starter in that style), or Plan my
+ * site, which creates it and then starts the job on it. Nothing is chosen for
+ * a person (AGL-4049), so there is no Skip: the close control and Escape
+ * create nothing there, they are `leave`. If the site was created and its job
+ * could not start, the site is a real one, and every way out gives it the
+ * starter as above, in the style its questions took, so none is left empty.
  *
  * Escape and the close control are DISMISSALS, though, and Skip is a choice
  * (AGL-3660, 2026-10-08). Once anything is typed or picked, a dismissal asks
@@ -334,7 +344,7 @@ const START_HELP = {
   choose: pluginDocsHelp('aiStart', {
     anchor: '#how-do-you-want-to-start',
     excerpt:
-      'The starter site gives you a ready-made home page to edit. Start with AI asks a few questions, then plans, writes and publishes your pages.',
+      'The starter site gives you a ready-made home page to edit, in a style you choose. Start with AI asks a few questions, then plans, writes and publishes your pages.',
   }),
   estimate: pluginDocsHelp('aiCredits', {
     anchor: '#before-a-job-starts',
@@ -428,6 +438,10 @@ export function AiSiteStartCard({
   const [busy, setBusy] = useState(false)
   // The starter card's own busy state while `startBlank` runs (AGL-3594).
   const [startingStarter, setStartingStarter] = useState(false)
+  // The starter card's style choice (AGL-4049): drawn after the starter card
+  // is clicked, with nothing chosen until a card is.
+  const [pickingStyle, setPickingStyle] = useState(false)
+  const [starterStyle, setStarterStyle] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   /** The site job "Plan my site" started, as the create door answered with it. */
   const [started, setStarted] = useState<AiJobSummary | null>(null)
@@ -521,7 +535,9 @@ export function AiSiteStartCard({
   const siteKind = aiSiteKindOfInputs(aiSiteStartInputs(answers))?.id ?? null
   const prompt = freeTaste ? (aiFreeSitePrompt(freeCredits, answers.pages, { siteKind }) ?? serverPrompt) : null
   const noneLeft = freeTaste && freeCredits !== null && freeCredits.left <= 0
-  const refusal = aiSiteStartRefusal(answers, { freeTaste })
+  // The door's refusal, else the questions' own: a style not yet chosen (AGL-4049).
+  const refusal =
+    aiSiteStartRefusal(answers, { freeTaste }) ?? (answers.style === null ? AI_SITE_START_STYLE_REQUIRED : null)
   const band = aiSitePagesBand(freeTaste)
   // On a paid plan the person picks the model that builds the site (AGL-3660),
   // Auto by default, from the models their plan allows; every step of the job
@@ -537,7 +553,7 @@ export function AiSiteStartCard({
 
   const plan = useCallback(async (options: { creditsConfirmed?: boolean; pages?: number } = {}) => {
     const asked = options.pages ? { ...answers, pages: options.pages } : answers
-    if (!orgId || aiSiteStartRefusal(asked, { freeTaste }) || noneLeft) return
+    if (!orgId || aiSiteStartRefusal(asked, { freeTaste }) || asked.style === null || noneLeft) return
     // Past what is left, only an explicit go-ahead starts it.
     if (freeTaste && !options.creditsConfirmed && aiFreeSitePrompt(freeCredits, asked.pages, { siteKind })) return
     if (options.pages) answer({ pages: options.pages })
@@ -597,7 +613,8 @@ export function AiSiteStartCard({
       let site = { hostId, host, orgSlug }
       if (!hostId && pendingSite) {
         if (!pendingSite.created && !(await refused(await requestJob(null, true)))) return
-        const made = await pendingSite.create()
+        // The style the questions took (AGL-4049), recorded on the site.
+        const made = await pendingSite.create(asked.style ? { style: asked.style } : undefined)
         if ('error' in made) {
           setNotice(made.error)
           if (made.address) setStep('choose')
@@ -651,28 +668,40 @@ export function AiSiteStartCard({
     }
   }, [orgId, hostId, answers, answer, freeTaste, freeCredits, noneLeft, orgSlug, host, leave, router, pickedModel, pendingSite, siteKind, tracker, clientIntake, siteInspiration])
 
-  // The zone's `startBlank`. Before the site exists it creates it with the
-  // starter, and answers `false` when it could not — most often a name or
-  // address to fix, which step 1 shows.
-  const runStartBlank = useCallback(() => {
-    const result = startBlank()
-    if (result && typeof result.then === 'function') {
-      void result.then((done) => {
-        if (done) return
-        setStartingStarter(false)
-        setStep('choose')
-      })
-    }
-  }, [startBlank])
+  // The zone's `startBlank`, with the style chosen for the starter (AGL-4049).
+  // Before the site exists it creates it with the starter, and answers
+  // `false` when it could not — most often a name or address to fix, which
+  // step 1 shows.
+  const runStartBlank = useCallback(
+    (options?: { style?: string }) => {
+      const result = startBlank(options?.style ? { style: options.style } : undefined)
+      if (result && typeof result.then === 'function') {
+        void result.then((done) => {
+          if (done) return
+          setStartingStarter(false)
+          setPickingStyle(false)
+          setStep('choose')
+        })
+      }
+    },
+    [startBlank],
+  )
 
+  // The starter card asks a style first (AGL-4049): nothing is created, and
+  // nothing chosen, until a style card is clicked and Create site with it.
   const chooseStarter = useCallback(() => {
     if (pendingSite && !pendingSite.created && !pendingSite.check()) return
-    setStartingStarter(true)
     trackEvent('site_start_choice', { choice: 'starter' })
+    setPickingStyle(true)
+  }, [pendingSite])
+
+  const createStarter = useCallback(() => {
+    if (!starterStyle || startingStarter) return
+    setStartingStarter(true)
     // The starter is a way to start, not a way to leave: no abandonment after it.
     tracker.finish()
-    runStartBlank()
-  }, [pendingSite, runStartBlank, tracker])
+    runStartBlank({ style: starterStyle })
+  }, [runStartBlank, starterStyle, startingStarter, tracker])
 
   const chooseImport = useCallback(() => {
     if (importAvailability.state !== 'ready') return
@@ -755,9 +784,14 @@ export function AiSiteStartCard({
 
   if (verdict !== 'ready') return null
 
+  // The style a way out gives the starter on a site that exists (AGL-4049):
+  // the one the starter's style view or the questions took, if any.
+  const exitStyle =
+    starterStyle ?? (answers.style !== null ? aiSiteStartKind(answers).id : null)
+  const giveStarter = () => runStartBlank(exitStyle ? { style: exitStyle } : undefined)
   // Before a job is started Skip is the blank site, which writes the starter
   // (AGL-3594); after, it only closes — the job builds the site.
-  const exit = started ? (leave ?? runStartBlank) : runStartBlank
+  const exit = started ? (leave ?? giveStarter) : giveStarter
   // Skip, as the header draws it: before a site is started it is leaving the questions.
   const skip = () => {
     if (!started) tracker.abandon('skip')
@@ -766,7 +800,7 @@ export function AiSiteStartCard({
   // Escape and the close control. Before "Create site" has made the site
   // (AGL-3761) there is nothing to give a starter to, so they only close,
   // and nothing is created; otherwise they are the same way out as Skip.
-  const dismissTo = creating && !started ? (leave ?? runStartBlank) : exit
+  const dismissTo = creating && !started ? (leave ?? giveStarter) : exit
   // Anything the person typed or picked, which a dismissal must not discard
   // silently (AGL-3660). After a job starts there is nothing left to lose.
   const drafted =
@@ -774,7 +808,8 @@ export function AiSiteStartCard({
     Boolean(
       answers.siteType.trim() ||
         answers.audience.trim() ||
-        answers.kind !== null ||
+        answers.style !== null ||
+        starterStyle !== null ||
         aiSiteStartExtrasGiven(answers).length > 0 ||
         (creating && pendingSite?.dirty),
     )
@@ -823,7 +858,9 @@ export function AiSiteStartCard({
 
   // The card is drawn wherever the workspace could use it, disabled where it cannot yet.
   const showsImport = importAvailability.state === 'ready' || importAvailability.state === 'blocked'
-  const choosing = step === 'choose' && !started && !importing
+  // The starter's style view (AGL-4049), on step 1.
+  const stylingStarter = step === 'choose' && pickingStyle && !started && !importing
+  const choosing = step === 'choose' && !pickingStyle && !started && !importing
   const reviewing = step === 'review' && !started && !importing
   const asking = step !== 'choose' && !started && !importing
   // Each answer's reason not to go forward, shown on a step once Next was refused there.
@@ -872,7 +909,12 @@ export function AiSiteStartCard({
         title: 'Bring my site',
         lede: `Bring the website you have now into ${PLATFORM_BRAND_NAME}: its pages, words and photos. First, prove it is yours.`,
       }
-    : HEADINGS[step]
+    : stylingStarter
+      ? {
+          title: 'Choose a style',
+          lede: 'Your site starts with a home page, a header and a footer in the style you choose. You can change everything later.',
+        }
+      : HEADINGS[step]
   // Enter in a text answer is Next. A select, a card or a button keeps its own Enter.
   const onStepKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key !== 'Enter' || event.nativeEvent.isComposing || !asking || reviewing) return
@@ -932,21 +974,25 @@ export function AiSiteStartCard({
           >
             {'Start your site'}
           </Typography>
-          <Button color="inherit" onClick={skip} aria-label={started ? 'Close' : 'Skip and start blank'}>
-            {started ? 'Close' : 'Skip'}
-          </Button>
+          {/* No Skip before the site exists (AGL-4049): nothing is chosen for
+              a person, and the close control already leaves with nothing made. */}
+          {creating && !started ? null : (
+            <Button color="inherit" onClick={skip} aria-label={started ? 'Close' : 'Skip and start blank'}>
+              {started ? 'Close' : 'Skip'}
+            </Button>
+          )}
         </Toolbar>
       </AppBar>
       <DialogContent sx={{ px: { xs: 2, sm: 3 } }} onKeyDown={onStepKeyDown}>
         {/* The step timeline spans the whole dialog, above the step's own
             narrower column (AGL-4014): MUI's Stepper as it comes. */}
-        {importing ? null : (
+        {importing || stylingStarter ? null : (
           <Box sx={{ pt: { xs: 3, sm: 4 } }}>
             <StartProgress step={step} compact={compact} onStep={started ? undefined : goBackTo} />
           </Box>
         )}
         <Container
-          maxWidth={choosing || step === 'kind' || step === 'style' ? 'md' : 'sm'}
+          maxWidth={choosing || stylingStarter || step === 'kind' || step === 'style' ? 'md' : 'sm'}
           disableGutters
           sx={{ py: { xs: 3, sm: 5 } }}
         >
@@ -962,7 +1008,7 @@ export function AiSiteStartCard({
                 {heading.title}
               </Typography>
               <Typography variant="body1" color="text.secondary">
-                {choosing ? (
+                {choosing || stylingStarter ? (
                   <HelpTip sx={{ float: 'right' }} {...START_HELP.choose} />
                 ) : importing ? null : (
                   <StepHelp step={step} />
@@ -1010,6 +1056,22 @@ export function AiSiteStartCard({
                 onBack={() => setImporting(false)}
                 leave={leave}
               />
+            ) : stylingStarter ? (
+              <Stack spacing={3} component="section" aria-label="Style of your starter site">
+                <OptionCardGrid
+                  label="Style of site"
+                  data-start-area="starter-style-cards"
+                  columns={{ xs: 2, sm: 2, md: 3 }}
+                  options={aiSiteStyleCards()}
+                  value={starterStyle}
+                  onChange={(id) => {
+                    setStarterStyle(id)
+                    tracker.fieldPicked('style')
+                  }}
+                />
+                {/* Start in preview (AGL-4086), for the starter. */}
+                {creating ? pendingSite?.previewControl?.('starter') : null}
+              </Stack>
             ) : choosing ? (
               <Stack spacing={2}>
                 <Box
@@ -1025,7 +1087,7 @@ export function AiSiteStartCard({
                     icon={mdiPageLayoutHeaderFooter.path}
                     iconId="page-layout-header-footer"
                     title="Start from the starter site"
-                    description="A ready-made home page with a header, footer and contact form you can edit."
+                    description="A ready-made home page with a header, footer and contact form, in a style you choose."
                     busy={startingStarter}
                     onChoose={chooseStarter}
                   />
@@ -1130,6 +1192,39 @@ export function AiSiteStartCard({
           </Stack>
         </Container>
       </DialogContent>
+      {stylingStarter && (
+        /* The starter's style view (AGL-4049): Create site waits for a style. */
+        <DialogActions
+          data-start-area="footer"
+          sx={{
+            px: { xs: 2, sm: 3 },
+            py: 2,
+            flexWrap: 'wrap',
+            rowGap: 1,
+            columnGap: 2,
+            borderTop: 1,
+            borderColor: 'divider',
+            ...AI_SITE_START_SURFACE_SX,
+          }}
+        >
+          <Button onClick={() => setPickingStyle(false)} disabled={startingStarter} sx={{ mr: 'auto' }}>
+            {'Back'}
+          </Button>
+          {starterStyle ? null : (
+            <Typography variant="body2" color="text.secondary">
+              {'Choose a style to continue.'}
+            </Typography>
+          )}
+          <Button
+            variant="contained"
+            size="large"
+            disabled={!starterStyle || startingStarter}
+            onClick={createStarter}
+          >
+            {startingStarter ? (creating ? 'Creating…' : 'Starting…') : creating ? 'Create site' : 'Use this style'}
+          </Button>
+        </DialogActions>
+      )}
       {asking && (
         /* The footer stays put while the questions scroll. It wraps, because
            the estimate, the reason and the buttons are wider than a phone. */

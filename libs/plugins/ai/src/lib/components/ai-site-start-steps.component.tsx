@@ -43,6 +43,7 @@ import {
   AccordionSummary,
   Box,
   Divider,
+  FormHelperText,
   LinearProgress,
   List,
   ListItemButton,
@@ -66,10 +67,12 @@ import {
   AI_SITE_INSPIRATION_PAID_NOTE,
   aiSiteInspirationHost,
 } from '../model/ai-site-inspiration'
+import { SITE_STYLE_AUTO } from '@aglyn/aglyn/app-utils/site-styles'
 import {
   AI_SITE_START_TYPES,
   aiSiteStartInspirationTyped,
   aiSiteStartKind,
+  aiSiteStartStyleAnswer,
   type AiSiteStartAnswers,
   type AiSiteStartExtraKey,
 } from '../model/ai-site-start'
@@ -139,7 +142,23 @@ export function startTypeTitle(type: string): string {
 }
 
 /** The id the style grid gives "Pick for me", which is no kind: the answers' `kind: null`. */
-export const AI_SITE_STYLE_AUTO = 'auto'
+export const AI_SITE_STYLE_AUTO = SITE_STYLE_AUTO
+
+/**
+ * The 21 style cards, each with its example home page (AGL-3898), as the
+ * Style step and the starter site's style choice (AGL-4049) both draw them.
+ */
+export function aiSiteStyleCards(): Array<{
+  id: string
+  title: string
+  description: string
+  image?: NonNullable<ReturnType<typeof aiSiteStylePreview>>
+}> {
+  return AI_SITE_KINDS.map((kind) => {
+    const image = aiSiteStylePreview(kind.id)
+    return { id: kind.id, title: kind.label, description: kind.blurb, ...(image ? { image } : {}) }
+  })
+}
 
 /**
  * The progress through the steps: labeled steps on a wide screen, a bar and
@@ -270,9 +289,10 @@ export function AudienceStep({ answers, answer, tracker, errors, fieldRef }: Ste
 }
 
 /**
- * Step: the style, from cards that show it. "Pick for me" leaves the kind
- * unset, which is what the single form's unpicked state was: the kind the
- * first answer suggests is the one used, and the card says which.
+ * Step: the style, from cards that show it. Nothing is chosen until a card is
+ * clicked (AGL-4049), and the step does not go forward before one is. "Pick
+ * for me" is a card too: it leaves the kind unset, so the kind the first
+ * answer suggests is the one used, and the card says which.
  */
 export function StyleStep({
   answers,
@@ -295,22 +315,29 @@ export function StyleStep({
           description: `From your answer: ${suggested.label}`,
           icon: mdiCreation.path,
         },
-        ...AI_SITE_KINDS.map((kind) => {
-          const image = aiSiteStylePreview(kind.id)
-          return { id: kind.id, title: kind.label, description: kind.blurb, ...(image ? { image } : {}) }
-        }),
+        ...aiSiteStyleCards(),
       ]}
-      value={answers.kind ?? AI_SITE_STYLE_AUTO}
+      value={answers.style}
       onChange={(id) => {
-        answer({ kind: id === AI_SITE_STYLE_AUTO ? null : id })
-        tracker.fieldPicked('kind')
+        answer(aiSiteStartStyleAnswer(id))
+        tracker.fieldPicked('style')
       }}
     />
   )
-  if (!inspiration) return cards
+  const chosen = (
+    <Stack spacing={1} data-start-area="field-style">
+      {cards}
+      {errors.style ? (
+        <FormHelperText error role="alert">
+          {errors.style.message}
+        </FormHelperText>
+      ) : null}
+    </Stack>
+  )
+  if (!inspiration) return chosen
   return (
     <Stack spacing={4}>
-      {cards}
+      {chosen}
       <InspirationFields answers={answers} answer={answer} tracker={tracker} errors={errors} fieldRef={fieldRef} offer={inspiration} />
     </Stack>
   )
@@ -892,7 +919,11 @@ export function ReviewStep({
   const rows: Array<{ label: string; value: ReactNode; step: AiSiteStartStep }> = [
     { label: 'Kind of site', value: answers.siteType.trim(), step: 'kind' },
     { label: 'Who it is for', value: answers.audience.trim() || 'Anyone (not said)', step: 'audience' },
-    { label: 'Style', value: answers.kind ? kind.label : `${kind.label}, picked for you`, step: 'style' },
+    {
+      label: 'Style',
+      value: answers.style === null ? 'Not chosen yet' : answers.kind ? kind.label : `${kind.label}, picked for you`,
+      step: 'style',
+    },
     ...(inspiration
       ? [{ label: 'Sites you like', value: liked.length ? liked.map(aiSiteInspirationHost).join(', ') : 'None', step: 'style' as const }]
       : []),

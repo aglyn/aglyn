@@ -15,7 +15,13 @@
  * limitations under the License.
  */
 
-import { AI_SITE_START_ANSWERS, aiSiteStartRefusal, type AiSiteStartAnswers } from './ai-site-start'
+import {
+  AI_SITE_START_ANSWERS,
+  AI_SITE_START_STYLE_REQUIRED,
+  aiSiteStartRefusal,
+  aiSiteStartStyleAnswer,
+  type AiSiteStartAnswers,
+} from './ai-site-start'
 import {
   AI_SITE_START_MORE_FIELDS,
   AI_SITE_START_STEP_FIELDS,
@@ -27,9 +33,11 @@ import {
   aiSiteStartStepErrors,
 } from './ai-site-start-steps'
 
+/** Answers a person gave: what the site is, and a style card clicked ("Pick for me"). */
 const answers = (patch: Partial<AiSiteStartAnswers> = {}): AiSiteStartAnswers => ({
   ...AI_SITE_START_ANSWERS,
   siteType: 'a bakery',
+  ...aiSiteStartStyleAnswer('auto'),
   ...patch,
 })
 
@@ -49,10 +57,24 @@ describe('the guided start’s steps (AGL-3898)', () => {
     expect(asked.sort()).toEqual([...Object.keys(AI_SITE_START_ANSWERS).filter((key) => key !== 'example'), 'inspiration'].sort())
   })
 
-  it('keeps what kind of site it is the one required answer', () => {
+  it('requires what kind of site it is, and a style card clicked, and nothing else', () => {
     const blank = answers({ siteType: '  ' })
     expect(aiSiteStartStepErrors('kind', blank)).toEqual([{ field: 'siteType', message: 'Say what kind of site this is.', code: 'required' }])
     for (const step of ['audience', 'style', 'details'] as const) expect(aiSiteStartStepErrors(step, blank)).toEqual([])
+  })
+
+  it('does not go forward from the Style step until a card is clicked (AGL-4049)', () => {
+    const unchosen = answers({ style: null, kind: null })
+    expect(aiSiteStartStepErrors('style', unchosen)).toEqual([
+      { field: 'style', message: AI_SITE_START_STYLE_REQUIRED, code: 'required' },
+    ])
+    // "Pick for me" is a card a person clicks, and it goes forward.
+    expect(aiSiteStartStepErrors('style', answers({ ...aiSiteStartStyleAnswer('auto') }))).toEqual([])
+    expect(aiSiteStartStepErrors('style', answers({ ...aiSiteStartStyleAnswer('trades') }))).toEqual([])
+    // A review reached without one opens on the Style step.
+    expect(aiSiteStartFirstInvalidStep(unchosen)).toBe('style')
+    // The door would admit it; it is the questions that ask.
+    expect(aiSiteStartRefusal(unchosen)).toBeNull()
   })
 
   it.each([
@@ -115,7 +137,8 @@ describe('the business details each step asks (AGL-3979)', () => {
 
 describe('the Style step holds both the sites they like and its More details (AGL-3975, AGL-3979)', () => {
   it('asks the style, then the sites they like, then the brand color under More details', () => {
-    expect(AI_SITE_START_STEP_FIELDS.style).toEqual(['kind', 'inspiration', ...AI_SITE_START_MORE_FIELDS.style])
+    // The card clicked (AGL-4049) and the kind it names, first.
+    expect(AI_SITE_START_STEP_FIELDS.style).toEqual(['style', 'kind', 'inspiration', ...AI_SITE_START_MORE_FIELDS.style])
     expect(AI_SITE_START_MORE_FIELDS.style).toEqual(['brand'])
   })
 

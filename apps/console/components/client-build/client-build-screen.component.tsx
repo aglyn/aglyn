@@ -894,12 +894,13 @@ function BuildStep(props: {
   // Recorded only once the starter exists (written now, or already there
   // from an earlier try); a failed request leaves the record as it was and
   // says so here, with a retry.
-  const giveStarter = useCallback(async () => {
+  const giveStarter = useCallback(async (style?: string) => {
     setOpen(false)
     setStarting(true)
     setStarterError(null)
     const failure = await (async () => {
-      const outcome = await requestStarterSiteOutcome(userRef.current, hostId)
+      // In the style chosen for it, when one was (AGL-4049).
+      const outcome = await requestStarterSiteOutcome(userRef.current, hostId, { style })
       if (outcome === 'failed') {
         return 'The starter site could not be added. Try again.'
       }
@@ -995,7 +996,7 @@ function BuildStep(props: {
           orgId={orgId}
           orgSlug={orgSlug}
           host={host}
-          startBlank={() => void giveStarter()}
+          startBlank={(options?: { style?: string }) => void giveStarter(options?.style)}
           // Closing after the start began: the job builds the site.
           leave={() => {
             setOpen(false)

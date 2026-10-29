@@ -1312,6 +1312,17 @@ describe('hosts', () => {
     await assertFails(
       updateDoc(doc(authed(OWNER), 'hosts', HOST), { projectNumber: 42 }),
     )
+    // What the site was created with (AGL-4049): its style and how it was
+    // started, recorded by the create and starter routes so preferences can
+    // be counted. Not the owner's, not an editor's, to rewrite.
+    await assertFails(
+      updateDoc(doc(authed(OWNER), 'hosts', HOST), {
+        starterChoice: { listingId: null, version: null, kind: 'trades', mode: 'base', start: 'starter' },
+      }),
+    )
+    await assertFails(
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST), { 'starterChoice.kind': 'yoga' }),
+    )
     // Authoring is untouched: the fields the editor legitimately owns still
     // write, including the theme override the setup page saves wholesale.
     await assertSucceeds(

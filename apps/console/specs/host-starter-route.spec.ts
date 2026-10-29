@@ -32,6 +32,16 @@ const mockLockdown = jest.fn(async () => null as Response | null)
 const mockVerify = jest.fn()
 const mockHosts = new Map<string, Record<string, unknown>>()
 
+const mockRegisterDeclarations = jest.fn(async () => undefined)
+const mockLook = jest.fn(async (_style: string): Promise<Record<string, unknown> | null> => null)
+let mockLooksRegistered = true
+jest.mock('../constants/plugins.declarations.server.generated', () => ({
+  registerPluginServerDeclarations: () => mockRegisterDeclarations(),
+}))
+jest.mock('@aglyn/aglyn/plugin-manager/plugin-site-style-looks', () => ({
+  resolveSiteStyleLooks: () => (mockLooksRegistered ? { look: (style: string) => mockLook(style) } : null),
+}))
+
 jest.mock('../utils/server/provision-host', () => ({
   __esModule: true,
   provisionStarterSite: (...args: unknown[]) => mockProvision(...args),
@@ -88,6 +98,10 @@ const ask = (body: Record<string, unknown>, token: string | null = 'tok') =>
   )
 
 beforeEach(() => {
+  mockLooksRegistered = true
+  mockLook.mockReset()
+  mockLook.mockResolvedValue(null)
+  mockRegisterDeclarations.mockClear()
   mockProvision.mockReset()
   mockDropCache.mockClear()
   mockLockdown.mockReset()
@@ -104,7 +118,9 @@ describe('POST /api/hosts/starter (AGL-3594)', () => {
     const response = await ask({ hostId: 'host-1' })
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ provisioned: true, screenId: 'scrHome' })
-    expect(mockProvision).toHaveBeenCalledWith(expect.anything(), 'host-1')
+    expect(mockProvision).toHaveBeenCalledWith(expect.anything(), 'host-1', {})
+    // No style asked, so no look is read.
+    expect(mockRegisterDeclarations).not.toHaveBeenCalled()
     expect(mockDropCache).toHaveBeenCalledTimes(1)
   })
 
@@ -136,5 +152,40 @@ describe('POST /api/hosts/starter (AGL-3594)', () => {
     expect((await ask({ hostId: 'host-1' }, null)).status).toBe(401)
     expect((await ask({})).status).toBe(400)
     expect((await ask({ hostId: 'nope' })).status).toBe(404)
+  })
+})
+
+describe('POST /api/hosts/starter with a style (AGL-4049)', () => {
+  const LOOK = { kind: 'builtin', base: 'bootstrap', brand: { light: { primary: '#B3261E' } }, fonts: 'oswald' }
+
+  it('gives the starter the chosen style\'s look, read from the plugin that has it', async () => {
+    mockLook.mockResolvedValue(LOOK)
+    mockProvision.mockResolvedValue({ provisioned: true, screenId: 'scrHome' })
+    const response = await ask({ hostId: 'host-1', style: 'trades' })
+    expect(response.status).toBe(200)
+    expect(mockLook).toHaveBeenCalledWith('trades')
+    expect(mockProvision).toHaveBeenCalledWith(expect.anything(), 'host-1', {
+      style: { id: 'trades', theme: LOOK },
+    })
+  })
+
+  it('records the style with no look when no plugin answers it', async () => {
+    mockLooksRegistered = false
+    mockProvision.mockResolvedValue({ provisioned: true, screenId: 'scrHome' })
+    const response = await ask({ hostId: 'host-1', style: 'yoga' })
+    expect(response.status).toBe(200)
+    expect(mockProvision).toHaveBeenCalledWith(expect.anything(), 'host-1', {
+      style: { id: 'yoga', theme: null },
+    })
+  })
+
+  it('refuses a style that is not one, and "Pick for me", before anything is read or written', async () => {
+    for (const style of ['nope', 'auto', '']) {
+      const response = await ask({ hostId: 'host-1', style })
+      expect(response.status).toBe(400)
+      expect(await response.json()).toEqual({ error: 'Unknown style' })
+    }
+    expect(mockVerify).not.toHaveBeenCalled()
+    expect(mockProvision).not.toHaveBeenCalled()
   })
 })
