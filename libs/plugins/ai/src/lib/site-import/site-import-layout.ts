@@ -617,7 +617,7 @@ class LayoutReader {
       const first = groups[0] as SiteImportLayoutGroup
       return { kind: 'group', group: first.group, columns: cells.length, boxed: groups.every((group) => group?.boxed), items: groups.flatMap((group) => group?.items ?? []) }
     }
-    return { kind: 'row', cols: siteImportTwelfths(weights), cells }
+    return { kind: 'row', cols: siteImportTwelfths(weights), cells: cells.map((nodes) => ({ nodes })) }
   }
 
   /** The columns' relative widths: the grid template, the cells' own sizes, else equal shares. */
@@ -758,9 +758,9 @@ class LayoutReader {
             const next = item.text?.find((ref) => this.lineText(ref).length <= 80)
             if (next !== undefined && (item.text?.length ?? 0) > 1) {
               item.title = next
-              item.text = item.text?.filter((ref) => ref !== next)
+              dropLine(item, 'text', next)
             }
-          } else item.text = item.text?.filter((ref) => ref !== lead)
+          } else dropLine(item, 'text', lead)
           if (item.text && !item.text.length) delete item.text
         }
       }
@@ -772,8 +772,8 @@ class LayoutReader {
         // The question names it; whatever named it before is its words.
         if (item.title !== undefined) item.text = [item.title, ...(item.text ?? [])].sort((a, b) => item.lines.indexOf(a) - item.lines.indexOf(b))
         item.title = question
-        item.text = item.text?.filter((ref) => ref !== question)
-        item.link = item.link?.filter((ref) => ref !== question)
+        dropLine(item, 'text', question)
+        dropLine(item, 'link', question)
         if (item.text && !item.text.length) delete item.text
         if (item.link && !item.link.length) delete item.link
       }
@@ -783,8 +783,8 @@ class LayoutReader {
         const price = item.lines.find((ref) => PRICE.test(this.lineText(ref)) && this.lineText(ref).length <= 24)
         if (price === undefined || item.title === price) continue
         item.figure = price
-        item.text = item.text?.filter((ref) => ref !== price)
-        item.list = item.list?.filter((ref) => ref !== price)
+        dropLine(item, 'text', price)
+        dropLine(item, 'list', price)
         if (item.text && !item.text.length) delete item.text
         if (item.list && !item.list.length) delete item.list
       }
@@ -950,7 +950,7 @@ class LayoutReader {
       (this.elements[rows[0] as number]?.parent !== undefined && this.elements[this.elements[rows[0] as number]?.parent as number]?.tag === 'thead') ||
       (this.elements[rows[0] as number]?.children ?? []).every((cell) => this.elements[cell]?.tag === 'th')
     // A caption, or lines outside the rows, are not lost.
-    return { kind: 'table', header, rows: out.filter((row) => row.some((cell) => cell.length)) }
+    return { kind: 'table', header, rows: tableRows(out.filter((row) => row.some((cell) => cell.length))) }
   }
 
   private refsIn(element: number, range: readonly [number, number]): SiteImportLineRef[] {
@@ -976,7 +976,7 @@ class LayoutReader {
     // A comparison's first row names the columns over an empty corner.
     const first = cells[0] ?? []
     const header = common >= 3 && !(first[0]?.length) && first.slice(1).every((cell) => cell.length > 0)
-    return { kind: 'table', header, rows: cells }
+    return { kind: 'table', header, rows: tableRows(cells) }
   }
 
   /** Tab strips, each read at the lowest element holding it and its panels. */
@@ -1135,11 +1135,11 @@ class LayoutReader {
         const beside = (nodes: SiteImportLayoutNode[]): boolean =>
           nodes.some((node) => {
             if (node.kind !== 'row') return false
-            const cellOf = (ref: number) => node.cells.findIndex((cell) => this.linesOf(cell).includes(ref))
+            const cellOf = (ref: number) => node.cells.findIndex((cell) => this.linesOf(cell.nodes).includes(ref))
             const a = cellOf(h1)
             const b = cellOf(image)
             if (a >= 0 && b >= 0 && a !== b) return true
-            return node.cells.some((cell) => beside(cell))
+            return node.cells.some((cell) => beside(cell.nodes))
           })
         if (beside(hero.nodes)) picture = 'beside'
         else if (this.pictureBehind(image)) picture = 'behind'
@@ -1162,6 +1162,18 @@ class LayoutReader {
   linesOf(nodes: readonly SiteImportLayoutNode[]): SiteImportLineRef[] {
     return siteImportLayoutLines(nodes)
   }
+}
+
+/** Takes a line out of one of an item's lists; a list left empty goes, never left undefined (Firestore holds no undefined). */
+function dropLine(item: SiteImportLayoutItem, key: 'text' | 'list' | 'link', ref: SiteImportLineRef): void {
+  const list = item[key]?.filter((entry) => entry !== ref)
+  if (list?.length) item[key] = list
+  else delete item[key]
+}
+
+/** Rows of cells of lines, as objects: a Firestore document holds no array inside an array. */
+function tableRows(rows: SiteImportLineRef[][][]): SiteImportLayoutTable['rows'] {
+  return rows.map((row) => ({ cells: row.map((lines) => ({ lines })) }))
 }
 
 interface TabStrip {
@@ -1403,7 +1415,7 @@ export function siteImportLayoutCounts(layout: SiteImportLayout, blocks: readonl
           break
         case 'row':
           if (node.cells.length >= 2) counts.rows += 1
-          node.cells.forEach(visit)
+          for (const cell of node.cells) visit(cell.nodes)
           break
         case 'group':
           counts.groups[node.group] = (counts.groups[node.group] ?? 0) + 1

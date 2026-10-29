@@ -71,7 +71,7 @@ function all<K extends SiteImportLayoutNode['kind']>(nodes: readonly SiteImportL
   const visit = (list: readonly SiteImportLayoutNode[]) => {
     for (const node of list) {
       if (node.kind === kind) out.push(node as Extract<SiteImportLayoutNode, { kind: K }>)
-      if (node.kind === 'row') node.cells.forEach(visit)
+      if (node.kind === 'row') for (const cell of node.cells) visit(cell.nodes)
       if (node.kind === 'tabs') for (const tab of node.tabs) visit(tab.panel)
     }
   }
@@ -84,6 +84,20 @@ const sectionNamed = (name: SiteLayoutPageName, label: string) => {
   const section = read(name).layout.sections.find((entry) => entry.name === label)
   if (!section) throw new Error(`no section ${label}`)
   return section
+}
+
+/** Whether a value holds an array directly inside an array, which Firestore refuses. */
+function hasUndefined(value: unknown): boolean {
+  if (value === undefined) return true
+  if (Array.isArray(value)) return value.some(hasUndefined)
+  if (value && typeof value === 'object') return Object.values(value).some(hasUndefined)
+  return false
+}
+
+function hasNestedArray(value: unknown, inArray = false): boolean {
+  if (Array.isArray(value)) return inArray || value.some((entry) => hasNestedArray(entry, true))
+  if (value && typeof value === 'object') return Object.values(value).some((entry) => hasNestedArray(entry, false))
+  return false
 }
 
 /** Whether a block is a line of the page: a link inside a sentence is in its sentence. */
@@ -106,6 +120,11 @@ describe.each(Object.keys(SITE_LAYOUT_PAGES) as SiteLayoutPageName[])('%s: every
 
   it('fits one page’s layout budget on the job document', () => {
     expect(siteImportLayoutChars(read(name).layout)).toBeLessThanOrEqual(AI_SITE_IMPORT_LAYOUT_MAX_CHARS)
+  })
+
+  it('is a value the Firestore job document it rides can hold: no array inside an array, nothing undefined', () => {
+    expect(hasNestedArray(read(name).layout)).toBe(false)
+    expect(hasUndefined(read(name).layout)).toBe(false)
   })
 })
 
@@ -205,8 +224,8 @@ describe('aglyn.com home', () => {
   it('reads "For agencies" as a wide and a narrow column, the words beside the picture', () => {
     const [row] = all(sectionNamed('home', 'For agencies and multi-brand teams').nodes, 'row')
     expect(row?.cols).toEqual([4, 8])
-    expect(all(row?.cells[0] ?? [], 'group')[0]).toMatchObject({ group: 'cards' })
-    expect(all(row?.cells[1] ?? [], 'picture')).toHaveLength(1)
+    expect(all(row?.cells[0]?.nodes ?? [], 'group')[0]).toMatchObject({ group: 'cards' })
+    expect(all(row?.cells[1]?.nodes ?? [], 'picture')).toHaveLength(1)
   })
 
   it('counts what the page is made of: 2 pictures, 3 buttons, the icons, and every "→" line a link', () => {
@@ -260,7 +279,7 @@ describe('aglyn.com /product', () => {
     const { layout, main } = read('product')
     expect(siteImportLayoutCounts(layout, main).pictures).toBe(3)
     const [row] = all(sectionNamed('product', 'One console').nodes, 'row')
-    expect(all(row?.cells[1] ?? [], 'picture')).toHaveLength(1)
+    expect(all(row?.cells[1]?.nodes ?? [], 'picture')).toHaveLength(1)
     expect(layout.sections[0]?.hero).toEqual({ picture: 'below' })
   })
 })
@@ -282,7 +301,7 @@ describe('aglyn.com /pricing', () => {
     const [table] = all(sectionNamed('pricing', 'What each plan actually includes.').nodes, 'table') as SiteImportLayoutTable[]
     expect(table?.header).toBe(true)
     expect(table?.rows).toHaveLength(14)
-    expect(table?.rows[0]?.slice(1).map((cell) => text(cell[0] as number))).toEqual(['Free', 'Starter', 'Pro', 'Business', 'Scale', 'Advanced', 'Agency', 'Enterprise'])
+    expect(table?.rows[0]?.cells.slice(1).map((cell) => text(cell.lines[0] as number))).toEqual(['Free', 'Starter', 'Pro', 'Business', 'Scale', 'Advanced', 'Agency', 'Enterprise'])
     expect(layout.sections.some((section) => all(section.nodes, 'group').some((group) => group.group === 'faq' && group.items.length === 11))).toBe(true)
   })
 })
@@ -291,7 +310,7 @@ describe('aglyn.com /contact', () => {
   it('keeps the form where it sat, beside its heading, and the email cards with their mailto: links', () => {
     const { layout, text } = read('contact')
     const [row] = layout.sections.flatMap((section) => all(section.nodes, 'row'))
-    expect(all(row?.cells[1] ?? [], 'form')).toEqual([{ kind: 'form', form: 0 }])
+    expect(all(row?.cells[1]?.nodes ?? [], 'form')).toEqual([{ kind: 'form', form: 0 }])
     const [cards] = groupsOf('contact')
     expect(cards?.items.map((item) => [text(item.title as number), item.to])).toEqual([
       ['Talk to sales', 'mailto:sales@example.com'],
@@ -325,7 +344,7 @@ describe('a page built with Squarespace’s markup', () => {
     expect(layout.sections[0]?.hero).toEqual({ picture: 'behind' })
     const [row] = all(layout.sections[1]?.nodes ?? [], 'row')
     expect(row?.cols).toEqual([1, 1])
-    expect(all(row?.cells[0] ?? [], 'picture')).toHaveLength(1)
+    expect(all(row?.cells[0]?.nodes ?? [], 'picture')).toHaveLength(1)
   })
 
   it('reads its summary cards, quotes, price table, accordion and logo strip', () => {
@@ -338,7 +357,7 @@ describe('a page built with Squarespace’s markup', () => {
       ['Kids clay club', true, 'https://www.tidewater-pottery.example/kids-clay'],
     ])
     const table = read('pottery').layout.sections.flatMap((section) => all(section.nodes, 'table'))[0]
-    expect(table?.rows.map((row) => row.map((cell) => text(cell[0] as number)))).toEqual([
+    expect(table?.rows.map((row) => row.cells.map((cell) => text(cell.lines[0] as number)))).toEqual([
       ['Class', 'Weeks', 'Price'],
       ['Wheel throwing', '6', '$320'],
       ['Hand building', '6', '$280'],

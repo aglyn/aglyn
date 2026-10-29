@@ -73,6 +73,13 @@ describe('aglyn.com’s header menu', () => {
     ])
   })
 
+  it('holds no array inside an array, menu or footer, as a Firestore document must', () => {
+    const nested = (value: unknown, inArray = false): boolean =>
+      Array.isArray(value) ? inArray || value.some((entry) => nested(entry, true)) : !!value && typeof value === 'object' && Object.values(value).some((entry) => nested(entry))
+    expect(nested(nav())).toBe(false)
+    expect(nested(siteImportFooterColumns(page('home')))).toBe(false)
+  })
+
   it('reads its two buttons with their addresses, outbound as the source has them, and its phone menu button', () => {
     expect(nav().ctas).toEqual([
       { label: 'Sign in', href: 'https://app.aglyn.com/signin', style: 'quiet' },

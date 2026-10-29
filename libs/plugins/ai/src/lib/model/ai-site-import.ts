@@ -269,11 +269,15 @@ export interface SiteImportLayoutForm {
   form: number
 }
 
-/** A row of columns side by side; `cols` are relative widths in twelfths (`[4, 8]`, `[1, 1, 1]`). */
+/**
+ * A row of columns side by side; `cols` are relative widths in twelfths
+ * (`[4, 8]`, `[1, 1, 1]`). Every list of lists is a list of objects: the
+ * layout rides a Firestore document, which holds no array inside an array.
+ */
 export interface SiteImportLayoutRow {
   kind: 'row'
   cols: number[]
-  cells: SiteImportLayoutNode[][]
+  cells: Array<{ nodes: SiteImportLayoutNode[] }>
 }
 
 /**
@@ -310,12 +314,12 @@ export interface SiteImportLayoutGroup {
   items: SiteImportLayoutItem[]
 }
 
-/** A table: rows of cells, each cell its lines. */
+/** A table: rows of cells, each cell its lines (objects, not nested arrays, for Firestore). */
 export interface SiteImportLayoutTable {
   kind: 'table'
   /** Whether the first row names the columns. */
   header: boolean
-  rows: SiteImportLineRef[][][]
+  rows: Array<{ cells: Array<{ lines: SiteImportLineRef[] }> }>
 }
 
 /** A tab strip and its panels; a panel the source did not draw is empty. */
@@ -470,13 +474,13 @@ export function siteImportLayoutLines(nodes: readonly SiteImportLayoutNode[]): S
           out.push(node.line)
           break
         case 'row':
-          for (const cell of node.cells) visit(cell)
+          for (const cell of node.cells) visit(cell.nodes)
           break
         case 'group':
           for (const item of node.items) out.push(...item.lines)
           break
         case 'table':
-          for (const row of node.rows) for (const cell of row) out.push(...cell)
+          for (const row of node.rows) for (const cell of row.cells) out.push(...cell.lines)
           break
         case 'tabs':
           for (const tab of node.tabs) {
@@ -522,8 +526,8 @@ export function siteImportFilterNodes(list: readonly SiteImportLayoutNode[], kee
         case 'form':
           return [node]
         case 'row': {
-          const cells = node.cells.map(nodes)
-          return cells.some((cell) => cell.length) ? [{ ...node, cells }] : []
+          const cells = node.cells.map((cell) => ({ nodes: nodes(cell.nodes) }))
+          return cells.some((cell) => cell.nodes.length) ? [{ ...node, cells }] : []
         }
         case 'group': {
           const items = node.items
@@ -532,7 +536,9 @@ export function siteImportFilterNodes(list: readonly SiteImportLayoutNode[], kee
           return items.length ? [{ ...node, items }] : []
         }
         case 'table': {
-          const rows = node.rows.map((row) => row.map((cell) => cell.filter(keep))).filter((row) => row.some((cell) => cell.length))
+          const rows = node.rows
+            .map((row) => ({ cells: row.cells.map((cell) => ({ lines: cell.lines.filter(keep) })) }))
+            .filter((row) => row.cells.some((cell) => cell.lines.length))
           return rows.length ? [{ ...node, rows }] : []
         }
         case 'tabs': {
