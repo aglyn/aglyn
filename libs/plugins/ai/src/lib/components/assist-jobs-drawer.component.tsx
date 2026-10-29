@@ -212,6 +212,12 @@ export interface AssistJobsDrawerProps {
    * drawer, and a named job is scrolled to and highlighted.
    */
   focus?: AiJobsOpenRequest | null
+  /**
+   * The AI jobs page of the site the console page is on (AGL-4116). With
+   * one, the list never opens inside the chat: the row counts the jobs and
+   * links to the page, where each has room to be read.
+   */
+  pageHref?: string | null
 }
 
 export function AssistJobsDrawer({
@@ -226,6 +232,7 @@ export function AssistJobsDrawer({
   insight,
   inFlight,
   focus,
+  pageHref = null,
 }: AssistJobsDrawerProps): JSX.Element | null {
   const entitled = orgReady && checkEntitlement(org as never, 'aiGenerative')
   const [expanded, setExpanded] = useState(false)
@@ -322,10 +329,14 @@ export function AssistJobsDrawer({
   // Expanded by default while anything is moving or waiting (AGL-3593): a
   // plan waiting to be confirmed behind a collapsed row is a site that never
   // gets built. Otherwise collapsed, which reads nothing until asked.
+  // A site's jobs are read on its AI jobs page instead (AGL-4116).
   const anyInFlight = (inFlight?.length ?? 0) > 0
   useEffect(() => {
-    if (anyInFlight && !toggledRef.current) setExpanded(true)
-  }, [anyInFlight])
+    if (anyInFlight && !toggledRef.current && !pageHref) setExpanded(true)
+  }, [anyInFlight, pageHref])
+  useEffect(() => {
+    if (pageHref) setExpanded(false)
+  }, [pageHref])
 
   // A request to open AI jobs (AGL-3593): expand, read the list again so a
   // job created a moment ago is in it, and highlight the job named.
@@ -334,7 +345,7 @@ export function AssistJobsDrawer({
   const expandedRef = useRef(expanded)
   expandedRef.current = expanded
   useEffect(() => {
-    if (!focusSeq) return
+    if (!focusSeq || pageHref) return
     toggledRef.current = true
     setHighlight(focusJobId)
     // An open list does not re-run the expand effect's read, so it reads here.
@@ -435,7 +446,11 @@ export function AssistJobsDrawer({
 
   // Counted by state, never as one "running" figure (AGL-3593): a plan waiting
   // to be confirmed needs the person, and a stopped job is not moving.
-  const chips = aiJobsHeaderChips(aiJobActivityCounts(inFlight ?? jobs))
+  // A row that links to a site's page counts that site's jobs (AGL-4116).
+  const counted = inFlight ?? jobs
+  const chips = aiJobsHeaderChips(
+    aiJobActivityCounts(pageHref && hostId ? counted.filter((job) => job.hostId === hostId) : counted),
+  )
 
   return (
     <Box sx={{ mb: 2, borderBottom: 1, borderColor: 'divider', pb: 1 }}>
@@ -471,20 +486,26 @@ export function AssistJobsDrawer({
             Describe a page
           </Button>
         )}
-        <IconButton
-          size="small"
-          aria-label={expanded ? 'Hide AI jobs' : 'Show AI jobs'}
-          aria-expanded={expanded}
-          onClick={() => {
-            toggledRef.current = true
-            setExpanded((prior) => !prior)
-          }}
-        >
-          <MdiIcon
-            path={expanded ? mdiChevronUp.path : mdiChevronDown.path}
-            sx={{ fontSize: 18 }}
-          />
-        </IconButton>
+        {pageHref ? (
+          <Button size="small" component={AppLink} href={pageHref}>
+            {'View all'}
+          </Button>
+        ) : (
+          <IconButton
+            size="small"
+            aria-label={expanded ? 'Hide AI jobs' : 'Show AI jobs'}
+            aria-expanded={expanded}
+            onClick={() => {
+              toggledRef.current = true
+              setExpanded((prior) => !prior)
+            }}
+          >
+            <MdiIcon
+              path={expanded ? mdiChevronUp.path : mdiChevronDown.path}
+              sx={{ fontSize: 18 }}
+            />
+          </IconButton>
+        )}
       </Stack>
       <Collapse in={expanded} unmountOnExit>
         {notice && (

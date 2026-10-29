@@ -63,7 +63,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   Fragment,
   memo,
@@ -105,6 +105,7 @@ import {
   type AiJobsOpenRequest,
 } from './ai-jobs-store'
 import { aiJobsActivity, aiJobsLauncherLabel } from '../model/ai-job-activity'
+import { AI_SITE_BUILD_HREF } from '../model/ai-job-notice'
 import { AiModelSelector } from './ai-model-selector.component'
 import { AiUsageStrip } from './ai-usage-strip.component'
 import { useAiModelChoice } from './use-ai-model-choice'
@@ -256,12 +257,38 @@ interface AssistQuotaInfo {
 
 const HISTORY_TURNS_SENT = 12
 
-const storageKey = (orgId: string) => `aglyn-assist:${orgId}`
+/**
+ * The thread a question belongs to: one per site, and one for the
+ * workspace's own pages (AGL-4116). A workspace-wide thread carried one
+ * site's request into a build on another site, because the history that
+ * rides each question is the thread's last turns.
+ */
+export function assistThreadKey(orgId: string, hostId: string | null | undefined): string {
+  return hostId ? `aglyn-assist:${orgId}:${hostId}` : `aglyn-assist:${orgId}`
+}
 
-function loadThread(orgId: string | undefined): AssistMessage[] {
-  if (!orgId || typeof sessionStorage === 'undefined') return []
+const NO_MESSAGES: AssistMessage[] = []
+
+/**
+ * The AI jobs page of the site a console page is on (AGL-4116), or `null`
+ * off a site: `/{orgSlug}/hosts/{site}/ai-jobs`, the site named as the
+ * address names it.
+ */
+export function assistSiteAiJobsHref(
+  pathname: string | null | undefined,
+  orgSlug: string | null | undefined,
+  hostId: string | null | undefined,
+): string | null {
+  if (!pathname || !orgSlug || !hostId) return null
+  const parts = pathname.split('/').filter(Boolean)
+  const site = parts[0] === orgSlug && parts[1] === 'hosts' ? parts[2] : undefined
+  return site ? `/${orgSlug}/hosts/${site}${AI_SITE_BUILD_HREF}` : null
+}
+
+function loadThread(key: string): AssistMessage[] {
+  if (typeof sessionStorage === 'undefined') return []
   try {
-    const raw = sessionStorage.getItem(storageKey(orgId))
+    const raw = sessionStorage.getItem(key)
     const parsed = raw ? (JSON.parse(raw) as AssistMessage[]) : []
     if (!Array.isArray(parsed)) return []
     // A build whose job was still being created when the page went away is
@@ -276,10 +303,10 @@ function loadThread(orgId: string | undefined): AssistMessage[] {
   }
 }
 
-function saveThread(orgId: string | undefined, messages: AssistMessage[]) {
-  if (!orgId || typeof sessionStorage === 'undefined') return
+function saveThread(key: string, messages: AssistMessage[]) {
+  if (typeof sessionStorage === 'undefined') return
   try {
-    sessionStorage.setItem(storageKey(orgId), JSON.stringify(messages))
+    sessionStorage.setItem(key, JSON.stringify(messages))
   } catch {
     // Quota/full storage never breaks chat.
   }
@@ -706,7 +733,23 @@ export function AssistPanelComponent(props: AssistDockProps) {
 
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [messages, setMessages] = useState<AssistMessage[]>([])
+  // Every thread this panel has opened, by its key (AGL-4116): the one on
+  // screen is this site's, and an answer still streaming lands in the thread
+  // it was asked in, even after the page moved to another site.
+  const threadKey = scopedOrgId ? assistThreadKey(scopedOrgId, hostId) : null
+  const [threads, setThreads] = useState<Readonly<Record<string, AssistMessage[]>>>({})
+  const messages = (threadKey && threads[threadKey]) || NO_MESSAGES
+  const updateThread = useCallback(
+    (key: string | null, update: (prior: AssistMessage[]) => AssistMessage[]) => {
+      if (!key) return
+      setThreads((prior) => ({ ...prior, [key]: update(prior[key] ?? loadThread(key)) }))
+    },
+    [],
+  )
+  const setMessages = useCallback(
+    (update: (prior: AssistMessage[]) => AssistMessage[]) => updateThread(threadKey, update),
+    [threadKey, updateThread],
+  )
   const [quota, setQuota] = useState<AssistQuotaInfo | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   // The model switch and the usage strip (AGL-2942): the pick rides the
@@ -728,20 +771,34 @@ export function AssistPanelComponent(props: AssistDockProps) {
   )
   const editorSession = openEditorSession()
 
-  // Thread is per-org, session-persisted; switching orgs swaps threads.
-  // Keyed on the SCOPED org (AGL-1934): gating only the render would still
-  // load — and, on the next keystroke, save — a thread under the fallback
-  // org's key on every mount of a page that named no workspace.
+  // A thread per site, session-persisted; moving to another site or org
+  // swaps threads (AGL-4116). Keyed on the SCOPED org (AGL-1934): gating only
+  // the render would still load — and, on the next keystroke, save — a
+  // thread under the fallback org's key on every mount of a page that named
+  // no workspace.
   useEffect(() => {
-    setMessages(loadThread(scopedOrgId))
+    if (!threadKey) return
+    setThreads((prior) => (threadKey in prior ? prior : { ...prior, [threadKey]: loadThread(threadKey) }))
+  }, [threadKey])
+  useEffect(() => {
     setQuota(null)
   }, [scopedOrgId])
 
+  // Each thread is written back when it changes, the one on screen or one an
+  // answer is still streaming into.
+  const savedThreads = useRef<Record<string, AssistMessage[]>>({})
   useEffect(() => {
-    saveThread(scopedOrgId, messages)
+    for (const [key, list] of Object.entries(threads)) {
+      if (savedThreads.current[key] === list) continue
+      savedThreads.current[key] = list
+      saveThread(key, list)
+    }
+  }, [threads])
+
+  useEffect(() => {
     const node = scrollRef.current
     if (node) node.scrollTop = node.scrollHeight
-  }, [scopedOrgId, messages])
+  }, [messages])
 
   const entitled = orgReady && checkEntitlement(org as never, 'aiAssist')
   // Whether a question asked from a besigner document carries its canvas
@@ -765,10 +822,16 @@ export function AssistPanelComponent(props: AssistDockProps) {
   // jobs that spend between chat messages move it (AGL-3722).
   useEffect(() => followAiJobsForUsageMeter(), [])
   const jobsActivity = aiJobsActivity(inFlight)
+  // On a site, its jobs are read on its AI jobs page (AGL-4116): the list in
+  // the chat was too cramped to read, and opening it scrolled the chat to
+  // its top.
+  const siteJobsHref = assistSiteAiJobsHref(pathname, orgSlug, hostId)
+  const router = useRouter()
   // Any surface asking to open AI jobs — an "Open AI jobs" button, the
-  // indicator, a notification's link — opens the panel on its drawer.
-  // The request is handed to the drawer until the panel closes, so opening
-  // the panel again later does not re-highlight a job asked for before.
+  // indicator, a notification's link — goes to the site's AI jobs page, on
+  // the job it names. Off a site, it opens the panel on its drawer, and the
+  // request is handed to the drawer until the panel closes, so opening the
+  // panel again later does not re-highlight a job asked for before.
   const openRequest = useAiJobsOpenRequest()
   const [jobsFocus, setJobsFocus] = useState<AiJobsOpenRequest | null>(null)
   // The request outlives the panel: it is module state, and a page in
@@ -778,6 +841,11 @@ export function AssistPanelComponent(props: AssistDockProps) {
   useEffect(() => {
     if (openRequest.seq <= answeredSeq.current) return
     answeredSeq.current = openRequest.seq
+    if (siteJobsHref) {
+      setOpen(false)
+      router.push(openRequest.jobId ? `${siteJobsHref}/${encodeURIComponent(openRequest.jobId)}` : siteJobsHref)
+      return
+    }
     setJobsFocus(openRequest)
     setOpen(true)
     // A new `seq` is a new request; the object is read as it stands.
@@ -801,16 +869,19 @@ export function AssistPanelComponent(props: AssistDockProps) {
     // The drafts this thread's builds made (AGL-3616): the chat sees refs and
     // labels; the addresses stay here, for the card a follow-up raises.
     const draftLinks = hostId ? assistThreadDraftLinks(messages, orgSlug) : []
+    // Only this site's turns ride the question (AGL-4116), and the answer
+    // lands in the thread it was asked in.
     const history = messages
       .slice(-HISTORY_TURNS_SENT)
       .map(({ role, text }) => ({ role, text }))
-    setMessages((prior) => [
+    const askedIn = threadKey
+    updateThread(askedIn, (prior) => [
       ...prior,
       { role: 'user', text: question },
       { role: 'assistant', text: '' },
     ])
     const patchAnswer = (patch: (message: AssistMessage) => AssistMessage) => {
-      setMessages((prior) => {
+      updateThread(askedIn, (prior) => {
         const next = [...prior]
         const last = next[next.length - 1]
         if (last?.role === 'assistant') next[next.length - 1] = patch(last)
@@ -1023,6 +1094,8 @@ export function AssistPanelComponent(props: AssistDockProps) {
     scopedOrgId,
     orgSlug,
     pathname,
+    threadKey,
+    updateThread,
     user,
   ])
 
@@ -1079,7 +1152,7 @@ export function AssistPanelComponent(props: AssistDockProps) {
         i === index ? { ...entry, proposalResolved: true } : entry,
       ),
     )
-  }, [])
+  }, [setMessages])
 
   /**
    * Land a confirmed edit on the open editor (AGL-2906): through the canvas's
@@ -1133,7 +1206,7 @@ export function AssistPanelComponent(props: AssistDockProps) {
         body: JSON.stringify(report),
       }).catch(() => undefined)
     },
-    [enqueueSnackbar, messages, scopedOrgId, user],
+    [enqueueSnackbar, messages, scopedOrgId, setMessages, user],
   )
 
   /** Keep what a build card learned about its job on its own message (AGL-3616). */
@@ -1141,7 +1214,7 @@ export function AssistPanelComponent(props: AssistDockProps) {
     (index: number, patch: Pick<AssistMessage, 'buildJob'> | Pick<AssistMessage, 'buildNotice'>) => {
       setMessages((prior) => prior.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)))
     },
-    [],
+    [setMessages],
   )
 
   /** Wave an edit card away. Nothing to tell the server: nothing happened. */
@@ -1152,7 +1225,7 @@ export function AssistPanelComponent(props: AssistDockProps) {
           i === index ? { ...entry, editOutcome: { kind: 'dismissed' } } : entry,
       ),
     )
-  }, [])
+  }, [setMessages])
 
   const sendFeedback = useCallback(
     async (index: number, feedback: 'up' | 'down') => {
@@ -1179,7 +1252,7 @@ export function AssistPanelComponent(props: AssistDockProps) {
         })
       }
     },
-    [enqueueSnackbar, messages, scopedOrgId, user],
+    [enqueueSnackbar, messages, scopedOrgId, setMessages, user],
   )
 
   // A released-off feature does not exist (staff preview excepted) — and
@@ -1321,6 +1394,7 @@ export function AssistPanelComponent(props: AssistDockProps) {
               insight={ai.generate ? aiInsightSurfaceForPath(pathname) : null}
               inFlight={jobsVisible ? inFlight : undefined}
               focus={jobsFocus}
+              pageHref={siteJobsHref}
             />
             {!messages.length && (
               <Alert severity="info" sx={{ mb: 2 }}>

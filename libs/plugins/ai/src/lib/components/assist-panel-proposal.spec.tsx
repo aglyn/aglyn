@@ -107,6 +107,7 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 
 jest.mock('next/navigation', () => ({
   __esModule: true,
+  useRouter: () => ({ push: () => undefined, prefetch: () => undefined }),
   usePathname: () => routeScope.pathname,
 }))
 
