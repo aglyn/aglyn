@@ -5835,7 +5835,15 @@ export const AI_SURFACES: Record<AiSurface, AiSurfaceDefinition> = {
       'video',
       'videoEmbed',
     ],
-    codeOnly: ['icon', 'muiDrawer', 'muiDrawerToggle', 'cart'],
+    codeOnly: [
+      'icon',
+      'muiDrawer',
+      'muiDrawerToggle',
+      'cart',
+      'muiNavMenu',
+      'muiMegaMenu',
+      'muiLinkBox',
+    ],
   },
   component: {
     root: 'div',

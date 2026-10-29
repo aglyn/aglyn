@@ -61,6 +61,8 @@ const HEADING_VARIANTS: ReadonlySet<string> = new Set(['h1', 'h2', 'h3', 'h4', '
 /** The Besigner's Dropdown Menu and Mega Menu. */
 const DROPDOWNS: ReadonlySet<string> = new Set(['muiNavMenu', 'muiMegaMenu'])
 const LINK = 'muiScreenLink'
+/** What a menu's entry may be: a Page Link, or a Link Container holding a name and the line under it (AGL-4108). */
+const MENU_LINKS: ReadonlySet<string> = new Set([LINK, 'muiLinkBox'])
 /** Frames that hold content without being it: the language's, and a plain element. */
 const HOLDERS: ReadonlySet<string> = new Set([...AI_LAYOUT_FRAMES, 'div', 'span', 'muiGrid'])
 
@@ -146,7 +148,7 @@ function inspect(map: NodeMap): AiLayoutFrameHollows & { rows: string[]; merges:
   const footerCenteredRows = rows.filter((id) => map[id].sx?.['alignItems'] === 'center')
   const headerIds = new Set(headers.flatMap(subtree))
   const headerMenus = [...headerIds].filter(
-    (id) => DROPDOWNS.has(String(map[id].componentId)) && !subtree(id).some((at) => at !== id && map[at].componentId === LINK),
+    (id) => DROPDOWNS.has(String(map[id].componentId)) && !subtree(id).some((at) => at !== id && MENU_LINKS.has(String(map[at].componentId))),
   )
   return { footerColumns, footerHeadings, footerCenteredRows, headerMenus, rows, merges }
 }

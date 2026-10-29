@@ -44,6 +44,13 @@ import {
   type AiLayoutPage,
   type AiLayoutTargets,
 } from './ai-layout-links'
+import {
+  AI_LAYOUT_HEADER_MEASURE,
+  aiLayoutNavBreakpoint,
+  aiLayoutSourceFooter,
+  aiLayoutSourceHeader,
+  type AiLayoutFrameSource,
+} from './ai-layout-frame-source'
 import { AiLayoutTreeBuilder, type AiLayoutRawTree } from './ai-layout-tree'
 
 /**
@@ -59,6 +66,15 @@ import { AiLayoutTreeBuilder, type AiLayoutRawTree } from './ai-layout-tree'
  * its Menu Button on a phone; the Layout Slot, the page's one main landmark,
  * held tall enough that the footer sits at the bottom of a short page; and
  * the site's pages and name in the footer, where the design gave neither.
+ *
+ * Every label of the navigation is held to one line, the logo never narrower
+ * than itself, and the row shows from the screen width it measures to fit
+ * (`aiLayoutNavBreakpoint`), the Menu Button below it (AGL-4108: the 10/29
+ * import's seven long titles wrapped from 900 px up and the logo lay over
+ * "Home" at 1280). A site brought in from elsewhere whose menu the reader
+ * found is drawn as its source builds it instead (`plan.source`,
+ * `ai-layout-frame-source.ts`): its menus, its buttons, its phone menu and its
+ * footer, in place of the site's pages and the design's button and footer.
  */
 
 export interface AiLayoutFramePlan {
@@ -103,6 +119,14 @@ export interface AiLayoutFramePlan {
    * header shows it. Absent, the name alone.
    */
   brand?: AiLayoutFrameBrand | null
+  /**
+   * A site brought in from elsewhere whose header the reader found
+   * (AGL-4108): its menu with its menus, its buttons with their own
+   * addresses, its phone menu and its footer, drawn as the source has them
+   * (`ai-layout-frame-source.ts`) in place of the site's pages and the
+   * design's button and footer.
+   */
+  source?: AiLayoutFrameSource | null
 }
 
 /** A header's brand as the source shows it (AGL-4084). */
@@ -111,6 +135,10 @@ export interface AiLayoutFrameBrand {
   logo?: { src: string } | null
   /** Whether the header prints the name as words, beside the logo or alone. */
   name: boolean
+  /** The logo's words for a screen reader, as the source names it (AGL-4108); the site's name where it gave none. */
+  alt?: string
+  /** The logo's width over its height, which the header row is measured with (AGL-4108). */
+  aspect?: number
 }
 
 /** The height a header's logo is drawn at: a Besigner field the owner may change. */
@@ -266,6 +294,8 @@ export function aiCompileLayoutFrame(
   const centeredNav = header.align === 'center' && pages.length > 0
   // The brand takes the room the navigation does not, and gives way before
   // it does: a long name ends in an ellipsis rather than pushing into the links.
+  // A logo never gives way: drawn narrower than itself it lay over the first
+  // link (the 10/29 header at 1280, AGL-4108).
   const brandSx = {
     typography: 'h6',
     fontWeight: 800,
@@ -277,8 +307,10 @@ export function aiCompileLayoutFrame(
     ...(centeredNav ? {} : { flexGrow: 1 }),
   }
   const logo = plan.brand?.logo?.src ? plan.brand.logo.src : null
+  const source = plan.source ?? null
+  const alt = (plan.brand?.alt ?? '').replace(/\s+/g, ' ').trim().slice(0, 120) || name.slice(0, 40)
   const brand = logo
-    ? brandMark(tree, { src: logo, name: name.slice(0, 40), withName: plan.brand?.name === true, homeId: plan.homeId, centered: centeredNav })
+    ? brandMark(tree, { src: logo, name: name.slice(0, 40), alt, withName: plan.brand?.name === true, homeId: plan.homeId, centered: centeredNav, grow: !source })
     : plan.homeId
     ? tree.add(
         'muiScreenLink',
@@ -299,23 +331,38 @@ export function aiCompileLayoutFrame(
         null,
         'brand',
       )
-  const nav = pages.length
-    ? tree.add(
-        'muiStack',
-        {
-          component: 'nav',
-          ariaLabel: 'Main',
-          direction: 'row',
-          spacing: '3',
-          alignItems: 'center',
-        },
-        { display: { xs: 'none', md: 'flex' } },
-        pages.map((entry) => navLink(entry, 'navLink')),
-        'nav',
-      )
-    : null
+  // How wide the brand is drawn, which the row is measured with (AGL-4108).
+  const aspect = plan.brand?.aspect && Number.isFinite(plan.brand.aspect) && plan.brand.aspect > 0 ? Math.min(plan.brand.aspect, 8) : null
+  const logoHeight = Number.parseInt(AI_LAYOUT_LOGO_HEIGHT, 10)
+  const brandWidth = logo
+    ? (aspect ? Math.round(aspect * logoHeight) : AI_LAYOUT_HEADER_MEASURE.logo) + (plan.brand?.name ? name.slice(0, 40).length * 11 + 12 : 0)
+    : Math.min(name.length, 40) * 11
+  // The source's own header (AGL-4108), drawn as it builds it.
+  const close = [AI_LAYOUT_CLOSE_DRAWER]
+  const drawn = source ? aiLayoutSourceHeader(tree, source, { onBrand: band === 'brand' || band === 'dark', close, brandWidth }) : null
+  // Every label on one line, and the row only on a screen it fits (AGL-4108).
+  const pagesBreakpoint = aiLayoutNavBreakpoint({ brandWidth, nav: pages.map((entry) => ({ label: entry.label, menu: false })), ctas: [] })
+  const breakpoint = drawn?.breakpoint ?? pagesBreakpoint
+  const nav = drawn
+    ? drawn.nav
+    : pages.length
+      ? tree.add(
+          'muiStack',
+          {
+            component: 'nav',
+            ariaLabel: 'Main',
+            direction: 'row',
+            spacing: '3',
+            alignItems: 'center',
+          },
+          { display: { xs: 'none', [breakpoint]: 'flex' }, whiteSpace: 'nowrap' },
+          pages.map((entry) => navLink(entry, 'navLink')),
+          'nav',
+        )
+      : null
   // The design's call to action: its first button, where it goes somewhere.
-  const ctaBlock = header.blocks.find((block) => block.kind === 'button')
+  // A source's header carries its own buttons instead (AGL-4108).
+  const ctaBlock = source ? undefined : header.blocks.find((block) => block.kind === 'button')
   // A store's announcement: the first short line the design gave its header (AGL-3676).
   const store = !!plan.shopId
   const noteBlock = store ? header.blocks.find((block) => block.kind === 'note' || block.kind === 'text' || block.kind === 'lede') : undefined
@@ -384,9 +431,24 @@ export function aiCompileLayoutFrame(
     return id
   }
   // A phone's menu: the platform's Drawer, opened by its Menu Button; a link
-  // followed from it closes it.
-  const close = [AI_LAYOUT_CLOSE_DRAWER]
-  const drawer = pages.length
+  // followed from it closes it. A source's holds its menus, links and buttons (AGL-4108).
+  const drawer = drawn?.drawer.length
+    ? tree.add(
+        'muiDrawer',
+        { anchor: 'right' },
+        null,
+        [
+          tree.add(
+            'muiStack',
+            { component: 'nav', ariaLabel: 'Menu' },
+            { display: 'flex', flexDirection: 'column', gap: 3, p: 3 },
+            [...drawn.drawer, accountPath ? accountLink('menuAccount', close) : null],
+            'menu',
+          ),
+        ],
+        'drawer',
+      )
+    : !source && pages.length
     ? tree.add(
         'muiDrawer',
         { anchor: 'right' },
@@ -425,7 +487,8 @@ export function aiCompileLayoutFrame(
     ? tree.add(
         'muiDrawerToggle',
         { ariaLabel: 'Open the menu' },
-        { display: { xs: 'inline-flex', md: 'none' }, flexShrink: 0 },
+        // Pushed to the end of the row where no button is there to push it.
+        { display: { xs: 'inline-flex', [breakpoint]: 'none' }, flexShrink: 0, ...(drawn && !drawn.ctas ? { ml: 'auto' } : {}) },
         null,
         'menuButton',
       )
@@ -445,13 +508,13 @@ export function aiCompileLayoutFrame(
     ? tree.add(AI_LAYOUT_CART_ELEMENT, { variant: 'button' }, { flexShrink: 0 }, null, 'cart')
     : null
   // On a phone the account is in the menu, and the cart stays in the bar.
-  const account = accountPath ? accountLink('account', undefined, { display: { xs: 'none', md: 'inline-flex' }, flexShrink: 0 }) : null
+  const account = accountPath ? accountLink('account', undefined, { display: { xs: 'none', [breakpoint]: 'inline-flex' }, flexShrink: 0 }) : null
   // The row lives in a Container inside the Toolbar Content, which may only sit in an App Bar.
   const row = tree.add(
     'muiContainer',
     { maxWidth: 'lg' },
     { display: 'flex', alignItems: 'center', columnGap: 3 },
-    [brand, middle, cta, account, cart, toggle, drawer],
+    [brand, middle, drawn ? drawn.ctas : cta, account, cart, toggle, drawer],
     'headerRow',
   )
   const toolbar = tree.add(
@@ -461,17 +524,19 @@ export function aiCompileLayoutFrame(
     [row],
     'toolbar',
   )
+  // A source's header bar on the ground it sits on (AGL-4108): the page's own, where it is the page's.
+  const barLook = source?.header === 'page' ? { props: { color: 'inherit' }, sx: { bgcolor: 'background.default' } } : look
   const bar = tree.add(
     'muiAppBar',
     {
-      ...look.props,
+      ...barLook.props,
       position: 'sticky',
       // Over a page that opens with a photo cover, the bar sits on the photo (AGL-3660).
       overHero: true,
       component: 'header',
       ariaLabel: 'Site header',
     },
-    look.sx,
+    barLook.sx,
     [toolbar],
     'header',
   )
@@ -515,7 +580,7 @@ export function aiCompileLayoutFrame(
     null,
     'slot',
   )
-  const footer = compileFooter(page, frame.footer, plan, name)
+  const footer = source?.footer ? sourceFooter(page, source, name) : compileFooter(page, frame.footer, plan, name)
   // No heading with nothing under it, no column of only a heading, columns
   // top-aligned (AGL-3735): a list under a heading can compile to nothing.
   if (aiLayoutRepairFrameHollows(tree.nodes as unknown as Record<string, unknown>)) {
@@ -734,20 +799,38 @@ function compileFooter(
 }
 
 /**
+ * A source's footer (AGL-4108): its columns, words, profiles and © line, as
+ * the source has them, on the quiet band a footer sits on.
+ */
+function sourceFooter(page: PageScope, source: AiLayoutFrameSource, name: string): string {
+  const tree = page.tree
+  const drawn = aiLayoutSourceFooter(tree, source.footer as NonNullable<AiLayoutFrameSource['footer']>, { name })
+  const stack = tree.add('muiStack', { spacing: '6' }, drawn.sx, [drawn.top, drawn.bottom], 'footerStack')
+  const container = tree.add('muiContainer', { maxWidth: 'lg' }, { py: { xs: 6, md: 8 } }, [stack], 'footerInner')
+  return tree.add(
+    'section',
+    { element: 'footer', ariaLabel: 'Site footer' },
+    { bgcolor: 'background.paper', borderTop: 1, borderColor: 'divider' },
+    [container],
+    'footer',
+  )
+}
+
+/**
  * The header's brand drawn with the site's logo (AGL-4084), as the source's
  * header draws it: the logo alone, named by its alt text, or the logo with
  * the name beside it; either way the link home.
  */
 function brandMark(
   tree: AiLayoutTreeBuilder,
-  input: { src: string; name: string; withName: boolean; homeId: string | null; centered: boolean },
+  input: { src: string; name: string; alt: string; withName: boolean; homeId: string | null; centered: boolean; grow: boolean },
 ): string {
   const image = (alone: boolean) =>
     tree.add(
       'image',
       {
         src: input.src,
-        ...(alone ? { alt: input.name } : { decorative: true }),
+        ...(alone ? { alt: input.alt } : { decorative: true }),
         objectFit: 'contain',
         width: 'auto',
         height: AI_LAYOUT_LOGO_HEIGHT,
@@ -758,14 +841,15 @@ function brandMark(
       null,
       'logo',
     )
-  const grow = input.centered ? null : { flexGrow: 1 }
+  // Never narrower than the logo (AGL-4108); it grows into the room the
+  // navigation leaves only where the navigation does not take it itself.
+  const grow = input.centered || !input.grow ? null : { flexGrow: 1 }
   if (!input.withName) {
-    if (!grow) return image(true)
-    return tree.add('muiBox', null, { ...grow, display: 'flex', alignItems: 'center', minWidth: 0 }, [image(true)], 'brand')
+    return tree.add('muiBox', null, { ...(grow ?? {}), display: 'flex', alignItems: 'center', flexShrink: 0 }, [image(true)], 'brand')
   }
   const words = tree.add('muiTypography', { children: input.name, variant: 'h6', component: 'p' }, { fontWeight: 800, whiteSpace: 'nowrap' }, null, 'brandName')
   const row = tree.add('muiStack', { direction: 'row', spacing: '1.5', alignItems: 'center' }, null, [image(false), words], 'brandRow')
   return input.homeId
-    ? tree.add('muiLinkBox', { screenId: input.homeId, ariaLabel: input.name }, { ...(grow ?? {}), textDecoration: 'none', color: 'inherit', minWidth: 0 }, [row], 'brand')
-    : tree.add('muiBox', null, { ...(grow ?? {}), minWidth: 0 }, [row], 'brand')
+    ? tree.add('muiLinkBox', { screenId: input.homeId, ariaLabel: input.name }, { ...(grow ?? {}), textDecoration: 'none', color: 'inherit', flexShrink: 0 }, [row], 'brand')
+    : tree.add('muiBox', null, { ...(grow ?? {}), flexShrink: 0 }, [row], 'brand')
 }

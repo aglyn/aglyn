@@ -721,6 +721,27 @@ export interface AiSiteImportHome {
     social: string[]
     address: string
   }
+  /**
+   * The source's header menu as its home page builds it (AGL-4108): its
+   * items, their menus, its buttons. The header and footer are drawn from it
+   * with no model; absent on a read made before the reader, or where the home
+   * page has no menu the reader can find.
+   */
+  nav?: SiteImportNavTree | null
+  /** The source's footer as its home page builds it (AGL-4108): its columns, profiles, facts and © line. */
+  footer?: SiteImportFooter | null
+  /** What the source's look is made of (AGL-4108): its colors, its button fill and corners, its fonts. */
+  look?: SiteImportLookFacts | null
+}
+
+/**
+ * Whether the site's header and footer are built from the source's own menu
+ * (AGL-4108), with no model: the home page's menu was read. Then the frame
+ * costs nothing and is quoted at nothing.
+ */
+export function aiSiteImportFrameIsRead(state: Pick<AiSiteImportState, 'home'> | null | undefined): boolean {
+  const nav = state?.home?.nav
+  return !!nav && (nav.items.length > 0 || nav.ctas.length > 0)
 }
 
 /** What the look pass did (AGL-4084): no model is asked. */
@@ -1505,7 +1526,8 @@ export function aiSiteImportWaveOwed(
   items?: readonly AiJobItemLedger[] | null,
 ): { pages: number; arranged: number; copied: number; frame: boolean } {
   const owed = (slot: string) => (items ? aiSiteImportItemOpen(items, slot) : true)
-  const counts = { pages: 0, arranged: 0, copied: 0, frame: wave.frame && !!state.frame && owed(AI_SITE_IMPORT_FRAME_SLOT) }
+  // A header and footer drawn from the source's own menu ask no model (AGL-4108), so are owed nothing.
+  const counts = { pages: 0, arranged: 0, copied: 0, frame: wave.frame && !!state.frame && !aiSiteImportFrameIsRead(state) && owed(AI_SITE_IMPORT_FRAME_SLOT) }
   for (const slot of wave.slots) {
     const page = state.pages.find((entry) => entry.slot === slot)
     if (!owed(slot) || page?.refused) continue

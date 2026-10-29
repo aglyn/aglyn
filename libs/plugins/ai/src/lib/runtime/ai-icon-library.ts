@@ -304,3 +304,17 @@ export function aiIconOfWord(word: unknown): AiIconLibraryEntry | null {
 export function aiIconOfId(id: unknown): AiIconLibraryEntry | null {
   return typeof id === 'string' ? (BY_ID.get(id) ?? null) : null
 }
+
+/** The most characters an icon's own drawing may hold (AGL-4107): a page brought in carries its source's icons. */
+export const AI_ICON_PATH_MAX_CHARS = 8_192
+
+/** Whether a value is SVG path data and nothing else: commands, numbers and their separators. */
+export function aiIsIconPathData(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= AI_ICON_PATH_MAX_CHARS &&
+    /^[MmZzLlHhVvCcSsQqTtAa0-9eE.,\s+-]+$/.test(value) &&
+    /^\s*[Mm]/.test(value)
+  )
+}
