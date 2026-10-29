@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import type {
   SiteStarterFacets,
   SiteStarterMode,
@@ -259,12 +260,12 @@ export interface StarterCardFact {
 /**
  * The chips on a starter's card, in the order they are read: the price,
  * every card carrying one ("Free" included, so a missing chip never reads as
- * a forgotten price); "Aglyn" for the platform's own; "AI" for a starter the
+ * a forgotten price); the platform's name for its own; "AI" for a starter the
  * AI site start fills; the kind of site in words; and its page count.
  */
 export function starterCardFacts(row: SiteStarterSummary): StarterCardFact[] {
   const facts: StarterCardFact[] = [{ key: 'price', label: starterPriceLabel(row.priceUsd) }]
-  if (row.official) facts.push({ key: 'official', label: 'Aglyn' })
+  if (row.official) facts.push({ key: 'official', label: PLATFORM_BRAND_NAME })
   if (row.facets.mode === 'ai') facts.push({ key: 'ai', label: 'AI' })
   if (row.category) facts.push({ key: 'kind', label: row.category })
   const pages = starterPagesLabel(row.facets.pages)

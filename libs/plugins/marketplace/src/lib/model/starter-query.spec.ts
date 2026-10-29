@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { SITE_STARTER_SEARCH_MAX } from './site-starter-listing'
 import {
   parseStarterSearchAnswer,
@@ -206,11 +207,11 @@ describe('the words on a card', () => {
     expect(starterPagesLabel(pages)).toBe(label)
   })
 
-  it('reads a card’s chips in order: price, Aglyn, AI, kind, pages', () => {
+  it('reads a card’s chips in order: price, the platform’s mark, AI, kind, pages', () => {
     const ai = readStarterSummary({ ...ROW, priceUsd: 12, facets: { ...ROW.facets, mode: 'ai' } })
     expect(starterCardFacts(ai!)).toEqual([
       { key: 'price', label: '$12' },
-      { key: 'official', label: 'Aglyn' },
+      { key: 'official', label: PLATFORM_BRAND_NAME },
       { key: 'ai', label: 'AI' },
       { key: 'kind', label: 'Restaurant & café' },
       { key: 'pages', label: '4 pages' },

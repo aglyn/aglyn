@@ -96,7 +96,7 @@ function emptyMessage(props: ConsoleHostStarterPickerZoneProps): string {
  *
  * Lists what the dialog asks for — its mode, its search words and its
  * filters — as cards of the shared option grid: a picture, the name, who made
- * it, and its price, kind, page count and the "AI" and "Aglyn" marks as
+ * it, and its price, kind, page count and the "AI" and platform marks as
  * chips. NOTHING is selected when it opens; a person picks, and the pick goes
  * to the dialog through `onPick`. It creates nothing: the dialog creates the
  * site from the starter it was handed.
