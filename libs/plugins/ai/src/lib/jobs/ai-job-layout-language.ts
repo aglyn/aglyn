@@ -18,6 +18,7 @@
 import type { NodesMap } from '@aglyn/aglyn/types/nodes'
 import { aiLayoutDesignChoices, type AiLayoutDesign } from '../layout-language/ai-layout-design'
 import { aiCompileLayoutFrame, type AiLayoutFrameBrand } from '../layout-language/ai-layout-frame'
+import { aiLayoutFrameSourceOf, aiLayoutFrameSourcePageIds, type AiLayoutFrameSource } from '../layout-language/ai-layout-frame-source'
 import {
   aiLayoutFrameHollows,
   aiLayoutFrameHollowsSaid,
@@ -28,6 +29,7 @@ import {
   AI_LAYOUT_FRAME_TOOL,
   AI_LAYOUT_LANGUAGE_TEXT,
   aiReadLayoutFrame,
+  type AiLayoutSection,
 } from '../layout-language/ai-layout-language'
 import type {
   AiLayoutPage,
@@ -118,6 +120,20 @@ export const AI_JOB_LAYOUT_LANGUAGE_INSTRUCTIONS: readonly AiSystemBlock[] = [
 export const AI_LAYOUT_SITE_BRAND_INPUT = 'siteBrand'
 export const AI_LAYOUT_SITE_FACTS_INPUT = 'siteFacts'
 
+/**
+ * The unit input a site brought in gives its header and footer where the
+ * reader found the source's menu (AGL-4108): its menu, its buttons and its
+ * footer, every link resolved to a page of the site or the source's own
+ * address (`AiLayoutFrameSource`). With it the frame is drawn by code and no
+ * model is asked; read defensively, `null` on every other job.
+ */
+export const AI_LAYOUT_SITE_FRAME_INPUT = 'siteFrame'
+
+/** A job's source frame (AGL-4108), held to what a link and a label may carry; `null` where it has none. */
+export function aiLayoutSiteFrameOf(inputs: Readonly<Record<string, unknown>> | null | undefined): AiLayoutFrameSource | null {
+  return aiLayoutFrameSourceOf(inputs?.[AI_LAYOUT_SITE_FRAME_INPUT])
+}
+
 /** The most characters of a site's own header and footer words a frame is shown. */
 export const AI_LAYOUT_SITE_FACTS_MAX_CHARS = 4_000
 
@@ -136,7 +152,10 @@ export function aiLayoutSiteBrandOf(inputs: Readonly<Record<string, unknown>> | 
   const value = raw as Record<string, unknown>
   const logo = value['logo'] as Record<string, unknown> | null | undefined
   const src = typeof logo?.['src'] === 'string' && logo['src'].trim() ? logo['src'].trim() : null
-  return { ...(src ? { logo: { src } } : {}), name: src ? value['name'] === true : true }
+  // The logo's own words and shape, as the source names and draws it (AGL-4108).
+  const alt = typeof value['alt'] === 'string' ? value['alt'].replace(/\s+/g, ' ').trim().slice(0, 120) : ''
+  const aspect = typeof value['aspect'] === 'number' && Number.isFinite(value['aspect']) && value['aspect'] > 0 ? Math.min(value['aspect'], 8) : null
+  return { ...(src ? { logo: { src } } : {}), name: src ? value['name'] === true : true, ...(src && alt ? { alt } : {}), ...(src && aspect ? { aspect } : {}) }
 }
 
 export function aiLayoutSiteFactsOf(inputs: Readonly<Record<string, unknown>> | null | undefined): AiLayoutSiteFacts | null {
@@ -263,8 +282,8 @@ export interface AiLayoutFrameBuilt {
   dropped: string[]
 }
 
-/** The check a frame answer is held to: read, compiled, stored and checked as a layout, with the layout door's own checks. */
-export function aiLayoutFrameCheck(input: {
+/** What a frame is built with: the site, its pages and links, its look, and the layout door's own checks. */
+export interface AiLayoutFrameInput {
   /** The header arrangement the site's look chose (AGL-3660); the answer's otherwise. */
   headerAlign?: 'start' | 'center'
   siteName: string
@@ -280,128 +299,155 @@ export function aiLayoutFrameCheck(input: {
   language?: string
   /** The header's brand as a site brought in draws it (AGL-4084). */
   brand?: AiLayoutFrameBrand | null
-}): AiGenerationCheck<AiLayoutFrameBuilt> {
+  /** A site brought in's own header and footer (AGL-4108), drawn in place of the design's. */
+  source?: AiLayoutFrameSource | null
+}
+
+/** The check a frame answer is held to: read, compiled, stored and checked as a layout, with the layout door's own checks. */
+export function aiLayoutFrameCheck(input: AiLayoutFrameInput): AiGenerationCheck<AiLayoutFrameBuilt> {
   let answers = 0
   return (answer) => {
     // The last answer a generation takes has its gaps taken out rather than asked about again.
     answers += 1
-    const last = answers >= AI_GENERATION_MAX_ATTEMPTS
-    const frame = aiReadLayoutFrame(answer)
-    if (input.headerAlign && frame.header) frame.header.align = input.headerAlign
-    const compiled = aiCompileLayoutFrame(
-      frame,
-      {
-        siteName: input.siteName,
-        homeId: input.homeId,
-        navPages: input.pages,
-        closesDark: input.design ? aiLayoutDesignChoices(input.design).coverClose : false,
-        // A site that sells carries its cart in the header (AGL-3676).
-        cart: (input.targets.listings ?? []).some((listing) => listing.kind === 'products' && listing.cart !== false),
-        // And a store's header is a storefront's: no button repeating its navigation, an announcement bar (AGL-3676).
-        shopId: aiLayoutShopPageId(input.targets),
-        // And its account and policies, written after it (AGL-3676).
-        storeLinks: input.storeLinks ?? null,
-        ...(input.language ? { language: input.language } : {}),
-        ...(input.brand ? { brand: input.brand } : {}),
-      },
-      input.targets,
-    )
-    const context = {
-      screenIds: [
-        ...new Set([
-          ...input.targets.pages.map((page) => page.id),
-          ...input.pages.map((page) => page.id),
-          ...(input.homeId ? [input.homeId] : []),
-        ]),
+    return aiLayoutFrameBuild(aiReadLayoutFrame(answer), input, answers >= AI_GENERATION_MAX_ATTEMPTS)
+  }
+}
+
+/**
+ * A site brought in's header and footer as its source builds them
+ * (AGL-4108), with no model: compiled, stored and checked as a layout, held
+ * to every check an answer is. `value` is `null` with the violations where it
+ * does not pass, and the frame is then designed by the model instead.
+ */
+export function aiLayoutSourceFrameBuild(input: AiLayoutFrameInput & { source: AiLayoutFrameSource }): ReturnType<AiGenerationCheck<AiLayoutFrameBuilt>> {
+  const band = input.source.header === 'brand' || input.source.header === 'dark' ? input.source.header : 'plain'
+  return aiLayoutFrameBuild({ header: { band, align: 'start', blocks: [] }, footer: null }, input, true)
+}
+
+/** A frame compiled, stored and checked as a layout; `last` takes its gaps out rather than asking about them. */
+function aiLayoutFrameBuild(frame: { header: AiLayoutSection | null; footer: AiLayoutSection | null }, input: AiLayoutFrameInput, last: boolean): ReturnType<AiGenerationCheck<AiLayoutFrameBuilt>> {
+  if (input.headerAlign && frame.header && !input.source) frame.header.align = input.headerAlign
+  const compiled = aiCompileLayoutFrame(
+    frame,
+    {
+      siteName: input.siteName,
+      homeId: input.homeId,
+      navPages: input.pages,
+      closesDark: input.design ? aiLayoutDesignChoices(input.design).coverClose : false,
+      // A site that sells carries its cart in the header (AGL-3676).
+      cart: (input.targets.listings ?? []).some((listing) => listing.kind === 'products' && listing.cart !== false),
+      // And a store's header is a storefront's: no button repeating its navigation, an announcement bar (AGL-3676).
+      shopId: aiLayoutShopPageId(input.targets),
+      // And its account and policies, written after it (AGL-3676).
+      storeLinks: input.storeLinks ?? null,
+      ...(input.language ? { language: input.language } : {}),
+      ...(input.brand ? { brand: input.brand } : {}),
+      ...(input.source ? { source: input.source } : {}),
+    },
+    input.targets,
+  )
+  // The pages a source's menu and footer link by id (AGL-4108).
+  const sourcePages = input.source ? aiLayoutFrameSourcePageIds(input.source) : []
+  const context = {
+    screenIds: [
+      ...new Set([
+        ...input.targets.pages.map((page) => page.id),
+        ...input.pages.map((page) => page.id),
+        ...(input.homeId ? [input.homeId] : []),
+        ...sourcePages,
+      ]),
+    ],
+    formIds: input.targets.forms.map((form) => form.id),
+    homeScreenIds: input.targets.homeIds,
+    // A link home under the home page's own title says home, in any language (AGL-3760).
+    homeLabels: [
+      ...input.pages.filter((page) => aiLayoutIsHomeSlug(page.slug)),
+      ...input.targets.pages.filter((page) => input.targets.homeIds.includes(page.id)),
+    ].map((page) => page.label),
+    // A footer's "Get in touch" goes to the form, wherever it is placed (AGL-3729).
+    ...(input.targets.formPageId ? { formScreenIds: [input.targets.formPageId] } : {}),
+    codeBuilt: true,
+    // A source's header and footer are its owner's own words and menu
+    // (AGL-4108), drawn by code where they repeat: no model wrote a block
+    // twice that a component should carry once.
+    ...(input.source ? { ownWords: true, reusableComponents: false } : {}),
+  }
+  const stored = aiLayoutStoredTree(compiled.tree, 'layout', context)
+  if (stored.ok === false) {
+    console.error('ai layout frame: a compiled layout did not store', {
+      error: stored.error,
+    })
+    return {
+      value: null,
+      violations: [
+        {
+          rule: null,
+          code: 'layout-compile',
+          message: 'This layout could not be built. Try again.',
+          detail: stored.error,
+        },
       ],
-      formIds: input.targets.forms.map((form) => form.id),
-      homeScreenIds: input.targets.homeIds,
-      // A link home under the home page's own title says home, in any language (AGL-3760).
-      homeLabels: [
-        ...input.pages.filter((page) => aiLayoutIsHomeSlug(page.slug)),
-        ...input.targets.pages.filter((page) => input.targets.homeIds.includes(page.id)),
-      ].map((page) => page.label),
-      // A footer's "Get in touch" goes to the form, wherever it is placed (AGL-3729).
-      ...(input.targets.formPageId ? { formScreenIds: [input.targets.formPageId] } : {}),
-      codeBuilt: true,
     }
-    const stored = aiLayoutStoredTree(compiled.tree, 'layout', context)
-    if (stored.ok === false) {
-      console.error('ai layout frame: a compiled layout did not store', {
-        error: stored.error,
-      })
-      return {
-        value: null,
-        violations: [
+  }
+  // No gap and no internal reference in the words of a frame every published page shows.
+  const navPages = [...input.targets.pages, ...input.pages]
+  const copy = aiLayoutCopyCheck(
+    stored.nodes,
+    stored.rootId,
+    {
+      pages: navPages,
+      ids: [...navPages.map((page) => page.id), ...input.targets.forms.map((form) => form.id)],
+    },
+    last,
+  )
+  const { dropped } = copy
+  // An attribute a rule has one answer for is settled, not asked of the model again (AGL-3660).
+  const nodes = aiSettleUnrelatedScreenLinks(
+    aiSettleMechanicalRules(
+      { rootId: stored.rootId, nodes: copy.nodes as unknown as Record<string, AiDoctrineNode> },
+      'layout',
+      // And on the last answer, a link that goes nowhere, as the check below reads it (AGL-4076).
+      last ? context : undefined,
+    ),
+    'layout',
+    context,
+  ).nodes as unknown as typeof copy.nodes
+  // The copy check can take words out of the footer: no heading or column
+  // is left with nothing under it (AGL-3735), and none may remain.
+  aiLayoutRepairFrameHollows(nodes as unknown as Record<string, unknown>)
+  const hollow = aiLayoutFrameHollows(nodes as unknown as Record<string, unknown>)
+  const report = validateAiDoctrineTree(
+    { rootId: stored.rootId, nodes },
+    'layout',
+    context,
+  )
+  const violations = [
+    ...report.violations,
+    ...(aiLayoutFrameIsHollow(hollow)
+      ? [
           {
             rule: null,
-            code: 'layout-compile',
-            message: 'This layout could not be built. Try again.',
-            detail: stored.error,
+            code: 'layout-frame-hollow',
+            message: 'Every footer heading needs something under it, and every footer column more than a heading.',
+            detail: aiLayoutFrameHollowsSaid(hollow).join('; '),
           },
-        ],
-      }
-    }
-    // No gap and no internal reference in the words of a frame every published page shows.
-    const navPages = [...input.targets.pages, ...input.pages]
-    const copy = aiLayoutCopyCheck(
-      stored.nodes,
-      stored.rootId,
-      {
-        pages: navPages,
-        ids: [...navPages.map((page) => page.id), ...input.targets.forms.map((form) => form.id)],
-      },
-      last,
-    )
-    const { dropped } = copy
-    // An attribute a rule has one answer for is settled, not asked of the model again (AGL-3660).
-    const nodes = aiSettleUnrelatedScreenLinks(
-      aiSettleMechanicalRules(
-        { rootId: stored.rootId, nodes: copy.nodes as unknown as Record<string, AiDoctrineNode> },
-        'layout',
-        // And on the last answer, a link that goes nowhere, as the check below reads it (AGL-4076).
-        last ? context : undefined,
-      ),
-      'layout',
-      context,
-    ).nodes as unknown as typeof copy.nodes
-    // The copy check can take words out of the footer: no heading or column
-    // is left with nothing under it (AGL-3735), and none may remain.
-    aiLayoutRepairFrameHollows(nodes as unknown as Record<string, unknown>)
-    const hollow = aiLayoutFrameHollows(nodes as unknown as Record<string, unknown>)
-    const report = validateAiDoctrineTree(
-      { rootId: stored.rootId, nodes },
-      'layout',
-      context,
-    )
-    const violations = [
-      ...report.violations,
-      ...(aiLayoutFrameIsHollow(hollow)
-        ? [
-            {
-              rule: null,
-              code: 'layout-frame-hollow',
-              message: 'Every footer heading needs something under it, and every footer column more than a heading.',
-              detail: aiLayoutFrameHollowsSaid(hollow).join('; '),
-            },
-          ]
-        : []),
-      ...copy.violations,
-      ...input.extend({
-        rootId: stored.rootId,
-        nodes,
-        repairs: [],
-        sourceIds: {},
-        score: report.score as AiValidatedTree['score'],
-        load: report.load,
-      }),
-    ]
-    return {
-      value: violations.length
-        ? null
-        : { rootId: stored.rootId, nodes, load: report.load, dropped },
-      violations,
-    }
+        ]
+      : []),
+    ...copy.violations,
+    ...input.extend({
+      rootId: stored.rootId,
+      nodes,
+      repairs: [],
+      sourceIds: {},
+      score: report.score as AiValidatedTree['score'],
+      load: report.load,
+    }),
+  ]
+  return {
+    value: violations.length
+      ? null
+      : { rootId: stored.rootId, nodes, load: report.load, dropped },
+    violations,
   }
 }
 

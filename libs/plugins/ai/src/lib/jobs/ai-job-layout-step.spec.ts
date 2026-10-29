@@ -644,6 +644,75 @@ describe('the layout step', () => {
     expect(mockDocs.has(`hosts/host-1/layouts/${LAYOUT_ID}`)).toBe(false)
   })
 
+  describe('a site brought in whose menu the reader found (AGL-4108)', () => {
+    /** A source's own menu, buttons and footer, as the import hands them in: every link resolved. */
+    const SITE_FRAME = {
+      nav: [
+        {
+          label: 'Product',
+          to: 'page:scr-about',
+          items: [
+            { label: 'Besigner', text: 'Visual builder on a live canvas', to: 'page:scr-about', iconPath: 'M3 11H11V3H3Z' },
+            { label: 'Console', text: 'Manage every site in one place', to: '/console' },
+          ],
+        },
+        { label: 'Docs', to: 'https://docs.example.com/', items: [] },
+      ],
+      ctas: [{ label: 'Start free', to: 'https://app.example.com/signup', style: 'primary' }],
+      header: 'page',
+      footer: {
+        columns: [{ heading: 'Company', links: [{ label: 'About', to: 'page:scr-about' }, { label: 'Careers', to: 'https://example.com/careers' }] }],
+        links: [{ label: 'Privacy', to: '/privacy' }],
+        text: ['Family-run roofers in Springfield since 1998.'],
+        social: [{ label: 'GitHub', to: 'https://github.com/example', network: 'github' }],
+        address: null,
+        phone: null,
+        email: null,
+        copyright: '© 2026 Acme Roofing LLC. All rights reserved.',
+      },
+    }
+    const importedJob = (inputs: Record<string, unknown>) => ({
+      inputs: { originJobId: 'job-import', layoutLanguage: true, businessName: 'Acme Roofing', ...inputs },
+    })
+    const storedNodes = (id: string) => {
+      const layout = mockDocs.get(`hosts/host-1/layouts/${id}`) as { versionId: string }
+      const version = mockDocs.get(`hosts/host-1/layouts/${id}/versions/${layout.versionId}`) as { nodes: unknown }
+      return decodeStoredNodes<Record<string, { componentId: string; props?: Record<string, unknown> }>>(version.nodes as never)
+    }
+
+    it('draws its header and footer as the source builds them, asking no model and spending nothing', async () => {
+      const outcome = await createAiJobLayoutStep()(context(importedJob({ siteFrame: SITE_FRAME })))
+      expect(mockRunAiRequest).not.toHaveBeenCalled()
+      expect(outcome.usage).toEqual(AI_JOB_ZERO_USAGE)
+      expect(outcome.estCostUsd).toBe(0)
+      expect(outcome.review).toBeUndefined()
+      expect(outcome.outputs).toHaveLength(1)
+      const nodes = Object.values(storedNodes(LAYOUT_ID))
+      const menu = nodes.find((node) => node.componentId === 'muiMegaMenu')
+      expect(menu?.props).toMatchObject({ label: 'Product', panelWidth: 'wide' })
+      // The source's own icon, kept as the path it drew.
+      expect(nodes.find((node) => node.componentId === 'icon')?.props).toMatchObject({ iconPath: 'M3 11H11V3H3Z' })
+      const start = nodes.find((node) => node.componentId === 'muiButton' && node.props?.['children'] === 'Start free')
+      expect(start?.props).toMatchObject({ variant: 'contained', href: 'https://app.example.com/signup' })
+      expect(nodes.find((node) => node.componentId === 'socialLinks')?.props).toEqual({ github: 'https://github.com/example' })
+      expect(nodes.some((node) => node.props?.['children'] === '© 2026 Acme Roofing LLC. All rights reserved.')).toBe(true)
+    })
+
+    it('has the model design a frame whose source menu could not be read', async () => {
+      mockRunAiRequest.mockResolvedValue({
+        kind: 'completion',
+        text: '',
+        toolUse: [{ name: 'submit_frame', input: { header: { band: 'plain', align: 'start', cols: [], blocks: [] }, footer: { band: 'soft', align: 'start', cols: [], blocks: [{ kind: 'text', col: -1, text: 'Family-run roofers in Springfield since 1998.', to: '', icon: '', style: 'none', items: [] }] } } }],
+        usage: USAGE,
+        estCostUsd: 0.02,
+        stopReason: 'tool_use',
+      })
+      const outcome = await createAiJobLayoutStep()(context(importedJob({ siteFrame: { nav: [], ctas: [] } })))
+      expect(mockRunAiRequest).toHaveBeenCalledTimes(1)
+      expect(outcome.outputs).toHaveLength(1)
+    })
+  })
+
   describe('a plan that starts from a copy', () => {
     const inventory: AiSiteInventory = {
       ...INVENTORY,

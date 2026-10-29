@@ -123,12 +123,22 @@ top. You can still start the first wave.
 
 - **The first wave** brings in your main pages: home, then the pages in your menu,
   then your other top-level pages. Before any page, it gives your new site your current
-  site's look: your colors, read from your home page, on one of Aglyn's built-in themes,
-  with type in the same style as yours. If you already chose a theme for the new site, it
-  is kept. The first wave also builds your header and footer: your logo, your name, or both,
-  as your current site's header shows them, your menu linking your pages, and the address,
-  phone, email and profiles your current header and footer show. Your home page's title and
-  description become your new site's search listing, unless you already changed it.
+  site's look, on one of Aglyn's built-in themes: your buttons' color as its main color and
+  your links' color beside it, your pages' background color, the rounding of your buttons,
+  and your own font when Google Fonts has it, or a font in the same style when it does not.
+  Colors are kept readable, so a color too light for white words is used a shade deeper. If
+  you already chose a theme for the new site, it is kept.
+- **Your header and footer** come in with the first wave, as your current site shows them:
+  your logo, your name, or both; your menu, each dropdown as a **Dropdown Menu** or a
+  **Mega Menu** with its entries, their icons and the line under each; and your buttons,
+  such as **Sign in** or **Start free**, going where they go now. Every label stays on one
+  line, and on a screen too narrow for the whole menu it becomes a menu button that opens
+  every menu and button. Your footer keeps its columns and headings, its profiles, its
+  address, phone and email, and its copyright line as written. When your menu can be read,
+  the header and footer use no AI credits. See
+  [Menus & navigation](../building-sites/menus-and-navigation/overview.md) to change them
+  later. Your home page's title and description become your new site's search listing,
+  unless you already changed it.
 - **Each later wave** brings in up to 10 pages of one collection, for example
   **Blog, 1 of 3**.
 - **Never past your plan.** Your main pages are kept first. If your site has more pages

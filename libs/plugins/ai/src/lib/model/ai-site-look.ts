@@ -23,6 +23,7 @@ import { DEFAULT_SITE_THEME } from '@aglyn/aglyn/app-utils/default-site'
 import type {
   HostTheme,
   HostThemeComponentOverride,
+  HostThemeFontCategory,
   HostThemeSchemeColors,
   HostThemeTypographyVariant,
   HostThemeTypographyVariantKey,
@@ -131,6 +132,35 @@ export interface AiSiteStyle {
    * pages move in its kind's mood.
    */
   motion?: AiSiteMotionStyle
+  /**
+   * A site brought in's own page ground (AGL-4108), `#rrggbb`: the color its
+   * source's pages sit on, where it is light enough for the theme's text.
+   * Absent, the ground is drawn as `ground` says.
+   */
+  page?: string
+  /**
+   * A site brought in's own type (AGL-4108): the families its source sets
+   * its body and its headings in, where the theme font catalog has them,
+   * loaded in place of the pairing's. The pairing still sets the weights and
+   * the scale they are drawn at. Absent on every other site, whose type is
+   * the pairing's alone.
+   */
+  sourceFonts?: { body: AiSiteSourceFont; heading: AiSiteSourceFont | null } | null
+}
+
+/** A family a site brought in is set in (AGL-4108), with the weights the catalog says it has. */
+export interface AiSiteSourceFont {
+  family: string
+  category: HostThemeFontCategory
+  /** The upright weights the family offers. */
+  weights: number[]
+}
+
+/** The weights of `wanted` a family offers, each the nearest it has where it lacks one. */
+export function aiSiteFontWeightsIn(wanted: readonly number[], offered: readonly number[]): number[] {
+  if (!offered.length) return [...new Set(wanted)].sort((a, b) => a - b)
+  const nearest = (weight: number) => offered.reduce((best, each) => (Math.abs(each - weight) < Math.abs(best - weight) ? each : best), offered[0] as number)
+  return [...new Set(wanted.map(nearest))].sort((a, b) => a - b)
 }
 
 /** What the model may choose, every field optional. */
@@ -591,7 +621,9 @@ export function aiSiteColors(style: AiSiteStyle): { light: HostThemeSchemeColors
     tinted: { L: 0.968, C: 0.02, h, paper: [0.994, 0.006] },
   }
   const ground = grounds[style.ground]
-  const background = aiOklchHex(ground.L, ground.C * groundChroma, ground.h)
+  // A site brought in keeps the ground its source's pages sit on (AGL-4108), where its text reads on it.
+  const own = style.page && /^#[0-9a-f]{6}$/i.test(style.page) && aiHexOklch(style.page).L >= 0.9 ? style.page.toLowerCase() : null
+  const background = own ?? aiOklchHex(ground.L, ground.C * groundChroma, ground.h)
   const paper = aiOklchHex(ground.paper[0], ground.paper[1] * groundChroma, ground.h)
 
   // The brand color: a button label reads on it, so it reads on the page too.
@@ -937,23 +969,28 @@ export function aiSiteTheme(style: AiSiteStyle, base: HostTheme): HostTheme {
     components: merged(base.components ?? {}, componentsFor(style)),
   }
   delete theme.darkScheme
-  const sameFamily = pairing.heading.family === pairing.body.family
+  // A site brought in is set in its source's own families (AGL-4108), at the
+  // weights the pairing draws with, as near as each family has them.
+  const headingWeights = [pairing.heading.weight, pairing.heading.sub]
+  const source = style.sourceFonts ?? null
+  const body = source?.body
+    ? { family: source.body.family, category: source.body.category, weights: aiSiteFontWeightsIn(pairing.body.weights, source.body.weights) }
+    : { family: pairing.body.family, category: pairing.body.category, weights: [...pairing.body.weights] }
+  const heading = source
+    ? source.heading
+      ? { family: source.heading.family, category: source.heading.category, weights: aiSiteFontWeightsIn(headingWeights, source.heading.weights) }
+      : { ...body, weights: aiSiteFontWeightsIn(headingWeights, source.body.weights) }
+    : { family: pairing.heading.family, category: pairing.heading.category, weights: [...new Set(headingWeights)].sort((a, b) => a - b) }
+  const sameFamily = heading.family.toLowerCase() === body.family.toLowerCase()
   theme = writeThemeFonts(theme, {
-    body: { family: pairing.body.family, category: pairing.body.category, weights: [...pairing.body.weights], source: 'google' },
-    heading: sameFamily
-      ? null
-      : {
-          family: pairing.heading.family,
-          category: pairing.heading.category,
-          weights: [...new Set([pairing.heading.weight, pairing.heading.sub])].sort((a, b) => a - b),
-          source: 'google',
-        },
+    body: { ...body, source: 'google' },
+    heading: sameFamily ? null : { ...heading, source: 'google' },
   })
-  // A pairing whose heading is the body family loads the heading weights too.
+  // A heading in the body's family loads the heading weights too.
   if (sameFamily && theme.fonts?.[0]) {
     theme.fonts[0] = {
       ...theme.fonts[0],
-      weights: [...new Set([...(theme.fonts[0].weights ?? []), pairing.heading.weight, pairing.heading.sub])].sort((a, b) => a - b),
+      weights: [...new Set([...(theme.fonts[0].weights ?? []), ...heading.weights])].sort((a, b) => a - b),
     }
   }
   if (!themeReads(theme)) {

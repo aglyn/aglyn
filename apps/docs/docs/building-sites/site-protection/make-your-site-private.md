@@ -75,9 +75,9 @@ see what visitors see until you come in through **Visit site** once.
 
 ### Search engines stay away
 
-While the site is in preview, search engines are asked to stay away from every page, the
-site lists no pages for them, and its feeds are switched off. Nothing about the unfinished
-site gets indexed. When you make it public, your pages are offered to search engines again
+While the site is in preview, search engines are asked to stay away from every page, every
+address tells them the site is temporarily unavailable, the site lists no pages for them,
+and its feeds are switched off. Nothing about the unfinished site gets indexed. When you make it public, your pages are offered to search engines again
 as usual, unless you've also switched on
 [Discourage search engines](#keep-it-out-of-search-only).
 
@@ -124,8 +124,10 @@ link, and pages you add later are covered too.
 4. On launch day, switch maintenance mode off. Your pages are live again within about a
    minute.
 
-The 503 page is never offered to search engines, so nothing about the unfinished site
-gets indexed while maintenance mode is on.
+Search engines are told the site is temporarily unavailable, and the 503 page is never
+offered to them, so nothing about the unfinished site gets indexed while maintenance mode
+is on. The site's search page and its collection feeds pause too. See
+[Search engines and feeds](maintenance-mode.md#search-engines-and-feeds).
 
 :::tip Keep one page open instead
 If you'd rather keep a "coming soon" page open to collect email sign-ups while the rest of

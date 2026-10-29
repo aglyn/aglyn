@@ -86,8 +86,11 @@ import {
   aiLayoutNavPages,
   aiLayoutSiteBrandOf,
   aiLayoutSiteFactsText,
+  aiLayoutSiteFrameOf,
   aiLayoutSiteName,
+  aiLayoutSourceFrameBuild,
   type AiLayoutFrameBuilt,
+  type AiLayoutFrameInput,
 } from './ai-job-layout-language'
 import { AI_LAYOUT_LANGUAGE_THINKING, aiJobUsesLayoutLanguage, aiLayoutDesignOf } from './ai-job-page-language'
 import { aiJobStepBudget } from './ai-job-budget'
@@ -405,6 +408,50 @@ export function createAiJobLayoutStep(deps: AiJobLayoutStepDeps = {}): AiJobStep
       const siteName = aiLayoutSiteName(job)
       const pages = aiLayoutNavPages(job, inventory)
       const targets = aiLayoutFrameTargets(job, inventory)
+      const frameInput: AiLayoutFrameInput = {
+        ...aiSiteStyleTokens(job.inputs),
+        siteName,
+        homeId: aiLayoutHomeId(pages, inventory),
+        pages,
+        targets,
+        // A site brought in may state what its own header and footer state (AGL-4084).
+        extend: aiLayoutChecks(inventory, plan, [job.brief, aiLayoutSiteFactsText(job.inputs)].filter(Boolean).join('\n')),
+        design: aiLayoutDesignOf(job, '/'),
+        brand: aiLayoutSiteBrandOf(job.inputs),
+        storeLinks: aiStoreFrameLinksOf(job.inputs),
+        // The frame's own words in the site's language (AGL-3760).
+        ...(job.plan?.language ? { language: job.plan.language } : {}),
+      }
+      // A site brought in whose menu the reader found (AGL-4108): its own
+      // header and footer, drawn by code, and no model asked. One that does
+      // not pass the layout's checks is designed by the model instead.
+      const source = aiLayoutSiteFrameOf(job.inputs)
+      if (source) {
+        const drawn = aiLayoutSourceFrameBuild({ ...frameInput, source })
+        if (drawn.value) {
+          throwIfAiJobCanceled(signal)
+          const draft = await writeAiDraft(firestore, {
+            kind: 'layout',
+            hostId,
+            id: draftId,
+            uid: job.createdBy,
+            org,
+            name,
+            nodes: drawn.value.nodes,
+            aiJobId: aiOriginJobId(job),
+            now,
+          })
+          if (draft.ok === false) {
+            if (draft.status === 404) throw new Error(`site ${hostId} vanished while its layout was built`)
+            return aiUnspentOutcome(model, { review: aiLimitReview(draft.error) })
+          }
+          return aiUnspentOutcome(model, { outputs: [output(draft, drawn.value.load)] })
+        }
+        console.error('ai layout: a source frame did not pass its checks; designing it instead', {
+          jobId: job.$id,
+          violations: drawn.violations.map((violation) => violation.code),
+        })
+      }
       const result = await runValidatedGeneration<AiLayoutFrameBuilt>(AI_LAYOUT_FRAME_KIND, {
         step: 'job.layout',
         model,
@@ -414,20 +461,7 @@ export function createAiJobLayoutStep(deps: AiJobLayoutStepDeps = {}): AiJobStep
         tool: AI_LAYOUT_FRAME_TOOL,
         maxTokens: AI_JOB_LAYOUT_LANGUAGE_BUDGET.maxTokens(model),
         ...AI_LAYOUT_LANGUAGE_THINKING,
-        check: aiLayoutFrameCheck({
-          ...aiSiteStyleTokens(job.inputs),
-          siteName,
-          homeId: aiLayoutHomeId(pages, inventory),
-          pages,
-          targets,
-          // A site brought in may state what its own header and footer state (AGL-4084).
-          extend: aiLayoutChecks(inventory, plan, [job.brief, aiLayoutSiteFactsText(job.inputs)].filter(Boolean).join('\n')),
-          design: aiLayoutDesignOf(job, '/'),
-          brand: aiLayoutSiteBrandOf(job.inputs),
-          storeLinks: aiStoreFrameLinksOf(job.inputs),
-          // The frame's own words in the site's language (AGL-3760).
-          ...(job.plan?.language ? { language: job.plan.language } : {}),
-        }),
+        check: aiLayoutFrameCheck(frameInput),
         ...(signal ? { signal } : {}),
       })
       const spent = aiGenerationSpent(result)

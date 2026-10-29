@@ -3589,9 +3589,10 @@ export function detectOverBudget(
   tree: AiDoctrineTree,
   context: AiDoctrineTreeContext = {},
 ): AiDoctrineViolation[] {
-  // A page of its owner's own words weighs what their page does (AGL-4084), within the save ceiling.
+  // A page of its owner's own words weighs what their page does (AGL-4084), within the save ceiling;
+  // and so does a header and footer that is their own menu and footer (AGL-4108).
   const budget =
-    context.ownWords && (outputKind === 'page' || outputKind === 'template')
+    context.ownWords && (outputKind === 'page' || outputKind === 'template' || outputKind === 'layout')
       ? { ...AI_OUTPUT_BUDGETS[outputKind], ...AI_OWN_WORDS_PAGE_BUDGET }
       : AI_OUTPUT_BUDGETS[outputKind]
   const violations: AiDoctrineViolation[] = []

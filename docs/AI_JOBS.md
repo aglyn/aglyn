@@ -2586,12 +2586,27 @@ whose passes each do one unit (`aiSiteImportNextWork`):
    "About"), the home page "Home".
 3. **The look** (no model, AGL-4084), before anything of the first wave is
    built (`jobs/ai-site-import-look.ts`): the owner's home page is read once
-   more as AglynBot, with the crawl's `headersFor` edge headers, and its first
-   stylesheets; the inspiration signals (`aiSiteInspirationSignals`, AGL-3975)
-   pin the look, the brand being the source's strongest color drawn SOLID
-   (`aiSiteImportBrandColors`: a translucent tint is not counted), and the look
-   is drawn and saved as a guided start's (`aiSiteStyleFor`, `aiSaveSiteTheme`,
-   which keeps a theme the owner chose). The header's logo
+   more as AglynBot, and its first stylesheets. Its edge headers are the
+   caller's `headersFor` where one is handed in, else the edge's own
+   (`aiSiteImportLookHeaders` → `siteImportEdgeHeadersFor(siteImportOrigins(domain))`,
+   exactly as the crawl asks it; AGL-4108: production registers the step with
+   no seams, so the 10/29 read went without the header, our own edge
+   challenged it, and the site kept the starter's theme). The inspiration
+   signals (`aiSiteInspirationSignals`, AGL-3975) pin the look, the brand being
+   the source's strongest color drawn SOLID (`aiSiteImportBrandColors`: a
+   translucent tint is not counted); the home page's look facts
+   (`siteImport.home.look`, AGL-4106) pin it closer (AGL-4108,
+   `aiSiteImportStyle`): the filled buttons' color is the brand and the links'
+   color the accent (`aiSiteImportBrandOf`), the buttons' radius the corners
+   and button shape where the signals said none, the page's background the
+   ground (`AiSiteStyle.page`), and the source's own body and heading families
+   where the theme font catalog has them (`themeFontFacts`, the fonts plugin's
+   Google Fonts catalog) or the page loads them from Google Fonts
+   (`AiSiteStyle.sourceFonts`, `aiSiteImportSourceFonts`), else the pairing of
+   its type mood. `aiSiteColors` still holds every color to the reading
+   checks: a brand too light for white words is drawn at its nearest shade
+   that reads. The look is drawn and saved as a guided start's
+   (`aiSiteStyleFor`, `aiSaveSiteTheme`, which keeps a theme the owner chose). The header's logo
    (`siteImportHeaderBrand`) is brought into the library once by its import
    key, an SVG drawn as a PNG 192 px tall (`rasterizeAiLogoSvg`, on Vercel the
    images function's `logo-raster` op). The home page's `<title>`,
@@ -2599,15 +2614,38 @@ whose passes each do one unit (`aiSiteImportNextWork`):
    still the seeded one (`aiSiteImportListingUpdates`, `aiSiteListingSeeded`).
    The result is `siteImport.look`; its seed and style ride every unit
    (`siteKind`, `siteStyle`).
-4. **The header and footer**, in the first wave: the layout step's own pass on
-   a derived `layout` job in the layout language, linking the wave's pages in
-   the menu's order. Its brand is the source's (`siteBrand`: the logo alone,
-   the logo and the name, or the name, drawn by `ai-layout-frame.ts`); its
-   prompt shows the source's own header and footer lines and description
+4. **The header and footer**, in the first wave, on a derived `layout` job in
+   the layout language. Where the reader found the home page's menu
+   (`aiSiteImportFrameIsRead`, AGL-4108), the job carries `siteFrame`
+   (`aiSiteImportFrameSource`): the menu's items and their entries, the
+   header's buttons with their styles, the header's ground, and the footer's
+   columns, links, words, profiles, address, phone, email and © line, every
+   link resolved by `aiSiteImportFrameLinkTo` (a page of the header's wave or
+   home by its draft id, a page of a later wave by its new path, since a link
+   by id to a page not yet live is taken out when a wave publishes, and
+   anything else by the source's own address). The layout step then draws the
+   frame with NO model (`aiLayoutSourceFrameBuild`,
+   `layout-language/ai-layout-frame-source.ts`): a menu whose entries carry a
+   line or sit in headed columns as a `muiMegaMenu` (each entry a
+   `muiLinkBox` with the source's own one-path icon), else a `muiNavMenu`;
+   the row `nowrap`, shown from the breakpoint `aiLayoutNavBreakpoint`
+   measures it to fit (`lg` past five items or 60 characters), the Menu
+   Button below it, the Drawer holding each menu as a heading over its
+   entries, then the links and the buttons; the footer as the source's
+   columns, profiles (`socialLinks`, any other network linked by its name)
+   and © line word for word. It is checked as the owner's own words
+   (`ownWords`, the own-words budget, rule 1 not asked), costs nothing and is
+   quoted at nothing (`aiSiteImportWaveOwed`). A source frame that does not
+   pass, or a source whose menu could not be read, takes the layout step's
+   own pass instead, linking the wave's pages in the menu's order: its prompt
+   shows the source's own header and footer lines and description
    (`siteFacts`), FENCED under `UNTRUSTED_TEXT_RULE`, in place of the brief,
-   and its contact check admits what they state. `businessName` is the
-   person's name for the site unless the source's differs from it only by
-   case or punctuation.
+   and its contact check admits what they state. Either way the brand is the
+   source's (`siteBrand`: the logo alone, the logo and the name, or the name,
+   drawn by `ai-layout-frame.ts`), the logo named by the source's own alt or
+   name (`alt`) and measured by its shape (`aspect`), and never narrower than
+   itself. `businessName` is the person's name for the site unless the
+   source's differs from it only by case or punctuation.
 5. **Each page**: its photos first (no model), through `pluginMediaIngest()
    .ingest` with `importedFrom` and the key `import:<sha256 of the address>`,
    asked of `findImportedPhoto` before anything is fetched, so a photo is stored
@@ -2694,7 +2732,7 @@ whose passes each do one unit (`aiSiteImportNextWork`):
   running or waiting wave `stopped` and a wave in review `done`.
 - **Priced by how a page is built.** `AI_MEASURED_IMPORT_CREDITS`: an
   arranged page at `arranged` (its design answer), a copied page at `copied`, the
-  header its layout; each wave is quoted before it starts
+  header its layout, or nothing where it is drawn from the source's menu; each wave is quoted before it starts
   (`aiSiteImportWaveCreditRange`), naming both. Both rows are provisional until
   the live check measures them.
 - **Published only into a preview.** A wave's pages go live only on a site in
@@ -3600,6 +3638,46 @@ AGL-3660), which fills every empty slot and takes the icon out of its frame:
   The replays are `ai-stock-photo-agl4092-{berm,pit,rut}.spec.ts` and
   `ai-layout-pictures-agl4092-roles.spec.ts`, over 40 searches re-asked of Pixabay
   on 2026-10-28 as the source asks them (`fixtures/ai-stock-photo-agl4092-recordings.ts`).
+- **Another city's street, a thing of its own, and a team (AGL-4092, 2026-10-29).**
+  The live check of beta.291 put a food truck under the Chicago skyscrapers, a man
+  with a cart in the rain and a woman with a bagel cart in Antalya in a taco
+  trailer's home gallery, tomatoes beside a bowl of salsa on its menu's "Bottled
+  Water", a model posing with a street bike in a garage in a motocross team's riders
+  band (searched "motorcycle workshop"), and a man in a motorcycle suit on a road
+  trip, tagged "motocross" third, in its sponsors band. Each is closed by its tags:
+  - *Another city's or country's street is never the business's,* whatever the
+    caption (`aiStockForeignStreet`): a hit with a street, town or city tag
+    (`STREET_HEADS`) that names a city, state or country (`NAMED_PLACES`) the site's
+    business type, audience and name never name is refused. Tacos tagged "mexico"
+    are a dish, not a street.
+  - *Street food is anyone's.* "street food" names the taco trailer's world only
+    beside its own food or its truck (`near`), and the taco group's `rivals` turn
+    down an ice cream van, a hot dog stand or a bagel cart tagged "food truck"
+    unless the hit names tacos too. The maker's searches (`making`) take only a hit
+    OF the business's own world (`leadOwn`), as its broad rungs do.
+  - *A thing of its own is a photo of itself* (`aiStockThingOfItsOwn`): a record's or
+    a product's object with kin (`OBJECT_KIN`: bottled water, a soda, an agua fresca
+    or horchata, now in every food world) where neither its words nor its kin name
+    the craft itself (`core`). It is searched by its own words and kin, unqualified,
+    never by the craft's broad searches or `aiStockCraftSearches`, and a record of
+    one takes no other record's photo, nor gives its own
+    (`aiSiteDatasetRecordsFromOwn`, `itsOwn` kept on the late pass's list). With no
+    photo of itself it takes a neutral starter. A soap shop's "Lavender Soap Bar"
+    names its soap and is not one.
+  - *A team is shown racing.* A group's `team` searches replace its repair shop's
+    `making` where the business's own clause names a team or a club: a motocross
+    team searches "motocross rider gear" and "dirt bike racing", and adds "motocross
+    track" to its broad searches (the library answers "motocross paddock" with horses
+    and "motocross pits" with fruit). A parts shop keeps its mechanic.
+  - *An off-road business's pictures are never a street bike's* (`wider.road` and
+    `wider.ground`, read from every tag, a product's excepted): a hit naming a road,
+    a street, a trip, travel, a motorcycle suit, a sportbike, a model or a studio is
+    refused unless it also names the ground a dirt bike rides (dirt, mud, sand, a
+    desert, a track, off-road, enduro). "Road, travel" beside "off-road, desert,
+    sand" is a dirt bike in the dunes.
+  The replays are `ai-stock-photo-agl4092-1029-{pit,rut}.spec.ts`, from production's
+  search cache for the searches the two sites sent and Pixabay re-asked read-only
+  for those the fixes send in their place (`fixtures/ai-stock-photo-agl4092-1029-recordings.ts`).
 - **One refused photo is that photo's (AGL-3923, #1770).** The provider names a
   download by its bytes (`sniffPhotoContentType`, the upload check's own
   signatures), never by its label. A media-library refusal of one photo's own bytes

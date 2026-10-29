@@ -74,6 +74,7 @@ import {
   aiStockJobPhotosOf,
   aiStockPhotoWordsOf,
   aiStockRecordScene,
+  aiStockRecordsOfTheirOwn,
   aiStockStem,
 } from './ai-layout-stock-photos'
 import { AI_DATASET_DRAFT_RESOURCE } from './ai-build-unit-outcome'
@@ -554,6 +555,11 @@ export interface AiSiteDatasetRecordPhoto {
   refused?: AiStockRefusedPicks
   /** A starter on a site with no stock library (AGL-3988): it keeps it, and no late pass fills it. */
   noLibrary?: true
+  /**
+   * A record of a thing of its own (AGL-4092, `aiStockThingOfItsOwn`): it
+   * shows a photo of itself or a neutral starter, never another record's.
+   */
+  itsOwn?: true
 }
 
 /**
@@ -599,6 +605,9 @@ export async function aiSiteDatasetRecordPhotos(input: {
     ...(people ? {} : { record: input.categories?.[index]?.trim() ? { category: (input.categories[index] as string).trim() } : {} }),
   }))
   const seed = `${job.$id}:records`
+  const business = aiSiteWords(job.inputs).about || job.brief
+  // A record of a thing of its own never takes another record's photo (AGL-4092): "Bottled Water" is no taco.
+  const itsOwn = people ? input.names.map(() => false) : aiStockRecordsOfTheirOwn({ business, ...aiStockPhotoWordsOf(job) }, input.names)
   let found: ReadonlyArray<AiLayoutPicturePhoto | null> = []
   /** The picks the image hosts refused, by record (AGL-3988). */
   const report: AiLayoutPictureReport = { refused: new Map() }
@@ -610,7 +619,7 @@ export async function aiSiteDatasetRecordPhotos(input: {
         hostId: job.hostId,
         uid: job.createdBy,
         seed,
-        business: aiSiteWords(job.inputs).about || job.brief,
+        business,
         ...aiStockPhotoWordsOf(job),
         sectionNames: [input.name],
         jobId: aiOriginJobId(job),
@@ -632,7 +641,11 @@ export async function aiSiteDatasetRecordPhotos(input: {
   const photos =
     library && !people
       ? aiSiteDatasetRecordsFromOwn(
-          input.names.map((name, index) => ({ name, category: input.categories?.[index] ?? null })),
+          input.names.map((name, index) => ({
+            name,
+            category: input.categories?.[index] ?? null,
+            ...(itsOwn[index] ? { itsOwn: true as const } : {}),
+          })),
           copied,
           seed,
         )
@@ -652,6 +665,7 @@ export async function aiSiteDatasetRecordPhotos(input: {
         alt: photo.alt?.trim() || null,
         width: photo.width,
         height: photo.height,
+        ...(itsOwn[index] ? { itsOwn: true as const } : {}),
       }
     }
     const refused = report.refused.get(slots[index] as AiLayoutPictureSlot)
@@ -661,6 +675,7 @@ export async function aiSiteDatasetRecordPhotos(input: {
       alt: starters[index]?.alt?.trim() || null,
       ...(refused ? { refused } : {}),
       ...(library ? {} : { noLibrary: true as const }),
+      ...(itsOwn[index] ? { itsOwn: true as const } : {}),
     }
   })
 }
@@ -687,7 +702,8 @@ export async function aiSiteDatasetRecordPhotos(input: {
  * photo sits beside takes the photo beside it rather than none.
  */
 export function aiSiteDatasetRecordsFromOwn(
-  records: ReadonlyArray<{ name: string; category?: string | null }>,
+  /** `itsOwn`: a record of a thing of its own (AGL-4092), which keeps none of these and takes a starter. */
+  records: ReadonlyArray<{ name: string; category?: string | null; itsOwn?: boolean }>,
   photos: ReadonlyArray<AiLayoutPicturePhoto | null>,
   seed: string,
   /**
@@ -698,8 +714,9 @@ export function aiSiteDatasetRecordsFromOwn(
   others: readonly AiLayoutPicturePhoto[] = [],
   options: { besideLast?: boolean } = {},
 ): Array<AiLayoutPicturePhoto | null> {
-  const listed = photos.flatMap((photo, index) => (photo?.src ? [{ photo, index }] : []))
-  const shownHere = new Set(listed.map((entry) => entry.photo.src))
+  // A bottle of water is that record's alone: no taco takes it (AGL-4092).
+  const listed = photos.flatMap((photo, index) => (photo?.src && !records[index]?.itsOwn ? [{ photo, index }] : []))
+  const shownHere = new Set(photos.flatMap((photo) => (photo?.src ? [photo.src] : [])))
   const own = [
     ...listed,
     ...others
@@ -729,7 +746,8 @@ export function aiSiteDatasetRecordsFromOwn(
     const filled = [...photos]
     for (const index of order) {
       const record = records[index]
-      if (!record || filled[index]?.src) continue
+      // "Bottled Water" takes no taco from the list (AGL-4092).
+      if (!record || record.itsOwn || filled[index]?.src) continue
       const beside = new Set([filled[index - 1]?.src, filled[index + 1]?.src].filter(Boolean))
       const apart = (entry: { photo: AiLayoutPicturePhoto }) => !beside.has(entry.photo.src)
       const same = own.filter((entry) => category(index) && category(entry.index) === category(index))
@@ -1199,6 +1217,7 @@ export function aiSiteDatasetStarterList(input: {
       return {
         name,
         ...(category ? { category } : {}),
+        ...(photo?.itsOwn ? { itsOwn: true as const } : {}),
         value,
         ...(src && photo?.width && photo.height
           ? { photo: { src, width: photo.width, height: photo.height, ...(photo.alt ? { alt: photo.alt } : {}) } }

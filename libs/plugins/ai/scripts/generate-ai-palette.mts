@@ -184,8 +184,11 @@ const CODE_ONLY_IDS: Readonly<Record<string, readonly string[]>> = {
   // page brought in draws as its source does (AGL-4107): its tabs, a card
   // that is itself a link, and a strip of labels on outlined surfaces.
   screen: ['icon', 'product-grid', 'product-reviews', 'newsletter-signup', 'eventList', 'muiTabs', 'muiTabPanel', 'muiLinkBox', 'muiPaper'],
-  // And a selling site's cart button in its header (AGL-3676).
-  layout: ['icon', 'muiDrawer', 'muiDrawerToggle', 'cart'],
+  // And a selling site's cart button in its header (AGL-3676); and a site
+  // brought in's own menus, as its source builds them (AGL-4108): the
+  // Dropdown and Mega Menus its header opens, and the Link Container each
+  // entry of a mega menu and a brand of a logo and a name are one link with.
+  layout: ['icon', 'muiDrawer', 'muiDrawerToggle', 'cart', 'muiNavMenu', 'muiMegaMenu', 'muiLinkBox'],
 }
 
 /**
