@@ -4855,13 +4855,15 @@ public struct ProductModifierGroup: Codable, Hashable, Sendable {
   public var max: Double
   public var min: Double
   public var name: String
+  public var online: Bool?
   public var options: [ProductModifierOption]
 
-  public init(id: String, max: Double, min: Double, name: String, options: [ProductModifierOption]) {
+  public init(id: String, max: Double, min: Double, name: String, online: Bool? = nil, options: [ProductModifierOption]) {
     self.id = id
     self.max = max
     self.min = min
     self.name = name
+    self.online = online
     self.options = options
   }
 }
@@ -4870,11 +4872,13 @@ public struct ProductModifierOption: Codable, Hashable, Sendable {
   public var id: String
   public var name: String
   public var priceCents: Double
+  public var priceCentsByVariant: [String: Double]?
 
-  public init(id: String, name: String, priceCents: Double) {
+  public init(id: String, name: String, priceCents: Double, priceCentsByVariant: [String: Double]? = nil) {
     self.id = id
     self.name = name
     self.priceCents = priceCents
+    self.priceCentsByVariant = priceCentsByVariant
   }
 }
 

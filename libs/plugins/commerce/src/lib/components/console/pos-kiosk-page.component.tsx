@@ -107,7 +107,10 @@ export function kioskCartLine(
     ...(choice.modifiers.length ? { modifiers: choice.modifiers } : {}),
     name: product.name,
     ...(label ? { label } : {}),
-    unitCents: variant.priceCents + picked.reduce((sum, option) => sum + option.priceCents, 0),
+    // A choice priced by variant adds its price on this one (AGL-4100).
+    unitCents:
+      variant.priceCents +
+      picked.reduce((sum, option) => sum + CommerceModel.modifierOptionPriceCents(option, variant.id), 0),
   }
 }
 

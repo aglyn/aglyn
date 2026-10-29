@@ -23,6 +23,8 @@
  * a stale price. Pure helpers; the cart API owns I/O.
  */
 
+import { modifierSelectionKey, type ModifierSelection } from './product-modifiers'
+
 export interface CartLine {
   productId: string
   /** Absent = the product's default variant. */
@@ -34,6 +36,13 @@ export interface CartLine {
    * different days of one pass are two lines.
    */
   useDayKey?: string
+  /**
+   * The add-ons the shopper chose on the product's page (AGL-4100), ids
+   * only, in the product's group order: priced from the product on every
+   * read and at checkout, never stored with a price. Absent: none. The same
+   * product with different choices is a different line.
+   */
+  modifiers?: ModifierSelection[]
 }
 
 /** `hosts/{hostId}/carts/{cartId}` doc. */
@@ -48,9 +57,17 @@ export interface HostCart {
 export const CART_MAX_LINES = 50
 export const CART_MAX_QUANTITY = 99
 
-/** One cart line's identity: product, variant and use day. */
-export function cartLineKey(line: Pick<CartLine, 'productId' | 'variantId' | 'useDayKey'>): string {
-  return `${line.productId}:${line.variantId ?? ''}:${line.useDayKey ?? ''}`
+/**
+ * One cart line's identity: product, variant, use day and add-ons
+ * (AGL-4100). A line with no add-ons keeps the key it always had, so a cart
+ * stored before add-ons were sold online reads, merges and removes as it did.
+ */
+export function cartLineKey(
+  line: Pick<CartLine, 'productId' | 'variantId' | 'useDayKey' | 'modifiers'>,
+): string {
+  const base = `${line.productId}:${line.variantId ?? ''}:${line.useDayKey ?? ''}`
+  const choices = modifierSelectionKey(line.modifiers)
+  return choices ? `${base}:${choices}` : base
 }
 
 const lineKey = cartLineKey
@@ -114,7 +131,7 @@ export function upsertCartLine(
 
 export function removeCartLine(
   cart: Pick<HostCart, 'lines'>,
-  line: Pick<CartLine, 'productId' | 'variantId' | 'useDayKey'>,
+  line: Pick<CartLine, 'productId' | 'variantId' | 'useDayKey' | 'modifiers'>,
 ): CartLine[] {
   const key = lineKey(line)
   return cart.lines.filter((item) => lineKey(item) !== key)

@@ -3164,6 +3164,7 @@ data class ProductModifierGroup(
     val max: Double,
     val min: Double,
     val name: String,
+    val online: Boolean? = null,
     val options: List<ProductModifierOption>,
 )
 
@@ -3172,6 +3173,7 @@ data class ProductModifierOption(
     val id: String,
     val name: String,
     val priceCents: Double,
+    val priceCentsByVariant: Map<String, Double>? = null,
 )
 
 @Serializable

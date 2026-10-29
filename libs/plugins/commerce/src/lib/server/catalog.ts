@@ -63,6 +63,12 @@ export interface PublicCatalogItem {
    * a product with exactly one variant; several need the product page.
    */
   defaultVariantId?: string
+  /**
+   * The product's page asks a choice first (AGL-4100): a required add-on
+   * group shown on the website. Its card's quick add opens the page rather
+   * than adding it, as the cart would refuse the line without the choice.
+   */
+  requiresChoices?: true
 }
 
 /**
@@ -394,6 +400,7 @@ function toItem(row: CatalogRow): PublicCatalogItem {
       : { priceComingSoon: true as const }),
     variantCount: product.variants.length,
     ...(product.variants.length === 1 && primary?.id ? { defaultVariantId: primary.id } : {}),
+    ...(CommerceModel.websiteModifiersRequired(product) ? { requiresChoices: true as const } : {}),
   }
 }
 

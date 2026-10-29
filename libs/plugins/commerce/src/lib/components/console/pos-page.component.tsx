@@ -206,7 +206,7 @@ export function registerLineFor(
   choice: PosItemChoice,
 ): RegisterLine {
   const { variant, modifiers, quantity } = choice
-  const resolved = CommerceModel.resolveLineModifiers(product, modifiers)
+  const resolved = CommerceModel.resolveLineModifiers(product, modifiers, variant?.id)
   const picked = resolved.ok ? resolved.modifiers : []
   const label = CommerceModel.lineLabelWithModifiers(
     Object.keys(variant.options ?? {}).length

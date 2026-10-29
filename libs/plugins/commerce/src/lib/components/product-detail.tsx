@@ -134,6 +134,11 @@ interface Detail {
   subscriptionOptional?: boolean
   /** The store's time zone, when a variant asks for a use day (AGL-4043). */
   useDayTimeZone?: string
+  /**
+   * The add-ons the page offers (AGL-4100): only groups shown on the
+   * website ever arrive here.
+   */
+  modifierGroups?: CommerceModel.ProductModifierGroup[]
 }
 
 /**
@@ -141,6 +146,18 @@ interface Detail {
  * variant asks for a day downloads the date picker.
  */
 const UseDayPicker = lazy(() => import('./use-day-picker'))
+
+/**
+ * The add-on pickers (AGL-4100), in their own chunk: only a product with
+ * add-ons on the website downloads them.
+ */
+const ProductAddOns = lazy(() => import('./product-add-ons'))
+
+/** Money on the product page, in the store's currency: `$1,250.00`, never `$1250`. */
+const money = (cents: number) => CommerceModel.formatOrderMoney(cents)
+
+/** A price in dollars as the page prints it. */
+const moneyFromUsd = (priceUsd: number) => money(Math.round(priceUsd * 100))
 
 const SAMPLE: Detail = {
   id: 'sample',
@@ -172,13 +189,42 @@ function buyItem(
   product: Detail,
   variant: DetailVariant | undefined,
   quantity: number,
+  /** What one unit costs with its add-ons (AGL-4100), when the page has some. */
+  unitCents?: number,
 ): AnalyticsItem {
   return {
     item_id: product.id,
     item_name: product.name,
-    price: variant?.priceUsd ?? undefined,
+    price:
+      unitCents !== undefined && typeof variant?.priceUsd === 'number'
+        ? unitCents / 100
+        : (variant?.priceUsd ?? undefined),
     quantity,
   }
+}
+
+/**
+ * The page's add-ons for the variant picked (AGL-4100): whether every
+ * required group is answered — the server's own check, run on the groups the
+ * page was sent — and what the picks so far add to one unit, for the live
+ * price. Display only; every sale door prices them again from the product.
+ */
+export function productPageAddOns(
+  product: Pick<Detail, 'name' | 'modifierGroups'>,
+  picks: readonly CommerceModel.ModifierSelection[],
+  variantId: string | undefined,
+): { ready: boolean; extraCents: number; error?: string } {
+  const groups = product.modifierGroups ?? []
+  if (!groups.length) return { ready: true, extraCents: 0 }
+  const source = { name: product.name, modifierGroups: groups }
+  const checked = CommerceModel.resolveLineModifiers(source, picks, variantId)
+  const extraCents = CommerceModel.soldLineModifiers(source, picks, variantId).reduce(
+    (sum, modifier) => sum + modifier.priceCents,
+    0,
+  )
+  return checked.ok
+    ? { ready: true, extraCents }
+    : { ready: false, extraCents, ...(checked.error ? { error: checked.error } : {}) }
 }
 
 /** How one option is offered on the page. */
@@ -344,6 +390,10 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
       initialSelections(seededProduct),
     )
     const [quantity, setQuantity] = useState(1)
+    /** The add-ons picked (AGL-4100), ids only. */
+    const [addOns, setAddOns] = useState<CommerceModel.ModifierSelection[]>([])
+    /** Why the cart refused the line, when it did. */
+    const [addRefusal, setAddRefusal] = useState('')
     /**
      * The day the buyer chose to use a pass (AGL-4043), `YYYY-MM-DD` on the
      * store's calendar; '' is the day they buy, which is also the default.
@@ -427,6 +477,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
               items: [{ item_id: product.id, item_name: product.name }],
             })
             setSelections(initialSelections(product))
+            setAddOns([])
           }
         })
         .catch(() => {
@@ -455,6 +506,17 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
       ) ?? resolved.variants[0]
     }, [resolved, selections])
 
+    // The add-ons picked, checked and priced on this variant (AGL-4100).
+    const addOnGroups = resolved?.modifierGroups ?? []
+    const pageAddOns = resolved
+      ? productPageAddOns(resolved, addOns, variant?.id)
+      : { ready: true, extraCents: 0 }
+    const unitCents =
+      typeof variant?.priceUsd === 'number'
+        ? Math.round(variant.priceUsd * 100) + pageAddOns.extraCents
+        : 0
+    const addOnsKey = CommerceModel.modifierSelectionKey(addOns)
+
     // The day to send with this variant: only when it asks for one and the
     // buyer chose a day (AGL-4043).
     const chosenUseDay = variant?.asksUseDate && useDay ? useDay : ''
@@ -465,8 +527,11 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
 
     // Add to cart (AGL-293) beside instant buy; badge refresh via event.
     const handleAddToCart = async () => {
-      if (!hostId || !resolved || !variant) return
+      // A required add-on unanswered is refused here, before any request
+      // (AGL-4100); the button says so too.
+      if (!hostId || !resolved || !variant || !pageAddOns.ready) return
       setAdded(false)
+      setAddRefusal('')
       // Priced (AGL-1591's shape, completed): the resolved variant's price
       // and the chosen quantity both come from the server's product payload,
       // so GA4's "value added to cart" is a real number. The funnel step
@@ -479,7 +544,9 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
         variantId: variant.id,
         quantity,
         ...(chosenUseDay ? { useDayKey: chosenUseDay } : {}),
-        item: buyItem(resolved, variant, quantity),
+        ...(addOns.length ? { modifiers: addOns } : {}),
+        item: buyItem(resolved, variant, quantity, addOnGroups.length ? unitCents : undefined),
+        onRefused: setAddRefusal,
       })
       if (ok) setAdded(true)
     }
@@ -502,7 +569,12 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
       resolved &&
         variant &&
         !(resolved.subscription && (!resolved.subscriptionOptional || billing === 'subscribe'))
-        ? { productId: resolved.id, variantId: variant.id, quantity }
+        ? {
+            productId: resolved.id,
+            variantId: variant.id,
+            quantity,
+            ...(addOns.length ? { modifiers: addOns } : {}),
+          }
         : null,
     )
     const attemptKey = useRef('')
@@ -513,10 +585,11 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
       // key, and the server replays the original full-price session — a quoted
       // number that is not the number charged, which is the whole defect class
       // this path has been cleared of.
-    }, [resolved?.id, variant?.id, quantity, billing, shipTo, shipPostal, coupon, fulfillment.signature, chosenUseDay])
+      // `addOnsKey` too: different add-ons are a different price (AGL-4100).
+    }, [resolved?.id, variant?.id, quantity, billing, shipTo, shipPostal, coupon, fulfillment.signature, chosenUseDay, addOnsKey])
 
     const handleBuy = async () => {
-      if (!hostId || !resolved || !variant || status === 'sending') return
+      if (!hostId || !resolved || !variant || status === 'sending' || !pageAddOns.ready) return
       setStatus('sending')
       setMessage('')
       if (!attemptKey.current) {
@@ -539,6 +612,9 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
             // The day the buyer will use it (AGL-4043); the server checks it
             // against the product and the store's calendar.
             ...(chosenUseDay ? { useDayKey: chosenUseDay } : {}),
+            // The add-ons picked (AGL-4100), ids only: the server checks every
+            // required one is answered and prices them from the product.
+            ...(addOns.length ? { modifiers: addOns } : {}),
             // Billing choice (AGL-545): the server re-validates against
             // the product doc, so this is a request, not an instruction.
             ...(resolved.subscriptionOptional ? { billing } : {}),
@@ -578,7 +654,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
           trackEvent(
             'begin_checkout',
             buildBeginCheckoutParams({
-              items: [buyItem(resolved, variant, quantity)],
+              items: [buyItem(resolved, variant, quantity, addOnGroups.length ? unitCents : undefined)],
             }),
           )
           setNativeCheckout({
@@ -597,7 +673,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
           await trackEventBeforeNavigation(
             'begin_checkout',
             buildBeginCheckoutParams({
-              items: [buyItem(resolved, variant, quantity)],
+              items: [buyItem(resolved, variant, quantity, addOnGroups.length ? unitCents : undefined)],
             }),
           )
           window.location.assign(payload.url)
@@ -830,8 +906,9 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
           </Typography>
           <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 2 }}>
             <Typography variant="h6">
+              {/* The configured unit (AGL-4100): the variant and its add-ons, formatted. */}
               {priced
-                ? `$${variant?.priceUsd}${subscribing ? intervalSuffix : ''}`
+                ? `${money(unitCents)}${subscribing ? intervalSuffix : ''}`
                 : PRICE_COMING_SOON_LABEL}
             </Typography>
             {subscribing && subscription?.trialDays ? (
@@ -846,7 +923,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
                   color="text.disabled"
                   sx={{ textDecoration: 'line-through' }}
                 >
-                  {`$${variant.compareAtPriceUsd}`}
+                  {moneyFromUsd(variant.compareAtPriceUsd)}
                 </Typography>
                 <Chip label="Sale" size="small" color="primary" />
               </>
@@ -878,10 +955,10 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
               sx={{ mb: 2 }}
             >
               <ToggleButton value="once">
-                {priced ? `One-time $${variant?.priceUsd}` : 'One-time'}
+                {priced ? `One-time ${money(unitCents)}` : 'One-time'}
               </ToggleButton>
               <ToggleButton value="subscribe">
-                {priced ? `Subscribe $${variant?.priceUsd}${intervalSuffix}` : 'Subscribe'}
+                {priced ? `Subscribe ${money(unitCents)}${intervalSuffix}` : 'Subscribe'}
               </ToggleButton>
             </ToggleButtonGroup>
           ) : null}
@@ -925,6 +1002,18 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
             </TextField>
             ),
           )}
+          {addOnGroups.length && priced ? (
+            <Suspense fallback={null}>
+              <ProductAddOns
+                groups={addOnGroups}
+                variantId={variant?.id}
+                value={addOns}
+                onChange={setAddOns}
+                formatCents={money}
+                disabled={Boolean(variant?.soldOut)}
+              />
+            </Suspense>
+          ) : null}
           {showCoupon ? (
             <TextField
               label="Discount code"
@@ -972,7 +1061,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
               variant="outlined"
               color="primary"
               size="large"
-              disabled={!hostId || !priced || variant?.soldOut}
+              disabled={!hostId || !priced || variant?.soldOut || !pageAddOns.ready}
               onClick={handleAddToCart}
             >
               {added ? 'Added ✓' : 'Add to cart'}
@@ -986,6 +1075,8 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
                 !priced ||
                 status === 'sending' ||
                 variant?.soldOut ||
+                // A required add-on unanswered (AGL-4100).
+                !pageAddOns.ready ||
                 // No payments on this deployment: the same 501 every time, so
                 // the control latches off rather than inviting a retry that
                 // cannot succeed (AGL-2019).
@@ -1010,6 +1101,29 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
                   : buyLabel || (subscribing ? 'Subscribe' : 'Buy now')}
             </Button>
           </Box>
+          {/*
+            The live price with add-ons (AGL-4100): one configured unit
+            times the quantity, and what is still to choose.
+          */}
+          {addOnGroups.length && priced ? (
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="subtitle1" component="p">
+                {quantity > 1
+                  ? `Total for ${quantity}: ${money(unitCents * quantity)}`
+                  : `Total: ${money(unitCents)}`}
+              </Typography>
+              {!pageAddOns.ready && pageAddOns.error && !variant?.soldOut ? (
+                <Typography variant="body2" color="text.secondary">
+                  {pageAddOns.error}
+                </Typography>
+              ) : null}
+            </Box>
+          ) : null}
+          {addRefusal ? (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              {addRefusal}
+            </Alert>
+          ) : null}
           {nativeCheckout ? (
             <Suspense fallback={<StorefrontPaymentElementFallback />}>
               <StorefrontPaymentElement
@@ -1037,7 +1151,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
             <Box sx={{ mb: 2 }}>
               <CartFulfillmentChoice
                 state={fulfillment}
-                formatCents={(cents) => `$${(cents / 100).toFixed(2)}`}
+                formatCents={money}
               />
             </Box>
           ) : null}

@@ -17,7 +17,9 @@ A **product** is what you manage; a **variant** is what a customer actually
 buys. Products define up to **3 options** (like Size or Color, each with up
 to 25 values), and the products hub expands them into a variants matrix — up
 to **100 variants** per product, each with its own SKU, barcode, price,
-compare-at price, weight, image, and inventory count.
+compare-at price, weight, image, and inventory count. Choices that don't need
+their own stock, like walls or printing on a canopy, are
+[add-ons](#add-ons) instead, and they don't count toward the 100.
 
 - **Types**: `physical` (shippable), `digital` (delivered as downloads), or
   `service`.
@@ -40,6 +42,75 @@ compare-at price, weight, image, and inventory count.
 Products created with the earlier single-price product block are lifted
 into this model automatically as a single default variant — nothing breaks
 and no migration step is needed.
+
+### More than 100 combinations {#more-than-100-combinations}
+
+Every value of every option makes more variants: 5 sizes, 5 frames and 6 print
+colors are 150 combinations, more than a product holds. When the options you
+type would make more than 100, the editor says how many, under the options:
+
+> These options make 150 combinations, and a product holds at most 100.
+
+Every value you typed stays where it is, and the variants table stays as it
+was, so nothing is lost. **Save product** stays off until the options fit:
+remove some values, or move the choices that don't need their own stock to
+[add-ons](#add-ons).
+
+For a canopy, keep **Size** as the option, because each size is a different
+item on your shelf with its own stock and price. The frame, the walls and the
+printing are then add-ons: 5 sizes are 5 variants, and the rest are choices the
+shopper adds on the product's page, each with its price.
+
+## Add-ons {#add-ons}
+
+**Add-ons** are choices added to an item that aren't stocked variants: the
+frame, walls and printing on a canopy, gift wrap on a box, or a milk in a latte.
+Each can be free or add to the price. They're under **Add-ons** in the product
+editor on every plan, and editing them takes the same access as editing the
+product.
+
+1. Click **New add-on group** and name it (for example "Walls").
+2. Set **At least**: 0 makes the group optional, and 1 or more makes it
+   required. Set **At most** to the number of choices a customer can pick (1
+   for "pick one").
+3. Click **Add choice** for each choice, with what it **Adds** to the price.
+   Leave it blank for a free choice.
+4. Leave **Show on the website** on to offer the group on the product's page.
+   Turn it off to offer the group at the [register](pos-and-reservations.md#modifiers)
+   only.
+
+A group you add is shown on the website. A group made before add-ons came to
+the website (October 2026) stays at the register until you turn **Show on the
+website** on, so nothing changes on your live store by itself.
+
+### Price an add-on by size {#price-by-size}
+
+A choice can cost more on one variant than another. A back wall for a 10×20
+canopy takes more fabric than one for a 10×10, so it costs more. On a product
+with options, click **Price by size** beside the choice. The button is named
+after your option, and it says **Price by variant** when the product has
+several options. Then enter what the choice adds on each size. A size you leave
+blank uses the choice's own price.
+
+### On the product's page {#add-ons-on-the-product-page}
+
+The product's page shows each group that's shown on the website, under the
+product's options:
+
+- A group that takes one choice is a drop-down. A group that takes several is a
+  set of checkboxes. Each choice shows what it adds on the size picked, like
+  **Aluminum frame (+$200.00)**.
+- A required group is marked with an asterisk, and **Add to cart** and **Buy
+  now** stay off until it's answered. The page says what's missing, like
+  "Choose frame for Canopy."
+- The price under the name is the size's price plus the add-ons picked, and a
+  **Total** line multiplies it by the quantity as the customer chooses.
+
+The cart and checkout price the add-ons again from the product, and the order,
+the receipt and your order emails name them after the size, like
+“10x20 / Aluminum frame, Back wall”. The same canopy with other add-ons is its
+own line in the cart. A product that needs a required add-on opens its page
+from a product grid's **Add to cart**, so the customer can choose it there.
 
 ## Sell in person only {#sell-in-person-only}
 

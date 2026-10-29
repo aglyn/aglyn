@@ -2399,12 +2399,22 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             )
           : liftedForSnapshot.variants[0]
         const variantOptions = Object.values(soldVariant?.options ?? {})
+        // The add-ons bought with it (AGL-4100), named from the product; their
+        // price is already in the session's `unitAmountCents`.
+        const subModifiers = CommerceModel.soldLineModifiers(
+          liftedForSnapshot,
+          CommerceModel.decodeModifierSelection(object.metadata?.modifiers),
+          soldVariant?.id,
+        )
+        const subLabel = CommerceModel.lineLabelWithModifiers(
+          variantOptions.length ? variantOptions.join(' / ') : undefined,
+          subModifiers,
+        )
         const { lineItems: subLineItems, totals: subTotals } =
           CommerceModel.computeBuyNowOrder(object, {
             name: String(productForSnapshot.get('name') ?? 'Product'),
-            ...(variantOptions.length
-              ? { variantLabel: variantOptions.join(' / ') }
-              : {}),
+            ...(subLabel ? { variantLabel: subLabel } : {}),
+            ...(subModifiers.length ? { modifiers: subModifiers } : {}),
             ...(soldVariant?.sku ? { sku: soldVariant.sku } : {}),
             ...(liftedForSnapshot.type
               ? { productType: liftedForSnapshot.type }
@@ -3576,6 +3586,17 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             const variant = line.variantId
               ? product.variants.find((item) => item.id === line.variantId)
               : product.variants[0]
+            // The add-ons on the line (AGL-4100), priced from the product as
+            // `cart-checkout.ts` priced them on the variant sold, and named
+            // on the line as the register names its modifiers.
+            const modifiers = CommerceModel.soldLineModifiers(product, line.modifiers, variant?.id)
+            const extraCents = modifiers.reduce((sum, modifier) => sum + modifier.priceCents, 0)
+            const variantLabel = CommerceModel.lineLabelWithModifiers(
+              variant && Object.keys(variant.options ?? {}).length
+                ? Object.values(variant.options ?? {}).join(' / ')
+                : undefined,
+              modifiers,
+            )
             return {
               productId: line.productId,
               ...(line.variantId ? { variantId: line.variantId } : {}),
@@ -3583,22 +3604,16 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               // checked when the session was made.
               ...(CommerceModel.isCheckInDayKey(line.useDayKey) ? { useDayKey: line.useDayKey } : {}),
               name: product.name,
-              ...(variant && Object.keys(variant.options ?? {}).length
-                ? {
-                    variantLabel: Object.values(variant.options ?? {}).join(
-                      ' / ',
-                    ),
-                  }
-                : {}),
+              ...(variantLabel ? { variantLabel } : {}),
+              ...(modifiers.length ? { modifiers } : {}),
               ...(variant?.sku ? { sku: variant.sku } : {}),
               productType: product.type,
               ...(product.supplierId
                 ? { supplierId: product.supplierId }
                 : {}),
               quantity: line.quantity,
-              unitAmountCents: Math.round(
-                Number(variant?.priceUsd ?? 0) * 100,
-              ),
+              unitAmountCents:
+                Math.round(Number(variant?.priceUsd ?? 0) * 100) + extraCents,
             }
           })
           .filter(Boolean) as CommerceModel.OrderLineItem[]
@@ -5018,12 +5033,23 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             )
           : liftedForSnapshot.variants[0]
         const variantOptions = Object.values(soldVariant?.options ?? {})
+        // The add-ons bought with it (AGL-4100), named from the product; their
+        // price is already in the session's `unitAmountCents`, so a price
+        // edit since the sale moves no money on the record.
+        const buyNowModifiers = CommerceModel.soldLineModifiers(
+          liftedForSnapshot,
+          CommerceModel.decodeModifierSelection(object.metadata?.modifiers),
+          soldVariant?.id,
+        )
+        const buyNowLabel = CommerceModel.lineLabelWithModifiers(
+          variantOptions.length ? variantOptions.join(' / ') : undefined,
+          buyNowModifiers,
+        )
         const { lineItems: buyNowLineItems, totals: buyNowTotals } =
           CommerceModel.computeBuyNowOrder(object, {
             name: snapshotName,
-            ...(variantOptions.length
-              ? { variantLabel: variantOptions.join(' / ') }
-              : {}),
+            ...(buyNowLabel ? { variantLabel: buyNowLabel } : {}),
+            ...(buyNowModifiers.length ? { modifiers: buyNowModifiers } : {}),
             ...(soldVariant?.sku ? { sku: soldVariant.sku } : {}),
             ...(liftedForSnapshot.type
               ? { productType: liftedForSnapshot.type }

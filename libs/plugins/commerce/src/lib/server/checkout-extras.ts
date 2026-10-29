@@ -174,12 +174,14 @@ async function resolveCartExtrasLines(
       ? product.variants.find((item) => item.id === line.variantId)
       : product.variants[0]
     if (!variant || !CommerceModel.variantHasPrice(variant)) continue
+    // With its add-ons (AGL-4100): the same unit price checkout charges.
+    const chosen = CommerceModel.resolveWebsiteLineModifiers(product, line.modifiers, variant.id)
     lines.push({
       productId: line.productId,
       name: product.name,
       ...(variant.sku ? { sku: variant.sku } : {}),
       quantity: Math.max(0, Math.round(Number(line.quantity) || 0)),
-      unitCents: Math.round(Number(variant.priceUsd) * 100),
+      unitCents: Math.round(Number(variant.priceUsd) * 100) + (chosen.ok ? chosen.extraCents : 0),
       physical: (product.type ?? 'physical') === 'physical',
     })
   }

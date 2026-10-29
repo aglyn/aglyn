@@ -38,6 +38,7 @@ import {
   smartCollectionRulesOf,
   stockAdjustmentWrite,
   validateProduct,
+  variantMatrixProblem,
   type InventoryAdjustmentReason,
 } from '../model'
 import { planRefusal, roomRefusal } from './product-drafts'
@@ -211,7 +212,9 @@ export function createProductSaveHandler(options: ProductsWriteDeps = {}): Plugi
       if (!door) return
       const nowMs = deps.now()
       const fields = productSaveFields(product, nowMs)
-      const problem = validateProduct(fields as never)
+      // More combinations than a product holds is refused with the count
+      // (AGL-4100), never saved short of the options it names.
+      const problem = variantMatrixProblem(fields.options) ?? validateProduct(fields as never)
       if (problem) return res.status(400).json({ error: problem })
       const db = deps.firestore()
       const hostRef = db.collection('hosts').doc(hostId)
