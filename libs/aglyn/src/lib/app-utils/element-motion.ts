@@ -158,6 +158,8 @@ export const ELEMENT_MOTION_NEVER: ReadonlySet<string> = new Set([
   'muiRating',
   'muiDatePicker',
   'muiTimePicker',
+  'formFileUpload',
+  'product-options-field',
   'newsletter-signup',
   'member-signin',
   'member-signup',

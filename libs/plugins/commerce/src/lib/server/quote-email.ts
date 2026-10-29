@@ -33,13 +33,12 @@ import {
   type SendingIdentityVerdict,
 } from '@aglyn/shared-util-email'
 import {
-  consentGroupForSite,
   firebaseAdmin,
   hostSendingIdentity,
   meterHostEmail,
   renderHostEmailWithTokens,
-  siteAddressSuppression,
   siteEmailFrame,
+  transactionalAddressSuppression,
 } from '@aglyn/tenant-data-admin'
 import * as CommerceModel from '../model'
 import { QUOTE_EMAIL_KEY, quoteEmailContent, type QuoteEmailColors } from '../utils/quote-email-content'
@@ -64,7 +63,11 @@ import type { CommercePdfFile } from './pdf-response'
  *     from it (`nextThreadHeaders`). The provider's own id is returned beside
  *     ours, because whether a provider keeps a caller's `Message-ID` is its
  *     own call, and a replaced one can then be traced;
- *   - METERED as a site's transactional email.
+ *   - METERED as a site's transactional email;
+ *   - REFUSED only for an address that bounced for good or reported mail as
+ *     spam (`transactionalAddressSuppression`): the customer asked for the
+ *     quote, so an unsubscribe from the site's newsletter does not stop it,
+ *     as it does not stop a receipt (AGL-4098).
  *
  * The route decides everything about the quote (who may send, the link, the
  * stage); this module only says the email and sends it.
@@ -113,7 +116,8 @@ export interface QuoteMailerDeps {
   quotePdf(input: Parameters<typeof quotePdfFile>[0]): Promise<CommercePdfFile>
   send(options: SendEmailOptions): Promise<SendEmailResult>
   meter(hostId: string): Promise<void>
-  suppression(hostId: string, email: string, org: unknown): Promise<'suppressed-platform' | 'suppressed-host' | null>
+  /** The bounce and complaint list only: a quote is mail the customer asked for. */
+  suppression(email: string): Promise<'suppressed-platform' | null>
 }
 
 export function defaultQuoteMailerDeps(): QuoteMailerDeps {
@@ -128,17 +132,14 @@ export function defaultQuoteMailerDeps(): QuoteMailerDeps {
     meter: async (hostId) => {
       await meterHostEmail(hostId)
     },
-    suppression: async (hostId, email, org) =>
-      siteAddressSuppression(hostId, email, {
-        group: await consentGroupForSite(hostId, (org as Record<string, unknown> | null) ?? null),
-      }),
+    suppression: (email) => transactionalAddressSuppression(email),
   }
 }
 
 /** What the console's Send quote reaches: whether mail can go, whether this address may be mailed, and the send. */
 export interface QuoteMailer {
   configured(): boolean
-  suppression(hostId: string, email: string, org: unknown): Promise<'suppressed-platform' | 'suppressed-host' | null>
+  suppression(email: string): Promise<'suppressed-platform' | null>
   deliver(input: QuoteDeliveryInput): Promise<QuoteDeliveryResult>
 }
 
@@ -193,7 +194,7 @@ function refusalOf(result: Extract<SendEmailResult, { sent: false }>): { status:
 export function quoteMailer(deps: QuoteMailerDeps = defaultQuoteMailerDeps()): QuoteMailer {
   return {
     configured: () => deps.configured(),
-    suppression: (hostId, email, org) => deps.suppression(hostId, email, org),
+    suppression: (email) => deps.suppression(email),
     deliver: async (input) => {
       const { hostId, quoteId, order, host } = input
       const businessName = quoteBusinessName(host)

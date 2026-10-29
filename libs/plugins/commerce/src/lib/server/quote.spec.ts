@@ -158,6 +158,10 @@ const mailerDeps: QuoteMailerDeps = {
   suppression: async () => suppressionAnswer,
 }
 
+/** What the forms plugin's facts reader answers for a request (AGL-4098), and who asked. */
+let requestFactsAnswer: Awaited<ReturnType<QuoteDeps['requestFacts']>> = null
+const requestFactsAsked: Array<Parameters<QuoteDeps['requestFacts']>[0]> = []
+
 const deps: QuoteDeps = {
   verifyIdToken: async (token) => ({ uid: token, email: `${token}@example.com` }),
   firestore: () => firestore,
@@ -172,6 +176,10 @@ const deps: QuoteDeps = {
     `https://acme.aglyn.app/api/commerce/quote-proof?hostId=${hostId}&q=${quoteId}&t=${version}.sig&file=${proofId}`,
   uploads: async () => uploads,
   mailer: async () => quoteMailer(mailerDeps),
+  requestFacts: async (asked) => {
+    requestFactsAsked.push(asked)
+    return requestFactsAnswer
+  },
   now: () => nowMs,
 }
 
@@ -207,6 +215,8 @@ beforeEach(() => {
   sendAnswer = { sent: true, id: 'provider-1' }
   suppressionAnswer = null
   mailConfigured = true
+  requestFactsAnswer = null
+  requestFactsAsked.length = 0
   docs.set('hosts/site1', {
     subdomain: 'acme',
     memberRoles: { admin: 'admin', editor: 'editor', author: 'author', viewer: 'viewer', granted: 'author', sender: 'author', editsOnly: 'editor' },
@@ -1211,7 +1221,7 @@ describe('sending the quote by email (AGL-4097)', () => {
     expect(stored(path)['quote']['sends']).toBeUndefined()
   })
 
-  it('refuses an address on a suppression list, in words that say why', async () => {
+  it('refuses an address that bounced or complained, in words that say why', async () => {
     const { quoteId, path } = await created()
     suppressionAnswer = 'suppressed-platform'
     const bounced = await send('admin', quoteId)
@@ -1219,10 +1229,27 @@ describe('sending the quote by email (AGL-4097)', () => {
     expect(String(bounced.body['error'])).toBe(
       'jane@example.com bounced or reported an email as spam, so it can’t be emailed. Copy the pay link and send it another way.',
     )
-    suppressionAnswer = 'suppressed-host'
-    expect(String((await send('admin', quoteId)).body['error'])).toMatch(/unsubscribed from this site’s emails/)
     expect(sentEmails).toEqual([])
     expect(stored(path)['quote']['stage']).toBe('draft')
+  })
+
+  it('sends a quote to someone who unsubscribed from the site’s newsletter: they asked for it (AGL-4098)', async () => {
+    const { quoteId } = await created()
+    // An unsubscribe lives on the site's own list, which a transactional send
+    // never reads; the mailer asks the bounce and complaint list alone.
+    docs.set('hosts/site1/suppressions/anything', { reason: 'unsubscribe' })
+    const asked: string[] = []
+    const spy = jest.spyOn(mailerDeps, 'suppression').mockImplementation(async (email) => {
+      asked.push(email)
+      return null
+    })
+    try {
+      expect((await send('admin', quoteId)).status).toBe(200)
+    } finally {
+      spy.mockRestore()
+    }
+    expect(asked).toEqual(['jane@example.com'])
+    expect(sentEmails).toHaveLength(1)
   })
 
   it('says so when email is not set up, or the site has no address for the pay link', async () => {
@@ -1233,5 +1260,153 @@ describe('sending the quote by email (AGL-4097)', () => {
     docs.set('hosts/site1', { ...docs.get('hosts/site1'), subdomain: '' })
     expect(String((await send('admin', quoteId)).body['error'])).toMatch(/no web address/)
     expect(sentEmails).toEqual([])
+  })
+})
+
+describe('a quote started from a request (AGL-4098)', () => {
+  const THREAD = {
+    messageId: '<form.k1.0123456789abcdef@mail.acme.test>',
+    references: ['<form.k1.0123456789abcdef@mail.acme.test>'],
+    subject: 'We got your quote request — Acme Signs',
+  }
+  const FACTS = {
+    record: 'formSubmission',
+    hostId: 'site1',
+    formId: 'quote-form',
+    formName: 'Request a quote',
+    createdAtMs: 900,
+    request: { kind: 'quote' },
+    person: { name: 'Jane Doe', email: 'jane@example.com', phone: '555-0199', company: 'Acme' },
+    message: 'Two canopies for the fair.',
+    answers: [],
+    fieldData: { product: '{"productId":"canopy","variantId":"red","options":{"Color":"Red"}}' },
+    files: [
+      { id: 'f1', field: 'artwork', name: 'logo.ai', contentType: 'application/illustrator', size: 900, path: 'hosts/site1/private/uploads/form-file/sub1/f1' },
+    ],
+    emailThread: THREAD,
+  }
+
+  it('answers the editor’s prefill from the request, read for the member asking, with no storage path', async () => {
+    requestFactsAnswer = { ok: true, facts: FACTS }
+    const outcome = await handleQuote(deps, request('admin', { action: 'start-from-request', hostId: 'site1', submissionId: 'sub1' }))
+    expect(outcome).toEqual({
+      status: 200,
+      body: {
+        prefill: {
+          customer: { name: 'Jane Doe', email: 'jane@example.com', phone: '555-0199', company: 'Acme' },
+          lines: [{ kind: 'catalog', productId: 'canopy', variantId: 'red', quantity: 1 }],
+          notes: 'Two canopies for the fair.',
+        },
+        request: { submissionId: 'sub1', formName: 'Request a quote', receivedAtMs: 900 },
+        files: [{ id: 'f1', name: 'logo.ai', contentType: 'application/illustrator', size: 900 }],
+        threaded: true,
+      },
+    })
+    expect(requestFactsAsked).toEqual([
+      expect.objectContaining({ orgId: 'org-1', hostId: 'site1', id: 'sub1', uid: 'admin', staff: false }),
+    ])
+  })
+
+  it('is refused without "Create and edit quotes", before the request is read', async () => {
+    requestFactsAnswer = { ok: true, facts: FACTS }
+    const outcome = await handleQuote(deps, request('author', { action: 'start-from-request', hostId: 'site1', submissionId: 'sub1' }))
+    expect(outcome.status).toBe(403)
+    expect(requestFactsAsked).toEqual([])
+  })
+
+  it('passes on the reader’s refusal, and says so where no plugin reads requests', async () => {
+    requestFactsAnswer = { ok: false, status: 403, error: 'You can’t read this site’s submissions.' }
+    expect(await handleQuote(deps, request('admin', { action: 'start-from-request', hostId: 'site1', submissionId: 'sub1' }))).toEqual({
+      status: 403,
+      body: { error: 'You can’t read this site’s submissions.' },
+    })
+    requestFactsAnswer = null
+    expect((await handleQuote(deps, request('admin', { action: 'start-from-request', hostId: 'site1', submissionId: 'sub1' }))).status).toBe(404)
+  })
+
+  it('creates the quote stamped from the request read again, never from the body, and its first email replies into the confirmation', async () => {
+    requestFactsAnswer = { ok: true, facts: FACTS }
+    const created = await handleQuote(
+      deps,
+      request(
+        'admin',
+        {
+          action: 'create',
+          hostId: 'site1',
+          from: { kind: 'submission', id: 'sub1' },
+          quote: {
+            lines: [CANOPY],
+            customer: { name: 'Jane Doe', email: 'jane@example.com' },
+            notes: 'Two canopies for the fair.',
+            // A body cannot name a request's parts.
+            request: { submissionId: 'forged' },
+            emailThread: { messageId: '<forged@evil.test>', references: [], subject: 'x' },
+          },
+        },
+        'k-from-request',
+      ),
+    )
+    expect(created.status).toBe(200)
+    const quoteId = String(created.body['quoteId'])
+    const quote = (docs.get(`hosts/site1/orders/${quoteId}`) as Record<string, any>)['quote']
+    expect(quote['request']).toEqual({ submissionId: 'sub1', formName: 'Request a quote', receivedAtMs: 900 })
+    expect(quote['requestFiles']).toEqual([
+      { id: 'f1', name: 'logo.ai', contentType: 'application/illustrator', size: 900, path: 'hosts/site1/private/uploads/form-file/sub1/f1' },
+    ])
+    expect(quote['emailThread']).toEqual(THREAD)
+
+    // The request's file downloads through the quote's own route.
+    expect(await handleQuote(deps, request('admin', { action: 'file', hostId: 'site1', quoteId, fileId: 'f1' }))).toEqual({
+      status: 200,
+      body: {},
+      file: { path: 'hosts/site1/private/uploads/form-file/sub1/f1', name: 'logo.ai', contentType: 'application/illustrator' },
+    })
+
+    // The first email answers the confirmation's conversation and keeps its subject.
+    const sent = await handleQuote(
+      deps,
+      request('admin', { action: 'send', hostId: 'site1', quoteId, message: 'Here it is.' }, 'send-from-request'),
+    )
+    expect(sent.status).toBe(200)
+    const headers = sentEmails[sentEmails.length - 1].headers as Record<string, string>
+    expect(headers['In-Reply-To']).toBe(THREAD.messageId)
+    expect(headers['References']).toBe(THREAD.messageId)
+    expect(sentEmails[sentEmails.length - 1].subject).toBe(THREAD.subject)
+  })
+
+  it('refuses the create when the request can no longer be read, and writes nothing', async () => {
+    requestFactsAnswer = { ok: false, status: 404, error: 'That submission is no longer in the Inbox.' }
+    const outcome = await handleQuote(
+      deps,
+      request('admin', { action: 'create', hostId: 'site1', from: { kind: 'submission', id: 'gone' }, quote: { lines: [CANOPY] } }, 'k-gone'),
+    )
+    expect(outcome).toEqual({ status: 404, body: { error: 'That submission is no longer in the Inbox.' } })
+    expect(quoteDocs()).toEqual([])
+  })
+
+  it('a contact’s quote is an ordinary create: the customer record, nothing stamped from a request', async () => {
+    const outcome = await handleQuote(
+      deps,
+      request(
+        'admin',
+        {
+          action: 'create',
+          hostId: 'site1',
+          quote: { lines: [CUSTOM], customer: { record: { kind: 'contact', id: 'c9' }, name: 'Sam Lee', email: 'sam@example.com', phone: '555-0101', company: 'Lee & Co' } },
+        },
+        'k-contact',
+      ),
+    )
+    const quote = (docs.get(`hosts/site1/orders/${String(outcome.body['quoteId'])}`) as Record<string, any>)['quote']
+    expect(quote['customer']).toEqual({
+      record: { kind: 'contact', id: 'c9' },
+      name: 'Sam Lee',
+      company: 'Lee & Co',
+      email: 'sam@example.com',
+      emailLower: 'sam@example.com',
+      phone: '555-0101',
+    })
+    expect(quote).not.toHaveProperty('request')
+    expect(requestFactsAsked).toEqual([])
   })
 })

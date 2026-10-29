@@ -20,6 +20,9 @@ import { firebaseAdmin, isImpersonationSession } from '@aglyn/tenant-data-admin'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { FORM_STATS_RECOUNT_MAX, recountFormStats } from './server/form-stats'
 import { formPromoteHandler } from './server/form-promote-route'
+import { registerPluginRecordFactsReader } from '@aglyn/aglyn/plugin-manager/plugin-record-facts'
+import { BUNDLE_ID } from './constants/bundle-common'
+import { FORM_SUBMISSION_FACTS_RESOURCE } from './model/form-request'
 
 /**
  * `POST /api/forms/stats` — recount the named forms' counters from their
@@ -116,11 +119,35 @@ export function registerFormsApi(): void {
     { web: async (request) => (await import('./server/form-submit')).POST(request) },
     { ownVisitorGates: true },
   )
+  // A form's files, sent before the form (AGL-4098): tickets, finalize and
+  // remove for a File upload field. An ordinary visitor write, so the
+  // dispatcher's cross-origin check, the site's Forms switch, lockdown and
+  // write limit stand in front of the upload's own limits.
+  registerPluginApiRoute('forms/upload', {
+    web: async (request) => (await import('./server/form-upload')).POST(request),
+  })
 }
 
 /** Console API registration. */
 export function registerFormsConsoleApi(): void {
   registerPluginApiRoute('forms/stats', formStatsHandler)
+  // A submission's files (AGL-4098): downloaded by a member who may read the
+  // site's submissions, and released once the Inbox deleted the submission.
+  registerPluginApiRoute('forms/submission-file', async (req, res) =>
+    (await import('./server/submission-files')).submissionFilesHandler(req, res),
+  )
+  // A submission's facts for another plugin in this process (AGL-4098):
+  // commerce starts a quote from a quote request through it, on the Inbox's
+  // read rules, without reading this plugin's collection. Registered with the
+  // console's routes, as the CRM's readers are, so the routes that ask find it.
+  registerPluginRecordFactsReader(
+    FORM_SUBMISSION_FACTS_RESOURCE,
+    {
+      read: async (request) =>
+        (await import('./server/submission-facts')).formSubmissionFactsReader.read(request),
+    },
+    { pluginId: BUNDLE_ID },
+  )
   // A form's publish — the `besignerDocuments` publish route
   // `plugins.config.json` declares for it.
   registerPluginApiRoute('forms/promote', { web: formPromoteHandler })

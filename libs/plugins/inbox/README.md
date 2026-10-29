@@ -33,6 +33,8 @@ The Inbox is console-only. Submissions, members and leads live in Firestore and 
 - An "Inbox" glance widget in the `hostDashboard` slot.
 - A "Submissions" widget in the `formSubmissions` slot, a zone the forms plugin hosts on a form's page. It is the Inbox's own table narrowed to that form.
 - Two zones the Inbox hosts for other plugins: the body of its Campaigns section, and a "where this came from" attribution area on a lead or submission. The plugin that owns campaigns draws in both.
+- A third, `inboxSubmissionActions` (AGL-4098): an action on an open submission, among its buttons. Commerce draws "Start a quote" there for a quote request.
+- An open submission's files, downloaded through the forms plugin's `/api/forms/submission-file`, and a "Quote request" chip on a request. Deleting a submission asks that route to release its files.
 
 ### On the server
 

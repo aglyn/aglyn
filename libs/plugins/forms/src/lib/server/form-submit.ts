@@ -60,6 +60,15 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { isCredentialFieldName } from '@aglyn/shared-util-email/hosted-page-screen'
 import { FORMS_OFF_FOR_SITE_REFUSAL, formSubmissionDoorPlugin } from '../model/form-door'
 import { FORM_ABUSE_CEILING_CODE } from '../model/form-unavailable'
+import { formSendsConfirmation, readFormRequest } from '@aglyn/aglyn/app-utils/forms'
+import {
+  FORM_FILES_BODY_KEY,
+  FORM_FILES_REFUSAL_CODE,
+  parseFormFileRefs,
+  splitFormFieldData,
+  type FormFileRefs,
+} from '../model/form-request'
+import { attachFormFiles, type AttachedFormFiles } from './form-submit-files'
 import { incrementFormStats } from './increment-form-stats'
 import {
   NO_CLIENT_ADDRESS_BUCKET,
@@ -506,13 +515,27 @@ export async function POST(request: Request): Promise<Response> {
      * — could still post one here. Such a field is dropped, never stored,
      * never forwarded to a workflow or a contact.
      */
-    const sanitizedFields: Record<string, string> = {}
+    const postedFields: Record<string, string> = {}
     for (const [key, value] of Object.entries(fields)) {
       if (isCredentialFieldName(String(key))) continue
-      sanitizedFields[String(key).slice(0, 64)] = String(value).slice(0, 2000)
+      postedFields[String(key).slice(0, 64)] = String(value).slice(0, 2000)
     }
+    /*
+     * THE ANSWERS, APART FROM THE MACHINE VALUES BESIDE THEM (AGL-4098). A
+     * field such as a product and its options posts a readable line under its
+     * name and a value only the plugin that drew it reads under
+     * `{name}__data`. The line is the answer every reader shows; the value is
+     * kept as `fieldData`, never shown, emailed or searched.
+     */
+    const { answers: sanitizedFields, fieldData } = splitFormFieldData(postedFields)
     if (!Object.keys(sanitizedFields).length) {
       return json({ error: 'Invalid submission' }, 400)
+    }
+    // The files the page sent, by id (AGL-4098): shape only here; each is
+    // checked against the verified form below, before anything is written.
+    const fileRefs = parseFormFileRefs(payload[FORM_FILES_BODY_KEY])
+    if (fileRefs && 'error' in fileRefs) {
+      return json({ error: fileRefs.error, code: FORM_FILES_REFUSAL_CODE }, 400)
     }
 
     /*
@@ -595,6 +618,34 @@ export async function POST(request: Request): Promise<Response> {
     const formFieldDecls = Array.isArray(form?.get('fields'))
       ? (form?.get('fields') as Aglyn.FormFieldDecl[])
       : []
+    /*
+     * THE FILES, each read back from the scope of the key the page minted
+     * and held to the field that asked for it (`form-submit-files.ts`). A
+     * file that did not arrive refuses the submission here, before it is
+     * stored or counted; the files that did become the field's answer by
+     * name. The upload pipeline loads only for a submission that has files.
+     */
+    let attached: Extract<AttachedFormFiles, { ok: true }> | null = null
+    if (fileRefs) {
+      const checked = await attachFormFiles({
+        firestore,
+        hostId,
+        formId: form?.id ?? null,
+        decls: formFieldDecls,
+        refs: fileRefs as FormFileRefs,
+        uploads: (await import('./form-uploads')).formUploadCalls(),
+      })
+      if ('error' in checked) {
+        return json({ error: checked.error, code: FORM_FILES_REFUSAL_CODE }, checked.status)
+      }
+      attached = checked as Extract<AttachedFormFiles, { ok: true }>
+      Object.assign(sanitizedFields, checked.answers)
+    }
+    /*
+     * WHAT THE FORM ASKS FOR (AGL-4098), off the verified document only: a
+     * request body cannot make an ordinary message a quote request.
+     */
+    const formRequest = form ? readFormRequest(form.data()) : null
     /*
      * A SIGN-UP form says so on the entity (`optInOnSubmit`): its one purpose
      * is subscribing, so the submission IS the opt-in. Read off the verified
@@ -725,7 +776,7 @@ export async function POST(request: Request): Promise<Response> {
     const hostOrgId = hostSnapshot.get('orgId')
     const submissionOrgId =
       typeof hostOrgId === 'string' && hostOrgId ? hostOrgId : owningOrg?.orgId
-    const submissionRef = await hostRef.collection('formSubmissions').add({
+    const submissionData = {
       /*
        * WHERE THE ROW LIVES, as fields (AGL-3303). The organization's Inbox
        * reads every site's submissions with ONE collection-group query,
@@ -795,7 +846,35 @@ export async function POST(request: Request): Promise<Response> {
       // failing. Written only when true — an absent field is the healthy case
       // and costs nothing on the millions of rows that are fine.
       ...(rate.degraded ? { rateDegraded: true } : {}),
-    })
+      /*
+       * A REQUEST'S PARTS (AGL-4098): the files it carries, by id and name
+       * (the bytes stay private, under the submission's own id); what the form
+       * asks for; and the machine values a field posted beside its answer.
+       * Each written only when there is one.
+       */
+      ...(attached?.files.length ? { files: attached.files } : {}),
+      ...(formRequest ? { request: formRequest } : {}),
+      ...(Object.keys(fieldData).length ? { fieldData } : {}),
+    }
+    /*
+     * A submission with files takes the key its files were sent under as its
+     * id, so they are always at `form-file/{submissionId}`. `create` refuses a
+     * key already used: a page that sends twice is answered as received, and
+     * nothing is written over.
+     */
+    let submissionRef: FirebaseFirestore.DocumentReference
+    if (attached) {
+      submissionRef = hostRef.collection('formSubmissions').doc(attached.key)
+      try {
+        await submissionRef.create(submissionData)
+      } catch (error) {
+        if ((error as { code?: unknown })?.code === 6) return json({ received: true })
+        throw error
+      }
+      await attached.release()
+    } else {
+      submissionRef = await hostRef.collection('formSubmissions').add(submissionData)
+    }
     // Contacts ingestion (AGL-197): forms don't guarantee an email field —
     // best-effort extraction; never blocks the submission.
     const contactEmail = extractEmailFromFields(sanitizedFields)
@@ -1055,7 +1134,9 @@ export async function POST(request: Request): Promise<Response> {
       hostId,
       {
         type: 'content.formSubmission',
-        title: `New form submission — ${resolvedFormName}`,
+        title: formRequest
+          ? `New quote request — ${resolvedFormName}`
+          : `New form submission — ${resolvedFormName}`,
         body: [
           `Someone submitted “${resolvedFormName}” on {site}` +
             (alertPath ? ` (page ${alertPath}).` : '.'),
@@ -1125,7 +1206,45 @@ export async function POST(request: Request): Promise<Response> {
           : {}),
       },
     )
+    /*
+     * THE CONFIRMATION TO THE PERSON (AGL-4098), for a form set to send one
+     * and a submission that named an address: what they sent and what
+     * happens next, from the site, in its theme. It starts the conversation
+     * the business's answer replies into, kept on the submission as
+     * `emailThread`. Loaded only here; it never fails the submission, and it
+     * is awaited for the reason the managers' alert is.
+     */
+    const confirming =
+      form && contactEmail && formSendsConfirmation(form.data())
+        ? import('./form-confirmation-email')
+            .then(({ sendFormConfirmation }) =>
+              sendFormConfirmation({
+                hostId,
+                host: (hostSnapshot.data() ?? {}) as Record<string, unknown>,
+                org: orgBilling ?? null,
+                to: contactEmail,
+                formName: resolvedFormName,
+                request: formRequest,
+                answers: sanitizedFields,
+                decls: formFieldDecls,
+                consentFieldName: form.get('consentFieldName')
+                  ? String(form.get('consentFieldName'))
+                  : null,
+                fileNames: (attached?.files ?? []).map((file) => file.name),
+                atMs: submittedAtMs,
+              }),
+            )
+            .then(async (sent) => {
+              if (!sent.sent) return
+              await submissionRef.update({
+                emailThread: sent.thread,
+                confirmation: { to: contactEmail, sentAtMs: submittedAtMs, messageId: sent.messageId },
+              })
+            })
+            .catch((error: unknown) => console.error('form confirmation not recorded', error))
+        : null
     await notifyingManagers
+    await confirming
     return json({ received: true, alerts })
   } catch (error) {
     console.error(error)

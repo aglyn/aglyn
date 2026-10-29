@@ -2114,6 +2114,8 @@ data class OrderQuote(
     val notes: String? = null,
     val paidAtMs: Double? = null,
     val proofs: List<QuoteProof>? = null,
+    val request: QuoteRequestRef? = null,
+    val requestFiles: List<QuoteResponseFile>? = null,
     val requireProofApproval: Boolean? = null,
     val responses: List<QuoteCustomerResponse>? = null,
     val revision: Double,
@@ -3286,6 +3288,13 @@ data class QuoteProof(
     val path: String,
     val revision: Double,
     val size: Double,
+)
+
+@Serializable
+data class QuoteRequestRef(
+    val formName: String,
+    val receivedAtMs: Double? = null,
+    val submissionId: String,
 )
 
 @Serializable

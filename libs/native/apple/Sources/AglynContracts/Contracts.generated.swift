@@ -3192,6 +3192,8 @@ public struct OrderQuote: Codable, Hashable, Sendable {
   public var notes: String?
   public var paidAtMs: Double?
   public var proofs: [QuoteProof]?
+  public var request: QuoteRequestRef?
+  public var requestFiles: [QuoteResponseFile]?
   public var requireProofApproval: Bool?
   public var responses: [QuoteCustomerResponse]?
   public var revision: Double
@@ -3205,7 +3207,7 @@ public struct OrderQuote: Codable, Hashable, Sendable {
   public var updatedAtMs: Double
   public var updatedBy: String
 
-  public init(approval: QuoteApproval? = nil, approvedRevision: Double? = nil, billTo: OrderAddress? = nil, createdAtMs: Double, createdBy: String, customer: QuoteCustomer, discount: QuoteDiscount? = nil, emailThread: QuoteEmailThread? = nil, linkVersion: Double? = nil, notes: String? = nil, paidAtMs: Double? = nil, proofs: [QuoteProof]? = nil, requireProofApproval: Bool? = nil, responses: [QuoteCustomerResponse]? = nil, revision: Double, sends: [QuoteSendRecord]? = nil, shipping: QuoteShipping? = nil, shipTo: OrderAddress? = nil, stage: QuoteStage, tax: QuoteTaxBasis, terms: String? = nil, unmatchedPayments: [QuoteUnmatchedPayment]? = nil, updatedAtMs: Double, updatedBy: String) {
+  public init(approval: QuoteApproval? = nil, approvedRevision: Double? = nil, billTo: OrderAddress? = nil, createdAtMs: Double, createdBy: String, customer: QuoteCustomer, discount: QuoteDiscount? = nil, emailThread: QuoteEmailThread? = nil, linkVersion: Double? = nil, notes: String? = nil, paidAtMs: Double? = nil, proofs: [QuoteProof]? = nil, request: QuoteRequestRef? = nil, requestFiles: [QuoteResponseFile]? = nil, requireProofApproval: Bool? = nil, responses: [QuoteCustomerResponse]? = nil, revision: Double, sends: [QuoteSendRecord]? = nil, shipping: QuoteShipping? = nil, shipTo: OrderAddress? = nil, stage: QuoteStage, tax: QuoteTaxBasis, terms: String? = nil, unmatchedPayments: [QuoteUnmatchedPayment]? = nil, updatedAtMs: Double, updatedBy: String) {
     self.approval = approval
     self.approvedRevision = approvedRevision
     self.billTo = billTo
@@ -3218,6 +3220,8 @@ public struct OrderQuote: Codable, Hashable, Sendable {
     self.notes = notes
     self.paidAtMs = paidAtMs
     self.proofs = proofs
+    self.request = request
+    self.requestFiles = requestFiles
     self.requireProofApproval = requireProofApproval
     self.responses = responses
     self.revision = revision
@@ -5037,6 +5041,18 @@ public struct QuoteProof: Codable, Hashable, Sendable {
     self.path = path
     self.revision = revision
     self.size = size
+  }
+}
+
+public struct QuoteRequestRef: Codable, Hashable, Sendable {
+  public var formName: String
+  public var receivedAtMs: Double?
+  public var submissionId: String
+
+  public init(formName: String, receivedAtMs: Double? = nil, submissionId: String) {
+    self.formName = formName
+    self.receivedAtMs = receivedAtMs
+    self.submissionId = submissionId
   }
 }
 

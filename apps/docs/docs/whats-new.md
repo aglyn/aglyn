@@ -27,6 +27,18 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — Request a quote forms
+
+- **[A Request a quote form](commerce-and-bookings/commerce/quotes-and-proofs.md#a-request-a-quote-form)**
+  — mark a form as asking for a quote, add a **Product and options** field and a
+  **[File upload](content-and-data/forms/overview.md#file-upload)** field for artwork, and
+  [start a quote](commerce-and-bookings/commerce/quotes-and-proofs.md#start-a-quote-from-a-request)
+  from the request in the Inbox, or from a contact, already filled in.
+- **[Email the person a confirmation](content-and-data/forms/overview.md#after-someone-sends-it)**
+  — a form can send the person a copy of what they sent, and the quote you send them later
+  arrives in the same conversation. A quote, like a receipt, now reaches someone who
+  unsubscribed from your newsletter.
+
 ## October 2026 — email a quote
 
 - **[Email a quote](commerce-and-bookings/commerce/quotes-and-proofs.md#send)** — send a

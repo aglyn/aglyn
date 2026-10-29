@@ -109,8 +109,13 @@ import {
   relativeTime,
   routingChips,
   senderHue,
+  submissionFiles,
+  submissionRequestKind,
+  submissionRequestLabel,
   submissionSender,
 } from '../model/submission-presenter'
+import { InboxSubmissionActionsZone } from './inbox-submission-actions-zone'
+import SubmissionFiles, { FORM_SUBMISSION_FILE_API_PATH } from './submission-files.component'
 import {
   FORM_SCOPED_SUBMISSION_LIST_QUERY,
   ORG_SUBMISSION_LIST_QUERY,
@@ -505,6 +510,18 @@ export function SubmissionsCard({
         persist: false,
       })
       /*
+       * Its files go with it (AGL-4098). They are in private storage, which
+       * the browser cannot reach, so the forms plugin deletes them once the
+       * submission is gone. Best effort: the delete has happened either way.
+       */
+      if (submissionFiles(submission.files).length) {
+        void postPluginApi(FORM_SUBMISSION_FILE_API_PATH, {
+          action: 'release',
+          hostId: site,
+          submissionId: submission.$id,
+        })
+      }
+      /*
        * The form counted this submission when it arrived (AGL-3330), and an
        * increment cannot see a delete: the forms plugin recounts the form
        * from the rows that are left. Best effort — the delete has happened
@@ -618,9 +635,15 @@ export function SubmissionsCard({
               <Typography variant="body2" noWrap>
                 {sender.label}
               </Typography>
-              <Typography variant="caption" color="text.secondary" noWrap>
-                {submission.formName ?? 'Form'}
-              </Typography>
+              <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', minWidth: 0 }}>
+                <Typography variant="caption" color="text.secondary" noWrap>
+                  {submission.formName ?? 'Form'}
+                </Typography>
+                {/* A request (AGL-4098) says so in the list, as when it is open. */}
+                {submissionRequestLabel(submission.request) ? (
+                  <Chip size="small" color="info" variant="outlined" label={submissionRequestLabel(submission.request)} />
+                ) : null}
+              </Stack>
             </Stack>
           </Stack>
         )
@@ -835,7 +858,14 @@ export function SubmissionsCard({
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>{reader?.formName ?? 'Form submission'}</DialogTitle>
+        <DialogTitle>
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+            <span>{reader?.formName ?? 'Form submission'}</span>
+            {submissionRequestLabel(reader?.request) ? (
+              <Chip size="small" color="info" variant="outlined" label={submissionRequestLabel(reader?.request)} />
+            ) : null}
+          </Stack>
+        </DialogTitle>
         <DialogContent>
           <Typography variant="caption" color="text.secondary">
             {`Received ${reader?.createdAt?.toDate?.().toLocaleString() ?? ''}` +
@@ -900,6 +930,14 @@ export function SubmissionsCard({
               </Stack>
             ))}
           </Stack>
+          {/* The files it came with (AGL-4098), each downloaded when pressed. */}
+          {reader?.$id && readerSite && submissionFiles(reader.files).length ? (
+            <SubmissionFiles
+              hostId={readerSite}
+              submissionId={String(reader.$id)}
+              files={submissionFiles(reader.files)}
+            />
+          ) : null}
           {/*
             What happened to this submission (AGL-2168). The mockup puts
             these under the fields: `Saved to Inbox` and `Added to "Leads"
@@ -968,6 +1006,19 @@ export function SubmissionsCard({
           ) : null}
         </DialogContent>
         <DialogActions>
+          {/*
+            What another plugin offers to do with this submission (AGL-4098):
+            Start a quote on a quote request. First, as the act the reader
+            came for; nothing draws for an ordinary message.
+          */}
+          {reader?.$id && readerSite ? (
+            <InboxSubmissionActionsZone
+              hostId={readerSite}
+              submissionId={String(reader.$id)}
+              requestKind={submissionRequestKind(reader.request)}
+              formName={String(reader.formName ?? 'Form')}
+            />
+          ) : null}
           <Button
             color="error"
             onClick={async () => {

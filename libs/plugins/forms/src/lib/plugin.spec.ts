@@ -51,7 +51,7 @@ import { BUNDLE_ID } from './constants/bundle-common'
 import { FORMS_BUNDLE, registerFormsConsole } from './plugin'
 
 /** Persisted in screen documents; never rename without a data migration. */
-const PERSISTED_COMPONENT_IDS = ['form', 'formField']
+const PERSISTED_COMPONENT_IDS = ['form', 'formField', 'formFileUpload']
 
 type PresetNode = {
   componentId?: string

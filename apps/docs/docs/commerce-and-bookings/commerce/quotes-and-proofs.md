@@ -62,6 +62,59 @@ anything and choose **Save**. A draft quote you no longer need can be deleted.
 The list shows each quote's customer, total, status and when it last changed, and
 sorts by any column.
 
+## A Request a quote form {#a-request-a-quote-form}
+
+Let customers ask for a quote on your site, with the product they want and their
+artwork:
+
+1. On the **Forms** page, make a form (or open one) and open it in the Besigner.
+2. Add the fields you need: a name, an email, a message, a **Product and options**
+   field from the element picker's **Forms** group, and a
+   [File upload](../../content-and-data/forms/overview.md#file-upload) field for logos
+   or artwork.
+3. On the form's page, under
+   [After someone sends it](../../content-and-data/forms/overview.md#after-someone-sends-it),
+   turn on **This form asks for a quote**. **Email the person a confirmation** turns on
+   with it.
+4. Publish the form and place it on a page.
+
+The **Product and options** field lists your store's products for the customer to pick
+from, then the product's options (size, color and so on). To quote one product only,
+pick it in the field's **Product** setting; the customer then picks just its options.
+The field sends the product and options in words, which is what your Inbox and your
+alert show, and keeps the exact product and option beside them for the quote.
+
+The customer gets a confirmation email with a copy of their request, and their request
+lands in your Inbox marked **Quote request**.
+
+## Start a quote from a request {#start-a-quote-from-a-request}
+
+Open a quote request in the **Inbox** and choose **Start a quote**. The quote editor
+opens with:
+
+- **the customer**: their name, email, phone and company, as the form gave them;
+- **a line for the product** they picked, with its options, priced from your catalog;
+- **their message** as the quote's notes, ready to edit;
+- **their files**, listed under **From the request**.
+
+Set the prices and anything else, and choose **Create quote**. The quote keeps the
+request's files as the customer's files, which you can download from the quote, and
+remembers which request it came from.
+
+When you [email the quote](#send), it is sent as a reply to the confirmation your
+customer got for their request, so the request, the quote and every revision after it
+are [one conversation](#conversation) in their inbox. Keep the subject the same so
+every inbox keeps them together.
+
+## Start a quote from a contact {#start-a-quote-from-a-contact}
+
+On a contact's page in the **CRM**, choose **Start a quote**. The quote editor opens
+with the contact as the customer: their name, email, phone and company. Add the lines
+and choose **Create quote**.
+
+Both need **Create and edit quotes**, and starting one from a request also needs a
+role that can read the site's Inbox.
+
 ## Totals and tax {#totals-and-tax}
 
 The totals add up the items (included items count nothing), take off the
@@ -130,9 +183,10 @@ and colors like your other site emails. It can use these tokens:
 | `{{quote.nextStep}}`, `{{quote.buttonLabel}}`, `{{quote.url}}` | What to do next, the button's words, and the pay link |
 | `{{quote.subject}}` | The subject you sent it under |
 
-A quote isn't emailed to an address that bounced or reported an email as spam, or
-that unsubscribed from your site's emails. The quote says so; copy the
-[pay link](#pay-link) and send it another way.
+A quote isn't emailed to an address that bounced or reported an email as spam. The
+quote says so; copy the [pay link](#pay-link) and send it another way. Your customer
+asked for the quote, so it still goes to an address that unsubscribed from your site's
+newsletter, as a receipt does.
 
 ## One conversation in your customer's inbox {#conversation}
 

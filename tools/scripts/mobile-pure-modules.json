@@ -495,7 +495,11 @@
     },
     {
       "path": "libs/plugins/commerce/src/lib/model/commerce-quotes.ts",
-      "why": "A quote's shape on its order (the quote section, its customer, discount, shipping and tax basis) and the pure totals, tax basis, status and proof-approval rules (AGL-4093); imports commerce, commerce-orders (types), commerce-tax, commerce-tax-decision, commerce-tax-engine and product-modifiers. HostOrder.quote reaches the apps' order contract through it."
+      "why": "A quote's shape on its order (the quote section, its customer, discount, shipping and tax basis) and the pure totals, tax basis, status and proof-approval rules (AGL-4093); imports commerce, commerce-orders (types), commerce-quote-request (types), commerce-tax, commerce-tax-decision, commerce-tax-engine and product-modifiers. HostOrder.quote reaches the apps' order contract through it."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/commerce-quote-request.ts",
+      "why": "The request a quote was started from (QuoteRequestRef on OrderQuote.request) and the pure readers of a request form's product value and facts (AGL-4098); type-only imports of commerce-quotes. The apps' quote screens read the request through it."
     },
     {
       "path": "libs/plugins/commerce/src/lib/model/commerce-tax-decision.ts",

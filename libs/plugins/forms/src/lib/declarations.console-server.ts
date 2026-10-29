@@ -19,6 +19,7 @@
 // registry, not the whole server surface.
 import { registerApiV1SiteResource } from '@aglyn/tenant-data-admin/server/api-v1-resources'
 import { registerPluginTransferResource } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
+import { registerPluginConsoleCron } from '@aglyn/aglyn/plugin-manager/plugin-console-crons'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { registerFormsRecordRoutes } from './model/forms-record-routes'
 import {
@@ -59,6 +60,21 @@ async function formSubmissionsTransfer(): Promise<FormSubmissionsTransferResourc
  * Registering again replaces this plugin's own entries.
  */
 export function registerFormsConsoleServerDeclarations(): void {
+  // Files attached to a form that was never sent (AGL-4098): deleted a day
+  // after their latest upload, with the key's record.
+  registerPluginConsoleCron(
+    {
+      id: 'forms-upload-sweep',
+      label: 'Unsent form files',
+      drives:
+        'Deletes the files a visitor attached to a form and never sent, a day after the last one went up. If it stops, those files stay in the site’s private storage.',
+      run: async (context) => {
+        const { defaultFormUploadSweepDeps, sweepFormUploads } = await import('./server/form-upload-sweep')
+        return sweepFormUploads(defaultFormUploadSweepDeps(), context)
+      },
+    },
+    { pluginId: BUNDLE_ID },
+  )
   // A form's console address on the server too, so a server route that names a
   // form someone else made (an AI job's draft, AGL-3854) links it through the
   // record-route seam rather than spelling this plugin's path.
