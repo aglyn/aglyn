@@ -110,7 +110,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     return mockFlagOn
   },
   // The REAL role → permission resolution, not a boolean (AGL-2444). This
-  // route now checks `data.manage` on top of the writer-role gate, and a
+  // route checks `data.manage` (alone since AGL-4047), and a
   // `jest.mock` factory is a CLOSED WORLD: omitting it fails as "not a
   // function" inside the handler, which reads as a broken suite rather than
   // as a missing gate. Resolved from the member document so the fixtures'

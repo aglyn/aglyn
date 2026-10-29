@@ -287,15 +287,17 @@ image as a picture and every other file as a download. Beside them are two choic
   record of the approval, and moves to **Approved**.
 - **Request changes.** Your customer says what should change, and can attach their own
   artwork: up to 10 files of the same kinds and size as proofs. The quote moves to
-  **Changes requested**, with their comment and files.
+  **Changes requested**, with their comment and files. Files they attach and never send
+  are deleted a day later.
 
 The latest answer is the one that counts. A customer who asked for changes can still
 approve, and one who approved can still ask for changes, which withdraws the approval.
 The page tells them what they last said.
 
-You're notified of every answer, in the console and by email, with the quote, the
-customer, the revision and what they said. The notice opens the quote, and replying to
-the email reaches your customer.
+You're notified of every answer, in the console and by email, as **Proof approved** or
+**Changes requested**, with the quote, the customer, the revision, the quote's total and
+what they said. **View quote** opens the quote, and replying to the email reaches your
+customer. These notices follow your settings for order notifications.
 
 A paid quote still shows its proofs, with nothing to press. A link you replaced shows
 nothing of the quote, proofs included, and takes no answer.
