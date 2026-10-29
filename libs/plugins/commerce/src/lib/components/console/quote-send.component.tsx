@@ -106,11 +106,11 @@ export function QuoteSendSection(props: QuoteSendSectionProps) {
   }, [to, subject, message])
 
   const openForm = useCallback(() => {
-    setTo(String(section?.customer?.email ?? ''))
+    setTo(CommerceModel.quoteSendPrefill(quote))
     setSubject(CommerceModel.quoteEmailDefaultSubject(quote, businessName, quoteId))
     setMessage('')
     setOpen(true)
-  }, [section, quote, businessName, quoteId])
+  }, [quote, businessName, quoteId])
 
   const send = useCallback(async () => {
     setBusy(true)

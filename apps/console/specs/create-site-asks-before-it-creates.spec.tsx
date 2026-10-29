@@ -105,6 +105,12 @@ jest.mock('../hooks/use-org-permissions', () => ({
 jest.mock('../hooks/use-org-scope', () => ({
   useOrgScope: () => ({ currentOrg: { $id: 'org-1', slug: 'acme' } }),
 }))
+const mockDequeueLoading = jest.fn()
+const mockQueueLoading = jest.fn(() => mockDequeueLoading)
+jest.mock('@aglyn/shared-ui-jsx', () => ({
+  ...jest.requireActual('@aglyn/shared-ui-jsx'),
+  useLoading: () => ({ queueLoading: mockQueueLoading }),
+}))
 jest.mock('../utils/account-acquisition', () => ({ firstTouchField: () => ({}) }))
 jest.mock('../utils/hard-navigate', () => ({
   __esModule: true,
@@ -196,6 +202,22 @@ beforeEach(() => {
       orgCreated: false,
     },
   }
+})
+
+describe('Create site waits under the console loading overlay', () => {
+  it('queues the overlay while the start decides, with no dialog of its own, and clears it after', async () => {
+    render(<CreateHostDialog open onClose={jest.fn()} />)
+    await flush()
+    // Red before the fix: a dialog around a spinner, and no overlay queued.
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(screen.queryByRole('progressbar')).toBeNull()
+    expect(mockQueueLoading).toHaveBeenCalledTimes(1)
+    expect(mockDequeueLoading).not.toHaveBeenCalled()
+
+    act(() => mockZone?.pendingSite.ready(true))
+    expect(mockDequeueLoading).toHaveBeenCalledTimes(1)
+    expect(screen.getByTestId('start-zone')).toBeTruthy()
+  })
 })
 
 describe('AGL-3761 · Create site opens on the start, with nothing created', () => {
