@@ -622,12 +622,25 @@ describe('AGL-4049 lane 3 · Choose your starter, behind release_site_starters',
     })
   }
   const pick = (row: Record<string, unknown>) => act(() => mockPicker?.onPick(row))
+  /** Opens the start, lets the picker's first search answer `shown`. */
+  const openOffered = async (shown = true, onClose = jest.fn()) => {
+    const view = await openStart(onClose)
+    act(() => mockPicker?.ready(shown))
+    return view
+  }
   /** Opens the start with the picker offered, and takes its starter path. */
   const openChoose = async (onClose = jest.fn()) => {
-    const view = await openStart(onClose)
+    const view = await openOffered(true, onClose)
     act(() => mockZone?.chooseStarter?.())
     act(() => mockPicker?.ready(true))
     return view
+  }
+  /** Opens Create site on the way back from paying, both answers in. */
+  const openReturn = async (initialStarter: { listingId: string; purchase: 'success' | 'canceled' | null }) => {
+    render(<CreateHostDialog open onClose={jest.fn()} initialStarter={initialStarter} />)
+    await flush()
+    act(() => mockZone?.pendingSite.ready(true))
+    act(() => mockPicker?.ready(true))
   }
 
   beforeEach(() => {
@@ -655,8 +668,24 @@ describe('AGL-4049 lane 3 · Choose your starter, behind release_site_starters',
     expect(mockSlotZones.some((zones) => zones.includes('hostStarterPicker'))).toBe(false)
   })
 
-  it('with the flag on, the starter path opens Choose your starter with nothing chosen', async () => {
+  it('asks the picker first, out of sight, and holds the start under the overlay until it answers', async () => {
     await openStart()
+    expect(screen.queryByTestId('start-zone')).toBeTruthy()
+    expect(document.querySelector('[data-create-area="starter-probe"]')).toBeTruthy()
+    expect(mockDequeueLoading).not.toHaveBeenCalled()
+    act(() => mockPicker?.ready(true))
+    expect(mockDequeueLoading).toHaveBeenCalled()
+    expect(document.querySelector('[data-create-area="starter-probe"]')).toBeNull()
+  })
+
+  it('leaves the start exactly as it was where the picker has no starters to offer', async () => {
+    await openOffered(false)
+    expect(mockZone?.chooseStarter).toBeUndefined()
+    expect(screen.getByTestId('start-zone')).toBeTruthy()
+  })
+
+  it('with the flag on, the starter path opens Choose your starter with nothing chosen', async () => {
+    await openOffered(true)
     // Red before the fix: the start was never handed a way to the picker.
     expect(typeof mockZone?.chooseStarter).toBe('function')
     act(() => mockZone?.chooseStarter?.())
@@ -725,9 +754,7 @@ describe('AGL-4049 lane 3 · Choose your starter, behind release_site_starters',
       status: 402,
       body: { error: 'Purchase required', code: 'purchase_required', listingId: PAID.listingId, priceUsd: 12 },
     }
-    render(<CreateHostDialog open onClose={jest.fn()} initialStarter={{ listingId: PAID.listingId, purchase: 'success' }} />)
-    await flush()
-    act(() => mockZone?.pendingSite.ready(true))
+    await openReturn({ listingId: PAID.listingId, purchase: 'success' })
     pick(PAID)
     typeName()
     await create()
@@ -771,14 +798,13 @@ describe('AGL-4049 lane 3 · Choose your starter, behind release_site_starters',
       '../components/create-host-dialog.component',
     ) as typeof import('../components/create-host-dialog.component')
     const onOpen = jest.fn()
-    render(<CreateSiteFromUrl onOpen={onOpen} />)
+    const url = render(<CreateSiteFromUrl onOpen={onOpen} />)
     expect(onOpen).toHaveBeenCalledWith({ listingId: 'northwind-studio', purchase: 'success' })
     expect(mockReplace).toHaveBeenCalledWith('/acme/hosts')
+    url.unmount()
 
     // The dialog opens straight on Choose your starter, that card chosen, owned.
-    render(<CreateHostDialog open onClose={jest.fn()} initialStarter={{ listingId: 'northwind-studio', purchase: 'success' }} />)
-    await flush()
-    act(() => mockZone?.pendingSite.ready(true))
+    await openReturn({ listingId: 'northwind-studio', purchase: 'success' })
     expect(screen.getByRole('heading', { name: 'Choose your starter' })).toBeTruthy()
     expect(mockPicker?.selected).toEqual({ listingId: 'northwind-studio', owned: true })
     // The picker hands it back once read; Create waits only for the name.
@@ -788,9 +814,7 @@ describe('AGL-4049 lane 3 · Choose your starter, behind release_site_starters',
   })
 
   it('a pick restored after cancelling shows Buy again', async () => {
-    render(<CreateHostDialog open onClose={jest.fn()} initialStarter={{ listingId: 'northwind-studio', purchase: 'canceled' }} />)
-    await flush()
-    act(() => mockZone?.pendingSite.ready(true))
+    await openReturn({ listingId: 'northwind-studio', purchase: 'canceled' })
     expect(mockPicker?.selected).toEqual({ listingId: 'northwind-studio' })
     pick(PAID)
     typeName()
@@ -801,6 +825,7 @@ describe('AGL-4049 lane 3 · Choose your starter, behind release_site_starters',
     mockWidgets = []
     render(<CreateHostDialog open onClose={jest.fn()} />)
     await flush()
+    act(() => mockPicker?.ready(true))
     expect(screen.getByRole('heading', { name: 'Choose your starter' })).toBeTruthy()
     expect(screen.queryByRole('tab', { name: 'AI starters' })).toBeNull()
     act(() => mockPicker?.ready(false))
@@ -809,8 +834,8 @@ describe('AGL-4049 lane 3 · Choose your starter, behind release_site_starters',
     expect(screen.getAllByRole('radio')).toHaveLength(21)
   })
 
-  it('the styles stand in for a picker with nothing to offer on the start’s path', async () => {
-    await openStart()
+  it('the styles stand in for a picker that has nothing to offer after all, on the start’s path', async () => {
+    await openOffered(true)
     act(() => mockZone?.chooseStarter?.())
     act(() => mockPicker?.ready(false))
     expect(screen.getByRole('heading', { name: 'Choose a style' })).toBeTruthy()

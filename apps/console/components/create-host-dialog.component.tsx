@@ -49,6 +49,7 @@ import { useLoading } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
+  Box,
   Button,
   Dialog,
   DialogActions,
@@ -261,11 +262,14 @@ function CreateSiteFlow({
   const { widgets: pickerWidgets, ready: pickerWidgetsReady } = useSlotWidgets(
     starters.visible ? [STARTER_ZONE] : [],
   )
-  // The picker's own answer to whether it drew anything: `false` (no
-  // starters to offer here) draws the styles in its place.
+  // The picker's own answer to whether it draws anything, asked before the
+  // start is drawn (a hidden first search while Create site decides), so a
+  // workspace with no starters to offer — staff before any are listed
+  // included — gets exactly the start it had before. `false` later, from the
+  // picker on screen, draws the styles in its place.
   const [pickerVerdict, setPickerVerdict] = useState<boolean | null>(null)
   const pickerOffered = starters.visible && pickerWidgets.length > 0
-  const pickerOn = pickerOffered && pickerVerdict !== false
+  const pickerOn = pickerOffered && pickerVerdict === true
   // Opened from the start's starter choice, or straight away on the way back
   // from buying a starter.
   const [choosing, setChoosing] = useState(initialStarter !== null)
@@ -287,7 +291,11 @@ function CreateSiteFlow({
   const [chooseStyle, setChooseStyle] = useState<string | null>(null)
 
   const resolving =
-    (!widgetsReady || !permissionsLoaded || !orgReady || (starters.visible && !pickerWidgetsReady)) &&
+    (!widgetsReady ||
+      !permissionsLoaded ||
+      !orgReady ||
+      (starters.visible && !pickerWidgetsReady) ||
+      (pickerOffered && pickerVerdict === null)) &&
     !timedOut
   const offersStart =
     !blocked && widgets.length > 0 && verdict !== false && !(timedOut && verdict === null)
@@ -718,17 +726,45 @@ function CreateSiteFlow({
         {...(mode === 'start' ? { onBack: () => setChoosing(false) } : {})}
         title={usingStyles ? CHOOSE_STARTER_COPY.styles.title : CHOOSE_STARTER_COPY.starters.title}
         lede={usingStyles ? CHOOSE_STARTER_COPY.styles.lede : CHOOSE_STARTER_COPY.starters.lede}
+        staffPreview={starters.ready && starters.staffPreview}
       />
+    ) : null
+
+  // The picker's first answer, asked out of sight while Create site decides
+  // which start to draw: the start is offered "Choose your starter" only
+  // where it has starters to show.
+  const pickerProbe =
+    pickerOffered && pickerVerdict === null && currentOrg && orgSlug ? (
+      <Box sx={{ display: 'none' }} aria-hidden data-create-area="starter-probe">
+        <PluginWidgetSlot
+          slot={CONSOLE_WIDGET_SLOTS.hostStarterPicker}
+          orgId={currentOrg.$id}
+          orgSlug={orgSlug}
+          mode="base"
+          search=""
+          filter={{}}
+          onPick={onPick}
+          ready={pickerReady}
+          selected={null}
+        />
+      </Box>
     ) : null
 
   // "Choose your starter" takes the start's place while it is open: the
   // site's name and address are asked in one place at a time, and Back draws
   // the start again on its first step, where they were typed.
-  if (mode === 'start') return choosing && pickerOffered ? chooseView : startZone
+  if (mode === 'start') return choosing && pickerOffered && pickerVerdict !== null ? chooseView : startZone
 
   // The start zone stays mounted while resolving: its widget is what gives
-  // the verdict.
-  if (mode === 'resolving') return startZone
+  // the verdict, as the picker's first search gives its own.
+  if (mode === 'resolving') {
+    return (
+      <>
+        {startZone}
+        {pickerProbe}
+      </>
+    )
+  }
 
   if (mode === 'blocked') {
     return (

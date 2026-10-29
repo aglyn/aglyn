@@ -79,6 +79,8 @@ export interface ChooseStarterDialogProps {
   /** The heading: "Choose your starter", or "Choose a style" when only the styles are drawn. */
   title: string
   lede: string
+  /** Only staff can see it while its release flag is off: said, and marked as staff-only chrome. */
+  staffPreview?: boolean
 }
 
 /**
@@ -115,6 +117,7 @@ export function ChooseStarterDialog(props: ChooseStarterDialogProps) {
     onBack,
     title,
     lede,
+    staffPreview = false,
   } = props
   return (
     <Dialog
@@ -160,6 +163,11 @@ export function ChooseStarterDialog(props: ChooseStarterDialogProps) {
                 {lede}
               </Typography>
             </Stack>
+            {staffPreview ? (
+              <Alert severity="warning" data-staff-only="release_site_starters">
+                {'Release-flagged: customers do not see Choose your starter yet. You see it because you are staff.'}
+              </Alert>
+            ) : null}
             {notice ? (
               <Alert severity="warning" onClose={onDismissNotice} data-create-area="starter-notice">
                 {notice}
