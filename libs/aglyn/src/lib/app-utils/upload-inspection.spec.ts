@@ -191,6 +191,12 @@ describe('inspectUploadBytes', () => {
         ]),
       ],
       ['font/woff2', Buffer.concat([Buffer.from('wOF2', 'ascii'), Buffer.alloc(64)])],
+      ['application/illustrator', pdfFile()],
+      ['application/illustrator', Buffer.concat([Buffer.from('%!PS-Adobe-3.0', 'ascii'), Buffer.alloc(64)])],
+      ['application/postscript', Buffer.concat([Buffer.from('%!PS-Adobe-3.0 EPSF-3.0', 'ascii'), Buffer.alloc(64)])],
+      ['application/postscript', Buffer.concat([bytes(0xc5, 0xd0, 0xd3, 0xc6), Buffer.alloc(64)])],
+      ['image/vnd.adobe.photoshop', Buffer.concat([Buffer.from('8BPS', 'ascii'), Buffer.alloc(64)])],
+      ['image/tiff', Buffer.concat([bytes(0x49, 0x49, 0x2a, 0x00), Buffer.alloc(64)])],
     ])('accepts a genuine %s', (contentType, buffer) => {
       expect(
         inspectUploadBytes({ bytes: buffer, contentType, fileName: 'file' }),
@@ -205,6 +211,20 @@ describe('inspectUploadBytes', () => {
         const refusal = inspectUploadBytes({ bytes: buffer, contentType: 'font/woff2', fileName: 'font.woff2' })
         expect(refusal?.code).toBe('type_mismatch')
       }
+    })
+
+    it('refuses a page or a program dressed as a design file (AGL-4096)', () => {
+      for (const contentType of ['application/illustrator', 'application/postscript', 'image/vnd.adobe.photoshop']) {
+        const refusal = inspectUploadBytes({
+          bytes: Buffer.from('<!DOCTYPE html><html><script>', 'utf8'),
+          contentType,
+          fileName: 'artwork',
+        })
+        expect(refusal?.code).toBe('type_mismatch')
+      }
+      expect(
+        inspectUploadBytes({ bytes: windowsExecutable(), contentType: 'image/vnd.adobe.photoshop', fileName: 'logo.psd' })?.code,
+      ).toBe('executable_bytes')
     })
 
     it('accepts text types, which have no magic to check', () => {

@@ -27,6 +27,29 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — proofs and revisions for quotes
+
+- **[Proofs on quotes](commerce-and-bookings/commerce/quotes-and-proofs.md#proofs)** —
+  attach images, PDFs and design files (AI, EPS, PSD, SVG, TIFF) to a quote. Your
+  customer sees them on the quote page and approves them under their name, or asks for
+  changes with a comment and their own artwork, and you're notified either way.
+- **[Proof approval before paying](commerce-and-bookings/commerce/quotes-and-proofs.md#approval-and-paying)**
+  — a quote that asks for approval offers **Pay** once the current proof is approved.
+  With the switch off, paying never waits.
+- **[Revisions](commerce-and-bookings/commerce/quotes-and-proofs.md#revisions)** — start
+  the next revision of a quote, and every earlier one is kept with its proofs, totals and
+  your customer's answers.
+
+## October 2026 — quote and invoice PDFs
+
+- **[Quote PDFs](commerce-and-bookings/commerce/quotes-and-proofs.md#pdf)** — download a
+  quote as a PDF in your site's look: your logo, contact details and primary color, the
+  items and totals, your notes and terms, and the pay link to click. Your customer can
+  download the same PDF from the quote page.
+- **[Invoice PDFs](commerce-and-bookings/commerce/orders-and-returns.md#invoices)** —
+  **Invoice** in an order's dialog now offers **Download PDF** beside **Print invoice**:
+  the order's invoice as a PDF file in the same look, with whether it is paid.
+
 ## October 2026 — pay links for quotes
 
 - **[Quote pay links](commerce-and-bookings/commerce/quotes-and-proofs.md#pay-link)** — copy

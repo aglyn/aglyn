@@ -106,6 +106,12 @@ const mediaRateLimitRule = (id) => ({
   conditionGroup: [{ conditions: [{ type: 'path', op: 'pre', value: '/api/media/cdn' }] }],
 })
 
+/**
+ * The site import rule's secret as a fixture holds it: as long as a real one,
+ * never shaped like one (the last test in this file refuses 64 hex digits).
+ */
+const SITE_IMPORT_STUB_SECRET = 'not-the-real-site-import-secret-value-here'
+
 /** The live-good aglyn-tenant config, with the probe secret stubbed. */
 function healthyTenantConfig() {
   return {
@@ -281,6 +287,23 @@ function healthyTenantConfig() {
           { conditions: [{ type: 'path', op: 'eq', value: '/contact' }] },
           { conditions: [{ type: 'path', op: 'pre', value: '/legal/' }] },
           { conditions: [{ type: 'path', op: 'pre', value: '/.well-known/' }] },
+        ],
+      },
+      // AGL-4085: Bring my site's crawler through our own edge. ONE group with
+      // both conditions, appended last, so it sits behind the media CDN limit.
+      {
+        name: 'Site import crawler bypass',
+        id: 'rule_site_import_crawler',
+        active: true,
+        valid: true,
+        action: bypass(),
+        conditionGroup: [
+          {
+            conditions: [
+              { type: 'header', op: 'eq', key: 'x-aglyn-import', value: SITE_IMPORT_STUB_SECRET },
+              { type: 'user_agent', op: 're', value: '^AglynBot/' },
+            ],
+          },
         ],
       },
     ],
@@ -1437,4 +1460,150 @@ test('the plugin webhook bypass names each webhook route exactly (AGL-3846)', ()
   const widened = healthyConsoleConfig()
   ruleNamed(widened, 'Plugin webhook bypass').conditionGroup[0].conditions[0].value = '^/api/[a-z-]+/webhooks/'
   assert.match(evalConsole(widened).findings.join('\n'), /Plugin webhook bypass/)
+})
+
+// ── Bring my site's crawler through our own edge (AGL-4085) ────────────────
+
+const SITE_IMPORT_RULE = 'Site import crawler bypass'
+const siteImportGroup = (config) => ruleNamed(config, SITE_IMPORT_RULE).conditionGroup[0]
+
+test('the tenant declares the site import bypass: the secret AND the AglynBot user agent, in one group', () => {
+  const rule = tenantExpected.bypassRules.find((r) => r.name === SITE_IMPORT_RULE)
+  assert.ok(rule, 'declared on the tenant')
+  assert.deepEqual(
+    rule.conditions.map((c) => [c.type, c.op, c.key ?? null]),
+    [
+      ['header', 'eq', 'x-aglyn-import'],
+      ['user_agent', 're', null],
+    ],
+  )
+  assert.equal(rule.conditions[1].value, '^AglynBot/')
+  assert.equal(rule.conditions[0].valueNonEmpty, true)
+  assert.ok(rule.conditions[0].valueMinLength >= 32)
+  assert.equal(rule.conditions[0].value, undefined, 'the secret is never declared literally')
+  assert.equal(rule.follows, MEDIA_LIMIT_NAME)
+  // Only the tenant serves customer sites; neither the console nor the docs
+  // may grow the hole.
+  for (const expected of EXPECTED_POSTURE.filter((e) => e.project !== 'aglyn-tenant')) {
+    assert.equal((expected.bypassRules ?? []).some((r) => r.name === SITE_IMPORT_RULE), false, expected.project)
+  }
+})
+
+test('the site import bypass decayed to USER-AGENT-ONLY fails — anyone could call themselves AglynBot', () => {
+  const config = healthyTenantConfig()
+  siteImportGroup(config).conditions = [{ type: 'user_agent', op: 're', value: '^AglynBot/' }]
+  assert.match(
+    tenantFindings(config),
+    /Site import crawler bypass" NO LONGER REQUIRES header x-aglyn-import eq <at least 32 characters, redacted>/,
+  )
+})
+
+test('the site import bypass decayed to HEADER-ONLY fails — a leaked secret would pass any client', () => {
+  const config = healthyTenantConfig()
+  siteImportGroup(config).conditions = [
+    { type: 'header', op: 'eq', key: 'x-aglyn-import', value: SITE_IMPORT_STUB_SECRET },
+  ]
+  const findings = tenantFindings(config)
+  assert.match(findings, /Site import crawler bypass" NO LONGER REQUIRES user_agent re "\^AglynBot\/"/)
+  // The finding names what the group still matches, and must not print the
+  // secret the API returned in doing so: the drift log is public.
+  assert.match(findings, /That group bypasses: header x-aglyn-import eq <42 characters, redacted>/)
+  const report = formatReport(
+    evaluatePosture({ configs: new Map([...configsMatchingLiveToday(), ['aglyn-tenant', config]]) }),
+  )
+  assert.equal(report.includes(SITE_IMPORT_STUB_SECRET), false, 'the report prints the secret')
+})
+
+test('no finding prints a live header secret, whichever condition the group lost', () => {
+  // The probe rule's own case: the key changed, so the group no longer
+  // carries the declared condition and the finding describes the one it has.
+  const config = healthyTenantConfig()
+  ruleNamed(config, 'CI and uptime probe bypass').conditionGroup[0].conditions[0].key = 'x-something-else'
+  const findings = tenantFindings(config)
+  assert.match(findings, /That group bypasses: header x-something-else eq <18 characters, redacted>/)
+  assert.equal(findings.includes('not-the-real-token'), false)
+  // A regular expression is a pattern, not a secret, and stays readable.
+  const native = healthyConsoleConfig()
+  ruleNamed(native, 'Native app API bypass').conditionGroup[0].conditions[0].value = '/api/v2/'
+  assert.match(evalConsole(native).findings.join('\n'), /header authorization re "\^Bearer/)
+})
+
+test('a SECOND group carrying only the user agent re-opens the site import bypass and fails', () => {
+  // The two conditions split across two OR'd groups admit each half alone.
+  const config = healthyTenantConfig()
+  const [header, agent] = siteImportGroup(config).conditions
+  ruleNamed(config, SITE_IMPORT_RULE).conditionGroup = [{ conditions: [header] }, { conditions: [agent] }]
+  const findings = tenantFindings(config)
+  assert.match(findings, /Site import crawler bypass" \(condition group 1 of 2\) NO LONGER REQUIRES user_agent/)
+  assert.match(findings, /Site import crawler bypass" \(condition group 2 of 2\) NO LONGER REQUIRES header x-aglyn-import/)
+})
+
+test('a site import secret typed short, or blanked, fails — and the finding never prints it', () => {
+  for (const value of ['test', '']) {
+    const config = healthyTenantConfig()
+    siteImportGroup(config).conditions[0].value = value
+    const findings = tenantFindings(config)
+    assert.match(findings, /NO LONGER REQUIRES header x-aglyn-import eq <at least 32 characters, redacted>/)
+  }
+  const report = formatReport(evaluatePosture({ configs: configsMatchingLiveToday() }))
+  assert.equal(report.includes(SITE_IMPORT_STUB_SECRET), false)
+})
+
+test('the site import user agent loosened from the anchored prefix fails', () => {
+  for (const value of ['AglynBot', '^AglynBot', '.*', 'AglynBot|Mozilla']) {
+    const config = healthyTenantConfig()
+    siteImportGroup(config).conditions[1].value = value
+    assert.match(tenantFindings(config), /Site import crawler bypass" NO LONGER REQUIRES user_agent re "\^AglynBot\/"/)
+  }
+})
+
+test('the site import bypass on another header key fails', () => {
+  const config = healthyTenantConfig()
+  siteImportGroup(config).conditions[0].key = 'x-aglyn-probe'
+  assert.match(tenantFindings(config), /NO LONGER REQUIRES header x-aglyn-import/)
+})
+
+test('a missing site import bypass fails, naming what it is for', () => {
+  const config = healthyTenantConfig()
+  config.rules = config.rules.filter((r) => r.name !== SITE_IMPORT_RULE)
+  assert.match(tenantFindings(config), /bypass rule "Site import crawler bypass" is MISSING — Bring my site/)
+})
+
+test('the site import bypass AHEAD of the media rate limit fails — its requests would go uncounted there', () => {
+  const config = healthyTenantConfig()
+  const rule = ruleNamed(config, SITE_IMPORT_RULE)
+  config.rules = [rule, ...config.rules.filter((r) => r !== rule)]
+  const findings = tenantFindings(config)
+  assert.match(findings, /"Site import crawler bypass" is evaluated BEFORE "Media CDN per-IP rate limit"/)
+  // The index the finding names puts it directly behind the limit, and passes.
+  const index = Number(/BEFORE "Media CDN per-IP rate limit".*value (\d+)\./.exec(findings)[1])
+  const rest = config.rules.filter((r) => r !== rule)
+  config.rules = [...rest.slice(0, index), rule, ...rest.slice(index)]
+  assert.deepEqual(evalTenant(config).findings, [])
+})
+
+test('the follows check is silent while either rule is missing; each has its own finding', () => {
+  const config = healthyTenantConfig()
+  config.rules = config.rules.filter((r) => r.name !== MEDIA_LIMIT_NAME)
+  const findings = tenantFindings(config)
+  assert.match(findings, /rate-limit rule "Media CDN per-IP rate limit" is MISSING/)
+  assert.doesNotMatch(findings, /evaluated BEFORE/)
+})
+
+test('a declaration whose follows or length floor asserts nothing is refused at startup', () => {
+  const rule = tenantExpected.bypassRules.find((r) => r.name === SITE_IMPORT_RULE)
+  const withRule = (patch) => [
+    { ...tenantExpected, bypassRules: [...tenantExpected.bypassRules.filter((r) => r !== rule), { ...rule, ...patch }] },
+  ]
+  assert.match(
+    validatePostureTable(withRule({ follows: 'No such limit' })).join('\n'),
+    /`follows` "No such limit", which is not a declared rate-limit rule of this project/,
+  )
+  assert.match(
+    validatePostureTable(
+      withRule({ conditions: [{ ...rule.conditions[0], valueMinLength: 0 }, rule.conditions[1]] }),
+    ).join('\n'),
+    /declares a `valueMinLength` that is not a positive whole number/,
+  )
+  assert.deepEqual(validatePostureTable(withRule({})), [])
 })

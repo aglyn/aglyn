@@ -35,7 +35,10 @@ import {
   type SaleTaxEngineResult,
 } from './tax-engine-quote'
 import { expireCheckoutSession, type CheckoutSessionExpiry } from './checkout-session-expiry'
+import type { quotePdfFile } from './commerce-pdf'
+import { sendPdf, type CommercePdfFile } from './pdf-response'
 import { quotePayLinkUrl } from './quote-link-token'
+import type { QuoteUploadCalls } from './quote-uploads'
 
 /*==========================================
  * QUOTES IN THE CONSOLE (AGL-4093): `POST /api/commerce/quote`.
@@ -46,10 +49,30 @@ import { quotePayLinkUrl } from './quote-link-token'
  *   { action: 'search-customers', hostId, text }              → { available, customers }
  *   { action: 'pay-link', hostId, quoteId }                   → { url, linkVersion }
  *   { action: 'replace-link', hostId, quoteId }               → { url, linkVersion }
+ *   { action: 'pdf', hostId, quoteId }                        → application/pdf
  *
- * The first four ask "Create and edit quotes" (`commerce.quotes`); the pay
- * link's two ask "Send quotes and invoices to customers"
- * (`commerce.quotes.send`, AGL-4094). Create and update take an
+ * Proofs and revisions (AGL-4096), all under "Create and edit quotes":
+ *
+ *   { action: 'proof-ticket', hostId, quoteId, file: { name, contentType, size } }
+ *                                                             → { ticket, upload: { url, fields }, file }
+ *   { action: 'proof-finalize', hostId, quoteId, ticket }     → { proof, updatedAtMs }
+ *   { action: 'proof-remove', hostId, quoteId, proofId }      → { removed: true, updatedAtMs }
+ *   { action: 'start-revision', hostId, quoteId }             → { revision, updatedAtMs }
+ *   { action: 'revisions', hostId, quoteId }                  → { revisions: QuoteRevisionView[] }
+ *   { action: 'file', hostId, quoteId, fileId, revision? }    → the file (a proof, or the customer's)
+ *
+ * A proof goes up the way a visitor's file does (`visitor-upload`): a ticket
+ * for a signed upload straight to Storage, then finalize, which inspects the
+ * bytes and keeps them under the quote. Adding or removing a proof, and
+ * starting a revision, change what the customer is shown, so each is an edit
+ * of the quote: it moves `quote.updatedAtMs` (the page's version) and closes
+ * the pay page's open session, as an edit does.
+ *
+ * Every action but the pay link's two asks "Create and edit quotes"
+ * (`commerce.quotes`); the pay link's two ask "Send quotes and invoices to
+ * customers" (`commerce.quotes.send`, AGL-4094). The PDF (AGL-4095) is the
+ * document the customer would download from the quote page, and carries the
+ * pay link only for someone who also holds `commerce.quotes.send`. Create and update take an
  * `Idempotency-Key` header, one per attempt, so a retried save replays its
  * answer instead of writing a second quote or failing its own change check;
  * delete is idempotent by nature, and so are the link's two (a replace bumps
@@ -79,6 +102,10 @@ export interface QuoteDeps {
   expireSession(sessionId: string): Promise<CheckoutSessionExpiry>
   /** The quote's pay link at a link version, or null when the site has no address or no signing secret. */
   payLinkUrl(host: Record<string, unknown>, hostId: string, quoteId: string, version: number): string | null
+  /** The quote's PDF; loads the PDF writer and sharp only when asked. */
+  quotePdf(input: Parameters<typeof quotePdfFile>[0]): Promise<CommercePdfFile>
+  /** The upload pipeline, loaded only by the proof actions. */
+  uploads(): Promise<QuoteUploadCalls>
   now(): number
 }
 
@@ -94,6 +121,8 @@ export function defaultQuoteDeps(): QuoteDeps {
     quoteTax: (request) => quoteSaleTaxWithEngine(request),
     expireSession: (sessionId) => expireCheckoutSession(sessionId),
     payLinkUrl: (host, hostId, quoteId, version) => quotePayLinkUrl(host, hostId, quoteId, version),
+    quotePdf: async (input) => (await import('./commerce-pdf')).quotePdfFile(input),
+    uploads: async () => (await import('./quote-uploads')).quoteUploadCalls(),
     now: () => Date.now(),
   }
 }
@@ -107,7 +136,13 @@ async function closeOpenSession(deps: QuoteDeps, sessionId: string | undefined, 
   }
 }
 
-type Outcome = { status: number; body: Record<string, unknown> }
+type Outcome = {
+  status: number
+  body: Record<string, unknown>
+  pdf?: CommercePdfFile
+  /** A proof or a customer's file, streamed by the handler. */
+  file?: { path: string; name: string; contentType: string }
+}
 
 const refuse = (status: number, error: string): Outcome => ({ status, body: { error } })
 
@@ -322,6 +357,43 @@ export async function handleQuote(deps: QuoteDeps, req: PluginApiRequest): Promi
     return { status: 200, body: { url, linkVersion } }
   }
 
+  if (PROOF_ACTIONS.has(action)) {
+    const quoteId = String(body['quoteId'] ?? '')
+    if (!DOC_ID.test(quoteId)) return refuse(400, 'Missing quoteId')
+    return handleProofAction(deps, { action, body, hostId, quoteId, hostRef, firestore, uid: decoded.uid, actor })
+  }
+
+  if (action === 'pdf') {
+    const quoteId = String(body['quoteId'] ?? '')
+    if (!DOC_ID.test(quoteId)) return refuse(400, 'Missing quoteId')
+    const [snapshot, store] = await Promise.all([
+      hostRef.collection('orders').doc(quoteId).get(),
+      hostRef.collection('settings').doc('store').get(),
+    ])
+    const order = snapshot.exists ? (snapshot.data() as CommerceModel.HostOrder) : null
+    if (!order || !CommerceModel.isQuote(order) || !order.quote) return refuse(404, 'Unknown quote')
+    const hostData = (host.data() ?? {}) as Record<string, unknown>
+    // The pay link is "Send quotes and invoices to customers"; without it the PDF leaves the link off.
+    const payUrl =
+      CommerceModel.isUnpaidQuote(order) && holdsCommerceSiteKey(host, decoded.uid, 'commerce.quotes.send')
+        ? deps.payLinkUrl(hostData, hostId, quoteId, CommerceModel.quoteLinkVersion(order.quote))
+        : null
+    try {
+      const pdf = await deps.quotePdf({
+        hostId,
+        quoteId,
+        order,
+        host: hostData,
+        store: (store.data() ?? null) as Record<string, unknown> | null,
+        payUrl,
+      })
+      return { status: 200, body: {}, pdf }
+    } catch (error) {
+      console.error('commerce quote pdf failed', error)
+      return refuse(500, 'The PDF could not be made. Try again.')
+    }
+  }
+
   if (action === 'search-customers') {
     const text = String(body['text'] ?? '').trim().slice(0, 120)
     if (text.length < 2) return { status: 200, body: { available: true, customers: [] } }
@@ -363,11 +435,18 @@ export async function handleQuote(deps: QuoteDeps, req: PluginApiRequest): Promi
       if ((order.quote?.stage ?? 'draft') !== 'draft') {
         return refuse(409, 'Only a draft quote can be deleted.')
       }
+      // Earlier revisions are what the customer was shown and answered; a
+      // quote that has them stays on record.
+      if (Number(order.quote?.revision ?? 1) > 1) {
+        return refuse(409, 'This quote has earlier revisions the customer saw, so it stays on record.')
+      }
       transaction.delete(ref)
       return { status: 200, body: { deleted: true }, closeSession: order.checkoutSessionId }
     })
     const { closeSession, ...outcome } = deleted as Outcome & { closeSession?: string }
     await closeOpenSession(deps, closeSession, 'quote deleted')
+    // Its proofs and anything the customer sent go with it.
+    if (outcome.status === 200) await removeQuoteFiles(deps, hostId, quoteId)
     return outcome
   }
 
@@ -487,8 +566,225 @@ export async function handleQuote(deps: QuoteDeps, req: PluginApiRequest): Promi
   }
 }
 
+/*==========================================
+ * PROOFS AND REVISIONS (AGL-4096)
+ *=========================================*/
+
+const PROOF_ACTIONS = new Set(['proof-ticket', 'proof-finalize', 'proof-remove', 'start-revision', 'revisions', 'file'])
+
+/** Deletes a quote's kept files, its proofs and the customer's artwork; never throws. */
+async function removeQuoteFiles(deps: QuoteDeps, hostId: string, quoteId: string): Promise<void> {
+  try {
+    const uploads = await deps.uploads()
+    await Promise.all(
+      [CommerceModel.QUOTE_PROOF_PURPOSE, CommerceModel.QUOTE_ARTWORK_PURPOSE].map((purpose) =>
+        uploads.removeAll({ hostId, purpose, purposeId: quoteId }),
+      ),
+    )
+  } catch (error) {
+    console.error('quote files were not removed', { hostId, quoteId, error })
+  }
+}
+
+/** A file as the console is told about it: everything but where it is kept. */
+function fileView<T extends { path?: string }>(file: T): Omit<T, 'path'> {
+  const rest: T = { ...file }
+  delete rest.path
+  return rest
+}
+
+/** A revision as the console's history lists it. */
+function revisionView(snapshot: CommerceModel.QuoteRevisionSnapshot) {
+  return {
+    ...snapshot,
+    proofs: (snapshot.proofs ?? []).map(fileView),
+    responses: (snapshot.responses ?? []).map((response) => ({
+      ...response,
+      ...(response.files ? { files: response.files.map(fileView) } : {}),
+    })),
+  }
+}
+
+/**
+ * Writes `next` over the quote in `transaction`, without the pay page's open
+ * session, which was priced from the quote as it stood; the caller closes it.
+ */
+function writeEditedQuote(
+  transaction: FirebaseFirestore.Transaction,
+  ref: FirebaseFirestore.DocumentReference,
+  next: CommerceModel.HostOrder,
+): string | undefined {
+  const rest: Partial<CommerceModel.HostOrder> = { ...next }
+  const session = rest.checkoutSessionId
+  delete rest.checkoutSessionId
+  transaction.set(ref, rest)
+  return session
+}
+
+async function handleProofAction(
+  deps: QuoteDeps,
+  context: {
+    action: string
+    body: Record<string, unknown>
+    hostId: string
+    quoteId: string
+    hostRef: FirebaseFirestore.DocumentReference
+    firestore: FirebaseFirestore.Firestore
+    uid: string
+    actor: string
+  },
+): Promise<Outcome> {
+  const { action, body, hostId, quoteId, hostRef, firestore, uid, actor } = context
+  const ref = hostRef.collection('orders').doc(quoteId)
+  const proofScope = { hostId, purpose: CommerceModel.QUOTE_PROOF_PURPOSE, purposeId: quoteId }
+
+  if (action === 'revisions' || action === 'file') {
+    const snapshot = await ref.get()
+    const order = snapshot.exists ? (snapshot.data() as CommerceModel.HostOrder) : null
+    if (!order || !CommerceModel.isQuote(order) || !order.quote) return refuse(404, 'Unknown quote')
+    const current = Number(order.quote.revision ?? 1)
+    const wanted = body['revision'] === undefined || body['revision'] === null ? current : Number(body['revision'])
+    let snapshots: CommerceModel.QuoteRevisionSnapshot[] = []
+    if (action === 'revisions' || wanted !== current) {
+      const listed = await ref.collection('revisions').get()
+      snapshots = listed.docs
+        .map((entry) => entry.data() as CommerceModel.QuoteRevisionSnapshot)
+        .filter((entry) => Number.isInteger(Number(entry?.revision)))
+        .sort((a, b) => Number(a.revision) - Number(b.revision))
+    }
+    if (action === 'revisions') return { status: 200, body: { revisions: snapshots.map(revisionView) } }
+
+    const fileId = String(body['fileId'] ?? '')
+    const source =
+      wanted === current
+        ? { proofs: CommerceModel.currentQuoteProofs(order.quote), responses: order.quote.responses ?? [] }
+        : snapshots.find((entry) => Number(entry.revision) === wanted)
+    const files = [
+      ...(source?.proofs ?? []),
+      ...(source?.responses ?? []).flatMap((response) => response.files ?? []),
+    ]
+    const file = files.find((entry) => entry.id === fileId)
+    if (!file?.path) return refuse(404, 'That file is no longer on this quote.')
+    return { status: 200, body: {}, file: { path: file.path, name: file.name, contentType: file.contentType } }
+  }
+
+  if (action === 'proof-ticket') {
+    const snapshot = await ref.get()
+    const order = snapshot.exists ? (snapshot.data() as CommerceModel.HostOrder) : null
+    const refused = CommerceModel.quoteProofChangeRefusal(order, 'add')
+    if (refused) return refuse(refused === 'not-a-quote' ? 404 : 409, CommerceModel.quoteProofRefusalMessage(refused))
+    // Storage is spent here, so the plan must sell, as a save's must.
+    const owner = await deps.orgForHost(hostId)
+    if (!checkEntitlement(owner?.org as never, 'commerce')) return refuse(403, 'Selling is not enabled')
+    const uploads = await deps.uploads()
+    const minted = await uploads.mint({ scope: proofScope, request: body['file'], caller: { uid } })
+    if ('error' in minted) return refuse(minted.status, minted.error)
+    return { status: 200, body: { ticket: minted.ticket, upload: minted.upload, file: minted.file } }
+  }
+
+  if (action === 'proof-finalize') {
+    const uploads = await deps.uploads()
+    const kept = await uploads.finalize({ scope: proofScope, ticket: body['ticket'], caller: { uid } })
+    if ('error' in kept) return refuse(kept.status, kept.error)
+    const now = deps.now()
+    const answer = await firestore.runTransaction(
+      async (transaction): Promise<{ outcome: Outcome; closeSession?: string }> => {
+        const snapshot = await transaction.get(ref)
+        const order = snapshot.exists ? (snapshot.data() as CommerceModel.HostOrder) : null
+        if (!order) return { outcome: refuse(404, 'Unknown quote') }
+        // A retried finalize finds its proof already on the quote.
+        const already = CommerceModel.currentQuoteProofs(order.quote).find((proof) => proof.id === kept.file.id)
+        if (already) {
+          return { outcome: { status: 200, body: { proof: fileView(already), updatedAtMs: order.quote?.updatedAtMs ?? null } } }
+        }
+        const added = CommerceModel.withQuoteProofAdded(
+          order,
+          {
+            id: kept.file.id,
+            name: kept.file.name,
+            contentType: kept.file.contentType,
+            size: kept.file.size,
+            path: kept.file.path,
+          },
+          { atMs: now, by: actor },
+        )
+        if ('reason' in added) {
+          return {
+            outcome: refuse(added.reason === 'not-a-quote' ? 404 : 409, CommerceModel.quoteProofRefusalMessage(added.reason)),
+          }
+        }
+        const closeSession = writeEditedQuote(transaction, ref, added.order)
+        return { outcome: { status: 200, body: { proof: fileView(added.proof), updatedAtMs: now } }, closeSession }
+      },
+    )
+    if (answer.outcome.status !== 200) await uploads.remove(kept.file.path).catch(() => undefined)
+    await closeOpenSession(deps, answer.closeSession, 'quote proof added')
+    return answer.outcome
+  }
+
+  if (action === 'proof-remove') {
+    const proofId = String(body['proofId'] ?? '')
+    const now = deps.now()
+    const answer = await firestore.runTransaction(
+      async (transaction): Promise<{ outcome: Outcome; closeSession?: string; path?: string }> => {
+        const snapshot = await transaction.get(ref)
+        const order = snapshot.exists ? (snapshot.data() as CommerceModel.HostOrder) : null
+        if (!order) return { outcome: refuse(404, 'Unknown quote') }
+        const removed = CommerceModel.withQuoteProofRemoved(order, proofId, { atMs: now, by: actor })
+        if ('reason' in removed) {
+          return {
+            outcome: refuse(
+              removed.reason === 'not-a-quote' || removed.reason === 'unknown-proof' ? 404 : 409,
+              CommerceModel.quoteProofRefusalMessage(removed.reason),
+            ),
+          }
+        }
+        const closeSession = writeEditedQuote(transaction, ref, removed.order)
+        return { outcome: { status: 200, body: { removed: true, updatedAtMs: now } }, closeSession, path: removed.proof.path }
+      },
+    )
+    if (answer.path) {
+      const uploads = await deps.uploads()
+      await uploads.remove(answer.path).catch((error) => console.error('quote proof file was not deleted', error))
+    }
+    await closeOpenSession(deps, answer.closeSession, 'quote proof removed')
+    return answer.outcome
+  }
+
+  // start-revision
+  const now = deps.now()
+  const answer = await firestore.runTransaction(
+    async (transaction): Promise<{ outcome: Outcome; closeSession?: string }> => {
+      const snapshot = await transaction.get(ref)
+      const order = snapshot.exists ? (snapshot.data() as CommerceModel.HostOrder) : null
+      if (!order) return { outcome: refuse(404, 'Unknown quote') }
+      const started = CommerceModel.startQuoteRevision(order, { atMs: now, by: actor })
+      if ('reason' in started) return { outcome: refuse(started.reason === 'paid' ? 409 : 404, started.error) }
+      const revisionRef = ref.collection('revisions').doc(String(started.revision))
+      // A revision on record is never written over.
+      if ((await transaction.get(revisionRef)).exists) {
+        return { outcome: refuse(409, `Revision ${started.revision} is already on record. Close the quote and open it again.`) }
+      }
+      transaction.set(revisionRef, started.snapshot)
+      const closeSession = writeEditedQuote(transaction, ref, started.order)
+      return {
+        outcome: { status: 200, body: { revision: started.revision + 1, updatedAtMs: now } },
+        closeSession,
+      }
+    },
+  )
+  await closeOpenSession(deps, answer.closeSession, 'quote revision started')
+  return answer.outcome
+}
+
 /** `POST /api/commerce/quote`. */
 export const quoteHandler: PluginApiHandler = async (req, res) => {
-  const outcome = await handleQuote(defaultQuoteDeps(), req)
+  const deps = defaultQuoteDeps()
+  const outcome = await handleQuote(deps, req)
+  if (outcome.pdf) return sendPdf(res, outcome.pdf)
+  if (outcome.file) {
+    const uploads = await deps.uploads()
+    return uploads.send(res as never, outcome.file)
+  }
   return res.status(outcome.status).json(outcome.body)
 }

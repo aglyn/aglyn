@@ -2102,6 +2102,7 @@ internal object OrderPickupStatusSerializer :
 
 @Serializable
 data class OrderQuote(
+    val approval: QuoteApproval? = null,
     val approvedRevision: Double? = null,
     val billTo: OrderAddress? = null,
     val createdAtMs: Double,
@@ -2111,8 +2112,9 @@ data class OrderQuote(
     val linkVersion: Double? = null,
     val notes: String? = null,
     val paidAtMs: Double? = null,
-    val proofs: List<QuoteProofRef>? = null,
+    val proofs: List<QuoteProof>? = null,
     val requireProofApproval: Boolean? = null,
+    val responses: List<QuoteCustomerResponse>? = null,
     val revision: Double,
     val shipping: QuoteShipping? = null,
     val shipTo: OrderAddress? = null,
@@ -3187,6 +3189,15 @@ data class ProductVariant(
 )
 
 @Serializable
+data class QuoteApproval(
+    val atMs: Double,
+    val ip: String? = null,
+    val name: String,
+    val revision: Double,
+    val userAgent: String? = null,
+)
+
+@Serializable
 data class QuoteCustomer(
     val company: String? = null,
     val email: String? = null,
@@ -3201,6 +3212,29 @@ data class QuoteCustomerRecord(
     val id: String,
     val kind: String,
 )
+
+@Serializable
+data class QuoteCustomerResponse(
+    val action: QuoteCustomerResponseAction,
+    val atMs: Double,
+    val comment: String? = null,
+    val files: List<QuoteResponseFile>? = null,
+    val ip: String? = null,
+    val name: String? = null,
+    val revision: Double,
+    val userAgent: String? = null,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = QuoteCustomerResponseActionSerializer::class)
+enum class QuoteCustomerResponseAction(val raw: String) {
+    APPROVE("approve"),
+    CHANGES("changes"),
+    UNKNOWN(""),
+}
+
+internal object QuoteCustomerResponseActionSerializer :
+    RawEnumSerializer<QuoteCustomerResponseAction>("com.aglyn.contracts.QuoteCustomerResponseAction", QuoteCustomerResponseAction.entries, QuoteCustomerResponseAction.UNKNOWN, { it.raw })
 
 @Serializable
 data class QuoteDiscount(
@@ -3234,9 +3268,24 @@ internal object QuoteNoTaxReasonSerializer :
     RawEnumSerializer<QuoteNoTaxReason>("com.aglyn.contracts.QuoteNoTaxReason", QuoteNoTaxReason.entries, QuoteNoTaxReason.UNKNOWN, { it.raw })
 
 @Serializable
-data class QuoteProofRef(
+data class QuoteProof(
+    val addedAtMs: Double,
+    val addedBy: String,
+    val contentType: String,
     val id: String,
+    val name: String,
+    val path: String,
     val revision: Double,
+    val size: Double,
+)
+
+@Serializable
+data class QuoteResponseFile(
+    val contentType: String,
+    val id: String,
+    val name: String,
+    val path: String,
+    val size: Double,
 )
 
 @Serializable

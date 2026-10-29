@@ -199,6 +199,15 @@ const CANNOT_STORE_VIDEO: Record<string, { why: string; proof: string }> = {
       'ever served from it.',
     proof: "const bytes = Buffer.from(JSON.stringify(pkg), 'utf8')",
   },
+  'libs/tenant/data/admin/src/lib/server/visitor-upload.ts': {
+    why:
+      "a site visitor's or member's file for a record (AGL-4096): a quote's " +
+      'proof or artwork, a form attachment. The ticket is minted only for a ' +
+      'type in VISITOR_UPLOAD_TYPES (images, PDF, SVG, AI, EPS, PSD, TIFF, ' +
+      'no video), the signed post is bound to that type, and finalize refuses ' +
+      'any object whose type is not the one the ticket signed.',
+    proof: 'const checked = checkVisitorUploadRequest(input.request, { maxBytes: input.maxBytes })',
+  },
   'libs/plugins/waivers/src/lib/server/db.ts': {
     why:
       "the waivers plugin's private file store: a drawn signature or a photo " +

@@ -20,6 +20,7 @@ import { planListQuery } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { nameSearchKey, nameSearchTokens } from '@aglyn/aglyn/app-utils/name-search'
 import { ORDER_LIST_COLUMN_SORTS, ORDER_LIST_QUERY } from '../constants/orders-list-query'
 import { handleQuote, type QuoteDeps } from './quote'
+import type { QuoteUploadCalls } from './quote-uploads'
 
 jest.mock('@aglyn/tenant-data-admin', () => ({ firebaseAdmin: {}, getOrgForHost: jest.fn() }))
 
@@ -67,7 +68,15 @@ function docRef(path: string): any {
 }
 
 function collectionRef(path: string): any {
-  return { doc: (id?: string) => docRef(`${path}/${id ?? `quote-${++autoId}`}`) }
+  return {
+    doc: (id?: string) => docRef(`${path}/${id ?? `quote-${++autoId}`}`),
+    // The documents directly in this collection, as a query answers them.
+    get: async () => ({
+      docs: [...docs.keys()]
+        .filter((key) => key.startsWith(`${path}/`) && !key.slice(path.length + 1).includes('/'))
+        .map(snapshotOf),
+    }),
+  }
 }
 
 const firestore: any = {
@@ -93,6 +102,37 @@ const expireSession = jest.fn<ReturnType<QuoteDeps['expireSession']>, Parameters
   async () => 'expired',
 )
 
+const quotePdf = jest.fn<ReturnType<QuoteDeps['quotePdf']>, Parameters<QuoteDeps['quotePdf']>>(async (input) => ({
+  bytes: new Uint8Array([37, 80, 68, 70]),
+  filename: `quote-${String(input.order.number)}.pdf`,
+}))
+
+/** The upload pipeline, recorded (AGL-4096). */
+const uploadCalls: Array<[string, unknown]> = []
+let finalizeAnswer: Awaited<ReturnType<QuoteUploadCalls['finalize']>> = {
+  ok: true,
+  file: { id: 'proof1', name: 'Banner.png', contentType: 'image/png', size: 2_000, path: 'hosts/site1/private/uploads/quote-proof/QID/proof1', uploadedAtMs: 1 },
+}
+const uploads: QuoteUploadCalls = {
+  mint: async (input) => {
+    uploadCalls.push(['mint', input])
+    return {
+      ok: true,
+      ticket: 'ticket-1',
+      upload: { url: 'https://storage.example/b/', fields: { key: 'k' } },
+      file: { id: 'proof1', name: 'Banner.png', contentType: 'image/png', size: 2_000 },
+    }
+  },
+  finalize: async (input) => {
+    uploadCalls.push(['finalize', input])
+    return finalizeAnswer
+  },
+  read: async () => null,
+  remove: async (path) => void uploadCalls.push(['remove', path]),
+  removeAll: async (scope) => void uploadCalls.push(['removeAll', scope]),
+  send: async () => undefined,
+}
+
 const deps: QuoteDeps = {
   verifyIdToken: async (token) => ({ uid: token, email: `${token}@example.com` }),
   firestore: () => firestore,
@@ -102,6 +142,8 @@ const deps: QuoteDeps = {
   expireSession,
   payLinkUrl: (host, hostId, quoteId, version) =>
     host['subdomain'] ? `https://${String(host['subdomain'])}.aglyn.app/pay-quote?q=${quoteId}&t=${version}.sig-${hostId}` : null,
+  quotePdf,
+  uploads: async () => uploads,
   now: () => nowMs,
 }
 
@@ -130,6 +172,8 @@ beforeEach(() => {
   quoteTax.mockClear()
   searchPeople.mockClear()
   expireSession.mockClear()
+  quotePdf.mockClear()
+  uploadCalls.length = 0
   docs.set('hosts/site1', {
     subdomain: 'acme',
     memberRoles: { admin: 'admin', editor: 'editor', author: 'author', viewer: 'viewer', granted: 'author', sender: 'author', editsOnly: 'editor' },
@@ -679,5 +723,251 @@ describe('the pay link in the console (AGL-4094)', () => {
   it('answers no link for an order that is not a quote', async () => {
     docs.set('hosts/site1/orders/order-9', { status: 'pending', channel: 'draft', lineItems: [] })
     expect((await link('admin', 'pay-link', 'order-9')).status).toBe(404)
+  })
+})
+
+describe('the quote’s PDF in the console (AGL-4095)', () => {
+  async function created(): Promise<{ quoteId: string; path: string }> {
+    const outcome = await handleQuote(deps, request('admin', { action: 'create', hostId: 'site1', quote: { lines: [CUSTOM] } }, 'c'))
+    const quoteId = String(outcome.body['quoteId'])
+    return { quoteId, path: `hosts/site1/orders/${quoteId}` }
+  }
+  const pdf = (uid: string, quoteId: string) => handleQuote(deps, request(uid, { action: 'pdf', hostId: 'site1', quoteId }))
+
+  it('answers the file, with the pay link for someone who may send it', async () => {
+    const { quoteId } = await created()
+    const outcome = await pdf('admin', quoteId)
+    expect(outcome.status).toBe(200)
+    expect(outcome.pdf?.filename).toMatch(/^quote-\d+\.pdf$/)
+    expect(quotePdf).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hostId: 'site1',
+        quoteId,
+        payUrl: `https://acme.aglyn.app/pay-quote?q=${quoteId}&t=1.sig-site1`,
+        store: expect.objectContaining({ tax: expect.objectContaining({ mode: 'manual' }) }),
+      }),
+    )
+  })
+
+  it('leaves the pay link off for someone who may edit quotes but not send them', async () => {
+    const { quoteId } = await created()
+    for (const uid of ['granted', 'editsOnly']) {
+      quotePdf.mockClear()
+      expect((await pdf(uid, quoteId)).status).toBe(200)
+      expect(quotePdf.mock.calls[0][0].payUrl).toBeNull()
+    }
+  })
+
+  it('prints no pay link once the quote is paid', async () => {
+    const { quoteId, path } = await created()
+    docs.set(path, { ...docs.get(path), status: 'paid' })
+    expect((await pdf('admin', quoteId)).status).toBe(200)
+    expect(quotePdf.mock.calls[0][0].payUrl).toBeNull()
+  })
+
+  it.each([
+    ['author', 403],
+    ['viewer', 403],
+    ['stranger', 403],
+  ])('a site %s without "Create and edit quotes" is refused', async (uid, status) => {
+    const { quoteId } = await created()
+    expect(await pdf(uid, quoteId)).toEqual({
+      status,
+      body: { error: 'Your role does not include "Create and edit quotes" — ask an organization admin' },
+    })
+    expect(quotePdf).not.toHaveBeenCalled()
+  })
+
+  it('answers no file for an order that is not a quote, or a quote that is gone', async () => {
+    docs.set('hosts/site1/orders/order-9', { status: 'paid', channel: 'web', lineItems: [] })
+    expect((await pdf('admin', 'order-9')).status).toBe(404)
+    expect((await pdf('admin', 'missing')).status).toBe(404)
+    expect((await pdf('admin', '')).status).toBe(400)
+    expect(quotePdf).not.toHaveBeenCalled()
+  })
+
+  it('says the PDF could not be made when making it fails', async () => {
+    const { quoteId } = await created()
+    quotePdf.mockRejectedValueOnce(new Error('sharp exploded'))
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    expect(await pdf('admin', quoteId)).toEqual({ status: 500, body: { error: 'The PDF could not be made. Try again.' } })
+    spy.mockRestore()
+  })
+})
+
+describe('proofs and revisions in the console (AGL-4096)', () => {
+  async function created(key = 'c'): Promise<{ quoteId: string; path: string }> {
+    const outcome = await handleQuote(deps, request('admin', { action: 'create', hostId: 'site1', quote: { lines: [CUSTOM] } }, key))
+    const quoteId = String(outcome.body['quoteId'])
+    const path = `hosts/site1/orders/${quoteId}`
+    docs.set(path, { ...docs.get(path), checkoutSessionId: 'cs_test_open123456' })
+    finalizeAnswer = {
+      ok: true,
+      file: { id: 'proof1', name: 'Banner.png', contentType: 'image/png', size: 2_000, path: `hosts/site1/private/uploads/quote-proof/${quoteId}/proof1`, uploadedAtMs: 1 },
+    }
+    return { quoteId, path }
+  }
+  const act = (uid: string, action: string, quoteId: string, extra: Record<string, unknown> = {}) =>
+    handleQuote(deps, request(uid, { action, hostId: 'site1', quoteId, ...extra }))
+  const answered = (path: string) =>
+    docs.set(path, {
+      ...docs.get(path),
+      quote: {
+        ...docs.get(path)?.['quote'],
+        stage: 'changes_requested',
+        responses: [{ action: 'changes', revision: 1, atMs: 1_500, comment: 'Bigger', ip: null, userAgent: null }],
+      },
+    })
+
+  it.each(['proof-ticket', 'proof-finalize', 'proof-remove', 'start-revision', 'revisions', 'file'])(
+    '%s needs "Create and edit quotes"',
+    async (action) => {
+      const { quoteId, path } = await created()
+      const before = JSON.stringify(docs.get(path))
+      expect(await act('author', action, quoteId)).toEqual({
+        status: 403,
+        body: { error: 'Your role does not include "Create and edit quotes" — ask an organization admin' },
+      })
+      expect(JSON.stringify(docs.get(path))).toBe(before)
+      expect(uploadCalls).toEqual([])
+    },
+  )
+
+  it('signs a proof’s upload for the member, scoped to the quote’s proofs', async () => {
+    const { quoteId } = await created()
+    const file = { name: 'Banner.png', contentType: 'image/png', size: 2_000 }
+    const outcome = await act('editor', 'proof-ticket', quoteId, { file })
+    expect(outcome).toEqual({
+      status: 200,
+      body: {
+        ticket: 'ticket-1',
+        upload: { url: 'https://storage.example/b/', fields: { key: 'k' } },
+        file: { id: 'proof1', name: 'Banner.png', contentType: 'image/png', size: 2_000 },
+      },
+    })
+    expect(uploadCalls).toEqual([
+      ['mint', { scope: { hostId: 'site1', purpose: 'quote-proof', purposeId: quoteId }, request: file, caller: { uid: 'editor' } }],
+    ])
+  })
+
+  it('keeps a finalized proof on the current revision as an edit: new stamp, open session closed', async () => {
+    const { quoteId, path } = await created()
+    nowMs = 3_000
+    const outcome = await act('admin', 'proof-finalize', quoteId, { ticket: 'ticket-1' })
+    expect(outcome).toEqual({
+      status: 200,
+      body: {
+        proof: { id: 'proof1', revision: 1, name: 'Banner.png', contentType: 'image/png', size: 2_000, addedAtMs: 3_000, addedBy: 'admin@example.com' },
+        updatedAtMs: 3_000,
+      },
+    })
+    const stored = docs.get(path)
+    expect(stored?.['quote']).toMatchObject({ updatedAtMs: 3_000, updatedBy: 'admin@example.com' })
+    expect(stored?.['quote']?.proofs).toEqual([
+      expect.objectContaining({ id: 'proof1', path: `hosts/site1/private/uploads/quote-proof/${quoteId}/proof1` }),
+    ])
+    expect(stored?.['checkoutSessionId']).toBeUndefined()
+    expect(expireSession).toHaveBeenCalledWith('cs_test_open123456')
+    expect(stored?.['timeline'].at(-1)).toMatchObject({ event: 'quote-proof-added' })
+    // A retried finalize finds it there and adds nothing.
+    expect((await act('admin', 'proof-finalize', quoteId, { ticket: 'ticket-1' })).status).toBe(200)
+    expect(docs.get(path)?.['quote']?.proofs).toHaveLength(1)
+  })
+
+  it('passes on the upload’s refusal and writes nothing', async () => {
+    const { quoteId, path } = await created()
+    const before = JSON.stringify(docs.get(path))
+    finalizeAnswer = { ok: false, status: 415, code: 'inspection', error: '"x.png" is labeled image/png but its contents are not PNG.' }
+    expect(await act('admin', 'proof-finalize', quoteId, { ticket: 'ticket-1' })).toEqual({
+      status: 415,
+      body: { error: '"x.png" is labeled image/png but its contents are not PNG.' },
+    })
+    expect(JSON.stringify(docs.get(path))).toBe(before)
+  })
+
+  it('takes no new proof once the customer answered, and deletes the file it kept', async () => {
+    const { quoteId, path } = await created()
+    answered(path)
+    expect((await act('admin', 'proof-ticket', quoteId, { file: {} })).status).toBe(409)
+    const outcome = await act('admin', 'proof-finalize', quoteId, { ticket: 'ticket-1' })
+    expect(outcome).toEqual({
+      status: 409,
+      body: { error: 'The customer has answered this revision. Start a new revision to send different proofs.' },
+    })
+    expect(uploadCalls.at(-1)).toEqual(['remove', `hosts/site1/private/uploads/quote-proof/${quoteId}/proof1`])
+  })
+
+  it('removes a proof and its file while the revision is unanswered', async () => {
+    const { quoteId, path } = await created()
+    await act('admin', 'proof-finalize', quoteId, { ticket: 'ticket-1' })
+    nowMs = 4_000
+    expect(await act('admin', 'proof-remove', quoteId, { proofId: 'proof1' })).toEqual({ status: 200, body: { removed: true, updatedAtMs: 4_000 } })
+    expect(docs.get(path)?.['quote']?.proofs).toEqual([])
+    expect(uploadCalls.at(-1)).toEqual(['remove', `hosts/site1/private/uploads/quote-proof/${quoteId}/proof1`])
+    expect((await act('admin', 'proof-remove', quoteId, { proofId: 'proof1' })).status).toBe(404)
+  })
+
+  it('starts the next revision: the current one is kept whole in revisions/{n}, the new one has no proofs', async () => {
+    const { quoteId, path } = await created()
+    await act('admin', 'proof-finalize', quoteId, { ticket: 'ticket-1' })
+    answered(path)
+    expireSession.mockClear()
+    docs.set(path, { ...docs.get(path), checkoutSessionId: 'cs_test_second12345' })
+    nowMs = 5_000
+    expect(await act('admin', 'start-revision', quoteId)).toEqual({ status: 200, body: { revision: 2, updatedAtMs: 5_000 } })
+    const snapshot = docs.get(`${path}/revisions/1`)
+    expect(snapshot).toMatchObject({
+      revision: 1,
+      stage: 'changes_requested',
+      proofs: [expect.objectContaining({ id: 'proof1' })],
+      responses: [expect.objectContaining({ comment: 'Bigger' })],
+      closedAtMs: 5_000,
+      closedBy: 'admin@example.com',
+    })
+    expect(snapshot?.['lineItems']).toEqual(docs.get(path)?.['lineItems'])
+    expect(docs.get(path)?.['quote']).toMatchObject({ revision: 2, stage: 'draft', proofs: [], responses: [], updatedAtMs: 5_000 })
+    expect(expireSession).toHaveBeenCalledWith('cs_test_second12345')
+
+    // The history lists it, and its files are still served to members.
+    const history = await act('admin', 'revisions', quoteId)
+    expect(history.body['revisions']).toEqual([
+      expect.objectContaining({ revision: 1, proofs: [expect.not.objectContaining({ path: expect.anything() })] }),
+    ])
+    expect(await act('admin', 'file', quoteId, { fileId: 'proof1', revision: 1 })).toEqual({
+      status: 200,
+      body: {},
+      file: { path: `hosts/site1/private/uploads/quote-proof/${quoteId}/proof1`, name: 'Banner.png', contentType: 'image/png' },
+    })
+    // …but not as one of the current revision's.
+    expect((await act('admin', 'file', quoteId, { fileId: 'proof1' })).status).toBe(404)
+  })
+
+  it('never writes over a revision on record, and starts none on a paid quote', async () => {
+    const { quoteId, path } = await created()
+    docs.set(`${path}/revisions/1`, { revision: 1 })
+    expect((await act('admin', 'start-revision', quoteId)).status).toBe(409)
+    expect(docs.get(path)?.['quote']?.revision).toBe(1)
+    docs.delete(`${path}/revisions/1`)
+    docs.set(path, { ...docs.get(path), status: 'paid' })
+    expect(await act('admin', 'start-revision', quoteId)).toEqual({
+      status: 409,
+      body: { error: 'This quote has been paid, so it takes no new revision.' },
+    })
+  })
+
+  it('deleting a draft takes its files with it; a quote with earlier revisions stays', async () => {
+    const { quoteId } = await created()
+    expect((await act('admin', 'delete', quoteId)).status).toBe(200)
+    expect(uploadCalls).toEqual([
+      ['removeAll', { hostId: 'site1', purpose: 'quote-proof', purposeId: quoteId }],
+      ['removeAll', { hostId: 'site1', purpose: 'quote-artwork', purposeId: quoteId }],
+    ])
+    const second = await created('c2')
+    docs.set(second.path, { ...docs.get(second.path), quote: { ...docs.get(second.path)?.['quote'], revision: 2 } })
+    expect(await act('admin', 'delete', second.quoteId)).toEqual({
+      status: 409,
+      body: { error: 'This quote has earlier revisions the customer saw, so it stays on record.' },
+    })
+    expect(docs.has(second.path)).toBe(true)
   })
 })

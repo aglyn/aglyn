@@ -200,6 +200,64 @@ const PROBE_BYPASS_RULE = Object.freeze({
 })
 
 /**
+ * Bring my site's crawler through our OWN edge (AGL-4085).
+ *
+ * ## The finding
+ *
+ * The import of aglyn.com on 2026-10-20 read 10 of its 121 pages: `/contact`
+ * and nine `/legal/*` pages, exactly the paths the store-review bypass below
+ * admits. Every other page, the home page included, answered AglynBot with
+ * `429` and `x-vercel-mitigated: challenge`. So no site this project serves
+ * could be brought in, and the person was told to "allow AglynBot" in a
+ * firewall that is ours.
+ *
+ * ## Why a secret AND the user agent, in ONE group
+ *
+ * The two conditions sit in the same group, so both must hold. A request with
+ * the AglynBot user agent alone is challenged, which keeps the user agent
+ * from being a key anyone can copy (the AI agent rule below shows what a
+ * user-agent-only rule admits). A request with the secret but another user
+ * agent is challenged too, so a leaked secret is not a general pass. The
+ * scope check below holds every live group to both, so an appended
+ * header-only or user-agent-only group is a finding.
+ *
+ * ## Who holds the secret
+ *
+ * `SITE_IMPORT_EDGE_TOKEN` on the console, where the crawl runs. The crawler
+ * sends it only to a hostname this platform serves, decided from our host
+ * records and the hosting platform's live view of the name
+ * (`libs/plugins/ai/src/lib/site-import/site-import-edge.ts`,
+ * `isPlatformServedDomain`), and never on a redirect hop to another host. It
+ * is not the probe token: that one is scoped to our scripts.
+ *
+ * ## What it lifts
+ *
+ * The bot challenge, and nothing else: every route still does its own auth,
+ * lockdown still answers, and the media CDN's rate limit sits ahead of this
+ * rule (`follows`, asserted), so an AglynBot request to `/api/media/cdn` is
+ * counted like any other. The value is asserted as at least 32 characters,
+ * never literally. Rotation is the console's env and this rule's value,
+ * changed together.
+ */
+const SITE_IMPORT_BYPASS_RULE = Object.freeze({
+  name: 'Site import crawler bypass',
+  why: "Bring my site's crawler, AglynBot, was answered with a challenge on every page of every site this project serves except the store-review paths, so an import of an Aglyn-hosted site read 10 of 121 pages and no home page",
+  conditions: Object.freeze([
+    Object.freeze({
+      type: 'header',
+      op: 'eq',
+      key: 'x-aglyn-import',
+      // Never the literal secret, as for the probe rule. The length floor
+      // catches a value typed by hand into the dashboard, not only a blank.
+      valueNonEmpty: true,
+      valueMinLength: 32,
+    }),
+    Object.freeze({ type: 'user_agent', op: 're', value: '^AglynBot/' }),
+  ]),
+  follows: 'Media CDN per-IP rate limit',
+})
+
+/**
  * The link-preview crawler allowlist, named once so the tenant and docs
  * entries cannot drift apart by transcription.
  *
@@ -394,10 +452,11 @@ const MEDIA_CDN_RATE_LIMIT_RULE = Object.freeze({
  * `expect` is exactly one of:
  *
  *   'protected'    firewallEnabled, bot_protection = {active, challenge}, and
- *                  precisely the declared bypass rules — each still scoped.
- *                  Optional `rateLimitRules`: each present with its declared
- *                  window, limit, key and past-the-limit action, still scoped,
- *                  and ahead of the bypass it `precedes`.
+ *                  precisely the declared bypass rules — each still scoped,
+ *                  and behind the rate-limit rule it `follows`, if it names
+ *                  one. Optional `rateLimitRules`: each present with its
+ *                  declared window, limit, key and past-the-limit action,
+ *                  still scoped, and ahead of the bypass it `precedes`.
  *   'unprotected'  a KNOWN GAP. Requires a `gap` rationale. Still asserted:
  *                  the run fails if the project QUIETLY GAINS protection, so
  *                  the table can never silently describe a fiction. Reported
@@ -777,6 +836,7 @@ export const EXPECTED_POSTURE = Object.freeze([
           Object.freeze({ type: 'path', op: 'pre', value: '/.well-known/' }),
         ]),
       }),
+      SITE_IMPORT_BYPASS_RULE,
     ]),
     rateLimitRules: Object.freeze([MEDIA_CDN_RATE_LIMIT_RULE]),
   }),
@@ -1274,6 +1334,24 @@ export function validatePostureTable(table) {
               'give it the paths the rule really carries, or drop the key and use `value`',
           )
         }
+        for (const condition of rule?.conditions ?? []) {
+          if (!Object.prototype.hasOwnProperty.call(condition ?? {}, 'valueMinLength')) continue
+          if (Number.isInteger(condition.valueMinLength) && condition.valueMinLength > 0) continue
+          problems.push(
+            `"${name}": bypass rule "${rule?.name ?? '?'}" declares a \`valueMinLength\` that is not a positive whole number`,
+          )
+        }
+        if (rule?.follows !== undefined) {
+          // Asserted against the live order in `evaluateProject`. Naming a
+          // rule that is not declared would look for nothing and pass.
+          const limits = Array.isArray(entry.rateLimitRules) ? entry.rateLimitRules : []
+          if (!limits.some((limit) => limit?.name === rule.follows)) {
+            problems.push(
+              `"${name}": bypass rule "${rule?.name ?? '?'}" \`follows\` "${rule.follows}", ` +
+                'which is not a declared rate-limit rule of this project',
+            )
+          }
+        }
         if (Object.prototype.hasOwnProperty.call(rule ?? {}, 'alsoRequiresGroups')) {
           if (!Array.isArray(rule.alsoRequiresGroups) || rule.alsoRequiresGroups.length === 0) {
             problems.push(
@@ -1350,6 +1428,9 @@ function rateLimitDeclarationProblems(projectName, rule, bypassNames) {
 /** Human-readable condition, with any secret value redacted. */
 export function describeCondition(condition) {
   const key = typeof condition?.key === 'string' && condition.key.length > 0 ? ` ${condition.key}` : ''
+  if (Number.isInteger(condition?.valueMinLength)) {
+    return `${condition.type}${key} ${condition.op} <at least ${condition.valueMinLength} characters, redacted>`
+  }
   if (condition?.valueNonEmpty === true) return `${condition.type}${key} ${condition.op} <non-empty, redacted>`
   if (condition?.op === 'ex') return `${condition.type}${key} exists`
   if (Array.isArray(condition?.valueAnyOf)) {
@@ -1357,6 +1438,23 @@ export function describeCondition(condition) {
   }
   const value = condition?.value === undefined ? '' : ` "${condition.value}"`
   return `${condition?.type}${key} ${condition?.op}${value}`
+}
+
+/**
+ * A LIVE condition, as a finding prints it (AGL-4085). The API returns a
+ * header rule's secret in the clear, and a scope finding names what the
+ * offending group matches: a group that kept the secret and lost its other
+ * condition would print the secret into a public Actions log. So a live
+ * header condition's value is never printed, except a regular expression,
+ * which is a pattern (`^Bearer …`) and not a shared secret.
+ */
+export function describeLiveCondition(condition) {
+  if (condition?.type === 'header' && condition?.op !== 're' && condition?.op !== 'ex') {
+    const key = typeof condition?.key === 'string' && condition.key.length > 0 ? ` ${condition.key}` : ''
+    const length = String(condition?.value ?? '').length
+    return `header${key} ${condition.op} <${length} characters, redacted>`
+  }
+  return describeCondition(condition)
 }
 
 /**
@@ -1370,6 +1468,11 @@ function conditionSatisfies(required, actual) {
   if (required.key !== undefined && String(actual.key ?? '') !== required.key) return false
   if (required.value !== undefined && String(actual.value ?? '') !== required.value) return false
   if (required.valueNonEmpty === true && String(actual.value ?? '').length === 0) return false
+  // A secret's length, never its value (AGL-4085): a value typed by hand
+  // into the dashboard, `test` say, is a finding and not a pass.
+  if (Number.isInteger(required.valueMinLength) && String(actual.value ?? '').length < required.valueMinLength) {
+    return false
+  }
   // `valueAnyOf` is for a rule that is ONE hole with several mouths: the
   // console's machine-traffic bypass lists a dozen paths, one per OR'd group,
   // so the groups do NOT all carry the same value. Declaring the allowlist
@@ -1485,7 +1588,7 @@ function groupScopeFindings({ expectedRule, groups, label, widened, verb }) {
        * the path is what turns it into a one-minute fix instead of an
        * investigation against the live API.
        */
-      const matches = conditions.map((actual) => describeCondition(actual)).join(' AND ')
+      const matches = conditions.map((actual) => describeLiveCondition(actual)).join(' AND ')
       findings.push(
         `${label}${where} NO LONGER REQUIRES ${describeCondition(required)} — ` +
           `${widened}; groups are OR'd, so every group must carry ` +
@@ -1673,6 +1776,32 @@ export function evaluateRateLimitRule(expectedRule, liveRules) {
 }
 
 /**
+ * A bypass that can match a rate-limited path must sit BEHIND that limit
+ * (AGL-4085). The rate limit's own `precedes` says the same thing about one
+ * bypass that shares its path; this is the other direction, for a bypass whose
+ * scope is not a path at all: the site import's header-and-user-agent rule
+ * matches `/api/media/cdn` as readily as any page, and placed ahead of the
+ * limit it would let every request it admits there go uncounted.
+ *
+ * @param {object} expectedRule  a declared bypass rule
+ * @param {object[]} liveRules   the live config's `rules`, in evaluation order
+ * @returns {string[]} findings; empty when it sits behind the rule it follows,
+ *   or when either rule is missing (each has its own MISSING finding).
+ */
+export function followsFindings(expectedRule, liveRules) {
+  if (expectedRule?.follows === undefined) return []
+  const rules = Array.isArray(liveRules) ? liveRules : []
+  const at = rules.findIndex((rule) => rule?.name === expectedRule.name)
+  const limitAt = rules.findIndex((rule) => rule?.name === expectedRule.follows)
+  if (at === -1 || limitAt === -1 || at > limitAt) return []
+  return [
+    `bypass rule "${expectedRule.name}" is evaluated BEFORE "${expectedRule.follows}" (rule ${at + 1} of ` +
+      `${rules.length}, the limit is rule ${limitAt + 1}). A matched bypass skips every later custom rule, so ` +
+      `a request it admits is never counted by that limit. Move it with PATCH rules.priority, value ${limitAt}.`,
+  ]
+}
+
+/**
  * Evaluate one project.
  *
  * @param {object} args
@@ -1756,6 +1885,9 @@ export function evaluateProject({ expected, config }) {
   }
   for (const expectedLimit of expected.rateLimitRules ?? []) {
     findings.push(...evaluateRateLimitRule(expectedLimit, liveRules))
+  }
+  for (const expectedRule of expected.bypassRules) {
+    findings.push(...followsFindings(expectedRule, liveRules))
   }
 
   // An undeclared bypass rule is an undeclared hole. Report it even though
