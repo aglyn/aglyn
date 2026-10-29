@@ -154,7 +154,8 @@ your changes first.
 One email in your site's look, from your site's name, with:
 
 - **Your quote from** your business name as its heading, or **Your updated quote**
-  from the second revision on;
+  when it's a new revision of a quote you already emailed (the first email you send
+  for a quote, and sending the same revision again, keep **Your quote from**);
 - your message;
 - the quote number, its revision and its total;
 - the first three proof images, each opening the quote page, and the other proof

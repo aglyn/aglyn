@@ -1223,7 +1223,6 @@ export async function POST(request: Request): Promise<Response> {
                 host: (hostSnapshot.data() ?? {}) as Record<string, unknown>,
                 org: orgBilling ?? null,
                 to: contactEmail,
-                formName: resolvedFormName,
                 request: formRequest,
                 answers: sanitizedFields,
                 decls: formFieldDecls,
