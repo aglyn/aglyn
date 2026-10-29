@@ -167,6 +167,7 @@ export const ELEMENT_MOTION_NEVER: ReadonlySet<string> = new Set([
   'customer-account',
   'return-request',
   'order-status',
+  'quote-page',
   'searchBox',
   'collectionSearch',
   // Navigation and the site's frame.

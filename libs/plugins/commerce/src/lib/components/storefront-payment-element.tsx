@@ -40,6 +40,7 @@ import { loadStripe } from '@stripe/stripe-js/pure'
 import type {
   Stripe,
   StripeAddressElementChangeEvent,
+  StripeCheckoutContact,
   StripeCheckoutElementsSdkOptions,
 } from '@stripe/stripe-js'
 import Alert from '@mui/material/Alert'
@@ -164,6 +165,11 @@ export interface StorefrontPaymentElementProps {
    * Absent means every wallet the device supports shows.
    */
   wallets?: StorefrontCheckoutWallets
+  /**
+   * An address the shipping fields start with, where the session asks for
+   * one: a quote's ship-to (AGL-4094). The shopper can still change it.
+   */
+  defaultShippingAddress?: StripeCheckoutContact
 }
 
 /**
@@ -553,6 +559,7 @@ export function StorefrontPaymentElement({
   onCancel,
   onRestart,
   wallets,
+  defaultShippingAddress,
 }: StorefrontPaymentElementProps) {
   const stripe = useMemo(() => getStripe(publishableKey), [publishableKey])
   const theme = useTheme()
@@ -570,6 +577,7 @@ export function StorefrontPaymentElement({
             : undefined,
         ),
       },
+      ...(defaultShippingAddress ? { defaultValues: { shippingAddress: defaultShippingAddress } } : {}),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [clientSecret],

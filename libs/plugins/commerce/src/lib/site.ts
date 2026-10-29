@@ -31,6 +31,7 @@ import * as ProductDetail from './components/product-detail'
 import * as ReservationWidget from './components/reservation-widget'
 import * as ProductGrid from './components/product-grid'
 import * as ProductReviews from './components/product-reviews'
+import * as QuotePage from './components/quote-page'
 import * as RelatedProducts from './components/related-products'
 import * as ReturnRequest from './components/return-request'
 import * as Wishlist from './components/wishlist'
@@ -129,6 +130,11 @@ export const COMMERCE_BUNDLE: Aglyn.FeatureBundleEntry[] = [
     component: ReturnRequest.default,
     schema: ReturnRequest.schema,
     presets: ReturnRequest.presets,
+  },
+  {
+    component: QuotePage.default,
+    schema: QuotePage.schema,
+    presets: QuotePage.presets,
   },
 ]
 

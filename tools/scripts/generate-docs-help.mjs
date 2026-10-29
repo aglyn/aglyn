@@ -182,6 +182,8 @@ const PLUGIN_TOPICS = {
   catalog: '/commerce-and-bookings/commerce/catalog',
   commerce: '/commerce-and-bookings/commerce/overview',
   commerceEndToEnd: '/guides/commerce-end-to-end',
+  // The Quotes cards on the Orders tab and the Checkout settings (AGL-4094).
+  quotes: '/commerce-and-bookings/commerce/quotes-and-proofs',
   // The ShipStation card under the store's Settings (AGL-3613).
   shipStation: '/commerce-and-bookings/commerce/use-shipstation',
   // The ShippingEasy card under the store's Settings (AGL-3633).

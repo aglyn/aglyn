@@ -89,6 +89,9 @@ const searchPeople = jest.fn<ReturnType<QuoteDeps['searchPeople']>, Parameters<Q
   async () => [],
 )
 let nowMs = 1_000
+const expireSession = jest.fn<ReturnType<QuoteDeps['expireSession']>, Parameters<QuoteDeps['expireSession']>>(
+  async () => 'expired',
+)
 
 const deps: QuoteDeps = {
   verifyIdToken: async (token) => ({ uid: token, email: `${token}@example.com` }),
@@ -96,6 +99,9 @@ const deps: QuoteDeps = {
   orgForHost: async () => ({ id: 'org-1', org: ORG }),
   searchPeople,
   quoteTax,
+  expireSession,
+  payLinkUrl: (host, hostId, quoteId, version) =>
+    host['subdomain'] ? `https://${String(host['subdomain'])}.aglyn.app/pay-quote?q=${quoteId}&t=${version}.sig-${hostId}` : null,
   now: () => nowMs,
 }
 
@@ -123,9 +129,16 @@ beforeEach(() => {
   nowMs = 1_000
   quoteTax.mockClear()
   searchPeople.mockClear()
+  expireSession.mockClear()
   docs.set('hosts/site1', {
-    memberRoles: { admin: 'admin', editor: 'editor', author: 'author', viewer: 'viewer', granted: 'author' },
-    memberPermissions: { granted: { 'commerce.quotes': true }, editor: {} },
+    subdomain: 'acme',
+    memberRoles: { admin: 'admin', editor: 'editor', author: 'author', viewer: 'viewer', granted: 'author', sender: 'author', editsOnly: 'editor' },
+    memberPermissions: {
+      granted: { 'commerce.quotes': true },
+      editor: {},
+      sender: { 'commerce.quotes.send': true },
+      editsOnly: { 'commerce.quotes.send': false },
+    },
   })
   docs.set('hosts/site1/counters/orders', { next: 1042 })
   docs.set('hosts/site1/settings/store', {
@@ -542,5 +555,129 @@ describe('finding the customer', () => {
     searchPeople.mockResolvedValueOnce(null)
     const outcome = await handleQuote(deps, request('admin', { action: 'search-customers', hostId: 'site1', text: 'jordan' }))
     expect(outcome.body).toEqual({ available: false, customers: [] })
+  })
+})
+
+describe('a quote’s open payment goes with the version it was priced from (AGL-4094)', () => {
+  async function createdWithSession(): Promise<{ quoteId: string; path: string }> {
+    const outcome = await handleQuote(deps, request('admin', { action: 'create', hostId: 'site1', quote: { lines: [CUSTOM] } }, 'c'))
+    const quoteId = String(outcome.body['quoteId'])
+    const path = `hosts/site1/orders/${quoteId}`
+    docs.set(path, { ...docs.get(path), checkoutSessionId: 'cs_test_open123456' })
+    return { quoteId, path }
+  }
+
+  it('an edit expires the session the pay page opened, and forgets it', async () => {
+    const { quoteId, path } = await createdWithSession()
+    nowMs = 2_000
+    const outcome = await handleQuote(
+      deps,
+      request('admin', { action: 'update', hostId: 'site1', quoteId, baseUpdatedAtMs: 1_000, quote: { lines: [CANOPY] } }, 'e'),
+    )
+    expect(outcome.status).toBe(200)
+    expect(expireSession).toHaveBeenCalledWith('cs_test_open123456')
+    expect(docs.get(path)?.['checkoutSessionId']).toBeUndefined()
+  })
+
+  it('a refused edit leaves the session alone', async () => {
+    const { quoteId } = await createdWithSession()
+    await handleQuote(
+      deps,
+      request('admin', { action: 'update', hostId: 'site1', quoteId, baseUpdatedAtMs: 999, quote: { lines: [CANOPY] } }, 'e'),
+    )
+    expect(expireSession).not.toHaveBeenCalled()
+  })
+
+  it('deleting the quote expires it too', async () => {
+    const { quoteId } = await createdWithSession()
+    expect(await handleQuote(deps, request('admin', { action: 'delete', hostId: 'site1', quoteId }))).toEqual({
+      status: 200,
+      body: { deleted: true },
+    })
+    expect(expireSession).toHaveBeenCalledWith('cs_test_open123456')
+  })
+})
+
+describe('the pay link in the console (AGL-4094)', () => {
+  async function created(): Promise<{ quoteId: string; path: string }> {
+    const outcome = await handleQuote(deps, request('admin', { action: 'create', hostId: 'site1', quote: { lines: [CUSTOM] } }, 'c'))
+    const quoteId = String(outcome.body['quoteId'])
+    return { quoteId, path: `hosts/site1/orders/${quoteId}` }
+  }
+  const link = (uid: string, action: 'pay-link' | 'replace-link', quoteId: string) =>
+    handleQuote(deps, request(uid, { action, hostId: 'site1', quoteId }))
+
+  it('answers the link at the quote’s version, the first when it has none', async () => {
+    const { quoteId } = await created()
+    expect(await link('admin', 'pay-link', quoteId)).toEqual({
+      status: 200,
+      body: { url: `https://acme.aglyn.app/pay-quote?q=${quoteId}&t=1.sig-site1`, linkVersion: 1 },
+    })
+  })
+
+  it('replacing it bumps the version, closes the open session, notes who, and leaves the edit stamp alone', async () => {
+    const { quoteId, path } = await created()
+    docs.set(path, { ...docs.get(path), checkoutSessionId: 'cs_test_open123456' })
+    nowMs = 5_000
+    const outcome = await link('editor', 'replace-link', quoteId)
+    expect(outcome).toEqual({
+      status: 200,
+      body: { url: `https://acme.aglyn.app/pay-quote?q=${quoteId}&t=2.sig-site1`, linkVersion: 2 },
+    })
+    const stored = docs.get(path) as Record<string, any>
+    expect(stored['quote']['linkVersion']).toBe(2)
+    expect(stored['quote']['updatedAtMs']).toBe(1_000)
+    expect(stored['checkoutSessionId']).toBeUndefined()
+    expect(stored['timeline'].at(-1)).toMatchObject({ event: 'quote-link-replaced', atMs: 5_000 })
+    expect(stored['timeline'].at(-1).detail).toContain('editor@example.com')
+    expect(expireSession).toHaveBeenCalledWith('cs_test_open123456')
+    expect((await link('admin', 'pay-link', quoteId)).body['linkVersion']).toBe(2)
+  })
+
+  it('never replaces a paid quote’s link', async () => {
+    const { quoteId, path } = await created()
+    docs.set(path, { ...docs.get(path), status: 'paid' })
+    expect((await link('admin', 'replace-link', quoteId)).status).toBe(409)
+    expect(docs.get(path)?.['quote']['linkVersion']).toBeUndefined()
+    // Copying it still works: it opens the paid quote and the order.
+    expect((await link('admin', 'pay-link', quoteId)).status).toBe(200)
+  })
+
+  it.each([
+    ['author', 403],
+    ['viewer', 403],
+    ['editsOnly', 403],
+  ])('a site %s without "Send quotes and invoices to customers" is refused both', async (uid, status) => {
+    const { quoteId, path } = await created()
+    for (const action of ['pay-link', 'replace-link'] as const) {
+      expect(await link(uid, action, quoteId)).toEqual({
+        status,
+        body: { error: 'Your role does not include "Send quotes and invoices to customers" — ask an organization admin' },
+      })
+    }
+    expect(docs.get(path)?.['quote']['linkVersion']).toBeUndefined()
+  })
+
+  it('admits the presets of "Manage orders", and a member granted the key alone', async () => {
+    const { quoteId } = await created()
+    for (const uid of ['admin', 'editor', 'sender']) {
+      expect((await link(uid, 'pay-link', quoteId)).status).toBe(200)
+    }
+    // The key is its own: holding it does not let the member edit quotes.
+    const edit = await handleQuote(deps, request('sender', { action: 'create', hostId: 'site1', quote: { lines: [CUSTOM] } }, 'x'))
+    expect(edit.status).toBe(403)
+  })
+
+  it('says so when the site has no address to link to', async () => {
+    const { quoteId } = await created()
+    docs.set('hosts/site1', { ...docs.get('hosts/site1'), subdomain: '' })
+    const outcome = await link('admin', 'pay-link', quoteId)
+    expect(outcome.status).toBe(409)
+    expect(String(outcome.body['error'])).toMatch(/no web address/)
+  })
+
+  it('answers no link for an order that is not a quote', async () => {
+    docs.set('hosts/site1/orders/order-9', { status: 'pending', channel: 'draft', lineItems: [] })
+    expect((await link('admin', 'pay-link', 'order-9')).status).toBe(404)
   })
 })

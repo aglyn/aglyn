@@ -78,3 +78,46 @@ describe('the console build fits the 8 GB builder (AGL-3570)', () => {
     expect(config.experimental?.turbopackFileSystemCacheForBuild).toBe(false)
   })
 })
+
+/**
+ * The console config as Next loads it under a given `NODE_ENV`. The config
+ * reads `NODE_ENV` when it is required, so each read gets its own module
+ * registry.
+ */
+async function consoleConfigUnder(nodeEnv: 'production' | 'development') {
+  const env = process.env as Record<string, string | undefined>
+  const previous = env.NODE_ENV
+  env.NODE_ENV = nodeEnv
+  try {
+    let load: typeof nextConfigPhase = nextConfigPhase
+    jest.isolateModules(() => {
+      load = require('../next.config.js')
+    })
+    return await load('phase-production-build', { defaultConfig: {} })
+  } finally {
+    env.NODE_ENV = previous
+  }
+}
+
+describe('a production console build writes no server source maps (beta.288 OOM)', () => {
+  it('PREMISE — the installed Next still takes a serverSourceMaps setting', () => {
+    // If Next drops the key, the setting below silently stops doing anything
+    // and the server maps, about 1 GB of the build's peak, come back.
+    expect(nextDist('server/config-schema.js')).toMatch(/serverSourceMaps:/)
+  })
+
+  it('turns server source maps off when NODE_ENV is production', async () => {
+    const config = await consoleConfigUnder('production')
+
+    expect(config.experimental?.serverSourceMaps).toBe(false)
+    // The browser's maps are a different setting, and they stay on.
+    expect(config.productionBrowserSourceMaps).toBe(true)
+    expect(config.experimental?.turbopackFileSystemCacheForBuild).toBe(false)
+  })
+
+  it('leaves next dev its server source maps', async () => {
+    const config = await consoleConfigUnder('development')
+
+    expect(config.experimental?.serverSourceMaps).toBeUndefined()
+  })
+})
