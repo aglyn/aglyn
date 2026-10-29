@@ -3493,6 +3493,11 @@ allow update: if isStaff() ||
 
 
 
+'starterChoice',
+
+
+
+
 
 'preview', 'publicSinceMs',
 

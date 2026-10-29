@@ -307,6 +307,8 @@ export interface NewSiteAnnouncement {
    * resumed.
    */
   start?: 'guided-ai' | 'starter' | 'marketplace-starter' | 'api' | 'resumed'
+  /** The style the person chose, by its name (AGL-4049); `null` or absent for none. */
+  style?: string | null
 }
 
 /**
@@ -321,7 +323,7 @@ export interface NewSiteAnnouncement {
  * platform subdomain. The email's text blocks are linkified when rendered.
  */
 export async function announceNewSite(site: NewSiteAnnouncement): Promise<void> {
-  const { hostId, displayName, subdomain, orgSlug, createdBy, start } = site
+  const { hostId, displayName, subdomain, orgSlug, createdBy, start, style } = site
   try {
     if (isSignupCanaryOrgSlug(orgSlug) || isSignupCanaryEmail(createdBy)) return
     const liveUrl = `https://${subdomain}.${TENANT_APEX}`
@@ -364,6 +366,7 @@ export async function announceNewSite(site: NewSiteAnnouncement): Promise<void> 
                         ? 'A create that was resumed'
                         : null,
           },
+          { label: 'Style', value: style ?? null },
           { label: 'Created by', value: createdBy },
           { label: 'How they found us', value: acquisition ? describeAccountAcquisition(acquisition, { primaryHost: homeHost() }) : null },
           { label: 'Site id', value: hostId },

@@ -17,6 +17,7 @@
 
 import { AI_SITE_INPUT_MAX_CHARS, AI_SITE_SUBMISSIONS, aiSitePagesBand } from './ai-site-job'
 import {
+  AI_SITE_START_STYLE_REQUIRED,
   aiSiteStartExtraProblem,
   aiSiteStartInspirationRefusal,
   type AiSiteStartAnswers,
@@ -31,8 +32,9 @@ import {
  * Splitting the questions changes nothing they become. Every step writes the
  * same {@link AiSiteStartAnswers} the single form did, and only the review's
  * "Plan my site" turns them into the job's brief and inputs, through the same
- * `aiSiteStartBrief` / `aiSiteStartInputs`. Which answers are required is
- * unchanged too: only what kind of site it is.
+ * `aiSiteStartBrief` / `aiSiteStartInputs`. Two answers are required: what
+ * kind of site it is, and a style card clicked (AGL-4049; "Pick for me" is
+ * one), since nothing is chosen for a person.
  *
  * Pure: ids, titles, which answers each step holds, and each step's reasons
  * not to go forward, worded as `aiSiteStartRefusal` words them.
@@ -57,6 +59,7 @@ export const AI_SITE_START_STEP_LABELS: Readonly<Record<AiSiteStartStep, string>
 export type AiSiteStartField =
   | 'siteType'
   | 'audience'
+  | 'style'
   | 'kind'
   | 'inspiration'
   | 'pages'
@@ -84,7 +87,7 @@ export const AI_SITE_START_STEP_FIELDS: Readonly<Record<AiSiteStartStep, readonl
   kind: ['siteType', ...AI_SITE_START_MORE_FIELDS.kind],
   audience: ['audience', ...AI_SITE_START_MORE_FIELDS.audience],
   // The sites they like sit under the style cards (AGL-3975), when asked.
-  style: ['kind', 'inspiration', ...AI_SITE_START_MORE_FIELDS.style],
+  style: ['style', 'kind', 'inspiration', ...AI_SITE_START_MORE_FIELDS.style],
   details: ['phone', 'email', 'submissions', 'pages', 'welcomeEmail', ...AI_SITE_START_MORE_FIELDS.details],
   review: [],
 }
@@ -128,6 +131,8 @@ export function aiSiteStartFieldErrors(
   if (answers.audience.trim().length > AI_SITE_INPUT_MAX_CHARS) {
     errors.audience = { message: `Keep who the site is for under ${AI_SITE_INPUT_MAX_CHARS} characters.`, code: 'too_long' }
   }
+  // Nothing is chosen for a person (AGL-4049): a card, "Pick for me" included.
+  if (answers.style === null) errors.style = { message: AI_SITE_START_STYLE_REQUIRED, code: 'required' }
   const band = aiSitePagesBand(options.freeTaste)
   if (!Number.isInteger(answers.pages) || answers.pages < band.min || answers.pages > band.max) {
     errors.pages = { message: `A site is planned with ${band.min} to ${band.max} pages.`, code: 'out_of_range' }
@@ -149,6 +154,7 @@ export function aiSiteStartFieldErrors(
 const CORE_FIELDS: ReadonlySet<AiSiteStartField> = new Set([
   'siteType',
   'audience',
+  'style',
   'kind',
   'inspiration',
   'pages',

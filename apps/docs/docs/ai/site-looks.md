@@ -20,8 +20,15 @@ site, so two sites with the same style and the same answers still look different
 ## Choose a style {#choose-a-style}
 
 The **Style** step of **Start your site** offers these styles, each as a card with a
-picture of an example home page of that kind, drawn in its style. **Pick for me**, first and chosen unless you
-choose another, uses the style that what you said the site is suggests, and names it.
+picture of an example home page of that kind, drawn in its style. Nothing is chosen until
+you pick a card. **Pick for me**, the first card, uses the style that what you said the
+site is suggests, and names it.
+
+The same styles start the starter site too. **Start from the starter site**, and
+**Create site** when Aglyn AI is not part of your plan, ask you to choose one of them
+before the site is created; there is no **Pick for me** there. The starter's home page,
+header and footer then come in that style's built-in theme, brand color and fonts, which
+you can change under **Setup → Theme**.
 
 | Style | For |
 | --- | --- |

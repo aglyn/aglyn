@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { SITE_STYLES } from '@aglyn/aglyn/app-utils/site-styles'
 import { AI_SITE_KINDS, aiSiteKindFor, aiSiteKindOfInputs } from './ai-site-kinds'
 
 /** [what the site is for, who it is for, the kind it should pick]. */
@@ -236,5 +237,17 @@ describe('aiSiteKindFor', () => {
       const all = [...kind.keywords, ...kind.hints]
       expect(all.filter((term, index) => all.indexOf(term) !== index)).toEqual([])
     }
+  })
+})
+
+describe('the kinds are the styles a new site can start in (AGL-4049)', () => {
+  it('names the same styles as core, id for id and in order', () => {
+    expect(AI_SITE_KINDS.map((kind) => kind.id)).toEqual(SITE_STYLES.map((style) => style.id))
+  })
+
+  it('calls each style what its card calls it, with the same line under it', () => {
+    expect(AI_SITE_KINDS.map((kind) => [kind.label, kind.blurb])).toEqual(
+      SITE_STYLES.map((style) => [style.name, style.blurb]),
+    )
   })
 })

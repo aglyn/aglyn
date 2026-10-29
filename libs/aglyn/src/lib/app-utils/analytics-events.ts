@@ -225,8 +225,14 @@ export interface AnalyticsEventParams {
   // --- Activation (GTM §6: % publish a site, % connect Stripe) -------------
   /** Custom: no GA4 equivalent. A new organization exists. */
   org_created: { plan?: string }
-  /** Custom: no GA4 equivalent. A new site/host exists. */
-  host_created: Record<string, never>
+  /**
+   * Custom: no GA4 equivalent. A new site/host exists. With what it was
+   * started with (AGL-4049), from the create's own answer: `start` is
+   * `starter`, `ai`, `import` or `api`; `starter_kind` the style id, `auto`
+   * for the AI start's "Pick for me", or `none`; `starter_listing` the
+   * marketplace starter's listing id, or `none` (`hostCreatedEventParams`).
+   */
+  host_created: { start: string; starter_kind: string; starter_listing: string }
   /**
    * Custom: no GA4 equivalent, and the GTM plan's headline activation metric.
    * A site actually went live.

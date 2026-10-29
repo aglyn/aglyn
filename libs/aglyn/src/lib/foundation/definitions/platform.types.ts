@@ -28,6 +28,7 @@ import type {
 // validates them (`normalizeVideoMetadata`, `parseMediaRendition`) so a
 // document field and its validator can never describe different things.
 import type { MediaEmbeddedMetadata } from '../../app-utils/media-embedded-fields'
+import type { HostStarterChoice } from '../../app-utils/site-styles'
 import type { MediaVideoMetadata } from '../../app-utils/media-metadata'
 import type { MediaVideoRendition } from '../../app-utils/media-ref'
 
@@ -501,6 +502,14 @@ export interface AglynHost extends AglynDocument {
    * born with the starter, which may still be offered it.
    */
   starterProvisionedAt?: unknown
+  /**
+   * What the site was created with (AGL-4049): its style, the starter listing
+   * picked, and how it was started. Written by the server in the create's
+   * own transaction, and by the starter route when a site born for the AI
+   * start is given the starter in a style; never by a client. Absent on
+   * sites created before it.
+   */
+  starterChoice?: HostStarterChoice
   /** Screen rendered (noindex) for unmatched paths (AGL-87). */
   notFoundScreenId?: ScreenUid
   /**

@@ -211,6 +211,8 @@ describe('a failed start reopens on its own answers (AGL-3596)', () => {
       siteType: 'dog grooming salon',
       audience: 'dog owners in Hillside',
       example: 'business',
+      // A start that ran had its style chosen (AGL-4049); it comes back chosen.
+      style: 'business',
       kind: 'business',
       pages: 2,
       submissions: 'lead' as const,
@@ -229,6 +231,8 @@ describe('a failed start reopens on its own answers (AGL-3596)', () => {
       siteType: 'a cafe',
       audience: '',
       example: null,
+      // No kind to read back: it reopens on "Pick for me", chosen (AGL-4049).
+      style: 'auto',
       kind: null,
       pages: 2,
       submissions: 'inbox',
@@ -288,7 +292,12 @@ describe('a failed start keeps its business details (AGL-3979)', () => {
     // The summary a failed start carries back holds every detail.
     const summary = start.aiSiteStartInputsOf({ ...inputs, autoConfirm: true })
     // The kind and example come back as the kind the words suggested; every detail as given.
-    expect(start.aiSiteStartAnswersFromInputs(summary)).toEqual({ ...answers, example: expect.anything(), kind: expect.any(String) })
+    expect(start.aiSiteStartAnswersFromInputs(summary)).toEqual({
+      ...answers,
+      example: expect.anything(),
+      style: expect.any(String),
+      kind: expect.any(String),
+    })
   })
 
   it('sends a detail only where it was given, so a start without them asks the plan nothing new', () => {
@@ -327,7 +336,12 @@ describe('a start with business details and sites it likes carries both (AGL-397
     })
     const summary = start.aiSiteStartInputsOf({ ...inputs, autoConfirm: true })
     expect(summary).toMatchObject({ phone: '(512) 555-0142', inspiration: 'https://pipes.example.com/ https://drains.example.com/' })
-    expect(start.aiSiteStartAnswersFromInputs(summary)).toEqual({ ...answers, example: expect.anything(), kind: expect.any(String) })
+    expect(start.aiSiteStartAnswersFromInputs(summary)).toEqual({
+      ...answers,
+      example: expect.anything(),
+      style: expect.any(String),
+      kind: expect.any(String),
+    })
   })
 
   it('refuses either one on its own rule', () => {
@@ -336,5 +350,28 @@ describe('a start with business details and sites it likes carries both (AGL-397
     expect(aiSiteStartRefusal({ ...answers, inspiration: ['not a site'] })).toMatch(/https address/)
     // A Free workspace names one site; the details stay its own to give.
     expect(aiSiteStartRefusal({ ...answers, pages: 2 }, { freeTaste: true })).toMatch(/Free workspace/)
+  })
+})
+
+describe('a style card clicked (AGL-4049)', () => {
+  it('starts with nothing chosen', () => {
+    expect(AI_SITE_START_ANSWERS.style).toBeNull()
+    expect(AI_SITE_START_ANSWERS.kind).toBeNull()
+  })
+
+  it('holds the card as the style and the kind it names; "Pick for me" names none', () => {
+    expect(start.aiSiteStartStyleAnswer('trades')).toEqual({ style: 'trades', kind: 'trades' })
+    expect(start.aiSiteStartStyleAnswer('auto')).toEqual({ style: 'auto', kind: null })
+    // "Pick for me" leaves the kind to what the site is.
+    const picked = { ...AI_SITE_START_ANSWERS, siteType: 'a roofing company', ...start.aiSiteStartStyleAnswer('auto') }
+    expect(start.aiSiteStartKind(picked).id).toBe('trades')
+    // A card names the kind outright.
+    const chosen = { ...picked, ...start.aiSiteStartStyleAnswer('yoga') }
+    expect(start.aiSiteStartKind(chosen).id).toBe('yoga')
+  })
+
+  it('reopens a start that ran on its style, chosen', () => {
+    const inputs = start.aiSiteStartInputs({ ...AI_SITE_START_ANSWERS, siteType: 'a bakery', ...start.aiSiteStartStyleAnswer('restaurant') })
+    expect(start.aiSiteStartAnswersFromInputs(inputs)).toMatchObject({ style: 'restaurant', kind: 'restaurant' })
   })
 })

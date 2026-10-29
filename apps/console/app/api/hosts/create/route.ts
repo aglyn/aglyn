@@ -45,6 +45,7 @@ import {
   isTransientFirestoreError,
   NEW_SITE_ENABLED_PLUGINS,
   resumeUnfinishedCreate,
+  type SiteStyleInstall,
 } from '../../../../utils/server/provision-host'
 import { guidedStartOffered } from '../../../../utils/server/guided-start-offered'
 import { registerPluginServerDeclarations } from '../../../../constants/plugins.declarations.server.generated'
@@ -53,6 +54,13 @@ import {
   type PluginSiteStarterSource,
 } from '@aglyn/aglyn/plugin-manager/plugin-site-starters'
 import type { SiteStarterPayload } from '@aglyn/aglyn/app-utils/site-starter'
+import {
+  isSiteStyleId,
+  SITE_STYLE_AUTO,
+  siteStyleOf,
+  type HostStarterStart,
+} from '@aglyn/aglyn/app-utils/site-styles'
+import { resolveSiteStyleLooks } from '@aglyn/aglyn/plugin-manager/plugin-site-style-looks'
 import { sitePreviewForCreate } from '@aglyn/aglyn/app-utils/site-preview'
 import {
   readSiteStarterChoice,
@@ -107,6 +115,18 @@ async function handler(request: Request): Promise<Response> {
     body?.starter == null ? null : readSiteStarterChoice(body.starter)
   if (body?.starter != null && !starterChoice) {
     return Response.json({ error: 'Unknown starter' }, { status: 400 })
+  }
+  // The style the person chose (AGL-4049): nothing in Create site is chosen
+  // for them, so the starter site comes in a style they picked, and the AI
+  // start records the one its questions took ("Pick for me" included, which
+  // only the AI start offers). Present but not a style, it is refused.
+  const styleId = body?.style == null ? null : String(body.style)
+  if (
+    styleId !== null &&
+    !isSiteStyleId(styleId) &&
+    !(styleId === SITE_STYLE_AUTO && body?.start !== 'starter')
+  ) {
+    return Response.json({ error: 'Unknown style' }, { status: 400 })
   }
 
   const authorization = headers.authorization ?? ''
@@ -221,6 +241,8 @@ async function handler(request: Request): Promise<Response> {
             // The workspace, if this door made one, was made by the attempt
             // that claimed the site, and reported then or never.
             orgCreated: false,
+            // What the claim recorded it was created with (AGL-4049).
+            starterChoice: resumable.starterChoice,
           },
           { status: 200 },
         )
@@ -386,6 +408,29 @@ async function handler(request: Request): Promise<Response> {
     // else in preview for a site brought in from somewhere else
     // (`start: 'import'`) and public for every other start.
     const preview = sitePreviewForCreate(body)
+    // The chosen style's look (AGL-4049), for a site born with the starter:
+    // the plugin that designed the looks answers it (`core.site-style-looks`).
+    // No plugin, or no look for the style, and the site keeps the default
+    // theme; the choice is recorded either way.
+    let style: SiteStyleInstall | null = null
+    if (styleId !== null) {
+      let theme: SiteStyleInstall['theme'] = null
+      if (!guidedStart && !starterInstall && isSiteStyleId(styleId)) {
+        await registerPluginServerDeclarations().catch((error: unknown) => {
+          console.error('[hosts/create] plugin declarations failed', error)
+        })
+        theme = await (resolveSiteStyleLooks()?.look(styleId) ?? Promise.resolve(null)).catch(
+          (error: unknown) => {
+            console.error('[hosts/create] style look failed', error)
+            return null
+          },
+        )
+      }
+      style = { id: styleId, theme }
+    }
+    // How it was started, as the site records it (AGL-4049).
+    const start: HostStarterStart =
+      body?.start === 'import' ? 'import' : guidedStart ? 'ai' : 'starter'
     const claim = await claimHostForOrg({
       firestore,
       orgId: orgMembership.orgId,
@@ -394,6 +439,8 @@ async function handler(request: Request): Promise<Response> {
       org,
       starter: starterInstall ?? !guidedStart,
       preview,
+      ...(style ? { style } : {}),
+      start,
     })
     // Lost the subdomain to a concurrent create between the pre-check above
     // and the transaction's commit (AGL-2465). The console has no idempotency
@@ -468,6 +515,7 @@ async function handler(request: Request): Promise<Response> {
         : starterInstall
           ? 'marketplace-starter'
           : 'starter',
+      style: styleId === SITE_STYLE_AUTO ? 'Pick for me' : (siteStyleOf(styleId)?.name ?? null),
     })
     // No starter seeding here (AGL-687). Starters render from the code
     // definitions and are copied in only when a user uses or edits one, so a
@@ -497,6 +545,9 @@ async function handler(request: Request): Promise<Response> {
         // and the caller emits it through the same consent-gated transport as
         // every other event.
         orgCreated: orgMembership.created === true,
+        // What the site was created with (AGL-4049), as the site records it:
+        // the client reports it on `host_created`.
+        starterChoice: claim.starterChoice ?? null,
         // The starter the site was created from (AGL-4049), when one was picked.
         ...(starterChoice
           ? {
