@@ -50,7 +50,10 @@ import { datasetFilterFields, effectiveModel } from './record-filter-keys.mjs'
  *
  * `hostIds` seeds the same site under more than one id — the smoke renders
  * one copy against the live font origin and another with that origin hung,
- * and a page cached by the first pass must not answer for the second.
+ * and a page cached by the first pass must not answer for the second. Two more
+ * copies are the same site in maintenance mode and in preview (AGL-4110), so
+ * the smoke can ask a real production server what status the site's 503
+ * answer goes out with, beside a live copy that must still answer 200.
  */
 export const CLIENT_SITE_FIXTURE = {
   orgId: 'e2e-client-owner',
@@ -62,6 +65,10 @@ export const CLIENT_SITE_FIXTURE = {
   hostId: 'ridgeline',
   /** The same site, rendered with the font origin hung (AGL-3566). */
   stalledHostId: 'ridgeline-stalled',
+  /** The same site in maintenance mode, with no 503 page assigned (AGL-4110). */
+  maintenanceHostId: 'ridgeline-maintenance',
+  /** The same site in preview, with no 503 page assigned (AGL-4110). */
+  previewHostId: 'ridgeline-preview',
   /** The Google families its theme loads — the smoke asserts they reach the page. */
   fontFamilies: ['Montserrat', 'Open Sans'],
   /** Text the smoke asserts per route. */
@@ -473,7 +480,12 @@ export async function seedClientSite({
   firestore,
   put,
   now,
-  hostIds = [F.hostId, F.stalledHostId],
+  hostIds = [
+    F.hostId,
+    F.stalledHostId,
+    F.maintenanceHostId,
+    F.previewHostId,
+  ],
 }) {
   const orgRef = firestore.collection('orgs').doc(F.orgId)
   await put(orgRef, {
@@ -533,6 +545,16 @@ export async function seedClientSite({
   }
 }
 
+/**
+ * The switches a copy is seeded with (AGL-4110). Each is written explicitly
+ * on every copy, so a re-seed over an emulator export can never leave a copy
+ * in a state its id does not name.
+ */
+const hostSwitches = (hostId) => ({
+  maintenance: hostId === F.maintenanceHostId,
+  preview: hostId === F.previewHostId,
+})
+
 async function seedClientHost({ firestore, put, now, hostId }) {
   const hostRef = firestore.collection('hosts').doc(hostId)
   const homeScreenId = 'seed-client-home'
@@ -556,6 +578,7 @@ async function seedClientHost({ firestore, put, now, hostId }) {
       appIcon: `media:${hostId}/seed-client-app-icon`,
     },
     suspended: false,
+    ...hostSwitches(hostId),
     createdAt: now,
   })
 

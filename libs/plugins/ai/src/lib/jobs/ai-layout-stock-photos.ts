@@ -842,6 +842,15 @@ function saysMadeByHand(text: string): boolean {
 }
 
 /**
+ * The worlds a drink is sold in (2026-10-29, AGL-4092): where "water" on a
+ * menu is a bottle of it, never a lake, and a "drink" a soda.
+ */
+const FOOD_WORLDS = [
+  'taco', 'taqueria', 'burrito', 'mexican food', 'street food', 'food truck', 'food', 'restaurant', 'cafe', 'caterer',
+  'catering', 'menu', 'meal', 'cuisine', 'bakery', 'deli', 'pizza', 'burger', 'barbecue', 'bbq', 'diner',
+]
+
+/**
  * The kin of a few objects whose own word is not enough (AGL-3660): a "melt"
  * is any melting thing (the beta.239 "Wax melts" tile showed resin fluid
  * art), so a wax melt names one of these phrases. `within` is the world they
@@ -1015,11 +1024,27 @@ const OBJECT_KIN: ReadonlyArray<{
   },
   {
     // A fountain drink is a soda, never a well's fountain (AGL-4092).
-    objects: ['drink', 'soda'],
-    within: ['taco', 'taqueria', 'burrito', 'mexican food', 'street food', 'food truck'],
+    objects: ['drink', 'soda', 'cola'],
+    within: FOOD_WORLDS,
     // Never "fountain drink" itself: a well's page address says it word for word.
-    kin: ['soda', 'soft drink', 'iced tea', 'agua fresca', 'lemonade', 'soda cup'],
+    kin: ['soda', 'soft drink', 'iced tea', 'agua fresca', 'lemonade', 'soda cup', 'soda can', 'soda bottle', 'cola'],
     queries: ['soda cup', 'agua fresca'],
+  },
+  {
+    // Bottled water is a bottle of water (2026-10-29, AGL-4092): Pit Row
+    // Tacos' "Bottled Water" searched "taco water", then its broad "tacos",
+    // and took tomatoes beside a bowl of salsa.
+    objects: ['water'],
+    within: FOOD_WORLDS,
+    kin: ['bottled water', 'water bottle', 'bottle of water', 'mineral water', 'drinking water', 'sparkling water'],
+    queries: ['bottled water', 'water bottle'],
+  },
+  {
+    // An agua fresca is a glass of fruit water, never a taco (2026-10-29, AGL-4092).
+    objects: ['fresca', 'horchata', 'lemonade', 'limeade'],
+    within: FOOD_WORLDS,
+    kin: ['agua fresca', 'horchata', 'lemonade', 'limeade', 'fruit water', 'fruit drink', 'infused water', 'fruit juice'],
+    queries: ['agua fresca', 'lemonade'],
   },
 ]
 
@@ -1035,6 +1060,27 @@ function objectKin(
         entry.within.some((word) => world.includes(stemPhrase(word))),
     ) ?? null
   )
+}
+
+/**
+ * Whether a record's or a product's thing is a photo of itself alone
+ * (2026-10-29, AGL-4092): its object has kin ({@link OBJECT_KIN}), and
+ * neither its words nor its kin name the craft itself ({@link AiStockSiteTerms.core}).
+ * Pit Row Tacos' "Bottled Water" is bottled water: no photo of the taco
+ * trailer's world is one, and its broad "tacos" took tomatoes beside a bowl
+ * of salsa. A soap shop's "Lavender Soap Bar" names its soap, and a soap's
+ * photo still shows it. Such a thing is searched by its own words and kin
+ * alone, never by the craft's photos, and takes none of another record's.
+ * Pure.
+ */
+export function aiStockThingOfItsOwn(subject: string, terms: Pick<AiStockSiteTerms, 'domain' | 'core'>): boolean {
+  const object = aiStockObjectWord(subject)
+  if (!object) return false
+  const kin = objectKin(object, [...terms.domain, ...stemList(subject)])
+  if (!kin) return false
+  const core = new Set(terms.core)
+  const namesCore = (phrase: string) => withPairs(stemList(phrase)).some((term) => core.has(term))
+  return !namesCore(subject) && !kin.kin.some(namesCore)
 }
 
 /**
@@ -1104,14 +1150,30 @@ const CRAFT_KIN: ReadonlyArray<{
    * off-road names; a hit naming only "motorcycle" among its first tags
    * shows it no more than a man posing with a street bike does. Their
    * photos' own subjects (`shunLead`) are then never the business's.
+   *
+   * `road` and `ground` read every tag of such a business's pictures
+   * (2026-10-29, AGL-4092): a photo naming a road, a trip or a rider's suit
+   * is a street bike's unless it also names the ground an off-road bike
+   * rides ({@link AiStockSiteTerms.road}). Rut Runners Racing's sponsors band
+   * took a man in a motorcycle suit on a street bike, tagged "motocross"
+   * third and "trip", "to travel", "vacations" later; its riders band a
+   * model posing with a street bike in a garage, tagged "road" seventeenth.
    */
-  wider?: { words: readonly string[]; shunLead: readonly string[] }
+  wider?: { words: readonly string[]; shunLead: readonly string[]; road?: readonly string[]; ground?: readonly string[] }
   /**
    * What a picture of the business out where it is asks for (AGL-4092):
    * "Around town" is a taco trailer's customers in line, never a street of
    * houses. A world not listing them asks for its own customers.
    */
   out?: readonly string[]
+  /**
+   * A team of the craft's world, where the business's own words say it is
+   * one (2026-10-29, AGL-4092): its pictures of the craft at work are its
+   * riders and their racing, never the repair shop's `making`. Rut Runners
+   * Racing's riders band searched "motorcycle workshop" and took a model
+   * posing with a street bike in a garage. `broad` is added to the group's.
+   */
+  team?: { words: readonly string[]; making: readonly string[]; broad?: readonly string[] }
 }> = [
   {
     match: [
@@ -1486,6 +1548,25 @@ const CRAFT_KIN: ReadonlyArray<{
     wider: {
       words: ['motorcycle', 'motorcycles', 'motorbike', 'motorbikes', 'moto'],
       shunLead: ['model', 'urban', 'street', 'road bike', 'road racing', 'sportbike', 'superbike', 'studio', 'posing'],
+      // Never "garage" or "workshop": a parts shop's mechanic works in one.
+      road: [
+        'road', 'roads', 'street', 'streets', 'highway', 'asphalt', 'traffic', 'city', 'urban', 'travel', 'trip', 'road trip',
+        'vacation', 'touring', 'tourer', 'motorcycle suit', 'leathers', 'sportbike', 'sport bike', 'sports bike', 'superbike',
+        'super bike', 'cafe racer', 'model', 'posing', 'studio',
+      ],
+      ground: [
+        'dirt', 'mud', 'muddy', 'dust', 'dusty', 'sand', 'sandy', 'dune', 'dunes', 'desert', 'gravel', 'trail', 'terrain',
+        'off-road', 'offroad', 'track', 'dirt track', 'grass track', 'motocross track', 'jump', 'berm', 'dirt bike', 'dirtbike',
+        'enduro', 'supercross',
+      ],
+    },
+    // A team's riders in their gear and their racing (AGL-4092): the library
+    // answers "motocross paddock" with horses and "motocross pits" with
+    // avocados, so neither is asked.
+    team: {
+      words: ['team', 'teams', 'club', 'clubs', 'squad'],
+      making: ['motocross rider gear', 'dirt bike racing'],
+      broad: ['motocross track'],
     },
   },
   {
@@ -1503,9 +1584,23 @@ const CRAFT_KIN: ReadonlyArray<{
     // a chef in whites or raw potatoes (Pit Row Tacos).
     match: ['taco', 'tacos', 'taqueria', 'taco truck', 'taco trailer', 'burrito', 'burritos'],
     kin: [
-      'taco', 'tacos', 'tortilla', 'tortillas', 'salsa', 'mexican', 'mexican food', 'street food', 'food truck', 'taco truck',
+      'taco', 'tacos', 'tortilla', 'tortillas', 'salsa', 'mexican', 'mexican food', 'food truck', 'taco truck',
       'griddle', 'burrito', 'quesadilla', 'nachos', 'guacamole', 'carnitas', 'pastor', 'asada',
     ],
+    // Street food is anyone's (2026-10-29, AGL-4092): a man with a cart in
+    // the rain and a woman with a bagel cart in Antalya, tagged "street food",
+    // filled Pit Row Tacos' gallery. It names the trailer's world only beside
+    // its own food or its truck.
+    near: ['street food'],
+    // Its truck is a taco truck: an ice cream van or a hot dog stand tagged
+    // "food truck" is another trailer's (2026-10-29, AGL-4092).
+    rivals: {
+      words: [
+        'ice cream', 'gelato', 'dessert', 'hot dog', 'hotdog', 'pizza', 'burger', 'burgers', 'crepe', 'crepes', 'donut',
+        'doughnut', 'kebab', 'sushi', 'popcorn', 'cotton candy', 'waffle', 'pretzel', 'bagel', 'simit', 'fruit stand',
+      ],
+      core: ['taco', 'tacos', 'taqueria', 'tortilla', 'tortillas', 'burrito', 'quesadilla', 'nachos', 'salsa', 'mexican'],
+    },
     broad: ['tacos', 'street tacos', 'taco truck'],
     making: ['taco truck cooking', 'tacos on the griddle'],
     out: ['food truck crowd', 'street food customers', 'taco stand customers'],
@@ -1714,6 +1809,15 @@ export interface AiStockSiteTerms {
   shun: string[]
   /** Words no photo of the site's craft is OF, among its first tags, unless the slot or the brief names them ({@link CRAFT_KIN}). */
   shunLead: string[]
+  /**
+   * A street bike's words, as stems, which no picture of an off-road
+   * business carries anywhere among its tags unless it names the `ground`
+   * too, or the slot or the brief names them (2026-10-29, AGL-4092): a man in
+   * a motorcycle suit on a road trip, tagged "motocross", is a street bike.
+   */
+  road?: string[]
+  /** The ground an off-road bike rides, as stems: dirt, sand, a track ({@link road}). */
+  ground?: string[]
   /** Whether the site is for adults alone, so no photo of a child is placed on it ({@link aiStockAdultsOnly}, AGL-3856). */
   adults?: boolean
   /** Where the site's own words set its pictures ({@link aiStockSetting}): a record's moment is set there where its words say nowhere (AGL-3856). */
@@ -1758,6 +1862,8 @@ export function aiStockSiteTerms(businessType: string): AiStockSiteTerms {
   const asked = new Set<string>()
   /** The business's own clause, as stems and stem pairs: what its lead is read from. */
   let own: string[] = []
+  /** Every word of the business's own clause, those naming a world only beside another kept: "team" of "motocross race team". */
+  let ownAll: string[] = []
   let ownSeen = false
   /** The last word of the first clause that names the world: "soap" of "for handmade cold-process soap". */
   let firstWorld = ''
@@ -1783,6 +1889,7 @@ export function aiStockSiteTerms(businessType: string): AiStockSiteTerms {
     if (!ownSeen && businessOf(clause).length) {
       ownSeen = true
       own = kept.filter((word) => !LEAD_GENERIC.has(word))
+      ownAll = kept
     }
     if (kept.length) named = true
     // What it makes names its world by what the things are made of, never
@@ -1863,10 +1970,13 @@ export function aiStockSiteTerms(businessType: string): AiStockSiteTerms {
         core: group.rivals.core.map(groupTerm),
       })
   }
+  // A team of the craft's world is shown racing, never at the repair shop's bench (AGL-4092).
+  const ownStems = new Set(ownAll.flatMap((word) => stemList(word)))
   for (const group of major) {
     for (const word of group.match) core.add(groupTerm(word))
-    broad.push(...group.broad)
-    makingSearches.push(...group.making)
+    const team = group.team && group.team.words.some((word) => ownStems.has(aiStockStem(word))) ? group.team : null
+    broad.push(...group.broad, ...(team?.broad ?? []))
+    makingSearches.push(...(team ? team.making : group.making))
   }
   // A two-word name of a listed world names it whole: "dirt bike", never
   // "bike" (a bicycle's) where the type says it nowhere else (AGL-4065).
@@ -1893,13 +2003,18 @@ export function aiStockSiteTerms(businessType: string): AiStockSiteTerms {
         if (![...lead].some((term) => term === stem || (term.includes(' ') && term.split(' ').includes(stem) && ownTerms.has(term))))
           lead.add(stem)
   // A wider world's names lead only where the business's own words say them
-  // (AGL-4092): a motocross team's world is off-road, never "motorcycle" alone.
+  // (AGL-4092): a motocross team's world is off-road, never "motorcycle" alone,
+  // and a street bike's words are never its pictures' without the ground.
+  const road = new Set<string>()
+  const ground = new Set<string>()
   for (const group of leading) {
     if (!group.wider) continue
     const wider = group.wider.words.map(groupTerm)
     if (wider.some((term) => ownTerms.has(term))) continue
     for (const term of wider) lead.delete(term)
     for (const word of group.wider.shunLead) shunLead.add(groupTerm(word))
+    for (const word of group.wider.road ?? []) road.add(groupTerm(word))
+    for (const word of group.wider.ground ?? []) ground.add(groupTerm(word))
   }
   // A trade's world, named by the world it serves: "dirt bike" for a dirt bike parts shop.
   const served = craftGroup?.of
@@ -1935,6 +2050,7 @@ export function aiStockSiteTerms(businessType: string): AiStockSiteTerms {
     core: [...core].filter((term) => !craftGroup?.of || ofAWorld(term)),
     shun: [...shun],
     shunLead: [...shunLead],
+    ...(road.size ? { road: [...road], ground: [...ground] } : {}),
   }
 }
 
@@ -2531,6 +2647,14 @@ const PRODUCT_SIZES =
 /** The wrapper words a gift is named by, searched with the craft: "soap gift box". */
 const GIFT_WRAPPERS = words('gift gifts box boxes basket baskets hamper hampers')
 
+/** A product's subjects, its name's first, its sizes left out ({@link aiStockProductSearches}). */
+function aiStockProductSubjects(slot: Pick<AiLayoutPictureSlot, 'product'>): string[] {
+  return (slot.product?.subjects ?? []).map((raw) => aiStockSubjectWords(raw.replace(PRODUCT_SIZES, ' '), '')).filter(Boolean)
+}
+
+/** A product's own subject: its name's noun phrase ({@link aiStockProductSearches}). */
+const aiStockProductSubject = (slot: Pick<AiLayoutPictureSlot, 'product'>) => aiStockProductSubjects(slot)[0] ?? ''
+
 /**
  * A product's searches (AGL-3676), most specific first: each of its subjects
  * — its name's noun phrase, then its photo's — with the shop's category
@@ -2587,9 +2711,7 @@ export function aiStockProductSearches(
   const size = orientation === 'vertical' ? { minHeight: 900 } : { minWidth: 900 }
   const craftStems = stemList(craft)
   const world = new Set([...domain, ...craftStems])
-  const subjects = (slot.product?.subjects ?? [])
-    .map((raw) => aiStockSubjectWords(raw.replace(PRODUCT_SIZES, ' '), ''))
-    .filter(Boolean)
+  const subjects = aiStockProductSubjects(slot)
   // The product's head noun is its name's: "candle" of "Hand-Poured Soy Candle".
   const own = subjects[0] ?? ''
   const object = aiStockObjectWord(own)
@@ -2651,8 +2773,11 @@ export function aiStockProductSearches(
   else if (craft && !trade)
     queries.push({ query: craft, subject: own || craft, object: craft, lead: true, tier: 'borrow' })
   const held = [...queries]
+  // A thing of its own is a photo of itself, never of the shop's category (AGL-4092): "Bottled Water" is no taco.
+  const itsOwn = Boolean(own) && aiStockThingOfItsOwn(own, { domain: [...world], core: [...core, ...craftStems, ...(fallback.core ?? [])] })
+  const broadOf = itsOwn ? [] : (fallback.broad ?? [])
   // 2. A photo OF its category, which may be one the job already shows.
-  for (const query of fallback.broad ?? [])
+  for (const query of broadOf)
     queries.push({ query, subject: own, object: '', lead: true, broad: true, tier: 'borrow' })
   // 3. The head noun anywhere among the tags, by the same searches.
   for (const entry of held) queries.push({ ...entry, lead: false, tier: 'weak' })
@@ -2670,7 +2795,7 @@ export function aiStockProductSearches(
       tier: 'weak',
     })
   // The craft's own broad searches, any hit naming the craft.
-  for (const query of fallback.broad ?? [])
+  for (const query of broadOf)
     queries.push({ query, subject: own, object: '', lead: false, broad: true, tier: 'weak' })
   // What a borrowed photo is OF: the product's kin, its own word of the shop's world, else the craft.
   const borrowed = kinPhrases.length ? kinPhrases : ownWorld.length ? ownWorld : core
@@ -2815,10 +2940,14 @@ export function aiStockSearchesFor(
   // own object among the first tags, and searched by its object's kin, never
   // the category's world alone (AGL-3660).
   const collection = part === 'collection' && Boolean(terms.craft) && !work
+  // A record of a thing of its own is a photo of that thing, never of the
+  // site's world (AGL-4092): a taco trailer's "Bottled Water" took tomatoes
+  // from its broad "tacos".
+  const itsOwn = Boolean(slot.record) && !work && Boolean(subject) && aiStockThingOfItsOwn(subject, { domain: terms.domain, core })
   // A picture's broad searches find a photo OF the business's own world,
   // never one naming it in a word of a tag (AGL-4092); a hero's first tag
   // already names it.
-  const broad: Query[] = (kin && collection) || work
+  const broad: Query[] = (kin && collection) || work || itsOwn
     ? []
     : terms.broad
         .filter(shown)
@@ -2829,11 +2958,14 @@ export function aiStockSearchesFor(
   // the site's own world, and "Around town" of its customers out where it is.
   const thingless = Boolean(subject) && !object && !work
   const out = thingless && slot.role !== 'hero' && PLACE_PHRASES.test(slot.alt)
-  // The maker at work, held to the craft: never "hands" (AGL-3660).
+  // The maker at work, held to the craft: never "hands" (AGL-3660), and a
+  // photo OF the business's own world, never a taco bowl salad for a taco
+  // trailer's crew at work (AGL-4092).
   const makers: Query[] = (work ? [] : (terms.making ?? [])).filter(shown).map((query) => ({
     query,
     broad: true,
     category: true,
+    own: true,
   }))
   // A portrait in its role, in the site's world, where the libraries know a word for it.
   const roleWord = slot.people ? (aiStockPeopleRole(slot.alt, sectionName)?.query ?? '') : ''
@@ -2864,6 +2996,12 @@ export function aiStockSearchesFor(
         ? out
           ? (terms.out?.length ? terms.out : [`${leadWord} customers`.trim()]).map((query) => ({ query, out: true }))
           : [{ query: `${leadWord} ${subject}`.trim(), own: true }]
+      : itsOwn
+        ? [
+            // Its own words and its kin, never qualified by the site's world: "bottled water", never "taco bottled water".
+            { query: subject, held: true, leads: true },
+            ...(kin ? kin.queries.map((query) => ({ query, held: true, leads: true })) : []),
+          ]
       : ofTheWorld
         ? [
             {
@@ -3103,6 +3241,16 @@ export interface AiStockJudgement {
   roleRefuse?: readonly string[]
   /** Stems of the places the picture is not set in, which none of a hit's first tags may name ({@link AiStockSearch.away}). */
   away?: readonly string[]
+  /** A street bike's words, which a hit never carries without `ground` unless the slot or the brief names them ({@link AiStockSiteTerms.road}). */
+  road?: readonly string[]
+  /** The ground an off-road bike rides ({@link AiStockSiteTerms.ground}). */
+  ground?: readonly string[]
+  /**
+   * Stems of where the site's own words say it is (AGL-4092): its business
+   * type's, its audience's and its name's, which a street photo may name
+   * ({@link aiStockForeignStreet}). Its business type's alone where absent.
+   */
+  here?: readonly string[]
 }
 
 /** The words of a photo's page address at its library, its id dropped: "robin-bird-songbird-garden-winter". */
@@ -3196,6 +3344,72 @@ export function aiStockOddLeads(said: readonly string[], options: { body?: boole
 }
 
 /**
+ * Cities, states and countries a library's street photos are tagged with
+ * (2026-10-29, AGL-4092), as stem phrases. Only where a tag says the photo is
+ * of a street or a town ({@link STREET_HEADS}) does one say where it is set:
+ * tacos tagged "mexico" are a dish, a cart tagged "antalya, turkey, street"
+ * is a street in Turkey. A word that is as often something else ("chile",
+ * "jordan", "nice") is not one.
+ */
+const NAMED_PLACES: readonly string[] = [
+  // Countries and regions.
+  'afghanistan', 'africa', 'albania', 'algeria', 'argentina', 'armenia', 'asia', 'australia', 'austria', 'bali',
+  'bangladesh', 'belgium', 'bolivia', 'bosnia', 'brazil', 'bulgaria', 'cambodia', 'canada', 'china', 'colombia',
+  'croatia', 'cuba', 'cyprus', 'czech', 'czechia', 'denmark', 'dominican republic', 'ecuador', 'egypt', 'england',
+  'estonia', 'ethiopia', 'europe', 'finland', 'france', 'germany', 'ghana', 'greece', 'guatemala', 'holland', 'hungary',
+  'iceland', 'india', 'indonesia', 'iran', 'iraq', 'ireland', 'israel', 'italy', 'jamaica', 'japan', 'kenya', 'korea',
+  'laos', 'latvia', 'lebanon', 'lithuania', 'malaysia', 'malta', 'mexico', 'mongolia', 'montenegro', 'morocco',
+  'myanmar', 'nepal', 'netherlands', 'new zealand', 'nigeria', 'norway', 'pakistan', 'panama', 'peru', 'philippines',
+  'poland', 'portugal', 'romania', 'russia', 'scotland', 'serbia', 'singapore', 'slovakia', 'slovenia', 'spain',
+  'sri lanka', 'sweden', 'switzerland', 'syria', 'taiwan', 'tanzania', 'thailand', 'tunisia', 'turkey', 'ukraine',
+  'united kingdom', 'uruguay', 'uzbekistan', 'venezuela', 'vietnam', 'wales',
+  // Cities.
+  'amsterdam', 'antalya', 'athens', 'bangkok', 'barcelona', 'beijing', 'berlin', 'bogota', 'bruges', 'brussels',
+  'budapest', 'buenos aires', 'cairo', 'cancun', 'cologne', 'copenhagen', 'cusco', 'delhi', 'dubai', 'dublin',
+  'edinburgh', 'florence', 'frankfurt', 'hamburg', 'hanoi', 'havana', 'ho chi minh', 'hong kong', 'istanbul', 'jaipur',
+  'jakarta', 'jerusalem', 'kathmandu', 'kolkata', 'krakow', 'kuala lumpur', 'kyoto', 'lisbon', 'london', 'lyon',
+  'madrid', 'manila', 'marrakech', 'marrakesh', 'milan', 'montreal', 'moscow', 'mumbai', 'munich', 'naples', 'oaxaca',
+  'osaka', 'oslo', 'paris', 'porto', 'prague', 'quito', 'rio de janeiro', 'rome', 'saigon', 'salzburg', 'seoul',
+  'seville', 'shanghai', 'stockholm', 'sydney', 'taipei', 'tokyo', 'toronto', 'vancouver', 'venice', 'vienna', 'warsaw',
+  'zurich',
+  // The United States' most photographed cities, and the states their photos name.
+  'atlanta', 'boston', 'brooklyn', 'chicago', 'denver', 'detroit', 'honolulu', 'las vegas', 'los angeles', 'manhattan',
+  'miami', 'new orleans', 'new york', 'nyc', 'philadelphia', 'san francisco', 'seattle', 'california', 'florida',
+  'hawaii', 'illinois', 'nevada',
+].map(stemPhrase)
+
+/**
+ * A tag's last word that says the photo is of a street, a town or a city
+ * (AGL-4092): "street", "city street", "old town", "skyscraper". Never
+ * "road": a motocross track's "off-road" and "dirt road" are not streets.
+ */
+const STREET_HEADS: ReadonlySet<string> = new Set(
+  [
+    'street', 'alley', 'alleyway', 'avenue', 'sidewalk', 'city', 'downtown', 'urban', 'skyline', 'skyscraper',
+    'cityscape', 'building', 'architecture', 'town', 'village', 'market', 'bazaar', 'traffic',
+  ].map(aiStockStem),
+)
+
+/**
+ * Whether a hit is a street, a town or a city its tags place somewhere the
+ * site's own words never name (2026-10-29, AGL-4092): Pit Row Tacos, a taco
+ * trailer near Buda, Texas, showed a food truck under the Chicago
+ * skyscrapers ("food truck, chicago, skyscraper, … city, urban, downtown")
+ * and a woman with a bagel cart in Antalya ("food cart, woman, street, …,
+ * antalya, turkey"), whatever its captions said. `here` is the site's own
+ * stems: its business type's and its audience's. Pure.
+ */
+export function aiStockForeignStreet(photo: Pick<StockPhoto, 'tags'>, here: readonly string[]): boolean {
+  const tags = (photo.tags ?? []).map((tag) => stemList(tag)).filter((stems) => stems.length)
+  if (!tags.some((stems) => STREET_HEADS.has(stems[stems.length - 1] as string))) return false
+  const own = new Set(here)
+  return NAMED_PLACES.some(
+    (place) =>
+      tags.some((stems) => ` ${stems.join(' ')} `.includes(` ${place} `)) && !place.split(' ').every((stem) => own.has(stem)),
+  )
+}
+
+/**
  * Whether a hit carries a topic its site never named ({@link SENSITIVE_TOPICS}):
  * a cross, a grave, a flag, a gun, a glass of wine, a child, a mannequin.
  */
@@ -3238,6 +3452,8 @@ export function aiStockRelevance(
   const hit = hitWords(photo)
   if (hit.rejected) return 0
   if (aiStockSensitive(photo, judgement.named)) return 0
+  // Another city's or country's street is never the business's (AGL-4092).
+  if (aiStockForeignStreet(photo, [...(judgement.named ?? []), ...(judgement.here ?? [])])) return 0
   // Glass art is not pottery: a rival craft's photo names this craft's own words.
   for (const rival of judgement.rivals ?? [])
     if (
@@ -3252,6 +3468,13 @@ export function aiStockRelevance(
   const owned = new Set([...subject, ...(judgement.named ?? [])])
   // A dispenser is not a soapmaker's, nor a pump a bar's (AGL-3660).
   if ((judgement.shun ?? []).some((word) => hit.all.has(word) && !owned.has(word)))
+    return 0
+  // A street bike is never an off-road business's picture without the ground it rides (AGL-4092):
+  // a man in a motorcycle suit on a road trip, tagged "motocross", and a model in a garage tagged "road".
+  if (
+    (judgement.road ?? []).some((word) => hit.all.has(word) && !owned.has(word)) &&
+    !(judgement.ground ?? []).some((word) => hit.all.has(word))
+  )
     return 0
   // A family session is never a bride, however the photographer's brief names weddings.
   if ((judgement.refuse ?? []).some((word) => hit.all.has(word))) return 0
@@ -4905,6 +5128,22 @@ function aiStockSourceSubject(
 }
 
 /**
+ * Which of a list's records are each of a thing of its own (2026-10-29,
+ * AGL-4092, {@link aiStockThingOfItsOwn}), by position: a taco trailer's
+ * "Bottled Water" is a bottle of water, and the list's other photos are
+ * tacos, so it never takes one of theirs. None on a site in another
+ * language, whose record names no English thing. Pure.
+ */
+export function aiStockRecordsOfTheirOwn(
+  input: Pick<AiLayoutStockPhotoSourceInput, 'business' | 'language' | 'photoWords' | 'kindWords' | 'name' | 'audience' | 'kind'>,
+  names: readonly string[],
+): boolean[] {
+  if (aiLayoutSpeaksOtherThanEnglish(input.language)) return names.map(() => false)
+  const terms = aiStockSourceTerms(input)
+  return names.map((name) => aiStockThingOfItsOwn(aiStockSubjectWords(name, ''), terms))
+}
+
+/**
  * How a search's hits are judged for a slot (AGL-3660), as the source judges
  * them: by the search's own words, held to the world it was asked for — the
  * site's own (`site`), or a wider one where the site's found nothing
@@ -4957,6 +5196,8 @@ export function aiStockJudgementFor(
     ...(request.refuseLead?.length ? { refuseLead: request.refuseLead } : {}),
     ...(request.away?.length ? { away: request.away } : {}),
     ...(oddLeads.length ? { oddLeads } : {}),
+    // An off-road business's pictures are never a street bike's; its products are parts that fit either (AGL-4092).
+    ...(site.road?.length && !request.product ? { road: site.road, ground: site.ground ?? [] } : {}),
     // A portfolio's record is of its own subject, never of the craft's world (AGL-3856).
     ...(request.worldless ? { domain: [], rivals: [] } : {}),
     // An occupation is shown in it (a teacher, a coach); a team is any adult at work.
@@ -4984,10 +5225,13 @@ export function aiStockJudgementFor(
 export function aiStockCraftSearches(
   slot: Pick<AiLayoutPictureSlot, 'role' | 'aspect' | 'record' | 'people' | 'product'>,
   world: AiStockSiteTerms,
+  subject = '',
 ): AiStockSearch[] {
   // A portfolio's record of the work is never filled by the craft's own
   // photos (AGL-3856), nor is any picture of a site that shows its work (AGL-3942).
   if (!world.core.length || aiStockShowsTheWork(slot, world) || aiStockShowsItsWork(slot, world)) return []
+  // Nor is a record or a product of a thing of its own (AGL-4092): "Bottled Water" is no taco.
+  if ((slot.record || slot.product) && subject && aiStockThingOfItsOwn(subject, world)) return []
   const orientation = aiStockOrientation(slot.aspect)
   const size = slot.role === 'hero' ? { minWidth: 1600 } : orientation === 'vertical' ? { minHeight: 900 } : { minWidth: 900 }
   return world.broad.map((query) => ({
@@ -5025,6 +5269,8 @@ export function aiLayoutStockPhotoSource(
   const wider = aiStockWiderTerms(terms, input.kind ?? '')
   const unlisted = aiStockWorldIsUnlisted(terms)
   const proper = aiStockProperWords(input.business)
+  // Where the site's own words say it is: a street there may be its own (AGL-4092).
+  const here = [...new Set(stemList([input.business, input.audience ?? '', input.name ?? ''].join(' ')))]
   const now = deps.now ?? Date.now
   return async (slots, report) => {
     const timeout = AbortSignal.timeout(
@@ -5194,10 +5440,12 @@ export function aiLayoutStockPhotoSource(
       slot: AiLayoutPictureSlot,
       request: AiStockSearch,
       subject: string,
-    ): AiStockJudgement =>
-      aiStockJudgementFor(slot, request, subject, terms, input.sectionNames[slot.sectionIndex] ?? '', worldOf.get(request) ?? terms)
-    const craftSearches = (slot: AiLayoutPictureSlot, world: AiStockSiteTerms = terms): AiStockSearch[] =>
-      aiStockCraftSearches(slot, world)
+    ): AiStockJudgement => ({
+      ...aiStockJudgementFor(slot, request, subject, terms, input.sectionNames[slot.sectionIndex] ?? '', worldOf.get(request) ?? terms),
+      here,
+    })
+    const craftSearches = (slot: AiLayoutPictureSlot, world: AiStockSiteTerms = terms, subject = ''): AiStockSearch[] =>
+      aiStockCraftSearches(slot, world, subject)
 
     /**
      * A slot's searches once its own world found it nothing (AGL-3923), in
@@ -5288,7 +5536,7 @@ export function aiLayoutStockPhotoSource(
               aiStockSlotPart(slot, sectionName),
               sectionName,
             )),
-        ...craftSearches(slot),
+        ...craftSearches(slot, terms, slot.product ? aiStockProductSubject(slot) : subject),
       ]
       /** Whether the library answered any of the slot's own searches with a photo at all (AGL-4065). */
       let knew = false

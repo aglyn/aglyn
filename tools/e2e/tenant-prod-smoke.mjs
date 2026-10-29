@@ -134,11 +134,42 @@ const clientPages = (host) => [
       C.markers.projectRow,
       ...clientChrome,
     ],
+    // A live site answers as it always did: no `Retry-After` (AGL-4110).
+    retryAfter: null,
   },
   {
     host,
     path: '/contact',
     markers: [C.markers.formLabel, ...clientChrome],
+  },
+]
+/**
+ * The site's 503 answer goes out as a 503 (AGL-4110), asked of a real
+ * production server, because only one can prove it: the middleware asks for
+ * the status on its rewrite, and whether the catch-all's ISR render keeps it
+ * is Next's behavior, which jest cannot see. Each address is the built-in
+ * notice (no 503 page is assigned on these copies), never the site.
+ *
+ * `SITE_UNAVAILABLE_RETRY_AFTER_SECONDS` in `site-unavailable.ts`, spelled out:
+ * this script cannot import TypeScript, and that file's spec pins the value.
+ */
+const UNAVAILABLE_RETRY_AFTER = '3600'
+const unavailablePages = [
+  ...['/', '/contact'].map((path) => ({
+    host: C.maintenanceHostId,
+    path,
+    status: 503,
+    retryAfter: UNAVAILABLE_RETRY_AFTER,
+    markers: ['This site is undergoing maintenance. Please check back shortly.'],
+    absent: path === '/' ? C.markers.hero : C.markers.formLabel,
+  })),
+  {
+    host: C.previewHostId,
+    path: '/',
+    status: 503,
+    retryAfter: UNAVAILABLE_RETRY_AFTER,
+    markers: ['This site is coming soon. Check back shortly.'],
+    absent: C.markers.hero,
   },
 ]
 /**
@@ -176,6 +207,7 @@ const PHASES = [
       // Either delivery is a pass here: Google may be slow from a runner, and
       // the fallback is the designed answer to that.
       ...clientPages(C.hostId).map((check) => ({ ...check, fonts: 'either' })),
+      ...unavailablePages,
     ],
   },
   {
@@ -405,7 +437,15 @@ const serverErrorLines = () =>
  * the budget itself, so a render that never finishes fails at the budget with
  * its name on it rather than hanging the job.
  */
-const runCheck = async ({ path, host, markers, absent, fonts }) => {
+const runCheck = async ({
+  path,
+  host,
+  markers,
+  absent,
+  fonts,
+  status = 200,
+  retryAfter,
+}) => {
   const label = `${host ?? 'demo'} ${path}`
   const started = performance.now()
   const elapsed = () => Math.round(performance.now() - started)
@@ -431,7 +471,14 @@ const runCheck = async ({ path, host, markers, absent, fonts }) => {
     return false
   }
   const ms = elapsed()
-  const okStatus = res.status === 200
+  const okStatus = res.status === status
+  // `undefined` is "not asked"; `null` is "must be absent" (AGL-4110).
+  const gotRetryAfter = res.headers.get('retry-after')
+  const retryAfterProblem =
+    retryAfter === undefined || gotRetryAfter === retryAfter
+      ? null
+      : `Retry-After ${gotRetryAfter === null ? 'missing' : `"${gotRetryAfter}"`}, ` +
+        `expected ${retryAfter === null ? 'none' : `"${retryAfter}"`}`
   const missing = markers.filter((marker) =>
     marker instanceof RegExp ? !marker.test(body) : !body.includes(marker),
   )
@@ -439,7 +486,8 @@ const runCheck = async ({ path, host, markers, absent, fonts }) => {
   // renders correctly AND carries a row it must never have loaded.
   const okAbsent = !absent || !body.includes(absent)
   // Only meaningful on a 200 — an error page proves nothing about the key.
-  const emotionProblem = okStatus ? emotionCheck(body) : null
+  // The page renders proved by their key; a notice is not one of them.
+  const emotionProblem = okStatus && status === 200 ? emotionCheck(body) : null
   const delivery = fonts ? fontsDelivery(body) : null
   const fontsProblem = !fonts
     ? null
@@ -451,9 +499,17 @@ const runCheck = async ({ path, host, markers, absent, fonts }) => {
           ? `expected the inlined rules, got ${delivery}`
           : null
   const ok =
-    okStatus && !missing.length && okAbsent && !emotionProblem && !fontsProblem
+    okStatus &&
+    !retryAfterProblem &&
+    !missing.length &&
+    okAbsent &&
+    !emotionProblem &&
+    !fontsProblem
   console.log(
     `${ok ? 'PASS' : 'FAIL'}  ${label} — HTTP ${res.status} in ${ms} ms` +
+      `${okStatus ? '' : ` (expected ${status})`}` +
+      `${gotRetryAfter ? `, Retry-After ${gotRetryAfter}` : ''}` +
+      `${retryAfterProblem ? ` (${retryAfterProblem})` : ''}` +
       `${delivery ? `, ${delivery}` : ''}` +
       `${missing.length ? ` (missing ${missing.map((m) => `"${m}"`).join(', ')})` : ''}` +
       `${okAbsent ? '' : ` (LEAKED "${absent}")`}` +

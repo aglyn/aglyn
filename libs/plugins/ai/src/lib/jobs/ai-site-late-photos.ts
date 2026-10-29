@@ -478,7 +478,7 @@ export function aiSiteListPhotos(
   )
   if (list.people) return current
   return aiSiteDatasetRecordsFromOwn(
-    list.records.map((record) => ({ name: record.name, category: record.category ?? null })),
+    list.records.map((record) => ({ name: record.name, category: record.category ?? null, ...(record.itsOwn ? { itsOwn: true } : {}) })),
     current,
     seed,
     pool,
