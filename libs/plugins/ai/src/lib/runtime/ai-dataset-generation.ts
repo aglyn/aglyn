@@ -73,7 +73,9 @@ export const AI_DATASET_LIST_WITHOUT_ENTRIES: 'samples' | 'empty' = 'samples'
 /** What a list the brief gives no entries for is told to hold (AGL-4065). */
 const WITHOUT_ENTRIES_RULE =
   AI_DATASET_LIST_WITHOUT_ENTRIES === 'samples'
-    ? 'Where the brief gives no entries for the list, write sample records the owner replaces, each marked sample: a complete entry of its kind, named in the brief’s own words (such as "Series Round 1 at Mill Creek" for a race team that rides at Mill Creek), its other values typical of it. This is the one place a record may give a value the brief does not, and a sample still gives no price, phone number, email, address, real person’s name or brand. Leave a date "" in a sample, for the platform to set, and name no month or date in it.'
+    ? 'Where the brief gives no entries for the list, write sample records the owner replaces, each marked sample: a complete entry of its kind, named in the brief’s own words (such as "Series Round 1 at Mill Creek" for a race team that rides at Mill Creek), its other values typical of it. This is the one place a record may give a value the brief does not, and a sample still gives no price, phone number, email, address, real person’s name or brand. Leave a date "" in a sample, for the platform to set, and name no month or date in it. ' +
+      // AGL-4092: six sample riders' bios ended "Add this rider's story here.", and six past races' results were "Add finishing position".
+      'A sample’s words read as finished copy about it: never an instruction to the owner, such as "Add this rider\'s story here" or "Add finishing position", and never a note that it is a sample, which the console says.'
     : 'Where the brief gives no entries for the list, give the fields and no records: an empty list is an answer, a numbered placeholder is not.'
 
 /** The rules for one dataset. Byte-identical on every request. */
@@ -164,11 +166,15 @@ export function aiDatasetPrompt(input: AiDatasetPromptInput): string {
  * (AGL-4065): the 2026-10-25 Rut Runners Racing start's "Race events" came
  * back as "Upcoming race 1 (details to be added)" to "Past race 5 (details to
  * be added)", because the rules forbid inventing a date and the first field
- * may not be empty.
+ * may not be empty. And (AGL-4092) the 2026-10-28 start's sample riders each
+ * ended "Add this rider's story here.": an instruction to the owner is a
+ * placeholder too.
  */
 export const AI_DATASET_PLACEHOLDER_REASK =
   AI_DATASET_LIST_WITHOUT_ENTRIES === 'samples'
-    ? "Every record names a real thing the brief gives, or is a sample marked sample: a complete entry of its kind in the brief's own words. Never a placeholder such as 'Upcoming race 1 (details to be added)', 'TBD', 'coming soon' or 'Item 1'."
+    ? "Every record names a real thing the brief gives, or is a sample marked sample: a complete entry of its kind in the brief's own words. Never a placeholder such as 'Upcoming race 1 (details to be added)', 'TBD', 'coming soon' or 'Item 1'. " +
+      // AGL-4092: the samples' bios and results told the owner what to add.
+      "Never an instruction to the owner either, such as 'Add this rider's story here' or 'Add finishing position': a sample's words read as finished copy about the sample."
     : "Every record names a real thing the brief gives. Where the brief gives no entries for this list — no dates, no names, no results — answer with the fields and ZERO records; never number placeholders like 'Upcoming race 1 (details to be added)'."
 
 /** The code a dataset's placeholder records are refused under. */
@@ -177,6 +183,86 @@ export const AI_DATASET_PLACEHOLDER_CODE = 'placeholder-records'
 /** A value that marks a gap for later rather than saying anything: in a name, a date or anywhere else. */
 const PLACEHOLDER_TEXT =
   /\b(?:details?|dates?|info|information|names?)\s+(?:(?:to be|will be)\s+)?(?:added|confirmed|announced|determined|decided|filled)\b|\bto be (?:added|confirmed|announced|determined|decided)\b|\b(?:tbd|tba|t\.b\.[ad])(?![a-z])|\bcoming soon\b|\bplaceholder\b|\blorem\b|\b(?:sample|example|test|dummy) (?:record|entry|row|item|name)s?\b/i
+
+/** What a sentence tells the owner to do to the record, in place of saying anything: add, write, replace. */
+const OWNER_VERB = '(?:add|insert|write|enter|put|type|paste|replace|swap|fill in|fill out|update|describe|upload|attach)'
+
+/** How an instruction opens: its own words, imperative, first. */
+const INSTRUCTION_START = '^\\s*(?:please\\s+)?'
+
+/**
+ * Words that tell the owner to do something, where the record should say
+ * something (AGL-4092): "Add this rider's story here.", "Replace with your
+ * own photo.", "Update the results later." Only an imperative is one: "Riders
+ * enter the gate early and race later" says something, and a visitor's
+ * instruction names no place the owner fills ("Fill in the form on the
+ * Contact page"); both are kept.
+ */
+const OWNER_INSTRUCTION = new RegExp(
+  `${INSTRUCTION_START}(?:${OWNER_VERB}\\b[^.!?]{0,80}?\\b(?:here|later|soon|in data)\\b|(?:replace|swap)\\b[^.!?]{0,60}?\\byour (?:own|real)\\b)`,
+  'i',
+)
+
+/** What a record says of itself, which an instruction names as the thing to add: "Add finishing position". */
+const RECORD_PARTS =
+  '(?:position|placing|placement|result|results|score|scores|time|times|finish|date|dates|details?|info|information|name|names|story|bio|biography|description|photo|photos|picture|image|link|price|location|address|phone|email|text|copy|content|notes?|summary|title|caption|quote)'
+
+/** Words that are nothing but a bare instruction naming a part of the record: "Add finishing position", "Enter result". */
+const BARE_INSTRUCTION = new RegExp(
+  `${INSTRUCTION_START}${OWNER_VERB}\\s+(?:(?:the|this|that|a|an|their|its|each)\\s+)?(?:[\\p{L}'’-]+\\s+){0,2}${RECORD_PARTS}\\s*[.!]?\\s*$`,
+  'iu',
+)
+
+/** An aside in parentheses: "Junior rider (add details later)". */
+const ASIDE = /\s*\(([^()]{1,160})\)/g
+
+/** Where a sentence turns to something else: a dash, a colon, a semicolon. */
+const TURN = /\s*(?:[—–:;]|\s-)\s*/g
+
+/** A value's sentences, each with its closing mark. */
+const sentencesOf = (value: string): string[] =>
+  value
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean)
+
+/** What a visitor's instruction points at, which an owner's never does: "Fill in the form here", "Book on the Contact page". */
+const VISITOR_TARGET = /\b(?:form|button|link|page|website|checkout|cart|account|app)s?\b/i
+
+/** Whether words, read from their start, are an instruction to the owner rather than words about the record (AGL-4092). */
+export function aiDatasetInstructionSentence(words: string): boolean {
+  return (OWNER_INSTRUCTION.test(words) && !VISITOR_TARGET.test(words)) || BARE_INSTRUCTION.test(words)
+}
+
+/** One sentence without the instruction it is or ends with: "" for "Add finishing position", "Junior rider" for "Junior rider — add details later". */
+function sentenceWithoutInstruction(sentence: string): string {
+  if (aiDatasetInstructionSentence(sentence)) return ''
+  for (const turn of sentence.matchAll(TURN)) {
+    const at = turn.index ?? 0
+    if (at > 0 && aiDatasetInstructionSentence(sentence.slice(at + turn[0].length))) {
+      const head = sentence.slice(0, at).replace(/[\s,]+$/, '')
+      return head && !/[.!?]$/.test(head) ? `${head}.` : head
+    }
+  }
+  return sentence
+}
+
+/**
+ * A value with every instruction to the owner taken out (AGL-4092): an aside,
+ * a sentence, or the turn a sentence ends on; `''` where nothing else was
+ * said, and the value unchanged where none was. Pure.
+ */
+export function aiDatasetValueWithoutInstructions(value: string): string {
+  const unasided = value.replace(ASIDE, (aside, inner: string) => (aiDatasetInstructionSentence(inner) ? '' : aside))
+  const sentences = sentencesOf(unasided)
+  const kept = sentences.map(sentenceWithoutInstruction).filter(Boolean)
+  return unasided === value && kept.length === sentences.length && kept.every((sentence, index) => sentence === sentences[index])
+    ? value
+    : kept.join(' ')
+}
+
+/** Whether a value tells the owner to do something anywhere in it (AGL-4092). */
+const holdsInstruction = (value: string): boolean => aiDatasetValueWithoutInstructions(value) !== value
 
 /** A name that ends in a number, with any aside after it: "Upcoming race 1 (details to be added)". */
 const NUMBERED_NAME = /^(.*?)\s*(?:#|no\.?\s*)?\d+\s*(?:\([^)]*\))?$/i
@@ -198,6 +284,8 @@ const stemWords = (text: string) =>
  * The records of a designed dataset that are placeholders (AGL-4065), by
  * position, which no site shows:
  *  - any value that marks a gap: "details to be added", "TBD", "coming soon";
+ *  - any sentence that tells the owner what to add instead of saying it
+ *    (AGL-4092): "Add this rider's story here.", "Add finishing position";
  *  - a name that is a number after nothing but the list's own words and
  *    stand-in words: "Item 1", "Race 2", "Upcoming race 3", "New entry 4".
  * A course's "Level 1" to "Level 3" and a series' "Series Round 1 at
@@ -209,7 +297,7 @@ export function aiDatasetPlaceholderRecords(
 ): number[] {
   const own = new Set([...stemWords(name), ...dataset.fields.flatMap((field) => stemWords(field.name))])
   return dataset.records.flatMap((values, index) => {
-    if (values.some((value) => PLACEHOLDER_TEXT.test(value ?? ''))) return [index]
+    if (values.some((value) => PLACEHOLDER_TEXT.test(value ?? '') || holdsInstruction(value ?? ''))) return [index]
     const match = NUMBERED_NAME.exec((values[0] ?? '').replace(/\s+/g, ' ').trim())
     if (!match) return []
     const words = stemWords(match[1] ?? '')
@@ -295,11 +383,44 @@ export function aiDatasetWithoutPlaceholders(answer: Record<string, unknown> | n
 }
 
 /**
- * A designed dataset with any placeholder record taken out (AGL-4065), and
- * where the list starts with no samples (`AI_DATASET_LIST_WITHOUT_ENTRIES`
- * is `empty`), every sample too. Pure.
+ * An answer with every instruction to the owner taken out of its records'
+ * values (AGL-4092), for the salvage after its one re-ask: "Add this rider's
+ * story here." leaves the bio's other sentences, "Add finishing position"
+ * leaves the result "", and a record with no name left is dropped. The
+ * answer unchanged where no value instructed. Pure.
  */
-export function aiDatasetRealRecords(dataset: AiDataset, name: string): AiDataset {
+export function aiDatasetWithoutInstructions<A extends Record<string, unknown> | null | undefined>(answer: A): A {
+  if (!answer || !Array.isArray(answer['records'])) return answer
+  let changed = false
+  const records = (answer['records'] as unknown[]).flatMap((record) => {
+    const values = (record as Record<string, unknown> | null)?.['values']
+    if (!Array.isArray(values)) return [record]
+    const next = values.map((value: unknown) => (typeof value === 'string' ? aiDatasetValueWithoutInstructions(value) : value))
+    if (next.every((value, index) => value === values[index])) return [record]
+    changed = true
+    return typeof next[0] === 'string' && next[0].trim() ? [{ ...(record as Record<string, unknown>), values: next }] : []
+  })
+  return changed ? ({ ...answer, records } as A) : answer
+}
+
+/** A designed dataset with every instruction to the owner taken out (AGL-4092), as {@link aiDatasetWithoutInstructions} does an answer. */
+function designedWithoutInstructions(dataset: AiDataset): AiDataset {
+  const records = dataset.records.map((values) => values.map((value) => aiDatasetValueWithoutInstructions(value ?? '')))
+  if (records.every((values, index) => values.every((value, column) => value === (dataset.records[index]?.[column] ?? '')))) return dataset
+  const keep = records.map((values) => Boolean(values[0]?.trim()))
+  const { samples: all, ...rest } = dataset
+  const samples = all?.filter((_sample, index) => keep[index])
+  return { ...rest, records: records.filter((_values, index) => keep[index]), ...(samples?.some(Boolean) ? { samples } : {}) }
+}
+
+/**
+ * A designed dataset with any instruction to the owner (AGL-4092) and any
+ * placeholder record taken out (AGL-4065), and where the list starts with no
+ * samples (`AI_DATASET_LIST_WITHOUT_ENTRIES` is `empty`), every sample too.
+ * Pure.
+ */
+export function aiDatasetRealRecords(designed: AiDataset, name: string): AiDataset {
+  const dataset = designedWithoutInstructions(designed)
   const drop = new Set(aiDatasetPlaceholderRecords(dataset, name))
   if (AI_DATASET_LIST_WITHOUT_ENTRIES === 'empty') dataset.samples?.forEach((sample, index) => sample && drop.add(index))
   if (!drop.size) return dataset
@@ -372,7 +493,10 @@ export function aiDatasetSampleDates(
         ? new Date(firstBehind.getTime() - behind++ * stepDays * DAY_MS)
         : new Date(firstAhead.getTime() + ahead++ * stepDays * DAY_MS)
       const said = format.format(at)
-      return values.map((value, column) => (dates.includes(column) ? said : !past && outcomes.includes(column) ? '' : value))
+      // A race still to come has no result, and one behind us never an instruction for one (AGL-4092).
+      return values.map((value, column) =>
+        dates.includes(column) ? said : outcomes.includes(column) && (!past || holdsInstruction(value ?? '')) ? '' : value,
+      )
     }),
   }
 }
