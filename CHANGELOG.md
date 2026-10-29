@@ -20,6 +20,7 @@ content on the marketing site and is written separately.
 ### Fixed
 
 - **commerce:** quote, invoice and request-confirmation emails carry a conversation root in References, so replies stay in one conversation ([AGL-4097](https://linear.app/aglyn/issue/AGL-4097))
+- **console:** Create site waits under the console loading overlay, not a spinner dialog ([AGL-4103](https://linear.app/aglyn/issue/AGL-4103))
 
 ### Documentation
 
