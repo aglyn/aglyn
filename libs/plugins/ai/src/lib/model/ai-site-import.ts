@@ -598,6 +598,12 @@ export interface AiSiteImportPageRead {
    * read made before the reader, or when it did not fit the wave's budget.
    */
   layout?: SiteImportLayout | null
+  /**
+   * The page's browser title and meta description as the source writes them
+   * (AGL-4107), which the new page's listing keeps word for word. Absent on a
+   * read made before they were kept.
+   */
+  meta?: { title: string; description: string }
 }
 
 /** How a page is built from its old page, as the step chose: its words copied as they are, or arranged by Aglyn AI. */
@@ -635,7 +641,12 @@ export interface AiSiteImportPage {
   } | null
 }
 
-export type AiSiteImportWaveStatus = 'waiting' | 'running' | 'review' | 'done'
+/**
+ * A wave's place in its import: waiting to start, running, in and waiting for
+ * the person's review, in, or `stopped` — the import was canceled before the
+ * wave was in, while it ran or before it started (AGL-4107).
+ */
+export type AiSiteImportWaveStatus = 'waiting' | 'running' | 'review' | 'done' | 'stopped'
 
 export interface AiSiteImportWave {
   index: number
@@ -1464,6 +1475,24 @@ export function aiSiteImportWaveClosed(state: AiSiteImportState, index: number, 
   // What the wave read is no longer needed by any model answer.
   for (const slot of state.waves.find((wave) => wave.index === index)?.slots ?? []) next = aiSiteImportPageSettled(next, slot)
   return next
+}
+
+/**
+ * The state of an import a person canceled (AGL-4107): every wave settled. A
+ * wave that ran, or was waiting to, is stopped; one already in, for review or
+ * done, is in. On 10/29 a canceled import still showed its second wave as
+ * running, with nothing running it.
+ */
+export function aiSiteImportCanceled(state: AiSiteImportState, at: string): AiSiteImportState {
+  return {
+    ...state,
+    autoContinue: false,
+    waves: state.waves.map((wave): AiSiteImportWave => {
+      if (wave.status === 'running' || wave.status === 'waiting') return { ...wave, status: 'stopped', finishedAt: wave.status === 'running' ? at : wave.finishedAt }
+      if (wave.status === 'review') return { ...wave, status: 'done' }
+      return wave
+    }),
+  }
 }
 
 /** The state as the console reads it: every page's read text left off. */

@@ -99,7 +99,7 @@ export const AI_LAYOUT_BLOCK_KINDS = [
 export type AiLayoutBlockKind = (typeof AI_LAYOUT_BLOCK_KINDS)[number]
 
 /** The kinds that carry `items`. */
-export const AI_LAYOUT_GROUP_KINDS: ReadonlySet<AiLayoutBlockKind> = new Set([
+export const AI_LAYOUT_GROUP_KINDS: ReadonlySet<string> = new Set<AiLayoutBlockKind>([
   'list',
   'cards',
   'steps',
@@ -139,23 +139,97 @@ export interface AiLayoutItem {
   text: string
   to?: string
   icon?: string
+  // ── A page brought in (AGL-4107): what the source's item shows beside its
+  // title and text, every word as written. No model writes these: no tool
+  // schema names them, and the compiler draws them only on a verbatim page.
+  /** Its own icon, the source's drawing as a path on the 24-unit square. */
+  iconPath?: string
+  /** A figure that leads it: a step's number, a plan's price. */
+  figure?: string
+  /** Its further paragraphs, each its own line. */
+  more?: string[]
+  /** Its bullet points (a plan's features). */
+  list?: string[]
+  /** The mark each bullet carries, as a path on the 24-unit square. */
+  listIconPath?: string
+  /** Its own calls to action, last in it. */
+  links?: AiLayoutLink[]
+  /** The picture over it, from the site's library. */
+  picture?: AiLayoutPicture
+}
+
+/** A link of a page brought in (AGL-4107): its words and where it goes, `page:<id>`, `https:`, `mailto:` or `tel:`. */
+export interface AiLayoutLink {
+  text: string
+  to?: string
+  style?: AiLayoutStyle
+}
+
+/** A picture of a page brought in (AGL-4107): the library's copy of the source's own. */
+export interface AiLayoutPicture {
+  src: string
+  alt: string
+  /** Its width over its height, where the library knows them. */
+  ratio?: number
+  /** Where pressing it goes. */
+  to?: string
+  /** A byline's portrait beside a few words, drawn small. */
+  small?: boolean
+}
+
+/**
+ * The block kinds only a page brought in draws (AGL-4107), never in a tool
+ * schema: a TABLE of rows of cells, TABS whose panels hold blocks, and a
+ * strip of LOGOS — pictures, or short words as chips.
+ */
+export const AI_LAYOUT_IMPORT_BLOCK_KINDS = ['table', 'tabs', 'logos'] as const
+export type AiLayoutImportBlockKind = (typeof AI_LAYOUT_IMPORT_BLOCK_KINDS)[number]
+
+/** A tab of a page brought in: its label and the blocks its panel shows. */
+export interface AiLayoutTab {
+  label: string
+  /** The tab the source shows open. */
+  selected?: boolean
+  blocks: AiLayoutBlock[]
 }
 
 export interface AiLayoutBlock {
-  kind: AiLayoutBlockKind
+  kind: AiLayoutBlockKind | AiLayoutImportBlockKind
   col?: number
   text?: string
   to?: string
   style?: AiLayoutStyle
   icon?: string
   items?: AiLayoutItem[]
+  // ── A page brought in (AGL-4107), never in a tool schema ──
+  /** An image block's picture, the source's own. */
+  picture?: AiLayoutPicture
+  /** A table's rows, each its cells' words; `header` when its first row names the columns. */
+  rows?: Array<{ cells: string[] }>
+  header?: boolean
+  /** A tab strip's tabs. */
+  tabs?: AiLayoutTab[]
+  /** How a group is drawn, as the page's design answer chose (`submit_design`). */
+  variant?: AiLayoutGroupStyle
+  /** The columns the source lays a group's items out in on a wide screen. */
+  columns?: number
 }
+
+/** How a group of a page brought in is drawn (AGL-4107): the compiler's group variants a source can show. */
+export const AI_LAYOUT_GROUP_STYLES = ['cards', 'ruled', 'icons', 'pictures', 'articles'] as const
+export type AiLayoutGroupStyle = (typeof AI_LAYOUT_GROUP_STYLES)[number]
+
+/** The heroes a page brought in may open with (AGL-4107): each lays the source's own picture beside, behind or under its words. */
+export const AI_LAYOUT_IMPORT_HEROES = ['split', 'bleed', 'cover', 'poster', 'column', 'editorial', 'panel'] as const
+export type AiLayoutImportHero = (typeof AI_LAYOUT_IMPORT_HEROES)[number]
 
 export interface AiLayoutSection {
   band?: AiLayoutBand
   cols?: number[]
   align?: AiLayoutAlign
   blocks: AiLayoutBlock[]
+  /** A page brought in (AGL-4107): the hero its first section opens as, around the source's picture. */
+  hero?: AiLayoutImportHero
 }
 
 /** A page: its plan's sections, in order. */
@@ -577,170 +651,113 @@ function readBare(raw: Record<string, unknown>): AiLayoutSection {
   return { ...(band ? { band } : {}), ...(align ? { align } : {}), blocks: [] }
 }
 
-// ── Arranging a page brought in (AGL-4084) ───────────────────────────────
+// ── The design of a page brought in (AGL-4107) ───────────────────────────
 
 /**
- * A page brought in from its owner's own website is ARRANGED, never written
- * (AGL-4084): its words are the source's, numbered line by line, and the
- * answer says only how each section is laid out and which numbered lines go
- * in which kind of block. Code substitutes every line exactly as the source
- * wrote it (`jobs/ai-site-import-document.ts`), so the schema below has no
- * field a model could put a word of copy in: a rewording has nowhere to go.
+ * A page brought in from its owner's own website is laid out as its source
+ * lays it out (AGL-4107): the reader reads its sections, bands, rows, groups,
+ * pictures and icons (`site-import/site-import-layout.ts`), and code compiles
+ * that structure with every word as written (`jobs/ai-site-import-compile.ts`).
+ * The one question left for a model is the page's DESIGN, over the structure
+ * it is shown: which hero the opening becomes around its picture, how each
+ * group is drawn, a band where the source gave none, the kind of a group the
+ * reader could not tell, and an alignment. The schema below names only those
+ * choices, so no word of copy, no line and no structure has anywhere to go.
  */
 
-/** The kinds of block an arranged line may go in. */
-export const AI_LAYOUT_ARRANGE_KINDS = [
-  'eyebrow',
-  'heading',
-  'lede',
-  'text',
-  'note',
-  'list',
-  'button',
-  'image',
-  'cards',
-  'steps',
-  'stats',
-  'faq',
-] as const
+/** A section's choice where the source's own stands: its band, its alignment, a group's kind. */
+export const AI_LAYOUT_DESIGN_SOURCE = 'source'
 
-export type AiLayoutArrangeKind = (typeof AI_LAYOUT_ARRANGE_KINDS)[number]
+/** The kinds a group the reader could not tell may be read as. */
+export const AI_LAYOUT_DESIGN_GROUP_KINDS = ['cards', 'steps', 'stats', 'list'] as const
+export type AiLayoutDesignGroupKind = (typeof AI_LAYOUT_DESIGN_GROUP_KINDS)[number]
 
-/** The arranged kinds whose lines are items: each item's `from` is its title line, then its text lines. */
-export const AI_LAYOUT_ARRANGE_ITEM_KINDS: ReadonlySet<AiLayoutArrangeKind> = new Set(['cards', 'steps', 'stats', 'faq'])
+/** The bands a design answer may give a section the source drew on no band of its own. */
+export const AI_LAYOUT_DESIGN_BANDS = ['plain', 'soft', 'dark'] as const
 
-/** The bands an arranged section may take: a brand band's words need a contrast the source never chose. */
-export const AI_LAYOUT_ARRANGE_BANDS = ['plain', 'soft', 'dark'] as const
-export type AiLayoutArrangeBand = (typeof AI_LAYOUT_ARRANGE_BANDS)[number]
-
-export interface AiLayoutArrangedBlock {
-  kind: AiLayoutArrangeKind
-  col?: number
-  /** The numbered source lines it shows, in order. */
-  from: number[]
-  style?: AiLayoutStyle
-  /** For a group: each item's lines, its title line first. */
-  items?: number[][]
+export interface AiLayoutDesignGroup {
+  /** The group's kind, where the answer reads it otherwise than the reader did. */
+  kind?: AiLayoutDesignGroupKind
+  style?: AiLayoutGroupStyle
 }
 
-export interface AiLayoutArrangedSection {
-  band?: AiLayoutArrangeBand
-  cols?: number[]
+export interface AiLayoutDesignSection {
+  /** The hero the opening becomes, or `none` to keep it as the source lays it out. */
+  hero?: AiLayoutImportHero | 'none'
+  band?: (typeof AI_LAYOUT_DESIGN_BANDS)[number]
   align?: AiLayoutAlign
-  blocks: AiLayoutArrangedBlock[]
+  /** One for each group of the section, in order. */
+  groups: AiLayoutDesignGroup[]
 }
 
-/** An arrangement answer read: one entry per source section, `null` where it gave none. */
-export interface AiLayoutArrangement {
-  sections: Array<AiLayoutArrangedSection | null>
+/** A design answer read: one entry per section of the page, `null` where it gave none. */
+export interface AiLayoutDesignAnswer {
+  sections: Array<AiLayoutDesignSection | null>
 }
 
-const LINE_LIST_SCHEMA = { type: 'array', items: { type: 'integer' } } as const
-
-const ARRANGE_ITEM_SCHEMA = {
+const DESIGN_GROUP_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['from'],
-  properties: { from: LINE_LIST_SCHEMA },
-} as const
-
-const ARRANGE_BLOCK_SCHEMA = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['kind', 'col', 'from', 'style', 'items'],
+  required: ['kind', 'style'],
   properties: {
-    kind: { type: 'string', enum: [...AI_LAYOUT_ARRANGE_KINDS] },
-    col: { type: 'integer' },
-    from: LINE_LIST_SCHEMA,
-    style: { type: 'string', enum: [...AI_LAYOUT_STYLES, 'none'] },
-    items: { type: 'array', items: ARRANGE_ITEM_SCHEMA },
+    kind: { type: 'string', enum: [AI_LAYOUT_DESIGN_SOURCE, ...AI_LAYOUT_DESIGN_GROUP_KINDS] },
+    style: { type: 'string', enum: [...AI_LAYOUT_GROUP_STYLES] },
   },
 } as const
 
-const ARRANGE_SECTION_SCHEMA = {
+const DESIGN_SECTION_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['band', 'cols', 'align', 'blocks'],
+  required: ['hero', 'band', 'align', 'groups'],
   properties: {
-    band: { type: 'string', enum: [...AI_LAYOUT_ARRANGE_BANDS] },
-    cols: { type: 'array', items: { type: 'integer' } },
-    align: { type: 'string', enum: [...AI_LAYOUT_ALIGNS] },
-    blocks: { type: 'array', items: ARRANGE_BLOCK_SCHEMA },
+    hero: { type: 'string', enum: ['none', ...AI_LAYOUT_IMPORT_HEROES] },
+    band: { type: 'string', enum: [AI_LAYOUT_DESIGN_SOURCE, ...AI_LAYOUT_DESIGN_BANDS] },
+    align: { type: 'string', enum: [AI_LAYOUT_DESIGN_SOURCE, ...AI_LAYOUT_ALIGNS] },
+    groups: { type: 'array', items: DESIGN_GROUP_SCHEMA },
   },
 } as const
 
-/** The arrangement tool: every section of a page brought in, in order, by its numbered lines. */
-export const AI_LAYOUT_ARRANGE_TOOL: AiTool = {
-  name: 'submit_arrangement',
-  description:
-    "Submit the page's arrangement: one entry in sections for each section of the page, in order, placing its numbered lines in blocks by from.",
+/** The design tool: one entry per section of a page brought in, in order, naming design choices only. */
+export const AI_LAYOUT_DESIGN_TOOL: AiTool = {
+  name: 'submit_design',
+  description: "Submit the page's design: one entry in sections for each section of the page, in order, with one entry in groups for each of its groups.",
   strict: true,
   inputSchema: {
     type: 'object',
     additionalProperties: false,
     required: ['sections'],
-    properties: { sections: { type: 'array', items: ARRANGE_SECTION_SCHEMA } },
+    properties: { sections: { type: 'array', items: DESIGN_SECTION_SCHEMA } },
   },
 }
 
-/** Line numbers as an answer gives them: whole, positive, each once. */
-function lineNumbers(value: unknown): number[] {
-  if (!Array.isArray(value)) return []
-  const out: number[] = []
-  for (const entry of value) {
-    if (typeof entry === 'number' && Number.isInteger(entry) && entry > 0 && !out.includes(entry)) out.push(entry)
-  }
-  return out
-}
-
-function readArrangedBlock(raw: unknown): AiLayoutArrangedBlock | null {
+function readDesignSection(raw: unknown): AiLayoutDesignSection | null {
   if (!isRecord(raw)) return null
-  const kind = oneOf(raw['kind'], AI_LAYOUT_ARRANGE_KINDS)
-  if (!kind) return null
-  // Only line numbers are read: any words an answer carried are ignored.
-  const block: AiLayoutArrangedBlock = { kind, from: lineNumbers(raw['from']) }
-  if (typeof raw['col'] === 'number' && Number.isInteger(raw['col']) && raw['col'] >= 0) block.col = raw['col']
-  const style = oneOf(raw['style'], AI_LAYOUT_STYLES)
-  if (style) block.style = style
-  if (AI_LAYOUT_ARRANGE_ITEM_KINDS.has(kind)) {
-    const items = (Array.isArray(raw['items']) ? raw['items'] : [])
-      .map((item) => (isRecord(item) ? lineNumbers(item['from']) : []))
-      .filter((lines) => lines.length > 0)
-    if (items.length) block.items = items
-  }
-  // A block that names no line is no block.
-  return block.from.length || block.items?.length ? block : null
-}
-
-function readArrangedSection(raw: unknown): AiLayoutArrangedSection | null {
-  if (!isRecord(raw)) return null
-  const section: AiLayoutArrangedSection = { blocks: [] }
-  const band = oneOf(raw['band'], AI_LAYOUT_ARRANGE_BANDS)
+  const section: AiLayoutDesignSection = { groups: [] }
+  const hero = oneOf(raw['hero'], ['none', ...AI_LAYOUT_IMPORT_HEROES] as const)
+  if (hero) section.hero = hero
+  const band = oneOf(raw['band'], AI_LAYOUT_DESIGN_BANDS)
   if (band) section.band = band
   const align = oneOf(raw['align'], AI_LAYOUT_ALIGNS)
   if (align) section.align = align
-  if (Array.isArray(raw['cols'])) {
-    const cols = raw['cols'].filter((value): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0)
-    if (cols.length >= 2) section.cols = cols.slice(0, AI_LAYOUT_MAX_COLS).map((value) => Math.min(12, Math.max(1, Math.round(value))))
-  }
-  for (const entry of Array.isArray(raw['blocks']) ? raw['blocks'] : []) {
-    const block = readArrangedBlock(entry)
-    if (!block) continue
-    if (block.col !== undefined && (!section.cols || block.col >= section.cols.length)) {
-      if (section.cols) block.col = section.cols.length - 1
-      else delete block.col
+  for (const entry of Array.isArray(raw['groups']) ? raw['groups'] : []) {
+    const group: AiLayoutDesignGroup = {}
+    if (isRecord(entry)) {
+      const kind = oneOf(entry['kind'], AI_LAYOUT_DESIGN_GROUP_KINDS)
+      if (kind) group.kind = kind
+      const style = oneOf(entry['style'], AI_LAYOUT_GROUP_STYLES)
+      if (style) group.style = style
     }
-    section.blocks.push(block)
+    section.groups.push(group)
   }
-  return section.blocks.length ? section : null
+  return section
 }
 
 /**
- * An arrangement answer read (AGL-4084): each source section's layout, by
- * position, and `null` for one it gave nothing usable for — that section is
- * then laid out as the source has it. Words are never read from an answer.
+ * A design answer read (AGL-4107): each section's choices by position, and
+ * `null` for one it gave nothing usable for, which is then drawn as its
+ * source has it. An answer carries no words, and none would be read.
  */
-export function aiReadLayoutArrangement(raw: unknown, sections: number): AiLayoutArrangement {
+export function aiReadLayoutDesign(raw: unknown, sections: number): AiLayoutDesignAnswer {
   const given = isRecord(raw) && Array.isArray(raw['sections']) ? raw['sections'] : []
-  return { sections: Array.from({ length: Math.max(0, sections) }, (_, index) => readArrangedSection(given[index])) }
+  return { sections: Array.from({ length: Math.max(0, sections) }, (_, index) => readDesignSection(given[index])) }
 }

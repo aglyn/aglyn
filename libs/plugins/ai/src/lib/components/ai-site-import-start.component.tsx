@@ -228,10 +228,10 @@ export function AiSiteImportStart({ orgId, orgSlug, hostId, host, user, pendingS
               {'If your home page cannot be read, nothing is planned and no AI credits are used. You are told why, and you check again once it can be.'}
             </Typography>
             <Typography component="li" variant="body2">
-              {`${PLATFORM_BRAND_NAME} AI rewrites each page into your new site’s design, with its words, facts and photos. You review each wave and start the next yourself.`}
+              {'Each page keeps every word as you wrote it and is laid out as your page is: its sections, columns, cards, icons, pictures, tables and tabs, in your site’s own look. You review each wave and start the next yourself.'}
             </Typography>
             <Typography component="li" variant="body2">
-              {'Every page is a draft. Nothing is published until you publish it, and your current site is not changed.'}
+              {'Each wave lands in your new site’s preview, where only you and your team can see it, until you make the site public. A site not in preview keeps its pages as drafts. Your current site is not changed.'}
             </Typography>
           </Box>
           {/* Start in preview (AGL-4086), for a site this creates: on unless

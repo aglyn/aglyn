@@ -1,7 +1,7 @@
 ---
 sidebar_position: 2.75
 title: Bring my site
-description: Bring the website you have now into Aglyn, its pages, words and photos, in waves you review and start yourself, once you have proved the site is yours.
+description: Bring the website you have now into Aglyn, every word as you wrote it, laid out as your pages are, in waves you review and start yourself, once you have proved the site is yours.
 ---
 
 # Bring my site
@@ -13,10 +13,11 @@ while how it reads and rebuilds your pages, and the steps on this page, may
 still change.
 :::
 
-**Bring my site** moves the website you have now into a new Aglyn site. Aglyn AI
-reads each of its pages and rewrites it in your new site's design, keeping its words,
-facts and photos. Pages come in a few at a time, in **waves**. You review each wave
-before you start the next.
+**Bring my site** moves the website you have now into a new Aglyn site. Each page keeps
+every word as you wrote it and is laid out as your page is: its sections and their
+backgrounds, its columns, cards, icons, pictures, tables and tabs, drawn with Aglyn's own
+elements in your site's look. Pages come in a few at a time, in **waves**, into your new
+site's preview. You review each wave before you start the next.
 
 It is included on every paid plan. On the Free plan the card is shown but turned off,
 with a link to upgrade.
@@ -144,14 +145,21 @@ top. You can still start the first wave.
   than your plan allows, the last pages of your collections are the ones left out, each
   listed with **Past your plan's page count**. **See plans** opens Billing.
 
-Your words are never rewritten. Each page is built one of two ways, and the wave's row for
-the page says which:
+Your words are never rewritten. Every page is laid out as your page is: its sections in
+their own backgrounds, its columns, its cards with their icons and links, its numbered
+steps, figures, questions and answers, quotes, logo strips, price cards, tables and tabs,
+and its pictures where your page shows them. Each heading, paragraph, list, link and button
+keeps the words your page has, and every link goes to the page it went to: to that page on
+your new site, once it is in. Each page also keeps your page's own title and description as
+its search listing.
 
-- **Copied as it is**: a page of a collection, such as a blog post or a policy, and any
-  long page. Every heading, paragraph, list and link comes in, in order, laid out in your
-  new site's theme.
-- **Arranged by Aglyn AI**: your main pages. Aglyn AI chooses how each section is laid
-  out, such as its columns and background, and every line keeps the words your page has.
+Each page is built one of two ways, and the wave's row for the page says which:
+
+- **Copied as it is**: a page of a collection, such as a blog post or a policy. It is laid
+  out as your page is, in your new site's look, with no AI.
+- **Arranged by Aglyn AI**: your main pages. They are laid out as your pages are, and
+  Aglyn AI chooses only their finish: how the first section opens around its picture, how
+  each group of cards is drawn, and a background where your page has none.
 
 To start a wave, choose its **Start** button, for example **Start Main pages**. Each wave
 shows its cost before you start it, and how many of its pages are arranged and how many are
@@ -203,7 +211,8 @@ the next wave's **Start** button. Nothing starts the next wave except you, unles
 **Start every remaining wave**.
 
 **Cancel** stops the import. The pages already brought in stay where they are: in the
-preview, or as drafts.
+preview, or as drafts. Under **Every wave**, a wave that was running reads **stopped**, and a
+wave that had not started reads **not started**.
 
 ## Photos {#photos}
 
@@ -219,7 +228,9 @@ your new site's share image unless you already chose one.
 
 - **Sign-in pages.** A page that asks for a password is left out, and so is a page AglynBot
   is asked not to read by robots.txt.
-- **Code and forms.** Scripts, embedded frames and forms are never brought in.
+- **Code and forms.** Scripts, embedded frames and forms are never brought in. Where your
+  page had a form and your new site already has one saved form, that form is placed where
+  your page had its own.
 - **Other websites.** Only pages on your own domain are read. A page that sends visitors to
   another website is left out.
 

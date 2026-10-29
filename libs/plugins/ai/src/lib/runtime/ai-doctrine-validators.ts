@@ -253,7 +253,9 @@ export interface AiDoctrineTreeContext extends AiNodeTreeContext {
    * The page is its owner's own words, brought in from their website word for
    * word (AGL-4084). Rule 8 does not ask for a dataset for its lists, which
    * are the source's, and rule 14's copy checks (filler, placeholders,
-   * unfinished lines) judge copy a generator wrote, never the owner's.
+   * unfinished lines) judge copy a generator wrote, never the owner's. Nor
+   * does rule 1 ask a component of its repeats (AGL-4107): its cards, steps
+   * and questions are the source's, laid out as the source lays them out.
    */
   ownWords?: boolean
   /**
@@ -531,9 +533,13 @@ function aiRepeatFrameOrSection(tree: AiDoctrineTree): (visit: Visit) => boolean
 export function detectRepeatedSubtrees(
   tree: AiDoctrineTree,
   otherPages: readonly AiDoctrineTree[] = [],
-  context: Pick<AiDoctrineTreeContext, 'reusableComponents' | 'repeatsCompiled'> = {},
+  context: Pick<AiDoctrineTreeContext, 'reusableComponents' | 'repeatsCompiled' | 'ownWords'> = {},
 ): AiDoctrineViolation[] {
   if (context.reusableComponents === false) return []
+  // A page brought in repeats what its source repeats (AGL-4107): its cards,
+  // its steps and its questions are the source's own, drawn by the compiler,
+  // and an import has no component of the source's to place them as.
+  if (context.ownWords) return []
   const index = indexShapes(tree)
   /**
    * A compiled picture card (AGL-3660): a Stack that opens with its picture,

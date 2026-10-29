@@ -115,7 +115,7 @@ export const PLUGIN_DOCS = {
   aiImport: {
     path: '/ai/bring-my-site',
     title: 'Bring my site',
-    excerpt: 'Bring the website you have now into Aglyn, its pages, words and photos, in waves you review and start yourself, once you have proved the site is yours.',
+    excerpt: 'Bring the website you have now into Aglyn, every word as you wrote it, laid out as your pages are, in waves you review and start yourself, once you have proved the site is yours.',
   },
   aiInsights: {
     path: '/marketing-and-automation/analytics/insights',

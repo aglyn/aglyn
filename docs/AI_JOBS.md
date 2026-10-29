@@ -2651,31 +2651,66 @@ whose passes each do one unit (`aiSiteImportNextWork`):
    asked of `findImportedPhoto` before anything is fetched, so a photo is stored
    once per site (an ingest that cannot answer stores nothing), each kept with
    the address it was read from (`from`); then the page step's own passes on a
-   derived `page` job, NEVER REWRITTEN (AGL-4084,
-   `jobs/ai-site-import-document.ts`). The job carries `importedSections`: the
-   read's blocks, the photos and where the site's own links go. The plan's
-   sections are the source's (its opening, then one at each h2). How the page
-   is built is decided by code (`aiSiteImportBuildOf`):
-   - **copied** (a collection's page, whatever its length; since AGL-4106 a
-     main page is never copied for its length): `aiCompileImportedDocument` lays every line out in source order,
-     bands alternating plain and soft, with NO model; only the listing pass
-     spends;
-   - **arranged** (every main page, whatever its length): one answer on the page tier
-     through `submit_arrangement` (`AI_LAYOUT_ARRANGE_TOOL`, which has no field
-     for a word), told the numbered lines fenced (`aiLayoutArrangePrompt`). The
-     compiler substitutes each line as written; a block naming a line already
-     placed is dropped, a line of another section is not taken, and every line
-     the answer left out is added at the end of its section.
+   derived `page` job, NEVER REWRITTEN (AGL-4084), built by the SITE COMPILER
+   (AGL-4107, `jobs/ai-site-import-compile.ts`). The job carries
+   `importedSections`: the read's blocks, its layout (`AiSiteImportPageRead.
+   layout`, AGL-4106), the photos and where the site's own links go — every
+   page the import plans, in any wave, by its draft id
+   (`aiSiteImportLinkablePages` admits them on the check's `screenIds`). The
+   plan's sections are the layout's own, by name (`aiSiteImportSectionNames`);
+   a read with no layout is read into one from its lines, one section at each
+   h2 (`aiSiteImportLayoutOfLines`). The screen's `seoTitle` and
+   `seoDescription` are the source's `<title>` and meta description word for
+   word (`read.meta`), and the last pass writes them as they are
+   (`aiImportedPageListing`); the listing generator runs only for a part the
+   source left empty.
+   - **The compile.** `aiSiteImportDesignedSections` turns the layout into the
+     layout language: each section in its source band (a design answer's band
+     only where the source drew none), its first row as `cols` (a byline row —
+     a lone portrait beside a few words — is the portrait, small), each group a
+     `cards`/`steps`/`stats`/`faq`/`quotes`/`list` block whose items carry every
+     part (`iconPath`, `picture`, `figure`, `more`, `list`, `listIconPath`,
+     `links`, `to`), and the import-only kinds `table`, `tabs` and `logos`.
+     Every line is taken once; a line the layout placed nowhere goes at its
+     section's end. `aiCompileLayoutPage` draws it with `verbatim: true`: words
+     as written (never fitted, guarded, gapped or cut; a heading past the
+     headline style a subtitle; a link longer than a button's label a Link
+     Container around its words), every item of a group, the source's own
+     pictures (`src`, never a stand-in), its icons as paths on the icon
+     element's 24-unit square (`aiSiteImportIconPath`; a stroke drawing is left
+     out), its bands, and only the hero among the design moves: the opening
+     around its one picture as `split`, `bleed`, `cover`, `poster`, `panel`,
+     `column` or `editorial` (`importedHero`; `beside` → split, `behind` →
+     cover, `below` → column by default). A table is the `dataTable` element
+     (`rows`, code-only); tabs whose every panel the source drew are `muiTabs`
+     with a `muiTabPanel` each, else the labels as a strip, the open one
+     filled, over the panel the source drew. A page past
+     `AI_SITE_IMPORT_DOC_MAX_NODES` keeps its last sections by name, `cut`.
+   - **copied** (a collection's page): the compile alone, NO model, nothing
+     spent but a listing the source left empty;
+   - **arranged** (every main page, whatever its length): the same compile
+     first; one DESIGN answer on the page step's balanced tier, pinned against
+     `AI_DEFAULT_MODEL` (`aiImportPageModel` → `aiModelAtLeastStepTier`),
+     through `submit_design` (`AI_LAYOUT_DESIGN_TOOL`: per section `hero`,
+     `band`, `align` and per group `kind` and `style`, no field for a word, a
+     line or a block), told the page's structure (`aiSiteImportDesignText`,
+     the section names fenced; about 1,000–1,300 tokens in on aglyn.com's
+     pages). An answer whose design cannot be drawn is set aside and the page
+     is drawn from its layout, never re-asked; a page whose layout cannot be
+     built is reviewed before anything is spent.
    Both are checked as the owner's own words (`ownWords` on the doctrine
-   context): rule 8 asks no dataset of their lists, rule 14's copy checks do
-   not judge them, and the page budget is `AI_OWN_WORDS_PAGE_BUDGET`. A
-   paragraph longer than a text element holds is split between sentences. The
-   words on the stored draft are counted into the page's `brought`.
+   context): rule 1 asks no component of their repeats, rule 8 no dataset of
+   their lists, rule 14's copy checks do not judge them, and the page budget is
+   `AI_OWN_WORDS_PAGE_BUDGET`. The words on the stored draft are counted into
+   the page's `brought`.
 6. **Close the wave**: its pages go live INTO THE PREVIEW
    (`jobs/ai-site-import-publish.ts`, `aiPublishImportedWave` on
    `aiPublishGuidedSite`) when the site is in preview (`host.preview`,
    AGL-4086): Home takes `/` in the first wave, later waves join what is live
-   (`retry`), links to a page not in come out, and `site_published` is not
+   (`retry`), a link to a page that will never come in (left out, failed)
+   loses its destination and keeps its words (`keepLinkWords`), a link to a
+   page of a later wave keeps its place — a visitor sees its words until that
+   page is live, then it goes there — and `site_published` is not
    sent (the switch sends it). A site not in preview keeps the drafts. The job
    then parks again, reason `wave`, until the next wave is started, or, with
    `siteImport.autoContinue` (the resume door's `startAll`,
@@ -2692,8 +2727,11 @@ whose passes each do one unit (`aiSiteImportNextWork`):
   row says why, and the wave goes on. The machine keeps `siteImport` on the job
   from the outcome in the pass's own write; the summary carries it without any
   page text (`aiSiteImportWire`).
+- **A cancel settles every wave** (AGL-4107): `aiSiteImportCanceled`, in the
+  cancel's own write and in a step's write a pending cancel ends, marks a
+  running or waiting wave `stopped` and a wave in review `done`.
 - **Priced by how a page is built.** `AI_MEASURED_IMPORT_CREDITS`: an
-  arranged page at `arranged`, a copied page at `copied` (its listing pass), the
+  arranged page at `arranged` (its design answer), a copied page at `copied`, the
   header its layout, or nothing where it is drawn from the source's menu; each wave is quoted before it starts
   (`aiSiteImportWaveCreditRange`), naming both. Both rows are provisional until
   the live check measures them.

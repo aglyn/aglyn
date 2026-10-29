@@ -3496,6 +3496,23 @@ describe('a site import brings a proved site in, wave by wave, each started by a
     expect(aiJobSummary(done, NOW).siteImport?.pages.every((page) => !page.read?.text)).toBe(true)
   })
 
+  it('settles every wave when a person cancels it: none reads running with nothing running it (AGL-4107)', async () => {
+    const read = await untilParked((await importJob()).$id)
+    await resumeAiJob(firestore, ORG, read.$id, { uid: 'uid-1' }, NOW)
+    await runAiJobStep(firestore, ORG, read.$id, { owner: 'beat-1', now: NOW })
+    const running = (await getAiJob(firestore, ORG, read.$id)) as AiJob
+    expect(running.siteImport?.waves.map((wave) => wave.status)).toEqual(['running', 'waiting'])
+    await cancelAiJob(firestore, ORG, read.$id, NOW)
+    const canceled = (await getAiJob(firestore, ORG, read.$id)) as AiJob
+    expect(canceled.status).toBe('canceled')
+    expect(canceled.siteImport?.waves.map((wave) => [wave.status, wave.finishedAt])).toEqual([
+      ['stopped', NOW.toISOString()],
+      ['stopped', null],
+    ])
+    // The rest of the import's state is as it was.
+    expect(canceled.siteImport?.pages).toHaveLength(running.siteImport?.pages.length ?? -1)
+  })
+
   it('gives back a page that failed on our side, alone, and the wave goes on', async () => {
     failing = new Set(['Services'])
     const read = await untilParked((await importJob()).$id)

@@ -180,8 +180,10 @@ const CODE_ONLY_IDS: Readonly<Record<string, readonly string[]>> = {
   // (AGL-3676): bound to the catalog by code, never written by a model; and
   // a selling store's own reviews and its newsletter sign-up, which the
   // storefront's sections place the same way (AGL-3676); and the Event List
-  // an event-led start lists its first events with (AGL-3755).
-  screen: ['icon', 'product-grid', 'product-reviews', 'newsletter-signup', 'eventList'],
+  // an event-led start lists its first events with (AGL-3755). And what a
+  // page brought in draws as its source does (AGL-4107): its tabs, a card
+  // that is itself a link, and a strip of labels on outlined surfaces.
+  screen: ['icon', 'product-grid', 'product-reviews', 'newsletter-signup', 'eventList', 'muiTabs', 'muiTabPanel', 'muiLinkBox', 'muiPaper'],
   // And a selling site's cart button in its header (AGL-3676); and a site
   // brought in's own menus, as its source builds them (AGL-4108): the
   // Dropdown and Mega Menus its header opens, and the Link Container each
@@ -282,6 +284,12 @@ const ENUM_FIELDS = new Set([
   'button-group',
   'preset-choice',
 ])
+/**
+ * The Table's grid editor (AGL-4107): its value is one string, a row a line
+ * and its cells between pipes, which only code writes on a page — a page
+ * brought in draws the source's own tables with it. Its words are copy.
+ */
+const TABLE_FIELDS = new Set(['data-table'])
 const BOOLEAN_FIELDS = new Set(['switch', 'checkbox'])
 const NUMBER_FIELDS = new Set(['slider'])
 const NESTED_FIELDS = new Set(['sub-form', 'tabs', 'tab-item'])
@@ -373,6 +381,10 @@ function declareProp(
     if (typeof attribute.max === 'number') schema.maximum = attribute.max
   } else if (STRING_FIELDS.has(component)) {
     schema.type = 'string'
+  } else if (TABLE_FIELDS.has(component)) {
+    schema.type = 'string'
+    role = 'text'
+    textLimit = textLimits.table
   } else {
     return null
   }
@@ -520,6 +532,8 @@ const CATALOG_PROPS: Readonly<Record<string, readonly string[]>> = {
 const CODE_ONLY_PROPS: Readonly<Record<string, readonly string[]>> = {
   section: ['underHeader'],
   muiAppBar: ['overHero'],
+  // A page brought in writes the source's table into its grid (AGL-4107).
+  dataTable: ['rows'],
 }
 
 function catalogProps(id: string, entry: Dict, max = 5): string {

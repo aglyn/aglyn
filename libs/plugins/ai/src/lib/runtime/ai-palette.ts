@@ -265,6 +265,8 @@ export const AI_TEXT_LIMITS = {
   button: 40,
   /** A short label, title or caption. */
   label: 200,
+  /** A table's grid, every cell's words (AGL-4107): a page brought in carries its source's tables whole. */
+  table: 20_000,
 } as const
 
 /**
