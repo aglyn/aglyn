@@ -847,6 +847,10 @@ describe('the ledger: what each request caches, against its model’s minimum', 
     // prompt moves one of them DOWN and says so in its commit, and a prompt
     // that grows without anyone meaning it to moves one UP and is red here.
     expect(measured()).toEqual({
+      // Every request that carries the document doctrine is up 24 at
+      // AGL-4092, whose rule 14 says to leave a missing fact out and write the
+      // sentence without it, never a bracket, unless the door's own
+      // instructions ask for one.
       // Every request that carries the doctrine is down 4 at AGL-3596, whose
       // rule 3 no longer describes a form drawn on the page; the page section
       // is down 24, its instructions dropping the same.
@@ -858,12 +862,12 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // at AGL-3433, whose shorter rule 16 every document request below also
       // carries. A brief that asks for a video is offered the plan's list of
       // players on a tool of its own; this plain one is the same bytes.
-      plan: { prefixTokens: 2_984, minimum: 512, caches: true, toolsStable: true },
+      plan: { prefixTokens: 3_008, minimum: 512, caches: true, toolsStable: true },
       // A site's plan says the language its brief is in (AGL-3750): the plain
       // plan's prefix and one nullable field, up 54. Its photo words in
       // English (AGL-3760) took it up 55 more, and saying they are required
       // whenever the language is not English (AGL-3779) 15 more.
-      'site-plan': { prefixTokens: 3_109, minimum: 512, caches: true, toolsStable: true },
+      'site-plan': { prefixTokens: 3_133, minimum: 512, caches: true, toolsStable: true },
       // The layout, template, component and section doors each grew 20 when
       // the palette learned the layout elements' Color scheme (AGL-3284).
       // All four then came DOWN 2 at AGL-3411: Tertiary
@@ -879,15 +883,15 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // 4 at AGL-3717, the Image's and the Image List's lightbox switch, and
       // 10 at AGL-3886, the List Item Text's secondary text color, which the
       // page section's catalog carries too.
-      layout: { prefixTokens: 4_428, minimum: 512, caches: true, toolsStable: true },
-      template: { prefixTokens: 5_040, minimum: 512, caches: true, toolsStable: true },
-      component: { prefixTokens: 5_040, minimum: 512, caches: true, toolsStable: true },
+      layout: { prefixTokens: 4_452, minimum: 512, caches: true, toolsStable: true },
+      template: { prefixTokens: 5_064, minimum: 512, caches: true, toolsStable: true },
+      component: { prefixTokens: 5_064, minimum: 512, caches: true, toolsStable: true },
       // 2,901 before AGL-3287 gave the email palette its Header and Footer,
       // which the catalog names as blocks to imitate. Up 74 at AGL-3676, which
       // says plainly that a subject line and a preheader carry no merge token.
       // Up 5 at AGL-3897, whose email text offers the Eyebrow, Details and
       // Links styles.
-      email: { prefixTokens: 2_975, minimum: 512, caches: true, toolsStable: true },
+      email: { prefixTokens: 2_999, minimum: 512, caches: true, toolsStable: true },
       // 2,728 while a form was the Form and its all-in-one Form Fields. Up 594
       // when the form job moved to MUI's separate form elements: the form
       // catalog lists each piece of a field, and the instructions say how a
@@ -898,8 +902,8 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // the instructions say a day and a time of day are answers a form takes.
       // Up 50 at AGL-3942: the instructions say a placeholder is an example
       // answer, never a note in square brackets.
-      form: { prefixTokens: 3_554, minimum: 512, caches: true, toolsStable: true },
-      'page-section': { prefixTokens: 4_598, minimum: 512, caches: true, toolsStable: true },
+      form: { prefixTokens: 3_578, minimum: 512, caches: true, toolsStable: true },
+      'page-section': { prefixTokens: 4_622, minimum: 512, caches: true, toolsStable: true },
       // The layout language (AGL-3660). Read four characters a token these
       // err low: the token counting endpoint puts the page's cached span at
       // 2,872 tokens and the frame's at 3,471 on the balanced tier, tools
@@ -911,7 +915,7 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       'layout-frame': { prefixTokens: 2_232, minimum: 512, caches: true, toolsStable: true },
       // 3,326 before AGL-3403 widened the components a theme may style and
       // gave a component leaf its theme-aware `sx` target.
-      theme: { prefixTokens: 3_518, minimum: 512, caches: true, toolsStable: true },
+      theme: { prefixTokens: 3_542, minimum: 512, caches: true, toolsStable: true },
       // The automation tool carries a variant per step type, each with only its
       // own fields and none a `null` union: the bytes that keep a request
       // within a provider's union limit (AGL-3096). Up 84 at AGL-3538: a
@@ -924,8 +928,8 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // Up 249 at AGL-3611, the order and return triggers the draft may start
       // on, and 7 for the two steps that ride a larger variant naming its
       // empty field.
-      'workflow-draft': { prefixTokens: 5_001, minimum: 512, caches: true, toolsStable: true },
-      'workflow-explain': { prefixTokens: 2_216, minimum: 512, caches: true, toolsStable: true },
+      'workflow-draft': { prefixTokens: 5_025, minimum: 512, caches: true, toolsStable: true },
+      'workflow-explain': { prefixTokens: 2_240, minimum: 512, caches: true, toolsStable: true },
       // The listing doors were under Claude Haiku 4.5's 4,096-token minimum
       // and are over Claude Haiku 5.5's 512 since it became the fast default
       // (AGL-3781), read four characters a token, which errs low; that model
@@ -940,7 +944,7 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       'seo-fixes': { prefixTokens: 921, minimum: 512, caches: true, toolsStable: false },
       // The grader's copy criterion is up 44 at AGL-3827: a template placeholder
       // left where words belong grades a 1, and a bracketed fact is not filler.
-      'eval-grade': { prefixTokens: 2_051, minimum: 512, caches: true, toolsStable: true },
+      'eval-grade': { prefixTokens: 2_075, minimum: 512, caches: true, toolsStable: true },
       // An insight's rules are short on purpose: no model caches them, so every
       // byte is billed as input on both calls and on a re-ask.
       // A/B tests by AI (AGL-2914): the rules are one block, well under the
@@ -962,8 +966,8 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // Both up 106 at AGL-3838: the protocol's Animation line, the
       // vocabulary's presets, triggers, easings and caps an updateProps may set.
       // Both up 9 at AGL-3886 for the List Item Text's secondary text color.
-      'edit-screen': { prefixTokens: 6_178, minimum: 512, caches: true, toolsStable: true },
-      'edit-layout': { prefixTokens: 6_166, minimum: 512, caches: true, toolsStable: true },
+      'edit-screen': { prefixTokens: 6_202, minimum: 512, caches: true, toolsStable: true },
+      'edit-layout': { prefixTokens: 6_190, minimum: 512, caches: true, toolsStable: true },
       // Both insight requests are up 60 or 61 at AGL-3663: a site's published
       // state comes only from its Site status table, never from its traffic.
       // Both up 25 at AGL-3834: so does which pages are published, never the
@@ -976,19 +980,21 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // the whole doctrine, each generation's rules and its tool, which clear
       // the balanced tier's minimum, so a bulk job reads the prefix once a
       // product after its first.
-      'product-copy': { prefixTokens: 2_424, minimum: 512, caches: true, toolsStable: true },
+      'product-copy': { prefixTokens: 2_448, minimum: 512, caches: true, toolsStable: true },
       // The catalog is up 132 at AGL-3733 (Zach, 2026-10-12): each product's
       // suggested price, its field and the rule that prices it by kind.
       // Up 72 at AGL-4065: the rule that names each product as one thing a
       // shopper buys, never a kind with "Item" or "Order" after it.
-      catalog: { prefixTokens: 2_654, minimum: 512, caches: true, toolsStable: true },
-      categories: { prefixTokens: 2_349, minimum: 512, caches: true, toolsStable: true },
+      catalog: { prefixTokens: 2_678, minimum: 512, caches: true, toolsStable: true },
+      categories: { prefixTokens: 2_373, minimum: 512, caches: true, toolsStable: true },
       // A site's first post (AGL-3676): the doctrine's fields block, its rules and its tool.
       'blog-post': { prefixTokens: 821, minimum: 512, caches: true, toolsStable: true },
       // A site's dataset (AGL-3616): the doctrine's fields block, its rules and its tool.
       // Up 195 at AGL-4065: the rule that a list the brief gives no entries for
       // starts with marked samples, and the tool's `sample` on each record.
-      dataset: { prefixTokens: 1_225, minimum: 512, caches: true, toolsStable: true },
+      // Up 53 at AGL-4092: a sample's words read as finished copy, never an
+      // instruction to the owner such as "Add this rider's story here".
+      dataset: { prefixTokens: 1_278, minimum: 512, caches: true, toolsStable: true },
       // CRM by AI (AGL-2917), on the fast tier: each prompt is only the field
       // rules, the kind's own and its tool, which no shape took past Claude
       // Haiku 4.5's minimum and every shape takes past Claude Haiku 5.5's
@@ -999,7 +1005,8 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       'crm-mapping': { prefixTokens: 680, minimum: 512, caches: true, toolsStable: true },
       // The text step marks a breakpoint its prompt is far too short to fill.
       // It costs nothing and it caches nothing; the brief is the request.
-      text: { prefixTokens: 128, minimum: 512, caches: false, toolsStable: true },
+      // Down 2 at AGL-4092: a missing detail is left out, never a placeholder in square brackets.
+      text: { prefixTokens: 126, minimum: 512, caches: false, toolsStable: true },
       'overlay-popup': { prefixTokens: 866, minimum: 512, caches: true, toolsStable: true },
       // Under even Claude Haiku 5.5's 512-token minimum (AGL-3781).
       'copy.element': { prefixTokens: 339, minimum: 512, caches: false, toolsStable: true },

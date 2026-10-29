@@ -40,7 +40,11 @@
  *
  * Every plan, whatever its kind, names no section "placeholder": a section's
  * name is what its build is asked to write, and a name that says it is a
- * stand-in is written as one.
+ * stand-in is written as one. Nor does it name a gap (AGL-4092): an Assist
+ * build's About plan of 2026-10-28 named "Who we are: …, with [year
+ * founded] and [team story]" and "Contact details: [email], [phone], …", and
+ * its plan card printed them. A fact in square brackets, "to be added" and
+ * "TBD" are taken out of a name, with the words that joined them to it.
  *
  * Pure: plans in, plans out.
  */
@@ -104,13 +108,56 @@ export function aiPlanSectionSaysCustomerWords(name: string): boolean {
   return SAID_SECTION.test(aiPlanSectionNameWithoutPlaceholder(name))
 }
 
-/** A section's name with the word "placeholder" taken out; the name unchanged where nothing is left. */
+/** A fact a plan left in square brackets, as the doctrine's validators read one (`BRACKETED_FACT`): "[year founded]". */
+const BRACKETED_GAP = /\[[^[\]{}\n]{1,80}\]/g
+
+/** A gap's own words, "to be added" or "TBD", with any parentheses or dash they are set off by. */
+const GAP_WORDS =
+  /\s*[(]?\s*[-–—:]?\s*\b(?:(?:details?|dates?|info|information|names?)\s+)?(?:to be (?:added|confirmed|announced|determined|decided)|tbd|tba)\b\s*[)]?/gi
+
+/** Where a bracketed gap stood while the words around it are tidied. */
+const GAP = '\uE000'
+
+/** Words that join a gap to a list: a comma, "and", "or". */
+const LIST_JOIN = '\\s*(?:,|;|&|/|\\band\\b|\\bor\\b)(?:\\s*(?:\\band\\b|\\bor\\b))?\\s*'
+
+/** A run of gaps listed together: "[year founded] and [team story]", "[email], [phone]". */
+const GAP_RUN = new RegExp(`${GAP}(?:${LIST_JOIN}${GAP})+`, 'g')
+
+/** A gap that opens a name or a list after a colon, and the comma after it: "Contact details: [email], …". */
+const LEADING_GAP = new RegExp(`(^|:\\s*)${GAP}(?:\\s*,\\s*(?:(?:and|or)\\s+)?)?`, 'g')
+
+/** A gap and the words that joined it to the name: ", with [year founded]", ", and [age and class requirements]". */
+const JOINED_GAP = new RegExp(
+  `\\s*,?\\s*(?:\\b(?:and|or|with|including|plus|such as|like|in|since|on|at|from|by)\\b\\s*|&\\s*)*${GAP}`,
+  'gi',
+)
+
+/** Whether a name says it is a stand-in, or holds a gap (AGL-3887, AGL-4092). */
+const HOLDS_GAP = /\bplace ?holders?\b|\[[^[\]{}\n]{1,80}\]|\bto be (?:added|confirmed|announced|determined|decided)\b|\b(?:tbd|tba)\b/i
+
+/**
+ * A section's name with the word "placeholder" (AGL-3887) and every gap
+ * (AGL-4092) taken out, with the words that joined them: "Who we are: a
+ * team, with [year founded] and [team story]" is "Who we are: a team". The
+ * name unchanged where it had none; "Section" where nothing is left.
+ */
 export function aiPlanSectionNameWithoutPlaceholder(name: string): string {
-  if (!/\bplace ?holders?\b/i.test(name)) return name
+  if (!HOLDS_GAP.test(name)) return name
   const cleaned = name
     .replace(PLACEHOLDER_WORD, ' ')
+    .replace(GAP_WORDS, ' ')
+    .replace(BRACKETED_GAP, GAP)
+    .replace(GAP_RUN, GAP)
+    .replace(LEADING_GAP, '$1')
+    .replace(JOINED_GAP, '')
+    .split(GAP)
+    .join('')
+    .replace(/\(\s*\)/g, '')
+    .replace(/\s+,/g, ',')
+    .replace(/,(?:\s*,)+/g, ',')
     .replace(/\s{2,}/g, ' ')
-    .replace(/^[\s\-–—:,]+|[\s\-–—:,]+$/g, '')
+    .replace(/^[\s\-–—:,;]+|[\s\-–—:,;]+$/g, '')
     .trim()
   return cleaned || 'Section'
 }
@@ -132,7 +179,7 @@ export function aiPlanHasCustomerWords(input: {
   return SAID_SECTION.test(brief) || ATTRIBUTED_QUOTE.test(brief)
 }
 
-/** Every section's name with the word "placeholder" taken out (AGL-3887), the plan unchanged where none had it. */
+/** Every section's name with the word "placeholder" (AGL-3887) and every gap (AGL-4092) taken out, the plan unchanged where none had one. */
 export function aiSettlePlanPlaceholderNames<P extends Pick<AiBuildPlan, 'screens'>>(plan: P): P {
   let changed = false
   const screens = plan.screens.map((screen) => {
