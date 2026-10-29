@@ -277,7 +277,11 @@ async function findOrders(
   const digits = text.replace(/^#/, '')
   if (/^\d{1,12}$/.test(digits)) {
     const snapshot = await orders.where('number', '==', Number(digits)).limit(5).get()
-    return snapshot.docs.map((doc) => ({ id: doc.id, data: (doc.data() ?? {}) as Record<string, any> }))
+    // A quote takes an order number before it is paid (AGL-4093), and until
+    // then there is nothing to return.
+    return snapshot.docs
+      .map((doc) => ({ id: doc.id, data: (doc.data() ?? {}) as Record<string, any> }))
+      .filter((order) => !CommerceModel.isUnpaidQuote(order.data))
   }
   if (text.includes('@')) {
     const snapshot = await orders

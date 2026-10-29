@@ -94,6 +94,7 @@ describe('the reservation keys (AGL-4047)', () => {
     expect(siteRolePresetPermissionKeys().filter((key) => key.startsWith('commerce.'))).toEqual([
       ...KEYS,
       'commerce.orders',
+      'commerce.quotes',
       'commerce.giftCards',
       'commerce.paymentMethods',
       'commerce.shippingConnections',
@@ -144,8 +145,9 @@ describe('the reservation keys (AGL-4047)', () => {
   })
 })
 
-describe('the order and gift card keys (AGL-4047)', () => {
-  const ORDER_KEYS = ['commerce.orders', 'commerce.giftCards'] as const
+describe('the order, quote and gift card keys (AGL-4047, AGL-4093)', () => {
+  // Quotes start where draft orders were: whoever may manage orders.
+  const ORDER_KEYS = ['commerce.orders', 'commerce.quotes', 'commerce.giftCards'] as const
 
   it('keep the site Admin and Editor who worked orders as their preset, never an Author', () => {
     expect(ORDERS_SITE_ROLE_PRESET).toEqual({ admin: true, editor: true, author: false, viewer: false })
@@ -175,6 +177,9 @@ describe('the order and gift card keys (AGL-4047)', () => {
   it('refuse in the permission’s words', () => {
     expect(commerceSitePermissionRefusal('commerce.orders')).toBe(
       'Your role does not include "Manage orders" — ask an organization admin',
+    )
+    expect(commerceSitePermissionRefusal('commerce.quotes')).toBe(
+      'Your role does not include "Create and edit quotes" — ask an organization admin',
     )
   })
 })

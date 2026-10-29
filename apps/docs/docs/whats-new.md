@@ -27,6 +27,14 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — quotes
+
+- **[Quotes](commerce-and-bookings/commerce/quotes-and-proofs.md)** — price a customer's
+  order before they buy, from the **Quotes** card on the **Orders** tab: your products with
+  their options and add-ons, items typed for the job, things included at no charge, a
+  discount, shipping, notes and terms, with tax worked out from your store's tax settings.
+  Making and editing quotes is its own permission, **Create and edit quotes**.
+
 ## October 2026 — suppressions, lists and inbox replies are permissions
 
 - **[Email and inbox permissions](workspace-and-billing/teams-and-roles/custom-roles.md#email-and-inbox-permissions)** —

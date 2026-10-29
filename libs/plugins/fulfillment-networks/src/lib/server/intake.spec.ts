@@ -71,6 +71,20 @@ describe('a paid order (AGL-3634)', () => {
     ])
   })
 
+  it('never holds a line typed on a quote, whatever SKU it was given (AGL-4093)', async () => {
+    const { store, deps, id } = await setup()
+    await onOrderPaid(
+      deps,
+      envelope({
+        lineItems: [
+          { name: 'Mug', sku: 'MUG', quantity: 1 },
+          { productId: '', custom: true, name: 'Engraving', sku: 'MUG', quantity: 1 },
+        ],
+      }),
+    )
+    expect(store.routings.get(id)?.lines.map((line) => line.lineIndex)).toEqual([0])
+  })
+
   it('narrows the first hold to the SKUs a counted network holds', async () => {
     const { store, deps, id } = await setup({ stock: { MUG: 4 } })
     await onOrderPaid(deps, envelope())

@@ -55,6 +55,9 @@ export interface CommercePersonEraserDeps {
 
 const LABEL = 'commerce person eraser'
 
+/** Where a quote keeps its customer's address (`commerce-quotes.ts`). */
+const QUOTE_EMAIL_FIELD = 'quote.customer.emailLower'
+
 /** The patch that takes the buyer off one order, as it stands. */
 export function erasedOrderPatch(
   data: FirebaseFirestore.DocumentData | undefined,
@@ -82,6 +85,23 @@ export function erasedOrderPatch(
 }
 
 /** The patch that takes the customer off one check-in at the window (AGL-4043). */
+/**
+ * A quote's customer, erased (AGL-4093). An unpaid quote keeps its customer
+ * in its `quote` section rather than on the order's own fields, so it is
+ * found by `quote.customer.emailLower` and loses the person and both
+ * addresses; its lines and totals stay, as an order's do.
+ */
+export function erasedQuotePatch(
+  data: FirebaseFirestore.DocumentData | undefined,
+  now: number,
+): Record<string, unknown> {
+  const quote = (data?.['quote'] ?? {}) as Record<string, unknown>
+  return {
+    quote: { ...quote, customer: {}, billTo: null, shipTo: null },
+    customerErasedAtMs: now,
+  }
+}
+
 export function erasedCheckInPatch(
   data: FirebaseFirestore.DocumentData | undefined,
   now: number,
@@ -107,6 +127,7 @@ export function createCommercePersonEraser(deps: CommercePersonEraserDeps): Plug
     const hosts = await db.collection('hosts').where('orgId', '==', orgId).get()
     let orders = 0
     let checkIns = 0
+    let quotes = 0
     const emailLower = email.trim().toLowerCase()
     for (const host of hosts.docs) {
       const placed = host.ref.collection('orders')
@@ -114,6 +135,7 @@ export function createCommercePersonEraser(deps: CommercePersonEraserDeps): Plug
       if (dryRun) {
         orders += (await placed.where('customerEmail', '==', email).get()).size
         checkIns += (await checked.where('customerEmailLower', '==', emailLower).get()).size
+        quotes += (await placed.where(QUOTE_EMAIL_FIELD, '==', emailLower).get()).size
         continue
       }
       checkIns += await updateWhereEquals(
@@ -132,8 +154,16 @@ export function createCommercePersonEraser(deps: CommercePersonEraserDeps): Plug
         (data) => erasedOrderPatch(data, atMs),
         LABEL,
       )
+      quotes += await updateWhereEquals(
+        db,
+        placed,
+        QUOTE_EMAIL_FIELD,
+        emailLower,
+        (data) => erasedQuotePatch(data, atMs),
+        LABEL,
+      )
     }
-    return { orders, checkIns }
+    return { orders, checkIns, quotes }
   }
 }
 

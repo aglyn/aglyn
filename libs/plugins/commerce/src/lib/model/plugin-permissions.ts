@@ -194,6 +194,7 @@ export type ReservationPermission = 'commerce.reservations' | 'commerce.walkIns'
 export type CommerceSitePermission =
   | ReservationPermission
   | 'commerce.orders'
+  | 'commerce.quotes'
   | 'commerce.giftCards'
   | 'commerce.paymentMethods'
   | 'commerce.shippingConnections'
@@ -268,6 +269,17 @@ export const COMMERCE_SITE_PERMISSIONS: readonly PluginOrgPermissionDeclaration[
     label: 'Manage orders',
     description:
       'Fulfill, cancel and print orders, resend receipts, build draft orders, take returns and record shipments. Follows the site role unless a role or member sets it.',
+    roleDefaults: { ...RESERVATION_ORG_ROLE_PRESET },
+    hostRoleDefaults: { ...ORDERS_SITE_ROLE_PRESET },
+    group: 'commerce',
+    groupLabel: 'Commerce',
+    presetFromSiteRole: true,
+  },
+  {
+    key: 'commerce.quotes',
+    label: 'Create and edit quotes',
+    description:
+      'Create, edit and delete quotes for customers. Follows the site role unless a role or member sets it.',
     roleDefaults: { ...RESERVATION_ORG_ROLE_PRESET },
     hostRoleDefaults: { ...ORDERS_SITE_ROLE_PRESET },
     group: 'commerce',

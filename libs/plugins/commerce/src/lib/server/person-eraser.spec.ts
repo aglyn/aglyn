@@ -82,7 +82,12 @@ function collectionRef(path: string): any {
     get: async () => {
       const hits = childPaths(path)
         .map(snapshot)
-        .filter((snap) => filters.every(([field, value]) => snap.data()?.[field] === value))
+        .filter((snap) =>
+          filters.every(
+            ([field, value]) =>
+              field.split('.').reduce<any>((at, key) => at?.[key], snap.data()) === value,
+          ),
+        )
         .slice(0, max ?? Number.POSITIVE_INFINITY)
       return { empty: hits.length === 0, size: hits.length, docs: hits }
     },
@@ -134,7 +139,7 @@ beforeEach(() => {
 
 describe('commerce’s person eraser', () => {
   it('takes the buyer off every order on the workspace’s sites, and keeps the order', async () => {
-    expect(await eraser(REQUEST)).toEqual({ orders: 1, checkIns: 0 })
+    expect(await eraser(REQUEST)).toEqual({ orders: 1, checkIns: 0, quotes: 0 })
     const order = docs.get('hosts/h1/orders/o1')
     expect(order).toMatchObject({ customerEmail: null, customerName: null, customerErasedAtMs: 777 })
     expect(order).not.toHaveProperty('shippingAddress')
@@ -153,8 +158,34 @@ describe('commerce’s person eraser', () => {
   it('counts on a dry run, and writes nothing', async () => {
     docs.set('hosts/h1/checkIns/o_o1_0_0', { customerEmailLower: EMAIL, customerName: 'Jane Doe' })
     const before = new Map(docs)
-    expect(await eraser({ ...REQUEST, dryRun: true })).toEqual({ orders: 1, checkIns: 1 })
+    expect(await eraser({ ...REQUEST, dryRun: true })).toEqual({ orders: 1, checkIns: 1, quotes: 0 })
     expect(docs).toEqual(before)
+  })
+
+  it('takes the customer off an unpaid quote, which keeps them in its quote section (AGL-4093)', async () => {
+    docs.set('hosts/h2/orders/q1', {
+      number: 1043,
+      status: 'pending',
+      channel: 'quote',
+      totals: { totalCents: 9900 },
+      quote: {
+        stage: 'draft',
+        notes: 'Two walls',
+        customer: { name: 'Jane Doe', email: 'Jane@Example.com', emailLower: EMAIL, phone: '555 0100' },
+        billTo: { line1: '1 Main St' },
+        shipTo: { line1: '1 Main St', country: 'US' },
+      },
+    })
+    expect(await eraser({ ...REQUEST, dryRun: true })).toEqual({ orders: 1, checkIns: 0, quotes: 1 })
+    expect(await eraser(REQUEST)).toEqual({ orders: 1, checkIns: 0, quotes: 1 })
+    expect(docs.get('hosts/h2/orders/q1')).toEqual({
+      number: 1043,
+      status: 'pending',
+      channel: 'quote',
+      totals: { totalCents: 9900 },
+      quote: { stage: 'draft', notes: 'Two walls', customer: {}, billTo: null, shipTo: null },
+      customerErasedAtMs: 777,
+    })
   })
 
   it('takes the customer off their check-ins at the window, and keeps who was checked in (AGL-4043)', async () => {
@@ -170,7 +201,7 @@ describe('commerce’s person eraser', () => {
       customerPhone: '555 201 7788',
       searchTokens: ['jane', '5552017788'],
     })
-    expect(await eraser(REQUEST)).toEqual({ orders: 1, checkIns: 1 })
+    expect(await eraser(REQUEST)).toEqual({ orders: 1, checkIns: 1, quotes: 0 })
     expect(docs.get('hosts/h1/checkIns/o_o1_0_0')).toEqual({
       orderId: 'o1',
       status: 'checked_in',
