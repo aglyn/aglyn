@@ -109,8 +109,8 @@ export interface QuotePageProof {
   name: string
   contentType: string
   size: number
-  /** Shown as a picture; everything else is a download. */
-  image: boolean
+  /** Shown in the page as a picture; everything else is a download. */
+  inline: boolean
 }
 
 /** The customer's latest answer to the revision the page shows. */
@@ -315,7 +315,7 @@ export function buildQuotePageView(input: {
       name: String(proof.name ?? 'Proof'),
       contentType: String(proof.contentType ?? ''),
       size: Math.max(0, cents(proof.size)),
-      image: visitorUploadIsInline(String(proof.contentType ?? '')),
+      inline: visitorUploadIsInline(String(proof.contentType ?? '')),
     })),
     response: pageResponse(quote),
     // The page is only ever a quote's, whatever the caller picked off the order.

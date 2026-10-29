@@ -1,7 +1,7 @@
 ---
 sidebar_position: 3.1
 title: Quotes
-description: Price a customer's order before they buy, with products and their add-ons, items typed for the job, things included at no charge, a discount, shipping, notes and terms, and tax worked out as you go; attach proofs for them to approve, and keep every revision.
+description: Price a customer's order before they buy, from your products and items typed for the job, with tax worked out as you go. Attach proofs to approve, and keep every revision.
 ---
 
 # Quotes

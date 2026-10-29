@@ -269,7 +269,7 @@ describe('approval and paying', () => {
     if (!('order' in answered)) throw new Error('refused')
     const view = buildQuotePageView({ order: answered.order, orderId: 'q-1', storeName: 'Acme', currency: 'USD' })
     expect(view.revision).toBe(1)
-    expect(view.proofs).toEqual([{ id: 'p1', name: 'p1.png', contentType: 'image/png', size: 100, image: true }])
+    expect(view.proofs).toEqual([{ id: 'p1', name: 'p1.png', contentType: 'image/png', size: 100, inline: true }])
     expect(view.response).toEqual({ action: 'approve', atMs: 6_000, name: 'Jordan Lee', comment: null, files: 0 })
     expect(view.respondable).toBe(true)
     const text = JSON.stringify(view)

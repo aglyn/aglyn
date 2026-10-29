@@ -673,6 +673,9 @@ async function handleProofAction(
     const order = snapshot.exists ? (snapshot.data() as CommerceModel.HostOrder) : null
     const refused = CommerceModel.quoteProofChangeRefusal(order, 'add')
     if (refused) return refuse(refused === 'not-a-quote' ? 404 : 409, CommerceModel.quoteProofRefusalMessage(refused))
+    // Storage is spent here, so the plan must sell, as a save's must.
+    const owner = await deps.orgForHost(hostId)
+    if (!checkEntitlement(owner?.org as never, 'commerce')) return refuse(403, 'Selling is not enabled')
     const uploads = await deps.uploads()
     const minted = await uploads.mint({ scope: proofScope, request: body['file'], caller: { uid } })
     if ('error' in minted) return refuse(minted.status, minted.error)

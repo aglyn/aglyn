@@ -196,7 +196,7 @@ export function QuoteProofPanel(props: QuoteProofPanelProps) {
 
         <Stack spacing={1.5}>
           {view.proofs.map((proof) =>
-            proof.image ? (
+            proof.inline ? (
               <Stack key={proof.id} spacing={0.5}>
                 <Box
                   component="img"
