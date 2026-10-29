@@ -25,12 +25,20 @@ import {
  * WHAT A FORM'S CONFIRMATION SAYS (AGL-4098).
  *
  * The `form-confirmation` catalog email's tokens, composed per send: a
+ * subject, what they sent as they would call it (never the form's own name,
+ * which is the business's internal label for it), a
  * heading and a sentence on what this is (a request, or a message), a copy of
  * the answers under the form's own labels, the files by name, what happens
  * next, and how to reach the business beyond a reply. The opt-in box and the
  * file fields' own lines are left out of the answers: a tick says nothing
  * worth a copy, and the files are named on their own line. Links typed into
  * an answer are left out too ({@link TYPED_LINK}).
+ *
+ * THE SUBJECT NAMES THE CONVERSATION. The confirmation starts the email
+ * conversation the business's answer replies into, and every later email in
+ * it (a quote started from the request, its invoice) keeps its subject. So a
+ * request's subject says what the conversation is about, "Your quote request
+ * with Northwind Signs", rather than the one event of it arriving.
  *
  * Pure: the submit route and the sample renders call the same function.
  *=========================================*/
@@ -46,7 +54,6 @@ const MAX_NAMED_FILES = 6
 
 export interface FormConfirmationInput {
   businessName: string
-  formName: string
   request: FormRequest | null
   /** The answers as stored, in the order the form posted them. */
   answers: Readonly<Record<string, string>>
@@ -112,7 +119,8 @@ function namedFiles(names: readonly string[]): string {
 export function formConfirmationContent(input: FormConfirmationInput): FormConfirmationContent {
   const business = input.businessName.trim() || 'the business'
   const quote = input.request?.kind === 'quote'
-  const subject = (quote ? `We got your quote request — ${business}` : `We got your message — ${business}`).slice(0, 200)
+  const subject = (quote ? `Your quote request with ${business}` : `We got your message — ${business}`).slice(0, 200)
+  const label = quote ? 'Quote request' : 'Your message'
   const heading = quote ? 'We got your request' : 'Thanks, we got your message'
   const intro = quote
     ? `Thanks for asking ${business} for a quote. Here is a copy of what you sent.`
@@ -128,7 +136,7 @@ export function formConfirmationContent(input: FormConfirmationInput): FormConfi
   const contact = ways.length ? `You can also reach ${business} at ${ways.join(' or ')}.` : ''
   const tokens: Record<string, string> = {
     'form.subject': subject,
-    'form.name': input.formName.trim() || 'Form',
+    'form.name': label,
     'form.heading': heading,
     'form.intro': intro,
     'form.answers': answers.join('\n'),

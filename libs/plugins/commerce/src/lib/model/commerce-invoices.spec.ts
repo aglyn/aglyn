@@ -26,6 +26,7 @@ import {
   invoicePayRefusal,
   invoicePayRefusalMessage,
   invoiceSendPatch,
+  invoiceSendPrefill,
   invoiceSendRecipient,
   invoiceSendRefusal,
   invoiceSendRefusalMessage,
@@ -224,6 +225,33 @@ describe('sending an invoice', () => {
     expect(invoiceSendRecipient(DRAFT, ' other@example.com ')).toBe('other@example.com')
     expect(invoiceSendRecipient(DRAFT, '')).toBe('jordan@example.com')
     expect(invoiceSendRecipient(QUOTE, '')).toBe('pat@example.com')
+  })
+
+  it('starts the form addressed to the customer, else where the last invoice went, else where the quote went', () => {
+    expect(invoiceSendPrefill(DRAFT)).toBe('jordan@example.com')
+    const sent = (to: string, atMs: number): OrderInvoiceSendRecord => ({
+      to,
+      subject: 'Invoice #2001',
+      atMs,
+      by: 'owner@example.com',
+      messageId: `<i.${atMs}@acme.example.com>`,
+      providerId: null,
+      paid: false,
+      linkVersion: 1,
+      totalCents: 233_820,
+    })
+    const unnamed = { ...DRAFT, customerEmail: '', invoiceSends: [sent('old@example.com', 1), sent('billing@example.com', 2)] }
+    expect(invoiceSendPrefill(unnamed)).toBe('billing@example.com')
+    const quoted = {
+      ...QUOTE,
+      quote: {
+        ...QUOTE.quote,
+        customer: { name: 'Pat Lee', email: '' },
+        sends: [{ revision: 1, to: 'pat.work@example.com', subject: 's', atMs: 1, by: 'o', messageId: '<q@a>', providerId: null, linkVersion: 3 }],
+      },
+    } as HostOrder
+    expect(invoiceSendPrefill(quoted)).toBe('pat.work@example.com')
+    expect(invoiceSendPrefill({ ...DRAFT, customerEmail: '' })).toBe('')
   })
 
   it('replies into the quote’s conversation for a quote, and the order’s own otherwise', () => {

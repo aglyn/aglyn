@@ -195,11 +195,11 @@ jest.mock('../../../libs/plugins/forms/src/lib/server/form-confirmation-email', 
       sent: true,
       messageId: '<form.abc.0123456789abcdef@mail.site.example>',
       providerId: 'provider-1',
-      subject: 'We got your quote request — Site',
+      subject: 'Your quote request with Site',
       thread: {
         messageId: '<form.abc.0123456789abcdef@mail.site.example>',
         references: ['<form.abc.0123456789abcdef@mail.site.example>'],
-        subject: 'We got your quote request — Site',
+        subject: 'Your quote request with Site',
       },
     }
   },
@@ -415,15 +415,16 @@ describe('the confirmation a request sends (AGL-4098)', () => {
     expect(mockConfirmations[0]).toMatchObject({
       hostId: HOST_ID,
       to: 'visitor@example.com',
-      formName: 'Request a quote',
       request: { kind: 'quote' },
       fileNames: ['logo.ai'],
     })
+    // The form's name is the business's internal label: the customer's email never gets it.
+    expect(mockConfirmations[0]).not.toHaveProperty('formName')
     const thread = mockUpdates.find((update) => update.path === `hosts/${HOST_ID}/formSubmissions/${KEY}` && update.patch['emailThread'])
     expect(thread?.patch['emailThread']).toEqual({
       messageId: '<form.abc.0123456789abcdef@mail.site.example>',
       references: ['<form.abc.0123456789abcdef@mail.site.example>'],
-      subject: 'We got your quote request — Site',
+      subject: 'Your quote request with Site',
     })
     expect(thread?.patch['confirmation']).toMatchObject({ to: 'visitor@example.com' })
   })
