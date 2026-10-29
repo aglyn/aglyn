@@ -59,9 +59,12 @@ export interface BlockedControlProps {
  * appears — which would leave a dead button and no reason at all, the exact
  * failure this exists to stop.
  *
- * And the reason lands on the span as a real `aria-label` and `title`, not
- * only inside the Tooltip's popper. An explanation that appears only on
- * hover says nothing to a screen reader and nothing on a touch device.
+ * And the reason lands on the span as a real `aria-label`, not only inside
+ * the Tooltip's popper: an explanation that appears only on hover says
+ * nothing to a screen reader. On a touch device the Tooltip opens on a long
+ * press. Not a `title` as well: MUI's Tooltip refuses one on its child (a
+ * console error on every render of a blocked control, and two tips on
+ * hover), and the label already carries the reason.
  *
  * Both were got right once and then copied; AGL-2113 is the precedent for
  * what copies do — five quota readouts grew their own phrasing and stopped
@@ -76,7 +79,6 @@ export function BlockedControl({ blocked, reason, children, fullWidth }: Blocked
       <Box
         component="span"
         aria-label={reason}
-        title={reason}
         sx={fullWidth ? { display: 'flex', width: '100%', '& > *': { flex: 1 } } : { display: 'inline-flex' }}
       >
         {cloneElement(children, { disabled: true })}

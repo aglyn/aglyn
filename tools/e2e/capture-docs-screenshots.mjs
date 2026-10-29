@@ -46,6 +46,7 @@ import {
 import { optimizePng } from './lib/optimize-png.mjs'
 import { chromeExecutable } from './lib/chrome-executable.mjs'
 import { loadFirstPartyStarterSources } from '../scripts/lib/first-party-starters.mjs'
+import { importWorkspaceModule } from '../scripts/lib/workspace-module.mjs'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const IMG_ROOT = join(repoRoot, 'apps/docs/static/img')
@@ -91,7 +92,10 @@ const TIMEOUT_MS = Number(process.env.E2E_TIMEOUT_MS ?? 60_000)
  * and restores the org after it. `siteStarters: true` lists the platform's
  * own site starters in the emulator's marketplace for that one shot (the
  * first-party seed, under a publisher of its own) and removes them after it,
- * so no other shot of Create site meets them. `assertAbsent: [selector, …]` (or a single
+ * so no other shot of Create site meets them. `hostFields: async () => ({ … })`
+ * writes top-level fields (plain JSON) onto the seeded site for that one shot
+ * and restores them after it, for a state the seed does not give the site.
+ * `assertAbsent: [selector, …]` (or a single
  * selector) fails the shot when any of them is visible at the shutter.
  * A step may carry only `settleMs`, which is how a shot waits for the
  * canvas to finish laying out before its first click.
@@ -400,6 +404,30 @@ const shots = [
       { fill: ['role=textbox[name=/Site name/]', 'Hillside Dog Grooming'], settleMs: 1200 },
       { click: 'role=button[name="Start from a starter site"]', waitFor: 'Choose your starter', settleMs: 4000 },
     ],
+  },
+  {
+    // "Publish as a starter" (AGL-4049 phase 5), behind `release_site_starters`:
+    // Admin → Backup & template → Site template opens the marketplace's
+    // publish window for the site as a starter. The seeded site is given a
+    // built-in look for the shot (Material 3 with its own brand color and a
+    // font pairing, as a site created with one is stored) and its Home page
+    // at `/`, so the window shows a site ready to publish. Publish is never
+    // pressed.
+    out: 'building-sites/publish-as-starter.png',
+    path: `/${HOST_BASE}/admin/backup`,
+    waitFor: 'Site template',
+    settleMs: 2500,
+    orgReleaseFlags: { release_site_starters: true },
+    hostFields: builtinStarterSiteFields,
+    viewport: { width: 1280, height: 1400 },
+    actions: [
+      { click: 'role=button[name="Publish as a starter"]', waitFor: 'Closest style', settleMs: 3000 },
+      { fill: ['role=textbox[name="What kind of site is it?"]', 'Bakery'], settleMs: 300 },
+      { click: 'role=radio[name=/built-in theme with its brand colors/]', settleMs: 400 },
+      { click: 'role=combobox[name="Closest style"]', settleMs: 600 },
+      { click: 'role=option[name="Restaurant & café"]', settleMs: 800 },
+    ],
+    clipTo: { locator: '.MuiDialog-paper' },
   },
   {
     out: 'getting-started/screens-list.png',
@@ -1559,6 +1587,82 @@ async function applyOrgReleaseFlags(flags) {
     patch(['releaseFlags'], previous ? { releaseFlags: previous } : {})
 }
 
+/** A shot's site fields as the emulator's REST API takes them. */
+function firestoreValue(value) {
+  if (value === null || value === undefined) return { nullValue: null }
+  if (Array.isArray(value)) {
+    return { arrayValue: value.length ? { values: value.map(firestoreValue) } : {} }
+  }
+  if (typeof value === 'boolean') return { booleanValue: value }
+  if (typeof value === 'number') {
+    return Number.isInteger(value) ? { integerValue: String(value) } : { doubleValue: value }
+  }
+  if (typeof value === 'string') return { stringValue: value }
+  return {
+    mapValue: {
+      fields: Object.fromEntries(
+        Object.entries(value)
+          .filter(([, entry]) => entry !== undefined)
+          .map(([key, entry]) => [key, firestoreValue(entry)]),
+      ),
+    },
+  }
+}
+
+/**
+ * Writes a shot's fields onto the seeded site, and returns the function that
+ * restores each one exactly as it was — absent included, because a PATCH
+ * mask naming a field the body omits deletes it. Throws rather than warning,
+ * as `applyOrgReleaseFlags` does: a write that silently failed photographs
+ * the site as seeded.
+ */
+async function applyHostFields(fields) {
+  const url = documentUrl(`hosts/${HOST}`)
+  const names = Object.keys(fields)
+  const mask = (key) => names.map((name) => `${key}=${name}`).join('&')
+  const read = await fetch(`${url}?${mask('mask.fieldPaths')}`, { headers: EMULATOR_ADMIN })
+  if (!read.ok) throw new Error(`site ${HOST} not readable (${read.status}) at ${FIRESTORE_HOST}`)
+  const previous = (await read.json()).fields ?? {}
+  const patch = async (body) => {
+    const response = await fetch(`${url}?${mask('updateMask.fieldPaths')}`, {
+      method: 'PATCH',
+      headers: EMULATOR_ADMIN,
+      body: JSON.stringify({ fields: body }),
+    })
+    if (!response.ok) throw new Error(`site ${HOST} fields not written (${response.status}) at ${FIRESTORE_HOST}`)
+  }
+  await patch(Object.fromEntries(names.map((name) => [name, firestoreValue(fields[name])])))
+  return () => patch(previous)
+}
+
+/**
+ * The seeded site as one created with a built-in look is stored (AGL-4049):
+ * the theme fields `planSiteStarterTheme` writes for Material 3 with a brand
+ * color and a font pairing, and the routing with Home at `/`, which is the
+ * page a starter needs.
+ */
+async function builtinStarterSiteFields() {
+  const [{ planSiteStarterTheme }, { THEME_PRESETS }] = await Promise.all([
+    importWorkspaceModule('libs/aglyn/src/lib/app-utils/site-starter-theme.ts'),
+    importWorkspaceModule('libs/plugins/themes/src/lib/presets/index.ts'),
+  ])
+  const { host } = planSiteStarterTheme({
+    theme: {
+      kind: 'builtin',
+      base: 'material3',
+      brand: { light: { primary: '#8d4f2b' }, dark: { primary: '#f0b48e' } },
+      fonts: 'fraunces',
+    },
+    presets: THEME_PRESETS,
+    listing: { listingId: '', version: '', displayName: '' },
+    newId: () => 'unused',
+  })
+  return {
+    ...host,
+    screens: { 'seed-home': '/', 'seed-guide-survey-screen': 'survey', 'seed-scoped': 'scoped' },
+  }
+}
+
 /** The publisher the emulator's first-party starters are listed under for a shot. */
 const STARTER_PUBLISHER_ORG = 'docs-starter-publisher'
 const documentUrl = (path) =>
@@ -1728,6 +1832,7 @@ for (const shot of selected) {
   const page = await context.newPage()
   let restoreOrgReleaseFlags = null
   let removeSiteStarters = null
+  let restoreHostFields = null
   try {
     // A taller window for a surface that is genuinely taller than 900px.
     // `clip` is clamped to the viewport, so a dialog that overflows gets
@@ -1756,6 +1861,7 @@ for (const shot of selected) {
       restoreOrgReleaseFlags = await applyOrgReleaseFlags(shot.orgReleaseFlags)
     }
     if (shot.siteStarters) removeSiteStarters = await listSiteStarters()
+    if (shot.hostFields) restoreHostFields = await applyHostFields(await shot.hostFields())
     await page.goto(`${BASE_URL}${shot.path}`, {
       waitUntil: 'domcontentloaded',
       timeout: TIMEOUT_MS,
@@ -1875,6 +1981,12 @@ for (const shot of selected) {
       await removeSiteStarters().catch((error) => {
         failures += 1
         console.error(`FAIL  ${shot.out}: site starters not removed: ${error.message}`)
+      })
+    }
+    if (restoreHostFields) {
+      await restoreHostFields().catch((error) => {
+        failures += 1
+        console.error(`FAIL  ${shot.out}: site fields not restored: ${error.message}`)
       })
     }
   }

@@ -417,6 +417,17 @@ export const FLAG_DOC_PAGES: Partial<
       disclosure: [/\*\*Choose your starter is rolling out\*\*,[\s\S]{0,40}may not have it yet\./],
       checkNoPriceClaim: true,
     },
+    {
+      // "Publish as a starter" (AGL-4049 phase 5), a section of the page on
+      // saving and sharing templates, disclosed where it begins.
+      path: 'docs/building-sites/site-templates/save-a-template.md',
+      disclosure: [
+        /## Publish as a starter[\s\S]{0,80}\*\*Publish as a starter is rolling out\*\*,[\s\S]{0,40}may not have it yet\./,
+      ],
+      checkNoPriceClaim: false,
+      priceClaimNote:
+        'The page opens with a `:::info Plan availability` admonition for the template gallery and sharing, which ship on their own plan gates. The starter section names no plan or price.',
+    },
   ],
   release_accounting: [
     {

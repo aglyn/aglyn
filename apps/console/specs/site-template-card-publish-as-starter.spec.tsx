@@ -18,7 +18,7 @@
 /**
  * "PUBLISH AS A STARTER", BESIDE "PUBLISH AS TEMPLATE" (AGL-4049).
  *
- * Setup → Backup & restore's Site template card offers the whole site as a
+ * Admin → Backup & template's Site template card offers the whole site as a
  * site starter too: the same `hostArtifactPublish` zone, handed a
  * `siteStarter` artifact with the site's name and description to seed the
  * listing. Site starters are released behind `release_site_starters`, so the
