@@ -3554,6 +3554,46 @@ AGL-3660), which fills every empty slot and takes the icon out of its frame:
   The replays are `ai-stock-photo-agl4092-{berm,pit,rut}.spec.ts` and
   `ai-layout-pictures-agl4092-roles.spec.ts`, over 40 searches re-asked of Pixabay
   on 2026-10-28 as the source asks them (`fixtures/ai-stock-photo-agl4092-recordings.ts`).
+- **Another city's street, a thing of its own, and a team (AGL-4092, 2026-10-29).**
+  The live check of beta.291 put a food truck under the Chicago skyscrapers, a man
+  with a cart in the rain and a woman with a bagel cart in Antalya in a taco
+  trailer's home gallery, tomatoes beside a bowl of salsa on its menu's "Bottled
+  Water", a model posing with a street bike in a garage in a motocross team's riders
+  band (searched "motorcycle workshop"), and a man in a motorcycle suit on a road
+  trip, tagged "motocross" third, in its sponsors band. Each is closed by its tags:
+  - *Another city's or country's street is never the business's,* whatever the
+    caption (`aiStockForeignStreet`): a hit with a street, town or city tag
+    (`STREET_HEADS`) that names a city, state or country (`NAMED_PLACES`) the site's
+    business type, audience and name never name is refused. Tacos tagged "mexico"
+    are a dish, not a street.
+  - *Street food is anyone's.* "street food" names the taco trailer's world only
+    beside its own food or its truck (`near`), and the taco group's `rivals` turn
+    down an ice cream van, a hot dog stand or a bagel cart tagged "food truck"
+    unless the hit names tacos too. The maker's searches (`making`) take only a hit
+    OF the business's own world (`leadOwn`), as its broad rungs do.
+  - *A thing of its own is a photo of itself* (`aiStockThingOfItsOwn`): a record's or
+    a product's object with kin (`OBJECT_KIN`: bottled water, a soda, an agua fresca
+    or horchata, now in every food world) where neither its words nor its kin name
+    the craft itself (`core`). It is searched by its own words and kin, unqualified,
+    never by the craft's broad searches or `aiStockCraftSearches`, and a record of
+    one takes no other record's photo, nor gives its own
+    (`aiSiteDatasetRecordsFromOwn`, `itsOwn` kept on the late pass's list). With no
+    photo of itself it takes a neutral starter. A soap shop's "Lavender Soap Bar"
+    names its soap and is not one.
+  - *A team is shown racing.* A group's `team` searches replace its repair shop's
+    `making` where the business's own clause names a team or a club: a motocross
+    team searches "motocross rider gear" and "dirt bike racing", and adds "motocross
+    track" to its broad searches (the library answers "motocross paddock" with horses
+    and "motocross pits" with fruit). A parts shop keeps its mechanic.
+  - *An off-road business's pictures are never a street bike's* (`wider.road` and
+    `wider.ground`, read from every tag, a product's excepted): a hit naming a road,
+    a street, a trip, travel, a motorcycle suit, a sportbike, a model or a studio is
+    refused unless it also names the ground a dirt bike rides (dirt, mud, sand, a
+    desert, a track, off-road, enduro). "Road, travel" beside "off-road, desert,
+    sand" is a dirt bike in the dunes.
+  The replays are `ai-stock-photo-agl4092-1029-{pit,rut}.spec.ts`, from production's
+  search cache for the searches the two sites sent and Pixabay re-asked read-only
+  for those the fixes send in their place (`fixtures/ai-stock-photo-agl4092-1029-recordings.ts`).
 - **One refused photo is that photo's (AGL-3923, #1770).** The provider names a
   download by its bytes (`sniffPhotoContentType`, the upload check's own
   signatures), never by its label. A media-library refusal of one photo's own bytes
