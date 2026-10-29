@@ -41,7 +41,10 @@
  *   starter" (AGL-4049 lane 3): nothing chosen, Create waits for a pick it
  *   may create from, a free pick creates from its listing and lands naming
  *   it, a 402 keeps the pick for Buy, a refused pick is cleared in words,
- *   Close creates nothing, and the way back from paying reopens the pick.
+ *   Close creates nothing, and the way back from paying reopens the pick;
+ * - an AI starter picked there (AGL-4049 phase 4) goes on to the start's
+ *   questions with the answers it carries, creating nothing; the start's
+ *   Plan my site creates the site with the starter named.
  */
 
 import { act, fireEvent, render, screen } from '@testing-library/react'
@@ -155,11 +158,16 @@ type ZoneProps = {
   startBlank: (options?: { style?: string }) => void | Promise<boolean>
   leave: () => void
   chooseStarter?: () => void
+  starter?: { choice: { listingId: string }; displayName: string; answers: Record<string, unknown> }
   pendingSite: {
     fields: React.ReactNode
     check: () => boolean
     dirty: boolean
-    create: (options?: { start?: 'import'; style?: string }) => Promise<Record<string, unknown>>
+    create: (options?: {
+      start?: 'import'
+      style?: string
+      starter?: { listingId: string }
+    }) => Promise<Record<string, unknown>>
     created: Record<string, unknown> | null
     ready: (shown: boolean) => void
   }
@@ -169,7 +177,7 @@ type PickerProps = {
   mode: 'base' | 'ai'
   search: string
   filter: Record<string, string>
-  onPick: (pick: Record<string, unknown>) => void
+  onPick: (pick: Record<string, unknown>, extra?: { answers?: Record<string, unknown> }) => void
   ready: (shown: boolean) => void
   selected?: { listingId: string; owned?: boolean } | null
 }
@@ -765,7 +773,7 @@ describe('AGL-4049 lane 3 · Choose your starter, behind release_site_starters',
   it.each([
     [403, 'Site starters are not available for this workspace yet'],
     [404, 'That starter is no longer available'],
-    [409, 'This starter needs the AI start, which is coming soon'],
+    [409, 'This starter needs the AI start, which is not available to you in this workspace'],
   ])('a %i is shown in words, and the pick cleared', async (status, error) => {
     mockCreateAnswer = { status, body: { error, listingId: FREE.listingId } }
     await openChoose()
@@ -855,5 +863,129 @@ describe('AGL-4049 lane 3 · Choose your starter, behind release_site_starters',
     fireEvent.click(screen.getByRole('tab', { name: 'AI starters' }))
     expect(mockPicker?.mode).toBe('ai')
     expect(mockPicker?.selected).toBeNull()
+  })
+})
+
+describe('AGL-4049 phase 4 · an AI starter picked in Choose your starter', () => {
+  const AI = {
+    listingId: 'fp-starter-restaurant-ai',
+    displayName: 'Restaurant & café with AI',
+    description: '',
+    authorName: 'Aglyn',
+    official: true,
+    priceUsd: 0,
+    previewImageUrl: null,
+    facets: { kind: 'restaurant', base: 'starter', fonts: null, pages: 1, mode: 'ai' },
+  }
+  const PAID_AI = { ...AI, listingId: 'northwind-ai', displayName: 'Studio North with AI', official: false, priceUsd: 12 }
+  const ANSWERS = { kind: 'restaurant', brief: 'a corner bistro', brandColors: { primary: '#8a3b12' } }
+  const continueButton = () => screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement
+  const pick = (row: Record<string, unknown>, extra?: { answers?: Record<string, unknown> }) =>
+    act(() => mockPicker?.onPick(row, extra))
+  /** Opens the start, takes its starter path, and the AI starters tab. */
+  const openAiTab = async (onClose = jest.fn()) => {
+    const view = await openStart(onClose)
+    act(() => mockPicker?.ready(true))
+    act(() => mockZone?.chooseStarter?.())
+    act(() => mockPicker?.ready(true))
+    fireEvent.click(screen.getByRole('tab', { name: 'AI starters' }))
+    return view
+  }
+
+  beforeEach(() => {
+    mockStartersVisible = true
+    mockPickerWidgets = [{ widgetId: 'marketplace-starter-picker' }]
+  })
+
+  it('asks the questions next, not to create: Continue waits for a name, a pick and its answers', async () => {
+    await openAiTab()
+    expect(mockPicker?.mode).toBe('ai')
+    // Red before: the AI tab's button created the site from the pick, and the create refused it.
+    expect(screen.queryByRole('button', { name: 'Create site' })).toBeNull()
+    expect(continueButton().disabled).toBe(true)
+    expect(screen.getByText('Name your site and choose its address to continue.')).toBeTruthy()
+    typeName()
+    expect(screen.getByText('Choose an AI starter to continue.')).toBeTruthy()
+    pick(AI)
+    expect(continueButton().disabled).toBe(true)
+    expect(screen.getByText('Reading this starter’s answers…')).toBeTruthy()
+    pick(AI, { answers: ANSWERS })
+    expect(continueButton().disabled).toBe(false)
+    expect(createCalls()).toHaveLength(0)
+  })
+
+  it('a priced AI starter not yet bought asks to be bought first', async () => {
+    await openAiTab()
+    typeName()
+    pick(PAID_AI)
+    expect(continueButton().disabled).toBe(true)
+    expect(screen.getByText('Buy this starter to continue with it.')).toBeTruthy()
+    pick({ ...PAID_AI, owned: false })
+    expect(continueButton().disabled).toBe(true)
+  })
+
+  it('Continue lands in the questions, filled from the starter, with nothing created', async () => {
+    await openAiTab()
+    typeName()
+    pick(AI, { answers: ANSWERS })
+    fireEvent.click(continueButton())
+    expect(screen.queryByRole('heading', { name: 'Choose your starter' })).toBeNull()
+    expect(screen.getByTestId('start-zone')).toBeTruthy()
+    expect(mockZone?.starter).toEqual({
+      choice: { listingId: AI.listingId },
+      displayName: AI.displayName,
+      answers: ANSWERS,
+    })
+    expect(createCalls()).toHaveLength(0)
+    expect(mockStarter).not.toHaveBeenCalled()
+  })
+
+  it('Plan my site creates the site empty for the start, naming the starter and the style', async () => {
+    mockCreateAnswer.body = {
+      ...mockCreateAnswer.body,
+      guidedStart: true,
+      starterChoice: { listingId: AI.listingId, version: 'latest', kind: 'restaurant', mode: 'ai', start: 'ai' },
+      starter: { listingId: AI.listingId, version: null, displayName: AI.displayName },
+    }
+    await openAiTab()
+    typeName()
+    pick(AI, { answers: ANSWERS })
+    fireEvent.click(continueButton())
+    let made: Record<string, unknown> | undefined
+    await act(async () => {
+      made = await mockZone?.pendingSite.create({ style: 'restaurant', starter: { listingId: AI.listingId } })
+    })
+    expect(made).toMatchObject({ hostId: 'host-1' })
+    expect(createCalls()).toHaveLength(1)
+    const body = createBody()
+    expect(body).toMatchObject({ style: 'restaurant', starter: { listingId: AI.listingId } })
+    expect(body).not.toHaveProperty('start')
+    expect(mockTrack).toHaveBeenCalledWith('host_created', {
+      start: 'ai',
+      starter_kind: 'restaurant',
+      starter_listing: AI.listingId,
+    })
+  })
+
+  it('a second trip to the starters leaves the AI starter behind', async () => {
+    await openAiTab()
+    typeName()
+    pick(AI, { answers: ANSWERS })
+    fireEvent.click(continueButton())
+    expect(mockZone?.starter).toBeTruthy()
+    act(() => mockZone?.chooseStarter?.())
+    expect(screen.getByRole('heading', { name: 'Choose your starter' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    expect(screen.getByTestId('start-zone')).toBeTruthy()
+    expect(mockZone?.starter).toBeUndefined()
+  })
+
+  it('the Starters tab still creates from its pick, with Create site', async () => {
+    await openStart()
+    act(() => mockPicker?.ready(true))
+    act(() => mockZone?.chooseStarter?.())
+    act(() => mockPicker?.ready(true))
+    expect(screen.getByRole('button', { name: 'Create site' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Continue' })).toBeNull()
   })
 })

@@ -303,11 +303,25 @@ describe('siteStarterPickRefusal', () => {
     })
   })
 
-  it('refuses an AI starter until the AI start takes one, naming the pick', () => {
-    expect(siteStarterPickRefusal(payload({ mode: 'ai', answers: {} }), allowed)).toEqual({
-      status: 409,
-      body: { error: 'This starter needs the AI start, which is coming soon', listingId: 'listing-1' },
+  it('takes an AI starter where the AI start is offered, whatever its pages: the job’s own band applies (AGL-4049)', () => {
+    const many = payload({
+      mode: 'ai',
+      answers: {},
+      screens: Array.from({ length: 9 }, (_, i) => ({ slug: i ? `p${i}` : '/', nodes: {} })),
     })
+    expect(siteStarterPickRefusal(many, { ...allowed, aiStart: true })).toBeNull()
+  })
+
+  it('refuses an AI starter where the AI start is not offered, naming the pick', () => {
+    for (const input of [allowed, { ...allowed, aiStart: false }]) {
+      expect(siteStarterPickRefusal(payload({ mode: 'ai', answers: {} }), input)).toEqual({
+        status: 409,
+        body: {
+          error: 'This starter needs the AI start, which is not available to you in this workspace',
+          listingId: 'listing-1',
+        },
+      })
+    }
   })
 
   it("refuses more pages than the plan includes, and passes as many as it includes", () => {

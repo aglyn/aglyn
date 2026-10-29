@@ -287,11 +287,14 @@ export interface SiteStarterPickRefusal {
  * it refused, so Create site can tell a refused pick from a refused name.
  *
  * `resolved` is what the starter source answered; `pagesAllowed` is the
- * plan's `screensPerHost`.
+ * plan's `screensPerHost`. `aiStart` is whether the person creating the site
+ * is offered the AI start (AGL-4049 phase 4): an AI starter fills in its
+ * questions, so without it there is nothing to create one from, and with it
+ * the site is created empty for the start, whose own page band applies.
  */
 export function siteStarterPickRefusal(
   resolved: SiteStarterPayload | { error: string; status: 402 | 403 | 404; priceUsd?: number },
-  input: { listingId: string; pagesAllowed: number },
+  input: { listingId: string; pagesAllowed: number; aiStart?: boolean },
 ): SiteStarterPickRefusal | null {
   if (!isRecord(resolved)) {
     return { status: 404, body: { error: 'That starter is no longer available', listingId: input.listingId } }
@@ -309,9 +312,13 @@ export function siteStarterPickRefusal(
     }
   }
   if (resolved.mode === 'ai') {
+    if (input.aiStart === true) return null
     return {
       status: 409,
-      body: { error: 'This starter needs the AI start, which is coming soon', listingId: input.listingId },
+      body: {
+        error: 'This starter needs the AI start, which is not available to you in this workspace',
+        listingId: input.listingId,
+      },
     }
   }
   const pages = Array.isArray(resolved.screens) ? resolved.screens.length : 0

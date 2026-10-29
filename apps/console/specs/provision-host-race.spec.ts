@@ -610,6 +610,57 @@ describe('a site born for the guided AI start, and its starter on request (AGL-3
     expect(await provisionStarterSite(mockFirestore, 'no-such-site')).toEqual({ missing: true, provisioned: false })
   })
 
+  /** An AI starter as resolved for the site that started from it (AGL-4049 phase 4). */
+  const aiStarterInstall = () => ({
+    payload: {
+      mode: 'ai' as const,
+      facets: { kind: 'restaurant', base: 'starter', fonts: null, pages: 2, mode: 'ai' as const },
+      theme: { kind: 'builtin' as const, base: 'starter', brand: { light: { primary: '#8a3b12' } }, fonts: null },
+      screens: [
+        { displayName: 'Home', slug: '/', nodes: { root: { componentId: 'box', props: {} } } },
+        { displayName: 'Menu', slug: 'menu', nodes: { root: { componentId: 'box', props: {} } } },
+      ],
+      layout: { displayName: 'Header and footer', nodes: { slot: { componentId: 'layoutSlot', props: {} } } },
+      answers: { kind: 'restaurant' },
+    },
+    listing: { listingId: 'fp-starter-restaurant-ai', version: 'latest', displayName: 'Restaurant & café with AI', kind: 'restaurant' },
+  })
+
+  it('gives a site born from an AI starter that starter’s own pages, layout and theme, once (AGL-4049 phase 4)', async () => {
+    const hostId = await bare()
+    const result = await provisionStarterSite(mockFirestore, hostId, {
+      style: { id: 'yoga', theme: null },
+      starter: aiStarterInstall(),
+    })
+    // Red before: the default starter's one Home page, in the default theme.
+    expect(result.provisioned).toBe(true)
+    const host = mockDocs.get(`hosts/${hostId}`)
+    const pages = docsOf(hostId, 'screens')
+    expect(pages).toHaveLength(2)
+    expect(docsOf(hostId, 'layouts')).toHaveLength(1)
+    expect(Object.values(host['screens'] as object).sort()).toEqual(['/', 'menu'])
+    expect(host['screens']).toMatchObject({ [result.screenId as string]: '/' })
+    expect(host['defaultHomeScreenId']).toBe(result.screenId)
+    expect(host['starterProvisionedAt']).toBe('NOW')
+    expect(JSON.stringify(host['themeOverride'])).toContain('#8a3b12')
+    // Every page sits in the starter's layout.
+    const [layoutPath] = docsOf(hostId, 'layouts')
+    const layoutId = layoutPath.split('/').pop()
+    for (const path of pages) expect(mockDocs.get(path)).toMatchObject({ layoutId })
+    // The style the person chose is still the one recorded.
+    expect(host['starterChoice']).toMatchObject({ kind: 'yoga', start: 'ai' })
+    // Idempotent, as the default starter is.
+    expect(await provisionStarterSite(mockFirestore, hostId, { starter: aiStarterInstall() })).toEqual({ provisioned: false })
+    expect(docsOf(hostId, 'screens')).toHaveLength(2)
+  })
+
+  it('takes nothing from a site that has a page already, an AI starter’s pages included', async () => {
+    const hostId = await bare()
+    mockDocs.set(`hosts/${hostId}/screens/aiDraftHome`, { displayName: 'Home', slug: '/' })
+    expect(await provisionStarterSite(mockFirestore, hostId, { starter: aiStarterInstall() })).toEqual({ provisioned: false })
+    expect(docsOf(hostId, 'layouts')).toHaveLength(0)
+  })
+
   it('is still born with the starter when nothing says otherwise — every door but the guided start’s', async () => {
     const result = await provision('api-site')
     const host = mockDocs.get(`hosts/${result.hostId}`)

@@ -382,6 +382,29 @@ describe('claimHostForOrg: what the site was created with (AGL-4049)', () => {
     )
   })
 
+  it('records an AI starter on a site born empty for the start it filled in (AGL-4049 phase 4)', async () => {
+    const { writes, starterChoice } = await claim(false, {
+      start: 'ai',
+      style: { id: 'yoga', theme: null },
+      aiStarter: { listingId: 'fp-starter-restaurant-ai', version: 'latest', displayName: 'Restaurant & café with AI', kind: 'restaurant' },
+    })
+    // Born as any guided start is: the host and the claim, and no page.
+    expect(writes.map(([path]) => path)).toEqual(['hosts/uid-1', 'orgs/org-1'])
+    const host = writes[0][1] as Record<string, unknown>
+    expect(host['screens']).toEqual({})
+    expect(host['theme']).toEqual(DEFAULT_SITE_THEME)
+    // The style the questions took, over the kind the listing names.
+    const expected = choice({ listingId: 'fp-starter-restaurant-ai', version: 'latest', kind: 'yoga', mode: 'ai', start: 'ai' })
+    expect(host['starterChoice']).toEqual(expected)
+    expect(starterChoice).toEqual(expected)
+    // Without a style, the listing's kind.
+    const bare = await claim(false, {
+      start: 'ai',
+      aiStarter: { listingId: 'fp-starter-restaurant-ai', version: 3, displayName: 'Starter', kind: 'restaurant' },
+    })
+    expect(bare.starterChoice).toEqual(choice({ listingId: 'fp-starter-restaurant-ai', version: '3', kind: 'restaurant', mode: 'ai', start: 'ai' }))
+  })
+
   it('records the kind the listing names over the stored pages’ own (AGL-4049 lane 3)', async () => {
     const { writes } = await claim({
       payload: {
