@@ -256,22 +256,31 @@ describe('the Ironline Strength Studio events (AGL-3856, beta.259)', () => {
   })
 
   it('turns down a cricket ball on a wooden court for "Deadlift PR night", and every other ball sport (AGL-3856)', () => {
-    // The event's object is its "night"; a hit tagged with it and the gym's world would otherwise fill it.
-    const deadlift = judged(terms, { subject: aiStockSubjectWords('Deadlift PR night', ''), strict: true })
+    // The event's object was its "night"; a hit tagged with it and the gym's
+    // world would otherwise have filled it. A night is never a thing (AGL-4092):
+    // the event is of its deadlift, which no ball names.
+    const subject = aiStockSubjectWords('Deadlift PR night', '')
+    expect(aiStockObjectWord(subject)).toBe('deadlift')
+    const deadlift = judged(terms, { subject, strict: true })
+    const night = { ...deadlift, object: 'night' }
     const broad = judged(terms, { subject: '' })
     const ball = (id: string, tags: string[]) => ({ ...byId(YOGA_ON_THE_BEACH), id, pageUrl: `https://pixabay.com/photos/${id}/`, tags })
     const cricket = ball('cricket-ball', ['ball', 'cricket', 'wooden court', 'night', 'fitness', 'sport'])
-    expect(aiStockRelevance(cricket, { ...deadlift, shunLead: [] })).toBeGreaterThan(0)
     expect(aiStockRelevance(cricket, deadlift)).toBe(0)
+    // Held to the night, as the event was read before, the ball sport is what turns it down.
+    expect(aiStockRelevance(cricket, { ...night, shunLead: [] })).toBeGreaterThan(0)
+    expect(aiStockRelevance(cricket, night)).toBe(0)
     expect(aiStockRelevance(cricket, broad)).toBe(0)
     for (const sport of ['squash', 'badminton', 'bowling', 'billiards', 'pool', 'lacrosse', 'softball', 'handball', 'ping pong']) {
       const hit = ball(sport, [sport, 'ball', 'night', 'fitness'])
-      expect(aiStockRelevance(hit, { ...deadlift, shunLead: [] })).toBeGreaterThan(0)
+      expect(aiStockRelevance(hit, { ...night, shunLead: [] })).toBeGreaterThan(0)
+      expect(aiStockRelevance(hit, night)).toBe(0)
       expect(aiStockRelevance(hit, deadlift)).toBe(0)
     }
     expect(terms.shunLead).toEqual(expect.arrayContaining(['cricket', 'squash', 'badminton', 'bowling', 'billiard', 'lacrosse', 'softball', 'handball']))
     // A medicine ball is a gym's own.
-    expect(aiStockRelevance(ball('medicine-ball', ['medicine ball', 'gym', 'night', 'workout']), deadlift)).toBeGreaterThan(0)
+    expect(aiStockRelevance(ball('medicine-ball', ['medicine ball', 'gym', 'night', 'workout']), night)).toBeGreaterThan(0)
+    expect(aiStockRelevance(ball('medicine-ball', ['medicine ball', 'gym', 'deadlift', 'workout']), deadlift)).toBeGreaterThan(0)
   })
 
   it('covers each event with a photo of lifting or training, described by its own words', async () => {

@@ -3415,6 +3415,58 @@ AGL-3660), which fills every empty slot and takes the icon out of its frame:
   (`fixtures/ai-stock-photo-agl4065-recordings.ts`; the search cache had expired, so
   each list is what one search placed, tagged by its page address) and their stored
   home pages (`fixtures/ai-site-agl4065-pages.ts`).
+- **The thing, the place and the trade (AGL-4092).** The 2026-10-28 live check on
+  beta.287 put a bare foot tagged "body part" on a dirt bike parts shop's "Engine and
+  air" tile, a transmission chain under its "Brake Pad Set" (searched "part" alone),
+  one contributor's shoot under both of its tires, a cat tagged "hungry" under a taco
+  trailer's "Come hungry", a European alley under "Around town", a chicken salad
+  tagged "taco bowl" under "Race day", and a man posing with a street bike, tagged
+  "susuki" 21st, in a motocross team's "The team in pictures". Each is closed by a
+  rule the tags can see:
+  - *A picture of a thing is held to the business's own world.* The strict gate's
+    world half reads `lead`, never every word of the type, so "street" and
+    "breakfast" of "street and breakfast tacos" vouch for nothing. A feeling, a time
+    or a way of being somewhere is never a thing (`NON_THINGS`: "hungry", "day",
+    "town", "PR"); a caption left with none is searched as the world's own
+    (`"<leadWord ?? craft> <caption>"`), and one that says where the business is
+    (`PLACE_PHRASES`: "around town", "at events") asks for its customers out there
+    (`CRAFT_KIN.out`: "food truck crowd" for tacos, else "<lead> customers"), needing
+    people or a stand and refusing a street that is someone else's (`FOREIGN_STREET`).
+  - *A broad search finds a photo OF the world.* Every non-hero broad rung of the
+    site's own world, and a trade's product fallbacks, take a hit only where one of
+    its first three tags names the lead and ends in a word of it (`leadOwn`,
+    `leadsWithWorld`): "street tacos" and "dirt bike tire" do, "taco bowl" and "body
+    part" do not. A wider world (AGL-3923) keeps its own rule. An animal, a toy or a
+    bare body part never leads a hit whose first tags name nothing of the lead
+    (`aiStockOddLeads`), unless the slot, its section or the brief names its group;
+    a portrait's face and a photographer's scenes keep their bodies.
+  - *A trade's things are held to the world it serves.* Where the craft is a trade
+    (`of`), `held` is the served world's names: its products and collection tiles
+    must name one (`served`, kin or not: a railway brake wheel tagged "brake" is no
+    brake pad), the craft alone is never searched, and a product's search is
+    qualified by `leadWord` ("dirt bike skid plate"), never "part". `OBJECT_KIN`
+    gains brakes, engines and air filters, a food truck, tortilla chips and sodas. A
+    product's photo naming its object first or second scores 2 more, and a product
+    takes a photo of a shoot no other slot shows before one that another does
+    (`aiStockFreshShootsFirst` with `whole`). A gallery keeps its order: the recorded
+    fixtures name one contributor for all, so a shoot cannot be told offline.
+  - *A band of pictures is the gallery's* (`aiLayoutPictureRole`): its cells are
+    portraits only where their own words are of people, so "The team in pictures"
+    is searched as motocross, and "Meet the riders" stays the team's.
+  - *A motocross business's world is off-road.* Where its own clause names no wider
+    word of its group (`CRAFT_KIN.wider`: "motorcycle", "motorbike", "moto"), those
+    leave `lead`, and `shunLead` gains a street bike's own subjects (a model, posing,
+    urban, a street). A business that says "motorcycle" keeps it.
+  - *Brand marks are refused by their tags, everywhere, with no image read.* A tag
+    one letter off a maker of six letters or more names it ("susuki", "yamha"),
+    except a word of its own ("barley", "rental", "phone"); gear and tire makers join
+    `MAKERS` and the alt text's `BRANDS`, those whose name is a common word only in
+    their phrase ("fox racing", "shift mx"). The Pixabay provider keeps up to 30 tags
+    of a hit (it kept 20, and the "susuki" was the 21st). A mark only the pixels show
+    (the team hero's "SHIFT" jersey) is still placed: that is the stated limit.
+  The replays are `ai-stock-photo-agl4092-{berm,pit,rut}.spec.ts` and
+  `ai-layout-pictures-agl4092-roles.spec.ts`, over 40 searches re-asked of Pixabay
+  on 2026-10-28 as the source asks them (`fixtures/ai-stock-photo-agl4092-recordings.ts`).
 - **One refused photo is that photo's (AGL-3923, #1770).** The provider names a
   download by its bytes (`sniffPhotoContentType`, the upload check's own
   signatures), never by its label. A media-library refusal of one photo's own bytes
