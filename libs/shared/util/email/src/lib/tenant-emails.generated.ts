@@ -796,6 +796,129 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
     "footerReason": "You’re receiving this because you placed an order with {{host.businessName}}."
   },
   {
+    "key": "quote-sent",
+    "name": "Quote",
+    "description": "Sends a quote to the customer when you choose Send quote: your message, the proof, the quote as a PDF and a button to approve or pay it on your site. Later sends, such as a new revision, arrive in the same conversation.",
+    "pluginId": "commerce",
+    "plugin": "Commerce",
+    "control": "besigner",
+    "defaultSubject": "{{quote.subject}}",
+    "mergeTokens": [
+      {
+        "name": "quote.subject",
+        "description": "The subject typed when sending; it stays the same for every email about the quote",
+        "sample": "Quote #1042 from Northwind Signs"
+      },
+      {
+        "name": "quote.number",
+        "description": "The quote number",
+        "sample": "#1042"
+      },
+      {
+        "name": "quote.revision",
+        "description": "Which revision of the quote this is",
+        "sample": "2"
+      },
+      {
+        "name": "quote.total",
+        "description": "The quote total; “before tax” when tax is added at payment",
+        "sample": "$1,250.00"
+      },
+      {
+        "name": "quote.heading",
+        "description": "“Your quote from …”, or “Your updated quote” from the second revision on",
+        "sample": "Your quote from Northwind Signs"
+      },
+      {
+        "name": "quote.intro",
+        "description": "One sentence on what this email is: a new quote, or an updated revision",
+        "sample": "Here is your quote from Northwind Signs. The quote is attached as a PDF too."
+      },
+      {
+        "name": "quote.message",
+        "description": "The message typed when sending; empty when none was typed",
+        "sample": "Thanks for stopping by the shop. Here is the banner we talked about."
+      },
+      {
+        "name": "quote.proofImages",
+        "description": "Up to three proof images, each linked to the quote page; empty when the revision has none",
+        "sample": "<table role=\"presentation\"><tr><td><img src=\"https://shop.example.com/api/commerce/quote-proof?file=p1\" alt=\"Proof: banner.png\" width=\"552\" /></td></tr></table>"
+      },
+      {
+        "name": "quote.proofFiles",
+        "description": "The other proof files by name, to see on the quote page; empty when there are none",
+        "sample": "Also with this revision: banner.ai. See it on your quote page."
+      },
+      {
+        "name": "quote.nextStep",
+        "description": "What to do next: approve the proof first, or pay when ready",
+        "sample": "Look over the proof, then approve it on your quote page. Once you approve it, you can pay there."
+      },
+      {
+        "name": "quote.buttonLabel",
+        "description": "“Review and approve” while an approval is needed first, else “View and pay” with the total",
+        "sample": "View and pay $1,250.00"
+      },
+      {
+        "name": "quote.url",
+        "description": "The quote’s pay link on your site. Private to the customer; it needs no account",
+        "sample": "https://shop.example.com/pay-quote?q=quote_123&t=…"
+      }
+    ],
+    "defaultBody": [
+      {
+        "block": "text",
+        "text": "{{host.businessName}} · Quote {{quote.number}}",
+        "variant": "eyebrow"
+      },
+      {
+        "block": "text",
+        "text": "{{quote.heading}}",
+        "variant": "heading"
+      },
+      {
+        "block": "text",
+        "text": "{{quote.intro}}",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "{{quote.message}}",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "Quote: {{quote.number}}\nRevision: {{quote.revision}}\nTotal: {{quote.total}}",
+        "variant": "details"
+      },
+      {
+        "block": "html",
+        "html": "{{quote.proofImages}}"
+      },
+      {
+        "block": "text",
+        "text": "{{quote.proofFiles}}",
+        "variant": "caption"
+      },
+      {
+        "block": "text",
+        "text": "{{quote.nextStep}}",
+        "variant": "body"
+      },
+      {
+        "block": "button",
+        "label": "{{quote.buttonLabel}}",
+        "href": "{{quote.url}}"
+      },
+      {
+        "block": "text",
+        "text": "Reply to this email to reach {{host.businessName}}.",
+        "variant": "caption"
+      }
+    ],
+    "footerReason": "You’re receiving this because {{host.businessName}} prepared a quote for you."
+  },
+  {
     "key": "sale-notification",
     "name": "New sale",
     "description": "Notifies the seller when an order is placed.",

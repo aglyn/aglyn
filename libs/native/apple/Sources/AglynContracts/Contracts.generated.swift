@@ -3187,6 +3187,7 @@ public struct OrderQuote: Codable, Hashable, Sendable {
   public var createdBy: String
   public var customer: QuoteCustomer
   public var discount: QuoteDiscount?
+  public var emailThread: QuoteEmailThread?
   public var linkVersion: Double?
   public var notes: String?
   public var paidAtMs: Double?
@@ -3194,6 +3195,7 @@ public struct OrderQuote: Codable, Hashable, Sendable {
   public var requireProofApproval: Bool?
   public var responses: [QuoteCustomerResponse]?
   public var revision: Double
+  public var sends: [QuoteSendRecord]?
   public var shipping: QuoteShipping?
   public var shipTo: OrderAddress?
   public var stage: QuoteStage
@@ -3203,7 +3205,7 @@ public struct OrderQuote: Codable, Hashable, Sendable {
   public var updatedAtMs: Double
   public var updatedBy: String
 
-  public init(approval: QuoteApproval? = nil, approvedRevision: Double? = nil, billTo: OrderAddress? = nil, createdAtMs: Double, createdBy: String, customer: QuoteCustomer, discount: QuoteDiscount? = nil, linkVersion: Double? = nil, notes: String? = nil, paidAtMs: Double? = nil, proofs: [QuoteProof]? = nil, requireProofApproval: Bool? = nil, responses: [QuoteCustomerResponse]? = nil, revision: Double, shipping: QuoteShipping? = nil, shipTo: OrderAddress? = nil, stage: QuoteStage, tax: QuoteTaxBasis, terms: String? = nil, unmatchedPayments: [QuoteUnmatchedPayment]? = nil, updatedAtMs: Double, updatedBy: String) {
+  public init(approval: QuoteApproval? = nil, approvedRevision: Double? = nil, billTo: OrderAddress? = nil, createdAtMs: Double, createdBy: String, customer: QuoteCustomer, discount: QuoteDiscount? = nil, emailThread: QuoteEmailThread? = nil, linkVersion: Double? = nil, notes: String? = nil, paidAtMs: Double? = nil, proofs: [QuoteProof]? = nil, requireProofApproval: Bool? = nil, responses: [QuoteCustomerResponse]? = nil, revision: Double, sends: [QuoteSendRecord]? = nil, shipping: QuoteShipping? = nil, shipTo: OrderAddress? = nil, stage: QuoteStage, tax: QuoteTaxBasis, terms: String? = nil, unmatchedPayments: [QuoteUnmatchedPayment]? = nil, updatedAtMs: Double, updatedBy: String) {
     self.approval = approval
     self.approvedRevision = approvedRevision
     self.billTo = billTo
@@ -3211,6 +3213,7 @@ public struct OrderQuote: Codable, Hashable, Sendable {
     self.createdBy = createdBy
     self.customer = customer
     self.discount = discount
+    self.emailThread = emailThread
     self.linkVersion = linkVersion
     self.notes = notes
     self.paidAtMs = paidAtMs
@@ -3218,6 +3221,7 @@ public struct OrderQuote: Codable, Hashable, Sendable {
     self.requireProofApproval = requireProofApproval
     self.responses = responses
     self.revision = revision
+    self.sends = sends
     self.shipping = shipping
     self.shipTo = shipTo
     self.stage = stage
@@ -4988,6 +4992,18 @@ public enum QuoteDiscountKind: String, Codable, CaseIterable, Hashable, Sendable
   }
 }
 
+public struct QuoteEmailThread: Codable, Hashable, Sendable {
+  public var messageId: String
+  public var references: [String]
+  public var subject: String
+
+  public init(messageId: String, references: [String], subject: String) {
+    self.messageId = messageId
+    self.references = references
+    self.subject = subject
+  }
+}
+
 /// A newer server value decodes as `.unknown`, so an older app never fails on it.
 public enum QuoteNoTaxReason: String, Codable, CaseIterable, Hashable, Sendable {
   case noRate = "no-rate"
@@ -5037,6 +5053,28 @@ public struct QuoteResponseFile: Codable, Hashable, Sendable {
     self.name = name
     self.path = path
     self.size = size
+  }
+}
+
+public struct QuoteSendRecord: Codable, Hashable, Sendable {
+  public var atMs: Double
+  public var by: String
+  public var linkVersion: Double
+  public var messageId: String
+  public var providerId: String?
+  public var revision: Double
+  public var subject: String
+  public var to: String
+
+  public init(atMs: Double, by: String, linkVersion: Double, messageId: String, providerId: String? = nil, revision: Double, subject: String, to: String) {
+    self.atMs = atMs
+    self.by = by
+    self.linkVersion = linkVersion
+    self.messageId = messageId
+    self.providerId = providerId
+    self.revision = revision
+    self.subject = subject
+    self.to = to
   }
 }
 

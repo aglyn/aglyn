@@ -111,3 +111,27 @@ export function quotePayLinkUrl(
   if (!origin || !token) return null
   return `${origin}${quotePageHref(quoteId, token)}`
 }
+
+/**
+ * The absolute address of one of the current revision's proofs, behind the
+ * same signed link as the page (`GET /api/commerce/quote-proof`, AGL-4096),
+ * or null when the site has no public address or no signing secret. What the
+ * quote email draws a proof image from (AGL-4097); a link the business
+ * replaces stops serving it, with the page.
+ */
+export function quoteProofLinkUrl(
+  host: { cname?: unknown; subdomain?: unknown } | null | undefined,
+  hostId: string,
+  quoteId: string,
+  version: number,
+  proofId: string,
+): string | null {
+  const origin = hostPublicOrigin({
+    cname: typeof host?.cname === 'string' ? host.cname : null,
+    subdomain: typeof host?.subdomain === 'string' ? host.subdomain : null,
+  })
+  const token = mintQuoteLinkToken(hostId, quoteId, version)
+  if (!origin || !token || !proofId) return null
+  const query = new URLSearchParams({ hostId, q: quoteId, t: token, file: proofId })
+  return `${origin}/api/commerce/quote-proof?${query.toString()}`
+}

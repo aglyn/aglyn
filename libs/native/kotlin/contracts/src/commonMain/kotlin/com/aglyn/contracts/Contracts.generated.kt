@@ -2109,6 +2109,7 @@ data class OrderQuote(
     val createdBy: String,
     val customer: QuoteCustomer,
     val discount: QuoteDiscount? = null,
+    val emailThread: QuoteEmailThread? = null,
     val linkVersion: Double? = null,
     val notes: String? = null,
     val paidAtMs: Double? = null,
@@ -2116,6 +2117,7 @@ data class OrderQuote(
     val requireProofApproval: Boolean? = null,
     val responses: List<QuoteCustomerResponse>? = null,
     val revision: Double,
+    val sends: List<QuoteSendRecord>? = null,
     val shipping: QuoteShipping? = null,
     val shipTo: OrderAddress? = null,
     val stage: QuoteStage,
@@ -3254,6 +3256,13 @@ enum class QuoteDiscountKind(val raw: String) {
 internal object QuoteDiscountKindSerializer :
     RawEnumSerializer<QuoteDiscountKind>("com.aglyn.contracts.QuoteDiscountKind", QuoteDiscountKind.entries, QuoteDiscountKind.UNKNOWN, { it.raw })
 
+@Serializable
+data class QuoteEmailThread(
+    val messageId: String,
+    val references: List<String>,
+    val subject: String,
+)
+
 /** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
 @Serializable(with = QuoteNoTaxReasonSerializer::class)
 enum class QuoteNoTaxReason(val raw: String) {
@@ -3286,6 +3295,18 @@ data class QuoteResponseFile(
     val name: String,
     val path: String,
     val size: Double,
+)
+
+@Serializable
+data class QuoteSendRecord(
+    val atMs: Double,
+    val by: String,
+    val linkVersion: Double,
+    val messageId: String,
+    val providerId: String? = null,
+    val revision: Double,
+    val subject: String,
+    val to: String,
 )
 
 @Serializable

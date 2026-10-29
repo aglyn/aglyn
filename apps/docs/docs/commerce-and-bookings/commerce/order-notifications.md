@@ -146,3 +146,4 @@ arrive between 9 PM and 8 AM in your site's time zone are held until 8 AM.
 
 - [Commerce overview](overview.md#orders)
 - [POS & reservations](pos-and-reservations.md)
+- [The quote email](quotes-and-proofs.md#quote-email), which you send yourself

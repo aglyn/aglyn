@@ -1,7 +1,7 @@
 ---
 sidebar_position: 3.1
 title: Quotes
-description: Price a customer's order before they buy, from your products and items typed for the job, with tax worked out as you go. Attach proofs to approve, and keep every revision.
+description: Price a customer's order before they buy, from your products and items typed for the job, with tax worked out as you go. Email it with its proof and PDF, have proofs approved, and keep every revision.
 ---
 
 # Quotes
@@ -80,10 +80,86 @@ discount, then add shipping and tax. Tax follows your store's
 If your store hasn't chosen how it handles sales tax, the quote shows no tax and
 says so, with a link to **Taxes**.
 
+## Email the quote {#send}
+
+Send the quote to your customer by email, from your site, with your own message:
+
+1. Open a saved quote and choose **Send quote** under **Email to customer**.
+2. Check **To**. It starts with the customer's email from the quote; type another
+   address to send it somewhere else.
+3. Check **Subject**. It starts as **Quote #1042 from** your business name.
+4. Type a **Message**: a few words to your customer, shown at the top of the email.
+5. Choose **Send**.
+
+The quote then shows **Sent** with the date and the address, and moves to **Sent**
+in the list (unless your customer has already approved it or asked for changes,
+which it keeps showing). The email shows the quote as it was last saved, so save
+your changes first.
+
+## What your customer gets {#quote-email}
+
+One email in your site's look, from your site's name, with:
+
+- **Your quote from** your business name as its heading, or **Your updated quote**
+  from the second revision on;
+- your message;
+- the quote number, its revision and its total;
+- the first three proof images, each opening the quote page, and the other proof
+  files by name, to see on the quote page (a WebP image is named rather than shown,
+  because some inboxes can't show one);
+- what to do next, and one button:
+  - **Review and approve** while
+    [the proof must be approved before paying](#approval-and-paying) and isn't yet;
+  - otherwise **View and pay** with the total;
+- the quote attached as a PDF, the same one as [Download PDF](#pdf), with the pay
+  link on it.
+
+The button opens the quote's [pay link](#pay-link). Replies go to your site's contact
+email, the one your business listing shows or else your support email, and to your
+own email when your site has neither. The email ends with a line saying so.
+
+The email is the **Quote** email under **Emails**, where you can change its wording
+and colors like your other site emails. It can use these tokens:
+
+| Token | Value |
+| -- | -- |
+| `{{quote.number}}`, `{{quote.revision}}`, `{{quote.total}}` | The quote number, like #1042, its revision, and its total (with "before tax" when Stripe Tax adds the tax at payment) |
+| `{{quote.heading}}`, `{{quote.intro}}` | The heading, and one sentence on whether this is a new quote or an updated revision |
+| `{{quote.message}}` | The message you typed; empty when you typed none |
+| `{{quote.proofImages}}`, `{{quote.proofFiles}}` | Up to three proof images, and the other proof files by name |
+| `{{quote.nextStep}}`, `{{quote.buttonLabel}}`, `{{quote.url}}` | What to do next, the button's words, and the pay link |
+| `{{quote.subject}}` | The subject you sent it under |
+
+A quote isn't emailed to an address that bounced or reported an email as spam, or
+that unsubscribed from your site's emails. The quote says so; copy the
+[pay link](#pay-link) and send it another way.
+
+## One conversation in your customer's inbox {#conversation}
+
+Every email about a quote goes into the same conversation: the first one, sending it
+again and sending a new revision. Each one is sent as a reply to the one before, and
+the subject starts as the conversation's. Keep the subject the same when you send
+again: many inboxes group a conversation by its subject, so a new subject can start a
+new one.
+
+## Send it again, or send a revision {#send-again}
+
+After the first email, the button reads:
+
+- **Send again**, for the revision you already sent. The pay link stays the same.
+- **Send revision 2** (or whichever is current), once you've
+  [started a new revision](#revisions). Sending it gives your customer a new pay
+  link, and the link in your earlier email opens a page saying the quote was updated,
+  with nothing of the old revision. If you already replaced the link yourself, it
+  isn't replaced again.
+
+A paid quote isn't sent again.
+
 ## Send the pay link {#pay-link}
 
 Every quote has a pay link: an address on your own site, at `/pay-quote`, that opens
-the quote for your customer with a **Pay** button. Open the quote and, under
+the quote for your customer with a **Pay** button. [The quote email](#send) carries it
+for you. To send it some other way, open the quote and, under
 **Pay link**, choose **Copy pay link**. The link is copied and shown, ready to paste
 into an email or a text. It opens the quote as it was last saved, so save your changes
 before you copy it.
@@ -263,7 +339,8 @@ tools and the customer's account page.
 
 Making, editing and deleting quotes, adding and removing proofs, starting a revision,
 seeing earlier revisions and your customer's files, and downloading a quote's PDF, takes
-the **Create and edit quotes** permission. Copying and replacing a quote's pay link takes
-**Send quotes and invoices to customers**, and so does a PDF that carries the pay link. Everyone who can manage orders on the site has both to start with; a
+the **Create and edit quotes** permission. Emailing a quote, and copying and replacing
+its pay link, takes **Send quotes and invoices to customers**, and so does a PDF that
+carries the pay link. Everyone who can manage orders on the site has both to start with; a
 custom role or a per-member override can grant or deny each one. See
 [Order permissions](../../workspace-and-billing/teams-and-roles/custom-roles.md#order-permissions).

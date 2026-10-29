@@ -27,6 +27,15 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — email a quote
+
+- **[Email a quote](commerce-and-bookings/commerce/quotes-and-proofs.md#send)** — send a
+  quote to your customer from your site, with your message, the first proof images, the
+  quote as a PDF and a button to approve the proof or pay. Replies reach your business.
+- **[One conversation](commerce-and-bookings/commerce/quotes-and-proofs.md#conversation)**
+  — sending again or sending a new revision arrives in the same conversation in your
+  customer's inbox, and a new revision's email gives them a new pay link.
+
 ## October 2026 — proofs and revisions for quotes
 
 - **[Proofs on quotes](commerce-and-bookings/commerce/quotes-and-proofs.md#proofs)** —

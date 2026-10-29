@@ -755,6 +755,39 @@ export async function isEmailSuppressed(
 }
 
 /**
+ * Whether a site may write to one address, person to person (AGL-4097):
+ * `suppressed-platform` when it bounced or reported mail as spam anywhere,
+ * `suppressed-host` when it unsubscribed from this site or any site of its
+ * consent group, else null. Both lists, the same two the inbox's reply reads
+ * (`addressSuppression` in the inbox plugin), shared from here so a plugin
+ * that sends a customer one message, such as a quote, asks the same question
+ * without importing another plugin.
+ *
+ * Fails closed like {@link isEmailSuppressed}: an address it cannot key, or a
+ * platform list it cannot read, is `suppressed-platform`.
+ */
+export async function siteAddressSuppression(
+  hostId: string,
+  email: string,
+  options: {
+    firestore?: any
+    /** The site's consent group, whose every site's opt-outs answer; absent reads the site alone. */
+    group?: Pick<ConsentGroup, 'hostId' | 'hostIds'> | null
+  } = {},
+): Promise<'suppressed-platform' | 'suppressed-host' | null> {
+  const key = emailSuppressionKey(email)
+  if (!key) return 'suppressed-platform'
+  if (await isEmailSuppressed(email, options.firestore)) return 'suppressed-platform'
+  const group = options.group
+  const hostIds = group && group.hostId === hostId ? consentGroupOptOutHosts(group) : [hostId]
+  const db = options.firestore ?? defaultFirestore()
+  const docs = await Promise.all(
+    hostIds.map((id) => db.collection('hosts').doc(id).collection('suppressions').doc(key).get()),
+  )
+  return docs.some((doc: { exists: boolean }) => doc.exists) ? 'suppressed-host' : null
+}
+
+/**
  * The sendable subset of a recipient list, for the bulk senders.
  *
  * One `get()` per DISTINCT address rather than a query, so the check needs no

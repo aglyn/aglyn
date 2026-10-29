@@ -195,7 +195,7 @@ export const DOCS_HELP_EXCERPTS = {
   publishAPlugin: 'Ship your own plugin to the marketplace with version pinning.',
   publisherHandbook: 'Publishing to the Aglyn marketplace — from profile setup through listing authoring, review, updates, and getting paid.',
   publishYourFirstScreen: 'Create a page, design it in the Besigner, and publish it live.',
-  quotesAndProofs: 'Price a customer\'s order before they buy, from your products and items typed for the job, with tax worked out as you go. Attach proofs to approve, and keep every revision.',
+  quotesAndProofs: 'Price a customer\'s order before they buy, from your products and items typed for the job, with tax worked out as you go. Email it with its proof and PDF, have proofs approved, and keep every revision.',
   realmBundles: 'The end-to-end path from a standalone bundle to first-party-grade code running in the app realm.',
   redirects: 'Manage URL redirects with validation, loop detection, and hit metrics.',
   refunds: 'Refunding an organization\'s subscription charge from its org page — how much each staff role may refund before it escalates, why a refund is a loss rather than a reversal, and the audit row it writes.',

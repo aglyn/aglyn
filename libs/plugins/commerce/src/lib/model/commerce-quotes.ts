@@ -197,6 +197,37 @@ export interface QuoteUnmatchedPayment {
   reason: 'superseded' | 'already-paid'
 }
 
+/**
+ * The conversation the quote's emails keep in the customer's mailbox
+ * (AGL-4097): the latest message's `Message-ID`, every id in the
+ * conversation oldest first, and the subject it runs under. The shape of
+ * `EmailThread` (`@aglyn/shared-util-email`), spelled out so the model needs
+ * no email library. Started by the first email about the quote (a request's
+ * confirmation, or the quote itself); every later one replies into it.
+ */
+export interface QuoteEmailThread {
+  messageId: string
+  references: string[]
+  subject: string
+}
+
+/** One time the quote was emailed to the customer (AGL-4097). */
+export interface QuoteSendRecord {
+  /** The revision the email carried. */
+  revision: number
+  to: string
+  subject: string
+  atMs: number
+  /** Who sent it: an email, else a uid. */
+  by: string
+  /** The `Message-ID` the email was sent with. */
+  messageId: string
+  /** The mail provider's own id for the message, when it answered one. */
+  providerId: string | null
+  /** The pay link version the email carried. */
+  linkVersion: number
+}
+
 /** What only a quote has, on its order document. */
 export interface OrderQuote {
   stage: QuoteStage
@@ -226,6 +257,10 @@ export interface OrderQuote {
    * as 1. Bumped when the business replaces the link.
    */
   linkVersion?: number
+  /** The conversation its emails keep in the customer's mailbox (AGL-4097). */
+  emailThread?: QuoteEmailThread | null
+  /** Every time it was emailed to the customer, oldest first (AGL-4097). */
+  sends?: QuoteSendRecord[]
   /** When the customer paid it. */
   paidAtMs?: number
   /** Payments the quote could not take; see {@link QuoteUnmatchedPayment}. */

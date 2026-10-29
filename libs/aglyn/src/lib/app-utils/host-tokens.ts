@@ -398,6 +398,27 @@ export function hostTokenMerge(
 }
 
 /**
+ * The email address a visitor writes to the business at: the one its
+ * business listing shows (`seo.entity.email`), else its support email. Null
+ * when the site has neither. One answer for every place that names it: the
+ * waiver consent, the quote and invoice PDFs, and the Reply-To of the quote
+ * email (AGL-4097). Trimmed, not validated; a caller putting it in a header
+ * checks it is an address.
+ */
+export function hostContactEmail(
+  host:
+    | {
+        seo?: { entity?: { email?: unknown } | null } | null
+        business?: { supportEmail?: unknown } | null
+      }
+    | null
+    | undefined,
+): string | null {
+  const text = (value: unknown) => (typeof value === 'string' ? value.trim().slice(0, 320) : '')
+  return text(host?.seo?.entity?.email) || text(host?.business?.supportEmail) || null
+}
+
+/**
  * Resolves `host.*` tokens across every string prop of a normalized node map.
  *
  * Mirrors `resolveNodesBindings` deliberately — same shallow-copy discipline,
