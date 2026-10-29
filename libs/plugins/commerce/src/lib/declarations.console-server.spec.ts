@@ -34,6 +34,7 @@ jest.mock('./server/pos-display', () => ({
   verifyPosCustomerDisplay: (...args: unknown[]) => mockVerify(...(args as [])),
 }))
 
+import { listPluginConsoleCrons } from '@aglyn/aglyn/plugin-manager/plugin-console-crons'
 import { verifyCustomerDisplay } from '@aglyn/aglyn/plugin-manager/plugin-customer-display-verifier'
 import {
   listPluginEventHandlers,
@@ -91,5 +92,14 @@ describe('core’s customer display verifier (AGL-4042)', () => {
     const credential = 'display-token-0123456789abcdefghijklmnop'
     expect(await verifyCustomerDisplay(credential)).toEqual({ hostId: 'host-1', orgId: 'org-1', screen: null, shownBy: null })
     expect(mockVerify).toHaveBeenCalledWith(credential)
+  })
+})
+
+describe('the sweep of a customer’s unsent quote files (AGL-4096)', () => {
+  it('is a console job of commerce’s own, on the plugin job runner’s tick', () => {
+    registerCommerceConsoleServerDeclarations()
+    expect(listPluginConsoleCrons()).toContainEqual(
+      expect.objectContaining({ pluginId: BUNDLE_ID, id: 'commerce-quote-upload-sweep', label: 'Unsent quote files' }),
+    )
   })
 })
