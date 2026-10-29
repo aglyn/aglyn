@@ -247,7 +247,6 @@ your new site's share image unless you already chose one.
   planned and no AI credits were used. Fix what the page names, then choose **Check again**.
 - **Out of AI credits.** The import pauses. Choose **Get more AI credits**, then **Resume**.
 
-Every import is also logged for the Trust & Safety team's review.
 
 ## When your site turns AglynBot away {#turned-away}
 
