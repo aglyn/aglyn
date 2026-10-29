@@ -126,6 +126,30 @@ final class SetupTests: XCTestCase {
     XCTAssertEqual(SetupSection.of("business"), .business)
   }
 
+  /// Year founded (AGL-4102): read into the form, carried into the owner's save, its origin said like any other field, and a
+  /// year the console would refuse is refused here with the console's words.
+  func testYearFoundedIsABusinessProfileField() {
+    let stored: [String: Any] = ["whatYouDo": "Racing", "founded": "2019", "sources": ["founded": "start"]]
+    let form = businessProfileForm(stored)
+    XCTAssertEqual(form["founded"], "2019")
+    XCTAssertEqual(businessProfileForm(nil)["founded"], "")
+    var edited = form
+    edited["founded"] = " 2015 "
+    let values = businessProfileSaveValues(edited)
+    XCTAssertEqual(values["founded"] as? String, " 2015 ")
+    XCTAssertEqual(businessProfileOwnerWrite(stored, values)["founded"] as? String, "2015")
+    XCTAssertEqual((businessProfileOwnerWrite(stored, values)["sources"] as? [String: Any])?["founded"] as? String, "owner")
+    let resolved = resolveBusinessProfile(host: [:], site: stored)
+    XCTAssertEqual(
+      businessOriginLine("founded", stored: stored, resolved: resolved, fallback: "Four digits, such as 2015"),
+      "Your answers when the site was started. Edit it and it becomes yours.")
+    XCTAssertEqual(businessOriginLine("founded", stored: [:], resolved: nil, fallback: "Four digits, such as 2015"), "Four digits, such as 2015")
+    XCTAssertNil(businessFoundedError(form))
+    edited["founded"] = "founded 2015!"
+    XCTAssertEqual(businessFoundedError(edited), businessProfileFoundedProblem("founded 2015!"))
+    XCTAssertNotNil(businessFoundedError(edited))
+  }
+
   func testIntegrationsOfferTheCardsOfPluginsRunningOnTheSite() {
     let registry = NativePluginRegistry()
     let entries = ["live-chat", "marketing-platforms", "zapier"].map { id in

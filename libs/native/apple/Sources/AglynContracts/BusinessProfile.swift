@@ -77,6 +77,20 @@ public func businessProfileSourceOf(_ doc: [String: Any]?, _ field: String) -> S
   return "owner"
 }
 
+/// What is wrong with a year founded as the owner typed it (AGL-4092, AGL-4102), or nil when nothing is: empty, or four digits
+/// no later than this year, the guided start's own rule. `nowMs` is read on the Gregorian calendar in the device's zone, as
+/// the console reads it in the browser's.
+public func businessProfileFoundedProblem(_ value: Any?, nowMs: Double = Date().timeIntervalSince1970 * 1000) -> String? {
+  let year = (value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+  if year.isEmpty { return nil }
+  var calendar = Calendar(identifier: .gregorian)
+  calendar.timeZone = .current
+  let latest = calendar.component(.year, from: Date(timeIntervalSince1970: nowMs / 1000))
+  let fourDigits = year.utf8.count == 4 && year.utf8.allSatisfy { $0 >= 48 && $0 <= 57 }
+  if fourDigits, let number = Int(year), number >= 1000, number <= latest { return nil }
+  return "Enter the year as four digits, like \(latest - 10)."
+}
+
 /// Every value a write may carry, sanitized; an absent field stays absent.
 public func sanitizeBusinessProfileValues(_ values: [String: Any]) -> [String: Any] {
   var clean: [String: Any] = [:]

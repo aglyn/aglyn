@@ -67,6 +67,13 @@ class BusinessProfileCasesTest {
     cases("businessProfileOwnerWrite").forEach { (args, result) -> assertEquals(plain(map(result)), plain(businessProfileOwnerWrite(map(args[0]), map(args[1]).orEmpty())), args.toString()) }
   }
 
+  /** The year founded's rule (AGL-4102): the console's own answers, each at the moment the case names. */
+  @Test
+  fun foundedProblem() = cases("businessProfileFoundedProblem").forEach { (args, result) ->
+    val expected = (result as? JsonPrimitive)?.takeIf { it !is JsonNull }?.content
+    assertEquals(expected, businessProfileFoundedProblem(plainJson(args[0]), args[1].jsonPrimitive.content.toDouble().toLong()), args.toString())
+  }
+
   @Test
   fun placesAndProfileUrls() {
     cases("normalizeAreaServed").forEach { (args, result) -> assertEquals(result.jsonArray.map { it.jsonPrimitive.content }, normalizeAreaServed(plainJson(args[0])), args.toString()) }

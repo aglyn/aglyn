@@ -479,6 +479,34 @@ class SiteTest {
     assertEquals(listOf("details", "business", "seo", "tracking", "theme", "emails", "integrations"), com.aglyn.site.setup.SetupSection.entries.map { it.id })
   }
 
+  /**
+   * Year founded (AGL-4102): read into the form, carried into the owner's save, its origin said like any other field, and a
+   * year the console would refuse is refused here with the console's words.
+   */
+  @Test
+  fun yearFoundedIsABusinessProfileField() {
+    val stored = mapOf("whatYouDo" to "Racing", "founded" to "2019", "sources" to mapOf("founded" to "start"))
+    val form = com.aglyn.site.setup.businessProfileForm(stored)
+    assertEquals("2019", form["founded"])
+    assertEquals("", com.aglyn.site.setup.businessProfileForm(null)["founded"])
+    val edited = form + ("founded" to " 2015 ")
+    val values = com.aglyn.site.setup.businessProfileValues(edited)
+    assertEquals(" 2015 ", values["founded"])
+    val write = com.aglyn.contracts.businessProfileOwnerWrite(stored, values)
+    assertEquals("2015", write["founded"])
+    assertEquals("owner", (write["sources"] as Map<*, *>)["founded"])
+    val resolved = com.aglyn.contracts.resolveBusinessProfile(emptyMap(), stored)
+    assertEquals(
+      "Your answers when the site was started. Edit it and it becomes yours.",
+      com.aglyn.site.setup.businessOriginLine("founded", stored, resolved, "Four digits, such as 2015"),
+    )
+    assertEquals("Four digits, such as 2015", com.aglyn.site.setup.businessOriginLine("founded", emptyMap(), null, "Four digits, such as 2015"))
+    assertEquals(null, com.aglyn.site.setup.businessFoundedError(form))
+    val wrong = form + ("founded" to "founded 2015!")
+    assertEquals(com.aglyn.contracts.businessProfileFoundedProblem("founded 2015!", com.aglyn.core.nowMillis()), com.aglyn.site.setup.businessFoundedError(wrong))
+    assertTrue(com.aglyn.site.setup.businessFoundedError(wrong) != null)
+  }
+
   @Test
   fun integrationsOfferTheCardsOfPluginsRunningOnTheSite() {
     val registry = com.aglyn.pluginhost.NativePluginRegistry()
