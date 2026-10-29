@@ -83,6 +83,9 @@ jest.mock('@aglyn/aglyn/plugin-manager/plugin-site-starters', () => ({
     calls.push('source')
     return mockResolveSource()
   },
+  // The real best-effort reader, so the route is held to what it promises.
+  describeSiteStarter: jest.requireActual('@aglyn/aglyn/plugin-manager/plugin-site-starters')
+    .describeSiteStarter,
 }))
 jest.mock('@aglyn/aglyn/plugin-manager/plugin-declarations-repair', () => ({
   runPluginDeclarationsRepair: () => {
@@ -316,5 +319,37 @@ describe('what it answers', () => {
     expect(response.status).toBe(500)
     expect(await bodyOf(response)).toEqual({ error: 'Starters could not be loaded' })
     quiet.mockRestore()
+  })
+})
+
+describe('a pick restored on the way back from paying for it (AGL-4049 lane 3)', () => {
+  const PAID = { ...SUMMARY, listingId: 'northwind-studio', official: false, priceUsd: 12, owned: true }
+
+  it('lists the named starter first, as the source describes it for this viewer, and once', async () => {
+    const describe = jest.fn(async () => PAID)
+    mockSearch.mockResolvedValue([SUMMARY, { ...PAID, owned: false }])
+    mockResolveSource.mockReturnValue({ search: mockSearch, resolve: jest.fn(), describe })
+    const { rows } = await bodyOf(await ask('orgId=org-1&include=northwind-studio'))
+    expect(describe).toHaveBeenCalledWith({ listingId: 'northwind-studio' }, { orgId: 'org-1', uid: 'member-1' })
+    expect(rows).toEqual([PAID, SUMMARY])
+  })
+
+  it('lists nothing extra for a starter this viewer may not pick, or a source that cannot describe one', async () => {
+    mockResolveSource.mockReturnValue({ search: mockSearch, resolve: jest.fn(), describe: async () => null })
+    expect((await bodyOf(await ask('orgId=org-1&include=gone'))).rows).toEqual([SUMMARY])
+    mockResolveSource.mockReturnValue({ search: mockSearch, resolve: jest.fn() })
+    expect((await bodyOf(await ask('orgId=org-1&include=gone'))).rows).toEqual([SUMMARY])
+  })
+
+  it('never describes anything for a caller the gates refuse', async () => {
+    const describe = jest.fn(async () => PAID)
+    mockResolveSource.mockReturnValue({ search: mockSearch, resolve: jest.fn(), describe })
+    mockFlagOn.mockResolvedValue(false)
+    expect((await ask('orgId=org-1&include=northwind-studio')).status).toBe(403)
+    expect(describe).not.toHaveBeenCalled()
+  })
+
+  it('400s an id no listing can have', async () => {
+    expect((await ask('orgId=org-1&include=a%2Fb')).status).toBe(400)
   })
 })

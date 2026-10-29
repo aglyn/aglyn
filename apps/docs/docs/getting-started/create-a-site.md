@@ -39,6 +39,14 @@ settings. Everything you build lives under a site, and you can own several.
 
    ![Start your site's Choose a style step: style cards for Business & services, Home services & trades, Law, finance & consulting and more, each with a picture of an example home page and a line about the look, none of them selected, with Back, and Create site unavailable beside Choose a style to continue](/img/getting-started/create-site-choose-style.png)
 
+   **Choose your starter is rolling out**, and your workspace may not have it yet. Where
+   it is on, **Start from a starter site** (or, without Aglyn AI, **Create site** itself)
+   opens **Choose your starter** in place of the style cards: Aglyn's styles come first,
+   then starters from the marketplace. A card with a price says so, and you buy it before
+   the site is made. Nothing is chosen for you, **Create site** waits until you pick a
+   starter, and closing the window creates nothing. See
+   [Site starters](../building-sites/site-templates/site-starters.md).
+
    Otherwise **Create site** asks for the name, the address and the style in one
    window: choose a style card, then **Create site**, which stays unavailable until a
    style is chosen. The starter is a complete website, published and open to search

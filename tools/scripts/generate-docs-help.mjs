@@ -162,6 +162,10 @@ const PLUGIN_TOPICS = {
   // PLUGIN_UNLISTED_TOPICS.
   aiImport: '/ai/bring-my-site',
   aiTemplate: '/building-sites/site-templates/templates-library',
+  // "Choose your starter"'s marketplace shelf (AGL-4049): what an empty
+  // shelf links to, behind `release_site_starters` like the page's own
+  // rolling-out note.
+  siteStarters: '/building-sites/site-templates/site-starters',
   aiMarketing: '/ai/marketing-with-ai',
   // The Ad conversions card on a site's setup page (AGL-3694), whose guide
   // is unlisted until AD_CONVERSIONS_TOKEN_KEY is set. The Tracking tab's

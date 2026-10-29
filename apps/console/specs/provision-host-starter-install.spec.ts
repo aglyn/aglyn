@@ -381,4 +381,20 @@ describe('claimHostForOrg: what the site was created with (AGL-4049)', () => {
       choice({ listingId: 'listing-1', version: '3', kind: 'trades' }),
     )
   })
+
+  it('records the kind the listing names over the stored pages’ own (AGL-4049 lane 3)', async () => {
+    const { writes } = await claim({
+      payload: {
+        mode: 'base',
+        facets: { kind: null, base: 'starter', fonts: null, pages: 1, mode: 'base' },
+        theme: { kind: 'builtin', base: 'starter', brand: { light: {} }, fonts: null },
+        screens: [{ displayName: 'Home', slug: '/', nodes: {} }],
+        layout: { displayName: 'Header and footer', nodes: {}, props: [] },
+      },
+      listing: { listingId: 'listing-1', version: 3, displayName: 'Corner bistro', kind: 'restaurant' },
+    })
+    expect((writes[0][1] as Record<string, unknown>)['starterChoice']).toEqual(
+      choice({ listingId: 'listing-1', version: '3', kind: 'restaurant' }),
+    )
+  })
 })

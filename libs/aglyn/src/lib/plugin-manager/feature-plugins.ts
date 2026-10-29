@@ -912,11 +912,16 @@ export const CONSOLE_WIDGET_SLOTS = {
    * workspace, how the site will be filled, the person's search and filter,
    * `onPick` and `ready`.
    *
-   * A pick is required: there is no Skip, and the listing the platform starts
-   * a site from by default comes first. A widget here lists and picks and
-   * creates nothing; the site is created by the dialog from the starter it was
-   * handed. Not a staff zone and not host-gated: the widget's own extension
-   * gates it, as on any other zone.
+   * A pick is required: there is no Skip, and nothing is picked for anyone —
+   * the platform's own styles are listed first, and none is chosen until the
+   * person clicks one. A widget here lists and picks and creates nothing; the
+   * site is created by the dialog from the starter it was handed. A starter
+   * with a price the workspace has not paid is bought from the widget, which
+   * is the marketplace's to sell, and the person comes back to the dialog on
+   * the same pick (`app-utils/site-create-return.ts`). Mounted by "Create
+   * site"'s "Choose your starter", behind `release_site_starters`. Not a
+   * staff zone and not host-gated: the widget's own extension gates it, as
+   * on any other zone.
    */
   hostStarterPicker: 'hostStarterPicker',
   /**
@@ -1434,6 +1439,18 @@ export interface ConsoleHostFirstRunZoneProps {
    */
   pendingSite?: ConsolePendingSite
   /**
+   * Opens the shell's "Choose your starter" for the starter path (AGL-4049),
+   * where the person picks a starter site from the marketplace — the
+   * platform's styles first — before the site exists. Present only when the
+   * shell offers that picker (its release, and a widget on the
+   * `hostStarterPicker` zone); a widget that is handed it calls it from its
+   * starter choice instead of asking a style itself. Absent, the widget asks
+   * the style and calls `startBlank` with it, as before. It creates nothing:
+   * the shell creates the site from the pick, and closing it leaves the
+   * person where they were.
+   */
+  chooseStarter?: () => void
+  /**
    * Present when staff build the site for a client (AGL-3958), from the
    * one-screen build. See {@link ConsoleClientBuildStart}.
    */
@@ -1695,10 +1712,28 @@ export interface ConsoleHostStarterPickerZoneProps {
   search: string
   /** The facets the person narrowed to; an absent one is any. */
   filter: Partial<SiteStarterFacets>
-  /** Hands the dialog the starter the person picked. */
+  /**
+   * Hands the dialog the starter the person picked. Called again with the
+   * same listing once the widget has read a pick the dialog restored through
+   * {@link selected}, and with `owned: true` once the widget learns the
+   * workspace owns it.
+   */
   onPick: (pick: SiteStarterSummary) => void
   /** Reports whether the widget drew a picker; `false` gives the dialog its own default. */
   ready: (shown: boolean) => void
+  /**
+   * The pick the dialog holds, or `null` for none (AGL-4049). Absent, the
+   * widget keeps its own pick from the clicks it is given.
+   *
+   * The dialog sets it to restore the person's OWN earlier pick — the way
+   * back from buying it — or to clear one the create refused; it never
+   * picks for anyone. The widget shows that card chosen, listing it even
+   * where the search would not, and hands it back through {@link onPick}
+   * once it has read it. `owned` is what the dialog knows better than the
+   * search: `true` straight after paying for it, `false` when the create
+   * still asked for payment; absent, the search's own answer stands.
+   */
+  selected?: { listingId: string; owned?: boolean } | null
 }
 
 /** What the `hostTheme` zone hands each widget (AGL-2938). */

@@ -138,10 +138,12 @@ Every template shows a badge:
 That badge is set by Aglyn, not by whoever made the template, so a listing cannot
 claim to be something it is not.
 
-## First-party starters
+## Starter templates {#first-party-starters}
 
-Aglyn's starter sites (Landing Page, Business, Portfolio, the two Shop starters) are
-ordinary templates in your library — not a separate, locked-down kind. Every site gets
+Aglyn's starter templates (Landing Page, Business, Portfolio, the two Shop starters) are
+ordinary templates in your library — not a separate, locked-down kind. They add pages to
+a site you already have; to create a new site from a ready-made website, see
+[Site starters](site-starters.md). Every site gets
 its own copy, so you can open a starter in the besigner, edit it, keep versions of it,
 and use it to create pages exactly like a template you saved yourself. They carry the
 **Starter** badge, and they don't count against your plan's template allowance.

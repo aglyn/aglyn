@@ -50,6 +50,7 @@ import {
 import { guidedStartOffered } from '../../../../utils/server/guided-start-offered'
 import { registerPluginServerDeclarations } from '../../../../constants/plugins.declarations.server.generated'
 import {
+  describeSiteStarter,
   resolveSiteStarterSource,
   type PluginSiteStarterSource,
 } from '@aglyn/aglyn/plugin-manager/plugin-site-starters'
@@ -284,7 +285,10 @@ async function handler(request: Request): Promise<Response> {
         !(await isServerReleaseFlagOnForOrg('release_site_starters', orgMembership.orgId))
       ) {
         return Response.json(
-          { error: 'Site starters are not available for this workspace yet' },
+          {
+            error: 'Site starters are not available for this workspace yet',
+            listingId: starterChoice.listingId,
+          },
           { status: 403 },
         )
       }
@@ -309,15 +313,24 @@ async function handler(request: Request): Promise<Response> {
         pagesAllowed: checkQuota(org as never, 'screensPerHost', 0).limit,
       })
       if (refused) return Response.json(refused.body, { status: refused.status })
+      // The listing as the source describes it for this viewer: its name, for
+      // the library entry a full theme is filed under ("<name> theme") and for
+      // the landing that says what the site was made from, and its kind of
+      // site, which the site records. Best-effort: a name the client sent is
+      // never trusted, so without a description the entry is "Starter theme"
+      // and the kind is the stored pages' own.
+      const described = await describeSiteStarter(starterSource, starterChoice, {
+        orgId: orgMembership.orgId,
+        uid: decoded.uid,
+      })
+      const payload = resolved as SiteStarterPayload
       starterInstall = {
-        payload: resolved as SiteStarterPayload,
-        // The source answers with a payload and no listing name, and a name
-        // the client sent is not trusted, so the library entry a full theme
-        // files is named "Starter theme" until this route reads the listing.
+        payload,
         listing: {
           listingId: starterChoice.listingId,
           version: starterChoice.version ?? 'latest',
-          displayName: 'Starter',
+          displayName: described?.displayName?.trim() || 'Starter',
+          kind: described?.facets?.kind ?? payload.facets?.kind ?? null,
         },
       }
     }
@@ -549,11 +562,14 @@ async function handler(request: Request): Promise<Response> {
         // the client reports it on `host_created`.
         starterChoice: claim.starterChoice ?? null,
         // The starter the site was created from (AGL-4049), when one was picked.
+        // Its name is the listing's as the source described it, so the
+        // landing can say what the site was made from.
         ...(starterChoice
           ? {
               starter: {
                 listingId: starterChoice.listingId,
                 version: starterChoice.version ?? null,
+                displayName: starterInstall?.listing.displayName ?? 'Starter',
               },
             }
           : {}),

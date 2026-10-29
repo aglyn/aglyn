@@ -21,6 +21,7 @@ import { SITE_THEME_BASES } from '@aglyn/aglyn/app-utils/site-starter'
 import { siteStarterPresetId } from '@aglyn/aglyn/app-utils/site-starter-theme'
 import { runPluginDeclarationsRepair } from '@aglyn/aglyn/plugin-manager/plugin-declarations-repair'
 import {
+  describeSiteStarter,
   resolveSiteStarterSource,
   type PluginSiteStarterSource,
   type SiteStarterSummary,
@@ -45,9 +46,15 @@ import {
 /*
  * THE STARTER SEARCH "Choose your starter" ASKS (AGL-4049).
  *
- * `GET /api/marketplace/starters?orgId=&mode=base|ai&q=&kind=&base=&fonts=&limit=`
+ * `GET /api/marketplace/starters?orgId=&mode=base|ai&q=&kind=&base=&fonts=&limit=&include=`
  * answers `{ rows, labels }`: the starters matching a search, each a summary
  * a card shows, and the names for the theme and font ids they carry.
+ *
+ * `include` names a listing the answer carries first whatever the search
+ * finds: the person's own pick, restored after they went to pay for it,
+ * which a search for other words would not list. It is described for this
+ * viewer through the seam's `describe`, behind the same gates as a pick, so
+ * it lists nothing the person could not pick anyway.
  *
  * Summaries only. A paid AI starter's answers ARE what it sells, and a
  * starter's pages are what a site is created from; both come out of the
@@ -157,15 +164,22 @@ async function handler(request: Request): Promise<Response> {
 
     const source = await starterSource()
     if (!source) return refuse(503, SITE_STARTERS_UNAVAILABLE)
+    const viewer = { orgId, uid: decoded.uid }
     const found = await source.search(
       { word: asked.word, filter: asked.filter, limit: asked.limit },
-      { orgId, uid: decoded.uid },
+      viewer,
     )
     const rows: SiteStarterSummary[] = []
+    // The restored pick first, so the card the person chose is the one they
+    // see, wherever the search would have put it, or left it out.
+    const included = asked.include
+      ? readStarterSummary(await describeSiteStarter(source, { listingId: asked.include }, viewer))
+      : null
+    if (included) rows.push(included)
     for (const value of Array.isArray(found) ? found : []) {
       const row = readStarterSummary(value)
-      if (row) rows.push(row)
-      if (rows.length >= asked.limit) break
+      if (row && row.listingId !== included?.listingId) rows.push(row)
+      if (rows.length >= asked.limit + (included ? 1 : 0)) break
     }
     const body: StarterSearchAnswer = { rows, labels: starterSearchLabels() }
     return answer(body)

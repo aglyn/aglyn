@@ -817,6 +817,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/building-sites/site-search/overview',
     title: 'Site Search',
   },
+  siteStarters: {
+    path: '/building-sites/site-templates/site-starters',
+    title: 'Site starters',
+  },
   sso: {
     path: '/enterprise/sso',
     title: 'Single sign-on (SAML)',
@@ -1155,6 +1159,7 @@ export const DOCS_HELP_ANCHORS = {
   siteLooks: ['#choose-a-style', '#each-styles-layout', '#how-the-look-is-made', '#your-theme-afterwards', '#change-the-look-later', '#related'],
   siteProtection: ['#where-these-controls-live', '#per-screen-passwords', '#custom-error-screens', '#maintenance-mode', '#related'],
   siteSearch: ['#how-it-works', '#what-it-searches', '#the-layout-built-in-pages-use', '#configure-it', '#related'],
+  siteStarters: ['#choose-your-starter', '#what-a-card-shows', '#where-starters-come-from', '#starters-and-ai-starters', '#a-starter-with-a-price', '#what-your-site-gets', '#make-it-your-own', '#who-can-use-them', '#related'],
   sso: ['#setting-it-up', '#1-verify-your-domain', '#2-connect-your-identity-provider', '#rotating-your-signing-certificate', '#3-turn-it-on', '#how-it-works', '#enforcement', '#you-must-keep-one-way-in-that-does-not-go-through-your-idp', '#an-owner-who-signs-in-outside-your-identity-pool', '#or-a-break-glass-account-inside-the-pool', '#transferring-ownership-while-you-are-enforcing', '#if-we-cannot-check', '#consequences-worth-knowing-before-you-switch', '#testing-it', '#related'],
   staffConsole: ['#runbooks', '#whats-there', '#staff-overview', '#staff-overview-organizations', '#staff-overview-signups', '#staff-overview-sites', '#staff-overview-users', '#staff-overview-mrr', '#staff-overview-newest-orgs', '#support-queue', '#plugin-reviews', '#organizations-admin', '#filter-the-directory', '#organization-detail', '#staff-org-email', '#free-workspace-limit', '#first-party-hosts', '#entitlement-editor', '#plan-comps', '#build-for-a-client', '#client-build-screen', '#bundle-link', '#sites-admin', '#filter-the-site-list', '#site-detail', '#site-ownership', '#site-transfer', '#site-content', '#staff-automations', '#staff-org-automations', '#emails-sent', '#staff-media-library', '#users-admin', '#users-accounts', '#user-detail', '#user-identity', '#user-organizations', '#user-audit-trail', '#user-data-access', '#user-activity', '#legal-acceptances', '#acquisition', '#password-help', '#sign-one-device-out', '#email-delivery', '#import-delivery-history', '#organization-page-cards', '#org-staff-actions', '#org-edit', '#org-sites', '#org-members', '#org-effective-entitlements', '#org-metered-usage', '#enterprise-custom-billing', '#org-recent-admin-actions', '#org-activity', '#success-manager', '#site-page-cards', '#site-usage', '#site-settings-snapshot', '#staff-notes', '#broadcast-announcements', '#billing-insight', '#margin-utilization', '#margin-scan', '#margin-fleet-utilization', '#margin-fleet-margin', '#margin-by-organization', '#refunds', '#impersonation', '#system-emails', '#edit-a-system-email', '#platform-send-rate', '#platform-suppressions', '#platform-settings', '#feature-flags', '#multi-tenant-architecture', '#audit-archival', '#organization-suspension', '#operator-alerts', '#ai-monitoring', '#sales-tax-return', '#audit-log', '#audit-admin-actions', '#coupons', '#create-a-coupon', '#discount-floors', '#existing-coupons', '#contact-suppressions', '#record-a-dnc-request', '#suppressed-numbers', '#access', '#which-identity-holds-staff', '#staff-inside-a-customers-tenant--a-property-worth-knowing', '#offboarding', '#break-glass-access', '#requiring-sso-for-a-company-domain', '#why-am-i-getting-a-404', '#related'],
   startWithAi: ['#how-do-you-want-to-start', '#the-questions', '#your-business', '#audience', '#style', '#sites-you-like', '#details', '#review', '#what-it-will-cost', '#what-gets-built', '#building-your-site', '#paused-or-out-of-credits', '#try-again', '#published-and-indexable', '#the-sites-search-listing', '#business-details', '#a-store-from-the-start', '#a-blog-from-the-start', '#events-from-the-start', '#on-the-free-plan', '#who-can-use-it', '#related'],
@@ -1988,7 +1993,7 @@ export const DOCS_HELP_SECTION_TITLES: {
     '#team-roles': 'Team roles',
   },
   templatesLibrary: {
-    '#first-party-starters': 'First-party starters',
+    '#first-party-starters': 'Starter templates',
     '#templates-list': 'Your Templates list',
     '#using-a-template': 'Using a template',
     '#where-a-template-came-from': 'Where a template came from',

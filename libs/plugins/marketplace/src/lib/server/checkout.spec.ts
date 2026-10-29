@@ -33,10 +33,13 @@
 // field — so the handler cannot open a session without one. These suites are
 // about the take rate, the tax code and the kill switch, so the membership is
 // simply present and permitted.
+// What the buyer's membership grants: both keys a sale can ask for, unless a
+// case takes one away (AGL-4049 lane 3).
+const mockPermissions: Record<string, boolean> = { installPlugins: true, createHosts: true }
 jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
   resolveOrgPermissions: async () => ({
     orgId: 'buyer-org',
-    permissions: { installPlugins: true },
+    permissions: mockPermissions,
   }),
 }))
 
@@ -55,9 +58,9 @@ jest.mock('@aglyn/aglyn/server', () => {
     '@aglyn/aglyn/app-utils/plan-entitlements',
   )
   return {
-    buildRoute: (_route: string, params: Record<string, string>) =>
-      `/${params.orgSlug}/marketplace`,
-    Route: { ORG_MARKETPLACE: '/manage/marketplace' },
+    buildRoute: (route: string, params: Record<string, string>) =>
+      route === '/[orgSlug]/hosts' ? `/${params.orgSlug}/hosts` : `/${params.orgSlug}/marketplace`,
+    Route: { ORG_MARKETPLACE: '/manage/marketplace', HOST_LIST: '/[orgSlug]/hosts' },
     checkEntitlement: entitlements.checkEntitlement,
     resolveMarketplaceFeePct: entitlements.resolveMarketplaceFeePct,
     // The REAL claim (AGL-1697). None of the requests below carry an
@@ -587,5 +590,76 @@ describe('a publisher cannot pay itself, and a locked one sells nothing (AGL-336
     await checkoutHandler(makeReq(), res)
     expect(res.statusCode).toBe(404)
     expect(stripeCalls).toEqual([])
+  })
+})
+
+describe('a site starter bought from Create site (AGL-4049 lane 3)', () => {
+  const STARTER = { artifactType: 'siteStarter', displayName: 'Studio North' }
+  const sessionOf = () => stripeCalls[0]?.params
+  const buy = async (body: Record<string, unknown> = {}) => {
+    const res = makeRes()
+    await checkoutHandler(makeReq({ orgId: 'buyer-org', ...body }), res)
+    return res
+  }
+
+  beforeEach(() => {
+    mockPermissions.installPlugins = true
+    mockPermissions.createHosts = true
+  })
+
+  it('sends the buyer back to Create site on the same pick, paid or not', async () => {
+    seed({ listing: STARTER })
+    store()['orgs/buyer-org'] = { slug: 'buyer' }
+    const res = await buy({ return: 'create-site' })
+    expect(res.statusCode).toBe(200)
+    expect(sessionOf()?.get('success_url')).toBe(
+      'https://console.aglyn.com/buyer/hosts?create=site&starter=listing-1&purchase=success',
+    )
+    expect(sessionOf()?.get('cancel_url')).toBe(
+      'https://console.aglyn.com/buyer/hosts?create=site&starter=listing-1&purchase=canceled',
+    )
+  })
+
+  it('keeps every other way back on the marketplace, built the same way', async () => {
+    seed({ listing: STARTER })
+    store()['orgs/buyer-org'] = { slug: 'buyer' }
+    await buy()
+    expect(sessionOf()?.get('success_url')).toBe('https://console.aglyn.com/buyer/marketplace?purchase=success')
+    // A listing that is not a site starter never returns to Create site.
+    stripeCalls.length = 0
+    seed()
+    store()['orgs/buyer-org'] = { slug: 'buyer' }
+    await buy({ return: 'create-site' })
+    expect(sessionOf()?.get('cancel_url')).toBe('https://console.aglyn.com/buyer/marketplace?purchase=canceled')
+  })
+
+  it('refuses a way back that is not Create site, before anything is read or charged', async () => {
+    seed({ listing: STARTER })
+    const res = await buy({ return: 'https://elsewhere.example/steal' })
+    expect(res.statusCode).toBe(400)
+    expect(res.body).toEqual({ error: 'Unknown return' })
+    expect(stripeCalls).toHaveLength(0)
+  })
+
+  it('takes "Create sites" to buy a starter, naming the permission, and not the install permission', async () => {
+    seed({ listing: STARTER })
+    mockPermissions.installPlugins = false
+    expect((await buy({ return: 'create-site' })).statusCode).toBe(200)
+    stripeCalls.length = 0
+    mockPermissions.installPlugins = true
+    mockPermissions.createHosts = false
+    const refused = await buy({ return: 'create-site' })
+    expect(refused.statusCode).toBe(403)
+    expect(refused.body).toEqual({ error: 'Your role does not include "Create sites" — ask an organization admin' })
+    expect(stripeCalls).toHaveLength(0)
+  })
+
+  it('still takes the install permission for anything else', async () => {
+    seed()
+    mockPermissions.createHosts = true
+    mockPermissions.installPlugins = false
+    const refused = await buy()
+    expect(refused.statusCode).toBe(403)
+    expect(stripeCalls).toHaveLength(0)
   })
 })

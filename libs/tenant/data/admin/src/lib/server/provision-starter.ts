@@ -59,7 +59,12 @@ import {
 /** A starter resolved for a create: its payload, and the listing it came from. */
 export interface SiteStarterInstall {
   payload: SiteStarterPayload
-  listing: { listingId: string; version: string | number; displayName: string }
+  /**
+   * The listing it came from. `kind` is the kind of site the listing names
+   * (AGL-4049), which the site records over the one its stored pages carry:
+   * a listing's kind is kept current by its publisher and by staff.
+   */
+  listing: { listingId: string; version: string | number; displayName: string; kind?: string | null }
 }
 
 /** Every document a starter's site is born with, ids minted, ready to queue. */
@@ -278,7 +283,8 @@ export interface SiteStarterPickRefusal {
  * site can be created from it (AGL-4049). Every refusal is decided before the
  * site exists, so a refused pick creates nothing, and a 402 is answered with
  * what the person needs to buy it: the listing and its price. Once bought,
- * the same request again creates the site.
+ * the same request again creates the site. Every refusal names the listing
+ * it refused, so Create site can tell a refused pick from a refused name.
  *
  * `resolved` is what the starter source answered; `pagesAllowed` is the
  * plan's `screensPerHost`.
@@ -303,7 +309,10 @@ export function siteStarterPickRefusal(
     }
   }
   if (resolved.mode === 'ai') {
-    return { status: 409, body: { error: 'This starter needs the AI start, which is coming soon' } }
+    return {
+      status: 409,
+      body: { error: 'This starter needs the AI start, which is coming soon', listingId: input.listingId },
+    }
   }
   const pages = Array.isArray(resolved.screens) ? resolved.screens.length : 0
   if (pages > input.pagesAllowed) {
@@ -313,6 +322,7 @@ export function siteStarterPickRefusal(
         error:
           `This starter has ${pages} pages; your plan includes ${input.pagesAllowed}. ` +
           'Pick a smaller starter or upgrade in Billing.',
+        listingId: input.listingId,
       },
     }
   }

@@ -437,7 +437,7 @@ export async function claimHostForOrg(
   const starterChoice: HostStarterChoice = hostStarterChoice({
     listingId: picked ? picked.listing.listingId : null,
     version: picked ? String(picked.listing.version) : null,
-    kind: input.style?.id ?? (picked ? (picked.payload.facets?.kind ?? null) : null),
+    kind: input.style?.id ?? (picked ? (picked.listing.kind ?? picked.payload.facets?.kind ?? null) : null),
     mode: picked ? picked.payload.mode : 'base',
     start: input.start ?? (starter ? 'starter' : 'ai'),
   })

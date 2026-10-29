@@ -27,14 +27,29 @@ import {
   sitePreviewStartsOn,
   type SitePreviewStart,
 } from '@aglyn/aglyn/app-utils/site-preview'
-import type {
-  ConsoleCreatedSite,
-  ConsolePendingSite,
+import {
+  readSiteCreateRequest,
+  SITE_CREATE_PARAM,
+  SITE_CREATE_VALUE,
+  type SiteCreateStarterReturn,
+} from '@aglyn/aglyn/app-utils/site-create-return'
+import type { SiteStarterMode } from '@aglyn/aglyn/app-utils/site-starter'
+import {
+  readSiteStarterPickRefusal,
+  siteStarterPickBlock,
+  type SiteStarterPickRefused,
+} from '@aglyn/aglyn/app-utils/site-starter-pick'
+import {
+  CONSOLE_WIDGET_SLOTS,
+  type ConsoleCreatedSite,
+  type ConsolePendingSite,
 } from '@aglyn/aglyn/plugin-manager/feature-plugins'
+import type { SiteStarterSummary } from '@aglyn/aglyn/plugin-manager/plugin-site-starters'
 import { useLoading } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
+  Box,
   Button,
   Dialog,
   DialogActions,
@@ -50,11 +65,14 @@ import { buildRoute, Route } from '../constants/route-links'
 import useCurrentOrg from '../hooks/use-current-org'
 import useOrgPermissions from '../hooks/use-org-permissions'
 import { useOrgScope } from '../hooks/use-org-scope'
+import { useReleaseFlag } from '../hooks/use-release-flags'
 import { firstTouchField } from '../utils/account-acquisition'
 import { currentConsoleLandingHref } from '../utils/console-landing'
 import hardNavigate from '../utils/hard-navigate'
 import { requestStarterSite } from '../utils/host-first-run'
+import ChooseStarterDialog, { CHOOSE_STARTER_COPY } from './choose-starter-dialog.component'
 import {
+  SITE_LIVE_STARTER_PARAM,
   SITE_START_LIVE_VALUE,
   SITE_START_PARAM,
 } from './host-first-run-gate.component'
@@ -66,6 +84,9 @@ import SiteStylePicker from './site-style-picker.component'
 /** The zone "Create site" draws its start through (AGL-3761). */
 const START_ZONE = 'hostFirstRun'
 
+/** The zone "Choose your starter" draws the marketplace's starters through (AGL-4049). */
+const STARTER_ZONE = CONSOLE_WIDGET_SLOTS.hostStarterPicker
+
 /**
  * How long a start widget may take to say whether it draws anything before
  * the plain dialog is shown instead. The widget asks one route; this only
@@ -76,38 +97,52 @@ export const SITE_START_VERDICT_TIMEOUT_MS = 10_000
 /**
  * The query a sites page opens "Create site" from (AGL-3761):
  * `/{org}/hosts?create=site`. The empty console sends a first site here once
- * its workspace exists, so the start is asked inside that workspace.
+ * its workspace exists, so the start is asked inside that workspace. A
+ * starter bought from "Choose your starter" comes back the same way, naming
+ * the pick (`app-utils/site-create-return.ts`, AGL-4049).
  */
-export const SITE_CREATE_PARAM = 'create'
-export const SITE_CREATE_VALUE = 'site'
+export { SITE_CREATE_PARAM, SITE_CREATE_VALUE }
 
 /**
  * Opens "Create site" when the page was reached with `?create=site`, and
- * drops the parameter, so a reload or Back does not open it again. Rendered
- * under a `Suspense`, as anything reading the search parameters is.
+ * drops the parameters, so a reload or Back does not open it again. With
+ * `&starter=` — the way back from buying a starter (AGL-4049) — it opens on
+ * that pick. Rendered under a `Suspense`, as anything reading the search
+ * parameters is.
  */
-export function CreateSiteFromUrl({ onOpen }: { onOpen: () => void }) {
+export function CreateSiteFromUrl({
+  onOpen,
+}: {
+  onOpen: (starter: SiteCreateStarterReturn | null) => void
+}) {
   const searchParams = useSearchParams()
   const pathname = usePathname()
   const router = useRouter()
-  const asked = searchParams?.get(SITE_CREATE_PARAM) === SITE_CREATE_VALUE
+  const request = readSiteCreateRequest(searchParams)
+  const starterId = request.starter?.listingId ?? null
+  const purchase = request.starter?.purchase ?? null
   useEffect(() => {
-    if (!asked) return
-    onOpen()
+    if (!request.asked) return
+    onOpen(starterId ? { listingId: starterId, purchase } : null)
     if (pathname) router.replace(pathname)
-  }, [asked, onOpen, pathname, router])
+  }, [request.asked, starterId, purchase, onOpen, pathname, router])
   return null
 }
 
 export interface CreateHostDialogProps {
   open: boolean
   onClose: () => void
+  /**
+   * The starter to reopen "Choose your starter" on (AGL-4049): the person's
+   * own pick, on the way back from paying for it. Never a pick of ours.
+   */
+  initialStarter?: SiteCreateStarterReturn | null
 }
 
 /** What a create attempt came to. */
 type CreateOutcome =
-  | { site: ConsoleCreatedSite }
-  | { error: string; address?: boolean }
+  | { site: ConsoleCreatedSite; starterName?: string }
+  | { error: string; address?: boolean; pick?: SiteStarterPickRefused }
 
 /**
  * "Create site" (user request 2026-07-07), opened straight on how the site
@@ -148,11 +183,17 @@ export function CreateHostDialog(props: CreateHostDialogProps) {
   // Mounted only while open: the start zone loads its plugin when it mounts,
   // and a closed dialog on every sites page has no reason to.
   if (!props.open) return null
-  return <CreateSiteFlow onClose={props.onClose} />
+  return <CreateSiteFlow onClose={props.onClose} initialStarter={props.initialStarter ?? null} />
 }
 CreateHostDialog.displayName = 'CreateHostDialog'
 
-function CreateSiteFlow({ onClose }: { onClose: () => void }) {
+function CreateSiteFlow({
+  onClose,
+  initialStarter,
+}: {
+  onClose: () => void
+  initialStarter: SiteCreateStarterReturn | null
+}) {
   const router = useRouter()
   const { data: user } = useUser()
   const userRef = useRef(user)
@@ -212,7 +253,50 @@ function CreateSiteFlow({ onClose }: { onClose: () => void }) {
     return () => clearTimeout(timer)
   }, [])
 
-  const resolving = (!widgetsReady || !permissionsLoaded || !orgReady) && !timedOut
+  // ── "Choose your starter" (AGL-4049) ──────────────────────────────────────
+  // The marketplace's starters in the starter path, behind its release flag
+  // (staff see it before it is released, as every flagged surface). Its zone's
+  // plugin is asked for only when the flag is visible, so with it off Create
+  // site loads, draws and creates exactly as before.
+  const starters = useReleaseFlag('release_site_starters')
+  const { widgets: pickerWidgets, ready: pickerWidgetsReady } = useSlotWidgets(
+    starters.visible ? [STARTER_ZONE] : [],
+  )
+  // The picker's own answer to whether it draws anything, asked before the
+  // start is drawn (a hidden first search while Create site decides), so a
+  // workspace with no starters to offer — staff before any are listed
+  // included — gets exactly the start it had before. `false` later, from the
+  // picker on screen, draws the styles in its place.
+  const [pickerVerdict, setPickerVerdict] = useState<boolean | null>(null)
+  const pickerOffered = starters.visible && pickerWidgets.length > 0
+  const pickerOn = pickerOffered && pickerVerdict === true
+  // Opened from the start's starter choice, or straight away on the way back
+  // from buying a starter.
+  const [choosing, setChoosing] = useState(initialStarter !== null)
+  const [starterMode, setStarterMode] = useState<SiteStarterMode>('base')
+  const [starterSearch, setStarterSearch] = useState('')
+  const [starterKind, setStarterKind] = useState<string | null>(null)
+  const [pick, setPick] = useState<SiteStarterSummary | null>(null)
+  // The pick being restored on the way back from paying for it, until the
+  // picker hands it back (or it is cleared).
+  const [restoring, setRestoring] = useState<SiteCreateStarterReturn | null>(initialStarter)
+  // What the dialog knows about owning a pick better than the search does:
+  // paid for just now (`true`), or still asked for payment (`false`).
+  const [ownedOverride, setOwnedOverride] = useState<{ listingId: string; owned: boolean } | null>(
+    initialStarter?.purchase === 'success' ? { listingId: initialStarter.listingId, owned: true } : null,
+  )
+  const [pickNotice, setPickNotice] = useState<string | null>(null)
+  // The style chosen when the picker has nothing to offer and the styles are
+  // drawn in its place.
+  const [chooseStyle, setChooseStyle] = useState<string | null>(null)
+
+  const resolving =
+    (!widgetsReady ||
+      !permissionsLoaded ||
+      !orgReady ||
+      (starters.visible && !pickerWidgetsReady) ||
+      (pickerOffered && pickerVerdict === null)) &&
+    !timedOut
   const offersStart =
     !blocked && widgets.length > 0 && verdict !== false && !(timedOut && verdict === null)
   const mode: 'blocked' | 'resolving' | 'start' | 'form' = blocked
@@ -255,7 +339,10 @@ function CreateSiteFlow({ onClose }: { onClose: () => void }) {
   )
 
   const requestCreate = useCallback(
-    (start?: 'starter' | 'import', options: { style?: string } = {}): Promise<CreateOutcome> => {
+    (
+      start?: 'starter' | 'import',
+      options: { style?: string; starter?: { listingId: string } } = {},
+    ): Promise<CreateOutcome> => {
       if (inFlight.current) return inFlight.current
       setMadeHere(true)
       const request = (async (): Promise<CreateOutcome> => {
@@ -274,6 +361,9 @@ function CreateSiteFlow({ onClose }: { onClose: () => void }) {
               // The style the person chose (AGL-4049): the starter's look,
               // and what the site records it was created with.
               ...(options.style ? { style: options.style } : {}),
+              // A starter picked in "Choose your starter" (AGL-4049): the
+              // site is born from that listing instead.
+              ...(options.starter ? { starter: { listingId: options.starter.listingId } } : {}),
               // Start in preview (AGL-4086), as the switch reads for this start.
               preview: previewForRef.current(start ?? 'ai'),
               // A first site can provision the workspace too, which records
@@ -284,6 +374,11 @@ function CreateSiteFlow({ onClose }: { onClose: () => void }) {
           const payload = await response.json().catch(() => null)
           if (!response.ok || !payload?.hostId) {
             const error = String(payload?.error ?? 'Site creation failed')
+            // A refusal of the starter picked, not of the name (AGL-4049).
+            const pickRefused = options.starter
+              ? readSiteStarterPickRefusal(response.status, payload, options.starter.listingId)
+              : null
+            if (pickRefused) return { error, pick: pickRefused }
             if (response.status === 409) {
               address.refuse(
                 error,
@@ -314,7 +409,9 @@ function CreateSiteFlow({ onClose }: { onClose: () => void }) {
             // so the response's slug outranks the (possibly null) current one.
             orgSlug: String(payload.orgSlug ?? orgSlug ?? ''),
           }
-          return { site }
+          const starterName =
+            typeof payload.starter?.displayName === 'string' ? payload.starter.displayName : null
+          return { site, ...(starterName ? { starterName } : {}) }
         } catch (error) {
           console.error(error)
           return { error: 'An error has occurred' }
@@ -438,6 +535,133 @@ function CreateSiteFlow({ onClose }: { onClose: () => void }) {
     return true
   }, [address, dashboardOf, enqueueSnackbar, land, onClose, requestCreate])
 
+  // ── Choose your starter: the pick, and the create from it ───────────────
+  const openChoose = useCallback(() => {
+    setPickNotice(null)
+    setChoosing(true)
+  }, [])
+  const pickOwned =
+    pick && ownedOverride?.listingId === pick.listingId ? ownedOverride.owned : undefined
+  // The pick the picker shows chosen: the person's own, or the one they come
+  // back to after paying for it, which the picker hands back once it has
+  // read it. Never one of ours.
+  const selected = pick
+    ? { listingId: pick.listingId, ...(pickOwned === undefined ? {} : { owned: pickOwned }) }
+    : restoring
+      ? {
+          listingId: restoring.listingId,
+          ...(ownedOverride?.listingId === restoring.listingId ? { owned: ownedOverride.owned } : {}),
+        }
+      : null
+  const onPick = useCallback((next: SiteStarterSummary) => {
+    setPickNotice(null)
+    setRestoring(null)
+    setPick(next)
+    // A pick the picker restored can be of the other kind of starter: its tab
+    // is shown, with it chosen.
+    setStarterMode((current) => (next.facets?.mode && next.facets.mode !== current ? next.facets.mode : current))
+    // The picker learned the workspace owns it (a payment that found it
+    // bought already): that outranks an earlier "still asked for payment".
+    if (next.owned === true) {
+      setOwnedOverride((current) =>
+        current?.listingId === next.listingId && !current.owned ? null : current,
+      )
+    }
+  }, [])
+  const pickerReady = useCallback((shown: boolean) => setPickerVerdict(shown), [])
+  const changeStarterMode = useCallback((next: SiteStarterMode) => {
+    // Another kind of starter is another list: what was picked in this one
+    // is not carried across, so nothing is chosen that is not on screen.
+    setStarterMode(next)
+    setPick(null)
+    setRestoring(null)
+    setPickNotice(null)
+  }, [])
+
+  // The styles drawn in the picker's place create the starter site in the
+  // style chosen, as the plain dialog does.
+  const usingStyles = pickerVerdict === false
+  const pickBlock = usingStyles ? (chooseStyle ? null : 'none') : siteStarterPickBlock(pick, pickOwned)
+  const chooseBlocked: string | null = !address.usable
+    ? 'Name your site and choose its address to create it.'
+    : pickBlock === 'none'
+      ? usingStyles
+        ? 'Choose a style to create your site.'
+        : 'Choose a starter to create your site.'
+      : pickBlock === 'purchase'
+        ? 'Buy this starter to create your site from it.'
+        : null
+
+  const createFromPick = useCallback(async () => {
+    if (busy || !address.check()) return
+    if (usingStyles) {
+      if (!chooseStyle) return
+      setBusy(true)
+      try {
+        await startBlank({ style: chooseStyle })
+      } finally {
+        setBusy(false)
+      }
+      return
+    }
+    if (!pick || siteStarterPickBlock(pick, pickOwned)) return
+    setBusy(true)
+    try {
+      const outcome = await requestCreate('starter', { starter: { listingId: pick.listingId } })
+      if ('error' in outcome) {
+        if (outcome.pick) {
+          const justPaid =
+            initialStarter?.purchase === 'success' && initialStarter.listingId === pick.listingId
+          if (outcome.pick.keep) {
+            // Still asked for payment. Straight after paying, the payment is
+            // being confirmed; otherwise it is a price to pay, and Buy shows.
+            if (justPaid) {
+              setPickNotice('Your payment is still being confirmed. Try Create site again in a moment.')
+            } else {
+              setOwnedOverride({ listingId: pick.listingId, owned: false })
+              setPickNotice(outcome.pick.message)
+            }
+          } else {
+            setPick(null)
+            setRestoring(null)
+            setPickNotice(outcome.pick.message)
+          }
+          return
+        }
+        return void enqueueSnackbar(outcome.error, {
+          variant: outcome.address ? 'warning' : 'error',
+          allowDuplicate: true,
+        })
+      }
+      // Its pages are published with the site, as the starter's always are.
+      // Not for a site that starts in preview (AGL-4086).
+      const inPreview = previewForRef.current('starter')
+      if (!inPreview) trackEvent('site_published', { first_publish: true })
+      onClose()
+      if (!outcome.site.orgSlug) return
+      if (inPreview) return land(dashboardOf(outcome.site))
+      const live = new URLSearchParams({ [SITE_START_PARAM]: SITE_START_LIVE_VALUE })
+      if (outcome.starterName) live.set(SITE_LIVE_STARTER_PARAM, outcome.starterName)
+      land(`${dashboardOf(outcome.site)}?${live.toString()}`)
+    } finally {
+      setBusy(false)
+    }
+  }, [
+    address,
+    busy,
+    chooseStyle,
+    dashboardOf,
+    enqueueSnackbar,
+    initialStarter,
+    land,
+    onClose,
+    pick,
+    pickOwned,
+    requestCreate,
+    startBlank,
+    usingStyles,
+  ])
+
   const startZone = offersStart && currentOrg && orgSlug ? (
     <PluginWidgetSlot
       slot={START_ZONE}
@@ -450,14 +674,97 @@ function CreateSiteFlow({ onClose }: { onClose: () => void }) {
       // began: either way there is nothing for the shell to write.
       leave={onClose}
       pendingSite={pendingSite}
+      // The starter path through "Choose your starter", where it is offered.
+      {...(pickerOn ? { chooseStarter: openChoose } : {})}
     />
   ) : null
 
-  if (mode === 'start') return startZone
+  const chooseView =
+    currentOrg && orgSlug ? (
+      <ChooseStarterDialog
+        fields={address.fields}
+        previewControl={
+          <StartInPreviewSwitch
+            checked={previewFor('starter')}
+            onChange={setPreviewChoice}
+            disabled={busy}
+          />
+        }
+        mode={starterMode}
+        onModeChange={changeStarterMode}
+        // AI starters are filled by the AI start, offered only where it is.
+        offersAi={mode === 'start' && !usingStyles}
+        search={starterSearch}
+        onSearchChange={setStarterSearch}
+        kind={starterKind}
+        onKindChange={setStarterKind}
+        filters={!usingStyles}
+        picker={
+          usingStyles ? (
+            <SiteStylePicker value={chooseStyle} onChange={setChooseStyle} />
+          ) : (
+            <PluginWidgetSlot
+              slot={CONSOLE_WIDGET_SLOTS.hostStarterPicker}
+              orgId={currentOrg.$id}
+              orgSlug={orgSlug}
+              mode={starterMode}
+              search={starterSearch}
+              filter={starterKind ? { kind: starterKind } : {}}
+              onPick={onPick}
+              ready={pickerReady}
+              selected={selected}
+            />
+          )
+        }
+        notice={pickNotice}
+        onDismissNotice={() => setPickNotice(null)}
+        blocked={chooseBlocked}
+        busy={busy}
+        onCreate={() => void createFromPick()}
+        onClose={onClose}
+        // Back to the start it was opened from; the plain path has none.
+        {...(mode === 'start' ? { onBack: () => setChoosing(false) } : {})}
+        title={usingStyles ? CHOOSE_STARTER_COPY.styles.title : CHOOSE_STARTER_COPY.starters.title}
+        lede={usingStyles ? CHOOSE_STARTER_COPY.styles.lede : CHOOSE_STARTER_COPY.starters.lede}
+        staffPreview={starters.ready && starters.staffPreview}
+      />
+    ) : null
+
+  // The picker's first answer, asked out of sight while Create site decides
+  // which start to draw: the start is offered "Choose your starter" only
+  // where it has starters to show.
+  const pickerProbe =
+    pickerOffered && pickerVerdict === null && currentOrg && orgSlug ? (
+      <Box sx={{ display: 'none' }} aria-hidden data-create-area="starter-probe">
+        <PluginWidgetSlot
+          slot={CONSOLE_WIDGET_SLOTS.hostStarterPicker}
+          orgId={currentOrg.$id}
+          orgSlug={orgSlug}
+          mode="base"
+          search=""
+          filter={{}}
+          onPick={onPick}
+          ready={pickerReady}
+          selected={null}
+        />
+      </Box>
+    ) : null
+
+  // "Choose your starter" takes the start's place while it is open: the
+  // site's name and address are asked in one place at a time, and Back draws
+  // the start again on its first step, where they were typed.
+  if (mode === 'start') return choosing && pickerOffered && pickerVerdict !== null ? chooseView : startZone
 
   // The start zone stays mounted while resolving: its widget is what gives
-  // the verdict.
-  if (mode === 'resolving') return startZone
+  // the verdict, as the picker's first search gives its own.
+  if (mode === 'resolving') {
+    return (
+      <>
+        {startZone}
+        {pickerProbe}
+      </>
+    )
+  }
 
   if (mode === 'blocked') {
     return (
@@ -483,6 +790,11 @@ function CreateSiteFlow({ onClose }: { onClose: () => void }) {
       </Dialog>
     )
   }
+
+  // With no start to offer, the starter path is the whole of Create site:
+  // "Choose your starter" where its picker draws, the plain dialog where it
+  // does not.
+  if (pickerOn) return chooseView
 
   return (
     <Dialog

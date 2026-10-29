@@ -58,6 +58,13 @@ export interface SiteStarterSummary {
    * satisfies the seam, and `facets.kind` stays the id a search filters on.
    */
   category?: string | null
+  /**
+   * The asking workspace may create from it without paying (AGL-4049):
+   * bought already, or its own. Read for the person who asked, so it is set
+   * only by an answer that knows who that is, and absent where it does not
+   * say; a free starter needs no purchase either way.
+   */
+  owned?: boolean
 }
 
 /** Who is asking: the workspace the site will belong to, and the person. */
@@ -86,6 +93,15 @@ export interface PluginSiteStarterSource {
    * Optional, so a source that does not count installs still satisfies the seam.
    */
   installed?(choice: SiteStarterChoice, viewer: SiteStarterViewer, site: { hostId: string }): Promise<void>
+  /**
+   * One starter as a search would list it for this viewer, or `null` when it
+   * is not one they may see (AGL-4049): what the create path records a site
+   * was started from, and the name it files the starter's theme under, and
+   * what "Choose your starter" shows for a pick it restores. Best-effort.
+   * Optional, so a source that cannot describe a single listing still
+   * satisfies the seam; read it through {@link describeSiteStarter}.
+   */
+  describe?(choice: SiteStarterChoice, viewer: SiteStarterViewer): Promise<SiteStarterSummary | null>
 }
 
 export const PLUGIN_SITE_STARTERS = definePluginServiceContract<PluginSiteStarterSource>(
@@ -104,4 +120,26 @@ export function registerPluginSiteStarterSource(
 /** The registered starter source, or `null` when no plugin serves starters. */
 export function resolveSiteStarterSource(): PluginSiteStarterSource | null {
   return resolvePluginService(PLUGIN_SITE_STARTERS) ?? null
+}
+
+/**
+ * A starter as the source describes it, or `null` when the source cannot say
+ * (AGL-4049): no `describe`, a listing the viewer may not see, or a source
+ * that failed. Never throws, because nothing it answers is required: the
+ * create path falls back to the payload's own facts, and the picker to the
+ * search.
+ */
+export async function describeSiteStarter(
+  source: PluginSiteStarterSource | null,
+  choice: SiteStarterChoice,
+  viewer: SiteStarterViewer,
+): Promise<SiteStarterSummary | null> {
+  if (!source?.describe || !choice?.listingId) return null
+  try {
+    const summary = await source.describe(choice, viewer)
+    return summary && typeof summary === 'object' && summary.listingId === choice.listingId ? summary : null
+  } catch (error) {
+    console.error('[site-starters] describe failed', { listingId: choice.listingId, error })
+    return null
+  }
 }

@@ -16,6 +16,7 @@
  */
 
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
+import { isSiteStyleId, siteStyleOf } from '@aglyn/aglyn/app-utils/site-styles'
 import type {
   SiteStarterFacets,
   SiteStarterMode,
@@ -73,6 +74,12 @@ export interface StarterQueryInput {
   filter?: Partial<SiteStarterFacets>
   /** At most this many; the route caps it. */
   limit?: number
+  /**
+   * A listing the answer must carry whatever the search finds (AGL-4049):
+   * the person's own pick, restored on the way back from buying it, which a
+   * search for other words or another mode would not list.
+   */
+  include?: string | null
 }
 
 /** One search, as the route reads it back, every part checked. */
@@ -83,9 +90,12 @@ export interface StarterQuery {
   /** `mode` is always among them, so the source asks for that mode only. */
   filter: Partial<SiteStarterFacets>
   limit: number
+  /** The listing to carry whatever the search finds, or `null`. */
+  include: string | null
 }
 
 const ORG_ID = /^[A-Za-z0-9_-]{1,128}$/
+const LISTING_ID = /^[A-Za-z0-9_-]{1,128}$/
 const FACET_ID = /^[a-z0-9][a-z0-9-]{0,63}$/
 
 const trimmed = (value: unknown): string =>
@@ -93,8 +103,8 @@ const trimmed = (value: unknown): string =>
 
 /**
  * The query string for one search, its parameters always in one order —
- * `orgId`, `mode`, `q`, `kind`, `base`, `fonts`, `limit` — so the same
- * search is the same URL, and a hook can key a request on it.
+ * `orgId`, `mode`, `q`, `kind`, `base`, `fonts`, `limit`, `include` — so the
+ * same search is the same URL, and a hook can key a request on it.
  */
 export function starterQueryParams(input: StarterQueryInput): URLSearchParams {
   const params = new URLSearchParams()
@@ -110,6 +120,8 @@ export function starterQueryParams(input: StarterQueryInput): URLSearchParams {
     'limit',
     String(siteStarterSearchLimit(input.limit ?? SITE_STARTER_SEARCH_MAX) || SITE_STARTER_SEARCH_MAX),
   )
+  const include = trimmed(input.include)
+  if (LISTING_ID.test(include)) params.set('include', include)
   return params
 }
 
@@ -117,12 +129,9 @@ export function starterQueryParams(input: StarterQueryInput): URLSearchParams {
  * The route's reading of a search, or the refusal it answers with a 400.
  *
  * A base theme or a font pairing is checked against the lists a starter may
- * name (`SITE_STARTER_KNOWN_IDS`), so a mistyped one is named rather than
- * answered with nothing. A kind is checked for its shape only: the core keeps
- * no list of kinds.
- *
- * TODO(AGL-4049 phase 3 lane 3): check `kind` with core's `isSiteStyleId`
- * once lane 1's `SITE_STYLES` is on main.
+ * name (`SITE_STARTER_KNOWN_IDS`), and a kind against the styles a person
+ * chooses among (core's `SITE_STYLES`, which are the kinds of site), so a
+ * mistyped one is named rather than answered with nothing.
  */
 export function starterQueryFrom(
   params: URLSearchParams,
@@ -137,7 +146,7 @@ export function starterQueryFrom(
   const filter: Partial<SiteStarterFacets> = { mode }
   const kind = trimmed(params.get('kind'))
   if (kind) {
-    if (!FACET_ID.test(kind)) return { error: 'Unknown kind of site' }
+    if (!FACET_ID.test(kind) || !isSiteStyleId(kind)) return { error: 'Unknown kind of site' }
     filter.kind = kind
   }
   const base = trimmed(params.get('base'))
@@ -150,12 +159,15 @@ export function starterQueryFrom(
     if (!SITE_STARTER_KNOWN_IDS.fonts?.has(fonts)) return { error: 'Unknown font pairing' }
     filter.fonts = fonts
   }
+  const include = trimmed(params.get('include'))
+  if (include && !LISTING_ID.test(include)) return { error: 'Unknown starter' }
   return {
     orgId,
     mode,
     word: trimmed(params.get('q')).slice(0, STARTER_SEARCH_WORD_MAX),
     filter,
     limit: siteStarterSearchLimit(params.get('limit')) || SITE_STARTER_SEARCH_MAX,
+    include: include || null,
   }
 }
 
@@ -177,7 +189,8 @@ const idOrNull = (value: unknown): string | null =>
  * handed back a paid AI starter's answers, or its pages, would have them
  * dropped here. Each field falls back the way a card needs it to: a missing
  * price is free, a missing picture is none, a page count is a whole number
- * from zero, and a mode is `base` unless it says `ai`.
+ * from zero, a mode is `base` unless it says `ai`, and `owned` is kept only
+ * where the answer gave it as a yes or a no.
  */
 export function readStarterSummary(value: unknown): SiteStarterSummary | null {
   if (!isRecord(value)) return null
@@ -203,6 +216,8 @@ export function readStarterSummary(value: unknown): SiteStarterSummary | null {
       mode: facets['mode'] === 'ai' ? 'ai' : 'base',
     },
     category: idOrNull(value['category']),
+    // Only where the answer says: absent is "the search does not know".
+    ...(typeof value['owned'] === 'boolean' ? { owned: value['owned'] } : {}),
   }
 }
 
@@ -262,13 +277,54 @@ export interface StarterCardFact {
  * every card carrying one ("Free" included, so a missing chip never reads as
  * a forgotten price); the platform's name for its own; "AI" for a starter the
  * AI site start fills; the kind of site in words; and its page count.
+ *
+ * The kind is the style's own name for the listing's kind of site (core's
+ * `SITE_STYLES`), the same words the kind filters show — never the listing's
+ * marketplace category, which for a starter that names no kind is a shelf
+ * of the marketplace (`design`), not a kind of site.
  */
 export function starterCardFacts(row: SiteStarterSummary): StarterCardFact[] {
   const facts: StarterCardFact[] = [{ key: 'price', label: starterPriceLabel(row.priceUsd) }]
   if (row.official) facts.push({ key: 'official', label: PLATFORM_BRAND_NAME })
   if (row.facets.mode === 'ai') facts.push({ key: 'ai', label: 'AI' })
-  if (row.category) facts.push({ key: 'kind', label: row.category })
+  const kind = siteStyleOf(row.facets.kind)?.name
+  if (kind) facts.push({ key: 'kind', label: kind })
   const pages = starterPagesLabel(row.facets.pages)
   if (pages) facts.push({ key: 'pages', label: pages })
   return facts
+}
+
+/** Where a purchase is opened. */
+export const STARTER_CHECKOUT_PATH = '/api/marketplace/checkout'
+
+/**
+ * The one place other than the marketplace a purchase may send its buyer
+ * back to (AGL-4049): Create site, reopened on the starter they picked. A
+ * name the checkout turns into an address itself, never an address the
+ * browser hands it.
+ */
+export const STARTER_CHECKOUT_RETURN = 'create-site'
+export type StarterCheckoutReturn = typeof STARTER_CHECKOUT_RETURN
+
+/**
+ * A checkout body's `return`, read: `create-site`, `null` when it names none
+ * (the marketplace, as always), or the refusal a 400 answers with.
+ */
+export function readStarterCheckoutReturn(value: unknown): StarterCheckoutReturn | null | { error: string } {
+  if (value === undefined || value === null || value === '') return null
+  return value === STARTER_CHECKOUT_RETURN ? STARTER_CHECKOUT_RETURN : { error: 'Unknown return' }
+}
+
+/** The body "Buy and continue" sends: the starter, the workspace buying it, and the way back. */
+export function starterCheckoutBody(input: {
+  listingId: string
+  orgId: string
+  gaClientId?: string | null
+}): Record<string, string> {
+  return {
+    listingId: input.listingId,
+    orgId: input.orgId,
+    return: STARTER_CHECKOUT_RETURN,
+    ...(input.gaClientId ? { gaClientId: input.gaClientId } : {}),
+  }
 }

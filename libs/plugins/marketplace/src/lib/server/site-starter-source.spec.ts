@@ -296,6 +296,8 @@ describe('search (AGL-4049)', () => {
       authorName: 'Pub Studio',
       official: false,
       priceUsd: 29,
+      // A priced starter says whether the asking workspace owns it (AGL-4049 lane 3).
+      owned: false,
       previewImageUrl: 'https://cdn.example/a.png',
       facets: { kind: 'restaurant', base: 'starter', fonts: null, pages: 1, mode: 'base' },
       // The listing's "What kind of site is it?", trimmed; the card shows it.
@@ -315,6 +317,77 @@ describe('search (AGL-4049)', () => {
     expect(state.queries).toEqual([])
     await search({ limit: 500 })
     expect(state.queries[0].limit).toBe(100)
+  })
+})
+
+describe('owned, on a priced starter (AGL-4049 lane 3)', () => {
+  it('says a priced starter is owned once the workspace holds a live licence, and says nothing on a free one', async () => {
+    listing('paid', { priceUsd: 29 })
+    listing('free', { createdAt: 50 })
+    let found = await search()
+    expect(found.find((row) => row.listingId === 'paid')?.owned).toBe(false)
+    expect(found.find((row) => row.listingId === 'free')).not.toHaveProperty('owned')
+    state.docs.set('marketplacePurchases/p1', { buyerOrgId: BUYER.orgId, buyerUid: 'someone', listingId: 'paid' })
+    found = await search()
+    expect(found.find((row) => row.listingId === 'paid')?.owned).toBe(true)
+  })
+
+  it('does not count a refunded licence, and counts the publisher’s own workspace', async () => {
+    listing('paid', { priceUsd: 29 })
+    state.docs.set('marketplacePurchases/p1', { buyerOrgId: BUYER.orgId, listingId: 'paid', refundedAt: 5 })
+    expect((await search()).find((row) => row.listingId === 'paid')?.owned).toBe(false)
+    state.managers.add(`owner-1@${PUBLISHER}`)
+    const own = await source.search({ word: '', filter: {}, limit: 10 }, { orgId: PUBLISHER, uid: 'owner-1' })
+    expect(own.find((row) => row.listingId === 'paid')?.owned).toBe(true)
+  })
+})
+
+describe('describe (AGL-4049 lane 3)', () => {
+  it('answers one starter as a search would list it for this viewer, from the listing alone', async () => {
+    listing('a', { priceUsd: 29, category: 'Restaurant & café' })
+    state.docs.set('marketplacePurchases/p1', { buyerOrgId: BUYER.orgId, buyerUid: 'someone', listingId: 'a' })
+    expect(await source.describe({ listingId: 'a' }, BUYER)).toEqual({
+      listingId: 'a',
+      displayName: 'Corner bistro',
+      description: 'A starter',
+      authorName: 'Pub Studio',
+      official: false,
+      priceUsd: 29,
+      owned: true,
+      previewImageUrl: null,
+      facets: { kind: 'restaurant', base: 'starter', fonts: null, pages: 1, mode: 'base' },
+      category: 'Restaurant & café',
+    })
+  })
+
+  it.each([
+    ['unknown', () => undefined],
+    ['deleted', () => listing('a', { deletedAt: 5 })],
+    ['taken down', () => listing('a', { hiddenAt: 5 })],
+    ['from a publisher under a security lock', () => {
+      listing('a')
+      state.locked.add(PUBLISHER)
+    }],
+    ['not a starter', () => listing('a', { artifactType: 'template' })],
+    ['private, to another workspace', () => listing('a', { visibility: 'private' })],
+    ['still in review, to another workspace', () => listing('a', { reviewStatus: 'submitted' })],
+  ])('is null when the listing is %s', async (_case, arrange) => {
+    arrange()
+    expect(await source.describe({ listingId: 'a' }, BUYER)).toBeNull()
+  })
+
+  it('describes a private or unlisted starter to its own publisher, owned', async () => {
+    listing('a', { visibility: 'private', priceUsd: 29 })
+    state.managers.add(`owner-1@${PUBLISHER}`)
+    expect(await source.describe({ listingId: 'a' }, { orgId: PUBLISHER, uid: 'owner-1' })).toMatchObject({
+      listingId: 'a',
+      owned: true,
+    })
+  })
+
+  it('is null for a missing listing id, without a read', async () => {
+    expect(await source.describe({ listingId: '' }, BUYER)).toBeNull()
+    expect(state.queries).toEqual([])
   })
 })
 

@@ -52,6 +52,7 @@ const mockRateLimit = jest.fn(async () => ({ allowed: true, limit: 20, remaining
 const mockRegisterDeclarations = jest.fn(async () => undefined)
 const mockResolve = jest.fn()
 const mockInstalled = jest.fn(async () => undefined)
+const mockDescribe = jest.fn(async (..._args: unknown[]): Promise<Record<string, unknown> | null> => null)
 const mockAnnounceNewSite = jest.fn(async (_site: Record<string, unknown>) => undefined)
 let mockSourceRegistered = true
 let mockStaff = false
@@ -100,8 +101,12 @@ jest.mock('@aglyn/aglyn/plugin-manager/plugin-site-starters', () => ({
           search: async () => [],
           resolve: (...args: unknown[]) => mockResolve(...args),
           installed: (...args: unknown[]) => mockInstalled(...(args as [])),
+          describe: (...args: unknown[]) => mockDescribe(...args),
         }
       : null,
+  // The real best-effort reader (AGL-4049 lane 3).
+  describeSiteStarter: jest.requireActual('@aglyn/aglyn/plugin-manager/plugin-site-starters')
+    .describeSiteStarter,
 }))
 jest.mock('@aglyn/tenant-data-admin/server/account-acquisition', () => ({
   recordSignUpAcquisition: async () => undefined,
@@ -141,6 +146,7 @@ beforeEach(() => {
   mockGuidedStart.mockResolvedValue(true)
   mockFlagOn.mockResolvedValue(true)
   mockResolve.mockResolvedValue(starterPayload(3))
+  mockDescribe.mockResolvedValue(null)
   mockSourceRegistered = true
   mockLooksRegistered = true
   mockLook.mockResolvedValue(null)
@@ -196,7 +202,7 @@ describe('POST /api/hosts/create with a starter from the marketplace (AGL-4049)'
       expect.objectContaining({
         starter: {
           payload: starterPayload(3),
-          listing: { listingId: 'listing-1', version: 'latest', displayName: 'Starter' },
+          listing: { listingId: 'listing-1', version: 'latest', displayName: 'Starter', kind: null },
         },
       }),
     )
@@ -204,7 +210,7 @@ describe('POST /api/hosts/create with a starter from the marketplace (AGL-4049)'
     await expect(response.json()).resolves.toMatchObject({
       hostId: 'host-1',
       guidedStart: false,
-      starter: { listingId: 'listing-1', version: null },
+      starter: { listingId: 'listing-1', version: null, displayName: 'Starter' },
     })
     expect(mockInstalled).toHaveBeenCalledWith(
       { listingId: 'listing-1' },
@@ -239,6 +245,9 @@ describe('POST /api/hosts/create with a starter from the marketplace (AGL-4049)'
     expect(response.status).toBe(403)
     await expect(response.json()).resolves.toEqual({
       error: 'Site starters are not available for this workspace yet',
+      // Every refusal of a pick names it, so Create site clears the pick
+      // rather than reading a refused name (AGL-4049 lane 3).
+      listingId: 'listing-1',
     })
     expect(mockFlagOn).toHaveBeenCalledWith('release_site_starters', 'org-1')
     expect(mockRegisterDeclarations).not.toHaveBeenCalled()
@@ -293,6 +302,7 @@ describe('POST /api/hosts/create with a starter from the marketplace (AGL-4049)'
     expect(response.status).toBe(409)
     await expect(response.json()).resolves.toEqual({
       error: 'This starter needs the AI start, which is coming soon',
+      listingId: 'listing-1',
     })
     expect(mockClaim).not.toHaveBeenCalled()
   })
@@ -304,6 +314,7 @@ describe('POST /api/hosts/create with a starter from the marketplace (AGL-4049)'
     expect(refused.status).toBe(403)
     await expect(refused.json()).resolves.toEqual({
       error: 'This starter has 6 pages; your plan includes 5. Pick a smaller starter or upgrade in Billing.',
+      listingId: 'listing-1',
     })
     expect(mockClaim).not.toHaveBeenCalled()
 
@@ -319,6 +330,60 @@ describe('POST /api/hosts/create with a starter from the marketplace (AGL-4049)'
     expect(mockFlagOn).not.toHaveBeenCalled()
     expect(mockResolve).not.toHaveBeenCalled()
     expect(mockClaim.mock.calls.map(([input]) => input['starter'])).toEqual([true, false])
+  })
+})
+
+describe('POST /api/hosts/create names and records a pick from its listing (AGL-4049 lane 3)', () => {
+  const DESCRIBED = {
+    listingId: 'listing-1',
+    displayName: 'Corner bistro',
+    description: '',
+    authorName: 'Pub',
+    official: false,
+    priceUsd: 0,
+    previewImageUrl: null,
+    facets: { kind: 'restaurant', base: 'starter', fonts: null, pages: 3, mode: 'base' },
+  }
+
+  it('records the listing’s kind and files the theme under its name, as the source describes it for the viewer', async () => {
+    mockDescribe.mockResolvedValue(DESCRIBED)
+    const response = await create({ starter: { listingId: 'listing-1' } })
+    expect(response.status).toBe(200)
+    expect(mockDescribe).toHaveBeenCalledWith({ listingId: 'listing-1' }, { orgId: 'org-1', uid: 'user-1' })
+    // Red before the fix: the entry was "Starter theme" and the kind the
+    // stored pages' own (null here).
+    expect(mockClaim).toHaveBeenCalledWith(
+      expect.objectContaining({
+        starter: expect.objectContaining({
+          listing: { listingId: 'listing-1', version: 'latest', displayName: 'Corner bistro', kind: 'restaurant' },
+        }),
+      }),
+    )
+    await expect(response.json()).resolves.toMatchObject({
+      starter: { listingId: 'listing-1', version: null, displayName: 'Corner bistro' },
+    })
+  })
+
+  it('falls back to the stored pages’ kind and "Starter" when the source cannot describe it, or fails to', async () => {
+    const quiet = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    mockResolve.mockResolvedValue({ ...starterPayload(3), facets: { ...starterPayload(3).facets, kind: 'yoga' } })
+    mockDescribe.mockRejectedValue(new Error('down'))
+    const response = await create({ starter: { listingId: 'listing-1' } })
+    expect(response.status).toBe(200)
+    expect(mockClaim).toHaveBeenCalledWith(
+      expect.objectContaining({
+        starter: expect.objectContaining({
+          listing: { listingId: 'listing-1', version: 'latest', displayName: 'Starter', kind: 'yoga' },
+        }),
+      }),
+    )
+    quiet.mockRestore()
+  })
+
+  it('describes nothing for a pick the source refused', async () => {
+    mockResolve.mockResolvedValue({ error: 'Purchase required', status: 402, priceUsd: 29 })
+    await create({ starter: { listingId: 'listing-1' } })
+    expect(mockDescribe).not.toHaveBeenCalled()
   })
 })
 
