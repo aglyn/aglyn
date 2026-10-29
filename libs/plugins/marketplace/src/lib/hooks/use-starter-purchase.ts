@@ -84,7 +84,7 @@ export function useStarterPurchase(orgId: string | undefined): StarterPurchase {
             starterCheckoutBody({
               listingId,
               orgId,
-              gaClientId: await readGaClientId(process.env['NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID']),
+              gaClientId: await readGaClientId(process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID),
             }),
           ),
         })
