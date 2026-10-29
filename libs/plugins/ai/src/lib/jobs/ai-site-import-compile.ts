@@ -133,6 +133,27 @@ export function aiSiteImportLinkablePages(doc: Pick<AiSiteImportDocument, 'links
   })
 }
 
+/**
+ * The listing a page brought in keeps (AGL-4107): its source's own title and
+ * description, word for word, never clipped and never rewritten — the 10/29
+ * import's Home was retitled "Aglyn: Build a Website with AI, Free to Start".
+ * Only a part the source left empty takes what was `written` for it.
+ */
+export function aiImportedPageListing(
+  screen: { seoTitle: string; seoDescription: string },
+  written: { title?: string; description?: string } = {},
+): { title: string; description: string } {
+  return {
+    title: screen.seoTitle.trim() || (written.title ?? '').trim(),
+    description: screen.seoDescription.trim() || (written.description ?? '').trim(),
+  }
+}
+
+/** Whether a page brought in still owes a part of its listing: one its source left empty. */
+export function aiImportedPageListingOwed(listing: { title: string; description: string }): boolean {
+  return !listing.title || !listing.description
+}
+
 /*------------------------------------------
  * The layout a page is built from
  *-----------------------------------------*/

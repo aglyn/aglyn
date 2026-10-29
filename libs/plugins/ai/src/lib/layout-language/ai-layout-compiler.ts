@@ -1278,6 +1278,9 @@ function compileButton(
     })
     return null
   }
+  // A link of a page brought in longer than a button's label holds is its
+  // words, as a link (AGL-4107): every word kept, and it still goes there.
+  if (verbatim && asked.length > AI_TEXT_LIMITS.button) return linkedWords(scope, asked, destination)
   // A button to a page merged into the blog names the blog (AGL-3676).
   const label = verbatim ? asked : aiLayoutRenamedLabel(asked, destination)
   if (label !== asked) scope.page.settled.push({ at: scope.at, what: `the button "${asked}" named for the blog: "${label}"` })
@@ -3650,16 +3653,35 @@ function paragraphs(scope: SectionScope, lines: readonly (string | undefined)[],
     .map((line) => tree.add('muiTypography', { children: line, variant, ...align(scope) }, sx, null, role))
 }
 
-/** An item's bullet points: each led by the source's mark where it drew one, else a plain list. */
+/**
+ * Words of a page brought in that are a link longer than a button's label
+ * holds (AGL-4107): the words in the brand color, inside a Link Container
+ * that goes where the source's link went.
+ */
+function linkedWords(scope: SectionScope, text: string, destination: AiLayoutDestination): string {
+  const tree = scope.page.tree
+  const words = tree.add('muiTypography', { children: text, variant: 'body1', ...align(scope) }, accent(scope), null, 'linkWords')
+  if (destination.kind === 'section') {
+    linkTo(scope, words, destination)
+    return words
+  }
+  return tree.add(
+    'muiLinkBox',
+    { ...destinationProps(destination), ariaLabel: text.slice(0, AI_TEXT_LIMITS.label), ...(destination.kind === 'href' ? { newTab: true } : {}) },
+    null,
+    [words],
+    'longLink',
+  )
+}
+
+/** An item's bullet points: each led by the source's mark where it drew one, else one under another. */
 function bullets(scope: SectionScope, lines: readonly string[], iconPath: string | undefined): string | null {
   const tree = scope.page.tree
   const said = lines.map((line) => aiLayoutAsWritten(line)).filter(Boolean)
   if (!said.length) return null
   if (!iconPath) {
-    const rows = said.map((line) =>
-      tree.add('muiListItem', { disableGutters: true }, null, [tree.add('muiListItemText', { primary: line }, null, null, 'line')], 'row'),
-    )
-    return tree.add('muiList', { disablePadding: true, dense: true }, null, rows, 'bullets')
+    const rows = said.map((line) => tree.add('muiTypography', { children: line, variant: 'body2' }, null, null, 'line'))
+    return tree.add('muiStack', { spacing: '1' }, null, rows, 'bullets')
   }
   const rows = said.map((line) =>
     tree.add(
@@ -3785,10 +3807,12 @@ function importedList(scope: SectionScope, block: AiLayoutBlock, room: Room): st
   const rows = items.map((item) => {
     const line = aiLayoutAsWritten([item.title, item.text].filter((part) => part.trim()).join(' '))
     const destination = item.to ? aiLayoutImportedDestination(item.to, scope.page.plan.sections.length) : null
-    const words = destination
-      ? tree.add('muiScreenLink', { children: line, renderAs: 'link', color: 'inherit', ...destinationProps(destination) }, null, null, 'link')
-      : tree.add('muiTypography', { children: line, variant: 'body1' }, null, null, 'line')
-    if (destination) linkTo(scope, words, destination)
+    const words = !destination
+      ? tree.add('muiTypography', { children: line, variant: 'body1' }, null, null, 'line')
+      : line.length > AI_TEXT_LIMITS.button
+        ? linkedWords(scope, line, destination)
+        : tree.add('muiScreenLink', { children: line, renderAs: 'link', color: 'inherit', ...destinationProps(destination) }, null, null, 'link')
+    if (destination && line.length <= AI_TEXT_LIMITS.button) linkTo(scope, words, destination)
     const mark = item.iconPath || item.icon ? sourceIcon(scope, item, '22', accent(scope), 'check') : null
     return mark ? tree.add('muiStack', { direction: 'row', spacing: '1.5', alignItems: 'flex-start' }, null, [mark, words], 'row') : words
   })

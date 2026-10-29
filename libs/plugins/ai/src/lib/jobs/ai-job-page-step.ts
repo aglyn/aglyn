@@ -123,7 +123,7 @@ import {
   type AiLayoutStartPage,
 } from './ai-job-page-language'
 import { aiSiteImportDocumentOf } from './ai-site-import-document'
-import { aiImportPageModel, aiSiteImportLinkablePages } from './ai-site-import-compile'
+import { aiImportedPageListing, aiImportedPageListingOwed, aiImportPageModel, aiSiteImportLinkablePages } from './ai-site-import-compile'
 import { aiWithSiteMotion } from '../layout-language/ai-layout-motion'
 import {
   aiCreationUnit,
@@ -843,14 +843,14 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         // job runs. A page brought in keeps its source's title and description
         // word for word (AGL-4107): never clipped, never rewritten.
         let values = imported
-          ? { title: screen.seoTitle.trim(), description: screen.seoDescription.trim() }
+          ? aiImportedPageListing(screen)
           : {
               title: aiClipAtWord(screen.seoTitle, SCREEN_SEO_TEXT_GUIDANCE.title, plan.language),
               description: aiClipAtWord(screen.seoDescription, SCREEN_SEO_TEXT_GUIDANCE.description, plan.language),
             }
         // Only what the source does not say is written: a page brought in with
         // its own title and description asks for no listing at all.
-        const owed = !imported || !values.title || !values.description
+        const owed = !imported || aiImportedPageListingOwed(values)
         if (
           owed &&
           // A listing is written from the page's own text, with no inventory
@@ -882,7 +882,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
             const usable = (text: string | null | undefined): string =>
               text?.trim() && !aiHasPlaceholderToken(text) ? text.trim() : ''
             values = imported
-              ? { title: values.title || usable(result.value.title), description: values.description || usable(result.value.description) }
+              ? aiImportedPageListing(screen, { title: usable(result.value.title), description: usable(result.value.description) })
               : {
                   title: usable(result.value.title) || values.title,
                   description: usable(result.value.description) || values.description,

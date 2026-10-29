@@ -64,7 +64,7 @@ export const DOCS_HELP_EXCERPTS = {
   billing: 'How Aglyn\'s tiers, entitlements, quotas, usage meters, and seat add-ons work.',
   bindings: 'Live values in your content — typed variables, no-code functions, and rename-safe id tokens.',
   bookings: 'Offer services with availability, let visitors book, take payment, and send reminders.',
-  bringMySite: 'Bring the website you have now into Aglyn, its pages, words and photos, in waves you review and start yourself, once you have proved the site is yours.',
+  bringMySite: 'Bring the website you have now into Aglyn, every word as you wrote it, laid out as your pages are, in waves you review and start yourself, once you have proved the site is yours.',
   buildABlog: 'Create a collection, publish rich entries, and design how its list and entries look with template pages.',
   buildAndPublishASurvey: 'Create a dataset with a typed schema, design a survey form with dropdowns, radios, checkboxes, and a star rating, publish it, and watch responses arrive.',
   buildAWorkflow: 'Create a multi-step workflow that runs when a site event fires.',

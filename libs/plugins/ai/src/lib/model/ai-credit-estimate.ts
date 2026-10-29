@@ -127,13 +127,17 @@ export const AI_MEASURED_IMPORT_CREDITS = {
   page: AI_MEASURED_PAID_SITE_CREDITS.page,
   frame: AI_MEASURED_PAID_SITE_CREDITS.layout,
   /**
-   * A main page Aglyn AI arranges from its old page's own lines (AGL-4083):
-   * one frame-sized structured answer, no prose, and its listing.
-   * PROVISIONAL until the first live import measures it; it prices nothing
-   * until the step marks a page `arranged`.
+   * A main page whose design Aglyn AI answers (AGL-4107): one small answer on
+   * the balanced tier over the page's read structure — about 1,000 to 1,300
+   * tokens in, two thirds of them its cached instructions, and 500 to 900 out
+   * with its thinking, $0.009–$0.017 at Sonnet 5.5's billed rates over the
+   * recorded aglyn.com pages — and no listing, the source's own being kept.
+   * The 10/29 run spent 36–58 a page on a smaller model for a line-by-line
+   * answer twenty times the size. PROVISIONAL until the next live import
+   * measures it.
    */
-  arranged: { median: 12, p90: 20 },
-  /** A page copied as it is (AGL-4083): its listing pass alone. Provisional, as `arranged`. */
+  arranged: { median: 16, p90: 30 },
+  /** A page copied as it is (AGL-4083): no model, and a listing only where the source has none. Provisional, as `arranged`. */
   copied: { median: 1, p90: 2 },
 } as const satisfies Record<string, AiMeasuredCredits>
 

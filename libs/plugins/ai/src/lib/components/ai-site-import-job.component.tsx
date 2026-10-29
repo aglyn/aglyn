@@ -241,7 +241,7 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
       </Stack>
       <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
         <Typography variant="body2" color="text.secondary">
-          {`${start.quote}, from your AI credits. Every page is a draft until you publish it.`}
+          {`${start.quote}, from your AI credits. Its pages land in your site’s preview, or as drafts where the site is not in preview.`}
         </Typography>
         <HelpTip {...AI_SITE_IMPORT_HELP.waves} ariaLabel="How waves work" />
       </Stack>
@@ -493,8 +493,8 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
       <Alert severity="info">
         {job.error ??
           (job.status === 'canceled'
-            ? 'Nothing more is brought in. The pages already in stay as drafts.'
-            : 'It could not go on. The pages already in stay as drafts.')}
+            ? 'Nothing more is brought in. The pages already in stay where they are: in your site’s preview, or as drafts.'
+            : 'It could not go on. The pages already in stay where they are: in your site’s preview, or as drafts.')}
       </Alert>
       {pagesHref ? (
         <Box>
@@ -503,6 +503,8 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
           </Button>
         </Box>
       ) : null}
+      {/* Which waves came in and which stopped (AGL-4107). */}
+      {waves}
     </Frame>
   )
 }
