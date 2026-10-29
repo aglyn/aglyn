@@ -9,6 +9,24 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.292 — 2026-10-29
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.291...v1.0.0-beta.292)
+
+### Added
+
+- **commerce:** add-ons priced on the storefront, and no silent cut at 100 variants ([AGL-4100](https://linear.app/aglyn/issue/AGL-4100))
+
+### Fixed
+
+- **commerce:** quote, invoice and request-confirmation emails carry a conversation root in References, so replies stay in one conversation ([AGL-4097](https://linear.app/aglyn/issue/AGL-4097))
+
+### Documentation
+
+- **assist:** regenerate the docs index for the add-ons sections ([AGL-4100](https://linear.app/aglyn/issue/AGL-4100))
+
+1 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
 ## v1.0.0-beta.291 — 2026-10-29
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/554f125c9...v1.0.0-beta.291)
