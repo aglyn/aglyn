@@ -2815,6 +2815,235 @@
         }
       ]
     },
+    "businessProfileFoundedProblem": {
+      "module": "libs/aglyn/src/lib/app-utils/business-profile.ts",
+      "cases": [
+        {
+          "args": [
+            "",
+            1781524800000
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "",
+            1940760000000
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "   ",
+            1781524800000
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "   ",
+            1940760000000
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "2019",
+            1781524800000
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "2019",
+            1940760000000
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            " 2019 ",
+            1781524800000
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            " 2019 ",
+            1940760000000
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "1999",
+            1781524800000
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "1999",
+            1940760000000
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "2026",
+            1781524800000
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "2026",
+            1940760000000
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "2027",
+            1781524800000
+          ],
+          "result": "Enter the year as four digits, like 2016."
+        },
+        {
+          "args": [
+            "2027",
+            1940760000000
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "19",
+            1781524800000
+          ],
+          "result": "Enter the year as four digits, like 2016."
+        },
+        {
+          "args": [
+            "19",
+            1940760000000
+          ],
+          "result": "Enter the year as four digits, like 2021."
+        },
+        {
+          "args": [
+            "20155",
+            1781524800000
+          ],
+          "result": "Enter the year as four digits, like 2016."
+        },
+        {
+          "args": [
+            "20155",
+            1940760000000
+          ],
+          "result": "Enter the year as four digits, like 2021."
+        },
+        {
+          "args": [
+            "0999",
+            1781524800000
+          ],
+          "result": "Enter the year as four digits, like 2016."
+        },
+        {
+          "args": [
+            "0999",
+            1940760000000
+          ],
+          "result": "Enter the year as four digits, like 2021."
+        },
+        {
+          "args": [
+            "1000",
+            1781524800000
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "1000",
+            1940760000000
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "twenty",
+            1781524800000
+          ],
+          "result": "Enter the year as four digits, like 2016."
+        },
+        {
+          "args": [
+            "twenty",
+            1940760000000
+          ],
+          "result": "Enter the year as four digits, like 2021."
+        },
+        {
+          "args": [
+            "Since 2015",
+            1781524800000
+          ],
+          "result": "Enter the year as four digits, like 2016."
+        },
+        {
+          "args": [
+            "Since 2015",
+            1940760000000
+          ],
+          "result": "Enter the year as four digits, like 2021."
+        },
+        {
+          "args": [
+            "founded 2015!",
+            1781524800000
+          ],
+          "result": "Enter the year as four digits, like 2016."
+        },
+        {
+          "args": [
+            "founded 2015!",
+            1940760000000
+          ],
+          "result": "Enter the year as four digits, like 2021."
+        },
+        {
+          "args": [
+            null,
+            1781524800000
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            1940760000000
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            2019,
+            1781524800000
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            2019,
+            1940760000000
+          ],
+          "result": null
+        }
+      ]
+    },
     "businessProfileOwnerWrite": {
       "module": "libs/aglyn/src/lib/app-utils/business-profile.ts",
       "cases": [
