@@ -227,10 +227,12 @@ export function aiMemoryFixtures({ nowMs, idFor = (id) => id }) {
 /**
  * Setup → Business profile: the site's profile document
  * (`hosts/{host}/businessProfile/profile`) and the workspace defaults
- * (`orgs/{org}/businessProfile/defaults`), each with a source per field.
+ * (`orgs/{org}/businessProfile/defaults`), each with a source per field. A
+ * `founded` year (AGL-4092) is the guided start's, and is stored only when
+ * given, so a seed that passes none writes what it wrote before.
  *
  * @param {{ at: unknown, whatYouDo?: string, services?: string[], audience?: string,
- *   tone?: string, serviceArea?: string, toneNotes?: string }} options
+ *   tone?: string, serviceArea?: string, toneNotes?: string, founded?: string }} options
  */
 export function businessProfileFixtures({
   at,
@@ -240,6 +242,7 @@ export function businessProfileFixtures({
   tone = 'friendly',
   serviceArea = 'Austin, Texas',
   toneNotes = 'Warm and plain. No exclamation marks.',
+  founded,
 }) {
   return {
     profile: {
@@ -247,7 +250,8 @@ export function businessProfileFixtures({
       services,
       audience,
       tone,
-      sources: { whatYouDo: 'start', services: 'start', audience: 'ai', tone: 'ai' },
+      ...(founded ? { founded } : {}),
+      sources: { whatYouDo: 'start', services: 'start', audience: 'ai', tone: 'ai', ...(founded ? { founded: 'start' } : {}) },
       updatedAt: at,
       updatedBy: null,
     },
