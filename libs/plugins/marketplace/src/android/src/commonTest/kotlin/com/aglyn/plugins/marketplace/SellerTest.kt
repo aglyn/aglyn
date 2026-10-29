@@ -91,13 +91,23 @@ class SellerTest {
     assertEquals(true, payoutsSentence(PayoutReadiness.DISCONNECTED).startsWith("Connect a Stripe account"))
   }
 
+  /** The publisher agreement a save agrees to (AGL-4105), as each seller save sends it. */
+  private val agreed = PublisherAgreementConsent("2026-08-24.1")
+
+  private fun assertAgreed(body: Map<String, kotlinx.serialization.json.JsonElement>) {
+    val agreement = body["agreement"]!!.jsonObject
+    assertEquals("2026-08-24.1", agreement["version"]?.jsonPrimitive?.content)
+    assertEquals("true", agreement["accepted"]?.jsonPrimitive?.content)
+  }
+
   @Test
   fun theProfileIsSavedThroughTheRouteWithTheOrganization() = runTest {
     val calls = Calls()
-    SellerApi(calls.client, "o1").saveProfile(mapOf("handle" to "studio", "displayName" to "Studio", "bio" to ""))
+    SellerApi(calls.client, "o1").saveProfile(mapOf("handle" to "studio", "displayName" to "Studio", "bio" to ""), agreed)
     val (path, body) = calls.seen.single()
     assertEquals("/api/marketplace/publisher-profile", path)
-    assertEquals(mapOf("orgId" to "o1", "handle" to "studio", "displayName" to "Studio", "bio" to ""), body.mapValues { it.value.jsonPrimitive.content })
+    assertEquals(mapOf("orgId" to "o1", "handle" to "studio", "displayName" to "Studio", "bio" to ""), body.filterKeys { it != "agreement" }.mapValues { it.value.jsonPrimitive.content })
+    assertAgreed(body)
   }
 
   @Test
@@ -118,13 +128,13 @@ class SellerTest {
   fun aListingIsChangedThroughThePublishRouteOneActionAtATime() = runTest {
     val calls = Calls()
     val api = SellerApi(calls.client, "o1")
-    api.setVisibility("l1", "private")
-    api.setPublished("l1", published = false)
-    api.updateListing("l1", mapOf("displayName" to "Hero", "description" to "A hero", "readme" to "About it", "homepageUrl" to "https://x.test"), "Marketing", listOf("/api/media/cdn/org:o1/a", "/api/media/cdn/org:o1/b"))
-    api.updateListing("l1", mapOf("displayName" to "Hero"), "", emptyList())
+    api.setVisibility("l1", "private", agreed)
+    api.setPublished("l1", published = false, agreement = agreed)
+    api.updateListing("l1", mapOf("displayName" to "Hero", "description" to "A hero", "readme" to "About it", "homepageUrl" to "https://x.test"), "Marketing", listOf("/api/media/cdn/org:o1/a", "/api/media/cdn/org:o1/b"), agreed)
+    api.updateListing("l1", mapOf("displayName" to "Hero"), "", emptyList(), agreed)
     assertEquals(List(4) { "/api/marketplace/publish-plugin" }, calls.seen.map { it.first })
-    assertEquals(mapOf("action" to "set-visibility", "listingId" to "l1", "visibility" to "private"), calls.seen[0].second.mapValues { it.value.jsonPrimitive.content })
-    assertEquals(mapOf("action" to "set-published", "listingId" to "l1", "published" to "false"), calls.seen[1].second.mapValues { it.value.jsonPrimitive.content })
+    assertEquals(mapOf("action" to "set-visibility", "listingId" to "l1", "visibility" to "private"), calls.seen[0].second.filterKeys { it != "agreement" }.mapValues { it.value.jsonPrimitive.content })
+    assertEquals(mapOf("action" to "set-published", "listingId" to "l1", "published" to "false"), calls.seen[1].second.filterKeys { it != "agreement" }.mapValues { it.value.jsonPrimitive.content })
     val update = calls.seen[2].second
     assertEquals("update-listing", update["action"]?.jsonPrimitive?.content)
     assertEquals(listOf("Marketing"), update["categories"]!!.jsonArray.map { it.jsonPrimitive.content })
@@ -133,18 +143,21 @@ class SellerTest {
     assertNull(update["previewImageUrl"])
     assertEquals(0, calls.seen[3].second["categories"]!!.jsonArray.size)
     assertEquals(0, calls.seen[3].second["screenshots"]!!.jsonArray.size)
+    // Each one agrees to the publisher agreement on its own (AGL-4105).
+    calls.seen.forEach { assertAgreed(it.second) }
   }
 
   @Test
   fun thePreviewImageIsSetAndRemovedThroughItsOwnRoute() = runTest {
     val calls = Calls()
     val api = SellerApi(calls.client, "o1")
-    api.setPreviewImage("l1", "/api/media/cdn/org:o1/m1")
-    api.setPreviewImage("l1", "")
+    api.setPreviewImage("l1", "/api/media/cdn/org:o1/m1", agreed)
+    api.setPreviewImage("l1", "", agreed)
     assertEquals(List(2) { "/api/marketplace/preview-image" }, calls.seen.map { it.first })
     assertEquals(listOf("POST", "DELETE"), calls.methods)
-    assertEquals(mapOf("listingId" to "l1", "url" to "/api/media/cdn/org:o1/m1"), calls.seen[0].second.mapValues { it.value.jsonPrimitive.content })
-    assertEquals(mapOf("listingId" to "l1"), calls.seen[1].second.mapValues { it.value.jsonPrimitive.content })
+    assertEquals(mapOf("listingId" to "l1", "url" to "/api/media/cdn/org:o1/m1"), calls.seen[0].second.filterKeys { it != "agreement" }.mapValues { it.value.jsonPrimitive.content })
+    assertEquals(mapOf("listingId" to "l1"), calls.seen[1].second.filterKeys { it != "agreement" }.mapValues { it.value.jsonPrimitive.content })
+    calls.seen.forEach { assertAgreed(it.second) }
   }
 
   @Test

@@ -4276,15 +4276,19 @@ internal data class ContractValuesPart6(
     @SerialName("PRODUCT_LIST_OPTIONS") val productListOptions: Map<String, List<ListFilterOption>>,
     @SerialName("PRODUCT_LIST_QUERY") val productListQuery: ListQueryDeclaration,
     @SerialName("PRODUCT_LIST_SELECT_FIELDS") val productListSelectFields: List<String>,
+    @SerialName("PUBLISHER_AGREEMENT_CONSENT_LABEL") val publisherAgreementConsentLabel: String,
+    @SerialName("PUBLISHER_AGREEMENT_TITLE") val publisherAgreementTitle: String,
+    @SerialName("PUBLISHER_AGREEMENT_URL") val publisherAgreementUrl: String,
+    @SerialName("PUBLISHER_AGREEMENT_VERSION") val publisherAgreementVersion: String,
     @SerialName("RAIL_RECENT_ORGS") val railRecentOrgs: Long,
-    @SerialName("RECENT_ORGS_FIELD") val recentOrgsField: String,
-    @SerialName("RECENT_ORGS_MAX") val recentOrgsMax: Long,
-    @SerialName("RECENTS_FIELD") val recentsField: String,
-    @SerialName("RECENTS_MAX") val recentsMax: Long,
 )
 
 @Serializable
 internal data class ContractValuesPart7(
+    @SerialName("RECENT_ORGS_FIELD") val recentOrgsField: String,
+    @SerialName("RECENT_ORGS_MAX") val recentOrgsMax: Long,
+    @SerialName("RECENTS_FIELD") val recentsField: String,
+    @SerialName("RECENTS_MAX") val recentsMax: Long,
     @SerialName("REFUND_BLOCKED_BY_DISPUTE") val refundBlockedByDispute: String,
     @SerialName("REMINDER_WINDOW_END_HOURS") val reminderWindowEndHours: Long,
     @SerialName("REMINDER_WINDOW_START_HOURS") val reminderWindowStartHours: Long,
@@ -4329,14 +4333,14 @@ internal data class ContractValuesPart7(
     @SerialName("TENANT_EMAIL_COLLECTION") val tenantEmailCollection: String,
     @SerialName("TENANT_EMAILS") val tenantEmails: List<TenantEmailEntry>,
     @SerialName("THEME_ACCENT_SWATCHES") val themeAccentSwatches: List<ThemeAccentSwatch>,
-    @SerialName("THEME_ACCENTS") val themeAccents: List<ThemeNamedAccent>,
-    @SerialName("THEME_CONSOLE_FIELDS") val themeConsoleFields: List<String>,
-    @SerialName("THEME_DARK_RAIL_SEEDS") val themeDarkRailSeeds: Map<String, String>,
-    @SerialName("THEME_DENSITIES") val themeDensities: List<ThemeDensity>,
 )
 
 @Serializable
 internal data class ContractValuesPart8(
+    @SerialName("THEME_ACCENTS") val themeAccents: List<ThemeNamedAccent>,
+    @SerialName("THEME_CONSOLE_FIELDS") val themeConsoleFields: List<String>,
+    @SerialName("THEME_DARK_RAIL_SEEDS") val themeDarkRailSeeds: Map<String, String>,
+    @SerialName("THEME_DENSITIES") val themeDensities: List<ThemeDensity>,
     @SerialName("THEME_FIGMA_BASE") val themeFigmaBase: ThemeColorsPair,
     @SerialName("THEME_NON_TEXT_CONTRAST") val themeNonTextContrast: Long,
     @SerialName("THEME_PALETTES") val themePalettes: List<ThemePalette>,
@@ -4652,11 +4656,15 @@ class ContractValues internal constructor(
     val productListOptions: Map<String, List<ListFilterOption>> get() = part6.productListOptions
     val productListQuery: ListQueryDeclaration get() = part6.productListQuery
     val productListSelectFields: List<String> get() = part6.productListSelectFields
+    val publisherAgreementConsentLabel: String get() = part6.publisherAgreementConsentLabel
+    val publisherAgreementTitle: String get() = part6.publisherAgreementTitle
+    val publisherAgreementUrl: String get() = part6.publisherAgreementUrl
+    val publisherAgreementVersion: String get() = part6.publisherAgreementVersion
     val railRecentOrgs: Long get() = part6.railRecentOrgs
-    val recentOrgsField: String get() = part6.recentOrgsField
-    val recentOrgsMax: Long get() = part6.recentOrgsMax
-    val recentsField: String get() = part6.recentsField
-    val recentsMax: Long get() = part6.recentsMax
+    val recentOrgsField: String get() = part7.recentOrgsField
+    val recentOrgsMax: Long get() = part7.recentOrgsMax
+    val recentsField: String get() = part7.recentsField
+    val recentsMax: Long get() = part7.recentsMax
     val refundBlockedByDispute: String get() = part7.refundBlockedByDispute
     val reminderWindowEndHours: Long get() = part7.reminderWindowEndHours
     val reminderWindowStartHours: Long get() = part7.reminderWindowStartHours
@@ -4701,10 +4709,10 @@ class ContractValues internal constructor(
     val tenantEmailCollection: String get() = part7.tenantEmailCollection
     val tenantEmails: List<TenantEmailEntry> get() = part7.tenantEmails
     val themeAccentSwatches: List<ThemeAccentSwatch> get() = part7.themeAccentSwatches
-    val themeAccents: List<ThemeNamedAccent> get() = part7.themeAccents
-    val themeConsoleFields: List<String> get() = part7.themeConsoleFields
-    val themeDarkRailSeeds: Map<String, String> get() = part7.themeDarkRailSeeds
-    val themeDensities: List<ThemeDensity> get() = part7.themeDensities
+    val themeAccents: List<ThemeNamedAccent> get() = part8.themeAccents
+    val themeConsoleFields: List<String> get() = part8.themeConsoleFields
+    val themeDarkRailSeeds: Map<String, String> get() = part8.themeDarkRailSeeds
+    val themeDensities: List<ThemeDensity> get() = part8.themeDensities
     val themeFigmaBase: ThemeColorsPair get() = part8.themeFigmaBase
     val themeNonTextContrast: Long get() = part8.themeNonTextContrast
     val themePalettes: List<ThemePalette> get() = part8.themePalettes

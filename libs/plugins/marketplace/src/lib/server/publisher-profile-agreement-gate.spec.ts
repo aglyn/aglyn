@@ -18,32 +18,35 @@
  */
 
 /**
- * AGL-1660 — no acceptance of a document that was never served.
+ * AGL-1660 — no agreement to a document that was never served, on any save
+ * (AGL-4105).
  *
- * The console hides the accept control while the agreement has no published
- * page, but a hidden control is not a gate: this route is the only writer of
- * `publisherAgreement`, so the refusal has to be a fact here. A recorded
- * acceptance of text nobody could read is worse than no record, because it
- * looks like evidence.
+ * The console's box cannot be ticked while the agreement has no published
+ * page, but a disabled box is not a gate: the routes refuse a save's
+ * agreement whatever it says while there is nothing behind it, so the
+ * refusal is a fact on the server. A recorded agreement to text nobody could
+ * read is worse than no record, because it looks like evidence.
  *
- * Both directions are asserted, so the gate cannot quietly become a no-op when
- * the page IS published.
+ * Driven through the profile save with the REAL recorder, so the record it
+ * writes is the one asserted: pinned to the document's bytes, naming the
+ * person, the save and the device. Both directions are asserted, so the gate
+ * cannot quietly become a no-op when the page IS published.
  */
 
 const mockTimestampSentinel = Symbol('serverTimestamp')
 
-/**
- * Whether the document is published, as the route sees it. A mutable holder
- * rather than a spy: the real function reads a constant list, and both sides
- * of the gate have to be exercised — the one that holds today, and the one
- * that has to still hold on the day the page goes live.
- */
+/** Whether the agreement's page is published, as the model is told. */
 const mockPublished = { value: false }
 
-jest.mock('../model/publisher-agreement', () => ({
-  ...jest.requireActual('../model/publisher-agreement'),
-  publisherAgreementIsPublished: () => mockPublished.value,
-}))
+jest.mock('../model/publisher-agreement', () => {
+  const actual = jest.requireActual('../model/publisher-agreement')
+  return {
+    ...actual,
+    publisherAgreementIsPublished: () => mockPublished.value,
+    publisherAgreementConsentRefusal: (raw: unknown) =>
+      actual.publisherAgreementConsentRefusal(raw, { published: mockPublished.value }),
+  }
+})
 
 jest.mock('./publisher-profile', () => ({
   PUBLISHER_PROFILES: 'publisherProfiles',
@@ -53,18 +56,26 @@ jest.mock('./publisher-profile', () => ({
 }))
 
 jest.mock('@aglyn/tenant-data-admin', () => {
-  const docRef = {
-    get: async () => ({ get: () => 'acme' }),
+  const store = () =>
+    jest.requireMock('@aglyn/tenant-data-admin') as {
+      __writes: Array<Record<string, unknown>>
+      __records: Array<Record<string, unknown>>
+    }
+  const docRef: Record<string, unknown> = {
+    get: async () => ({ exists: true, get: () => 'acme' }),
     set: (data: Record<string, unknown>) => {
-      const store = jest.requireMock('@aglyn/tenant-data-admin') as {
-        __writes: Array<Record<string, unknown>>
-      }
-      store.__writes.push(data)
+      store().__writes.push(data)
       return Promise.resolve()
     },
+    create: (data: Record<string, unknown>) => {
+      store().__records.push(data)
+      return Promise.resolve()
+    },
+    collection: () => ({ doc: () => docRef }),
   }
   return {
     __writes: [] as Array<Record<string, unknown>>,
+    __records: [] as Array<Record<string, unknown>>,
     firebaseAdmin: {
       app: () => ({
         auth: () => ({ verifyIdToken: async () => ({ uid: 'user-1' }) }),
@@ -83,12 +94,11 @@ jest.mock('@aglyn/tenant-data-admin', () => {
 import * as agreement from '../model/publisher-agreement'
 import { publisherProfileSaveHandler } from './publisher-profile-save'
 
-const writes = () =>
-  (
-    jest.requireMock('@aglyn/tenant-data-admin') as {
-      __writes: Array<Record<string, unknown>>
-    }
-  ).__writes
+const admin = () =>
+  jest.requireMock('@aglyn/tenant-data-admin') as {
+    __writes: Array<Record<string, unknown>>
+    __records: Array<Record<string, unknown>>
+  }
 
 function makeRes() {
   const res: any = {
@@ -106,38 +116,59 @@ function makeRes() {
   return res
 }
 
-const acceptRequest = () =>
+const saveRequest = () =>
   ({
     method: 'POST',
-    headers: { authorization: 'Bearer token' },
+    headers: {
+      authorization: 'Bearer token',
+      'user-agent': 'Spec Browser/1.0',
+      'x-forwarded-for': '203.0.113.7',
+    },
+    socket: {},
     body: {
-      action: 'accept-agreement',
       orgId: 'acme',
-      version: agreement.PUBLISHER_AGREEMENT_VERSION,
+      handle: 'acme',
+      displayName: 'Acme',
+      agreement: agreement.publisherAgreementConsent(),
     },
   }) as any
 
-describe('accepting the publisher agreement (AGL-1660)', () => {
+describe('agreeing to the publisher agreement on a save (AGL-1660, AGL-4105)', () => {
   beforeEach(() => {
-    writes().length = 0
+    admin().__writes.length = 0
+    admin().__records.length = 0
     mockPublished.value = false
   })
 
-  it('refuses, and writes nothing, while the document has no page', async () => {
+  it('refuses, and writes and records nothing, while the document has no page', async () => {
     const res = makeRes()
-    await publisherProfileSaveHandler(acceptRequest(), res)
+    await publisherProfileSaveHandler(saveRequest(), res)
     expect(res.statusCode).toBe(409)
-    expect(res.body).toMatchObject({ unavailable: true })
-    expect(writes()).toHaveLength(0)
+    expect(res.body).toMatchObject({ agreement: { state: 'unavailable' } })
+    expect(admin().__writes).toHaveLength(0)
+    expect(admin().__records).toHaveLength(0)
   })
 
-  it('records the acceptance once the document is published', async () => {
+  it('records the agreement, and saves, once the document is published', async () => {
     mockPublished.value = true
     const res = makeRes()
-    await publisherProfileSaveHandler(acceptRequest(), res)
+    await publisherProfileSaveHandler(saveRequest(), res)
     expect(res.statusCode).toBe(200)
-    expect(writes()).toHaveLength(1)
-    expect(writes()[0]).toMatchObject({
+    expect(admin().__records).toHaveLength(1)
+    expect(admin().__records[0]).toMatchObject({
+      version: agreement.PUBLISHER_AGREEMENT_VERSION,
+      orgId: 'acme',
+      uid: 'user-1',
+      staff: false,
+      action: 'save-profile',
+      targetId: 'acme',
+      userAgent: 'Spec Browser/1.0',
+      acceptedAt: mockTimestampSentinel,
+    })
+    expect(typeof admin().__records[0]['atMs']).toBe('number')
+    // The profile's note of it rides the profile write itself.
+    expect(admin().__writes).toHaveLength(1)
+    expect(admin().__writes[0]).toMatchObject({
       publisherAgreement: {
         version: agreement.PUBLISHER_AGREEMENT_VERSION,
         acceptedBy: 'user-1',
@@ -145,21 +176,22 @@ describe('accepting the publisher agreement (AGL-1660)', () => {
     })
   })
 
-  it('pins the acceptance to the bytes of the document, not just its label (AGL-1678)', async () => {
+  it('pins the record to the bytes of the document, not just its label (AGL-1678)', async () => {
     // A version string is a label we control and can reuse; the snapshot hash
     // is what makes the record self-contained evidence of content. Same
     // machinery as the signup clickwrap (AGL-1497): sha256 + byte length of
     // the archived snapshot, written onto every acceptance record.
     mockPublished.value = true
     const res = makeRes()
-    await publisherProfileSaveHandler(acceptRequest(), res)
+    await publisherProfileSaveHandler(saveRequest(), res)
     expect(res.statusCode).toBe(200)
-    expect(writes()).toHaveLength(1)
-    const recorded = (writes()[0] as {
+    expect(admin().__records[0]['sha256']).toBe(agreement.PUBLISHER_AGREEMENT_SHA256)
+    expect(admin().__records[0]['bytes']).toBe(agreement.PUBLISHER_AGREEMENT_BYTES)
+    const note = (admin().__writes[0] as {
       publisherAgreement: { sha256?: unknown; bytes?: unknown }
     }).publisherAgreement
-    expect(recorded.sha256).toBe(agreement.PUBLISHER_AGREEMENT_SHA256)
-    expect(recorded.bytes).toBe(agreement.PUBLISHER_AGREEMENT_BYTES)
+    expect(note.sha256).toBe(agreement.PUBLISHER_AGREEMENT_SHA256)
+    expect(note.bytes).toBe(agreement.PUBLISHER_AGREEMENT_BYTES)
     // The manifest itself must be a real pin, not an empty default the
     // assertion above would vacuously match.
     expect(agreement.PUBLISHER_AGREEMENT_SHA256).toMatch(/^[0-9a-f]{64}$/)
@@ -168,16 +200,15 @@ describe('accepting the publisher agreement (AGL-1660)', () => {
 
   it('follows the REAL published set, not just the stub', async () => {
     // The stub above proves the branch; this proves the branch is wired to
-    // the actual constant. As of this commit the page does not exist, so the
-    // route refuses in production too — and when the page is published, the
-    // same assertion expects 200 without anyone editing this file.
+    // the actual constant: when the page is published the same assertion
+    // expects 200 without anyone editing this file.
     const real = jest.requireActual(
       '../model/publisher-agreement',
     ) as typeof agreement
     mockPublished.value = real.publisherAgreementIsPublished()
     const res = makeRes()
-    await publisherProfileSaveHandler(acceptRequest(), res)
+    await publisherProfileSaveHandler(saveRequest(), res)
     expect(res.statusCode).toBe(mockPublished.value ? 200 : 409)
-    expect(writes()).toHaveLength(mockPublished.value ? 1 : 0)
+    expect(admin().__records).toHaveLength(mockPublished.value ? 1 : 0)
   })
 })

@@ -32,7 +32,7 @@
  */
 
 import { compress } from '@aglyn/aglyn/app-utils/compress'
-import { PUBLISHER_AGREEMENT_VERSION } from '../model/publisher-agreement'
+import { PUBLISHER_AGREEMENT_VERSION, publisherAgreementConsent } from '../model/publisher-agreement'
 import { decodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { sanitizeMarketplaceDefinition } from '../model/marketplace'
 
@@ -89,6 +89,12 @@ let store: Record<string, Record<string, any>> = {}
 /** Every `set` the handlers performed, in order. */
 let writes: Array<{ path: string; data: any }> = []
 
+// Each save's agreement is recorded through its own module (AGL-4105),
+// faked here so the route's Firestore double does not have to model it.
+jest.mock('./publisher-agreement-acceptance', () => ({
+  recordPublisherAgreementAcceptance: jest.fn(async () => ({})),
+  publisherAgreementNote: () => ({ version: 'noted' }),
+}))
 jest.mock('@aglyn/aglyn/server', () => ({
   CANVAS_ROOT_ELEMENT_ID: '_@_',
   checkEntitlement: () => true,
@@ -242,26 +248,26 @@ function seed(nodes: unknown) {
   adminMock.__writes = writes
 }
 
-async function publishTemplate() {
+async function publishTemplate(agreement: unknown = publisherAgreementConsent()) {
   const { res, result } = respond()
   await publishTemplateHandler(
     {
       method: 'POST',
       headers: { authorization: 'Bearer token' },
-      body: { hostId: 'host-1', displayName: 'Starter site' },
+      body: { hostId: 'host-1', displayName: 'Starter site', agreement },
     } as never,
     res as never,
   )
   return result
 }
 
-async function publishLayout() {
+async function publishLayout(agreement: unknown = publisherAgreementConsent()) {
   const { res, result } = respond()
   await publishLayoutHandler(
     {
       method: 'POST',
       headers: { authorization: 'Bearer token' },
-      body: { hostId: 'host-1', layoutId: 'layout-1', displayName: 'Shell' },
+      body: { hostId: 'host-1', layoutId: 'layout-1', displayName: 'Shell', agreement },
     } as never,
     res as never,
   )
@@ -475,7 +481,8 @@ describe('an undecoded definition does not read as an authoring mistake', () => 
 })
 
 /**
- * The publisher agreement, observed refusing on a LIVE route (AGL-2282).
+ * The publisher agreement, observed refusing on a LIVE route (AGL-2282),
+ * agreed to on every publish since AGL-4105.
  *
  * `publish-agreement-gate.spec.ts` unit-tests the decision and guards that
  * every publish door calls it. This is the other half of that pair: a pure
@@ -484,42 +491,36 @@ describe('an undecoded definition does not read as an authoring mistake', () => 
  * has to be watched refusing for real. Both handlers this file already stands
  * up are exercised, because they took different routes to the same gate.
  *
- * The mocked profile is otherwise perfect — a real org, payouts enabled — so
- * what changes the answer is the agreement and nothing else.
+ * The mocked profile is otherwise perfect — a real org, payouts enabled, and
+ * a current acceptance on file — so what changes the answer is the box on
+ * this publish and nothing else.
  */
-describe('a publish door refuses without a current agreement (AGL-2282)', () => {
-  // No restore hook: `seed` re-establishes the current acceptance, and every
-  // case below seeds before it changes anything — so the order is always
-  // seed-then-break, never the reverse.
-  it('refuses a TEMPLATE publish when the org has never accepted', async () => {
+describe('a publish door refuses without the agreement ticked (AGL-2282, AGL-4105)', () => {
+  it('refuses a TEMPLATE publish that did not tick the box, from an org that agreed before', async () => {
     seed(SCREEN_NODES)
-    profileMock.__agreement = undefined
 
-    const result = await publishTemplate()
+    const result = await publishTemplate(null)
 
-    expect(result.status).toBe(412)
-    expect(result.body.agreement).toMatchObject({ state: 'none' })
+    expect(result.status).toBe(428)
+    expect(result.body.agreement).toMatchObject({ state: 'missing' })
     // And it refused BEFORE writing anything: a listing created under no
     // terms is the thing being prevented, not a message shown afterwards.
     expect(versionWrite()).toBeUndefined()
   })
 
-  it('refuses a LAYOUT publish when the acceptance is stale', async () => {
+  it('refuses a LAYOUT publish ticked for a version no longer in force', async () => {
     seed(LAYOUT_NODES)
-    profileMock.__agreement = { version: '1999-01-01.1' }
 
-    const result = await publishLayout()
+    const result = await publishLayout({ version: '1999-01-01.1', accepted: true })
 
-    expect(result.status).toBe(412)
-    expect(result.body.agreement).toMatchObject({
-      accepted: '1999-01-01.1',
-      state: 'outdated',
-    })
+    expect(result.status).toBe(409)
+    expect(result.body.agreement).toMatchObject({ state: 'outdated' })
     expect(versionWrite()).toBeUndefined()
   })
 
-  it('publishes once the acceptance is current — the control', async () => {
+  it('publishes with the box ticked, from an org with nothing on file — the control', async () => {
     seed(SCREEN_NODES)
+    profileMock.__agreement = undefined
     expect(await publishTemplate()).toEqual(PUBLISHED)
   })
 })

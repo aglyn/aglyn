@@ -39,7 +39,10 @@ import {
   Typography,
 } from '@mui/material'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import usePublisherAgreementGate from './use-publisher-agreement-gate'
+import {
+  PublisherAgreementCheckbox,
+  usePublisherAgreementConsent,
+} from './publisher-agreement-checkbox.component'
 
 /** One kind's publish route, and the words a person reads about it. */
 interface PublishRequest {
@@ -163,14 +166,10 @@ export function PublishArtifactDialog({
   const [category, setCategory] = useState('')
   const [price, setPrice] = useState('')
   const [busy, setBusy] = useState(false)
-  // The publisher agreement (AGL-3407): offered as the dialog opens when the
-  // org's acceptance is missing or stale, and presented again over the form
-  // if the publish is refused for it — accepting sends the same publish.
-  const { send: sendGated, dialog: agreementDialog } =
-    usePublisherAgreementGate({
-      orgId: artifact?.orgId ?? null,
-      offer: Boolean(target),
-    })
+  // The publisher agreement, agreed to on this publish (AGL-4105): the box
+  // above the button, unticked for every artifact the dialog opens on.
+  const agreement = usePublisherAgreementConsent()
+  const { reset: resetAgreement } = agreement
 
   useEffect(() => {
     if (!artifact) return
@@ -178,31 +177,26 @@ export function PublishArtifactDialog({
     setDescription(artifact.description ?? '')
     setCategory('')
     setPrice('')
-  }, [artifact])
+    resetAgreement()
+  }, [artifact, resetAgreement])
 
   const handlePublish = useCallback(async () => {
-    if (!target || !name.trim() || busy) return
+    if (!target || !name.trim() || busy || !agreement.consent) return
     setBusy(true)
     try {
-      // Serialized once, so a retry after accepting the agreement sends the
-      // very bytes the first attempt did.
-      const body = JSON.stringify({
-        ...target.payload,
-        displayName: name.trim(),
-        description: description.trim(),
-        category: category.trim(),
-        priceUsd: Number(price) || 0,
-      })
-      const { response, payload, declined } = await sendGated(() =>
-        authorizedFetch(user, `/api/${target.endpoint}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body,
+      const response = await authorizedFetch(user, `/api/${target.endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...target.payload,
+          displayName: name.trim(),
+          description: description.trim(),
+          category: category.trim(),
+          priceUsd: Number(price) || 0,
+          agreement: agreement.consent,
         }),
-      )
-      // The agreement was shown and closed; it said why, and the form stays
-      // as it was for when they are ready.
-      if (declined) return
+      })
+      const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
         // 412 means a setup step is missing (publisher profile, payouts) —
         // actionable, so it reads as a warning rather than an error.
@@ -215,6 +209,8 @@ export function PublishArtifactDialog({
         variant: 'success',
         persist: false,
       })
+      // Each publish is its own agreement: the next one ticks the box again.
+      resetAgreement()
       onClose()
     } catch (error) {
       console.error(error)
@@ -235,7 +231,8 @@ export function PublishArtifactDialog({
     user,
     enqueueSnackbar,
     onClose,
-    sendGated,
+    agreement.consent,
+    resetAgreement,
   ])
 
   if (artifact && !target) {
@@ -327,6 +324,12 @@ export function PublishArtifactDialog({
               disabled={busy}
               fullWidth
             />
+            {/* Directly above Publish (AGL-4105), which waits for it. */}
+            <PublisherAgreementCheckbox
+              checked={agreement.agreed}
+              onChange={agreement.setAgreed}
+              disabled={busy}
+            />
           </Stack>
         </DialogContent>
         <DialogActions>
@@ -338,7 +341,10 @@ export function PublishArtifactDialog({
             variant="contained"
             color="primary"
             disabled={
-              busy || !name.trim() || isBelowMarketplacePriceFloor(price)
+              busy ||
+              !name.trim() ||
+              isBelowMarketplacePriceFloor(price) ||
+              !agreement.agreed
             }
             onClick={() => void handlePublish()}
           >
@@ -346,7 +352,6 @@ export function PublishArtifactDialog({
           </Button>
         </DialogActions>
       </Dialog>
-      {agreementDialog}
     </>
   )
 }

@@ -39,6 +39,10 @@ import {
   MarkdownField,
   type MarkdownFieldHandle,
 } from '@aglyn/aglyn-markdown-editor'
+import {
+  PublisherAgreementCheckbox,
+  usePublisherAgreementConsent,
+} from './publisher-agreement-checkbox.component'
 
 // Mirrors the server's fixed taxonomy (marketplace plugin model), which the
 // console can't import across the aglyn:addons boundary. The server
@@ -87,6 +91,8 @@ export function ListingDetailEditor(props: ListingDetailEditorProps) {
   const { enqueueSnackbar } = useSnackbar()
   const editorRef = useRef<MarkdownFieldHandle | null>(null)
   const [busy, setBusy] = useState(false)
+  // The publisher agreement, agreed to on this save (AGL-4105).
+  const agreement = usePublisherAgreementConsent()
 
   const [values, setValues] = useState({
     displayName: '',
@@ -182,20 +188,32 @@ export function ListingDetailEditor(props: ListingDetailEditorProps) {
   }
 
   const save = async () => {
+    if (!agreement.consent) return
     setBusy(true)
     try {
       const headers = { 'Content-Type': 'application/json' }
       // Preview image isn't a content field, so it has its own endpoint
-      // (AGL-863). Only touch it when it actually changed.
+      // (AGL-863). Only touch it when it actually changed. Both requests carry
+      // the one agreement this save was made with (AGL-4105), and a refused
+      // preview stops the save rather than saving the rest without it.
       if (values.previewImageUrl !== originalPreview.current) {
-        await authorizedFetch(user, '/api/marketplace/preview-image', {
+        const preview = await authorizedFetch(user, '/api/marketplace/preview-image', {
           method: values.previewImageUrl ? 'POST' : 'DELETE',
           headers,
           body: JSON.stringify({
             listingId,
             ...(values.previewImageUrl ? { url: values.previewImageUrl } : {}),
+            agreement: agreement.consent,
           }),
         })
+        if (!preview.ok) {
+          const refused = await preview.json().catch(() => ({}))
+          return void enqueueSnackbar(refused?.error ?? 'Update failed', {
+            variant: 'error',
+            allowDuplicate: true,
+          })
+        }
+        originalPreview.current = values.previewImageUrl
       }
       const response = await authorizedFetch(
         user,
@@ -215,6 +233,7 @@ export function ListingDetailEditor(props: ListingDetailEditorProps) {
             license: values.license,
             categories: values.category ? [values.category] : [],
             screenshots,
+            agreement: agreement.consent,
           }),
         },
       )
@@ -226,6 +245,8 @@ export function ListingDetailEditor(props: ListingDetailEditorProps) {
         })
       }
       enqueueSnackbar('Listing updated', { variant: 'success', persist: false })
+      // Each save is its own agreement: the next one ticks the box again.
+      agreement.reset()
       onDone()
     } catch (error) {
       console.error(error)
@@ -426,11 +447,17 @@ export function ListingDetailEditor(props: ListingDetailEditorProps) {
           </TextField>
         </Stack>
 
-        <Stack direction="row" spacing={1} sx={{ pt: 1 }}>
+        {/* Directly above Save listing (AGL-4105), which waits for it. */}
+        <PublisherAgreementCheckbox
+          checked={agreement.agreed}
+          onChange={agreement.setAgreed}
+          disabled={busy}
+        />
+        <Stack direction="row" spacing={1}>
           <Button
             variant="contained"
             color="primary"
-            disabled={busy || !values.displayName.trim()}
+            disabled={busy || !values.displayName.trim() || !agreement.agreed}
             onClick={() => void save()}
           >
             {busy ? 'Saving…' : 'Save listing'}

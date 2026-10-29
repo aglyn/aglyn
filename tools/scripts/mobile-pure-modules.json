@@ -826,6 +826,10 @@
       "why": "Reached by the marketplace's native-nav module: the hub's Licenses section id, a stored value; no imports at all."
     },
     {
+      "path": "libs/plugins/marketplace/src/lib/model/publisher-agreement.ts",
+      "why": "The Marketplace Publisher Agreement every publisher save agrees to (AGL-4105): its version, title, address and the box's sentence, which the native seller screens send and show as the console's do; imports only published-legal-pages.ts."
+    },
+    {
       "path": "libs/plugins/marketplace/src/lib/model/payout-readiness.ts",
       "why": "Whether a publisher's Stripe account can take charges and release payouts, as the seller panel says it (AGL-3668). No imports."
     },

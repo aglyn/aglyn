@@ -34,8 +34,8 @@ import PluginWidgetSlot, { useSlotWidgets } from './plugin-widget-slot.component
  * The card says what it has — this site — and the publish itself is drawn
  * through the `hostArtifactPublish` zone (AGL-3080), the same widget the
  * layouts and components pages open: the route, the listing form, the price
- * floor and the publisher agreement it may need to ask for (AGL-3407) are
- * the marketplace's, not the console's. With nothing drawing that zone there
+ * floor and the publisher agreement box every publish carries (AGL-3407,
+ * AGL-4105) are the marketplace's, not the console's. With nothing drawing that zone there
  * is nowhere to publish to, so the card is not shown at all.
  */
 export function SiteTemplateCard(props: { hostId: string }) {
