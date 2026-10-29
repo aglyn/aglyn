@@ -58,6 +58,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { downloadCommercePdf } from './commerce-pdf-download'
 import { QuotePayLinkSection } from './quote-pay-link.component'
 import { QuoteProofsSection } from './quote-proofs.component'
+import { QuoteSendSection } from './quote-send.component'
 
 /** A quote as the list reads it: the order document and its id. */
 export type QuoteRow = CommerceModel.HostOrder & { $id: string }
@@ -454,6 +455,9 @@ export function QuoteEditorDialog(props: QuoteEditorDialogProps) {
                 ? `Paid ${new Date(quote.quote.paidAtMs).toLocaleDateString()}. It is an order now and can no longer be changed.`
                 : 'This quote has been paid, so it is an order now and can no longer be changed.'}
             </Alert>
+          ) : null}
+          {quote ? (
+            <QuoteSendSection hostId={hostId} quoteId={quote.$id} quote={quote} canSend={canSend} edited={edited} />
           ) : null}
           {quote ? (
             <QuotePayLinkSection hostId={hostId} quoteId={quote.$id} quote={quote} canSend={canSend} edited={edited} />

@@ -45,6 +45,9 @@ export * from './lib/host-email-render'
 export * from './lib/email-render'
 export * from './lib/text-email-html'
 export * from './lib/marketing-send'
+// One conversation in the recipient's mailbox (AGL-4097): Message-ID,
+// In-Reply-To and References for a record's later messages. Pure.
+export * from './lib/email-thread'
 // The List-Unsubscribe setting sequences and campaigns share (AGL-3307).
 export * from './lib/list-unsubscribe'
 export * from './lib/email-delivery-events'

@@ -88,16 +88,22 @@ export function erasedOrderPatch(
 /**
  * A quote's customer, erased (AGL-4093). An unpaid quote keeps its customer
  * in its `quote` section rather than on the order's own fields, so it is
- * found by `quote.customer.emailLower` and loses the person and both
- * addresses; its lines and totals stay, as an order's do.
+ * found by `quote.customer.emailLower` and loses the person, both
+ * addresses and the address each email went to; its lines and totals stay,
+ * as an order's do.
  */
 export function erasedQuotePatch(
   data: FirebaseFirestore.DocumentData | undefined,
   now: number,
 ): Record<string, unknown> {
   const quote = (data?.['quote'] ?? {}) as Record<string, unknown>
+  // Each time it was emailed names where it went (AGL-4097); the record of
+  // the send stays, without the address.
+  const sends = Array.isArray(quote['sends'])
+    ? { sends: (quote['sends'] as Array<Record<string, unknown>>).map((send) => ({ ...send, to: '' })) }
+    : {}
   return {
-    quote: { ...quote, customer: {}, billTo: null, shipTo: null },
+    quote: { ...quote, customer: {}, billTo: null, shipTo: null, ...sends },
     customerErasedAtMs: now,
   }
 }

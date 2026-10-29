@@ -17,7 +17,7 @@
 
 import type { PluginApiHandler, PluginApiRequest } from '@aglyn/aglyn/server'
 import { resolveSiteTimeZone } from '@aglyn/aglyn/app-utils/collection-entry-date'
-import { resolveHostToken, type HostTokenSource } from '@aglyn/aglyn/app-utils/host-tokens'
+import { siteContactEmail, resolveHostToken, type HostTokenSource } from '@aglyn/aglyn/app-utils/host-tokens'
 import { resolveSiteTheme, type ThemeHostDocument } from '@aglyn/aglyn/app-utils/site-theme'
 import { buildEmailPalette, emailPaletteBaseForHost } from '@aglyn/shared-util-email'
 import { readJpeg, type PdfJpegImage } from '@aglyn/shared-util-tools/pdf/pdf-file'
@@ -97,7 +97,7 @@ export function commercePdfContactLines(host: HostDocument | null | undefined): 
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
-  const email = trimmed(source.seo?.entity?.email) || trimmed(source.business?.supportEmail)
+  const email = siteContactEmail(source) ?? ''
   const phone = trimmed(source.seo?.entity?.telephone)
   const site = trimmed(resolveHostToken('url', source)).replace(/^https?:\/\//, '').replace(/\/$/, '')
   return [...address, email, phone, site].filter(Boolean)

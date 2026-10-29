@@ -20,6 +20,7 @@ import { planListQuery } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { nameSearchKey, nameSearchTokens } from '@aglyn/aglyn/app-utils/name-search'
 import { ORDER_LIST_COLUMN_SORTS, ORDER_LIST_QUERY } from '../constants/orders-list-query'
 import { handleQuote, type QuoteDeps } from './quote'
+import { quoteMailer, type QuoteMailerDeps } from './quote-email'
 import type { QuoteUploadCalls } from './quote-uploads'
 
 jest.mock('@aglyn/tenant-data-admin', () => ({ firebaseAdmin: {}, getOrgForHost: jest.fn() }))
@@ -133,6 +134,30 @@ const uploads: QuoteUploadCalls = {
   send: async () => undefined,
 }
 
+/** The quote email (AGL-4097): the real composition and threading over a recorded send. */
+const sentEmails: Array<Parameters<QuoteMailerDeps['send']>[0]> = []
+const renderedTokens: Array<Record<string, string>> = []
+let sendAnswer: Awaited<ReturnType<QuoteMailerDeps['send']>> = { sent: true, id: 'provider-1' }
+let suppressionAnswer: Awaited<ReturnType<QuoteMailerDeps['suppression']>> = null
+let mailConfigured = true
+const mailerDeps: QuoteMailerDeps = {
+  configured: () => mailConfigured,
+  sendingIdentity: async () =>
+    ({ from: 'Acme Signs <hello@mail.acme.test>', source: 'site', domain: 'mail.acme.test', summary: 'mail.acme.test', refusal: null }) as never,
+  render: async (_hostId, _key, tokens) => {
+    renderedTokens.push(tokens)
+    return { subject: tokens['quote.subject'], html: `<p>${tokens['quote.heading']}</p>`, text: tokens['quote.heading'] }
+  },
+  theme: async () => null,
+  quotePdf: async (input) => ({ bytes: new Uint8Array([37, 80, 68, 70]), filename: `acme-quote-${String(input.order.number)}.pdf` }),
+  send: async (options) => {
+    sentEmails.push(options)
+    return sendAnswer
+  },
+  meter: async () => undefined,
+  suppression: async () => suppressionAnswer,
+}
+
 const deps: QuoteDeps = {
   verifyIdToken: async (token) => ({ uid: token, email: `${token}@example.com` }),
   firestore: () => firestore,
@@ -143,7 +168,10 @@ const deps: QuoteDeps = {
   payLinkUrl: (host, hostId, quoteId, version) =>
     host['subdomain'] ? `https://${String(host['subdomain'])}.aglyn.app/pay-quote?q=${quoteId}&t=${version}.sig-${hostId}` : null,
   quotePdf,
+  proofLinkUrl: (_host, hostId, quoteId, version, proofId) =>
+    `https://acme.aglyn.app/api/commerce/quote-proof?hostId=${hostId}&q=${quoteId}&t=${version}.sig&file=${proofId}`,
   uploads: async () => uploads,
+  mailer: async () => quoteMailer(mailerDeps),
   now: () => nowMs,
 }
 
@@ -174,6 +202,11 @@ beforeEach(() => {
   expireSession.mockClear()
   quotePdf.mockClear()
   uploadCalls.length = 0
+  sentEmails.length = 0
+  renderedTokens.length = 0
+  sendAnswer = { sent: true, id: 'provider-1' }
+  suppressionAnswer = null
+  mailConfigured = true
   docs.set('hosts/site1', {
     subdomain: 'acme',
     memberRoles: { admin: 'admin', editor: 'editor', author: 'author', viewer: 'viewer', granted: 'author', sender: 'author', editsOnly: 'editor' },
@@ -969,5 +1002,236 @@ describe('proofs and revisions in the console (AGL-4096)', () => {
       body: { error: 'This quote has earlier revisions the customer saw, so it stays on record.' },
     })
     expect(docs.has(second.path)).toBe(true)
+  })
+})
+
+describe('sending the quote by email (AGL-4097)', () => {
+  const JANE = { name: 'Jane Doe', email: 'jane@example.com' }
+  async function created(customer: Record<string, unknown> = JANE): Promise<{ quoteId: string; path: string }> {
+    const outcome = await handleQuote(
+      deps,
+      request('admin', { action: 'create', hostId: 'site1', quote: { lines: [CUSTOM], customer } }, `c-${Math.random()}`),
+    )
+    const quoteId = String(outcome.body['quoteId'])
+    return { quoteId, path: `hosts/site1/orders/${quoteId}` }
+  }
+  let attempt = 0
+  const send = (uid: string, quoteId: string, extra: Record<string, unknown> = {}, key = `send-${++attempt}`) =>
+    handleQuote(deps, request(uid, { action: 'send', hostId: 'site1', quoteId, message: 'Here is the banner.', ...extra }, key))
+  const stored = (path: string) => docs.get(path) as Record<string, any>
+  const startRevision = (quoteId: string) =>
+    handleQuote(deps, request('admin', { action: 'start-revision', hostId: 'site1', quoteId }))
+
+  beforeEach(() => {
+    docs.set('hosts/site1', { ...docs.get('hosts/site1'), displayName: 'Acme Signs' })
+  })
+
+  it.each([
+    ['author', 403],
+    ['viewer', 403],
+    ['editsOnly', 403],
+  ])('a site %s without "Send quotes and invoices to customers" sends nothing', async (uid, status) => {
+    const { quoteId, path } = await created()
+    const before = JSON.stringify(docs.get(path))
+    expect(await send(uid, quoteId)).toEqual({
+      status,
+      body: { error: 'Your role does not include "Send quotes and invoices to customers" — ask an organization admin' },
+    })
+    expect(sentEmails).toEqual([])
+    expect(JSON.stringify(docs.get(path))).toBe(before)
+  })
+
+  it('admits the presets of "Manage orders", and a member granted the key alone', async () => {
+    const { quoteId } = await created()
+    for (const uid of ['admin', 'editor', 'sender']) expect((await send(uid, quoteId)).status).toBe(200)
+    expect(sentEmails).toHaveLength(3)
+  })
+
+  it('emails the customer the quote with its PDF, answering to the site, and records it', async () => {
+    docs.set('hosts/site1', { ...docs.get('hosts/site1'), seo: { entity: { email: 'hello@acme.test' } } })
+    const { quoteId, path } = await created()
+    nowMs = 7_000
+    expect(await send('admin', quoteId)).toEqual({
+      status: 200,
+      body: { sent: true, to: 'jane@example.com', atMs: 7_000, revision: 1, linkVersion: 1, linkReplaced: false },
+    })
+    expect(sentEmails).toHaveLength(1)
+    const email = sentEmails[0]
+    expect(email).toMatchObject({
+      to: 'jane@example.com',
+      subject: 'Quote #1042 from Acme Signs',
+      replyTo: 'hello@acme.test',
+      audience: 'tenant',
+      context: 'quote',
+      attachments: [{ filename: 'acme-quote-1042.pdf', contentType: 'application/pdf', content: 'JVBERg==' }],
+    })
+    const messageId = String(email.headers?.['Message-ID'])
+    expect(messageId).toMatch(/^<quote\.[a-z0-9]+\.[0-9a-f]{16}@mail\.acme\.test>$/)
+    expect(email.headers).toEqual({ 'Message-ID': messageId })
+    expect(renderedTokens[0]).toMatchObject({
+      'quote.message': 'Here is the banner.',
+      'quote.url': `https://acme.aglyn.app/pay-quote?q=${quoteId}&t=1.sig-site1`,
+    })
+
+    const quote = stored(path)['quote']
+    expect(quote['stage']).toBe('sent')
+    expect(quote['sends']).toEqual([
+      {
+        revision: 1,
+        to: 'jane@example.com',
+        subject: 'Quote #1042 from Acme Signs',
+        atMs: 7_000,
+        by: 'admin@example.com',
+        messageId,
+        providerId: 'provider-1',
+        linkVersion: 1,
+      },
+    ])
+    expect(quote['emailThread']).toEqual({ messageId, references: [messageId], subject: 'Quote #1042 from Acme Signs' })
+    expect(quote['updatedAtMs']).toBe(1_000)
+    expect(stored(path)['timeline'].at(-1)).toMatchObject({ event: 'quote-sent', atMs: 7_000 })
+  })
+
+  it('answers to the person sending when the site has no contact email', async () => {
+    const { quoteId } = await created()
+    await send('editor', quoteId)
+    expect(sentEmails[0].replyTo).toBe('editor@example.com')
+  })
+
+  it('threads three sends: a resend keeps the link, a new revision replaces it, each replies to the last', async () => {
+    const { quoteId, path } = await created()
+    await send('admin', quoteId)
+    await send('admin', quoteId, { subject: 'A different subject' })
+    const [first, second] = sentEmails.map((email) => String(email.headers?.['Message-ID']))
+    expect(sentEmails[1].headers).toEqual({ 'Message-ID': second, 'In-Reply-To': first, References: first })
+    expect(stored(path)['quote']['linkVersion']).toBeUndefined()
+    expect(expireSession).not.toHaveBeenCalled()
+
+    expect((await startRevision(quoteId)).status).toBe(200)
+    docs.set(path, { ...stored(path), checkoutSessionId: 'cs_test_open123456' })
+    nowMs = 9_000
+    expect((await send('admin', quoteId)).body).toMatchObject({ revision: 2, linkVersion: 2, linkReplaced: true })
+    const third = String(sentEmails[2].headers?.['Message-ID'])
+    expect(sentEmails[2].headers).toEqual({ 'Message-ID': third, 'In-Reply-To': second, References: `${first} ${second}` })
+    // The conversation keeps the subject it started with.
+    expect(sentEmails[2].subject).toBe('Quote #1042 from Acme Signs')
+    expect(renderedTokens[2]['quote.url']).toBe(`https://acme.aglyn.app/pay-quote?q=${quoteId}&t=2.sig-site1`)
+    expect(renderedTokens[2]['quote.heading']).toBe('Your updated quote')
+    expect(expireSession).toHaveBeenCalledWith('cs_test_open123456')
+    const after = stored(path)
+    expect(after['checkoutSessionId']).toBeUndefined()
+    expect(after['quote']['linkVersion']).toBe(2)
+    expect(after['quote']['emailThread']['references']).toEqual([first, second, third])
+    expect(after['timeline'].map((entry: { event: string }) => entry.event)).toEqual(
+      expect.arrayContaining(['quote-link-replaced', 'quote-sent']),
+    )
+
+    // Sending revision 2 again keeps its link.
+    expect((await send('admin', quoteId)).body).toMatchObject({ revision: 2, linkVersion: 2, linkReplaced: false })
+    expect(stored(path)['quote']['sends'].map((entry: { linkVersion: number }) => entry.linkVersion)).toEqual([1, 1, 2, 2])
+  })
+
+  it('replies into the conversation a request already started, under its subject', async () => {
+    const { quoteId, path } = await created()
+    const request1 = '<request.1.a@mail.acme.test>'
+    docs.set(path, {
+      ...stored(path),
+      quote: { ...stored(path)['quote'], emailThread: { messageId: request1, references: [request1], subject: 'Your request to Acme Signs' } },
+    })
+    expect((await send('admin', quoteId)).body).toMatchObject({ linkVersion: 1, linkReplaced: false })
+    expect(sentEmails[0].subject).toBe('Your request to Acme Signs')
+    expect(sentEmails[0].headers).toMatchObject({ 'In-Reply-To': request1, References: request1 })
+  })
+
+  it('counts a link replaced by hand since the last email as the new link, and replaces it no further', async () => {
+    const { quoteId, path } = await created()
+    await send('admin', quoteId)
+    await startRevision(quoteId)
+    await handleQuote(deps, request('admin', { action: 'replace-link', hostId: 'site1', quoteId }))
+    expect((await send('admin', quoteId)).body).toMatchObject({ linkVersion: 2, linkReplaced: false })
+    expect(stored(path)['quote']['linkVersion']).toBe(2)
+  })
+
+  it('a send that fails replaces the link once, and its retry does not replace it again', async () => {
+    const { quoteId, path } = await created()
+    await send('admin', quoteId)
+    await startRevision(quoteId)
+    sendAnswer = { sent: false, reason: 'rejected', status: 422, detail: 'nope' }
+    expect(await send('admin', quoteId)).toEqual({ status: 502, body: { error: 'The quote email could not be sent. Try again.' } })
+    expect(stored(path)['quote']['linkVersion']).toBe(2)
+    expect(stored(path)['quote']['sends']).toHaveLength(1)
+    sendAnswer = { sent: true, id: 'provider-2' }
+    expect((await send('admin', quoteId)).body).toMatchObject({ linkVersion: 2, linkReplaced: false })
+    expect(stored(path)['quote']['linkVersion']).toBe(2)
+  })
+
+  it('replays a retried press instead of sending twice', async () => {
+    const { quoteId } = await created()
+    const first = await send('admin', quoteId, {}, 'same')
+    const again = await send('admin', quoteId, {}, 'same')
+    expect(again).toEqual(first)
+    expect(sentEmails).toHaveLength(1)
+  })
+
+  it('leaves an answered revision where the customer put it', async () => {
+    const { quoteId, path } = await created()
+    docs.set(path, {
+      ...stored(path),
+      quote: {
+        ...stored(path)['quote'],
+        stage: 'approved',
+        approvedRevision: 1,
+        responses: [{ action: 'approve', revision: 1, atMs: 2, name: 'Jane', ip: null, userAgent: null }],
+      },
+    })
+    await send('admin', quoteId)
+    expect(stored(path)['quote']['stage']).toBe('approved')
+  })
+
+  it('sends to the address typed in the form, under the subject typed', async () => {
+    const { quoteId } = await created({ name: 'No email' })
+    expect((await send('admin', quoteId, { to: 'buyer@example.org', subject: 'Your banner quote' })).status).toBe(200)
+    expect(sentEmails[0]).toMatchObject({ to: 'buyer@example.org', subject: 'Your banner quote' })
+  })
+
+  it('refuses, sending and writing nothing: paid, nowhere to send, a bad address, too long, no key', async () => {
+    const { quoteId, path } = await created({ name: 'No email' })
+    expect(await send('admin', quoteId)).toEqual({
+      status: 400,
+      body: { error: 'This quote has no email for the customer. Add one to the quote, or type where to send it.' },
+    })
+    expect((await send('admin', quoteId, { to: 'not-an-address' })).status).toBe(400)
+    expect((await send('admin', quoteId, { to: 'a@b.co', message: 'x'.repeat(5_001) })).status).toBe(400)
+    expect((await handleQuote(deps, request('admin', { action: 'send', hostId: 'site1', quoteId, to: 'a@b.co' }))).status).toBe(400)
+    docs.set(path, { ...stored(path), status: 'paid' })
+    expect((await send('admin', quoteId, { to: 'a@b.co' })).status).toBe(409)
+    docs.set('hosts/site1/orders/order-9', { status: 'pending', channel: 'draft', lineItems: [] })
+    expect((await send('admin', 'order-9', { to: 'a@b.co' })).status).toBe(404)
+    expect(sentEmails).toEqual([])
+    expect(stored(path)['quote']['sends']).toBeUndefined()
+  })
+
+  it('refuses an address on a suppression list, in words that say why', async () => {
+    const { quoteId, path } = await created()
+    suppressionAnswer = 'suppressed-platform'
+    const bounced = await send('admin', quoteId)
+    expect(bounced.status).toBe(409)
+    expect(String(bounced.body['error'])).toBe(
+      'jane@example.com bounced or reported an email as spam, so it can’t be emailed. Copy the pay link and send it another way.',
+    )
+    suppressionAnswer = 'suppressed-host'
+    expect(String((await send('admin', quoteId)).body['error'])).toMatch(/unsubscribed from this site’s emails/)
+    expect(sentEmails).toEqual([])
+    expect(stored(path)['quote']['stage']).toBe('draft')
+  })
+
+  it('says so when email is not set up, or the site has no address for the pay link', async () => {
+    const { quoteId } = await created()
+    mailConfigured = false
+    expect((await send('admin', quoteId)).status).toBe(503)
+    mailConfigured = true
+    docs.set('hosts/site1', { ...docs.get('hosts/site1'), subdomain: '' })
+    expect(String((await send('admin', quoteId)).body['error'])).toMatch(/no web address/)
+    expect(sentEmails).toEqual([])
   })
 })
