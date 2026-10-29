@@ -157,6 +157,7 @@ jest.mock('../utils/auth-delegation', () => ({
   authSignInHost: () => 'auth.aglyn.com',
 }))
 jest.mock('../utils/interactive-signin', () => ({
+  hasPendingInteractiveSignIn: () => false,
   markInteractiveSignIn: jest.fn(),
   markInteractiveSignOut: jest.fn(),
 }))
