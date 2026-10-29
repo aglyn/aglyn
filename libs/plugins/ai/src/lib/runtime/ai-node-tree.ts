@@ -332,6 +332,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+/**
+ * An icon's drawing a site brought in gave it (AGL-4108): one path's data on
+ * a 24-unit square, commands and numbers only, as the reader keeps it.
+ */
+export function aiIconSourcePathAllowed(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= 4_096 && /^[MmZzLlHhVvCcSsQqTtAa0-9eE.,\s+-]+$/.test(value)
+}
+
 /** An `https:` address that parses as one. */
 export function isHttpsUrl(value: string): boolean {
   if (!/^https:\/\//i.test(value)) return false
@@ -1089,8 +1097,9 @@ function validate(
   const codeBuilt = context?.codeBuilt === true
   const mediaByNodeId = new Map<string, Record<string, string>>()
   const boundByNodeId = new Map<string, Record<string, string>>()
-  // A code-built Icon's drawing, from the library by the id it names (AGL-3660).
-  const iconByNodeId = new Map<string, { iconId: string; iconPath: string }>()
+  // A code-built Icon's drawing, from the library by the id it names (AGL-3660),
+  // or the one path a site brought in drew it with (AGL-4108).
+  const iconByNodeId = new Map<string, { iconId?: string; iconPath: string }>()
   const forSanitizer: Record<string, unknown> = {}
   for (const [id, node] of Object.entries(nodes)) {
     if (!isRecord(node) || !isRecord(node.props)) {
@@ -1103,6 +1112,8 @@ function validate(
       delete rest['iconPath']
       const icon = aiIconOfId(iconId)
       if (icon) iconByNodeId.set(id, { iconId: icon.id, iconPath: icon.path })
+      // A source's own icon (AGL-4108): one path's data, no id of the library's.
+      else if (iconId === undefined && aiIconSourcePathAllowed(props['iconPath'])) iconByNodeId.set(id, { iconPath: props['iconPath'] })
       forSanitizer[id] = { ...node, props: rest }
       continue
     }

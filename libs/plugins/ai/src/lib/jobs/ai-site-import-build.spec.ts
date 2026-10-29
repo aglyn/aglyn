@@ -313,7 +313,8 @@ describe('the first wave: the look before the frame, the brand as the source, th
     expect(h.lib.stored.filter((entry) => entry.contentType === 'image/png')).toHaveLength(1)
     await pass(step, job) // the frame
     const frame = h.frames[0]
-    expect(aiLayoutSiteBrandOf(frame.inputs)).toEqual({ logo: { src: job.siteImport?.look?.logo?.src }, name: false })
+    // Named as the source names its logo, never by the host's name (AGL-4108).
+    expect(aiLayoutSiteBrandOf(frame.inputs)).toEqual({ logo: { src: job.siteImport?.look?.logo?.src }, name: false, alt: 'Aglyn' })
     // The header and footer the frame compiles: an image links home, and no name is printed beside it.
     const check = aiLayoutFrameCheck({
       siteName: SITE_NAME,
@@ -330,7 +331,7 @@ describe('the first wave: the look before the frame, the brand as the source, th
     expect(built.violations).toEqual([])
     const nodes = Object.values(built.value?.nodes as unknown as Record<string, { componentId: string; props?: Record<string, unknown> }>)
     const logo = nodes.find((node) => node.componentId === 'image')
-    expect(logo?.props).toMatchObject({ src: job.siteImport?.look?.logo?.src, alt: SITE_NAME, screenId: 'home-id' })
+    expect(logo?.props).toMatchObject({ src: job.siteImport?.look?.logo?.src, alt: 'Aglyn', screenId: 'home-id' })
     expect(nodes.some((node) => node.props?.['children'] === SITE_NAME)).toBe(false)
   })
 
