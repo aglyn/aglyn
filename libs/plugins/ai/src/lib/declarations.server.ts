@@ -35,6 +35,7 @@ import { registerPluginUsageMeter } from '@aglyn/aglyn/plugin-manager/plugin-usa
 import { registerOperatorAlerts } from '@aglyn/aglyn/plugin-manager/operator-alerts'
 import { registerStockPhotoPicker } from '@aglyn/aglyn/plugin-manager/stock-photo-provider'
 import { registerPluginSiteStyleLooks } from '@aglyn/aglyn/plugin-manager/plugin-site-style-looks'
+import { listServerThemePresets } from '@aglyn/aglyn/plugin-manager/plugin-theme-presets'
 import { AI_PLUGIN_ID, AI_USAGE_METER_ID } from './constants'
 import { AI_BUILD_PARTLY_FAILED, AI_JOB_FAILED, AI_PROVIDER_UNAVAILABLE } from './operator-alerts'
 import { registerAiDeclarations } from './declarations'
@@ -200,10 +201,9 @@ export function registerAiServerDeclarations(): void {
   registerPluginSiteStyleLooks(
     {
       look: async (styleId) => {
-        const [{ aiSiteKind }, { aiSiteKindDefaultLook }, { listServerThemePresets }] = await Promise.all([
+        const [{ aiSiteKind }, { aiSiteKindDefaultLook }] = await Promise.all([
           import('./model/ai-site-kinds'),
           import('./model/ai-site-look'),
-          import('@aglyn/aglyn/plugin-manager/plugin-theme-presets'),
         ])
         const kind = aiSiteKind(styleId)
         if (!kind) return null
