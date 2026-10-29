@@ -153,10 +153,16 @@ export function aiSiteBuildHref(
   return `/${orgSlug}/hosts/${hostSubdomain}${AI_SITE_BUILD_HREF}/${encodeURIComponent(jobId)}`
 }
 
+/** A page version's own address under a site, for the console route named by `leaf`. */
+function screenVersionHref(orgSlug: string, output: AiJobOutput, leaf: 'preview' | 'besigner'): string {
+  return `/${orgSlug}/hosts/${String(output.hostSubdomain)}/screens/${output.id}/versions/${output.versionId}/${leaf}`
+}
+
 /**
  * A finished site's two ways in (AGL-3594): its first page's draft, opened in
- * the console's preview of that version, and the Pages list every draft waits
- * in. Either is `null` where the job reported nothing to open.
+ * the console's preview of that version — the page as a visitor will see it,
+ * never its details — and the Pages list every draft waits in. Either is
+ * `null` where the job reported nothing to open.
  */
 export function aiSiteBuildDoneLinks(
   job: Pick<AiJobSummary, 'outputs'>,
@@ -167,11 +173,25 @@ export function aiSiteBuildDoneLinks(
   if (!first || !orgSlug) return { view: null, pages: null }
   const host = String(first.hostSubdomain)
   return {
-    view: first.versionId
-      ? `/${orgSlug}/hosts/${host}/screens/${first.id}/versions/${first.versionId}/view`
-      : null,
+    view: first.versionId ? screenVersionHref(orgSlug, first, 'preview') : null,
     pages: buildRoute(Route.HOST_SCREENS, { orgSlug, host }),
   }
+}
+
+/**
+ * The two ways to look at the one page a job changed (AGL-3616): its new
+ * version in the preview, where it can be published, and in the Besigner.
+ * `null` where the job wrote no page version, or more than one page — those
+ * wait in Pages.
+ */
+export function aiJobReviewLinks(
+  job: Pick<AiJobSummary, 'outputs'>,
+  orgSlug: string,
+): { preview: string; besigner: string } | null {
+  if (!orgSlug) return null
+  const pages = job.outputs.filter((output) => output.resource === 'screen' && output.hostSubdomain && output.versionId)
+  if (new Set(pages.map((page) => page.id)).size !== 1) return null
+  return { preview: screenVersionHref(orgSlug, pages[0], 'preview'), besigner: screenVersionHref(orgSlug, pages[0], 'besigner') }
 }
 
 /**
