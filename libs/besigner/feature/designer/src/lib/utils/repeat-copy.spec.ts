@@ -15,21 +15,23 @@
  * limitations under the License.
  */
 
-import { repeatCopyElementsOf } from './repeat-copy'
+import * as Aglyn from '@aglyn/aglyn'
+import * as Besigner from '@aglyn/besigner'
+import {
+  repeatCopyAt,
+  repeatCopyElementIn,
+  repeatCopyStandIns,
+} from './repeat-copy'
 
-/** A Stack repeating its rows, with a card that is itself repeated inside. */
+/** A grid repeating its card, whose title has a copy in each copy of the card. */
 function render() {
   const root = document.createElement('div')
   root.innerHTML = `
-    <div data-aglyn="leaf:visible">
-      <p data-aglyn="leaf:row">Avery</p>
-      <p data-aglyn="leaf:rep__visible__1__row" data-aglyn-repeat-copy="">Sam</p>
-      <p data-aglyn="leaf:rep__visible__2__row" data-aglyn-repeat-copy="">Jordan</p>
-      <p data-aglyn="leaf:other-row">Unrelated</p>
-      <div data-aglyn="leaf:rep__visible__1__card" data-aglyn-repeat-copy="">
-        <span data-aglyn="leaf:rep__visible__1__title">Inner copy</span>
+    <div data-aglyn="leaf:grid">
+      <div data-aglyn="leaf:card"><span data-aglyn="leaf:title">Avery</span></div>
+      <div data-aglyn="leaf:rep__grid__1__card" data-aglyn-repeat-copy="">
+        <span data-aglyn="leaf:rep__grid__1__title"><b>Sam</b></span>
       </div>
-      <span data-aglyn="leaf:title">Inner</span>
     </div>`
   document.body.appendChild(root)
   const $ = (id: string) =>
@@ -37,28 +39,89 @@ function render() {
   return { root, $ }
 }
 
+const nodes: Record<string, any> = {
+  card: { $id: 'card' },
+  title: { $id: 'title' },
+  grid: { $id: 'grid' },
+}
+
+let getNode: jest.SpyInstance
+
+beforeEach(() => {
+  getNode = jest
+    .spyOn(Aglyn.canvas, 'getNode')
+    .mockImplementation((($id: any) => nodes[$id]) as any)
+})
+
 afterEach(() => {
+  getNode.mockRestore()
+  Besigner.focus.clearFocusStatus()
+  repeatCopyStandIns.set('hovered', null)
+  repeatCopyStandIns.set('selected', null)
   document.body.innerHTML = ''
 })
 
-describe('repeatCopyElementsOf', () => {
-  it('finds every drawn copy of an element, and nothing else', () => {
+describe('repeatCopyAt', () => {
+  it('names the copy under the pointer and the element it draws', () => {
     const { $ } = render()
-    expect(repeatCopyElementsOf($('row'), 'row').map((e) => e.textContent)).toEqual([
-      'Sam',
-      'Jordan',
-    ])
+    const inside = $('rep__grid__1__title').querySelector('b')
+    expect(repeatCopyAt(inside)).toEqual({
+      original: nodes.title,
+      copyId: 'rep__grid__1__title',
+    })
+    expect(repeatCopyAt($('rep__grid__1__card'))).toEqual({
+      original: nodes.card,
+      copyId: 'rep__grid__1__card',
+    })
   })
 
-  it('finds a copy nested inside a copy of its parent', () => {
+  it('has nothing for a real element', () => {
     const { $ } = render()
-    expect(
-      repeatCopyElementsOf($('title'), 'title').map((e) => e.textContent),
-    ).toEqual(['Inner copy'])
+    expect(repeatCopyAt($('title'))).toBeNull()
+    expect(repeatCopyAt(null)).toBeNull()
+  })
+})
+
+describe('repeatCopyElementIn', () => {
+  it('finds a drawn copy by its id, in the canvas the element lives in', () => {
+    const { $ } = render()
+    expect(repeatCopyElementIn($('title'), 'rep__grid__1__title')).toBe(
+      $('rep__grid__1__title'),
+    )
+    expect(repeatCopyElementIn($('title'), 'rep__grid__9__title')).toBeNull()
+  })
+})
+
+describe('repeatCopyStandIns', () => {
+  const copy = { original: nodes.title, copyId: 'rep__grid__1__title' }
+
+  it('outlines the copy for the element it was made on, and nothing else', () => {
+    Besigner.focus.setSelectedNode(nodes.title)
+    repeatCopyStandIns.set('selected', copy)
+    expect(repeatCopyStandIns.copyIdFor('selected', 'title')).toBe(
+      'rep__grid__1__title',
+    )
+    expect(repeatCopyStandIns.copyIdFor('selected', 'card')).toBeUndefined()
+    expect(repeatCopyStandIns.copyIdFor('hovered', 'title')).toBeUndefined()
   })
 
-  it('has nothing for an element no repeat draws', () => {
-    const { $ } = render()
-    expect(repeatCopyElementsOf($('other-row'), 'other-row')).toEqual([])
+  it('forgets the copy once the selection moves to another element', () => {
+    Besigner.focus.setSelectedNode(nodes.title)
+    repeatCopyStandIns.set('selected', copy)
+    Besigner.focus.setSelectedNode(nodes.card)
+    // Back to the title some other way — the hierarchy, say: the title is
+    // outlined, not the copy clicked before.
+    Besigner.focus.setSelectedNode(nodes.title)
+    expect(repeatCopyStandIns.copyIdFor('selected', 'title')).toBeUndefined()
+  })
+
+  it('forgets the hovered copy once the pointer leaves the element', () => {
+    Besigner.focus.setHoveredNode(nodes.title)
+    repeatCopyStandIns.set('hovered', copy)
+    expect(repeatCopyStandIns.copyIdFor('hovered', 'title')).toBe(
+      'rep__grid__1__title',
+    )
+    Besigner.focus.dehoverNode(nodes.title)
+    expect(repeatCopyStandIns.copyIdFor('hovered', 'title')).toBeUndefined()
   })
 })
