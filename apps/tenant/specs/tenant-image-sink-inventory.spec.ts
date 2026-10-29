@@ -357,6 +357,11 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'off-tenant',
     why: "Not a sink, and never on a tenant render: the Bring my site job model (AGL-4106), types and pure helpers used by the import door and the import job on the console's AI job runner. Both markers are the layout's `icons` field and `siteImportLayoutWithoutDrawings`, which drops the drawings for a lighter page: SVG shapes the reader copied from the old page's inline `<svg>`, never an address. Nothing in the file renders.",
   },
+  'libs/plugins/ai/src/lib/jobs/ai-site-import-compile.ts': {
+    markers: 1,
+    guard: 'off-tenant',
+    why: "Not a sink, and never on a tenant render: Bring my site's page compiler (AGL-4107), imported only by the AI job steps that build a page (jobs/ai-job-import-step.ts, ai-job-page-step.ts, ai-job-page-language.ts) and the layout language that reads its document, all run for a job on the console's AI job runner. The marker is `icons: []` in the layout it reads from a page's lines when the reader drew none: an empty list of the old page's inline SVG shapes, never an address. What it returns is screen data the job saves; the tenant renders the saved nodes through the ordinary element path.",
+  },
   'libs/plugins/ai/src/lib/jobs/ai-site-import-look.ts': {
     markers: 1,
     guard: 'off-tenant',
@@ -391,6 +396,11 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     markers: 1,
     guard: 'off-tenant',
     why: "Not a sink, and never on a tenant render: the copy assistant's mode prompts (AGL-2937), composed for /api/ai/assist on the console. The marker is `image: src, alt` in the prose listing which props the model may set on a generated node, and the same block tells it to leave the src EMPTY. It is instruction text, not a value: no author string reaches it and no URL is produced here.",
+  },
+  'libs/plugins/ai/src/lib/layout-language/ai-layout-frame-source.ts': {
+    markers: 1,
+    guard: 'off-tenant',
+    why: "Not a sink, and never on a tenant render: the header and footer brought in as the source builds them (AGL-4108), used by layout-language/ai-layout-frame.ts and the AI job steps (jobs/ai-job-import-step.ts, ai-job-layout-language.ts) on the console's AI job runner. The marker is the `icons` binding for the Social Links element it adds, whose props are the profile LINKS keyed by network (`to`, a page link, never an image); the element draws its own icon set. Nothing in the file renders; the job saves the tree and the tenant renders it through the Social Links element.",
   },
   'libs/plugins/ai/src/lib/layout-language/ai-layout-language.ts': {
     markers: 1,
