@@ -77,8 +77,8 @@ export function QuoteSettingsCard(props: QuoteSettingsCardProps) {
   return (
     <CardDisplay
       header={'Quotes'}
-      help={pluginDocsHelp('commerce', {
-        anchor: '#orders',
+      help={pluginDocsHelp('quotes', {
+        anchor: '#quote-defaults',
         title: 'Quotes',
         excerpt: 'What every new quote starts with. Each quote can change it.',
       })}

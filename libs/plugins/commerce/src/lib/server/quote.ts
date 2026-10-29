@@ -33,6 +33,8 @@ import {
   type SaleTaxEngineRequest,
   type SaleTaxEngineResult,
 } from './tax-engine-quote'
+import { expireCheckoutSession, type CheckoutSessionExpiry } from './checkout-session-expiry'
+import { quotePayLinkUrl } from './quote-link-token'
 
 /*==========================================
  * QUOTES IN THE CONSOLE (AGL-4093): `POST /api/commerce/quote`.
@@ -41,11 +43,21 @@ import {
  *   { action: 'update', hostId, quoteId, baseUpdatedAtMs, quote } → { quoteId, number, updatedAtMs }
  *   { action: 'delete', hostId, quoteId }                     → { deleted: true }
  *   { action: 'search-customers', hostId, text }              → { available, customers }
+ *   { action: 'pay-link', hostId, quoteId }                   → { url, linkVersion }
+ *   { action: 'replace-link', hostId, quoteId }               → { url, linkVersion }
  *
- * Every action asks "Create and edit quotes" (`commerce.quotes`). Create and
- * update take an `Idempotency-Key` header, one per attempt, so a retried save
- * replays its answer instead of writing a second quote or failing its own
- * change check; delete is idempotent by nature.
+ * The first four ask "Create and edit quotes" (`commerce.quotes`); the pay
+ * link's two ask "Send quotes and invoices to customers"
+ * (`commerce.quotes.send`, AGL-4094). Create and update take an
+ * `Idempotency-Key` header, one per attempt, so a retried save replays its
+ * answer instead of writing a second quote or failing its own change check;
+ * delete is idempotent by nature, and so are the link's two (a replace bumps
+ * the version once per press, and a second press is another replacement).
+ *
+ * A quote's open Checkout Session (`checkoutSessionId`, opened by the pay
+ * page) was priced from the quote as it stood. Editing the quote, deleting it
+ * or replacing its link expires that session, so nobody pays a price or a
+ * link the business has withdrawn.
  *
  * The server prices every product line from the product and works out the
  * tax; the console sends what was chosen, never what it costs. A quote is
@@ -62,6 +74,10 @@ export interface QuoteDeps {
   searchPeople(request: PluginPersonSearchRequest): Promise<PluginPersonRecord[] | null>
   /** The site's tax service, where one is connected; `{ quote: null }` otherwise. */
   quoteTax(request: SaleTaxEngineRequest): Promise<SaleTaxEngineResult>
+  /** Closes a Checkout Session the pay page opened for the quote. */
+  expireSession(sessionId: string): Promise<CheckoutSessionExpiry>
+  /** The quote's pay link at a link version, or null when the site has no address or no signing secret. */
+  payLinkUrl(host: Record<string, unknown>, hostId: string, quoteId: string, version: number): string | null
   now(): number
 }
 
@@ -75,7 +91,18 @@ export function defaultQuoteDeps(): QuoteDeps {
     },
     searchPeople: (request) => searchPluginPeople(request),
     quoteTax: (request) => quoteSaleTaxWithEngine(request),
+    expireSession: (sessionId) => expireCheckoutSession(sessionId),
+    payLinkUrl: (host, hostId, quoteId, version) => quotePayLinkUrl(host, hostId, quoteId, version),
     now: () => Date.now(),
+  }
+}
+
+/** Expires the session the pay page opened, when there is one; a failure is logged, never thrown. */
+async function closeOpenSession(deps: QuoteDeps, sessionId: string | undefined, context: string): Promise<void> {
+  if (!sessionId) return
+  const result = await deps.expireSession(sessionId).catch((): CheckoutSessionExpiry => 'open')
+  if (result === 'open') {
+    console.error(`${context}: the quote's Stripe session was not expired and may still be paid`, { sessionId })
   }
 }
 
@@ -247,10 +274,51 @@ export async function handleQuote(deps: QuoteDeps, req: PluginApiRequest): Promi
   const hostRef = firestore.collection('hosts').doc(hostId)
   const host = await hostRef.get()
   if (!host.exists) return refuse(404, 'Unknown site')
-  if (!holdsCommerceSiteKey(host, decoded.uid, 'commerce.quotes')) {
-    return refuse(403, commerceSitePermissionRefusal('commerce.quotes'))
+  const key = action === 'pay-link' || action === 'replace-link' ? 'commerce.quotes.send' : 'commerce.quotes'
+  if (!holdsCommerceSiteKey(host, decoded.uid, key)) {
+    return refuse(403, commerceSitePermissionRefusal(key))
   }
   const actor = String(decoded.email || decoded.uid)
+
+  if (action === 'pay-link' || action === 'replace-link') {
+    const quoteId = String(body['quoteId'] ?? '')
+    if (!DOC_ID.test(quoteId)) return refuse(400, 'Missing quoteId')
+    const ref = hostRef.collection('orders').doc(quoteId)
+    const now = deps.now()
+    const answer = await firestore.runTransaction(
+      async (transaction): Promise<{ outcome: Outcome; closeSession?: string }> => {
+        const snapshot = await transaction.get(ref)
+        const order = snapshot.exists ? (snapshot.data() as CommerceModel.HostOrder) : null
+        if (!order || !CommerceModel.isQuote(order) || !order.quote) return { outcome: refuse(404, 'Unknown quote') }
+        const version = CommerceModel.quoteLinkVersion(order.quote)
+        if (action === 'pay-link') return { outcome: { status: 200, body: { linkVersion: version } } }
+        if (!CommerceModel.isUnpaidQuote(order)) {
+          return { outcome: refuse(409, 'This quote has been paid, so its link can no longer be replaced.') }
+        }
+        const next = version + 1
+        // The open session goes with the link it was opened from.
+        const rest: Partial<CommerceModel.HostOrder> = { ...order }
+        delete rest.checkoutSessionId
+        transaction.set(ref, {
+          ...rest,
+          timeline: CommerceModel.appendOrderEvent(
+            order,
+            'quote-link-replaced',
+            `Pay link replaced by ${actor}; the earlier link no longer opens the quote`,
+            now,
+          ),
+          quote: { ...order.quote, linkVersion: next },
+        })
+        return { outcome: { status: 200, body: { linkVersion: next } }, closeSession: order.checkoutSessionId }
+      },
+    )
+    if (answer.closeSession) await closeOpenSession(deps, answer.closeSession, 'quote link replaced')
+    if (answer.outcome.status !== 200) return answer.outcome
+    const linkVersion = Number(answer.outcome.body['linkVersion'])
+    const url = deps.payLinkUrl((host.data() ?? {}) as Record<string, unknown>, hostId, quoteId, linkVersion)
+    if (!url) return refuse(409, 'This site has no web address yet, so its quotes have no pay link. Publish the site first.')
+    return { status: 200, body: { url, linkVersion } }
+  }
 
   if (action === 'search-customers') {
     const text = String(body['text'] ?? '').trim().slice(0, 120)
@@ -281,7 +349,7 @@ export async function handleQuote(deps: QuoteDeps, req: PluginApiRequest): Promi
   if (action === 'delete') {
     if (!DOC_ID.test(quoteId)) return refuse(400, 'Missing quoteId')
     const ref = hostRef.collection('orders').doc(quoteId)
-    return await firestore.runTransaction(async (transaction): Promise<Outcome> => {
+    const deleted = await firestore.runTransaction(async (transaction): Promise<Outcome & { closeSession?: string }> => {
       const snapshot = await transaction.get(ref)
       // Already gone is what a retried delete finds.
       if (!snapshot.exists) return { status: 200, body: { deleted: true } }
@@ -294,8 +362,11 @@ export async function handleQuote(deps: QuoteDeps, req: PluginApiRequest): Promi
         return refuse(409, 'Only a draft quote can be deleted.')
       }
       transaction.delete(ref)
-      return { status: 200, body: { deleted: true } }
+      return { status: 200, body: { deleted: true }, closeSession: order.checkoutSessionId }
     })
+    const { closeSession, ...outcome } = deleted as Outcome & { closeSession?: string }
+    await closeOpenSession(deps, closeSession, 'quote deleted')
+    return outcome
   }
 
   if (action !== 'create' && action !== 'update') return refuse(400, 'Unknown action')
@@ -363,7 +434,9 @@ export async function handleQuote(deps: QuoteDeps, req: PluginApiRequest): Promi
     } else {
       const baseUpdatedAtMs = Number(body['baseUpdatedAtMs'])
       const orderRef = hostRef.collection('orders').doc(quoteId)
+      let closeSession: string | undefined
       outcome = await firestore.runTransaction(async (transaction): Promise<Outcome> => {
+        closeSession = undefined
         const snapshot = await transaction.get(orderRef)
         const existing = snapshot.exists ? (snapshot.data() as CommerceModel.HostOrder) : null
         if (!existing || !CommerceModel.isQuote(existing) || !existing.quote) {
@@ -375,9 +448,13 @@ export async function handleQuote(deps: QuoteDeps, req: PluginApiRequest): Promi
         if (Number(existing.quote.updatedAtMs) !== baseUpdatedAtMs) {
           return refuse(409, 'Someone else changed this quote. Close it and open it again to see their changes.')
         }
-        // The tax mode is restated from this pricing, and dropped when it has none.
+        // The tax mode is restated from this pricing, and dropped when it has
+        // none. The pay page's open session was priced from the quote before
+        // this edit, so it is closed and forgotten.
         const rest: Partial<CommerceModel.HostOrder> = { ...existing }
         delete rest.taxMode
+        delete rest.checkoutSessionId
+        closeSession = existing.checkoutSessionId
         transaction.set(orderRef, {
           ...rest,
           lineItems: priced.lineItems,
@@ -396,6 +473,7 @@ export async function handleQuote(deps: QuoteDeps, req: PluginApiRequest): Promi
         })
         return { status: 200, body: { quoteId, number: existing.number ?? null, updatedAtMs: now } }
       })
+      if (outcome.status === 200) await closeOpenSession(deps, closeSession, 'quote edited')
     }
     if (outcome.status === 200) await claim.record(outcome.status, outcome.body)
     else await claim.release()

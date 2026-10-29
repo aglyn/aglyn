@@ -55,6 +55,7 @@ import {
 } from '@mui/material'
 import { doc } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { QuotePayLinkSection } from './quote-pay-link.component'
 
 /** A quote as the list reads it: the order document and its id. */
 export type QuoteRow = CommerceModel.HostOrder & { $id: string }
@@ -67,6 +68,8 @@ export interface QuoteEditorDialogProps {
   products: readonly Record<string, any>[]
   /** Holds "Create and edit quotes" (`commerce.quotes`). */
   canEdit: boolean
+  /** Holds "Send quotes and invoices to customers" (`commerce.quotes.send`). */
+  canSend: boolean
   onClose: () => void
 }
 
@@ -264,7 +267,7 @@ interface FoundCustomer {
  * over the same inputs, and a connected tax service's figure arrives on save.
  */
 export function QuoteEditorDialog(props: QuoteEditorDialogProps) {
-  const { hostId, quote, products, canEdit, onClose } = props
+  const { hostId, quote, products, canEdit, canSend, onClose } = props
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
@@ -422,7 +425,14 @@ export function QuoteEditorDialog(props: QuoteEditorDialogProps) {
       <DialogContent dividers>
         <Stack spacing={3}>
           {paid ? (
-            <Alert severity="info">{'This quote has been paid, so it is an order now and can no longer be changed.'}</Alert>
+            <Alert severity="success">
+              {quote?.quote?.paidAtMs
+                ? `Paid ${new Date(quote.quote.paidAtMs).toLocaleDateString()}. It is an order now and can no longer be changed.`
+                : 'This quote has been paid, so it is an order now and can no longer be changed.'}
+            </Alert>
+          ) : null}
+          {quote ? (
+            <QuotePayLinkSection hostId={hostId} quoteId={quote.$id} quote={quote} canSend={canSend} edited={edited} />
           ) : null}
           {taxBasis.kind === 'none' && taxBasis.reason === 'undecided' ? (
             <PrerequisiteNotice href={taxesHref ?? undefined} actionLabel="Open Taxes">

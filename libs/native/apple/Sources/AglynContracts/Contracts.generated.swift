@@ -3186,7 +3186,9 @@ public struct OrderQuote: Codable, Hashable, Sendable {
   public var createdBy: String
   public var customer: QuoteCustomer
   public var discount: QuoteDiscount?
+  public var linkVersion: Double?
   public var notes: String?
+  public var paidAtMs: Double?
   public var proofs: [QuoteProofRef]?
   public var requireProofApproval: Bool?
   public var revision: Double
@@ -3195,17 +3197,20 @@ public struct OrderQuote: Codable, Hashable, Sendable {
   public var stage: QuoteStage
   public var tax: QuoteTaxBasis
   public var terms: String?
+  public var unmatchedPayments: [QuoteUnmatchedPayment]?
   public var updatedAtMs: Double
   public var updatedBy: String
 
-  public init(approvedRevision: Double? = nil, billTo: OrderAddress? = nil, createdAtMs: Double, createdBy: String, customer: QuoteCustomer, discount: QuoteDiscount? = nil, notes: String? = nil, proofs: [QuoteProofRef]? = nil, requireProofApproval: Bool? = nil, revision: Double, shipping: QuoteShipping? = nil, shipTo: OrderAddress? = nil, stage: QuoteStage, tax: QuoteTaxBasis, terms: String? = nil, updatedAtMs: Double, updatedBy: String) {
+  public init(approvedRevision: Double? = nil, billTo: OrderAddress? = nil, createdAtMs: Double, createdBy: String, customer: QuoteCustomer, discount: QuoteDiscount? = nil, linkVersion: Double? = nil, notes: String? = nil, paidAtMs: Double? = nil, proofs: [QuoteProofRef]? = nil, requireProofApproval: Bool? = nil, revision: Double, shipping: QuoteShipping? = nil, shipTo: OrderAddress? = nil, stage: QuoteStage, tax: QuoteTaxBasis, terms: String? = nil, unmatchedPayments: [QuoteUnmatchedPayment]? = nil, updatedAtMs: Double, updatedBy: String) {
     self.approvedRevision = approvedRevision
     self.billTo = billTo
     self.createdAtMs = createdAtMs
     self.createdBy = createdBy
     self.customer = customer
     self.discount = discount
+    self.linkVersion = linkVersion
     self.notes = notes
+    self.paidAtMs = paidAtMs
     self.proofs = proofs
     self.requireProofApproval = requireProofApproval
     self.revision = revision
@@ -3214,6 +3219,7 @@ public struct OrderQuote: Codable, Hashable, Sendable {
     self.stage = stage
     self.tax = tax
     self.terms = terms
+    self.unmatchedPayments = unmatchedPayments
     self.updatedAtMs = updatedAtMs
     self.updatedBy = updatedBy
   }
@@ -4998,6 +5004,34 @@ public enum QuoteTaxKind: String, Codable, CaseIterable, Hashable, Sendable {
   case none = "none"
   case rate = "rate"
   case service = "service"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct QuoteUnmatchedPayment: Codable, Hashable, Sendable {
+  public var amountCents: Double
+  public var atMs: Double
+  public var paymentIntentId: String?
+  public var reason: QuoteUnmatchedPaymentReason
+  public var sessionId: String
+
+  public init(amountCents: Double, atMs: Double, paymentIntentId: String? = nil, reason: QuoteUnmatchedPaymentReason, sessionId: String) {
+    self.amountCents = amountCents
+    self.atMs = atMs
+    self.paymentIntentId = paymentIntentId
+    self.reason = reason
+    self.sessionId = sessionId
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum QuoteUnmatchedPaymentReason: String, Codable, CaseIterable, Hashable, Sendable {
+  case alreadyPaid = "already-paid"
+  case superseded = "superseded"
   case unknown = ""
 
   public init(from decoder: Decoder) throws {

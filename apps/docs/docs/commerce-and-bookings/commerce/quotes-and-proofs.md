@@ -34,8 +34,16 @@ Quotes are on your site's **Products** hub, on the **Orders** tab, in the
 - **Notes for the customer** and **Terms**.
 
 Each quote also keeps whether **Customers approve the proof before they can pay**.
-New quotes start with your store's setting, in the **Quotes** card on the
-**Checkout** settings page, and you can change it on each quote.
+When it is on and the quote has a proof the customer hasn't approved, the customer's
+page asks them to approve it instead of offering **Pay**, and a payment can't be
+started for it. A quote with no proof is never held.
+
+## New-quote defaults {#quote-defaults}
+
+The **Quotes** card on the **Checkout** settings page sets what every new quote starts
+with: whether customers approve the proof before they can pay. Turn the switch on or
+off and choose **Save**. Each quote starts with this setting, and you can change it on
+the quote.
 
 ## Make a quote {#make-a-quote}
 
@@ -71,15 +79,79 @@ discount, then add shipping and tax. Tax follows your store's
 If your store hasn't chosen how it handles sales tax, the quote shows no tax and
 says so, with a link to **Taxes**.
 
-## Quotes are not orders {#quotes-are-not-orders}
+## Send the pay link {#pay-link}
+
+Every quote has a pay link: an address on your own site, at `/pay-quote`, that opens
+the quote for your customer with a **Pay** button. Open the quote and, under
+**Pay link**, choose **Copy pay link**. The link is copied and shown, ready to paste
+into an email or a text. It opens the quote as it was last saved, so save your changes
+before you copy it.
+
+The link doesn't expire. It keeps working until the customer pays or you replace it.
+
+**Replace link** makes a new link and retires the old one. Use it when a link went to
+the wrong person, or when you want only your latest message to work. The old link then
+opens a page saying the quote was updated and that you sent a newer link, and shows
+nothing of the quote. Send your customer the new one. A paid quote's link can't be
+replaced.
+
+## What your customer sees {#customer-page}
+
+The pay link opens the quote inside your site's own header and footer:
+
+- your business name, the quote number and its date;
+- who it is for, and the bill-to and ship-to addresses;
+- each item with its option and add-ons, description, SKU, quantity and price, and
+  **Included** beside anything included at no charge;
+- the discount, shipping, tax and total, or **Tax is added at payment** when Stripe
+  Tax works the tax out;
+- your notes and terms.
+
+The page is private: search engines don't list it, and it never shows the customer's
+email or phone number, your notes to yourself or who on your team wrote the quote.
+
+## How your customer pays {#paying}
+
+**Pay** charges the quote as you saved it, priced from its items, discount, shipping
+and tax. Your customer pays on the page itself, or on a Stripe payment page that brings
+them back to the quote afterward. Their email is filled in from the quote. When the
+quote charges shipping, they're asked where it ships, starting from the quote's
+ship-to. Under Stripe Tax, the tax is worked out from that address when they pay.
+
+If you edit the quote while your customer has it open, **Pay** asks them to reload the
+page first, so nobody pays for a version they haven't seen. Editing a quote, deleting
+it or replacing its link also closes any payment your customer had started for it.
+
+Paying needs a connected Stripe account and a decision about sales tax. Until your
+store has both, **Pay** tells the customer to contact you.
+
+## When a quote is paid {#paid}
+
+A paid quote becomes an order, with the same number:
+
+- it joins the **Orders** list on the day it was paid, and the **Channel** filter finds
+  it as **Quote**;
+- your customer gets a receipt, and their quote page shows **Paid** with a link to
+  their order;
+- the customer becomes a contact, and you're notified;
+- stock goes down for your catalog products on the quote, included ones too. Custom
+  items never change your stock.
+
+The quote then can no longer be changed. If a second payment arrives for a quote that
+was already paid, or a payment comes through a link you had replaced, it isn't counted
+as a sale: the quote's timeline records it and you're notified, so you can refund it in
+Stripe.
+
+## Quotes are not orders until they're paid {#quotes-are-not-orders}
 
 A quote shares your order numbers, but until it is paid it is not an order. It
 stays out of the orders list, the money tiles, the analytics, exports, the shipping
 tools and the customer's account page.
 
-## Who can make quotes {#permissions}
+## Who can make and send quotes {#permissions}
 
 Making, editing and deleting quotes takes the **Create and edit quotes** permission.
-Everyone who can manage orders on the site has it to start with; a custom role or a
-per-member override can grant or deny it. See
+Copying and replacing a quote's pay link takes **Send quotes and invoices to
+customers**. Everyone who can manage orders on the site has both to start with; a
+custom role or a per-member override can grant or deny each one. See
 [Order permissions](../../workspace-and-billing/teams-and-roles/custom-roles.md#order-permissions).

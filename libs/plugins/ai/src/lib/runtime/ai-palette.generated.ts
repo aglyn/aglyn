@@ -4905,6 +4905,36 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     },
     presets: ['Product reviews'],
   },
+  'quote-page': {
+    pluginId: 'commerce',
+    kind: 'element',
+    category: 'Commerce',
+    displayName: 'Quote',
+    summary:
+      'A customer’s quote and its Pay button, opened from the pay link a business sends.',
+    acceptsChildren: false,
+    propsSchema: {
+      type: 'object',
+      properties: {
+        heading: {
+          type: 'string',
+          maxLength: 200,
+        },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+    propRoles: {
+      heading: 'text',
+    },
+    propFields: {
+      heading: 'text-field',
+    },
+    textLimits: {
+      heading: 200,
+    },
+    presets: ['Quote'],
+  },
   'related-products': {
     pluginId: 'commerce',
     kind: 'element',

@@ -136,6 +136,7 @@ only, set them for that site in its **Users** card: choose **Permissions** besid
 |---|---|---|---|---|---|
 | **Manage orders** (`commerce.orders`) | Fulfill, cancel and print orders, resend receipts, build draft orders, take returns, and record shipments from a file | Yes | Yes | No | No |
 | **Create and edit quotes** (`commerce.quotes`) | Create, edit and delete [quotes](../../commerce-and-bookings/commerce/quotes-and-proofs.md) for customers | Yes | Yes | No | No |
+| **Send quotes and invoices to customers** (`commerce.quotes.send`) | Copy a quote's [pay link](../../commerce-and-bookings/commerce/quotes-and-proofs.md#pay-link) to send to the customer, and replace it so the old link stops working | Yes | Yes | No | No |
 | **Issue gift cards** (`commerce.giftCards`) | Issue, adjust and void the store's gift cards | Yes | Yes | No | No |
 | **Manage payment methods** (`commerce.paymentMethods`) | Turn the store's payment methods on and off (anyone with **Manage orders** sees them) | Yes | No | No | No |
 | **Connect shipping apps** (`commerce.shippingConnections`) | Connect, sync and disconnect ShipStation and ShippingEasy, and show or replace their credentials (anyone with **Manage orders** sees whether they're connected) | Yes | No | No | No |

@@ -175,15 +175,14 @@ export const ORDER_STATUS_OPTIONS: readonly ListFilterOption[] = (
 ).map((status) => ({ value: status, label: ORDER_STATUS_LABELS[status] }))
 
 /*
- * `quote` is left out: an unpaid quote is never on this list (AGL-4093,
- * `commerce-quotes.ts`), and a business choosing "Quote" here would be
- * looking for its quotes, which the Quotes card lists.
+ * Every channel, `quote` included: a quote is listed here once it is paid
+ * (AGL-4094), as the order it became, and "Quote" finds those orders. An
+ * unpaid quote is never on this list (`commerce-quotes.ts`); the Quotes card
+ * lists it.
  */
 export const ORDER_CHANNEL_OPTIONS: readonly ListFilterOption[] = (
   Object.keys(ORDER_CHANNEL_LABELS) as OrderChannel[]
-)
-  .filter((channel) => channel !== 'quote')
-  .map((channel) => ({ value: channel, label: ORDER_CHANNEL_LABELS[channel] }))
+).map((channel) => ({ value: channel, label: ORDER_CHANNEL_LABELS[channel] }))
 
 /*
  * The dispute badge's tones (`orderDisputeKey`), labelled as the badge
