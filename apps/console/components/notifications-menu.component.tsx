@@ -18,6 +18,7 @@
 
 import {
   loudestNotificationLevel,
+  notificationLabel,
   notificationLevel,
   type AglynNotification,
 } from '@aglyn/aglyn'
@@ -53,7 +54,6 @@ import {
   NotificationLevelIcon,
   notificationLevelRowStyle,
   notificationLevelTextSx,
-  notificationTypeLabel,
 } from './notification-level.component'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useHostIndexEntries from '../hooks/use-host-index-entries'
@@ -549,7 +549,7 @@ export function NotificationsMenu() {
                           notificationLevelTextSx(level),
                         ]}
                       >
-                        {notificationTypeLabel(notification.type)}
+                        {notificationLabel(notification)}
                       </Box>
                       {' · '}
                       {notification.createdAt?.toDate?.().toLocaleString() ?? ''}
