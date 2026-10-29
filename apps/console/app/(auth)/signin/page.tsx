@@ -57,7 +57,7 @@ import {
   signOut,
   type UserCredential,
 } from 'firebase/auth'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useAuth, useSigninCheck } from '@aglyn/tenant-feature-instance'
 import AuthErrorAlertComponent from '../../../components/auth-error-alert.component'
 import AuthFormTemplateComponent from '../../../components/auth-form-template.component'
@@ -71,9 +71,15 @@ import { authSignInHost } from '../../../utils/auth-delegation'
 import { markConsentBounce } from '../../../utils/consent-bounce'
 import { isNewAccount, sendToConsentGate } from '../../../utils/legal-consent'
 import {
+  hasPendingInteractiveSignIn,
   markInteractiveSignIn,
   markInteractiveSignOut,
 } from '../../../utils/interactive-signin'
+import {
+  holdSignUpLanding,
+  isRedirectLandingInFlight,
+  releaseSignUpLanding,
+} from '../../../utils/sign-up-landing-hold'
 import isMobileBrowser from '@aglyn/shared-util-dom/is-mobile-browser'
 import { createGoogleOAuthProvider } from '../../../utils/oauth-providers'
 import { aimAuthAtPool } from '../../../utils/pooled-custom-token'
@@ -155,6 +161,14 @@ async function signInWithAnyConfirmedAddress(
   }
 }
 
+/**
+ * The holds this page raises on the auth layout's redirect while a Google
+ * sign-in may still turn out to be a new account (AGL-4113). Separate keys so
+ * neither door's release can drop the other's hold.
+ */
+const SIGN_IN_REDIRECT_HOLD = 'signin:redirect'
+const SIGN_IN_POPUP_HOLD = 'signin:popup'
+
 function SignIn() {
   const { queueLoading, loading } = useLoading()
   const firebaseAuth = useAuth()
@@ -203,11 +217,33 @@ function SignIn() {
   // round-trip when Google sends the user back here — and on mobile that is
   // the ONLY place the new-account bounce above can happen, because the page
   // that started the flow is gone by then.
+  // A Google redirect that may be coming back to this page holds the auth
+  // layout until its result settles (AGL-4113). The layout pushes a signed-in
+  // visitor to `/` the moment the credential lands, and for a brand-new
+  // account that push beat the stand-down above: the sign-out then ran inside
+  // the console, whose guard sent the person to /signin instead of the
+  // consent gate, signed out, with no workspace and no terms. The /signup
+  // doors already hold for the same race (AGL-3578).
+  useEffect(() => {
+    if (
+      delegation !== 'off' ||
+      !(hasPendingInteractiveSignIn() || isRedirectLandingInFlight())
+    )
+      return void 0
+    holdSignUpLanding(SIGN_IN_REDIRECT_HOLD)
+    return () => releaseSignUpLanding(SIGN_IN_REDIRECT_HOLD)
+  }, [delegation])
+  const releaseRedirectHold = useCallback(
+    () => releaseSignUpLanding(SIGN_IN_REDIRECT_HOLD),
+    [],
+  )
   useGoogleRedirectResult(
     'login',
     setError,
     delegation === 'off',
     rejectUnconsentedNewAccount,
+    undefined,
+    releaseRedirectHold,
   )
   // Once auth succeeds there's a short window before the layout redirects to
   // the dashboard/continue URL; show the loading splash instead of flashing
@@ -238,6 +274,12 @@ function SignIn() {
       // mobile redirect round-trip; the session hook mints the shared
       // cookie on return instead of validating a stale one (AGL-463).
       markInteractiveSignIn()
+      // The popup can create an account, and the layout must not push a
+      // brand-new one into the console before `rejectUnconsentedNewAccount`
+      // stands it down (AGL-4113). Released however the attempt ends; a
+      // bounced account is signed out by then, so the layout stays put while
+      // the consent gate loads.
+      if (!values) holdSignUpLanding(SIGN_IN_POPUP_HOLD)
       // Both doors below are PROJECT-pool credentials, and `auth.tenantId` is
       // sticky instance state that `/sso` sets and nothing clears (AGL-1993).
       // The `← Back to sign in` link on `/sso` is a client-side `<Link>`, so an
@@ -280,6 +322,7 @@ function SignIn() {
           })
         })
         .finally(() => {
+          releaseSignUpLanding(SIGN_IN_POPUP_HOLD)
           releaseGuard?.()
           dequeueLoading()
         })
