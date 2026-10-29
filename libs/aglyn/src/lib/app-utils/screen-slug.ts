@@ -92,14 +92,14 @@ export function normalizeScreenSlug(
  *    the path is parsed as `[host]` with an empty slug.
  *  - `aglyn-preview` — the same mechanism as `search`, one route over
  *    (AGL-3205). The live-site preview of an unpublished collection entry is
- *    a rewrite to `app/[host]/[scheme]/aglyn-preview/[...slug]`, because it
+ *    a rewrite to `app/[host]/[scheme]/aglyn-preview/[[...slug]]`, because it
  *    must be a DIFFERENT Next route from the ISR-cached catch-all; a static
  *    folder wins over the optional catch-all beside it, so `/aglyn-preview/x`
  *    would reach the preview page and 404 rather than render a screen. The
- *    bare `/aglyn-preview` would in fact still serve — the preview route's
- *    catch-all is required, not optional — and it is reserved anyway for the
- *    reason given below about child paths: a child's path is composed from
- *    its parent's slug, and this rule refuses that slug.
+ *    bare `/aglyn-preview` reaches it too since the team's view of a site in
+ *    preview (AGL-4086) made its catch-all optional, so a site's home page
+ *    could be previewed; and a child's path is composed from its parent's
+ *    slug, which this rule refuses.
  *  - `_aglyn` — the platform's own pages on every site, the leaving notice
  *    at `/_aglyn/leaving` first (AGL-3452). The middleware rewrites that path
  *    to an api route before the catch-all could see it.

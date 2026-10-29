@@ -79,6 +79,7 @@ const val SITE_SITE_SCREEN = "site.site"
 fun hostStatusTone(kind: HostStatusKind): StatusTone = when (kind) {
   HostStatusKind.LIVE -> StatusTone.SUCCESS
   HostStatusKind.DRAFT -> StatusTone.NEUTRAL
+  HostStatusKind.PREVIEW -> StatusTone.NEUTRAL
   HostStatusKind.MAINTENANCE -> StatusTone.WARNING
   HostStatusKind.SUSPENDED -> StatusTone.ERROR
 }

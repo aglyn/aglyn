@@ -159,6 +159,11 @@ jest.mock('../components/search-discouraged-banner.component', () => ({
   __esModule: true,
   default: () => null,
 }))
+// Its sibling, the "in preview" banner (AGL-4086), reads the host the same way.
+jest.mock('../components/site-preview-banner.component', () => ({
+  __esModule: true,
+  default: () => null,
+}))
 jest.mock('../components/footer.component', () => ({
   __esModule: true,
   default: () => null,

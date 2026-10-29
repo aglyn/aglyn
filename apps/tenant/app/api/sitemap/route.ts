@@ -25,7 +25,8 @@ import {
   hostCollectionKind,
   hostPublicOrigin,
   isScreenIndexable,
-  isSearchDiscouraged,
+  isSiteKeptFromSearch,
+  previewScreenIds,
   newestSitemapLastmod,
   statusPageScreenIds,
   parseSitemapSectionPath,
@@ -161,7 +162,10 @@ export async function GET(request: Request): Promise<Response> {
   // what that has always been and what an index would have to degrade to
   // anyway, since an index whose children are all empty still advertises them.
   // Returning early also skips every read below, which is the whole cost.
-  if (isSearchDiscouraged(hostRes.host)) return xmlResponse(sitemapUrlsetXml([]))
+  //
+  // A site in preview (AGL-4086) answers the same way: nobody but its team may
+  // see it, so it lists nothing.
+  if (isSiteKeptFromSearch(hostRes.host)) return xmlResponse(sitemapUrlsetXml([]))
 
   // Which child sitemap was asked for, or none of them — `/sitemap.xml` itself,
   // which is the index.
@@ -584,6 +588,9 @@ async function buildPageUrls(
   // Sharing it is the point: the two surfaces disagreeing is how a site
   // advertises to agents the URLs it withheld from crawlers.
   for (const screenId of statusPageScreenIds(host as never)) excluded.add(screenId)
+  // A page in preview (AGL-4086) answers the public with a 404 until it is
+  // made public, so submitting it would hand a crawler a dead address.
+  for (const screenId of previewScreenIds(host as never)) excluded.add(screenId)
 
   const urls = Object.entries(host.screens ?? {})
     .filter(([screenId]) => !excluded.has(screenId))

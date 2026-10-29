@@ -19,6 +19,7 @@ import {
   curateLlmsTxtPages,
   hostCollectionKind,
   statusPageScreenIds,
+  previewScreenIds,
   screenRoutePathToUrl,
   type AglynHost,
   type LlmsTxtScreenRecord,
@@ -228,6 +229,8 @@ export async function readAgentSiteFacts(host: AglynHost): Promise<AgentSiteFact
         ...templateScreenIds,
         ...Object.keys(listRoutes),
         ...statusPageScreenIds(host as never),
+        // A page in preview (AGL-4086) is a 404 to everyone outside the team.
+        ...previewScreenIds(host as never),
       ])
       return {
         collections,
