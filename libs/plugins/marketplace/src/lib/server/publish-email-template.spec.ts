@@ -36,6 +36,12 @@ const state = {
   writes: [] as Array<{ path: string; data: Record<string, unknown> }>,
 }
 
+// Each save's agreement is recorded through its own module (AGL-4105),
+// faked here so the route's Firestore double does not have to model it.
+jest.mock('./publisher-agreement-acceptance', () => ({
+  recordPublisherAgreementAcceptance: jest.fn(async () => ({})),
+  publisherAgreementNote: () => ({ version: 'noted' }),
+}))
 jest.mock('@aglyn/aglyn/server', () => ({
   createResourceUid: () => 'listing-new',
   checkEntitlement: () => true,
@@ -123,6 +129,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   }
 })
 
+import { publisherAgreementConsent } from '../model/publisher-agreement'
 import { EMAIL_UNRESOLVED_BLOCK_REFUSAL } from './publish-email-blocks'
 import { publishEmailTemplateHandler } from './publish-email-template'
 
@@ -147,6 +154,7 @@ async function publish() {
         hostId: 'host-1',
         templateKey: 'booking-confirmed',
         displayName: 'Friendly confirmation',
+        agreement: publisherAgreementConsent(),
       },
     } as any,
     res,

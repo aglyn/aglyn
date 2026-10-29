@@ -3777,11 +3777,18 @@ describe('hosts', () => {
         { uid: VIEWER, rating: 5 },
       )
     })
-    // An org manager may edit their own listing's shelf placement. (Its copy
-    // — the name since AGL-3321, the description, readme and links since
-    // AGL-3365 — is written through the publish API, which screens it.)
-    await assertSucceeds(
+    // An org manager no longer writes even its listing's shelf placement
+    // directly (AGL-4105): every publisher save agrees to the Marketplace
+    // Publisher Agreement through the API. (Its copy — the name since
+    // AGL-3321, the description, readme and links since AGL-3365 — already
+    // was.) Staff still moderate, the control.
+    await assertFails(
       updateDoc(doc(authed(OWNER), 'marketplaceListings', 'listing-rated'), {
+        category: 'Reworded',
+      }),
+    )
+    await assertSucceeds(
+      updateDoc(doc(authed(STAFF, { staff: true }), 'marketplaceListings', 'listing-rated'), {
         category: 'Reworded',
       }),
     )
@@ -3871,14 +3878,20 @@ describe('hosts', () => {
         reporterUid: OUTSIDER, reason: 'spam', status: 'open',
       })
     })
-    // The owner may still edit ordinary metadata...
-    await assertSucceeds(
+    // The owner edits even ordinary metadata through the API since AGL-4105
+    // (it carries the publisher agreement), and staff still may...
+    await assertFails(
       updateDoc(doc(authed(OWNER), 'marketplaceListings', 'listing-hidden'), {
         category: 'Reworded',
       }),
     )
-    // ...but cannot un-hide themselves, which would make moderation a
-    // suggestion.
+    await assertSucceeds(
+      updateDoc(doc(authed(STAFF, { staff: true }), 'marketplaceListings', 'listing-hidden'), {
+        category: 'Reworded',
+      }),
+    )
+    // ...and the owner cannot un-hide themselves, which would make
+    // moderation a suggestion.
     for (const field of ['hiddenAt', 'hiddenBy', 'hiddenReason']) {
       await assertFails(
         updateDoc(doc(authed(OWNER), 'marketplaceListings', 'listing-hidden'), {
@@ -6255,14 +6268,20 @@ describe('pre-release hardening guards', () => {
         updateDoc(doc(authed(OWNER), 'marketplaceListings', LISTING), field),
       )
     }
-    // Shelf placement stays owner-writable — the point of the deny-list is
-    // that it names what is server-owned, not everything. The copy a buyer
-    // reads is written through the API since AGL-3365, which screens it.
-    await assertSucceeds(
-      updateDoc(doc(authed(OWNER), 'marketplaceListings', LISTING), {
-        categories: ['forms'],
-      }),
-    )
+    // Shelf placement and the manifest id are no longer owner-writable
+    // (AGL-4105): every publisher save agrees to the Marketplace Publisher
+    // Agreement, which only a route can refuse and record, so they go
+    // through `update-listing` and the publish route like everything else.
+    // The copy a buyer reads is written through the API since AGL-3365.
+    for (const field of [
+      { categories: ['forms'] },
+      { category: 'forms' },
+      { pluginId: 'acme.other' },
+    ]) {
+      await assertFails(
+        updateDoc(doc(authed(OWNER), 'marketplaceListings', LISTING), field),
+      )
+    }
     await assertFails(
       updateDoc(doc(authed(OWNER), 'marketplaceListings', LISTING), {
         description: 'Plugin v2', readme: '# Docs', license: 'MIT',
@@ -6272,6 +6291,36 @@ describe('pre-release hardening guards', () => {
     await assertFails(
       updateDoc(doc(authed(EDITOR), 'marketplaceListings', LISTING), { categories: ['mine'] }),
     )
+    // Staff still moderate (the control).
+    await assertSucceeds(
+      updateDoc(doc(authed(STAFF, { staff: true }), 'marketplaceListings', LISTING), {
+        categories: ['forms'],
+      }),
+    )
+  })
+
+  it('a listing is taken down through the API, never a client delete (AGL-4105)', async () => {
+    // Unpublishing is `set-published`, which carries the publisher agreement;
+    // a client delete would be the one publisher change that skipped it.
+    await assertFails(deleteDoc(doc(authed(OWNER), 'marketplaceListings', LISTING)))
+    await assertFails(deleteDoc(doc(authed(EDITOR), 'marketplaceListings', LISTING)))
+    await assertSucceeds(deleteDoc(doc(authed(STAFF, { staff: true }), 'marketplaceListings', LISTING)))
+  })
+
+  it('each agreement to the publisher agreement is server-only evidence (AGL-4105)', async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), 'orgs', ORG, 'publisherAgreementAcceptances', 'a1'),
+        { version: 'v', orgId: ORG, uid: OWNER, action: 'update-listing' },
+      )
+    })
+    const path = ['orgs', ORG, 'publisherAgreementAcceptances']
+    for (const who of [OWNER, EDITOR, OUTSIDER]) {
+      await assertFails(getDoc(doc(authed(who), ...path, 'a1')))
+      await assertFails(setDoc(doc(authed(who), ...path, 'a2'), { version: 'v', uid: who }))
+      await assertFails(updateDoc(doc(authed(who), ...path, 'a1'), { uid: who }))
+      await assertFails(deleteDoc(doc(authed(who), ...path, 'a1')))
+    }
   })
 
   it('host install pins are create/update API-only but client-deletable (AGL-508)', async () => {

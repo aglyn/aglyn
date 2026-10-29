@@ -1051,6 +1051,15 @@ allow read, write: if false;
 
 
 
+match /publisherAgreementAcceptances/{acceptanceId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
 
 
 
@@ -5173,7 +5182,6 @@ request.resource.data.displayName.size() <= 80;
 
 
 
-
 allow create: if false;
 
 
@@ -5333,8 +5341,18 @@ allow update: if isStaff() ||
 
 
 'official', 'starterKind', 'starterBase', 'starterFonts',
-'starterPages', 'starterMode', 'sourceStarterHostId']));
-allow delete: if isStaff() || listingManager();
+'starterPages', 'starterMode', 'sourceStarterHostId',
+
+
+
+
+
+
+'category', 'categories', 'pluginId']));
+
+
+
+allow delete: if isStaff();
 
 
 

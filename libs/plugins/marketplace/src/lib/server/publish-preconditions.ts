@@ -15,11 +15,7 @@
  * limitations under the License.
  */
 
-import {
-  PUBLISHER_AGREEMENT_VERSION,
-  publisherAgreementRefusal,
-  publisherAgreementState,
-} from '../model/publisher-agreement'
+import { publisherAgreementConsentRefusal } from '../model/publisher-agreement'
 import { merchantAccountIsReady } from '@aglyn/tenant-data-admin/server/payment-provider'
 import { marketplacePriceRefusal } from '../model/marketplace'
 import type { ResolvedPublisher } from './publisher-profile'
@@ -72,27 +68,30 @@ export interface PublishRefusal {
  * from the PLATFORM's balance, and two of the seven doors validated the price
  * not at all. It reads FIRST — see the comment on the check itself.
  *
- * ORDER IS DELIBERATE and matches what `publish-plugin.ts` already did:
- * profile, then payouts, then the agreement. The first two are things a
- * publisher sets up once; the third can go stale under a publisher who did
- * everything right, so it reads last and says so specifically.
+ * THE AGREEMENT IS AGREED TO ON EVERY PUBLISH since AGL-4105, not read off
+ * the org's last acceptance: the request carries `agreement` from the box the
+ * publisher ticked above the button. ORDER: price, then the agreement — both
+ * properties of the request, fixed in the form in front of the publisher —
+ * then the profile and payouts, which are set up once elsewhere. The door
+ * records the acceptance (`recordPublisherAgreementAcceptance`) right before
+ * it writes.
  *
- * THE AGREEMENT IS ASKED FOR FREE LISTINGS TOO, exactly as
- * `publish-plugin.ts` asked. Sections 2 (the distribution licence), 3 (the
- * warranties) and 9 (indemnity) are what make a free listing distributable at
- * all; only §8 is about money. Gating on `priceUsd > 0` would put every free
- * listing outside the terms that let us serve it.
+ * THE AGREEMENT IS ASKED FOR FREE LISTINGS TOO. Sections 2 (the distribution
+ * licence), 3 (the warranties) and 9 (indemnity) are what make a free listing
+ * distributable at all; only §8 is about money. Gating on `priceUsd > 0`
+ * would put every free listing outside the terms that let us serve it.
  *
  * @param publisher the org's resolved marketplace profile, or null/undefined
  *   when it has none.
  * @param options.sells the plural artifact noun for the payout refusal —
  *   "components", "themes", "layouts" — so the message keeps naming what the
  *   publisher was actually trying to sell.
+ * @param options.agreement the request's `agreement`, as sent.
  * @returns the refusal to send, or `null` when the publish may proceed.
  */
 export function publishPreconditionRefusal(
   publisher: ResolvedPublisher | null | undefined,
-  options: { priceUsd: number; sells: string },
+  options: { priceUsd: number; sells: string; agreement: unknown },
 ): PublishRefusal | null {
   // THE PRICE FLOOR (AGL-2343), first, and 400 rather than 412: it is the only
   // refusal here that is a property of the REQUEST rather than of the org, so
@@ -111,6 +110,12 @@ export function publishPreconditionRefusal(
   if (priceRefusal) {
     return { status: 400, body: { error: priceRefusal } }
   }
+  // The publisher agreement, agreed to on THIS save (AGL-4105): the box
+  // above the form's button, sent as `agreement`. A property of the request
+  // like the price, so it reads before the org's setup, and like the price it
+  // is fixed in the form in front of the publisher.
+  const agreementRefusal = publisherAgreementConsentRefusal(options.agreement)
+  if (agreementRefusal) return agreementRefusal
   if (!publisher) {
     return {
       status: 412,
@@ -142,39 +147,6 @@ export function publishPreconditionRefusal(
       status: 412,
       body: {
         error: `Set up payouts first — Marketplace → Payouts — to sell ${options.sells}.`,
-      },
-    }
-  }
-  // The publisher agreement (AGL-1077). A precondition on the ORG, checked
-  // here beside the profile and payout preconditions it belongs with —
-  // deliberately NOT the 428 the attestation uses. "You did not confirm the
-  // checklist for this bundle" and "your organization has never agreed to our
-  // terms" are different problems, fixed in different places, and a shared
-  // status code would send a publisher back to the checklist to tick
-  // something that is already ticked.
-  //
-  // An acceptance of an older version does not count: whoever publishes next
-  // reads the changed agreement and accepts it, or does not publish.
-  //
-  // `agreement` is the machine-readable half of the refusal (AGL-3407): the
-  // console reads it, not the prose, to present the agreement where the
-  // publish was attempted and send the same request again once it is
-  // accepted. `orgId` is in it because the acceptance is the ORG's, and a
-  // host-scoped publish (a layout, a theme, a component) names only its site
-  // — the client would otherwise have to guess which org it is asking to
-  // bind.
-  const agreementState = publisherAgreementState(publisher.agreement)
-  if (agreementState !== 'current') {
-    return {
-      status: 412,
-      body: {
-        error: publisherAgreementRefusal(agreementState),
-        agreement: {
-          required: PUBLISHER_AGREEMENT_VERSION,
-          accepted: publisher.agreement?.version ?? null,
-          state: agreementState,
-          orgId: publisher.orgId,
-        },
       },
     }
   }

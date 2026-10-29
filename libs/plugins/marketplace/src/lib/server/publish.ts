@@ -33,8 +33,11 @@ import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { resolvePublisherProfile } from './publisher-profile'
 import { publishPreconditionRefusal } from './publish-preconditions'
+import { recordPublisherAgreementAcceptance } from './publisher-agreement-acceptance'
 import { listingSubmissionRefusal } from './listing-screen'
 import { refreshListingQueryFields } from './listing-query-fields'
+import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
+import type { DecodedIdToken } from 'firebase-admin/auth'
 
 /**
  * Publishes a host reusable component to the marketplace (AGL-44). Runs
@@ -75,8 +78,16 @@ export const publishHandler: PluginApiHandler = async (req, res) => {
     : undefined
   if (!idToken) return res.status(401).json({ error: 'Unauthenticated' })
 
+  let decoded: DecodedIdToken
   try {
-    const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
+    decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
+  } catch (error) {
+    // Only a refused credential is the caller's 401; failing to check it is
+    // ours and keeps the dispatcher's 5xx (AGL-2852).
+    if (!isRefusedIdToken(error)) throw error
+    return res.status(401).json({ error: 'Unauthenticated' })
+  }
+  try {
     // Org-role permission gate (AGL-238).
     const membership = await resolveOrgPermissions(decoded.uid, { hostId })
     if (!membership.permissions.publishToMarketplace) {
@@ -117,6 +128,7 @@ export const publishHandler: PluginApiHandler = async (req, res) => {
     const refusal = publishPreconditionRefusal(publisher, {
       priceUsd,
       sells: 'components',
+      agreement: req.body?.agreement,
     })
     if (refusal) return res.status(refusal.status).json(refusal.body)
 
@@ -187,6 +199,17 @@ export const publishHandler: PluginApiHandler = async (req, res) => {
       org: orgForHost.org ?? null,
     })
     if (screened) return res.status(screened.status).json(screened.body)
+    // The agreement this publish was sent with, recorded before anything
+    // is listed under it (AGL-4105).
+    await recordPublisherAgreementAcceptance({
+      firestore,
+      request: req,
+      orgId: publisher.orgId,
+      uid: decoded.uid,
+      staff: decoded['staff'] === true,
+      action: 'publish-component',
+      targetId: listingRef.id,
+    })
 
     await listingRef.set(
       {

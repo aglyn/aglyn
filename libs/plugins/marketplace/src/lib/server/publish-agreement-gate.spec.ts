@@ -18,7 +18,9 @@
  */
 
 /**
- * The publisher agreement holds on EVERY publish door (AGL-2282).
+ * The publisher agreement holds on EVERY publish door (AGL-2282), agreed to
+ * on each publish since AGL-4105: the request carries the box the publisher
+ * ticked, the gate refuses one that did not, and the door records it.
  *
  * `publish-plugin-agreement.spec.ts` proves the gate on the plugin route. It
  * proved nothing about the other six, and the other six did not have it: a
@@ -36,7 +38,7 @@
  *    than restating it, so the eighth publish route somebody writes next year
  *    is in scope the day it lands.
  *
- * The third layer — a route driven END TO END to a real 412, because a pure
+ * The third layer — a route driven END TO END to a real refusal, because a pure
  * function nobody calls is exactly the failure this file exists to catch —
  * lives in `publish-stored-nodes.spec.ts`, which already stands up a real
  * Firestore double for `publishTemplateHandler` and `publishLayoutHandler`.
@@ -47,10 +49,14 @@
 
 import { readdirSync, readFileSync } from 'fs'
 import { join } from 'path'
-import { PUBLISHER_AGREEMENT_VERSION } from '../model/publisher-agreement'
+import {
+  PUBLISHER_AGREEMENT_CONSENT_REQUIRED,
+  PUBLISHER_AGREEMENT_VERSION,
+  publisherAgreementConsent,
+} from '../model/publisher-agreement'
 import { publishPreconditionRefusal } from './publish-preconditions'
 
-const CURRENT = { version: PUBLISHER_AGREEMENT_VERSION }
+const AGREED = publisherAgreementConsent()
 const PROFILE = {
   orgId: 'org-1',
   handle: 'acme',
@@ -59,18 +65,20 @@ const PROFILE = {
   // with no account id was never a real publisher, only a fixture.
   stripeAccountId: 'acct_spec',
   stripeChargesEnabled: true,
-  agreement: CURRENT,
 }
 
-describe('publishPreconditionRefusal (AGL-2282)', () => {
-  it('lets a fully set-up publisher through', () => {
-    expect(publishPreconditionRefusal(PROFILE, { priceUsd: 9, sells: 'themes' })).toBeNull()
+describe('publishPreconditionRefusal (AGL-2282, AGL-4105)', () => {
+  it('lets a fully set-up publisher through with the box ticked', () => {
+    expect(
+      publishPreconditionRefusal(PROFILE, { priceUsd: 9, sells: 'themes', agreement: AGREED }),
+    ).toBeNull()
   })
 
   it('refuses with no profile at all', () => {
     const refusal = publishPreconditionRefusal(null, {
       priceUsd: 0,
       sells: 'themes',
+      agreement: AGREED,
     })
     expect(refusal?.status).toBe(412)
     expect(String(refusal?.body.error)).toContain('publisher profile')
@@ -79,7 +87,7 @@ describe('publishPreconditionRefusal (AGL-2282)', () => {
   it('refuses a PAID listing with no payout binding, naming the artifact', () => {
     const refusal = publishPreconditionRefusal(
       { ...PROFILE, stripeChargesEnabled: false },
-      { priceUsd: 9, sells: 'layouts' },
+      { priceUsd: 9, sells: 'layouts', agreement: AGREED },
     )
     expect(refusal?.status).toBe(412)
     expect(String(refusal?.body.error)).toContain('to sell layouts')
@@ -89,37 +97,33 @@ describe('publishPreconditionRefusal (AGL-2282)', () => {
     expect(
       publishPreconditionRefusal(
         { ...PROFILE, stripeChargesEnabled: false },
-        { priceUsd: 0, sells: 'layouts' },
+        { priceUsd: 0, sells: 'layouts', agreement: AGREED },
       ),
     ).toBeNull()
   })
 
-  it('refuses when the org has never accepted', () => {
-    const refusal = publishPreconditionRefusal(
-      { ...PROFILE, agreement: undefined },
-      { priceUsd: 9, sells: 'components' },
-    )
-    expect(refusal?.status).toBe(412)
-    // The org rides in the refusal (AGL-3407): a host-scoped publish names
-    // only its site, and the console accepts on the org's behalf from here.
-    expect(refusal?.body.agreement).toEqual({
-      required: PUBLISHER_AGREEMENT_VERSION,
-      accepted: null,
-      state: 'none',
-      orgId: PROFILE.orgId,
-    })
+  it('refuses a publish that did not tick the box, whatever the org agreed before', () => {
+    // The org's last acceptance is a note now, not a gate: a profile carrying
+    // a current one still has to agree on this save.
+    for (const agreement of [undefined, null, {}, { version: PUBLISHER_AGREEMENT_VERSION }, { ...AGREED, accepted: false }]) {
+      const refusal = publishPreconditionRefusal(
+        { ...PROFILE, agreement: { version: PUBLISHER_AGREEMENT_VERSION } } as never,
+        { priceUsd: 9, sells: 'components', agreement },
+      )
+      expect(refusal?.status).toBe(428)
+      expect(refusal?.body.error).toBe(PUBLISHER_AGREEMENT_CONSENT_REQUIRED)
+      expect(refusal?.body.agreement).toEqual({ required: PUBLISHER_AGREEMENT_VERSION, state: 'missing' })
+    }
   })
 
-  it('refuses a STALE acceptance — the point of versioning it is that it re-asks', () => {
-    const refusal = publishPreconditionRefusal(
-      { ...PROFILE, agreement: { version: '1999-01-01.1' } },
-      { priceUsd: 9, sells: 'components' },
-    )
-    expect(refusal?.status).toBe(412)
-    expect(refusal?.body.agreement).toMatchObject({
-      accepted: '1999-01-01.1',
-      state: 'outdated',
+  it('refuses a box ticked for a version no longer in force', () => {
+    const refusal = publishPreconditionRefusal(PROFILE, {
+      priceUsd: 9,
+      sells: 'components',
+      agreement: { version: '1999-01-01.1', accepted: true },
     })
+    expect(refusal?.status).toBe(409)
+    expect(refusal?.body.agreement).toMatchObject({ state: 'outdated' })
   })
 
   it('asks a FREE listing for the agreement too', () => {
@@ -127,23 +131,33 @@ describe('publishPreconditionRefusal (AGL-2282)', () => {
     // distribution licence, warranties, indemnity — are what make a free
     // listing servable at all; only §8 is about money. A `priceUsd > 0` gate
     // here would put every free listing outside the terms.
-    const refusal = publishPreconditionRefusal(
-      { ...PROFILE, agreement: undefined },
-      { priceUsd: 0, sells: 'themes' },
-    )
-    expect(refusal?.status).toBe(412)
-    expect(refusal?.body.agreement).toMatchObject({ state: 'none' })
+    const refusal = publishPreconditionRefusal(PROFILE, {
+      priceUsd: 0,
+      sells: 'themes',
+      agreement: undefined,
+    })
+    expect(refusal?.status).toBe(428)
   })
 
-  it('reports the profile refusal BEFORE the agreement one', () => {
-    // Order matters to the person reading it: an org with no profile has
-    // nowhere to record an acceptance, so "accept the agreement" would be
-    // advice they cannot follow.
+  it('reports the unticked box BEFORE the org-setup refusals', () => {
+    // Like the price, the box is a property of the request and is fixed in
+    // the form in front of the publisher; they should not go and set up a
+    // profile only to be bounced again on a box they could have ticked.
     const refusal = publishPreconditionRefusal(undefined, {
       priceUsd: 9,
       sells: 'themes',
+      agreement: undefined,
     })
-    expect(refusal?.body.agreement).toBeUndefined()
+    expect(refusal?.status).toBe(428)
+  })
+
+  it('still reports the price before the box', () => {
+    const refusal = publishPreconditionRefusal(PROFILE, {
+      priceUsd: 1,
+      sells: 'themes',
+      agreement: undefined,
+    })
+    expect(refusal?.status).toBe(400)
   })
 })
 
@@ -213,18 +227,26 @@ describe('every publish door runs the shared gate (AGL-2282)', () => {
     // Fall back to a placeholder so a broken enumeration is a FAILURE here
     // rather than an empty `it.each` that reports nothing at all.
     doors.length ? doors.map((file) => file.name) : ['<no doors found>'],
-  )('%s calls publishPreconditionRefusal', (name) => {
+  )('%s calls publishPreconditionRefusal with the request\'s agreement, and records it', (name) => {
     const file = doors.find((entry) => entry.name === name)
     expect(file).toBeDefined()
     expect(file!.text).toContain('publishPreconditionRefusal(publisher, {')
+    // AGL-4105: the box this publish was sent with goes into the gate…
+    expect(file!.text).toMatch(/publishPreconditionRefusal\(publisher, \{[^}]*agreement: (req\.body|body)\?\.agreement,/)
+    // …and is recorded before the door writes.
+    expect(file!.text).toContain('await recordPublisherAgreementAcceptance({')
   })
 
   it('no door carries its own copy of the agreement check', () => {
-    // The gate is worth having only while it is the single decision. A route
-    // that re-derived `publisherAgreementState` beside it would drift the
-    // moment the states change.
+    // The gate is worth having only while it is the single decision. A door
+    // that re-derived the org's standing or re-checked the box beside it
+    // would drift the moment the rule changes.
     const offenders = doors
-      .filter((file) => /publisherAgreementState\s*\(/.test(file.text))
+      .filter(
+        (file) =>
+          /publisherAgreementState\s*\(/.test(file.text) ||
+          (file.name !== 'publish-plugin.ts' && /publisherAgreementConsentRefusal\s*\(/.test(file.text)),
+      )
       .map((file) => file.name)
     expect(offenders).toEqual([])
   })

@@ -16,21 +16,28 @@
  */
 
 /**
- * The marketplace publisher agreement, and whether an org has accepted the
- * current one (AGL-1077).
+ * The marketplace publisher agreement, and the box a publisher ticks to agree
+ * to it on every save (AGL-1077, AGL-4105).
  *
  * Deliberately NOT the per-version attestation (AGL-969). An attestation is
- * a statement about *specific bytes* and re-asks on every republish, because
- * the bytes changed. This is about the *relationship*: what we may do with a
- * listing, what the publisher warrants, indemnity, takedown, payouts, what
- * survives termination. It is accepted once, by an org, and re-asked only
- * when we change it.
+ * a statement about *specific bytes*. This is about the *relationship*: what
+ * we may do with a listing, what the publisher warrants, indemnity, takedown,
+ * payouts, what survives termination.
  *
- * Shared like the attestation model is, and for the same reason: the publish
- * route enforces it, the profile page collects it, and the review page shows
- * staff which terms a publisher is actually under. Three copies of a version
- * string would drift, and a drifted version is one that either re-asks
- * forever or never re-asks at all.
+ * It was accepted once per organization and version, in a dialog. Since
+ * AGL-4105 it is agreed to on EVERY publisher save instead: a profile, a
+ * listing's words and pictures, its price or visibility, a version, a
+ * component, template or layout. Each save form carries an unticked
+ * "I agree to the Marketplace Publisher Agreement" box above its button, the
+ * request carries {@link PublisherAgreementConsent}, and the route refuses a
+ * write without it and records the acceptance. The org's `publisherAgreement`
+ * stays as a note of the last acceptance (staff read it on the review page);
+ * it no longer gates anything.
+ *
+ * Shared like the attestation model is, and for the same reason: every
+ * publisher route enforces it, the console and the apps send it, and the
+ * review page shows staff which terms a publisher is under. Copies of a
+ * version string would drift.
  */
 
 import { LEGAL_ORIGIN, isPublishedLegalUrl } from '@aglyn/aglyn/app-utils/published-legal-pages'
@@ -337,7 +344,10 @@ export function publisherAgreementChangesSince(
 }
 
 /**
- * A recorded acceptance: which version, of which exact bytes, by whom, when.
+ * The org's last acceptance, as `publisherProfiles/{orgId}.publisherAgreement`
+ * notes it: which version, of which exact bytes, by whom, when. Rewritten by
+ * every save since AGL-4105, beside the append-only record of each one
+ * ({@link PublisherAgreementAcceptanceRecord}).
  *
  * `sha256`/`bytes` (AGL-1678) pin the acceptance to the archived snapshot of
  * the text the publisher was shown. Optional because records written before
@@ -372,12 +382,11 @@ export function publisherAgreementState(
 }
 
 /**
- * Whether a publish may proceed.
+ * Whether an org's last acceptance is of the version in force.
  *
- * An older acceptance is NOT carried forward. Whoever publishes next reads
- * the changed agreement and accepts it, or does not publish — silently
- * inheriting an acceptance across a rewrite is precisely what makes the
- * record worthless.
+ * A note since AGL-4105, not a gate: every save agrees again on its own
+ * ({@link publisherAgreementConsentRefusal}). Read by the first-party starter
+ * seeding script, which writes listings without a save form.
  */
 export function hasCurrentPublisherAgreement(
   acceptance: PublisherAgreementAcceptance | null | undefined,
@@ -420,24 +429,193 @@ export function publisherAgreementPresentation(
   }
 }
 
-/** The refusal a publisher sees, saying which of the two problems it is. */
-export function publisherAgreementRefusal(
-  state: PublisherAgreementState,
-  published: boolean = publisherAgreementIsPublished(),
-): string {
-  // Sending someone to a control we have disabled is worse than saying
-  // nothing: they go, find no button, and conclude the console is broken.
-  if (!published) {
-    return (
-      `The ${PUBLISHER_AGREEMENT_TITLE} is not published yet, so it cannot ` +
-      'be accepted and publishing is paused for everyone. This is on us, not ' +
-      'on your organization.'
-    )
+/*==========================================
+ * AGREED TO ON EVERY SAVE (AGL-4105).
+ *
+ * Every publisher save — a profile, a listing's words, pictures, categories,
+ * price or visibility, unpublishing or republishing it, a version, a
+ * component, template, theme, layout, dataset schema or email, asking for the
+ * Verified badge — carries {@link PublisherAgreementConsent}. The console and
+ * the apps send it only while the person has ticked the box above the button,
+ * and the box is unticked again after every save, so each save is its own
+ * agreement. The routes refuse a write without it
+ * ({@link publisherAgreementConsentRefusal}) and record who agreed, to which
+ * version, for what, and from where.
+ *=========================================*/
+
+/** What a save sends while its box is ticked: the version it agrees to. */
+export interface PublisherAgreementConsent {
+  version: string
+  accepted: true
+}
+
+/** The box's sentence; the agreement's title in it is the link to the document. */
+export const PUBLISHER_AGREEMENT_CONSENT_LABEL = `I agree to the ${PUBLISHER_AGREEMENT_TITLE}`
+
+/** What a save without the box ticked is told. */
+export const PUBLISHER_AGREEMENT_CONSENT_REQUIRED = `Tick '${PUBLISHER_AGREEMENT_CONSENT_LABEL}' to save`
+
+/** What a save that agreed to an older version is told: the page was open across a change. */
+export const PUBLISHER_AGREEMENT_CONSENT_OUTDATED =
+  `The ${PUBLISHER_AGREEMENT_TITLE} changed while this was open. Reload, read ` +
+  'the current version and tick the box again to save.'
+
+/** What a save sends once its box is ticked. */
+export function publisherAgreementConsent(
+  version: string = PUBLISHER_AGREEMENT_VERSION,
+): PublisherAgreementConsent {
+  return { version, accepted: true }
+}
+
+/**
+ * Why a save's `agreement` does not count, or null when it does.
+ *
+ * `missing`: absent, not ticked, or not this shape. `outdated`: ticked for a
+ * version that is no longer in force, which is a page left open across a
+ * change, not a publisher who declined. `unavailable`: the document has no
+ * published page, so nothing can be agreed to (AGL-1660) whatever was sent.
+ */
+export type PublisherAgreementConsentProblem = 'missing' | 'outdated' | 'unavailable'
+
+export function publisherAgreementConsentProblem(
+  raw: unknown,
+  options: { currentVersion?: string; published?: boolean } = {},
+): PublisherAgreementConsentProblem | null {
+  const currentVersion = options.currentVersion ?? PUBLISHER_AGREEMENT_VERSION
+  const published = options.published ?? publisherAgreementIsPublished()
+  if (!published) return 'unavailable'
+  const consent = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  if (consent['accepted'] !== true) return 'missing'
+  const version = typeof consent['version'] === 'string' ? consent['version'].trim() : ''
+  if (!version) return 'missing'
+  return version === currentVersion ? null : 'outdated'
+}
+
+/**
+ * The refusal a save without a counting `agreement` gets, or null when it may
+ * go ahead. One answer for every publisher route.
+ *
+ * 428, like the per-version attestation (AGL-969): both say "tick the box in
+ * the form in front of you". A version from before a change is 409, the
+ * conflict-with-current-state answer the retired accept route gave the same
+ * mismatch, and so is an unpublished document. `agreement` is the
+ * machine-readable half, for a client that wants to point at the box.
+ */
+export function publisherAgreementConsentRefusal(
+  raw: unknown,
+  options: { currentVersion?: string; published?: boolean } = {},
+): { status: number; body: Record<string, unknown> } | null {
+  const problem = publisherAgreementConsentProblem(raw, options)
+  if (!problem) return null
+  const required = options.currentVersion ?? PUBLISHER_AGREEMENT_VERSION
+  const agreement = { required, state: problem }
+  if (problem === 'unavailable') {
+    return { status: 409, body: { error: PUBLISHER_AGREEMENT_UNAVAILABLE_NOTICE, agreement } }
   }
-  return state === 'outdated'
-    ? `The ${PUBLISHER_AGREEMENT_TITLE} has changed since your organization ` +
-        'accepted it. Review and accept the current version in Marketplace → ' +
-        'Publisher Profile, then publish.'
-    : `Your organization has not accepted the ${PUBLISHER_AGREEMENT_TITLE}. ` +
-        'Accept it in Marketplace → Publisher Profile, then publish.'
+  if (problem === 'outdated') {
+    return { status: 409, body: { error: PUBLISHER_AGREEMENT_CONSENT_OUTDATED, agreement } }
+  }
+  return { status: 428, body: { error: PUBLISHER_AGREEMENT_CONSENT_REQUIRED, agreement } }
+}
+
+/**
+ * What the box may show (AGL-1660, AGL-4105): the link, and whether it can be
+ * ticked at all. The box reads its href from here, never from
+ * {@link PUBLISHER_AGREEMENT_URL}, so an unpublished document cannot reach a
+ * link and cannot be agreed to.
+ */
+export interface PublisherAgreementConsentPresentation {
+  /** The document to link, or null when there is no page to link to. */
+  documentUrl: string | null
+  /** Whether the box may be ticked. */
+  canAgree: boolean
+  /** Why it cannot be, or null when it can. */
+  unavailableNotice: string | null
+}
+
+export function publisherAgreementConsentPresentation(
+  published: boolean = publisherAgreementIsPublished(),
+): PublisherAgreementConsentPresentation {
+  return {
+    documentUrl: published ? PUBLISHER_AGREEMENT_URL : null,
+    canAgree: published,
+    unavailableNotice: published ? null : PUBLISHER_AGREEMENT_UNAVAILABLE_NOTICE,
+  }
+}
+
+/**
+ * Where an acceptance came from, as its record names it: one name per
+ * publisher save. Closed, so a record can always be read back as an action.
+ */
+export const PUBLISHER_AGREEMENT_ACTIONS = [
+  'save-profile',
+  'publish-component',
+  'publish-layout',
+  'publish-template',
+  'publish-starter',
+  'publish-theme',
+  'publish-dataset-schema',
+  'publish-email-template',
+  'publish-email-starter',
+  'publish-plugin',
+  'update-listing',
+  'set-preview-image',
+  'remove-preview-image',
+  'set-visibility',
+  'set-published',
+  'request-verification',
+  'withdraw-verification',
+] as const
+
+export type PublisherAgreementAction = (typeof PUBLISHER_AGREEMENT_ACTIONS)[number]
+
+/**
+ * One acceptance, as `orgs/{orgId}/publisherAgreementAcceptances/{id}` holds
+ * it: append-only and server-written, with the evidence a signature's audit
+ * keeps (the hardware terms' acceptance is the same shape, AGL-4038) — which
+ * text, by whom, when, for which save, and from which device.
+ */
+export interface PublisherAgreementAcceptanceRecord {
+  version: string
+  /** The archived snapshot's pin (AGL-1678), so the record names the bytes as well as the label. */
+  sha256: string
+  bytes: number
+  orgId: string
+  uid: string
+  /** Whether the person was acting as staff rather than as the publisher. */
+  staff: boolean
+  action: PublisherAgreementAction
+  /** The listing, profile or source the save wrote, or null where it has none yet. */
+  targetId: string | null
+  ip: string | null
+  userAgent: string | null
+  atMs: number
+}
+
+/** A fresh acceptance of the agreement in force. */
+export function publisherAgreementAcceptanceRecord(input: {
+  orgId: string
+  uid: string
+  staff?: boolean
+  action: PublisherAgreementAction
+  targetId?: string | null
+  ip?: string | null
+  userAgent?: string | null
+  atMs: number
+}): PublisherAgreementAcceptanceRecord {
+  const text = (value: string | null | undefined, max: number) =>
+    typeof value === 'string' && value.trim() ? value.trim().slice(0, max) : null
+  return {
+    version: PUBLISHER_AGREEMENT_VERSION,
+    sha256: PUBLISHER_AGREEMENT_SHA256,
+    bytes: PUBLISHER_AGREEMENT_BYTES,
+    orgId: input.orgId,
+    uid: input.uid,
+    staff: input.staff === true,
+    action: input.action,
+    targetId: text(input.targetId, 256),
+    ip: text(input.ip, 100),
+    userAgent: text(input.userAgent, 400),
+    atMs: input.atMs,
+  }
 }
