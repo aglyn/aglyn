@@ -123,10 +123,63 @@ export interface QuoteTaxBasis {
   reason?: QuoteNoTaxReason
 }
 
-/** A proof attached to one revision of a quote. Written by the proofs feature. */
+/** A proof attached to one revision of a quote: what names it, and the revision it is for. */
 export interface QuoteProofRef {
   id: string
   revision: number
+}
+
+/**
+ * A proof the business attached to a revision (AGL-4096): an image or a
+ * design file in the site's private storage, under the quote.
+ */
+export interface QuoteProof extends QuoteProofRef {
+  name: string
+  contentType: string
+  size: number
+  /** The private Storage object. Never sent to the customer. */
+  path: string
+  addedAtMs: number
+  /** Who attached it: an email, else a uid. */
+  addedBy: string
+}
+
+/** A file the customer sent with a response. */
+export interface QuoteResponseFile {
+  id: string
+  name: string
+  contentType: string
+  size: number
+  /** The private Storage object. Never sent to the customer. */
+  path: string
+}
+
+/**
+ * The customer's answer to a revision's proofs (AGL-4096): approved under a
+ * typed name, or changes asked for in a comment, with artwork if they had
+ * some. The address and browser are kept as the record of who answered.
+ */
+export interface QuoteCustomerResponse {
+  action: 'approve' | 'changes'
+  revision: number
+  atMs: number
+  /** With `approve`: the name they typed. */
+  name?: string
+  /** With `changes`: what to change. */
+  comment?: string
+  /** With `changes`: files they sent. */
+  files?: QuoteResponseFile[]
+  ip: string | null
+  userAgent: string | null
+}
+
+/** The record of a revision's approval. */
+export interface QuoteApproval {
+  revision: number
+  name: string
+  atMs: number
+  ip: string | null
+  userAgent: string | null
 }
 
 /**
@@ -159,7 +212,12 @@ export interface OrderQuote {
   tax: QuoteTaxBasis
   /** The customer approves the current revision's proof before they can pay. Absent reads as off. */
   requireProofApproval?: boolean
-  proofs?: QuoteProofRef[]
+  /** The current revision's proofs; earlier revisions keep theirs in `revisions/{n}`. */
+  proofs?: QuoteProof[]
+  /** The customer's answers to the current revision, oldest first; the last one counts. */
+  responses?: QuoteCustomerResponse[]
+  /** The current revision's approval, while its latest answer is one. */
+  approval?: QuoteApproval | null
   /** The revision the customer approved, when they have. */
   approvedRevision?: number | null
   /**
@@ -198,7 +256,12 @@ export function quoteRequiresProofApprovalByDefault(
  * one the customer approved. A revision with no proof never holds a payment.
  */
 export function quotePaymentBlockedByApproval(
-  quote: Pick<OrderQuote, 'requireProofApproval' | 'revision' | 'proofs' | 'approvedRevision'> | null | undefined,
+  quote:
+    | (Pick<OrderQuote, 'requireProofApproval' | 'revision' | 'approvedRevision'> & {
+        proofs?: readonly QuoteProofRef[]
+      })
+    | null
+    | undefined,
 ): boolean {
   if (!quote || quote.requireProofApproval !== true) return false
   const revision = Number(quote.revision ?? 1)

@@ -35,6 +35,7 @@ import {
   type StorefrontCheckoutWallets,
 } from '../model'
 import type { QuotePageProps } from './quote-page'
+import { QuoteProofPanel } from './quote-proof-panel'
 import { StorefrontPaymentElementFallback } from './storefront-payment-element-fallback'
 
 /** The Payment Element, lazily: Stripe.js loads only when a customer presses Pay. */
@@ -445,6 +446,17 @@ const QuotePageBody = forwardRef<HTMLDivElement, QuotePageProps>((props, ref) =>
             </Typography>
           </Stack>
         ) : null}
+
+        <QuoteProofPanel
+          view={quote}
+          hostId={hostId}
+          quoteId={link.current.quoteId}
+          token={link.current.token}
+          siteFetch={siteFetch}
+          onView={(next) => setState({ kind: 'ready', view: next })}
+          onReload={() => void load().then(setState)}
+          onReplaced={() => setState({ kind: 'replaced', storeName: quote.storeName })}
+        />
 
         {unpaid ? (
           <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>

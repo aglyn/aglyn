@@ -447,6 +447,16 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'off-tenant',
     why: "The preview thumbnail beside a dataset record's Image field (AGL-3763), in the console's record editor on the site and organization Data pages. The src is the record's stored value through resolveMediaSrc with the site's id: a media-library pick, or an https link the workspace member typed under \"Use a link instead\". The reader is that member, signed in to the console, so the IP at risk is theirs, never a site visitor's.",
   },
+  'libs/plugins/commerce/src/lib/components/console/quote-proofs.component.tsx': {
+    markers: 1,
+    guard: 'off-tenant',
+    why: "The console's quote editor (AGL-4096), never a tenant render: a proof's thumbnail is a blob: URL of bytes the member's browser fetched with their own token from POST /api/commerce/quote {action:'file'}, which streams the quote's private object. No stored or author URL reaches it, and no third-party host.",
+  },
+  'libs/plugins/commerce/src/lib/components/quote-proof-panel.tsx': {
+    markers: 1,
+    guard: 'platform',
+    why: "The customer's quote page (AGL-4096): a proof image whose src this file builds itself, `/api/commerce/quote-proof?hostId=&q=&t=&file=`, a path on the page's own origin. That gated route checks the signed link and streams the quote's private object; no stored URL, author string or other host reaches the src.",
+  },
   'libs/plugins/commerce/src/lib/components/console/product-editor-dialog.component.tsx': {
     markers: 1,
     guard: 'off-tenant',

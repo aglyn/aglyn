@@ -270,6 +270,7 @@ every rule the bucket should have.
 | `users/{uid}/…` | avatar upload | **Code, never age.** `eraseUser` sweeps it. |
 | `adminAudit-archive/{yyyy-MM}/*.jsonl` | `/api/admin/audit-archive` | **`age: 365`** — this rule. |
 | `erasures/{orgId}/*.json` | **nothing, since AGL-1443** | **`age: 30`** — a backstop, not the policy. |
+| `visitor-uploads-pending/{hostId}/{purpose}/{recordId}/{uploadId}` | a visitor's or member's signed upload (`visitor-upload.ts`, AGL-4096), before finalize checks it and moves it under `hosts/{hostId}/private/uploads/` | **`age: 1`** — what nobody finalized. A refused finalize deletes its object at once. |
 | `marketplaceListings/{id}/preview` | `libs/plugins/marketplace/.../preview-image.ts` | **Nothing, deliberately.** See below. |
 
 > **A rule here can delete live customer media, and nothing would say which.**

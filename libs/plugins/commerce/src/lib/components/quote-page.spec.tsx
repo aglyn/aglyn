@@ -171,3 +171,113 @@ describe('the quote page', () => {
     expect(mockSiteFetch).not.toHaveBeenCalled()
   })
 })
+
+describe('the proofs on the quote page (AGL-4096)', () => {
+  const PROOFS = [
+    { id: 'p1', revision: 1, name: 'Banner.png', contentType: 'image/png', size: 2_048, path: 'hosts/x/private/uploads/quote-proof/q-1/p1', addedAtMs: 1, addedBy: 'a' },
+    { id: 'p2', revision: 1, name: 'Banner.ai', contentType: 'application/illustrator', size: 4_096, path: 'hosts/x/private/uploads/quote-proof/q-1/p2', addedAtMs: 1, addedBy: 'a' },
+  ]
+  const proofed = (quote: Record<string, unknown> = {}, order: Record<string, unknown> = {}) =>
+    view({ ...ORDER, ...order, quote: { ...ORDER.quote, proofs: PROOFS, ...quote } })
+  const storageFetch = jest.fn(async (_url: string, _init?: RequestInit) => ({ ok: false, status: 0 }))
+  const realFetch = globalThis.fetch
+
+  beforeEach(() => {
+    storageFetch.mockClear()
+    Object.assign(globalThis, { fetch: storageFetch })
+  })
+
+  afterEach(() => {
+    Object.assign(globalThis, { fetch: realFetch })
+  })
+
+  it('shows each image through the signed link and offers every other file as a download', async () => {
+    mockSiteFetch.mockResolvedValue(json(proofed()))
+    render(<QuotePage />)
+    const image = await screen.findByRole('img', { name: 'Banner.png' })
+    expect(image.getAttribute('src')).toBe('/api/commerce/quote-proof?hostId=host-1&q=q-1&t=1.tok&file=p1')
+    const download = screen.getByRole('link', { name: 'Download Banner.ai (4 KB)' })
+    expect(download.getAttribute('href')).toBe('/api/commerce/quote-proof?hostId=host-1&q=q-1&t=1.tok&file=p2')
+    expect(screen.getByText(/Revision 1\. Look it over/)).toBeTruthy()
+  })
+
+  it('approves under a typed name, for the version shown, and Pay comes back', async () => {
+    const answered = proofed(
+      { requireProofApproval: true, stage: 'approved', approvedRevision: 1, responses: [{ action: 'approve', revision: 1, atMs: Date.UTC(2026, 9, 22), name: 'Jordan Lee', ip: null, userAgent: null }] },
+    )
+    mockSiteFetch.mockResolvedValueOnce(json(proofed({ requireProofApproval: true }))).mockResolvedValueOnce(json({ view: answered }))
+    render(<QuotePage />)
+    expect(await screen.findByText('Acme Tents asks you to approve the proof before you pay.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Approve this proof' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+    expect(await screen.findByText('Type your name to approve the proof.')).toBeTruthy()
+    expect(mockSiteFetch).toHaveBeenCalledTimes(1)
+    fireEvent.change(screen.getByLabelText('Your name'), { target: { value: 'Jordan Lee' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+    expect(await screen.findByText(/You approved this proof on .* as Jordan Lee\./)).toBeTruthy()
+    const [url, init] = mockSiteFetch.mock.calls[1] as [string, RequestInit]
+    expect(url).toBe('/api/commerce/quote-respond')
+    expect(JSON.parse(String(init.body))).toEqual({
+      hostId: 'host-1',
+      q: 'q-1',
+      t: '1.tok',
+      v: Date.UTC(2026, 9, 21),
+      action: 'approve',
+      name: 'Jordan Lee',
+      website: '',
+    })
+    expect((init.headers as Record<string, string>)['Idempotency-Key']).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Pay $2,675.48' })).toBeTruthy()
+  })
+
+  it('asks for changes with a comment and artwork sent through the upload', async () => {
+    mockSiteFetch.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url.startsWith('/api/commerce/quote-view')) return json(proofed())
+      const body = JSON.parse(String(init?.body))
+      if (url === '/api/commerce/quote-upload' && body.action === 'ticket') {
+        return json({ ticket: 'ticket-1', upload: { url: 'https://storage.example/b/', fields: { key: 'k' } } })
+      }
+      if (url === '/api/commerce/quote-upload') {
+        return json({ file: { id: 'a1', name: 'logo.ai', contentType: 'application/illustrator', size: 900, uploadedAtMs: 1 } })
+      }
+      return json({ view: proofed({ responses: [{ action: 'changes', revision: 1, atMs: Date.UTC(2026, 9, 22), comment: 'Bigger', ip: null, userAgent: null }] }) })
+    })
+    render(<QuotePage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Request changes' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Send changes' }))
+    expect(await screen.findByText('Tell us what to change.')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText(/What should change\?/), { target: { value: 'Bigger logo' } })
+    const file = new File(['%!PS-Adobe'], 'logo.ai', { type: 'application/postscript' })
+    fireEvent.change(screen.getByTestId('quote-artwork-picker'), { target: { files: [file] } })
+    expect(await screen.findByText('logo.ai · 1 KB')).toBeTruthy()
+    expect(storageFetch).toHaveBeenCalledWith('https://storage.example/b/', expect.objectContaining({ method: 'POST', mode: 'no-cors' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Send changes' }))
+    expect(await screen.findByText(/You asked for changes on/)).toBeTruthy()
+    const respond = mockSiteFetch.mock.calls.find(([url]) => url === '/api/commerce/quote-respond') as [string, RequestInit]
+    expect(JSON.parse(String(respond[1].body))).toMatchObject({ action: 'changes', comment: 'Bigger logo', fileIds: ['a1'] })
+    // They may still approve after asking for changes.
+    expect(screen.getByRole('button', { name: 'Approve this proof' })).toBeTruthy()
+  })
+
+  it('shows a paid quote’s proofs with nothing to press', async () => {
+    mockSiteFetch.mockResolvedValue(json(proofed({ paidAtMs: Date.UTC(2026, 9, 30) }, { status: 'paid' })))
+    render(<QuotePage />)
+    expect(await screen.findByRole('img', { name: 'Banner.png' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Approve this proof' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Request changes' })).toBeNull()
+  })
+
+  it('shows the quote again when it changed since the page loaded', async () => {
+    mockSiteFetch
+      .mockResolvedValueOnce(json(proofed()))
+      .mockResolvedValueOnce(json({ error: 'This quote was updated since you opened it. Look it over again before you answer.', reason: 'updated' }, false))
+      .mockResolvedValueOnce(json(proofed()))
+    render(<QuotePage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve this proof' }))
+    fireEvent.change(screen.getByLabelText('Your name'), { target: { value: 'Jordan Lee' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+    expect(await screen.findByText(/This quote was updated since you opened it/)).toBeTruthy()
+    await waitFor(() => expect(mockSiteFetch).toHaveBeenCalledTimes(3))
+    expect(mockSiteFetch.mock.calls[2][0]).toBe('/api/commerce/quote-view?hostId=host-1&q=q-1&t=1.tok')
+  })
+})
