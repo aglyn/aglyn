@@ -65,7 +65,7 @@ import { aiSiteStartAnswersFromInputs } from '../model/ai-site-start'
 import { AiSiteStartCard } from './ai-site-start-card.component'
 import { AI_JOB_TERMINAL_STATUSES, type AiJobSummary } from '../model/ai-jobs.types'
 import { followAiJobEvents } from './ai-job-events'
-import { aiCreditsBillingHref, aiSiteBuildDoneLinks, aiStoreFinishHostId, aiStoreFinishLinks } from './ai-job-links'
+import { aiCreditsBillingHref, aiJobReviewLinks, aiSiteBuildDoneLinks, aiStoreFinishHostId, aiStoreFinishLinks } from './ai-job-links'
 import { AiStoreFinishCard } from './ai-store-finish-card.component'
 import { AiJobPlan } from './ai-job-plan.component'
 import { aiBuildCanRetry, aiBuildRetryCreditRange } from '../model/ai-build-progress'
@@ -412,6 +412,9 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
   const links = phase === 'done' ? aiSiteBuildDoneLinks(ready, orgSlug) : { view: null, pages: null }
   const sitePublish = ready.kind === 'site' && phase === 'done' ? (ready.sitePublish ?? null) : null
   const liveUrl = sitePublish && sitePublish.published.length > 0 ? sitePublish.liveUrl : null
+  // A job that changed one page (AGL-3616) leads with that page's new version,
+  // to look at and publish, rather than the site.
+  const review = phase === 'done' && ready.kind !== 'site' && !liveUrl ? aiJobReviewLinks(ready, orgSlug) : null
   // A store start's last steps (AGL-3676): only payments, products, shipping and tax, and the policies.
   const storeFinish = phase === 'done' ? aiStoreFinishLinks(ready, orgSlug) : null
   // Paused by the meter (AGL-3660): out of credits or at a cap, carried on by Resume.
@@ -566,7 +569,17 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
           onBuildWhatFits={() => void tryAgain({ creditsConfirmed: true })}
         />
       )}
-      {phase === 'done' && !liveNotice && (
+      {review ? (
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+          {/* A view, so it opens beside this page; Publish is on it. */}
+          <Button variant="contained" size="large" component={AppLink} href={review.preview} {...newTabLinkProps}>
+            {'Preview'}
+          </Button>
+          <Button variant="outlined" size="large" component={AppLink} href={review.besigner}>
+            {'Open in Besigner'}
+          </Button>
+        </Stack>
+      ) : phase === 'done' && !liveNotice && (
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
           {liveUrl ? (
             // The live site, in a tab of its own: the console stays where it is.
