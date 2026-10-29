@@ -27,6 +27,13 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — datasets follow Manage data
+
+- **[Manage data](workspace-and-billing/teams-and-roles/custom-roles.md#workspace-permissions)**
+  — the permission now decides who may create, edit and delete datasets and their
+  records on its own. Everyone keeps what their role gave them, and a custom role or a
+  per-member override can now let a viewer edit datasets.
+
 ## October 2026 — Add-ons on your website
 
 - **[Add-ons on the product's page](commerce-and-bookings/commerce/catalog.md#add-ons)**

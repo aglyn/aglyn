@@ -26,6 +26,7 @@ import { registerClosureNoticeSource } from '@aglyn/aglyn/plugin-manager/plugin-
 import { registerCustomerDisplayVerifier } from '@aglyn/aglyn/plugin-manager/plugin-customer-display-verifier'
 import { registerPluginEventHandler } from '@aglyn/aglyn/plugin-manager/plugin-events'
 import { registerPluginSearchSources } from '@aglyn/aglyn/plugin-manager/plugin-search-sources'
+import { registerPluginConsoleCron } from '@aglyn/aglyn/plugin-manager/plugin-console-crons'
 import { COMMERCE_SERVER_SEARCH_SOURCES } from './model/commerce-server-search-sources'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { ORDER_HISTORY_CONTRACT } from './model/order-history'
@@ -54,6 +55,22 @@ import { registerCommerceTransferResources } from './transfer/register-transfer-
  * this plugin's own entries.
  */
 export function registerCommerceConsoleServerDeclarations(): void {
+  // Files a customer attached to an answer on a quote and never sent
+  // (AGL-4096): deleted a day after their latest upload, on the same tick as
+  // the forms plugin's sweep of forms never sent.
+  registerPluginConsoleCron(
+    {
+      id: 'commerce-quote-upload-sweep',
+      label: 'Unsent quote files',
+      drives:
+        'Deletes the files a customer attached to an answer on a quote and never sent, a day after the last one went up. If it stops, those files stay in the site’s private storage.',
+      run: async (context) => {
+        const { defaultQuoteUploadSweepDeps, sweepQuoteUploads } = await import('./server/quote-upload-sweep')
+        return sweepQuoteUploads(defaultQuoteUploadSweepDeps(), context)
+      },
+    },
+    { pluginId: BUNDLE_ID },
+  )
   // Commerce's share of a person erasure (AGL-2623, AGL-3080): every order the
   // person placed keeps its amounts, with the buyer taken off it. Required,
   // and loaded with the first erasure.

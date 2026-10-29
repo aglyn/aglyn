@@ -69,6 +69,7 @@ describe('marketplace plugin', () => {
     const slots = (extension?.widgets ?? []).map((widget) => widget.slot)
     expect(slots.sort()).toEqual([
       'hostArtifactPublish',
+      'hostStarterPicker',
       'orgPluginInstalls',
       'pluginInstallStatus',
       'pluginSiteSet',
@@ -77,6 +78,27 @@ describe('marketplace plugin', () => {
       'templateInstallStatus',
     ])
     expect(Aglyn.plugins.getDependency(BUNDLE_ID)).toBeUndefined()
+  })
+
+  it('offers its site starters in Create site, gated on the create permission (AGL-4049)', () => {
+    /*
+     * The starter picker is drawn before a site exists, so the only gate the
+     * shell can put on it is the workspace's: "Create sites", the key the
+     * create route and the starter search route both check. A widget with no
+     * permission would mount for a member who cannot create a site at all.
+     */
+    registerMarketplaceConsole()
+    const extension = Aglyn.listConsoleExtensions().find(
+      (entry) => entry.pluginId === BUNDLE_ID,
+    )
+    const picker = (extension?.widgets ?? []).find(
+      (widget) => widget.slot === 'hostStarterPicker',
+    )
+    expect(picker).toMatchObject({
+      widgetId: 'marketplace-starter-picker',
+      permission: 'hosts.create',
+    })
+    expect(picker?.Component).toBeDefined()
   })
 
   it('is the last plugin tab on the org strip, beside Plugins (AGL-3294)', () => {

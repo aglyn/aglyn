@@ -23,9 +23,9 @@
 /**
  * A member adds records only to a dataset they can see (AGL-2894).
  *
- * `/api/orgs/datasets` gates its record actions on the writer role and
- * `data.manage`. Both are about the ORG: `data.manage` resolves from the role
- * alone, so an editor scoped to one client's site passes them. The route then
+ * `/api/orgs/datasets` gates its record actions on `data.manage` (AGL-4047).
+ * That is about the ORG: it resolves from the member's role and their
+ * grants, so an editor scoped to one client's site passes it. The route then
  * wrote into whatever `datasetId` the body named — including an internal
  * dataset shared only with other sites, which that collaborator can neither
  * list nor open, and which the rules would never let them touch a record of

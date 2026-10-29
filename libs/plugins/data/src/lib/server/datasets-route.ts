@@ -41,6 +41,7 @@ import {
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { announceDatasetRecords as announceDatasetChange } from './announce-dataset-records'
 import { coerceDocumentValues, datasetIntegrityFields, datasetIntegrityUpdate, effectiveDatasetModel, validateDocument } from '../model/dataset-models'
@@ -81,8 +82,23 @@ async function refuseIfDataStorageBlocked(
   )
 }
 
-/** Roles allowed to create org data — mirrors rules' canWriteOrgData(). */
-const WRITER_ROLES = new Set(['owner', 'admin', 'editor'])
+/**
+ * The key every action here asks (AGL-4047): "Manage data", whose default is
+ * the owner, admin and editor, as the rules' `canWriteOrgDatasets()` asks it.
+ */
+const DATASETS_PERMISSION = 'data.manage'
+
+/** The 403 for a member without it, naming the permission, never a role. */
+function datasetsPermissionRefusal(): Response {
+  return Response.json(
+    {
+      error: permissionRefusalText(DATASETS_PERMISSION),
+      reason: 'permission',
+      permission: DATASETS_PERMISSION,
+    },
+    { status: 403 },
+  )
+}
 
 /**
  * Rows written per import transaction.
@@ -148,33 +164,29 @@ export const datasetsHandler: PluginWebApiHandler = async (request) => {
     }
     const membership = await resolveOrgMembership(decoded.uid, orgId)
     const member = membership?.member as any
-    if (!member || !WRITER_ROLES.has(String(member.role))) {
-      return Response.json({ error: 'Editing org data requires the editor role' }, { status: 403 })
-    }
+    if (!member) return datasetsPermissionRefusal()
     /*==========================================
-     * AND the granular permission (AGL-2444).
+     * "Manage data" (`data.manage`), and nothing about the role (AGL-2444,
+     * AGL-4047).
      *
      * `data.manage` had ZERO consumers: an owner could build a custom role
      * with "Manage data" unticked, assign it, and the member kept creating,
      * editing and deleting datasets — because this gate read the raw role,
      * exactly the defect AGL-2350 fixed one route over on `hosts.create`.
      *
-     * Identical for the built-in roles — `data.manage` is on for owner,
-     * admin and editor, which is `WRITER_ROLES` — so nobody's access moves.
-     * What it adds is that a custom role or a per-member override is now
-     * honoured, which is the narrowing the docs sell.
-     *
-     * The role check is kept ALONGSIDE it rather than replaced. It mirrors
-     * the rules' `canWriteOrgData()`, and a route that disagreed with the
-     * rules would let one door open while the other stayed shut.
+     * It then sat BESIDE a role gate (owner, admin or editor), so the key
+     * could narrow but never widen: a viewer granted it was still refused.
+     * The key's default is exactly those three roles, so with no custom role
+     * or override deciding it nobody's access moves; a grant now opens the
+     * route as it opens the rules' `canWriteOrgDatasets()`, and a refusal
+     * names the permission. Staff keep their bypass, as the rules' `isStaff()`
+     * does, and still need a membership.
      *=========================================*/
     if (
       decoded['staff'] !== true &&
-      !(await memberHasOrgPermission(orgId, member, 'data.manage'))
+      !(await memberHasOrgPermission(orgId, member, DATASETS_PERMISSION))
     ) {
-      return Response.json({
-        error: 'Your organization role does not allow editing organization data',
-      }, { status: 403 })
+      return datasetsPermissionRefusal()
     }
 
     // Release gate (AGL-1653). `<FeatureGate flag="release_data_store">` on
@@ -370,8 +382,8 @@ export const datasetsHandler: PluginWebApiHandler = async (request) => {
       /**
        * The caller has to be able to SEE the dataset they add rows to.
        *
-       * The role and `data.manage` gates above are about the org, and a member
-       * scoped to one site passes both. The rules hold every record update and
+       * The `data.manage` gate above is about the org, and a member scoped
+       * to one site can pass it. The rules hold every record update and
        * delete to the parent dataset being visible (`parentDatasetVisible()`),
        * and refuse client record creates outright, so this route is the one
        * place a member's create can be held to the same condition. Without it,
@@ -510,7 +522,7 @@ export const datasetsHandler: PluginWebApiHandler = async (request) => {
        * Firestore — it consumes no quota — with the values coerced, filled
        * and validated against the model and the integrity and filter index
        * moved with them; the native apps reach the same write here, under
-       * the same role, `data.manage` and visibility gates as a create.
+       * the same `data.manage` and visibility gates as a create.
        * `values` is replaced whole, so a removed field's value strips here,
        * as it does on the card (the AGL-178 policy).
        */

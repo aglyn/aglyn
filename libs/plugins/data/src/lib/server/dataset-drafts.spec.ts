@@ -23,8 +23,9 @@
  *  - THE DOCUMENT is the Data card's: a typed model, the org's Default
  *    sharing, and the seeded records held to the model, each addressed where
  *    a record page wants one.
- *  - THE REFUSAL is the datasets route's: role, `data.manage`, the release
- *    flag, the plan, the dataset allowance — counted inside the create.
+ *  - THE REFUSAL is the datasets route's: "Manage data" (`data.manage`) and
+ *    nothing about the role, the release flag, the plan, the dataset
+ *    allowance — counted inside the create.
  *  - THE WRITE is idempotent under its id.
  */
 
@@ -55,7 +56,6 @@ import {
   DATASET_DRAFT_RECORDS_MAX,
   DATASET_DRAFT_RELEASE_REFUSAL,
   DATASET_DRAFT_RESOURCE,
-  DATASET_DRAFT_ROLE_REFUSAL,
   DATASET_DRAFT_STORAGE_REFUSAL,
   readDatasetDraftContent,
   registerDatasetDraftWriter,
@@ -189,7 +189,7 @@ const records = () =>
 
 beforeEach(() => {
   store.clear()
-  member = { role: 'editor', canManageData: true, member: { role: 'editor' } }
+  member = { canManageData: true, member: { role: 'editor' } }
   released = true
   storageFull = false
   resetPluginServicesForTests()
@@ -381,18 +381,30 @@ describe('the dataset writer', () => {
     expect(records()).toHaveLength(3)
   })
 
-  it('refuses as the datasets route does: role, permission, flag, plan', async () => {
-    member = { role: 'viewer', canManageData: false, member: { role: 'viewer' } }
-    expect(await writer.write(request())).toEqual({ ok: false, status: 403, error: DATASET_DRAFT_ROLE_REFUSAL })
-    member = { role: 'editor', canManageData: false, member: { role: 'editor' } }
+  it('refuses as the datasets route does: permission, flag, plan', async () => {
+    member = null
+    expect(await writer.write(request())).toEqual({ ok: false, status: 403, error: DATASET_DRAFT_PERMISSION_REFUSAL })
+    member = { canManageData: false, member: { role: 'viewer' } }
+    expect(await writer.write(request())).toEqual({ ok: false, status: 403, error: DATASET_DRAFT_PERMISSION_REFUSAL })
+    // An editor whose "Manage data" a custom role or an override took away.
+    member = { canManageData: false, member: { role: 'editor' } }
     expect(await writer.refusal(request())).toEqual({ status: 403, error: DATASET_DRAFT_PERMISSION_REFUSAL })
-    member = { role: 'editor', canManageData: true, member: { role: 'editor' } }
+    // The refusal names the permission, never a role (AGL-4047).
+    expect(DATASET_DRAFT_PERMISSION_REFUSAL).toBe('Your role does not include "Manage data" — ask an organization admin')
+    member = { canManageData: true, member: { role: 'editor' } }
     released = false
     expect(await writer.refusal(request())).toEqual({ status: 403, error: DATASET_DRAFT_RELEASE_REFUSAL })
     released = true
     expect(await writer.refusal(request({ org: FREE }))).toEqual({ status: 403, error: DATASET_DRAFT_PLAN_REFUSAL })
     expect(await writer.refusal(request({ hostId: 'host-2' }))).toEqual({ status: 404, error: 'Unknown site' })
     expect(store.size).toBe(0)
+  })
+
+  it('writes for a viewer granted "Manage data": the key decides, not the role (AGL-4047)', async () => {
+    member = { canManageData: true, member: { role: 'viewer' } }
+    expect(await writer.refusal(request())).toBeNull()
+    expect(await writer.write(request())).toMatchObject({ ok: true, id: 'job-1-d0' })
+    expect(records()).toHaveLength(3)
   })
 
   it('meets the dataset allowance inside the create: Starter holds two', async () => {
@@ -516,13 +528,13 @@ describe('the dataset writer changes a seeded record’s photo (AGL-3988)', () =
 
   it('refuses as its write does, and answers a dataset that is gone', async () => {
     await seeded()
-    member = { role: 'viewer', canManageData: false, member: { role: 'viewer' } }
+    member = { canManageData: false, member: { role: 'viewer' } }
     expect(await revise([{ order: 0, values: { image: '/api/media/cdn/host-1/couple01' } }])).toEqual({
       ok: false,
       status: 403,
-      error: DATASET_DRAFT_ROLE_REFUSAL,
+      error: DATASET_DRAFT_PERMISSION_REFUSAL,
     })
-    member = { role: 'editor', canManageData: true, member: { role: 'editor' } }
+    member = { canManageData: true, member: { role: 'editor' } }
     expect(await revise([{ order: 0, values: { image: '/api/media/cdn/host-1/couple01' } }], { id: 'job-1-gone' })).toMatchObject({
       ok: false,
       status: 404,

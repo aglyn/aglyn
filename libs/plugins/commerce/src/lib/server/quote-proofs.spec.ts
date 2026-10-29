@@ -40,6 +40,16 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 
 const docs = new Map<string, Record<string, any>>()
 
+/** A merge-set as Firestore applies it: nested maps merge key by key. */
+function merged(base: Record<string, any> | undefined, patch: Record<string, any>): Record<string, any> {
+  const next: Record<string, any> = { ...(base ?? {}) }
+  for (const [key, value] of Object.entries(patch)) {
+    const plain = (entry: unknown) => !!entry && typeof entry === 'object' && !Array.isArray(entry)
+    next[key] = plain(value) && plain(next[key]) ? merged(next[key], value) : value
+  }
+  return next
+}
+
 function snapshotOf(path: string) {
   const data = docs.get(path)
   return {
@@ -56,7 +66,7 @@ function docRef(path: string): any {
     path,
     get: async () => snapshotOf(path),
     set: async (value: Record<string, any>, options?: { merge?: boolean }) => {
-      docs.set(path, options?.merge ? { ...(docs.get(path) ?? {}), ...value } : JSON.parse(JSON.stringify(value)))
+      docs.set(path, options?.merge ? merged(docs.get(path), value) : JSON.parse(JSON.stringify(value)))
     },
     create: async (value: Record<string, any>) => {
       if (docs.has(path)) throw Object.assign(new Error('ALREADY_EXISTS'), { code: 6 })
@@ -69,8 +79,18 @@ function docRef(path: string): any {
   }
 }
 
+/** Collections the routes listed, in order. */
+const listedCollections: string[] = []
+
 function collectionRef(path: string): any {
-  return { doc: (id: string) => docRef(`${path}/${id}`) }
+  return {
+    doc: (id: string) => docRef(`${path}/${id}`),
+    get: async () => {
+      listedCollections.push(path)
+      const children = [...docs.keys()].filter((key) => key.startsWith(`${path}/`) && !key.slice(path.length + 1).includes('/'))
+      return { docs: children.map((key) => snapshotOf(key)) }
+    },
+  }
 }
 
 const firestore: any = {
@@ -79,6 +99,7 @@ const firestore: any = {
     fn({
       get: (ref: any) => ref.get(),
       set: (ref: any, value: any, options?: any) => void ref.set(value, options),
+      delete: (ref: any) => void ref.delete(),
     }),
 }
 
@@ -129,6 +150,8 @@ const deps: QuoteProofDeps = {
 }
 
 const QUOTE_PATH = 'hosts/site1/orders/q-1'
+const PENDING_PATH = `${QUOTE_PATH}/quoteUploadKeys/q-1`
+const DAY_MS = 24 * 60 * 60 * 1000
 const PROOF = {
   id: 'p1',
   revision: 1,
@@ -191,6 +214,7 @@ beforeEach(() => {
   docs.set('hosts/site1/settings/store', { currency: 'USD' })
   storeQuote()
   rateAllowed = true
+  listedCollections.length = 0
   limited.length = 0
   notified.length = 0
   minted.length = 0
@@ -211,16 +235,82 @@ describe('GET commerce/quote-proof', () => {
       file: { path: PROOF.path, name: 'banner.png', contentType: 'image/png' },
     })
     expect(limited).toEqual(['commerce-quote-proof:site1:203.0.113.9'])
+    // The current revision has it, so no earlier revision is read.
+    expect(listedCollections).toEqual([])
   })
 
-  it('answers a wrong token as a missing quote, a replaced link as replaced, and an earlier revision’s proof as gone', async () => {
-    expect((await handleQuoteProof(deps, get({ hostId: 'site1', q: 'q-1', t: '1.0000', file: 'p1' }))).status).toBe(404)
-    storeQuote({ linkVersion: 2 })
-    expect((await handleQuoteProof(deps, get({ hostId: 'site1', q: 'q-1', t: token(1), file: 'p1' }))).status).toBe(410)
-    storeQuote({ revision: 2 })
-    const gone = await handleQuoteProof(deps, get({ hostId: 'site1', q: 'q-1', t: token(), file: 'p1' }))
-    expect(gone.status).toBe(404)
-    expect(gone.file).toBeUndefined()
+  /** Revision 3 is current on link version 2; revision 1's proof is kept in its snapshot (AGL-4097). */
+  const PROOF_R3 = { ...PROOF, id: 'p3', revision: 3, name: 'banner-v3.png', path: 'hosts/site1/private/uploads/quote-proof/q-1/p3' }
+  function storeLaterRevision() {
+    storeQuote({ revision: 3, linkVersion: 2, proofs: [PROOF_R3] })
+    docs.set(`${QUOTE_PATH}/revisions/1`, { revision: 1, proofs: [PROOF], responses: [], approval: null })
+    docs.set(`${QUOTE_PATH}/revisions/2`, { revision: 2, proofs: [], responses: [], approval: null })
+  }
+
+  it('keeps serving an earlier email’s proof after a new revision and a replaced link', async () => {
+    storeLaterRevision()
+    // The first email's link (version 1) and its revision 1 proof.
+    const earlier = await handleQuoteProof(deps, get({ hostId: 'site1', q: 'q-1', t: token(1), file: 'p1' }))
+    expect(earlier).toEqual({ status: 200, body: {}, file: { path: PROOF.path, name: 'banner.png', contentType: 'image/png' } })
+    expect(listedCollections).toEqual([`${QUOTE_PATH}/revisions`])
+    // The same old link reaches the current revision's proof, and the new link the earlier one.
+    expect((await handleQuoteProof(deps, get({ hostId: 'site1', q: 'q-1', t: token(1), file: 'p3' }))).file?.path).toBe(PROOF_R3.path)
+    expect((await handleQuoteProof(deps, get({ hostId: 'site1', q: 'q-1', t: token(2), file: 'p1' }))).file?.path).toBe(PROOF.path)
+  })
+
+  it('answers a proof the business took off its revision as gone', async () => {
+    // Revision 1's only proof, removed before anyone answered.
+    storeQuote({ proofs: [] })
+    const removed = await handleQuoteProof(deps, get({ hostId: 'site1', q: 'q-1', t: token(), file: 'p1' }))
+    expect(removed).toEqual({ status: 404, body: { error: 'That proof is no longer on this quote.' } })
+    // p2 went on revision 3 and was removed: on neither the quote nor a snapshot, through any link.
+    storeLaterRevision()
+    for (const t of [token(1), token(2)]) {
+      const gone = await handleQuoteProof(deps, get({ hostId: 'site1', q: 'q-1', t, file: 'p2' }))
+      expect(gone.status).toBe(404)
+      expect(gone.file).toBeUndefined()
+    }
+  })
+
+  it('answers a forged token, a token for a version never sent and an invoice’s link as a missing quote', async () => {
+    storeLaterRevision()
+    const forged = [
+      '1.0000',
+      `1.${'0'.repeat(32)}`,
+      String(mintQuoteLinkToken('site1', 'q-2', 1)),
+      String(mintQuoteLinkToken('site2', 'q-1', 1)),
+      token(3),
+    ]
+    for (const t of forged) {
+      const outcome = await handleQuoteProof(deps, get({ hostId: 'site1', q: 'q-1', t, file: 'p1' }))
+      expect(outcome.status).toBe(404)
+      expect(outcome.file).toBeUndefined()
+    }
+    docs.set(QUOTE_PATH, { number: 1042, status: 'pending', channel: 'draft', lineItems: [], timeline: [], payLink: { version: 1 } })
+    expect((await handleQuoteProof(deps, get({ hostId: 'site1', q: 'q-1', t: token(1), file: 'p1' }))).status).toBe(404)
+    expect(listedCollections).toEqual([])
+  })
+
+  it('never serves another quote’s file through this quote’s link', async () => {
+    storeLaterRevision()
+    // Another quote's proof, named by its id: not in this quote's history.
+    docs.set('hosts/site1/orders/q-2/revisions/1', { revision: 1, proofs: [{ ...PROOF, id: 'other', path: 'hosts/site1/private/uploads/quote-proof/q-2/other' }] })
+    expect((await handleQuoteProof(deps, get({ hostId: 'site1', q: 'q-1', t: token(1), file: 'other' }))).status).toBe(404)
+    // A snapshot naming a file outside this quote's proofs is never streamed.
+    docs.set(`${QUOTE_PATH}/revisions/2`, {
+      revision: 2,
+      proofs: [{ ...PROOF, id: 'stray', path: 'hosts/site1/private/uploads/quote-artwork/q-1/stray' }],
+    })
+    const stray = await handleQuoteProof(deps, get({ hostId: 'site1', q: 'q-1', t: token(1), file: 'stray' }))
+    expect(stray.status).toBe(404)
+    expect(stray.file).toBeUndefined()
+  })
+
+  it('leaves pay, answers and uploads on the current link version', async () => {
+    storeLaterRevision()
+    expect((await handleQuoteUpload(deps, post({ action: 'ticket', file: {}, t: token(1) }))).status).toBe(410)
+    expect((await handleQuoteRespond(deps, post({ action: 'approve', name: 'Jordan Lee', v: 2_000, t: token(1) }))).status).toBe(410)
+    expect(minted).toEqual([])
   })
 
   it('is rate-limited before the token is looked at', async () => {
@@ -260,6 +350,16 @@ describe('POST commerce/quote-upload', () => {
     ])
   })
 
+  it('records each file as pending under its quote from its ticket on, swept a day after the latest', async () => {
+    docs.set(PENDING_PATH, { hostId: 'site1', quoteId: 'q-1', files: { b2: 4_000 }, sweepAtMs: 4_000 + DAY_MS })
+    expect((await handleQuoteUpload(deps, post({ action: 'ticket', file: { name: 'logo.ai', contentType: '', size: 900 } }))).status).toBe(200)
+    expect(docs.get(PENDING_PATH)).toEqual({ hostId: 'site1', quoteId: 'q-1', files: { b2: 4_000, a1: 10_000 }, sweepAtMs: 10_000 + DAY_MS })
+    docs.delete(PENDING_PATH)
+    // A finalize records it again, so a file kept with no ticket record is still swept.
+    expect((await handleQuoteUpload(deps, post({ action: 'finalize', ticket: 'ticket-1' }))).status).toBe(200)
+    expect(docs.get(PENDING_PATH)).toEqual({ hostId: 'site1', quoteId: 'q-1', files: { a1: 10_000 }, sweepAtMs: 10_000 + DAY_MS })
+  })
+
   it('takes no files for a paid quote, a replaced link or a wrong token', async () => {
     storeQuote({}, { status: 'paid' })
     expect((await handleQuoteUpload(deps, post({ action: 'ticket', file: {} }))).status).toBe(409)
@@ -268,6 +368,7 @@ describe('POST commerce/quote-upload', () => {
     storeQuote()
     expect((await handleQuoteUpload(deps, post({ action: 'ticket', file: {}, t: '1.bad' }))).status).toBe(404)
     expect(minted).toEqual([])
+    expect(docs.has(PENDING_PATH)).toBe(false)
   })
 
   it('pretends to a bot that filled the honeypot, and signs nothing', async () => {
@@ -290,20 +391,36 @@ describe('POST commerce/quote-respond', () => {
     })
     // The open session is the customer's to use: an answer is not an edit.
     expect(docs.get(QUOTE_PATH)?.['checkoutSessionId']).toBe('cs_open')
+    // Order work for the managers' order switches, but it reads as the quote
+    // it is (AGL-4096): its own label where "New order" would show, the
+    // customer and the quote as its heading, and a button that opens the quote.
     expect(notified).toEqual([
       [
         'site1',
         expect.objectContaining({
           type: 'content.order',
-          title: 'Proof approved — Quote #1042 on {site}',
+          level: 'success',
+          label: 'Proof approved',
+          actionLabel: 'View quote',
+          title: 'Jordan Lee approved the proof for Quote #1042 on {site}',
           link: '/site1/products/orders?quote=q-1',
         }),
         expect.objectContaining({
           replyTo: 'jordan@example.com',
-          emailDetails: expect.arrayContaining([{ label: 'Approved as', value: 'Jordan Lee' }]),
+          emailDetails: expect.arrayContaining([
+            { label: 'Quote', value: 'Quote #1042' },
+            { label: 'Total', value: '$400.00' },
+            { label: 'Approved as', value: 'Jordan Lee' },
+          ]),
         }),
       ],
     ])
+    const notice = notified[0][1]
+    expect(notice.body).toBe(
+      'Revision 1 is approved. The quote becomes an order when they pay. ' +
+        'The approval, with the name, time and address it was given from, is on the quote.',
+    )
+    expect(`${notice.title} ${notice.body} ${notice.label}`).not.toMatch(/new order/i)
   })
 
   it('records a change request with the artwork read back from this quote, by id', async () => {
@@ -323,13 +440,46 @@ describe('POST commerce/quote-respond', () => {
         userAgent: 'Spec Browser',
       },
     ])
-    expect(notified[0][1]).toMatchObject({ title: 'Changes requested — Quote #1042 on {site}' })
+    expect(notified[0][1]).toMatchObject({
+      type: 'content.order',
+      level: 'info',
+      label: 'Changes requested',
+      actionLabel: 'View quote',
+      title: 'Jordan Lee asked for changes to Quote #1042 on {site}',
+      body:
+        'What they want changed on revision 1, and the 1 file they sent, are on the quote. ' +
+        'Read them, then start revision 2 with new proofs and send it.',
+    })
     expect(notified[0][2]?.emailDetails).toEqual(
       expect.arrayContaining([
         { label: 'What to change', value: 'Bigger logo' },
         { label: 'Files sent', value: 'logo.ai' },
       ]),
     )
+  })
+
+  it('keeps the files it sends: they leave the pending record, and a record left with none goes', async () => {
+    const file = (id: string) => ({ id, name: `${id}.ai`, contentType: 'application/illustrator', size: 900, path: `hosts/site1/private/uploads/quote-artwork/q-1/${id}`, uploadedAtMs: 9 })
+    kept.set('a1', file('a1'))
+    kept.set('b2', file('b2'))
+    docs.set(PENDING_PATH, { hostId: 'site1', quoteId: 'q-1', files: { a1: 9_000, b2: 9_500, c3: 9_600 }, sweepAtMs: 9_600 + DAY_MS })
+    expect((await handleQuoteRespond(deps, post({ v: 2_000, action: 'changes', comment: 'Bigger logo', fileIds: ['a1', 'b2'] }, 'k1'))).status).toBe(200)
+    // The file attached and left out of the answer is still pending.
+    expect(docs.get(PENDING_PATH)).toEqual({ hostId: 'site1', quoteId: 'q-1', files: { c3: 9_600 }, sweepAtMs: 9_600 + DAY_MS })
+
+    storeQuote()
+    kept.set('c3', file('c3'))
+    expect((await handleQuoteRespond(deps, post({ v: 2_000, action: 'changes', comment: 'And this', fileIds: ['c3'] }, 'k2'))).status).toBe(200)
+    expect(docs.has(PENDING_PATH)).toBe(false)
+  })
+
+  it('leaves the pending files alone for an approval, and for an answer that is refused', async () => {
+    const pending = { hostId: 'site1', quoteId: 'q-1', files: { a1: 9_000 }, sweepAtMs: 9_000 + DAY_MS }
+    docs.set(PENDING_PATH, pending)
+    kept.set('a1', { id: 'a1', name: 'logo.ai', contentType: 'application/illustrator', size: 900, path: 'hosts/site1/private/uploads/quote-artwork/q-1/a1', uploadedAtMs: 9 })
+    expect((await handleQuoteRespond(deps, post({ v: 1_000, action: 'changes', comment: 'x', fileIds: ['a1'] }, 'k1'))).status).toBe(409)
+    expect((await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee' }, 'k2'))).status).toBe(200)
+    expect(docs.get(PENDING_PATH)).toEqual(pending)
   })
 
   it('refuses a file id that is not this quote’s artwork', async () => {
@@ -390,6 +540,6 @@ describe('POST commerce/quote-respond', () => {
     storeQuote({ requireProofApproval: true })
     const outcome = await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee' }))
     expect(outcome.body['view']).toMatchObject({ approvalRequired: false, payable: true })
-    expect(notified[0][1].body).toContain('They can pay the quote now.')
+    expect(notified[0][1].body).toContain('Revision 1 is approved, so they can pay the quote now.')
   })
 })

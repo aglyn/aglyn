@@ -116,8 +116,10 @@ export function quotePayLinkUrl(
  * The absolute address of one of the current revision's proofs, behind the
  * same signed link as the page (`GET /api/commerce/quote-proof`, AGL-4096),
  * or null when the site has no public address or no signing secret. What the
- * quote email draws a proof image from (AGL-4097); a link the business
- * replaces stops serving it, with the page.
+ * quote email draws a proof image from (AGL-4097). The email is a record the
+ * customer keeps, so the image keeps showing after the business starts the
+ * next revision or replaces the link (the page itself then says it was
+ * updated); it stops only if the business takes that proof off its revision.
  */
 export function quoteProofLinkUrl(
   host: { cname?: unknown; subdomain?: unknown } | null | undefined,

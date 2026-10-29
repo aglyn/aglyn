@@ -32,12 +32,18 @@ import {
   visitorUploadIsInline,
   visitorUploadPendingPath,
   visitorUploadTypeOf,
+  VISITOR_UPLOAD_COUNTER_BYTES,
+  VISITOR_UPLOAD_COUNTER_FILES,
   VISITOR_UPLOAD_MAX_BYTES,
   VISITOR_UPLOAD_TICKET_TTL_MS,
   type VisitorUploadFile,
   type VisitorUploadKind,
   type VisitorUploadScope,
 } from '@aglyn/aglyn/app-utils/visitor-upload'
+import {
+  uploadStorageGate,
+  type UploadStorageRefusal,
+} from '@aglyn/aglyn/plugin-manager/plugin-upload-storage-gate'
 import firebaseAdmin from './firebase-admin'
 import { featureLockdownRefusal } from './lockdown'
 import { consumeRateLimit } from './rate-limit-store'
@@ -91,6 +97,33 @@ import { consumeRateLimit } from './rate-limit-store'
  * platform's uploads pause (`uploads` lockdown feature) refuses new tickets,
  * and the plugin route sits behind the site dispatcher's cross-origin check,
  * lockdown and visitor-write limit.
+ *
+ * STORAGE. A kept file counts toward the workspace's storage exactly as a
+ * media library file does: finalize adds its bytes to the site's storage
+ * counter (`hosts/{hostId}/counters/media`, `bytes` plus the
+ * `uploadBytes`/`uploadCount` share, see `VISITOR_UPLOAD_COUNTER_BYTES`),
+ * the figure the storage band, the Billing meter, the usage alerts and the
+ * invoice read. Deleting a kept file takes its bytes off again. A file that
+ * was counted carries `storageCounted` in its metadata, so a file kept before
+ * files were counted releases nothing it never added, and only the delete
+ * that actually removed the object releases its bytes.
+ *
+ * Who is refused for storage:
+ *
+ * - A MEMBER's file (a quote's proof, `caller: { uid }`) meets the same band
+ *   a library upload does, through `core.upload-storage-gate`: refused past
+ *   the allowance on a plan that does not bill storage, taken and billed past
+ *   it on one that does, refused past a storage cap the workspace set.
+ * - A VISITOR's file (`caller: { ip }`: a customer's artwork on a quote, a
+ *   form's file) is NEVER refused for the business's storage. The customer
+ *   cannot free space or upgrade the plan, and a request or an approval lost
+ *   to the business's storage is a lost customer. The file is kept and
+ *   counted all the same, so past the allowance a plan that bills storage
+ *   bills it, a plan that does not stops the business's own uploads until
+ *   space is freed, and the usage alerts tell the owner either way. What
+ *   bounds a visitor is what bounded one before: the size and file limits,
+ *   the rate limits, the uploads pause, and for a form the plan's submission
+ *   allowance.
  *=========================================*/
 
 /** The few Storage calls this makes, so a spec can stand in for the bucket. */
@@ -116,9 +149,23 @@ export interface VisitorUploadObjectMetadata {
   metadata?: Record<string, string | null | undefined> | null
 }
 
+/** An object as a listing answers it: its name, its metadata, and a way to delete it. */
+export interface VisitorUploadListedObject {
+  name: string
+  metadata?: VisitorUploadObjectMetadata | null
+  delete(options?: { ignoreNotFound?: boolean }): Promise<unknown>
+}
+
 export interface VisitorUploadBucket {
   file(path: string): VisitorUploadObject
-  deleteFiles(options: { prefix: string }): Promise<unknown>
+  /** Every object under a prefix, with its metadata (Storage answers `[files, nextQuery, response]`). */
+  getFiles(options: { prefix: string }): Promise<[VisitorUploadListedObject[], ...unknown[]]>
+}
+
+/** How a kept file moves its site's storage counter: `+` when kept, `-` when deleted. */
+export interface VisitorUploadStorageDelta {
+  bytes: number
+  files: number
 }
 
 export interface VisitorUploadDeps {
@@ -131,6 +178,17 @@ export interface VisitorUploadDeps {
   now(): number
   /** A fresh upload id: a path segment no one can guess. */
   newId(): string
+  /**
+   * Moves the site's storage counter (`hosts/{hostId}/counters/media`) by a
+   * kept file: its bytes in `bytes`, the figure every storage reader reads,
+   * and in the kept files' own share beside it.
+   */
+  countStorage(hostId: string, delta: VisitorUploadStorageDelta): Promise<void>
+  /**
+   * The workspace's storage band, asked before a MEMBER's file is taken:
+   * `null` to take it. Never asked for a visitor's. Absent, the file is taken.
+   */
+  storageGate?(input: { hostId: string; bytes: number }): Promise<UploadStorageRefusal | null>
 }
 
 export function defaultVisitorUploadDeps(): VisitorUploadDeps {
@@ -151,6 +209,27 @@ export function defaultVisitorUploadDeps(): VisitorUploadDeps {
     },
     now: () => Date.now(),
     newId: () => randomBytes(12).toString('hex'),
+    countStorage: async (hostId, delta) => {
+      const increment = firebaseAdmin.firestore.FieldValue.increment
+      await firebaseAdmin
+        .app()
+        .firestore()
+        .collection('hosts')
+        .doc(hostId)
+        .collection('counters')
+        .doc('media')
+        .set(
+          {
+            bytes: increment(delta.bytes),
+            [VISITOR_UPLOAD_COUNTER_BYTES]: increment(delta.bytes),
+            [VISITOR_UPLOAD_COUNTER_FILES]: increment(delta.files),
+          },
+          { merge: true },
+        )
+    },
+    // The console registers the band (`core.upload-storage-gate`); the site
+    // app registers none and never takes a member's file.
+    storageGate: async (input) => (await uploadStorageGate()?.check(input)) ?? null,
   }
 }
 
@@ -188,7 +267,18 @@ export type VisitorUploadRefusal = {
   ok: false
   status: number
   error: string
-  code: 'type' | 'size' | 'empty' | 'scope' | 'rate' | 'paused' | 'ticket' | 'missing' | 'inspection' | 'unchecked'
+  code:
+    | 'type'
+    | 'size'
+    | 'empty'
+    | 'scope'
+    | 'rate'
+    | 'paused'
+    | 'storage'
+    | 'ticket'
+    | 'missing'
+    | 'inspection'
+    | 'unchecked'
   retryAfterSeconds?: number
 }
 
@@ -269,9 +359,10 @@ export interface VisitorUploadTicket {
 /**
  * A ticket and a signed upload for ONE file, after the caller's route has
  * decided the caller may upload for `scope`. Spends the rate limits; refused
- * while the platform's uploads are paused. `maxBytes` narrows the 25 MB
- * ceiling, never widens it; `kinds` narrows the types taken (a form field
- * that asks for PDFs only), never widens them.
+ * while the platform's uploads are paused, and a member's file when the
+ * workspace's storage band refuses it (never a visitor's). `maxBytes`
+ * narrows the 25 MB ceiling, never widens it; `kinds` narrows the types
+ * taken (a form field that asks for PDFs only), never widens them.
  */
 export async function mintVisitorUploadTicket(
   deps: VisitorUploadDeps,
@@ -290,6 +381,12 @@ export async function mintVisitorUploadTicket(
   if ('error' in checked) return refusal(checked.code === 'size' ? 413 : 400, checked.code, checked.error)
   if (await deps.uploadsPaused()) {
     return refusal(423, 'paused', 'Uploads are paused for a moment. Try again a little later.')
+  }
+  // A member's file meets the storage band a library upload meets; a
+  // visitor's is never refused for the business's storage (see STORAGE).
+  if ('uid' in input.caller && deps.storageGate) {
+    const full = await deps.storageGate({ hostId: scope.hostId, bytes: checked.upload.size })
+    if (full) return refusal(full.status, 'storage', full.error)
   }
   const limits = input.limits ?? VISITOR_UPLOAD_LIMITS
   for (const [key, rate] of [
@@ -341,6 +438,13 @@ export async function mintVisitorUploadTicket(
 
 const first = <T,>(answer: [T] | T[]): T => answer[0] as T
 
+/**
+ * The custom metadata key a kept file carries once its bytes are in its
+ * site's storage counter. A file kept before files were counted has none, so
+ * deleting it releases nothing it never added.
+ */
+const STORAGE_COUNTED = 'storageCounted'
+
 /** The custom metadata a kept file carries, which is how its record is read back. */
 function keptMetadata(name: string, uploadedAtMs: number): Record<string, string | null> {
   return {
@@ -348,6 +452,27 @@ function keptMetadata(name: string, uploadedAtMs: number): Record<string, string
     uploadedAtMs: String(uploadedAtMs),
     // Never a download token: nothing but the Admin SDK reads the object.
     firebaseStorageDownloadTokens: null,
+    [STORAGE_COUNTED]: '1',
+  }
+}
+
+/**
+ * Adds a file just kept to its site's storage. Never the uploader's problem:
+ * the file stays kept whatever the counter does, and if the counter could
+ * not be moved the file's mark comes off, so deleting it later releases
+ * nothing it never added.
+ */
+async function countKept(
+  deps: Pick<VisitorUploadDeps, 'countStorage'>,
+  hostId: string,
+  size: number,
+  kept: VisitorUploadObject,
+): Promise<void> {
+  try {
+    await deps.countStorage(hostId, { bytes: size, files: 1 })
+  } catch (error) {
+    console.error('a kept upload was not counted toward storage', { hostId, error })
+    await kept.setMetadata({ metadata: { [STORAGE_COUNTED]: null } }).catch(() => undefined)
   }
 }
 
@@ -455,6 +580,7 @@ export async function finalizeVisitorUpload(
       },
     })
     await pending.delete({ ignoreNotFound: true }).catch(() => undefined)
+    await countKept(deps, scope.hostId, sanitized.buffer.length, kept)
     return {
       ok: true,
       file: { id: ticket.u, name: ticket.n, contentType, size: sanitized.buffer.length, path: finalPath, uploadedAtMs },
@@ -466,6 +592,7 @@ export async function finalizeVisitorUpload(
     contentDisposition: disposition,
     metadata: keptMetadata(ticket.n, uploadedAtMs),
   })
+  await countKept(deps, scope.hostId, size, kept)
   return { ok: true, file: { id: ticket.u, name: ticket.n, contentType, size, path: finalPath, uploadedAtMs } }
 }
 
@@ -486,16 +613,77 @@ export async function readVisitorUpload(
   return recordFromMetadata(path, id, first(await file.getMetadata()))
 }
 
-/** Deletes one kept file. Gone already is fine. */
-export async function deleteVisitorUpload(deps: Pick<VisitorUploadDeps, 'bucket'>, path: string): Promise<void> {
-  if (!path.startsWith('hosts/') || !path.includes('/private/uploads/')) return
-  await deps.bucket().file(path).delete({ ignoreNotFound: true })
+const isNotFound = (error: unknown): boolean =>
+  Number((error as { code?: unknown } | null)?.code) === 404
+
+/** Deletes one object; true only when this call is the one that removed it. */
+async function deleteObject(object: Pick<VisitorUploadObject, 'delete'>): Promise<boolean> {
+  try {
+    await object.delete()
+    return true
+  } catch (error) {
+    if (isNotFound(error)) return false
+    throw error
+  }
 }
 
-/** Deletes every kept file of one purpose and record. */
-export async function deleteVisitorUploads(deps: Pick<VisitorUploadDeps, 'bucket'>, scope: VisitorUploadScope): Promise<void> {
+/**
+ * Takes deleted files' bytes off their site's storage: the ones that were
+ * counted, by the size each was kept at. Never throws, so a counter that
+ * could not be moved never fails the delete it follows.
+ */
+async function releaseCounted(
+  deps: Pick<VisitorUploadDeps, 'countStorage'>,
+  hostId: string,
+  deleted: ReadonlyArray<VisitorUploadObjectMetadata | null | undefined>,
+): Promise<void> {
+  let bytes = 0
+  let files = 0
+  for (const metadata of deleted) {
+    if (metadata?.metadata?.[STORAGE_COUNTED] !== '1') continue
+    const size = Number(metadata.size)
+    if (!Number.isSafeInteger(size) || size <= 0) continue
+    bytes += size
+    files += 1
+  }
+  if (!files) return
+  try {
+    await deps.countStorage(hostId, { bytes: -bytes, files: -files })
+  } catch (error) {
+    console.error('deleted uploads were not taken off storage', { hostId, bytes, files, error })
+  }
+}
+
+/** Deletes one kept file and releases its bytes. Gone already is fine. */
+export async function deleteVisitorUpload(
+  deps: Pick<VisitorUploadDeps, 'bucket' | 'countStorage'>,
+  path: string,
+): Promise<void> {
+  if (!path.startsWith('hosts/') || !path.includes('/private/uploads/')) return
+  const hostId = path.split('/')[1] ?? ''
+  if (!isVisitorUploadSegment(hostId)) return
+  const file = deps.bucket().file(path)
+  let metadata: VisitorUploadObjectMetadata
+  try {
+    metadata = first(await file.getMetadata())
+  } catch (error) {
+    if (isNotFound(error)) return
+    throw error
+  }
+  if (await deleteObject(file)) await releaseCounted(deps, hostId, [metadata])
+}
+
+/** Deletes every kept file of one purpose and record, and releases their bytes. */
+export async function deleteVisitorUploads(
+  deps: Pick<VisitorUploadDeps, 'bucket' | 'countStorage'>,
+  scope: VisitorUploadScope,
+): Promise<void> {
   if (!isVisitorUploadScope(scope)) return
-  await deps.bucket().deleteFiles({ prefix: visitorUploadFolder(scope) })
+  const [listed = []] = await deps.bucket().getFiles({ prefix: visitorUploadFolder(scope) })
+  const deleted = await Promise.all(
+    listed.map(async (object) => ((await deleteObject(object)) ? object.metadata : null)),
+  )
+  await releaseCounted(deps, scope.hostId, deleted)
 }
 
 /** An ASCII stand-in for a header, and the real name encoded beside it. */

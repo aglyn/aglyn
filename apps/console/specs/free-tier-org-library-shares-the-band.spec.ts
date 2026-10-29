@@ -56,6 +56,8 @@ import { resolveOrgMediaBand } from '../utils/server/media-storage-band'
 const MB = 1024 * 1024
 
 let counters: Record<string, number> = {}
+/** Each counter's share that is kept quote and form files (AGL-4096). */
+let uploadCounters: Record<string, number> = {}
 let legacyHosts: string[] = []
 let getAllCalls = 0
 let queryCalls = 0
@@ -82,7 +84,11 @@ function fakeFirestore(): any {
       getAllCalls += 1
       return refs.map((ref) => ({
         get: (field: string) =>
-          field === 'bytes' ? counters[ref.path] : undefined,
+          field === 'bytes'
+            ? counters[ref.path]
+            : field === 'uploadBytes'
+              ? uploadCounters[ref.path]
+              : undefined,
       }))
     },
   }
@@ -117,6 +123,7 @@ async function ingressVerdict(options: {
 
 beforeEach(() => {
   counters = {}
+  uploadCounters = {}
   legacyHosts = []
   getAllCalls = 0
   queryCalls = 0
@@ -314,8 +321,10 @@ describe('every ingress door measures the pool (AGL-2075)', () => {
     // `utils/api-v1-resources.ts`, and `/api/media/metadata`, whose write
     // rewrites a file's own details and so changes its size (AGL-3331), and
     // the server's media door, `utils/server/media-ingest.ts`, which keeps a
-    // stock photo in a site's library (AGL-3660): eight.
-    expect(callSites.length).toBe(8)
+    // stock photo in a site's library (AGL-3660), and the upload storage gate,
+    // `utils/server/upload-storage-gate.ts`, which a quote's proof meets
+    // before it is kept outside the library (AGL-4096): nine.
+    expect(callSites.length).toBe(9)
     for (const site of callSites) {
       expect(site).toContain('allowanceMb')
     }
@@ -338,6 +347,30 @@ describe('the band says which library holds what (AGL-3470)', () => {
     const parts = Object.values(pool.byScope).reduce((sum, bytes) => sum + bytes, 0)
     expect(parts).toBe(pool.usedBytes)
     expect(getAllCalls).toBe(1)
+  })
+
+  it('counts a site’s kept quote and form files in the pool, apart from its library (AGL-4096)', async () => {
+    // 3 MB in host-1's counter, 1 MB of it proofs and customers' files.
+    counters['hosts/host-1/counters/media'] = 3 * MB
+    uploadCounters['hosts/host-1/counters/media'] = 1 * MB
+    counters['orgs/org-1/counters/media'] = 2 * MB
+    const pool = await band(freeOrg())
+    expect(pool.usedBytes).toBe(5 * MB)
+    expect(pool.byScope).toEqual({
+      'hosts/host-1': 2 * MB,
+      'hosts/host-1/uploads': 1 * MB,
+      'orgs/org-1': 2 * MB,
+    })
+    const parts = Object.values(pool.byScope).reduce((sum, bytes) => sum + bytes, 0)
+    expect(parts).toBe(pool.usedBytes)
+  })
+
+  it('refuses a library upload a site’s kept files leave no room for', async () => {
+    counters['hosts/host-1/counters/media'] = 250 * MB
+    uploadCounters['hosts/host-1/counters/media'] = 250 * MB
+    expect(
+      (await ingressVerdict({ org: freeOrg(), incomingBytes: 1, currentHostId: 'host-1' })).allowed,
+    ).toBe(false)
   })
 
   it('counts a corrupt counter as nothing in its share too', async () => {

@@ -25,6 +25,7 @@ import { registerPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site
 import { registerPluginSiteEraser } from '@aglyn/aglyn/plugin-manager/plugin-site-erase'
 import { registerPluginTrustSigner } from '@aglyn/aglyn/plugin-manager/plugin-trust-signing'
 import { registerPluginMediaIngest } from '@aglyn/aglyn/plugin-manager/plugin-media-ingest'
+import { registerUploadStorageGate } from '@aglyn/aglyn/plugin-manager/plugin-upload-storage-gate'
 import { registerPurchaseGatePreclearance } from '@aglyn/aglyn/plugin-manager/purchase-gate-preclearance'
 
 /**
@@ -183,6 +184,22 @@ export async function register(): Promise<void> {
       findImportedPhoto: async (input) => {
         const { consoleMediaIngest } = await import('./utils/server/media-ingest')
         return await consoleMediaIngest.findImportedPhoto(input)
+      },
+    },
+    { pluginId: 'console' },
+  )
+
+  /*
+   * And the storage band for a member's file kept outside the media library
+   * (AGL-4096): a quote's proof meets the band a library upload meets. This
+   * app holds the band, so it registers the one implementation; deferred by
+   * RELATIVE path for the reason the cache above is.
+   */
+  registerUploadStorageGate(
+    {
+      check: async (input) => {
+        const { consoleUploadStorageGate } = await import('./utils/server/upload-storage-gate')
+        return await consoleUploadStorageGate.check(input)
       },
     },
     { pluginId: 'console' },

@@ -892,8 +892,10 @@ export function BillingUsageComponent(props: BillingUsageProps) {
    * on the invoice yet — the route's `hardBand` for the org scope says so.
    */
   const storageCaption = [
-    'Every site’s media library and the organization library share this ' +
-      'one allowance.',
+    // Quote proofs and the files customers send with quotes and forms count
+    // toward the same allowance (AGL-4096).
+    'Every site’s media library, the organization library, and the proofs ' +
+      'and customer files on quotes and forms share this one allowance.',
     storageBand && storageBand.scopeBytes > 0
       ? `${formatMediaBytes(storageBand.scopeBytes)} of it is in the ` +
         'organization library.'
