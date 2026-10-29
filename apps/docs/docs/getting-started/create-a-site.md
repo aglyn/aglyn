@@ -37,7 +37,7 @@ settings. Everything you build lives under a site, and you can own several.
    site's address, **View your site** and **Edit your pages**. **Back** returns to
    the first step, and closing the window creates nothing.
 
-   ![Start your site's Choose a style step: 21 style cards with a picture of an example home page each, none selected, and Create site unavailable below them](/img/getting-started/create-site-choose-style.png)
+   ![Start your site's Choose a style step: style cards for Business & services, Home services & trades, Law, finance & consulting and more, each with a picture of an example home page and a line about the look, none of them selected, with Back, and Create site unavailable beside Choose a style to continue](/img/getting-started/create-site-choose-style.png)
 
    Otherwise **Create site** asks for the name, the address and the style in one
    window: choose a style card, then **Create site**, which stays unavailable until a
