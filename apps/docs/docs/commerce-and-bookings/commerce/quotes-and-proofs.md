@@ -287,9 +287,10 @@ The latest answer is the one that counts. A customer who asked for changes can s
 approve, and one who approved can still ask for changes, which withdraws the approval.
 The page tells them what they last said.
 
-You're notified of every answer, in the console and by email, with the quote, the
-customer, the revision and what they said. The notice opens the quote, and replying to
-the email reaches your customer.
+You're notified of every answer, in the console and by email, as **Proof approved** or
+**Changes requested**, with the quote, the customer, the revision, the quote's total and
+what they said. **View quote** opens the quote, and replying to the email reaches your
+customer. These notices follow your settings for order notifications.
 
 A paid quote still shows its proofs, with nothing to press. A link you replaced shows
 nothing of the quote, proofs included, and takes no answer.

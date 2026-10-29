@@ -391,20 +391,36 @@ describe('POST commerce/quote-respond', () => {
     })
     // The open session is the customer's to use: an answer is not an edit.
     expect(docs.get(QUOTE_PATH)?.['checkoutSessionId']).toBe('cs_open')
+    // Order work for the managers' order switches, but it reads as the quote
+    // it is (AGL-4096): its own label where "New order" would show, the
+    // customer and the quote as its heading, and a button that opens the quote.
     expect(notified).toEqual([
       [
         'site1',
         expect.objectContaining({
           type: 'content.order',
-          title: 'Proof approved — Quote #1042 on {site}',
+          level: 'success',
+          label: 'Proof approved',
+          actionLabel: 'View quote',
+          title: 'Jordan Lee approved the proof for Quote #1042 on {site}',
           link: '/site1/products/orders?quote=q-1',
         }),
         expect.objectContaining({
           replyTo: 'jordan@example.com',
-          emailDetails: expect.arrayContaining([{ label: 'Approved as', value: 'Jordan Lee' }]),
+          emailDetails: expect.arrayContaining([
+            { label: 'Quote', value: 'Quote #1042' },
+            { label: 'Total', value: '$400.00' },
+            { label: 'Approved as', value: 'Jordan Lee' },
+          ]),
         }),
       ],
     ])
+    const notice = notified[0][1]
+    expect(notice.body).toBe(
+      'Revision 1 is approved. The quote becomes an order when they pay. ' +
+        'The approval, with the name, time and address it was given from, is on the quote.',
+    )
+    expect(`${notice.title} ${notice.body} ${notice.label}`).not.toMatch(/new order/i)
   })
 
   it('records a change request with the artwork read back from this quote, by id', async () => {
@@ -424,7 +440,16 @@ describe('POST commerce/quote-respond', () => {
         userAgent: 'Spec Browser',
       },
     ])
-    expect(notified[0][1]).toMatchObject({ title: 'Changes requested — Quote #1042 on {site}' })
+    expect(notified[0][1]).toMatchObject({
+      type: 'content.order',
+      level: 'info',
+      label: 'Changes requested',
+      actionLabel: 'View quote',
+      title: 'Jordan Lee asked for changes to Quote #1042 on {site}',
+      body:
+        'What they want changed on revision 1, and the 1 file they sent, are on the quote. ' +
+        'Read them, then start revision 2 with new proofs and send it.',
+    })
     expect(notified[0][2]?.emailDetails).toEqual(
       expect.arrayContaining([
         { label: 'What to change', value: 'Bigger logo' },
@@ -515,6 +540,6 @@ describe('POST commerce/quote-respond', () => {
     storeQuote({ requireProofApproval: true })
     const outcome = await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee' }))
     expect(outcome.body['view']).toMatchObject({ approvalRequired: false, payable: true })
-    expect(notified[0][1].body).toContain('They can pay the quote now.')
+    expect(notified[0][1].body).toContain('Revision 1 is approved, so they can pay the quote now.')
   })
 })

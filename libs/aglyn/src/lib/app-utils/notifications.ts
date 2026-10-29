@@ -314,6 +314,22 @@ export interface AglynNotification {
    * existed; read it through {@link notificationLevel}, never directly.
    */
   level?: NotificationLevel
+  /**
+   * What this one notification is, in a few words, where its type's label
+   * would otherwise name it: the feed's caption and type chip, and the
+   * email's eyebrow before the site. For an emitter whose notice rides a type
+   * for that type's switches but is not what the type's label says: a
+   * customer's answer on something that is not an order yet is order work,
+   * so it follows the order switches, and it is not a "New order". Absent,
+   * the type's label; read it through {@link notificationLabel}.
+   */
+  label?: string
+  /**
+   * What the email's button says it opens, for the same kind of emitter:
+   * the record the link lands on, named. Absent, the type's own words from
+   * {@link notificationEmailAction}.
+   */
+  actionLabel?: string
 }
 
 export const NOTIFICATION_TYPE_LABELS: Record<AglynNotificationType, string> = {
@@ -1011,9 +1027,30 @@ const NOTIFICATION_EMAIL_ACTIONS: Partial<Record<AglynNotificationType, string>>
   'staff.paymentFailed': 'Open workspace',
 }
 
-/** The words on a notification email's button: the record it opens, else "Open in {product}". */
-export function notificationEmailAction(type: AglynNotificationType | string, productName: string): string {
-  return NOTIFICATION_EMAIL_ACTIONS[type as AglynNotificationType] ?? `Open in ${productName}`
+/**
+ * The words on a notification email's button: the notification's own
+ * `actionLabel` when its emitter named what the link opens, else its type's
+ * record, else "Open in {product}".
+ */
+export function notificationEmailAction(
+  type: AglynNotificationType | string,
+  productName: string,
+  actionLabel?: unknown,
+): string {
+  const own = typeof actionLabel === 'string' ? actionLabel.trim() : ''
+  return own || (NOTIFICATION_EMAIL_ACTIONS[type as AglynNotificationType] ?? `Open in ${productName}`)
+}
+
+/**
+ * What a notification calls itself where its kind is shown (the feed's
+ * caption, the type chip, the email's eyebrow): its own `label` when its
+ * emitter gave one, else its type's label, else the stored type itself.
+ */
+export function notificationLabel(notification: { type?: string | null; label?: unknown }): string {
+  const own = typeof notification.label === 'string' ? notification.label.trim() : ''
+  if (own) return own
+  const type = notification.type ?? ''
+  return (NOTIFICATION_TYPE_LABELS as Record<string, string>)[type] ?? type
 }
 
 /** What a type does on a channel when nobody has answered for it or its category. */

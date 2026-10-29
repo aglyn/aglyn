@@ -18,7 +18,7 @@
 
 import {
   NOTIFICATION_LEVEL_LABELS,
-  NOTIFICATION_TYPE_LABELS,
+  notificationLabel,
   notificationLevel,
   type NotificationLevel,
 } from '@aglyn/aglyn/app-utils/notifications'
@@ -185,21 +185,23 @@ export const notificationLevelTextSx =
 
 /** The label a notification's type reads as, or the stored type itself. */
 export const notificationTypeLabel = (type: string | undefined): string =>
-  (NOTIFICATION_TYPE_LABELS as Record<string, string>)[type ?? ''] ?? type ?? ''
+  notificationLabel({ type })
 
 export interface NotificationTypeChipProps {
-  notification: { type?: string; level?: unknown }
+  notification: { type?: string; level?: unknown; label?: unknown }
 }
 
 /**
- * The notification's type as a chip in its level's color: solid for
- * `critical`, tinted for the rest, the default gray for `neutral`.
+ * The notification's kind as a chip in its level's color: solid for
+ * `critical`, tinted for the rest, the default gray for `neutral`. A
+ * notification that names itself ("Proof approved", AGL-4096) reads as that
+ * rather than as its type.
  */
 export function NotificationTypeChip(props: NotificationTypeChipProps) {
   const { notification } = props
   const level = notificationLevel(notification)
   const color = NOTIFICATION_LEVEL_COLORS[level]
-  const label = notificationTypeLabel(notification.type)
+  const label = notificationLabel(notification)
   if (!color) return <Chip size="small" label={label} />
   if (level === 'critical') {
     return <Chip size="small" color={color} label={label} />

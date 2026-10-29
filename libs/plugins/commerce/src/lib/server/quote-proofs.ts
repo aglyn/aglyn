@@ -195,12 +195,23 @@ export async function handleQuoteUpload(deps: QuoteProofDeps, req: PluginApiRequ
 
 const UPDATED_MESSAGE = 'This quote was updated since you opened it. Look it over again before you answer.'
 
-/** The managers' notice of an answer: who, which quote and revision, what they said, and what to do next. */
+/**
+ * The managers' notice of an answer (AGL-4096): who, which quote and
+ * revision, what they said, and what to do next.
+ *
+ * It rides `content.order`, so whoever is told about orders (in the feed, by
+ * email, by push) is told about the quotes that become them, and it names
+ * itself as what it is rather than as that type: "Proof approved" or
+ * "Changes requested" where the feed and the email's eyebrow would say "New
+ * order", the customer and the quote as its heading, and "View quote" on the
+ * email's button, which opens the quote's dialog on the Orders page.
+ */
 function noticeOf(input: {
   hostId: string
   quoteId: string
   order: CommerceModel.HostOrder
   response: CommerceModel.QuoteCustomerResponse
+  currency: string
 }) {
   const { hostId, quoteId, order, response } = input
   const quote = order.quote as CommerceModel.OrderQuote
@@ -209,11 +220,14 @@ function noticeOf(input: {
   const revision = response.revision
   const files = response.files ?? []
   const approving = response.action === 'approve'
-  const payNote = quote.requireProofApproval === true ? ' They can pay the quote now.' : ''
+  const money = CommerceModel.formatOrderMoney(Number(order.totals?.totalCents ?? 0), input.currency)
+  const total = quote.tax?.kind === 'at-payment' ? `${money} before tax` : money
+  const filesSent = `${files.length} file${files.length === 1 ? '' : 's'}`
   const details = [
     { label: 'Quote', value: number },
     { label: 'Customer', value: [quote.customer?.name, quote.customer?.company, quote.customer?.email].filter(Boolean).join(', ') },
     { label: 'Revision', value: String(revision) },
+    { label: 'Total', value: total },
     ...(approving
       ? [{ label: 'Approved as', value: response.name ?? '' }]
       : [
@@ -225,12 +239,23 @@ function noticeOf(input: {
   return {
     payload: {
       type: 'content.order' as const,
-      title: approving ? `Proof approved — ${number} on {site}` : `Changes requested — ${number} on {site}`,
+      // Good news for an approval; a change request is work to read.
+      level: approving ? ('success' as const) : ('info' as const),
+      label: approving ? 'Proof approved' : 'Changes requested',
+      actionLabel: 'View quote',
+      title: approving
+        ? `${customer} approved the proof for ${number} on {site}`
+        : `${customer} asked for changes to ${number} on {site}`,
       body: approving
-        ? `${customer} approved the proof for revision ${revision} of ${number}.${payNote} The approval, with the name, time and address it was given from, is on the quote.`
-        : `${customer} asked for changes to revision ${revision} of ${number}` +
-          (files.length ? ` and sent ${files.length} file${files.length === 1 ? '' : 's'}` : '') +
-          `. Read what they asked for on the quote, then start revision ${revision + 1} with new proofs.`,
+        ? (quote.requireProofApproval === true
+            ? `Revision ${revision} is approved, so they can pay the quote now. It becomes an order when they do.`
+            : `Revision ${revision} is approved. The quote becomes an order when they pay.`) +
+          ' The approval, with the name, time and address it was given from, is on the quote.'
+        : files.length
+          ? `What they want changed on revision ${revision}, and the ${filesSent} they sent, are on the quote. ` +
+            `Read them, then start revision ${revision + 1} with new proofs and send it.`
+          : `What they want changed on revision ${revision} is on the quote. ` +
+            `Read it, then start revision ${revision + 1} with new proofs and send it.`,
       link: `/${hostId}/products/orders?quote=${encodeURIComponent(quoteId)}`,
     },
     options: {
@@ -349,7 +374,13 @@ export async function handleQuoteRespond(deps: QuoteProofDeps, req: PluginApiReq
     })
     const outcome = { status: 200, body: { view } as Record<string, unknown> }
     await claim.record(200, outcome.body)
-    const notice = noticeOf({ hostId, quoteId, order: settled.order, response: settled.response })
+    const notice = noticeOf({
+      hostId,
+      quoteId,
+      order: settled.order,
+      response: settled.response,
+      currency: String(store.get('currency') ?? 'USD'),
+    })
     void deps.notify(hostId, notice.payload, notice.options)
     return outcome
   } catch (error) {
