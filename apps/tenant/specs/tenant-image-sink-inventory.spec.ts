@@ -338,9 +338,24 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     why: "Not a sink, and never on a tenant render: the AglynBot crawler for Bring my site (AGL-3974, AGL-3976), run only by the console's import door (server/ai-site-import-route.ts) and the import job step (jobs/ai-job-import-step.ts) on the console's AI job runner. One marker is `siteImportPagePromptText`'s `[image: <alt>]` placeholder, the text line the model reads in place of a crawled picture; it carries the alt text, never the address. The other two are the crawled page's `icons` field and its copy from the extract (AGL-4083): addresses the crawler READ, kept as data for the logo candidates. The crawled pictures, the logo among them, reach a site only through the media library's ingest (site-import-images.ts, jobs/ai-site-import-look.ts), never as a remote URL.",
   },
   'libs/plugins/ai/src/lib/site-import/site-import-html.ts': {
-    markers: 9,
+    markers: 14,
     guard: 'off-tenant',
-    why: "Not a sink, and never on a tenant render: the Bring my site page extractor (AGL-3974, AGL-4083), imported only by the crawler above on the console's AI job runner. Every marker READS an old page: the `icons` and `og:image` fields of the extract, their caps, and the `<picture>` reader, which rewrites a picture's first `<source>` into an `<img>` inside the extractor's own working string so the tokenizer reads one shape. Nothing it returns is rendered: a picture it finds reaches a site only through the media library's ingest (site-import-images.ts), never as a remote URL.",
+    why: "Not a sink, and never on a tenant render: the Bring my site page extractor (AGL-3974, AGL-4083, AGL-4106), imported only by the crawler above on the console's AI job runner. Every marker READS an old page: the `icons` and `og:image` fields of the extract and their caps; the `<picture>` reader, which rewrites a picture's first `<source>` into an `<img>` inside the extractor's own working string so the tokenizer reads one shape; the inline-`<svg>` icon reader (`readSvgIcons`), which keeps an icon's drawing as data, never an address; the `<style>` collector for the stylesheet reader; and a linked card's picture address in the extract's anchors. Nothing it returns is rendered: a picture it finds reaches a site only through the media library's ingest (site-import-images.ts), never as a remote URL.",
+  },
+  'libs/plugins/ai/src/lib/site-import/site-import-css.ts': {
+    markers: 2,
+    guard: 'off-tenant',
+    why: "Not a sink, and never on a tenant render: the Bring my site stylesheet reader (AGL-4106), imported only by the layout reader (site-import-layout.ts) on the console's AI job runner. Both markers are a parsed background's `image`: a `url(...)` the reader READ out of the old page's CSS and keeps as data for the section's backdrop. It never fetches or renders it; a picture of the old site reaches a site only through the media library's ingest (site-import-images.ts), never as a remote URL.",
+  },
+  'libs/plugins/ai/src/lib/site-import/site-import-layout.ts': {
+    markers: 3,
+    guard: 'off-tenant',
+    why: "Not a sink, and never on a tenant render: the Bring my site layout reader (AGL-4106), imported only by the crawler on the console's AI job runner. One marker copies the extract's inline-SVG icon drawings (viewBox, path, a cleaned svg) into the layout, never an address; the other two are `icons` COUNTS in `siteImportLayoutCounts` (a number and its zero). Nothing it returns is rendered as a remote URL.",
+  },
+  'libs/plugins/ai/src/lib/model/ai-site-import.ts': {
+    markers: 2,
+    guard: 'off-tenant',
+    why: "Not a sink, and never on a tenant render: the Bring my site job model (AGL-4106), types and pure helpers used by the import door and the import job on the console's AI job runner. Both markers are the layout's `icons` field and `siteImportLayoutWithoutDrawings`, which drops the drawings for a lighter page: SVG shapes the reader copied from the old page's inline `<svg>`, never an address. Nothing in the file renders.",
   },
   'libs/plugins/ai/src/lib/jobs/ai-site-import-look.ts': {
     markers: 1,

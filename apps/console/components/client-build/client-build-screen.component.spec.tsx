@@ -314,8 +314,11 @@ describe('the client build screen (AGL-3958)', () => {
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Use the starter site' }))
     })
-    // The starter path from here chooses no style; Create site's own style view does (AGL-4049).
-    expect(mockStarter).toHaveBeenCalledWith(mockUserObject, 'host-1', { style: undefined })
+    // The style the screen asked for rides along (AGL-4049); none was chosen
+    // on this path, so it travels as undefined and the starter picks its own.
+    expect(mockStarter).toHaveBeenCalledWith(mockUserObject, 'host-1', {
+      style: undefined,
+    })
     expect(await screen.findByRole('button', { name: /Email the preview/ })).toBeTruthy()
     // Recorded, so a reload (or a second phone) resumes at the send step.
     expect(posts('/api/admin/client-build', 'save').at(-1)?.body).toMatchObject({ starter: true })

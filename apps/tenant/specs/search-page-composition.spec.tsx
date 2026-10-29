@@ -76,11 +76,18 @@ jest.mock('@aglyn/tenant-runtime/compose-search-page', () => ({
   __esModule: true,
   composeSearchPage: jest.fn(async () => null),
 }))
+// Who is asking, for a site in preview (AGL-4086). Reads cookies in Node, so it
+// is doubled; every host above it is public, which never asks.
+jest.mock('../utils/site-preview-viewer', () => ({
+  __esModule: true,
+  sitePreviewViewer: jest.fn(async () => ({ admitted: false, via: null })),
+}))
 
 import type { SearchResult } from '../utils/search-content'
 import searchContent from '../utils/search-content'
 import { getHostCached } from '../app/[host]/host-data'
 import SearchPage from '../app/[host]/[scheme]/search/page'
+import { sitePreviewViewer } from '../utils/site-preview-viewer'
 
 const mockSearch = searchContent as jest.MockedFunction<typeof searchContent>
 const mockHost = getHostCached as jest.MockedFunction<typeof getHostCached>
@@ -166,5 +173,60 @@ describe('/search composition (AGL-1525)', () => {
     const long = 'x'.repeat(250)
     const element = await renderPage({ q: long })
     expect(element.props.query).toHaveLength(100)
+  })
+})
+
+/**
+ * A site in maintenance answers its search to nobody (AGL-4111).
+ *
+ * Every other address of the site serves its 503 page in maintenance, the
+ * team included, and this page went on answering with the site's own words —
+ * entry titles and snippets, to anyone who typed a query. It refuses the way
+ * it already refused the public of a site in preview.
+ */
+describe('/search on a site that is not open (AGL-4111)', () => {
+  const mockViewer = sitePreviewViewer as jest.MockedFunction<
+    typeof sitePreviewViewer
+  >
+  beforeEach(() => {
+    mockSearch.mockResolvedValue(RESULTS)
+    // Reset, not cleared: a queued answer the short-circuit never asked for
+    // would otherwise be the next case's.
+    mockViewer.mockReset()
+    mockViewer.mockResolvedValue({ admitted: false, via: null })
+  })
+  afterEach(() => jest.clearAllMocks())
+
+  it('in maintenance: not found, and nothing is searched', async () => {
+    mockHost.mockResolvedValue({
+      host: { $id: 'host_acme', maintenance: true },
+    } as any)
+    await expect(renderPage({ q: 'platform' })).rejects.toThrow('notFound')
+    expect(mockSearch).not.toHaveBeenCalled()
+  })
+
+  it('in maintenance AND preview, even for the team: maintenance means nobody', async () => {
+    mockHost.mockResolvedValue({
+      host: { $id: 'host_acme', maintenance: true, preview: true },
+    } as any)
+    mockViewer.mockResolvedValue({ admitted: true, via: 'cookie' })
+    await expect(renderPage({ q: 'platform' })).rejects.toThrow('notFound')
+    expect(mockSearch).not.toHaveBeenCalled()
+  })
+
+  it('CONTROL — in preview, the admitted team still gets its results', async () => {
+    mockHost.mockResolvedValue({
+      host: { $id: 'host_acme', preview: true },
+    } as any)
+    mockViewer.mockResolvedValue({ admitted: true, via: 'cookie' })
+    const element = await renderPage({ q: 'platform' })
+    expect(element.props.results).toHaveLength(6)
+  })
+
+  it('CONTROL — in preview, the public is refused as before', async () => {
+    mockHost.mockResolvedValue({
+      host: { $id: 'host_acme', preview: true },
+    } as any)
+    await expect(renderPage({ q: 'platform' })).rejects.toThrow('notFound')
   })
 })

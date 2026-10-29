@@ -191,6 +191,12 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'AGL-4083. Test data, never shipped at runtime: the recordings of aglyn.com that the Bring my site replay specs read (site-import-crawl, site-import-html, the import build specs). The domain IS the recording: every recorded address, sitemap and robots.txt line is that site, and the importer itself names no host of ours.',
   },
   {
+    file: 'libs/plugins/ai/src/lib/site-import/fixtures/site-layout-recordings.ts',
+    count: 1,
+    reason:
+      'AGL-4106. Test data, never shipped at runtime: the origin of the five aglyn.com pages the Bring my site layout, menu and stylesheet replay specs read (site-import-layout, site-import-nav, site-import-css). The domain IS the recording: every recorded address is that site, and the reader itself names no host of ours.',
+  },
+  {
     file: 'libs/plugins/marketplace/src/lib/model/listing-social-card.ts',
     count: 1,
     reason:
