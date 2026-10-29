@@ -580,6 +580,18 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'Reader of a base-URL argument; the literal is its default. Internal tool.',
   },
   {
+    file: 'tools/scripts/prove-site-import-edge.mjs',
+    count: 1,
+    reason:
+      "Internal proof of Aglyn's own tenant firewall rule (AGL-4085); the literal is its default URL. It must hit a host the platform serves.",
+  },
+  {
+    file: 'tools/scripts/lib/site-import-edge-proof.mjs',
+    count: 5,
+    reason:
+      "The proof's host check (AGL-4085): the secret may only be sent to aglyn.com or a <name>.aglyn.app the tenant project serves, so it names them.",
+  },
+  {
     file: 'tools/scripts/generate-blog-covers.mjs',
     count: 1,
     reason:
