@@ -34,6 +34,11 @@
  *     so the pages are written for the business. Answers and a look, never a
  *     copy of a site.
  *
+ * Each kind's two listings are pictured and named as the style a person picks
+ * in Create site (`site-styles.ts`): the style's example home page, served by
+ * the console, is the listing's preview image, and the style's name is its
+ * category, so the starter shelf can group them by kind.
+ *
  * The content comes from the TypeScript that owns it, loaded through `jiti`
  * (`workspace-module.mjs`), so a change to the default site reaches these
  * listings on the next run as a new version, and never by copying it here.
@@ -45,11 +50,12 @@
  *
  * SEED-OWNED fields are rewritten on every run, because they follow from the
  * code: the artifact type, the publisher, `official`, the starter facets, the
- * page count, the seed marker, the version content, and the query fields
+ * page count, the seed marker, the preview image (a kind's style picture on
+ * this deployment's console), the version content, and the query fields
  * derived from the stored listing. STAFF-OWNED fields are written only when a
- * listing is first created: its name, description, category, price, preview
- * image and review verdict. A run never undoes a staff edit, a price or a
- * takedown; `--verify` reports where they differ from the plan.
+ * listing is first created: its name, description, category, price and review
+ * verdict. A run never undoes a staff edit, a price or a takedown; `--verify`
+ * reports where they differ from the plan.
  */
 
 import { listingQueryFieldsPatch } from './listing-query-fields.mjs'
@@ -71,7 +77,10 @@ export const SITE_NAME_TOKEN = '{{host.businessName}}'
  */
 const HOME_LINK_PLACEHOLDER = 'first-party-starter-home'
 
-/** The category a first-party starter is created under (`LISTING_CATEGORIES`). */
+/**
+ * The category the starter site is created under (`LISTING_CATEGORIES`). A
+ * kind's listings are created under the kind's style name instead.
+ */
 const STARTER_CATEGORY = 'design'
 
 /** Fields a run writes only when it creates the listing; staff edit them after. */
@@ -80,7 +89,6 @@ export const FIRST_PARTY_STARTER_STAFF_OWNED_FIELDS = Object.freeze([
   'description',
   'category',
   'priceUsd',
-  'previewImageUrl',
   'reviewStatus',
 ])
 
@@ -96,6 +104,7 @@ export const FIRST_PARTY_STARTER_SEED_OWNED_FIELDS = Object.freeze([
   'starterMode',
   'screenCount',
   'seedSource',
+  'previewImageUrl',
 ])
 
 /** Where each module the plan reads lives, relative to the repository root. */
@@ -108,6 +117,9 @@ export const FIRST_PARTY_STARTER_MODULE_PATHS = Object.freeze({
   fontPairings: 'libs/aglyn/src/lib/app-utils/site-font-pairings.ts',
   kinds: 'libs/plugins/ai/src/lib/model/ai-site-kinds.ts',
   look: 'libs/plugins/ai/src/lib/model/ai-site-look.ts',
+  styles: 'libs/aglyn/src/lib/app-utils/site-styles.ts',
+  brand: 'libs/aglyn/src/lib/app-utils/platform-brand.ts',
+  consoleProject: 'apps/console/project.json',
   presets: 'libs/plugins/themes/src/lib/presets/index.ts',
   agreement: 'libs/plugins/marketplace/src/lib/model/publisher-agreement.ts',
 })
@@ -129,7 +141,21 @@ export function firstPartyStarterListingId(kind, mode = 'base') {
  */
 export async function loadFirstPartyStarterSources(importModule = importWorkspaceModule) {
   const paths = FIRST_PARTY_STARTER_MODULE_PATHS
-  const [defaultSite, siteStarter, links, starterNodes, canvas, fontPairings, kinds, look, presets, agreement] = await Promise.all(
+  const [
+    defaultSite,
+    siteStarter,
+    links,
+    starterNodes,
+    canvas,
+    fontPairings,
+    kinds,
+    look,
+    siteStyles,
+    brand,
+    consoleProject,
+    presets,
+    agreement,
+  ] = await Promise.all(
     [
       paths.defaultSite,
       paths.siteStarter,
@@ -139,6 +165,9 @@ export async function loadFirstPartyStarterSources(importModule = importWorkspac
       paths.fontPairings,
       paths.kinds,
       paths.look,
+      paths.styles,
+      paths.brand,
+      paths.consoleProject,
       paths.presets,
       paths.agreement,
     ].map((path) => importModule(path)),
@@ -155,6 +184,16 @@ export async function loadFirstPartyStarterSources(importModule = importWorkspac
   if (typeof starterNodes.sanitizeSiteStarterNodes !== 'function') {
     throw new Error(`${paths.starterNodes} does not export sanitizeSiteStarterNodes`)
   }
+  if (!Array.isArray(siteStyles.SITE_STYLES)) {
+    throw new Error(`${paths.styles} does not export SITE_STYLES`)
+  }
+  if (typeof brand.platformConsoleOrigin !== 'function') {
+    throw new Error(`${paths.brand} does not export platformConsoleOrigin`)
+  }
+  const servePort = Number((consoleProject.default ?? consoleProject).targets?.serve?.options?.port)
+  if (!Number.isInteger(servePort) || servePort <= 0) {
+    throw new Error(`${paths.consoleProject} names no serve port`)
+  }
   return {
     core: {
       buildDefaultHomeScreen: defaultSite.buildDefaultHomeScreen,
@@ -169,6 +208,8 @@ export async function loadFirstPartyStarterSources(importModule = importWorkspac
       aiSiteKindDefaultLook: look.aiSiteKindDefaultLook,
     },
     kinds: kinds.AI_SITE_KINDS,
+    styles: siteStyles.SITE_STYLES,
+    console: { platformOrigin: brand.platformConsoleOrigin, servePort },
     pairings: fontPairings.SITE_FONT_PAIRINGS,
     presets: presets.THEME_PRESETS,
     bases: siteStarter.SITE_THEME_BASES,
@@ -176,6 +217,47 @@ export async function loadFirstPartyStarterSources(importModule = importWorkspac
       version: agreement.PUBLISHER_AGREEMENT_VERSION,
       isCurrent: agreement.hasCurrentPublisherAgreement,
     },
+  }
+}
+
+/**
+ * The console origin the starters' pictures are served from, with no
+ * trailing slash. The console serves each style's picture
+ * (`site-styles.ts`), and a listing stores it as an absolute URL because
+ * readers off the console, the native apps and a listing's social card, load
+ * it too.
+ *
+ * Against the emulator (`FIRESTORE_EMULATOR_HOST` set) it is the local
+ * console the emulated stack serves: `E2E_BASE_URL` when the e2e harness
+ * names one, else localhost on the console's serve port
+ * (`apps/console/project.json`). The env file may hold the production
+ * console's URL, so it is not read there. Anywhere else it is
+ * `platformConsoleOrigin()`, core's one reading of `NEXT_PUBLIC_CONSOLE_URL`,
+ * and it must be https. `site` is `sources.console`.
+ */
+export function firstPartyStarterConsoleOrigin(env, site) {
+  const emulator = Boolean(env.FIRESTORE_EMULATOR_HOST)
+  const raw = emulator ? env.E2E_BASE_URL?.trim() || `http://localhost:${site.servePort}` : site.platformOrigin()
+  let url
+  try {
+    url = new URL(raw)
+  } catch {
+    throw new Error(`The console origin "${raw}" is not a URL`)
+  }
+  if (url.protocol !== 'https:' && !(emulator && url.protocol === 'http:')) {
+    throw new Error(`The console origin "${raw}" is not https, which a listing's picture needs outside the emulator`)
+  }
+  return url.origin
+}
+
+/** Whether a value is an origin: an http(s) scheme and a host, nothing after. */
+const isOrigin = (value) => {
+  if (typeof value !== 'string') return false
+  try {
+    const url = new URL(value)
+    return /^https?:$/.test(url.protocol) && url.origin === value
+  } catch {
+    return false
   }
 }
 
@@ -266,12 +348,19 @@ function kindLook(kind, { core, presetIds, pairingIds }) {
  *
  * Each entry is `{ listingId, order, listing, version: { starter } }`, where
  * `listing` holds every field a new listing is created with, and `order` is
- * its place in the list. Throws, naming the listing, when a payload is one
- * `siteStarterRefusal` refuses: a starter that cannot start a site is never
+ * its place in the list. A kind's two listings carry its style's picture on
+ * `consoleOrigin` ({@link firstPartyStarterConsoleOrigin}) and its style's
+ * name as their category. Throws, naming the listing, when a payload is one
+ * `siteStarterRefusal` refuses, or when a kind has no style: a starter that
+ * cannot start a site, or a kind's card without its picture, is never
  * planned.
  */
-export function buildFirstPartyStarterPlan({ orgId, kinds, pairings, presets, bases, core }) {
+export function buildFirstPartyStarterPlan({ orgId, consoleOrigin, kinds, styles, pairings, presets, bases, core }) {
   if (typeof orgId !== 'string' || !orgId.trim()) throw new Error('An org id is required')
+  if (!isOrigin(consoleOrigin)) {
+    throw new Error(`A console origin is required, as a scheme and a host with nothing after (got ${JSON.stringify(consoleOrigin)})`)
+  }
+  const stylesById = new Map(styles.map((style) => [style.id, style]))
   const pairingIds = new Set(pairings.map((pairing) => pairing.id))
   const presetIds = new Set(presets.map((preset) => preset.id))
   const known = {
@@ -288,18 +377,25 @@ export function buildFirstPartyStarterPlan({ orgId, kinds, pairings, presets, ba
       description:
         "The site every new site starts as: a Home page with the sections most sites need, a header and " +
         "footer every page shares, and your site's name filled in.",
+      category: STARTER_CATEGORY,
       facets: { kind: null, base: 'starter', fonts: null, pages: pages.screens.length, mode: 'base' },
       theme: { kind: 'builtin', base: 'starter', brand: { light: {} }, fonts: null },
     },
   ]
   for (const kind of kinds) {
+    const style = stylesById.get(kind.id)
+    if (!style) {
+      throw new Error(`${firstPartyStarterListingId(kind.id)}: no style "${kind.id}" in site-styles.ts names its picture`)
+    }
     const look = kindLook(kind, { core, presetIds, pairingIds })
     const theme = { kind: 'builtin', base: look.base, brand: look.brand, fonts: look.fonts }
     const facets = { kind: kind.id, base: look.base, fonts: look.fonts, pages: pages.screens.length }
+    const pictured = { category: style.name, previewImageUrl: `${consoleOrigin}${style.preview}` }
     rows.push({
       listingId: firstPartyStarterListingId(kind.id, 'base'),
       displayName: kind.label,
       description: `${kind.blurb}. Starts with the starter site's pages, in a theme, colors and fonts that suit this kind of site.`,
+      ...pictured,
       facets: { ...facets, mode: 'base' },
       theme,
     })
@@ -307,6 +403,7 @@ export function buildFirstPartyStarterPlan({ orgId, kinds, pairings, presets, ba
       listingId: firstPartyStarterListingId(kind.id, 'ai'),
       displayName: `${kind.label} with AI`,
       description: `${kind.blurb}. The AI start asks about your business and writes the pages for it, in a theme, colors and fonts that suit this kind of site.`,
+      ...pictured,
       facets: { ...facets, mode: 'ai' },
       theme,
       answers: {
@@ -341,9 +438,10 @@ export function buildFirstPartyStarterPlan({ orgId, kinds, pairings, presets, ba
         ...core.siteStarterFacetFields(row.facets),
         screenCount: starter.screens.length,
         seedSource: FIRST_PARTY_STARTER_SEED_SOURCE,
+        ...(row.previewImageUrl ? { previewImageUrl: row.previewImageUrl } : {}),
         displayName: row.displayName,
         description: row.description,
-        category: STARTER_CATEGORY,
+        category: row.category,
         priceUsd: 0,
         reviewStatus: 'listed',
       },

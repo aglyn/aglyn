@@ -21,22 +21,30 @@
 //   node --test tools/scripts/lib/first-party-starters.test.mjs
 
 import assert from 'node:assert/strict'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, it } from 'node:test'
 import {
+  FIRST_PARTY_STARTER_MODULE_PATHS,
   FIRST_PARTY_STARTER_SEED_SOURCE,
   FIRST_PARTY_STARTER_STAFF_OWNED_FIELDS,
   SITE_NAME_TOKEN,
   buildFirstPartyStarterPlan,
+  firstPartyStarterConsoleOrigin,
   firstPartyStarterListingId,
   firstPartyStarterOwnedFields,
   loadFirstPartyStarterSources,
   reconcileFirstPartyStarter,
 } from './first-party-starters.mjs'
 import { listingQueryFields } from './listing-query-fields.mjs'
+import { WORKSPACE_ROOT, importWorkspaceModule } from './workspace-module.mjs'
 
 const sources = await loadFirstPartyStarterSources()
 const ORG = 'org-platform'
-const plan = buildFirstPartyStarterPlan({ orgId: ORG, ...sources })
+const ORIGIN = 'https://console.example.com'
+/** The plan for the platform org on {@link ORIGIN}, with any input replaced. */
+const planOf = (overrides = {}) => buildFirstPartyStarterPlan({ orgId: ORG, consoleOrigin: ORIGIN, ...sources, ...overrides })
+const plan = planOf()
 const byId = new Map(plan.map((entry) => [entry.listingId, entry]))
 const known = {
   kinds: new Set(sources.kinds.map((kind) => kind.id)),
@@ -169,7 +177,7 @@ describe('the plan', () => {
     const withRule = (sanitizeSiteStarterNodes) => ({ ...sources.core, sanitizeSiteStarterNodes })
     const refuse = withRule(() => ({ ok: false, error: 'Component "x" cannot be in a starter' }))
     assert.throws(
-      () => buildFirstPartyStarterPlan({ orgId: ORG, ...sources, core: refuse }),
+      () => planOf({ core: refuse }),
       /The starter site's Home page: Component "x" cannot be in a starter/,
     )
     const drop = withRule((definition, options) => {
@@ -177,9 +185,9 @@ describe('the plan', () => {
       const [first, ...rest] = Object.keys(result.nodes).filter((id) => id !== definition.rootId)
       return rest.length ? { ...result, nodes: Object.fromEntries(Object.entries(result.nodes).filter(([id]) => id !== first)) } : result
     })
-    assert.throws(() => buildFirstPartyStarterPlan({ orgId: ORG, ...sources, core: drop }), /the starter rule dropped /)
+    assert.throws(() => planOf({ core: drop }), /the starter rule dropped /)
     const noSlot = { ...sources.core, layoutSlotId: 'no-such-slot' }
-    assert.throws(() => buildFirstPartyStarterPlan({ orgId: ORG, ...sources, core: noSlot }), /no content slot/)
+    assert.throws(() => planOf({ core: noSlot }), /no content slot/)
   })
 
   it('gives each kind its first base the platform has, its first pairing and a brand from its first hue', () => {
@@ -225,28 +233,108 @@ describe('the plan', () => {
     }
   })
 
+  it("pictures and names each kind's two starters as its style, on the console's origin", () => {
+    const styles = new Map(sources.styles.map((style) => [style.id, style]))
+    for (const kind of sources.kinds) {
+      const style = styles.get(kind.id)
+      assert.ok(style, kind.id)
+      for (const mode of ['base', 'ai']) {
+        const { listing } = byId.get(`fp-starter-${kind.id}-${mode}`)
+        assert.equal(listing.previewImageUrl, `${ORIGIN}/_static/starter/styles/${kind.id}.webp`, `${kind.id} ${mode}`)
+        assert.equal(listing.previewImageUrl, `${ORIGIN}${style.preview}`, `${kind.id} ${mode}`)
+        assert.equal(listing.category, style.name, `${kind.id} ${mode}`)
+        assert.equal(listing.category, kind.label, `${kind.id} ${mode}: the kind's card calls it this too`)
+      }
+      // The console serves the file the URL names.
+      assert.ok(existsSync(join(WORKSPACE_ROOT, 'apps/console/public', style.preview)), style.preview)
+    }
+    assert.equal(byId.get('fp-starter-trades-ai').listing.category, 'Home services & trades')
+  })
+
+  it('keeps the starter site listed and official, with no picture and its own category', () => {
+    const { listing } = byId.get('fp-starter-default')
+    assert.equal(listing.official, true)
+    assert.equal(listing.reviewStatus, 'listed')
+    assert.equal(listing.previewImageUrl, undefined)
+    assert.equal(listing.category, 'design')
+  })
+
+  it('takes the pictures from whatever console origin it is handed', () => {
+    const local = planOf({ consoleOrigin: 'http://localhost:4290' })
+    assert.equal(
+      local.find((entry) => entry.listingId === 'fp-starter-yoga-base').listing.previewImageUrl,
+      'http://localhost:4290/_static/starter/styles/yoga.webp',
+    )
+  })
+
+  it('refuses a plan without a console origin, or with more than an origin', () => {
+    for (const consoleOrigin of [undefined, '', 'console.example.com', `${ORIGIN}/`, `${ORIGIN}/app`, 'ftp://console.example.com']) {
+      assert.throws(() => planOf({ consoleOrigin }), /A console origin is required/, String(consoleOrigin))
+    }
+  })
+
+  it('refuses a kind with no style to picture it, naming the listing', () => {
+    const styles = sources.styles.filter((style) => style.id !== 'music')
+    assert.throws(() => planOf({ styles }), /fp-starter-music-base: no style "music" in site-styles.ts/)
+  })
+
   it('is the same plan on every run', () => {
-    const again = buildFirstPartyStarterPlan({ orgId: ORG, ...sources })
+    const again = planOf()
     assert.deepEqual(again, plan)
   })
 
   it('fails the run on a payload a starter refuses, naming the listing', () => {
     const bases = sources.bases.filter((name) => name !== 'starter')
     assert.throws(
-      () => buildFirstPartyStarterPlan({ orgId: ORG, ...sources, bases }),
+      () => planOf({ bases }),
       /fp-starter-default: Unknown base theme "starter"/,
     )
     const core = { ...sources.core, buildDefaultHomeScreen: (name) => ({ ...sources.core.buildDefaultHomeScreen(name), slug: '/home' }) }
     assert.throws(
-      () => buildFirstPartyStarterPlan({ orgId: ORG, ...sources, core }),
+      () => planOf({ core }),
       /fp-starter-default: A starter needs a published Home page at \//,
     )
-    assert.throws(() => buildFirstPartyStarterPlan({ ...sources, orgId: '' }), /An org id is required/)
+    assert.throws(() => planOf({ orgId: '' }), /An org id is required/)
   })
 
   it('refuses a links rewrite that leaves the layout linking to Home by id', () => {
     const core = { ...sources.core, starterLinksBySlug: (nodes) => nodes }
-    assert.throws(() => buildFirstPartyStarterPlan({ orgId: ORG, ...sources, core }), /linking to Home by id/)
+    assert.throws(() => planOf({ core }), /linking to Home by id/)
+  })
+})
+
+describe('the console origin the pictures are on', () => {
+  const site = { servePort: 4200, platformOrigin: () => 'https://app.example.com/' }
+
+  it('is the local console against the emulator: the e2e harness’s, else the serve port', () => {
+    const emulator = { FIRESTORE_EMULATOR_HOST: 'localhost:8082' }
+    assert.equal(firstPartyStarterConsoleOrigin(emulator, site), 'http://localhost:4200')
+    assert.equal(firstPartyStarterConsoleOrigin({ ...emulator, E2E_BASE_URL: 'http://localhost:4290/signin' }, site), 'http://localhost:4290')
+    // An env file's production console is not where the emulated stack serves its pictures.
+    assert.equal(
+      firstPartyStarterConsoleOrigin({ ...emulator, NEXT_PUBLIC_CONSOLE_URL: 'https://app.example.com' }, site),
+      'http://localhost:4200',
+    )
+  })
+
+  it("is the platform's console anywhere else, and only over https", () => {
+    assert.equal(firstPartyStarterConsoleOrigin({}, site), 'https://app.example.com')
+    assert.throws(
+      () => firstPartyStarterConsoleOrigin({}, { ...site, platformOrigin: () => 'http://app.example.com' }),
+      /is not https/,
+    )
+    assert.throws(() => firstPartyStarterConsoleOrigin({}, { ...site, platformOrigin: () => 'not a url' }), /is not a URL/)
+  })
+
+  it("reads core's console origin and the console's serve port", () => {
+    assert.equal(typeof sources.console.platformOrigin, 'function')
+    assert.ok(Number.isInteger(sources.console.servePort) && sources.console.servePort > 0)
+  })
+
+  it('refuses a console project that names no serve port', async () => {
+    const importModule = async (path) =>
+      path === FIRST_PARTY_STARTER_MODULE_PATHS.consoleProject ? { targets: {} } : importWorkspaceModule(path)
+    await assert.rejects(loadFirstPartyStarterSources(importModule), /apps\/console\/project.json names no serve port/)
   })
 })
 
@@ -256,16 +344,32 @@ describe('who owns which field', () => {
     assert.deepEqual(Object.keys(staff).sort(), ['category', 'description', 'displayName', 'priceUsd', 'reviewStatus'])
     assert.deepEqual(
       Object.keys(seed).sort(),
-      ['artifactType', 'official', 'profileId', 'screenCount', 'seedSource', 'starterBase', 'starterFonts', 'starterKind', 'starterMode', 'starterPages'],
+      [
+        'artifactType',
+        'official',
+        'previewImageUrl',
+        'profileId',
+        'screenCount',
+        'seedSource',
+        'starterBase',
+        'starterFonts',
+        'starterKind',
+        'starterMode',
+        'starterPages',
+      ],
     )
     assert.deepEqual([...FIRST_PARTY_STARTER_STAFF_OWNED_FIELDS].sort(), [
       'category',
       'description',
       'displayName',
-      'previewImageUrl',
       'priceUsd',
       'reviewStatus',
     ])
+  })
+
+  it('leaves the starter site without a picture, so no run writes one over a staff choice', () => {
+    const { seed } = firstPartyStarterOwnedFields(plan[0].listing)
+    assert.equal('previewImageUrl' in seed, false)
   })
 })
 
@@ -342,6 +446,35 @@ describe('reconcile', () => {
     assert.deepEqual(again.seedChanges.sort(), ['official', 'starterFonts'])
     assert.deepEqual(again.listingWrite, { official: true, starterFonts: entry.listing.starterFonts, updatedAt: '<now>' })
     assert.equal(again.versionWrite, null)
+  })
+
+  it('creates a kind’s starter with its picture and its style’s name', () => {
+    assert.equal(created.listingWrite.previewImageUrl, `${ORIGIN}/_static/starter/styles/trades.webp`)
+    assert.equal(created.listingWrite.category, 'Home services & trades')
+    assert.ok(created.seedChanges.includes('previewImageUrl'))
+  })
+
+  it('puts back a picture that is missing or on another origin, as seed-owned drift', () => {
+    const elsewhere = { ...storedListing, previewImageUrl: 'http://localhost:4200/_static/starter/styles/trades.webp' }
+    const moved = reconcileFirstPartyStarter(entry, { listing: elsewhere, version: storedVersion }, values)
+    assert.equal(moved.action, 'update')
+    assert.deepEqual(moved.seedChanges, ['previewImageUrl'])
+    assert.deepEqual(moved.staffDrift, [])
+    assert.deepEqual(moved.listingWrite, { previewImageUrl: entry.listing.previewImageUrl, updatedAt: '<now>' })
+    assert.equal(moved.versionWrite, null)
+
+    const { previewImageUrl: _dropped, ...bare } = storedListing
+    const missing = reconcileFirstPartyStarter(entry, { listing: bare, version: storedVersion }, values)
+    assert.deepEqual(missing.seedChanges, ['previewImageUrl'])
+    assert.equal(missing.listingWrite.previewImageUrl, entry.listing.previewImageUrl)
+  })
+
+  it('leaves a category staff changed alone, and reports it', () => {
+    const recategorized = { ...storedListing, category: 'Roofing' }
+    const again = reconcileFirstPartyStarter(entry, { listing: recategorized, version: storedVersion }, values)
+    assert.equal(again.action, 'unchanged')
+    assert.equal(again.listingWrite, null)
+    assert.deepEqual(again.staffDrift, [{ field: 'category', stored: 'Roofing', planned: 'Home services & trades' }])
   })
 
   it('writes the next version when the content changes, and only then', () => {
