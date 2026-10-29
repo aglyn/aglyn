@@ -950,7 +950,7 @@ export const NodeLeaf = observer(
             // Inert, like the component and form previews below: a copy is a
             // picture of the template, not a document, so nothing in it is
             // ever selected. A click on one goes to the element it draws —
-            // this leaf's own handlers redirect it (`repeatOriginalAt`).
+            // this leaf's own handlers redirect it (`repeatCopyAt`).
             <>
               {/* Their outline, as CSS rather than as a wrapper: a dimmed,
                   dashed GREY, so a copy never reads as the element — the

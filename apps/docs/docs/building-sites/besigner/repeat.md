@@ -74,9 +74,11 @@ Attributes panel.
 
 The first copy is the element you edit. Change a color, retype a heading,
 drag something in — every copy changes with it, because there is only ever one
-design. The copies beside it are pictures: hovering one says so, and clicking
-one selects the element it copies. Pointing at either outlines the whole group —
-the element you edit and its copies — with the element itself marked inside it.
+design. The copies beside it are pictures: hovering one says so. Click any
+part of a copy — a heading in the third card, say — and the outline goes round
+exactly what you clicked, while the panels edit the element it copies, so the
+change shows in every copy at once. To type new text in place, double-click it
+in the first copy.
 
 ## Bound what renders
 
