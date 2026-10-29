@@ -139,6 +139,118 @@ export interface SiteImportExtract {
   forms: { kept: SiteImportForm[]; removed: number }
   /** True when the page has a password field; nothing else is extracted. */
   loginForm: boolean
+  /**
+   * How the page is built (AGL-4106), when asked for: every element the
+   * blocks sit in, so the layout reader sees the source's sections, rows,
+   * cards and menus, not only its lines. Never stored: the crawl reads it
+   * into a layout and drops it.
+   */
+  structure?: SiteImportStructure
+}
+
+/** The attributes of an element the layout reader reads; everything else is dropped. */
+export interface SiteImportElementAttrs {
+  class?: string
+  id?: string
+  style?: string
+  role?: string
+  /** `aria-label`. */
+  label?: string
+  /** An anchor's address as written. */
+  href?: string
+  /** `hidden`, or `aria-hidden="true"`. */
+  hidden?: true
+  /** `data-section-theme` or `data-theme`: a site builder's name for a band's look. */
+  theme?: string
+  type?: string
+  /** `aria-controls` / `aria-labelledby`: what a tab shows, and what names a panel. */
+  controls?: string
+  labelledby?: string
+}
+
+/** One element of the page, in a flat table: its parent and children by index. */
+export interface SiteImportElement {
+  id: number
+  tag: string
+  /** -1 for an element at the top of the body. */
+  parent: number
+  children: number[]
+  region: SiteImportRegion
+  /** Inside a `<nav>`, or a header with no `<nav>`. */
+  nav: boolean
+  attrs: SiteImportElementAttrs
+  /** The blocks whose words sit directly in this element, by index into `blocks`. */
+  blocks: number[]
+  /** The icon this element is, by index into `structure.icons` (an inline `<svg>`). */
+  icon?: number
+  /** The form that sat here, by index into the page's kept forms. */
+  form?: number
+  /**
+   * Its place in the page's order of content: a block's index, or the index
+   * of the block that follows an icon, less a half. Set on elements that
+   * hold a block or an icon directly.
+   */
+  order?: number
+}
+
+/**
+ * An inline `<svg>` the page draws as an icon (AGL-4106): one path the
+ * Besigner's icon element draws as it is, or the shapes of a small drawing,
+ * cleaned to geometry, for a picture of it. Never its text.
+ */
+export interface SiteImportSvgIcon {
+  viewBox: string
+  /** The one `<path d>`, at most 4 KB. */
+  path?: string
+  /** A drawing of several shapes, at most 16 KB, its geometry and fills only. */
+  svg?: string
+}
+
+/** A link on the page, menus included, as the structure keeps it for the menus' reader. */
+export interface SiteImportAnchor {
+  /** The `<a>` element. */
+  element: number
+  /** Where it goes: an absolute http(s) address, a `mailto:` or a `tel:`; `null` for none. */
+  href: string | null
+  /** Its first line: a menu entry's name. */
+  label: string
+  /** Its other lines: a mega-menu entry's description. */
+  text: string
+  region: SiteImportRegion
+  nav: boolean
+  /** The first icon inside it. */
+  icon?: number
+  /** The first picture inside it. */
+  image?: string
+}
+
+export interface SiteImportStructure {
+  elements: SiteImportElement[]
+  /** The element each block's words sit in, by block index. */
+  blockElement: number[]
+  icons: SiteImportSvgIcon[]
+  anchors: SiteImportAnchor[]
+  /**
+   * Words a menu or a header holds outside its links, where they sit: a mega
+   * menu's column heading ("By team"), the button that opens a menu. A menu's
+   * words are never blocks, so these are how the menu reader sees them.
+   */
+  texts: Array<{ element: number; text: string }>
+  /** The page's own `<style>` sheets, in order. */
+  styles: string[]
+  /** The stylesheets it links (absolute https), in order, Google Fonts' included. */
+  stylesheets: string[]
+  /** The `<main>` element, or -1 when the page has none. */
+  main: number
+  /** The `<body>`'s element, or -1. */
+  body: number
+  /** The `<html>` element's attributes. */
+  root: SiteImportElementAttrs
+}
+
+export interface SiteImportExtractOptions {
+  /** Keep how the page is built (`structure`), for the layout reader (AGL-4106). */
+  structure?: boolean
 }
 
 /** Ceilings that keep one odd page from becoming the whole inventory. */
@@ -154,6 +266,12 @@ export const SITE_IMPORT_PAGE_LIMITS = {
   forms: 10,
   fieldsPerForm: 30,
   icons: 12,
+  /** The structure's ceilings (AGL-4106): elements, inline icons, links and the page's own style sheets. */
+  elements: 20_000,
+  svgIcons: 200,
+  anchors: 800,
+  styleChars: 1_500_000,
+  stylesheets: 4,
 } as const
 
 /** Elements removed with everything inside them. */
@@ -174,8 +292,13 @@ const REMOVED_WITH_CONTENT = [
   'audio',
 ]
 
-/** Form controls, removed with their content once the forms are summarized. */
-const FORM_CONTROLS = ['textarea', 'select', 'button']
+/**
+ * Form controls, removed with their content once the forms are summarized.
+ * A `<button>` outside a form is not one (AGL-4106): its words are a line
+ * ("Watch the 40-second film", a pricing tab's name) and a picture inside it
+ * is still a picture. A form's own buttons go with the form.
+ */
+const FORM_CONTROLS = ['textarea', 'select']
 
 /** Void elements removed wherever they appear. */
 const REMOVED_VOID = /<(?:embed|param|source|track|link|base)\b(?:[^>"']|"[^"]*"|'[^']*')*>/gi
@@ -201,6 +324,9 @@ const BLOCK_TAGS: Record<string, 'paragraph' | 'list-item' | 'quote'> = {
   figcaption: 'paragraph',
   caption: 'paragraph',
   label: 'paragraph',
+  /** A disclosure's question, a button's words (AGL-4106). */
+  summary: 'paragraph',
+  button: 'paragraph',
   blockquote: 'quote',
 }
 
@@ -221,6 +347,8 @@ const BREAK_TAGS = new Set([
   'tr',
   'tbody',
   'thead',
+  'tfoot',
+  'details',
   'figure',
   'form',
   'hr',
@@ -381,6 +509,8 @@ function takeForms(html: string): { html: string; kept: SiteImportForm[]; remove
         if (fields.length >= SITE_IMPORT_PAGE_LIMITS.fieldsPerForm) break
       }
       kept.push({ fields })
+      // Where the form sat, for the layout (AGL-4106): a marker, never words.
+      return ` <aglyn-form data-form="${kept.length - 1}"> `
     }
     return ' '
   })
@@ -531,6 +661,194 @@ function readOrganization(html: string): SiteImportOrganization | null {
   }
 }
 
+/*------------------------------------------
+ * How the page is built (AGL-4106)
+ *-----------------------------------------*/
+
+const SVG_ELEMENT = /<svg\b((?:[^>"']|"[^"]*"|'[^']*')*)>([\s\S]*?)<\/svg\s*>/gi
+const SVG_SHAPE = /<(path|circle|rect|ellipse|line|polyline|polygon)\b((?:[^>"']|"[^"]*"|'[^']*')*)>/gi
+/** What a drawing keeps of a shape: its geometry and paint, never a link, a script or a reference. */
+const SVG_SHAPE_ATTRIBUTES = new Set([
+  'd',
+  'cx',
+  'cy',
+  'r',
+  'rx',
+  'ry',
+  'x',
+  'y',
+  'x1',
+  'y1',
+  'x2',
+  'y2',
+  'width',
+  'height',
+  'points',
+  'fill',
+  'fill-rule',
+  'clip-rule',
+  'fill-opacity',
+  'stroke',
+  'stroke-width',
+  'stroke-linecap',
+  'stroke-linejoin',
+  'opacity',
+  'transform',
+])
+const SVG_SAFE_VALUE = /^[\w\s.,#%()+-]*$/
+const SVG_PATH_DATA = /^[MmZzLlHhVvCcSsQqTtAa0-9eE.,\s+-]+$/
+const VIEW_BOX = /^-?[\d.]+(?:[\s,]+-?[\d.]+){3}$/
+
+/** An `<svg>`'s drawing area: its `viewBox`, else its size, else the 24-unit square of an icon set. */
+function viewBoxOf(attributes: Record<string, string>): string {
+  const written = (attributes['viewbox'] ?? '').trim().replace(/[\s,]+/g, ' ')
+  if (VIEW_BOX.test(written)) return written
+  const width = parseFloat(attributes['width'] ?? '')
+  const height = parseFloat(attributes['height'] ?? '')
+  return width > 0 && height > 0 ? `0 0 ${width} ${height}` : '0 0 24 24'
+}
+
+/**
+ * Every inline `<svg>` turned into a marker the walk reads as an icon at its
+ * place, its drawing kept in `icons` once however often it repeats. A drawing
+ * that embeds anything but shapes (a picture, text, a reference) is no icon
+ * and goes, as every `<svg>` did before.
+ */
+function readSvgIcons(html: string, icons: SiteImportSvgIcon[]): string {
+  const seen = new Map<string, number>()
+  return html.replace(SVG_ELEMENT, (whole: string, attributeSource: string, inner: string) => {
+    if (/<(?:image|foreignobject|use|text|script)\b/i.test(inner)) return ' '
+    const shapes = [...inner.matchAll(SVG_SHAPE)]
+    if (!shapes.length) return ' '
+    const viewBox = viewBoxOf(parseAttributes(attributeSource))
+    let icon: SiteImportSvgIcon | null = null
+    if (shapes.length === 1 && shapes[0][1].toLowerCase() === 'path') {
+      const d = (parseAttributes(shapes[0][2])['d'] ?? '').trim()
+      if (d && d.length <= 4_096 && SVG_PATH_DATA.test(d)) icon = { viewBox, path: d }
+    }
+    if (!icon && whole.length <= 16_384 && shapes.length <= 64) {
+      const drawn = shapes.map(([, tag, source]) => {
+        const kept = Object.entries(parseAttributes(source))
+          .filter(([name, value]) => SVG_SHAPE_ATTRIBUTES.has(name) && SVG_SAFE_VALUE.test(value) && !/url\s*\(/i.test(value))
+          .map(([name, value]) => `${name}="${value}"`)
+        return `<${tag.toLowerCase()}${kept.length ? ` ${kept.join(' ')}` : ''}/>`
+      })
+      icon = { viewBox, svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}">${drawn.join('')}</svg>` }
+    }
+    if (!icon) return ' '
+    const key = `${icon.viewBox}|${icon.path ?? icon.svg}`
+    let index = seen.get(key)
+    if (index === undefined) {
+      if (icons.length >= SITE_IMPORT_PAGE_LIMITS.svgIcons) return ' '
+      index = icons.length
+      icons.push(icon)
+      seen.set(key, index)
+    }
+    return ` <aglyn-svg data-icon="${index}"> `
+  })
+}
+
+/** The page's own `<style>` sheets and the stylesheets it links, print ones left out. */
+function readStyleSheets(html: string, pageUrl: string): { styles: string[]; stylesheets: string[] } {
+  const styles: string[] = []
+  let chars = 0
+  for (const match of html.matchAll(/<style\b((?:[^>"']|"[^"]*"|'[^']*')*)>([\s\S]*?)<\/style\s*>/gi)) {
+    const media = (parseAttributes(match[1])['media'] ?? '').toLowerCase()
+    if (media && !/\b(?:all|screen)\b/.test(media)) continue
+    const css = match[2] ?? ''
+    if (!css.trim() || chars + css.length > SITE_IMPORT_PAGE_LIMITS.styleChars) continue
+    chars += css.length
+    styles.push(css)
+  }
+  const stylesheets: string[] = []
+  for (const match of html.matchAll(/<link\b((?:[^>"']|"[^"]*"|'[^']*')*)>/gi)) {
+    const attributes = parseAttributes(match[1])
+    if (!(attributes['rel'] ?? '').toLowerCase().split(/\s+/).includes('stylesheet')) continue
+    const media = (attributes['media'] ?? '').toLowerCase()
+    if (media && !/\b(?:all|screen)\b/.test(media)) continue
+    const url = resolveSiteUrl(attributes['href'], pageUrl)
+    if (!url || url.protocol !== 'https:' || stylesheets.includes(url.toString())) continue
+    stylesheets.push(url.toString())
+    if (stylesheets.length >= SITE_IMPORT_PAGE_LIMITS.stylesheets) break
+  }
+  return { styles, stylesheets }
+}
+
+/** Elements with no content and no end tag. */
+const VOID_TAGS = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr', 'aglyn-svg', 'aglyn-form'])
+
+/** Start tags that end an open `<p>`, as a browser reads them. */
+const CLOSES_P = new Set([
+  'address',
+  'article',
+  'aside',
+  'blockquote',
+  'details',
+  'div',
+  'dl',
+  'fieldset',
+  'figcaption',
+  'figure',
+  'footer',
+  'form',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'header',
+  'hr',
+  'main',
+  'menu',
+  'nav',
+  'ol',
+  'p',
+  'pre',
+  'section',
+  'table',
+  'ul',
+])
+
+/** For each tag that ends an open one of its own kind: the kinds it ends, and the tags that wall the search off. */
+const IMPLIED_END: Record<string, { ends: ReadonlySet<string>; walls: ReadonlySet<string> }> = {
+  li: { ends: new Set(['li']), walls: new Set(['ul', 'ol', 'menu']) },
+  dt: { ends: new Set(['dt', 'dd']), walls: new Set(['dl']) },
+  dd: { ends: new Set(['dt', 'dd']), walls: new Set(['dl']) },
+  tr: { ends: new Set(['tr', 'td', 'th']), walls: new Set(['table', 'tbody', 'thead', 'tfoot']) },
+  td: { ends: new Set(['td', 'th']), walls: new Set(['tr', 'table']) },
+  th: { ends: new Set(['td', 'th']), walls: new Set(['tr', 'table']) },
+  option: { ends: new Set(['option']), walls: new Set(['select', 'datalist']) },
+  tbody: { ends: new Set(['tbody', 'thead', 'tfoot', 'tr', 'td', 'th']), walls: new Set(['table']) },
+  thead: { ends: new Set(['tbody', 'thead', 'tfoot', 'tr', 'td', 'th']), walls: new Set(['table']) },
+  tfoot: { ends: new Set(['tbody', 'thead', 'tfoot', 'tr', 'td', 'th']), walls: new Set(['table']) },
+}
+const P_WALLS = new Set(['button', 'table', 'td', 'th', 'caption', 'object', 'template', 'html', 'marquee', 'applet'])
+
+/** The attributes the layout reader reads. */
+function elementAttrs(attributes: Record<string, string>): SiteImportElementAttrs {
+  const attrs: SiteImportElementAttrs = {}
+  const text = (value: string | undefined, max: number) => {
+    const clean = String(value ?? '').replace(/\s+/g, ' ').trim()
+    return clean ? clean.slice(0, max) : undefined
+  }
+  const put = <K extends keyof SiteImportElementAttrs>(key: K, value: SiteImportElementAttrs[K] | undefined) => {
+    if (value !== undefined) attrs[key] = value
+  }
+  put('class', text(attributes['class'], 600))
+  put('id', text(attributes['id'], 120))
+  put('style', text(attributes['style'], 1_000))
+  put('role', text(attributes['role'], 40)?.toLowerCase())
+  put('label', text(attributes['aria-label'], 200))
+  put('href', text(attributes['href'], 2_048))
+  put('theme', text(attributes['data-section-theme'] ?? attributes['data-theme'], 40)?.toLowerCase())
+  put('type', text(attributes['type'], 40)?.toLowerCase())
+  put('controls', text(attributes['aria-controls'], 120))
+  put('labelledby', text(attributes['aria-labelledby'], 120))
+  if ('hidden' in attributes || (attributes['aria-hidden'] ?? '').toLowerCase() === 'true') attrs.hidden = true
+  return attrs
+}
+
 /**
  * The words, structure, pictures and links of one page.
  *
@@ -541,6 +859,7 @@ export function extractSiteImportPage(
   html: string,
   pageUrl: string,
   isSameSite: (url: URL) => boolean,
+  options: SiteImportExtractOptions = {},
 ): SiteImportExtract {
   const empty: SiteImportExtract = {
     title: '',
@@ -567,6 +886,11 @@ export function extractSiteImportPage(
   // Read before scripts go: the structured data is a script's body.
   const organization = readOrganization(source)
   const icons = readIcons(source, pageUrl)
+  const keep = options.structure === true
+  const sheets = keep ? readStyleSheets(source, pageUrl) : { styles: [], stylesheets: [] }
+  // An inline icon is a marker at its place (AGL-4106); its drawing is never words.
+  const svgIcons: SiteImportSvgIcon[] = []
+  source = readSvgIcons(source, svgIcons)
   source = removeElements(readPictures(source), REMOVED_WITH_CONTENT).replace(REMOVED_VOID, ' ')
   // Forms next, so a field list is read before the controls go.
   const forms = takeForms(source)
@@ -614,7 +938,7 @@ export function extractSiteImportPage(
   let navDepth = 0
   let headerDepth = 0
   let footerDepth = 0
-  let current: { kind: 'heading' | 'paragraph' | 'list-item' | 'quote'; level?: number; tag: string } | null = null
+  let current: { kind: 'heading' | 'paragraph' | 'list-item' | 'quote'; level?: number; tag: string; element: number } | null = null
   let buffer = ''
   /** The link being read: its menu address (http(s) only), where it goes, its words and its first picture. */
   let anchor: {
@@ -629,9 +953,35 @@ export function extractSiteImportPage(
     /** Its words ran across a block's end: some of them are in a block already. */
     crossed: boolean
     region: SiteImportRegion
+    /** Its element, and the first icon inside it (AGL-4106). */
+    element: number
+    icon?: number
   } | null = null
   /** The links read into the block being built, written after it. */
-  let pending: Array<{ text: string; href: string; start: number; end: number; crossed: boolean; region: SiteImportRegion }> = []
+  let pending: Array<{ text: string; href: string; start: number; end: number; crossed: boolean; region: SiteImportRegion; element: number }> = []
+
+  // How the page is built (AGL-4106): every element, in a flat table, and
+  // the element each block's words sit in. Kept only when asked for.
+  const elements: SiteImportElement[] = []
+  const blockElement: number[] = []
+  const anchors: SiteImportAnchor[] = []
+  const texts: Array<{ element: number; text: string }> = []
+  /** Where in `buffer` the words no link has taken begin: a menu's own words are read from here. */
+  let ownFrom = 0
+  /** A menu's or a header's own words, outside its links (AGL-4106), from `ownFrom` on. */
+  const takeOwnWords = (element: number) => {
+    if (!keep || element < 0 || !(navDepth > 0 || headerDepth > 0) || texts.length >= SITE_IMPORT_PAGE_LIMITS.anchors) return
+    const words = clip(collapse(decodeHtmlEntities(buffer.slice(ownFrom))), 300)
+    if (words) texts.push({ element, text: words })
+  }
+  /** The elements open where the walk is, innermost last. */
+  const open: number[] = []
+  let mainElement = -1
+  let roleMain = -1
+  let bodyElement = -1
+  /** The element the loose words being read began in. */
+  let looseElement = -1
+  const top = () => (open.length ? (open[open.length - 1] as number) : -1)
 
   const region = (): SiteImportRegion =>
     footerDepth > 0 ? 'footer' : headerDepth > 0 ? 'header' : 'main'
@@ -639,19 +989,76 @@ export function extractSiteImportPage(
   const inNav = () => navDepth > 0 || (!hasNav && headerDepth > 0)
   const room = () => blocks.length < SITE_IMPORT_PAGE_LIMITS.blocks
 
+  /** A block, and where its words sit. */
+  const push = (block: SiteImportBlock, element: number) => {
+    blocks.push(block)
+    if (!keep) return
+    blockElement.push(element)
+    const owner = elements[element]
+    if (!owner) return
+    owner.blocks.push(blocks.length - 1)
+    if (owner.order === undefined) owner.order = blocks.length - 1
+  }
+
+  /** Pops the open elements down to the innermost `tags` one, unless a wall stands first. */
+  const endOpen = (tags: ReadonlySet<string>, walls: ReadonlySet<string>) => {
+    for (let at = open.length - 1; at >= 0; at -= 1) {
+      const tag = elements[open[at] as number]?.tag ?? ''
+      if (tags.has(tag)) {
+        open.length = at
+        return
+      }
+      if (walls.has(tag)) return
+    }
+  }
+  const P_ONLY = new Set(['p'])
+  /** An element opens: what it implies is closed first, then it is the innermost. */
+  const openElement = (tag: string, attributes: Record<string, string>, selfClosing: boolean): number => {
+    if (!keep) return -1
+    if (CLOSES_P.has(tag)) endOpen(P_ONLY, P_WALLS)
+    const implied = IMPLIED_END[tag]
+    if (implied) endOpen(implied.ends, implied.walls)
+    const isVoid = VOID_TAGS.has(tag)
+    if (isVoid && tag !== 'img' && tag !== 'aglyn-svg' && tag !== 'aglyn-form') return -1
+    if (elements.length >= SITE_IMPORT_PAGE_LIMITS.elements) return -1
+    const id = elements.length
+    const parent = top()
+    elements.push({ id, tag, parent, children: [], region: region(), nav: inNav(), attrs: elementAttrs(attributes), blocks: [] })
+    elements[parent]?.children.push(id)
+    if (!isVoid && !selfClosing) open.push(id)
+    if (tag === 'body' && bodyElement < 0) bodyElement = id
+    if (tag === 'main' && mainElement < 0) mainElement = id
+    if (roleMain < 0 && (attributes['role'] ?? '').toLowerCase() === 'main') roleMain = id
+    return id
+  }
+  /** An element closes: it and everything still open inside it. */
+  const closeElement = (tag: string) => {
+    if (!keep) return
+    for (let at = open.length - 1; at >= 0; at -= 1) {
+      if (elements[open[at] as number]?.tag === tag) {
+        open.length = at
+        return
+      }
+    }
+  }
+
   const flush = () => {
     const raw = buffer
     const written = pending
+    const loose = current === null
+    const element = current?.element ?? looseElement
+    if (!anchor) takeOwnWords(element)
+    ownFrom = 0
     buffer = ''
     pending = []
+    looseElement = -1
     if (anchor && collapse(decodeHtmlEntities(raw.slice(anchor.start)))) anchor.crossed = true
     if (anchor) anchor.start = 0
     const kind = current?.kind ?? 'paragraph'
     const level = current?.level
-    const loose = current === null
     current = null
-    if (navDepth > 0) return
     const text = clip(collapse(decodeHtmlEntities(raw)), SITE_IMPORT_PAGE_LIMITS.blockChars)
+    if (navDepth > 0) return
     // Loose words that are only links (a row of buttons, an address in a
     // card) are those links, each a block of its own; words around a link
     // keep their block, and the link follows it.
@@ -662,9 +1069,9 @@ export function extractSiteImportPage(
       const last = blocks[blocks.length - 1]
       if (!(last && last.kind !== 'image' && last.kind !== 'link' && last.text === text)) {
         if (kind === 'heading') {
-          blocks.push({ kind, level: (level ?? 2) as 1 | 2 | 3 | 4 | 5 | 6, text, region: region() })
+          push({ kind, level: (level ?? 2) as 1 | 2 | 3 | 4 | 5 | 6, text, region: region() }, element)
         } else {
-          blocks.push({ kind, text, region: region() })
+          push({ kind, text, region: region() }, element)
         }
       }
     }
@@ -673,7 +1080,7 @@ export function extractSiteImportPage(
       const last = blocks[blocks.length - 1]
       if (last?.kind === 'link' && last.href === link.href && last.text === link.text) continue
       const inline = !onlyLinks || link.crossed
-      blocks.push({ kind: 'link', text: link.text, href: link.href, region: link.region, ...(inline ? { inline: true as const } : {}) })
+      push({ kind: 'link', text: link.text, href: link.href, region: link.region, ...(inline ? { inline: true as const } : {}) }, link.element)
     }
   }
 
@@ -685,21 +1092,8 @@ export function extractSiteImportPage(
     if (block && anchor.lines[anchor.lines.length - 1] !== '') anchor.lines.push('')
   }
 
-  for (const match of body.matchAll(new RegExp(`${TAG.source}|([^<]+)|<`, 'g'))) {
-    const text = match[4]
-    if (text !== undefined || match[2] === undefined) {
-      const run = text ?? '<'
-      buffer += run
-      if (anchor) {
-        anchor.text += run
-        anchor.lines[anchor.lines.length - 1] += run
-      }
-      continue
-    }
-    const closing = match[1] === '/'
-    const tag = match[2].toLowerCase()
-    const attributes = closing ? {} : parseAttributes(match[3] ?? '')
-
+  /** One tag of the page, read where the walk is. */
+  const read = (closing: boolean, tag: string, attributes: Record<string, string>, element: number) => {
     if (tag === 'a') {
       if (closing) {
         if (anchor) {
@@ -712,13 +1106,29 @@ export function extractSiteImportPage(
             brand = { logo: anchor.image, text: label, region: anchor.region }
           }
           if (!inNav() && anchor.href && label) {
-            pending.push({ text: label, href: anchor.href, start: anchor.start, end: buffer.length, crossed: anchor.crossed, region: anchor.region })
+            pending.push({ text: label, href: anchor.href, start: anchor.start, end: buffer.length, crossed: anchor.crossed, region: anchor.region, element: anchor.element })
+          }
+          if (keep && anchor.element >= 0 && anchors.length < SITE_IMPORT_PAGE_LIMITS.anchors) {
+            const lines = anchor.lines.map((line) => clip(collapse(decodeHtmlEntities(line)), 300)).filter(Boolean)
+            anchors.push({
+              element: anchor.element,
+              href: anchor.href,
+              label: firstLine,
+              text: clip(lines.slice(1).join(' '), 300),
+              region: anchor.region,
+              nav: inNav(),
+              ...(anchor.icon !== undefined ? { icon: anchor.icon } : {}),
+              ...(anchor.image ? { image: anchor.image.url } : {}),
+            })
           }
           anchor = null
         }
         boundary(false)
-        continue
+        ownFrom = buffer.length
+        return
       }
+      // Words before a link in a menu are its own: a column's heading.
+      if (!anchor) takeOwnWords(current?.element ?? (looseElement >= 0 ? looseElement : top()))
       boundary(false)
       const url = resolveSiteUrl(attributes['href'], pageUrl)
       anchor = {
@@ -730,6 +1140,7 @@ export function extractSiteImportPage(
         start: buffer.length,
         crossed: false,
         region: region(),
+        element,
       }
       if (url && isSameSite(url) && links.length < SITE_IMPORT_PAGE_LIMITS.links) {
         const key = url.toString()
@@ -738,7 +1149,29 @@ export function extractSiteImportPage(
           links.push(key)
         }
       }
-      continue
+      return
+    }
+
+    if (tag === 'aglyn-svg') {
+      // An icon at its place: never words (AGL-4106).
+      const index = Number(attributes['data-icon'])
+      if (keep && element >= 0 && Number.isInteger(index) && svgIcons[index]) {
+        const own = elements[element] as SiteImportElement
+        own.icon = index
+        own.order = blocks.length - 0.5
+        if (anchor && anchor.icon === undefined) anchor.icon = index
+      }
+      return
+    }
+
+    if (tag === 'aglyn-form') {
+      const index = Number(attributes['data-form'])
+      if (keep && element >= 0 && Number.isInteger(index)) {
+        const own = elements[element] as SiteImportElement
+        own.form = index
+        own.order = blocks.length - 0.5
+      }
+      return
     }
 
     if (tag === 'img' && !closing) {
@@ -756,11 +1189,11 @@ export function extractSiteImportPage(
           images.push({ url: key, alt, sameSite: isSameSite(url), region: region() })
           if (navDepth === 0) {
             flush()
-            if (room()) blocks.push({ kind: 'image', url: key, alt, region: region() })
+            if (room()) push({ kind: 'image', url: key, alt, region: region() }, element)
           }
         }
       }
-      continue
+      return
     }
 
     if (tag === 'nav' || tag === 'header' || tag === 'footer') {
@@ -770,7 +1203,13 @@ export function extractSiteImportPage(
       if (tag === 'nav') navDepth = Math.max(0, navDepth + step)
       if (tag === 'header') headerDepth = Math.max(0, headerDepth + step)
       if (tag === 'footer') footerDepth = Math.max(0, footerDepth + step)
-      continue
+      // The landmark is in its own region.
+      const own = elements[element]
+      if (own) {
+        own.region = region()
+        own.nav = inNav()
+      }
+      return
     }
 
     const heading = /^h([1-6])$/.exec(tag)
@@ -778,28 +1217,48 @@ export function extractSiteImportPage(
       if (closing) {
         if (current?.tag === tag) flush()
         boundary(true)
-        continue
+        return
       }
       flush()
       boundary(true)
       current = heading
-        ? { kind: 'heading', level: Number(heading[1]), tag }
-        : { kind: BLOCK_TAGS[tag], tag }
-      continue
+        ? { kind: 'heading', level: Number(heading[1]), tag, element }
+        : { kind: BLOCK_TAGS[tag], tag, element }
+      return
     }
 
     if (BREAK_TAGS.has(tag)) {
       if (tag === 'br' && current) {
         buffer += ' '
         if (anchor) anchor.text += ' '
-        continue
+        return
       }
       flush()
       boundary(true)
-      continue
+      return
     }
 
     if (RUN_BOUNDARY.has(tag)) boundary(false)
+  }
+
+  for (const match of body.matchAll(new RegExp(`${TAG.source}|([^<]+)|<`, 'g'))) {
+    const text = match[4]
+    if (text !== undefined || match[2] === undefined) {
+      const run = text ?? '<'
+      buffer += run
+      if (keep && looseElement < 0 && current === null && run.trim()) looseElement = top()
+      if (anchor) {
+        anchor.text += run
+        anchor.lines[anchor.lines.length - 1] += run
+      }
+      continue
+    }
+    const closing = match[1] === '/'
+    const tag = match[2].toLowerCase()
+    const attributes = closing ? {} : parseAttributes(match[3] ?? '')
+    const element = closing ? -1 : openElement(tag, attributes, /\/\s*$/.test(match[3] ?? ''))
+    read(closing, tag, attributes, element)
+    if (closing) closeElement(tag)
   }
   flush()
 
@@ -819,5 +1278,21 @@ export function extractSiteImportPage(
     links,
     forms: { kept: forms.kept, removed: forms.removed },
     loginForm: false,
+    ...(keep
+      ? {
+          structure: {
+            elements,
+            blockElement,
+            icons: svgIcons,
+            anchors,
+            texts,
+            styles: sheets.styles,
+            stylesheets: sheets.stylesheets,
+            main: mainElement >= 0 ? mainElement : roleMain,
+            body: bodyElement,
+            root: htmlTag ? elementAttrs(parseAttributes(htmlTag[1])) : {},
+          },
+        }
+      : {}),
   }
 }

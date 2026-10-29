@@ -68,7 +68,18 @@ Choose **Read my site**. Aglyn then:
   sitemap, then your home page, then every other page, and only on your own domain.
   Your current site is not changed.
 
+Aglyn reads up to 400 pages. A link to a file, such as a download or a PDF, is not a page,
+so it is never read as one and never counts toward that number.
+
 Reading uses no AI credits.
+
+**What is read.** For each page Aglyn reads its words and how your site lays them out: its
+sections and their background colors, its columns, its cards and the icons on them, its
+numbered steps, figures, questions and answers, quotes, logo strips, price cards, tables
+and tabs, its pictures where they sit, and which links your site shows as buttons. From
+your home page it also reads your menu, with each dropdown and its entries, the buttons
+beside it, and your footer's columns, profiles and copyright line, plus your site's fonts
+and colors. Your new pages are built from this, with every word as you wrote it.
 
 **Your home page comes first.** If AglynBot cannot read your home page, nothing is
 planned and no AI credits are used. The import waits and says why:
@@ -98,6 +109,7 @@ Each page left out is listed under one of these reasons:
 - **Turned away by your site's bot protection or firewall.** See
   [When your site turns AglynBot away](#turned-away).
 - **Not reached.** The read stopped before it got to the page.
+- **A file, not a page.** The link led to a file, such as a PDF, rather than a page.
 - **No text could be read.** The page shows its words only once a browser runs it, so it
   cannot be brought in yet.
 - **Could not be read just now**, **a sign-in page**, **robots.txt asks AglynBot not to
