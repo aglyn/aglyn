@@ -244,10 +244,12 @@ describe('sending an unpaid draft order’s invoice', () => {
     expect(order['invoiceSends']).toEqual([
       expect.objectContaining({ to: 'jordan@example.com', by: 'editor@example.com', paid: false, linkVersion: 1, totalCents: 50_000, providerId: 'provider-1' }),
     ])
-    // The order's own conversation, started by this invoice.
+    // The order's own conversation, started by this invoice under its root.
+    const messageId = String(sent[0].headers?.['Message-ID'])
+    expect(sent[0].headers?.['References']).toBe(`<thread.${messageId.slice(1)}`)
     expect(order['emailThread']).toEqual({
-      messageId: sent[0].headers?.['Message-ID'],
-      references: [sent[0].headers?.['Message-ID']],
+      messageId,
+      references: [`<thread.${messageId.slice(1)}`, messageId],
       subject: 'Invoice #2001 from Acme Signs',
     })
     expect(order['timeline'].at(-1)).toEqual({ atMs: 50_000, event: 'invoice-sent', detail: 'Invoice emailed to the customer by editor@example.com' })

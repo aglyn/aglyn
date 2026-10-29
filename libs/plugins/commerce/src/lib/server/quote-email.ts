@@ -60,9 +60,10 @@ import type { CommercePdfFile } from './pdf-response'
  *   - IN THE CUSTOMER'S CONVERSATION: a `Message-ID` minted on the sending
  *     domain, and, when the quote already has a conversation (an earlier
  *     send, or a request's confirmation), `In-Reply-To` and `References`
- *     from it (`nextThreadHeaders`). The provider's own id is returned beside
- *     ours, because whether a provider keeps a caller's `Message-ID` is its
- *     own call, and a replaced one can then be traced;
+ *     from it, else the root of the one it starts in `References`
+ *     (`nextThreadHeaders`). The provider's own id is returned beside ours,
+ *     because a provider may replace a caller's `Message-ID` (in production
+ *     one does), and a replaced one can then be traced;
  *   - METERED as a site's transactional email;
  *   - REFUSED only for an address that bounced for good or reported mail as
  *     spam (`transactionalAddressSuppression`): the customer asked for the
