@@ -149,6 +149,11 @@ final class TelemetryTests: XCTestCase {
     }
     let emulator = try String(contentsOf: config.appendingPathComponent("Emulator.xcconfig"), encoding: .utf8)
     XCTAssertTrue(emulator.contains("AGLYN_TELEMETRY = off"))
+    // Analytics starts Firebase Installations at launch, which ends the app on a key without a real key's shape: 39
+    // characters from [A-Za-z0-9_-], starting with "A" (AGL-4104). The emulators accept any key, so the placeholder has it.
+    let key = emulator.split(separator: "\n").first { $0.hasPrefix("AGLYN_FIREBASE_API_KEY = ") }
+      .map { String($0.dropFirst("AGLYN_FIREBASE_API_KEY = ".count)) } ?? ""
+    XCTAssertNotNil(key.range(of: "^A[A-Za-z0-9_-]{38}$", options: .regularExpression), key)
     for app in ["Aglyn", "AglynPOS"] {
       let manifest = try Data(contentsOf: repo.appendingPathComponent("apps/ios/\(app)/PrivacyInfo.xcprivacy"))
       let plist = try XCTUnwrap(PropertyListSerialization.propertyList(from: manifest, format: nil) as? [String: Any])
