@@ -42,8 +42,10 @@ import {
   useThemeModeState,
 } from '@aglyn/shared-ui-theme'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { getDocBounded } from '@aglyn/tenant-feature-instance/hooks/firebase/firestore-bounded-read'
 import {
   Alert,
+  Button,
   CircularProgress,
   CssBaseline,
   MenuItem,
@@ -55,6 +57,7 @@ import {
 } from '@mui/material'
 import {
   collection,
+  type DocumentReference,
   doc as firestoreDoc,
   getDoc,
   getDocs,
@@ -84,6 +87,23 @@ const SUPPRESSED_SCREEN_LINKS = { suppressNavigation: true }
  * It is a ceiling on a hang, not a latency budget.
  */
 export const DEFINITIONS_TIMEOUT_MS = 8000
+
+/**
+ * One read of the document being previewed, bounded (AGL-4101).
+ *
+ * A plain `getDoc` never settles while another tab holds the shared cache
+ * (AGL-3428), so the stored-document reads waited out the ceiling and the
+ * preview said the page had nothing saved. `getDocBounded` asks the client to
+ * recover once the read stalls and answers from the local cache meanwhile;
+ * when the cache cannot answer either, it rejects, which the caller reports
+ * as a read that failed rather than a document that is empty.
+ */
+async function readPreviewDocument(reference: DocumentReference) {
+  return (await getDocBounded(reference)).snapshot
+}
+
+/** Why the stored document has not arrived, when it has not. */
+type StoredReadTrouble = 'slow' | 'failed'
 
 const KIND_LABEL: Record<PreviewKind, string> = {
   screen: 'page',
@@ -294,6 +314,16 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
   const [storedNodes, setStoredNodes] = useState<
     Aglyn.NodesMap | null | undefined
   >(undefined)
+  /**
+   * Why `storedNodes` has not arrived, when it has not (AGL-4101).
+   *
+   * `'slow'` once the ceiling passes with the read still out, `'failed'` when
+   * it threw. Kept apart from `storedNodes` because that `null` means the
+   * document has nothing saved, and a read that was only slow or refused must
+   * not say so. A late answer still lands and replaces the notice.
+   */
+  const [storedReadTrouble, setStoredReadTrouble] =
+    useState<StoredReadTrouble | null>(null)
 
   const hostId = ids?.hostId
   const kind = ids?.kind
@@ -346,6 +376,18 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
   useEffect(() => {
     if (!firestore || !hostId || !kind || !docId) return undefined
     let cancelled = false
+    // Whether the resolver has answered, so the ceiling below never calls a
+    // read slow after it settled.
+    let settled = false
+    const settle = (nodes: Aglyn.NodesMap | null) => {
+      settled = true
+      setStoredReadTrouble(null)
+      setStoredNodes(nodes)
+    }
+    const fail = () => {
+      settled = true
+      setStoredReadTrouble('failed')
+    }
     const collectionName = KIND_COLLECTION[kind]
 
     /**
@@ -370,12 +412,12 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
       ) {
         seen.add(String(layoutId))
         try {
-          const layout = await getDoc(
+          const layout = await readPreviewDocument(
             firestoreDoc(firestore, 'hosts', hostId, 'layouts', String(layoutId)),
           )
           const layoutVersionId = layout.get('versionId')
           if (!layoutVersionId) break
-          const version = await getDoc(
+          const version = await readPreviewDocument(
             firestoreDoc(
               firestore,
               'hosts',
@@ -407,10 +449,12 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
 
     const resolve = async () => {
       let parent: Record<string, unknown> | null
+      // A parent that could not be read is not a parent that is absent.
+      let parentFailed = false
       try {
         const snapshot = await firestoreOneShotRetry(
           () =>
-            getDoc(
+            readPreviewDocument(
               firestoreDoc(firestore, 'hosts', hostId, collectionName, docId),
             ),
           'preview-subject',
@@ -418,6 +462,7 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
         parent = (snapshot.data() as Record<string, unknown> | undefined) ?? null
       } catch {
         parent = null
+        parentFailed = true
       }
       if (cancelled) return
       setParentDoc(parent)
@@ -434,7 +479,15 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
        * would hold a spinner instead of saying what it said before.
        */
       if (readPreviewState({ hostId, kind, docId, versionId })) {
-        setStoredNodes(null)
+        settle(null)
+        return
+      }
+
+      // Without the parent, a template has no tree to read and a link that
+      // named no version has no pointer to follow. Neither means the
+      // document has nothing saved.
+      if (parentFailed && (kind === 'template' || !versionId)) {
+        fail()
         return
       }
 
@@ -451,14 +504,14 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
         // one this document currently points at.
         const version = versionId ?? (parent?.versionId as string | undefined)
         if (!version) {
-          if (!cancelled) setStoredNodes(null)
+          if (!cancelled) settle(null)
           return
         }
         let data: Record<string, unknown> | undefined
         try {
           const snapshot = await firestoreOneShotRetry(
             () =>
-              getDoc(
+              readPreviewDocument(
                 firestoreDoc(
                   firestore,
                   'hosts',
@@ -474,7 +527,7 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
           data = snapshot.data() as Record<string, unknown> | undefined
         } catch (error) {
           console.error(error)
-          if (!cancelled) setStoredNodes(null)
+          if (!cancelled) fail()
           return
         }
         if (cancelled) return
@@ -493,7 +546,7 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
 
       const decoded = Aglyn.decodeStoredNodes<Aglyn.NodesMap>(raw)
       if (!decoded || !Object.keys(decoded).length) {
-        setStoredNodes(null)
+        settle(null)
         return
       }
       // A component, a form and a component-kind template are stored as a
@@ -507,12 +560,12 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
       }) as Aglyn.NodesMap
 
       if (kind !== 'screen') {
-        setStoredNodes(tree)
+        settle(tree)
         return
       }
       const chain = await readLayoutChain(layoutBinding)
       if (cancelled) return
-      setStoredNodes(
+      settle(
         Aglyn.composeLayoutChainWithProps(
           chain as any,
           tree as any,
@@ -524,27 +577,32 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
 
     resolve().catch((error) => {
       console.error(error)
-      if (!cancelled) setStoredNodes(null)
+      if (!cancelled) fail()
     })
 
     /**
-     * The same ceiling the host reads get, for the same reason (AGL-1261): a
-     * one-shot read has no timeout of its own, and while `storedNodes` is
-     * `undefined` the apply effect returns early — so a wedged read would
-     * hold the spinner forever, which is the blank tab in a new costume.
-     * Fail open to the refusal, which is at least a true statement.
+     * The same ceiling the host reads get, for the same reason (AGL-1261):
+     * while `storedNodes` is `undefined` the apply effect returns early, so a
+     * read that has not answered would hold the spinner indefinitely, which
+     * is the blank tab in a new costume.
+     *
+     * Past the ceiling the preview says the read is slow (AGL-4101), not that
+     * the document is empty: `storedNodes` stays `undefined`, so the answer
+     * still renders when it lands. With a snapshot nothing waits on this
+     * read, and `null` lets `applyState` render the snapshot as before.
      */
     const timer = setTimeout(() => {
-      if (cancelled) return
-      setStoredNodes((current) => {
-        if (current !== undefined) return current
-        console.warn(
-          `[preview] the stored-document read did not settle within ` +
-            `${DEFINITIONS_TIMEOUT_MS}ms — saying so rather than holding a ` +
-            'spinner that never resolves.',
-        )
-        return null
-      })
+      if (cancelled || settled) return
+      console.warn(
+        `[preview] the stored-document read did not settle within ` +
+          `${DEFINITIONS_TIMEOUT_MS}ms — saying it is slow rather than ` +
+          'holding a spinner.',
+      )
+      if (readPreviewState({ hostId, kind, docId, versionId })) {
+        setStoredNodes((current) => (current === undefined ? null : current))
+        return
+      }
+      setStoredReadTrouble((current) => current ?? 'slow')
     }, DEFINITIONS_TIMEOUT_MS)
 
     return () => {
@@ -985,6 +1043,9 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
   // empty document throughout, which is indistinguishable from a tab that
   // will never load. The bounded read above means this state is temporary
   // even when Firestore never answers.
+  if (!root && storedReadTrouble) {
+    return <DocumentPreviewNotLoaded kind={kind} trouble={storedReadTrouble} />
+  }
   if (!root) return <DocumentPreviewPreparing kind={kind} />
 
   return (
@@ -1178,6 +1239,43 @@ export function DocumentPreviewPreparing({ kind }: { kind?: PreviewKind | null }
       <Typography color="text.secondary">
         {`Preparing the ${KIND_LABEL[kind ?? 'screen']} preview…`}
       </Typography>
+    </Stack>
+  )
+}
+
+/**
+ * The document could not be read in time, or at all (AGL-4101).
+ *
+ * Says that it has not loaded, never that there is nothing to load: the
+ * read that timed out may still answer, and replaces this when it does.
+ */
+function DocumentPreviewNotLoaded({
+  kind,
+  trouble,
+}: {
+  kind?: PreviewKind | null
+  trouble: StoredReadTrouble
+}) {
+  const label = KIND_LABEL[kind ?? 'screen']
+  return (
+    <Stack
+      role="status"
+      sx={{
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '100vh',
+        gap: 1,
+      }}
+    >
+      <Typography variant="h6">{`This ${label} hasn't loaded yet`}</Typography>
+      <Typography color="text.secondary">
+        {trouble === 'slow'
+          ? `Reading the ${label} is taking longer than usual. It will appear here when it arrives.`
+          : `The ${label} couldn't be read just now.`}
+      </Typography>
+      <Button sx={{ mt: 1 }} onClick={() => window.location.reload()}>
+        {'Reload'}
+      </Button>
     </Stack>
   )
 }
