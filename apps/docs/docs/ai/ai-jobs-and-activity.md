@@ -62,14 +62,21 @@ For a new site this is the **Building your site** page; see
 
 ## AI jobs in Assist {#ai-jobs-in-assist}
 
-The **AI jobs** list at the top of the [Assist](../getting-started/aglyn-assist.md) panel
-follows the workspace's jobs wherever you are in the console. It opens on its own while
-a job is running or waiting for you, counts the jobs that **need you** and are
-**running**, and shows each job's steps, credits and plan, with **Cancel** while it runs.
+The **AI jobs** row at the top of the [Assist](../getting-started/aglyn-assist.md) panel
+follows your jobs wherever you are in the console, and counts the jobs that **need you**
+and are **running**.
+
+- **On a site**, it counts that site's jobs, and **View all** opens the site's
+  [AI jobs page](#the-ai-jobs-page), where each job has room to be read. **Open in AI
+  jobs** on a card in the chat opens that job's own page there.
+- **On a workspace page**, such as Billing, the row opens into a list of the workspace's
+  jobs. It opens on its own while a job is running or waiting for you, and shows each
+  job's steps, credits and plan, with **Cancel** while it runs.
 
 The **AI** chip in the top bar, beside the notifications bell, appears while any job is
 running or waiting: **AI · plan ready**, **AI · needs attention**, **AI · planning** or
-**AI · working**. Choose it to open that job in the list.
+**AI · working**. Choose it to open that job: on the site's AI jobs page when you are on
+a site, in the list in Assist otherwise.
 
 A notification arrives when a plan is ready, when a job finishes and when it stops. A plan
 still waiting for you a day after it was ready gets one reminder, and never another. Turn
@@ -82,8 +89,8 @@ You can stop a job at any point before it finishes. **Cancel** is on:
 
 - the job's own page, such as **Building your site**;
 - each row of a site's **AI jobs** page, from the row's **⋮** menu (**Cancel job**);
-- each running job in the **AI jobs** list in Assist, which the **AI** chip in the top bar
-  opens.
+- each running job in the **AI jobs** list in Assist on a workspace page, which the **AI**
+  chip in the top bar opens.
 
 Each asks first, in a **Cancel this AI job?** window. Choose **Cancel job** to stop, or
 **Keep building** to let it carry on. Cancel needs the **Generate with AI** permission on

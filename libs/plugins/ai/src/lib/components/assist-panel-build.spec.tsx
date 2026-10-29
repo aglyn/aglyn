@@ -47,7 +47,7 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   AppLink: ({ href, children }: { href: string; children: unknown }) => <a href={href}>{children as string}</a>,
   MdiIcon: () => <span />,
 }))
-jest.mock('next/navigation', () => ({ __esModule: true, usePathname: () => '/acme/hosts/host-1/screens' }))
+jest.mock('next/navigation', () => ({ __esModule: true, useRouter: () => ({ push: () => undefined, prefetch: () => undefined }), usePathname: () => '/acme/hosts/host-1/screens' }))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   __esModule: true,
   useUser: () => ({ data: { uid: 'viewer', getIdToken: async () => 'tok' } }),
@@ -236,7 +236,7 @@ describe('a build asked in the chat (AGL-3616)', () => {
 
   it('a stored build whose job never came back is not started again', async () => {
     sessionStorage.setItem(
-      'aglyn-assist:org-1',
+      'aglyn-assist:org-1:host-1',
       JSON.stringify([
         { role: 'user', text: 'Build it' },
         { role: 'assistant', text: 'I will plan that.', build: BUILD },

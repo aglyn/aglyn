@@ -154,7 +154,7 @@ beforeEach(() => {
     json: async () => ({ jobs: [] }),
   }))
   sessionStorage.clear()
-  sessionStorage.setItem('aglyn-assist:org-1', JSON.stringify(THREAD))
+  sessionStorage.setItem('aglyn-assist:org-1:host-1', JSON.stringify(THREAD))
   localStorage.clear()
   // Someone who has asked before: the usage strip is drawn under the thread.
   localStorage.setItem('aglyn-ai-meter:viewer:org-1', JSON.stringify(METER))

@@ -90,6 +90,15 @@ import {
   resolveAssistEdit,
 } from './assist-edit'
 import { ASSIST_BUILD_TOOL_NAME, type AssistBuildProposal } from '../model/assist-build'
+import { ASSIST_PAGE_CHANGE_TOOL_NAME, type AssistPageChangeProposal } from '../model/assist-page-change'
+import {
+  assistPageChangeBlock,
+  assistPageChangeTool,
+  assistSitePagesBlock,
+  readAssistSitePages,
+  resolveAssistPageChange,
+  type AssistSitePage,
+} from './assist-page-change'
 import {
   assistBuildDraftsBlock,
   assistDraftsForTurn,
@@ -1171,6 +1180,20 @@ async function handler(request: Request): Promise<Response> {
       member: resolved.member,
       firestore,
     })
+    // A change to a page the site already has (AGL-4116): wherever a build
+    // may be proposed and no canvas is open (the canvas's own edit answers
+    // there), on a plan with version history, where the change has a draft
+    // version to land in beside the published one. The edit job's door checks
+    // the page and the plan again when the panel starts it.
+    const pageChangeRung: { hostId: string; pages: AssistSitePage[] } | null =
+      buildRung && !editRung && checkEntitlement(org as never, 'versioning')
+        ? await readAssistSitePages(firestore, buildRung.hostId)
+            .then((pages) => (pages.length ? { hostId: buildRung.hostId, pages } : null))
+            .catch((error: unknown) => {
+              console.error('assist page change rung failed', { orgId: body.orgId, error })
+              return null
+            })
+        : null
 
     // ── Retrieval FIRST (AGL-2486) ────────────────────────────────────────
     // Level-1 grounding for everyone. Hoisted above the reservation and the
@@ -1573,7 +1596,16 @@ async function handler(request: Request): Promise<Response> {
         ? [{ text: editCanvasBlock(editRung.target.kind), cacheBreakpoint: true as const }]
         : []),
       // The build protocol (AGL-3616): the same for every site, so cached.
-      ...(buildRung ? [{ text: assistBuildBlock(), cacheBreakpoint: true as const }] : []),
+      // A page change's protocol rides the same block (AGL-4116), so it
+      // takes no breakpoint of its own.
+      ...(buildRung
+        ? [
+            {
+              text: pageChangeRung ? `${assistBuildBlock()}\n\n${assistPageChangeBlock()}` : assistBuildBlock(),
+              cacheBreakpoint: true as const,
+            },
+          ]
+        : []),
       // The site's own block closes the cached span (AGL-3661): every block
       // above is shared by every workspace, this one is cached per site.
       ...siteBlock,
@@ -1593,6 +1625,8 @@ async function handler(request: Request): Promise<Response> {
         : []),
       // What a build can make on this site: per site, so volatile.
       ...(buildRung ? [{ text: assistBuildIntentsBlock(buildRung.intents), volatile: true as const }] : []),
+      // The pages a change may name (AGL-4116): per site, so volatile.
+      ...(pageChangeRung ? [{ text: assistSitePagesBlock(pageChangeRung.pages) ?? '', volatile: true as const }] : []),
       ...(docsBlock ? [{ text: docsBlock, volatile: true as const }] : []),
     ]
 
@@ -1613,6 +1647,7 @@ async function handler(request: Request): Promise<Response> {
               tools: [
                 ...(editRung ? [assistEditTool(editRung.target.kind)] : []),
                 ...(buildRung ? [assistBuildTool()] : []),
+                ...(pageChangeRung ? [assistPageChangeTool()] : []),
               ],
             }
           : {}),
@@ -1662,6 +1697,8 @@ async function handler(request: Request): Promise<Response> {
         let editInput: Record<string, unknown> | null = null
         /** The first call of the build tool (AGL-3616). */
         let buildInput: Record<string, unknown> | null = null
+        /** The first call of the page change tool (AGL-4116). */
+        let pageChangeInput: Record<string, unknown> | null = null
         /**
          * What the model wrote into its tool calls, when the stream stopped
          * at its ceiling (AGL-3143). Held here only long enough to be
@@ -1696,6 +1733,9 @@ async function handler(request: Request): Promise<Response> {
               }
               if (buildRung && !buildInput && event.name === ASSIST_BUILD_TOOL_NAME) {
                 buildInput = event.input
+              }
+              if (pageChangeRung && !pageChangeInput && event.name === ASSIST_PAGE_CHANGE_TOOL_NAME) {
+                pageChangeInput = event.input
               }
             } else if (event.type === 'done') {
               usage = event.usage
@@ -1753,6 +1793,20 @@ async function handler(request: Request): Promise<Response> {
                   screen: guide?.view?.screen ?? describeView(sanitiseRoute(body.context?.route ?? ''))?.screen ?? null,
                 })
               : null
+
+          // The page change (AGL-4116), held to the site's own pages. Still
+          // nothing is changed: the panel starts the edit job, whose draft
+          // the person opens in the Besigner and publishes.
+          const pageChange: AssistPageChangeProposal | null =
+            pageChangeRung && pageChangeInput && stopReason !== 'max_tokens'
+              ? resolveAssistPageChange(pageChangeInput, pageChangeRung)
+              : null
+          if (pageChangeRung && pageChangeInput && !pageChange && stopReason !== 'max_tokens') {
+            emit({
+              type: 'error',
+              error: 'That page could not be found on this site, so nothing was changed. Say which page and ask again.',
+            })
+          }
 
           // A refusal is an HTTP 200 with an empty or partial answer, not an
           // error — so without this the user watches the spinner stop and
@@ -1862,6 +1916,9 @@ async function handler(request: Request): Promise<Response> {
             // The build proposal (AGL-3616): the panel starts its job and
             // shows the plan card; nothing is built before it is confirmed.
             build,
+            // The page change (AGL-4116): the panel starts its edit job and
+            // links the draft it makes in the Besigner.
+            pageChange,
             // The reservation VERBATIM (AGL-2238). It already describes the
             // standing after the message, because it is what moved the
             // counter — `reserveAssistMessage` returns `used + 1` and
