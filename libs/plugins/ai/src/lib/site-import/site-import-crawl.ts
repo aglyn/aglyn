@@ -65,11 +65,14 @@
 import { lookalikeBrandForHost } from '@aglyn/shared-util-email/outbound-phishing-screen'
 import { fenceUntrustedText } from '@aglyn/shared-util-tools/untrusted-text'
 import {
+  AI_THEME_REFERENCE_STYLESHEETS,
+  AI_THEME_STYLESHEET_MAX_BYTES,
   fetchPublicTextDetailed,
   type PublicFetchEdge,
   type PublicFetchOptions,
   type PublicFetchResult,
 } from '../jobs/ai-theme-brand-inputs'
+import type { SiteImportFooter, SiteImportLayout, SiteImportLookFacts, SiteImportNavTree } from '../model/ai-site-import'
 import {
   extractSiteImportPage,
   readMetaValues,
@@ -90,6 +93,8 @@ import {
   type RobotsRule,
 } from './site-import-robots'
 import { NO_SITE_IMPORT_HEADERS, siteImportEdgeHeadersFor, type SiteImportHeadersFor } from './site-import-edge'
+import { siteImportLayout, siteImportLookOf } from './site-import-layout'
+import { siteImportFooterColumns, siteImportNavTree } from './site-import-nav'
 
 /**
  * Where the bot's user agent points a site owner who wants to know what it is
@@ -110,8 +115,11 @@ export const AGLYN_BOT_USER_AGENT = `AglynBot/1.0 (+${AGLYN_BOT_INFO_URL})`
 
 export const SITE_IMPORT_DEFAULTS = {
   maxPageBytes: 2 * 1024 * 1024,
-  /** A whole site's worth (AGL-4083): 54 MB for aglyn.com's 123 pages, with room. */
-  maxTotalBytes: 160 * 1024 * 1024,
+  /**
+   * A whole site's worth (AGL-4083): 54 MB for aglyn.com's 123 pages, with
+   * room; 400 pages at its 440 KB average are 176 MB (AGL-4106).
+   */
+  maxTotalBytes: 320 * 1024 * 1024,
   timeBudgetMs: 60_000,
   /** One request's own clock, inside the whole crawl's. */
   requestTimeoutMs: 8_000,
@@ -132,6 +140,14 @@ const NON_PAGE_EXTENSION =
   /\.(?:pdf|jpe?g|png|gif|webp|avif|svg|ico|bmp|tiff?|zip|gz|tgz|rar|7z|mp4|m4v|mov|webm|mp3|wav|ogg|m4a|docx?|xlsx?|pptx?|csv|txt|css|js|mjs|json|xml|rss|atom|woff2?|ttf|otf|eot|exe|dmg|apk)$/i
 
 const TRACKING_PARAM = /^(?:utm_[a-z]+|fbclid|gclid|msclkid|mc_cid|mc_eid|_ga|ref)$/i
+
+/**
+ * Never a page, whatever its extension (AGL-4106): an API's or a CDN's path
+ * (aglyn.com's press kit links 136 `/api/media/cdn/…?download=1` files) and
+ * any address that asks for a download.
+ */
+const NON_PAGE_PATH = /^\/(?:api|cdn-cgi|wp-json|_next\/static|_next\/image)(?:\/|$)/i
+const DOWNLOAD_PARAM = /^(?:download|dl|attachment)$/i
 
 const DOMAIN_PATTERN = /^(?!-)[a-z0-9-]{1,63}(\.[a-z0-9-]{1,63})+$/
 
@@ -188,6 +204,12 @@ export interface SiteImportPage {
   links: string[]
   forms: { kept: SiteImportForm[]; removed: number }
   bytes: number
+  /** How the source lays the page out (AGL-4106), on a read asked for it (`layout`): a wave's. */
+  layout?: SiteImportLayout | null
+  /** The home page's menu, footer and look, as its source builds them (AGL-4106). */
+  nav?: SiteImportNavTree | null
+  footer?: SiteImportFooter | null
+  look?: SiteImportLookFacts | null
 }
 
 export type SiteImportStop =
@@ -238,6 +260,13 @@ export interface SiteImportCrawlOptions {
    * as for any crawl, and every other rule holds.
    */
   only?: readonly string[]
+  /**
+   * Read how each page is laid out (AGL-4106): its structure, through its own
+   * stylesheets (the first two it links, each asked once a crawl). On by
+   * default for a wave's read (`only`), whose pages are built; the home page's
+   * menu, footer and look are read on every crawl.
+   */
+  layout?: boolean
 }
 
 export interface SiteImportCrawlSeams {
@@ -289,7 +318,8 @@ export function siteImportPageKey(url: URL, origins: readonly string[]): string 
   if (url.protocol !== 'https:' || url.username || url.password) return null
   if (url.port && url.port !== '443') return null
   if (!origins.includes(url.origin)) return null
-  if (NON_PAGE_EXTENSION.test(url.pathname)) return null
+  if (NON_PAGE_EXTENSION.test(url.pathname) || NON_PAGE_PATH.test(url.pathname)) return null
+  if ([...url.searchParams.keys()].some((key) => DOWNLOAD_PARAM.test(key))) return null
   const clean = new URL(url.toString())
   clean.hash = ''
   for (const key of [...clean.searchParams.keys()]) {
@@ -518,8 +548,29 @@ export async function crawlSiteForImport(
       if (remainingBytes() - reserved <= 0) return 'wait'
       return null
     }
+    const readLayout = options.layout ?? !!only
+    /** Linked stylesheets, each asked once a crawl. */
+    const sheets = new Map<string, Promise<string | null>>()
+    const stylesheet = (url: string): Promise<string | null> => {
+      const held = sheets.get(url)
+      if (held) return held
+      const room = Math.min(AI_THEME_STYLESHEET_MAX_BYTES, remainingBytes() - reserved)
+      const asked: Promise<string | null> =
+        room <= 0 || outOfTime()
+          ? Promise.resolve(null)
+          : request(url, /text\/css|text\/plain/i, 'text/css,*/*;q=0.1', room).then(
+              (answer) => {
+                if (!answer.ok) return null
+                inventory.bytesRead += answer.bytes
+                return answer.text
+              },
+              () => null,
+            )
+      sheets.set(url, asked)
+      return asked
+    }
     /** Takes one asked page in: the inventory's next page, a skip, or the reason the read must stop. */
-    const takeIn = ({ next, key, cap, page }: Asked): SiteImportStop | null => {
+    const takeIn = async ({ next, key, cap, page }: Asked): Promise<SiteImportStop | null> => {
       const foundBy = next.foundBy
       if (foundBy === 'home') homeIn = true
       if (!page.ok) {
@@ -531,6 +582,8 @@ export async function crawlSiteForImport(
           cutOff.push(key)
           return 'time'
         }
+        // A file is not a page: it takes nothing from the page budget's attempts (AGL-4106).
+        if (page.refusal === 'content-type') attempts = Math.max(0, attempts - 1)
         skip({
           url: key,
           reason: skipReasonFor(page),
@@ -551,7 +604,9 @@ export async function crawlSiteForImport(
           return null
         }
       }
-      const extract = extractSiteImportPage(page.text, page.url, sameSite)
+      const isHome = foundBy === 'home'
+      const structured = readLayout || isHome
+      const extract = extractSiteImportPage(page.text, page.url, sameSite, { structure: structured })
       if (extract.loginForm) {
         skip({ url: finalKey, reason: 'login-form' })
         return null
@@ -566,7 +621,24 @@ export async function crawlSiteForImport(
           queue.push({ key: linkKey, foundBy: 'link' })
         }
       }
+      // How the page is built (AGL-4106), through its own stylesheets.
+      let built: Pick<SiteImportPage, 'layout' | 'nav' | 'footer' | 'look'> = {}
+      if (extract.structure) {
+        const linked = await Promise.all(extract.structure.stylesheets.filter((url) => !/fonts\.googleapis\.com/i.test(url)).slice(0, AI_THEME_REFERENCE_STYLESHEETS).map(stylesheet))
+        const css = linked.filter((text): text is string => typeof text === 'string')
+        const source = { blocks: extract.blocks, organization: extract.organization, structure: extract.structure }
+        try {
+          built = {
+            ...(readLayout ? { layout: siteImportLayout(source, css) } : {}),
+            ...(isHome ? { nav: siteImportNavTree(source, css), footer: siteImportFooterColumns(source, css), look: siteImportLookOf(source, css) } : {}),
+          }
+        } catch (error) {
+          // A page the reader cannot lay out is still its words.
+          console.warn('[site-import] the layout could not be read', { url: page.url, error })
+        }
+      }
       inventory.pages.push({
+        ...built,
         url: finalKey,
         path: new URL(finalKey).pathname,
         foundBy,
@@ -616,7 +688,7 @@ export async function crawlSiteForImport(
       if (!window.length) break
       const asked = await (window.shift() as Promise<Asked>)
       reserved -= asked.cap
-      stop = takeIn(asked) ?? stop
+      stop = (await takeIn(asked)) ?? stop
     }
     inventory.stoppedBy = stop
     // Whatever a stop left unread is said, never dropped; a wave's own read

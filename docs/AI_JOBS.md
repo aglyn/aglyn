@@ -2556,7 +2556,15 @@ whose passes each do one unit (`aiSiteImportNextWork`):
 1. **Read** (no model): the crawler reads the site as AglynBot with
    `shallowFirst` (a sitemap's shallow addresses before its deep tail), up to
    the site's room under the plan's page count plus one wave, capped at
-   `AI_SITE_IMPORT_MAX_PAGES` (200). `aiSiteImportInventory` groups the pages
+   `AI_SITE_IMPORT_MAX_PAGES` (400; AGL-4106). A file is never a page: an
+   `/api/`, `/cdn-cgi/` or download address is never asked for, and an address
+   that answers with something other than HTML is left out as `file` and takes
+   nothing from the page budget. A wave's read keeps each page's LAYOUT
+   (`site-import/site-import-layout.ts`, no model): its sections and bands,
+   rows, groups by kind, tables, tabs, pictures, icons and buttons over the
+   read's blocks by index (`AiSiteImportPageRead.layout`), through the page's
+   own stylesheets (`site-import-css.ts`); every crawl reads the home page's
+   menu, footer and look (`site-import-nav.ts`). `aiSiteImportInventory` groups the pages
    (the MAIN pages: home, the home menu's, every top-level page and any page of
    no collection; then each COLLECTION, an address prefix with at least three
    pages, a dated archive as Posts), keeps them in that order until the room is
@@ -2610,11 +2618,11 @@ whose passes each do one unit (`aiSiteImportNextWork`):
    read's blocks, the photos and where the site's own links go. The plan's
    sections are the source's (its opening, then one at each h2). How the page
    is built is decided by code (`aiSiteImportBuildOf`):
-   - **copied** (a collection's page, any page past `AI_SITE_IMPORT_PROSE_WORDS`
-     words): `aiCompileImportedDocument` lays every line out in source order,
+   - **copied** (a collection's page, whatever its length; since AGL-4106 a
+     main page is never copied for its length): `aiCompileImportedDocument` lays every line out in source order,
      bands alternating plain and soft, with NO model; only the listing pass
      spends;
-   - **arranged** (the main pages, Home always): one answer on the page tier
+   - **arranged** (every main page, whatever its length): one answer on the page tier
      through `submit_arrangement` (`AI_LAYOUT_ARRANGE_TOOL`, which has no field
      for a word), told the numbered lines fenced (`aiLayoutArrangePrompt`). The
      compiler substitutes each line as written; a block naming a line already
