@@ -18,8 +18,10 @@
 import {
   PLUGIN_REJECTION_CATEGORIES,
   pluginRejectionCategory,
+  rejectionCategoriesFor,
   rejectionHeadline,
   rejectionInputError,
+  SITE_STARTER_REJECTION_CATEGORIES,
 } from './plugin-rejection-categories'
 
 describe('PLUGIN_REJECTION_CATEGORIES', () => {
@@ -94,5 +96,51 @@ describe('rejectionHeadline', () => {
 
   it('truncates a long legacy reason so it can be a subject line', () => {
     expect(rejectionHeadline('', 'x'.repeat(400)).length).toBe(120)
+  })
+})
+
+/*
+ * A site starter is turned down for what it is (AGL-4049): its pages, the
+ * words and pictures on them, its theme. A plugin's reasons are about code,
+ * and a publisher told "obfuscated bundle" about a site has nothing to fix.
+ */
+describe('the reasons a site starter is rejected for (AGL-4049)', () => {
+  it('are its own, with the two that fit anything shared', () => {
+    const ids = SITE_STARTER_REJECTION_CATEGORIES.map((entry) => entry.id)
+    expect(ids).toEqual(['starter-pages', 'starter-content', 'starter-theme', 'starter-not-as-described', 'duplicate', 'other'])
+    for (const id of ['duplicate', 'other']) {
+      expect(SITE_STARTER_REJECTION_CATEGORIES.find((entry) => entry.id === id)).toBe(
+        PLUGIN_REJECTION_CATEGORIES.find((entry) => entry.id === id),
+      )
+    }
+  })
+
+  it('never use an id a plugin reason means something else by', () => {
+    const plugin = new Set(PLUGIN_REJECTION_CATEGORIES.map((entry) => entry.id))
+    for (const entry of SITE_STARTER_REJECTION_CATEGORIES) {
+      if (plugin.has(entry.id)) expect(pluginRejectionCategory(entry.id)).toBe(entry)
+    }
+  })
+
+  it('tell a publisher what to do, never about code', () => {
+    for (const entry of SITE_STARTER_REJECTION_CATEGORIES.slice(0, 4)) {
+      expect(entry.guidance).toMatch(/publish/i)
+      expect(`${entry.label} ${entry.guidance}`).not.toMatch(/bundle|repository|plugin/i)
+    }
+  })
+
+  it('are picked by type, and a reason from the other list is refused', () => {
+    expect(rejectionCategoriesFor('siteStarter')).toBe(SITE_STARTER_REJECTION_CATEGORIES)
+    expect(rejectionCategoriesFor('plugin')).toBe(PLUGIN_REJECTION_CATEGORIES)
+    expect(rejectionInputError('starter-theme', '', 'siteStarter')).toBeNull()
+    expect(rejectionInputError('readme', '', 'siteStarter')).toBe('Pick a rejection reason')
+    expect(rejectionInputError('starter-theme', '', 'plugin')).toBe('Pick a rejection reason')
+    expect(rejectionInputError('other', '', 'siteStarter')).toContain('needs a comment')
+  })
+
+  it('lead the headline like any other reason', () => {
+    expect(rejectionHeadline('starter-content', '')).toBe(
+      SITE_STARTER_REJECTION_CATEGORIES.find((entry) => entry.id === 'starter-content')?.label,
+    )
   })
 })

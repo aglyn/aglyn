@@ -656,6 +656,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#platform-settings': 'Staff → Platform settings holds the settings that describe the platform rather than one organization, each changed without a deploy and audited with the reason you give.',
     '#platform-suppressions': 'Also on the System emails page: every address that bounced permanently or reported spam on any send from any site.',
     '#plugin-reviews': 'The marketplace review queue, plus a Listed plugins — realm trust table for granting or revoking realm trust per version.',
+    '#plugin-reviews-site-starters': 'A site starter is a whole site someone creates by picking it, so a starter a publisher submits waits here until it is listed.',
     '#record-a-dnc-request': 'Record a request is for an opt-out that arrived outside the product — by email to the privacy address, or spoken on a call.',
     '#sign-one-device-out': 'A Sign-in history card on the same detail page lists every device that has signed in to the account — browser and system, location, IP, first and last seen — and can end the sessions on one of them.',
     '#site-content': 'The Content card lists what the site is built from, one tab per kind: Pages, Email designs, Layouts, Components, Templates and Forms.',

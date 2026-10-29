@@ -111,8 +111,64 @@ export const PLUGIN_REJECTION_CATEGORIES: readonly PluginRejectionCategory[] = [
   },
 ]
 
+/** A plugin reason that fits any listing, shared by object so the two cannot drift. */
+const sharedCategory = (id: string): PluginRejectionCategory => {
+  const category = PLUGIN_REJECTION_CATEGORIES.find((entry) => entry.id === id)
+  if (!category) throw new Error(`No plugin rejection category "${id}" to share`)
+  return category
+}
+
+/**
+ * What a SITE STARTER is turned down for (AGL-4049): its pages, the words and
+ * pictures on them, its theme, and whether it is what its listing says. Each
+ * mirrors an item of the starter's review checklist, so a reviewer who cannot
+ * tick one has the reason to give. A plugin's reasons are about code, and a
+ * publisher told "obfuscated bundle" about a site has nothing to fix; the two
+ * that fit any listing are shared. Ids never collide with a plugin reason
+ * that means something else, since both are stored on the same field.
+ */
+export const SITE_STARTER_REJECTION_CATEGORIES: readonly PluginRejectionCategory[] = [
+  {
+    id: 'starter-pages',
+    label: 'A page does not open or is unfinished',
+    guidance:
+      'Every page has to open and look finished on a site created from it. Fix the page on your site, then publish the starter again.',
+  },
+  {
+    id: 'starter-content',
+    label: 'Words or images that are not yours to publish',
+    guidance:
+      'Every word and image is copied into each site created from it, so it has to be yours or licensed for that use, and nothing may present another business as the new site. Replace it, then publish the starter again.',
+  },
+  {
+    id: 'starter-theme',
+    label: 'The theme does not read in light or dark',
+    guidance:
+      'Text has to read against its background, and buttons and links have to stand out, in both light and dark. Adjust the colors, then publish the starter again.',
+  },
+  {
+    id: 'starter-not-as-described',
+    label: 'Not what its listing says',
+    guidance:
+      'Its name, description, category and picture have to describe the pages a site created from it gets. Change the listing or the pages, then publish the starter again.',
+  },
+  sharedCategory('duplicate'),
+  sharedCategory('other'),
+]
+
+/** The reasons an artifact type is rejected for: a starter's own, else a plugin's. */
+export function rejectionCategoriesFor(
+  artifactType?: string | null,
+): readonly PluginRejectionCategory[] {
+  return artifactType === 'siteStarter'
+    ? SITE_STARTER_REJECTION_CATEGORIES
+    : PLUGIN_REJECTION_CATEGORIES
+}
+
 const BY_ID = new Map(
-  PLUGIN_REJECTION_CATEGORIES.map((category) => [category.id, category]),
+  [...PLUGIN_REJECTION_CATEGORIES, ...SITE_STARTER_REJECTION_CATEGORIES].map(
+    (category) => [category.id, category],
+  ),
 )
 
 export function isPluginRejectionCategory(value: unknown): boolean {
@@ -143,7 +199,8 @@ export function rejectionHeadline(
 }
 
 /**
- * Why this rejection input is not acceptable, or `null` when it is.
+ * Why this rejection input is not acceptable, or `null` when it is: the
+ * category has to be one of the artifact type's own reasons.
  *
  * One function for both rejection paths — the version verdict and the listing
  * verdict — because two copies of "what counts as a valid rejection" is how
@@ -152,8 +209,12 @@ export function rejectionHeadline(
 export function rejectionInputError(
   categoryId: string | null | undefined,
   comment: string | null | undefined,
+  /** Whose reasons it must be one of; a plugin's when unnamed. */
+  artifactType?: string | null,
 ): string | null {
-  const category = pluginRejectionCategory(categoryId)
+  const category = rejectionCategoriesFor(artifactType).find(
+    (entry) => entry.id === categoryId,
+  )
   if (!category) return 'Pick a rejection reason'
   // "Other" says nothing on its own, so the comment IS the reason. Every
   // other category is self-explanatory and a required comment there would

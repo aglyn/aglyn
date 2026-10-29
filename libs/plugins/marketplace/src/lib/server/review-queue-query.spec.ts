@@ -251,3 +251,101 @@ describe('the review queue serves its search and status by the query (AGL-3321)'
     expect(body.more.queue).toBe(false)
   })
 })
+
+/** A site starter listing as the publish route stores it, query fields included. */
+const starter = (id: string, fields: Record<string, unknown>): Row => {
+  const listing = {
+    artifactType: 'siteStarter',
+    profileId: 'org-1',
+    latestVersion: 1,
+    deletedAt: null,
+    reviewStatus: 'submitted',
+    priceUsd: 0,
+    screenCount: 3,
+    ...fields,
+  }
+  return { $id: id, ...listing, ...listingQueryFields(listing) }
+}
+
+/** A Firestore timestamp as the Admin SDK hands one back. */
+const at = (ms: number) => ({ toDate: () => new Date(ms), toMillis: () => ms })
+
+describe('site starters have their own section (AGL-4049)', () => {
+  beforeEach(() => {
+    listings = [
+      plugin('p1', { displayName: 'Waiting Widget' }),
+      starter('s-old', { displayName: 'Corner Bistro', createdAt: at(1000), priceUsd: 19, screenCount: 4 }),
+      starter('s-new', { displayName: 'Harbor Roofing', createdAt: at(2000) }),
+      starter('s-listed', { displayName: 'Listed Bakery', createdAt: at(3000), reviewStatus: 'listed' }),
+      starter('s-gone', { displayName: 'Withdrawn Studio', createdAt: at(4000), deletedAt: at(4500) }),
+    ]
+  })
+
+  it('lists the starters waiting for review, newest first, and only there', async () => {
+    const body = await get()
+    expect(body.starters.map((row: any) => row.listingId)).toEqual(['s-new', 's-old'])
+    expect(body.more.starters).toBe(false)
+    // Not plugins: no starter is in a plugin section, no plugin in this one.
+    expect(body.queue.map((row: any) => row.listingId)).toEqual(['p1'])
+    expect(body.listed).toEqual([])
+  })
+
+  it('says what a reviewer scans a starter by: name, publisher, pages, price, submitted, status', async () => {
+    const body = await get()
+    expect(body.starters[1]).toMatchObject({
+      listingId: 's-old',
+      displayName: 'Corner Bistro',
+      profileId: 'org-1',
+      pages: 4,
+      priceUsd: 19,
+      submittedAt: new Date(1000).toISOString(),
+      reviewStatus: 'submitted',
+      version: '1',
+      hidden: false,
+    })
+  })
+
+  it('asks the query for the section: starters, live, submitted, by created', async () => {
+    await get()
+    const section = asked.find((filters) => filters.some((filter) => filter.value === 'siteStarter'))
+    expect(section).toEqual([
+      { path: 'artifactType', op: '==', value: 'siteStarter' },
+      { path: 'deletedAt', op: '==', value: null },
+      { path: 'reviewStatus', op: '==', value: 'submitted' },
+    ])
+  })
+
+  it('takes the Status select in place of Submitted, and Taken down by its flag', async () => {
+    listings.push(starter('s-down', { displayName: 'Down Diner', createdAt: at(5000), reviewStatus: 'listed', hiddenAt: at(5100) }))
+    const listed = await get('?status=listed')
+    expect(listed.starters.map((row: any) => row.listingId)).toEqual(['s-down', 's-listed'])
+    const down = await get('?status=hidden')
+    expect(down.starters.map((row: any) => row.listingId)).toEqual(['s-down'])
+    expect(down.starters[0].hidden).toBe(true)
+  })
+
+  it('finds a starter by a word of its name, on the query', async () => {
+    const body = await get('?q=roof')
+    expect(body.starters.map((row: any) => row.listingId)).toEqual(['s-new'])
+    const section = asked.find((filters) => filters.some((filter) => filter.value === 'siteStarter'))
+    expect(section).toContainEqual({ path: 'nameTokens', op: 'array-contains', value: 'roof' })
+  })
+
+  it('pages the section and says when there is more', async () => {
+    listings = Array.from({ length: 120 }, (_, index) =>
+      starter(`s${String(index).padStart(3, '0')}`, { displayName: `Starter ${index}`, createdAt: at(index) }),
+    )
+    const first = await get()
+    expect(first.starters).toHaveLength(100)
+    expect(first.more.starters).toBe(true)
+    expect(first.starters[0].listingId).toBe('s119')
+    const all = await get('?limit=200')
+    expect(all.starters).toHaveLength(120)
+    expect(all.more.starters).toBe(false)
+  })
+
+  it('names each starter row’s publisher with the rest', async () => {
+    const body = await get()
+    expect(Object.keys(body)).toContain('publishers')
+  })
+})

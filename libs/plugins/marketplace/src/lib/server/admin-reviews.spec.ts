@@ -72,8 +72,8 @@ let onSet: ((path: string, data: Record<string, unknown>) => void) | null = null
 const mockVerifyIdToken = jest.fn()
 /** Every publisher notification, as `[orgId, payload]`. */
 let mockNotices: [string, { title: string; body: string }][] = []
-/** Every publisher email, as `[orgId, subject, body]`. */
-let mockEmails: [string, string, string][] = []
+/** Every publisher email, as `[orgId, subject, body, options]`. */
+let mockEmails: [string, string, string, unknown?][] = []
 
 function mockIsPlainObject(value: unknown): value is Record<string, unknown> {
   return (
@@ -242,8 +242,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 // The fan-out is its own module with its own spec; here only the words matter.
 jest.mock('./publisher-review-email', () => ({
   __esModule: true,
-  emailPublisher: async (orgId: string, subject: string, text: string) => {
-    mockEmails.push([orgId, subject, text])
+  emailPublisher: async (orgId: string, subject: string, text: string, options?: unknown) => {
+    mockEmails.push([orgId, subject, text, options])
   },
 }))
 
@@ -279,8 +279,8 @@ jest.mock('@aglyn/aglyn/server', () => ({
   Route: {},
   pluginRequestFromWeb: async (request: Request) => ({
     method: request.method,
-    body: await request.json(),
-    query: {},
+    body: request.method === 'GET' ? {} : await request.json(),
+    query: Object.fromEntries(new URL(request.url).searchParams),
     headers: Object.fromEntries(request.headers),
   }),
 }))
@@ -1219,5 +1219,284 @@ describe('a verdict names the plugin and says what happened to it (AGL-3432)', (
     expect(mockNotices[0][1].body).toMatch(
       /^Smoke Test Widget version 1\.2\.0 has been stopped on every site running it\./,
     )
+  })
+})
+
+/*
+ * A SITE STARTER IS REVIEWED LIKE A PLUGIN, ON ITS OWN TERMS (AGL-4049).
+ *
+ * It waits for review before anyone may create a site from it, and the
+ * verdicts that move it are List and Reject. What a starter is NOT is code
+ * running in somebody's workspace: a site created from it holds its own copy
+ * of the pages, so a takedown stops the next pick and reaches no site already
+ * made. The checklist is the starter's own, ticked against the version.
+ */
+describe('a site starter in review (AGL-4049)', () => {
+  const STARTER = 'starter-1'
+  const PUBLISHER = 'org-publisher'
+  const starterPath = `marketplaceListings/${STARTER}`
+  const versionPath = (n = 2) => `${starterPath}/versions/${n}`
+
+  function seedStarter(fields: Record<string, unknown> = {}): void {
+    docs.set(starterPath, {
+      artifactType: 'siteStarter',
+      displayName: 'Corner Bistro',
+      profileId: PUBLISHER,
+      sourceStarterHostId: 'host-src',
+      reviewStatus: 'submitted',
+      latestVersion: 2,
+      deletedAt: null,
+      priceUsd: 19,
+      category: 'Restaurant & café',
+      previewImageUrl: 'https://cdn.example.test/bistro.webp',
+      starterKind: 'restaurant',
+      starterBase: 'bootstrap',
+      starterFonts: 'editorial',
+      starterPages: 3,
+      starterMode: 'base',
+      screenCount: 3,
+      ...fields,
+    })
+    docs.set(versionPath(2), {
+      publishedAt: { toDate: () => new Date(Date.UTC(2026, 9, 28)) },
+      starter: {
+        mode: 'base',
+        facets: { kind: 'restaurant', base: 'bootstrap', fonts: 'editorial', pages: 3, mode: 'base' },
+        theme: {
+          kind: 'builtin',
+          base: 'bootstrap',
+          brand: { light: { primary: '#1b5e20' }, dark: { primary: '#81c784' } },
+          fonts: 'editorial',
+        },
+        screens: [
+          { displayName: 'Home', slug: '/', nodes: {} },
+          { displayName: 'Menu', slug: '/menu', nodes: {} },
+          { displayName: 'Private dining', nodes: {} },
+        ],
+        layout: { displayName: 'Site header and footer', nodes: {} },
+      },
+    })
+    docs.set(versionPath(1), { publishedAt: { toDate: () => new Date(Date.UTC(2026, 9, 20)) }, starter: { screens: [] } })
+    docs.set(`orgs/${PUBLISHER}`, { name: 'Northwind Coffee', slug: 'northwind' })
+    docs.set('hosts/host-src', { name: 'Bistro demo', subdomain: 'bistro-demo', orgId: PUBLISHER })
+  }
+
+  /** Every required starter item, ticked against version 2. */
+  function tickStarter(version = '2'): void {
+    const checklist: Record<string, unknown> = {}
+    for (const id of mockChecklist.requiredChecklistIds('siteStarter')) {
+      checklist[id] = { by: 'staff-1', at: '__then__', version }
+    }
+    docs.set(versionPath(Number(version)), { ...docs.get(versionPath(Number(version))), reviewChecklist: checklist })
+  }
+
+  const act = (body: Record<string, unknown>) => POST(post({ listingId: STARTER, ...body }))
+  const listing = () => docs.get(starterPath) ?? {}
+
+  describe('listing it', () => {
+    it('is refused while the starter checklist is outstanding, naming what is left', async () => {
+      seedStarter()
+      const response = await act({ action: 'list' })
+      expect(response.status).toBe(409)
+      expect((await response.json()).outstanding).toEqual(mockChecklist.requiredChecklistIds('siteStarter'))
+      expect(listing()['reviewStatus']).toBe('submitted')
+    })
+
+    it('lists it once every starter item is ticked for the newest version', async () => {
+      seedStarter()
+      tickStarter()
+      const response = await act({ action: 'list' })
+      expect(response.status).toBe(200)
+      expect(listing()).toMatchObject({ reviewStatus: 'listed', reviewedBy: 'staff-1', reviewedVersion: '2' })
+    })
+
+    it('re-derives who browse shows it to: everyone, once listed', async () => {
+      seedStarter()
+      tickStarter()
+      await act({ action: 'list' })
+      expect(listing()['browseAudience']).toEqual(expect.arrayContaining(['*']))
+    })
+
+    it('does not count plugin ticks, or ticks on another version', async () => {
+      seedStarter()
+      tickStarter('1')
+      expect((await act({ action: 'list' })).status).toBe(409)
+    })
+
+    it('tells the publisher it is listed, as a starter, never as installs of code', async () => {
+      seedStarter()
+      tickStarter()
+      await act({ action: 'list' })
+      expect(mockNotices).toHaveLength(1)
+      expect(mockNotices[0][1].title).toBe('"Corner Bistro" is now listed')
+      expect(mockNotices[0][1].body).toMatch(/^Corner Bistro passed review and is now listed in the marketplace/)
+      expect(mockNotices[0][1].body).not.toMatch(/install/i)
+      expect(mockEmails[0][1]).toBe('Corner Bistro is now listed')
+      expect(mockEmails[0][3]).toMatchObject({ frame: { noun: 'Site starter', plugin: 'Corner Bistro', outcome: 'Listed' } })
+    })
+  })
+
+  describe('rejecting it', () => {
+    it('needs a starter reason, and takes one without the checklist', async () => {
+      seedStarter()
+      expect((await act({ action: 'reject', category: 'readme' })).status).toBe(400)
+      const response = await act({ action: 'reject', category: 'starter-content', reason: 'The photos are a stock site’s.' })
+      expect(response.status).toBe(200)
+      expect(listing()).toMatchObject({
+        reviewStatus: 'rejected',
+        rejectionCategory: 'starter-content',
+        rejectionReason: 'The photos are a stock site’s.',
+        reviewedVersion: '2',
+      })
+    })
+
+    it('tells the publisher why and how to send it back, and that made sites are untouched', async () => {
+      seedStarter()
+      await act({ action: 'reject', category: 'starter-theme' })
+      const body = mockNotices[0][1].body
+      expect(mockNotices[0][1].title).toBe('"Corner Bistro" was rejected')
+      expect(body).toMatch(/^Corner Bistro version 2 was rejected: The theme does not read in light or dark\./)
+      expect(body).toContain('Sites already created from it keep everything they have.')
+      expect(body).toContain('publish it again')
+      expect(mockEmails[0][1]).toBe('Corner Bistro was rejected — The theme does not read in light or dark')
+      expect(mockEmails[0][3]).toMatchObject({ frame: { noun: 'Site starter', outcome: 'Rejected' } })
+    })
+
+    it('stays out of browse while rejected', async () => {
+      seedStarter({ reviewStatus: 'listed' })
+      await act({ action: 'reject', category: 'duplicate' })
+      expect(listing()['browseAudience']).not.toContain('*')
+    })
+  })
+
+  it('refuses the plugin verdicts a starter has no use for', async () => {
+    seedStarter()
+    tickStarter()
+    for (const action of ['verify', 'unverify', 'delist', 'start-review', 'approve-version', 'reject-version', 'revoke-version', 'decline-verification']) {
+      const response = await act({ action, version: '2', reason: 'x', category: 'other' })
+      expect([action, response.status]).toEqual([action, 400])
+    }
+    expect(listing()['reviewStatus']).toBe('submitted')
+    expect(docs.has(`revocations/${STARTER}`)).toBe(false)
+  })
+
+  describe('its checklist', () => {
+    it('ticks a starter item on the version, pinned to it, and audits it', async () => {
+      seedStarter()
+      const response = await act({ action: 'checklist', version: '2', itemId: 'starter-theme' })
+      expect(response.status).toBe(200)
+      expect(docs.get(versionPath(2))?.['reviewChecklist']).toEqual({
+        'starter-theme': { by: 'staff-1', at: '__now__', version: '2' },
+      })
+      expect(audit.at(-1)).toMatchObject({
+        action: 'plugins.review.checklist.check',
+        target: `${starterPath}/versions/2`,
+        after: { itemId: 'starter-theme', checked: true, version: '2' },
+      })
+      expect(docs.has(`${starterPath}/pluginVersions/2`)).toBe(false)
+    })
+
+    it('refuses a plugin item on a starter, and a starter item on a plugin', async () => {
+      seedStarter()
+      expect((await act({ action: 'checklist', version: '2', itemId: 'source-read' })).status).toBe(400)
+      seedListing()
+      seedVersion()
+      const plugin = await POST(post({ listingId: LISTING, action: 'checklist', version: VERSION, itemId: 'starter-theme' }))
+      expect(plugin.status).toBe(400)
+    })
+
+    it('404s a version the starter does not have', async () => {
+      seedStarter()
+      expect((await act({ action: 'checklist', version: '9', itemId: 'starter-theme' })).status).toBe(404)
+    })
+  })
+
+  it('takes it down without a kill switch: a site made from it holds its own copy', async () => {
+    seedStarter({ reviewStatus: 'listed' })
+    const response = await act({ action: 'hide', reason: 'Copied from another business.' })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ hidden: true, revoked: false })
+    expect(docs.has(`revocations/${STARTER}`)).toBe(false)
+    expect(listing()['takenDown']).toBe(true)
+    expect(listing()['browseAudience']).not.toContain('*')
+  })
+
+  describe('its detail page', () => {
+    const detail = async (query = '') => {
+      const response = await POST(
+        new Request(`https://app.aglyn.com/api/marketplace/admin/reviews?listingId=${STARTER}${query}`, {
+          method: 'GET',
+          headers: { authorization: 'Bearer staff-token' },
+        }),
+      )
+      expect(response.status).toBe(200)
+      return response.json()
+    }
+
+    it('says what a site created from it gets: its pages, layout and theme', async () => {
+      seedStarter()
+      const body = await detail()
+      expect(body).toMatchObject({
+        artifactType: 'siteStarter',
+        listingId: STARTER,
+        displayName: 'Corner Bistro',
+        reviewStatus: 'submitted',
+        reviewVersion: '2',
+        latestVersion: '2',
+        priceUsd: 19,
+        category: 'Restaurant & café',
+        previewImageUrl: 'https://cdn.example.test/bistro.webp',
+        facets: { kind: 'restaurant', base: 'bootstrap', fonts: 'editorial', pages: 3, mode: 'base' },
+        mode: 'base',
+        pages: [
+          { name: 'Home', slug: '/', published: true },
+          { name: 'Menu', slug: '/menu', published: true },
+          { name: 'Private dining', slug: null, published: false },
+        ],
+        layout: { name: 'Site header and footer' },
+        theme: {
+          kind: 'builtin',
+          base: 'bootstrap',
+          fonts: 'editorial',
+          brand: { light: { primary: '#1b5e20' }, dark: { primary: '#81c784' } },
+        },
+      })
+    })
+
+    it('names the publisher, and the site it was published from', async () => {
+      seedStarter()
+      const body = await detail()
+      expect(body).toMatchObject({
+        publisherId: PUBLISHER,
+        publisherName: 'Northwind Coffee',
+        publisherSlug: 'northwind',
+        publisherAgreement: { state: 'none' },
+        sourceSite: { hostId: 'host-src', name: 'Bistro demo', subdomain: 'bistro-demo', cname: null },
+      })
+    })
+
+    it('lists its versions newest first, and reviews the one asked for', async () => {
+      seedStarter()
+      expect((await detail()).versions.map((entry: any) => entry.version).sort()).toEqual(['1', '2'])
+      const older = await detail('&version=1')
+      expect(older.reviewVersion).toBe('1')
+      expect(older.pages).toEqual([])
+    })
+
+    it('carries the starter checklist for the version under review', async () => {
+      seedStarter()
+      tickStarter()
+      const body = await detail()
+      expect(Object.keys(body.checklist).sort()).toEqual([...mockChecklist.requiredChecklistIds('siteStarter')].sort())
+      expect(body.checklistOutstanding).toEqual([])
+      const older = await detail('&version=1')
+      expect(older.checklistOutstanding).toEqual(mockChecklist.requiredChecklistIds('siteStarter'))
+    })
+
+    it('says when the site it came from is gone', async () => {
+      seedStarter()
+      docs.delete('hosts/host-src')
+      expect((await detail()).sourceSite).toEqual({ hostId: 'host-src', name: null, subdomain: null, cname: null })
+    })
   })
 })

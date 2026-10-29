@@ -79,7 +79,11 @@ export async function emailPublisher(
    */
   options?: {
     firestore?: any
-    frame?: { plugin: string; version?: string; outcome: string }
+    /**
+     * `noun` is what the listing is called in the details panel: "Plugin"
+     * unless named, "Site starter" for a starter's verdict (AGL-4049).
+     */
+    frame?: { plugin: string; version?: string; outcome: string; noun?: string }
   },
 ): Promise<void> {
   try {
@@ -123,7 +127,7 @@ export async function emailPublisher(
         'review.body': text,
         'review.details': frame
           ? [
-              `Plugin: ${frame.plugin}`,
+              `${frame.noun ?? 'Plugin'}: ${frame.plugin}`,
               frame.version ? `Version: ${frame.version}` : '',
               `Outcome: ${frame.outcome}`,
             ]
