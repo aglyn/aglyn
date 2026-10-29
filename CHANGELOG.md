@@ -9,6 +9,33 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.294 — 2026-10-29
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.293...v1.0.0-beta.294)
+
+### Added
+
+- **console:** a version's preview offers Publish and the Besigner; AI jobs lead there ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+
+### Fixed
+
+- **besigner:** a click on a repeated copy outlines that copy ([AGL-4115](https://linear.app/aglyn/issue/AGL-4115))
+- **console:** the review bar sits under toasts, and its Publish confirm over it ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **ai:** an edit job binds a repeat to the site's datasets, never to nothing ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+
+### Documentation
+
+- a job that changed one page opens its preview, and a preview can publish ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **pricing:** the pricing calculator quotes Site Care ([AGL-3954](https://linear.app/aglyn/issue/AGL-3954))
+- **pricing:** the pricing calculator prices Aglyn AI as tiers ([AGL-3965](https://linear.app/aglyn/issue/AGL-3965))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **tools:** raise the Linear id floor to AGL-4115, read off the workspace ([AGL-4115](https://linear.app/aglyn/issue/AGL-4115))
+
+</details>
+
 ## v1.0.0-beta.293 — 2026-10-29
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.292...v1.0.0-beta.293)

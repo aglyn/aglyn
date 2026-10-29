@@ -81,13 +81,6 @@ const ACCENT_TOKEN_EXCEPTION = {
 const SELECTION_ACCENT_EXCEPTION = {
   file: 'node-outline.tsx',
   declaration: /^\s*const selectionAccent = tv\.palette\.secondary\.main$/,
-  /**
-   * The same hue as a channel, for the one place it is drawn dimmed: the
-   * element inside a repeat group (AGL-3111), marked as part of the
-   * selection rather than as a second one.
-   */
-  channel:
-    /^\s*const selectionAccentChannel = tv\.palette\.secondary\.mainChannel$/,
 }
 
 /**
@@ -140,8 +133,7 @@ const accentOffenders = (file: string, source: string) =>
       (line) =>
         !(
           file === SELECTION_ACCENT_EXCEPTION.file &&
-          (SELECTION_ACCENT_EXCEPTION.declaration.test(line) ||
-            SELECTION_ACCENT_EXCEPTION.channel.test(line))
+          SELECTION_ACCENT_EXCEPTION.declaration.test(line)
         ),
     )
     .filter(
@@ -290,12 +282,6 @@ describe('the selection outline is pink, as a carve-out (AGL-1221)', () => {
     expect(uses).toHaveLength(2) // the declaration, and the one use
     expect(source).toMatch(
       /selectedSelf}`]: \{\s*outlineWidth: 2,\s*outlineStyle: 'solid',\s*outlineColor: selectionAccent,\s*\}/,
-    )
-    // Its channel is spent once too: on the repeat member, dimmed.
-    const channelUses = [...source.matchAll(/\bselectionAccentChannel\b/g)]
-    expect(channelUses).toHaveLength(2)
-    expect(source).toMatch(
-      /repeatMember}`]: \{[^}]*outlineColor: `rgba\(\$\{selectionAccentChannel\} \/ 0\.5\)`/,
     )
   })
 

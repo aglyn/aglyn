@@ -62,12 +62,16 @@ import {
 } from '../runtime/ai-doctrine'
 import { AI_PALETTE } from '../runtime/ai-palette.generated'
 import type { AiSystemBlock } from '../runtime/ai-runtime'
+import { readAiSiteDatasets } from '../runtime/site-inventory'
 import {
   assistEditTool,
   checkAssistEditAnswer,
   editCanvasBlock,
+  editDatasetsBlock,
   editSelectionBlock,
   parseAssistEditContext,
+  type AssistEditDataset,
+  type AssistEditDatasetScope,
 } from '../server/assist-edit'
 import { registerAiJobAdmission, type AiJobAdmission, type AiJobAdmissionRefusal } from './ai-job-admission'
 import { aiJobStepBudget } from './ai-job-budget'
@@ -154,9 +158,43 @@ export function aiJobEditInstructions(kind: AiEditTargetKind): AiSystemBlock[] {
   return [AI_JOB_EDIT_RULES, { text: editCanvasBlock(kind), cacheBreakpoint: true }]
 }
 
-/** What the change is asked from: the document's outline, then the request. */
-export function aiJobEditPrompt(input: { brief: string; context: AssistEditCanvasContext }): string {
-  return [editSelectionBlock(input.context), '', `Request: ${input.brief.slice(0, AI_JOB_BRIEF_MAX_CHARS)}`].join('\n')
+/**
+ * What the change is asked from: the document's outline, the site's datasets
+ * an element may show the records of (AGL-3616), then the request.
+ */
+export function aiJobEditPrompt(input: {
+  brief: string
+  context: AssistEditCanvasContext
+  datasets?: readonly AssistEditDataset[]
+}): string {
+  const datasets = editDatasetsBlock(input.datasets ?? [])
+  return [
+    editSelectionBlock(input.context),
+    ...(datasets ? ['', datasets] : []),
+    '',
+    `Request: ${input.brief.slice(0, AI_JOB_BRIEF_MAX_CHARS)}`,
+  ].join('\n')
+}
+
+/**
+ * The datasets an edit to this document knows (AGL-3616): every one the site
+ * holds, and the one whose record page the document is, if it is one.
+ */
+export function aiEditDatasetScope(
+  datasets: ReadonlyArray<AssistEditDataset & { recordScreenId?: string }>,
+  read: Pick<AiEditTargetRead, 'kind' | 'id'>,
+): Required<AssistEditDatasetScope> {
+  const record = read.kind === 'screen' ? datasets.find((dataset) => dataset.recordScreenId === read.id) : undefined
+  return {
+    datasets: datasets.map(({ id, name, fields, fieldIds, imageField }) => ({
+      id,
+      name,
+      fields,
+      ...(fieldIds ? { fieldIds } : {}),
+      ...(imageField ? { imageField } : {}),
+    })),
+    recordDatasetId: record?.id ?? null,
+  }
 }
 
 /** The edit as the doctrine's loop runs it: the rung's tool, held to the rung's check. */
@@ -166,7 +204,7 @@ export function aiJobEditGeneration(request: {
   target: AssistEditTarget
   model: string
   signal?: AbortSignal
-}): AiCustomGenerationInput<AssistEditProposal> {
+} & AssistEditDatasetScope): AiCustomGenerationInput<AssistEditProposal> {
   const row = AI_ROUTING_TABLE['job.edit']
   const kind = request.target.kind as AiEditTargetKind
   return {
@@ -179,7 +217,13 @@ export function aiJobEditGeneration(request: {
     ...(row.thinking ? { thinking: row.thinking } : {}),
     ...(row.effort ? { effort: row.effort } : {}),
     ...(request.signal ? { signal: request.signal } : {}),
-    check: (answer) => checkAssistEditAnswer(answer, { context: request.context, target: request.target }),
+    check: (answer) =>
+      checkAssistEditAnswer(answer, {
+        context: request.context,
+        target: request.target,
+        ...(request.datasets ? { datasets: request.datasets } : {}),
+        ...(request.recordDatasetId ? { recordDatasetId: request.recordDatasetId } : {}),
+      }),
   }
 }
 
@@ -458,6 +502,7 @@ export async function writeAiEdit(firestore: Firestore, input: AiEditWriteInput)
 export interface AiJobEditStepDeps {
   readTarget?: typeof readAiEditTarget
   writeEdit?: typeof writeAiEdit
+  readDatasets?: typeof readAiSiteDatasets
 }
 
 /** What an edit wrote, as the job's output: a link into the Besigner on the version written. */
@@ -504,6 +549,7 @@ export function aiEditJobOps(
 export function createAiJobEditStep(deps: AiJobEditStepDeps = {}): AiJobStepRunner {
   const readTarget = deps.readTarget ?? readAiEditTarget
   const writeEdit = deps.writeEdit ?? writeAiEdit
+  const readDatasets = deps.readDatasets ?? readAiSiteDatasets
   return async ({ job, now, signal, firestore, org, modelFor }): Promise<AiJobStepOutcome> => {
     const model = modelFor?.('job.edit') ?? aiJobEditModel()
     const unspent = (failure: string): AiJobStepOutcome => ({ ...aiUnspentOutcome(model), failure })
@@ -534,9 +580,13 @@ export function createAiJobEditStep(deps: AiJobEditStepDeps = {}): AiJobStepRunn
       hostId,
     }
 
+    // The site's datasets, so a request to show records binds a repeat to a
+    // real one instead of writing tokens nothing fills (AGL-3616).
+    const datasets = aiEditDatasetScope(await readDatasets(job.orgId, hostId), read)
+
     const generation = await runValidatedGeneration(
       'edit',
-      aiJobEditGeneration({ brief: job.brief, context, target, model, ...(signal ? { signal } : {}) }),
+      aiJobEditGeneration({ brief: job.brief, context, target, model, ...datasets, ...(signal ? { signal } : {}) }),
     )
     const spent = { ...aiGenerationSpent(generation), ...(generation.effort ? { effort: generation.effort } : {}) }
     if (generation.status === 'refused') return { ...spent, refused: true }
@@ -548,7 +598,7 @@ export function createAiJobEditStep(deps: AiJobEditStepDeps = {}): AiJobStepRunn
     if (!proposal && refused) {
       const salvaged = validateStreamedGeneration('edit', {
         answer: refused,
-        check: (answer) => checkAssistEditAnswer(answer, { context, target }),
+        check: (answer) => checkAssistEditAnswer(answer, { context, target, ...datasets }),
       })
       proposal = salvaged.status === 'ok' ? salvaged.value : null
     }

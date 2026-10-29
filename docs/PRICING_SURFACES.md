@@ -356,6 +356,58 @@ library posters `v2sbemHaD1` and `opiiHe6jgz` stay as they are for the film
 band and the other pages that play the films. The versions so far:
 `COCDoTk7vn` → `W4VceCRSjF` → `4EvGpOyRjG` → `IO02sEaW0U` → `MuMb5a8jki`.
 
+### 2026-10-29 — the pricing calculator prices Aglyn AI as tiers (AGL-3965)
+
+The calculator (`/resources/pricing-calculator`) still priced Aglyn AI the
+way it sold before AGL-3965: switching on generation forced the plan's own
+add-on, each plan offered only that one, and `plan_starter` carried no
+included credits, although Starter has included 750 since 2026-09-20. So it
+quoted more than billing charges for any brief that used AI. Every other
+figure it carries was read against `origin/production` the same day and was
+current: plan prices, every band, every add-on and overage rate, the three
+metered rates and every feature level.
+
+- `estimate_plan` (`catNvLFb59`, 306 → 347 cards): for each plan, the
+  cheapest of overage at the plan's rate or any one of the six tiers plus
+  overage past it, the way billing charges it; generation adds nothing on its
+  own, and the itemized line names the tier. Its worst case applies 715 of
+  `FUNCTION_MAX_OPERATIONS`.
+- `plan_starter`: `has_assist` 0 → 1 and `ai_credits` 0 → 750.
+- `plan_rates` gains `ai_<tier>` and `ai_<tier>_credits` for Spark through
+  Studio, read from `AI_TIERS`. A tier price or band change owes them an edit,
+  and no parity spec reads them. `plan_<id>.ai_addon` and `.ai_addon_credits`
+  are still there, holding the legacy tier's figures, and nothing reads them.
+- The screen (`DLvsEL-aO-`) went from `967xr9GJ5O` to `LOLTIHnVcD`, "Aglyn AI
+  tiers and Starter credits (AGL-3965)": the Aglyn AI help sentence (node
+  `9tKawMBMRf`), which names no tier price, and Aglyn's "AI site and page
+  generation" cell (`qIkq-BS74D`), now "Included on every paid plan, uses AI
+  credits".
+
+Every quote that moved went down, to what billing has charged since
+2026-10-19, so it went out at once. A brief with no AI quotes exactly what it
+did before.
+
+### 2026-10-29, later — the pricing calculator quotes Site Care (AGL-3954)
+
+The calculator now has a Site Care switch, so it is a Site Care pricing
+surface: a change to `SITE_CARE_ADDON_MONTHLY_USD` owes it an edit.
+
+- `plan_rates.site_care` is 49. `estimate_plan` (`catNvLFb59`) gains a
+  `site_care` switch and a `c_site_care` line, priced once per workspace and
+  the same on every plan, the way the Event Calendar is. It never changes
+  which plan wins.
+- The screen (`DLvsEL-aO-`) went from `LOLTIHnVcD` to `K7pXMVxoVn`, "Site
+  Care switch and line (AGL-3954)". The switch, "Site Care: we make your site
+  changes for you", sits after the Event Calendar's in "What you switch on".
+  The itemized line, "Site Care", carries the note "Up to about an hour of
+  work a month, done within 2 business days". Both take their wording from
+  `/pricing`'s Site Care card.
+- Like the Event Calendar, it counts in Aglyn's figure in the platform
+  comparison ("the add-ons this brief needs"). It states no extra-time rate
+  and no project price.
+
+With the switch off, every figure on the page is what it was before.
+
 ## Enterprise has no price here, but it has bands
 
 `PLAN_ENTITLEMENTS.enterprise` is a row of **finite fallbacks** — twice

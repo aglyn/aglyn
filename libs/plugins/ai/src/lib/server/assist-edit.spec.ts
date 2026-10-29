@@ -43,6 +43,7 @@ import {
   assistEditTool,
   checkAssistEditAnswer,
   editCanvasBlock,
+  editDatasetsBlock,
   editSelectionBlock,
   parseAssistEditContext,
   resolveAssistEdit,
@@ -885,5 +886,137 @@ describe('an element’s animation, set, changed or removed by updateProps (AGL-
     for (const prop of NODE_ANIMATION_PROPS.filter((prop) => prop !== 'aglynAnimationRepeat')) {
       expect(ASSIST_EDIT_MOTION_LINE).toContain(prop)
     }
+  })
+})
+
+describe('a repeat over the site’s datasets (AGL-3616)', () => {
+  /** A page with a section that already lists one dataset's records. */
+  const LISTED = {
+    selectedId: null,
+    nodes: [
+      { id: ROOT, componentId: 'div', parentId: null, index: 0, childCount: 2 },
+      { id: 'about', componentId: 'section', parentId: ROOT, index: 0, childCount: 1, props: { element: 'section' } },
+      {
+        id: 'areas',
+        componentId: 'muiBox',
+        parentId: 'about',
+        index: 0,
+        childCount: 1,
+        props: { repeatLimit: '3', repeatDataset: 'ds-areas' },
+      },
+      { id: 'area-name', componentId: 'muiTypography', parentId: 'areas', index: 0, childCount: 0, props: { children: '{{item.town}}' } },
+      { id: 'services', componentId: 'section', parentId: ROOT, index: 1, childCount: 0, props: { element: 'section' } },
+    ],
+  }
+  const listed = () => {
+    const parsed = parseAssistEditContext(LISTED)
+    if (!parsed) throw new Error('the fixture canvas must parse')
+    return parsed
+  }
+  const SERVICES = {
+    id: 'ds-services',
+    name: 'Services',
+    fields: ['Name', 'Summary', 'Photo'],
+    fieldIds: ['name', 'summary', 'photo'],
+    imageField: 'photo',
+  }
+  const AREAS = { id: 'ds-areas', name: 'Areas', fields: ['Town'], fieldIds: ['town'] }
+  /** A job's check: the site's datasets read, as the edit job reads them. */
+  const job = (ops: unknown[], extra: { recordDatasetId?: string } = {}) =>
+    checkAssistEditAnswer({ summary: 'Add a services grid', ops }, { context: listed(), target: PAGE, datasets: [SERVICES, AREAS], ...extra })
+  /** A grid of cards, the repeat on the grid around one item. */
+  const grid = (repeat: Array<{ name: string; value: string }>, copy = '{{item.name}}') =>
+    op({
+      op: 'insertSubtree',
+      parentId: 'services',
+      nodes: [
+        { id: 'grid', componentId: 'muiGrid', children: ['cell'], props: [{ name: 'container', value: 'true' }, ...repeat], sx: [] },
+        { id: 'cell', componentId: 'muiGrid', children: ['card'], props: [{ name: 'size', value: 'xs:12 md:4' }], sx: [] },
+        { id: 'card', componentId: 'muiCard', children: ['photo', 'title'], props: [], sx: [] },
+        { id: 'photo', componentId: 'image', children: [], props: [{ name: 'src', value: '{{item.photo}}' }, { name: 'alt', value: '{{item.name}}' }], sx: [] },
+        { id: 'title', componentId: 'muiTypography', children: [], props: [{ name: 'children', value: copy }], sx: [] },
+      ],
+    })
+  const insertOf = (value: { value: unknown }) => (value.value as { ops: AssistEditInsertOp[] } | null)?.ops[0]
+
+  it('keeps a new repeat over one of the site’s datasets, with its record’s copy and photo', () => {
+    const result = job([grid([{ name: 'repeatDataset', value: 'ds-services' }])])
+    expect(result.violations).toEqual([])
+    const nodes = Object.values(insertOf(result)?.nodes ?? {})
+    expect(nodes.find((node) => node.componentId === 'muiGrid' && node.props['container'])?.props['repeatDataset']).toBe('ds-services')
+    expect(nodes.find((node) => node.componentId === 'image')?.props['src']).toBe('{{item.photo}}')
+    expect(nodes.find((node) => node.componentId === 'muiTypography')?.props['children']).toBe('{{item.name}}')
+  })
+
+  it('refuses a record’s tokens where nothing around them repeats, so the job asks again', () => {
+    const result = job([grid([])])
+    expect(result.value).toBeNull()
+    expect(result.violations.map((one) => one.message).join(' ')).toContain('sits in no element that repeats over a dataset')
+  })
+
+  it('refuses a field the dataset does not have, naming the ones it does', () => {
+    const result = job([grid([{ name: 'repeatDataset', value: 'ds-services' }], '{{item.price}}')])
+    expect(result.value).toBeNull()
+    expect(result.violations.map((one) => one.message).join(' ')).toContain(
+      '{{item.price}} is not a field of the dataset "Services" (its fields: name, summary, photo)',
+    )
+  })
+
+  it('drops a dataset the site does not have', () => {
+    const result = job([grid([{ name: 'repeatDataset', value: 'ds-invented' }])])
+    expect(result.value).toBeNull()
+  })
+
+  it('fills a record page’s tokens anywhere on it', () => {
+    const result = job([grid([])], { recordDatasetId: 'ds-services' })
+    expect(result.violations).toEqual([])
+  })
+
+  it('binds an element already on the page, and keeps copy inside a repeat the page has', () => {
+    const result = job([
+      op({ op: 'updateProps', nodeId: 'services', props: [{ name: 'repeatDataset', value: 'ds-services' }] }),
+      op({ op: 'updateProps', nodeId: 'area-name', props: [{ name: 'children', value: '{{item.town}}, Texas' }] }),
+    ])
+    expect(result.violations).toEqual([])
+    expect(result.value?.ops).toEqual([
+      { op: 'updateProps', nodeId: 'services', componentId: 'section', props: { repeatDataset: 'ds-services' } },
+      { op: 'updateProps', nodeId: 'area-name', componentId: 'muiTypography', props: { children: '{{item.town}}, Texas' } },
+    ])
+  })
+
+  it('refuses binding an element already on the page to a dataset the site does not have', () => {
+    const result = job([op({ op: 'updateProps', nodeId: 'services', props: [{ name: 'repeatDataset', value: 'ds-invented' }] })])
+    expect(result.value).toBeNull()
+    expect(result.violations.map((one) => one.message).join(' ')).toContain('names a dataset this site does not have')
+  })
+
+  it('admits, in the chat, a dataset the canvas already repeats over, and judges no tokens it cannot see the site for', () => {
+    const chat = checkAssistEditAnswer(
+      { summary: 'Add a grid', ops: [grid([{ name: 'repeatDataset', value: 'ds-areas' }], '{{item.town}}')] },
+      { context: listed(), target: PAGE },
+    )
+    expect(chat.violations).toEqual([])
+    const nodes = Object.values(insertOf(chat)?.nodes ?? {})
+    expect(nodes.find((node) => node.props['container'])?.props['repeatDataset']).toBe('ds-areas')
+  })
+
+  it('lists each dataset’s field ids, with names where they differ, and its picture; nothing where there are none', () => {
+    const block = editDatasetsBlock([SERVICES, { id: 'ds-faq', name: 'FAQ', fields: ['question'], fieldIds: ['question'] }])
+    expect(block).toContain('- ds-services · Services · name (Name), summary (Summary), photo (Photo) · picture: photo')
+    expect(block).toContain('- ds-faq · FAQ · question\n')
+    expect(block).toContain('repeatDataset')
+    expect(editDatasetsBlock([])).toBe('')
+  })
+
+  it('keeps an element’s dataset in the outline ahead of the settings the cap cuts', () => {
+    const many = Object.fromEntries(Array.from({ length: 20 }, (_, index) => [`setting${index}`, 'x']))
+    const parsed = parseAssistEditContext({
+      selectedId: null,
+      nodes: [
+        { id: ROOT, componentId: 'div', parentId: null, index: 0, childCount: 1 },
+        { id: 'list', componentId: 'muiBox', parentId: ROOT, index: 0, childCount: 0, props: { ...many, repeatDataset: 'ds-services' } },
+      ],
+    })
+    expect(parsed?.nodes[1]?.props?.['repeatDataset']).toBe('ds-services')
   })
 })

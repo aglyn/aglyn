@@ -169,7 +169,7 @@ describe('Building your site (AGL-3594)', () => {
     expect(await screen.findByRole('heading', { name: 'Your site is ready' })).toBeTruthy()
     expect(screen.getByText('Your new pages are drafts. Publish them when you’re happy.')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'View your site' }).getAttribute('href')).toBe(
-      '/acme/hosts/groomer/screens/home/versions/home-v1/view',
+      '/acme/hosts/groomer/screens/home/versions/home-v1/preview',
     )
     expect(screen.getByRole('link', { name: 'Edit your pages' })).toBeTruthy()
     expect(screen.getByText('This site used 180 credits.')).toBeTruthy()
@@ -202,6 +202,29 @@ describe('Building your site (AGL-3594)', () => {
     }))
     expect(await screen.findByText(reason)).toBeTruthy()
     expect((screen.getByRole('button', { name: 'Try again' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+})
+
+describe('a build that changed one page (AGL-3616)', () => {
+  const edited = (outputs: unknown[]) =>
+    job({ kind: 'build', status: 'done', running: false, outputs: outputs as never, creditsSpent: 198 } as never)
+
+  it('leads with the new version’s preview, beside this page, and opens it in the Besigner', async () => {
+    await open(edited([screenOutput('home')]))
+    const preview = await screen.findByRole('link', { name: 'Preview' })
+    expect(preview.getAttribute('href')).toBe('/acme/hosts/groomer/screens/home/versions/home-v1/preview')
+    expect(preview.getAttribute('target')).toBe('_blank')
+    expect(screen.getByRole('link', { name: 'Open in Besigner' }).getAttribute('href')).toBe(
+      '/acme/hosts/groomer/screens/home/versions/home-v1/besigner',
+    )
+    expect(screen.queryByRole('link', { name: 'Edit your pages' })).toBeNull()
+  })
+
+  it('keeps the site’s two ways in for a build that wrote several pages', async () => {
+    await open(edited([screenOutput('home'), screenOutput('book')]))
+    expect(await screen.findByRole('link', { name: 'View your site' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Edit your pages' })).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Open in Besigner' })).toBeNull()
   })
 })
 
@@ -258,7 +281,7 @@ describe('a guided start that put the site live (AGL-3596)', () => {
     expect(await screen.findByRole('heading', { name: 'Your site is ready' })).toBeTruthy()
     expect(screen.getByText('Home: The site has reached its page limit.')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'View your site' }).getAttribute('href')).toBe(
-      '/acme/hosts/groomer/screens/home/versions/home-v1/view',
+      '/acme/hosts/groomer/screens/home/versions/home-v1/preview',
     )
   })
 })
