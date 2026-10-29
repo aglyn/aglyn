@@ -44,7 +44,7 @@ import { createIdUrlSafe } from '@aglyn/aglyn/foundation/constants/app'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import { NodeType, type NodesMap } from '@aglyn/aglyn/types/nodes'
 import type { AiComponentPropTypes } from '../model/ai-site-inventory'
-import { AI_ICON_COMPONENT_ID, aiIconOfId } from './ai-icon-library'
+import { AI_ICON_COMPONENT_ID, aiIconOfId, aiIsIconPathData } from './ai-icon-library'
 import {
   AI_COMPONENT_VISIBILITY_PROPS,
   isAiComponentPropToken,
@@ -330,14 +330,6 @@ const typographyVariants = new Set<string>(AI_SX_TOKENS.typographyVariants)
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-/**
- * An icon's drawing a site brought in gave it (AGL-4108): one path's data on
- * a 24-unit square, commands and numbers only, as the reader keeps it.
- */
-export function aiIconSourcePathAllowed(value: unknown): value is string {
-  return typeof value === 'string' && value.length > 0 && value.length <= 4_096 && /^[MmZzLlHhVvCcSsQqTtAa0-9eE.,\s+-]+$/.test(value)
 }
 
 /** An `https:` address that parses as one. */
@@ -1097,8 +1089,7 @@ function validate(
   const codeBuilt = context?.codeBuilt === true
   const mediaByNodeId = new Map<string, Record<string, string>>()
   const boundByNodeId = new Map<string, Record<string, string>>()
-  // A code-built Icon's drawing, from the library by the id it names (AGL-3660),
-  // or the one path a site brought in drew it with (AGL-4108).
+  // A code-built Icon's drawing, from the library by the id it names (AGL-3660).
   const iconByNodeId = new Map<string, { iconId?: string; iconPath: string }>()
   const forSanitizer: Record<string, unknown> = {}
   for (const [id, node] of Object.entries(nodes)) {
@@ -1109,11 +1100,13 @@ function validate(
     if (codeBuilt && node.componentId === AI_ICON_COMPONENT_ID) {
       const { iconId, ...props } = node.props
       const rest = { ...props }
+      const drawn = rest['iconPath']
       delete rest['iconPath']
       const icon = aiIconOfId(iconId)
       if (icon) iconByNodeId.set(id, { iconId: icon.id, iconPath: icon.path })
-      // A source's own icon (AGL-4108): one path's data, no id of the library's.
-      else if (iconId === undefined && aiIconSourcePathAllowed(props['iconPath'])) iconByNodeId.set(id, { iconPath: props['iconPath'] })
+      // A page brought in draws the source's own icon (AGL-4107): its shape as
+      // one path on the icon's 24-unit square, path data and nothing else.
+      else if (aiIsIconPathData(drawn)) iconByNodeId.set(id, { iconPath: drawn })
       forSanitizer[id] = { ...node, props: rest }
       continue
     }

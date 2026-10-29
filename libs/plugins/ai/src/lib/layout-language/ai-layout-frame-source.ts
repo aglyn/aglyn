@@ -44,7 +44,8 @@
  * Every word is the source's, as written; nothing here is a model's.
  *=========================================*/
 
-import { aiIconSourcePathAllowed, isContactHref, isHttpsUrl, isRootRelativePath } from '../runtime/ai-node-tree'
+import { aiIsIconPathData } from '../runtime/ai-icon-library'
+import { isContactHref, isHttpsUrl, isRootRelativePath } from '../runtime/ai-node-tree'
 import type { AiLayoutTreeBuilder } from './ai-layout-tree'
 
 /** How a source's button is drawn: filled, outlined, or as text. */
@@ -169,7 +170,7 @@ export function aiLayoutFrameSourceOf(raw: unknown): AiLayoutFrameSource | null 
           return {
             ...link,
             ...(text ? { text } : {}),
-            ...(aiIconSourcePathAllowed(entry['iconPath']) ? { iconPath: entry['iconPath'] } : {}),
+            ...(aiIsIconPathData(entry['iconPath']) ? { iconPath: entry['iconPath'] } : {}),
             ...(column ? { column } : {}),
           }
         })
