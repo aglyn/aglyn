@@ -42,6 +42,7 @@ import {
   aiDatasetListedAsPast,
   aiDatasetRealRecords,
   aiDatasetSampleDates,
+  aiDatasetWithoutInstructions,
   aiDatasetWithoutPlaceholders,
   generateAiDataset,
   type AiDatasetSplit,
@@ -1035,10 +1036,16 @@ export function createAiSiteDatasetRunner(deps: AiSiteDatasetRunnerDeps = {}): A
     if (generation.status === 'refused') return { ...spent, refused: true }
     // An answer that still numbers placeholders after its re-ask is kept with
     // the records that name real things — none, as often as not — and written
-    // with its fields, for the owner to fill (AGL-4065).
+    // with its fields, for the owner to fill (AGL-4065). An instruction to the
+    // owner in it is taken out first, so a sample keeps the rest of what it
+    // says, and only a row nothing is left of goes (AGL-4092).
     const salvaged =
       generation.status === 'needs_input' && generation.violations.some((violation) => violation.code === AI_DATASET_PLACEHOLDER_CODE)
-        ? aiDatasetWithoutPlaceholders(generation.answer, { planned: creation.fields, merchantWords: job.brief, name: creation.name })
+        ? aiDatasetWithoutPlaceholders(aiDatasetWithoutInstructions(generation.answer), {
+            planned: creation.fields,
+            merchantWords: job.brief,
+            name: creation.name,
+          })
         : null
     if (generation.status === 'needs_input' && !salvaged) return { ...spent, failure: generation.message }
     // No placeholder record is ever written, whatever let it through (AGL-4065);

@@ -51,6 +51,8 @@ export interface MarkdownFieldProps {
   minHeight?: number
   /** Shown under the editor in visual mode. */
   helperText?: string
+  /** Shown while the field is empty; never part of the value. */
+  placeholder?: string
 }
 
 /**
@@ -81,6 +83,7 @@ export function MarkdownField(
     onPickImageFromMedia,
     minHeight = 200,
     helperText,
+    placeholder,
     editorRef,
   } = props
   const visualRef = useRef<MarkdownVisualEditorHandle | null>(null)
@@ -156,6 +159,7 @@ export function MarkdownField(
           onPickImageFromMedia={onPickImageFromMedia}
           onContextChange={setContext}
           minHeight={minHeight}
+          placeholder={placeholder}
         />
       ) : (
         <TextField
@@ -167,6 +171,7 @@ export function MarkdownField(
           minRows={12}
           fullWidth
           inputRef={sourceRef}
+          placeholder={placeholder}
           helperText={MARKDOWN_SOURCE_HINT}
         />
       )}

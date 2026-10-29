@@ -176,6 +176,22 @@ import { aiStockBusinessNoun } from './ai-stock-business-nouns'
  *    searched only with its world; a record's cover is searched in its world
  *    first; and a listed world widens only where the library knew nothing of
  *    it, never an outdoor or a trade world to an office.
+ * 11. **The thing, the place and the trade** (the 2026-10-28 live check,
+ *    AGL-4092: a bare foot tagged "body part" for a parts shop's "Engine and
+ *    air", a transmission chain for its "Brake Pad Set", a cat tagged "hungry"
+ *    for a taco trailer's "Come hungry", a European alley for "Around town", a
+ *    taco bowl salad for "Race day", and a man posing with a street bike tagged
+ *    "susuki" in a motocross team's band of pictures). A picture of a thing is
+ *    held to the business's own world, never any word of its type; a feeling,
+ *    a time or a way of being somewhere is never a thing, and "around town" is
+ *    the business's customers out there; a broad search's photo is OF the
+ *    world among its first tags, never a "taco bowl"; an animal, a toy or a
+ *    bare body part never leads a photo naming nothing of the world; a trade's
+ *    things are held to the world it serves, never to "part"; a product takes
+ *    a shoot no other product shows; a motocross business's world is
+ *    off-road; and a maker is named one letter off ("susuki") and by its
+ *    gear's and tires' names. Still by the tags: a mark only the pixels show
+ *    is placed.
  *
  * A slot the library could not fill because it never answered — down, or
  * out of time before its first answer — or because the site's library
@@ -298,6 +314,36 @@ const GENERIC_OBJECTS = words(
  * river, tagged "part", for a dirt bike shop's "Parts for the ranch".
  */
 const WORLD_OBJECTS = words('part parts gear gears machine machines equipment spare spares accessory accessories')
+
+/**
+ * Words of a picture's caption that are never the thing it shows (AGL-4092):
+ * a feeling, a time, a way of being somewhere. "Come hungry" read its object
+ * as "hungry" and took a cat tagged "hungry"; "Around town" read "town" and
+ * took a European alley. A caption left with no thing is a picture of the
+ * site's own world. A personal record is a feat, never a thing: "Deadlift PR
+ * night" is of the deadlift.
+ */
+const NON_THINGS = words(
+  'come hungry happy ready welcome day days night nights time times today tonight weekend weekends season seasons ' +
+    'around town hours hour way moment moments memories pr pb',
+)
+
+/**
+ * Where a business is, said as a place to go (AGL-4092): "Around town", "At
+ * events". Never a street of houses: a picture of it shows the business's
+ * customers out where it is, or its stand.
+ */
+const PLACE_PHRASES = /\b(?:around town|in town|downtown|on the road|out and about|at (?:the )?events|neighbou?rhoods?)\b/i
+
+/** What a picture of a business out where it is shows, as stems: its people, a line, a street stand (AGL-4092). */
+const PLACE_NEEDS = [
+  'people', 'crowd', 'customer', 'customers', 'queue', 'line', 'street food', 'food truck', 'market', 'festival',
+]
+
+/** A street that is someone else's, never where a business is found (AGL-4092): a European alley for "Around town". */
+const FOREIGN_STREET = [
+  'alley', 'cobblestone', 'village', 'old town', 'historic', 'castle', 'cathedral', 'europe', 'landscape', 'architecture',
+]
 
 /**
  * The verbs a business type's clause opens with when it says what a customer
@@ -675,6 +721,12 @@ const SENSITIVE_STEMS = SENSITIVE_TOPICS.map((topic) => ({
  * the address, so a logo no tag names still shows: the live check is where
  * that is seen.
  */
+/** The one-word makers of riding gear and tires (AGL-4092), also never said in a photo's description ({@link BRANDS}). */
+const GEAR_MAKER_WORDS = [
+  'alpinestars', 'oneal', 'leatt', 'arai', 'shoei', 'agv', 'oakley', 'renthal', 'fmf', 'acerbis', 'dunlop', 'michelin',
+  'pirelli', 'bridgestone', 'metzeler', 'maxxis', 'kenda',
+]
+
 const MAKERS = [
   'porsche', 'ferrari', 'lamborghini', 'bmw', 'mercedes', 'audi', 'volkswagen', 'vw', 'toyota', 'honda', 'yamaha',
   'kawasaki', 'suzuki', 'ktm', 'ducati', 'harley', 'harley-davidson', 'husqvarna', 'gasgas', 'tesla', 'ford',
@@ -682,10 +734,47 @@ const MAKERS = [
   'gran turismo', 'playstation', 'xbox', 'nintendo', 'nike', 'adidas', 'reebok', 'red bull', 'monster energy',
   'coca cola', 'cocacola', 'pepsi', 'iphone', 'ipad', 'macbook', 'imac', 'samsung', 'starbucks', 'mcdonalds',
   'mcdonald',
+  // A rider's gear and a bike's tires carry their makers' marks as often as
+  // the bike does (AGL-4092). A maker whose name is a common word ("fox",
+  // "shift", "thor", "fly", "bell") is named only in its phrase.
+  ...GEAR_MAKER_WORDS,
+  'fox racing', 'shift mx', 'shift racing', 'thor mx', 'fly racing', 'troy lee', 'bell helmets', 'pro taper',
 ]
 
 /** The makers as stems and stem phrases, as a hit's words are read. */
 const MAKER_STEMS: ReadonlySet<string> = new Set(MAKERS.map((maker) => stemList(maker).join(' ')))
+
+/**
+ * The one-word makers long enough that a tag one letter off still names them
+ * (AGL-4092): Pixabay's "susuki" is a Suzuki. Never a common word one letter
+ * off a maker: "barley" is not a Harley, nor "rental" a Renthal.
+ */
+const FUZZY_MAKERS: readonly string[] = [...MAKER_STEMS].filter((maker) => !maker.includes(' ') && maker.length >= 6)
+
+/** Words one letter off a maker that are words of their own (AGL-4092). */
+const MAKER_LOOKALIKES = words('barley parley harlem rental samsun ducat phone suzuka')
+
+/** Whether two words are one edit apart: a letter changed, added, dropped, or two side by side swapped. */
+function oneEditApart(a: string, b: string): boolean {
+  if (a === b) return false
+  if (Math.abs(a.length - b.length) > 1) return false
+  if (a.length === b.length) {
+    const differ = [...a].flatMap((letter, index) => (letter === b[index] ? [] : [index]))
+    if (differ.length === 1) return true
+    const [first, second] = differ as [number, number]
+    return differ.length === 2 && second === first + 1 && a[first] === b[second] && a[second] === b[first]
+  }
+  const [short, long] = a.length < b.length ? [a, b] : [b, a]
+  let index = 0
+  while (index < short.length && short[index] === long[index]) index += 1
+  return short.slice(index) === long.slice(index + 1)
+}
+
+/** The maker a word names one letter off, else `null` ({@link FUZZY_MAKERS}). */
+function fuzzyMaker(word: string): string | null {
+  if (word.length < 5 || MAKER_LOOKALIKES.has(word) || MAKER_STEMS.has(word)) return null
+  return FUZZY_MAKERS.find((maker) => oneEditApart(word, maker)) ?? null
+}
 
 /**
  * A phrase's words and each pair of them in turn, as stems (AGL-4065): "dirt
@@ -715,7 +804,8 @@ const SUITS = /\b(?:wallpapers?|backgrounds?|screens?|screensavers?|lockscreen|4
 /** The words a photo names a maker by: its tags, those of what it suits left out, its description and its page address. */
 function aiStockMakerTerms(photo: Pick<StockPhoto, 'tags' | 'alt' | 'pageUrl'>): Set<string> {
   const tags = (photo.tags ?? []).filter((tag) => !SUITS.test(tag))
-  return termsOf([...tags, photo.alt ?? '', pageSlug(photo.pageUrl)])
+  // "O'Neal" is one name, never "neal" (AGL-4092).
+  return termsOf([...tags, photo.alt ?? '', pageSlug(photo.pageUrl)].map((text) => text.replace(/['’]/g, '')))
 }
 
 /**
@@ -893,6 +983,44 @@ const OBJECT_KIN: ReadonlyArray<{
     kin: ['tire', 'tires', 'knobby tire', 'motocross tire', 'dirt bike tire', 'motorcycle tire', 'bike tire', 'wheel'],
     queries: ['dirt bike tire', 'motocross tire'],
   },
+  {
+    // A brake pad is a brake's (AGL-4092): "Brake Pad Set" found nothing by its
+    // pad, then searched "part" alone and took a transmission chain.
+    objects: ['brake', 'pad', 'rotor', 'caliper'],
+    within: ['motocross', 'motorcycle', 'motorbike', 'dirtbike', 'dirt bike', 'enduro', 'atv'],
+    kin: ['brake', 'brakes', 'brake pad', 'brake pads', 'brake disc', 'brake caliper', 'disc brake', 'brake rotor'],
+    queries: ['motorcycle brake disc', 'dirt bike brake'],
+  },
+  {
+    // An engine's air is its filter's (AGL-4092): "Engine and air" tiled a
+    // collection with a bare foot tagged "body part".
+    objects: ['engine', 'filter', 'air', 'carburetor'],
+    within: ['motocross', 'motorcycle', 'motorbike', 'dirtbike', 'dirt bike', 'enduro', 'atv'],
+    kin: ['engine', 'air filter', 'motorcycle engine', 'dirt bike engine', 'carburetor'],
+    queries: ['dirt bike engine', 'motorcycle engine'],
+  },
+  {
+    // A taco trailer is a food truck, never a tank truck at a rest stop (AGL-4092).
+    objects: ['trailer', 'truck'],
+    within: ['taco', 'taqueria', 'burrito', 'mexican food', 'street food', 'food truck'],
+    kin: ['food truck', 'food trailer', 'taco truck', 'taco trailer', 'street food truck'],
+    queries: ['taco truck', 'food truck'],
+  },
+  {
+    // A taco trailer's chips are tortilla chips, never crisps or a cookie's (AGL-4092).
+    objects: ['chip'],
+    within: ['taco', 'taqueria', 'burrito', 'mexican food', 'street food', 'food truck'],
+    kin: ['tortilla chip', 'tortilla chips', 'chips and salsa', 'chips salsa', 'nachos', 'nacho'],
+    queries: ['tortilla chips salsa', 'nachos'],
+  },
+  {
+    // A fountain drink is a soda, never a well's fountain (AGL-4092).
+    objects: ['drink', 'soda'],
+    within: ['taco', 'taqueria', 'burrito', 'mexican food', 'street food', 'food truck'],
+    // Never "fountain drink" itself: a well's page address says it word for word.
+    kin: ['soda', 'soft drink', 'iced tea', 'agua fresca', 'lemonade', 'soda cup'],
+    queries: ['soda cup', 'agua fresca'],
+  },
 ]
 
 /** An object's kin where the site or the subject is of its world, else `null`. */
@@ -969,6 +1097,21 @@ const CRAFT_KIN: ReadonlyArray<{
    * search is held to.
    */
   near?: readonly string[]
+  /**
+   * The names of the group's wider world, which lead a business's own world
+   * only where its own words say them (AGL-4092): "motorcycle" is a street
+   * bike's as often as a dirt bike's. A motocross team's own world is its
+   * off-road names; a hit naming only "motorcycle" among its first tags
+   * shows it no more than a man posing with a street bike does. Their
+   * photos' own subjects (`shunLead`) are then never the business's.
+   */
+  wider?: { words: readonly string[]; shunLead: readonly string[] }
+  /**
+   * What a picture of the business out where it is asks for (AGL-4092):
+   * "Around town" is a taco trailer's customers in line, never a street of
+   * houses. A world not listing them asks for its own customers.
+   */
+  out?: readonly string[]
 }> = [
   {
     match: [
@@ -1339,6 +1482,11 @@ const CRAFT_KIN: ReadonlyArray<{
       core: ['motocross', 'motorcycle', 'motorbike', 'dirt bike', 'dirtbike', 'supercross', 'atv', 'quad bike'],
     },
     shunLead: ['car', 'scooter', 'moped', 'cruiser', 'chopper', 'vespa', 'bicycle', 'cyclist', 'horse', 'highway', 'asphalt', 'traffic'],
+    // A motocross team's "Gate drop" took a man posing with a street bike, tagged "man, model, motorcycle" (AGL-4092).
+    wider: {
+      words: ['motorcycle', 'motorcycles', 'motorbike', 'motorbikes', 'moto'],
+      shunLead: ['model', 'urban', 'street', 'road bike', 'road racing', 'sportbike', 'superbike', 'studio', 'posing'],
+    },
   },
   {
     // A parts shop of the motocross world: its parts, tires and riding gear,
@@ -1360,6 +1508,7 @@ const CRAFT_KIN: ReadonlyArray<{
     ],
     broad: ['tacos', 'street tacos', 'taco truck'],
     making: ['taco truck cooking', 'tacos on the griddle'],
+    out: ['food truck crowd', 'street food customers', 'taco stand customers'],
     shunLead: ['buffet', 'hotel', 'fine dining', 'chef', 'indian', 'potato', 'banquet', 'cafeteria', 'wedding'],
   },
 ]
@@ -1535,6 +1684,15 @@ export interface AiStockSiteTerms {
    * pictures are qualified by in place of the craft.
    */
   leadWord?: string
+  /**
+   * What a trade's pictures of a thing must name, where the craft is the
+   * trade (AGL-4092): the names of the world it serves ("dirt bike",
+   * "motocross"), never its craft. A parts shop's "part" named a bare foot
+   * tagged "body part" and a transmission tagged "mechanical part".
+   */
+  held?: string[]
+  /** What a picture of the business out where it is asks for ({@link CRAFT_KIN}, AGL-4092). */
+  out?: string[]
   /** The searches for the site's world itself, broadest last. */
   broad: string[]
   /** The searches for its maker at work, for a story of the craft (AGL-3660); empty for a craft not listed. */
@@ -1734,6 +1892,15 @@ export function aiStockSiteTerms(businessType: string): AiStockSiteTerms {
       for (const stem of stemList(word))
         if (![...lead].some((term) => term === stem || (term.includes(' ') && term.split(' ').includes(stem) && ownTerms.has(term))))
           lead.add(stem)
+  // A wider world's names lead only where the business's own words say them
+  // (AGL-4092): a motocross team's world is off-road, never "motorcycle" alone.
+  for (const group of leading) {
+    if (!group.wider) continue
+    const wider = group.wider.words.map(groupTerm)
+    if (wider.some((term) => ownTerms.has(term))) continue
+    for (const term of wider) lead.delete(term)
+    for (const word of group.wider.shunLead) shunLead.add(groupTerm(word))
+  }
   // A trade's world, named by the world it serves: "dirt bike" for a dirt bike parts shop.
   const served = craftGroup?.of
     ? groups
@@ -1745,12 +1912,18 @@ export function aiStockSiteTerms(businessType: string): AiStockSiteTerms {
   if (!broad.length) broad.push(business, craft)
   // A part or gear names no world on its own: a dirt bike shop's part, never a canoe's (AGL-4065).
   const ofAWorld = (term: string) => term.length > 1 && !term.split(' ').every((word) => WORLD_OBJECTS.has(word))
+  // A trade's things are held to the world it serves, never to its own word (AGL-4092).
+  const tradeNames = new Set((craftGroup?.of ? craftGroup.match : []).map(groupTerm))
+  const held = craftGroup?.of ? [...core].filter((term) => ofAWorld(term) && !tradeNames.has(term)) : []
+  const out = [...new Set(leading.flatMap((group) => group.out ?? []))]
   return {
     business,
     craft,
     domain: [...domain].filter((stem) => stem.length > 1),
     lead: leading.length ? [...lead].filter(ofAWorld) : [...domain].filter((stem) => stem.length > 1),
     ...(served ? { leadWord: served } : {}),
+    ...(held.length ? { held } : {}),
+    ...(out.length ? { out } : {}),
     broad: [...new Set(broad.map((query) => query.trim()).filter(Boolean))],
     making: [...new Set(makingSearches)],
     ...(groups.some((group) => group.scenes) ? { scenes: true } : {}),
@@ -1820,10 +1993,12 @@ export function aiStockSubjectWords(alt: string, sectionName: string): string {
  * The thing a subject shows, one singular word: its last word that is not
  * a set or a wrapper of it — "bowl" from "nesting bowl set", "candle" from
  * "candle gift set", "vase" from "bud vase". Its last word when every word
- * is one ("gift set").
+ * is one ("gift set"). A feeling, a time or a way of being somewhere is
+ * never one ({@link NON_THINGS}, AGL-4092): "Come hungry" and "Around town"
+ * show no thing, and "Race day" is of the race.
  */
 export function aiStockObjectWord(subject: string): string {
-  const list = subject.split(/\s+/).filter(Boolean)
+  const list = subject.split(/\s+/).filter((word) => word && !NON_THINGS.has(word))
   const object =
     [...list].reverse().find((word) => !WRAPPERS.has(word)) ??
     list[list.length - 1] ??
@@ -1866,6 +2041,25 @@ export interface AiStockSearch extends StockPhotoSearchRequest {
   lead?: boolean
   /** Whether the hit's first tags must name the site's world, where the object need not lead (AGL-3660). */
   leadWorld?: boolean
+  /**
+   * Whether one of the hit's first tags must be OF the business's own world
+   * ({@link AiStockSiteTerms.lead}, AGL-4092): naming it, and ending in a word
+   * of it. "Taco bowl" is a bowl and "body part" a part: a taco trailer's
+   * "Race day" took a chicken salad tagged "taco bowl".
+   */
+  leadOwn?: boolean
+  /**
+   * Stems of things a picture is never OF unless its words or the brief name
+   * them, refused among a hit's first tags where those name nothing of the
+   * business's own world ({@link aiStockOddLeads}, AGL-4092): a cat, a bare foot.
+   */
+  oddLeads?: readonly string[]
+  /**
+   * The world a trade serves, one of whose names every hit names, its kin or
+   * not ({@link AiStockSiteTerms.held}, AGL-4092): a dirt bike shop's "Brake
+   * Pad Set" is never a railway wagon's brake wheel tagged "brake".
+   */
+  served?: readonly string[]
   /**
    * Whether the hit's FIRST tag must name the site's world (AGL-3760): what
    * the photo is of, most of all. A hero is the site's opening picture; the
@@ -2320,6 +2514,10 @@ export interface AiStockProductFallback {
   broad?: readonly string[]
   /** The words a photo of the craft itself names ({@link AiStockSiteTerms.core}). */
   core?: readonly string[]
+  /** The world a trade serves, which its products name in place of the craft ({@link AiStockSiteTerms.held}, AGL-4092). */
+  held?: readonly string[]
+  /** The word a trade's product is searched with in place of its craft ({@link AiStockSiteTerms.leadWord}, AGL-4092). */
+  leadWord?: string
 }
 
 /**
@@ -2404,8 +2602,18 @@ export function aiStockProductSearches(
   const ownWorld = stemList(own).filter(
     (stem) => world.has(stem) && !WRAPPERS.has(stem) && !craftStems.includes(stem),
   )
-  const category = craft && ownWorld.length ? [...craftStems, ...ownWorld] : []
-  const core = [...new Set([...craftStems, ...(fallback.core ?? [])])]
+  // A trade's product is held to the world it serves, never to its craft
+  // (AGL-4092): a parts shop's "part" named a transmission's "mechanical part".
+  const served = [...new Set((fallback.held ?? []).map(stemPhrase).filter(Boolean))]
+  const trade = served.length > 0
+  const category = trade
+    ? served
+    : craft && ownWorld.length
+      ? [...craftStems, ...ownWorld]
+      : []
+  const core = trade ? served : [...new Set([...craftStems, ...(fallback.core ?? [])])]
+  // A trade's product is named by the world it serves: "dirt bike skid plate", never "part skid plate".
+  const prefix = trade ? (fallback.leadWord ?? '') : craft
   const shun = (kin?.shun ?? []).map(aiStockStem)
   type Query = {
     query: string
@@ -2425,8 +2633,8 @@ export function aiStockProductSearches(
         : kin.after
           ? `${subject} ${qualifier}`
           : `${qualifier} ${subject}`
-      : craft && !stems.some((stem) => world.has(stem))
-        ? `${craft} ${subject}`
+      : prefix && !stems.some((stem) => world.has(stem))
+        ? `${prefix} ${subject}`
         : subject
     queries.push({ query, subject, object, lead: true })
   }
@@ -2439,7 +2647,8 @@ export function aiStockProductSearches(
       queries.push({ query, subject: own || query, object, lead: true })
   else if (object && ownWorld.includes(object))
     queries.push({ query: object, subject: own, object, lead: true })
-  else if (craft)
+  // A trade's craft alone is never searched (AGL-4092): "part" answered a transmission chain for "Brake Pad Set".
+  else if (craft && !trade)
     queries.push({ query: craft, subject: own || craft, object: craft, lead: true, tier: 'borrow' })
   const held = [...queries]
   // 2. A photo OF its category, which may be one the job already shows.
@@ -2480,6 +2689,7 @@ export function aiStockProductSearches(
       product: true,
       ...(entry.tier ? { tier: entry.tier } : {}),
       ...(shun.length ? { shun } : {}),
+      ...(trade ? { served } : {}),
     }
     if (entry.broad) {
       const heldTo = [...new Set([...core, ...ownWorld])]
@@ -2493,7 +2703,7 @@ export function aiStockProductSearches(
               ...(heldTo.length ? { category: heldTo } : {}),
             }
           : core.length
-            ? { category: core }
+            ? { category: core, ...(trade ? { leadOwn: true } : {}) }
             : {}),
       })
       continue
@@ -2505,7 +2715,7 @@ export function aiStockProductSearches(
       ...(entry.lead ? { lead: true } : { leadWorld: true }),
       ...(entry.object ? { object: entry.object } : {}),
       ...(kinPhrases.length && entry.object === object ? { kin: kinPhrases } : {}),
-      ...(craft ? { requires: craft } : {}),
+      ...(trade ? { strict: true } : craft ? { requires: craft } : {}),
       ...(category.length ? { category } : {}),
     })
   }
@@ -2521,7 +2731,7 @@ export function aiStockProductSearches(
 export function aiStockSearchesFor(
   slot: Pick<AiLayoutPictureSlot, 'role' | 'alt' | 'aspect' | 'people' | 'record' | 'product'>,
   terms: Pick<AiStockSiteTerms, 'business' | 'craft' | 'domain' | 'broad'> &
-    Partial<Pick<AiStockSiteTerms, 'making' | 'core' | 'scenes' | 'setting' | 'maker' | 'work' | 'leadWord'>>,
+    Partial<Pick<AiStockSiteTerms, 'making' | 'core' | 'scenes' | 'setting' | 'maker' | 'work' | 'leadWord' | 'held' | 'out'>>,
   subject: string,
   part?: AiStockSlotPart,
   sectionName = '',
@@ -2596,14 +2806,29 @@ export function aiStockSearchesFor(
     leads?: boolean
     /** Whether its photo names the world's own words ({@link AiStockSiteTerms.core}) as well as the thing (AGL-4065). */
     ofWorld?: boolean
+    /** Whether one of its photo's first tags is OF the business's own world ({@link AiStockSearch.leadOwn}, AGL-4092). */
+    own?: boolean
+    /** Whether it asks for the business out where it is: its customers, never a street ({@link PLACE_PHRASES}, AGL-4092). */
+    out?: boolean
   }
   // A collection tile is product-like: held to the shop's category and its
   // own object among the first tags, and searched by its object's kin, never
   // the category's world alone (AGL-3660).
   const collection = part === 'collection' && Boolean(terms.craft) && !work
+  // A picture's broad searches find a photo OF the business's own world,
+  // never one naming it in a word of a tag (AGL-4092); a hero's first tag
+  // already names it.
   const broad: Query[] = (kin && collection) || work
     ? []
-    : terms.broad.filter(shown).map((query) => ({ query, broad: true, category: collection }))
+    : terms.broad
+        .filter(shown)
+        .map((query) => ({ query, broad: true, category: collection, ...(slot.role === 'hero' ? {} : { own: true }) }))
+  // A trade's things are held to the world it serves, never to its craft (AGL-4092).
+  const heldTo = terms.held?.length ? terms.held : null
+  // A caption that names no thing (AGL-4092): "Come hungry" is a picture of
+  // the site's own world, and "Around town" of its customers out where it is.
+  const thingless = Boolean(subject) && !object && !work
+  const out = thingless && slot.role !== 'hero' && PLACE_PHRASES.test(slot.alt)
   // The maker at work, held to the craft: never "hands" (AGL-3660).
   const makers: Query[] = (work ? [] : (terms.making ?? [])).filter(shown).map((query) => ({
     query,
@@ -2635,6 +2860,10 @@ export function aiStockSearchesFor(
   const thing: Query[] = (
     !subject
       ? []
+      : thingless
+        ? out
+          ? (terms.out?.length ? terms.out : [`${leadWord} customers`.trim()]).map((query) => ({ query, out: true }))
+          : [{ query: `${leadWord} ${subject}`.trim(), own: true }]
       : ofTheWorld
         ? [
             {
@@ -2759,16 +2988,24 @@ export function aiStockSearchesFor(
       ...(held && kinPhrases.length ? { kin: kinPhrases } : {}),
       ...((held && collection) || raw.leads ? { lead: true } : {}),
       ...(terms.craft && !raw.ofWorld && (raw.category || (raw.held && collection))
-        ? {
-            requires: terms.craft,
-            ...(ownWorld.length ? { category: [terms.craft, ...ownWorld] } : {}),
-          }
+        ? heldTo
+          ? { category: heldTo, served: heldTo }
+          : {
+              requires: terms.craft,
+              ...(ownWorld.length ? { category: [terms.craft, ...ownWorld] } : {}),
+            }
         : {}),
       ...(raw.ofWorld && worldNames.length ? { category: worldNames } : {}),
       ...(slot.role === 'hero' && core.length ? { category: core } : {}),
       // A hero is OF the site's world: its first tag names it (AGL-3760).
       ...(slot.role === 'hero' ? { first: true } : {}),
-      ...(refuseLead.length ? { refuseLead } : {}),
+      ...(raw.own ? { leadOwn: true } : {}),
+      // Its customers out where it is, never someone else's street (AGL-4092).
+      ...(raw.out
+        ? { broad: true, needs: PLACE_NEEDS.map(stemPhrase), refuseLead: [...new Set([...refuseLead, ...FOREIGN_STREET.map(stemPhrase)])] }
+        : refuseLead.length
+          ? { refuseLead }
+          : {}),
       ...(work ? { worldless: true } : {}),
     })
   }
@@ -2832,6 +3069,12 @@ export interface AiStockJudgement {
   lead?: boolean
   /** Whether the hit's first tags must name the site's world ({@link AiStockSearch.leadWorld}). */
   leadWorld?: boolean
+  /** Whether one of the hit's first tags must be OF the business's own world ({@link AiStockSearch.leadOwn}, AGL-4092). */
+  leadOwn?: boolean
+  /** Stems no hit's first tags lead with while they name nothing of the business's own world ({@link AiStockSearch.oddLeads}, AGL-4092). */
+  oddLeads?: readonly string[]
+  /** The world a trade serves, which every hit names ({@link AiStockSearch.served}, AGL-4092). */
+  served?: readonly string[]
   /** Whether the hit's first tag must name the site's world ({@link AiStockSearch.first}). */
   first?: boolean
   /** The stems of the site's business type or brief, which let a sensitive topic in ({@link AiStockSiteTerms.named}). */
@@ -2917,6 +3160,42 @@ const among = (phrases: readonly string[], phrase: string) =>
   phrases.some((found) => ` ${found} `.includes(` ${phrase} `))
 
 /**
+ * Whether one of a hit's first three tags is OF a world (AGL-4092): it names
+ * the world, and its last word, or its last two, is a word of the world or of
+ * its domain. "Street tacos" and "dirt bike tire" are; "taco bowl" is a bowl,
+ * "body part" a part. Read from the tags alone: the page address repeats them
+ * run together, and a run of words has no head.
+ */
+function leadsWithWorld(tags: readonly string[], world: ReadonlySet<string>, domain: ReadonlySet<string>): boolean {
+  return tags.slice(0, 3).some((tag) => {
+    const stems = stemList(tag)
+    if (!withPairs(stems).some((term) => world.has(term))) return false
+    return [stems[stems.length - 1] ?? '', stems.slice(-2).join(' ')].some(
+      (term) => Boolean(term) && (world.has(term) || domain.has(term)),
+    )
+  })
+}
+
+/**
+ * What a picture of a business's world is never OF unless its words name it
+ * (AGL-4092): an animal or a toy (as a portfolio's record never is,
+ * {@link RECORD_ODD_LEADS}), or a bare body part. Each group is let in whole
+ * by any of its words in `said` — the slot's words, its section's, the
+ * brief's — so a dog groomer's pictures show dogs and cats alike. As stems;
+ * the body's left out where `body` is false (a portrait's face).
+ */
+export function aiStockOddLeads(said: readonly string[], options: { body?: boolean } = {}): string[] {
+  const named = new Set(said.flatMap((text) => stemList(text)))
+  const groups = [
+    'animal animals cat cats kitten kittens dog dogs puppy puppies pet pets bird birds frog frogs duck ducks horse horses ' +
+      'cow cows rabbit rabbits bunny',
+    'toy toys figurine figurines lego doll dolls teddy puppet miniature',
+    ...(options.body === false ? [] : [`${[...BODY_PARTS].join(' ')} toe toes barefoot`]),
+  ].map((group) => [...new Set(stemList(group))])
+  return groups.filter((group) => !group.some((stem) => named.has(stem))).flat()
+}
+
+/**
  * Whether a hit carries a topic its site never named ({@link SENSITIVE_TOPICS}):
  * a cross, a grave, a flag, a gun, a glass of wine, a child, a mannequin.
  */
@@ -2926,9 +3205,14 @@ export function aiStockSensitive(
 ): boolean {
   const { words: found } = hitWords(photo)
   const site = new Set(named)
-  // A maker's name, in its tags or its page address, unless the site names the maker (AGL-4065).
+  // A maker's name, in its tags or its page address, unless the site names the maker (AGL-4065),
+  // or a word one letter off it: "susuki" is a Suzuki (AGL-4092).
   const makers = aiStockMakerTerms(photo)
   if ([...MAKER_STEMS].some((maker) => makers.has(maker) && !site.has(maker))) return true
+  for (const term of makers) {
+    const maker = term.includes(' ') ? null : fuzzyMaker(term)
+    if (maker && !site.has(maker) && !site.has(term)) return true
+  }
   return SENSITIVE_STEMS.some(
     (topic) =>
       [...topic.words].some((word) => found.has(word)) &&
@@ -2961,6 +3245,8 @@ export function aiStockRelevance(
       !rival.core.some((word) => hit.all.has(word))
     )
       return 0
+  // A trade's thing is of the world it serves, whatever else names it (AGL-4092).
+  if (judgement.served?.length && !judgement.served.some((term) => hit.all.has(stemPhrase(term)))) return 0
   const subject = stemList(judgement.subject ?? '')
   // What the slot or the brief names lets a shunned word, a room or a fragrance in.
   const owned = new Set([...subject, ...(judgement.named ?? [])])
@@ -3036,6 +3322,16 @@ export function aiStockRelevance(
     kinLead ||
     domain.some((stem) => hit.lead.has(stem))
   if (judgement.leadWorld && !worldLead) return 0
+  // One of its first tags is OF the business's own world (AGL-4092): "tacos",
+  // "street tacos", "dirt bike" lead with it; "taco bowl", "body part" and a
+  // man posing with a "motorcycle" for a motocross team do not.
+  if (judgement.leadOwn && own.length && !kinLead && !leadsWithWorld(photo.tags ?? [], new Set(own), new Set(domain)))
+    return 0
+  // A cat, a toy or a bare foot leads it, and nothing of the business's own world does (AGL-4092).
+  if (judgement.oddLeads?.length && own.length) {
+    const first = termsOf((photo.tags ?? []).slice(0, 3))
+    if (judgement.oddLeads.some((stem) => first.has(stem)) && !own.some((stem) => first.has(stem))) return 0
+  }
   // The first tag alone, never the page's address: Pixabay's slug repeats a
   // late tag ("coffee-latte-art-candle-…"). A site whose words name no world
   // holds its hero to none.
@@ -3061,10 +3357,18 @@ export function aiStockRelevance(
     const leading = kin.length ? kinLead : hit.lead.has(object)
     // A lifestyle scene whose object is a last tag is not a photo OF it.
     if (judgement.lead && !leading) return 0
-    if (domain.length && !world && !phrased) return 0
+    // The business's own world, never any word of its type (AGL-4092): a cat
+    // tagged "hungry" named "breakfast", and a European alley "street", of
+    // "Taco food trailer: street and breakfast tacos".
+    if (own.length && !ownWorld && !phrased) return 0
     score += leading ? 4 : 2
     if (kinNamed) score += 3
     if (firstNamed(kin.length ? kin : [object])) score += 1
+    // A product's photo is OF it: named by its first or second tag, over one naming it fourth (AGL-4092).
+    if (judgement.product) {
+      const firstTwo = (photo.tags ?? []).slice(0, 2).map((tag) => stemList(tag).join(' '))
+      if ((kin.length ? kin : [object]).some((phrase) => among(firstTwo, phrase))) score += 2
+    }
   } else if (own.length) {
     if (!ownWorld) return 0
   }
@@ -3137,16 +3441,19 @@ export function aiStockSameShoot(
  * A search's ranked hits with those of a shoot no slot shows yet first among
  * the best (AGL-3856): a team's three cards are three people where the
  * library has them, never one model three times while another fits as well.
- * Every other order is kept.
+ * Every other order is kept. A product's are of a shoot no slot shows yet
+ * first among ALL its accepted hits (`whole`, AGL-4092): Berm & Bolt's two
+ * tires were one contributor's shoot, 32 uploads apart.
  */
 export function aiStockFreshShootsFirst(
   ranked: readonly StockPhoto[],
   shown: readonly StockPhoto[],
   judgement: AiStockJudgement,
+  options: { whole?: boolean } = {},
 ): StockPhoto[] {
   if (!shown.length || ranked.length < 2) return [...ranked]
   const best = aiStockRelevance(ranked[0] as StockPhoto, judgement)
-  const top = ranked.filter((photo) => aiStockRelevance(photo, judgement) === best)
+  const top = options.whole ? ranked : ranked.filter((photo) => aiStockRelevance(photo, judgement) === best)
   const fresh = top.filter((photo) => !shown.some((other) => aiStockSameShoot(photo, other)))
   if (!fresh.length || fresh[0] === ranked[0]) return [...ranked]
   return [...fresh, ...ranked.filter((photo) => !fresh.includes(photo))]
@@ -3362,8 +3669,9 @@ const BRANDS = words(
     'apple iphone ipad macbook imac samsung huawei android google microsoft windows dell lenovo nintendo playstation ' +
     'xbox nike adidas puma reebok peloton bmw mercedes audi porsche ferrari lamborghini tesla ford toyota honda ' +
     'volkswagen vw jeep chevrolet coca-cola pepsi starbucks mcdonalds ikea lego barbie disney altman ' +
-    // The vehicle makers a moto site's photos are tagged with (AGL-4065).
+    // The vehicle makers a moto site's photos are tagged with (AGL-4065), and its gear's and tires' (AGL-4092).
     'yamaha kawasaki suzuki ktm ducati harley harley-davidson husqvarna gasgas nissan subaru mazda chevy dodge reebok ' +
+    `${GEAR_MAKER_WORDS.join(' ')} ` +
     'petri zenit praktica yashica minolta mamiya rolleiflex voigtlander contax ricoh konica lomo lomography holga zeiss',
 )
 
@@ -3964,6 +4272,9 @@ const SEARCH_JUDGMENT_KEYS = [
   'kin',
   'lead',
   'leadWorld',
+  'leadOwn',
+  'oddLeads',
+  'served',
   'first',
   'category',
   'strict',
@@ -4594,6 +4905,104 @@ function aiStockSourceSubject(
 }
 
 /**
+ * How a search's hits are judged for a slot (AGL-3660), as the source judges
+ * them: by the search's own words, held to the world it was asked for — the
+ * site's own (`site`), or a wider one where the site's found nothing
+ * (`world`, AGL-3923). What lets a sensitive topic, an animal or a body part
+ * in is always the site's own words. On a site for adults alone no hit names
+ * a child; a portrait of one of the business's people names an adult, never
+ * leads with a child, and is preferred in its role (AGL-3856). Any other
+ * picture never leads with an animal, a toy or a bare body part its words
+ * and the brief do not name, unless its first tags name the business's own
+ * world too (AGL-4092): Pit Row Tacos' "Come hungry" took a cat. Pure.
+ */
+export function aiStockJudgementFor(
+  slot: Pick<AiLayoutPictureSlot, 'role' | 'alt' | 'people' | 'product'>,
+  request: AiStockSearch,
+  subject: string,
+  site: AiStockSiteTerms,
+  sectionName = '',
+  world: AiStockSiteTerms = site,
+): AiStockJudgement {
+  const refuse = [...(request.refuse ?? []), ...(site.adults ? CHILD_STEMS : [])]
+  const role = slot.people ? aiStockPeopleRole(slot.alt, sectionName) : null
+  // A portrait's face is its own, and a craft whose pictures are people at a moment shows their hands and rings (AGL-4092).
+  const oddLeads = slot.people
+    ? []
+    : aiStockOddLeads([slot.alt, ...(slot.product?.subjects ?? []), sectionName, ...site.named], {
+        body: slot.role !== 'about' && !site.scenes,
+      })
+  return {
+    subject: request.subject ?? (request.broad ? '' : subject),
+    domain: world.domain,
+    ...(world.lead?.length ? { world: world.lead } : {}),
+    strict: (slot.role === 'gallery' && !request.broad) || !!request.requires || !!request.strict,
+    named: request.allow?.length ? [...new Set([...site.named, ...request.allow])] : site.named,
+    rivals: world.rivals,
+    ...(world.shun.length || request.shun?.length ? { shun: [...new Set([...world.shun, ...(request.shun ?? [])])] } : {}),
+    ...(world.shunLead.length ? { shunLead: world.shunLead } : {}),
+    ...(request.product ? { product: true } : {}),
+    ...(request.leadAny?.length ? { leadAny: request.leadAny } : {}),
+    ...(request.requires ? { requires: request.requires } : {}),
+    ...(request.category ? { category: request.category } : {}),
+    ...(request.object ? { object: request.object } : {}),
+    ...(request.kin ? { kin: request.kin } : {}),
+    ...(request.lead ? { lead: true } : {}),
+    ...(request.leadWorld ? { leadWorld: true } : {}),
+    ...(request.leadOwn ? { leadOwn: true } : {}),
+    ...(request.served?.length ? { served: request.served } : {}),
+    ...(request.first ? { first: true } : {}),
+    ...(refuse.length ? { refuse: [...new Set(refuse)] } : {}),
+    ...(request.needs?.length ? { needs: request.needs } : {}),
+    ...(request.refuseLead?.length ? { refuseLead: request.refuseLead } : {}),
+    ...(request.away?.length ? { away: request.away } : {}),
+    ...(oddLeads.length ? { oddLeads } : {}),
+    // A portfolio's record is of its own subject, never of the craft's world (AGL-3856).
+    ...(request.worldless ? { domain: [], rivals: [] } : {}),
+    // An occupation is shown in it (a teacher, a coach); a team is any adult at work.
+    ...(slot.people
+      ? {
+          needs: request.needs?.length ? request.needs : role?.required ? role.kin : ADULT_PEOPLE_STEMS,
+          refuseLead: [...new Set([...CHILD_STEMS, ...(request.refuseLead ?? [])])],
+          ...(role ? { roles: role.kin } : {}),
+          // A teacher is shown teaching, never posing or painting (AGL-3856).
+          ...(role?.scene?.length ? { roleScene: role.scene } : {}),
+          ...(role?.refuse?.length ? { roleRefuse: aiStockRoleRefusals(role, slot.alt) } : {}),
+        }
+      : {}),
+  }
+}
+
+/**
+ * The craft's own photos, the last thing a slot of a craft's site is filled
+ * from (AGL-3660): its broad searches, any hit naming the craft itself. Never
+ * a desk, a laptop or a living room for a soap shop. A picture that is not a
+ * hero nor a product takes only a photo OF the business's own world among its
+ * first tags (AGL-4092): a taco trailer's "Race day" took a chicken salad
+ * tagged "taco bowl". Pure.
+ */
+export function aiStockCraftSearches(
+  slot: Pick<AiLayoutPictureSlot, 'role' | 'aspect' | 'record' | 'people' | 'product'>,
+  world: AiStockSiteTerms,
+): AiStockSearch[] {
+  // A portfolio's record of the work is never filled by the craft's own
+  // photos (AGL-3856), nor is any picture of a site that shows its work (AGL-3942).
+  if (!world.core.length || aiStockShowsTheWork(slot, world) || aiStockShowsItsWork(slot, world)) return []
+  const orientation = aiStockOrientation(slot.aspect)
+  const size = slot.role === 'hero' ? { minWidth: 1600 } : orientation === 'vertical' ? { minHeight: 900 } : { minWidth: 900 }
+  return world.broad.map((query) => ({
+    query: clip(query),
+    orientation,
+    ...size,
+    broad: true,
+    category: world.core,
+    // A trade's product, too: a transmission tagged "motorcycle" last is not a dirt bike shop's photo.
+    ...(slot.role === 'hero' ? { first: true } : slot.product && !world.held?.length ? {} : { leadOwn: true }),
+    ...(slot.product ? { product: true, tier: 'weak' as const } : {}),
+  }))
+}
+
+/**
  * The source for one page, or `null` when this deployment has no stock
  * photo library or no media door, which leaves every slot to the starters.
  */
@@ -4785,89 +5194,10 @@ export function aiLayoutStockPhotoSource(
       slot: AiLayoutPictureSlot,
       request: AiStockSearch,
       subject: string,
-    ): AiStockJudgement => {
-      const refuse = [...(request.refuse ?? []), ...(terms.adults ? CHILD_STEMS : [])]
-      const role = slot.people ? aiStockPeopleRole(slot.alt, input.sectionNames[slot.sectionIndex] ?? '') : null
-      return {
-        ...judgementOf(slot, request, subject, worldOf.get(request) ?? terms),
-        ...(refuse.length ? { refuse: [...new Set(refuse)] } : {}),
-        // An occupation is shown in it (a teacher, a coach); a team is any adult at work.
-        ...(slot.people
-          ? {
-              needs: request.needs?.length ? request.needs : role?.required ? role.kin : ADULT_PEOPLE_STEMS,
-              refuseLead: [...new Set([...CHILD_STEMS, ...(request.refuseLead ?? [])])],
-              ...(role ? { roles: role.kin } : {}),
-              // A teacher is shown teaching, never posing or painting (AGL-3856).
-              ...(role?.scene?.length ? { roleScene: role.scene } : {}),
-              ...(role?.refuse?.length ? { roleRefuse: aiStockRoleRefusals(role, slot.alt) } : {}),
-            }
-          : {}),
-      }
-    }
-    /**
-     * A search's own judgement, as its words set it, held to the world it was
-     * asked for: the site's own, or a wider one where the site's found nothing
-     * (AGL-3923). What lets a sensitive topic in is always the site's own words.
-     */
-    const judgementOf = (
-      slot: AiLayoutPictureSlot,
-      request: AiStockSearch,
-      subject: string,
-      world: AiStockSiteTerms,
-    ): AiStockJudgement => ({
-      subject: request.subject ?? (request.broad ? '' : subject),
-      domain: world.domain,
-      ...(world.lead?.length ? { world: world.lead } : {}),
-      strict:
-        (slot.role === 'gallery' && !request.broad) || !!request.requires || !!request.strict,
-      named: request.allow?.length ? [...new Set([...terms.named, ...request.allow])] : terms.named,
-      rivals: world.rivals,
-      ...(world.shun.length || request.shun?.length
-        ? { shun: [...new Set([...world.shun, ...(request.shun ?? [])])] }
-        : {}),
-      ...(world.shunLead.length ? { shunLead: world.shunLead } : {}),
-      ...(request.product ? { product: true } : {}),
-      ...(request.leadAny?.length ? { leadAny: request.leadAny } : {}),
-      ...(request.requires ? { requires: request.requires } : {}),
-      ...(request.category ? { category: request.category } : {}),
-      ...(request.object ? { object: request.object } : {}),
-      ...(request.kin ? { kin: request.kin } : {}),
-      ...(request.lead ? { lead: true } : {}),
-      ...(request.leadWorld ? { leadWorld: true } : {}),
-      ...(request.first ? { first: true } : {}),
-      ...(request.refuse?.length ? { refuse: request.refuse } : {}),
-      ...(request.needs?.length ? { needs: request.needs } : {}),
-      ...(request.refuseLead?.length ? { refuseLead: request.refuseLead } : {}),
-      ...(request.away?.length ? { away: request.away } : {}),
-      // A portfolio's record is of its own subject, never of the craft's world (AGL-3856).
-      ...(request.worldless ? { domain: [], rivals: [] } : {}),
-    })
-    /**
-     * The craft's own photos, the last thing a slot of a craft's site is
-     * filled from (AGL-3660): its broad searches, any hit naming the craft
-     * itself. Never a desk, a laptop or a living room for a soap shop.
-     */
-    const craftSearches = (slot: AiLayoutPictureSlot, world: AiStockSiteTerms = terms): AiStockSearch[] => {
-      // A portfolio's record of the work is never filled by the craft's own
-      // photos (AGL-3856), nor is any picture of a site that shows its work (AGL-3942).
-      if (!world.core.length || aiStockShowsTheWork(slot, world) || aiStockShowsItsWork(slot, world)) return []
-      const orientation = aiStockOrientation(slot.aspect)
-      const size =
-        slot.role === 'hero'
-          ? { minWidth: 1600 }
-          : orientation === 'vertical'
-            ? { minHeight: 900 }
-            : { minWidth: 900 }
-      return world.broad.map((query) => ({
-        query: clip(query),
-        orientation,
-        ...size,
-        broad: true,
-        category: world.core,
-        ...(slot.role === 'hero' ? { first: true } : {}),
-        ...(slot.product ? { product: true, tier: 'weak' as const } : {}),
-      }))
-    }
+    ): AiStockJudgement =>
+      aiStockJudgementFor(slot, request, subject, terms, input.sectionNames[slot.sectionIndex] ?? '', worldOf.get(request) ?? terms)
+    const craftSearches = (slot: AiLayoutPictureSlot, world: AiStockSiteTerms = terms): AiStockSearch[] =>
+      aiStockCraftSearches(slot, world)
 
     /**
      * A slot's searches once its own world found it nothing (AGL-3923), in
@@ -4888,7 +5218,13 @@ export function aiLayoutStockPhotoSource(
       }
       for (const { rung, terms: world } of wider) {
         if (rung === 'generic') continue
-        ask(world, [...aiStockSearchesFor(slot, world, subject, part, sectionName), ...craftSearches(slot, world)])
+        // A wider world is the site's only as a kind of site: its photos are held to it as before (AGL-4092).
+        ask(
+          world,
+          [...aiStockSearchesFor(slot, world, subject, part, sectionName), ...craftSearches(slot, world)].map(
+            ({ leadOwn: _own, ...request }) => request,
+          ),
+        )
       }
       const orientation = aiStockOrientation(slot.aspect)
       const size = slot.role === 'hero' ? { minWidth: 1600 } : orientation === 'vertical' ? { minHeight: 900 } : { minWidth: 900 }
@@ -4942,6 +5278,8 @@ export function aiLayoutStockPhotoSource(
           ? aiStockProductSearches(slot, terms.craft, terms.domain, {
               broad: terms.broad,
               core: terms.core,
+              ...(terms.held ? { held: terms.held } : {}),
+              ...(terms.leadWord ? { leadWord: terms.leadWord } : {}),
             })
           : aiStockSearchesFor(
               slot,
@@ -4977,8 +5315,10 @@ export function aiLayoutStockPhotoSource(
         }
         const judgement = judgementFor(slot, request, subject)
         const ranked = aiStockRank(found, blocked, `${input.seed}:${index}:${request.query}`, judgement)
-        // A team's portraits are of different people where the hits allow (AGL-3856).
-        return slot.people && !repeat ? aiStockFreshShootsFirst(ranked, shown, judgement) : ranked
+        // A team's portraits are of different people where the hits allow (AGL-3856),
+        // and a shop's products of different shoots (AGL-4092).
+        if (repeat || !(slot.people || slot.product)) return ranked
+        return aiStockFreshShootsFirst(ranked, shown, judgement, slot.product ? { whole: true } : {})
       }
       /** The first of these searches with a hit to take: a new one, or one the job already shows. */
       const choose = async (

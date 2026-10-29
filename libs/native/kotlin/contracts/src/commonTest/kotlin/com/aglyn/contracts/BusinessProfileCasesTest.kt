@@ -46,7 +46,8 @@ class BusinessProfileCasesTest {
 
   private fun json(profile: ResolvedBusinessProfile): Map<String, Any?> = mapOf(
     "name" to field(profile.name), "whatYouDo" to field(profile.whatYouDo), "services" to field(profile.services), "serviceArea" to field(profile.serviceArea),
-    "audience" to field(profile.audience), "tone" to field(profile.tone), "toneNotes" to field(profile.toneNotes), "businessType" to profile.businessType,
+    "audience" to field(profile.audience), "tone" to field(profile.tone), "toneNotes" to field(profile.toneNotes), "founded" to field(profile.founded),
+    "businessType" to profile.businessType,
     "contact" to mapOf("email" to profile.contact.email, "phone" to profile.contact.phone, "address" to profile.contact.address, "hours" to profile.contact.hours),
     "profiles" to profile.profiles, "logo" to profile.logo,
   )

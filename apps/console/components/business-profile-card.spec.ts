@@ -22,7 +22,7 @@ import {
   resolveBusinessProfile,
   type BusinessProfileDoc,
 } from '@aglyn/aglyn/app-utils/business-profile'
-import { fromForm, originLine, toForm } from './business-profile-card.component'
+import { fromForm, originLine, profileSchema, toForm } from './business-profile-card.component'
 
 /**
  * The Business profile card's own logic (AGL-3661): services as one per
@@ -77,5 +77,41 @@ describe('the business profile form', () => {
       'Empty here, so Aglyn AI uses “Austin” from the workspace defaults.',
     )
     expect(originLine('serviceArea', stored, resolved, 'workspace', 'fallback')).toBe('fallback')
+  })
+})
+
+/**
+ * The year founded (AGL-4092): the guided start's year fills it, so a build
+ * reads it from the profile rather than planning "[year founded]". A site's
+ * card shows it beside the notes on tone; the workspace's defaults do not.
+ */
+describe('the year founded on the business profile card', () => {
+  const stored: BusinessProfileDoc = { founded: '2019', sources: { founded: 'start' } }
+  type Field = { name: string; label?: string; validate?: unknown[] }
+  const fields = (level: 'site' | 'workspace') =>
+    (profileSchema(level, stored, null, true).fields as Field[])
+
+  it('is a field of a site’s card, and not of the workspace defaults', () => {
+    const founded = fields('site').find((field) => field.name === 'founded')
+    expect(founded?.label).toBe('Year founded')
+    expect(fields('workspace').some((field) => field.name === 'founded')).toBe(false)
+  })
+
+  it('says it came from the start, and refuses a year that is not four digits', () => {
+    expect(originLine('founded', stored, null, 'site', 'fallback')).toBe(
+      'Your answers when the site was started. Edit it and it becomes yours.',
+    )
+    const check = fields('site').find((field) => field.name === 'founded')?.validate?.[0] as (value: unknown) => unknown
+    expect(check('2019')).toBeUndefined()
+    expect(check('')).toBeUndefined()
+    expect(check('19')).toMatch(/^Enter the year as four digits/)
+  })
+
+  it('reads and saves as the owner’s words once changed', () => {
+    expect(toForm(stored).founded).toBe('2019')
+    const next = businessProfileOwnerWrite(stored, fromForm({ ...toForm(stored), founded: '2018' }))
+    expect(next.founded).toBe('2018')
+    expect(next.sources.founded).toBe('owner')
+    expect(businessProfileOwnerWrite(stored, fromForm(toForm(stored))).sources.founded).toBe('start')
   })
 })

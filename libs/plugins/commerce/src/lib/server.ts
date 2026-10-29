@@ -538,6 +538,11 @@ export function registerCommerceConsoleApi(): void {
   registerPluginApiRoute('commerce/shipping/carrier-rates', carrierRatesAvailabilityHandler)
   registerPluginApiRoute('commerce/connect', connectHandler)
   registerPluginApiRoute('commerce/draft-order', draftOrderHandler)
+  // Quotes (AGL-4093): create, edit and delete a quote, and find the customer
+  // it is for, under "Create and edit quotes". Loaded on first call.
+  registerPluginApiRoute('commerce/quote', async (req, res) =>
+    (await import('./server/quote')).quoteHandler(req, res),
+  )
   // Fulfil + mark-delivered with the transition re-asked under the write
   // (AGL-1819) — the same stale-dialog hole cancel-order closes, minus the
   // stock release those two transitions never had. The customer REST API's

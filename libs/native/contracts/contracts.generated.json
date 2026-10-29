@@ -193,10 +193,12 @@
     "serviceArea",
     "audience",
     "tone",
-    "toneNotes"
+    "toneNotes",
+    "founded"
   ],
   "BUSINESS_PROFILE_MAX_CHARS": {
     "audience": 160,
+    "founded": 4,
     "serviceArea": 120,
     "services": 60,
     "toneNotes": 200,
@@ -7004,6 +7006,7 @@
     "marketplace": "Marketplace",
     "online": "Online",
     "pos": "POS",
+    "quote": "Quote",
     "subscription": "Subscription"
   },
   "ORDER_CHANNEL_OPTIONS": [
@@ -7365,6 +7368,7 @@
         "commerce.reservations",
         "commerce.walkIns",
         "commerce.orders",
+        "commerce.quotes",
         "commerce.giftCards",
         "commerce.paymentMethods",
         "commerce.shippingConnections",
@@ -7382,10 +7386,17 @@
         "marketplace.sitePublish",
         "outreach.use",
         "outreach.manageAll",
+        "email.suppressions",
+        "email.lists",
+        "inbox.reply",
+        "inbox.assign",
         "marketing.campaigns",
+        "workflows.orgAutomations",
+        "workflows.sitePause",
         "accounting.manage",
         "manageWaivers",
-        "collectWaivers"
+        "collectWaivers",
+        "domains.manage"
       ],
       "editor": [
         "data.manage",
@@ -7403,6 +7414,7 @@
         "commerce.reservations",
         "commerce.walkIns",
         "commerce.orders",
+        "commerce.quotes",
         "commerce.giftCards",
         "managePos",
         "posSell",
@@ -7413,7 +7425,13 @@
         "posBuyHardware",
         "marketplace.siteInstall",
         "marketplace.sitePublish",
+        "email.suppressions",
+        "email.lists",
+        "inbox.reply",
+        "inbox.assign",
         "marketing.campaigns",
+        "workflows.orgAutomations",
+        "workflows.sitePause",
         "manageWaivers",
         "collectWaivers"
       ],
@@ -7449,6 +7467,7 @@
         "commerce.reservations",
         "commerce.walkIns",
         "commerce.orders",
+        "commerce.quotes",
         "commerce.giftCards",
         "commerce.paymentMethods",
         "commerce.shippingConnections",
@@ -7466,10 +7485,17 @@
         "marketplace.sitePublish",
         "outreach.use",
         "outreach.manageAll",
+        "email.suppressions",
+        "email.lists",
+        "inbox.reply",
+        "inbox.assign",
         "marketing.campaigns",
+        "workflows.orgAutomations",
+        "workflows.sitePause",
         "accounting.manage",
         "manageWaivers",
-        "collectWaivers"
+        "collectWaivers",
+        "domains.manage"
       ],
       "viewer": []
     },
@@ -7525,8 +7551,20 @@
         "pluginId": "outreach"
       },
       {
+        "id": "email",
+        "label": "Email"
+      },
+      {
+        "id": "inbox",
+        "label": "Inbox"
+      },
+      {
         "id": "marketing",
         "label": "Marketing"
+      },
+      {
+        "id": "workflows",
+        "label": "Workflows"
       },
       {
         "id": "accounting",
@@ -7537,6 +7575,10 @@
         "id": "waivers",
         "label": "Waivers",
         "pluginId": "waivers"
+      },
+      {
+        "id": "domains",
+        "label": "Domains"
       }
     ],
     "permissions": [
@@ -7633,7 +7675,7 @@
         "scope": "site"
       },
       {
-        "description": "Read a site’s orders and returns, and set up its webhooks.",
+        "description": "Read a site’s orders, returns and sending address, and set up its webhooks.",
         "group": "sites",
         "key": "site.sensitive",
         "label": "See orders and webhooks",
@@ -7738,6 +7780,13 @@
         "group": "commerce",
         "key": "commerce.orders",
         "label": "Manage orders",
+        "scope": "site"
+      },
+      {
+        "description": "Create, edit and delete quotes for customers. Follows the site role unless a role or member sets it.",
+        "group": "commerce",
+        "key": "commerce.quotes",
+        "label": "Create and edit quotes",
         "scope": "site"
       },
       {
@@ -7875,10 +7924,52 @@
         "scope": "org"
       },
       {
+        "description": "Add addresses to the site’s suppression list and check addresses against it. Follows the site role unless a role or member sets it.",
+        "group": "email",
+        "key": "email.suppressions",
+        "label": "Manage the site’s suppressions",
+        "scope": "site"
+      },
+      {
+        "description": "Add and remove people on the organization’s marketing lists from a site (only for a member of the whole workspace who may write its lists, as the lists are the organization’s). Follows the site role unless a role or member sets it.",
+        "group": "email",
+        "key": "email.lists",
+        "label": "Add people to marketing lists from a site",
+        "scope": "site"
+      },
+      {
+        "description": "Reply by email to a form submission in the site’s inbox. Follows the site role unless a role or member sets it.",
+        "group": "inbox",
+        "key": "inbox.reply",
+        "label": "Reply from the inbox",
+        "scope": "site"
+      },
+      {
+        "description": "Add the person behind a form submission to the organization’s marketing lists (members of the whole workspace who may write its lists only). Follows the site role unless a role or member sets it.",
+        "group": "inbox",
+        "key": "inbox.assign",
+        "label": "Add people to lists from the inbox",
+        "scope": "site"
+      },
+      {
         "description": "Draft, send, duplicate and manage email campaigns, and see who a send reached. Follows the site role on a site, and the workspace role in the organization hub, unless a role or member sets it.",
         "group": "marketing",
         "key": "marketing.campaigns",
         "label": "Run email campaigns",
+        "scope": "site"
+      },
+      {
+        "description": "Create, change, switch on and off, remove and import the organization’s automations. Members of the whole workspace only.",
+        "group": "workflows",
+        "key": "workflows.orgAutomations",
+        "label": "Manage org automations",
+        "scope": "org"
+      },
+      {
+        "description": "Pause or resume one of the organization’s automations on a site. Follows the site role unless a role or member sets it; \"Manage org automations\" also allows it.",
+        "group": "workflows",
+        "key": "workflows.sitePause",
+        "label": "Pause org automations on a site",
         "scope": "site"
       },
       {
@@ -7903,6 +7994,13 @@
         "key": "collectWaivers",
         "label": "Collect waivers",
         "pluginId": "waivers",
+        "scope": "org"
+      },
+      {
+        "description": "Buy, transfer in, unlock and renew the workspace’s domains, and change their contacts and DNS. Paying for one also needs \"Manage billing\".",
+        "group": "domains",
+        "key": "domains.manage",
+        "label": "Manage the workspace’s domains",
         "scope": "org"
       }
     ]

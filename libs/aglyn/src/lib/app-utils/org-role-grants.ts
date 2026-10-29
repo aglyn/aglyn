@@ -267,7 +267,7 @@ export const CORE_ORG_PERMISSION_ENTRIES: readonly OrgPermissionEntry[] = [
     group: 'sites',
     scope: 'site',
     label: 'See orders and webhooks',
-    description: 'Read a site’s orders and returns, and set up its webhooks.',
+    description: 'Read a site’s orders, returns and sending address, and set up its webhooks.',
   },
   {
     key: 'site.manage',

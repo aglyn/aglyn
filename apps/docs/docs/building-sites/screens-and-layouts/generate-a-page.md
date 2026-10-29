@@ -61,10 +61,10 @@ placed as instances instead of copied.
 
 - **Pictures** are image slots with a description of what belongs there, for you to fill from
   the media library.
-- **Facts the brief does not give**, such as a price, a phone number or an address, appear in
-  square brackets for you to fill in, instead of being invented. **AI jobs** lists them beside
-  the draft, including the ones a component on the page shows until you set your own, named
-  once for that component however often the page places it.
+- **Facts the brief does not give**, such as a price, a phone number or an address, are left
+  out, never invented. If the draft still shows one in square brackets, **AI jobs** lists it
+  beside the draft, including the ones a component on the page shows until you set your own,
+  named once for that component however often the page places it.
 
 ## The draft
 

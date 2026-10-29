@@ -191,13 +191,29 @@ function slotAspect(image: { sx?: Record<string, unknown> } | undefined, frame: 
   return 1
 }
 
-/** A slot's role: the first section's picture is the hero; people make an about picture. */
+/**
+ * A section's name that says it is a band of pictures (AGL-4065): "The team
+ * at the track in pictures", "Photo gallery", "Photos from race day".
+ */
+const PICTURE_BAND =
+  /\b(?:in|through)\s+(?:pictures|photos|photographs|images)\b|\b(?:photo|picture|image)\s+galler(?:y|ies)\b|\bgalleries?\b|^\W*(?:photos|pictures|photographs|snapshots)\b/i
+
+/**
+ * A slot's role: the first section's picture is the hero; people make an
+ * about picture. A cell of a band of pictures is the gallery's whatever the
+ * band's name says (AGL-4092), and an about picture only where its own words
+ * are of people: the cells of Rut Runners Racing's "The team in pictures:
+ * garage, track and podium" were read as portraits of the team, searched
+ * "motocross race team gate drop" among people, and "Gate drop" took a man
+ * posing with a street bike. "Meet the riders" is still its people.
+ */
 export function aiLayoutPictureRole(input: {
   sectionIndex: number
   sectionName: string
   alt: string
 }): AiLayoutPictureRole {
   if (input.sectionIndex === 0) return 'hero'
+  if (PICTURE_BAND.test(input.sectionName)) return PEOPLE.test(input.alt) || ABOUT.test(input.alt) ? 'about' : 'gallery'
   if (PEOPLE.test(input.sectionName) || PEOPLE.test(input.alt) || ABOUT.test(input.sectionName) || ABOUT.test(input.alt)) return 'about'
   return 'gallery'
 }
@@ -616,13 +632,6 @@ export function aiLayoutDropEmptyPictures(
   }
   return next as unknown as NodesMap
 }
-
-/**
- * A section's name that says it is a band of pictures (AGL-4065): "The team
- * at the track in pictures", "Photo gallery", "Photos from race day".
- */
-const PICTURE_BAND =
-  /\b(?:in|through)\s+(?:pictures|photos|photographs|images)\b|\b(?:photo|picture|image)\s+galler(?:y|ies)\b|\bgalleries?\b|^\W*(?:photos|pictures|photographs|snapshots)\b/i
 
 /** Components that only hold words, or lay them out: what a band of captions is made of. */
 const WORDS_ONLY: ReadonlySet<string> = new Set([

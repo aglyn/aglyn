@@ -2829,6 +2829,7 @@
           ],
           "result": {
             "audience": "",
+            "founded": "",
             "serviceArea": "",
             "services": [
               "a",
@@ -2876,6 +2877,7 @@
           ],
           "result": {
             "audience": "Owners",
+            "founded": "",
             "serviceArea": "",
             "services": [
               "Bath",
@@ -2920,6 +2922,7 @@
           ],
           "result": {
             "audience": "",
+            "founded": "",
             "serviceArea": "",
             "services": [
               "Bath",
@@ -2959,6 +2962,7 @@
           ],
           "result": {
             "audience": "",
+            "founded": "",
             "serviceArea": "",
             "services": [
               "Full groom",
@@ -2987,6 +2991,7 @@
           ],
           "result": {
             "audience": "",
+            "founded": "",
             "serviceArea": "",
             "services": [],
             "sources": {
@@ -3020,6 +3025,7 @@
           ],
           "result": {
             "audience": "Owners",
+            "founded": "",
             "serviceArea": "",
             "services": [
               "Bath",
@@ -3054,6 +3060,7 @@
           ],
           "result": {
             "audience": "",
+            "founded": "",
             "serviceArea": "North Austin",
             "services": [
               "Full groom",
@@ -3084,6 +3091,7 @@
           ],
           "result": {
             "audience": "",
+            "founded": "",
             "serviceArea": "",
             "services": [],
             "sources": {
@@ -3108,6 +3116,7 @@
           ],
           "result": {
             "audience": "",
+            "founded": "",
             "serviceArea": "",
             "services": [],
             "sources": {
@@ -3132,6 +3141,7 @@
           ],
           "result": {
             "audience": "",
+            "founded": "",
             "serviceArea": "",
             "services": [],
             "sources": {
@@ -3156,6 +3166,7 @@
           ],
           "result": {
             "audience": "",
+            "founded": "",
             "serviceArea": "",
             "services": [],
             "sources": {
@@ -3177,6 +3188,7 @@
           ],
           "result": {
             "audience": "",
+            "founded": "",
             "serviceArea": "",
             "services": [],
             "sources": {
@@ -3198,6 +3210,7 @@
           ],
           "result": {
             "audience": "",
+            "founded": "",
             "serviceArea": "Austin",
             "services": [
               "a",
@@ -3224,6 +3237,7 @@
           ],
           "result": {
             "audience": "",
+            "founded": "",
             "serviceArea": "",
             "services": [],
             "sources": {
@@ -3255,6 +3269,7 @@
           ],
           "result": {
             "audience": "",
+            "founded": "",
             "serviceArea": "",
             "services": [
               "A",
@@ -36946,6 +36961,7 @@
               "hours": null,
               "phone": null
             },
+            "founded": null,
             "logo": null,
             "name": null,
             "profiles": [],
@@ -36971,6 +36987,7 @@
               "hours": null,
               "phone": null
             },
+            "founded": null,
             "logo": null,
             "name": null,
             "profiles": [],
@@ -37037,6 +37054,7 @@
               "hours": "Mo-Fr 09:00-17:00",
               "phone": "(512) 555-0100"
             },
+            "founded": null,
             "logo": "https://cdn.example/logo.png",
             "name": {
               "origin": "site",
@@ -37079,6 +37097,7 @@
               "hours": null,
               "phone": null
             },
+            "founded": null,
             "logo": null,
             "name": {
               "origin": "site",
@@ -37168,6 +37187,7 @@
               "hours": "Mo-Fr 09:00-17:00",
               "phone": "(512) 555-0100"
             },
+            "founded": null,
             "logo": "https://cdn.example/logo.png",
             "name": {
               "origin": "site",
@@ -37250,6 +37270,7 @@
               "hours": null,
               "phone": null
             },
+            "founded": null,
             "logo": null,
             "name": {
               "origin": "site",
@@ -37319,6 +37340,7 @@
               "hours": null,
               "phone": null
             },
+            "founded": null,
             "logo": null,
             "name": {
               "origin": "site",
@@ -37374,6 +37396,7 @@
               "hours": null,
               "phone": null
             },
+            "founded": null,
             "logo": null,
             "name": {
               "origin": "site",
@@ -37421,6 +37444,7 @@
               "hours": null,
               "phone": null
             },
+            "founded": null,
             "logo": null,
             "name": {
               "origin": "site",
@@ -58413,15 +58437,21 @@
             "commerce.orders": true,
             "commerce.paymentMethods": true,
             "commerce.posApprovals": true,
+            "commerce.quotes": true,
             "commerce.refunds": true,
             "commerce.reservations": true,
             "commerce.shippingConnections": true,
             "commerce.walkIns": true,
             "commerce.webhooks": true,
             "data.manage": true,
+            "domains.manage": true,
+            "email.lists": true,
+            "email.suppressions": true,
             "funnels.manage": true,
             "hosts.create": true,
             "hosts.delete": true,
+            "inbox.assign": true,
+            "inbox.reply": true,
             "managePos": true,
             "manageWaivers": true,
             "marketing.campaigns": true,
@@ -58451,7 +58481,9 @@
             "site.edit": true,
             "site.manage": true,
             "site.publish": true,
-            "site.sensitive": true
+            "site.sensitive": true,
+            "workflows.orgAutomations": true,
+            "workflows.sitePause": true
           }
         },
         {
@@ -58474,15 +58506,21 @@
             "commerce.orders": true,
             "commerce.paymentMethods": true,
             "commerce.posApprovals": true,
+            "commerce.quotes": true,
             "commerce.refunds": true,
             "commerce.reservations": true,
             "commerce.shippingConnections": true,
             "commerce.walkIns": true,
             "commerce.webhooks": true,
             "data.manage": true,
+            "domains.manage": true,
+            "email.lists": true,
+            "email.suppressions": true,
             "funnels.manage": true,
             "hosts.create": true,
             "hosts.delete": true,
+            "inbox.assign": true,
+            "inbox.reply": true,
             "managePos": true,
             "manageWaivers": true,
             "marketing.campaigns": true,
@@ -58512,7 +58550,9 @@
             "site.edit": true,
             "site.manage": true,
             "site.publish": true,
-            "site.sensitive": true
+            "site.sensitive": true,
+            "workflows.orgAutomations": true,
+            "workflows.sitePause": true
           }
         },
         {
@@ -58535,15 +58575,21 @@
             "commerce.orders": true,
             "commerce.paymentMethods": false,
             "commerce.posApprovals": false,
+            "commerce.quotes": true,
             "commerce.refunds": false,
             "commerce.reservations": true,
             "commerce.shippingConnections": false,
             "commerce.walkIns": true,
             "commerce.webhooks": false,
             "data.manage": true,
+            "domains.manage": false,
+            "email.lists": true,
+            "email.suppressions": true,
             "funnels.manage": true,
             "hosts.create": false,
             "hosts.delete": false,
+            "inbox.assign": true,
+            "inbox.reply": true,
             "managePos": true,
             "manageWaivers": true,
             "marketing.campaigns": true,
@@ -58573,7 +58619,9 @@
             "site.edit": true,
             "site.manage": false,
             "site.publish": true,
-            "site.sensitive": true
+            "site.sensitive": true,
+            "workflows.orgAutomations": true,
+            "workflows.sitePause": true
           }
         },
         {
@@ -58596,15 +58644,21 @@
             "commerce.orders": false,
             "commerce.paymentMethods": false,
             "commerce.posApprovals": false,
+            "commerce.quotes": false,
             "commerce.refunds": false,
             "commerce.reservations": false,
             "commerce.shippingConnections": false,
             "commerce.walkIns": false,
             "commerce.webhooks": false,
             "data.manage": false,
+            "domains.manage": false,
+            "email.lists": false,
+            "email.suppressions": false,
             "funnels.manage": false,
             "hosts.create": false,
             "hosts.delete": false,
+            "inbox.assign": false,
+            "inbox.reply": false,
             "managePos": false,
             "manageWaivers": false,
             "marketing.campaigns": false,
@@ -58634,7 +58688,9 @@
             "site.edit": false,
             "site.manage": false,
             "site.publish": false,
-            "site.sensitive": false
+            "site.sensitive": false,
+            "workflows.orgAutomations": false,
+            "workflows.sitePause": false
           }
         },
         {
@@ -58657,15 +58713,21 @@
             "commerce.orders": false,
             "commerce.paymentMethods": false,
             "commerce.posApprovals": false,
+            "commerce.quotes": false,
             "commerce.refunds": false,
             "commerce.reservations": false,
             "commerce.shippingConnections": false,
             "commerce.walkIns": false,
             "commerce.webhooks": false,
             "data.manage": false,
+            "domains.manage": false,
+            "email.lists": false,
+            "email.suppressions": false,
             "funnels.manage": false,
             "hosts.create": false,
             "hosts.delete": false,
+            "inbox.assign": false,
+            "inbox.reply": false,
             "managePos": false,
             "manageWaivers": false,
             "marketing.campaigns": false,
@@ -58695,7 +58757,9 @@
             "site.edit": false,
             "site.manage": false,
             "site.publish": false,
-            "site.sensitive": false
+            "site.sensitive": false,
+            "workflows.orgAutomations": false,
+            "workflows.sitePause": false
           }
         },
         {
@@ -58718,15 +58782,21 @@
             "commerce.orders": false,
             "commerce.paymentMethods": false,
             "commerce.posApprovals": false,
+            "commerce.quotes": false,
             "commerce.refunds": false,
             "commerce.reservations": false,
             "commerce.shippingConnections": false,
             "commerce.walkIns": false,
             "commerce.webhooks": false,
             "data.manage": false,
+            "domains.manage": false,
+            "email.lists": false,
+            "email.suppressions": false,
             "funnels.manage": false,
             "hosts.create": false,
             "hosts.delete": false,
+            "inbox.assign": false,
+            "inbox.reply": false,
             "managePos": false,
             "manageWaivers": false,
             "marketing.campaigns": false,
@@ -58756,7 +58826,9 @@
             "site.edit": false,
             "site.manage": false,
             "site.publish": false,
-            "site.sensitive": false
+            "site.sensitive": false,
+            "workflows.orgAutomations": false,
+            "workflows.sitePause": false
           }
         },
         {
@@ -58786,15 +58858,21 @@
             "commerce.orders": true,
             "commerce.paymentMethods": false,
             "commerce.posApprovals": false,
+            "commerce.quotes": true,
             "commerce.refunds": false,
             "commerce.reservations": true,
             "commerce.shippingConnections": false,
             "commerce.walkIns": true,
             "commerce.webhooks": false,
             "data.manage": false,
+            "domains.manage": false,
+            "email.lists": true,
+            "email.suppressions": true,
             "funnels.manage": true,
             "hosts.create": true,
             "hosts.delete": false,
+            "inbox.assign": true,
+            "inbox.reply": true,
             "managePos": true,
             "manageWaivers": true,
             "marketing.campaigns": true,
@@ -58824,7 +58902,9 @@
             "site.edit": true,
             "site.manage": false,
             "site.publish": true,
-            "site.sensitive": true
+            "site.sensitive": true,
+            "workflows.orgAutomations": true,
+            "workflows.sitePause": true
           }
         },
         {
@@ -58856,15 +58936,21 @@
             "commerce.orders": false,
             "commerce.paymentMethods": false,
             "commerce.posApprovals": false,
+            "commerce.quotes": false,
             "commerce.refunds": false,
             "commerce.reservations": false,
             "commerce.shippingConnections": false,
             "commerce.walkIns": false,
             "commerce.webhooks": false,
             "data.manage": false,
+            "domains.manage": false,
+            "email.lists": false,
+            "email.suppressions": false,
             "funnels.manage": false,
             "hosts.create": false,
             "hosts.delete": false,
+            "inbox.assign": false,
+            "inbox.reply": false,
             "managePos": false,
             "manageWaivers": false,
             "marketing.campaigns": false,
@@ -58894,7 +58980,9 @@
             "site.edit": false,
             "site.manage": false,
             "site.publish": false,
-            "site.sensitive": false
+            "site.sensitive": false,
+            "workflows.orgAutomations": false,
+            "workflows.sitePause": false
           }
         },
         {
@@ -58921,15 +59009,21 @@
             "commerce.orders": true,
             "commerce.paymentMethods": true,
             "commerce.posApprovals": true,
+            "commerce.quotes": true,
             "commerce.refunds": true,
             "commerce.reservations": true,
             "commerce.shippingConnections": true,
             "commerce.walkIns": true,
             "commerce.webhooks": true,
             "data.manage": true,
+            "domains.manage": true,
+            "email.lists": true,
+            "email.suppressions": true,
             "funnels.manage": true,
             "hosts.create": true,
             "hosts.delete": false,
+            "inbox.assign": true,
+            "inbox.reply": true,
             "managePos": true,
             "manageWaivers": true,
             "marketing.campaigns": true,
@@ -58959,7 +59053,9 @@
             "site.edit": true,
             "site.manage": true,
             "site.publish": true,
-            "site.sensitive": true
+            "site.sensitive": true,
+            "workflows.orgAutomations": true,
+            "workflows.sitePause": true
           }
         }
       ]

@@ -1167,6 +1167,13 @@ describe('e-sign consent v2 and the signer’s own copy (AGL-4042)', () => {
     expect(sent[0].fallback.text).toContain('a paper copy at no charge')
   })
 
+  it('tells the console how signers reach the business, and when they can’t', async () => {
+    const listed = async () => (await (await call(templatesRoute, 'GET')).json()).businessContact
+    expect(await listed()).toBeNull()
+    contactHost()
+    expect(await listed()).toBe('hello@example.com or +1-555-010-0100')
+  })
+
   it('answers an electronic signing with a one-hour link to its own PDF, and nothing else', async () => {
     const waiver = await publishedWaiver()
     const answer = await (await call(publicSignRoute, 'POST', { token: null, body: signing(waiver) })).json()

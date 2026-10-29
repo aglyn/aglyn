@@ -31,10 +31,6 @@
       "kind": "not-a-gate",
       "note": "Validates the default role an SSO connection assigns."
     },
-    "apps/console/app/api/email/sending-identity/route.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
     "apps/console/app/api/hosts/members/permissions/route.ts": {
       "count": 1,
       "kind": "not-a-gate",
@@ -184,7 +180,7 @@
       "kind": "pending"
     },
     "libs/plugins/delivery-apps/src/lib/server/platform-deps.ts": {
-      "count": 2,
+      "count": 1,
       "kind": "pending"
     },
     "libs/plugins/domains/src/lib/server/domain-emails.ts": {
@@ -192,25 +188,17 @@
       "kind": "not-a-gate",
       "note": "Picks who a domain email goes to."
     },
-    "libs/plugins/domains/src/lib/server/gates.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
     "libs/plugins/email/src/lib/components/sending-sender-drawer.tsx": {
       "count": 1,
       "kind": "not-a-gate",
       "note": "Lists the owners and admins a sending address can be sent as."
     },
     "libs/plugins/email/src/lib/server-list-gate.ts": {
-      "count": 4,
-      "kind": "pending"
-    },
-    "libs/plugins/email/src/lib/server-suppressions.ts": {
-      "count": 2,
+      "count": 3,
       "kind": "pending"
     },
     "libs/plugins/inbox/src/lib/server.ts": {
-      "count": 5,
+      "count": 3,
       "kind": "pending"
     },
     "libs/plugins/marketplace/src/lib/components/publisher-agreement-client.ts": {
@@ -225,14 +213,6 @@
       "count": 1,
       "kind": "not-a-gate",
       "note": "Picks who a publisher review email goes to."
-    },
-    "libs/plugins/workflows/src/lib/server/org-automations-routes.ts": {
-      "count": 2,
-      "kind": "pending"
-    },
-    "libs/plugins/workflows/src/lib/transfer/org-automations-package.server.ts": {
-      "count": 1,
-      "kind": "pending"
     },
     "libs/tenant/data/admin/src/lib/server/notifications.ts": {
       "count": 2,

@@ -34,8 +34,10 @@ export function registerPluginServerDeclarations(): Promise<void> {
     ;(await import('@aglyn/plugins-accounting/declarations.console-server')).registerAccountingConsoleServerDeclarations()
     ;(await import('@aglyn/plugins-data/declarations.server')).registerDataServerDeclarations()
     ;(await import('@aglyn/plugins-data/declarations.console-server')).registerDataConsoleServerDeclarations()
+    ;(await import('@aglyn/plugins-email/declarations')).registerEmailDeclarations()
     ;(await import('@aglyn/plugins-email/declarations.console-server')).registerEmailConsoleServerDeclarations()
     ;(await import('@aglyn/plugins-events-calendar/declarations.console-server')).registerEventsCalendarConsoleServerDeclarations()
+    ;(await import('@aglyn/plugins-inbox/declarations')).registerInboxDeclarations()
     ;(await import('@aglyn/plugins-logic/declarations.server')).registerLogicServerDeclarations()
     ;(await import('@aglyn/plugins-logic/declarations.console-server')).registerLogicConsoleServerDeclarations()
     ;(await import('@aglyn/plugins-marketing/declarations')).registerMarketingDeclarations()
@@ -82,6 +84,7 @@ export function registerPluginServerDeclarations(): Promise<void> {
     ;(await import('@aglyn/plugins-funnels/declarations.server')).registerFunnelsServerDeclarations()
     ;(await import('@aglyn/plugins-funnels/declarations.console-server')).registerFunnelsConsoleServerDeclarations()
     ;(await import('@aglyn/plugins-weglot/declarations')).registerWeglotDeclarations()
+    ;(await import('@aglyn/plugins-domains/declarations')).registerDomainsDeclarations()
     ;(await import('@aglyn/plugins-domains/declarations.console-server')).registerDomainsConsoleServerDeclarations()
   })()
   return done

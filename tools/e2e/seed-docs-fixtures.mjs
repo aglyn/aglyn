@@ -681,7 +681,8 @@ await put(firestore.collection('hosts').doc(hostId), {
     },
   },
 })
-const businessProfile = businessProfileFixtures({ at: now })
+// The year founded (AGL-4092), as the guided start's More details gave it, so the card shows the field filled.
+const businessProfile = businessProfileFixtures({ at: now, founded: '2012' })
 await firestore.doc(`hosts/${hostId}/businessProfile/profile`).set(businessProfile.profile)
 await firestore.doc(`orgs/${orgId}/businessProfile/defaults`).set(businessProfile.defaults)
 const aiMemory = firestore.collection('hosts').doc(hostId).collection('aiMemory')

@@ -195,6 +195,9 @@ const ENFORCED_AS: Record<OrgPermission, readonly string[]> = {
   // Commerce's order keys (AGL-4047): the order routes ask "Manage orders"
   // and the gift cards route "Issue gift cards" through `holdsCommerceSiteKey`.
   'commerce.orders': ["'commerce.orders'"],
+  // Quotes (AGL-4093): the quote route asks "Create and edit quotes" through
+  // `holdsCommerceSiteKey`.
+  'commerce.quotes': ["'commerce.quotes'"],
   // Workspace acts that asked for roles (AGL-4047): `/api/orgs/export-data`,
   // `/api/email/sending-domains`, the rules' business profile write, the
   // media scope and the rules' workspace media library, and the erase
@@ -234,6 +237,21 @@ const ENFORCED_AS: Record<OrgPermission, readonly string[]> = {
   // "Publish a site's items to the marketplace", beside the workspace keys.
   'marketplace.siteInstall': ["'marketplace.siteInstall'"],
   'marketplace.sitePublish': ["'marketplace.sitePublish'"],
+  // Workflows and Domains (AGL-4047): `automations/manage`, the org
+  // automations import and the pause door's managers ask "Manage org
+  // automations", the pause door "Pause org automations on a site", and the
+  // domains gate's workspace arm "Manage the workspace's domains".
+  'workflows.orgAutomations': ["'workflows.orgAutomations'"],
+  'workflows.sitePause': ["'workflows.sitePause'"],
+  'domains.manage': ["'domains.manage'"],
+  // Email and the inbox (AGL-4047): the suppression routes ask "Manage the
+  // site's suppressions", the list routes "Add people to marketing lists from
+  // a site", the inbox's reply "Reply from the inbox" and its list assignment
+  // "Add people to lists from the inbox".
+  'email.suppressions': ["'email.suppressions'"],
+  'email.lists': ["'email.lists'"],
+  'inbox.reply': ["'inbox.reply'"],
+  'inbox.assign': ["'inbox.assign'"],
 }
 
 function serverFilesContaining(needle: string): string[] {
@@ -276,7 +294,7 @@ describe('every advertised org permission is enforced server-side (AGL-2444)', (
     expect([...CATALOG].sort()).toEqual(
       Object.keys(ENFORCED_AS).sort(),
     )
-    expect(CATALOG.length).toBe(40)
+    expect(CATALOG.length).toBe(48)
   })
 
   it('the search really searches — a key nobody uses finds nothing', () => {

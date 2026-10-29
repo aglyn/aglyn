@@ -39,14 +39,17 @@
  * check is owed against an attached custom console domain.
  */
 
-import { render } from '@testing-library/react'
+import { render, waitFor } from '@testing-library/react'
 
 import { FirebaseServicesProvider } from './firebase-services'
 import type { AuthPersistenceClass } from './auth-persistence'
 import {
   MEMORY_CACHE_FALLBACK_KEY,
   MEMORY_CACHE_FALLBACK_TTL_MS,
+  SHARED_CACHE_LOCK_KEY,
+  SHARED_CACHE_LOCK_TTL_MS,
 } from './firestore-multitab-wedge'
+import { firestorePersistencePrefix } from './firestore-shared-client-state'
 import type { FirestoreSettings } from 'firebase/firestore'
 
 const mockInitializeFirestore = jest.fn(
@@ -224,5 +227,59 @@ describe('a tab that fell back from a locked multi-tab cache (AGL-3428)', () => 
     )
 
     expect(firestoreSettingsFor('durable').localCache?.kind).toBe('persistent')
+  })
+})
+
+describe('a tab opened after another saw the shared cache locked (AGL-4090)', () => {
+  beforeEach(() => {
+    mockPruneBrowserSharedClientState.mockClear()
+    window.sessionStorage.clear()
+    window.localStorage.clear()
+  })
+  afterEach(() => {
+    window.sessionStorage.clear()
+    window.localStorage.clear()
+  })
+
+  /** The database of the app the next mount boots. */
+  const nextDatabase = () =>
+    `${firestorePersistencePrefix(`agl1456-firestore-${appCounter}`, 'aglyn-main')}main`
+
+  const lockSeenOn = (databaseName: string, at = Date.now()) =>
+    window.localStorage.setItem(
+      SHARED_CACHE_LOCK_KEY,
+      JSON.stringify({ reason: 'lease-locked', databaseName, at }),
+    )
+
+  it('builds the memory cache in its first render, instead of hanging on the lock until it finds it', () => {
+    lockSeenOn(nextDatabase())
+
+    // This tab's own `sessionStorage` is empty: it has seen nothing itself.
+    expect(firestoreSettingsFor('durable').localCache?.kind).toBe('memory')
+    expect(mockPruneBrowserSharedClientState).not.toHaveBeenCalled()
+  })
+
+  it('boots a single tab, with no lock seen, on the durable cache exactly as before', () => {
+    expect(firestoreSettingsFor('durable').localCache?.kind).toBe('persistent')
+    expect(mockPruneBrowserSharedClientState).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the durable cache when the lock was seen on another database, or long enough ago', () => {
+    lockSeenOn('firestore/OTHER_APP/aglyn-main/main')
+    expect(firestoreSettingsFor('durable').localCache?.kind).toBe('persistent')
+
+    lockSeenOn(nextDatabase(), Date.now() - SHARED_CACHE_LOCK_TTL_MS)
+    expect(firestoreSettingsFor('durable').localCache?.kind).toBe('persistent')
+  })
+
+  it('reads the lease once and clears a record the store no longer bears out', async () => {
+    lockSeenOn(nextDatabase())
+
+    expect(firestoreSettingsFor('durable').localCache?.kind).toBe('memory')
+    // jsdom has no IndexedDB, so the read finds no database, and no database
+    // is no lock: the next tab gets the durable cache back.
+    await waitFor(() =>
+      expect(window.localStorage.getItem(SHARED_CACHE_LOCK_KEY)).toBeNull(),
+    )
   })
 })

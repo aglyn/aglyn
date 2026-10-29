@@ -170,6 +170,22 @@ describe('markdownToRows / rowsToMarkdown', () => {
 })
 
 describe('MarkdownVisualEditor', () => {
+  it('shows a caller’s placeholder while empty, and never emits it as text', () => {
+    const onChange = jest.fn()
+    const { rerender } = render(
+      <MarkdownVisualEditor value="" onChange={onChange} placeholder="Write your waiver here" />,
+    )
+    expect(screen.getByText('Write your waiver here')).toBeTruthy()
+    expect(onChange).not.toHaveBeenCalled()
+    rerender(<MarkdownVisualEditor value="Ride at your own risk." onChange={onChange} placeholder="Write your waiver here" />)
+    expect(screen.queryByText('Write your waiver here')).toBeNull()
+  })
+
+  it('keeps its own placeholder when the caller gives none', () => {
+    render(<MarkdownVisualEditor value="" onChange={jest.fn()} />)
+    expect(screen.getByText('Start writing…')).toBeTruthy()
+  })
+
   it('renders the parsed blocks as an editable surface', () => {
     renderEditor(
       '## Head\n\nA **bold** and *italic* [link](https://example.com).\n\n' +

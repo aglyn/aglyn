@@ -889,6 +889,7 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
     '#commerce-glance': 'Commerce at a glance',
     '#gift-cards': 'Gift cards & store credit',
     '#inventory-locations': 'Inventory locations',
+    '#orders': 'Orders',
     '#orders-screen': 'The Orders page',
     '#payment-methods': 'Payment methods',
     '#pickup-and-local-delivery': 'Pickup and local delivery',

@@ -494,8 +494,16 @@
       "why": "What a store's shipping zones and rates cover: the resolver checkout builds its shipping options from and the Coverage block's words. Pure arithmetic over the settings document; the native Shipping page replays it from function-cases.generated.json."
     },
     {
+      "path": "libs/plugins/commerce/src/lib/model/commerce-quotes.ts",
+      "why": "A quote's shape on its order (the quote section, its customer, discount, shipping and tax basis) and the pure totals, tax basis, status and proof-approval rules (AGL-4093); imports commerce, commerce-orders (types), commerce-tax, commerce-tax-decision, commerce-tax-engine and product-modifiers. HostOrder.quote reaches the apps' order contract through it."
+    },
+    {
       "path": "libs/plugins/commerce/src/lib/model/commerce-tax-decision.ts",
       "why": "How an order's tax was calculated, in the order dialog's words; a type-only import of commerce-tax. The apps' order screens replay describeOrderTaxMode (AGL-3841)."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/commerce-tax-engine.ts",
+      "why": "A tax service's stamp on an order and the cent allocation a quote spreads its discount with (AGL-3631, AGL-4093); no imports."
     },
     {
       "path": "libs/plugins/commerce/src/lib/model/commerce-tax.ts",
@@ -548,6 +556,22 @@
     {
       "path": "libs/plugins/marketplace/src/lib/model/marketplace-site-permissions.ts",
       "why": "The marketplace plugin's site keys (install into a site, publish from one) and their site-role preset, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
+      "path": "libs/plugins/workflows/src/lib/model/workflows-permissions.ts",
+      "why": "The workflows plugin's keys (manage the organization's automations, pause one on a site) and their presets, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
+      "path": "libs/plugins/domains/src/lib/model/domains-permissions.ts",
+      "why": "The domains plugin's workspace key (manage the workspace's domains) and its role defaults, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
+      "path": "libs/plugins/email/src/lib/model/email-permissions.ts",
+      "why": "The email plugin's site keys (suppressions, list membership) and their site-role preset, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
+      "path": "libs/plugins/inbox/src/lib/model/inbox-permissions.ts",
+      "why": "The inbox plugin's site keys (reply, add to lists) and their site-role preset, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
     },
     {
       "path": "libs/plugins/commerce/src/lib/model/product-channel.ts",

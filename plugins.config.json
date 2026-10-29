@@ -1853,6 +1853,7 @@
         "site": "registerEmailPlugin",
         "console": "registerEmailConsole",
         "tenantApi": "registerEmailApi",
+        "declarations": "registerEmailDeclarations",
         "consoleApi": "registerEmailConsoleApi",
         "consoleServerDeclarations": "registerEmailConsoleServerDeclarations"
       },
@@ -2111,6 +2112,7 @@
       "package": "@aglyn/plugins-inbox",
       "register": {
         "console": "registerInboxConsole",
+        "declarations": "registerInboxDeclarations",
         "consoleApi": "registerInboxConsoleApi"
       },
       "apiPrefixes": [
@@ -4434,6 +4436,7 @@
       "register": {
         "console": "registerDomainsConsole",
         "consoleApi": "registerDomainsConsoleApi",
+        "declarations": "registerDomainsDeclarations",
         "consoleServerDeclarations": "registerDomainsConsoleServerDeclarations",
         "subprocessors": "domainsSubprocessors"
       },

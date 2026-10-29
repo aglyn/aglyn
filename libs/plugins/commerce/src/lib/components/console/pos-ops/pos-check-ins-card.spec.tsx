@@ -107,6 +107,14 @@ describe("today's check-ins", () => {
     expect(mockPrint.mock.calls[0][0]).toContain('1 of 2 checked in')
   })
 
+  it('keeps a row’s actions beside its name, where a narrow window still sees them', async () => {
+    mockFetch.mockResolvedValue({ ok: true, status: 200, json: async () => LIST })
+    render(<PosCheckInsCard hostId="shop" canManagePos />)
+    await screen.findByText('Blue #214')
+    const headers = screen.getAllByRole('columnheader').map((header) => header.textContent?.trim())
+    expect(headers.slice(0, 2)).toEqual(['Name', 'Actions'])
+  })
+
   it('asks nothing for a viewer who cannot use the register, and says why', async () => {
     render(<PosCheckInsCard hostId="shop" />)
     expect(screen.getByText(/members who can use the register/)).toBeTruthy()

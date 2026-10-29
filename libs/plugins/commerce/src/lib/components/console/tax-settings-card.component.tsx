@@ -481,7 +481,10 @@ export function TaxSettingsCard(props: TaxSettingsCardProps) {
           variant="contained"
           color="primary"
           size="small"
-          disabled={!draft}
+          // An undecided store saves the choice on screen as it stands. The
+          // select fires no change for the option already shown, so waiting
+          // for an edit left "Manual rates" unsaveable and checkout off.
+          disabled={storeStatus === 'loading' || (decided && !draft)}
           onClick={handleSave}
           sx={{ alignSelf: 'flex-start' }}
         >

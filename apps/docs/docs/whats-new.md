@@ -27,6 +27,28 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — quotes
+
+- **[Quotes](commerce-and-bookings/commerce/quotes-and-proofs.md)** — price a customer's
+  order before they buy, from the **Quotes** card on the **Orders** tab: your products with
+  their options and add-ons, items typed for the job, things included at no charge, a
+  discount, shipping, notes and terms, with tax worked out from your store's tax settings.
+  Making and editing quotes is its own permission, **Create and edit quotes**.
+
+## October 2026 — suppressions, lists and inbox replies are permissions
+
+- **[Email and inbox permissions](workspace-and-billing/teams-and-roles/custom-roles.md#email-and-inbox-permissions)** —
+  managing a site's suppressions, adding people to marketing lists from a site or from the
+  inbox, and replying from the inbox now each have a permission. A site's admins and editors
+  keep them, and a custom role or a per-member override can grant or deny each one.
+
+## October 2026 — org automations and the workspace's domains are permissions
+
+- **[Automation and domain permissions](workspace-and-billing/teams-and-roles/custom-roles.md#automation-and-domain-permissions)** —
+  managing the organization's automations, pausing one on a site and managing the
+  workspace's domains now each have a permission. Everyone keeps what their role allowed,
+  and a custom role or a per-member override can grant or deny each one.
+
 ## October 2026 — installing and publishing on a site are permissions
 
 - **[Marketplace permissions on a site](workspace-and-billing/teams-and-roles/custom-roles.md#marketplace-site-permissions)** —

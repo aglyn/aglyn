@@ -1115,9 +1115,13 @@
         "COMMERCE_PERMISSIONS",
         "MARKETPLACE_SITE_PERMISSIONS",
         "OUTREACH_PERMISSIONS",
+        "EMAIL_SITE_PERMISSIONS",
+        "INBOX_SITE_PERMISSIONS",
         "MARKETING_SITE_PERMISSIONS",
+        "WORKFLOWS_PERMISSIONS",
         "ACCOUNTING_PERMISSIONS",
-        "WAIVERS_PERMISSION_DECLARATIONS"
+        "WAIVERS_PERMISSION_DECLARATIONS",
+        "DOMAINS_PERMISSIONS"
       ],
       "parts": [
         "libs/plugins/ai/src/lib/model/ai-permissions.ts",
@@ -1127,8 +1131,12 @@
         "libs/plugins/funnels/src/lib/model/funnels-permissions.ts",
         "libs/plugins/marketing/src/lib/model/marketing-permissions.ts",
         "libs/plugins/marketplace/src/lib/model/marketplace-site-permissions.ts",
+        "libs/plugins/email/src/lib/model/email-permissions.ts",
+        "libs/plugins/inbox/src/lib/model/inbox-permissions.ts",
         "libs/plugins/outreach/src/lib/constants/bundle-common.ts",
         "libs/plugins/accounting/src/lib/constants/bundle-common.ts",
+        "libs/plugins/workflows/src/lib/model/workflows-permissions.ts",
+        "libs/plugins/domains/src/lib/model/domains-permissions.ts",
         "libs/plugins/waivers/src/lib/constants/permissions.ts"
       ]
     }
