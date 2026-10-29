@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
 import type { PluginApiRequest } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
@@ -98,7 +99,7 @@ export async function recordPublisherAgreementAcceptance(input: {
     .collection('orgs')
     .doc(input.orgId)
     .collection(PUBLISHER_AGREEMENT_ACCEPTANCES)
-    .doc()
+    .doc(createResourceUid())
     .create({
       ...record,
       acceptedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
