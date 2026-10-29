@@ -33,6 +33,7 @@ import {
   registerSitePageResolver,
   registerPluginPermissions,
   registerPluginConfigSchema,
+  type PluginApiHandler,
 } from '@aglyn/aglyn/server'
 import { isEmailConfigured } from '@aglyn/shared-util-email'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
@@ -397,6 +398,13 @@ registerPluginJob({
  */
 const CARD_PAYMENT_DOOR = { cardPayment: true } as const
 
+/**
+ * The quote page's Pay button (AGL-4094): a fresh Checkout Session for a
+ * quote, for whoever holds its signed pay link. Loaded on first call.
+ */
+const quotePayDoor: PluginApiHandler = async (req, res) =>
+  (await import('./server/quote-pay')).quotePayHandler(req, res)
+
 /** Registers the commerce plugin's storefront API routes. */
 export function registerCommerceApi(): void {
   registerProductCardReader()
@@ -440,6 +448,15 @@ export function registerCommerceApi(): void {
   // …and its "Request a return" button (AGL-3611), on an order that can
   // still send something back.
   registerOrderStatusActions(returnRequestStatusAction)
+  // The customer's quote page (AGL-4094), behind the signed pay link a
+  // business sends: the quote, and its Pay button. The page's data is a
+  // recipient link, so it outlives the site's gates like the order status.
+  registerPluginApiRoute(
+    'commerce/quote-view',
+    async (req, res) => (await import('./server/quote-pay')).quoteViewHandler(req, res),
+    { recipientLink: true },
+  )
+  registerPluginApiRoute('commerce/quote-pay', quotePayDoor, CARD_PAYMENT_DOOR)
   // What became of a session the shopper was returned from (AGL-3606).
   registerPluginApiRoute('commerce/checkout-status', checkoutStatusHandler)
   registerPluginApiRoute('commerce/product', productHandler)

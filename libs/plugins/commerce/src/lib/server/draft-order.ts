@@ -27,6 +27,7 @@ import {
   type CarrierShippingPlan,
 } from './carrier-shipping'
 import { resolveManualTaxRateId } from './manual-tax-rate'
+import { orderStatusUrl } from './order-status-token'
 import {
   type PromotionSlotHold,
   holdPromotionSlot,
@@ -168,12 +169,14 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
       return res.status(409).json({ error: 'Payments are not set up yet' })
     }
 
-    // Stripe returns the merchant to the console Products page. This was
-    // `/{hostDocId}/products`, the pre-AGL-621/622 shape, so paying (or
-    // cancelling) a draft order landed on a 404 (AGL-685). Console products
-    // is the plugin route keyed by org slug + host SUBDOMAIN; server code
-    // cannot call useConsoleHostRoute, so resolve them here. Without both,
-    // fall back to the origin root rather than a fabricated dead path.
+    // Where Stripe returns the BUYER is the business's own site (AGL-4094):
+    // the order's status page after paying, the site's home after backing
+    // out — see the params below. The console Products page is only the
+    // fallback for a site with no public address or no signing secret, which
+    // no published site lacks. Console products is the plugin route keyed by
+    // org slug + host SUBDOMAIN; server code cannot call
+    // useConsoleHostRoute, so resolve them here. Without both, fall back to
+    // the origin root rather than a fabricated dead path.
     const consoleSubdomain = (
       await firestore.collection('hostIndex').doc(hostId).get()
     ).get('subdomain') as string | undefined
@@ -664,6 +667,11 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
         return res.status(502).json({ error: 'Payment link creation failed' })
       }
     }
+    // The buyer's way back, on the business's site: the order's status page
+    // (which reads the paid state from the server) and the site's home.
+    const siteData = hostSnapshot.data() as { cname?: unknown; subdomain?: unknown } | undefined
+    const buyerStatusUrl = orderStatusUrl(siteData, hostId, orderRef.id)
+    const buyerSiteUrl = buyerStatusUrl ? `${new URL(buyerStatusUrl).origin}/` : ''
     const params = new URLSearchParams({
       mode: 'payment',
       // 3-D Secure, from the one seam every card payment shares (AGL-3360).
@@ -691,8 +699,8 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
         shippingFloorCents: CommerceModel.shippingFloorCents(shippingOptions),
       }),
       ...(email ? { customer_email: email } : {}),
-      success_url: `${consoleProductsUrl}?draft=paid`,
-      cancel_url: `${consoleProductsUrl}?draft=canceled`,
+      success_url: buyerStatusUrl ?? `${consoleProductsUrl}?draft=paid`,
+      cancel_url: buyerSiteUrl || `${consoleProductsUrl}?draft=canceled`,
       'metadata[type]': 'commerce-draft',
       'metadata[hostId]': hostId,
       'metadata[orderId]': orderRef.id,

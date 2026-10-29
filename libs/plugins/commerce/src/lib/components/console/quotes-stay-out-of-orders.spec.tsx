@@ -154,8 +154,8 @@ describe('quotes stay out of the Orders list', () => {
     expect(screen.getByText('#1043')).toBeTruthy()
   })
 
-  it('keeps Quote out of the Channel filter, which would never find one', async () => {
+  it('offers Quote in the Channel filter, which finds the quotes that were paid (AGL-4094)', async () => {
     const { ORDER_CHANNEL_OPTIONS } = await import('../../constants/orders-list-query')
-    expect(ORDER_CHANNEL_OPTIONS.map((option) => option.value)).not.toContain('quote')
+    expect(ORDER_CHANNEL_OPTIONS).toContainEqual({ value: 'quote', label: 'Quote' })
   })
 })

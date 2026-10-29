@@ -4370,7 +4370,10 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
     }
 
     // Draft orders (AGL-287): the console pre-created the doc; completion
-    // flips it to paid, stamps the intent, and decrements stock.
+    // flips it to paid, stamps the intent, and decrements stock. A quote paid
+    // through its pay link (AGL-4094) completes here too: its session carries
+    // this type and the quote's own id as `orderId`, and the quote document is
+    // what becomes the order.
     if (
       type === 'checkout.session.completed' &&
       object?.metadata?.type === 'commerce-draft' &&
@@ -4449,9 +4452,78 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         let paidAfterCancel = false
         // The canceled order's number, for the notice below (AGL-3432).
         let canceledOrderLabel = ''
+        // A payment a quote could not take (AGL-4094), reported below.
+        let quoteUnmatched: CommerceModel.QuoteUnmatchedPayment | null = null
+        let quoteLabel = ''
         const flipped = await firestore.runTransaction(async (transaction) => {
           const snapshot = await transaction.get(orderRef)
           if (!snapshot.exists) return false
+          const raw = (snapshot.data() as CommerceModel.HostOrder | undefined) ?? null
+          // A QUOTE (AGL-4094). Paid as it stands, the same document becomes
+          // the order with every field order readers ask (`paidQuoteOrder`).
+          // A payment through a replaced link, for an earlier edit, or after
+          // the quote was paid is not fulfilled: it is recorded on the quote
+          // and the business is told, as a paid-after-cancel payment is.
+          if (raw && CommerceModel.isQuote(raw) && raw.quote) {
+            const facts: CommerceModel.QuotePaymentFacts = {
+              sessionId: String(object?.id ?? ''),
+              paymentIntentId: String(object?.payment_intent ?? '') || null,
+              linkVersion: object?.metadata?.quoteLinkVersion ?? null,
+              quoteUpdatedAtMs: object?.metadata?.quoteUpdatedAtMs ?? null,
+              paidAtMs: Date.now(),
+              email: object?.customer_details?.email ?? null,
+              name: object?.customer_details?.name ?? null,
+              amountTotalCents: Number.isFinite(chargedTotalCents) ? chargedTotalCents : null,
+              shippingCents,
+              taxCents: stripeTaxCents,
+              feeCents: Number(object?.metadata?.feeCents ?? 0) || 0,
+              taxMode: storefrontTaxModeOf(object, Number(object?.metadata?.taxCents ?? 0)),
+              shippingAddress: shipTo?.address
+                ? Object.fromEntries(
+                    Object.entries({
+                      name: shipTo.name,
+                      line1: shipTo.address.line1,
+                      line2: shipTo.address.line2,
+                      city: shipTo.address.city,
+                      state: shipTo.address.state,
+                      postalCode: shipTo.address.postal_code,
+                      country: shipTo.address.country,
+                    }).filter(([, value]) => typeof value === 'string' && value !== ''),
+                  )
+                : null,
+            }
+            const disposition = CommerceModel.quotePaymentDisposition(raw, facts)
+            if (disposition === 'redelivery') return false
+            if (disposition !== 'pay') {
+              const entry = CommerceModel.quoteUnmatchedPayment(facts, disposition)
+              quoteUnmatched = entry
+              quoteLabel = CommerceModel.formatQuoteNumber(raw, String(orderId))
+              transaction.set(
+                orderRef,
+                {
+                  quote: {
+                    ...raw.quote,
+                    unmatchedPayments: [...(raw.quote.unmatchedPayments ?? []), entry],
+                  },
+                  timeline: CommerceModel.appendOrderEvent(
+                    raw,
+                    'quote-payment-unmatched',
+                    CommerceModel.quoteUnmatchedPaymentDetail(entry),
+                    facts.paidAtMs,
+                  ),
+                },
+                { merge: true },
+              )
+              return false
+            }
+            const paidQuote = CommerceModel.paidQuoteOrder(raw, String(orderId), facts)
+            paidOrder = paidQuote
+            transaction.set(orderRef, {
+              ...paidQuote,
+              createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+            })
+            return true
+          }
           const lifted = CommerceModel.liftLegacyOrder(
             (snapshot.data() as any) ?? {},
           )
@@ -4586,6 +4658,18 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         // timeline line above is only findable by someone already looking at
         // the order they have no reason to open; this is money sitting in
         // Stripe against a sale the product does not have.
+        if (quoteUnmatched && hostId) {
+          const unmatched = quoteUnmatched as CommerceModel.QuoteUnmatchedPayment
+          await notifyHostManagers(String(hostId), {
+            type: 'content.order',
+            title:
+              unmatched.reason === 'already-paid'
+                ? `${quoteLabel} was paid twice`
+                : `A replaced link for ${quoteLabel} was paid`,
+            body: `${quoteLabel} on {site}: ${CommerceModel.quoteUnmatchedPaymentDetail(unmatched)}`,
+            link: `/${hostId}/products/orders`,
+          })
+        }
         if (paidAfterCancel && hostId) {
           await notifyHostManagers(String(hostId), {
             type: 'content.order',
@@ -4644,13 +4728,18 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           const draftPaidCents =
             Number(object?.amount_total ?? 0) ||
             Number(order.totals?.totalCents ?? 0)
+          const isQuotePayment = CommerceModel.isQuote(order)
           void notifyHostManagers(String(hostId), {
             type: 'content.order',
-            title: `Draft order paid — ${draftLabel}`,
+            title: isQuotePayment
+              ? `Quote paid — ${CommerceModel.formatQuoteNumber(order, String(orderId))}`
+              : `Draft order paid — ${draftLabel}`,
             // Who paid what, and where (AGL-3432).
-            body:
-              `${draftPayer ?? 'The buyer'} paid draft order ${draftLabel} ` +
-              `on {site}: $${(draftPaidCents / 100).toFixed(2)}.`,
+            body: isQuotePayment
+              ? `${draftPayer ?? 'The customer'} paid ${CommerceModel.formatQuoteNumber(order, String(orderId))} ` +
+                `on {site}: $${(draftPaidCents / 100).toFixed(2)}. It is order ${draftLabel} now.`
+              : `${draftPayer ?? 'The buyer'} paid draft order ${draftLabel} ` +
+                `on {site}: $${(draftPaidCents / 100).toFixed(2)}.`,
             link: `/${hostId}/products`,
           })
           // Contacts ingestion (AGL-1748): this branch flipped the order,
@@ -4676,7 +4765,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               hostId: String(hostId),
               identity: {
                 email: draftEmail,
-                name: object?.customer_details?.name ?? null,
+                name: object?.customer_details?.name ?? order.customerName ?? null,
               },
               surface: 'relationship',
               lifecycleFloor: 'customer',

@@ -2108,7 +2108,9 @@ data class OrderQuote(
     val createdBy: String,
     val customer: QuoteCustomer,
     val discount: QuoteDiscount? = null,
+    val linkVersion: Double? = null,
     val notes: String? = null,
+    val paidAtMs: Double? = null,
     val proofs: List<QuoteProofRef>? = null,
     val requireProofApproval: Boolean? = null,
     val revision: Double,
@@ -2117,6 +2119,7 @@ data class OrderQuote(
     val stage: QuoteStage,
     val tax: QuoteTaxBasis,
     val terms: String? = null,
+    val unmatchedPayments: List<QuoteUnmatchedPayment>? = null,
     val updatedAtMs: Double,
     val updatedBy: String,
 )
@@ -3276,6 +3279,26 @@ enum class QuoteTaxKind(val raw: String) {
 
 internal object QuoteTaxKindSerializer :
     RawEnumSerializer<QuoteTaxKind>("com.aglyn.contracts.QuoteTaxKind", QuoteTaxKind.entries, QuoteTaxKind.UNKNOWN, { it.raw })
+
+@Serializable
+data class QuoteUnmatchedPayment(
+    val amountCents: Double,
+    val atMs: Double,
+    val paymentIntentId: String? = null,
+    val reason: QuoteUnmatchedPaymentReason,
+    val sessionId: String,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = QuoteUnmatchedPaymentReasonSerializer::class)
+enum class QuoteUnmatchedPaymentReason(val raw: String) {
+    ALREADY_PAID("already-paid"),
+    SUPERSEDED("superseded"),
+    UNKNOWN(""),
+}
+
+internal object QuoteUnmatchedPaymentReasonSerializer :
+    RawEnumSerializer<QuoteUnmatchedPaymentReason>("com.aglyn.contracts.QuoteUnmatchedPaymentReason", QuoteUnmatchedPaymentReason.entries, QuoteUnmatchedPaymentReason.UNKNOWN, { it.raw })
 
 @Serializable
 data class RailWorkspaces(

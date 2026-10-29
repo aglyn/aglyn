@@ -147,8 +147,8 @@ function sectionBody(
   },
   /** The reservation keys this site decides for the member (AGL-4047). */
   reservations: { canManage: boolean; canWalkIn: boolean } = { canManage: true, canWalkIn: true },
-  /** "Create and edit quotes" on this site (AGL-4093). */
-  quotes: { canEdit: boolean } = { canEdit: true },
+  /** "Create and edit quotes" and "Send quotes and invoices to customers" on this site (AGL-4093, AGL-4094). */
+  quotes: { canEdit: boolean; canSend: boolean } = { canEdit: true, canSend: true },
 ): ReactNode {
   switch (section) {
     case 'catalog':
@@ -183,7 +183,7 @@ function sectionBody(
             // orders they become once paid.
             {
               size: { xs: 12 },
-              children: <HostQuotesCard hostId={hostId} canEdit={quotes.canEdit} />,
+              children: <HostQuotesCard hostId={hostId} canEdit={quotes.canEdit} canSend={quotes.canSend} />,
             },
             // What to prepare, hand over and drive out (AGL-3624). Renders
             // nothing for a store with no pickup and no local delivery.
@@ -426,7 +426,10 @@ export function CommerceConsolePage(props: ConsolePluginPageProps) {
   }
   // "Create and edit quotes" (AGL-4093), read the same way; the quote route
   // decides.
-  const quotes = { canEdit: permissions?.['commerce.quotes'] !== false }
+  const quotes = {
+    canEdit: permissions?.['commerce.quotes'] !== false,
+    canSend: permissions?.['commerce.quotes.send'] !== false,
+  }
 
   /*
    * Nothing, deliberately, while the redirect is in flight.

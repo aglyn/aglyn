@@ -27,6 +27,16 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## October 2026 — pay links for quotes
+
+- **[Quote pay links](commerce-and-bookings/commerce/quotes-and-proofs.md#pay-link)** — copy
+  a quote's pay link and send it to your customer. It opens the quote on your own site,
+  where they pay it; the paid quote becomes an order. **Replace link** retires a link you
+  sent before. Sending quotes is its own permission, **Send quotes and invoices to
+  customers**.
+- **Draft orders** — after paying a draft order's payment link, the buyer lands on the
+  order's status page on your site instead of a page they can't open.
+
 ## October 2026 — quotes
 
 - **[Quotes](commerce-and-bookings/commerce/quotes-and-proofs.md)** — price a customer's

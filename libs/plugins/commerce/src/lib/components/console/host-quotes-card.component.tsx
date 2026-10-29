@@ -40,6 +40,8 @@ export interface HostQuotesCardProps {
   hostId: string
   /** Holds "Create and edit quotes" (`commerce.quotes`). */
   canEdit: boolean
+  /** Holds "Send quotes and invoices to customers" (`commerce.quotes.send`). */
+  canSend: boolean
 }
 
 /**
@@ -87,7 +89,7 @@ function quoteListRow(quote: QuoteRow): QuoteListRow {
  * above never shows one until it is paid.
  */
 export function HostQuotesCard(props: HostQuotesCardProps) {
-  const { hostId, canEdit } = props
+  const { hostId, canEdit, canSend } = props
   const firestore = useFirestore()
   const { data: quoteDocs, status } = useFirestoreCollection<QuoteRow>(
     () =>
@@ -250,6 +252,7 @@ export function HostQuotesCard(props: HostQuotesCardProps) {
           quote={openQuote}
           products={products}
           canEdit={canEdit}
+          canSend={canSend}
           onClose={() => setOpenId(null)}
         />
       ) : null}

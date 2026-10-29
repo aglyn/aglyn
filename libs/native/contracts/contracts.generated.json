@@ -7029,6 +7029,10 @@
     {
       "label": "Marketplace",
       "value": "marketplace"
+    },
+    {
+      "label": "Quote",
+      "value": "quote"
     }
   ],
   "ORDER_COURIER_STATE_LABELS": {
@@ -7369,6 +7373,7 @@
         "commerce.walkIns",
         "commerce.orders",
         "commerce.quotes",
+        "commerce.quotes.send",
         "commerce.giftCards",
         "commerce.paymentMethods",
         "commerce.shippingConnections",
@@ -7415,6 +7420,7 @@
         "commerce.walkIns",
         "commerce.orders",
         "commerce.quotes",
+        "commerce.quotes.send",
         "commerce.giftCards",
         "managePos",
         "posSell",
@@ -7468,6 +7474,7 @@
         "commerce.walkIns",
         "commerce.orders",
         "commerce.quotes",
+        "commerce.quotes.send",
         "commerce.giftCards",
         "commerce.paymentMethods",
         "commerce.shippingConnections",
@@ -7787,6 +7794,13 @@
         "group": "commerce",
         "key": "commerce.quotes",
         "label": "Create and edit quotes",
+        "scope": "site"
+      },
+      {
+        "description": "Copy a quote’s pay link to send to the customer, and replace it so the old link stops working. Follows the site role unless a role or member sets it.",
+        "group": "commerce",
+        "key": "commerce.quotes.send",
+        "label": "Send quotes and invoices to customers",
         "scope": "site"
       },
       {

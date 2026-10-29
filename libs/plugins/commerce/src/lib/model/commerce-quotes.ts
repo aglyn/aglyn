@@ -129,6 +129,21 @@ export interface QuoteProofRef {
   revision: number
 }
 
+/**
+ * A payment that reached a quote it could not pay: one made through a pay
+ * link the business replaced or for a price it has since changed
+ * (`superseded`), or one made after the quote was already paid
+ * (`already-paid`). The money is in Stripe and the quote records no sale for
+ * it; the business refunds it or reconciles it by hand.
+ */
+export interface QuoteUnmatchedPayment {
+  sessionId: string
+  paymentIntentId: string | null
+  amountCents: number
+  atMs: number
+  reason: 'superseded' | 'already-paid'
+}
+
 /** What only a quote has, on its order document. */
 export interface OrderQuote {
   stage: QuoteStage
@@ -147,6 +162,16 @@ export interface OrderQuote {
   proofs?: QuoteProofRef[]
   /** The revision the customer approved, when they have. */
   approvedRevision?: number | null
+  /**
+   * Which pay link opens the quote: a link signed for an older version shows
+   * the customer that the quote was replaced, and nothing of it. Absent reads
+   * as 1. Bumped when the business replaces the link.
+   */
+  linkVersion?: number
+  /** When the customer paid it. */
+  paidAtMs?: number
+  /** Payments the quote could not take; see {@link QuoteUnmatchedPayment}. */
+  unmatchedPayments?: QuoteUnmatchedPayment[]
   createdAtMs: number
   updatedAtMs: number
   /** Who created and last changed it: an email, else a uid. */

@@ -209,6 +209,8 @@ function makeResponse() {
 interface Scenario {
   /** `hosts/host-1/settings/store`, or omitted for a merchant with no doc. */
   settings?: Record<string, any> | null
+  /** Merged over the seeded site doc. */
+  host?: Record<string, any>
   /** Merged over the seeded product doc. */
   product?: Record<string, any>
   quantity?: number
@@ -224,6 +226,7 @@ async function runDraft(scenario: Scenario = {}) {
     name: 'Acme',
     // `editor` — `projectHostMemberRoles` writes only admin/editor/viewer.
     memberRoles: { 'mgr-1': 'editor' },
+    ...(scenario.host ?? {}),
   })
   docs.set('hostIndex/host-1', { subdomain: 'acme' })
   docs.set('profiles/owner-1', {
@@ -598,5 +601,38 @@ describe('draft-order payment links honor the merchant’s payment methods (AGL-
     const { body } = await runDraft()
     expect(excluded(body)).toEqual(['crypto'])
     expect(body?.get('wallet_options[link][display]')).toBeNull()
+  })
+})
+
+describe('a paid or abandoned payment link returns the buyer to the business’s site (AGL-4094)', () => {
+  const realFetch = global.fetch
+  const realKey = process.env.STRIPE_SECRET_KEY
+  const realSecret = process.env.TOKEN_SIGNING_SECRET
+  beforeAll(() => {
+    global.fetch = fetchMock as unknown as typeof fetch
+    process.env.STRIPE_SECRET_KEY = 'sk_test_fake_never_used'
+    process.env.TOKEN_SIGNING_SECRET = 'draft-return-spec-secret'
+  })
+  afterAll(() => {
+    global.fetch = realFetch
+    process.env.STRIPE_SECRET_KEY = realKey as string
+    if (realSecret === undefined) delete process.env.TOKEN_SIGNING_SECRET
+    else process.env.TOKEN_SIGNING_SECRET = realSecret
+  })
+
+  it('sends the buyer to the order’s status page after paying, and to the site after backing out', async () => {
+    const { result, body } = await runDraft({ host: { subdomain: 'acme', cname: 'shop.example.com' } })
+    expect(result.status).toBe(200)
+    const orderId = String(result.body.orderId)
+    expect(body?.get('success_url')).toMatch(
+      new RegExp(`^https://shop\\.example\\.com/order-status\\?o=${orderId}&t=[0-9a-f]{32}$`),
+    )
+    expect(body?.get('cancel_url')).toBe('https://shop.example.com/')
+    expect(body?.get('success_url')).not.toContain('console.example.com')
+  })
+
+  it('falls back to the console only for a site with no address', async () => {
+    const { body } = await runDraft()
+    expect(body?.get('success_url')).toMatch(/^https:\/\/console\.example\.com.*draft=paid$/)
   })
 })
