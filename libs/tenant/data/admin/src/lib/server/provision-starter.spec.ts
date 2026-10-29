@@ -303,10 +303,10 @@ describe('siteStarterPickRefusal', () => {
     })
   })
 
-  it('refuses an AI starter until the AI start takes one', () => {
+  it('refuses an AI starter until the AI start takes one, naming the pick', () => {
     expect(siteStarterPickRefusal(payload({ mode: 'ai', answers: {} }), allowed)).toEqual({
       status: 409,
-      body: { error: 'This starter needs the AI start, which is coming soon' },
+      body: { error: 'This starter needs the AI start, which is coming soon', listingId: 'listing-1' },
     })
   })
 
@@ -316,6 +316,7 @@ describe('siteStarterPickRefusal', () => {
       status: 403,
       body: {
         error: 'This starter has 6 pages; your plan includes 5. Pick a smaller starter or upgrade in Billing.',
+        listingId: 'listing-1',
       },
     })
     expect(siteStarterPickRefusal(payload({ screens: six.screens.slice(0, 5) }), allowed)).toBeNull()

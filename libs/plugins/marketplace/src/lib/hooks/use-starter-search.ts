@@ -46,6 +46,8 @@ export interface StarterSearchInput {
   word: string
   filter?: Partial<SiteStarterFacets>
   limit?: number
+  /** A listing the answer carries whatever the search finds: a pick being restored (AGL-4049). */
+  include?: string | null
 }
 
 export interface StarterSearchState {
@@ -88,6 +90,7 @@ export function useStarterSearch({
   word,
   filter,
   limit,
+  include,
 }: StarterSearchInput): StarterSearchState {
   const { data: user } = useUser()
   // The token is read from the user at the moment of asking; the request is
@@ -106,7 +109,7 @@ export function useStarterSearch({
   }, [word, asked])
 
   // The query string is the request's identity: one search, one URL.
-  const query = orgId ? starterQueryParams({ orgId, mode, word: asked, filter, limit }).toString() : null
+  const query = orgId ? starterQueryParams({ orgId, mode, word: asked, filter, limit, include }).toString() : null
 
   const [rows, setRows] = useState<SiteStarterSummary[]>([])
   const [labels, setLabels] = useState<StarterSearchLabels>(NO_LABELS)

@@ -231,6 +231,7 @@ export const DOCS_HELP_EXCERPTS = {
   siteLooks: 'How a site started with AI gets its look: the style you choose sets the range of themes, colors, fonts and buttons, and every site gets its own readable variation, saved as a theme you can edit.',
   siteProtection: 'Password-protect pages, design custom error pages, and put your site in maintenance mode.',
   siteSearch: 'Let visitors search your site\'s pages, blog entries, and dataset records with a built-in search page.',
+  siteStarters: 'Create a new site from a ready-made website, one of Aglyn\'s styles or a starter from the marketplace, chosen in Create site before the site exists. Rolling out.',
   sso: 'How to set up SAML SSO yourself, how domain verification works, what enforcement does, and the consequences of SSO accounts living in their own identity pool.',
   staffConsole: 'Aglyn-staff tools for managing organizations, entitlements, users, and audits.',
   startWithAi: 'Answer a few questions when you create a site and Aglyn AI plans, writes and publishes it: its look, header and footer, contact form and pages, plus a store or a blog when that is what the site is.',
@@ -1064,7 +1065,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#team-roles': 'Invite teammates to a site and assign roles.',
   },
   templatesLibrary: {
-    '#first-party-starters': 'Aglyn\'s starter sites (Landing Page, Business, Portfolio, the two Shop starters) are ordinary templates in your library — not a separate, locked-down kind.',
+    '#first-party-starters': 'Aglyn\'s starter templates (Landing Page, Business, Portfolio, the two Shop starters) are ordinary templates in your library — not a separate, locked-down kind.',
     '#templates-list': 'A site\'s Templates page lists every template it has — pages, components and layouts you saved, ones installed from the marketplace, and Aglyn\'s starters — with how many your plan allows opposite the heading.',
     '#using-a-template': 'Use creates something new from the template — the template itself stays in your library, so you can use it as many times as you like.',
     '#where-a-template-came-from': 'Every template shows a badge: Saved here — you created it on this site',

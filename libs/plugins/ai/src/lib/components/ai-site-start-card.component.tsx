@@ -393,6 +393,7 @@ export function AiSiteStartCard({
   startBlank,
   leave,
   pendingSite,
+  chooseStarter: chooseStarterInShell,
   clientBuild,
   initialAnswers = null,
 }: AiSiteStartCardProps) {
@@ -689,11 +690,16 @@ export function AiSiteStartCard({
 
   // The starter card asks a style first (AGL-4049): nothing is created, and
   // nothing chosen, until a style card is clicked and Create site with it.
+  // Where the shell offers "Choose your starter" — the platform's styles and
+  // the marketplace's starters together — the card hands the choice to it
+  // instead, and asks no style itself.
   const chooseStarter = useCallback(() => {
     if (pendingSite && !pendingSite.created && !pendingSite.check()) return
     trackEvent('site_start_choice', { choice: 'starter' })
+    if (chooseStarterInShell && pendingSite && !pendingSite.created) return chooseStarterInShell()
     setPickingStyle(true)
-  }, [pendingSite])
+  }, [chooseStarterInShell, pendingSite])
+  const starterInShell = Boolean(chooseStarterInShell && pendingSite && !pendingSite.created)
 
   const createStarter = useCallback(() => {
     if (!starterStyle || startingStarter) return
@@ -1086,8 +1092,12 @@ export function AiSiteStartCard({
                     accent="secondary"
                     icon={mdiPageLayoutHeaderFooter.path}
                     iconId="page-layout-header-footer"
-                    title="Start from the starter site"
-                    description="A ready-made home page with a header, footer and contact form, in a style you choose."
+                    title={starterInShell ? 'Start from a starter site' : 'Start from the starter site'}
+                    description={
+                      starterInShell
+                        ? 'A ready-made website from the marketplace, in a style you choose.'
+                        : 'A ready-made home page with a header, footer and contact form, in a style you choose.'
+                    }
                     busy={startingStarter}
                     onChoose={chooseStarter}
                   />

@@ -20,7 +20,10 @@ import { SITE_STARTER_SEARCH_MAX } from './site-starter-listing'
 import {
   parseStarterSearchAnswer,
   readStarterSummary,
+  readStarterCheckoutReturn,
+  STARTER_CHECKOUT_RETURN,
   starterCardFacts,
+  starterCheckoutBody,
   starterPagesLabel,
   starterPriceLabel,
   starterQueryFrom,
@@ -90,7 +93,23 @@ describe('starterQueryFrom', () => {
       word: 'bistro',
       filter: { mode: 'ai', kind: 'restaurant', base: 'material3', fonts: 'inter' },
       limit: 12,
+      include: null,
     })
+  })
+
+  it('carries a restored pick as `include`, last, and reads it back (AGL-4049 lane 3)', () => {
+    const written = starterQueryParams({ orgId: 'org-1', mode: 'base', include: ' northwind-studio ' })
+    expect([...written.keys()]).toEqual(['orgId', 'mode', 'limit', 'include'])
+    expect(starterQueryFrom(written)).toMatchObject({ include: 'northwind-studio' })
+    // An id no listing can have is never written, and refused when typed.
+    expect(starterQueryParams({ orgId: 'org-1', mode: 'base', include: 'a/b' }).has('include')).toBe(false)
+    expect(read('orgId=org-1&include=a%2Fb')).toEqual({ error: 'Unknown starter' })
+  })
+
+  it('checks a kind against the styles a person chooses among (AGL-4049 lane 3)', () => {
+    expect(read('orgId=org-1&kind=restaurant')).toMatchObject({ filter: { mode: 'base', kind: 'restaurant' } })
+    // Shaped like a kind, but not one: named rather than answered with nothing.
+    expect(read('orgId=org-1&kind=spaceship')).toEqual({ error: 'Unknown kind of site' })
   })
 
   it('asks for base starters when no mode is named, and always filters on the mode', () => {
@@ -100,6 +119,7 @@ describe('starterQueryFrom', () => {
       word: '',
       filter: { mode: 'base' },
       limit: SITE_STARTER_SEARCH_MAX,
+      include: null,
     })
   })
 
@@ -137,6 +157,13 @@ describe('readStarterSummary', () => {
         'priceUsd',
       ].sort(),
     )
+  })
+
+  it('keeps `owned` only where the answer said yes or no (AGL-4049 lane 3)', () => {
+    expect(readStarterSummary({ ...ROW, owned: true })?.owned).toBe(true)
+    expect(readStarterSummary({ ...ROW, owned: false })?.owned).toBe(false)
+    expect(readStarterSummary({ ...ROW, owned: 'yes' })).not.toHaveProperty('owned')
+    expect(readStarterSummary(ROW)).not.toHaveProperty('owned')
   })
 
   it('falls back field by field the way a card needs', () => {
@@ -218,8 +245,44 @@ describe('the words on a card', () => {
     ])
   })
 
+  it('names the kind in the style’s words, never the marketplace shelf a kindless starter sits on (AGL-4049 lane 3)', () => {
+    // The platform's default starter names no kind, and its category is the
+    // marketplace's "design" shelf: no kind chip, rather than "design".
+    const plainStarter = readStarterSummary({
+      ...ROW,
+      listingId: 'fp-starter-default',
+      displayName: 'Starter site',
+      category: 'design',
+      facets: { ...ROW.facets, kind: null },
+    })
+    expect(starterCardFacts(plainStarter!).map((fact) => fact.key)).not.toContain('kind')
+    // A kind is named as the style names it, whatever the category says.
+    const kinded = readStarterSummary({ ...ROW, category: 'food', facets: { ...ROW.facets, kind: 'photography' } })
+    expect(starterCardFacts(kinded!)).toContainEqual({ key: 'kind', label: 'Photography' })
+  })
+
   it('puts a price on every card, Free included, and leaves out what a starter does not say', () => {
     const plain = readStarterSummary({ listingId: 'p', official: false })
     expect(starterCardFacts(plain!)).toEqual([{ key: 'price', label: 'Free' }])
+  })
+})
+
+describe('the way back from buying a starter (AGL-4049 lane 3)', () => {
+  it('names Create site as a return, never an address', () => {
+    expect(readStarterCheckoutReturn(undefined)).toBeNull()
+    expect(readStarterCheckoutReturn('')).toBeNull()
+    expect(readStarterCheckoutReturn(STARTER_CHECKOUT_RETURN)).toBe('create-site')
+    expect(readStarterCheckoutReturn('/acme/hosts?create=site')).toEqual({ error: 'Unknown return' })
+    expect(readStarterCheckoutReturn('https://evil.example')).toEqual({ error: 'Unknown return' })
+  })
+
+  it('sends the starter, the workspace and the return in the body', () => {
+    expect(starterCheckoutBody({ listingId: 'l-1', orgId: 'org-1', gaClientId: '1.2' })).toEqual({
+      listingId: 'l-1',
+      orgId: 'org-1',
+      return: 'create-site',
+      gaClientId: '1.2',
+    })
+    expect(starterCheckoutBody({ listingId: 'l-1', orgId: 'org-1', gaClientId: null })).not.toHaveProperty('gaClientId')
   })
 })

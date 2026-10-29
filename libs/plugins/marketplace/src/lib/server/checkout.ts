@@ -29,8 +29,12 @@ import {
   type PluginApiHandler,
   type PluginRevocation,
 } from '@aglyn/aglyn/server'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { siteCreateReturnQuery } from '@aglyn/aglyn/app-utils/site-create-return'
+import { SITE_STARTER_ARTIFACT_TYPE } from '@aglyn/aglyn/app-utils/site-starter'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
-import { isListingBrowsable, isPrivateListing } from '../model/marketplace'
+import { isListingBrowsable, isPrivateListing, listingArtifactType } from '../model/marketplace'
+import { readStarterCheckoutReturn } from '../model/starter-query'
 import {
   canActAsPublisher,
   resolvePublisherProfile,
@@ -121,6 +125,13 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     .trim()
     .slice(0, 200)
   if (!listingId) return res.status(400).json({ error: 'Missing listingId' })
+  // Where the buyer comes back to (AGL-4049): the marketplace, or Create
+  // site reopened on the starter they picked there. A name, never an
+  // address the browser hands over.
+  const returnTo = readStarterCheckoutReturn(req.body?.return)
+  if (returnTo !== null && typeof returnTo === 'object') {
+    return res.status(400).json({ error: returnTo.error })
+  }
 
   const authorization = String(req.headers.authorization ?? '')
   const idToken = authorization.startsWith('Bearer ')
@@ -170,12 +181,6 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     if (requestedOrgId && buyerOrgId !== requestedOrgId) {
       return res.status(403).json({ error: 'Not a member of that organization' })
     }
-    if (!membership.permissions.installPlugins) {
-      return res.status(403).json({
-        error:
-          'Your organization role does not allow installing from the marketplace',
-      })
-    }
     const firestore = firebaseAdmin.app().firestore()
     const listingSnapshot = await firestore
       .collection('marketplaceListings')
@@ -184,6 +189,19 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     const listing = listingSnapshot.data() as any
     if (!listing || listing.deletedAt) {
       return res.status(404).json({ error: 'Unknown listing' })
+    }
+    // A site starter is bought to create a site with (AGL-4049), so buying
+    // one takes the permission that creates sites, as picking one in Create
+    // site does; everything else is bought to install, as before. Asked of
+    // the listing, never of the request, and before anything else about the
+    // sale is read.
+    const siteStarter = listingArtifactType(listing) === SITE_STARTER_ARTIFACT_TYPE
+    if (siteStarter ? !membership.permissions.createHosts : !membership.permissions.installPlugins) {
+      return res.status(403).json({
+        error: siteStarter
+          ? permissionRefusalText('hosts.create')
+          : 'Your organization role does not allow installing from the marketplace',
+      })
     }
     // Review gating holds on the PAID path too (AGL-1543): browse hides
     // rejected/submitted/in_review listings, so a direct checkout call must
@@ -370,9 +388,26 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     const buyerOrgSlug = (
       await firestore.collection('orgs').doc(buyerOrgId).get()
     ).get('slug') as string | undefined
-    const returnPath = buyerOrgSlug
-      ? buildRoute(Route.ORG_MARKETPLACE, { orgSlug: buyerOrgSlug })
-      : Route.ORG_MARKETPLACE
+    // A site starter bought from Create site goes back to it (AGL-4049):
+    // the workspace's sites page, which reopens Create site on the same
+    // pick. Anything else, or a workspace with no slug to build that page
+    // from, goes to the marketplace as before.
+    const backToCreate =
+      returnTo === 'create-site' && siteStarter && buyerOrgSlug
+        ? siteCreateReturnQuery(listingId)
+        : null
+    const returnPath = backToCreate
+      ? buildRoute(Route.HOST_LIST, { orgSlug: buyerOrgSlug as string })
+      : buyerOrgSlug
+        ? buildRoute(Route.ORG_MARKETPLACE, { orgSlug: buyerOrgSlug })
+        : Route.ORG_MARKETPLACE
+    // Each way back is built as a query, so `purchase` joins whatever the
+    // page already asks for rather than being glued on as a second `?`.
+    const returnUrl = (purchase: 'success' | 'canceled'): string => {
+      const query = new URLSearchParams(backToCreate ?? undefined)
+      query.set('purchase', purchase)
+      return `${origin}${returnPath}?${query.toString()}`
+    }
     // Tax + funds flow (AGL-1544). Aglyn registered as a marketplace
     // provider with the Texas Comptroller: it collects and remits sales tax
     // on sellers' behalf. That is the PLATFORM's charge — no `on_behalf_of`,
@@ -427,8 +462,8 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       'payment_intent_data[metadata][listingId]': listingId,
       'payment_intent_data[metadata][buyerUid]': decoded.uid,
       'payment_intent_data[metadata][buyerOrgId]': buyerOrgId,
-      success_url: `${origin}${returnPath}?purchase=success`,
-      cancel_url: `${origin}${returnPath}?purchase=canceled`,
+      success_url: returnUrl('success'),
+      cancel_url: returnUrl('canceled'),
       client_reference_id: decoded.uid,
       'metadata[type]': 'marketplace-purchase',
       'metadata[listingId]': listingId,
