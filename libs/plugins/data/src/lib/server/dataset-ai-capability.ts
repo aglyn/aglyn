@@ -40,8 +40,8 @@ import {
  * into a page, so the owner edits one row and every page listing it follows.
  * Its item is written by this plugin's `dataset` draft writer, so every rule
  * is the writer's: `dataStore` (Starter and up), `datasetsPerOrg`,
- * `release_data_store`, the member's role, and the model every record is
- * held to.
+ * `release_data_store`, the member's "Manage data" (`data.manage`), and the
+ * model every record is held to.
  *
  * The arguments are flat, as the contract requires: each field as
  * `Name:type`, and each record as its values in field order joined by ` | `,

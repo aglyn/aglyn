@@ -102,7 +102,7 @@ import type { AiJobStepContext, AiJobStepOutcome, AiJobStepRunner } from './ai-j
  *    rating, quote or person's name, no price the brief does not state.
  *  - WRITTEN by the data plugin's `dataset` writer — this plugin never names
  *    the datasets collection — with every rule the console's datasets route
- *    has: the member's role and `data.manage`, `release_data_store`,
+ *    has: the member's "Manage data" (`data.manage`), `release_data_store`,
  *    `dataStore` (Starter and up), `datasetsPerOrg` counted inside the create,
  *    `recordsPerDataset` and the storage band. Each seeded record's
  *    reference and filter index is that writer's to stamp, with the data
@@ -1108,7 +1108,7 @@ export function createAiSiteDatasetRunner(deps: AiSiteDatasetRunnerDeps = {}): A
     })
     if (result.ok === false) {
       if (result.status === 400) return { ...spent, failure: AI_SITE_DATASET_NOT_WRITTEN_COPY }
-      // The allowance, the role, the plan or the flag: the workspace's to change.
+      // The allowance, the permission, the plan or the flag: the workspace's to change.
       return { ...spent, review: limitReview(result.error) }
     }
     const facts = result.facts as {
@@ -1215,8 +1215,8 @@ export const runAiSiteDatasetUnit = createAiSiteDatasetRunner()
  * Whether a dataset may be created for this member on this site, asked before
  * its first pass so a refusal spends nothing; `null` admits. The data plugin
  * must run here (on for the workspace and the site, past its release flag),
- * and its writer says whether this member may make one now: the role, the
- * plan, the flag, the allowance.
+ * and its writer says whether this member may make one now: "Manage data",
+ * the plan, the flag, the allowance.
  */
 export async function aiSiteDatasetRefusal(
   context: Pick<AiJobStepContext, 'firestore' | 'org' | 'now'> & { job: Pick<AiJob, 'orgId' | 'hostId' | 'createdBy'> },
