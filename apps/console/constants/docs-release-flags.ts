@@ -417,6 +417,18 @@ export const FLAG_DOC_PAGES: Partial<
       disclosure: [/\*\*Choose your starter is rolling out\*\*,[\s\S]{0,40}may not have it yet\./],
       checkNoPriceClaim: true,
     },
+    // An AI starter fills the AI start's questions (AGL-4049 phase 4): a
+    // section of each AI page, so each discloses beside its own mention.
+    {
+      path: 'docs/ai/start-with-ai.md',
+      disclosure: [/\*\*AI starters are rolling out\*\*,[\s\S]{0,40}may not have them yet\./],
+      checkNoPriceClaim: true,
+    },
+    {
+      path: 'docs/ai/site-looks.md',
+      disclosure: [/\*\*AI starters are rolling out\*\*,[\s\S]{0,40}may not have them yet\./],
+      checkNoPriceClaim: true,
+    },
   ],
   release_accounting: [
     {

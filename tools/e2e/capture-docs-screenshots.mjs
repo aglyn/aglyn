@@ -147,6 +147,32 @@ function starterStyleStep() {
   ]
 }
 
+/**
+ * Sites → Create site → Start from a starter site → AI starters (AGL-4049
+ * phase 4): the platform's Restaurant & café AI starter picked, then
+ * Continue, which opens the questions filled in from it; on to the Style step
+ * for `style`, what the site is for typed first. It stops there, so nothing
+ * is created and no AI runs.
+ */
+function aiStarterTo(step) {
+  const actions = [
+    { click: 'role=button[name=/Create site/] >> nth=0', waitFor: 'How do you want to start?', settleMs: 1500 },
+    { fill: ['role=textbox[name=/Site name/]', 'Corner Bistro'], settleMs: 1200 },
+    { click: 'role=button[name="Start from a starter site"]', waitFor: 'Choose your starter', settleMs: 4000 },
+    { click: 'role=tab[name="AI starters"]', settleMs: 4000 },
+    { click: 'role=radio[name=/^Restaurant & café with AI/]', settleMs: 3000 },
+    { click: 'role=button[name="Continue"]', waitFor: 'What are you building?', settleMs: 2500 },
+  ]
+  if (step === 'kind') return actions
+  return [
+    ...actions,
+    { fill: ['role=textbox[name=/What kind of site are you creating/]', 'a corner bistro with a seasonal menu'], settleMs: 400 },
+    { click: 'role=button[name="Next"]', waitFor: 'Who is it for?', settleMs: 600 },
+    { click: 'role=button[name="Next"]', waitFor: 'Choose a style', settleMs: 2500 },
+    { scroll: 'role=radio[name=/^Restaurant & café: From/]', settleMs: 1200 },
+  ]
+}
+
 const shots = [
   {
     out: 'getting-started/console-dashboard.png',
@@ -518,6 +544,27 @@ const shots = [
     waitFor: 'Demo Bakery',
     orgReleaseFlags: { release_ai_generative: true },
     actions: guidedStartTo('style'),
+  },
+  // Start from an AI starter (AGL-4049 phase 4), behind `release_site_starters`:
+  // Choose your starter's AI starters tab, a first-party AI starter picked and
+  // Continue, which opens the questions filled in from it. Nothing is created;
+  // Plan my site is never pressed.
+  {
+    out: 'ai/start-with-ai-from-starter.png',
+    path: `/${ORG_SLUG}/hosts`,
+    waitFor: 'Demo Bakery',
+    orgReleaseFlags: { release_ai_generative: true, release_site_starters: true },
+    siteStarters: true,
+    actions: aiStarterTo('kind'),
+  },
+  {
+    out: 'ai/start-with-ai-from-starter-style.png',
+    path: `/${ORG_SLUG}/hosts`,
+    waitFor: 'Demo Bakery',
+    orgReleaseFlags: { release_ai_generative: true, release_site_starters: true },
+    siteStarters: true,
+    viewport: { width: 1440, height: 1300 },
+    actions: aiStarterTo('style'),
   },
   {
     out: 'ai/start-with-ai-review.png',
