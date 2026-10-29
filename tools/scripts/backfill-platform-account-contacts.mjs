@@ -70,16 +70,23 @@ const args = parseDeployArgs({
 })
 const write = Boolean(args.write)
 
-/** Load the server libs through the workspace's path aliases. */
+/**
+ * Load the server libs through the workspace's path aliases. One loader for
+ * every lib, so they share one module graph and one plugin-service registry.
+ */
+let serverLibLoader
 function loadServerLib(file) {
-  const { paths } = JSON.parse(readFileSync(join(REPO_ROOT, 'tsconfig.base.json'), 'utf8')).compilerOptions
-  const alias = {}
-  for (const [key, [target]] of Object.entries(paths)) {
-    const absolute = join(REPO_ROOT, target)
-    if (key.endsWith('/*')) alias[key.slice(0, -1)] = absolute.slice(0, -1)
-    else alias[key] = absolute
+  if (!serverLibLoader) {
+    const { paths } = JSON.parse(readFileSync(join(REPO_ROOT, 'tsconfig.base.json'), 'utf8')).compilerOptions
+    const alias = {}
+    for (const [key, [target]] of Object.entries(paths)) {
+      const absolute = join(REPO_ROOT, target)
+      if (key.endsWith('/*')) alias[key.slice(0, -1)] = absolute.slice(0, -1)
+      else alias[key] = absolute
+    }
+    serverLibLoader = createJiti(import.meta.url, { alias, interopDefault: true })
   }
-  return createJiti(import.meta.url, { alias, interopDefault: true }).import(join(REPO_ROOT, file))
+  return serverLibLoader.import(join(REPO_ROOT, file))
 }
 
 async function* everyUser(auth) {
@@ -109,6 +116,14 @@ async function main() {
   const { recordPlatformAccountContact } = await loadServerLib(
     'libs/tenant/data/admin/src/lib/server/platform-marketing-consent.ts',
   )
+  // The CRM registers the Lead source writer when the console boots, and a
+  // script has no boot: without it every row would be written with no
+  // "Account sign-up" origin, unlike the same contact written at sign-up.
+  const { registerPluginRecordOriginWriter } = await loadServerLib(
+    'libs/aglyn/src/lib/plugin-manager/plugin-record-origin.ts',
+  )
+  const { crmRecordOriginWriter } = await loadServerLib('libs/plugins/crm/src/lib/server/record-origin.ts')
+  registerPluginRecordOriginWriter(crmRecordOriginWriter, { pluginId: 'crm' })
   const app = firebaseAdmin.app()
   const db = app.firestore()
   const auth = app.auth()

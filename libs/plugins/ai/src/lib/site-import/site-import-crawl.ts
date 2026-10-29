@@ -36,6 +36,10 @@
  *   group, else `*`. A robots.txt that answers 404 allows everything; one
  *   that cannot be read at all (5xx, no answer) stops the crawl, because
  *   "could not ask" is not "allowed".
+ * - **Our own edge.** A site this platform serves gets the edge secret
+ *   (`site-import-edge.ts`, AGL-4085), which lifts our bot challenge for
+ *   AglynBot; it is asked per request and per redirect hop, and a request
+ *   that leaves the site's two origins never carries it.
  * - **Sitemap first.** The sitemaps robots.txt names, else /sitemap.xml (an
  *   index's children included), then same-site links found on the pages read,
  *   for whatever the sitemap missed.
@@ -85,6 +89,7 @@ import {
   robotsRulesFor,
   type RobotsRule,
 } from './site-import-robots'
+import { NO_SITE_IMPORT_HEADERS, siteImportEdgeHeadersFor, type SiteImportHeadersFor } from './site-import-edge'
 
 /**
  * Where the bot's user agent points a site owner who wants to know what it is
@@ -240,24 +245,37 @@ export interface SiteImportCrawlSeams {
   now?: () => number
   /**
    * Request headers for the site being read, asked once per crawl with its
-   * domain (AGL-4083): the edge header a site this platform serves lets
-   * AglynBot past its own bot protection with. Sent on every request to the
-   * site, under the crawler's own `Accept` and `User-Agent`, and only to the
-   * site: every address the crawler asks for is on it. None when absent.
+   * domain (AGL-4083, AGL-4085). Absent, the crawl asks the edge
+   * (`siteImportEdgeHeadersFor`): Aglyn's edge secret for each of the site's
+   * two origins this platform serves, decided origin by origin, and nothing
+   * anywhere else. Either way the headers go only to the site's two origins,
+   * and the fetch asks again on every redirect hop, so a hop anywhere else
+   * carries nothing. Always under the crawler's own `Accept` and `User-Agent`.
    */
   headersFor?: (domain: string) => Promise<Readonly<Record<string, string>>> | Readonly<Record<string, string>>
 }
 
-/** The seam's headers for a domain; none when it has none or cannot say. */
-async function siteImportHeadersFor(seams: SiteImportCrawlSeams, domain: string): Promise<Readonly<Record<string, string>> | null> {
-  if (!seams.headersFor) return null
+/**
+ * The per-request headers of a crawl of `domain`: the seam's, else the edge's,
+ * and none for any address off the site's two origins. Never throws.
+ */
+async function siteRequestHeaders(
+  seams: SiteImportCrawlSeams,
+  domain: string,
+  origins: readonly string[],
+): Promise<SiteImportHeadersFor> {
+  let inner: SiteImportHeadersFor = NO_SITE_IMPORT_HEADERS
   try {
-    const headers = await seams.headersFor(domain)
-    return headers && Object.keys(headers).length ? headers : null
+    if (seams.headersFor) {
+      const headers = await seams.headersFor(domain)
+      if (headers && Object.keys(headers).length) inner = () => headers
+    } else {
+      inner = await siteImportEdgeHeadersFor(origins)
+    }
   } catch (error) {
     console.warn('[site-import] the edge headers could not be read; reading without them', { domain, error })
-    return null
   }
+  return (url: URL) => (origins.includes(url.origin) ? inner(url) : {})
 }
 
 /** The site's two origins for a domain. */
@@ -333,6 +351,8 @@ export async function crawlSiteForImport(
     return finish()
   }
 
+  // Asked once, before anything else, and held to the site's two origins.
+  const headersFor = await siteRequestHeaders(seams, domain, origins)
   const maxPages = Math.max(0, Math.floor(options.maxPages))
   const maxPageBytes = options.maxPageBytes ?? SITE_IMPORT_DEFAULTS.maxPageBytes
   const maxTotalBytes = options.maxTotalBytes ?? SITE_IMPORT_DEFAULTS.maxTotalBytes
@@ -346,19 +366,17 @@ export async function crawlSiteForImport(
   const sameSite = (url: URL) => origins.includes(url.origin) && url.protocol === 'https:'
   const remainingBytes = () => maxTotalBytes - inventory.bytesRead
   const outOfTime = () => controller.signal.aborted || now() >= deadlineAt
-  // Asked once, before anything else; every address below is on the site.
-  const extraHeaders = await siteImportHeadersFor(seams, domain)
   const request = (url: string, accept: RegExp, acceptHeader: string, maxBytes: number) =>
     fetchText(url, {
       maxBytes,
       accept,
       acceptHeader,
       userAgent: AGLYN_BOT_USER_AGENT,
+      headersFor,
       signal: controller.signal,
       timeoutMs: Math.max(1, Math.min(SITE_IMPORT_DEFAULTS.requestTimeoutMs, deadlineAt - now())),
       redirectAllowed: (_from, to) => sameSite(to),
       refuseOver: true,
-      ...(extraHeaders ? { headers: extraHeaders } : {}),
     })
   const skip = (entry: SiteImportSkipped) => {
     if (inventory.skipped.length < SITE_IMPORT_DEFAULTS.maxSkipped) inventory.skipped.push(entry)
@@ -633,15 +651,14 @@ export async function readSiteVerificationMeta(
   const bare = String(domain ?? '').trim().toLowerCase().replace(/^www\./, '')
   if (!DOMAIN_PATTERN.test(bare) || lookalikeBrandForHost(bare)) return { answered: false, values: [] }
   const origins = siteImportOrigins(bare)
-  const extraHeaders = await siteImportHeadersFor(seams, bare)
   const result = await fetchText(`${origins[0]}/`, {
     maxBytes: SITE_IMPORT_DEFAULTS.maxPageBytes,
     accept: /text\/html|application\/xhtml\+xml/i,
     acceptHeader: 'text/html, application/xhtml+xml;q=0.9',
     userAgent: AGLYN_BOT_USER_AGENT,
+    headersFor: await siteRequestHeaders(seams, bare, origins),
     timeoutMs: SITE_IMPORT_DEFAULTS.requestTimeoutMs,
     redirectAllowed: (_from, to) => to.protocol === 'https:' && origins.includes(to.origin),
-    ...(extraHeaders ? { headers: extraHeaders } : {}),
   })
   if (!result.ok) {
     // An answer that is not the page (a 404, a redirect off the site) is
