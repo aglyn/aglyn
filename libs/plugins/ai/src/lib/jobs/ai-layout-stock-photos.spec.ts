@@ -382,13 +382,15 @@ describe('the stock photo searches (AGL-3660)', () => {
         people: true,
         broad: true,
       },
+      // A broad search's photo is OF the site's own world among its first tags (AGL-4092).
       {
         query: 'yoga studio',
         orientation: 'vertical',
         minHeight: 900,
         broad: true,
+        leadOwn: true,
       },
-      { query: 'yoga', orientation: 'vertical', minHeight: 900, broad: true },
+      { query: 'yoga', orientation: 'vertical', minHeight: 900, broad: true, leadOwn: true },
     ])
     // No business words: the subject, then its object, each asked once.
     expect(
