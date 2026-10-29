@@ -9,6 +9,34 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.291 — 2026-10-29
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/554f125c9...v1.0.0-beta.291)
+
+### Added
+
+- **forms,commerce:** a quote from a request links to the lead or contact it was filed as ([AGL-4098](https://linear.app/aglyn/issue/AGL-4098))
+- **forms,commerce:** request a quote form with files, a confirmation email and Start a quote ([AGL-4098](https://linear.app/aglyn/issue/AGL-4098))
+- **commerce:** email a quote in the customer's conversation ([AGL-4097](https://linear.app/aglyn/issue/AGL-4097))
+
+### Fixed
+
+- **commerce:** the Product and options field says what it lists on the canvas ([AGL-4098](https://linear.app/aglyn/issue/AGL-4098))
+
+### Changed
+
+- **aglyn:** name the site's contact email helper siteContactEmail, outside the CRM's words ([AGL-4097](https://linear.app/aglyn/issue/AGL-4097))
+
+<details>
+<summary>Also in this release: 1 test, 1 chore</summary>
+
+- **forms,crm,ai:** keep the site bundles in budget and the AI palette current ([AGL-4098](https://linear.app/aglyn/issue/AGL-4098))
+- **tenant:** declare the quote email's proof images as off-tenant image sinks ([AGL-4097](https://linear.app/aglyn/issue/AGL-4097))
+
+</details>
+
+1 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
 ## v1.0.0-beta.290 — 2026-10-29
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.289...v1.0.0-beta.290)
