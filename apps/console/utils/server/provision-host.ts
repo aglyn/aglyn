@@ -126,6 +126,13 @@ export interface ClaimHostInput {
    * the default site, in the same transaction.
    */
   starter?: boolean | SiteStarterInstall
+  /**
+   * Born in preview (AGL-4086): only the site's team, and Aglyn staff, see
+   * it until someone makes it public from Admin → Error pages. The create
+   * flow's "Start in preview" choice; on for a site brought in from somewhere
+   * else, off for every other start, unless the person chose otherwise.
+   */
+  preview?: boolean
 }
 
 /**
@@ -400,6 +407,9 @@ export async function claimHostForOrg(
       displayName,
       subdomain,
       orgId,
+      // Born in preview (AGL-4086) only when asked: a site is public by
+      // default, and the field is absent rather than false on every other.
+      ...(input.preview === true ? { preview: true } : {}),
       // Born routed (AGL-3408): the home page written below answers `/` from
       // the site's first request, where an empty map answered with the 404.
       // A site born for the guided start (AGL-3594) has no page yet, and the

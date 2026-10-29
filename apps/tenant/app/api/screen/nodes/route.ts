@@ -21,7 +21,17 @@
 // maintenance, org suspension) answers `nodes: null` and this returns 404.
 
 import { deferLazyPanelNodes } from '@aglyn/tenant-runtime/defer-lazy-panels'
-import { loadPageData } from '../../../[host]/[scheme]/[[...slug]]/load-page-data'
+import {
+  isSitePreviewRequest,
+  sitePreviewPaths,
+} from '@aglyn/aglyn/app-utils/site-preview'
+import {
+  loadPageData,
+  SITE_PREVIEW_TEAM_VIEW,
+  type SiteOverride,
+} from '../../../[host]/[scheme]/[[...slug]]/load-page-data'
+import getHost from '../../../../utils/get-host'
+import { sitePreviewViewerForRequest } from '../../../../utils/site-preview-viewer'
 
 /**
  * The node definitions a page withheld from its payload (AGL-1285/1287).
@@ -73,7 +83,28 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   try {
-    const result = await loadPageData(host, slug)
+    /**
+     * A site, or this page, in preview (AGL-4086): the team's page asks for
+     * its panels here too, and gets them only once its cookie is verified —
+     * the same check the uncached preview route runs. Either answer is kept
+     * out of every shared cache, because the URL is the same for the team and
+     * for the public and only one of them may see the page.
+     */
+    const hostRes = await getHost({ host })
+    const hostDoc = hostRes.host as never
+    const inPreview = isSitePreviewRequest(
+      {
+        preview: (hostRes.host as { preview?: unknown } | null)?.preview === true,
+        previewPaths: sitePreviewPaths(hostDoc),
+      },
+      `/${slug.join('/')}`,
+    )
+    let override: SiteOverride = ''
+    if (inPreview && hostRes.host?.$id) {
+      const viewer = await sitePreviewViewerForRequest(request, String(hostRes.host.$id))
+      if (viewer.admitted) override = SITE_PREVIEW_TEAM_VIEW
+    }
+    const result = await loadPageData(host, slug, '', override)
     // Anything that is not a rendered page — a 404, the canonical-origin
     // redirect, or a gated surface that withholds its nodes — has nothing to
     // hand back. Deliberately indistinguishable: this must not become a probe
@@ -111,8 +142,10 @@ export async function GET(request: Request): Promise<Response> {
         headers: {
           // Public page content, so it caches like the page does — otherwise
           // every visitor who opens a tab pays a full compose. Matches the
-          // page's own 60s `revalidate`.
-          'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+          // page's own 60s `revalidate`. Never for a page in preview.
+          'Cache-Control': inPreview
+            ? 'private, no-store, max-age=0'
+            : 'public, s-maxage=60, stale-while-revalidate=300',
         },
       },
     )

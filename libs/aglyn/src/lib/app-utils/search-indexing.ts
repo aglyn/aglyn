@@ -58,6 +58,13 @@ export interface SearchIndexingHost {
      */
     discourageSearchEngines?: boolean
   } | null
+  /**
+   * Preview (AGL-4086): only the site's team can see it, so nothing about it
+   * is offered to a crawler either. Read by {@link isSiteKeptFromSearch},
+   * never by {@link isSearchDiscouraged}, which answers for the switch an
+   * author flipped and nothing else.
+   */
+  preview?: boolean | null
 }
 
 /** The screen fields this module reads. */
@@ -84,6 +91,22 @@ export function isSearchDiscouraged(
   host: SearchIndexingHost | null | undefined,
 ): boolean {
   return host?.seo?.discourageSearchEngines === true
+}
+
+/**
+ * Whether crawlers are asked to stay away from the whole site: search is
+ * discouraged, or the site is in preview (AGL-4086).
+ *
+ * Separate from {@link isSearchDiscouraged} on purpose. That one is the state
+ * of a switch, and the console shows it as the switch; a site in preview has
+ * not had that switch flipped, and reading it as though it had would show the
+ * author a setting they never changed. Every surface that answers a CRAWLER —
+ * the head, `robots.txt`, the sitemap, the agent files — asks this one.
+ */
+export function isSiteKeptFromSearch(
+  host: SearchIndexingHost | null | undefined,
+): boolean {
+  return isSearchDiscouraged(host) || host?.preview === true
 }
 
 /**
@@ -117,7 +140,7 @@ export function isPageIndexable(options: {
   host?: SearchIndexingHost | null
   screen?: SearchIndexingScreen | null
 }): boolean {
-  if (isSearchDiscouraged(options.host)) return false
+  if (isSiteKeptFromSearch(options.host)) return false
   return isScreenIndexable(options.screen)
 }
 
@@ -161,7 +184,9 @@ export function buildRobotsTxt(options: {
   /** Absolute origin (no trailing slash); omitted when unresolvable. */
   origin?: string
 }): string {
-  if (isSearchDiscouraged(options.host)) {
+  // A site in preview (AGL-4086) closes the file the same way: nobody but
+  // its team may see the site, so no crawler is invited in.
+  if (isSiteKeptFromSearch(options.host)) {
     /*
       Every named agent group is dropped along with the wildcard. A group that
       named an agent and allowed it would be a LOUDER permission than the

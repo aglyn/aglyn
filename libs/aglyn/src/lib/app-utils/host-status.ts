@@ -16,7 +16,7 @@
  */
 
 export interface HostStatus {
-  /** `Live`, `Draft`, `Maintenance`, `Suspended`. */
+  /** `Live`, `Draft`, `In preview`, `Maintenance`, `Suspended`. */
   label: string
   color: 'success' | 'default' | 'warning' | 'error'
   /** Why, in one sentence — the pill's tooltip. */
@@ -70,6 +70,7 @@ export function publishedScreenCount(
 export function describeHostStatus(host: {
   screens?: Record<string, unknown>
   maintenance?: boolean
+  preview?: boolean
   suspendedAt?: number
   suspendedUntilMs?: number
 }): HostStatus {
@@ -90,6 +91,17 @@ export function describeHostStatus(host: {
       label: 'Maintenance',
       color: 'warning',
       detail: 'Every path serves the maintenance page.',
+    }
+  }
+  // A site in preview (AGL-4086) is not live to its visitors whatever it has
+  // published: they get the 503 page or "Coming soon", and only the team
+  // sees the pages.
+  if (host?.preview === true) {
+    return {
+      label: 'In preview',
+      color: 'default',
+      detail:
+        'Only your team can see this site. Visitors see the 503 page or "Coming soon".',
     }
   }
   const published = publishedScreenCount(host)

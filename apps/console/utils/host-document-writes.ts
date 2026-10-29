@@ -106,6 +106,10 @@ export const SITE_RENDERED_HOST_FIELDS: Readonly<Record<string, string>> = {
   notFoundScreenId: 'The legacy 404 binding, still read by the error render.',
   errorScreens: 'Which designed screen renders each error status.',
   maintenance: 'Replaces every path with the 503 screen while it is on.',
+  previewScreens:
+    'Which published pages answer the public with the 404 while only the ' +
+    'site’s team sees them (AGL-4086); a cached copy would keep showing ' +
+    'the page, or keep hiding it.',
   announcementBar: 'The site-wide announcement bar, rendered above every page.',
   popup: 'The promotional popup, mounted on every page.',
   authScreens: 'Which screens render `/signin`, `/signup` and `/recover`.',

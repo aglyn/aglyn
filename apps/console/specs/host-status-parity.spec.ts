@@ -73,6 +73,17 @@ describe('describeHostStatus', () => {
     expect(describeHostStatus({ screens: {} }).label).toBe('Draft')
   })
 
+  it('calls a site in preview In preview, not Live, whatever it has published (AGL-4086)', () => {
+    // Visitors get the 503 page or "Coming soon"; only the team sees pages.
+    const status = describeHostStatus({ screens: { s1: '/' }, preview: true })
+    expect(status.label).toBe('In preview')
+    expect(status.detail).toContain('Only your team')
+    // Maintenance still outranks it: nobody at all sees the site then.
+    expect(
+      describeHostStatus({ screens: { s1: '/' }, preview: true, maintenance: true }).label,
+    ).toBe('Maintenance')
+  })
+
   it('does NOT call a site in maintenance Live, whatever it has published', () => {
     // Every path is serving the 503 screen. A `Live` pill here would be the
     // console agreeing with a customer who thinks their site is up.
