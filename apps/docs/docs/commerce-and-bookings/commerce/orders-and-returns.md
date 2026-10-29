@@ -98,7 +98,7 @@ uses Stripe Tax, the tax is worked out when they pay.
 
 When your customer pays:
 
-- the order is marked **Paid** and joins your orders on the day you made it;
+- the order is marked **Paid**, with the shipping and tax Stripe charged;
 - your customer gets a receipt, and the invoice page shows **Paid** with a link to
   their order;
 - you're notified, and stock goes down for your catalog products.
