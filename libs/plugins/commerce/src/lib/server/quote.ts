@@ -25,6 +25,7 @@ import {
   type PluginPersonSearchRequest,
 } from '@aglyn/aglyn/plugin-manager/plugin-person-records'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
+import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import * as CommerceModel from '../model'
 import { commerceSitePermissionRefusal } from '../model/plugin-permissions'
 import { holdsCommerceSiteKey } from './commerce-site-keys'
@@ -275,7 +276,8 @@ export async function handleQuote(deps: QuoteDeps, req: PluginApiRequest): Promi
   let decoded: { uid: string; email?: string | null }
   try {
     decoded = await deps.verifyIdToken(idToken)
-  } catch {
+  } catch (error) {
+    if (!isRefusedIdToken(error)) throw error
     return refuse(401, 'Unauthenticated')
   }
   const firestore = deps.firestore()
