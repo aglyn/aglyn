@@ -110,6 +110,14 @@ export const ASSIST_EDIT_CONTEXT_MAX_PROPS = 16
 export const ASSIST_EDIT_SELECTED_TEXT_CHARS = 400
 /** Characters of a string prop every other element carries. */
 export const ASSIST_EDIT_OUTLINE_TEXT_CHARS = 80
+/**
+ * Elements a whole-document outline describes at most: one the server reads
+ * from the stored document for an edit job, where nothing is selected and
+ * nobody can be asked to select what the outline leaves out. Far past a page
+ * an AI build or a starter makes (the starter home has 182), so in practice
+ * the model sees every element it could be asked about.
+ */
+export const ASSIST_EDIT_WHOLE_MAX_NODES = 400
 
 /**
  * One element of the canvas outline a request carries. Ids, component ids
@@ -127,7 +135,10 @@ export interface AssistEditCanvasNode {
   name?: string
   /** Primitive props, strings shortened. */
   props?: Record<string, string | number | boolean>
-  /** The element's own styles — carried for the selected element only. */
+  /**
+   * The element's own styles — carried for the selected element only, and
+   * for every element of a whole-document outline.
+   */
   sx?: Record<string, unknown>
   /**
    * Described by its place alone, without props: an element around the
@@ -211,6 +222,12 @@ export interface AssistEditCanvasContext {
    */
   total?: number
   nodes: AssistEditCanvasNode[]
+  /**
+   * The document as stored, read on the server for a job: every element in
+   * page order up to {@link ASSIST_EDIT_WHOLE_MAX_NODES}, each with its
+   * settings and styles, and nobody to ask. Never read from a request body.
+   */
+  whole?: true
 }
 
 /* ------------------------------------------------------------------ *

@@ -173,7 +173,8 @@ export function aiSiteBuildDoneLinks(
   if (!first || !orgSlug) return { view: null, pages: null }
   const host = String(first.hostSubdomain)
   return {
-    view: first.versionId ? screenVersionHref(orgSlug, first, 'preview') : null,
+    // A change in a page's draft is not in its version's preview (AGL-4116).
+    view: first.versionId && !first.inDraft ? screenVersionHref(orgSlug, first, 'preview') : null,
     pages: buildRoute(Route.HOST_SCREENS, { orgSlug, host }),
   }
 }
@@ -181,17 +182,22 @@ export function aiSiteBuildDoneLinks(
 /**
  * The two ways to look at the one page a job changed (AGL-3616): its new
  * version in the preview, where it can be published, and in the Besigner.
- * `null` where the job wrote no page version, or more than one page — those
- * wait in Pages.
+ * A change saved into the page's draft (AGL-4116) has no preview of its own
+ * — a version's preview shows the version, not its draft — so only the
+ * Besigner, where Open draft shows it. `null` where the job wrote no page
+ * version, or more than one page — those wait in Pages.
  */
 export function aiJobReviewLinks(
   job: Pick<AiJobSummary, 'outputs'>,
   orgSlug: string,
-): { preview: string; besigner: string } | null {
+): { preview: string | null; besigner: string } | null {
   if (!orgSlug) return null
   const pages = job.outputs.filter((output) => output.resource === 'screen' && output.hostSubdomain && output.versionId)
   if (new Set(pages.map((page) => page.id)).size !== 1) return null
-  return { preview: screenVersionHref(orgSlug, pages[0], 'preview'), besigner: screenVersionHref(orgSlug, pages[0], 'besigner') }
+  return {
+    preview: pages[0].inDraft ? null : screenVersionHref(orgSlug, pages[0], 'preview'),
+    besigner: screenVersionHref(orgSlug, pages[0], 'besigner'),
+  }
 }
 
 /**

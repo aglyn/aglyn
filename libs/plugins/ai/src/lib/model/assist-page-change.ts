@@ -18,9 +18,11 @@
 /**
  * A change to a page the site already has, asked in the Assist chat
  * (AGL-4116). No plan and no new page: the panel starts one `edit` job on
- * that page, which saves the change as a new unpublished version of it, and
- * the card links that version in the Besigner, where the person checks it
- * and publishes it.
+ * that page, which saves the change into the page's draft — on every plan,
+ * the draft the Besigner offers with Open draft — and the card links the
+ * page in the Besigner, where the person checks it and publishes it. Only
+ * when they ask for a new version, and the plan keeps version history, is
+ * the change saved as a new unpublished version instead.
  *
  * Asked through a build, a change to the home page came back as a second
  * page at `/` the plan generated from scratch, and every follow-up made
@@ -56,6 +58,8 @@ export interface AssistPageChangeProposal {
   brief: string
   /** One line saying what will change. */
   summary: string
+  /** They asked for a new version of the page; otherwise the change goes into its draft. */
+  newVersion?: boolean
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -73,15 +77,16 @@ export function isAssistPageChangeProposal(value: unknown): value is AssistPageC
     typeof value['pageName'] === 'string' &&
     typeof value['brief'] === 'string' &&
     value['brief'].trim().length > 0 &&
-    typeof value['summary'] === 'string'
+    typeof value['summary'] === 'string' &&
+    (value['newVersion'] === undefined || typeof value['newVersion'] === 'boolean')
   )
 }
 
 /**
  * The body of `POST /api/ai/jobs` a page change starts: an `edit` of the
- * page. `versionId` is the draft an earlier change in the same conversation
- * made, so a follow-up changes that draft rather than starting another one
- * from the published page.
+ * page. `versionId` is the version an earlier change in the same
+ * conversation wrote to, so a follow-up changes that version's draft rather
+ * than starting again from the published page.
  */
 export function assistPageChangeJobRequest(
   orgId: string,
@@ -92,14 +97,19 @@ export function assistPageChangeJobRequest(
   hostId: string
   kind: 'edit'
   brief: string
-  inputs: { target: string; targetKind: 'screen'; versionId?: string }
+  inputs: { target: string; targetKind: 'screen'; versionId?: string; newVersion?: true }
 } {
   return {
     orgId,
     hostId: proposal.hostId,
     kind: 'edit',
     brief: proposal.brief,
-    inputs: { target: proposal.pageId, targetKind: 'screen', ...(versionId ? { versionId } : {}) },
+    inputs: {
+      target: proposal.pageId,
+      targetKind: 'screen',
+      ...(versionId ? { versionId } : {}),
+      ...(proposal.newVersion ? { newVersion: true as const } : {}),
+    },
   }
 }
 
@@ -110,9 +120,9 @@ export function assistPageChangeOutput(job: Pick<AiJobSummary, 'status' | 'outpu
 }
 
 /**
- * The draft a new change to `pageId` continues (AGL-4116): the version the
- * conversation's latest finished change to that page wrote, or `null` to
- * start from the page as it is.
+ * The version a new change to `pageId` continues (AGL-4116): the one the
+ * conversation's latest finished change to that page wrote to — its draft
+ * holds that change — or `null` to start from the page as it is.
  */
 export function assistPageChangeDraftVersion(
   changes: ReadonlyArray<{ pageChange?: AssistPageChangeProposal | null; pageChangeJob?: AiJobSummary | null }>,

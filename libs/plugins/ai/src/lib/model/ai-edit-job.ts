@@ -16,7 +16,7 @@
  */
 
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
-import { ASSIST_EDIT_CONTEXT_MAX_NODES } from './assist-edit'
+import { ASSIST_EDIT_WHOLE_MAX_NODES } from './assist-edit'
 
 /**
  * An `edit` job (AGL-3616): a change to a page or a layout the site already
@@ -27,13 +27,17 @@ import { ASSIST_EDIT_CONTEXT_MAX_NODES } from './assist-edit'
  * — against the stored document instead of an open canvas, and the change is
  * saved where no visitor sees it:
  *
- *  - on a plan with version history, as a NEW version beside the one it
- *    started from, which becomes the page's current version only when the
- *    page is not published (no visitor reaches it); a published page's and a
- *    layout's current version never move;
- *  - on a plan without it, in place, and only on a version no visitor
- *    reaches — an unpublished page's, or a version that is not the current
- *    one. Anything else is refused, before anything is spent.
+ *  - by default, on every plan, into the WORKING DRAFT of the version it
+ *    started from (AGL-4116) — the draft the Besigner saves to as an author
+ *    works and offers with Open draft, so the author reviews the change and
+ *    publishes it there exactly as they would their own. A draft the author
+ *    already has is built on, never replaced;
+ *  - when the request asks for a new version and the plan keeps version
+ *    history, as a NEW version beside the one it started from, which becomes
+ *    the page's current version only when the page is not published; a
+ *    published page's and a layout's current version never move. Asked for
+ *    on a plan without version history, the change goes into the draft and
+ *    the output says why.
  *
  * Pure: the inputs, the sentences a person reads, and the outline the model
  * is shown. The runner is `jobs/ai-job-edit-step.ts`.
@@ -50,6 +54,8 @@ export interface AiEditJobInputs {
   targetKind: AiEditTargetKind | null
   /** The version to start from; the document's current version when absent. */
   versionId: string | null
+  /** The request asked for a new version; otherwise the change goes into the draft. */
+  newVersion: boolean
 }
 
 const DOCUMENT_ID = /^[A-Za-z0-9_-]{1,64}$/
@@ -76,6 +82,7 @@ export function parseAiEditJobInputs(
     target,
     targetKind: kind ? (kind as AiEditTargetKind) : null,
     versionId: typeof versionId === 'string' && versionId ? versionId : null,
+    newVersion: inputs?.['newVersion'] === true,
   }
 }
 
@@ -123,26 +130,40 @@ export type AiEditPlacement =
   | 'new-current'
   /** A new version beside the one it started from, which is unchanged. */
   | 'new-beside'
-  /** The version it started from, changed in place: one no visitor reaches. */
+  /** The version it started from, changed in place: one no visitor reaches. Written before AGL-4116. */
   | 'in-place'
+  /** The working draft of the version it started from, which the Besigner offers with Open draft. */
+  | 'draft'
 
 const NOUNS: Readonly<Record<AiEditTargetKind, string>> = { screen: 'page', layout: 'layout' }
+
+/**
+ * Why a change asked for as a new version went into the draft: the plan
+ * keeps no version history. The versions route's own words for the plan.
+ */
+export const AI_EDIT_NO_VERSIONS_DRAFT_COPY =
+  'A new version needs version history, which requires a Pro plan, so the change went into the draft instead.'
 
 /** The output's note: where the change is, that nothing visitors see moved, and what was left out. */
 export function aiEditOutputNote(input: {
   kind: AiEditTargetKind
   placement: AiEditPlacement
   leftOut: readonly string[]
+  /** A new version was asked for on a plan without version history. */
+  versionsUnavailable?: boolean
 }): string {
   const noun = NOUNS[input.kind]
   const where =
-    input.placement === 'new-current'
-      ? `Saved as a new version, now this ${noun}’s current one. The ${noun} is not published, so no visitor sees it until you publish it.`
-      : input.placement === 'new-beside'
-        ? `Saved as a new version beside the one it started from. Nothing visitors see has changed: open it to review it, and publish it when it is ready.`
-        : `Saved on the version it started from, which no visitor sees: open it to review it.`
+    input.placement === 'draft'
+      ? `Saved as this ${noun}’s draft. Nothing visitors see has changed: open the ${noun} in the Besigner and choose Open draft to review it, then publish it when it is ready.`
+      : input.placement === 'new-current'
+        ? `Saved as a new version, now this ${noun}’s current one. The ${noun} is not published, so no visitor sees it until you publish it.`
+        : input.placement === 'new-beside'
+          ? `Saved as a new version beside the one it started from. Nothing visitors see has changed: open it to review it, and publish it when it is ready.`
+          : `Saved on the version it started from, which no visitor sees: open it to review it.`
+  const versions = input.versionsUnavailable ? ` ${AI_EDIT_NO_VERSIONS_DRAFT_COPY}` : ''
   const leftOut = input.leftOut.length ? ` Left out: ${input.leftOut.join('; ')}.` : ''
-  return `${where}${leftOut}`.slice(0, 1_000)
+  return `${where}${versions}${leftOut}`.slice(0, 1_000)
 }
 
 /** What the output says of search fields a published page keeps on the page itself. */
@@ -159,15 +180,17 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 /**
  * The stored document as the outline the edit rung's protocol reads
- * (`parseAssistEditContext` holds it to its limits): the document root, then
- * every element level by level — each after its parent, so every ancestor
- * chain the check walks is whole — until the rung's cap.
+ * (`parseAssistEditContext` with `whole` holds it to its limits): the
+ * document root, then every element in the order it reads on the page — each
+ * after its parent, so every ancestor chain the check walks is whole — with
+ * its settings and its styles, up to the whole-document cap.
  *
  * In the editor, an outline is the neighborhood of what the author selected.
- * A job has no selection, so it is the TOP of the document, read breadth
- * first: every section, and as deep inside each as the cap reaches. Each
- * element keeps its real child count and the document its real size, so the
- * prompt can say how much the outline leaves out. `null` without a root.
+ * A job has no selection and nobody to ask, so it is the WHOLE document: a
+ * request about a picture five levels down is about an element the model can
+ * see, and a restyle starts from the styles the element has. Each element
+ * keeps its real child count and the document its real size, so the prompt
+ * can say what a document past the cap leaves out. `null` without a root.
  */
 export function aiEditJobOutline(nodes: Readonly<Record<string, unknown>>): {
   selectedId: null
@@ -178,25 +201,27 @@ export function aiEditJobOutline(nodes: Readonly<Record<string, unknown>>): {
   if (!isRecord(root)) return null
   const childrenOf = (node: Record<string, unknown>): string[] =>
     Array.isArray(node['nodes']) ? node['nodes'].filter((id): id is string => typeof id === 'string' && isRecord(nodes[id])) : []
-  const order: Array<{ id: string; parentId: string | null; index: number }> = [
+  const order: Array<{ id: string; parentId: string | null; index: number }> = []
+  const seen = new Set<string>([CANVAS_ROOT_ELEMENT_ID])
+  // Depth first, children in their stored order: the page as it reads.
+  const stack: Array<{ id: string; parentId: string | null; index: number }> = [
     { id: CANVAS_ROOT_ELEMENT_ID, parentId: null, index: 0 },
   ]
-  const seen = new Set<string>([CANVAS_ROOT_ELEMENT_ID])
-  // Every element reachable through child lists, for the document's size.
-  let total = 1
-  for (let at = 0; at < order.length; at += 1) {
-    const { id } = order[at]
-    childrenOf(nodes[id] as Record<string, unknown>).forEach((child, index) => {
-      if (seen.has(child)) return
+  while (stack.length) {
+    const at = stack.pop() as (typeof stack)[number]
+    order.push(at)
+    const children = childrenOf(nodes[at.id] as Record<string, unknown>)
+    for (let index = children.length - 1; index >= 0; index -= 1) {
+      const child = children[index]
+      if (seen.has(child)) continue
       seen.add(child)
-      total += 1
-      order.push({ id: child, parentId: id, index })
-    })
+      stack.push({ id: child, parentId: at.id, index })
+    }
   }
   return {
     selectedId: null,
-    total,
-    nodes: order.slice(0, ASSIST_EDIT_CONTEXT_MAX_NODES).map(({ id, parentId, index }) => {
+    total: order.length,
+    nodes: order.slice(0, ASSIST_EDIT_WHOLE_MAX_NODES).map(({ id, parentId, index }) => {
       const node = nodes[id] as Record<string, unknown>
       return {
         id,
@@ -206,6 +231,7 @@ export function aiEditJobOutline(nodes: Readonly<Record<string, unknown>>): {
         childCount: childrenOf(node).length,
         ...(typeof node['name'] === 'string' && node['name'] ? { name: node['name'] } : {}),
         ...(isRecord(node['props']) ? { props: node['props'] } : {}),
+        ...(isRecord(node['sx']) ? { sx: node['sx'] } : {}),
       }
     }),
   }

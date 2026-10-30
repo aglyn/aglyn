@@ -314,7 +314,7 @@ export function createAiJobNavigationStep(deps: AiJobNavigationStepDeps = {}): A
     const read = await readTarget(firestore, {
       orgId: job.orgId,
       hostId,
-      inputs: { target: plan.layoutId, targetKind: 'layout', versionId: null },
+      inputs: { target: plan.layoutId, targetKind: 'layout', versionId: null, newVersion: false },
       jobId: versionId,
     })
     if ('error' in read) return unspent(read.error)
@@ -390,7 +390,7 @@ export function createAiNavigationJobAdmission(deps: AiNavigationJobAdmissionDep
     const read = await readTarget(context.firestore, {
       orgId: context.orgId,
       hostId: context.hostId,
-      inputs: { target: plan.layoutId, targetKind: 'layout', versionId: null },
+      inputs: { target: plan.layoutId, targetKind: 'layout', versionId: null, newVersion: false },
       jobId: null,
     })
     if ('error' in read) return read
