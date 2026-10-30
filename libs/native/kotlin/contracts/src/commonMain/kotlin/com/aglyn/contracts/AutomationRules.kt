@@ -141,9 +141,18 @@ val CONTACT_LIFECYCLE_STAGE_LABELS: Map<String, String> = linkedMapOf(
 )
 val CRM_TASK_KIND_LABELS: Map<String, String> = linkedMapOf("call" to "Call", "email" to "Email", "meeting" to "Meeting", "todo" to "To-do")
 val CRM_ACTIVITY_KIND_LABELS: Map<String, String> =
-  linkedMapOf("call" to "Call", "email" to "Email", "meeting" to "Meeting", "note" to "Note", "other" to "Other")
+  linkedMapOf(
+    "call" to "Call", "email" to "Email", "text" to "Text message", "whatsapp" to "WhatsApp",
+    "messenger" to "Facebook Messenger", "instagram" to "Instagram", "linkedin" to "LinkedIn",
+    "meeting" to "Meeting", "note" to "Note", "other" to "Other",
+  )
 val CRM_ACTIVITY_DIRECTIONS: Map<String, List<String>> =
-  mapOf("call" to listOf("outbound", "inbound", "internal"), "email" to listOf("outbound", "inbound"))
+  mapOf(
+    "call" to listOf("outbound", "inbound", "internal"), "email" to listOf("outbound", "inbound"),
+    "text" to listOf("outbound", "inbound"), "whatsapp" to listOf("outbound", "inbound"),
+    "messenger" to listOf("outbound", "inbound"), "instagram" to listOf("outbound", "inbound"),
+    "linkedin" to listOf("outbound", "inbound"),
+  )
 val CRM_ACTIVITY_DIRECTION_LABELS: Map<String, String> =
   linkedMapOf("outbound" to "Outbound", "inbound" to "Inbound", "internal" to "Internal")
 val TASK_PRIORITIES: List<String> = listOf("low", "normal", "high")

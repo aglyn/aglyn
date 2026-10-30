@@ -154,4 +154,33 @@ describe('a call’s and an email’s direction (AGL-3517)', () => {
     await waitFor(() => expect(addDoc).toHaveBeenCalledTimes(2))
     expect('direction' in addDoc.mock.calls[1][1]).toBe(false)
   })
+
+  it('offers every messaging channel as a kind, and logs a message with its direction', async () => {
+    render(
+      <LogActivityDialog open onClose={() => undefined} scope={scope} link={{ contactId: 'c-1' }} />,
+    )
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Kind' }))
+    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual([
+      'Call',
+      'Email',
+      'Text message',
+      'WhatsApp',
+      'Facebook Messenger',
+      'Instagram',
+      'LinkedIn',
+      'Meeting',
+      'Note',
+      'Other',
+    ])
+    fireEvent.click(screen.getByRole('option', { name: 'Facebook Messenger' }))
+    expect(options()).toEqual(['Not said', 'Outbound', 'Inbound'])
+    fireEvent.click(screen.getByRole('option', { name: 'Inbound' }))
+    expect(screen.queryByRole('textbox', { name: 'Outcome' })).toBeNull()
+    fireEvent.change(screen.getByRole('textbox', { name: 'What happened' }), {
+      target: { value: 'Ready for the Starter plan' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Log' }))
+    await waitFor(() => expect(addDoc).toHaveBeenCalledTimes(1))
+    expect(addDoc.mock.calls[0][1]).toMatchObject({ kind: 'messenger', direction: 'inbound' })
+  })
 })
