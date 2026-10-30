@@ -9,6 +9,14 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.297 — 2026-10-30
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.296...v1.0.0-beta.297)
+
+### Fixed
+
+- **ai:** an edit keeps a change to an element it moved out of what it then removes ([AGL-4116](https://linear.app/aglyn/issue/AGL-4116))
+
 ## v1.0.0-beta.296 — 2026-10-30
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.295...v1.0.0-beta.296)

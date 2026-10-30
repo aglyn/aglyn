@@ -462,6 +462,27 @@ describe('the page’s draft, on every plan (AGL-4116)', () => {
     expect(docs.get(LAYOUT)?.['versionId']).toBe('lv-live')
   })
 
+  it('lands an answer that moves an element out, removes its old holder and then restyles it, as the live check’s did', async () => {
+    seed()
+    const reworked = {
+      summary: 'Headline out of the stack',
+      ops: [
+        { ...BLANK, op: 'move', nodeId: 'heroTitle', parentId: 'hero', index: 0 },
+        { ...BLANK, op: 'remove', nodeId: 'heroStack' },
+        { ...BLANK, op: 'updateSx', nodeId: 'heroTitle', sx: [{ key: 'position', value: 'relative', breakpoint: '' }, { key: 'zIndex', value: '2', breakpoint: '' }] },
+      ],
+    }
+    mockRunAiRequest.mockResolvedValueOnce(completion(reworked))
+    const outcome = await runStep({}, STARTER)
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(1)
+    expect(outcome.outputs[0].note).not.toContain('Left out')
+    const nodes = stored(DRAFT)
+    expect(nodes['hero'].nodes).toEqual(['heroTitle'])
+    expect(nodes['heroStack']).toBeUndefined()
+    expect(nodes['heroCta']).toBeUndefined()
+    expect(nodes['heroTitle'].sx).toEqual({ position: 'relative', zIndex: 2 })
+  })
+
   it('asks through the rung’s tool, with the job’s rules and the stored document as the outline', async () => {
     seed()
     mockRunAiRequest.mockResolvedValueOnce(completion(ANSWER))
