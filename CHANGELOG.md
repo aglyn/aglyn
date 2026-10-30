@@ -21,6 +21,7 @@ content on the marketing site and is written separately.
 ### Fixed
 
 - **ai:** an edit sees the whole page and lands in its draft on every plan ([AGL-4116](https://linear.app/aglyn/issue/AGL-4116))
+- **crm:** the deal board folds empty stages and pages sideways with arrows
 
 ## v1.0.0-beta.295 — 2026-10-29
 
