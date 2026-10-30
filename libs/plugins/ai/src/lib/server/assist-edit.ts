@@ -1078,8 +1078,25 @@ function parseEditInput(
   const pending: PendingEditOp[] = []
   /** Ids removed by an earlier op; nothing later may act inside them. */
   const removed = new Set<string>()
-  const insideRemoved = (nodeId: string): boolean =>
-    (chainTo(nodeId, byId) ?? []).some((node) => removed.has(node.id))
+  /**
+   * Where an earlier move put an element: its new parent. The canvas applies
+   * the ops in order, so a picture moved out of a column and then the column
+   * removed is still on the page, and a later change to the picture is to an
+   * element that is there (AGL-4116: the live check's answer did exactly that
+   * and lost the picture's restyle).
+   */
+  const movedTo = new Map<string, string>()
+  /** The element and its ancestors as the ops so far leave them, nearest first. */
+  const lineage = (nodeId: string): string[] => {
+    const ids: string[] = []
+    let at: string | null | undefined = nodeId
+    while (typeof at === 'string' && !ids.includes(at)) {
+      ids.push(at)
+      at = movedTo.get(at) ?? byId.get(at)?.parentId
+    }
+    return ids
+  }
+  const insideRemoved = (nodeId: string): boolean => lineage(nodeId).some((id) => removed.has(id))
   const described = (nodeId: unknown, label: string): AssistEditCanvasNode | null => {
     if (typeof nodeId !== 'string' || !byId.has(nodeId)) {
       dropped.push(`${label}: names an element that is not on the canvas described`)
@@ -1162,10 +1179,11 @@ function parseEditInput(
         if (!node) return
         const parent = describedParent(raw['parentId'], label, 'moves into')
         if (!parent) return
-        if ((chainTo(parent.id, byId) ?? []).some((ancestor) => ancestor.id === node.id)) {
+        if (lineage(parent.id).includes(node.id)) {
           dropped.push(`${label}: moves an element inside itself`)
           return
         }
+        movedTo.set(node.id, parent.id)
         pending.push({
           op,
           nodeId: node.id,
