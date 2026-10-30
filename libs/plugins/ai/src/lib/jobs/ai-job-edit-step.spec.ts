@@ -57,8 +57,8 @@ import type { AiJob } from '../model/ai-jobs.types'
 import {
   AI_EDIT_EMAIL_COPY,
   AI_EDIT_GONE_COPY,
-  AI_EDIT_NEEDS_VERSIONING_COPY,
   AI_EDIT_NO_SITE_COPY,
+  AI_EDIT_NO_VERSIONS_DRAFT_COPY,
   AI_EDIT_NOTHING_COPY,
   AI_EDIT_SEO_LEFT_OUT,
   AI_EDIT_STALE_COPY,
@@ -69,10 +69,10 @@ import {
   aiEditVersionName,
   parseAiEditJobInputs,
 } from '../model/ai-edit-job'
-import { ASSIST_EDIT_CONTEXT_MAX_NODES, ASSIST_EDIT_TOOL_NAME } from '../model/assist-edit'
+import { ASSIST_EDIT_TOOL_NAME, ASSIST_EDIT_WHOLE_MAX_NODES, type AssistEditCanvasContext } from '../model/assist-edit'
 import { AI_STEP_TIERS } from '../providers/catalog'
 import { AI_ROUTING_TABLE } from '../providers/routing'
-import { ASSIST_EDIT_MAX_OUTPUT_TOKENS } from '../server/assist-edit'
+import { ASSIST_EDIT_MAX_OUTPUT_TOKENS, editSelectionBlock, parseAssistEditContext } from '../server/assist-edit'
 import { AI_JOB_INLINE_BUDGET_MS, aiGenerationWorstCaseOnTierMs } from './ai-job-budget'
 import {
   AI_EDIT_READS_MS,
@@ -81,6 +81,7 @@ import {
   AI_JOB_EDIT_STEP_MINIMUM_MS,
   aiEditDatasetScope,
   aiEditJobAdmission,
+  aiEditJobPlacement,
   aiEditPlacement,
   aiJobEditModel,
   createAiEditJobAdmission,
@@ -157,6 +158,10 @@ const firestore = {
         if (!current) throw new Error(`NOT_FOUND ${ref.path}`)
         writes.push(() => docs.set(ref.path, patched(docs.get(ref.path) as Record<string, unknown>, patch)))
       },
+      // A whole-document write, as a draft is written.
+      set: (ref: { path: string }, data: Record<string, unknown>) => {
+        writes.push(() => docs.set(ref.path, data))
+      },
     }
     const result = await run(tx)
     for (const write of writes) write()
@@ -190,6 +195,11 @@ const stored = (path: string) => decodeStoredNodes<Record<string, Record<string,
 const HOST = 'hosts/host-1'
 const SCREEN = `${HOST}/screens/home`
 const LAYOUT = `${HOST}/layouts/frame`
+/** The live version's working draft, where the Besigner keeps it. */
+const DRAFT = `${SCREEN}/versions/v-live/draft/current`
+/** When the live version was last saved, as a stored stamp reads. */
+const SAVED_AT = { toMillis: () => 1_790_000_000_000 }
+const SAVED_STAMP = 'ms:1790000000000'
 
 function seed(options: { routed?: boolean; layout?: boolean } = {}) {
   docs.set(HOST, { orgId: 'org-1', subdomain: 'brightside', screens: options.routed === false ? {} : { home: '/' } })
@@ -201,6 +211,7 @@ function seed(options: { routed?: boolean; layout?: boolean } = {}) {
     layoutId: 'frame',
     nodes: packed(PAGE_NODES),
     createdBy: 'uid-0',
+    updatedAt: SAVED_AT,
   })
   docs.set(`${SCREEN}/versions/v-older`, {
     screenId: 'home',
@@ -264,12 +275,14 @@ beforeEach(() => {
 
 describe('the inputs', () => {
   it('reads a target, a kind and a version, and names what is wrong', () => {
-    expect(parseAiEditJobInputs({ target: 'home' })).toEqual({ target: 'home', targetKind: null, versionId: null })
-    expect(parseAiEditJobInputs({ target: 'frame', targetKind: 'layout', versionId: 'lv-1' })).toEqual({
+    expect(parseAiEditJobInputs({ target: 'home' })).toEqual({ target: 'home', targetKind: null, versionId: null, newVersion: false })
+    expect(parseAiEditJobInputs({ target: 'frame', targetKind: 'layout', versionId: 'lv-1', newVersion: true })).toEqual({
       target: 'frame',
       targetKind: 'layout',
       versionId: 'lv-1',
+      newVersion: true,
     })
+    expect(parseAiEditJobInputs({ target: 'home', newVersion: 'yes' })).toMatchObject({ newVersion: false })
     expect(parseAiEditJobInputs({})).toBe(AI_EDIT_TARGET_REQUIRED_COPY)
     expect(parseAiEditJobInputs({ target: '../x' })).toBe(AI_EDIT_TARGET_REQUIRED_COPY)
     expect(parseAiEditJobInputs({ target: 'home', targetKind: 'component' })).toBe(AI_EDIT_TARGET_KIND_COPY)
@@ -282,16 +295,40 @@ describe('the inputs', () => {
     expect(aiEditVersionName('x'.repeat(400))).toHaveLength(200)
   })
 
-  it('outlines the stored document breadth first, every element after its parent, to the rung’s cap', () => {
+  it('outlines the whole stored document in page order, every element after its parent, with its styles', () => {
     const outline = aiEditJobOutline(PAGE_NODES)
-    expect(outline?.nodes.map((node) => node['id'])).toEqual([ROOT, 'hero', 'services', 'heroStack', 'servicesTitle', 'heroTitle', 'heroCta'])
+    expect(outline?.nodes.map((node) => node['id'])).toEqual([ROOT, 'hero', 'heroStack', 'heroTitle', 'heroCta', 'services', 'servicesTitle'])
     expect(outline?.nodes[0]).toMatchObject({ parentId: null, childCount: 2 })
+    expect(outline?.nodes[1]).toMatchObject({ id: 'hero', sx: { py: 16 } })
     expect(outline?.total).toBe(7)
-    const wide: Record<string, unknown> = { [ROOT]: { componentId: 'div', nodes: Array.from({ length: 90 }, (_, i) => `n${i}`) } }
-    for (let i = 0; i < 90; i += 1) wide[`n${i}`] = { componentId: 'muiBox', nodes: [] }
+    const wide: Record<string, unknown> = { [ROOT]: { componentId: 'div', nodes: Array.from({ length: 450 }, (_, i) => `n${i}`) } }
+    for (let i = 0; i < 450; i += 1) wide[`n${i}`] = { componentId: 'muiBox', nodes: [] }
     const capped = aiEditJobOutline(wide)
-    expect([capped?.nodes.length, capped?.total]).toEqual([ASSIST_EDIT_CONTEXT_MAX_NODES, 91])
+    expect([capped?.nodes.length, capped?.total]).toEqual([ASSIST_EDIT_WHOLE_MAX_NODES, 451])
     expect(aiEditJobOutline({})).toBeNull()
+  })
+
+  it('shows the model an element five levels down, which the top-of-document outline left out (AGL-4116)', () => {
+    // The starter home's hero: section › container › grid › cell › image.
+    const deep: Record<string, unknown> = {
+      [ROOT]: { componentId: 'div', nodes: ['s0', 's1', 's2', 's3', 's4', 's5', 's6', 's7'] },
+    }
+    for (let i = 0; i < 8; i += 1) {
+      deep[`s${i}`] = { componentId: 'section', nodes: [`c${i}`] }
+      deep[`c${i}`] = { componentId: 'muiContainer', nodes: [`g${i}`] }
+      deep[`g${i}`] = { componentId: 'muiGrid', props: { container: true }, nodes: [`t${i}`, `m${i}`] }
+      deep[`t${i}`] = { componentId: 'muiGrid', props: { size: 'xs:12 md:6' }, nodes: Array.from({ length: 4 }, (_, j) => `x${i}-${j}`) }
+      for (let j = 0; j < 4; j += 1) deep[`x${i}-${j}`] = { componentId: 'muiTypography', props: { children: `Line ${j}` }, nodes: [] }
+      deep[`m${i}`] = { componentId: 'muiGrid', props: { size: 'xs:12 md:6' }, nodes: [`img${i}`] }
+      deep[`img${i}`] = { componentId: 'image', props: { src: `/photo-${i}.jpg`, alt: `Photo ${i}` }, sx: { borderRadius: 2 }, nodes: [] }
+    }
+    const context = parseAssistEditContext(aiEditJobOutline(deep), { whole: true })
+    expect(context?.whole).toBe(true)
+    expect(context?.nodes.find((node) => node.id === 'img0')).toMatchObject({ componentId: 'image', sx: { borderRadius: 2 } })
+    expect(context?.nodes).toHaveLength(1 + 8 * 10)
+    const block = editSelectionBlock(context as AssistEditCanvasContext)
+    expect(block).toContain('Every element of the document is described, in the order it reads on the page')
+    expect(block).not.toContain('ask the user to select')
   })
 
   it('places a change where no visitor sees it, or refuses', () => {
@@ -304,6 +341,16 @@ describe('the inputs', () => {
     expect(place(false, false, true)).toBe('in-place')
     expect(place(false, true, false)).toBe('in-place')
     expect(place(false, true, false, true)).toBe('refused')
+  })
+
+  it('puts an edit job’s change in the draft unless a new version is asked for on a plan that keeps them (AGL-4116)', () => {
+    const place = (newVersion: boolean, versioning: boolean, served = true) =>
+      aiEditJobPlacement({ newVersion, versioning, served, sourceIsPointer: true, sourceScheduled: false })
+    expect(place(false, false)).toBe('draft')
+    expect(place(false, true)).toBe('draft')
+    expect(place(true, false)).toBe('draft')
+    expect(place(true, true)).toBe('new-beside')
+    expect(place(true, true, false)).toBe('new-current')
   })
 })
 
@@ -331,11 +378,113 @@ describe('registration and time', () => {
 
 // ── Where the change lands ───────────────────────────────────────────────
 
-describe('a plan with version history', () => {
+describe('the page’s draft, on every plan (AGL-4116)', () => {
+  it('writes a published page’s change into its draft, as the Besigner writes one, and leaves every version as it was', async () => {
+    for (const org of [STARTER, PRO]) {
+      docs.clear()
+      seed()
+      mockRunAiRequest.mockReset().mockResolvedValueOnce(completion(ANSWER))
+      const outcome = await runStep({}, org)
+      expect(outcome.failure).toBeUndefined()
+      expect(docs.get(DRAFT)).toMatchObject({ baseStamp: SAVED_STAMP, updatedByUid: 'uid-1', updatedByEmail: null, updatedAt: NOW, aiEditJobId: 'job-1' })
+      const nodes = stored(DRAFT)
+      expect(nodes['heroTitle'].props).toEqual({ variant: 'h1', children: 'Friendly, fast plumbing for the valley' })
+      expect(nodes['hero'].sx).toEqual({ py: 8 })
+      // Everything the request did not ask about is as it was.
+      expect(nodes['servicesTitle'].props).toEqual(PAGE_NODES.servicesTitle.props)
+      expect(nodes['heroCta'].props).toEqual(PAGE_NODES.heroCta.props)
+      // No version is made or changed, and the pointer stays.
+      expect(docs.has(`${SCREEN}/versions/job-1`)).toBe(false)
+      expect(stored(`${SCREEN}/versions/v-live`)['heroTitle'].props.children).toBe(PAGE_NODES.heroTitle.props.children)
+      expect(docs.get(SCREEN)?.['versionId']).toBe('v-live')
+      expect(outcome.outputs).toEqual([
+        {
+          resource: 'screen',
+          id: 'home',
+          versionId: 'v-live',
+          hostId: 'host-1',
+          hostSubdomain: 'brightside',
+          label: 'Home',
+          inDraft: true,
+          note: expect.stringContaining('Saved as this page’s draft. Nothing visitors see has changed: open the page in the Besigner and choose Open draft'),
+        },
+      ])
+      expect(outcome.usage).toEqual(USAGE)
+    }
+  })
+
+  it('spends nothing when a run of the job already wrote the draft', async () => {
+    seed()
+    mockRunAiRequest.mockResolvedValueOnce(completion(ANSWER))
+    await runStep({}, STARTER)
+    mockRunAiRequest.mockReset()
+    const again = await runStep({}, STARTER)
+    expect(mockRunAiRequest).not.toHaveBeenCalled()
+    expect(again.usage).toEqual(AI_JOB_ZERO_USAGE)
+    expect(again.outputs[0]).toMatchObject({ versionId: 'v-live', note: expect.stringContaining('draft') })
+  })
+
+  it('builds on the draft the author already has, which the model is shown', async () => {
+    seed()
+    const authored = { ...PAGE_NODES, servicesTitle: { ...PAGE_NODES.servicesTitle, props: { variant: 'h2', children: 'Repairs we do' } } }
+    docs.set(DRAFT, { nodes: packed(authored), baseStamp: SAVED_STAMP, updatedByUid: 'uid-0' })
+    mockRunAiRequest.mockResolvedValueOnce(completion(ANSWER))
+    await runStep({}, STARTER)
+    expect(mockRunAiRequest.mock.calls[0][0].messages[0].content).toContain('Repairs we do')
+    const nodes = stored(DRAFT)
+    expect(nodes['servicesTitle'].props.children).toBe('Repairs we do')
+    expect(nodes['heroTitle'].props.children).toBe('Friendly, fast plumbing for the valley')
+  })
+
+  it('starts from the version when the page was saved past the author’s draft, as the Besigner no longer offers it', async () => {
+    seed()
+    const stale = { ...PAGE_NODES, servicesTitle: { ...PAGE_NODES.servicesTitle, props: { variant: 'h2', children: 'Repairs we do' } } }
+    docs.set(DRAFT, { nodes: packed(stale), baseStamp: 'ms:1', updatedByUid: 'uid-0' })
+    mockRunAiRequest.mockResolvedValueOnce(completion(ANSWER))
+    await runStep({}, STARTER)
+    expect(mockRunAiRequest.mock.calls[0][0].messages[0].content).not.toContain('Repairs we do')
+    expect(stored(DRAFT)['servicesTitle'].props.children).toBe('What we fix')
+    expect(docs.get(DRAFT)?.['baseStamp']).toBe(SAVED_STAMP)
+  })
+
+  it('writes the draft of a version a schedule will publish, and of a layout, without moving either', async () => {
+    seed({ layout: true })
+    docs.set(SCREEN, { ...docs.get(SCREEN), publishSchedule: { versionId: 'v-older', status: 'pending', publishAt: NOW } })
+    mockRunAiRequest.mockResolvedValueOnce(completion(ANSWER))
+    const scheduled = await runStep({ inputs: { target: 'home', versionId: 'v-older' } }, STARTER)
+    expect(scheduled.outputs[0]).toMatchObject({ versionId: 'v-older' })
+    expect(stored(`${SCREEN}/versions/v-older/draft/current`)['heroTitle'].props.children).toBe('Friendly, fast plumbing for the valley')
+    expect(stored(`${SCREEN}/versions/v-older`)['heroTitle'].props.children).toBe(PAGE_NODES.heroTitle.props.children)
+    mockRunAiRequest.mockResolvedValueOnce(completion(ANSWER))
+    const layout = await runStep({ $id: 'job-2', inputs: { target: 'frame', targetKind: 'layout' } }, STARTER)
+    expect(layout.outputs[0]).toMatchObject({ resource: 'layout', versionId: 'lv-live', label: 'Site frame' })
+    expect(docs.has(`${LAYOUT}/versions/lv-live/draft/current`)).toBe(true)
+    expect(docs.get(LAYOUT)?.['versionId']).toBe('lv-live')
+  })
+
+  it('asks through the rung’s tool, with the job’s rules and the stored document as the outline', async () => {
+    seed()
+    mockRunAiRequest.mockResolvedValueOnce(completion(ANSWER))
+    await runStep()
+    const request = mockRunAiRequest.mock.calls[0][0]
+    expect(request.tools.map((tool: { name: string }) => tool.name)).toEqual([ASSIST_EDIT_TOOL_NAME])
+    expect(request.system.map((block: { text: string }) => block.text)).toContain(AI_JOB_EDIT_RULES.text)
+    const user = request.messages[0].content as string
+    expect(user).toContain('"id":"heroTitle"')
+    expect(user).toContain('Every element of the document is described')
+    expect(user).toContain('"sx":{"py":16}')
+    expect(user).toContain("Request: Make the home page's hero shorter.")
+    expect(request.maxTokens).toBe(AI_JOB_EDIT_STEP_BUDGET.maxTokens(request.model))
+  })
+})
+
+describe('a new version, when the request asks for one', () => {
+  const NEW_VERSION = { inputs: { target: 'home', newVersion: true } }
+
   it('writes a published page’s change into a new version beside the live one, which stays current', async () => {
     seed()
     mockRunAiRequest.mockResolvedValueOnce(completion(ANSWER))
-    const outcome = await runStep()
+    const outcome = await runStep(NEW_VERSION)
     expect(outcome.failure).toBeUndefined()
     const written = docs.get(`${SCREEN}/versions/job-1`) as Record<string, unknown>
     expect(written).toMatchObject({
@@ -351,44 +500,17 @@ describe('a plan with version history', () => {
     const nodes = stored(`${SCREEN}/versions/job-1`)
     expect(nodes['heroTitle'].props).toEqual({ variant: 'h1', children: 'Friendly, fast plumbing for the valley' })
     expect(nodes['hero'].sx).toEqual({ py: 8 })
-    // Everything the request did not ask about is as it was.
-    expect(nodes['servicesTitle'].props).toEqual(PAGE_NODES.servicesTitle.props)
-    expect(nodes['heroCta'].props).toEqual(PAGE_NODES.heroCta.props)
-    // The live version and the pointer are untouched.
     expect(stored(`${SCREEN}/versions/v-live`)['heroTitle'].props.children).toBe(PAGE_NODES.heroTitle.props.children)
     expect(docs.get(SCREEN)?.['versionId']).toBe('v-live')
-    expect(outcome.outputs).toEqual([
-      {
-        resource: 'screen',
-        id: 'home',
-        versionId: 'job-1',
-        hostId: 'host-1',
-        hostSubdomain: 'brightside',
-        label: 'Home',
-        note: expect.stringContaining('beside the one it started from. Nothing visitors see has changed'),
-      },
-    ])
-    expect(outcome.usage).toEqual(USAGE)
-  })
-
-  it('asks through the rung’s tool, with the job’s rules and the stored document as the outline', async () => {
-    seed()
-    mockRunAiRequest.mockResolvedValueOnce(completion(ANSWER))
-    await runStep()
-    const request = mockRunAiRequest.mock.calls[0][0]
-    expect(request.tools.map((tool: { name: string }) => tool.name)).toEqual([ASSIST_EDIT_TOOL_NAME])
-    expect(request.system.map((block: { text: string }) => block.text)).toContain(AI_JOB_EDIT_RULES.text)
-    const user = request.messages[0].content as string
-    expect(user).toContain('"id":"heroTitle"')
-    expect(user).toContain('Nothing is selected.')
-    expect(user).toContain("Request: Make the home page's hero shorter.")
-    expect(request.maxTokens).toBe(AI_JOB_EDIT_STEP_BUDGET.maxTokens(request.model))
+    expect(docs.has(DRAFT)).toBe(false)
+    expect(outcome.outputs[0]).toMatchObject({ versionId: 'job-1', note: expect.stringContaining('beside the one it started from. Nothing visitors see has changed') })
+    expect(outcome.outputs[0]).not.toHaveProperty('inDraft')
   })
 
   it('makes an unpublished page’s new version its current one', async () => {
     seed({ routed: false })
     mockRunAiRequest.mockResolvedValueOnce(completion(ANSWER))
-    const outcome = await runStep()
+    const outcome = await runStep(NEW_VERSION)
     expect(docs.get(SCREEN)).toMatchObject({ versionId: 'job-1', updatedAt: NOW })
     expect(outcome.outputs[0]).toMatchObject({ versionId: 'job-1', note: expect.stringContaining('now this page’s current one') })
   })
@@ -396,7 +518,7 @@ describe('a plan with version history', () => {
   it('never moves a layout’s current version', async () => {
     seed({ layout: true })
     mockRunAiRequest.mockResolvedValueOnce(completion(ANSWER))
-    const outcome = await runStep({ inputs: { target: 'frame', targetKind: 'layout' } })
+    const outcome = await runStep({ inputs: { target: 'frame', targetKind: 'layout', newVersion: true } })
     expect(docs.get(`${LAYOUT}/versions/job-1`)).toMatchObject({ layoutId: 'frame', displayName: expect.stringMatching(/^AI edit: /) })
     expect(docs.get(LAYOUT)?.['versionId']).toBe('lv-live')
     expect(outcome.outputs[0]).toMatchObject({ resource: 'layout', id: 'frame', versionId: 'job-1', label: 'Site frame' })
@@ -405,48 +527,19 @@ describe('a plan with version history', () => {
   it('spends nothing when a run of the job already wrote its version', async () => {
     seed()
     docs.set(`${SCREEN}/versions/job-1`, { screenId: 'home', nodes: packed(PAGE_NODES) })
-    const outcome = await runStep()
+    const outcome = await runStep(NEW_VERSION)
     expect(mockRunAiRequest).not.toHaveBeenCalled()
     expect(outcome.usage).toEqual(AI_JOB_ZERO_USAGE)
     expect(outcome.outputs[0]).toMatchObject({ resource: 'screen', id: 'home', versionId: 'job-1' })
   })
-})
 
-describe('a plan without version history', () => {
-  it('refuses a version visitors see as a plan limit, before anything is spent', async () => {
+  it('goes into the draft on a plan without version history, and says why', async () => {
     seed()
-    const outcome = await runStep({}, STARTER)
-    expect(mockRunAiRequest).not.toHaveBeenCalled()
-    expect(outcome.usage).toEqual(AI_JOB_ZERO_USAGE)
-    expect(outcome.review).toEqual({ reason: 'limit', message: AI_EDIT_NEEDS_VERSIONING_COPY, findings: [] })
-    expect([...docs.keys()].filter((path) => path.includes('job-1'))).toEqual([])
-  })
-
-  it('changes an unpublished page’s version in place, stamped so a run asked again finds it', async () => {
-    seed({ routed: false })
     mockRunAiRequest.mockResolvedValueOnce(completion(ANSWER))
-    const outcome = await runStep({}, STARTER)
+    const outcome = await runStep(NEW_VERSION, STARTER)
     expect(docs.has(`${SCREEN}/versions/job-1`)).toBe(false)
-    expect(docs.get(`${SCREEN}/versions/v-live`)).toMatchObject({ updatedAt: NOW, aiEditJobId: 'job-1', displayName: 'Initial version' })
-    expect(stored(`${SCREEN}/versions/v-live`)['heroTitle'].props.children).toBe('Friendly, fast plumbing for the valley')
-    expect(outcome.outputs[0]).toMatchObject({ versionId: 'v-live', note: expect.stringContaining('which no visitor sees') })
-    mockRunAiRequest.mockReset()
-    const again = await runStep({}, STARTER)
-    expect(mockRunAiRequest).not.toHaveBeenCalled()
-    expect(again.outputs[0]).toMatchObject({ versionId: 'v-live' })
-  })
-
-  it('changes a version that is not the live one in place, and refuses one a schedule will publish', async () => {
-    seed()
-    mockRunAiRequest.mockResolvedValueOnce(completion(ANSWER))
-    const outcome = await runStep({ inputs: { target: 'home', versionId: 'v-older' } }, STARTER)
-    expect(outcome.outputs[0]).toMatchObject({ versionId: 'v-older' })
-    expect(docs.get(SCREEN)?.['versionId']).toBe('v-live')
-    docs.set(SCREEN, { ...docs.get(SCREEN), publishSchedule: { versionId: 'v-older', status: 'pending', publishAt: NOW } })
-    mockRunAiRequest.mockReset()
-    const scheduled = await runStep({ $id: 'job-2', inputs: { target: 'home', versionId: 'v-older' } }, STARTER)
-    expect(mockRunAiRequest).not.toHaveBeenCalled()
-    expect(scheduled.review?.message).toBe(AI_EDIT_NEEDS_VERSIONING_COPY)
+    expect(stored(DRAFT)['heroTitle'].props.children).toBe('Friendly, fast plumbing for the valley')
+    expect(outcome.outputs[0]).toMatchObject({ versionId: 'v-live', note: expect.stringContaining(AI_EDIT_NO_VERSIONS_DRAFT_COPY) })
   })
 })
 
@@ -459,8 +552,8 @@ describe('the answer', () => {
     const outcome = await runStep()
     expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
     expect(JSON.stringify(mockRunAiRequest.mock.calls[1][0].messages)).toContain('names an element that is not on the canvas described')
-    expect(outcome.outputs[0]).toMatchObject({ versionId: 'job-1' })
-    expect(stored(`${SCREEN}/versions/job-1`)['hero'].sx).toEqual({ py: 8 })
+    expect(outcome.outputs[0]).toMatchObject({ versionId: 'v-live' })
+    expect(stored(DRAFT)['hero'].sx).toEqual({ py: 8 })
   })
 
   it('keeps what survived a re-ask that still left a change out, and says what it left out', async () => {
@@ -469,7 +562,7 @@ describe('the answer', () => {
     const outcome = await runStep()
     expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
     expect(outcome.failure).toBeUndefined()
-    expect(stored(`${SCREEN}/versions/job-1`)['heroTitle'].props.children).toBe('Friendly, fast plumbing for the valley')
+    expect(stored(DRAFT)['heroTitle'].props.children).toBe('Friendly, fast plumbing for the valley')
     expect(outcome.outputs[0].note).toContain('Left out: change 2: names an element that is not on the canvas described.')
   })
 
@@ -479,7 +572,7 @@ describe('the answer', () => {
     const outcome = await runStep()
     expect(outcome.failure).toBe(AI_EDIT_NOTHING_COPY)
     expect(outcome.usage).not.toEqual(AI_JOB_ZERO_USAGE)
-    expect(docs.has(`${SCREEN}/versions/job-1`)).toBe(false)
+    expect(docs.has(DRAFT)).toBe(false)
   })
 
   it('leaves a published page’s search fields out, naming them, and writes an unpublished page’s', async () => {
@@ -494,7 +587,7 @@ describe('the answer', () => {
     mockRunAiRequest.mockResolvedValueOnce(completion({ summary: 'Shorter headline', ops: [SHORTER_TITLE, SEO] }))
     const draft = await runStep()
     expect(draft.outputs[0].note).not.toContain('Left out')
-    expect(docs.get(SCREEN)).toMatchObject({ seo: { title: 'Brightside Plumbing — fast, friendly plumbers' }, versionId: 'job-1' })
+    expect(docs.get(SCREEN)).toMatchObject({ seo: { title: 'Brightside Plumbing — fast, friendly plumbers' }, versionId: 'v-live' })
   })
 
   it('saves nothing when the page changed under the answer, as the editor refuses a stale proposal', async () => {
@@ -509,7 +602,7 @@ describe('the answer', () => {
     })
     const outcome = await runStep()
     expect(outcome.failure).toBe(AI_EDIT_STALE_COPY)
-    expect(docs.has(`${SCREEN}/versions/job-1`)).toBe(false)
+    expect(docs.has(DRAFT)).toBe(false)
   })
 
   it('declines with the model, having spent', async () => {
@@ -549,7 +642,7 @@ describe('a page that shows a dataset’s records (AGL-3616)', () => {
     const user = mockRunAiRequest.mock.calls[0][0].messages[0].content as string
     expect(user).toContain('- ds-services · Services · name (Name), summary (Summary), best_for (Best for)')
     expect(user.indexOf('ds-services')).toBeLessThan(user.indexOf('Request: Add a services grid.'))
-    const nodes = Object.values(stored(`${SCREEN}/versions/job-1`))
+    const nodes = Object.values(stored(DRAFT))
     expect(nodes.find((node) => node.props?.container)?.props.repeatDataset).toBe('ds-services')
     expect(nodes.find((node) => node.props?.children === '{{item.name}}')).toBeDefined()
   })
@@ -563,7 +656,7 @@ describe('a page that shows a dataset’s records (AGL-3616)', () => {
     expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
     expect(JSON.stringify(mockRunAiRequest.mock.calls[1][0].messages)).toContain('sits in no element that repeats over a dataset')
     expect(outcome.failure).toBeUndefined()
-    const nodes = Object.values(stored(`${SCREEN}/versions/job-1`))
+    const nodes = Object.values(stored(DRAFT))
     expect(nodes.find((node) => node.props?.container)?.props.repeatDataset).toBe('ds-services')
   })
 
@@ -604,9 +697,14 @@ describe('admission', () => {
     await expect(admit({ target: 'home', versionId: 'v-older' }, STARTER)).resolves.toBeNull()
   })
 
-  it('refuses in the plan’s words, and what is not there or not the org’s', async () => {
+  it('admits a live page on a plan without version history, whose change goes into its draft (AGL-4116)', async () => {
     seed()
-    await expect(admit({ target: 'home' }, STARTER)).resolves.toEqual({ status: 403, error: AI_EDIT_NEEDS_VERSIONING_COPY })
+    await expect(admit({ target: 'home' }, STARTER)).resolves.toBeNull()
+    await expect(admit({ target: 'home', newVersion: true }, STARTER)).resolves.toBeNull()
+  })
+
+  it('refuses what is not there or not the org’s', async () => {
+    seed()
     await expect(admit({})).resolves.toEqual({ status: 400, error: AI_EDIT_TARGET_REQUIRED_COPY })
     await expect(admit({ target: 'home' }, PRO, null)).resolves.toEqual({ status: 400, error: AI_EDIT_NO_SITE_COPY })
     await expect(admit({ target: 'nope' })).resolves.toEqual({ status: 404, error: AI_EDIT_GONE_COPY })

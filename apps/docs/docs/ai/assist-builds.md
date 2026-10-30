@@ -42,20 +42,26 @@ Ask for a change to a page the site already has, such as *make the image at the 
 the home page fill the background*, and Assist makes it on that page:
 
 1. The card says **Making the change as a draft of Home…** while it works.
-2. The change is saved as a new draft version of the same page. Your published page
-   stays as it is: visitors see no change until you publish the draft.
-3. The card then says **Your draft of Home is ready**, with **Open in the Besigner**.
-   Check the change there, and publish it when you are happy with it, as you would any
-   version. To leave it, don't publish it.
+2. The change is saved into the page's draft, the same draft the Besigner keeps for you
+   when you work on a page. Your published page stays as it is: visitors see no change
+   until you publish.
+3. The card then says where the change is, with **Open in the Besigner**. Choose
+   **Open draft** there to see the change, then publish it when you are happy with it.
+   To leave it, choose **Discard** instead.
 
 There is no plan to confirm, and nothing is added to the page that you did not ask for.
-Ask for another change to the same page and it starts from that draft, so the newest
+If you already had a draft of the page, the change is made on it, so your own work is
+kept. Ask for another change to the same page and it is made on the same draft, so the
 draft holds every change you asked for. If a change could not be made, the card says
 why, with **Try again**.
 
+This works on every plan. To keep the change apart as a new version instead, say so,
+such as *make the hero image fill the background, as a new version*. A new version
+needs version history, which comes with a Pro plan; without it, the change goes into
+the draft and the card says so.
+
 One message changes one page. For changes to several pages, ask for the next one when
-the first draft is ready. A change needs a paid plan, because it is saved beside the
-published page as its own version.
+the first is ready.
 
 ## What one request can build {#what-it-can-build}
 
@@ -84,8 +90,8 @@ One message can ask for any mix of:
   new values for a [picklist](./crm-by-ai.md#set-up-the-crm) such as lead status or source.
   These are saved straight to your CRM, as they are when you set them up yourself;
 - **a change to a page or layout** the site already has, alongside the rest of a request,
-  saved as a new version visitors do not see until you publish it. A change to one page on
-  its own needs no plan: see [Change a page](#change-a-page);
+  saved into its draft, which visitors do not see until you publish it. A change to one
+  page on its own needs no plan: see [Change a page](#change-a-page);
 - **redirects**: send an old address to a page you have, change where a redirect goes, or
   stop one, such as *redirect /old-menu to /menu*. See
   [Redirects](../building-sites/redirects/overview.md#ask-aglyn-ai);

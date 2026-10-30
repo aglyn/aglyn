@@ -369,7 +369,9 @@ let lifecycleStageLabels: [String: String] = [
 let taskKindLabels: [String: String] = ["call": "Call", "email": "Email", "meeting": "Meeting", "todo": "To-do"]
 let taskPriorityOptions: [(value: String, label: String)] = [("high", "High"), ("normal", "Normal"), ("low", "Low")]
 let activityKindLabels: [String: String] = [
-  "call": "Call", "email": "Email", "meeting": "Meeting", "note": "Note", "other": "Other",
+  "call": "Call", "email": "Email", "text": "Text message", "whatsapp": "WhatsApp",
+  "messenger": "Facebook Messenger", "instagram": "Instagram", "linkedin": "LinkedIn",
+  "meeting": "Meeting", "note": "Note", "other": "Other",
 ]
 let activityDirectionLabels: [String: String] = ["outbound": "Outbound", "inbound": "Inbound", "internal": "Internal"]
 

@@ -572,10 +572,13 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
       {review ? (
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
           {/* A view, so it opens beside this page; Publish is on it. */}
-          <Button variant="contained" size="large" component={AppLink} href={review.preview} {...newTabLinkProps}>
-            {'Preview'}
-          </Button>
-          <Button variant="outlined" size="large" component={AppLink} href={review.besigner}>
+          {review.preview ? (
+            <Button variant="contained" size="large" component={AppLink} href={review.preview} {...newTabLinkProps}>
+              {'Preview'}
+            </Button>
+          ) : null}
+          {/* A change in the page's draft is opened there, with Open draft (AGL-4116). */}
+          <Button variant={review.preview ? 'outlined' : 'contained'} size="large" component={AppLink} href={review.besigner}>
             {'Open in Besigner'}
           </Button>
         </Stack>

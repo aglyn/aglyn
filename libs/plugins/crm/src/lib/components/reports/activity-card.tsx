@@ -228,7 +228,7 @@ export function ActivityCard(props: ActivityCardProps) {
       help={Aglyn.pluginDocsHelp('crmReports', {
         anchor: '#activity-by-teammate',
         excerpt:
-          'The calls, emails, meetings and notes each teammate logged in ' +
+          'The calls, emails, messages, meetings and notes each teammate logged in ' +
           'the period, and the tasks they completed, busiest first. ' +
           'Grouped from the period’s newest thousand of each.',
       })}

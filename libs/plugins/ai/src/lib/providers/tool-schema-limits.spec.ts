@@ -288,10 +288,12 @@ describe('what each adapter declares', () => {
     // funnels plugin's "Left a funnel" trigger (AGL-3605) adds 13, and the
     // order and return triggers (AGL-3611) took it 140 past the proof. Folding
     // exitFlow into the reference variant and wait into waitForEvent's,
-    // every trigger kept, leaves it 131 under.
+    // every trigger kept, leaves it 131 under. The CRM's five messaging
+    // activity kinds (#2191: text, WhatsApp, Messenger, Instagram, LinkedIn)
+    // join the logged activity's kind enum and add 53, leaving it 78 under.
     const draft = [aiAutomationTool()]
     expect(ANTHROPIC_TOOL_SCHEMA_LIMITS.compiledSchemaBytes).toBe(3_807)
-    expect(aiToolSchemaCompiledBytes(draft)).toBe(3_676)
+    expect(aiToolSchemaCompiledBytes(draft)).toBe(3_729)
     expect(aiToolSchemaBreaches(draft, ANTHROPIC_TOOL_SCHEMA_LIMITS)).toEqual([])
   })
 

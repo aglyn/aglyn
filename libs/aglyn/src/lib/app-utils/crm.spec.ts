@@ -900,7 +900,18 @@ describe('crmDefaultScopeOf (AGL-3662)', () => {
  */
 describe('activity kinds', () => {
   it('labels every kind, in picker order', () => {
-    expect(CRM_ACTIVITY_KINDS).toEqual(['call', 'email', 'meeting', 'note', 'other'])
+    expect(CRM_ACTIVITY_KINDS).toEqual([
+      'call',
+      'email',
+      'text',
+      'whatsapp',
+      'messenger',
+      'instagram',
+      'linkedin',
+      'meeting',
+      'note',
+      'other',
+    ])
     for (const kind of CRM_ACTIVITY_KINDS) {
       expect(CRM_ACTIVITY_KIND_LABELS[kind]).toBeTruthy()
     }
@@ -918,6 +929,7 @@ describe('activity kinds', () => {
     expect(activityKindHasOutcome('call')).toBe(true)
     expect(activityKindHasOutcome('meeting')).toBe(true)
     expect(activityKindHasOutcome('email')).toBe(false)
+    expect(activityKindHasOutcome('whatsapp')).toBe(false)
     expect(activityKindHasOutcome('note')).toBe(false)
     expect(activityKindHasOutcome('other')).toBe(false)
   })
@@ -2162,12 +2174,28 @@ describe('an activity’s direction (AGL-3517)', () => {
     expect(crmActivityDirection('note', 'outbound')).toBeNull()
   })
 
+  it('takes inbound or outbound on every message kind, never internal', () => {
+    for (const kind of ['text', 'whatsapp', 'messenger', 'instagram', 'linkedin'] as const) {
+      expect(crmActivityDirection(kind, 'inbound')).toBe('inbound')
+      expect(crmActivityDirection(kind, 'outbound')).toBe('outbound')
+      expect(crmActivityDirection(kind, 'internal')).toBeNull()
+    }
+  })
+
   it('names a call or an email by its direction', () => {
     expect(crmActivityKindTitle('call', 'inbound')).toBe('Inbound call')
     expect(crmActivityKindTitle('email', 'outbound')).toBe('Outbound email')
     expect(crmActivityKindTitle('call', 'internal')).toBe('Internal call')
     expect(crmActivityKindTitle('call')).toBe('Call')
     expect(crmActivityKindTitle('meeting', 'inbound')).toBe('Meeting')
+  })
+
+  it('names a message by its direction and keeps a brand’s capitals', () => {
+    expect(crmActivityKindTitle('text', 'inbound')).toBe('Inbound text message')
+    expect(crmActivityKindTitle('whatsapp', 'outbound')).toBe('Outbound WhatsApp message')
+    expect(crmActivityKindTitle('messenger', 'inbound')).toBe('Inbound Messenger message')
+    expect(crmActivityKindTitle('linkedin', 'outbound')).toBe('Outbound LinkedIn message')
+    expect(crmActivityKindTitle('messenger')).toBe('Facebook Messenger')
   })
 })
 

@@ -2406,18 +2406,35 @@ the closed world of element ids, `checkAssistEditAnswer` and the canvas
 mutators of `applyAssistEdit` — against the STORED version, loaded into a
 headless `CanvasManager` whose child rules answer from the AI palette, so the
 server canvas refuses exactly what the validator refuses. Inputs: `target`
-(a page or layout id on the job's site), optional `targetKind` and
-`versionId` (the version to start from; the current one otherwise).
+(a page or layout id on the job's site), optional `targetKind`, `versionId`
+(the version to start from; the current one otherwise) and `newVersion`.
 
-- **Where the change lands, decided before anything is spent.** With the
-  `versioning` entitlement, a NEW version beside the one it started from; it
-  becomes the page's current version only when the page is not published, so
-  no visitor ever sees it. A published page's and a layout's current version
-  never move. Without `versioning`, only a version no visitor reaches — an
-  unpublished page's, or one that is not current — is changed in place;
-  anything else is refused with the plan sentence, and nothing is charged.
-- **Idempotent.** The written version is named by the job's id (a build
-  unit's is its item's id), so a pass run again finds it and spends nothing.
+- **The whole document (AGL-4116).** The model is shown every element of the
+  stored document in page order, each with its props and its `sx`
+  (`aiEditJobOutline` → `parseAssistEditContext(…, { whole: true })`, up to
+  `ASSIST_EDIT_WHOLE_MAX_NODES`), framed with nobody to ask. The top-of-the-
+  document outline it had before (60 elements, breadth first, no styles) left
+  the starter home's hero image out, and every request about it came back as
+  nothing. The protocol names every `sx` key the check keeps
+  (`ASSIST_EDIT_STYLE_KEYS_LINE`, read from `AI_SX_ALLOWED_KEYS`) and how a look
+  no single setting makes is composed (`ASSIST_EDIT_COMPOSE_LINE`); an element
+  the palette does not list can still be restyled.
+- **Where the change lands, decided before anything is spent (AGL-4116).** By
+  default, on every plan, the version's WORKING DRAFT
+  (`…/versions/{v}/draft/current`, `VERSION_DRAFT_*` in the core), which the
+  Besigner offers with Open draft and publishing moves into the version. It is
+  built on the author's own draft when the Besigner would still offer it (its
+  `baseStamp` matches the version's `updatedAt`), else on the version, and is
+  stamped with the version's stamp so it is offered. The output carries
+  `inDraft`, so the AI jobs page links the Besigner and no preview. Only with
+  `newVersion` and the `versioning` entitlement, a NEW version beside the one
+  it started from; it becomes the page's current version only when the page is
+  not published. A published page's and a layout's current version never
+  move. `newVersion` without `versioning` goes into the draft, and the note
+  says why. Nothing is refused for the plan.
+- **Idempotent.** A written version is named by the job's id (a build unit's
+  is its item's id), and a written draft carries it as `aiEditJobId`, so a
+  pass run again finds it and spends nothing.
 - **What it cannot do server-side** — save a reusable component, or write a
   published page's search listing — is left out and named on the output.
 - **Animation (AGL-3838).** `updateProps` also sets an element's entrance
@@ -2428,7 +2445,7 @@ server canvas refuses exactly what the validator refuses. Inputs: `target`
   is in the cached prefix.
 - **Routing.** `job.edit`, balanced tier, adaptive thinking, 6,144 tokens:
   the edit rung's tool-call ceiling with half as much again to think in. Its
-  cached prefix is 6,169 tokens for a page and 6,157 for a layout. Evals:
+  cached prefix is 6,608 tokens for a page and 6,596 for a layout. Evals:
   `tools/ai-eval/cases/edit`.
 
 | step | tier served | lookup rounds | ceiling asked: fast / balanced / deep | least time on the served tier |
@@ -2437,9 +2454,9 @@ server canvas refuses exactly what the validator refuses. Inputs: `target`
 
 - **In a build.** The `edit` operation names an inventory page or layout;
   "…and make the home page's hero shorter" becomes one item beside the new
-  pages. Not offered on Free: without version history only an unpublished
-  page could take the change, which is rarely the page meant, so the item
-  would be skipped after the plan was confirmed.
+  pages. Not offered on the Free taste. It runs this step, so the change goes
+  into the page's draft on any plan (AGL-4116); the planner's own words still
+  say "a version", unchanged until the live plan eval runs.
 
 ### Live runs this needs (founder's go only)
 

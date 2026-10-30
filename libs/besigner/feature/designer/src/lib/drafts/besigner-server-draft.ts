@@ -27,6 +27,8 @@ import {
 
 import {
   type ProcessableNodes,
+  VERSION_DRAFT_COLLECTION,
+  VERSION_DRAFT_DOC_ID,
   decodeStoredNodes,
   encodeStoredNodes,
 } from '@aglyn/aglyn'
@@ -91,8 +93,11 @@ import type { BesignerDraftIds } from './besigner-draft-store'
  * edits the draft already contains.
  */
 
-/** The only id a draft may have. One per version, by construction. */
-export const DRAFT_DOC_ID = 'current'
+/**
+ * The only id a draft may have. One per version, by construction. Read from
+ * the core, which an AI edit job writes the same draft through (AGL-4116).
+ */
+export const DRAFT_DOC_ID = VERSION_DRAFT_DOC_ID
 
 export interface BesignerServerDraft {
   nodes: ProcessableNodes
@@ -176,7 +181,7 @@ export function serverDraftRef(firestore: Firestore, ids: BesignerDraftIds) {
     ids.docId,
     'versions',
     ids.versionId,
-    'draft',
+    VERSION_DRAFT_COLLECTION,
     DRAFT_DOC_ID,
   )
 }

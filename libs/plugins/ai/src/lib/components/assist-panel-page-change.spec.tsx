@@ -222,7 +222,9 @@ describe('a change to a page the site has (AGL-4116)', () => {
     editJobs = [drafted('v-draft-1')]
     render(<AssistPanelComponent {...dockProps()} />)
     await ask('Make the image in the top of the home page fill the entire background')
-    expect(await screen.findByText('Your draft of Home is ready. Visitors see the page as it is until you publish the draft.')).toBeTruthy()
+    expect(
+      await screen.findByText('Your draft of Home is ready. Open it in the Besigner and choose Open draft to check it. Visitors see the page as it is until you publish.'),
+    ).toBeTruthy()
     expect(jobPosts()).toEqual([
       {
         orgId: 'org-1',
@@ -235,6 +237,16 @@ describe('a change to a page the site has (AGL-4116)', () => {
     const open = screen.getByText('Open in the Besigner').closest('a')
     expect(open?.getAttribute('href')).toBe('/acme/hosts/site-sub/screens/scr-home/versions/v-draft-1/besigner')
     expect(screen.queryByRole('button', { name: 'Confirm plan' })).toBeNull()
+  })
+
+  it('asks for a new version only when the chat said one was asked for, and shows where the job put the change', async () => {
+    turns = [{ pageChange: { ...CHANGE, newVersion: true } }]
+    const note = 'A new version needs version history, which requires a Pro plan, so the change went into the draft instead.'
+    editJobs = [{ ...drafted('v-live'), outputs: [{ ...drafted('v-live').outputs[0], note }] }]
+    render(<AssistPanelComponent {...dockProps()} />)
+    await ask('Make the top image fill the background, as a new version')
+    expect(await screen.findByText(note)).toBeTruthy()
+    expect(jobPosts()[0]).toMatchObject({ inputs: { target: 'scr-home', targetKind: 'screen', newVersion: true } })
   })
 
   it('starts a further change to the same page from the draft the first one made', async () => {

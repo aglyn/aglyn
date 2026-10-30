@@ -31,6 +31,7 @@ import {
   type CrmActivity,
   type CrmActivityKind,
   CRM_ACTIVITY_DIRECTIONS,
+  CRM_ACTIVITY_KINDS,
   CRM_ACTIVITY_LOG_FULL_MESSAGE,
   type CrmActivityDirection,
   createResourceUid,
@@ -70,7 +71,8 @@ import {
   refuseUnknownKeys,
 } from './crm-shared'
 
-const ACTIVITY_KINDS = ['call', 'email', 'meeting', 'note', 'other'] as const
+/** The kinds the API accepts: the CRM's own list, so a kind the console logs is one the API takes. */
+const ACTIVITY_KINDS = CRM_ACTIVITY_KINDS
 
 /** The activity object as published. */
 function activityView(doc: FirebaseFirestore.DocumentSnapshot) {

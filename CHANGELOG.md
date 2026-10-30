@@ -9,6 +9,20 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.296 — 2026-10-30
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.295...v1.0.0-beta.296)
+
+### Added
+
+- **crm:** the deal Stage card draws the whole path through to a closing step
+- **crm:** log a text, WhatsApp, Messenger, Instagram or LinkedIn message as its own activity kind
+
+### Fixed
+
+- **ai:** an edit sees the whole page and lands in its draft on every plan ([AGL-4116](https://linear.app/aglyn/issue/AGL-4116))
+- **crm:** the deal board folds empty stages and pages sideways with arrows
+
 ## v1.0.0-beta.295 — 2026-10-29
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/7016b756b...v1.0.0-beta.295)

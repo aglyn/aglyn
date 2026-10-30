@@ -518,7 +518,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#deals-on-a-record': 'The Deals card on a contact\'s or a company\'s page lists every deal that names that record, newest first, and New deal in its header starts one already linked to them.',
     '#line-items': 'A deal\'s amount can be a number you type, or the sum of the products behind it.',
     '#moving-winning-and-losing': 'Stage changes go through the server rather than being written directly, so that automations can hear them.',
-    '#the-board-and-the-table': 'The section opens as a board of the chosen pipeline: one column per open stage, with Won and Lost folded away at the end until you expand them; a board wider than the window scrolls sideways.',
+    '#the-board-and-the-table': 'The section opens as a board of the chosen pipeline: one column per open stage, with Won and Lost folded away at the end until you expand them.',
   },
   designedEmails: {
     '#find-a-template': 'The templates table filters through its toolbar by Template, the name (it contains a word, it is, or it starts with), and Search matches the start of any word of a template\'s name, up to its first twelve characters.',

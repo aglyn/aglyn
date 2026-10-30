@@ -105,13 +105,21 @@ describe('the pages the chat may change (AGL-4116)', () => {
     expect(assistSitePagesBlock([])).toBeNull()
   })
 
-  it('tells the model a change is a draft of that page, never a build, never "no link"', () => {
+  it('tells the model a change goes into that page’s draft on any plan, never a build, never "no link"', () => {
     const block = assistPageChangeBlock()
     expect(block).toMatch(/do not plan a build/)
-    expect(block).toMatch(/new draft version of that same page/)
-    expect(block).toMatch(/Open in the Besigner/)
+    expect(block).toMatch(/saved into that page’s draft, on any plan/)
+    expect(block).toMatch(/Open in the Besigner, where Open draft shows the change/)
+    expect(block).toMatch(/newVersion: true only when they ask for the change as a new or separate version/)
     expect(block).toMatch(/Never say you cannot use a draft/)
-    expect(assistPageChangeTool().inputSchema).toMatchObject({ required: ['summary', 'page', 'change'] })
+    expect(assistPageChangeTool().inputSchema).toMatchObject({ required: ['summary', 'page', 'change', 'newVersion'] })
+  })
+
+  it('tells the model when the plan keeps no version history, so a new version is never promised (AGL-4116)', () => {
+    expect(assistSitePagesBlock(PAGES.slice(0, 1))).not.toContain('version history')
+    expect(assistSitePagesBlock(PAGES.slice(0, 1), { versioning: false })).toContain(
+      'keeps no version history (it comes with Pro), so newVersion is always false',
+    )
   })
 })
 
@@ -126,6 +134,13 @@ describe('resolving the call (AGL-4116)', () => {
     expect(resolveAssistPageChange({ page: 'not-a-page', change: 'x', summary: 'y' }, { hostId: 'host-1', pages: PAGES })).toBeNull()
     expect(resolveAssistPageChange({ page: 'scr-about', change: '  ', summary: 'y' }, { hostId: 'host-1', pages: PAGES })).toBeNull()
     expect(resolveAssistPageChange(null, { hostId: 'host-1', pages: PAGES })).toBeNull()
+  })
+
+  it('carries a new version only when the model says one was asked for', () => {
+    const asked = { page: 'i_iheNM2TA', change: 'Make the image at the top fill the background.', summary: 'Fill the hero on Home' }
+    expect(resolveAssistPageChange({ ...asked, newVersion: true }, { hostId: 'host-1', pages: PAGES })).toEqual({ ...CHANGE, newVersion: true })
+    expect(resolveAssistPageChange({ ...asked, newVersion: false }, { hostId: 'host-1', pages: PAGES })).toEqual(CHANGE)
+    expect(resolveAssistPageChange({ ...asked, newVersion: 'yes' }, { hostId: 'host-1', pages: PAGES })).toEqual(CHANGE)
   })
 
   it('names the page when the model gave no summary', () => {

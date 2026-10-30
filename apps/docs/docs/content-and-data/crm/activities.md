@@ -128,17 +128,17 @@ is shown locked, so there is no record page to log from.
 
 | Field | What it is |
 | --- | --- |
-| **Kind** | Call, Email, Meeting, Note or Other. |
-| **Direction** | For a call: **Outbound** (your team placed it), **Inbound** (they called you) or **Internal** (a call between teammates about the record) — Salesforce's Call Type. For an email: Outbound or Inbound. Outbound to start; **Not said** leaves it off. |
+| **Kind** | Call, Email, Text message, WhatsApp, Facebook Messenger, Instagram, LinkedIn, Meeting, Note or Other — how the conversation happened, so a message on any channel is logged as itself rather than as Other. |
+| **Direction** | For a call: **Outbound** (your team placed it), **Inbound** (they called you) or **Internal** (a call between teammates about the record) — Salesforce's Call Type. For an email or a message (text, WhatsApp, Messenger, Instagram, LinkedIn): Outbound (you sent it) or Inbound (they wrote to you). Outbound to start; **Not said** leaves it off. |
 | **When** | When it happened, which is not always when you are logging it. Defaults to now. |
 | **What happened** | The body of the entry. |
 | **Outcome** | For a call or a meeting: how it ended — "left a voicemail", "agreed to a trial". |
 | **Minutes** | For a call or a meeting: how long it took. |
 
-A call or an email with a direction reads as it in its chip — **Inbound call**,
-**Outbound email**, **Internal call**. The **Log a CRM activity** automation step and
-`POST /v1/activities` take the same direction (`direction`), and only on a call or an
-email.
+A call, an email or a message with a direction reads as it in its chip — **Inbound call**,
+**Outbound email**, **Internal call**, **Outbound WhatsApp message**. The **Log a CRM
+activity** automation step and `POST /v1/activities` take the same direction
+(`direction`), and only on a call, an email or a message.
 
 Each entry shows who logged it and how long ago. The author can edit or delete
 their own entries; an org-wide member can edit or delete anyone's. A colleague

@@ -24,10 +24,12 @@ import { SCREEN_SEO_TEXT_FIELDS } from '@aglyn/aglyn/app-utils/screen-seo-fields
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import {
   ASSIST_EDIT_TOOL_NAME,
+  ASSIST_EDIT_WHOLE_MAX_NODES,
   type AssistEditInsertOp,
   type AssistEditTarget,
 } from '../model/assist-edit'
 import { validateStreamedGeneration } from '../runtime/ai-doctrine'
+import { AI_SX_ALLOWED_KEYS } from '../runtime/ai-node-tree'
 import { AI_PALETTE_CATALOG } from '../runtime/ai-palette.generated'
 import {
   ANIMATION_EASINGS,
@@ -36,9 +38,11 @@ import {
   NODE_ANIMATION_PROPS,
 } from '@aglyn/aglyn/app-utils/element-animation'
 import {
+  ASSIST_EDIT_COMPOSE_LINE,
   ASSIST_EDIT_MAX_INSERT_NODES,
   ASSIST_EDIT_MAX_OPS,
   ASSIST_EDIT_MOTION_LINE,
+  ASSIST_EDIT_STYLE_KEYS_LINE,
   assistEditMotionPatch,
   assistEditTool,
   checkAssistEditAnswer,
@@ -174,6 +178,15 @@ describe('the cached block', () => {
     expect(editCanvasBlock('component')).not.toContain('setSeo')
     expect(editCanvasBlock('component')).toContain(AI_PALETTE_CATALOG.component)
   })
+
+  it('names every style key the check keeps, read from the check’s own set, and how a look is composed (AGL-4116)', () => {
+    for (const kind of ['screen', 'layout', 'component'] as const) {
+      expect(editCanvasBlock(kind)).toContain(ASSIST_EDIT_STYLE_KEYS_LINE)
+      expect(editCanvasBlock(kind)).toContain(ASSIST_EDIT_COMPOSE_LINE)
+    }
+    const listed = ASSIST_EDIT_STYLE_KEYS_LINE.replace(/^.*no others: /, '').replace(/\.$/, '').split(', ')
+    expect(new Set(listed)).toEqual(new Set(AI_SX_ALLOWED_KEYS))
+  })
 })
 
 describe('the canvas outline a request carried', () => {
@@ -258,6 +271,26 @@ describe('the canvas outline a request carried', () => {
     })
     expect(styled?.nodes[1].sx).toEqual({ bgcolor: 'primary.main' })
     expect(styled?.nodes[2].sx).toBeUndefined()
+  })
+
+  it('reads a whole document for a job: every element to its own cap, each with its styles and its text at a selection’s length', () => {
+    const long = 'A sentence that runs well past the outline’s eighty characters, as a paragraph on a page does.'
+    const nodes = [
+      { id: ROOT, componentId: 'div', parentId: null },
+      { id: 'a', componentId: 'muiTypography', parentId: ROOT, props: { children: long }, sx: { color: 'primary.main', '&:hover': { color: 'red' } } },
+      ...Array.from({ length: 450 }, (_, i) => ({ id: `n${i}`, componentId: 'muiBox', parentId: ROOT, sx: { p: 2 } })),
+    ]
+    const whole = parseAssistEditContext({ selectedId: 'a', total: 452, nodes }, { whole: true })
+    expect(whole?.whole).toBe(true)
+    expect(whole?.selectedId).toBeNull()
+    expect(whole?.nodes).toHaveLength(ASSIST_EDIT_WHOLE_MAX_NODES)
+    expect(whole?.nodes[1]).toMatchObject({ props: { children: long }, sx: { color: 'primary.main' } })
+    expect(whole?.nodes[2].sx).toEqual({ p: 2 })
+    // A request body cannot claim it: only the server's own option does.
+    const claimed = parseAssistEditContext({ selectedId: null, whole: true, nodes })
+    expect(claimed).not.toHaveProperty('whole')
+    expect(claimed?.nodes).toHaveLength(60)
+    expect(claimed?.nodes[2].sx).toBeUndefined()
   })
 
   it('keeps the document’s size only when it is a whole number the outline could come from', () => {
