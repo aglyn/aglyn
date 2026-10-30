@@ -164,12 +164,14 @@ export function useCreateCompany(props: {
   const { data: user } = useUser()
   // The provenance and the scope both come from the site the record is
   // captured by — the mounted one, or at the organization level the one the
-  // reader picked (AGL-2630). No site picked, no create offered.
+  // reader picked (AGL-2630). Where the org keeps its sites apart, no site
+  // picked means no create offered; where every site sees its records, a
+  // company typed here with no site picked belongs to the whole org.
   const { scope, createTokens, createHostId } = useCrmScope({ hostId, org })
   const followUpSharing = useCrmSharingFollowUp(hostId, scope?.[1] ?? null)
   const uid = user?.uid ?? ''
   return useMemo<CreateCompany | null>(() => {
-    if (!scope || !createHostId) return null
+    if (!scope || !createTokens.length) return null
     return async (name) => {
       const result = companyDraftFields({
         ...EMPTY_COMPANY_DRAFT,

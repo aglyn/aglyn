@@ -90,8 +90,8 @@ the rest are checked on the page, which can come back
 `POST /v1/activities` — scope `crm:write`. Accepts an
 [`Idempotency-Key`](../conventions.md#idempotency), scoped to the organization —
 send one from a dialer or a mail integration, where a retry after a lost response
-would otherwise log the call twice. `body`, `consentSiteId` and at least one of
-`contactId`, `companyId`, `dealId` are required.
+would otherwise log the call twice. `body` and at least one of
+`contactId`, `companyId`, `dealId` are required. `consentSiteId` names the site the record came from; leave it out for a record from no site, which belongs to the whole organization. It is required only when your organization [keeps each site's records apart](/content-and-data/crm/sharing).
 
 ```bash
 curl -X POST "https://app.aglyn.com/api/v1/activities" \
@@ -116,7 +116,7 @@ Returns **`201`**, or **`200`** with the original when an `Idempotency-Key` repl
 
 | Status | `type` | When |
 | --- | --- | --- |
-| `400` | `bad_request` | `code: "validation_failed"` — a missing `body` or `consentSiteId`, no `contactId`, `companyId` or `dealId` at all (`fields.contactId` explains), a `kind` outside its list, an `at` that is not an ISO 8601 instant, a `byUid` who is not a member, a reference that does not exist, a `durationMinutes` that is not a whole number `0` or more, or a `direction` the kind does not take. On the list, a `?kind=` outside the list or a malformed `?updatedAfter=`. |
+| `400` | `bad_request` | `code: "validation_failed"` — a missing `body`, a missing `consentSiteId` where the organization keeps its sites apart, no `contactId`, `companyId` or `dealId` at all (`fields.contactId` explains), a `kind` outside its list, an `at` that is not an ISO 8601 instant, a `byUid` who is not a member, a reference that does not exist, a `durationMinutes` that is not a whole number `0` or more, or a `direction` the kind does not take. On the list, a `?kind=` outside the list or a malformed `?updatedAfter=`. |
 | `403` | `insufficient_scope` | Key lacks `crm:read` / `crm:write`. |
 | `404` | `not_found` | `"No such activity"`. |
 | `405` | `method_not_allowed` | `Allow`: `GET, POST` on `/v1/activities`, `GET, DELETE` on one activity — a `PATCH` is refused here rather than with a `404` that would read as "no such activity". |

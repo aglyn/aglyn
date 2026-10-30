@@ -86,6 +86,7 @@ export function useActivityScope(hostId: string | null, org: CrmOrg) {
     visibleTo: readTokens,
     createHostId,
     createTokens: writeTokens,
+    createNeedsSite,
   } = useCrmScope({ hostId, org })
   return useMemo(
     () => ({
@@ -102,6 +103,8 @@ export function useActivityScope(hostId: string | null, org: CrmOrg) {
       consentGroup,
       readTokens,
       writeTokens,
+      /** Whether a new activity must name a site — see `useCrmScope`'s `createNeedsSite`. */
+      needsSite: createNeedsSite,
     }),
     [
       firestore,
@@ -112,6 +115,7 @@ export function useActivityScope(hostId: string | null, org: CrmOrg) {
       consentGroup,
       readTokens,
       writeTokens,
+      createNeedsSite,
     ],
   )
 }

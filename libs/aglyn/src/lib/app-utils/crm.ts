@@ -317,13 +317,17 @@ export type CrmCustomValue = ContactCustomValue
  * `scope-tokens.ts` for why an absent one is seen by NOBODY. `hostId` is
  * provenance: the site whose console created the record, never rewritten,
  * so a report can say where a deal came from after the scope has widened.
+ * It is `null` for a record that came from no site — one added at the
+ * organization level of an org whose records belong to every site, where the
+ * site is a source to tag and not a scope to choose. Such a record is always
+ * stamped `['org']`: with no site there is no narrower scope to give it.
  * The timestamps are `unknown` because a client write carries a `Date` and a
  * read hands back a Firestore `Timestamp`; callers narrow at the edge.
  */
 export interface CrmScoped {
   visibleTo: string[]
-  /** The site that created it. */
-  hostId: string
+  /** The site that created it, or `null` for one that came from no site. */
+  hostId: string | null
   createdAt?: unknown
   updatedAt?: unknown
 }
@@ -2523,19 +2527,31 @@ export const CRM_DEFAULT_RECORD_SCOPE_PATH = `${ORG_CRM_SETTINGS_FIELD}.defaultR
  * `crm.defaultRecordScope` when the org has set it. Before AGL-3662 the CRM
  * read the org's dataset default, `defaultResourceScope`, so an org that set
  * that to All sites keeps CRM records org-wide until it chooses separately.
- * Neither set reads `undefined`, which every caller treats as `'host'`.
+ *
+ * Neither set reads `'org'`: a record belongs to the whole organization, and
+ * the site it came in on is where it came from, not who may see it. Keeping
+ * each site's records apart is the choice an agency makes, so that one
+ * client's collaborator never sees another client's people — a setting it
+ * turns on, never a default the rest live with.
+ *
+ * `undefined` only when there is no org document to read — a surface whose
+ * org has not loaded yet. Every caller treats that as `'host'`, the site the
+ * record came in on: an org that keeps its sites apart must never have a
+ * record stamped for everyone because its document was a moment late, and
+ * a record kept to its site is still visible where it was made.
  */
 export function crmDefaultScopeOf(
   orgDocument: Record<string, unknown> | null | undefined,
 ): 'org' | 'host' | undefined {
-  const settings = (orgDocument ?? {})[ORG_CRM_SETTINGS_FIELD]
+  if (!orgDocument || typeof orgDocument !== 'object') return undefined
+  const settings = orgDocument[ORG_CRM_SETTINGS_FIELD]
   const own =
     settings && typeof settings === 'object' && !Array.isArray(settings)
       ? (settings as Record<string, unknown>)['defaultRecordScope']
       : undefined
   if (own === 'org' || own === 'host') return own
-  const legacy = (orgDocument ?? {})['defaultResourceScope']
-  return legacy === 'org' || legacy === 'host' ? legacy : undefined
+  const legacy = orgDocument['defaultResourceScope']
+  return legacy === 'org' || legacy === 'host' ? legacy : 'org'
 }
 
 /**
@@ -2883,16 +2899,19 @@ export function newAssignmentRuleId(existing: readonly string[]): string {
  * The contact create path's own expression (`upsertHostContact`), lifted
  * here so that a company, a deal or a task created from a site's console
  * lands in exactly the scope a contact captured on that site would: the
- * whole org when the org's CRM default (`crmDefaultScopeOf`) is `'org'`, and
- * otherwise the sites that present as one sender — which, undeclared, is
- * this site alone. That is the agency's isolation, arrived at with nothing
- * configured, and the reason this is a function rather than a convention
- * eight creators are asked to remember.
+ * whole org when the org's CRM default (`crmDefaultScopeOf`) is `'org'` —
+ * which it is unless the org chose otherwise — and otherwise the sites that
+ * present as one sender, which, undeclared, is this site alone. That second
+ * answer is the agency's isolation, which it turns on in CRM → Settings, and
+ * the reason this is a function rather than a convention eight creators are
+ * asked to remember: a creator that spelled its own could stamp a kept-apart
+ * org's record for everyone.
  *
- * Widening past the group is an ACT — an org-wide member editing the scope
- * on the record — never a default. The rules refuse a scoped member creating
- * a record outside their own tokens, so a creator that bypassed this could
- * only make its record invisible to itself, never wider.
+ * Under a kept-apart org, widening past the group is an ACT — an org-wide
+ * member editing the scope on the record — never a default. The rules refuse
+ * a scoped member creating a record outside their own tokens, so a creator
+ * that bypassed this could only make its record invisible to itself, never
+ * wider.
  */
 export function crmScopeTokens(
   org: Record<string, unknown> | null | undefined,

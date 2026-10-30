@@ -20,8 +20,10 @@ import {
   type ConsentGroup,
   type ConsolePluginPageProps,
   consentGroupForHost,
+  crmDefaultScopeOf,
   crmReadTokens,
   crmScopeTokens,
+  ORG_SCOPE_TOKEN,
   type ScopeToken,
   soloConsentGroup,
 } from '@aglyn/aglyn'
@@ -83,19 +85,32 @@ export interface CrmScope {
    */
   visibleTo: readonly ScopeToken[] | null
   /**
-   * The site a record this viewer CREATES is captured by: the mounted site,
-   * or at the org level the site the reader picked (`null` until they
-   * have). A create must hold until this is known — the tokens below are
-   * empty without it, and a record stamped with none is visible to nobody.
+   * The site a record this viewer CREATES came from: the mounted site, or at
+   * the org level the site the reader picked — `null` when they picked none.
    */
   createHostId: string | null
   /** The consent group of {@link createHostId} — what a create records consent for. */
   createGroup: ConsentGroup | null
-  /** What a record this viewer CREATES is stamped with; empty until {@link createHostId} is known. */
+  /**
+   * What a record this viewer CREATES is stamped with. With a site, what
+   * `crmScopeTokens` says for it; with none, the whole org when the org's
+   * records belong to every site, and EMPTY when the org keeps its sites
+   * apart (or its document has not loaded) — there a record must come from
+   * a site, and a create holds until one is picked, because a record stamped
+   * with no tokens is visible to nobody.
+   */
   createTokens: readonly ScopeToken[]
+  /**
+   * Whether a create must name a site: true when the org keeps each site's
+   * records apart, where the site decides who may see the record. False when
+   * every record belongs to the whole org, where a site is only the source it
+   * came from and may be left empty.
+   */
+  createNeedsSite: boolean
 }
 
 const NO_TOKENS: readonly ScopeToken[] = Object.freeze([])
+const ORG_TOKENS: readonly ScopeToken[] = Object.freeze([ORG_SCOPE_TOKEN])
 
 /**
  * The scope facts every CRM surface needs, resolved once (AGL-2597, one
@@ -181,9 +196,15 @@ export function useCrmScope(props: {
     () => (createHostId ? consentGroupForHost(org, createHostId) : null),
     [org, createHostId],
   )
+  const sharesWithEverySite = crmDefaultScopeOf(org) === 'org'
   const createTokens = useMemo(
-    () => (createGroup ? crmScopeTokens(org, createGroup) : NO_TOKENS),
-    [org, createGroup],
+    () =>
+      createGroup
+        ? crmScopeTokens(org, createGroup)
+        : sharesWithEverySite
+          ? ORG_TOKENS
+          : NO_TOKENS,
+    [org, createGroup, sharesWithEverySite],
   )
   return useMemo(
     () => ({
@@ -197,6 +218,7 @@ export function useCrmScope(props: {
       createHostId,
       createGroup,
       createTokens,
+      createNeedsSite: !sharesWithEverySite,
     }),
     [
       scope,
@@ -209,6 +231,7 @@ export function useCrmScope(props: {
       createHostId,
       createGroup,
       createTokens,
+      sharesWithEverySite,
     ],
   )
 }

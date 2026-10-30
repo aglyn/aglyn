@@ -133,6 +133,7 @@ import { join } from 'node:path'
 import { consentGroupForHost } from '@aglyn/aglyn/app-utils/consent-groups'
 import {
   CRM_ACTIVITIES_PER_RECORD_CEILING,
+  crmReadTokens,
   crmScopeTokens,
   DEFAULT_DEAL_STAGES,
 } from '@aglyn/aglyn/app-utils/crm'
@@ -407,7 +408,8 @@ describe('the records band on company and deal creates (AGL-2611)', () => {
 // ── Companies ───────────────────────────────────────────────────────────────
 
 describe('POST /v1/companies', () => {
-  it('stamps the record for the site it names, exactly as that site would', async () => {
+  it('stamps the record for the site it names, exactly as that site would, when the org keeps its sites apart', async () => {
+    mockOrg = { ...mockOrg, crm: { defaultRecordScope: 'host' } }
     const response = await call('POST', 'companies', {
       name: 'Acme',
       domain: 'https://www.Acme.com/about',
@@ -449,7 +451,9 @@ describe('POST /v1/companies', () => {
     expect(mockDocs.get(`${COMPANIES}/${view.id}`)!.visibleTo).toEqual(['org'])
   })
 
-  it('requires the site, and refuses one the org does not own', async () => {
+  it('requires the site when the org keeps its sites apart, and refuses one the org does not own', async () => {
+    // Kept apart, the site decides who may see the record, so it is required.
+    mockOrg = { ...mockOrg, crm: { defaultRecordScope: 'host' } }
     const missing = await call('POST', 'companies', { name: 'Acme' })
     expect(missing.status).toBe(400)
     expect((await json(missing)).error.fields).toHaveProperty('consentSiteId')
@@ -832,12 +836,18 @@ describe('/v1/pipelines', () => {
       currency: 'usd',
       closedAt: null,
     })
-    // The pipeline visible from the site is queried, not the org's whole set.
+    // The pipeline visible from the site is queried, not the org's whole set:
+    // what the site READS, the org's rows and its own, so an org-wide default
+    // pipeline is found rather than seeded a second time.
     const seededBy = issued.find((filters) =>
       filters.some((filter) => filter.field === 'visibleTo'),
     )
     expect(seededBy).toEqual([
-      { field: 'visibleTo', op: 'array-contains-any', value: tokensFor('host-1') },
+      {
+        field: 'visibleTo',
+        op: 'array-contains-any',
+        value: crmReadTokens(consentGroupForHost(mockOrg, 'host-1')),
+      },
     ])
     // A second deal reuses it rather than seeding another.
     await call('POST', 'deals', { title: 'More beans', consentSiteId: 'host-1' })

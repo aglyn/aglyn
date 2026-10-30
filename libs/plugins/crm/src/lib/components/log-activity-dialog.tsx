@@ -169,7 +169,7 @@ export interface LogActivityDialogProps {
  */
 export function LogActivityDialog(props: LogActivityDialogProps) {
   const { open, onClose, scope, link, activity, kind: presetKind } = props
-  const { firestore, dataScope, hostId, mountedHostId, readTokens, writeTokens } =
+  const { firestore, dataScope, hostId, mountedHostId, readTokens, writeTokens, needsSite } =
     scope
   const { data: user } = useUser()
   const authorName = useUserName()
@@ -202,10 +202,11 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
   const canSave =
     Boolean(dataScope) &&
     Boolean(user?.uid) &&
-    // A NEW activity is stamped with a site's scope and provenance; at the
-    // organization level that is the picked site, and there is nothing to
-    // write until there is one (AGL-2630). An edit never touches either.
-    (Boolean(activity) || Boolean(hostId)) &&
+    // A NEW activity is stamped with a scope: the whole org where every site
+    // sees the CRM's records, else the picked site's — and in an org that
+    // keeps its sites apart there is nothing to write until one is picked
+    // (AGL-2630). An edit never touches either.
+    (Boolean(activity) || writeTokens.length > 0) &&
     body.length > 0 &&
     atMs !== null &&
     durationValid &&
@@ -217,7 +218,7 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
     if (!dataScope || !user?.uid || !body || atMs === null || !durationValid) {
       return
     }
-    if (!activity && !hostId) return
+    if (!activity && !writeTokens.length) return
     setSaving(true)
     try {
       const said = {
@@ -354,7 +355,12 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
           <CrmSitePicker
             hostId={mountedHostId}
             disabled={saving}
-            helperText="The site this activity is logged from — it decides which of your sites may see it."
+            optional={needsSite === false}
+            helperText={
+              needsSite === false
+                ? undefined
+                : 'The site this activity is logged from — it decides which of your sites may see it.'
+            }
           />
         )}
         <Stack direction="row" spacing={1} sx={{ mt: 1 }}>

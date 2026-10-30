@@ -970,7 +970,9 @@ describe('a send the provider accepted', () => {
       contactId: 'contact-1',
       companyId: 'co-1',
       hostId: HOST_ID,
-      visibleTo: [`host:${HOST_ID}`],
+      // What a record created on the site is stamped with: the org has
+      // chosen no default, so the row is the whole org's.
+      visibleTo: ['org'],
     })
     expect(row.atMs).toEqual(expect.any(Number))
     expect(recordEmailSends).toHaveBeenCalledWith({

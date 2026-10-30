@@ -40,10 +40,12 @@ Every CRM resource uses the same two scopes — `crm:read` for `GET`, `crm:write
 - **Reads are organization-wide.** An API key is an organization credential, so a
   list returns every company any of your sites knows, whichever site created it. That
   is the same answer [`GET /v1/contacts`](contacts.md) gives.
-- **Writes name a site.** Every create takes a `consentSiteId` — the same parameter a
-  [contact opt-in](contacts.md#add-a-contact) takes — and the record is stored exactly
-  as that site's console would store it: visible to that site (and, if you have
-  declared a consent group, to every site in it), and recorded as created from it.
+- **Writes may name a site.** A create takes an optional `consentSiteId` — the same
+  parameter a [contact opt-in](contacts.md#add-a-contact) takes — and the record is
+  stored exactly as that site's console would store it: recorded as created from it,
+  and visible to every site. In an organization that keeps each site's records apart,
+  `consentSiteId` is required and the record is visible to that site (and, if you have
+  declared a consent group, to every site in it).
   There is no default site, for the reason the contacts endpoint gives: picking your
   only site works until you have two. A record created for the wrong site is a record
   that site's own team cannot open, which is why this is required rather than
@@ -159,8 +161,8 @@ any other is checked on the page, so a combined filter can return a
 `POST /v1/companies` — scope `crm:write`. Accepts an
 [`Idempotency-Key`](../conventions.md#idempotency), scoped to the organization.
 
-**Body** — `name` and `consentSiteId` are required; every other
-[writable field](#the-company-object) is optional.
+**Body** — `name` is required; every other
+[writable field](#the-company-object) is optional. `consentSiteId` names the site the record came from; leave it out for a record from no site, which belongs to the whole organization. It is required only when your organization [keeps each site's records apart](/content-and-data/crm/sharing).
 
 ```bash
 curl -X POST "https://app.aglyn.com/api/v1/companies" \

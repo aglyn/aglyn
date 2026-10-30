@@ -78,7 +78,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
 })
 
 import type { TransferWarningClass } from '@aglyn/aglyn/data-transfer'
-import { hostScopeToken } from '@aglyn/aglyn/app-utils/scope-tokens'
+import { hostScopeToken, ORG_SCOPE_TOKEN } from '@aglyn/aglyn/app-utils/scope-tokens'
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 import {
   resetTransferResourcesForTests,
@@ -104,6 +104,8 @@ const ORG = 'org-1'
 const SITE = 'site-1'
 const ME = 'uid-me'
 const SITE_TOKENS = [hostScopeToken(SITE)]
+/** What a record the import creates is stamped with: this org has chosen no default, so the whole org's. */
+const CREATED_TOKENS = [ORG_SCOPE_TOKEN]
 const at = (collection: string, id = '') => `orgs/${ORG}/${collection}${id ? `/${id}` : ''}`
 
 const files = new Map<string, Buffer>()
@@ -184,7 +186,7 @@ describe('deals', () => {
       companyName: 'Acme',
       contactId: 'ana',
       ownerUid: 'uid-sam',
-      visibleTo: SITE_TOKENS,
+      visibleTo: CREATED_TOKENS,
       hostId: SITE,
       contactRoles: [{ contactId: 'ana', role: 'Decision Maker', primary: true }],
     })
@@ -229,7 +231,7 @@ describe('tasks', () => {
       priority: 'high',
       contactId: 'ana',
       dealId: 'd-acme',
-      visibleTo: SITE_TOKENS,
+      visibleTo: CREATED_TOKENS,
       completedByUid: ME,
     })
     expect(typeof task?.['completedAtMs']).toBe('number')

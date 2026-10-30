@@ -29,6 +29,8 @@ import {
   CONTACT_NAME_PART_MAX,
   type ConsentGroup,
   consentGroupForHost,
+  crmDefaultScopeOf,
+  crmScopeTokens,
   type ContactCompanyLinkPlan,
   type ContactCustomValue,
   contactFacetPath,
@@ -977,10 +979,11 @@ const companiesCollection = (ctx: ApiV1Context) =>
  * taking-and-releasing on a genuine refusal. AGL-2278 applies it to the two
  * older creates.
  *
- * `visibleTo` is stamped with `ORG_SCOPE_TOKEN`, as capture does. A contact
- * written without it matches no `array-contains-any` and is therefore visible
- * on NO site (AGL-1044) — the API would create data nobody can see, which is
- * worse than refusing.
+ * `visibleTo` is stamped with `ORG_SCOPE_TOKEN`, as capture does — or, in an
+ * org that keeps each site's records apart, the named site's group, which
+ * that org must then name. A contact written without one matches no
+ * `array-contains-any` and is therefore visible on NO site (AGL-1044) — the
+ * API would create data nobody can see, which is worse than refusing.
  */
 async function createContact(
   request: Request,
@@ -1018,6 +1021,28 @@ async function createContact(
       headers: ctx.headers,
     })
   }
+  /*
+   * Who may see the new contact: the whole org, unless the org keeps each
+   * site's records apart — then the named site's group, and a contact named
+   * by no site has nowhere to belong. A deterministic 400, so above the claim.
+   */
+  const orgDocument = ctx.org as Record<string, unknown>
+  const keepsSitesApart = crmDefaultScopeOf(orgDocument) === 'host'
+  if (keepsSitesApart && !consentSiteId) {
+    return ApiErrors.badRequest({
+      message: 'Contact failed validation',
+      code: 'validation_failed',
+      fields: {
+        consentSiteId:
+          "Required — this organization keeps each site's records apart, so name the site this contact belongs to",
+      },
+      headers: ctx.headers,
+    })
+  }
+  const visibleTo =
+    keepsSitesApart && consentSiteId
+      ? crmScopeTokens(orgDocument, consentGroupForHost(orgDocument, consentSiteId))
+      : [ORG_SCOPE_TOKEN]
   // Judged against the org's definitions, above the claim like every other
   // deterministic 400: an unknown key is named, never dropped (AGL-2601).
   const custom = parsed.values.custom
@@ -1137,7 +1162,7 @@ async function createContact(
       // "No next activity" filter asks as `null` (AGL-3321).
       nextTaskAtMs: null,
       // AGL-1044/AGL-1037: without this the contact matches no scoped read.
-      visibleTo: [ORG_SCOPE_TOKEN],
+      visibleTo,
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
     })

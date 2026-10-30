@@ -137,7 +137,7 @@ return a [short page](../conventions.md#short-pages).
 `POST /v1/deals` — scope `crm:write`. Accepts an
 [`Idempotency-Key`](../conventions.md#idempotency), scoped to the organization.
 
-**Body** — `title` and `consentSiteId` are required. `pipelineId` picks the pipeline;
+**Body** — `title` is required. `consentSiteId` names the site the record came from; leave it out for a record from no site, which belongs to the whole organization. It is required only when your organization [keeps each site's records apart](/content-and-data/crm/sharing). `pipelineId` picks the pipeline;
 `stageId` and/or `status` place the deal in it (see [below](#moving)); neither means
 the first open stage of the pipeline.
 
@@ -276,7 +276,7 @@ it.
 
 | Status | `type` | When |
 | --- | --- | --- |
-| `400` | `bad_request` | `code: "validation_failed"` — a missing `title` or `consentSiteId`, a `pipelineId` or `stageId` that does not exist, an archived `pipelineId`, a `status` that disagrees with the `stageId`, a `type` or `leadSource` outside the organization's active lists, a `probability` that is not a whole number `0`–`100`, a `forecastCategory` outside the five, a `campaignId` that is not one of the organization's live campaigns, an `amountCents` that is not a whole number `0` or more or that is sent to a deal with line items, a `currency` that is not a three-letter code or that a deal's line items are not in, a line item that fails its [rules](#line-items), an `expectedCloseAt` that is not an ISO 8601 instant, a `contactId` or `companyId` that does not exist, an `ownerUid` who is not a member, a `custom` entry that is not a deal field or does not fit its type (named as `custom.<key>`), or `pipelineId` on a `PATCH`. On the list, a `?status=` outside the three values or a malformed `?updatedAfter=`. `fields` names each key. |
+| `400` | `bad_request` | `code: "validation_failed"` — a missing `title`, a missing `consentSiteId` where the organization keeps its sites apart, a `pipelineId` or `stageId` that does not exist, an archived `pipelineId`, a `status` that disagrees with the `stageId`, a `type` or `leadSource` outside the organization's active lists, a `probability` that is not a whole number `0`–`100`, a `forecastCategory` outside the five, a `campaignId` that is not one of the organization's live campaigns, an `amountCents` that is not a whole number `0` or more or that is sent to a deal with line items, a `currency` that is not a three-letter code or that a deal's line items are not in, a line item that fails its [rules](#line-items), an `expectedCloseAt` that is not an ISO 8601 instant, a `contactId` or `companyId` that does not exist, an `ownerUid` who is not a member, a `custom` entry that is not a deal field or does not fit its type (named as `custom.<key>`), or `pipelineId` on a `PATCH`. On the list, a `?status=` outside the three values or a malformed `?updatedAfter=`. `fields` names each key. |
 | `403` | `plan_required` | `code: "crm"` — the plan doesn't include the CRM suite. `code: "crm_records_quota"` — the CRM records band is full on a plan that doesn't meter the overage. |
 | `403` | `insufficient_scope` | Key lacks `crm:read` / `crm:write`. |
 | `404` | `not_found` | `"No such deal"`. |

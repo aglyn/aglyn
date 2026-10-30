@@ -239,6 +239,9 @@ jest.mock('./organizations', () => ({
   __esModule: true,
   orgDataCollectionForHost: async () => mockLeadsCollection,
   resolveOrgIdForHost: async () => 'org-1',
+  // The org document the lead door reads to decide what a new lead is
+  // stamped with (`leadScopeForHost`): one that has chosen no default.
+  getOrgForHost: async () => ({ orgId: 'org-1', org: {} }),
   consentGroupForSite: async (hostId: string) =>
     jest.requireActual('@aglyn/aglyn/app-utils/consent-groups').soloConsentGroup(hostId),
   scopedToHost: (ref: any) => ref,

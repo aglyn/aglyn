@@ -217,7 +217,7 @@ struct SettingsSection: View {
       if let error { AglynNotice(error, tone: .error) { self.error = nil } }
       if !scope.canManage { AglynNotice("Only the workspace's owners and admins change these.", tone: .info) }
       Section("Who sees new records") {
-        Picker("New records", selection: Binding(get: { crmDefaultScope(scope.org) ?? "host" }, set: { write(["defaultRecordScope": $0]) })) {
+        Picker("New records", selection: Binding(get: { crmDefaultScope(scope.org) ?? "org" }, set: { write(["defaultRecordScope": $0]) })) {
           Text("The site that made them").tag("host")
           Text("Every site in the workspace").tag("org")
         }

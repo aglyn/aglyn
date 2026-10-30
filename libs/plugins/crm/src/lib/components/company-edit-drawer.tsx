@@ -185,7 +185,7 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
-  const { scope, createTokens, createHostId } = useCrmScope({ hostId, org })
+  const { scope, createTokens, createHostId, createNeedsSite } = useCrmScope({ hostId, org })
   // A client-direct write owes the org's sharing rules a re-evaluation (AGL-3336).
   const followUpSharing = useCrmSharingFollowUp(hostId, scope?.[1] ?? null)
   // The feed the act is logged in is the level it was PERFORMED at
@@ -375,9 +375,11 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
       } else {
         if (bandFull) return setError(CRM_RECORDS_BAND_FULL_MESSAGE)
         const id = createResourceUid()
-        // Held by the button until the capturing site is known; checked
-        // again here because a callback can outlive the render that held it.
-        if (!createHostId) return
+        // Held by the button until it knows who may see the company — the
+        // whole org, or a picked site's group where the org keeps its sites
+        // apart; checked again here because a callback can outlive the render
+        // that held it.
+        if (!createTokens.length) return
         await setDoc(
           doc(firestore, scope[0], scope[1], CRM_COLLECTIONS.companies, id),
           {
@@ -475,15 +477,21 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
         <Stack spacing={2}>
           {/*
             First, because the scope of everything below follows from it: at
-            the organization level a new company names the site that
-            captures it. Nothing under a site, and nothing on an edit — a
-            company keeps the site it was made on (AGL-2630).
+            the organization level a new company names the site it came
+            from — required where the org keeps its sites apart, optional
+            where every site sees it. Nothing under a site, and nothing on an
+            edit — a company keeps the site it was made on (AGL-2630).
           */}
           {company ? null : (
             <CrmSitePicker
               hostId={hostId}
               disabled={busy}
-              helperText="The site this company belongs to — it decides which of your sites may see it."
+              optional={!createNeedsSite}
+              helperText={
+                createNeedsSite
+                  ? 'The site this company belongs to — it decides which of your sites may see it.'
+                  : undefined
+              }
             />
           )}
           <Typography variant="body2" color="text.secondary">
@@ -733,7 +741,7 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
               variant="contained"
               color="primary"
               // A new company waits for its capturing site.
-              disabled={busy || !scope || !draft.name.trim() || (!company && !createHostId)}
+              disabled={busy || !scope || !draft.name.trim() || (!company && !createTokens.length)}
               onClick={() => void handleSave()}
             >
               {busy

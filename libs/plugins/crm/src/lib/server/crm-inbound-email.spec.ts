@@ -297,7 +297,9 @@ describe('filing a message', () => {
     expect(activities()).toHaveLength(3)
   })
 
-  it("files a member's copied send to a lead as outbound, on the lead, stamped with the member and the site's scope", async () => {
+  it("files a member's copied send to a lead as outbound, on the lead, stamped with the member and the site's scope when the org keeps its sites apart", async () => {
+    // The agency's opt-in, which is what keeps this lead on the second site.
+    store.set(`orgs/${ORG}`, { name: 'Acme', plan: 'agency', crm: { defaultRecordScope: 'host' } })
     const result = await file(
       message({
         from: 'Sam Rep <sam@acme.com>',

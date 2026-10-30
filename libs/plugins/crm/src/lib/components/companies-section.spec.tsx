@@ -310,9 +310,9 @@ describe('the Companies section (AGL-2597)', () => {
       name: 'Acme Coffee',
       nameLower: 'acme coffee',
       domain: 'acme.com',
-      // A group of one creates for its own site — the agency's isolation,
-      // arrived at with nothing configured.
-      visibleTo: ['host:host-1'],
+      // An org that has chosen nothing shares the company with every site;
+      // keeping each site's records apart is the agency's opt-in.
+      visibleTo: ['org'],
       hostId: 'host-1',
       createdByUid: 'uid-1',
       // The person filing it owns it until somebody says otherwise.
@@ -323,7 +323,7 @@ describe('the Companies section (AGL-2597)', () => {
     expect(data['nameTokens']).toEqual(expect.arrayContaining(['cof', 'acme']))
     // What the list searches and asks "No next activity" of (AGL-3321).
     expect(data['searchTokens']).toEqual(expect.arrayContaining(['cof', 'acme', 'com']))
-    expect(data['scopedSearchTokens']).toEqual(expect.arrayContaining(['host:host-1~acme']))
+    expect(data['scopedSearchTokens']).toEqual(expect.arrayContaining(['org~acme']))
     expect(data['nextTaskAtMs']).toBeNull()
     // And the new record's page opens.
     const id = path.slice('orgs/org-1/companies/'.length)

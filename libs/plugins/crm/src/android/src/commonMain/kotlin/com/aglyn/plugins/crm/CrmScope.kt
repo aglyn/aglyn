@@ -84,12 +84,16 @@ fun consentGroupForHost(org: Map<String, Any?>?, hostId: String): ConsentGroup {
 
 fun consentGroupScope(group: ConsentGroup): List<String> = group.hostIds.map(::hostScopeToken)
 
-/** `crmDefaultScopeOf`: `crm.defaultRecordScope`, else the legacy `defaultResourceScope`. */
+/**
+ * `crmDefaultScopeOf`: `crm.defaultRecordScope`, else the legacy `defaultResourceScope`, else
+ * the whole org. `null` only with no org to read, which every caller treats as the site.
+ */
 fun crmDefaultScopeOf(org: Map<String, Any?>?): String? {
-  val own = (org?.get("crm") as? Map<*, *>)?.get("defaultRecordScope")
+  if (org == null) return null
+  val own = (org["crm"] as? Map<*, *>)?.get("defaultRecordScope")
   if (own == "org" || own == "host") return own as String
-  val legacy = org?.get("defaultResourceScope")
-  return if (legacy == "org" || legacy == "host") legacy as String else null
+  val legacy = org["defaultResourceScope"]
+  return if (legacy == "org" || legacy == "host") legacy as String else "org"
 }
 
 /** What a record this viewer creates is stamped with. */

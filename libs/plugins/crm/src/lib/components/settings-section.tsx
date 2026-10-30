@@ -228,8 +228,10 @@ AutoCreateCompaniesCard.displayName = 'AutoCreateCompaniesCard'
  *
  * Reads `crmDefaultScopeOf`, the same reader the capture door and every CRM
  * creator stamp from, so the control cannot show one thing while records
- * get another — including for an org that has never set it, which inherits
- * the dataset default it shared before the split.
+ * get another — including for an org that has never set it, which shares
+ * with every site unless it set the older dataset default to keep them
+ * apart. Keeping each site's records apart is the agency's choice: one
+ * client's collaborator then sees only that client's people.
  */
 export function DefaultRecordSharingCard(props: AutoCreateCompaniesCardProps) {
   const { hostId, org } = props
@@ -239,7 +241,7 @@ export function DefaultRecordSharingCard(props: AutoCreateCompaniesCardProps) {
   const { canManage, ready: roleReady } = useCanManageCrmSettings(orgId)
 
   const stored =
-    crmDefaultScopeOf(org as Record<string, unknown> | undefined) ?? 'host'
+    crmDefaultScopeOf(org as Record<string, unknown> | undefined) ?? 'org'
   const [value, setValue] = useState<'org' | 'host'>(stored)
   const [busy, setBusy] = useState(false)
   useEffect(() => setValue(stored), [stored])
@@ -294,9 +296,9 @@ export function DefaultRecordSharingCard(props: AutoCreateCompaniesCardProps) {
             'Media pages.'
           }
         >
-          <MenuItem value="org">{'All sites'}</MenuItem>
+          <MenuItem value="org">{'All sites in the organization'}</MenuItem>
           <MenuItem value="host">
-            {'The site they came in on, and its consent group'}
+            {'Only the site they came in on (keeps clients apart, for agencies)'}
           </MenuItem>
         </TextField>
         <ManagersOnlyNote ready={ready} canManage={canManage} />

@@ -695,7 +695,8 @@ describe('converting a lead', () => {
       nameTokens: expect.arrayContaining(['acme', 'coffee']),
       domain: 'acme.com',
       ownerUid: CALLER,
-      visibleTo: ['host:h1'],
+      // The org has chosen no default, so all three are the whole org's.
+      visibleTo: ['org'],
       hostId: HOST,
       createdByUid: CALLER,
     })
@@ -712,7 +713,7 @@ describe('converting a lead', () => {
     expect(pipelines[0]).toMatchObject({
       name: 'Sales',
       isDefault: true,
-      visibleTo: ['host:h1'],
+      visibleTo: ['org'],
       hostId: HOST,
     })
     expect(pipelines[0].stages).toEqual(DEFAULT_DEAL_STAGES)
@@ -736,7 +737,7 @@ describe('converting a lead', () => {
       contactRoles: [{ contactId: contact.id, primary: true }],
       contactRoleContactIds: [contact.id],
       companyId: company.id,
-      visibleTo: ['host:h1'],
+      visibleTo: ['org'],
       hostId: HOST,
       createdByUid: CALLER,
     })
@@ -768,6 +769,19 @@ describe('converting a lead', () => {
     expect(all(`orgs/${ORG}/companies`)[0].visibleTo).toEqual(['org'])
     expect(all(`orgs/${ORG}/pipelines`)[0].visibleTo).toEqual(['org'])
     expect(all(`orgs/${ORG}/deals`)[0].visibleTo).toEqual(['org'])
+  })
+
+  it('stamps the site alone on all three when the org keeps its sites apart', async () => {
+    mockOrg = { plan: 'starter', crm: { defaultRecordScope: 'host' } }
+    await call({
+      hostId: HOST,
+      leadId: 'lead-1',
+      createCompany: { name: 'Acme' },
+      deal: { title: 'Acme' },
+    })
+    expect(all(`orgs/${ORG}/companies`)[0].visibleTo).toEqual(['host:h1'])
+    expect(all(`orgs/${ORG}/pipelines`)[0].visibleTo).toEqual(['host:h1'])
+    expect(all(`orgs/${ORG}/deals`)[0].visibleTo).toEqual(['host:h1'])
   })
 
   it('reuses a company the caller can see by domain rather than minting a second', async () => {

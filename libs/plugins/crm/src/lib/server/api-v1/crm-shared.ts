@@ -52,7 +52,9 @@ import {
   CRM_LEAD_SOURCE_PICKLIST,
   type CrmPicklist,
   consentGroupForHost,
+  crmDefaultScopeOf,
   crmScopeTokens,
+  ORG_SCOPE_TOKEN,
   effectiveCrmLeadSourcePicklist,
   readCrmCustomInput,
 } from '@aglyn/aglyn/server'
@@ -132,20 +134,28 @@ export async function crmRecordsBandRefusal(
 /**
  * The `consentSiteId` a create carries, validated.
  *
- * Required, and required to be one of the organization's own sites, for the
- * reason the module header gives. The message names the field so an
- * integrator sees the same key they would on a contact write.
+ * When given, it must be one of the organization's own sites, and the
+ * message names the field so an integrator sees the same key they would on a
+ * contact write. Whether it may be LEFT OUT is the org's CRM sharing: where
+ * every site sees the CRM's records (the default), the site is only the
+ * source a record came from, and a record created with none — `siteId:
+ * null` — belongs to the whole organization. Where the org keeps each site's
+ * records apart, the site decides who may see the record, so it stays
+ * required.
  */
 export function readCrmSite(
   ctx: ApiV1Context,
   noun: string,
   body: Record<string, unknown>,
-): { siteId: string } | { response: Response } {
+): { siteId: string | null } | { response: Response } {
   const refuse = (error: string) => ({
     response: crmValidationFailed(ctx, noun, { consentSiteId: error }),
   })
-  if (body.consentSiteId === undefined) {
-    return refuse('Required — name the site this record belongs to')
+  if (body.consentSiteId === undefined || body.consentSiteId === null) {
+    if (crmDefaultScopeOf(ctx.org as Record<string, unknown>) === 'org') return { siteId: null }
+    return refuse(
+      'Required — this organization keeps each site\'s records apart, so name the site this record belongs to',
+    )
   }
   const siteId = String(body.consentSiteId ?? '').trim()
   if (!siteId) return refuse('Must name a site')
@@ -158,20 +168,22 @@ export function readCrmSite(
  *
  * `visibleTo` is `crmScopeTokens` — the contact create path's own expression,
  * which is what puts an API-created deal in exactly the scope a deal created
- * from that site's console would land in. `hostId` is provenance and is never
- * rewritten. `createdByUid` is the literal `'api'` because a key has no uid;
- * it is the attribution the contact create makes through `sources.api`, in
- * the field the CRM types already carry.
+ * from that site's console would land in — or the whole org for a record
+ * from no site, which `readCrmSite` admits only where every site sees the
+ * CRM's records. `hostId` is provenance and is never rewritten.
+ * `createdByUid` is the literal `'api'` because a key has no uid; it is the
+ * attribution the contact create makes through `sources.api`, in the field
+ * the CRM types already carry.
  *
  * Both timestamps are set here, once, so a fresh record's `updated` equals
  * its `created` and an `updatedAfter` sweep that started before the create
  * picks it up.
  */
-export function crmCreateStamp(ctx: ApiV1Context, siteId: string) {
+export function crmCreateStamp(ctx: ApiV1Context, siteId: string | null) {
   const org = ctx.org as Record<string, unknown>
   const now = Timestamp.now()
   return {
-    visibleTo: crmScopeTokens(org, consentGroupForHost(org, siteId)),
+    visibleTo: siteId ? crmScopeTokens(org, consentGroupForHost(org, siteId)) : [ORG_SCOPE_TOKEN],
     hostId: siteId,
     createdByUid: 'api',
     createdAt: now,

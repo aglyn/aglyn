@@ -243,6 +243,13 @@ jest.mock('../../../../../tenant/data/admin/src/lib/server/organizations', () =>
   orgDataCollectionForHost: async (_hostId: string, name: string) =>
     collectionRef(`orgs/${ORG}/${name}`),
   resolveOrgIdForHost: async () => ORG,
+  // The lead door reads the org document to decide what a new lead is
+  // stamped with (`leadScopeForHost`): the org the consent groups below
+  // describe, which has chosen no sharing default of its own.
+  getOrgForHost: async () => ({
+    orgId: ORG,
+    org: mockConsentGroups ? { consentGroups: mockConsentGroups } : {},
+  }),
   consentGroupForSite: async (hostId: string) =>
     jest
       .requireActual('@aglyn/aglyn/app-utils/consent-groups')
@@ -335,9 +342,11 @@ describe('a lead surface', () => {
       request({ surface: 'lead', containers: { campaign: ['camp-1', 'camp-2'] } }),
     )
 
+    // Keyed by the lead's scope, which is the whole org's: the org has
+    // chosen no sharing default of its own.
     expect(docs.get(leadPath())).toMatchObject({
       campaignIds: ['camp-1', 'camp-2'],
-      scopedCampaignIds: [`host:${HOST}~camp-1`, `host:${HOST}~camp-2`],
+      scopedCampaignIds: ['org~camp-1', 'org~camp-2'],
     })
     expect(events[0]?.payload).toMatchObject({ campaignIds: 'camp-1,camp-2' })
   })
@@ -353,9 +362,18 @@ describe('a lead surface', () => {
 
     await captureContactForCrm(request({ surface: 'lead', containers: { campaign: ['camp-1', 'camp-2'] } }))
 
+    // The site the lead was held under keeps its keys, and the capture adds
+    // the org's: what a site captures is the whole org's by default.
     expect(docs.get(leadPath())).toMatchObject({
       campaignIds: ['camp-0', 'camp-1', 'camp-2'],
-      scopedCampaignIds: [`host:${HOST}~camp-0`, `host:${HOST}~camp-1`, `host:${HOST}~camp-2`],
+      scopedCampaignIds: [
+        `host:${HOST}~camp-0`,
+        `host:${HOST}~camp-1`,
+        `host:${HOST}~camp-2`,
+        'org~camp-0',
+        'org~camp-1',
+        'org~camp-2',
+      ],
     })
   })
 
@@ -371,7 +389,8 @@ describe('a lead surface', () => {
     await captureContactForCrm(request({ surface: 'lead' }))
 
     expect(docs.get(leadPath())?.['campaignIds']).toEqual(['camp-0'])
-    expect(docs.get(leadPath())?.['scopedCampaignIds']).toEqual([`host:${HOST}~camp-0`])
+    // The same campaign, keyed under the org's token the capture added.
+    expect(docs.get(leadPath())?.['scopedCampaignIds']).toEqual([`host:${HOST}~camp-0`, 'org~camp-0'])
   })
 
   it('updates the lead the site already holds, and announces nothing', async () => {

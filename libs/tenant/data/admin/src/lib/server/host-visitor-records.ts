@@ -51,6 +51,7 @@ import { scheduleCapturedEmailCheck } from './capture-email-check'
 import firebaseAdmin from './firebase-admin'
 import {
   consentGroupForSite,
+  getOrgForHost,
   orgDataCollectionForHost,
   resolveOrgIdForHost,
   scopedToHost,
@@ -152,8 +153,9 @@ export async function leadReadTokensForHost(
 }
 
 /**
- * The `visibleTo` a capture on this site stamps: the consent group's sites,
- * or `['org']` where the org's CRM default (`crmDefaultScopeOf`) is `'org'`.
+ * The `visibleTo` a capture on this site stamps: `['org']` where the org's
+ * CRM default (`crmDefaultScopeOf`) is `'org'` — its default — and the consent
+ * group's sites where the org keeps its sites apart.
  *
  * Widened by the capture, never by the lookup — a site that has never
  * captured this person gains nothing by finding them, which is what keeps an
@@ -165,8 +167,13 @@ export async function leadScopeForHost(
   hostId: string,
   org?: Record<string, unknown> | null,
 ): Promise<ScopeToken[]> {
-  const group = await consentGroupForSite(hostId, org)
-  return crmScopeTokens(org ?? null, group)
+  // The org document decides: a capture with none in hand reads it, rather
+  // than stamping the site alone for an org whose records belong to every
+  // site. An org that cannot be read stamps the site — never everyone.
+  const resolved =
+    org ?? ((await getOrgForHost(hostId).catch(() => null))?.org as Record<string, unknown> | undefined) ?? null
+  const group = await consentGroupForSite(hostId, resolved)
+  return crmScopeTokens(resolved, group)
 }
 
 /**

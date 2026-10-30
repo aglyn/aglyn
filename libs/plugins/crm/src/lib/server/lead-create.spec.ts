@@ -279,6 +279,9 @@ jest.mock('../../../../../tenant/data/admin/src/lib/server/organizations', () =>
   orgDataCollectionForHost: async (_hostId: string, name: string) =>
     collectionRef(`orgs/${ORG}/${name}`),
   resolveOrgIdForHost: async () => ORG,
+  // The door reads the org document to decide what a new lead is stamped
+  // with (`leadScopeForHost`): the same org the barrel answers.
+  getOrgForHost: async (hostId: string) => (hostId === HOST ? { orgId: ORG, org } : null),
   consentGroupForSite: async (hostId: string) =>
     jest.requireActual('@aglyn/aglyn/app-utils/consent-groups').soloConsentGroup(hostId),
   scopedToHost: (ref: any) => ref,
@@ -550,8 +553,9 @@ describe('what is written', () => {
       (path) => path.startsWith(`orgs/${ORG}/`) && !path.startsWith(`orgs/${ORG}/leads/`),
     )
     expect(orgPathsOtherThanLeads).toEqual([])
-    // Scoped like every other org row now, and still no per-holder facet map.
-    expect(lead?.['visibleTo']).toEqual([`host:${HOST}`])
+    // Scoped like every other org row now — the whole org's, as this org has
+    // chosen no default — and still no per-holder facet map.
+    expect(lead?.['visibleTo']).toEqual(['org'])
     expect(lead?.['facets']).toBeUndefined()
     // No basis: a person typed in by the team did not tick a box.
     expect(readMarketingBasis(lead ?? null, soloConsentGroup(HOST)).basis).toBe('unrecorded')
@@ -591,7 +595,8 @@ describe('what is written', () => {
     /*
      * And the lead's Activity says so (AGL-3274): one "Filed under" for
      * the campaign the lead was not already in, by the member, with the
-     * scope a record made on the site carries and the CRM's own id.
+     * scope a record made on the site carries and the CRM's own id. This
+     * org has chosen no default, so that scope is the whole org's.
      */
     expect(filed()).toEqual([
       expect.objectContaining({
@@ -599,7 +604,7 @@ describe('what is written', () => {
         body: 'Filed under Founder · ICP 2',
         leadId: personKey('dana@example.com'),
         hostId: HOST,
-        visibleTo: [`host:${HOST}`],
+        visibleTo: ['org'],
         byUid: CALLER,
         byName: 'ed@example.com',
         sourcePluginId: 'crm',

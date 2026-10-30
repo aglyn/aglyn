@@ -41,10 +41,11 @@ import {
   type CrmPipeline,
   createResourceUid,
   consentGroupForHost,
-  crmScopeTokens,
+  crmReadTokens,
   DEFAULT_DEAL_STAGES,
   dealStageForecastCategory,
   isPipelineArchived,
+  ORG_SCOPE_TOKEN,
 } from '@aglyn/aglyn/server'
 import { apiJson, ApiErrors } from '@aglyn/tenant-data-admin'
 import { FieldPath } from 'firebase-admin/firestore'
@@ -101,7 +102,7 @@ export interface ResolvedPipeline {
  */
 export async function resolvePipeline(
   ctx: ApiV1Context,
-  siteId: string,
+  siteId: string | null,
   pipelineId: string | undefined,
   options: { allowArchived?: boolean } = {},
 ): Promise<ResolvedPipeline | { error: string }> {
@@ -116,7 +117,11 @@ export async function resolvePipeline(
     return { id: snap.id, pipeline }
   }
   const org = ctx.org as Record<string, unknown>
-  const tokens = crmScopeTokens(org, consentGroupForHost(org, siteId))
+  // What the site READS, not what it would stamp: an org-wide pipeline is the
+  // default for every site, and looking it up with a site's create tokens
+  // missed it and seeded a second "Sales". A record from no site reads the
+  // org's own.
+  const tokens = siteId ? crmReadTokens(consentGroupForHost(org, siteId)) : [ORG_SCOPE_TOKEN]
   // Ordered, because a `limit()` with no `orderBy` is a random sample: fifty
   // is more pipelines than any org has, but the bound has to be a bound.
   const visible = await collection

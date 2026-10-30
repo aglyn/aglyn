@@ -56,6 +56,13 @@ let mockGroup: {
   name: string
   hostIds: string[]
 } | null = null
+/**
+ * The org document the lead door reads to decide what a new lead is stamped
+ * with (`leadScopeForHost`). Empty is an org that has chosen no sharing
+ * default, whose leads are the whole org's; a case about a kept-apart org
+ * sets `crm.defaultRecordScope: 'host'`.
+ */
+let mockOrg: Record<string, unknown> = {}
 
 jest.mock('./notifications', () => ({
   __esModule: true,
@@ -91,6 +98,7 @@ jest.mock('./organizations', () => ({
   __esModule: true,
   orgDataCollectionForHost: async () => mockLeads,
   resolveOrgIdForHost: async () => 'org-1',
+  getOrgForHost: async () => ({ orgId: 'org-1', org: mockOrg }),
   consentGroupForSite: async (hostId: string) =>
     mockGroup
       ? { hostId, ...mockGroup, declared: true, awaitsConfirmation: false }
@@ -248,6 +256,7 @@ beforeEach(() => {
   mockNotifications.length = 0
   mockScopeNarrowings = []
   mockGroup = null
+  mockOrg = {}
 })
 
 describe('addHostLead is bounded by LEADS_MAX_PER_HOST (AGL-1529)', () => {
@@ -528,8 +537,10 @@ describe('the lead is written as an org-scoped record (AGL-3275)', () => {
     const state = harness(0)
     await add(state)
 
+    // The org has chosen no sharing default, so what the capture adds is the
+    // whole org's token.
     expect(state.written[0]).toMatchObject({
-      visibleTo: { __arrayUnion: ['host:host-1'] },
+      visibleTo: { __arrayUnion: ['org'] },
     })
   })
 
@@ -567,8 +578,10 @@ describe('the sites a lead’s opt-in covers', () => {
       },
     })
 
-  it('records a grouped capture without a key for the capturing site alone', async () => {
+  it('records a grouped capture without a key for the capturing site alone, when the org keeps its sites apart', async () => {
     mockGroup = GROUP
+    // Kept apart, the group decides who sees the row.
+    mockOrg = { crm: { defaultRecordScope: 'host' } }
     const state = harness(0)
     await optIn(state)
     expect(Object.keys(state.written[0]['marketingConsentByHost'] as object)).toEqual([

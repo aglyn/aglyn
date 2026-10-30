@@ -116,7 +116,7 @@ jest.mock('../server/capture-host-contact', () => {
 })
 
 import { TRANSFER_UNDO_WINDOW_MS, type TransferWarningClass } from '@aglyn/aglyn/data-transfer'
-import { hostScopeToken } from '@aglyn/aglyn/app-utils/scope-tokens'
+import { hostScopeToken, ORG_SCOPE_TOKEN } from '@aglyn/aglyn/app-utils/scope-tokens'
 import {
   resetTransferResourcesForTests,
   resolveTransferResource,
@@ -279,7 +279,9 @@ describe('a Salesforce contacts file', () => {
     const bo = mockCaptures.find((options) => options.email === 'bo@globex.test')
     expect(bo).toMatchObject({ hostId: SITE, source: 'import', campaignIds: [] })
     const globex = [...mockMemory.docs.entries()].find(([path, data]) => path.startsWith(COMPANIES) && data['name'] === 'Globex')
-    expect(globex?.[1]).toMatchObject({ visibleTo: SITE_TOKENS, hostId: SITE })
+    // The org has chosen no default, so the company is the whole org's; the
+    // site the file came in on is its provenance.
+    expect(globex?.[1]).toMatchObject({ visibleTo: [ORG_SCOPE_TOKEN], hostId: SITE })
     expect(bo?.facet).toMatchObject({
       firstName: 'Bo',
       lastName: 'Ray',

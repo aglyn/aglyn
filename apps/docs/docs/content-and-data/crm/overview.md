@@ -222,15 +222,18 @@ listed there, and opening it edits the same record the site's own hub edits.
 
 What differs from a site's hub:
 
-- **Every create names a site.** A contact, company, deal or logged activity
-  is always captured *by* a site — that is what decides which of your sites may
-  see it and whose marketing consent a contact's checkbox records — so **New
-  contact**, **New company**, **New deal**, **Log activity** and **Import**
-  each begin with a required **Site** picker. The pick is remembered for the
-  session, and an organization with exactly one site never sees the field. The
-  REST API asks the same question as `consentSiteId`. A **task** is the one
-  exception: **New task** offers **This organization (no site)** beside the
-  sites, for work the organization itself owes — see
+- **A create can name the site it came from.** **New company**, **New deal**
+  and **Log activity** begin with an optional **Source site**. Leave it on
+  **None** for a record that came from no site; every site sees the record
+  either way, because the CRM's records belong to the whole workspace. In a
+  workspace that [keeps each site's records apart](./sharing.md), the site
+  decides who may see the record, so the field is required and reads **Site**.
+  **New contact** and **Import** still ask for the site, because that is whose
+  marketing consent a contact's checkbox records. The pick is remembered for
+  the session, and an organization with exactly one site never sees the field.
+  The REST API takes the same answer as `consentSiteId`, which may be left out
+  unless the workspace keeps its sites apart. A **task** also offers **This
+  organization (no site)**, for work the organization itself owes — see
   [Organization tasks](./tasks.md#organization-tasks).
 - **The cross-site facts.** The contacts list gains a **Known by** column — the
   sites that have captured each person — and a contact's page gains a **Known

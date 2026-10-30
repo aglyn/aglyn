@@ -167,7 +167,9 @@ describe('the crm-pipeline writer', () => {
       name: 'Agency sales',
       facts: { stages: ['Discovery (25%)', 'Proposal (50%)', 'Negotiation (75%)'], wonStage: 'Won', lostStage: 'Lost' },
     })
-    expect(pipelines.get('job-i0')).toMatchObject({ isDefault: true, visibleTo: ['host:h1'], hostId: 'h1', createdByUid: 'u1' })
+    // An org that never chose shares its records with every site, so the
+    // pipeline is stamped org-wide; the site it came from is its provenance.
+    expect(pipelines.get('job-i0')).toMatchObject({ isDefault: true, visibleTo: ['org'], hostId: 'h1', createdByUid: 'u1' })
     await expect(writer.read({ hostId: 'h1', id: 'job-i0' })).resolves.toMatchObject({ id: 'job-i0', name: 'Agency sales' })
   })
 
