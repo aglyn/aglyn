@@ -394,8 +394,6 @@ export type AssistEditRefusal =
   | 'no-editor'
   /** The editor open is not the document the proposal was made for. */
   | 'other-document'
-  /** The open version is the one the live site serves. */
-  | 'live-version'
   /** An element the proposal names has gone or changed since. */
   | 'stale'
   /** The canvas's own guards refused part of the change. */
@@ -463,14 +461,10 @@ export function checkAssistEdit(
       message: 'This change was proposed for a different document than the one open.',
     }
   }
-  if (session.isLiveVersion()) {
-    return {
-      ok: false,
-      reason: 'live-version',
-      message:
-        'This is the version your live site shows. Make a new version first, then apply the change there.',
-    }
-  }
+  // The version the live site shows takes the change too (AGL-4116): it lands
+  // as unsaved edits on the canvas, exactly as the author's own would, and the
+  // Besigner's Save on that version writes the page's draft, never the version
+  // visitors see. Publishing stays its own deliberate step.
   for (const op of proposal.ops) {
     switch (op.op) {
       case 'setSeo': {

@@ -20,11 +20,12 @@ import { SCREEN_KIND_TEMPLATE } from '@aglyn/aglyn/app-utils/screen-route'
 import { screenSeoStageKey, SCREEN_SEO_TEXT_FIELDS } from '@aglyn/aglyn/app-utils/screen-seo-fields'
 import { hasConcurrentWrite, versionStamp } from '@aglyn/aglyn/app-utils/guarded-version-save'
 import { decodeStoredNodes, encodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
-import { VERSION_DRAFT_COLLECTION, VERSION_DRAFT_DOC_ID } from '@aglyn/aglyn/app-utils/version-draft'
+import { coeditMirrorRoomPath, VERSION_DRAFT_COLLECTION, VERSION_DRAFT_DOC_ID } from '@aglyn/aglyn/app-utils/version-draft'
 import { CanvasManager } from '@aglyn/aglyn/canvas-manager/canvas-manager'
 import { FEATURE_FLAG } from '@aglyn/aglyn/foundation/constants/shared'
 import type { EditorSession } from '@aglyn/aglyn/plugin-manager/editor-sessions'
 import type { NodesMap } from '@aglyn/aglyn/types/nodes'
+import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { resolveOrgIdForHost } from '@aglyn/tenant-data-admin/server/organizations'
 import { applyAssistEdit } from '../components/assist-edit-canvas'
 import {
@@ -586,6 +587,32 @@ export interface AiJobEditStepDeps {
   readTarget?: typeof readAiEditTarget
   writeEdit?: typeof writeAiEdit
   readDatasets?: typeof readAiSiteDatasets
+  clearMirror?: typeof clearAiEditMirror
+}
+
+/**
+ * Clears the co-edit mirror of the version whose draft a job just wrote
+ * (AGL-4116), as the Besigner's own Save draft does.
+ *
+ * The mirror holds unsaved canvas work and replays everything newer than the
+ * version's last save to whoever opens it. A draft write does not move the
+ * version's save, so without this the canvas of someone who had opened the
+ * older draft replays over the change the job just saved, and a room with
+ * replayed work offers no draft at all: the newer draft can only be reached by
+ * a Discard that deletes it. Best effort: a mirror that cannot be cleared
+ * leaves the draft saved, and the job reports what it wrote.
+ */
+export async function clearAiEditMirror(input: {
+  orgId: string
+  hostId: string
+  kind: AiEditTargetKind
+  id: string
+  versionId: string
+}): Promise<void> {
+  await firebaseAdmin
+    .database()
+    .ref(coeditMirrorRoomPath({ orgId: input.orgId, hostId: input.hostId, docType: input.kind, docId: input.id, versionId: input.versionId }))
+    .remove()
 }
 
 /** What an edit wrote, as the job's output: a link into the Besigner on the version written. */
@@ -640,6 +667,7 @@ export function createAiJobEditStep(deps: AiJobEditStepDeps = {}): AiJobStepRunn
   const readTarget = deps.readTarget ?? readAiEditTarget
   const writeEdit = deps.writeEdit ?? writeAiEdit
   const readDatasets = deps.readDatasets ?? readAiSiteDatasets
+  const clearMirror = deps.clearMirror ?? clearAiEditMirror
   return async ({ job, now, signal, firestore, org, modelFor }): Promise<AiJobStepOutcome> => {
     const model = modelFor?.('job.edit') ?? aiJobEditModel()
     const unspent = (failure: string): AiJobStepOutcome => ({ ...aiUnspentOutcome(model), failure })
@@ -717,6 +745,11 @@ export function createAiJobEditStep(deps: AiJobEditStepDeps = {}): AiJobStepRunn
       now,
     })
     if (write.ok === false) return { ...spent, failure: write.error }
+    if (write.placement === 'draft') {
+      await clearMirror({ orgId: job.orgId, hostId, kind: read.kind, id: read.id, versionId: write.versionId }).catch((error: unknown) =>
+        console.warn('[ai edit] the co-edit mirror could not be cleared', { jobId: job.$id, error }),
+      )
+    }
     const versionsUnavailable = inputs.newVersion && !versioning
     return { ...spent, outputs: [aiEditOutput(read, hostId, write, leftOut, { versionsUnavailable })] }
   }
