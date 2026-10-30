@@ -965,9 +965,32 @@ export interface CrmTask extends Omit<CrmScoped, 'hostId'> {
 export const CRM_ACTIVITY_KIND_LABELS: Record<CrmActivityKind, string> = {
   call: 'Call',
   email: 'Email',
+  text: 'Text message',
+  whatsapp: 'WhatsApp',
+  messenger: 'Facebook Messenger',
+  instagram: 'Instagram',
+  linkedin: 'LinkedIn',
   meeting: 'Meeting',
   note: 'Note',
   other: 'Other',
+}
+
+/**
+ * How a kind reads after a direction — "Inbound call", "Outbound WhatsApp
+ * message". Its own map rather than the label lowercased, because a brand
+ * keeps its capitals and a channel's name is not the thing that was sent.
+ */
+const CRM_ACTIVITY_KIND_NOUNS: Record<CrmActivityKind, string> = {
+  call: 'call',
+  email: 'email',
+  text: 'text message',
+  whatsapp: 'WhatsApp message',
+  messenger: 'Messenger message',
+  instagram: 'Instagram message',
+  linkedin: 'LinkedIn message',
+  meeting: 'meeting',
+  note: 'note',
+  other: 'other',
 }
 
 /**
@@ -1132,10 +1155,19 @@ export type CrmCallDirection = CrmEmailDirection | 'internal'
 /** An activity's direction: a call's three, of which an email takes the first two. */
 export type CrmActivityDirection = CrmCallDirection
 
-/** The directions each kind takes, in the order a select lists them; none for the rest. */
+/**
+ * The directions each kind takes, in the order a select lists them; none for
+ * the rest. A message travels the way an email does: one the team sent, or
+ * one the customer wrote.
+ */
 export const CRM_ACTIVITY_DIRECTIONS: Readonly<Partial<Record<CrmActivityKind, readonly CrmActivityDirection[]>>> = {
   call: ['outbound', 'inbound', 'internal'],
   email: ['outbound', 'inbound'],
+  text: ['outbound', 'inbound'],
+  whatsapp: ['outbound', 'inbound'],
+  messenger: ['outbound', 'inbound'],
+  instagram: ['outbound', 'inbound'],
+  linkedin: ['outbound', 'inbound'],
 }
 
 export const CRM_ACTIVITY_DIRECTION_LABELS: Record<CrmActivityDirection, string> = {
@@ -1157,8 +1189,10 @@ export function crmActivityDirection(
 /** "Inbound call", "Outbound email", "Internal call" — or the kind alone with no direction. */
 export function crmActivityKindTitle(kind: CrmActivityKind, direction?: unknown): string {
   const known = crmActivityDirection(kind, direction)
-  const noun = CRM_ACTIVITY_KIND_LABELS[kind] ?? String(kind)
-  return known ? `${CRM_ACTIVITY_DIRECTION_LABELS[known]} ${noun.toLowerCase()}` : noun
+  const label = CRM_ACTIVITY_KIND_LABELS[kind] ?? String(kind)
+  if (!known) return label
+  const noun = CRM_ACTIVITY_KIND_NOUNS[kind] ?? label.toLowerCase()
+  return `${CRM_ACTIVITY_DIRECTION_LABELS[known]} ${noun}`
 }
 
 /**

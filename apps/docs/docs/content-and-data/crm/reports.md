@@ -221,8 +221,8 @@ This card reads the same **500 most recently closed of each outcome** the
 
 Who did what in the period, busiest first.
 
-- **Activities logged** — every call, email, meeting, note and other activity
-  logged in the period, counted on the server, with the change against the
+- **Activities logged** — every call, email, message, meeting, note and other
+  activity logged in the period, counted on the server, with the change against the
   previous period.
 - **Tasks completed** — tasks ticked off in the period, counted on the server.
 - **Teammates active** — how many people logged or completed something.
