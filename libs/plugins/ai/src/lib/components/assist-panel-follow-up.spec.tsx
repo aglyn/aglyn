@@ -58,7 +58,7 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   ),
   MdiIcon: () => <span />,
 }))
-jest.mock('next/navigation', () => ({ __esModule: true, usePathname: () => route.pathname }))
+jest.mock('next/navigation', () => ({ __esModule: true, useRouter: () => ({ push: () => undefined, prefetch: () => undefined }), usePathname: () => route.pathname }))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   __esModule: true,
   useUser: () => ({ data: { uid: 'viewer', getIdToken: async () => 'tok' } }),
@@ -210,7 +210,7 @@ beforeEach(() => {
   route.pathname = '/acme/hosts/host-1/screens'
   canvas.reset()
   sessionStorage.clear()
-  sessionStorage.setItem('aglyn-assist:org-1', JSON.stringify(THREAD))
+  sessionStorage.setItem('aglyn-assist:org-1:host-1', JSON.stringify(THREAD))
   resetAiJobsStoreForTests()
   resetEditorSessionsForTests()
   global.fetch = jest.fn(async (url: string, init: RequestInit) => {

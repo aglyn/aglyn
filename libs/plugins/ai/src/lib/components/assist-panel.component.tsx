@@ -63,7 +63,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   Fragment,
   memo,
@@ -94,7 +94,13 @@ import {
   type AssistPendingFollowUp,
 } from '../model/assist-follow-up'
 import type { AiJobSummary } from '../model/ai-jobs.types'
-import { startAssistBuildRequest } from './ai-job-requests'
+import { cancelAiJobRequest, startAssistBuildRequest, startAssistPageChangeRequest } from './ai-job-requests'
+import {
+  assistPageChangeDraftVersion,
+  isAssistPageChangeProposal,
+  type AssistPageChangeProposal,
+} from '../model/assist-page-change'
+import { AssistPageChangeCard } from './assist-page-change-card.component'
 import { aiInsightSurfaceForPath } from '../model/ai-insight'
 import { AssistJobsDrawer } from './assist-jobs-drawer.component'
 import {
@@ -104,7 +110,8 @@ import {
   useAiJobsOpenRequest,
   type AiJobsOpenRequest,
 } from './ai-jobs-store'
-import { aiJobsActivity, aiJobsLauncherLabel } from '../model/ai-job-activity'
+import { aiJobPhase, aiJobsActivity, aiJobsLauncherLabel } from '../model/ai-job-activity'
+import { AI_SITE_BUILD_HREF } from '../model/ai-job-notice'
 import { AiModelSelector } from './ai-model-selector.component'
 import { AiUsageStrip } from './ai-usage-strip.component'
 import { useAiModelChoice } from './use-ai-model-choice'
@@ -203,6 +210,20 @@ interface AssistMessage {
   buildJob?: AiJobSummary | null
   /** Why the build could not be planned or confirmed. */
   buildNotice?: string | null
+  /**
+   * A later turn's plan replaced this one before it was confirmed (AGL-4116):
+   * its job was canceled, and the card gives way to one line.
+   */
+  buildReplaced?: boolean
+  /**
+   * A change to a page the site already has (AGL-4116): the panel starts its
+   * `edit` job when the turn ends, and the card links the draft it makes.
+   */
+  pageChange?: AssistPageChangeProposal | null
+  /** The edit job the change started, as last seen. */
+  pageChangeJob?: AiJobSummary | null
+  /** Why the change could not be started. */
+  pageChangeNotice?: string | null
 }
 
 /** The key a follow-up waiting for its canvas is kept under, per org (AGL-3616). */
@@ -244,8 +265,31 @@ export function assistThreadDraftLinks(
   return assistBuildDraftLinks(jobs, orgSlug)
 }
 
+/**
+ * The builds in a thread whose plan is still waiting on the person
+ * (AGL-4116): queued, being planned, or planned and not yet confirmed. A new
+ * plan in the same thread replaces them, so a conversation that keeps
+ * changing a plan holds one plan, not one per message.
+ */
+export function assistUnconfirmedBuilds(
+  messages: ReadonlyArray<Pick<AssistMessage, 'build' | 'buildJob' | 'buildReplaced'>>,
+): Array<{ index: number; jobId: string }> {
+  return messages.flatMap((message, index) => {
+    const job = message.build && !message.buildReplaced ? message.buildJob : null
+    if (!job) return []
+    const phase = aiJobPhase(job)
+    return phase === 'queued' || phase === 'planning' || phase === 'plan-ready' ? [{ index, jobId: job.id }] : []
+  })
+}
+
+/** What a plan a later one replaced says in its card's place (AGL-4116). */
+export const ASSIST_BUILD_REPLACED_COPY = 'Replaced by the updated plan below. Nothing from this one was built.'
+
 /** What a stored build that never got its job says, rather than planning forever. */
 const BUILD_NOT_STARTED = 'This build was not started. Ask again to plan it.'
+
+/** What a stored page change that never got its job says (AGL-4116). */
+const PAGE_CHANGE_NOT_STARTED = 'This change was not started. Ask again to make it.'
 
 interface AssistQuotaInfo {
   period: 'day' | 'month'
@@ -256,30 +300,59 @@ interface AssistQuotaInfo {
 
 const HISTORY_TURNS_SENT = 12
 
-const storageKey = (orgId: string) => `aglyn-assist:${orgId}`
+/**
+ * The thread a question belongs to: one per site, and one for the
+ * workspace's own pages (AGL-4116). A workspace-wide thread carried one
+ * site's request into a build on another site, because the history that
+ * rides each question is the thread's last turns.
+ */
+export function assistThreadKey(orgId: string, hostId: string | null | undefined): string {
+  return hostId ? `aglyn-assist:${orgId}:${hostId}` : `aglyn-assist:${orgId}`
+}
 
-function loadThread(orgId: string | undefined): AssistMessage[] {
-  if (!orgId || typeof sessionStorage === 'undefined') return []
+const NO_MESSAGES: AssistMessage[] = []
+
+/**
+ * The AI jobs page of the site a console page is on (AGL-4116), or `null`
+ * off a site: `/{orgSlug}/hosts/{site}/ai-jobs`, the site named as the
+ * address names it.
+ */
+export function assistSiteAiJobsHref(
+  pathname: string | null | undefined,
+  orgSlug: string | null | undefined,
+  hostId: string | null | undefined,
+): string | null {
+  if (!pathname || !orgSlug || !hostId) return null
+  const parts = pathname.split('/').filter(Boolean)
+  const site = parts[0] === orgSlug && parts[1] === 'hosts' ? parts[2] : undefined
+  return site ? `/${orgSlug}/hosts/${site}${AI_SITE_BUILD_HREF}` : null
+}
+
+function loadThread(key: string): AssistMessage[] {
+  if (typeof sessionStorage === 'undefined') return []
   try {
-    const raw = sessionStorage.getItem(storageKey(orgId))
+    const raw = sessionStorage.getItem(key)
     const parsed = raw ? (JSON.parse(raw) as AssistMessage[]) : []
     if (!Array.isArray(parsed)) return []
     // A build whose job was still being created when the page went away is
     // not started again from a stored thread (AGL-3616): it says so instead.
+    // A page change likewise (AGL-4116).
     return parsed.map((message) =>
       message.build && !message.buildJob && !message.buildNotice
         ? { ...message, buildNotice: BUILD_NOT_STARTED }
-        : message,
+        : message.pageChange && !message.pageChangeJob && !message.pageChangeNotice
+          ? { ...message, pageChangeNotice: PAGE_CHANGE_NOT_STARTED }
+          : message,
     )
   } catch {
     return []
   }
 }
 
-function saveThread(orgId: string | undefined, messages: AssistMessage[]) {
-  if (!orgId || typeof sessionStorage === 'undefined') return
+function saveThread(key: string, messages: AssistMessage[]) {
+  if (typeof sessionStorage === 'undefined') return
   try {
-    sessionStorage.setItem(storageKey(orgId), JSON.stringify(messages))
+    sessionStorage.setItem(key, JSON.stringify(messages))
   } catch {
     // Quota/full storage never breaks chat.
   }
@@ -706,7 +779,23 @@ export function AssistPanelComponent(props: AssistDockProps) {
 
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [messages, setMessages] = useState<AssistMessage[]>([])
+  // Every thread this panel has opened, by its key (AGL-4116): the one on
+  // screen is this site's, and an answer still streaming lands in the thread
+  // it was asked in, even after the page moved to another site.
+  const threadKey = scopedOrgId ? assistThreadKey(scopedOrgId, hostId) : null
+  const [threads, setThreads] = useState<Readonly<Record<string, AssistMessage[]>>>({})
+  const messages = (threadKey && threads[threadKey]) || NO_MESSAGES
+  const updateThread = useCallback(
+    (key: string | null, update: (prior: AssistMessage[]) => AssistMessage[]) => {
+      if (!key) return
+      setThreads((prior) => ({ ...prior, [key]: update(prior[key] ?? loadThread(key)) }))
+    },
+    [],
+  )
+  const setMessages = useCallback(
+    (update: (prior: AssistMessage[]) => AssistMessage[]) => updateThread(threadKey, update),
+    [threadKey, updateThread],
+  )
   const [quota, setQuota] = useState<AssistQuotaInfo | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   // The model switch and the usage strip (AGL-2942): the pick rides the
@@ -728,20 +817,34 @@ export function AssistPanelComponent(props: AssistDockProps) {
   )
   const editorSession = openEditorSession()
 
-  // Thread is per-org, session-persisted; switching orgs swaps threads.
-  // Keyed on the SCOPED org (AGL-1934): gating only the render would still
-  // load — and, on the next keystroke, save — a thread under the fallback
-  // org's key on every mount of a page that named no workspace.
+  // A thread per site, session-persisted; moving to another site or org
+  // swaps threads (AGL-4116). Keyed on the SCOPED org (AGL-1934): gating only
+  // the render would still load — and, on the next keystroke, save — a
+  // thread under the fallback org's key on every mount of a page that named
+  // no workspace.
   useEffect(() => {
-    setMessages(loadThread(scopedOrgId))
+    if (!threadKey) return
+    setThreads((prior) => (threadKey in prior ? prior : { ...prior, [threadKey]: loadThread(threadKey) }))
+  }, [threadKey])
+  useEffect(() => {
     setQuota(null)
   }, [scopedOrgId])
 
+  // Each thread is written back when it changes, the one on screen or one an
+  // answer is still streaming into.
+  const savedThreads = useRef<Record<string, AssistMessage[]>>({})
   useEffect(() => {
-    saveThread(scopedOrgId, messages)
+    for (const [key, list] of Object.entries(threads)) {
+      if (savedThreads.current[key] === list) continue
+      savedThreads.current[key] = list
+      saveThread(key, list)
+    }
+  }, [threads])
+
+  useEffect(() => {
     const node = scrollRef.current
     if (node) node.scrollTop = node.scrollHeight
-  }, [scopedOrgId, messages])
+  }, [messages])
 
   const entitled = orgReady && checkEntitlement(org as never, 'aiAssist')
   // Whether a question asked from a besigner document carries its canvas
@@ -765,10 +868,16 @@ export function AssistPanelComponent(props: AssistDockProps) {
   // jobs that spend between chat messages move it (AGL-3722).
   useEffect(() => followAiJobsForUsageMeter(), [])
   const jobsActivity = aiJobsActivity(inFlight)
+  // On a site, its jobs are read on its AI jobs page (AGL-4116): the list in
+  // the chat was too cramped to read, and opening it scrolled the chat to
+  // its top.
+  const siteJobsHref = assistSiteAiJobsHref(pathname, orgSlug, hostId)
+  const router = useRouter()
   // Any surface asking to open AI jobs — an "Open AI jobs" button, the
-  // indicator, a notification's link — opens the panel on its drawer.
-  // The request is handed to the drawer until the panel closes, so opening
-  // the panel again later does not re-highlight a job asked for before.
+  // indicator, a notification's link — goes to the site's AI jobs page, on
+  // the job it names. Off a site, it opens the panel on its drawer, and the
+  // request is handed to the drawer until the panel closes, so opening the
+  // panel again later does not re-highlight a job asked for before.
   const openRequest = useAiJobsOpenRequest()
   const [jobsFocus, setJobsFocus] = useState<AiJobsOpenRequest | null>(null)
   // The request outlives the panel: it is module state, and a page in
@@ -778,6 +887,11 @@ export function AssistPanelComponent(props: AssistDockProps) {
   useEffect(() => {
     if (openRequest.seq <= answeredSeq.current) return
     answeredSeq.current = openRequest.seq
+    if (siteJobsHref) {
+      setOpen(false)
+      router.push(openRequest.jobId ? `${siteJobsHref}/${encodeURIComponent(openRequest.jobId)}` : siteJobsHref)
+      return
+    }
     setJobsFocus(openRequest)
     setOpen(true)
     // A new `seq` is a new request; the object is read as it stands.
@@ -801,16 +915,19 @@ export function AssistPanelComponent(props: AssistDockProps) {
     // The drafts this thread's builds made (AGL-3616): the chat sees refs and
     // labels; the addresses stay here, for the card a follow-up raises.
     const draftLinks = hostId ? assistThreadDraftLinks(messages, orgSlug) : []
+    // Only this site's turns ride the question (AGL-4116), and the answer
+    // lands in the thread it was asked in.
     const history = messages
       .slice(-HISTORY_TURNS_SENT)
       .map(({ role, text }) => ({ role, text }))
-    setMessages((prior) => [
+    const askedIn = threadKey
+    updateThread(askedIn, (prior) => [
       ...prior,
       { role: 'user', text: question },
       { role: 'assistant', text: '' },
     ])
     const patchAnswer = (patch: (message: AssistMessage) => AssistMessage) => {
-      setMessages((prior) => {
+      updateThread(askedIn, (prior) => {
         const next = [...prior]
         const last = next[next.length - 1]
         if (last?.role === 'assistant') next[next.length - 1] = patch(last)
@@ -829,6 +946,8 @@ export function AssistPanelComponent(props: AssistDockProps) {
     }
     /** The build this turn proposed, started once its stream ends (AGL-3616). */
     let proposedBuild: AssistBuildProposal | null = null
+    /** The page change this turn asked for, started once its stream ends (AGL-4116). */
+    let proposedChange: AssistPageChangeProposal | null = null
     try {
       // The canvas outline rides along from the besigner document the open
       // editor holds — ids, component ids and short values, never the stored
@@ -960,6 +1079,9 @@ export function AssistPanelComponent(props: AssistDockProps) {
             // The build proposal (AGL-3616), shape-checked before it can start a job.
             const build = isAssistBuildProposal(event.build) ? event.build : null
             proposedBuild = build
+            // The page change (AGL-4116), shape-checked before it can start a job.
+            const pageChange = isAssistPageChangeProposal(event.pageChange) ? event.pageChange : null
+            proposedChange = pageChange
             patchAnswer((message) => ({
               ...message,
               exchangeId: (event.exchangeId as string | null) ?? null,
@@ -967,6 +1089,7 @@ export function AssistPanelComponent(props: AssistDockProps) {
               proposal,
               edit,
               ...(build ? { build, buildJob: null, buildNotice: null } : {}),
+              ...(pageChange ? { pageChange, pageChangeJob: null, pageChangeNotice: null } : {}),
             }))
             if (event.quota) setQuota(event.quota as AssistQuotaInfo)
             publishMeter(event.meter)
@@ -983,6 +1106,9 @@ export function AssistPanelComponent(props: AssistDockProps) {
             if (build) {
               trackEvent('assistant_proposal_shown', { action: build.id })
             }
+            if (pageChange) {
+              trackEvent('assistant_proposal_shown', { action: pageChange.id })
+            }
           } else if (event.type === 'error') {
             failAnswer(String(event.error ?? 'The assistant stream failed.'))
           }
@@ -991,6 +1117,21 @@ export function AssistPanelComponent(props: AssistDockProps) {
       // One request, one build (AGL-3616): the job is created here, once,
       // through the job door, and plans inline; its card shows the plan.
       if (proposedBuild) {
+        // One plan per conversation (AGL-4116): a plan this thread proposed
+        // and the person has not confirmed is replaced by the new one, which
+        // the chat wrote from the whole request as it now stands. Its job is
+        // canceled, so it never builds and never warns another door.
+        for (const replaced of assistUnconfirmedBuilds(messages)) {
+          updateThread(askedIn, (prior) =>
+            prior.map((entry, i) => (i === replaced.index ? { ...entry, buildReplaced: true } : entry)),
+          )
+          void cancelAiJobRequest(user, scopedOrgId, replaced.jobId).then(({ job }) => {
+            if (!job) return
+            updateThread(askedIn, (prior) =>
+              prior.map((entry, i) => (i === replaced.index ? { ...entry, buildJob: job } : entry)),
+            )
+          })
+        }
         const decision = await startAssistBuildRequest(user, scopedOrgId, proposedBuild)
         // The plan the door ran inline has just spent (AGL-3722), so the strip
         // moves with it, to the figure the plan card quotes. Left to the jobs
@@ -1004,6 +1145,19 @@ export function AssistPanelComponent(props: AssistDockProps) {
           refreshAiUsageMeterFree(uid, scopedOrgId, decision.job?.review?.freeCredits, readAiUsageMeter(uid, scopedOrgId))
         }
         patchAnswer((message) => ({ ...message, buildJob: decision.job, buildNotice: decision.error }))
+      }
+      // A change to a page (AGL-4116): its edit job starts here, once, with
+      // no plan to confirm. A follow-up to a page this conversation already
+      // changed starts from the draft that change made.
+      if (proposedChange) {
+        const decision = await startAssistPageChangeRequest(
+          user,
+          scopedOrgId,
+          proposedChange,
+          assistPageChangeDraftVersion(messages, proposedChange.pageId),
+        )
+        publishMeter(decision.meter)
+        patchAnswer((message) => ({ ...message, pageChangeJob: decision.job, pageChangeNotice: decision.error }))
       }
     } catch (error) {
       console.error(error)
@@ -1023,6 +1177,8 @@ export function AssistPanelComponent(props: AssistDockProps) {
     scopedOrgId,
     orgSlug,
     pathname,
+    threadKey,
+    updateThread,
     user,
   ])
 
@@ -1079,7 +1235,7 @@ export function AssistPanelComponent(props: AssistDockProps) {
         i === index ? { ...entry, proposalResolved: true } : entry,
       ),
     )
-  }, [])
+  }, [setMessages])
 
   /**
    * Land a confirmed edit on the open editor (AGL-2906): through the canvas's
@@ -1133,7 +1289,7 @@ export function AssistPanelComponent(props: AssistDockProps) {
         body: JSON.stringify(report),
       }).catch(() => undefined)
     },
-    [enqueueSnackbar, messages, scopedOrgId, user],
+    [enqueueSnackbar, messages, scopedOrgId, setMessages, user],
   )
 
   /** Keep what a build card learned about its job on its own message (AGL-3616). */
@@ -1141,7 +1297,36 @@ export function AssistPanelComponent(props: AssistDockProps) {
     (index: number, patch: Pick<AssistMessage, 'buildJob'> | Pick<AssistMessage, 'buildNotice'>) => {
       setMessages((prior) => prior.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)))
     },
-    [],
+    [setMessages],
+  )
+
+  /** Keep what a page change card learned about its job on its own message (AGL-4116). */
+  const patchPageChange = useCallback(
+    (index: number, patch: Pick<AssistMessage, 'pageChangeJob' | 'pageChangeNotice'>) => {
+      setMessages((prior) => prior.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)))
+    },
+    [setMessages],
+  )
+
+  /** Start a page change again after it failed: a new edit job, from the same draft. */
+  const [retryingChange, setRetryingChange] = useState<number | null>(null)
+  const retryPageChange = useCallback(
+    async (index: number) => {
+      const proposal = messages[index]?.pageChange
+      if (!proposal || !scopedOrgId) return
+      setRetryingChange(index)
+      patchPageChange(index, { pageChangeJob: null, pageChangeNotice: null })
+      const decision = await startAssistPageChangeRequest(
+        user,
+        scopedOrgId,
+        proposal,
+        assistPageChangeDraftVersion(messages.slice(0, index), proposal.pageId),
+      )
+      publishMeter(decision.meter)
+      patchPageChange(index, { pageChangeJob: decision.job, pageChangeNotice: decision.error })
+      setRetryingChange(null)
+    },
+    [messages, patchPageChange, publishMeter, scopedOrgId, user],
   )
 
   /** Wave an edit card away. Nothing to tell the server: nothing happened. */
@@ -1152,7 +1337,7 @@ export function AssistPanelComponent(props: AssistDockProps) {
           i === index ? { ...entry, editOutcome: { kind: 'dismissed' } } : entry,
       ),
     )
-  }, [])
+  }, [setMessages])
 
   const sendFeedback = useCallback(
     async (index: number, feedback: 'up' | 'down') => {
@@ -1179,7 +1364,7 @@ export function AssistPanelComponent(props: AssistDockProps) {
         })
       }
     },
-    [enqueueSnackbar, messages, scopedOrgId, user],
+    [enqueueSnackbar, messages, scopedOrgId, setMessages, user],
   )
 
   // A released-off feature does not exist (staff preview excepted) — and
@@ -1321,6 +1506,7 @@ export function AssistPanelComponent(props: AssistDockProps) {
               insight={ai.generate ? aiInsightSurfaceForPath(pathname) : null}
               inFlight={jobsVisible ? inFlight : undefined}
               focus={jobsFocus}
+              pageHref={siteJobsHref}
             />
             {!messages.length && (
               <Alert severity="info" sx={{ mb: 2 }}>
@@ -1426,7 +1612,25 @@ export function AssistPanelComponent(props: AssistDockProps) {
                         onDismiss={() => dismissEdit(index)}
                       />
                     )}
-                  {message.role === 'assistant' && message.build && scopedOrgId && (
+                  {message.role === 'assistant' && message.pageChange && scopedOrgId && (
+                    <AssistPageChangeCard
+                      proposal={message.pageChange}
+                      job={message.pageChangeJob ?? null}
+                      notice={message.pageChangeNotice ?? null}
+                      orgId={scopedOrgId}
+                      orgSlug={orgSlug}
+                      user={user}
+                      busy={retryingChange === index}
+                      onJob={(job) => patchPageChange(index, { pageChangeJob: job })}
+                      onRetry={() => void retryPageChange(index)}
+                    />
+                  )}
+                  {message.role === 'assistant' && message.build && message.buildReplaced && (
+                    <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 0.5 }}>
+                      {ASSIST_BUILD_REPLACED_COPY}
+                    </Typography>
+                  )}
+                  {message.role === 'assistant' && message.build && !message.buildReplaced && scopedOrgId && (
                     <AssistBuildCard
                       proposal={message.build}
                       job={message.buildJob ?? null}

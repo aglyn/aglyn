@@ -55,6 +55,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#usage-strip': 'The assistant panel and the AI dialogs in the Besigner show a compact usage line once you have made a request: You — your credits this month, against your allotment when one applies.',
   },
   aiAssistBuilds: {
+    '#change-a-page': 'Ask for a change to a page the site already has, such as make the image at the top of the home page fill the background, and Assist makes it on that page.',
     '#the-plan-card': 'The card shows Planning what to build on this site… while the plan is made, then the Proposed plan, one line per part: Reuses something the site already has, and what for;',
   },
   aiAutomations: {
@@ -110,7 +111,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#asking-a-question': 'Choose Ask a question on the Ask AI about these numbers card — on a site\'s dashboard, its Analytics page, and your organization\'s Sites page — or open the Assist panel on one of these pages and choose Ask about your…',
   },
   aiJobs: {
-    '#ai-jobs-in-assist': 'The AI jobs list at the top of the Assist panel follows the workspace\'s jobs wherever you are in the console.',
+    '#ai-jobs-in-assist': 'The AI jobs row at the top of the Assist panel follows your jobs wherever you are in the console, and counts the jobs that need you and are running.',
   },
   aiLayout: {
     '#generate-a-layout-with-aglyn-ai': 'An AI build job can make a layout from a brief: the header, navigation and footer you have in mind.',

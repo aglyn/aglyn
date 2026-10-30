@@ -24,11 +24,38 @@ Assist decides from your message whether you are asking or asking for something 
 - **A question**, such as *how do I connect a domain?*, gets an answer from the docs.
 - **A change to the page you have open** in the Besigner gets a
   [proposed edit](../getting-started/aglyn-assist.md#edits-in-the-besigner).
+- **A change to a page the site already has**, asked anywhere else on the site, is made
+  as a draft of that page, with no plan to confirm. See [Change a page](#change-a-page).
 - **Something to make** gets a **plan card** in the chat.
+
+Each site has its own conversation. What you asked on one site is never part of a
+request on another, and the workspace's own pages, such as Billing, have one of their
+own.
 
 It builds only on a site, and only what your plan includes and the site has turned on.
 When you ask for something it cannot make from the chat, it says so plainly and plans the
 rest.
+
+## Change a page {#change-a-page}
+
+Ask for a change to a page the site already has, such as *make the image at the top of
+the home page fill the background*, and Assist makes it on that page:
+
+1. The card says **Making the change as a draft of Home…** while it works.
+2. The change is saved as a new draft version of the same page. Your published page
+   stays as it is: visitors see no change until you publish the draft.
+3. The card then says **Your draft of Home is ready**, with **Open in the Besigner**.
+   Check the change there, and publish it when you are happy with it, as you would any
+   version. To leave it, don't publish it.
+
+There is no plan to confirm, and nothing is added to the page that you did not ask for.
+Ask for another change to the same page and it starts from that draft, so the newest
+draft holds every change you asked for. If a change could not be made, the card says
+why, with **Try again**.
+
+One message changes one page. For changes to several pages, ask for the next one when
+the first draft is ready. A change needs a paid plan, because it is saved beside the
+published page as its own version.
 
 ## What one request can build {#what-it-can-build}
 
@@ -56,8 +83,9 @@ One message can ask for any mix of:
   [custom fields](./crm-by-ai.md#set-up-the-crm) on contacts, companies, deals or leads, and
   new values for a [picklist](./crm-by-ai.md#set-up-the-crm) such as lead status or source.
   These are saved straight to your CRM, as they are when you set them up yourself;
-- **a change to a page or layout** the site already has, saved as a new version visitors do
-  not see until you publish it;
+- **a change to a page or layout** the site already has, alongside the rest of a request,
+  saved as a new version visitors do not see until you publish it. A change to one page on
+  its own needs no plan: see [Change a page](#change-a-page);
 - **redirects**: send an old address to a page you have, change where a redirect goes, or
   stop one, such as *redirect /old-menu to /menu*. See
   [Redirects](../building-sites/redirects/overview.md#ask-aglyn-ai);
@@ -123,6 +151,11 @@ your credits cover and pauses, then **Resume** carries on), **Build the home pag
 (only the home page and what it needs), or **Upgrade**. See
 [Before a job starts](./ai-credits.md#before-a-job-starts).
 
+To change the plan before you confirm it, say what to change in the chat, such as
+*leave out the services grid*. Assist plans again with your change, and the new plan
+replaces the one waiting for you: that one is canceled and says **Replaced by the updated
+plan below**, so there is only ever one plan to confirm.
+
 Nothing is built while the card waits. The plan follows
 [the building rules](./how-aglyn-ai-builds.md#the-building-rules), and a plan that breaks
 them, or asks for more than your plan includes, is stopped before you are asked to confirm
@@ -133,8 +166,8 @@ it.
 **Confirm plan** builds it. The card then shows **Building each part in turn** and a row per
 part, such as *Page: Pricing — building*, that reads **built**, **building**, **waiting**,
 **failed** or **not built**. You can close the chat; the job keeps going, and
-**Open in AI jobs** follows it in the [AI jobs](./ai-jobs-and-activity.md#ai-jobs-in-assist)
-list.
+**Open in AI jobs** opens the job on the site's
+[AI jobs page](./ai-jobs-and-activity.md#the-ai-jobs-page).
 
 Confirming checks your permissions and credits again, so a plan confirmed after your
 credits ran out waits instead of building.
