@@ -34,10 +34,10 @@ the exact docs section and the console page where you do it.
   for a change to the page, component or layout you have open, and it shows
   exactly what would change before anything does. See
   [Edits in the Besigner](#edits-in-the-besigner).
-- **Change a page as a draft** (with AI generation on a paid plan) — ask for a
-  change to one of the site's pages from anywhere on the site, and it saves the
-  change as a draft of that page, with **Open in the Besigner** to check it and
-  publish it. See [Change a page](../ai/assist-builds.md#change-a-page).
+- **Change a page as a draft** (with AI generation) — ask for a change to one of
+  the site's pages from anywhere on the site, and it saves the change into that
+  page's draft, with **Open in the Besigner** to check it and publish it. See
+  [Change a page](../ai/assist-builds.md#change-a-page).
 - **Keep one conversation per site** — each site has its own conversation, so
   what you asked on one site never becomes part of a request on another.
 - **Answer in your language** — ask in any language and it answers in that

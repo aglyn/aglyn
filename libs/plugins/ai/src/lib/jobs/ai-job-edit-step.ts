@@ -18,7 +18,9 @@
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { SCREEN_KIND_TEMPLATE } from '@aglyn/aglyn/app-utils/screen-route'
 import { screenSeoStageKey, SCREEN_SEO_TEXT_FIELDS } from '@aglyn/aglyn/app-utils/screen-seo-fields'
+import { hasConcurrentWrite, versionStamp } from '@aglyn/aglyn/app-utils/guarded-version-save'
 import { decodeStoredNodes, encodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
+import { VERSION_DRAFT_COLLECTION, VERSION_DRAFT_DOC_ID } from '@aglyn/aglyn/app-utils/version-draft'
 import { CanvasManager } from '@aglyn/aglyn/canvas-manager/canvas-manager'
 import { FEATURE_FLAG } from '@aglyn/aglyn/foundation/constants/shared'
 import type { EditorSession } from '@aglyn/aglyn/plugin-manager/editor-sessions'
@@ -29,7 +31,6 @@ import {
   AI_EDIT_COMPONENT_LEFT_OUT,
   AI_EDIT_EMAIL_COPY,
   AI_EDIT_GONE_COPY,
-  AI_EDIT_NEEDS_VERSIONING_COPY,
   AI_EDIT_NO_NODES_COPY,
   AI_EDIT_NO_SITE_COPY,
   AI_EDIT_NOTHING_COPY,
@@ -76,7 +77,7 @@ import {
 import { registerAiJobAdmission, type AiJobAdmission, type AiJobAdmissionRefusal } from './ai-job-admission'
 import { aiJobStepBudget } from './ai-job-budget'
 import { aiOriginJobId } from './ai-job-draft-ids'
-import { aiGenerationSpent, aiLimitReview, aiUnspentOutcome } from './ai-job-generation'
+import { aiGenerationSpent, aiUnspentOutcome } from './ai-job-generation'
 import { AI_JOB_BRIEF_MAX_CHARS, type AiJobStepOutcome, type AiJobStepRunner } from './ai-job-text-step'
 import { registerAiJobStep } from './ai-jobs'
 
@@ -94,13 +95,19 @@ import { registerAiJobStep } from './ai-jobs'
  *
  * ── Where the change lands, decided before anything is spent ────────────
  *
- * Never on a version a visitor sees. With version history, a NEW version
- * beside the one it started from — a copy of that version's stored fields with
- * the changed nodes — which becomes the page's current version only when the
- * page is not published; a published page's current version, and a layout's,
- * never move. Without it, in place, on a version no visitor reaches: an
- * unpublished page's, or one that is not the current version and no schedule
- * will publish. Anything else is refused as a plan limit, charged nothing.
+ * Never on a version a visitor sees. By default, on every plan, in the
+ * WORKING DRAFT of the version it started from (AGL-4116): the one document
+ * the Besigner saves to as an author works and offers with Open draft, which
+ * publishing moves into the version. The change is built on the draft the
+ * author already has, when the Besigner would still offer it, so their work
+ * in progress is never thrown away; otherwise on the version's own tree.
+ *
+ * Only when the request asks for a new version, and the plan keeps version
+ * history, a NEW version beside the one it started from — a copy of that
+ * version's stored fields with the changed nodes — which becomes the page's
+ * current version only when the page is not published; a published page's
+ * current version, and a layout's, never move. Asked for without version
+ * history, the change goes into the draft and the output says why.
  *
  * ── What a job cannot do that the editor can ────────────────────────────
  *
@@ -114,8 +121,8 @@ import { registerAiJobStep } from './ai-jobs'
  *
  * The new version is named by the job's id — a build's unit is named by its
  * plan item's id — so a run asked again finds what it wrote and spends
- * nothing. A change made in place stamps the version with the job's id for
- * the same reason.
+ * nothing. A draft the job writes is stamped with the job's id for the same
+ * reason.
  */
 
 /** The longest the step may take reading the page and writing it. */
@@ -143,8 +150,8 @@ export function aiJobEditModel(): string {
 export const AI_JOB_EDIT_RULES: AiSystemBlock = {
   text: [
     'You change a page or a layout the person already has, as a job that runs on its own. No editor is open, nothing is selected, and nobody can answer a question before you finish.',
-    `- Make exactly the change the request asks for, and keep everything else as it is: other elements, their text, their styles and their order. Never rewrite, restyle, move or remove what the request does not ask about.`,
-    '- Find the elements the request means in the canvas outline the request carries, by what they say and what they are. Name only ids that outline lists.',
+    `- Make exactly the change the request asks for, and keep everything else as it is: other elements, their text, their styles and their order. Never rewrite, restyle, move or remove what the request does not ask about, beyond what making that change needs.`,
+    '- Find the elements the request means in the outline of the whole document the request carries, by what they say, what they are and where they sit on the page. Name only ids that outline lists.',
     `- If the outline does not show an element the request is about, change nothing for that part: never guess at an element.`,
     `- Call ${ASSIST_EDIT_TOOL_NAME} exactly once, with every operation. Its summary is one short line saying what changed, in the language of the request; it names the version the change is saved in.`,
     "- Fill in a page's search title or description only when the request asks for it.",
@@ -299,7 +306,14 @@ export interface AiEditTargetRead {
   pointerVersionId: string | null
   /** The version the change starts from. */
   sourceVersionId: string
+  /** The version's own tree. */
   nodes: NodesMap
+  /**
+   * The version's working draft, when it has one the Besigner would still
+   * offer: an author's saved work in progress, which a change to the draft
+   * is built on. Null when there is none, or the version was saved since.
+   */
+  draft: { nodes: NodesMap } | null
   /** Whether visitors see the document's current version: a published page, a collection template, any layout. */
   served: boolean
   /** The version a pending publish schedule will make current, if any. */
@@ -326,6 +340,29 @@ function pendingScheduleVersion(doc: FirebaseFirestore.DocumentSnapshot): string
   const schedule = doc.get('publishSchedule') as Record<string, unknown> | null | undefined
   if (!schedule || schedule['status'] !== 'pending' || schedule['action'] === 'unpublish') return null
   return text(schedule['versionId']) || null
+}
+
+/**
+ * A version's working draft as the Besigner would offer it: a tree, taken
+ * against the version as it is stored now. A draft the version has been
+ * saved past is not offered there (it would undo that save), so a change is
+ * not built on it here either. `aiEditJobId` names the job that wrote it.
+ */
+function usableDraft(
+  draft: FirebaseFirestore.DocumentSnapshot,
+  version: FirebaseFirestore.DocumentSnapshot,
+): { nodes: NodesMap; aiEditJobId: string | null } | null {
+  if (!draft.exists) return null
+  const nodes = decodeStoredNodes<NodesMap>(draft.get('nodes'))
+  if (!nodes || !Object.keys(nodes).length) return null
+  const baseStamp = typeof draft.get('baseStamp') === 'string' ? (draft.get('baseStamp') as string) : null
+  if (hasConcurrentWrite(baseStamp, versionStamp(version.get('updatedAt')))) return null
+  return { nodes, aiEditJobId: text(draft.get('aiEditJobId')) || null }
+}
+
+/** A version's working draft document: the Besigner's, at the core's one address. */
+function draftRef(versions: FirebaseFirestore.CollectionReference, versionId: string): FirebaseFirestore.DocumentReference {
+  return versions.doc(versionId).collection(VERSION_DRAFT_COLLECTION).doc(VERSION_DRAFT_DOC_ID)
 }
 
 /**
@@ -371,17 +408,21 @@ export async function readAiEditTarget(
     }
     if (own?.exists && input.jobId) {
       const placement: AiEditPlacement = pointerVersionId === input.jobId ? 'new-current' : 'new-beside'
-      return { ...base, sourceVersionId: sourceVersionId ?? input.jobId, nodes: {}, written: { versionId: input.jobId, placement } }
+      return { ...base, sourceVersionId: sourceVersionId ?? input.jobId, nodes: {}, draft: null, written: { versionId: input.jobId, placement } }
     }
     if (!sourceVersionId) return { status: 404, error: AI_EDIT_VERSION_GONE_COPY }
-    const source = await versions.doc(sourceVersionId).get()
+    const [source, draftDoc] = await Promise.all([versions.doc(sourceVersionId).get(), draftRef(versions, sourceVersionId).get()])
     if (!source.exists) return { status: 404, error: AI_EDIT_VERSION_GONE_COPY }
     if (input.jobId && source.get('aiEditJobId') === input.jobId) {
-      return { ...base, sourceVersionId, nodes: {}, written: { versionId: sourceVersionId, placement: 'in-place' } }
+      return { ...base, sourceVersionId, nodes: {}, draft: null, written: { versionId: sourceVersionId, placement: 'in-place' } }
+    }
+    const draft = usableDraft(draftDoc, source)
+    if (input.jobId && draft?.aiEditJobId === input.jobId) {
+      return { ...base, sourceVersionId, nodes: {}, draft: null, written: { versionId: sourceVersionId, placement: 'draft' } }
     }
     const nodes = decodeStoredNodes<NodesMap>(source.get('nodes'))
     if (!nodes || !Object.keys(nodes).length) return { status: 400, error: AI_EDIT_NO_NODES_COPY }
-    return { ...base, sourceVersionId, nodes, written: null }
+    return { ...base, sourceVersionId, nodes, draft: draft ? { nodes: draft.nodes } : null, written: null }
   }
   return { status: 404, error: AI_EDIT_GONE_COPY }
 }
@@ -401,6 +442,24 @@ export function aiEditPlacement(input: {
   return seen ? 'refused' : 'in-place'
 }
 
+/**
+ * Where an edit job's change lands (AGL-4116): the version's working draft,
+ * unless the request asked for a new version and the plan keeps version
+ * history — then where {@link aiEditPlacement} puts a new one. Never refused:
+ * a draft is on every plan, and no visitor sees it.
+ */
+export function aiEditJobPlacement(input: {
+  newVersion: boolean
+  versioning: boolean
+  served: boolean
+  sourceIsPointer: boolean
+  sourceScheduled: boolean
+}): AiEditPlacement {
+  if (!input.newVersion || !input.versioning) return 'draft'
+  const placed = aiEditPlacement(input)
+  return placed === 'refused' ? 'draft' : placed
+}
+
 // ── Writing it ────────────────────────────────────────────────────────────
 
 export interface AiEditWriteInput {
@@ -408,9 +467,11 @@ export interface AiEditWriteInput {
   kind: AiEditTargetKind
   id: string
   sourceVersionId: string
-  /** The new version's id, which is the job's; also the stamp a change in place carries. */
+  /** The new version's id, which is the job's; also the stamp a draft it writes carries. */
   jobVersionId: string
   versioning: boolean
+  /** The request asked for a new version (see {@link aiEditJobPlacement}). */
+  newVersion: boolean
   proposal: AssistEditProposal
   /** Whether the page's search fields may be written: a page no visitor reaches. */
   writeSeo: boolean
@@ -438,8 +499,15 @@ export async function writeAiEdit(firestore: Firestore, input: AiEditWriteInput)
   const versions = docRef.collection('versions')
   const sourceRef = versions.doc(input.sourceVersionId)
   const newRef = versions.doc(input.jobVersionId)
+  const sourceDraftRef = draftRef(versions, input.sourceVersionId)
   return firestore.runTransaction(async (tx): Promise<AiEditWrite> => {
-    const [host, doc, source, already] = await Promise.all([tx.get(hostRef), tx.get(docRef), tx.get(sourceRef), tx.get(newRef)])
+    const [host, doc, source, already, draftDoc] = await Promise.all([
+      tx.get(hostRef),
+      tx.get(docRef),
+      tx.get(sourceRef),
+      tx.get(newRef),
+      tx.get(sourceDraftRef),
+    ])
     const pointer = text(doc.get('versionId')) || null
     if (already.exists) {
       return { ok: true, versionId: input.jobVersionId, placement: pointer === input.jobVersionId ? 'new-current' : 'new-beside', seoWritten: false }
@@ -447,16 +515,22 @@ export async function writeAiEdit(firestore: Firestore, input: AiEditWriteInput)
     if (!doc.exists || doc.get('deletedAt') != null) return { ok: false, error: AI_EDIT_GONE_COPY }
     if (!source.exists) return { ok: false, error: AI_EDIT_VERSION_GONE_COPY }
     const served = input.kind === 'layout' || screenServed(doc, host)
-    const placement = aiEditPlacement({
+    const placement = aiEditJobPlacement({
+      newVersion: input.newVersion,
       versioning: input.versioning,
       served,
       sourceIsPointer: pointer === input.sourceVersionId,
       sourceScheduled: pendingScheduleVersion(doc) === input.sourceVersionId,
     })
-    if (placement === 'refused') return { ok: false, error: AI_EDIT_NEEDS_VERSIONING_COPY }
-    const nodes = decodeStoredNodes<NodesMap>(source.get('nodes'))
+    // Read again here, as the version is: an author who saved their draft,
+    // or published it, since the read is what the change is built on now.
+    const draft = placement === 'draft' ? usableDraft(draftDoc, source) : null
+    if (draft?.aiEditJobId === input.jobVersionId) {
+      return { ok: true, versionId: input.sourceVersionId, placement, seoWritten: false }
+    }
+    const nodes = draft?.nodes ?? decodeStoredNodes<NodesMap>(source.get('nodes'))
     if (!nodes) return { ok: false, error: AI_EDIT_NO_NODES_COPY }
-    const versionId = placement === 'in-place' ? input.sourceVersionId : input.jobVersionId
+    const versionId = placement === 'draft' ? input.sourceVersionId : input.jobVersionId
     const seo: Partial<Record<(typeof SCREEN_SEO_TEXT_FIELDS)[number], string>> = {}
     const writeSeo = input.writeSeo && input.kind === 'screen' && !served
     const proposal: AssistEditProposal = {
@@ -470,8 +544,17 @@ export async function writeAiEdit(firestore: Firestore, input: AiEditWriteInput)
     if (!packed) return { ok: false, error: AI_EDIT_NO_NODES_COPY }
     const stored = Buffer.from(packed)
     const docPatch: Record<string, unknown> = {}
-    if (placement === 'in-place') {
-      tx.update(sourceRef, { nodes: stored, updatedAt: input.now, aiEditJobId: input.jobVersionId })
+    if (placement === 'draft') {
+      // The whole working tree, as the Besigner writes a draft, taken against
+      // the version as stored so the Besigner offers it with Open draft.
+      tx.set(sourceDraftRef, {
+        nodes: stored,
+        baseStamp: versionStamp(source.get('updatedAt')),
+        updatedByUid: input.uid,
+        updatedByEmail: null,
+        updatedAt: input.now,
+        aiEditJobId: input.jobVersionId,
+      })
     } else {
       // A copy of the version it started from — its layout binding, its
       // declared properties, everything the editor stored — with the changed
@@ -511,6 +594,7 @@ export function aiEditOutput(
   hostId: string,
   written: { versionId: string; placement: AiEditPlacement },
   leftOut: readonly string[],
+  options: { versionsUnavailable?: boolean } = {},
 ): AiJobOutput {
   return {
     resource: read.kind,
@@ -519,7 +603,13 @@ export function aiEditOutput(
     hostId,
     hostSubdomain: read.hostSubdomain,
     label: read.name,
-    note: aiEditOutputNote({ kind: read.kind, placement: written.placement, leftOut }),
+    ...(written.placement === 'draft' ? { inDraft: true as const } : {}),
+    note: aiEditOutputNote({
+      kind: read.kind,
+      placement: written.placement,
+      leftOut,
+      ...(options.versionsUnavailable ? { versionsUnavailable: true } : {}),
+    }),
   }
 }
 
@@ -563,20 +653,21 @@ export function createAiJobEditStep(deps: AiJobEditStepDeps = {}): AiJobStepRunn
 
     const orgData = org ?? ((await firestore.collection('orgs').doc(job.orgId).get()).data() ?? null)
     const versioning = checkEntitlement(orgData as never, 'versioning')
-    const placement = aiEditPlacement({
+    const placement = aiEditJobPlacement({
+      newVersion: inputs.newVersion,
       versioning,
       served: read.served,
       sourceIsPointer: read.sourceVersionId === read.pointerVersionId,
       sourceScheduled: read.scheduledVersionId === read.sourceVersionId,
     })
-    if (placement === 'refused') return aiUnspentOutcome(model, { review: aiLimitReview(AI_EDIT_NEEDS_VERSIONING_COPY) })
-    const outline = aiEditJobOutline(read.nodes)
-    const context = outline ? parseAssistEditContext(outline) : null
+    // A change to the draft is made on the draft the author already has.
+    const outline = aiEditJobOutline(placement === 'draft' && read.draft ? read.draft.nodes : read.nodes)
+    const context = outline ? parseAssistEditContext(outline, { whole: true }) : null
     if (!context) return unspent(AI_EDIT_NO_NODES_COPY)
     const target: AssistEditTarget = {
       kind: read.kind,
       documentId: read.id,
-      versionId: placement === 'in-place' ? read.sourceVersionId : aiEditVersionId(job),
+      versionId: placement === 'draft' ? read.sourceVersionId : aiEditVersionId(job),
       hostId,
     }
 
@@ -617,6 +708,7 @@ export function createAiJobEditStep(deps: AiJobEditStepDeps = {}): AiJobStepRunn
       sourceVersionId: read.sourceVersionId,
       jobVersionId: aiEditVersionId(job),
       versioning,
+      newVersion: inputs.newVersion,
       proposal: { ...proposal, ops: kept.ops },
       writeSeo: seo,
       versionName: aiEditVersionName(proposal.summary),
@@ -625,7 +717,8 @@ export function createAiJobEditStep(deps: AiJobEditStepDeps = {}): AiJobStepRunn
       now,
     })
     if (write.ok === false) return { ...spent, failure: write.error }
-    return { ...spent, outputs: [aiEditOutput(read, hostId, write, leftOut)] }
+    const versionsUnavailable = inputs.newVersion && !versioning
+    return { ...spent, outputs: [aiEditOutput(read, hostId, write, leftOut, { versionsUnavailable })] }
   }
 }
 
@@ -639,9 +732,9 @@ export interface AiEditJobAdmissionDeps {
 }
 
 /**
- * An edit job is admitted for a page or layout of a site of its own org,
- * and only where the change has somewhere to land that no visitor sees on
- * this workspace's plan — refused in the plan's words before anything exists.
+ * An edit job is admitted for a page or layout of a site of its own org that
+ * has a version to start from. Every plan has somewhere to put the change
+ * that no visitor sees — the version's draft — so no plan is refused.
  */
 export function createAiEditJobAdmission(deps: AiEditJobAdmissionDeps = {}): AiJobAdmission {
   const readTarget = deps.readTarget ?? readAiEditTarget
@@ -654,14 +747,8 @@ export function createAiEditJobAdmission(deps: AiEditJobAdmissionDeps = {}): AiJ
     if (!owner || owner !== context.orgId) return { status: 404, error: 'Unknown site' }
     // A job asked about at its door has no run to find yet.
     const read = await readTarget(context.firestore, { orgId: context.orgId, hostId: context.hostId, inputs, jobId: null })
-    if ('error' in read) return read
-    const placement = aiEditPlacement({
-      versioning: checkEntitlement(context.org as never, 'versioning'),
-      served: read.served,
-      sourceIsPointer: read.sourceVersionId === read.pointerVersionId,
-      sourceScheduled: read.scheduledVersionId === read.sourceVersionId,
-    })
-    return placement === 'refused' ? { status: 403, error: AI_EDIT_NEEDS_VERSIONING_COPY } : null
+    // Every plan has somewhere to put the change: the page's draft (AGL-4116).
+    return 'error' in read ? read : null
   }
 }
 

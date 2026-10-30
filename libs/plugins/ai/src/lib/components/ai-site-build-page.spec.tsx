@@ -220,6 +220,13 @@ describe('a build that changed one page (AGL-3616)', () => {
     expect(screen.queryByRole('link', { name: 'Edit your pages' })).toBeNull()
   })
 
+  it('opens a change saved into the page’s draft in the Besigner only, as its version’s preview does not show it (AGL-4116)', async () => {
+    await open(edited([{ ...screenOutput('home'), inDraft: true }]))
+    const besigner = await screen.findByRole('link', { name: 'Open in Besigner' })
+    expect(besigner.getAttribute('href')).toBe('/acme/hosts/groomer/screens/home/versions/home-v1/besigner')
+    expect(screen.queryByRole('link', { name: 'Preview' })).toBeNull()
+  })
+
   it('keeps the site’s two ways in for a build that wrote several pages', async () => {
     await open(edited([screenOutput('home'), screenOutput('book')]))
     expect(await screen.findByRole('link', { name: 'View your site' })).toBeTruthy()

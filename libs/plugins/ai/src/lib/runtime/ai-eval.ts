@@ -1055,7 +1055,7 @@ function checkEdit(evalCase: AiEvalCase, answer: unknown): Checked {
     return { readable: false, rules: false, budget: false, findings: ['edit-not-a-call'] }
   }
   const outline = aiEditJobOutline(brief.nodes)
-  const context = outline ? parseAssistEditContext(outline) : null
+  const context = outline ? parseAssistEditContext(outline, { whole: true }) : null
   if (!context) return { readable: false, rules: false, budget: false, findings: ['edit-no-document'] }
   const checked = checkAssistEditAnswer(answer, {
     context,

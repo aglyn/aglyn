@@ -1182,13 +1182,17 @@ async function handler(request: Request): Promise<Response> {
     })
     // A change to a page the site already has (AGL-4116): wherever a build
     // may be proposed and no canvas is open (the canvas's own edit answers
-    // there), on a plan with version history, where the change has a draft
-    // version to land in beside the published one. The edit job's door checks
-    // the page and the plan again when the panel starts it.
-    const pageChangeRung: { hostId: string; pages: AssistSitePage[] } | null =
-      buildRung && !editRung && checkEntitlement(org as never, 'versioning')
+    // there), on every plan — the change goes into the page's draft, and a
+    // new version only where it is asked for and the plan keeps them. The
+    // edit job's door checks the page again when the panel starts it.
+    const pageChangeRung: { hostId: string; pages: AssistSitePage[]; versioning: boolean } | null =
+      buildRung && !editRung
         ? await readAssistSitePages(firestore, buildRung.hostId)
-            .then((pages) => (pages.length ? { hostId: buildRung.hostId, pages } : null))
+            .then((pages) =>
+              pages.length
+                ? { hostId: buildRung.hostId, pages, versioning: checkEntitlement(org as never, 'versioning') }
+                : null,
+            )
             .catch((error: unknown) => {
               console.error('assist page change rung failed', { orgId: body.orgId, error })
               return null
@@ -1626,7 +1630,9 @@ async function handler(request: Request): Promise<Response> {
       // What a build can make on this site: per site, so volatile.
       ...(buildRung ? [{ text: assistBuildIntentsBlock(buildRung.intents), volatile: true as const }] : []),
       // The pages a change may name (AGL-4116): per site, so volatile.
-      ...(pageChangeRung ? [{ text: assistSitePagesBlock(pageChangeRung.pages) ?? '', volatile: true as const }] : []),
+      ...(pageChangeRung
+        ? [{ text: assistSitePagesBlock(pageChangeRung.pages, { versioning: pageChangeRung.versioning }) ?? '', volatile: true as const }]
+        : []),
       ...(docsBlock ? [{ text: docsBlock, volatile: true as const }] : []),
     ]
 

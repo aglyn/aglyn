@@ -502,13 +502,14 @@ describe('on the build rung (AGL-3616)', () => {
       expect(pages?.cache_control).toBeUndefined()
       expect(pages?.text).toContain('- scr-home · Home · / · live, the home page')
       expect(pages?.text).toContain('- scr-copy · Home · / · draft, not live')
+      expect(pages?.text).not.toContain('version history')
     })
 
     it('a call comes back as an inert change of the named page, and nothing is changed', async () => {
       armStream([
         OPENING,
         text('I will make that change as a draft of Home.'),
-        ...changeCall({ summary: 'Fill the hero on Home', page: 'scr-home', change: 'Make the top image fill the background.' }),
+        ...changeCall({ summary: 'Fill the hero on Home', page: 'scr-home', change: 'Make the top image fill the background.', newVersion: false }),
         ...closing('tool_use'),
       ])
       const events = await readEvents(await POST(post(changeBody(PRO_ORG))))
@@ -536,11 +537,14 @@ describe('on the build rung (AGL-3616)', () => {
       expect(events.some((event) => event.type === 'error' && /could not be found on this site/.test(String(event.error)))).toBe(true)
     })
 
-    it('is not offered without version history: Free plans the change as before', async () => {
-      mockDocs.set('hosts/host-1', { orgId: FREE_ORG, name: 'Groomers', screens: { 'scr-home': '/' } })
-      armStream([OPENING, text('I will plan that.'), ...closing()])
+    it('is offered without version history too, and the model is told a new version cannot be made', async () => {
+      mockDocs.set('hosts/host-1', { orgId: FREE_ORG, name: 'Groomers', defaultHomeScreenId: 'scr-home', screens: { 'scr-home': '/' } })
+      armStream([OPENING, text('I will make that change as a draft of Home.'), ...closing()])
       await (await POST(post(changeBody(FREE_ORG)))).text()
-      expect(providerRequest().tools.map((tool: { name: string }) => tool.name)).toEqual(['propose_build'])
+      const request = providerRequest()
+      expect(request.tools.map((tool: { name: string }) => tool.name)).toEqual(['propose_build', 'change_page'])
+      const pages = (request.system as SystemBlock[]).find((block) => block.text.startsWith("The site's pages"))
+      expect(pages?.text).toContain('keeps no version history (it comes with Pro), so newVersion is always false')
     })
   })
 
