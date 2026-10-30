@@ -96,7 +96,7 @@ category reads as **Pipeline**.
 
 The section opens as a **board** of the chosen pipeline: one column per open
 stage, with Won and Lost folded away at the end until you expand them. A stage
-with no deals in it folds to a narrow labelled strip, so the stages holding
+with no deals in it folds to a narrow labeled strip, so the stages holding
 work get the room; you can still drag a card onto it. When the board is still
 wider than the window, arrows at either end page it sideways, and it scrolls
 like any other row. Each card shows the deal's title,
