@@ -348,10 +348,14 @@ shows:
 - **The header** — the deal's title in the page heading and the trail, the
   pipeline and stage under its kind, its status, amount and owner as chips,
   **Back to deals**, **Edit**, and a menu (⋮) carrying **Delete deal**.
-- **Stage** — a stepper across the open stages, with **Won** and **Lost**
-  buttons and, on a closed deal, the way to reopen it. The line under it says
-  how long the deal has sat in its stage, its probability and its forecast
-  category.
+- **Stage** — the deal's path through the whole pipeline, the way Salesforce
+  draws one: every open stage, so the stages still ahead are always in view,
+  then a final **Closed** step. Choose an open stage to move there; choose
+  **Closed** to mark the deal won or lost (the **Won** and **Lost** buttons
+  do the same). On a closed deal the path stays, every stage ticked and the
+  last step reading the pipeline's own name for the verdict, with the way to
+  reopen it below. The line under an open deal's path says how long it has
+  sat in its stage, its probability and its forecast category.
 - **Properties** — what the deal is worth and where it stands; see
   [Deal properties](#deal-properties).
 - **Contact roles** — every person on the deal, the part each plays, and the
