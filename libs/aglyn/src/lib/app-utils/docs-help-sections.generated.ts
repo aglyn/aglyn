@@ -300,7 +300,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#lead-details': 'Details is the lead\'s profile, laid out as Salesforce lays out a lead: the salutation and the name\'s parts, then Lead information — company, job title, industry, rating, lead source, tags, employees and annual…',
   },
   crmReports: {
-    '#activity-by-teammate': 'Who did what in the period, busiest first. Activities logged — every call, email, meeting, note and other activity logged in the period, counted on the server, with the change against the previous period.',
+    '#activity-by-teammate': 'Who did what in the period, busiest first. Activities logged — every call, email, message, meeting, note and other activity logged in the period, counted on the server, with the change against the previous period.',
     '#contacts': 'New contacts in the period, with the change against the previous period.',
     '#conversion-by-source': 'Of the people each capture surface brought in during the period, how many are customers now.',
     '#crm-at-a-glance': 'The site dashboard carries a CRM at a glance card with five numbers: contacts, new contacts this week, the value of every open deal, tasks due today or overdue, and leads to work — the leads on this site that are…',
