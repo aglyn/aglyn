@@ -95,8 +95,11 @@ category reads as **Pipeline**.
 ## The board and the table
 
 The section opens as a **board** of the chosen pipeline: one column per open
-stage, with Won and Lost folded away at the end until you expand them; a board wider than the window
-scrolls sideways. Each card shows the deal's title,
+stage, with Won and Lost folded away at the end until you expand them. A stage
+with no deals in it folds to a narrow labelled strip, so the stages holding
+work get the room; you can still drag a card onto it. When the board is still
+wider than the window, arrows at either end page it sideways, and it scrolls
+like any other row. Each card shows the deal's title,
 amount, the contact and company it is with, its owner, and how many days it has
 sat in its current stage. **Drag a card** between columns to move it, or use the
 card's menu to move it, mark it won, or mark it lost from the keyboard.
