@@ -511,6 +511,35 @@ describe('proposals — the closed world', () => {
     expect(proposal?.dropped.join(' ')).toContain('earlier change removes')
   })
 
+  it('a change to an element an earlier move took out of what is then removed is kept, in either order of the change (AGL-4116)', () => {
+    // The live check's answer: the picture moved out of its column, the column
+    // removed, then the picture restyled. The canvas applies them in order.
+    const { proposal } = resolve([
+      op({ op: 'move', nodeId: 'headline', parentId: ROOT, index: 0 }),
+      op({ op: 'remove', nodeId: 'hero' }),
+      op({ op: 'updateSx', nodeId: 'headline', sx: [{ key: 'position', value: 'absolute', breakpoint: '' }] }),
+      op({ op: 'updateProps', nodeId: 'headline', props: [{ name: 'children', value: 'Still here' }] }),
+    ])
+    expect(proposal?.ops.map((entry) => entry.op)).toEqual(['move', 'remove', 'updateSx', 'updateProps'])
+    expect(proposal?.dropped).toEqual([])
+    // Removed first, the element went with its holder: nothing may move it out.
+    const late = resolve([
+      op({ op: 'remove', nodeId: 'hero' }),
+      op({ op: 'move', nodeId: 'headline', parentId: ROOT, index: 0 }),
+    ])
+    expect(late.proposal?.ops.map((entry) => entry.op)).toEqual(['remove'])
+    expect(late.proposal?.dropped.join(' ')).toContain('earlier change removes')
+  })
+
+  it('a move into the element’s own subtree is dropped, as the moves before it leave the tree', () => {
+    // The CTA moved under the footer, then the footer moved under the CTA.
+    const { proposal } = resolve([
+      op({ op: 'move', nodeId: 'cta', parentId: 'footer', index: -1 }),
+      op({ op: 'move', nodeId: 'footer', parentId: 'cta', index: -1 }),
+    ])
+    expect(proposal?.dropped.join(' ')).toContain('inside itself')
+  })
+
   it('a move into the element’s own subtree is dropped', () => {
     const { proposal, dropped } = resolve([op({ op: 'move', nodeId: 'hero', parentId: 'headline' })])
     expect(proposal).toBeNull()
