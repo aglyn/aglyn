@@ -411,10 +411,14 @@ data class CrmRow(
 
 fun stageLabel(stage: String?) = stage?.let { Contracts.contactLifecycleStageLabels[it] ?: it }
 
-/** A contact's own fields for this viewer: the holder's facet over the shared record. */
+/** The facet of a person the organization added itself, with no site behind them (`ORG_CONTACT_HOLDER_ID`). */
+const val ORG_CONTACT_HOLDER_ID = "org"
+
+/** A contact's own fields for this viewer: the holder's facet over the shared record, or the one the organization holds. */
 @Suppress("UNCHECKED_CAST")
 fun contactView(data: Map<String, Any?>, groupId: String): Map<String, Any?> {
-  val facet = (data["facets"] as? Map<String, Any?>)?.get(groupId) as? Map<String, Any?> ?: emptyMap()
+  val facets = data["facets"] as? Map<String, Any?>
+  val facet = (facets?.get(groupId) ?: facets?.get(ORG_CONTACT_HOLDER_ID)) as? Map<String, Any?> ?: emptyMap()
   return data + facet.filterValues { it != null } + mapOf("name" to ((facet["name"] as? String)?.takeIf { it.isNotBlank() } ?: data["name"]))
 }
 
@@ -431,6 +435,61 @@ fun crmRow(kind: CrmKind, doc: FirestoreDoc, scope: CrmScope, stages: Map<String
       when (s("status")) { "won" -> "Won"; "lost" -> "Lost"; else -> null }, data,
     )
   }
+}
+
+/*---------- activity ----------*/
+
+/** `crmActivityKindTitle`: "Inbound call", "Outbound WhatsApp message", or the kind alone with no direction it takes. */
+fun crmActivityKindTitle(kind: String, direction: String? = null): String {
+  val label = Contracts.crmActivityKindLabels[kind] ?: kind
+  val text = direction.orEmpty().trim().lowercase()
+  if (text !in Contracts.nativeCrmActivityDirections[kind].orEmpty()) return label
+  val word = Contracts.crmActivityDirectionLabels[text] ?: return label
+  return "$word ${Contracts.crmActivityKindNouns[kind] ?: label.lowercase()}"
+}
+
+/** A logged activity as the timeline reads it (the console's `ActivityRow`): the chips, the heading, the rest of its words. */
+data class CrmActivityLine(
+  /** A stored kind outside the list reads as `other`. */
+  val kind: String,
+  /** The kind, with the direction a hand-logged entry names ("Outbound WhatsApp message"). */
+  val chip: String,
+  /** "Sent" or "Received": a message the platform carried or captured says so beside the kind. */
+  val state: String?,
+  val heading: String,
+  val detail: String?,
+)
+
+fun crmActivityLine(data: Map<String, Any?>): CrmActivityLine {
+  fun text(key: String) = (data[key] as? String).orEmpty().trim()
+  val stored = text("kind")
+  val kind = if (stored in Contracts.nativeCrmActivityKinds) stored else "other"
+  val captured = text("messageId").isNotEmpty()
+  val direction = text("direction")
+  val sent = direction == "outbound" && (captured || text("deliveryState").isNotEmpty())
+  val received = direction == "inbound" && captured
+  val body = text("body")
+  val subject = text("subject")
+  val lines = body.lines().dropWhile { it.isBlank() }
+  val heading = subject.ifEmpty { lines.firstOrNull().orEmpty().trim() }
+  val rest = (if (subject.isEmpty()) lines.drop(1).joinToString("\n") else body).trim()
+  return CrmActivityLine(
+    kind,
+    if (sent || received || captured) Contracts.crmActivityKindLabels[kind] ?: kind else crmActivityKindTitle(kind, direction),
+    if (received) "Received" else if (captured) "Sent" else null,
+    heading,
+    rest.ifEmpty { null }?.take(240),
+  )
+}
+
+/** The Material icon nearest the console's glyph for a kind, for the kinds that are not a brand (those draw `nativeCrmActivityIconPaths`). */
+fun crmActivityIconName(kind: String): String = when (kind) {
+  "call" -> "call"
+  "email" -> "mail"
+  "text" -> "sms"
+  "meeting" -> "groups"
+  "note" -> "sticky_note"
+  else -> "more_horiz"
 }
 
 /** A deal's line under its title: the amount, then its stage's name ([stageName] of its pipeline and stage ids). */

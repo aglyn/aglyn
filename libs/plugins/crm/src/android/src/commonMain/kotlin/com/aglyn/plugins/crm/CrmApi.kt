@@ -64,6 +64,8 @@ data class TaskDraft(
   val contactId: String? = null,
   val companyId: String? = null,
   val dealId: String? = null,
+  /** A new task's site, at the workspace's level; null files it with the organization. */
+  val sourceSite: String? = null,
 )
 
 data class ConvertDraft(
@@ -223,7 +225,9 @@ class CrmApi(private val api: ConsoleApiClient, private val writer: FirestoreWri
       "companyId" to draft.companyId,
       "dealId" to draft.dealId,
     )
-    val answer = api.request(CrmRoutes.TASK_SAVE, ApiMethod.POST, taskBody("taskId" to taskId, "task" to task))?.jsonObject
+    // A new task from the workspace's CRM names the site it is filed from; with none it is the organization's own.
+    val filedFrom = draft.sourceSite?.takeIf { taskId == null && scope.workspaceWide }
+    val answer = api.request(CrmRoutes.TASK_SAVE, ApiMethod.POST, taskBody("taskId" to taskId, "hostId" to filedFrom, "task" to task))?.jsonObject
     return (answer?.get("taskId") as? JsonPrimitive)?.contentOrNull
   }
 
