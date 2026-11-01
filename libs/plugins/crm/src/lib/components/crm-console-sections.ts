@@ -64,7 +64,7 @@ export const CRM_CONSOLE_SECTIONS: readonly ConsoleNavSection[] = [
   { id: 'contacts', label: 'Contacts' },
   { id: 'leads', label: 'Leads' },
   { id: 'companies', label: 'Companies' },
-  { id: 'deals', label: 'Deals' },
+  { id: 'deals', label: 'Deals / Opportunities' },
   { id: 'tasks', label: 'Tasks' },
   { id: 'reports', label: 'Reports' },
   { id: 'fields', label: 'Fields' },
