@@ -62,6 +62,7 @@ import {
   formatVersion,
   insertRelease,
   nextVersion,
+  startsNewMajor,
   parseVersion,
   renderRelease,
   summarizeCommits,
@@ -320,6 +321,30 @@ function main() {
     )
     out.push(
       '  or pass --base <sha> deliberately if you know what you are doing.',
+    )
+    out.push('')
+    console.log(out.join('\n'))
+    process.exitCode = 1
+    return
+  }
+
+  // Semver says a breaking change is a new major, and that stands. When there
+  // is one is the owner's decision, so the batch stops here and goes to them.
+  // Writing the major would take that decision for them, and shipping the break
+  // under a smaller number would make the version lie about what changed.
+  if (!options.set && startsNewMajor(current, proposed)) {
+    out.push('  ' + '-'.repeat(60))
+    out.push(`  REFUSING: ${version} would be a new major version.`)
+    out.push('')
+    out.push(
+      '  A major moves only when the owner asks for it, so take the BREAKING',
+    )
+    out.push('  commits above to the owner first. If they ask for it:')
+    out.push('')
+    out.push(`    npm run release:prepare -- --write --set ${version}`)
+    out.push('')
+    out.push(
+      '  If they decide otherwise, the version they choose goes through --set too.',
     )
     out.push('')
     console.log(out.join('\n'))

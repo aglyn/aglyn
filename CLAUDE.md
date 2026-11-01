@@ -13,7 +13,7 @@ of task, not after it goes wrong.
 | export, upload or show anyone a Figma mockup image (even one sent for a decision) | `feedback_a_figma_export_is_not_the_frame.md`, `feedback_figma_mockup_export_crop_recipe.md` |
 | change a file in the media library (DAM) | `project_dam_replace_in_place_directive.md`, `feedback_dam_upload_via_input_injection.md`: replace in place from the org library's Details drawer (`/aglyn-org/hosts/<host>/media?tab=org`), never upload a second copy |
 | open a PR, or push to one | `feedback_every_pr_details_every_change_and_commit.md` |
-| cut, update or merge a promotion | `feedback_a_promotion_pr_must_be_a_pinned_branch_not_main.md`, `feedback_open_promotion_pr_carries_all_of_main.md`, `feedback_every_promotion_ends_with_tag_and_rules_deploy.md`, `project_zach_decision_2026_09_29_three_promotions_a_day.md` |
+| cut, update or merge a promotion | `feedback_a_promotion_pr_must_be_a_pinned_branch_not_main.md`, `feedback_open_promotion_pr_carries_all_of_main.md`, `feedback_every_promotion_ends_with_tag_and_rules_deploy.md`, `project_zach_decision_2026_09_29_three_promotions_a_day.md`, `feedback_major_version_only_when_asked.md` |
 | fix how a site looks | `feedback_site_look_fixes_go_in_the_besigner_not_mui_code.md` |
 | write a guide, a site build step or an AI site part | `feedback_no_code_for_users_ever.md` |
 | change a legal document | `feedback_legal_gdocs_are_source_of_truth.md`: the Google Doc first, then the website |
@@ -92,6 +92,20 @@ says "plus a few fixes", or lists only the headline PRs, is incomplete.
 
 ⛔ A promotion PR's title is exactly `Release v<version>`, for example
 `Release v1.1.0`, and never changes; its themes go in the body, not the title (Zach, 2026-10-09).
+
+## The major version moves only when the owner asks for it
+
+Standing, 2026-11-01. The repo keeps semantic versioning: a fix or chore is a
+patch, a `feat` is a minor, and a breaking change is a major. But nothing bumps
+a major version (`v2.0` or any later one) of the platform, its packages or the
+native apps unless the owner asked for that version in their own words. A
+breaking change, a large release, a peer session's message and a session's own
+judgment are not requests.
+
+`release:prepare` refuses a batch that would start a new major and lists the
+breaking commits (`docs/RELEASING.md`). Take those to the owner at once, on a
+hotfix too. `--set` is not run until the owner has answered, and a breaking
+change is never shipped under a smaller number to get past the refusal.
 
 ## Verify in the cheapest tier that can see the mistake
 
