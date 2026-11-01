@@ -188,7 +188,11 @@ export const CRM_ACTIVITY_LOG_FULL_MESSAGE =
     'en-US',
   )} activities, which is the most one record can carry.`
 
-/** The record an activity is filed under: its links, of which one leads. */
+/**
+ * The records an activity is about, of which one leads. Salesforce's model
+ * (AGL-4123): `contactId` is the Who, `dealId` the What, and `companyId` the
+ * Account it rolls up to, or a What of its own on an entry about a company.
+ */
 export interface CrmActivityLink {
   contactId?: string | null
   companyId?: string | null
@@ -206,20 +210,20 @@ export interface CrmActivityLink {
  * The field the per-record activity ceiling is counted on, or `null` for an
  * activity that names no record at all.
  *
- * The contact leads, then the company, then the deal: an activity logged
- * from a contact's page carries the company beside it (the automation step
- * copies the facet's `companyId` onto every record it creates), and a
+ * The contact leads, then the deal, then the company: every activity about
+ * a contact or a deal carries the company it rolls up to (AGL-4123), and a
  * ceiling counted on the company would let one busy account exhaust every
- * contact filed under it. The record whose PAGE the log is read on is the
- * one whose log has the limit. Shared by the client dialog and the two
+ * contact and deal filed under it. The record whose PAGE the log is read on
+ * is the one whose log has the limit, so a company's own entries are counted
+ * with everything that rolled up to it. Shared by the client dialog and the
  * server writers so they count the same thing.
  */
 export function crmActivityCeilingLink(
   link: CrmActivityLink,
 ): { field: 'contactId' | 'companyId' | 'dealId' | 'leadId'; id: string } | null {
   if (link.contactId) return { field: 'contactId', id: String(link.contactId) }
-  if (link.companyId) return { field: 'companyId', id: String(link.companyId) }
   if (link.dealId) return { field: 'dealId', id: String(link.dealId) }
+  if (link.companyId) return { field: 'companyId', id: String(link.companyId) }
   // Last, because a converted lead's activities carry the contact beside it
   // and the contact is the record whose page they are read on.
   if (link.leadId) return { field: 'leadId', id: String(link.leadId) }
@@ -317,13 +321,17 @@ export type CrmCustomValue = ContactCustomValue
  * `scope-tokens.ts` for why an absent one is seen by NOBODY. `hostId` is
  * provenance: the site whose console created the record, never rewritten,
  * so a report can say where a deal came from after the scope has widened.
+ * It is `null` for a record that came from no site — one added at the
+ * organization level of an org whose records belong to every site, where the
+ * site is a source to tag and not a scope to choose. Such a record is always
+ * stamped `['org']`: with no site there is no narrower scope to give it.
  * The timestamps are `unknown` because a client write carries a `Date` and a
  * read hands back a Firestore `Timestamp`; callers narrow at the edge.
  */
 export interface CrmScoped {
   visibleTo: string[]
-  /** The site that created it. */
-  hostId: string
+  /** The site that created it, or `null` for one that came from no site. */
+  hostId: string | null
   createdAt?: unknown
   updatedAt?: unknown
 }
@@ -331,6 +339,8 @@ export interface CrmScoped {
 /** `orgs/{orgId}/companies/{companyId}`. */
 export interface CrmCompany extends CrmScoped {
   name: string
+  /** Who at the company plays which part: Salesforce's Account Contact Roles. */
+  contactRoles?: CrmDealContactRole[]
   /** `nameSearchFields` twins, for the prefix search the list runs. */
   nameLower?: string
   nameTokens?: string[]
@@ -1238,8 +1248,15 @@ export interface CrmActivity extends CrmScoped {
    * without parsing a sentence.
    */
   campaignId?: string
+  /** Who it was with — see {@link CrmActivityLink}. */
   contactId?: string
+  /**
+   * The company it rolls up to, stamped from the deal's company, else the
+   * contact's, by every writer when none was named — see `stampCrmActivityCompany`
+   * in the CRM plugin. What a company's timeline lists by.
+   */
   companyId?: string
+  /** The deal it is about — see {@link CrmActivityLink}. */
   dealId?: string
   /** The lead it was filed under (AGL-2615) — see {@link CrmActivityLink.leadId}. */
   leadId?: string
@@ -2523,19 +2540,31 @@ export const CRM_DEFAULT_RECORD_SCOPE_PATH = `${ORG_CRM_SETTINGS_FIELD}.defaultR
  * `crm.defaultRecordScope` when the org has set it. Before AGL-3662 the CRM
  * read the org's dataset default, `defaultResourceScope`, so an org that set
  * that to All sites keeps CRM records org-wide until it chooses separately.
- * Neither set reads `undefined`, which every caller treats as `'host'`.
+ *
+ * Neither set reads `'org'`: a record belongs to the whole organization, and
+ * the site it came in on is where it came from, not who may see it. Keeping
+ * each site's records apart is the choice an agency makes, so that one
+ * client's collaborator never sees another client's people — a setting it
+ * turns on, never a default the rest live with.
+ *
+ * `undefined` only when there is no org document to read — a surface whose
+ * org has not loaded yet. Every caller treats that as `'host'`, the site the
+ * record came in on: an org that keeps its sites apart must never have a
+ * record stamped for everyone because its document was a moment late, and
+ * a record kept to its site is still visible where it was made.
  */
 export function crmDefaultScopeOf(
   orgDocument: Record<string, unknown> | null | undefined,
 ): 'org' | 'host' | undefined {
-  const settings = (orgDocument ?? {})[ORG_CRM_SETTINGS_FIELD]
+  if (!orgDocument || typeof orgDocument !== 'object') return undefined
+  const settings = orgDocument[ORG_CRM_SETTINGS_FIELD]
   const own =
     settings && typeof settings === 'object' && !Array.isArray(settings)
       ? (settings as Record<string, unknown>)['defaultRecordScope']
       : undefined
   if (own === 'org' || own === 'host') return own
-  const legacy = (orgDocument ?? {})['defaultResourceScope']
-  return legacy === 'org' || legacy === 'host' ? legacy : undefined
+  const legacy = orgDocument['defaultResourceScope']
+  return legacy === 'org' || legacy === 'host' ? legacy : 'org'
 }
 
 /**
@@ -2883,16 +2912,19 @@ export function newAssignmentRuleId(existing: readonly string[]): string {
  * The contact create path's own expression (`upsertHostContact`), lifted
  * here so that a company, a deal or a task created from a site's console
  * lands in exactly the scope a contact captured on that site would: the
- * whole org when the org's CRM default (`crmDefaultScopeOf`) is `'org'`, and
- * otherwise the sites that present as one sender — which, undeclared, is
- * this site alone. That is the agency's isolation, arrived at with nothing
- * configured, and the reason this is a function rather than a convention
- * eight creators are asked to remember.
+ * whole org when the org's CRM default (`crmDefaultScopeOf`) is `'org'` —
+ * which it is unless the org chose otherwise — and otherwise the sites that
+ * present as one sender, which, undeclared, is this site alone. That second
+ * answer is the agency's isolation, which it turns on in CRM → Settings, and
+ * the reason this is a function rather than a convention eight creators are
+ * asked to remember: a creator that spelled its own could stamp a kept-apart
+ * org's record for everyone.
  *
- * Widening past the group is an ACT — an org-wide member editing the scope
- * on the record — never a default. The rules refuse a scoped member creating
- * a record outside their own tokens, so a creator that bypassed this could
- * only make its record invisible to itself, never wider.
+ * Under a kept-apart org, widening past the group is an ACT — an org-wide
+ * member editing the scope on the record — never a default. The rules refuse
+ * a scoped member creating a record outside their own tokens, so a creator
+ * that bypassed this could only make its record invisible to itself, never
+ * wider.
  */
 export function crmScopeTokens(
   org: Record<string, unknown> | null | undefined,

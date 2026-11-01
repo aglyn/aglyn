@@ -352,6 +352,11 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'off-tenant',
     why: "Not a sink, and never on a tenant render: the Bring my site layout reader (AGL-4106), imported only by the crawler on the console's AI job runner. One marker copies the extract's inline-SVG icon drawings (viewBox, path, a cleaned svg) into the layout, never an address; the other two are `icons` COUNTS in `siteImportLayoutCounts` (a number and its zero). Nothing it returns is rendered as a remote URL.",
   },
+  'libs/plugins/ai/src/lib/model/ai-site-import-fidelity.ts': {
+    markers: 3,
+    guard: 'off-tenant',
+    why: 'Not a sink, and never on a tenant render: the Bring my site fidelity scorer (AGL-4109), pure counting over what an import read and what it built, used by its replay fixture and the report script. All three markers are its `icons` tally, a number, and no URL passes through it.',
+  },
   'libs/plugins/ai/src/lib/model/ai-site-import.ts': {
     markers: 2,
     guard: 'off-tenant',
@@ -671,6 +676,11 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     markers: 2,
     guard: 'off-tenant',
     why: "The publisher's own EDITOR for their listing (AGL-869, moved out of the console app by AGL-3080). One marker previews the listing's `previewImageUrl` through `resolveMediaSrc`; the other previews a screenshot the same publisher just picked from their own library. The reader is a signed-in member of the org that owns the listing, on a console URL, looking at art they are in the middle of choosing — AGL-1701's actor pair, never a customer's site. `apps/tenant` does not import the marketplace plugin.",
+  },
+  'libs/plugins/marketplace/src/lib/components/site-starter-review-detail.component.tsx': {
+    markers: 1,
+    guard: 'off-tenant',
+    why: "The staff review page of a site starter in the console (AGL-4049). The marker is the listing's preview picture, shown to staff deciding whether to list it; no visitor ever reaches this page.",
   },
   'libs/plugins/marketplace/src/lib/components/listing-image.component.tsx': {
     markers: 1,

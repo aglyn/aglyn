@@ -118,6 +118,9 @@ function seedOrg(extra: Data = {}) {
   })
 }
 
+/** The agency's opt-in: each site's records kept apart, so the declared group decides. */
+const KEEPS_SITES_APART: Data = { crm: { defaultRecordScope: 'host' } }
+
 const writer = createCrmRecordTimelineWriter({ firestore: () => mockFirestore as never })
 
 const INBOUND: PluginRecordActivityRequest = {
@@ -166,7 +169,8 @@ describe('the CRM on the record-timeline seam (AGL-2981)', () => {
     expect(pluginRecordTimelineWriter()?.pluginId).toBe('crm')
   })
 
-  it("files an email under the capture address's id for its Message-ID, scoped like a record of the site", async () => {
+  it("files an email under the capture address's id for its Message-ID, scoped like a record of the site when the org keeps its sites apart", async () => {
+    seedOrg(KEEPS_SITES_APART)
     const result = await writer.logActivity(INBOUND)
     const ref = crmCapturedEmailActivityRef(
       mockFirestore as never,
@@ -339,7 +343,9 @@ describe('the CRM on the record-timeline seam (AGL-2981)', () => {
       sourcePluginId: 'outreach',
       contactId: 'contact-1',
       hostId: HOST,
-      visibleTo: ['host:host-1', 'host:host-2'],
+      // The org has chosen no default, so the task is the whole org's even
+      // though the site sits in a declared group.
+      visibleTo: ['org'],
     })
     // The records it names learn their next task once, for the one it made.
     expect(mockRecompute).toHaveBeenCalledTimes(1)
@@ -395,6 +401,31 @@ describe('a record found rather than named', () => {
         sourcePluginId: 'bookings',
       }),
     ])
+  })
+
+  it('rolls an entry filed on a named contact up to their company (AGL-4123)', async () => {
+    seedContact('contact-rhea', 'rhea@example.com')
+    await writer.logActivity({ ...FOUND, link: { contactId: 'contact-rhea' } })
+    expect(filed()[0]).toMatchObject({ contactId: 'contact-rhea', companyId: 'company-1' })
+  })
+
+  it('rolls an email filed on a named contact up the same way (AGL-4123)', async () => {
+    seedContact('contact-1', 'pat@example.com')
+    await writer.logActivity({ ...INBOUND, link: { contactId: 'contact-1' } })
+    expect(filed()[0]).toMatchObject({ kind: 'email', contactId: 'contact-1', companyId: 'company-1' })
+  })
+
+  it('takes the contact’s company for a deal that names none (AGL-4123)', async () => {
+    seedContact('contact-9', 'pat@example.com')
+    mockDocs.set(`orgs/${ORG}/deals/deal-7`, { visibleTo: SITE, contactId: 'contact-9' })
+    await writer.logActivity({ ...FOUND, link: { record: { kind: 'deal', id: 'deal-7' } } })
+    expect(filed()[0]).toMatchObject({ dealId: 'deal-7', contactId: 'contact-9', companyId: 'company-1' })
+  })
+
+  it('keeps a company the caller named over the contact’s (AGL-4123)', async () => {
+    seedContact('contact-rhea', 'rhea@example.com')
+    await writer.logActivity({ ...FOUND, link: { contactId: 'contact-rhea', companyId: 'company-named' } })
+    expect(filed()[0]).toMatchObject({ companyId: 'company-named' })
   })
 
   it('the record the link named beats the address', async () => {

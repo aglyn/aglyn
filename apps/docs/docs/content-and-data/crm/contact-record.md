@@ -32,7 +32,8 @@ list — the list itself stays exactly where it was.
 
 | Field | Notes |
 | --- | --- |
-| **Email** | Required. It is the one thing every site shares about a person and what makes two captures one record. |
+| **Source site** | At the organization level. Optional: the site the person came from, if any. Every site sees the contact either way, unless your workspace [keeps each site's records apart](./sharing.md), where this reads **Site** and is required. |
+| **Email** | Optional. A contact needs a name, an email or a phone number, and any one will do. When you have an address, it is what makes two captures one record. |
 | **Salutation** | Optional. One of your organization's salutations — **Mr.**, **Ms.**, **Mrs.**, **Dr.** and **Prof.** to start with; add your own under [CRM → Fields → Contacts](./custom-fields.md). |
 | **First name**, **Last name** | Optional. While either is filled in, the **Name** is made of them and cannot be typed separately. |
 | **Name** | Optional. Your own name for the person when you keep it as one field; the record also keeps the name they gave on a form. |
@@ -44,13 +45,16 @@ list — the list itself stays exactly where it was.
 | **Owner** | The team member responsible for the relationship, picked from your workspace roster. |
 | **Tags** | Comma-separated. Tags are lower-cased and deduplicated, so `VIP` and `vip` are one tag. |
 | **Mailing address** | Street, city, state or region, postal code and a two-letter country code. |
-| **Opted in to marketing email** | Tick it only if the person actually agreed. Adding a contact is never itself consent, and the checkbox says so. |
+| **Opted in to marketing email** | Tick it only if the person actually agreed. Adding a contact is never itself consent, and the checkbox says so. It needs an email, since there is nowhere to send marketing without one. With a **Source site** it records the opt-in for that site; with none it records it for every site in the workspace. |
 
 The rest of the profile — the other phones, the birthdate, the assistant, the
 manager and the other address — is filled in on the record page.
 
 If the email already belongs to a contact, nothing is duplicated: what you
-typed **merges** into the existing record and the page tells you so. On a plan
+typed **merges** into the existing record and the page tells you so. With no
+email, a phone number that is already on a contact you can see merges the same
+way. A name alone never does, and neither do two blank emails: two people with
+no address are two people. On a plan
 whose records band is a hard limit, a full band refuses the new record with the
 same wording the list shows.
 
@@ -120,8 +124,10 @@ changes** beside it puts back what you had not saved.
 The fields are grouped the way Salesforce groups a contact's details — see
 [The standard fields](#the-standard-fields) — then an **About** box for your
 team's notes, then under **More fields** one control per
-[custom field](./custom-fields.md) your organization has defined. The email is
-shown but cannot be edited here, because it is the shared identity.
+[custom field](./custom-fields.md) your organization has defined. Add the email
+here whenever you have it. Every site shares a contact's address, so replacing
+one changes it for all of them, needs access to the whole workspace, and is
+refused if another contact already has that address: merge the two instead.
 
 The **Company** field is the same picker the New contact drawer has: search
 the companies your site may see, create one by typing its name, or clear
@@ -138,7 +144,7 @@ groups:
 
 | Group | Fields |
 | --- | --- |
-| **Contact information** | Email (read-only), **Salutation**, **First name**, **Last name**, **Name**, **Job title**, **Department**, **Company**, **Lead source**, **Lifecycle stage**, **Owner**, **Tags**. |
+| **Contact information** | **Email**, **Salutation**, **First name**, **Last name**, **Name**, **Job title**, **Department**, **Company**, **Lead source**, **Lifecycle stage**, **Owner**, **Tags**. |
 | **Phones** | **Phone**, **Mobile phone**, **Home phone**, **Other phone**, **Fax** and **Do not call**. Every number is entered with its country code and stored in E.164; each one but the fax has a dial button beside it. |
 | **Addresses** | **Mailing address** — the address a letter goes to, and the one the CSV file's *Mailing* columns and the API's `address` carry — and **Other address**. |
 | **Additional information** | **Birthdate** (a past date), **Reports to** (another contact, picked from your contacts), **Assistant** and **Assistant phone**. |

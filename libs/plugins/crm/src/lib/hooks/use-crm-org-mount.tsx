@@ -42,14 +42,16 @@ import {
  */
 export interface CrmOrgMount extends ConsolePluginOrgMount {
   /**
-   * The site the next create stamps from: the reader's last pick this
-   * session, or the org's only site when it has exactly one, else `null`
-   * until somebody picks. A record is always captured BY a site — its
-   * `hostId`, its `visibleTo`, the consent group its profile lives on all
-   * come from one — and at the org level nothing else can say which.
+   * The site the next create comes from: the reader's last pick this
+   * session, or the org's only site when it has exactly one, else `null`.
+   * In an org that keeps each site's records apart a record must come from
+   * a site — its `visibleTo` and the consent group its profile lives on
+   * follow from it — so a create holds until one is picked; in an org whose
+   * records belong to every site, `null` is an answer: a record from no site.
    */
   createHostId: string | null
-  setCreateHostId: (hostId: string) => void
+  /** Picks the site the next create comes from; `null` picks none. */
+  setCreateHostId: (hostId: string | null) => void
   /** How a site reads on screen — its name, or its id when the list cannot name it. */
   siteName: (hostId: string) => string
   /**
@@ -83,9 +85,10 @@ function readRememberedPick(orgId: string): string | null {
   }
 }
 
-function writeRememberedPick(orgId: string, hostId: string): void {
+function writeRememberedPick(orgId: string, hostId: string | null): void {
   try {
-    window.sessionStorage.setItem(pickStorageKey(orgId), hostId)
+    if (hostId) window.sessionStorage.setItem(pickStorageKey(orgId), hostId)
+    else window.sessionStorage.removeItem(pickStorageKey(orgId))
   } catch {
     // A browser that refuses storage still gets the pick for this page.
   }
@@ -132,7 +135,7 @@ export function CrmOrgMountProvider(props: {
   }, [picked, byId, hostsReady, hosts])
 
   const setCreateHostId = useCallback(
-    (hostId: string) => {
+    (hostId: string | null) => {
       setPicked(hostId)
       writeRememberedPick(orgId, hostId)
     },

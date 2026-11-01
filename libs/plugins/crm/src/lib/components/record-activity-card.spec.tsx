@@ -18,9 +18,10 @@
 /**
  * The activity card of a company or a deal (AGL-2600).
  *
- *  1. A new activity is filed against the ONE record the page fixed — a
- *     company's card stamps `companyId` and neither of the other two ids —
- *     with the whole scope stamp a contact captured on this site would carry.
+ *  1. A new activity opens on the ONE record the page names — a company's
+ *     card stamps `companyId` and neither of the other two ids unless the
+ *     reader names one — with the whole scope stamp a contact captured on
+ *     this site would carry.
  *  2. Who may edit is decided once for the list, not once per row: the
  *     verdict reads the member document, and a list of a hundred calls must
  *     not read it a hundred times. The verdict itself still holds — the
@@ -88,10 +89,17 @@ jest.mock('firebase/firestore', () => ({
   updateDoc: jest.fn().mockResolvedValue(undefined),
 }))
 
+// **Name** and **Related To** have their own spec (`activity-link-fields`).
+jest.mock('./activity-link-fields', () => ({ ActivityLinkFields: () => null }))
+jest.mock('../hooks/use-crm-record-names', () => ({
+  useCrmRecordNames: () => (kind: string, id: string) =>
+    ({ 'contact:c-1': 'Jordan Lee', 'deal:d-1': 'Acme renewal' })[`${kind}:${id}`],
+}))
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar: jest.fn() }),
 }))
 jest.mock('@aglyn/shared-ui-jsx', () => ({
+  AppLink: ({ href, children }: { href: string; children: ReactNode }) => <a href={href}>{children}</a>,
   CardDisplay: ({
     header,
     HeaderProps,
@@ -144,6 +152,71 @@ const tenRows = Array.from({ length: 10 }, (_, index) =>
   row(`act-${index + 1}`, 'u-2', 10_000 - index),
 )
 
+/**
+ * A company's log is everything that rolled up to it (AGL-4123), so each entry
+ * says who or what it is about. The others are that record's own log, and do
+ * not repeat the page's subject on every row.
+ */
+describe('what a company’s entry is about (AGL-4123)', () => {
+  const entries = (...rows: Array<Record<string, unknown>>) =>
+    mockPaged.mockReturnValue({
+      data: rows,
+      rows,
+      hasMore: false,
+      page: 0,
+      pageSize: 100,
+      setPage,
+      setPageSize: jest.fn(),
+      status: 'success',
+      fromCache: false,
+    })
+  const company = (basePath?: string) =>
+    render(<RecordActivityCard hostId="host-1" org={{}} companyId="co-1" basePath={basePath} />)
+  const about = () => screen.getAllByTestId('activity-about').map((label) => label.textContent)
+
+  it('names the contact and the deal, each a link to its record', () => {
+    entries({ ...row('act-1', 'u-1', 3_000), contactId: 'c-1', dealId: 'd-1' })
+    company('/crm')
+    expect(about()).toEqual(['Jordan Lee · Acme renewal'])
+    expect(screen.getByRole('link', { name: 'Jordan Lee' }).getAttribute('href')).toBe(
+      '/crm/contacts/c-1',
+    )
+    expect(screen.getByRole('link', { name: 'Acme renewal' }).getAttribute('href')).toBe(
+      '/crm/deals/d-1',
+    )
+  })
+
+  it('labels an entry the platform captured too, which takes no other chip', () => {
+    entries({
+      ...row('act-1', 'u-1', 3_000),
+      kind: 'email',
+      direction: 'inbound',
+      messageId: '<a@mail.example>',
+      contactId: 'c-1',
+    })
+    company()
+    expect(about()).toEqual(['Jordan Lee'])
+  })
+
+  it('reads a record it cannot name as its kind, never as an id', () => {
+    entries({ ...row('act-1', 'u-1', 3_000), contactId: 'c-gone', dealId: 'd-gone' })
+    company()
+    expect(about()).toEqual(['Contact · Deal'])
+  })
+
+  it('adds nothing to an entry logged on the company itself', () => {
+    entries(row('act-1', 'u-1', 3_000))
+    company()
+    expect(screen.queryByTestId('activity-about')).toBeNull()
+  })
+
+  it('leaves a deal’s own log as it is', () => {
+    entries({ ...row('act-1', 'u-1', 3_000), contactId: 'c-1', dealId: 'd-1' })
+    render(<RecordActivityCard hostId="host-1" org={{}} dealId="d-1" />)
+    expect(screen.queryByTestId('activity-about')).toBeNull()
+  })
+})
+
 describe('RecordActivityCard (AGL-2600)', () => {
   it('carries Log activity and Expand all in its header, and no foot of buttons', () => {
     renderCard()
@@ -168,7 +241,8 @@ describe('RecordActivityCard (AGL-2600)', () => {
         kind: 'call',
         body: 'Toured the roastery',
         companyId: 'co-1',
-        visibleTo: ['host:host-1'],
+        // The org has chosen no default, so the entry is the whole org's.
+        visibleTo: ['org'],
         hostId: 'host-1',
         byUid: 'u-1',
         byName: 'Ada Admin',

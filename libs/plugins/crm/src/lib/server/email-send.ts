@@ -37,7 +37,6 @@ import {
   type PluginApiHandler,
   type PluginApiRequest,
   type PluginApiResponse,
-  readContactFacet,
   readEmailState,
   readMarketingBasis,
   renderCrmMergeFields,
@@ -77,6 +76,7 @@ import {
   readCrmRouteScope,
 } from './org-caller'
 import { crmSuiteRefusal } from './suite-gate'
+import { crmActivityLinkWithCompany } from './crm-activity-company'
 import { newCrmActivityRef, writeCrmEmailActivity } from './crm-email-activity'
 
 /**
@@ -621,12 +621,14 @@ export const crmEmailSendHandler: PluginApiHandler = async (req, res) => {
     if (site.ok === false) return answer(res, site)
     const { hostId } = site
     const group = await consentGroupForSite(hostId, org as Record<string, unknown>)
-    // The company the sending site files this person under, so the email
-    // shows on the company's log as the automation step's rows do.
-    if (recipient.contact) {
-      const facet = readContactFacet(recipient.contact, group.groupId)
-      if (facet.companyId) recipient.link.companyId = facet.companyId
-    }
+    const orgRef = firestore.collection('orgs').doc(orgId)
+    // The deal's company, else the one the sending site files this person
+    // under, so the email shows on the company's log as every activity does.
+    recipient.link = await crmActivityLinkWithCompany(orgRef, recipient.link, {
+      deal: recipient.deal,
+      contact: recipient.contact,
+      groupId: group.groupId,
+    })
 
     /*
      * MERGE FIELDS (AGL-2658), filled here rather than in the dialog: the
@@ -653,7 +655,6 @@ export const crmEmailSendHandler: PluginApiHandler = async (req, res) => {
     // The per-record ceiling, before the send: an email that could not be
     // logged would be a message the timeline never shows, and the timeline
     // is the reason the send lives on the record.
-    const orgRef = firestore.collection('orgs').doc(orgId)
     if (!crmActivityLogHasRoom(await countCrmActivitiesForRecord(orgRef, recipient.link))) {
       return answer(res, refuse(409, CRM_ACTIVITY_LOG_FULL_MESSAGE, { reason: 'ceiling' }))
     }

@@ -148,6 +148,12 @@ export interface ActivityRowProps {
    * activity is about here, a record page needs nothing.
    */
   subject?: ReactNode
+  /**
+   * Who or what this entry is about, on a timeline it rolled up to. Unlike
+   * {@link subject} it stands on every row: a rolled-up email is as much in
+   * need of saying whose it is as a rolled-up call.
+   */
+  about?: ReactNode
   /** The clock the relative time is read against; `Date.now()` when absent. */
   nowMs?: number
   /**
@@ -182,7 +188,7 @@ export interface ActivityRowProps {
  * not?", and the honest answer would be "you could, through the API".
  */
 export function ActivityRow(props: ActivityRowProps) {
-  const { activity, scope, onEdit, subject, nowMs, editable } = props
+  const { activity, scope, onEdit, subject, about, nowMs, editable } = props
   const [ownExpanded, setOwnExpanded] = useState(false)
   const expanded = props.expanded ?? ownExpanded
   const onToggle = props.onToggle ?? (() => setOwnExpanded((open) => !open))
@@ -327,6 +333,7 @@ export function ActivityRow(props: ActivityRowProps) {
             </Tooltip>
           ) : null}
           {captured ? null : subject}
+          {about}
           {detail.length ? (
             <Typography variant="caption" color="text.secondary">
               {detail.join(' · ')}
@@ -406,6 +413,8 @@ export interface ActivityListProps {
   loading?: boolean
   /** The record each row is about, for a list that spans records. */
   subjectFor?: (activity: CrmActivityRow) => ReactNode
+  /** Who or what each row is about, for a timeline rows roll up to. */
+  aboutFor?: (activity: CrmActivityRow) => ReactNode
   /**
    * No controls on any row, whoever is reading — and no member read to
    * decide them. A feed that spans records is a place to see what happened,
@@ -445,6 +454,7 @@ export function ActivityList(props: ActivityListProps) {
     onShowMore,
     loading,
     subjectFor,
+    aboutFor,
     readOnly,
   } = props
   const canEdit = useCanEditActivity(scope.orgId, !readOnly)
@@ -476,6 +486,7 @@ export function ActivityList(props: ActivityListProps) {
           scope={scope}
           onEdit={onEdit}
           subject={subjectFor?.(activity)}
+          about={aboutFor?.(activity)}
           nowMs={nowMs}
           editable={canEdit(activity)}
           expanded={expansion.isExpanded(activity.$id)}

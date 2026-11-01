@@ -71,10 +71,13 @@ func consentGroupForHost(_ org: [String: Any]?, _ hostID: String) -> ConsentGrou
   return .solo(hostID)
 }
 
+/// `crm.defaultRecordScope`, else the legacy `defaultResourceScope`, else the whole org.
+/// `nil` only with no org to read, which every caller treats as the site.
 func crmDefaultScope(_ org: [String: Any]?) -> String? {
-  if let own = (org?["crm"] as? [String: Any])?["defaultRecordScope"] as? String, own == "org" || own == "host" { return own }
-  if let legacy = org?["defaultResourceScope"] as? String, legacy == "org" || legacy == "host" { return legacy }
-  return nil
+  guard let org else { return nil }
+  if let own = (org["crm"] as? [String: Any])?["defaultRecordScope"] as? String, own == "org" || own == "host" { return own }
+  if let legacy = org["defaultResourceScope"] as? String, legacy == "org" || legacy == "host" { return legacy }
+  return "org"
 }
 
 func crmScopeTokens(_ org: [String: Any]?, _ group: ConsentGroup) -> [String] {

@@ -116,7 +116,7 @@ jest.mock('../server/capture-host-contact', () => {
 })
 
 import { TRANSFER_UNDO_WINDOW_MS, type TransferWarningClass } from '@aglyn/aglyn/data-transfer'
-import { hostScopeToken } from '@aglyn/aglyn/app-utils/scope-tokens'
+import { hostScopeToken, ORG_SCOPE_TOKEN } from '@aglyn/aglyn/app-utils/scope-tokens'
 import {
   resetTransferResourcesForTests,
   resolveTransferResource,
@@ -279,7 +279,9 @@ describe('a Salesforce contacts file', () => {
     const bo = mockCaptures.find((options) => options.email === 'bo@globex.test')
     expect(bo).toMatchObject({ hostId: SITE, source: 'import', campaignIds: [] })
     const globex = [...mockMemory.docs.entries()].find(([path, data]) => path.startsWith(COMPANIES) && data['name'] === 'Globex')
-    expect(globex?.[1]).toMatchObject({ visibleTo: SITE_TOKENS, hostId: SITE })
+    // The org has chosen no default, so the company is the whole org's; the
+    // site the file came in on is its provenance.
+    expect(globex?.[1]).toMatchObject({ visibleTo: [ORG_SCOPE_TOKEN], hostId: SITE })
     expect(bo?.facet).toMatchObject({
       firstName: 'Bo',
       lastName: 'Ray',
@@ -356,8 +358,21 @@ describe('a Salesforce contacts file', () => {
   })
 })
 
+describe('a file with no site (AGL-4122)', () => {
+  const NO_EMAIL_FILE = ['First Name,Last Name,Phone', 'Jordan,Lee,+15125550107'].join('\n')
+
+  it('files the people under the organization, with no email needed', async () => {
+    const atOrg = await uploaded(NO_EMAIL_FILE, null)
+    const { match } = await analyzeTransferJob(deps, { orgId: ORG, jobId: atOrg.id, actorUid: ME })
+    await expect(
+      planTransferJob(deps, { orgId: ORG, jobId: atOrg.id, actorUid: ME, choices: { mapping: match.mapping } }),
+    ).resolves.toBeDefined()
+  })
+})
+
 describe('who and where', () => {
-  it('needs a site to import into, and the CRM on the plan', async () => {
+  it('needs a site to import into when the org keeps its sites apart, and the CRM on the plan', async () => {
+    mockMemory.seed(`orgs/${ORG}`, { plan: 'starter', crm: { defaultRecordScope: 'host' } })
     const atOrg = await uploaded(SALESFORCE_FILE, null)
     const { match } = await analyzeTransferJob(deps, { orgId: ORG, jobId: atOrg.id, actorUid: ME })
     const choices = { mapping: match.mapping, lookupChoices: { company: { globex: { action: 'leaveBlank' as const } } } }

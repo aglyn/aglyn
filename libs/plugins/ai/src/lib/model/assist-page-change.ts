@@ -144,23 +144,56 @@ export interface AssistPageChangeTurn {
   pageChangeNotice?: string | null
 }
 
+/** A turn of a thread, as far as what it changed goes. */
+export interface AssistOutcomeTurn extends AssistPageChangeTurn {
+  edit?: { summary: string } | null
+  editOutcome?: { kind: string; message?: string } | null
+}
+
+/** How many of a thread's outcomes ride a question, the newest kept. */
+export const ASSIST_OUTCOMES_SENT = 12
+
 /**
- * What became of a turn's page change, in the words the next question's
- * history carries it (AGL-4116), or null when the turn asked for none. The
- * chat sees a thread's text and nothing else, so without this it read its own
- * "I'll make this change" with no outcome and told the person nothing in the
- * chat had changed their page.
+ * What became of a turn's page change, or null when the turn asked for none
+ * (AGL-4116).
  */
-export function assistPageChangeHistoryNote(turn: AssistPageChangeTurn): string | null {
+export function assistPageChangeOutcome(turn: AssistPageChangeTurn): string | null {
   const proposal = turn.pageChange
   if (!proposal) return null
   const change = `Page change on ${proposal.pageName}`
-  if (turn.pageChangeNotice) return `(${change} not started: ${turn.pageChangeNotice})`
+  if (turn.pageChangeNotice) return `${change} not started: ${turn.pageChangeNotice}`
   const job = turn.pageChangeJob ?? null
   const output = assistPageChangeOutput(job)
-  if (output) return `(${change}: ${output.note ?? 'saved, not published.'})`
+  if (output) return `${change}: ${output.note ?? 'saved, not published.'}`
   if (job?.status === 'failed' || job?.status === 'canceled') {
-    return `(${change} not made: ${job.error ?? job.status})`
+    return `${change} not made: ${job.error ?? job.status}`
   }
-  return `(${change} being made.)`
+  return `${change} being made.`
+}
+
+/** What became of a turn's edit card, or null while it waits for an answer. */
+function assistEditOutcome(turn: AssistOutcomeTurn): string | null {
+  if (!turn.edit) return null
+  const summary = turn.edit.summary
+  if (turn.editOutcome?.kind === 'applied') return `Applied to the open canvas as an unsaved change: ${summary}`
+  if (turn.editOutcome?.kind === 'dismissed') return `Not applied, they turned it down: ${summary}`
+  if (turn.editOutcome?.kind === 'failed') return `Could not be applied: ${summary}`
+  return null
+}
+
+/**
+ * What a thread's changes came to, oldest first, for the next question to
+ * carry apart from the thread's words (AGL-4116).
+ *
+ * Apart, because a note added to the assistant's own turn reads as the model
+ * saying so: it is told never to say a change is made, so it took its record
+ * of a saved draft for its own mistake and took the change back, telling the
+ * person nothing had changed. The chat sees a thread's text and nothing else,
+ * so without these it cannot know what happened at all.
+ */
+export function assistThreadOutcomes(turns: readonly AssistOutcomeTurn[]): string[] {
+  return turns
+    .flatMap((turn) => [assistPageChangeOutcome(turn), assistEditOutcome(turn)])
+    .filter((outcome): outcome is string => outcome !== null)
+    .slice(-ASSIST_OUTCOMES_SENT)
 }

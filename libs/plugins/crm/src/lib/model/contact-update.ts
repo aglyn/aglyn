@@ -50,6 +50,12 @@ export const CRM_CONTACT_UPDATE_MAX = 200
  */
 export interface ContactUpdateFields {
   /**
+   * The address, which every site shares, so not a field of any facet. Set on
+   * one contact at a time, and refused when another contact already answers
+   * to it (AGL-4122): an email can come after the person does.
+   */
+  email?: string
+  /**
    * This holder's own name for the person. The canonical name is never
    * written. While the holder keeps a first or last name, the name is their
    * composition, and a `name` that differs from it is refused (AGL-3515).
@@ -110,6 +116,7 @@ export interface ContactUpdateFields {
 
 /** Every field the route reads. A body naming any other is refused, not trimmed. */
 export const CONTACT_UPDATE_FIELDS: ReadonlyArray<keyof ContactUpdateFields> = [
+  'email',
   'name',
   'salutation',
   'firstName',

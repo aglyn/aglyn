@@ -133,6 +133,7 @@ import { join } from 'node:path'
 import { consentGroupForHost } from '@aglyn/aglyn/app-utils/consent-groups'
 import {
   CRM_ACTIVITIES_PER_RECORD_CEILING,
+  crmReadTokens,
   crmScopeTokens,
   DEFAULT_DEAL_STAGES,
 } from '@aglyn/aglyn/app-utils/crm'
@@ -407,7 +408,8 @@ describe('the records band on company and deal creates (AGL-2611)', () => {
 // ── Companies ───────────────────────────────────────────────────────────────
 
 describe('POST /v1/companies', () => {
-  it('stamps the record for the site it names, exactly as that site would', async () => {
+  it('stamps the record for the site it names, exactly as that site would, when the org keeps its sites apart', async () => {
+    mockOrg = { ...mockOrg, crm: { defaultRecordScope: 'host' } }
     const response = await call('POST', 'companies', {
       name: 'Acme',
       domain: 'https://www.Acme.com/about',
@@ -449,7 +451,9 @@ describe('POST /v1/companies', () => {
     expect(mockDocs.get(`${COMPANIES}/${view.id}`)!.visibleTo).toEqual(['org'])
   })
 
-  it('requires the site, and refuses one the org does not own', async () => {
+  it('requires the site when the org keeps its sites apart, and refuses one the org does not own', async () => {
+    // Kept apart, the site decides who may see the record, so it is required.
+    mockOrg = { ...mockOrg, crm: { defaultRecordScope: 'host' } }
     const missing = await call('POST', 'companies', { name: 'Acme' })
     expect(missing.status).toBe(400)
     expect((await json(missing)).error.fields).toHaveProperty('consentSiteId')
@@ -832,12 +836,18 @@ describe('/v1/pipelines', () => {
       currency: 'usd',
       closedAt: null,
     })
-    // The pipeline visible from the site is queried, not the org's whole set.
+    // The pipeline visible from the site is queried, not the org's whole set:
+    // what the site READS, the org's rows and its own, so an org-wide default
+    // pipeline is found rather than seeded a second time.
     const seededBy = issued.find((filters) =>
       filters.some((filter) => filter.field === 'visibleTo'),
     )
     expect(seededBy).toEqual([
-      { field: 'visibleTo', op: 'array-contains-any', value: tokensFor('host-1') },
+      {
+        field: 'visibleTo',
+        op: 'array-contains-any',
+        value: crmReadTokens(consentGroupForHost(mockOrg, 'host-1')),
+      },
     ])
     // A second deal reuses it rather than seeding another.
     await call('POST', 'deals', { title: 'More beans', consentSiteId: 'host-1' })
@@ -1336,6 +1346,59 @@ describe('/v1/tasks picklists (AGL-3517)', () => {
 })
 
 describe('/v1/activities', () => {
+  describe('the company an activity rolls up to (AGL-4123)', () => {
+    const logged = async (links: Record<string, string>, consentSiteId = 'host-1') =>
+      json(
+        await call('POST', 'activities', {
+          kind: 'note',
+          body: 'Spoke',
+          consentSiteId,
+          ...links,
+        }),
+      )
+
+    beforeEach(() => {
+      mockDocs.set(`${ORG}/contacts/c-1`, {
+        email: 'avery@example.com',
+        capturedByHostIds: ['host-1'],
+        facets: { 'host-1': { companyId: 'co-contact' } },
+      })
+      mockDocs.set(`${COMPANIES}/co-named`, { name: 'Named', visibleTo: ['org'] })
+      mockDocs.set(`${DEALS}/d-1`, { title: 'Deal', companyId: 'co-deal', visibleTo: ['org'] })
+      mockDocs.set(`${DEALS}/d-2`, { title: 'No company', visibleTo: ['org'] })
+    })
+
+    it('takes the contact’s company through the logging site’s holder', async () => {
+      const activity = await logged({ contactId: 'c-1' })
+      expect(activity).toMatchObject({ contactId: 'c-1', companyId: 'co-contact' })
+      expect(mockDocs.get(`${ACTIVITIES}/${activity.id}`)!.companyId).toBe('co-contact')
+    })
+
+    it('takes the deal’s company over the contact’s', async () => {
+      expect(await logged({ contactId: 'c-1', dealId: 'd-1' })).toMatchObject({
+        contactId: 'c-1',
+        dealId: 'd-1',
+        companyId: 'co-deal',
+      })
+    })
+
+    it('falls through a deal with no company to the contact’s', async () => {
+      expect(await logged({ contactId: 'c-1', dealId: 'd-2' })).toMatchObject({
+        companyId: 'co-contact',
+      })
+    })
+
+    it('keeps a company the caller named', async () => {
+      expect(await logged({ contactId: 'c-1', companyId: 'co-named' })).toMatchObject({
+        companyId: 'co-named',
+      })
+    })
+
+    it('stamps no company when nothing names one', async () => {
+      expect(await logged({ dealId: 'd-2' })).toMatchObject({ companyId: null })
+    })
+  })
+
   it('records which way a call or an email went, and refuses one the kind does not take (AGL-3517)', async () => {
     const call1 = await json(
       await call('POST', 'activities', {

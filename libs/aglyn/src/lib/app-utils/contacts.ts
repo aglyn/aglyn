@@ -670,6 +670,18 @@ export function readContactFacet(
   }
 }
 
+/**
+ * The facet of a person the ORGANIZATION holds rather than a site (AGL-4122):
+ * someone added by hand at the organization level with no Source site, where
+ * the record belongs to the whole org and no site has met them.
+ *
+ * A key in the same map as a consent group's id and read the same way, so the
+ * record page, the update route and every reader of a facet serve this person
+ * without knowing the difference. Never a consent group's own id: those are
+ * Firestore ids, and `resolveConsentGroup` does not mint this one.
+ */
+export const ORG_CONTACT_HOLDER_ID = 'org'
+
 /** The dotted Firestore path to one field of one holder's facet. */
 export function contactFacetPath(groupId: string, field: string): string {
   if (!groupId) throw new Error('a contact facet must name a holder')

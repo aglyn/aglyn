@@ -121,7 +121,8 @@ renames it on every company that holds it.
 
 The page names the company in the heading and the trail, and holds its
 properties, its contacts, its [deals](./deals.md), its open [tasks](./tasks.md)
-and the [activity](./activities.md) logged against it. The header of the
+and the [activity](./activities.md) logged against it and rolled up from its
+people and its deals. The header of the
 first card carries the domain under the company's kind, the type, the
 industry, the rating and the owner as chips, **Back to companies**, **Call** and **Log a call** (see
 [click to call](./activities.md#click-to-call)), and **Edit**, which opens the
@@ -137,6 +138,18 @@ Under the fixed properties the card lists every [custom field](./custom-fields.m
 defined on the **Companies** tab of the Fields section, and **Edit** carries a control
 for each, so a company's own properties are saved in the same form as its name and
 domain.
+
+## Contact roles {#contact-roles}
+
+The **Contact roles** card says who at the company plays which part, the way
+Salesforce's Account Contact Roles do. **Add contact** picks a person and their
+role, and one person is the **Primary**. **Make primary** moves it, and a role
+can be changed in place.
+
+The roles come from the same list as a deal's, kept under
+[CRM → Fields](./custom-fields.md). They are separate from the
+[roles on a deal](./deals.md#contact-roles): someone's part in the company is a
+fact about the account, and their part in one deal can differ.
 
 ## Contacts at a company
 

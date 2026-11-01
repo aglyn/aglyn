@@ -224,7 +224,7 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { data: user } = useUser()
-  const { orgId, consentGroup, visibleTo, createHostId, createTokens } =
+  const { orgId, consentGroup, visibleTo, createHostId, createTokens, createNeedsSite } =
     useCrmScope({ hostId, org })
   // A client-direct write owes the org's sharing rules a re-evaluation (AGL-3336).
   const followUpSharing = useCrmSharingFollowUp(hostId, orgId)
@@ -457,9 +457,11 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
         enqueueSnackbar('Deal saved', { variant: 'success', persist: false })
         onSaved?.(deal.$id, 'edit')
       } else {
-        // Held by the button until the capturing site is known; checked
-        // again here because a callback can outlive the render that held it.
-        if (!createHostId) return
+        // Held by the button until it knows who may see the deal — the whole
+        // org, or (in an org that keeps its sites apart) a picked site's
+        // group; checked again here because a callback can outlive the
+        // render that held it.
+        if (!createTokens.length) return
         const customDocument = crmCustomDraftDocument(custom)
         const record: Record<string, unknown> = {
           ...dealDocumentFromForm(saved, {
@@ -547,15 +549,21 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
         <Stack spacing={2} sx={{ width: { xs: '100%', sm: 420 } }}>
           {/*
             First, because the scope of everything below follows from it: at
-            the organization level a new deal names the site that captures
-            it. Nothing under a site, and nothing on an edit — a deal keeps
-            the site it was made on (AGL-2630).
+            the organization level a new deal names the site it came from —
+            required where the org keeps its sites apart, optional where every
+            site sees it. Nothing under a site, and nothing on an edit — a deal
+            keeps the site it was made on (AGL-2630).
           */}
           {mode === 'create' ? (
             <CrmSitePicker
               hostId={hostId}
               disabled={busy}
-              helperText="The site this deal belongs to — it decides which of your sites may see it."
+              optional={!createNeedsSite}
+              helperText={
+                createNeedsSite
+                  ? 'The site this deal belongs to — it decides which of your sites may see it.'
+                  : undefined
+              }
             />
           ) : null}
           <TextField
@@ -858,8 +866,9 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
               Boolean(problem) ||
               !orgId ||
               bandFull ||
-              // A new deal waits for its capturing site.
-              (mode === 'create' && !createHostId)
+              // A new deal waits for its scope: a site, where the org keeps
+              // its sites apart; nothing, where every site sees it.
+              (mode === 'create' && !createTokens.length)
             }
             onClick={() => void handleSave()}
           >

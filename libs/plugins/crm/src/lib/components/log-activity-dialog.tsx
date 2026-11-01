@@ -40,8 +40,17 @@ import {
   updateDoc,
   where,
 } from 'firebase/firestore'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { crmActivityClientReads } from '../hooks/crm-activity-client-reads'
 import { crmVisibleToClause } from '../hooks/use-crm-scope'
+import {
+  crmActivityLinkFromPicks,
+  crmActivityPicksEqual,
+  crmActivityPicksFrom,
+  type CrmActivityPicks,
+  resolveCrmActivityCompany,
+} from '../model/crm-activity-link'
+import { ActivityLinkFields } from './activity-link-fields'
 import type { ActivityRecordLink, ActivityScope } from './activity-queries'
 import { CrmSitePicker } from './crm-site-picker'
 
@@ -86,12 +95,17 @@ interface Draft {
    * written only when the kind takes it.
    */
   direction: string
+  /** **Name** and **Related To**, as the reader has left them. */
+  picks: CrmActivityPicks
 }
 
 /** The kind a new activity opens on when the caller names none. */
 const DEFAULT_KIND: CrmActivityKind = 'call'
 
-const freshDraft = (kind: CrmActivityKind = DEFAULT_KIND): Draft => ({
+const freshDraft = (
+  kind: CrmActivityKind = DEFAULT_KIND,
+  picks: CrmActivityPicks = crmActivityPicksFrom({}),
+): Draft => ({
   kind,
   body: '',
   at: toLocalInput(Date.now()),
@@ -99,6 +113,7 @@ const freshDraft = (kind: CrmActivityKind = DEFAULT_KIND): Draft => ({
   durationMinutes: '',
   // Most logged calls and emails are the team's own.
   direction: 'outbound',
+  picks,
 })
 
 const draftFrom = (activity: CrmActivityRow): Draft => ({
@@ -111,6 +126,7 @@ const draftFrom = (activity: CrmActivityRow): Draft => ({
       ? String(activity.durationMinutes)
       : '',
   direction: Aglyn.crmActivityDirection(activity.kind, activity.direction) ?? '',
+  picks: crmActivityPicksFrom(activity),
 })
 
 export interface LogActivityDialogProps {
@@ -119,16 +135,20 @@ export interface LogActivityDialogProps {
   /** Where the activity is written, from `useActivityScope`. */
   scope: ActivityScope
   /**
-   * The record the activity is filed against, FIXED by the caller. A
-   * contact's page logs against that contact; the dialog offers no picker,
-   * because an activity logged from a record page is about that record and
-   * a picker would be a way to file it somewhere the reader is not looking.
+   * The record the dialog was opened on, which prefills **Name** and
+   * **Related To** (AGL-4123). A lead's own log offers neither: the lead is
+   * the entry's only link until it converts.
    */
   link: ActivityRecordLink
   /**
+   * The deal the dialog was opened on, as its page read it: **Name** opens on
+   * its Primary and its contact roles lead the list.
+   */
+  deal?: { contactId?: unknown; contactRoles?: unknown } | null
+  /**
    * When set, the dialog EDITS this activity rather than logging a new one.
-   * The link, the author and the scope stay what they were; only what was
-   * said, when, and how it went can change.
+   * The author and the scope stay what they were; what was said, when, how
+   * it went, and who and what it is about can change.
    */
   activity?: CrmActivityRow | null
   /**
@@ -144,6 +164,15 @@ export interface LogActivityDialogProps {
  * Log a call, an email, a meeting, a note or something else against a
  * record (AGL-2600) — or correct one already logged.
  *
+ * ## Who, what and which account
+ *
+ * **Name** and **Related To** are Salesforce's Who and What (AGL-4123), and
+ * the company an entry rolls up to is stamped from them when it is saved —
+ * `model/crm-activity-link.ts` has the rule, shared with every other writer.
+ * The fields open on the record the dialog was opened from and the reader may
+ * change them: an entry named for a deal shows on the deal, on the person's
+ * timeline and on the company, whichever page it was logged from.
+ *
  * ## What is written
  *
  * A new activity carries the whole `CrmScoped` stamp: `visibleTo` from
@@ -156,9 +185,11 @@ export interface LogActivityDialogProps {
  * An edit rewrites only the fields the dialog shows. `visibleTo` is never
  * touched — the rules refuse a scoped member changing it, and widening a
  * record is an act for an org-wide member on the record itself — and neither
- * is the author or the link. A kind that stops taking an outcome takes the
- * outcome and the duration off the document rather than leaving a stale
- * "left a voicemail" on what is now a note.
+ * is the author. The links are rewritten only when **Name** or **Related To**
+ * changed, and then the company is worked out again, so an edit that corrects
+ * a typo cannot move an entry off a timeline it was filed on. A kind that
+ * stops taking an outcome takes the outcome and the duration off the document
+ * rather than leaving a stale "left a voicemail" on what is now a note.
  *
  * ## Who may write
  *
@@ -168,9 +199,10 @@ export interface LogActivityDialogProps {
  * so what reaches here has already passed the console's verdict.
  */
 export function LogActivityDialog(props: LogActivityDialogProps) {
-  const { open, onClose, scope, link, activity, kind: presetKind } = props
-  const { firestore, dataScope, hostId, mountedHostId, readTokens, writeTokens } =
+  const { open, onClose, scope, link, deal, activity, kind: presetKind } = props
+  const { firestore, dataScope, hostId, mountedHostId, readTokens, writeTokens, needsSite } =
     scope
+  const { consentGroup, org } = scope
   const { data: user } = useUser()
   const authorName = useUserName()
   const { enqueueSnackbar } = useSnackbar()
@@ -180,10 +212,23 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
   /*
    * Seeded on OPEN, not on mount: the dialog stays mounted between uses so
    * its state survives a close, and "log another call" must start from now
-   * rather than from the last call's timestamp.
+   * rather than from the last call's timestamp. The record is read through a
+   * ref, because a deal is a live document and a colleague's save to it must
+   * not wipe what the reader has typed so far.
    */
+  const openedOn = useRef({ link, deal })
   useEffect(() => {
-    if (open) setDraft(activity ? draftFrom(activity) : freshDraft(presetKind))
+    openedOn.current = { link, deal }
+  }, [link, deal])
+  useEffect(() => {
+    if (!open) return
+    const seed = openedOn.current
+    const primary = seed.deal ? Aglyn.dealPrimaryContactId(Aglyn.dealContactRolesOf(seed.deal)) : null
+    setDraft(
+      activity
+        ? draftFrom(activity)
+        : freshDraft(presetKind, crmActivityPicksFrom(seed.link, primary)),
+    )
   }, [open, activity, presetKind])
 
   const hasOutcome = Aglyn.activityKindHasOutcome(draft.kind)
@@ -191,6 +236,16 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
   const direction = Aglyn.crmActivityDirection(draft.kind, draft.direction)
   const atMs = fromLocalInput(draft.at)
   const body = draft.body.trim()
+  /*
+   * A lead's own log shows neither field: a lead is not a contact **Name**
+   * could hold, and in Salesforce's model too it names no What. A contact
+   * beside the lead means it converted, and the entry reads like any other.
+   */
+  const filedOn = activity ?? link
+  const leadOnly = Boolean(filedOn.leadId) && !filedOn.contactId
+  const { picks } = draft
+  // An activity attached to nothing is a sentence nobody can find (AGL-2606).
+  const linked = leadOnly || Boolean(picks.contactId || picks.related)
   const duration = draft.durationMinutes.trim()
     ? Number(draft.durationMinutes)
     : null
@@ -202,24 +257,33 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
   const canSave =
     Boolean(dataScope) &&
     Boolean(user?.uid) &&
-    // A NEW activity is stamped with a site's scope and provenance; at the
-    // organization level that is the picked site, and there is nothing to
-    // write until there is one (AGL-2630). An edit never touches either.
-    (Boolean(activity) || Boolean(hostId)) &&
+    // A NEW activity is stamped with a scope: the whole org where every site
+    // sees the CRM's records, else the picked site's — and in an org that
+    // keeps its sites apart there is nothing to write until one is picked
+    // (AGL-2630). An edit never touches either.
+    (Boolean(activity) || writeTokens.length > 0) &&
     body.length > 0 &&
     atMs !== null &&
     durationValid &&
+    linked &&
     !saving
 
   const handleSave = useCallback(async () => {
     // Every guard the button reads, again — a callback can outlive the
     // render that disabled it.
-    if (!dataScope || !user?.uid || !body || atMs === null || !durationValid) {
+    if (!dataScope || !user?.uid || !body || atMs === null || !durationValid || !linked) {
       return
     }
-    if (!activity && !hostId) return
+    if (!activity && !writeTokens.length) return
     setSaving(true)
     try {
+      const named = crmActivityLinkFromPicks(picks, filedOn.leadId)
+      const stamped = () =>
+        resolveCrmActivityCompany(
+          named,
+          { groupId: consentGroup?.groupId, org },
+          crmActivityClientReads(firestore, dataScope[1]),
+        )
       const said = {
         kind: draft.kind,
         body: body.slice(0, BODY_MAX),
@@ -228,6 +292,9 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
       const outcome = hasOutcome ? draft.outcome.trim().slice(0, OUTCOME_MAX) : ''
       const durationMinutes = hasOutcome && duration !== null ? duration : null
       if (activity) {
+        const relinked = crmActivityPicksEqual(picks, crmActivityPicksFrom(activity))
+          ? null
+          : await stamped()
         await updateDoc(
           doc(
             firestore,
@@ -238,6 +305,15 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
           ),
           {
             ...said,
+            // Cleared rather than left: an entry moved off a deal must stop
+            // showing on it. A lead's own link is never the fields' to change.
+            ...(relinked
+              ? {
+                  contactId: relinked.contactId ?? deleteField(),
+                  dealId: relinked.dealId ?? deleteField(),
+                  companyId: relinked.companyId ?? deleteField(),
+                }
+              : {}),
             // Cleared rather than left: a call turned into a note must not
             // keep the call's outcome, and Firestore refuses `undefined`.
             outcome: outcome ? outcome : deleteField(),
@@ -257,7 +333,7 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
          * listener is, so the rules admit the aggregate for a scoped
          * member exactly as they admit the timeline.
          */
-        const lead = Aglyn.crmActivityCeilingLink(link)
+        const lead = Aglyn.crmActivityCeilingLink(named)
         if (lead) {
           const logged = (
             await getCountFromServer(
@@ -281,6 +357,7 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
             return
           }
         }
+        const links = await stamped()
         await addDoc(
           collection(
             firestore,
@@ -293,13 +370,9 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
             ...(outcome ? { outcome } : {}),
             ...(durationMinutes !== null ? { durationMinutes } : {}),
             ...(direction ? { direction } : {}),
-            // Only the link the caller fixed. A key with no value is
-            // `undefined`, which Firestore refuses, so each is spread in
-            // rather than written blank.
-            ...(link.contactId ? { contactId: link.contactId } : {}),
-            ...(link.companyId ? { companyId: link.companyId } : {}),
-            ...(link.dealId ? { dealId: link.dealId } : {}),
-            ...(link.leadId ? { leadId: link.leadId } : {}),
+            // Only the links it has: `stampCrmActivityCompany` leaves no blank
+            // key, and Firestore refuses `undefined`.
+            ...links,
             visibleTo: writeTokens,
             hostId,
             byUid: user.uid,
@@ -337,7 +410,11 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
     activity,
     firestore,
     enqueueSnackbar,
-    link,
+    linked,
+    picks,
+    filedOn.leadId,
+    consentGroup,
+    org,
     readTokens,
     writeTokens,
     hostId,
@@ -354,7 +431,12 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
           <CrmSitePicker
             hostId={mountedHostId}
             disabled={saving}
-            helperText="The site this activity is logged from — it decides which of your sites may see it."
+            optional={needsSite === false}
+            helperText={
+              needsSite === false
+                ? undefined
+                : 'The site this activity is logged from — it decides which of your sites may see it.'
+            }
           />
         )}
         <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
@@ -456,6 +538,16 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
             />
           </Stack>
         ) : null}
+        {leadOnly ? null : (
+          <ActivityLinkFields
+            scope={scope}
+            picks={picks}
+            onChange={(next) => setDraft((prev) => ({ ...prev, picks: next }))}
+            link={link}
+            deal={deal}
+            disabled={saving}
+          />
+        )}
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose} disabled={saving}>

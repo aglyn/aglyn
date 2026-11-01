@@ -41,11 +41,17 @@ jest.mock('firebase-admin/firestore', () => ({
 
 const contacts: Record<string, Record<string, any>> = {}
 /**
- * The org's stored sharing default. Undefined is the shipped one — a new
- * contact is scoped to the capturing group — and `'org'` is the deliberate
- * widening an org running one brand across several sites may choose.
+ * The dataset sharing default (`defaultResourceScope`) the CRM falls back
+ * to. Undefined, with no CRM setting either, is the shipped default: a new
+ * contact belongs to the whole org.
  */
 let mockOrgDefaultScope: 'org' | 'host' | undefined
+/**
+ * The CRM's own sharing setting (`crm.defaultRecordScope`), which wins over
+ * the dataset default. `'host'` is the agency's opt-in — each site's records
+ * kept apart — and then a new contact is scoped to the capturing group.
+ */
+let mockCrmRecordScope: 'org' | 'host' | undefined
 /**
  * The org's consent-group declaration, when a case declares one; `null` is
  * the org that declared nothing, which is every other case in this file.
@@ -170,7 +176,11 @@ jest.mock('./organizations', () => ({
       ),
   getOrgForHost: async () => ({
     orgId: 'org1',
-    org: { plan: 'starter', defaultResourceScope: mockOrgDefaultScope },
+    org: {
+      plan: 'starter',
+      defaultResourceScope: mockOrgDefaultScope,
+      ...(mockCrmRecordScope ? { crm: { defaultRecordScope: mockCrmRecordScope } } : {}),
+    },
   }),
   orgDataCollectionForHost: async () => contactsRef,
   scopedToHost: (ref: unknown) => ref,
@@ -187,8 +197,8 @@ jest.mock('@aglyn/aglyn/server', () => {
     ...contactsModule,
     // The real consent and scope helpers. Reimplementing them here is the
     // unfaithful-double trap: a fake that wrote a basis at the top of the
-    // document, or scoped a new contact org-wide, would pass this file while
-    // shipping the leak.
+    // document, or scoped a new contact org-wide whatever the org chose,
+    // would pass this file while shipping the leak.
     ...jest.requireActual('../../../../../../aglyn/src/lib/app-utils/consent-groups'),
     crmDefaultScopeOf: jest.requireActual('../../../../../../aglyn/src/lib/app-utils/crm').crmDefaultScopeOf,
     ...jest.requireActual('../../../../../../aglyn/src/lib/app-utils/marketing-consent'),
@@ -211,6 +221,12 @@ jest.mock('@aglyn/aglyn/server', () => {
  */
 const facet = (id: string, groupId = 'h1') =>
   contacts[id]?.facets?.[groupId] ?? {}
+
+// Every case starts with no CRM sharing setting; the ones about a kept-apart
+// org say so.
+beforeEach(() => {
+  mockCrmRecordScope = undefined
+})
 
 describe('upsertHostContact RFM fields on an existing contact', () => {
   beforeEach(() => {
@@ -282,12 +298,14 @@ describe('upsertHostContact RFM fields on an existing contact', () => {
 })
 
 /**
- * A NEW CONTACT IS SCOPED TO THE CAPTURING GROUP, NOT TO THE ORG.
+ * A NEW CONTACT IS THE ORG'S, UNLESS THE ORG KEEPS ITS SITES APART.
  *
- * Stamping `['org']` here made every contact readable by every site in the
- * account on the day it was created, so an agency's twelve clients shared one
- * address book by default. Closing the missing-field fail-open would not have
- * touched it: the field was present and said so.
+ * An org that has not chosen shares a new contact with every one of its
+ * sites: one business on several sites keeps one address book. An agency
+ * keeps its clients apart by choosing that
+ * (`crm.defaultRecordScope: 'host'`), and then a new contact is scoped to
+ * the capturing group — stamping `['org']` there would make every client's
+ * contact readable by every other client's site on the day it was created.
  */
 describe('the scope a captured contact starts with', () => {
   beforeEach(() => {
@@ -296,7 +314,8 @@ describe('the scope a captured contact starts with', () => {
     mockOrgDefaultScope = undefined
   })
 
-  it('scopes a new contact to the capturing site and no wider', async () => {
+  it('scopes a new contact to the capturing site and no wider when the org keeps its sites apart', async () => {
+    mockCrmRecordScope = 'host'
     await upsertHostContact({
       hostId: 'h1',
       email: 'new@example.com',
@@ -352,10 +371,23 @@ describe('the scope a captured contact starts with', () => {
   })
 
   /**
-   * ANTI-VACUITY. The org may still widen deliberately — visibility and
-   * consent are separate axes, and an org running one brand across three
-   * sites may reasonably want one address book. What changed is that it is
-   * an ACT rather than the default.
+   * THE DEFAULT. An org that never chose shares a new contact with every
+   * one of its sites.
+   */
+  it('shares a new contact with the whole org when the org has not chosen', async () => {
+    await upsertHostContact({
+      hostId: 'h1',
+      email: 'shared@example.com',
+      source: 'form',
+      interaction: { refId: 'f3' },
+    })
+    expect(added[0].visibleTo).toEqual(['org'])
+  })
+
+  /**
+   * ANTI-VACUITY for the fallback. The dataset default is still read where
+   * the CRM has no setting of its own, so an org that chose org-wide sharing
+   * there keeps it.
    */
   it('still honors an org that has chosen org-wide sharing', async () => {
     mockOrgDefaultScope = 'org'
@@ -734,10 +766,11 @@ describe('the CRM profile a door passes with a capture', () => {
 /*==========================================
  * A GRANT COVERS THE SITES THE PERSON WAS TOLD ABOUT (AGL-3320).
  *
- * A site in a declared group captures under the group — its visibility and
- * its holder are the group's — but the opt-in reaches the other sites only
- * when the capture surface sent back the key of the group's CURRENT
- * disclosure. Everything else records the capturing site alone.
+ * A site in a declared group captures under the group — its holder is the
+ * group's, and so is its visibility where the org keeps its sites apart, as
+ * every case here does — but the opt-in reaches the other sites only when
+ * the capture surface sent back the key of the group's CURRENT disclosure.
+ * Everything else records the capturing site alone.
  *=========================================*/
 describe('the sites a captured opt-in covers', () => {
   const {
@@ -750,6 +783,7 @@ describe('the sites a captured opt-in covers', () => {
     for (const key of Object.keys(contacts)) delete contacts[key]
     added = []
     mockOrgDefaultScope = undefined
+    mockCrmRecordScope = 'host'
     mockConsentGroups = NORTHWIND
   })
   afterAll(() => {

@@ -59,6 +59,7 @@ import { readCrmTaskPicklists } from './read-picklist'
 import { CRM_SUITE_FEATURE } from './suite-gate'
 import { crmTaskReminderAfterEdit } from '../model/crm-task-reminders'
 import { recomputeCrmNextTaskAt } from './crm-next-activity'
+import { crmActivityLinkWithCompany } from './crm-activity-company'
 import {
   createCrmEmailActivity,
   crmActivityRef,
@@ -89,7 +90,9 @@ import {
  *  6. a bounce or a complaint on a filed email (AGL-3245) advances that
  *     email's own delivery state — the row the send was filed under, found
  *     by its `Message-ID` — exactly as the campaign webhook advances one,
- *     so the timeline reads Sent, then Bounced, with what the server said.
+ *     so the timeline reads Sent, then Bounced, with what the server said;
+ *  7. an activity rolls up to its deal's company, else its contact's
+ *     (AGL-4123), as every writer's does.
  *
  * Each entry names the plugin that filed it (`sourcePluginId`), and a task's
  * `nextTaskAtMs` is recomputed on the records it names, as every server
@@ -251,6 +254,7 @@ export function createCrmRecordTimelineWriter(deps: CrmRecordTimelineDeps): Plug
         orgRef: FirebaseFirestore.DocumentReference
         link: CrmActivityLink
         visibleTo: string[]
+        groupId: string
         holderUid?: string
       }
   > {
@@ -288,6 +292,7 @@ export function createCrmRecordTimelineWriter(deps: CrmRecordTimelineDeps): Plug
       orgRef,
       link,
       visibleTo: crmScopeTokens(org, group),
+      groupId: group.groupId,
       ...(holderUid ? { holderUid } : {}),
     }
   }
@@ -315,7 +320,7 @@ export function createCrmRecordTimelineWriter(deps: CrmRecordTimelineDeps): Plug
       if (!isCrmActivityKind(request.kind)) return refuse(400, `"${String(request.kind)}" isn't an activity.`)
       const admitted = await admit(request)
       if ('ok' in admitted) return admitted
-      const { firestore, orgRef, link, visibleTo } = admitted
+      const { firestore, orgRef, link, visibleTo, groupId } = admitted
       const orgId = orgRef.id
 
       let ref: FirebaseFirestore.DocumentReference
@@ -361,7 +366,13 @@ export function createCrmRecordTimelineWriter(deps: CrmRecordTimelineDeps): Plug
       if (!crmActivityLogHasRoom(await countCrmActivitiesForRecord(orgRef, link))) {
         return refuse(409, CRM_ACTIVITY_LOG_FULL_MESSAGE)
       }
-      const stamped = { ...activity, sourcePluginId: request.sourcePluginId }
+      // After the refusals, so an entry answered off one read costs no others.
+      const { companyId } = await crmActivityLinkWithCompany(orgRef, link, { groupId })
+      const stamped = {
+        ...activity,
+        ...(companyId ? { companyId } : {}),
+        sourcePluginId: request.sourcePluginId,
+      }
       const created =
         request.kind === 'email'
           ? (await createCrmEmailActivity(ref, stamped)) === 'created'

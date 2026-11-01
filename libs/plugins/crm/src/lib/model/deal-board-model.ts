@@ -439,10 +439,10 @@ export function renameStage(
   stageId: string,
   name: string,
 ): CrmDealStage[] {
-  const trimmed = String(name ?? '').trim()
-  return stages.map((stage) =>
-    stage.id === stageId && trimmed ? { ...stage, name: trimmed } : stage,
-  )
+  // As typed: a trailing space is how the second word of a name begins, so a
+  // trim here ate every space. `settleStageNames` tidies them for the save.
+  const typed = String(name ?? '')
+  return stages.map((stage) => (stage.id === stageId ? { ...stage, name: typed } : stage))
 }
 
 /**

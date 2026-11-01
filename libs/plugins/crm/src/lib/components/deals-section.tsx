@@ -248,6 +248,7 @@ export function DealsSection(props: ConsolePluginPageProps) {
     'open',
     BOARD_OPEN_LIMIT,
   )
+  const dealsLoaded = open.status !== 'loading'
   const closedPipelineId =
     view === 'board' && closedExpanded ? (pipeline?.$id ?? null) : null
   const won = useDealsByStatus(scope.orgId, scope.visibleTo, closedPipelineId, 'won', BOARD_CLOSED_LIMIT)
@@ -551,7 +552,7 @@ export function DealsSection(props: ConsolePluginPageProps) {
   return (
     <>
       <CardDisplay
-        header={'Deals'}
+        header={'Deals / Opportunities'}
         help={pluginDocsHelp('deals', { anchor: '#the-board-and-the-table' })}
         contentGutterX
         contentGutterY
@@ -589,9 +590,16 @@ export function DealsSection(props: ConsolePluginPageProps) {
             spacing={3}
             sx={{ alignItems: 'flex-end', flexWrap: 'wrap', rowGap: 1 }}
           >
-            <Figure label="Open deals" value={summary.openCount.toLocaleString()} />
-            <Figure label="Pipeline value" value={formatAmountByCurrency(summary.valueByCurrency)} />
-            <Figure label="Weighted value" value={formatAmountByCurrency(summary.weightedByCurrency)} />
+            {/* A dash until the deals have loaded: a slow read is not an empty pipeline. */}
+            <Figure label="Open deals" value={dealsLoaded ? summary.openCount.toLocaleString() : '—'} />
+            <Figure
+              label="Pipeline value"
+              value={dealsLoaded ? formatAmountByCurrency(summary.valueByCurrency) : '—'}
+            />
+            <Figure
+              label="Weighted value"
+              value={dealsLoaded ? formatAmountByCurrency(summary.weightedByCurrency) : '—'}
+            />
             <Stack sx={{ flex: 1 }} />
             {/* Which pipeline the board and table show, above them rather than under (AGL-3311). */}
             {activePipelines.length > 1 ? (
