@@ -1349,6 +1349,22 @@ export function browseMediaKind(options: {
 }
 
 /**
+ * Whether an element is offered the two visibility fields: inside a component
+ * editor, and wherever it already carries a directive, like the logo and name
+ * of a new site's header (AGL-4119), so what decides whether it shows can be
+ * read and changed where the element is edited.
+ */
+export function offersVisibilityFields(
+  nodeProps: Record<string, unknown> | null | undefined,
+  inComponentEditor: boolean,
+): boolean {
+  return (
+    inComponentEditor ||
+    Boolean(nodeProps?.[NODE_HIDE_IF_PROP] || nodeProps?.[NODE_HIDE_UNLESS_PROP])
+  )
+}
+
+/**
  * The two visibility fields every node inside a component definition gets
  * (AGL-1314), so "this part is optional" is something an author declares by
  * clicking rather than something the component hard-codes.
@@ -1358,11 +1374,12 @@ export function browseMediaKind(options: {
  * mockup"), `hideUnless` takes the prop that would have supplied the
  * content ("no link, no button" — AGL-1348).
  *
- * Offered ONLY where `{{prop.*}}` exists — inside a component editor,
- * signalled by `BindingPickerContext.componentProps` exactly as the insert
- * picker uses it. On an ordinary screen the directive is inert (the graft
- * is the only thing that evaluates it), and a field that silently does
- * nothing is worse than no field.
+ * Offered where `{{prop.*}}` exists — inside a component editor, signalled by
+ * `BindingPickerContext.componentProps` exactly as the insert picker uses it —
+ * and on an element that already carries one ({@link offersVisibilityFields}).
+ * Anywhere else a directive is inert (the graft is the only thing that
+ * evaluates a literal one), and a field that silently does nothing is worse
+ * than no field.
  */
 export function buildVisibilityFields(
   tokenOptions?: unknown,
@@ -2376,20 +2393,18 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       ],
     )
 
-    // Visibility directives (AGL-1314), inside a component editor — and on
-    // an element that already carries one, like the logo and name of a new
-    // site's header (AGL-4119), so what decides whether it shows can be read
-    // and changed there. `componentProps` is the same "am I editing a
-    // definition" signal the insert picker keys `{{prop.*}}` off.
-    const carriesVisibility = Boolean(
-      nodeProps?.[NODE_HIDE_IF_PROP] || nodeProps?.[NODE_HIDE_UNLESS_PROP],
+    // Visibility directives (AGL-1314). `componentProps` is the same "am I
+    // editing a definition" signal the insert picker keys `{{prop.*}}` off.
+    const offersVisibility = offersVisibilityFields(
+      nodeProps as Record<string, unknown> | undefined,
+      Boolean(editedComponentProps),
     )
     const visibilityFields = useMemo(
       () =>
-        editedComponentProps || carriesVisibility
+        offersVisibility
           ? buildVisibilityFields(insertOptions, tokenLabelContext)
           : [],
-      [carriesVisibility, editedComponentProps, insertOptions, tokenLabelContext],
+      [offersVisibility, insertOptions, tokenLabelContext],
     )
 
     // Element animation (AGL-2486). Static, so it is built once rather than

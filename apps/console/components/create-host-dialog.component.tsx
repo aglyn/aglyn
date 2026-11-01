@@ -462,7 +462,8 @@ function CreateSiteFlow({
           const { missed } = await brand.save(site.hostId)
           brandMissed.current = missed
           const notice = siteBrandMissedNotice(missed)
-          if (notice) enqueueSnackbar(notice, { variant: 'warning', allowDuplicate: true })
+          // Kept until it is read: the landing draws "Your site is live" over it.
+          if (notice) enqueueSnackbar(notice, { variant: 'warning', persist: true, allowDuplicate: true })
           return { site, ...(starterName ? { starterName } : {}) }
         } catch (error) {
           console.error(error)

@@ -1133,9 +1133,10 @@ describe('AGL-4119 · a logo, a dark logo and a favicon, in every create', () =>
     expect(createCalls()).toHaveLength(1)
     expect(mockPush).toHaveBeenCalledTimes(1)
     expect(calls('/api/hosts/sync-memberships')).toHaveLength(0)
+    // Kept until it is read: "Your site is live" draws over the landing.
     expect(mockSnackbar).toHaveBeenCalledWith(
       'Your site is ready, but your logo didn’t upload. Add it in Site settings.',
-      expect.objectContaining({ variant: 'warning' }),
+      expect.objectContaining({ variant: 'warning', persist: true }),
     )
   })
 

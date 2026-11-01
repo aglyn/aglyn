@@ -412,6 +412,21 @@ const shots = [
     actions: starterStyleStep(),
   },
   {
+    // The logo, dark logo and favicon fields (AGL-4119), the first two chosen,
+    // each previewed on the ground it will be seen on. Nothing is created.
+    out: 'getting-started/create-site-logo.png',
+    path: `/${ORG_SLUG}/hosts`,
+    waitFor: 'Demo Bakery',
+    orgReleaseFlags: { release_ai_generative: true },
+    viewport: { width: 1440, height: 760 },
+    actions: [
+      { click: 'role=button[name=/Create site/] >> nth=0', waitFor: 'How do you want to start?', settleMs: 1500 },
+      { fill: ['role=textbox[name=/Site name/]', 'Hillside Dog Grooming'], settleMs: 1200 },
+      { files: ['[data-create-area="site-brand"] input[type="file"] >> nth=0', 'tools/e2e/fixtures/docs-logo-light.png'] },
+      { files: ['[data-create-area="site-brand"] input[type="file"] >> nth=1', 'tools/e2e/fixtures/docs-logo-dark.png'], settleMs: 1000 },
+    ],
+  },
+  {
     // "Choose your starter" (AGL-4049 lane 3), behind `release_site_starters`:
     // the platform's styles as starters, nothing chosen. Staff see the flagged
     // surface; its staff note is marked staff-only and stripped like any other.
@@ -1827,6 +1842,9 @@ for (const shot of selected) {
         await page.mouse.click(action.dblclickXY[0], action.dblclickXY[1])
         await page.waitForTimeout(action.selectMs ?? 1200)
         await page.mouse.dblclick(action.dblclickXY[0], action.dblclickXY[1])
+      }
+      if (action.files) {
+        await scope.locator(action.files[0]).setInputFiles(join(repoRoot, action.files[1]))
       }
       if (action.fill) {
         await scope.locator(action.fill[0]).first().fill(action.fill[1])

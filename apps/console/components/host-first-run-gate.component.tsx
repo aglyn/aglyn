@@ -105,7 +105,7 @@ function SiteBrandMissedLanding({ named }: { named: string }) {
     if (said.current) return
     said.current = true
     const notice = siteBrandMissedNotice(readSiteBrandMissed(named))
-    if (notice) enqueueSnackbar(notice, { variant: 'warning', allowDuplicate: true })
+    if (notice) enqueueSnackbar(notice, { variant: 'warning', persist: true, allowDuplicate: true })
     const rest = new URLSearchParams(searchParams?.toString() ?? '')
     rest.delete(SITE_BRAND_MISSED_PARAM)
     if (pathname) router.replace(rest.size ? `${pathname}?${rest.toString()}` : pathname)

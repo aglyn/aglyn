@@ -77,7 +77,8 @@ function useFilePreview(file: File | null): string | null {
  * Pick one image, see it, and take it away again (AGL-4119). A compact tile on
  * {@link FileDropZone}, for a form that holds a file until there is somewhere
  * to put it. It hands back the file and nothing else: what a form accepts,
- * what it refuses and where the file goes are the form's.
+ * what it refuses and where the file goes are the form's. Figma: "Create site /
+ * Image file field" in Aglyn Console (web), page Sites · Create site.
  */
 export function ImageFileField(props: ImageFileFieldProps) {
   const { label, file, onChange, accept, onRejected, ground, helperText, error, disabled, sx } = props

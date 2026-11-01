@@ -106,7 +106,7 @@ start begins, so the AI uses your logo too. If one can't be uploaded, your site 
 created, and Aglyn tells you which file didn't make it. Add it under **Setup**: the logos
 are in **Basic details → Site logo**, and the favicon is in **SEO → Favicon**.
 
-![Create a new site: the name and subdomain fields, then Logo and favicon with a logo chosen and a logo for dark backgrounds chosen, each previewed on the background it will be seen on, and Favicon empty with Leave this blank to use your logo, then Choose a style](/img/getting-started/create-site-logo.png)
+![Start your site: the site name and subdomain, then Logo and favicon with a logo and a logo for dark backgrounds chosen, each previewed on the background it will be seen on with Remove beside it, and Favicon empty with Leave this blank to use your logo](/img/getting-started/create-site-logo.png)
 
 The header and footer that show your logo are the starter's. To change how the logo sits
 in them, open the layout under **Layouts**: each logo is an ordinary **Image** element.
