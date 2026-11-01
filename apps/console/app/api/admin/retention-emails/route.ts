@@ -39,6 +39,7 @@ import { isCronAuthorized, isCronDryRun } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
 import {
   isRetentionCandidate,
+  isRetentionTurn,
   LIFECYCLE_EMAILS_FIELD,
   planRetentionEmail,
   retentionNeedsPages,
@@ -64,12 +65,16 @@ import {
  * - A GET reports the plan and sends nothing; the scheduled POST sends.
  *   `?dryRun=1` on a POST reports too. A staff ID token may read the plan
  *   (always a dry run) but never send.
+ * - An account is asked every hour while an email could be coming due, and a
+ *   dormant one in its own hour of the day (`isRetentionTurn`, AGL-4121). A dry
+ *   run plans the same hour a POST would send, so what it reports is what this
+ *   run would do; `waiting` counts the accounts it left for their turn.
  * - Suppressed addresses, disabled and staff accounts are never mailed. The
  *   product tips skip anyone who answered No to product email. The
  *   verification reminder is account mail and is governed by the suppression
  *   list alone.
  * - The send is `bulk` priority: a refusal from the platform send-rate
- *   governor leaves the crossing unrecorded, and the next hour's run tries
+ *   governor leaves the crossing unrecorded, and the account's next run tries
  *   again. So does an Identity Platform throttle on a verification link.
  * - The crossing is recorded only after a send, so a failed send is retried
  *   and a sent one never repeats.
@@ -81,7 +86,7 @@ export const RETENTION_EMAILS_JOB_ID = 'retention-emails'
 const MAX_AUTH_PAGES = 20
 /** Accounts whose Firestore facts are read per run. */
 const MAX_CANDIDATES = 600
-/** Emails sent per run; the rest wait an hour. */
+/** Emails sent per run; the rest wait for their next run. */
 const MAX_SENDS = 60
 /** Sites and pages read per account. */
 const MAX_SITES = 3
@@ -336,6 +341,7 @@ async function handler(request: Request): Promise<Response> {
   const rows: PlanRow[] = []
   let scanned = 0
   let candidates = 0
+  let waiting = 0
   let sends = 0
   let pageToken: string | undefined
   try {
@@ -356,6 +362,20 @@ async function handler(request: Request): Promise<Response> {
           .filter((value): value is number => value !== null)
         const lastSeenMs = seen.length ? Math.max(...seen) : null
         if (!isRetentionCandidate({ nowMs, createdAtMs, lastSeenMs, emailVerified: user.emailVerified })) {
+          continue
+        }
+        // Before the first read, which is the point: an account that is not
+        // up this hour costs nothing but the Auth page it arrived on.
+        if (
+          !isRetentionTurn({
+            nowMs,
+            uid: user.uid,
+            emailVerified: user.emailVerified,
+            createdAtMs,
+            lastSeenMs,
+          })
+        ) {
+          waiting += 1
           continue
         }
         candidates += 1
@@ -406,7 +426,7 @@ async function handler(request: Request): Promise<Response> {
   const counts: Record<string, number> = {}
   for (const row of rows) counts[`${row.key}:${row.outcome}`] = (counts[`${row.key}:${row.outcome}`] ?? 0) + 1
   return Response.json(
-    { ok: true, dryRun, scanned, candidates, counts, rows },
+    { ok: true, dryRun, scanned, candidates, waiting, counts, rows },
     { status: 200 },
   )
 }

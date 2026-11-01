@@ -117,11 +117,11 @@ describe('createStallRecovery (AGL-3373)', () => {
    * One slow listener among many that were just confirmed is not that.
    */
   it('leaves a client alone while the server is answering it (AGL-4120)', async () => {
-    let answeredAt: number | undefined
+    const answered: { at?: number } = {}
     const { calls, recovery, advance } = setup({
-      lastServerAnswerAt: () => answeredAt,
+      lastServerAnswerAt: () => answered.at,
     })
-    answeredAt = 1_000_000
+    answered.at = 1_000_000
     advance(FIRESTORE_STALL_MS - 1)
     await expect(recovery.recover()).resolves.toBe('answering')
     expect(calls).toEqual([])
@@ -152,8 +152,8 @@ describe('createStallRecovery (AGL-3373)', () => {
   })
 
   it('caps the wait, and starts over once the server answers again (AGL-4120)', async () => {
-    let answeredAt: number | undefined
-    const { recovery, advance } = setup({ lastServerAnswerAt: () => answeredAt })
+    const answered: { at?: number } = {}
+    const { recovery, advance } = setup({ lastServerAnswerAt: () => answered.at })
     let clock = 1_000_000
     const step = (ms: number) => {
       advance(ms)
@@ -168,7 +168,7 @@ describe('createStallRecovery (AGL-3373)', () => {
     await expect(recovery.recover()).resolves.toBe('cooling')
 
     step(STALL_RECOVERY_MAX_COOLDOWN_MS)
-    answeredAt = clock
+    answered.at = clock
     step(FIRESTORE_STALL_MS)
     await expect(recovery.recover()).resolves.toBe('recovered')
     step(STALL_RECOVERY_COOLDOWN_MS)

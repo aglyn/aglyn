@@ -24,7 +24,9 @@ import {
   DAY_MS,
   HOUR_MS,
   isRetentionCandidate,
+  isRetentionTurn,
   retentionNeedsPages,
+  retentionTurnHour,
   planRetentionEmail,
   summarizePages,
   type RetentionFacts,
@@ -161,6 +163,119 @@ describe('isRetentionCandidate', () => {
     expect(isRetentionCandidate({ nowMs: NOW, createdAtMs: NOW - 2 * HOUR_MS, lastSeenMs: null, emailVerified: false })).toBe(true)
     expect(isRetentionCandidate({ nowMs: NOW, createdAtMs: NOW - 90 * DAY_MS, lastSeenMs: NOW - DAY_MS, emailVerified: true })).toBe(false)
     expect(isRetentionCandidate({ nowMs: NOW, createdAtMs: NOW - 90 * DAY_MS, lastSeenMs: NOW - 9 * DAY_MS, emailVerified: true })).toBe(true)
+  })
+})
+
+describe('the daily turn of a confirmed account (AGL-4121)', () => {
+  /**
+   * The hours `crossing` is owed for, walked off the planner itself: the
+   * premise of asking once a day is that no window is narrower than two turns,
+   * so this reads the rules rather than restating them.
+   */
+  function hoursOwed(crossing: string, at: (nowMs: number) => RetentionFacts): number {
+    let hours = 0
+    for (let hour = 0; hour <= 32 * 24; hour += 1) {
+      const decided = planRetentionEmail(at(NOW + hour * HOUR_MS))
+      if (decided?.crossing.split(':')[0] === crossing) hours += 1
+    }
+    return hours
+  }
+
+  const built = { ownPages: 1, createdAtMs: NOW, lastSeenMs: NOW }
+
+  it.each<[string, (nowMs: number) => RetentionFacts, number]>([
+    [
+      'next-steps',
+      (nowMs) => facts({ ...built, nowMs, lastOwnPublishMs: NOW }),
+      // 7 days, less the hour the person is still in the console.
+      7 * 24 - 1,
+    ],
+    ['build-24h', (nowMs) => facts({ nowMs, createdAtMs: NOW, lastSeenMs: NOW }), 2 * 24],
+    ['build-3d', (nowMs) => facts({ nowMs, createdAtMs: NOW, lastSeenMs: NOW }), 11 * 24],
+    [
+      'publish',
+      (nowMs) => facts({ ...built, nowMs, unpublishedEdits: true, lastEditMs: NOW }),
+      29 * 24,
+    ],
+    ['idle-7d', (nowMs) => facts({ ...built, nowMs }), 7 * 24],
+    ['idle-14d', (nowMs) => facts({ ...built, nowMs }), 16 * 24],
+  ])('%s stays owed for two days or more', (crossing, at, expected) => {
+    const hours = hoursOwed(crossing, at)
+    expect(hours).toBe(expected)
+    expect(hours).toBeGreaterThanOrEqual(2 * 24)
+  })
+
+  it('lands twice inside the narrowest window, whatever hour the account was made', () => {
+    const uid = 'an-account'
+    for (let signedUp = 0; signedUp < 24; signedUp += 1) {
+      const createdAtMs = NOW + signedUp * HOUR_MS
+      let turns = 0
+      for (let hour = 24; hour < 3 * 24; hour += 1) {
+        const nowMs = createdAtMs + hour * HOUR_MS
+        if (isRetentionTurn({ nowMs, uid, emailVerified: true, createdAtMs, lastSeenMs: createdAtMs })) {
+          turns += 1
+        }
+      }
+      expect(turns).toBeGreaterThanOrEqual(2)
+    }
+  })
+
+  it.each<[string, (nowMs: number) => RetentionFacts]>([
+    ['build-24h', (nowMs) => facts({ nowMs, createdAtMs: NOW, lastSeenMs: NOW })],
+    ['build-3d', (nowMs) => facts({ nowMs, createdAtMs: NOW, lastSeenMs: NOW })],
+    ['next-steps', (nowMs) => facts({ ...built, nowMs, lastOwnPublishMs: NOW })],
+    ['publish', (nowMs) => facts({ ...built, nowMs, unpublishedEdits: true, lastEditMs: NOW })],
+    ['idle-7d', (nowMs) => facts({ ...built, nowMs })],
+    ['idle-14d', (nowMs) => facts({ ...built, nowMs })],
+  ])('asks about %s in the hour it comes due, whatever hour the account owns', (crossing, at) => {
+    for (let index = 0; index < 24; index += 1) {
+      const uid = `uid-${index}`
+      for (let hour = 0; hour <= 32 * 24; hour += 1) {
+        const nowMs = NOW + hour * HOUR_MS
+        if (planRetentionEmail(at(nowMs))?.crossing.split(':')[0] !== crossing) continue
+        expect(
+          isRetentionTurn({ nowMs, uid, emailVerified: true, createdAtMs: NOW, lastSeenMs: NOW }),
+        ).toBe(true)
+        break
+      }
+    }
+  })
+
+  it('never moves the hour, and spreads accounts across the day', () => {
+    // A value, so a change to the hash has to say what it does to every
+    // account's hour.
+    expect(retentionTurnHour('an-account')).toBe(16)
+    const perHour = new Array<number>(24).fill(0)
+    for (let index = 0; index < 2400; index += 1) {
+      perHour[retentionTurnHour(`uid-${index}-${index * 7919}`)] += 1
+    }
+    expect(Math.min(...perHour)).toBeGreaterThan(50)
+    expect(Math.max(...perHour)).toBeLessThan(150)
+  })
+
+  it('asks a dormant account in its own hour only', () => {
+    const uid = 'an-account'
+    const midnight = Date.parse('2026-10-08T00:20:00Z')
+    const dormant = { createdAtMs: midnight - 20 * DAY_MS, lastSeenMs: midnight - 10 * DAY_MS }
+    const asked = Array.from({ length: 24 }, (_, hour) => hour).filter((hour) =>
+      isRetentionTurn({ nowMs: midnight + hour * HOUR_MS, uid, emailVerified: true, ...dormant }),
+    )
+    expect(asked).toEqual([retentionTurnHour(uid)])
+  })
+
+  it('asks an unconfirmed account every hour: its reminder is due an hour after sign-up', () => {
+    const midnight = Date.parse('2026-10-08T00:20:00Z')
+    for (let hour = 0; hour < 24; hour += 1) {
+      expect(
+        isRetentionTurn({
+          nowMs: midnight + hour * HOUR_MS,
+          uid: 'an-account',
+          emailVerified: false,
+          createdAtMs: midnight - 2 * DAY_MS,
+          lastSeenMs: null,
+        }),
+      ).toBe(true)
+    }
   })
 })
 

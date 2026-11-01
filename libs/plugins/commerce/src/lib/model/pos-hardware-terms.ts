@@ -39,7 +39,7 @@ import { LEGAL_ORIGIN } from '@aglyn/aglyn/app-utils/published-legal-pages'
  *=========================================*/
 
 /** The published Terms version the summary and every acceptance name. */
-export const POS_HARDWARE_TERMS_VERSION = 'v20'
+export const POS_HARDWARE_TERMS_VERSION = 'v21'
 
 /** The sections of the Terms that are the terms of sale for hardware. */
 export const POS_HARDWARE_TERMS_SECTIONS = '4.26–4.32'

@@ -139,11 +139,16 @@ async function main() {
 
   const nowMs = Date.now()
   const day = utcDay(nowMs)
-  const hosts = await db.collection('hosts').limit(HOST_SCAN_LIMIT).get()
+  // Ids and one field, in one round trip (AGL-4121). A host document carries a
+  // whole site's routing, and all this needs of it is the id. Firestore bills
+  // both reads per document either way, so this saves bytes and the walk of a
+  // thousand sequential gets, not reads.
+  const hosts = await db.collection('hosts').select().limit(HOST_SCAN_LIMIT).get()
+  const days = hosts.docs.map((host) => host.ref.collection('analytics').doc(day))
+  const snaps = days.length ? await db.getAll(...days, { fieldMask: ['total'] }) : []
   let total = 0
   let counted = 0
-  for (const host of hosts.docs) {
-    const snap = await host.ref.collection('analytics').doc(day).get()
+  for (const snap of snaps) {
     if (!snap.exists) continue
     const n = Number(snap.get('total') ?? 0)
     if (Number.isFinite(n) && n > 0) {

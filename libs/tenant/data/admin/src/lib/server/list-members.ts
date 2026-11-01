@@ -37,7 +37,7 @@
  * no caller is offered the chance to derive its own.
  */
 
-import type { DocumentReference } from 'firebase-admin/firestore'
+import type { DocumentReference, DocumentSnapshot } from 'firebase-admin/firestore'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
   normalizeContactEmail,
@@ -53,6 +53,7 @@ import {
 import { consentGroupForGrant } from '@aglyn/aglyn/app-utils/consent-groups'
 import { nameSearchTokens } from '@aglyn/aglyn/app-utils/name-search'
 import { createHash, createHmac } from 'node:crypto'
+import { isDeepStrictEqual } from 'node:util'
 import { emailSearchTokens } from './email-suppression'
 import { scheduleCapturedEmailCheck } from './capture-email-check'
 
@@ -231,6 +232,18 @@ export interface EnrollListMemberInput {
    * person somebody added by hand does not.
    */
   via?: 'manual' | 'rule'
+  /**
+   * This person's row at the canonical id, for a caller that has just read
+   * the list and is enrolling everyone on it (AGL-4121).
+   *
+   * The canonical row is the one the lookup below would have settled on,
+   * legacy rows or none, so a held row that exists answers the lookup without
+   * its `getAll`. Holding it is also the caller saying this is a re-enrollment
+   * sweep: a write that would leave the row exactly as it is goes unsent, and
+   * the result says `unchanged`. Everything else about the enrollment, a
+   * recorded refusal above all, is decided here as it is for every caller.
+   */
+  heldRow?: DocumentSnapshot
 }
 
 export interface EnrolledListMember {
@@ -240,6 +253,8 @@ export interface EnrolledListMember {
   adopted: boolean
   /** False when the row already existed under some id. */
   created: boolean
+  /** True when a {@link EnrollListMemberInput.heldRow} needed no write at all. */
+  unchanged?: true
 }
 
 /** Why nothing was written. */
@@ -280,6 +295,9 @@ export type EnrollListMemberResult =
  *
  * The cost is one `getAll` of three refs, on a human-triggered signup, in
  * place of the blind `set` this replaced. It is one round trip, not three.
+ * The dynamic-list sweep is not human-triggered and hands in what it read
+ * instead (`heldRow`), or that one round trip is three reads and a write for
+ * every member of every list on every sweep.
  *
  * `addedAt` is stamped only when the document is created, so re-enrolling
  * keeps the date the person actually joined — the same "earliest wins" collapse
@@ -316,10 +334,9 @@ export async function enrollListMember(
     .filter((id) => id !== key)
     .map((id) => members.doc(id))
 
-  const snapshots = await input.listRef.firestore.getAll(
-    canonicalRef,
-    ...legacyRefs,
-  )
+  const snapshots = input.heldRow?.exists
+    ? [input.heldRow]
+    : await input.listRef.firestore.getAll(canonicalRef, ...legacyRefs)
   const existing = snapshots.find((snapshot) => snapshot.exists)
   const target = existing?.ref ?? canonicalRef
 
@@ -353,87 +370,108 @@ export async function enrollListMember(
    * that name's, and a re-enrollment without a name keeps the stored one.
    */
   const name = input.name || (existing?.get('name') as string | undefined) || null
-  await target.set(
-    {
-      email,
-      /*
-       * `name` and `addedAt` are on EVERY row, because the members table
-       * orders its query by them (AGL-3680) and `orderBy` drops a document
-       * that lacks the field: the caller's name, else the stored one, else
-       * `null`. A caller that says nothing never clears a stored name.
-       */
-      ...(input.name
-        ? { name: input.name }
-        : existing?.get('name') !== undefined
-          ? {}
-          : { name: null }),
-      searchTokens: listMemberSearchTokens(email, name),
-      source: input.source,
-      /*
-       * `via` is on every row, so the table's How filter can ask for it
-       * (AGL-3321): the caller's, else `manual` on a row that has none — what
-       * an absent `via` has always meant. A caller that says nothing never
-       * moves a stored one.
-       */
-      ...(input.via
-        ? { via: input.via }
-        : existing?.get('via')
-          ? {}
-          : { via: 'manual' }),
-      /*
-       * Written only when the caller has a basis, and never unwritten.
-       *
-       * A merge that stamped `marketingConsent: false` on the omitted case
-       * would erase a basis this person gave on an earlier enrollment, and a
-       * withdrawn consent is not the same event as a re-enrollment that
-       * happened to carry no checkbox. Withdrawal has its own path — the
-       * unsubscribe link and the suppression list.
-       *
-       * `marketingConsentAtMs` moves with each fresh basis on purpose: the
-       * question a consent record answers is when the person last said yes.
-       *
-       * The `marketingConsent` family rather than the `consent*` names
-       * `docs/specs/email-overhaul.md` §3d sketched: `readMarketingBasis` is
-       * the shipped reader and it reads these, so a second vocabulary here
-       * would be a basis the send-time join cannot see. The two new fields
-       * are attribution ON that field — they say why the person is mailable,
-       * never whether — so nothing about the send decision moves into them.
-       *
-       * Written UNDER the enrolling GROUP, through the one writer helper. A
-       * list lives on the org and every site in it can mail one, so a basis
-       * written at the top of this row would enroll a person into one
-       * client's newsletter and make them mailable by all of them. A group of
-       * one — the default — is that client and nobody else.
-       *
-       * `marketingConsentByUid` is written on EVERY basis, `null` for a
-       * pass-through. Leaving it absent would let a real opt-in that
-       * supersedes an earlier attestation inherit the attesting account, and
-       * a row reading "this account vouched for them" when the person ticked
-       * a box themselves is a false attribution in the one direction a
-       * compliance answer cannot afford.
-       *
-       * `marketingConsentReason` follows the same rule for the same reason:
-       * always written, `''` for a pass-through, so a later real opt-in
-       * cannot inherit the sentence an earlier import wrote about where the
-       * merchant said the address came from.
-       *
-       * WHICH sites the basis covers is `membershipConsentFields`' to say,
-       * and it never re-derives a grant from the group as it stands now.
-       */
-      ...(consent ? membershipConsentFields(input, consent) : {}),
-      ...(existing
-        ? // A legacy row that predates `addedAt` joined when it was created:
-          // its document's create time, the date it has always meant.
-          existing.get('addedAt') === undefined && existing.createTime
-          ? { addedAt: existing.createTime }
-          : {}
-        : {
-            addedAt: FieldValue.serverTimestamp(),
-            [CAPTURED_BY_HOST_FIELD]: [input.group.hostId],
-          }),
-    },
-    { merge: true },
-  )
+  const fields: Record<string, unknown> = {
+    email,
+    /*
+     * `name` and `addedAt` are on EVERY row, because the members table
+     * orders its query by them (AGL-3680) and `orderBy` drops a document
+     * that lacks the field: the caller's name, else the stored one, else
+     * `null`. A caller that says nothing never clears a stored name.
+     */
+    ...(input.name
+      ? { name: input.name }
+      : existing?.get('name') !== undefined
+        ? {}
+        : { name: null }),
+    searchTokens: listMemberSearchTokens(email, name),
+    source: input.source,
+    /*
+     * `via` is on every row, so the table's How filter can ask for it
+     * (AGL-3321): the caller's, else `manual` on a row that has none — what
+     * an absent `via` has always meant. A caller that says nothing never
+     * moves a stored one.
+     */
+    ...(input.via
+      ? { via: input.via }
+      : existing?.get('via')
+        ? {}
+        : { via: 'manual' }),
+    /*
+     * Written only when the caller has a basis, and never unwritten.
+     *
+     * A merge that stamped `marketingConsent: false` on the omitted case
+     * would erase a basis this person gave on an earlier enrollment, and a
+     * withdrawn consent is not the same event as a re-enrollment that
+     * happened to carry no checkbox. Withdrawal has its own path — the
+     * unsubscribe link and the suppression list.
+     *
+     * `marketingConsentAtMs` moves with each fresh basis on purpose: the
+     * question a consent record answers is when the person last said yes.
+     *
+     * The `marketingConsent` family rather than the `consent*` names
+     * `docs/specs/email-overhaul.md` §3d sketched: `readMarketingBasis` is
+     * the shipped reader and it reads these, so a second vocabulary here
+     * would be a basis the send-time join cannot see. The two new fields
+     * are attribution ON that field — they say why the person is mailable,
+     * never whether — so nothing about the send decision moves into them.
+     *
+     * Written UNDER the enrolling GROUP, through the one writer helper. A
+     * list lives on the org and every site in it can mail one, so a basis
+     * written at the top of this row would enroll a person into one
+     * client's newsletter and make them mailable by all of them. A group of
+     * one — the default — is that client and nobody else.
+     *
+     * `marketingConsentByUid` is written on EVERY basis, `null` for a
+     * pass-through. Leaving it absent would let a real opt-in that
+     * supersedes an earlier attestation inherit the attesting account, and
+     * a row reading "this account vouched for them" when the person ticked
+     * a box themselves is a false attribution in the one direction a
+     * compliance answer cannot afford.
+     *
+     * `marketingConsentReason` follows the same rule for the same reason:
+     * always written, `''` for a pass-through, so a later real opt-in
+     * cannot inherit the sentence an earlier import wrote about where the
+     * merchant said the address came from.
+     *
+     * WHICH sites the basis covers is `membershipConsentFields`' to say,
+     * and it never re-derives a grant from the group as it stands now.
+     */
+    ...(consent ? membershipConsentFields(input, consent) : {}),
+    ...(existing
+      ? // A legacy row that predates `addedAt` joined when it was created:
+        // its document's create time, the date it has always meant.
+        existing.get('addedAt') === undefined && existing.createTime
+        ? { addedAt: existing.createTime }
+        : {}
+      : {
+          addedAt: FieldValue.serverTimestamp(),
+          [CAPTURED_BY_HOST_FIELD]: [input.group.hostId],
+        }),
+  }
+
+  /*
+   * Compared against what this write would actually send, field by field,
+   * rather than against a list of what a sweep tends to change: a field added
+   * to the write above is covered here the day it is added, and any doubt
+   * (a Timestamp, a nested basis) reads as a difference and writes.
+   */
+  if (
+    input.heldRow &&
+    existing &&
+    Object.entries(fields).every(([field, value]) =>
+      isDeepStrictEqual(existing.get(field), value),
+    )
+  ) {
+    return {
+      enrolled: true,
+      memberId: target.id,
+      adopted: target.id !== key,
+      created: false,
+      unchanged: true,
+    }
+  }
+
+  await target.set(fields, { merge: true })
 
   /*
    * A person NEW to the list has their address's domain checked after the

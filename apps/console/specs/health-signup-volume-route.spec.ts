@@ -60,11 +60,16 @@ const mockLandingGet = jest.fn()
 const mockWorkspaceGet = jest.fn()
 const mockAccountSubGet = jest.fn()
 const mockGetUsers = jest.fn()
-const workspaceQueries: { bounds: { field: string; op: string; ms: number }[]; limit: number }[] = []
+const workspaceQueries: {
+  bounds: { field: string; op: string; ms: number }[]
+  limit: number
+  fields: string[]
+}[] = []
 const landingQueries: {
   collection: string
   bounds: { field: string; op: string; ms: number }[]
   limit: number
+  fields: string[]
 }[] = []
 const queries: {
   collection: string
@@ -96,6 +101,38 @@ const attemptQueries: {
   limit: number
 }[] = []
 
+/**
+ * What a field mask leaves of a stored document, as Firestore applies it: a
+ * dotted path keeps that one key of its map, and a field outside the mask reads
+ * `undefined`. Applied, not waved through, so a field dropped from the route's
+ * mask starves the check that reads it here too, rather than passing against a
+ * document the query would never have returned (AGL-4121).
+ */
+function maskedGet(
+  fields: string[],
+  get: (field: string) => unknown,
+): (field: string) => unknown {
+  return (field) => {
+    if (fields.includes(field)) return get(field)
+    const kept = fields
+      .filter((path) => path.startsWith(`${field}.`))
+      .map((path) => path.slice(field.length + 1))
+    if (!kept.length) return undefined
+    const stored = get(field) as Record<string, unknown> | null | undefined
+    if (!stored) return stored
+    return Object.fromEntries(
+      kept.filter((key) => key in stored).map((key) => [key, stored[key]]),
+    )
+  }
+}
+
+const masked = (
+  snapshot: { docs: { get: (field: string) => unknown }[] },
+  fields: string[],
+) => ({
+  docs: snapshot.docs.map((doc) => ({ ...doc, get: maskedGet(fields, doc.get) })),
+})
+
 jest.mock('firebase-admin/app', () => ({
   __esModule: true,
   getApp: () => ({}),
@@ -114,29 +151,33 @@ jest.mock('firebase-admin/firestore', () => ({
       where: (field: string, op: string, cutoff: { ms: number } | number) => ({
         // AGL-3725: the landing read is the only one with a SECOND range edge.
         where: (field2: string, op2: string, cutoff2: { ms: number }) => ({
-          limit: (max: number) => ({
-            get: () => {
-              // AGL-4021: the account read ranges on plain milliseconds.
-              if (collection === 'users') {
-                workspaceQueries.push({
+          select: (...fields: string[]) => ({
+            limit: (max: number) => ({
+              get: async () => {
+                // AGL-4021: the account read ranges on plain milliseconds.
+                if (collection === 'users') {
+                  workspaceQueries.push({
+                    bounds: [
+                      { field, op, ms: cutoff as number },
+                      { field: field2, op: op2, ms: cutoff2 as unknown as number },
+                    ],
+                    limit: max,
+                    fields,
+                  })
+                  return masked(await mockWorkspaceGet(), fields)
+                }
+                landingQueries.push({
+                  collection,
                   bounds: [
-                    { field, op, ms: cutoff as number },
-                    { field: field2, op: op2, ms: cutoff2 as unknown as number },
+                    { field, op, ms: (cutoff as { ms: number }).ms },
+                    { field: field2, op: op2, ms: cutoff2.ms },
                   ],
                   limit: max,
+                  fields,
                 })
-                return mockWorkspaceGet()
-              }
-              landingQueries.push({
-                collection,
-                bounds: [
-                  { field, op, ms: (cutoff as { ms: number }).ms },
-                  { field: field2, op: op2, ms: cutoff2.ms },
-                ],
-                limit: max,
-              })
-              return mockLandingGet()
-            },
+                return masked(await mockLandingGet(), fields)
+              },
+            }),
           }),
         }),
         // AGL-1536: the org-creation aggregation.
@@ -649,6 +690,35 @@ describe('AGL-2583 · the drought — traffic arrived and nobody got an account'
     expect((await response.json()).checks.signupDrought.ok).toBe(true)
   })
 
+  it('caps both marker listings at the minutes in the window, which is every marker (AGL-4121)', async () => {
+    mockCountGet.mockImplementation(countOf(0))
+    await (await freshRoute()).GET()
+    // 61, pinned as a value: one document per minute (the ids carry no
+    // instance) over 60 minutes plus the partial one the cutoff lands in.
+    // Anything lower turns the printed sums into floors; anything higher is a
+    // bound that cannot bind.
+    expect(servedQueries.map((query) => query.limit)).toEqual([61])
+    expect(attemptQueries.map((query) => query.limit)).toEqual([61])
+  })
+
+  it('prints the same sums and verdict with every minute of the hour holding a marker (AGL-4121)', async () => {
+    const everyMinute = Array.from({ length: 61 }, (_, index) => index)
+    mockCountGet.mockImplementation(countOf(0))
+    mockServedGet.mockImplementation(
+      servesOf(...everyMinute.map((index) => serveMarker(`signupServed_${index}`, 2))),
+    )
+    mockAttemptGet.mockImplementation(
+      attemptsOf(...everyMinute.map((index) => attemptMarker(`signupAttempted_${index}`, 1))),
+    )
+    const body = await (await (await freshRoute()).GET()).json()
+    expect(body.checks.signupDrought).toMatchObject({
+      ok: false,
+      code: 'signup-drought',
+      signupPagesServed: 122,
+      signupAttempts: 61,
+    })
+  })
+
   it('queries serves by servedAtMs — never a field a sibling owns', async () => {
     mockCountGet.mockImplementation(countOf(0))
     const before = Date.now()
@@ -966,6 +1036,18 @@ describe('AGL-3725 · signupLanding: a workspace that never reached a site', () 
     expect(body.checks.signupLanding.code).toBeUndefined()
   })
 
+  it('masks the org read to the fields the check reads, and only those (AGL-4121)', async () => {
+    mockCountGet.mockImplementation(countOf(0))
+    await (await freshRoute()).GET()
+    expect(landingQueries[0].fields).toEqual([
+      'hosts',
+      'createdAt',
+      'acquisition.capturedAt',
+      'ownerUid',
+      'landedAtMs',
+    ])
+  })
+
   it('reads orgs between twelve hours and thirty minutes old, bounded', async () => {
     mockCountGet.mockImplementation(countOf(0))
     const before = Date.now()
@@ -1071,6 +1153,15 @@ describe('AGL-4021 · signupWorkspace: a verified account that never got a works
     const body = await response.json()
     expect(response.status).toBe(200)
     expect(body.checks.signupWorkspace).toMatchObject({ ok: true, gradedInWindow: 0 })
+  })
+
+  it('masks the account read to the door and the creation time (AGL-4121)', async () => {
+    mockCountGet.mockImplementation(countOf(0))
+    await (await freshRoute()).GET()
+    expect(workspaceQueries[0].fields).toEqual([
+      'acquisition.door',
+      'acquisition.accountCreatedAt',
+    ])
   })
 
   it('reads accounts between thirty-six hours and thirty minutes old, bounded', async () => {
