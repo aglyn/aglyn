@@ -30,6 +30,9 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **crm:** the contact form follows the document until it is edited, so a page drawn from the cache can't write old values back over newer ones ([AGL-4122](https://linear.app/aglyn/issue/AGL-4122))
+- **ai:** the chat is told what a thread changed, apart from what it said ([AGL-4116](https://linear.app/aglyn/issue/AGL-4116))
+- **marketplace:** each starter review card has its own help ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
 - **crm:** keep the eager bundle inside its budget, and regenerate the native contracts for the label ([AGL-4122](https://linear.app/aglyn/issue/AGL-4122))
 - **console:** the workspace logo hint names no brand, and the published prune has a spec ([AGL-4119](https://linear.app/aglyn/issue/AGL-4119))
 - **ai:** the fidelity report takes the default app, says when nothing was scored, and lists a frame's shortfalls ([AGL-4109](https://linear.app/aglyn/issue/AGL-4109))
