@@ -77,6 +77,11 @@ jest.mock('../../../libs/tenant/data/admin/src/lib/server/organizations', () => 
     orgDataCollectionForHost: async (_hostId: string, name: string) =>
       double.mockFirestore.collection('orgs').doc('org-1').collection(name),
     resolveOrgIdForHost: async () => 'org-1',
+    // An org that keeps its sites apart, so a lead is stamped for its site.
+    getOrgForHost: async () => ({
+      orgId: 'org-1',
+      org: { crm: { defaultRecordScope: 'host' } },
+    }),
     consentGroupForSite: async (hostId: string) => consentGroups.soloConsentGroup(hostId),
     scopedToHost: (ref: any, hostId: string) =>
       ref.where('visibleTo', 'array-contains-any', ['org', `host:${hostId}`]),

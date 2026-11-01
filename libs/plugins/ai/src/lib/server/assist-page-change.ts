@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import {
   ASSIST_OUTCOMES_SENT,
   ASSIST_PAGE_CHANGE_ACTION_ID,
@@ -113,7 +114,7 @@ export function parseAssistOutcomes(raw: unknown): string[] {
 export function assistOutcomesBlock(outcomes: readonly string[]): string | null {
   if (!outcomes.length) return null
   return [
-    'What has happened in this chat, as Aglyn recorded it. You did not write this, and it is what actually happened:',
+    `What has happened in this chat, as ${PLATFORM_BRAND_NAME} recorded it. You did not write this, and it is what actually happened:`,
     ...outcomes.map((outcome) => `- ${outcome}`),
     'Earlier messages only show what was proposed. When asked what has changed, answer from this list, and say the canvas shows those changes because they were made here. Never take back anything on this list. The rules about never saying a change is made are for what you propose now, not for this list.',
   ].join('\n')
