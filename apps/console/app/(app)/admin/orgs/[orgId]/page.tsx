@@ -78,7 +78,7 @@ import {
 } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { SITE_LOGO_HINT } from '../../../../../constants/media-size-hints'
+import { WORKSPACE_LOGO_HINT } from '../../../../../constants/media-size-hints'
 import { useAuth, useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
@@ -1307,7 +1307,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                         />
                         <MediaUrlField
                           label="Logo URL"
-                          helperText={SITE_LOGO_HINT}
+                          helperText={WORKSPACE_LOGO_HINT}
                           orgId={orgId}
                           value={orgEdit.logoUrl}
                           onChange={(logoUrl) =>

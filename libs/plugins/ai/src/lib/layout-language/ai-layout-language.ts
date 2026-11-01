@@ -191,6 +191,11 @@ export interface AiLayoutTab {
   /** The tab the source shows open. */
   selected?: boolean
   blocks: AiLayoutBlock[]
+  /**
+   * The row of columns the source sets in the panel (AGL-4114), as a
+   * section's `cols`: relative widths, its blocks placed by `col`.
+   */
+  cols?: number[]
 }
 
 export interface AiLayoutBlock {

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { isHostImageToken, resolveHostToken, type HostTokenSource } from '@aglyn/aglyn/app-utils/host-tokens'
 import type { NodesMap } from '@aglyn/aglyn/types/nodes'
 import { aiLayoutDesignChoices, type AiLayoutDesign } from '../layout-language/ai-layout-design'
 import { aiCompileLayoutFrame, type AiLayoutFrameBrand } from '../layout-language/ai-layout-frame'
@@ -156,6 +157,31 @@ export function aiLayoutSiteBrandOf(inputs: Readonly<Record<string, unknown>> | 
   const alt = typeof value['alt'] === 'string' ? value['alt'].replace(/\s+/g, ' ').trim().slice(0, 120) : ''
   const aspect = typeof value['aspect'] === 'number' && Number.isFinite(value['aspect']) && value['aspect'] > 0 ? Math.min(value['aspect'], 8) : null
   return { ...(src ? { logo: { src } } : {}), name: src ? value['name'] === true : true, ...(src && alt ? { alt } : {}), ...(src && aspect ? { aspect } : {}) }
+}
+
+/**
+ * The brand a site's own logo gives its frame (AGL-4119), for the logo a
+ * person brought to Create site: the logo alone, in the header and the footer.
+ * By token rather than by value, so a logo changed later follows. `null` for
+ * a site with none, whose frame carries its name as it always has.
+ */
+export function aiLayoutHostBrandOf(host: HostTokenSource | null | undefined): AiLayoutFrameBrand | null {
+  if (!resolveHostToken('logo', host)) return null
+  return {
+    logo: { src: '{{host.logo}}' },
+    ...(host?.logoDarkUrl?.trim() ? { logoDark: { src: '{{host.logoDark}}' } } : {}),
+    name: false,
+    footer: true,
+  }
+}
+
+/** A job's brand: what a site brought in draws its logo as, else the site's own logo. */
+export function aiLayoutFrameBrandOf(
+  inputs: Readonly<Record<string, unknown>> | null | undefined,
+  host: HostTokenSource | null | undefined,
+): AiLayoutFrameBrand | null {
+  const brought = aiLayoutSiteBrandOf(inputs)
+  return brought?.logo ? brought : (aiLayoutHostBrandOf(host) ?? brought)
 }
 
 export function aiLayoutSiteFactsOf(inputs: Readonly<Record<string, unknown>> | null | undefined): AiLayoutSiteFacts | null {
@@ -348,6 +374,11 @@ function aiLayoutFrameBuild(frame: { header: AiLayoutSection | null; footer: AiL
   )
   // The pages a source's menu and footer link by id (AGL-4108).
   const sourcePages = input.source ? aiLayoutFrameSourcePageIds(input.source) : []
+  // A site's own logo is a token no address rule knows (AGL-4119), and these
+  // two are ours to name: no model writes them.
+  const logoTokens = [input.brand?.logo?.src, input.brand?.logoDark?.src].filter(
+    (src): src is string => Boolean(src && isHostImageToken(src)),
+  )
   const context = {
     screenIds: [
       ...new Set([
@@ -367,6 +398,7 @@ function aiLayoutFrameBuild(frame: { header: AiLayoutSection | null; footer: AiL
     // A footer's "Get in touch" goes to the form, wherever it is placed (AGL-3729).
     ...(input.targets.formPageId ? { formScreenIds: [input.targets.formPageId] } : {}),
     codeBuilt: true,
+    ...(logoTokens.length ? { bindingTokens: logoTokens } : {}),
     // A source's header and footer are its owner's own words and menu
     // (AGL-4108), drawn by code where they repeat: no model wrote a block
     // twice that a component should carry once.

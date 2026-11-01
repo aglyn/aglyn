@@ -210,6 +210,19 @@ describe('a mirrored field is written by the server that re-fans it (AGL-3972)',
     })
   })
 
+  it('reads a new site’s logos onto the host, beside its favicon (AGL-4119)', () => {
+    expect(
+      projectedHostFieldsUpdate({ hostId: 'h', logoUrl: 'media:h/a', logoDarkUrl: 'media:h/b', favicon: 'media:h/a' }),
+    ).toEqual({
+      update: { logoUrl: 'media:h/a', logoDarkUrl: 'media:h/b', 'seo.favicon': 'media:h/a' },
+    })
+  })
+
+  it('refuses a logo that is not text, or is longer than an address (AGL-4119)', () => {
+    expect(projectedHostFieldsUpdate({ logoUrl: 42 })).toHaveProperty('error')
+    expect(projectedHostFieldsUpdate({ logoDarkUrl: 'x'.repeat(2_049) })).toHaveProperty('error')
+  })
+
   it('writes nothing for a body naming neither, so a plain re-fan stays one', () => {
     expect(projectedHostFieldsUpdate({ hostId: 'h' })).toEqual({ update: null })
     expect(projectedHostFieldsUpdate(null)).toEqual({ update: null })
