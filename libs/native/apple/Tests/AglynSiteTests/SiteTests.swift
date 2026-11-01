@@ -167,11 +167,35 @@ final class SiteTests: XCTestCase {
     XCTAssertEqual(cleanSubdomainInput("My Site_2!"), "mysite2")
   }
 
-  func testCreatesTheSiteWithTheStarterInTheSameRequest() {
+  func testCreatesTheSiteWithTheStarterInTheChosenStyle() {
     XCTAssertEqual(
-      createSiteBody(orgID: "org1", name: "  My Shop ", subdomain: " MyShop "),
+      createSiteBody(orgID: "org1", name: "  My Shop ", subdomain: " MyShop ", style: "trades"),
       // The console's "Create the starter site"; without it the server may leave the site empty for a guided start the app does not have.
-      ["displayName": "My Shop", "subdomain": "myshop", "orgId": "org1", "start": "starter"])
+      ["displayName": "My Shop", "subdomain": "myshop", "orgId": "org1", "start": "starter", "style": "trades"])
+  }
+
+  func testCreateSiteWaitsForAStyleThePersonPicked() {
+    XCTAssertFalse(canCreateSite(name: "My Shop", subdomain: "my-shop", style: nil))
+    XCTAssertTrue(canCreateSite(name: "My Shop", subdomain: "my-shop", style: "trades"))
+    // "Pick for me" is the AI start's card: the route refuses it for the starter site.
+    XCTAssertFalse(canCreateSite(name: "My Shop", subdomain: "my-shop", style: "auto"))
+    XCTAssertFalse(canCreateSite(name: "My Shop", subdomain: "my-shop", style: "nope"))
+    // The other two still count.
+    XCTAssertFalse(canCreateSite(name: "  ", subdomain: "my-shop", style: "trades"))
+    XCTAssertFalse(canCreateSite(name: "My Shop", subdomain: "ab", style: "trades"))
+  }
+
+  func testOffersEveryStyleWithAPictureAnAppCanRead() {
+    XCTAssertEqual(SiteStyles.all.count, 21)
+    XCTAssertEqual(SiteStyles.all.first?.id, "business")
+    XCTAssertEqual(SiteStyles.all.first?.name, "Business & services")
+    XCTAssertEqual(SiteStyles.all.last?.id, "coming-soon")
+    for style in SiteStyles.all {
+      // Under the public media path: `/_static` answers URLSession with a bot challenge it cannot solve.
+      XCTAssertEqual(
+        mediaPreviewURL(style.preview, origin: "https://app.aglyn.com", hostID: nil, width: 480)?.absoluteString,
+        "https://app.aglyn.com/api/media/cdn/site-styles/\(style.id).webp?w=480")
+    }
   }
 
   func testPlansTheLibraryQueryAsTheConsoleDoes() {

@@ -152,7 +152,7 @@ fun PanelSheet(
   subtitle: String? = null,
   closeLabel: String = "Close",
   action: (@Composable RowScope.() -> Unit)? = null,
-  /** False when the content scrolls on its own (a lazy list) or centers itself (an empty state). */
+  /** False when the content scrolls on its own (a lazy list, which keeps its own padding) or centers itself (an empty state). */
   scroll: Boolean = true,
   content: @Composable () -> Unit,
 ) {
@@ -181,8 +181,8 @@ fun PanelSheet(
         HorizontalDivider()
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
           Column(
-            Modifier.widthIn(max = 720.dp).fillMaxWidth().then(if (scroll) Modifier.verticalScroll(rememberScrollState()) else Modifier.fillMaxHeight())
-              .padding(space(2f)),
+            Modifier.widthIn(max = 720.dp).fillMaxWidth()
+              .then(if (scroll) Modifier.verticalScroll(rememberScrollState()).padding(space(2f)) else Modifier.fillMaxHeight()),
             verticalArrangement = Arrangement.spacedBy(space(1.5f)),
           ) { content() }
         }

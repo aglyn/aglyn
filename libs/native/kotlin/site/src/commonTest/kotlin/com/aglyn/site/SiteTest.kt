@@ -4,6 +4,8 @@ import com.aglyn.contracts.MediaSort
 import com.aglyn.core.ConsoleApiClient
 import com.aglyn.core.ConsoleApiError
 import com.aglyn.core.FilterOp
+import com.aglyn.core.SiteStyles
+import com.aglyn.core.mediaPreviewUrl
 import com.aglyn.ui.PickedFile
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
@@ -41,6 +43,7 @@ import com.aglyn.site.pages.pageStatus
 import com.aglyn.site.pages.pageTree
 import com.aglyn.site.sites.SiteDomainFilter
 import com.aglyn.site.sites.SUBDOMAIN_PATTERN
+import com.aglyn.site.sites.canCreateSite
 import com.aglyn.site.sites.createSiteBody
 import com.aglyn.site.sites.suggestSubdomain
 import com.aglyn.core.listquery.planListQuery
@@ -157,13 +160,41 @@ class SiteTest {
   }
 
   @Test
-  fun createsTheSiteWithTheStarterInTheSameRequest() {
-    val body = createSiteBody("org1", "  My Shop ", " MyShop ")
+  fun createsTheSiteWithTheStarterInTheChosenStyle() {
+    val body = createSiteBody("org1", "  My Shop ", " MyShop ", "trades")
     assertEquals("My Shop", body["displayName"]?.jsonPrimitive?.content)
     assertEquals("myshop", body["subdomain"]?.jsonPrimitive?.content)
     assertEquals("org1", body["orgId"]?.jsonPrimitive?.content)
     // The console's "Create the starter site"; without it the server may leave the site empty for a guided start the app does not have.
     assertEquals("starter", body["start"]?.jsonPrimitive?.content)
+    assertEquals("trades", body["style"]?.jsonPrimitive?.content)
+  }
+
+  @Test
+  fun createSiteWaitsForAStyleThePersonPicked() {
+    assertFalse(canCreateSite("My Shop", "my-shop", null))
+    assertTrue(canCreateSite("My Shop", "my-shop", "trades"))
+    // "Pick for me" is the AI start's card: the route refuses it for the starter site.
+    assertFalse(canCreateSite("My Shop", "my-shop", "auto"))
+    assertFalse(canCreateSite("My Shop", "my-shop", "nope"))
+    // The other two still count.
+    assertFalse(canCreateSite("  ", "my-shop", "trades"))
+    assertFalse(canCreateSite("My Shop", "ab", "trades"))
+  }
+
+  @Test
+  fun offersEveryStyleWithAPictureAnAppCanRead() {
+    assertEquals(21, SiteStyles.all.size)
+    assertEquals("business", SiteStyles.all.first().id)
+    assertEquals("Business & services", SiteStyles.all.first().name)
+    assertEquals("coming-soon", SiteStyles.all.last().id)
+    SiteStyles.all.forEach { style ->
+      // Under the public media path: `/_static` answers OkHttp with a bot challenge it cannot solve.
+      assertEquals(
+        "https://app.aglyn.com/api/media/cdn/site-styles/${style.id}.webp?w=480",
+        mediaPreviewUrl(style.preview, "https://app.aglyn.com", null, 480),
+      )
+    }
   }
 
   @Test

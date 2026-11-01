@@ -300,8 +300,9 @@ struct SiteOverview: View {
   }
 }
 
-/// Create a site, as the console's Create site: a name, an address the
-/// route checks, and the addresses it suggests when the one asked for is taken.
+/// Create a site, as the console's Create site: a name, an address the route checks, the addresses it suggests when the
+/// one asked for is taken, and the style the site starts in (AGL-4049), which the person must pick: nothing is chosen
+/// for them, so Create site stays off until a card is.
 struct CreateSiteSheet: View {
   let context: NativePluginContext
   let orgID: String
@@ -311,11 +312,12 @@ struct CreateSiteSheet: View {
   @State private var subdomain = ""
   @State private var edited = false
   @State private var suggestions: [String] = []
+  @State private var style: String?
 
   /// What the create would refuse anyway, said first (the console's dialog): nil while unknown or when nothing stops it.
   @State private var blocked: CreateSiteBlock?
 
-  private var valid: Bool { !name.trimmed.isEmpty && isValidSubdomain(subdomain) }
+  private var valid: Bool { canCreateSite(name: name, subdomain: subdomain, style: style) }
 
   var body: some View {
     if let blocked {
@@ -409,13 +411,49 @@ struct CreateSiteSheet: View {
           }
         }
       }
+    } below: {
+      styleSection
+    }
+    .aglynSheetMinimumSize(width: 640, height: 640)
+  }
+
+  /// The console's own choice (`SiteStylePicker`): its heading and words, and every style in its order, each with its
+  /// picture from the console. The starter site has no "Pick for me": that card is the AI start's.
+  private var styleSection: some View {
+    Section {
+      AglynOptionCardGrid(
+        label: "Style of site",
+        options: SiteStyles.all.map { style in
+          AglynOptionCardItem(
+            id: style.id, title: style.name, description: style.blurb,
+            imageURL: mediaPreviewURL(style.preview, origin: context.api.origin, hostID: nil, width: 480),
+            imageAlt: style.alt)
+        }, selection: $style
+      )
+      .accessibilityIdentifier("site-style-cards")
+      .listRowInsets(EdgeInsets())
+      .listRowBackground(Color.clear)
+    } header: {
+      VStack(alignment: .leading, spacing: AglynSpace.half) {
+        Text("Choose a style").font(AglynFont.headline).foregroundStyle(AglynColor.textPrimary)
+          .accessibilityAddTraits(.isHeader)
+        Text("Your site starts with a home page, a header and a footer in the style you choose. You can change everything later.")
+          .font(AglynFont.subheadline).foregroundStyle(AglynColor.secondaryText)
+        if style == nil {
+          Text("Choose a style to create your site.").font(AglynFont.subheadline)
+            .foregroundStyle(AglynColor.secondaryText).accessibilityIdentifier("site-style-required")
+        }
+      }
+      .textCase(nil)
+      .padding(.bottom, AglynSpace.half)
     }
   }
 
   private func create() {
+    guard let style else { return }
     let (name, subdomain) = (name, subdomain)
     runner.run {
-      switch try await createSite(context.api, orgID: orgID, name: name, subdomain: subdomain) {
+      switch try await createSite(context.api, orgID: orgID, name: name, subdomain: subdomain, style: style) {
       case .created(let hostID, _):
         context.selectSite(hostID)
         dismiss()
