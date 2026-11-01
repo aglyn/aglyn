@@ -2,11 +2,13 @@ package com.aglyn.plugins.crm
 
 import com.aglyn.core.ApiMethod
 import com.aglyn.core.ConsoleApiClient
+import com.aglyn.core.FirestoreReader
 import com.aglyn.core.FirestoreWriter
 import com.aglyn.core.firestoreJson
 import com.aglyn.core.firestoreNow
 import com.aglyn.core.nowMillis
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -77,7 +79,7 @@ data class ConvertDraft(
   val dealStageId: String?,
 )
 
-class CrmApi(private val api: ConsoleApiClient, private val writer: FirestoreWriter, val scope: CrmScope) {
+class CrmApi(private val api: ConsoleApiClient, private val writer: FirestoreWriter, val scope: CrmScope, private val reader: FirestoreReader? = null) {
   private fun body(vararg pairs: Pair<String, Any?>): kotlinx.serialization.json.JsonElement =
     firestoreJson((scope.routeScope + pairs).filterValues { it != null })
 
@@ -270,6 +272,7 @@ class CrmApi(private val api: ConsoleApiClient, private val writer: FirestoreWri
   ): String {
     val id = newRecordId()
     val now = firestoreNow()
+    val company = activityCompany(links)
     writer.merge(
       "${crmPath(scope.orgId, "crmActivities")}/$id",
       linkedMapOf<String, Any?>(
@@ -282,6 +285,7 @@ class CrmApi(private val api: ConsoleApiClient, private val writer: FirestoreWri
         "createdAt" to now,
       ).apply {
         putAll(links)
+        company?.let { put("companyId", it) }
         byName?.let { put("byName", it) }
         outcome?.let { put("outcome", it) }
         durationMinutes?.let { put("durationMinutes", it) }
@@ -289,6 +293,26 @@ class CrmApi(private val api: ConsoleApiClient, private val writer: FirestoreWri
       },
     )
     return id
+  }
+
+  /**
+   * The company an activity rolls up to (`resolveCrmActivityCompany`), reading only what the links leave open. A read that fails
+   * or stalls costs the company's timeline this entry, never the entry itself.
+   */
+  private suspend fun activityCompany(links: Map<String, String>): String? {
+    links["companyId"]?.takeIf { it.isNotBlank() }?.let { return it }
+    suspend fun read(collection: String, key: String): Map<String, Any?>? {
+      val id = links[key]?.takeIf { it.isNotBlank() } ?: return null
+      val from = reader ?: return null
+      return try {
+        withTimeoutOrNull(4_000) { from.get("${crmPath(scope.orgId, collection)}/$id") }?.data
+      } catch (error: Throwable) {
+        if (error is CancellationException) throw error
+        null
+      }
+    }
+    crmActivityCompanyId(null, read("deals", "dealId"), null, null, null)?.let { return it }
+    return crmActivityCompanyId(null, null, read("contacts", "contactId"), scope.groupId, scope.org)
   }
 
   suspend fun editActivity(id: String, body: String) {

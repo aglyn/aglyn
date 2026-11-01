@@ -634,6 +634,14 @@
       "why": "The Fields list declaration (AGL-3669)."
     },
     {
+      "path": "libs/plugins/crm/src/lib/model/contact-holder.ts",
+      "why": "Which holder's facet a cross-site reader shows for a contact (contactPrimaryGroup), reached by crm-activity-link; the native record screens replay it (AGL-4124)."
+    },
+    {
+      "path": "libs/plugins/crm/src/lib/model/crm-activity-link.ts",
+      "why": "The company an activity rolls up to (crmActivityCompanyId): the native Log activity writers stamp the same answer and replay its cases (AGL-4124)."
+    },
+    {
       "path": "libs/plugins/crm/src/lib/model/crm-list-query.ts",
       "why": "Reached by the CRM declarations: the CRM's shared search."
     },

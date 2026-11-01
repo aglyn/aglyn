@@ -382,7 +382,7 @@ struct RecordDetail: View {
   /// Email a contact, Move an open deal's stage, else Log activity), and every other act in ⋯, Remove or Delete last.
   private func recordActions(_ row: CrmRow) -> (primary: AglynRecordAction?, more: [AglynRecordAction]) {
     var acts: [(String, String, RecordAction)] = [("Edit", "pencil", .edit), ("Log activity", "note.text", .log)]
-    if row.data["email"] != nil || kind == .deal { acts.append(("Email", "envelope", .email)) }
+    if crmHasEmail(row.data) || kind == .deal { acts.append(("Email", "envelope", .email)) }
     acts.append(("New task", "checklist", .task))
     let status = row.data["status"] as? String
     switch kind {
@@ -401,7 +401,7 @@ struct RecordDetail: View {
     let next: RecordAction =
       switch kind {
       case .lead: status == "qualified" && row.data["convertedContactId"] == nil ? .convert : .log
-      case .contact: row.data["email"] != nil ? .email : .log
+      case .contact: crmHasEmail(row.data) ? .email : .log
       case .deal: (status ?? "open") == "open" ? .move : .log
       case .company: .log
       }
@@ -475,7 +475,11 @@ struct RecordDetail: View {
     let done = { (message: String) in notice = message }
     switch action {
     case .edit:
-      EditRecordSheet(title: "Edit \(kind.singular.lowercased())", fields: fields.filter(\.editable), initial: values) { edited in
+      EditRecordSheet(
+        title: "Edit \(kind.singular.lowercased())",
+        fields: kind == .contact ? withContactEmailHelp(fields.filter(\.editable), hasEmail: crmHasEmail(row.data)) : fields.filter(\.editable),
+        initial: values
+      ) { edited in
         let changes = changedFields(fields, before: values, after: edited)
         if kind == .contact { try await api.updateContact(id, changes) } else { try await api.updateRecord(kind, id, changes) }
         done("\(kind.singular) saved.")
@@ -854,6 +858,9 @@ struct CreateRecordSheet: View {
       title: "New \(kind.singular.lowercased())", fields: fields, initial: ["ownerUid": scope.uid, crmSiteFieldKey: startSite ?? ""],
       confirm: "Create"
     ) { values in
+      if kind == .contact, !crmContactIdentified(values) {
+        throw ConsoleAPIError(status: 400, message: "Enter a name, an email or a phone number.")
+      }
       let picked = values[crmSiteFieldKey].flatMap { $0.isEmpty ? nil : $0 }
       if scope.orgLevel { CrmCreateSiteMemory.remember(picked, scope.orgID) }
       let api = CrmAPI(api: api.api, reader: api.reader, scope: scope.orgLevel ? picked.map(scope.forSite) ?? scope : scope)

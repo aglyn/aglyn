@@ -95,6 +95,28 @@ class CrmWorkspaceScopeTest {
   }
 
   @Test
+  fun aContactWithNoEmailReadsAsItsNameThenItsNumber() {
+    assertEquals("Ada", crmContactLabel(mapOf("name" to "Ada", "email" to "a@example.com")))
+    assertEquals("a@example.com", crmContactLabel(mapOf("email" to "a@example.com")))
+    assertEquals("+1 555 0100", crmContactLabel(mapOf("name" to " ", "email" to "", "phone" to "+1 555 0100")))
+    assertEquals("+1 555 0101", crmContactLabel(mapOf("mobilePhone" to "+1 555 0101")))
+    assertEquals("Unnamed contact", crmContactLabel(emptyMap()))
+    assertFalse(crmHasEmail(mapOf("email" to "")))
+    assertTrue(crmHasEmail(mapOf("email" to "a@example.com")))
+    assertTrue(crmContactIdentified(mapOf("phone" to "+1 555 0100")))
+    assertFalse(crmContactIdentified(mapOf("email" to " ", "ownerUid" to "u1")))
+    val scope = crmScopeOf("o1", null, "u1", emptyMap(), owner)
+    val doc = FirestoreDoc("c1", "orgs/o1/contacts/c1", mapOf("email" to "", "facets" to mapOf("org" to mapOf("phone" to "+1 555 0100"))))
+    assertEquals("+1 555 0100", crmRow(CrmKind.CONTACT, doc, scope).title)
+    val fields = standardFields(CrmKind.CONTACT, Picklists(emptyMap()), emptyList(), emptyList(), emptyList())
+    val email = fields.first { it.spec.key == "email" }
+    assertFalse(email.spec.required)
+    assertTrue(email.editable)
+    assertTrue(standardFields(CrmKind.LEAD, Picklists(emptyMap()), emptyList(), emptyList(), emptyList()).first { it.spec.key == "email" }.spec.required)
+    assertEquals("Add it whenever you have it.", withContactEmailHelp(listOf(email), false).single().spec.help)
+  }
+
+  @Test
   fun anActivityReadsAsTheConsoleReadsIt() {
     val message = crmActivityLine(mapOf("kind" to "whatsapp", "direction" to "outbound", "body" to "Sent the proposal\nThey asked about hosting"))
     assertEquals("Outbound WhatsApp message", message.chip)

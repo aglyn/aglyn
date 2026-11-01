@@ -49,7 +49,7 @@ final class CrmReference {
   @ObservationIgnored let pipelineDocs = LiveQueryList(pageSize: 20, map: pipelineOf)
   @ObservationIgnored let companyDocs = LiveQueryList(pageSize: 200) { FieldOption($0.id, $0.string("name") ?? $0.id) }
   @ObservationIgnored let contactDocs = LiveQueryList(pageSize: 200) { doc in
-    FieldOption(doc.id, doc.string("name").flatMap { $0.isEmpty ? nil : $0 } ?? doc.string("email") ?? doc.id)
+    FieldOption(doc.id, crmContactLabel(contactView(doc.data, groupID: crmContactPrimaryHolder(doc.data, org: nil))))
   }
 
   func start(_ context: NativePluginContext, _ scope: CrmScope, _ api: CrmAPI) {

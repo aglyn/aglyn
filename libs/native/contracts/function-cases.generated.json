@@ -5838,6 +5838,224 @@
         }
       ]
     },
+    "crmActivityCompanyId": {
+      "module": "libs/plugins/crm/src/lib/model/crm-activity-link.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "companyId": "named"
+            },
+            {
+              "deal": {
+                "companyId": "deal-co"
+              },
+              "contact": {
+                "facets": {
+                  "h1": {
+                    "companyId": "contact-co"
+                  }
+                }
+              }
+            }
+          ],
+          "result": "named"
+        },
+        {
+          "args": [
+            {},
+            {
+              "deal": {
+                "companyId": "deal-co"
+              },
+              "contact": {
+                "facets": {
+                  "h1": {
+                    "companyId": "contact-co"
+                  }
+                }
+              },
+              "groupId": "h1"
+            }
+          ],
+          "result": "deal-co"
+        },
+        {
+          "args": [
+            {},
+            {
+              "contact": {
+                "facets": {
+                  "h1": {
+                    "companyId": "contact-co"
+                  }
+                }
+              },
+              "groupId": "h1"
+            }
+          ],
+          "result": "contact-co"
+        },
+        {
+          "args": [
+            {},
+            {
+              "contact": {
+                "facets": {
+                  "h1": {
+                    "companyId": "one"
+                  },
+                  "h2": {
+                    "companyId": "two"
+                  }
+                }
+              },
+              "groupId": "h2"
+            }
+          ],
+          "result": "two"
+        },
+        {
+          "args": [
+            {},
+            {
+              "contact": {
+                "facets": {
+                  "h1": {
+                    "companyId": "one"
+                  }
+                }
+              },
+              "groupId": "h2"
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {},
+            {
+              "contact": {
+                "facets": {
+                  "org": {
+                    "companyId": "org-co"
+                  }
+                }
+              },
+              "groupId": "h2"
+            }
+          ],
+          "result": "org-co"
+        },
+        {
+          "args": [
+            {},
+            {
+              "contact": {
+                "facets": {
+                  "h1": {
+                    "companyId": "first"
+                  },
+                  "h2": {
+                    "companyId": "second"
+                  }
+                },
+                "capturedByHostIds": [
+                  "h2",
+                  "h1"
+                ]
+              }
+            }
+          ],
+          "result": "second"
+        },
+        {
+          "args": [
+            {},
+            {
+              "contact": {
+                "facets": {
+                  "org": {
+                    "companyId": "org-co"
+                  },
+                  "h1": {
+                    "companyId": "site-co"
+                  }
+                },
+                "capturedByHostIds": [
+                  "h1"
+                ]
+              }
+            }
+          ],
+          "result": "org-co"
+        },
+        {
+          "args": [
+            {},
+            {
+              "contact": {
+                "facets": {
+                  "brand": {
+                    "companyId": "group-co"
+                  }
+                },
+                "capturedByHostIds": [
+                  "h1"
+                ]
+              },
+              "org": {
+                "consentGroups": {
+                  "brand": {
+                    "name": "Brand",
+                    "hostIds": [
+                      "h1",
+                      "h2"
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "result": "group-co"
+        },
+        {
+          "args": [
+            {},
+            {
+              "contact": {
+                "companyIds": [
+                  "mirror"
+                ],
+                "facets": {}
+              },
+              "groupId": "h1"
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {},
+            {}
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "companyId": "  "
+            },
+            {
+              "deal": {
+                "companyId": "  "
+              }
+            }
+          ],
+          "result": null
+        }
+      ]
+    },
     "crmActivityKindTitle": {
       "module": "libs/aglyn/src/lib/app-utils/crm.ts",
       "cases": [

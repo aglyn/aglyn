@@ -142,7 +142,7 @@ fun rememberCrmReference(context: NativePluginContext, scope: CrmScope, api: Crm
     customFields = ready(fieldDocs, { docs -> docs.map(::customFieldOf) }, emptyList()),
     pipelines = ready(pipelineDocs, { docs -> docs.map(::pipelineOf) }, emptyList()),
     companies = ready(companyDocs, { docs -> docs.map { FieldOption(it.id, it.string("name") ?: it.id) } }, emptyList()),
-    contacts = ready(contactDocs, { docs -> docs.map { FieldOption(it.id, it.string("name")?.takeIf(String::isNotBlank) ?: it.string("email") ?: it.id) } }, emptyList()),
+    contacts = ready(contactDocs, { docs -> docs.map { FieldOption(it.id, crmContactLabel(contactView(it.data, crmContactPrimaryHolder(it.data, null)))) } }, emptyList()),
   )
 }
 
@@ -185,7 +185,7 @@ fun CrmGate(context: NativePluginContext, content: @Composable (CrmScope, CrmApi
         )
         return
       }
-      val api = remember(scope, context.api, context.writer) { CrmApi(context.api, context.writer, scope) }
+      val api = remember(scope, context.api, context.writer) { CrmApi(context.api, context.writer, scope, context.firestore) }
       val reference = rememberCrmReference(context, scope, api)
       content(scope, api, reference)
     }

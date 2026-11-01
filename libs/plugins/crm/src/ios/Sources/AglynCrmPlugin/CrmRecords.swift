@@ -245,8 +245,9 @@ func standardFields(
     ]
   case .contact:
     return [
-      text("name", "Name"), email, picklist("salutation", "Salutation", "salutation"), text("firstName", "First name"),
-      text("lastName", "Last name"), text("jobTitle", "Title"), text("department", "Department"), company,
+      // A contact needs no address, and one can be added or changed here (`crm/contact-update`).
+      text("name", "Name"), text("email", "Email", .email), picklist("salutation", "Salutation", "salutation"),
+      text("firstName", "First name"), text("lastName", "Last name"), text("jobTitle", "Title"), text("department", "Department"), company,
       text("phone", "Phone", .phone), text("mobilePhone", "Mobile", .phone), text("homePhone", "Home phone", .phone),
       text("otherPhone", "Other phone", .phone), text("fax", "Fax", .phone),
       CrmField(FieldSpec("birthdate", "Birthdate", kind: .date), stored: .day), text("assistantName", "Assistant"),
@@ -446,6 +447,62 @@ struct CrmRow: Identifiable {
   }
 }
 
+/// What to call a person (`contactRecordLabel`): their name, then their address, then their number.
+func crmContactLabel(_ data: [String: Any]) -> String {
+  ["name", "email", "phone", "mobilePhone"].lazy.compactMap { key in
+    (data[key] as? String).flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
+  }.first ?? "Unnamed contact"
+}
+
+/// Whether a contact has an address to write to: a blank one is none.
+func crmHasEmail(_ data: [String: Any]) -> Bool {
+  !(data["email"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+}
+
+/// Whether a new contact can be told apart: a name, an email or a number (AGL-4122).
+func crmContactIdentified(_ values: [String: String]) -> Bool {
+  ["name", "email", "phone"].contains { !(values[$0] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+}
+
+/// The Email field of a contact's edit sheet, saying what saving it does.
+func withContactEmailHelp(_ fields: [CrmField], hasEmail: Bool) -> [CrmField] {
+  fields.map { field in
+    guard field.spec.key == "email" else { return field }
+    let help = hasEmail ? "Every site shares this address, so changing it changes it for all of them." : "Add it whenever you have it."
+    return CrmField(FieldSpec(field.spec.key, field.spec.label, kind: field.spec.kind, help: help), path: field.path, stored: field.stored, editable: field.editable)
+  }
+}
+
+/// The holder a cross-site reader shows a contact through (`contactPrimaryGroup`): the organization's own facet, then
+/// the first capturing site whose group holds one, then any facet, then the first capturing site; empty for none.
+func crmContactPrimaryHolder(_ data: [String: Any], org: [String: Any]?) -> String {
+  let facets = data["facets"] as? [String: Any] ?? [:]
+  if facets[orgContactHolderID] != nil { return orgContactHolderID }
+  let captured = (data["capturedByHostIds"] as? [Any] ?? []).map { "\($0)".trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+  for host in captured {
+    let group = consentGroupForHost(org, host)
+    if facets[group.groupID] != nil { return group.groupID }
+  }
+  if let key = facets.keys.sorted().first { return key }
+  return captured.first.map { consentGroupForHost(org, $0).groupID } ?? ""
+}
+
+/// `crmActivityCompanyId`: the company an activity rolls up to. One the writer named stands; else the deal's; else the
+/// contact's, as the writer's holder knows it, or the organization's own facet. Never the `companyIds` mirror, which
+/// carries every holder's link.
+func crmActivityCompanyID(
+  named: String?, deal: [String: Any]?, contact: [String: Any]?, groupID: String?, org: [String: Any]?
+) -> String? {
+  func id(_ value: Any?) -> String? {
+    (value as? String).flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+  }
+  if let company = id(named) ?? id(deal?["companyId"]) { return company }
+  guard let contact else { return nil }
+  let facets = contact["facets"] as? [String: Any]
+  let holder = groupID.flatMap { $0.isEmpty ? nil : $0 } ?? crmContactPrimaryHolder(contact, org: org)
+  return id((facets?[holder] as? [String: Any])?["companyId"]) ?? id((facets?[orgContactHolderID] as? [String: Any])?["companyId"])
+}
+
 /// The facet of a person the organization added itself, with no site behind them (`ORG_CONTACT_HOLDER_ID`).
 let orgContactHolderID = "org"
 
@@ -473,7 +530,9 @@ func crmRowLine(_ parts: [String?], fallback: String?) -> String {
 }
 
 func crmRow(_ kind: CrmKind, _ doc: FirestoreDocument, _ scope: CrmScope, stages: [String: String] = [:]) -> CrmRow {
-  let data = kind == .contact ? contactView(doc.data, groupID: scope.groupID) : doc.data
+  // A whole-workspace reader sees a contact through the person's primary holder, as their page does.
+  let holder = scope.groupID.isEmpty ? crmContactPrimaryHolder(doc.data, org: scope.org) : scope.groupID
+  let data = kind == .contact ? contactView(doc.data, groupID: holder) : doc.data
   func s(_ key: String) -> String? { (data[key] as? String).flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 } }
   switch kind {
   case .lead:
@@ -482,9 +541,10 @@ func crmRow(_ kind: CrmKind, _ doc: FirestoreDocument, _ scope: CrmScope, stages
       subtitle: crmRowLine([s("company")], fallback: s("email") == s("name") ? nil : s("email")),
       chip: s("statusLabel") ?? s("status").map(leadStatusLabel), data: data)
   case .contact:
+    let title = crmContactLabel(data)
     return CrmRow(
-      id: doc.id, kind: kind, title: s("name") ?? s("email") ?? "Contact",
-      subtitle: crmRowLine([s("companyName"), s("jobTitle")], fallback: s("email") == s("name") ? nil : s("email")),
+      id: doc.id, kind: kind, title: title,
+      subtitle: crmRowLine([s("companyName"), s("jobTitle")], fallback: [s("email"), s("phone"), s("mobilePhone")].compactMap { $0 }.first { $0 != title }),
       chip: stageLabel(s("lifecycleStage")), data: data)
   case .company:
     let count = (data["contactsCount"] as? NSNumber)?.intValue ?? 0

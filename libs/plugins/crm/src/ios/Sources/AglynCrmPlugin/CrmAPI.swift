@@ -244,10 +244,27 @@ struct CrmAPI {
       "byUid": scope.uid, "createdAt": FirestoreSentinel.serverTimestamp,
     ]
     for (key, value) in links { fields[key] = value }
+    if let company = await activityCompany(links) { fields["companyId"] = company }
     if let outcome, !outcome.isEmpty { fields["outcome"] = outcome }
     if let minutes { fields["durationMinutes"] = minutes }
     if let direction, !direction.isEmpty { fields["direction"] = direction }
     try await reader.setDocument(crmPath(scope.orgID, "crmActivities") + [newRecordID()], fields, merge: true)
+  }
+
+  /// The company an activity rolls up to (`resolveCrmActivityCompany`), reading only what the links leave open. A read
+  /// that fails costs the company's timeline this entry, never the entry itself.
+  private func activityCompany(_ links: [String: String]) async -> String? {
+    let named = links["companyId"]
+    if let named, !named.isEmpty { return named }
+    func read(_ collection: String, _ key: String) async -> [String: Any]? {
+      guard let id = links[key], !id.isEmpty else { return nil }
+      return (try? await reader.readOnce(crmPath(scope.orgID, collection) + [id]))?.data
+    }
+    let deal = await read("deals", "dealId")
+    let dealCompany = crmActivityCompanyID(named: nil, deal: deal, contact: nil, groupID: nil, org: nil)
+    if let dealCompany { return dealCompany }
+    let contact = await read("contacts", "contactId")
+    return crmActivityCompanyID(named: nil, deal: nil, contact: contact, groupID: scope.groupID, org: scope.org)
   }
 
   func deleteActivity(_ id: String) async throws {

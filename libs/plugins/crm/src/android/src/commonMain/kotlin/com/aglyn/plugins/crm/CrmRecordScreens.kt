@@ -240,7 +240,7 @@ fun RecordDetail(context: NativePluginContext, kind: CrmKind, id: String, listSc
         return
       }
       val scope = remember(listScope, crmRecordSite(doc.data)) { recordScope(listScope, doc) }
-      val api = remember(scope, listApi) { if (scope == listScope) listApi else CrmApi(context.api, context.writer, scope) }
+      val api = remember(scope, listApi) { if (scope == listScope) listApi else CrmApi(context.api, context.writer, scope, context.firestore) }
       val stages = reference.pipeline(doc.string("pipelineId")).stages.associate { it.id to it.name }
       val row = crmRow(kind, doc, scope, stages)
       val fields = reference.fields(kind)
@@ -300,7 +300,7 @@ private fun recordActions(kind: CrmKind, row: CrmRow, open: (RecordDialog) -> Un
   val all = buildList {
     add(act("Edit", "edit", RecordDialog.EDIT))
     add(act("Log activity", "sticky_note", RecordDialog.LOG))
-    if (kind != CrmKind.COMPANY && row.data["email"] != null || kind == CrmKind.DEAL) add(act("Email", "mail", RecordDialog.EMAIL))
+    if (kind != CrmKind.COMPANY && crmHasEmail(row.data) || kind == CrmKind.DEAL) add(act("Email", "mail", RecordDialog.EMAIL))
     add(act("New task", "task", RecordDialog.TASK))
     when (kind) {
       CrmKind.LEAD -> {
@@ -320,7 +320,7 @@ private fun recordActions(kind: CrmKind, row: CrmRow, open: (RecordDialog) -> Un
   }
   val next = when (kind) {
     CrmKind.LEAD -> if (row.data["status"] == "qualified" && row.data["convertedContactId"] == null) RecordDialog.CONVERT else RecordDialog.LOG
-    CrmKind.CONTACT -> if (row.data["email"] != null) RecordDialog.EMAIL else RecordDialog.LOG
+    CrmKind.CONTACT -> if (crmHasEmail(row.data)) RecordDialog.EMAIL else RecordDialog.LOG
     CrmKind.DEAL -> if (row.data["status"] == "open" || row.data["status"] == null) RecordDialog.MOVE else RecordDialog.LOG
     CrmKind.COMPANY -> RecordDialog.LOG
   }
@@ -523,7 +523,7 @@ private fun RecordDialogs(
     null -> Unit
     RecordDialog.EDIT -> EditSheet(
       title = "Edit ${kind.singular.lowercase()}",
-      fields = fields.filter { it.editable },
+      fields = fields.filter { it.editable }.let { if (kind == CrmKind.CONTACT) withContactEmailHelp(it, crmHasEmail(row.data)) else it },
       initial = values,
       busy = busy,
       onDismiss = onClose,
@@ -761,10 +761,14 @@ private fun CreateRecordDialog(context: NativePluginContext, kind: CrmKind, scop
       FieldEditor(FieldSpec("stageId", "Stage", FieldKind.SELECT, required = true, options = pipeline.stages.filter { it.kind == "open" }.map { FieldOption(it.id, it.name) }, emptyLabel = null), stageId, { stageId = it })
     }) else null,
   ) { values ->
+    if (kind == CrmKind.CONTACT && !crmContactIdentified(values)) {
+      busy.error = "Enter a name, an email or a phone number."
+      return@EditSheet
+    }
     val site = if (scope.workspaceWide) crmCreateHost(values[CRM_SITE_FIELD_KEY]?.ifEmpty { null }, sites?.map { it.id }.orEmpty()) else null
     if (scope.workspaceWide) CrmCreateSiteMemory.remember(site, scope.orgId)
     val siteScope = site?.let(scope::forSite) ?: scope
-    val siteApi = if (siteScope == scope) api else CrmApi(context.api, context.writer, siteScope)
+    val siteApi = if (siteScope == scope) api else CrmApi(context.api, context.writer, siteScope, context.firestore)
     busy.run(coroutines) {
       val created = createdFields(fields, values)
       val id = when (kind) {

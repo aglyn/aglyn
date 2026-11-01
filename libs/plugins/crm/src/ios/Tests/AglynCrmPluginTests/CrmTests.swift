@@ -172,6 +172,40 @@ final class CrmTests: XCTestCase {
     XCTAssertEqual(crmActivitySymbol("other"), "ellipsis.circle")
   }
 
+  func testTheActivityCompanyIsTheConsoles() throws {
+    for (index, item) in try functionCases("crmActivityCompanyId").enumerated() {
+      let link = item.args[0] as? [String: Any]
+      let sources = item.args[1] as? [String: Any]
+      XCTAssertEqual(
+        crmActivityCompanyID(
+          named: link?["companyId"] as? String, deal: sources?["deal"] as? [String: Any], contact: sources?["contact"] as? [String: Any],
+          groupID: sources?["groupId"] as? String, org: sources?["org"] as? [String: Any]),
+        item.result as? String, "case \(index)")
+    }
+  }
+
+  /// A contact needs no email: it reads as its name, then its number, and offers nothing to write to.
+  func testAContactWithNoEmailReadsAsItsNameThenItsNumber() {
+    XCTAssertEqual(crmContactLabel(["name": "Ada", "email": "a@example.com"]), "Ada")
+    XCTAssertEqual(crmContactLabel(["email": "a@example.com"]), "a@example.com")
+    XCTAssertEqual(crmContactLabel(["name": " ", "email": "", "phone": "+1 555 0100"]), "+1 555 0100")
+    XCTAssertEqual(crmContactLabel(["mobilePhone": "+1 555 0101"]), "+1 555 0101")
+    XCTAssertEqual(crmContactLabel([:]), "Unnamed contact")
+    XCTAssertFalse(crmHasEmail(["email": ""]))
+    XCTAssertFalse(crmHasEmail([:]))
+    XCTAssertTrue(crmHasEmail(["email": "a@example.com"]))
+    XCTAssertTrue(crmContactIdentified(["phone": "+1 555 0100"]))
+    XCTAssertFalse(crmContactIdentified(["email": " ", "ownerUid": "u1"]))
+    let scope = CrmScope(orgID: "o1", hostID: "", uid: "u1", org: [:], member: ["role": "owner"], orgLevel: true)
+    let doc = FirestoreDocument(id: "c1", data: ["email": "", "facets": ["org": ["phone": "+1 555 0100"]]])
+    XCTAssertEqual(crmRow(.contact, doc, scope).title, "+1 555 0100")
+    let email = standardFields(.contact, picklists: Picklists(), members: [], companies: [], contacts: []).first { $0.spec.key == "email" }
+    XCTAssertEqual(email?.spec.required, false)
+    XCTAssertEqual(email?.editable, true)
+    XCTAssertEqual(standardFields(.lead, picklists: Picklists(), members: [], companies: [], contacts: []).first { $0.spec.key == "email" }?.spec.required, true)
+    XCTAssertEqual(withContactEmailHelp([email!], hasEmail: false).first?.spec.help, "Add it whenever you have it.")
+  }
+
   /// A person the organization added holds their fields in its own facet, read wherever no site's facet answers.
   func testAnOrgHeldContactReadsItsOwnFacet() {
     let data: [String: Any] = ["name": "Base", "facets": ["org": ["phone": "+1 555 0100"], "g1": ["phone": "+1 555 0199"]]]
