@@ -1653,9 +1653,14 @@
   "CRM_ACTIVITY_KIND_LABELS": {
     "call": "Call",
     "email": "Email",
+    "instagram": "Instagram",
+    "linkedin": "LinkedIn",
     "meeting": "Meeting",
+    "messenger": "Facebook Messenger",
     "note": "Note",
-    "other": "Other"
+    "other": "Other",
+    "text": "Text message",
+    "whatsapp": "WhatsApp"
   },
   "CRM_EMAIL_BODY_MAX": 10000,
   "CRM_EMAIL_SUBJECT_MAX": 200,
@@ -4255,11 +4260,36 @@
     "email": [
       "outbound",
       "inbound"
+    ],
+    "instagram": [
+      "outbound",
+      "inbound"
+    ],
+    "linkedin": [
+      "outbound",
+      "inbound"
+    ],
+    "messenger": [
+      "outbound",
+      "inbound"
+    ],
+    "text": [
+      "outbound",
+      "inbound"
+    ],
+    "whatsapp": [
+      "outbound",
+      "inbound"
     ]
   },
   "NATIVE_CRM_ACTIVITY_KINDS": [
     "call",
     "email",
+    "text",
+    "whatsapp",
+    "messenger",
+    "instagram",
+    "linkedin",
     "meeting",
     "note",
     "other"

@@ -278,7 +278,6 @@ import { createAiJobImportStep, SITE_IMPORT_WAVES_PER_ORG_PER_DAY } from './ai-j
 import { AI_LAYOUT_IMPORTED_PAGE_INPUT } from './ai-job-page-language'
 import { AI_LAYOUT_IMPORTED_SECTIONS_INPUT, type AiSiteImportDocument } from './ai-site-import-document'
 import { AI_LAYOUT_PAGE_PHOTOS_INPUT } from './ai-layout-owner-photos'
-import type { SiteImportReviewInput } from '../site-import/site-import-review'
 import type { PluginMediaIngest, PluginMediaIngestRequest } from '@aglyn/aglyn/plugin-manager/plugin-media-ingest'
 import {
   HARBOR_DOMAIN,
@@ -3340,7 +3339,6 @@ describe('a site import brings a proved site in, wave by wave, each started by a
   let allowed: boolean
   let failing: Set<string>
   let handed: AiJob[]
-  let reviews: SiteImportReviewInput[]
   let stored: PluginMediaIngestRequest[]
   let limited: Array<{ key: string; limit: number }>
 
@@ -3349,7 +3347,6 @@ describe('a site import brings a proved site in, wave by wave, each started by a
     allowed = true
     failing = new Set()
     handed = []
-    reviews = []
     stored = []
     limited = []
     const passes = new Map<string, number>()
@@ -3396,10 +3393,6 @@ describe('a site import brings a proved site in, wave by wave, each started by a
         ingest: () => ingest,
         readRoom: async () => ({ limit: 12, used: 0 }),
         readSiteName: async () => 'Harbor Dental',
-        fileReview: async (_firestore, input) => {
-          reviews.push(input)
-          return 'site-import-row'
-        },
         pageWritten: async () => true,
         mintId: () => `drft${String(++minted).padStart(4, '0')}`,
       }),
@@ -3442,8 +3435,7 @@ describe('a site import brings a proved site in, wave by wave, each started by a
     expect(job.creditsSpent).toBe(0)
     expect(handed).toEqual([])
     expect(stored).toEqual([])
-    // Logged for Trust & Safety the moment the site is read, and the day's limit counted once.
-    expect(reviews.map((entry) => entry.event)).toEqual(['read'])
+    // The day's limit counted once.
     expect(limited).toEqual([{ key: `ai-import:${ORG}`, limit: SITE_IMPORT_WAVES_PER_ORG_PER_DAY }])
     // Waiting for a person is never something the beat resumes.
     expect((await runAiJobStep(firestore, ORG, job.$id, { owner: 'beat-2', now: NOW })).outcome).toBe('not-claimable')
@@ -3491,7 +3483,8 @@ describe('a site import brings a proved site in, wave by wave, each started by a
     expect(done.siteImport?.waves.map((wave) => wave.status)).toEqual(['done', 'done'])
     expect(done.items?.every((row) => row.status === 'succeeded')).toBe(true)
     expect(done.sitePublish).toBeUndefined()
-    expect(reviews.map((entry) => entry.event)).toEqual(['read', 'wave-started', 'wave-finished', 'wave-started', 'wave-finished'])
+    // An import the workspace proved it owns is not abuse: it files nothing in the abuse queue.
+    expect([...mockDocs.keys()].filter((path) => path.startsWith('abuseReports/'))).toEqual([])
     // The console never reads a page's text.
     expect(aiJobSummary(done, NOW).siteImport?.pages.every((page) => !page.read?.text)).toBe(true)
   })
@@ -3545,7 +3538,6 @@ describe('a site import brings a proved site in, wave by wave, each started by a
     expect(job.status).toBe('needs_review')
     expect(job.review).toMatchObject({ reason: 'ownership' })
     expect(job.siteImport).toBeUndefined()
-    expect(reviews).toEqual([])
     expect(limited).toEqual([])
   })
 })

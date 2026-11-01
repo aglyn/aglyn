@@ -232,6 +232,7 @@ async function readIndexedDatasets(
       // The record page the site already serves for it (AGL-3747), whose
       // address field is the one its pages are reached by.
       const page = aiInventoryRecordPage(record.facts['recordPage'], fields)
+      const recordScreenId = page ? text((record.facts['recordPage'] as Data)['screenId']) : ''
       const address = page?.addressField ?? fields.find((field) => field.address && field.id)?.id
       // Made for this site, where its scope names this site alone (AGL-3912).
       const visibleTo = Array.isArray(record.facts['visibleTo']) ? (record.facts['visibleTo'] as unknown[]) : []
@@ -244,11 +245,27 @@ async function readIndexedDatasets(
         ...(image ? { imageField: image.id } : {}),
         ...(address ? { addressField: address } : {}),
         ...(page ? { recordBase: page.recordBase } : {}),
+        ...(recordScreenId ? { recordScreenId } : {}),
         ...(siteOnly ? { siteOnly: true as const } : {}),
       }
     }),
     truncated,
   }
+}
+
+/**
+ * The datasets shared with one site (AGL-3616), alone: what an edit to one of
+ * its pages may repeat an element over. The caller has already held the site
+ * to the org; a failed read answers none, and the edit admits only the
+ * repeats already on its canvas.
+ */
+export async function readAiSiteDatasets(orgId: string, hostId: string): Promise<AiInventoryDataset[]> {
+  return readIndexedDatasets(orgId, hostId, AI_SITE_INVENTORY_MAX_PER_KIND)
+    .then((window) => window.rows)
+    .catch((error: unknown) => {
+      console.error('ai site datasets read failed', { orgId, hostId, error })
+      return []
+    })
 }
 
 /**

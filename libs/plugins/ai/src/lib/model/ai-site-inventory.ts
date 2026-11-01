@@ -148,6 +148,12 @@ export interface AiInventoryDataset {
    */
   recordBase?: string
   /**
+   * The page that template is (AGL-3616): the screen whose `{{item.*}}` the
+   * site fills with each record. Never shown in the prompt: an edit to that
+   * page reads it to know its tokens are filled.
+   */
+  recordScreenId?: string
+  /**
    * Whether it is shared with this site and no other (AGL-3912): its scope
    * names this site alone, so it was made for this site. Absent where it is
    * the workspace's, shared with every site, or with others besides.

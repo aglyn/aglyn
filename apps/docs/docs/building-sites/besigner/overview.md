@@ -43,6 +43,19 @@ Two deliberate differences from the real site:
 Use Preview to check interaction behavior before publishing, and the canvas to edit the
 parts a visitor would never see open.
 
+### Publish from a preview {#publish-from-a-preview}
+
+A preview of a saved page version, such as the one an AI job opens, has a small bar in its
+corner. It says whether that version is live, and offers **Open in Besigner** and
+**Publish**. Publish asks first. On a live page it makes this version the one visitors see;
+on a page that isn't on your site yet, it publishes the page at its address with this
+version.
+
+Publish waits, with the reason shown, when your role on the site can't publish, when the
+page has no address yet (or a page above it isn't published), when the address is taken,
+or when the preview is showing changes from the Besigner that may not be saved. Open the
+page in the Besigner to sort any of these out.
+
 :::info Plan availability
 **Free**. The Besigner is core to building; some components and actions it exposes are
 plan-gated (noted where relevant).

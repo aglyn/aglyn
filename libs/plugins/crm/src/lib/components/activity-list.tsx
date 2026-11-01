@@ -24,9 +24,14 @@ import {
   mdiDotsHorizontalCircleOutline,
   mdiEmailOutline,
   mdiEmailReceiveOutline,
+  mdiFacebookMessenger,
+  mdiInstagram,
+  mdiLinkedin,
+  mdiMessageTextOutline,
   mdiNoteTextOutline,
   mdiPencilOutline,
   mdiPhoneOutline,
+  mdiWhatsapp,
 } from '@aglyn/shared-data-mdi'
 import { MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
@@ -53,6 +58,11 @@ import {
 const KIND_ICONS: Record<CrmActivityKind, { path: string }> = {
   call: mdiPhoneOutline,
   email: mdiEmailOutline,
+  text: mdiMessageTextOutline,
+  whatsapp: mdiWhatsapp,
+  messenger: mdiFacebookMessenger,
+  instagram: mdiInstagram,
+  linkedin: mdiLinkedin,
   meeting: mdiAccountGroupOutline,
   note: mdiNoteTextOutline,
   other: mdiDotsHorizontalCircleOutline,

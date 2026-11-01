@@ -63,6 +63,23 @@ export function consumeInteractiveSignIn(
   }
 }
 
+/**
+ * Whether a sign-in started in this tab within `maxAgeMs` is still unclaimed,
+ * WITHOUT consuming it (AGL-4113). `/signin` reads it on a fresh page to know
+ * that a Google redirect may be about to land, and holds the auth layout until
+ * the redirect result settles; the session hook still consumes it as before.
+ */
+export function hasPendingInteractiveSignIn(
+  maxAgeMs = DEFAULT_MAX_AGE_MS,
+): boolean {
+  try {
+    const raw = window.sessionStorage.getItem(MARKER_KEY)
+    return raw !== null && Date.now() - Number(raw) < maxAgeMs
+  } catch {
+    return false
+  }
+}
+
 export function clearInteractiveSignIn(): void {
   try {
     window.sessionStorage.removeItem(MARKER_KEY)

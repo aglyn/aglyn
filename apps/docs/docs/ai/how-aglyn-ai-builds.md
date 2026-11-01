@@ -58,7 +58,8 @@ If another build on the same site used the last form your plan includes after yo
 confirmed, the page places the form that build just made instead, and the job says so.
 When no such form will do, the job stops, and you are not charged for what it could not
 build. Starting a page while another is being built on the same site says *A page is
-already being built*: wait for it, or start another anyway.
+already being built*: wait for it, or start another anyway. A plan still waiting for you
+to confirm it is not being built, so it never shows that message.
 
 The job then waits for you. The window you started it from stays with it: it
 shows the job planning, then the plan itself, with **Confirm plan** to build it
