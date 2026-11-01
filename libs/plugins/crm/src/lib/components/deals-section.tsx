@@ -552,7 +552,7 @@ export function DealsSection(props: ConsolePluginPageProps) {
   return (
     <>
       <CardDisplay
-        header={'Deals'}
+        header={'Deals / Opportunities'}
         help={pluginDocsHelp('deals', { anchor: '#the-board-and-the-table' })}
         contentGutterX
         contentGutterY

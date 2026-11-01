@@ -335,6 +335,8 @@ export interface CrmScoped {
 /** `orgs/{orgId}/companies/{companyId}`. */
 export interface CrmCompany extends CrmScoped {
   name: string
+  /** Who at the company plays which part: Salesforce's Account Contact Roles. */
+  contactRoles?: CrmDealContactRole[]
   /** `nameSearchFields` twins, for the prefix search the list runs. */
   nameLower?: string
   nameTokens?: string[]
