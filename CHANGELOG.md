@@ -18,6 +18,10 @@ content on the marketing site and is written separately.
 - **ai:** AI page changes open on their draft; Assist reads the whole page ([AGL-4116](https://linear.app/aglyn/issue/AGL-4116))
 - **console:** a save waits for the server instead of being refused with "We could not confirm", and a slow page no longer disconnects a working tab ([AGL-4120](https://linear.app/aglyn/issue/AGL-4120))
 
+### Changed
+
+- **legal:** pin Legal v21: Terms and EULA GA wording, §4.30 console return requests for shipped hardware, §4.32 per-store 4G billed monthly in arrears; members who accepted v20 see one re-acceptance banner ([AGL-4053](https://linear.app/aglyn/issue/AGL-4053), [AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+
 ### Documentation
 
 - **billing:** remove the pre-release pricing note ([AGL-4051](https://linear.app/aglyn/issue/AGL-4051))
