@@ -47,7 +47,10 @@ import {
 export interface RestockScanResult {
   scanned: number
   sent: number
-  /** Alerts left unstamped because their site is locked (AGL-2495). */
+  /**
+   * Alerts owed a stamp or an email and left unstamped because their site is
+   * locked (AGL-2495). An alert owed nothing is not asked about (AGL-4121).
+   */
   skippedLocked: number
 }
 
@@ -104,17 +107,6 @@ export async function scanRestockAlerts(
   for (const docSnapshot of alerts.docs) {
     const hostRef = docSnapshot.ref.parent.parent
     if (!hostRef) continue
-    // LOCKDOWN (AGL-2495), before anything in this body writes. The poisoned-
-    // row retirement below stamps `notifiedAtMs`, which is a write, and the
-    // email is a message sent in a suspended merchant's name — both wait.
-    //
-    // SKIPPED, NOT DROPPED: an alert that is not stamped is re-scanned on the
-    // next beat, which is exactly the behaviour the `notifiedAtMs == null`
-    // query already relies on.
-    if (await gate.isLocked(hostRef.id)) {
-      skippedLocked += 1
-      continue
-    }
     const data = docSnapshot.data() as any
     // AGL-1774: `productId` is a STORED FIELD written by an unauthenticated
     // POST (`notify-restock.ts`), and this line is where it becomes a path
@@ -149,18 +141,36 @@ export async function scanRestockAlerts(
       )
     }
     const product = productId ? productCache.get(cacheKey) : null
+    // An alert still waiting on its product leaves here, before the gate
+    // (AGL-4121): the verdict is three reads, the product is one per run, and
+    // this window is mostly shoppers waiting on a shelf that is still empty.
+    // Neither filter writes or mails, so neither needs a verdict. They leave
+    // the row unstamped, which is what a lock would have done with it.
+    if (product) {
+      const total = CommerceModel.productInventory(product)
+      if (total != null && total <= 0) continue
+      // Sold in person only (AGL-4060): the email's one button is the
+      // product's page, which is not served. The alert waits, unstamped, and
+      // goes out once the product sells online again.
+      if (!CommerceModel.productSellsOnline(product)) continue
+    }
+    // LOCKDOWN (AGL-2495), before anything in this body writes. The poisoned-
+    // row retirement below stamps `notifiedAtMs`, which is a write, and the
+    // email is a message sent in a suspended merchant's name — both wait.
+    //
+    // SKIPPED, NOT DROPPED: an alert that is not stamped is re-scanned on the
+    // next beat, which is exactly the behaviour the `notifiedAtMs == null`
+    // query already relies on.
+    if (await gate.isLocked(hostRef.id)) {
+      skippedLocked += 1
+      continue
+    }
     if (!product) {
       await docSnapshot.ref
         .set({ notifiedAtMs: Date.now(), skipped: true }, { merge: true })
         .catch(() => undefined)
       continue
     }
-    const total = CommerceModel.productInventory(product)
-    if (total != null && total <= 0) continue
-    // Sold in person only (AGL-4060): the email's one button is the product's
-    // page, which is not served. The alert waits, unstamped, and goes out once
-    // the product sells online again.
-    if (!CommerceModel.productSellsOnline(product)) continue
     let loaded = templateCache.get(hostRef.id)
     if (loaded === undefined) {
       loaded = await // The template, or the built-in copy in the site's header and

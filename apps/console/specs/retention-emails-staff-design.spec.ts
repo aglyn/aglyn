@@ -155,8 +155,19 @@ const staffSend = require('../app/api/admin/users/system-email/route')
 const { DOCS_BASE_URL } = require('../constants/docs-links')
 const { RETENTION_DOCS_PATHS } = jest.requireActual('@aglyn/shared-util-email')
 
+const { retentionTurnHour } = jest.requireActual('../utils/server/retention-emails')
+
 const NOW = Date.now()
 const HOUR = 60 * 60 * 1000
+
+/** A confirmed account the sweep asks about in this run's hour (AGL-4121). */
+function uidOnTurn(base: string): string {
+  const hour = new Date(NOW).getUTCHours()
+  for (let index = 0; ; index += 1) {
+    const uid = `${base}-${index}`
+    if (retentionTurnHour(uid) === hour) return uid
+  }
+}
 
 /** A staff design of `retention-build-site`, as the Besigner stores one. */
 function publishStaffDesign() {
@@ -215,6 +226,8 @@ function expectStaffDesign(sent: Record<string, unknown>) {
 beforeEach(() => {
   jest.clearAllMocks()
   jest.spyOn(console, 'error').mockImplementation(() => undefined)
+  // Held, so a case that runs across the top of an hour keeps its uid's turn.
+  jest.spyOn(Date, 'now').mockReturnValue(NOW)
   process.env.CRON_SECRET = 'cron-secret'
   mockTemplates = {}
   mockVersions = {}
@@ -223,7 +236,7 @@ beforeEach(() => {
   mockListUsers.mockResolvedValue({
     users: [
       {
-        uid: 'stalled',
+        uid: uidOnTurn('stalled'),
         email: 'stalled@example.com',
         emailVerified: true,
         disabled: false,

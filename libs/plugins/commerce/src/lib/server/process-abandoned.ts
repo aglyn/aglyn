@@ -52,7 +52,10 @@ import {
 export interface AbandonedScanResult {
   scanned: number
   sent: number
-  /** Rows left untouched because their site is locked (AGL-2495). */
+  /**
+   * Rows owed an expiry or a reminder and left untouched because their site
+   * is locked (AGL-2495). A row owed nothing is not asked about (AGL-4121).
+   */
   skippedLocked: number
 }
 
@@ -124,10 +127,21 @@ export async function scanAbandonedCheckouts(
     // `hosts/{hostId}/checkouts/{id}` — the grandparent is the host.
     const hostId = docSnapshot.ref.parent.parent?.id
     if (!hostId) continue
-    // LOCKDOWN (AGL-2495), and it is the FIRST thing in the loop body rather
-    // than sitting next to the email below, because the `status: 'expired'`
-    // stamp further down is itself a write for this host. Reordered for that
-    // reason: the cheap filters used to run first, and one of them wrote.
+    const createdAtMs = Number(data.createdAtMs ?? 0)
+    const pastGivingUp = now - createdAtMs > GIVE_UP_AFTER_MS
+    // Rows nothing is owed on leave here, before the gate (AGL-4121): the
+    // verdict is three reads, and this window is mostly checkouts too young
+    // to remind or already reminded. Neither filter writes or mails, so
+    // neither needs a verdict. Past the give-up age a row IS owed a write, so
+    // it goes on to the gate whatever else it is.
+    if (!pastGivingUp) {
+      if (!data.email || data.remindedAtMs) continue
+      if (now - createdAtMs < REMIND_AFTER_MS) continue
+    }
+    // LOCKDOWN (AGL-2495), and it is ahead of everything below rather than
+    // sitting next to the email, because the `status: 'expired'` stamp is
+    // itself a write for this host. Only filters that write nothing may run
+    // before it.
     //
     // SKIPPED, NOT DROPPED: `continue` leaves the checkout `open` and
     // unstamped, so the reminder is sent — or the row expired — on the first
@@ -137,21 +151,18 @@ export async function scanAbandonedCheckouts(
       skippedLocked += 1
       continue
     }
-    const createdAtMs = Number(data.createdAtMs ?? 0)
-    // Expiry comes BEFORE the email and reminded skips. This pass reads 200
-    // open checkouts, and a checkout that never had an address, or was
-    // already reminded, used to be skipped while still `open` — forever — so
-    // enough of them would fill every pass and starve the ones still owed a
-    // reminder. Past the give-up age every open checkout closes, whatever
+    // Expiry comes BEFORE the email and reminded skips have any say. This
+    // pass reads 200 open checkouts, and a checkout that never had an address,
+    // or was already reminded, used to be skipped while still `open` — forever
+    // — so enough of them would fill every pass and starve the ones still owed
+    // a reminder. Past the give-up age every open checkout closes, whatever
     // else it is.
-    if (now - createdAtMs > GIVE_UP_AFTER_MS) {
+    if (pastGivingUp) {
       await docSnapshot.ref
         .set({ status: 'expired' }, { merge: true })
         .catch(() => undefined)
       continue
     }
-    if (!data.email || data.remindedAtMs) continue
-    if (now - createdAtMs < REMIND_AFTER_MS) continue
     if (!entitledHosts.has(hostId)) {
       const org = await getOrgForHost(hostId).catch(() => null)
       entitledHosts.set(
