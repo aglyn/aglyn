@@ -137,16 +137,39 @@ export interface PluginJobHostGate {
  * shut by infrastructure it never asked for. The loss is real and is why
  * `hasPluginJobHostLockdown` is reported by the runner route rather than
  * left to be inferred from nothing happening.
+ *
+ * ONE VERDICT PER HOST PER GATE (AGL-4121). The resolver's answer costs three
+ * Firestore reads (org id, org, host) and outside a request `React.cache`
+ * dedupes none of them, so a scan that asked once per row paid three reads per
+ * row for one site's answer. The runner mints a gate per job per run, so a
+ * verdict held here lives exactly as long as the run that asked, the way the
+ * sending-identity and branding maps in those scans do, and the next beat asks
+ * afresh. A lock laid mid-run therefore reaches a site already asked about on
+ * the next beat rather than on that run's next row.
+ *
+ * The promise is what is held, so askers running side by side
+ * (`pos-cellular-billing` asks under a `Promise.all`) share one read. A
+ * resolver that failed gave no verdict, so nothing is kept and the next row
+ * asks again, as it always has.
  */
 export function pluginJobHostGate(): PluginJobHostGate {
+  const verdicts = new Map<string, Promise<boolean>>()
+  const ask = async (hostId: string): Promise<boolean> => {
+    if (!hostId) return false
+    if (!hostLockedResolver) {
+      warnMissingResolver()
+      return false
+    }
+    return (await hostLockedResolver(hostId)) === true
+  }
   return {
-    isLocked: async (hostId: string) => {
-      if (!hostId) return false
-      if (!hostLockedResolver) {
-        warnMissingResolver()
-        return false
-      }
-      return (await hostLockedResolver(hostId)) === true
+    isLocked: (hostId: string) => {
+      const held = verdicts.get(hostId)
+      if (held) return held
+      const verdict = ask(hostId)
+      verdicts.set(hostId, verdict)
+      verdict.catch(() => verdicts.delete(hostId))
+      return verdict
     },
   }
 }

@@ -34,7 +34,11 @@ import {
   scheduleRefusedReopen,
   subscribeFirestoreSessionHeal,
 } from './firestore-denial-reporter'
-import { armFirestoreStallWatch } from './firebase/firestore-stall-recovery'
+import {
+  armFirestoreStallWatch,
+  noteFirestoreServerAnswer,
+} from './firebase/firestore-stall-recovery'
+import { trackListenConfirmation } from './helpers/listen-confirmation'
 
 const RETRY_DELAY_MS = 400
 const MAX_RETRIES = 5
@@ -189,6 +193,10 @@ export function useFirestoreCollection<T = DocumentData>(
      * stall) and by cleanup.
      */
     const disarmStall = armFirestoreStallWatch(q.firestore)
+    /** What a save waits on while this listener is unconfirmed (AGL-4120). */
+    const confirmation = trackListenConfirmation()
+    /** Whether the rows on screen came from the cache (AGL-4120). */
+    let shownFromCache = false
     // Disappearance tracking (AGL-1196); inert unless opted in.
     const seen = new Set<string>()
     const confirmedGone = new Set<string>()
@@ -196,6 +204,7 @@ export function useFirestoreCollection<T = DocumentData>(
     const emit = (
       docs: QueryDocumentSnapshot<DocumentData>[],
       cached: boolean,
+      changed: boolean,
     ) => {
       // A server-answered emission is the one thing that ends the refusal,
       // including the `getDocsFromServer` confirmation path below.
@@ -205,6 +214,8 @@ export function useFirestoreCollection<T = DocumentData>(
         setError(undefined)
       }
       setFromCache(cached)
+      confirmation.report(cached, !cached && shownFromCache && changed)
+      shownFromCache = cached
       setData(
         docs.map((docSnap) => {
           const value = { ...docSnap.data() } as Record<string, unknown>
@@ -265,6 +276,7 @@ export function useFirestoreCollection<T = DocumentData>(
           // Only the SERVER answering is evidence the session can read.
           if (!snapshot.metadata.fromCache) {
             disarmStall()
+            noteFirestoreServerAnswer(q.firestore)
             attempt = 0
             deniedStreak = 0
             denialReported = false
@@ -279,6 +291,9 @@ export function useFirestoreCollection<T = DocumentData>(
             // refunded exactly as it always was.
             attempt = 0
           }
+
+          // Only the values count: a metadata-only tick is not a change.
+          const changed = snapshot.docChanges?.().length > 0
 
           if (confirmDisappearances) {
             const present = new Set(snapshot.docs.map((d) => d.id))
@@ -300,23 +315,26 @@ export function useFirestoreCollection<T = DocumentData>(
                   })
                   freshIds.forEach((id) => seen.add(id))
                   // `getDocsFromServer` is server-confirmed by definition.
-                  emit(fresh.docs, false)
+                  emit(fresh.docs, false, true)
                 })
                 .catch(() => {
                   // Couldn't confirm: show the live result rather than an
                   // error. A possibly-short list beats an empty one.
-                  if (!cancelled) emit(snapshot.docs, snapshot.metadata.fromCache)
+                  if (!cancelled) {
+                    emit(snapshot.docs, snapshot.metadata.fromCache, changed)
+                  }
                 })
               return
             }
             snapshot.docs.forEach((d) => seen.add(d.id))
           }
 
-          emit(snapshot.docs, snapshot.metadata.fromCache)
+          emit(snapshot.docs, snapshot.metadata.fromCache, changed)
         },
         (err) => {
           if (cancelled) return
           disarmStall()
+          confirmation.release()
           unsubscribe?.()
           // Say so once per outage, and only for a refusal — a lost network
           // produces no error callback at all, so this cannot fire offline.
@@ -417,6 +435,7 @@ export function useFirestoreCollection<T = DocumentData>(
     return () => {
       cancelled = true
       disarmStall()
+      confirmation.release()
       unsubscribeHeal()
       if (timer) clearTimeout(timer)
       cancelRefusedReopen?.()

@@ -223,7 +223,7 @@ describe('a change to a page the site has (AGL-4116)', () => {
     render(<AssistPanelComponent {...dockProps()} />)
     await ask('Make the image in the top of the home page fill the entire background')
     expect(
-      await screen.findByText('Your draft of Home is ready. Open it in the Besigner and choose Open draft to check it. Visitors see the page as it is until you publish.'),
+      await screen.findByText('Your draft of Home is ready. Open it in the Besigner to check it. Visitors see the page as it is until you publish.'),
     ).toBeTruthy()
     expect(jobPosts()).toEqual([
       {

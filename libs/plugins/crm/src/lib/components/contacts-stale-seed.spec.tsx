@@ -34,6 +34,7 @@
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { setSeedConfirmWaitMs } from '@aglyn/tenant-feature-instance/hooks/helpers/listen-confirmation'
 import { updateDoc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
 import ContactDetailPage from './contact-detail-page'
@@ -230,6 +231,10 @@ function editNotesAndSave() {
   fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 }
 
+// This spec pins the refusal, not the wait before it (AGL-4120).
+beforeAll(() => setSeedConfirmWaitMs(0))
+afterAll(() => setSeedConfirmWaitMs())
+
 describe('ContactDetailPage (AGL-1358, AGL-2596)', () => {
   it('REFUSES to write a contact seeded from an unconfirmed read', async () => {
     listener.fromCache = true
@@ -243,7 +248,7 @@ describe('ContactDetailPage (AGL-1358, AGL-2596)', () => {
     expect(profileSaves()).toEqual([])
     const [message] = enqueueSnackbar.mock.calls[0]
     expect(message).toEqual(expect.stringContaining('contact'))
-    expect(message).toEqual(expect.stringMatching(/reload/i))
+    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
     // The card keeps what was typed, so the refusal is not a silent no-op.
     expect((screen.getByLabelText('About') as HTMLInputElement).value).toEqual(
       'Prefers a phone call',

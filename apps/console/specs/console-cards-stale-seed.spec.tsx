@@ -45,6 +45,7 @@
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { setSeedConfirmWaitMs } from '@aglyn/tenant-feature-instance/hooks/helpers/listen-confirmation'
 import { updateDoc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
 import BusinessDetailsCard from '../components/business-details-card.component'
@@ -294,6 +295,10 @@ beforeEach(() => {
   mockListener.status = 'success'
 })
 
+// This spec pins the refusal, not the wait before it (AGL-4120).
+beforeAll(() => setSeedConfirmWaitMs(0))
+afterAll(() => setSeedConfirmWaitMs())
+
 describe('BusinessDetailsCard (AGL-1358)', () => {
   const editAndSave = () => {
     fireEvent.change(screen.getByLabelText('Support email'), {
@@ -313,7 +318,7 @@ describe('BusinessDetailsCard (AGL-1358)', () => {
     expect(mockSetDoc).not.toHaveBeenCalled()
     const [message] = mockEnqueueSnackbar.mock.calls[0]
     expect(message).toEqual(expect.stringContaining('business details'))
-    expect(message).toEqual(expect.stringMatching(/reload/i))
+    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
     // The form keeps what was typed, so the refusal is not a silent no-op.
     expect(
       (screen.getByLabelText('Support email') as HTMLInputElement).value,
@@ -366,7 +371,7 @@ describe('LanguagesCard (AGL-1358)', () => {
     expect(updateDoc).not.toHaveBeenCalled()
     const [message] = mockEnqueueSnackbar.mock.calls[0]
     expect(message).toEqual(expect.stringContaining('language settings'))
-    expect(message).toEqual(expect.stringMatching(/reload/i))
+    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
     expect(
       (screen.getByLabelText('Languages') as HTMLInputElement).value,
     ).toEqual('en, es, fr')
@@ -467,7 +472,7 @@ describe('HostComponentsCard (AGL-1358)', () => {
     expect(updateDoc).not.toHaveBeenCalled()
     const [message] = mockEnqueueSnackbar.mock.calls[0]
     expect(message).toEqual(expect.stringContaining('component'))
-    expect(message).toEqual(expect.stringMatching(/reload/i))
+    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
     // The dialog is still open with what was being edited. This path had no
     // report at all before the guard, so the message is the whole point.
     expect((screen.getByLabelText('Name') as HTMLInputElement).value).toEqual(

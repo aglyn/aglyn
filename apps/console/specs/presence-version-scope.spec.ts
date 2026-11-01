@@ -18,6 +18,10 @@
 import { readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import {
+  COEDIT_MIRROR_CURRENT_VERSION,
+  coeditMirrorRoomPath,
+} from '@aglyn/aglyn/app-utils/version-draft'
+import {
   PRESENCE_CURRENT_VERSION,
   presenceRoomPath,
 } from '../hooks/use-presence'
@@ -79,6 +83,16 @@ describe('presence and the co-edit mirror cannot drift apart', () => {
     const sentinel = /versionId \?\? '([^']+)'/.exec(MIRROR)?.[1]
     expect(sentinel).toBeDefined()
     expect(PRESENCE_CURRENT_VERSION).toBe(sentinel)
+  })
+
+  it('names the mirror’s room as an AI edit clears it (AGL-4116)', () => {
+    // The job clears the room from the server, so it builds the path the hook
+    // builds. The two are held together here, as presence's is.
+    const room = { orgId: 'o', hostId: 'h', docType: 'screen', docId: 'd' }
+    expect(coeditMirrorRoomPath({ ...room, versionId: 'v' })).toBe('coedit/o/h/screen/d/v/nodes')
+    expect(coeditMirrorRoomPath(room)).toBe(`coedit/o/h/screen/d/${COEDIT_MIRROR_CURRENT_VERSION}/nodes`)
+    expect(COEDIT_MIRROR_CURRENT_VERSION).toBe(/versionId \?\? '([^']+)'/.exec(MIRROR)?.[1])
+    expect(MIRROR).toMatch(/`coedit\/\$\{session\.orgId\}\/\$\{session\.hostId\}\/\$\{docType\}\/\$\{docId\}\/`/)
   })
 
   it('scopes on the same version identifier the mirror scopes on', () => {

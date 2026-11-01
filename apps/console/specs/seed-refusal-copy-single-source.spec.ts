@@ -114,9 +114,10 @@ const REFUSAL_PHRASES = [
   'could not be loaded, so there is nothing safe to',
   'overwrite the stored copy with blanks',
   // unconfirmed
-  'with the server, so what is',
-  'Check your connection and reload; if it is refused again,',
-  'open this page in a new browser tab',
+  'with the server yet, so nothing',
+  'was saved. What you entered is still here.',
+  // refreshed
+  'just updated from the server, so nothing was saved',
   // stale-session
   'Your session went stale, so your',
   'saving now could overwrite newer values.',
@@ -170,8 +171,6 @@ describe('nothing hand-rolls the guard off session-health (AGL-1449)', () => {
       'PRODUCES the evidence rather than consuming it: it reads `deniedCollections` to decide whether a retry budget was spent on a dead session, and reports denials in. It writes nothing to Firestore.',
     'apps/console/components/layouts/firebase-app.layout.tsx':
       'The registration seam itself (AGL-1358). `setStaleSessionCheck(() => getSessionHealth().staleSession)` at module scope is the ONLY way this console signal reaches a guard that lives in the library.',
-    'libs/tenant/feature/instance/src/lib/hooks/helpers/guarded-seed-write.ts':
-      'The guard. Names `getSessionHealth()` in prose only — explaining why the console-side verdict is injected rather than imported — and the lib could not import it if it wanted to.',
   }
 
   const consumers = corpus

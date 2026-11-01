@@ -45,9 +45,10 @@ the home page fill the background*, and Assist makes it on that page:
 2. The change is saved into the page's draft, the same draft the Besigner keeps for you
    when you work on a page. Your published page stays as it is: visitors see no change
    until you publish.
-3. The card then says where the change is, with **Open in the Besigner**. Choose
-   **Open draft** there to see the change, then publish it when you are happy with it.
-   To leave it, choose **Discard** instead.
+3. The card then says where the change is, with **Open in the Besigner**, which opens the
+   page with the draft already on the canvas. Check the change, then publish it when you
+   are happy with it. To leave it, choose **File > Discard changes** instead. If someone
+   else is working on the page, the Besigner says so and opens the draft once they're done.
 
 There is no plan to confirm, and nothing is added to the page that you did not ask for.
 If you already had a draft of the page, the change is made on it, so your own work is
