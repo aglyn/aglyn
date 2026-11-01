@@ -459,7 +459,7 @@ async function starterDetail(
       sourceSite: sourceHostId
         ? {
             hostId: sourceHostId,
-            name: textOf(source?.get('name')),
+            name: textOf(source?.get('displayName')),
             subdomain: textOf(source?.get('subdomain')),
             cname: textOf(source?.get('cname')),
           }

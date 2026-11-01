@@ -1278,7 +1278,7 @@ describe('a site starter in review (AGL-4049)', () => {
     })
     docs.set(versionPath(1), { publishedAt: { toDate: () => new Date(Date.UTC(2026, 9, 20)) }, starter: { screens: [] } })
     docs.set(`orgs/${PUBLISHER}`, { name: 'Northwind Coffee', slug: 'northwind' })
-    docs.set('hosts/host-src', { name: 'Bistro demo', subdomain: 'bistro-demo', orgId: PUBLISHER })
+    docs.set('hosts/host-src', { displayName: 'Bistro demo', subdomain: 'bistro-demo', orgId: PUBLISHER })
   }
 
   /** Every required starter item, ticked against version 2. */
