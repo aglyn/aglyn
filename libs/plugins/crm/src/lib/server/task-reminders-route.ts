@@ -93,8 +93,9 @@ async function recordCronBeat(jobId: string): Promise<void> {
  *
  * The digest beside this route says once a morning what is late and what
  * is due today; nothing said "the 3:00 call is at 3:00". Every hour this
- * reads, per org, the open tasks whose `remindAtMs` has come and tells
- * each one's assignee ONCE — a console notification per task
+ * finds the orgs with an open task whose `remindAtMs` has come
+ * (`orgIdsWithDueReminders`), reads those orgs' tasks and tells each one's
+ * assignee ONCE — a console notification per task
  * (`content.taskReminder`, opening the record the task is for) and one
  * email per member per run listing everything of theirs that fell due.
  * The words and the rule live in `crm-task-reminders.ts`; this file is the
@@ -122,8 +123,8 @@ async function recordCronBeat(jobId: string): Promise<void> {
  * not come back every hour. A reminder is left unstamped only when the run
  * never reached a verdict: the send-rate governor refused, or the org
  * threw. Orgs are swept in id order behind a cursor, as the digest sweeps
- * them, so the workflow's `done:false` loop carries a platform of any
- * size across invocations.
+ * them, so the workflow's `done:false` loop carries any number of them
+ * across invocations.
  *
  * The task query reads the NEWEST reminders that have come due, not the
  * oldest — see `CRM_TASK_REMINDER_CEILING` for why that is what makes a
@@ -146,9 +147,13 @@ export const CRM_TASK_REMINDERS_JOB_ID = 'crm-task-reminders'
  * More than the digest's twenty-five: an org here costs one task query and,
  * only when something fell due, the roster and the sends. The common hour
  * finds nothing due in most orgs, and a chunk that reads a hundred empty
- * queries finishes well inside `maxDuration = 60`.
+ * queries finishes well inside `maxDuration = 60`, which is what the whole
+ * platform costs on the night `orgIdsWithDueReminders` cannot answer.
  */
 export const CRM_TASK_REMINDERS_ORG_CHUNK = 100
+
+/** Tasks per page of the platform-wide due query. */
+const DUE_TASK_PAGE = 500
 
 /**
  * The most members per org whose address is chased through the auth pools
@@ -158,7 +163,7 @@ export const CRM_TASK_REMINDERS_ORG_CHUNK = 100
 export const CRM_TASK_REMINDERS_MAX_UID_LOOKUPS = 5
 
 type Firestore = FirebaseFirestore.Firestore
-type Snapshot = FirebaseFirestore.QueryDocumentSnapshot
+type Snapshot = FirebaseFirestore.DocumentSnapshot
 
 /** What one member's row in the response says. */
 interface MemberReport {
@@ -198,6 +203,52 @@ interface SweepContext {
 /** A due reminder with the document it came from, so the stamp has a target. */
 interface DueTask extends CrmReminderTask {
   ref: FirebaseFirestore.DocumentReference
+}
+
+/**
+ * THE ORGS WITH A REMINDER OWED, found from the tasks (AGL-4121).
+ *
+ * The sweep used to walk the orgs to find them: every org document read, and
+ * every entitled org's tasks asked, every hour, to learn that nothing had come
+ * due in almost all of them. Asked of the collection group, an hour with
+ * nothing due is one query and no org at all.
+ *
+ * Every page is read, not the newest, and that is what keeps this honest.
+ * `CRM_TASK_REMINDER_CEILING` is safe per org because the newest five hundred
+ * of ONE org begin with what fell due since the last run; across the platform
+ * one busy org's handled reminders could bury a quiet org's first one. This
+ * pays once for the same open tasks the org queries read, projected to what
+ * the rule needs, and `remindOrg` then decides from its own window exactly as
+ * it always has. An org found here with nothing inside that window reports
+ * `nothing-due`, as it did.
+ *
+ * Needs the COLLECTION_GROUP `(status, remindAtMs desc)` index, and the
+ * `crmTasks` entry for it is deployed after the code that first asks: see the
+ * caller for what happens until then.
+ */
+async function orgIdsWithDueReminders(firestore: Firestore, nowMs: number): Promise<string[]> {
+  const orgIds = new Set<string>()
+  let after: FirebaseFirestore.QueryDocumentSnapshot | undefined
+  for (;;) {
+    let query = firestore
+      .collectionGroup(CRM_COLLECTIONS.tasks)
+      .where('status', '==', 'open')
+      .where('remindAtMs', '<=', nowMs)
+      .orderBy('remindAtMs', 'desc')
+      .select('status', 'remindAtMs', 'reminderSentAtMs')
+      .limit(DUE_TASK_PAGE)
+    if (after) query = query.startAfter(after)
+    const page = await query.get()
+    for (const doc of page.docs) {
+      const org = doc.ref.parent.parent
+      if (org?.parent.id !== 'orgs') continue
+      if (crmTaskReminderDue(doc.data() as Parameters<typeof crmTaskReminderDue>[0], nowMs)) {
+        orgIds.add(org.id)
+      }
+    }
+    if (page.docs.length < DUE_TASK_PAGE) return [...orgIds].sort()
+    after = page.docs[page.docs.length - 1]
+  }
 }
 
 async function remindOrg(ctx: SweepContext, orgDoc: Snapshot): Promise<OrgReport> {
@@ -494,8 +545,8 @@ export async function crmTaskRemindersRoute(request: Request): Promise<Response>
     }
 
     // The resumable sweep, in the shape the digest reads orgs (AGL-2220):
-    // ordered by id, `limit + 1` to learn whether there is more, the cursor
-    // validated as an org id before it becomes a reference.
+    // ordered by id, one more than a chunk to learn whether there is more, the
+    // cursor validated as an org id before it becomes a reference.
     const requestedLimit = Number((body as { limit?: unknown } | undefined)?.limit)
     const pageSize =
       Number.isFinite(requestedLimit) && requestedLimit > 0
@@ -506,14 +557,43 @@ export async function crmTaskRemindersRoute(request: Request): Promise<Response>
       typeof rawCursor === 'string' && rawCursor.length > 0 && !rawCursor.includes('/')
         ? rawCursor
         : null
-    let orgQuery = firestore
-      .collection('orgs')
-      .orderBy(firebaseAdmin.firestore.FieldPath.documentId())
-      .limit(pageSize + 1)
-    if (cursor) orgQuery = orgQuery.startAfter(firestore.collection('orgs').doc(cursor))
-    const page = await orgQuery.get()
-    const hasMore = page.docs.length > pageSize
-    const orgDocs = hasMore ? page.docs.slice(0, pageSize) : page.docs
+    /*
+     * Only the orgs with something owed. A due query that fails is not an hour
+     * with nothing due, so it never answers for one: it falls back to walking
+     * every org, which needs no collection-group index and is what makes this
+     * safe to ship ahead of the index it uses. Composite indexes deploy in the
+     * promotion's tail, and a reminder must not wait on the order of that tail.
+     */
+    const withDue = await orgIdsWithDueReminders(firestore, nowMs).catch((error: unknown) => {
+      console.warn('[crm] task reminders: the due query failed, sweeping every org', error)
+      return null
+    })
+    let orgDocs: Snapshot[]
+    let hasMore: boolean
+    /** Where the next chunk starts, whichever way this one was chosen. */
+    let lastOrgId: string | null
+    if (withDue) {
+      const ahead = cursor ? withDue.filter((orgId) => orgId > cursor) : withDue
+      const chunk = ahead.slice(0, pageSize)
+      hasMore = ahead.length > pageSize
+      lastOrgId = chunk[chunk.length - 1] ?? null
+      // A task can outlive its org by a moment; there is nobody to tell.
+      orgDocs = chunk.length
+        ? (await firestore.getAll(...chunk.map((orgId) => firestore.collection('orgs').doc(orgId)))).filter(
+            (doc) => doc.exists,
+          )
+        : []
+    } else {
+      let orgQuery = firestore
+        .collection('orgs')
+        .orderBy(firebaseAdmin.firestore.FieldPath.documentId())
+        .limit(pageSize + 1)
+      if (cursor) orgQuery = orgQuery.startAfter(firestore.collection('orgs').doc(cursor))
+      const page = await orgQuery.get()
+      hasMore = page.docs.length > pageSize
+      orgDocs = hasMore ? page.docs.slice(0, pageSize) : page.docs
+      lastOrgId = orgDocs[orgDocs.length - 1]?.id ?? null
+    }
 
     const orgs: Record<string, OrgReport> = {}
     const failures: Record<string, string> = {}
@@ -554,7 +634,7 @@ export async function crmTaskRemindersRoute(request: Request): Promise<Response>
         ...(failed.length ? { failures } : {}),
         // A deferred run reports `done: true` — see the module comment —
         // so the workflow's loop does not re-POST into a full window.
-        nextCursor: deferred || !hasMore ? null : (orgDocs[orgDocs.length - 1]?.id ?? null),
+        nextCursor: deferred || !hasMore ? null : lastOrgId,
         done: deferred || !hasMore,
       },
       // 207: this chunk finished and some org in it needs a person, which is

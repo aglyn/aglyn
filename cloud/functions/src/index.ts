@@ -46,6 +46,25 @@ const PLUGIN_JOBS_SECRET = defineSecret('PLUGIN_JOBS_SECRET')
 const CONSOLE_CRON_SECRET = defineSecret('CRON_SECRET')
 
 /**
+ * A QUARTER OF A vCPU FOR EVERY SCHEDULED WRAPPER (AGL-4121).
+ *
+ * Each scheduled function here does one thing: it POSTs to a route on the
+ * console or tenant origin and waits. Cloud Run bills the allocated CPU for
+ * that whole wait, so at the default of 1 vCPU these wrappers billed 206K
+ * vCPU-seconds in October for almost no computing. A quarter is enough to make
+ * an HTTP call, and it leaves the free tier room as the platform grows.
+ *
+ * `concurrency: 1` is not a choice: Cloud Run refuses less than 1 vCPU without
+ * it. Every wrapper already runs one tick at a time on its own schedule, so an
+ * overlapping tick simply gets a second instance.
+ *
+ * ⛔ `beforeSignupCreate` does not use this. It runs inside a sign-up under
+ * Identity Platform's seven-second deadline, and a slower cold start there is a
+ * failed account creation.
+ */
+const SCHEDULED_WRAPPER_RESOURCES = { cpu: 0.25, concurrency: 1 } as const
+
+/**
  * Tenant origin to poke. Any host on THIS deployment works — the runner is not
  * host-scoped — but it must be a host on this deployment (AGL-2176).
  *
@@ -161,6 +180,7 @@ const JOB_RUNNER_REQUEST_TIMEOUT_MS = 90_000
  */
 export const pluginJobsBeat = onSchedule(
   {
+    ...SCHEDULED_WRAPPER_RESOURCES,
     schedule: 'every 1 minutes',
     timeZone: 'Etc/UTC',
     secrets: [PLUGIN_JOBS_SECRET],
@@ -578,6 +598,7 @@ async function sweepConsoleCron(
  */
 export const consoleFastCrons = onSchedule(
   {
+    ...SCHEDULED_WRAPPER_RESOURCES,
     schedule: CONSOLE_FAST_CRON_SCHEDULE,
     timeZone: 'Etc/UTC',
     secrets: [CONSOLE_CRON_SECRET],
@@ -667,6 +688,7 @@ const CONSOLE_AI_JOBS_BEAT_TIMEOUT_MS = 320_000
  */
 export const consoleAiJobsBeat = onSchedule(
   {
+    ...SCHEDULED_WRAPPER_RESOURCES,
     schedule: CONSOLE_AI_JOBS_BEAT_SCHEDULE,
     timeZone: 'Etc/UTC',
     secrets: [CONSOLE_CRON_SECRET],
@@ -739,6 +761,7 @@ const CONSOLE_RENDER_MONITOR_TIMEOUT_MS = 75_000
  */
 export const consoleRenderMonitor = onSchedule(
   {
+    ...SCHEDULED_WRAPPER_RESOURCES,
     schedule: CONSOLE_RENDER_MONITOR_SCHEDULE,
     timeZone: 'Etc/UTC',
     secrets: [CONSOLE_CRON_SECRET],
@@ -982,6 +1005,7 @@ function consoleDailyCron(job: keyof typeof CONSOLE_DAILY_CRONS) {
   const { schedule, route } = CONSOLE_DAILY_CRONS[job]
   return onSchedule(
     {
+      ...SCHEDULED_WRAPPER_RESOURCES,
       schedule,
       timeZone: 'Etc/UTC',
       secrets: [CONSOLE_CRON_SECRET],
