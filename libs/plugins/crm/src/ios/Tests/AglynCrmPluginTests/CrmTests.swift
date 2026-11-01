@@ -105,6 +105,7 @@ final class CrmTests: XCTestCase {
     XCTAssertEqual(crmSiteField(.deal, shared, sites: sites)?.spec.emptyLabel, "None")
     XCTAssertEqual(crmSiteField(.deal, apart, sites: sites)?.spec.label, "Site")
     XCTAssertEqual(crmSiteField(.deal, apart, sites: sites)?.spec.required, true)
+    XCTAssertNil(crmSiteField(.deal, apart, sites: sites)?.spec.emptyLabel)
     // A lead is private to one site, whatever the org keeps.
     XCTAssertEqual(crmSiteField(.lead, shared, sites: sites)?.spec.required, true)
     XCTAssertNil(crmSiteField(.deal, shared, sites: [sites[0]]))

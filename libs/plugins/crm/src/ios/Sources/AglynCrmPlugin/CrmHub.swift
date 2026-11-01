@@ -241,7 +241,9 @@ func crmSiteField(_ kind: CrmKind, _ scope: CrmScope, sites: [NativeSiteRef]) ->
       }
   }
   return CrmField(
-    FieldSpec(crmSiteFieldKey, required ? "Site" : "Source site", kind: .select, required: required, options: options, help: help),
+    FieldSpec(
+      crmSiteFieldKey, required ? "Site" : "Source site", kind: .select, required: required, options: options, help: help,
+      emptyLabel: required ? nil : "None"),
     editable: false)
 }
 
