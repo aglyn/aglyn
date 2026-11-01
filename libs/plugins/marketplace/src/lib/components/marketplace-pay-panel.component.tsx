@@ -37,7 +37,7 @@ export type PayStep =
   | { kind: 'card'; clientSecret: string | null }
   | { kind: 'address' }
   /** Something is needed that this person cannot add. */
-  | { kind: 'ask-billing'; need: PayPrerequisite }
+  | { kind: 'ask-billing'; need: PayPrerequisite; amountCents: number | null }
 
 export interface MarketplacePayPanelProps {
   step: PayStep
@@ -103,18 +103,38 @@ export function MarketplacePayPanel(props: MarketplacePayPanelProps) {
           <Divider />
           <SummaryLine label="Total" value={formatPayCents(quote.totalCents)} strong />
         </Stack>
-        <Typography variant="body2" color="text.secondary">
-          {`Charged to ${payCardLabel(quote.card)}. The receipt lands in Billing.`}
-        </Typography>
-        {failure}
-        <Stack direction="row" spacing={1}>
-          <Button variant="contained" size="small" disabled={busy} onClick={onPay}>
-            {busy ? 'Paying…' : `Pay ${formatPayCents(quote.totalCents)}`}
-          </Button>
-          <Button size="small" disabled={busy} onClick={onCancel}>
-            {'Cancel'}
-          </Button>
-        </Stack>
+        {quote.canPay ? (
+          <>
+            <Typography variant="body2" color="text.secondary">
+              {`Charged to ${payCardLabel(quote.card)}. The receipt lands in Billing.`}
+            </Typography>
+            {/* A card that will not pay is changed in Billing: the way there is beside the reason. */}
+            {error ? (
+              <PrerequisiteNotice severity="warning" href={billingHref ?? undefined} actionLabel="Open Billing">
+                {error}
+              </PrerequisiteNotice>
+            ) : null}
+            <Stack direction="row" spacing={1}>
+              <Button variant="contained" size="small" disabled={busy} onClick={onPay}>
+                {busy ? 'Paying…' : `Pay ${formatPayCents(quote.totalCents)}`}
+              </Button>
+              <Button size="small" disabled={busy} onClick={onCancel}>
+                {'Cancel'}
+              </Button>
+            </Stack>
+          </>
+        ) : (
+          <>
+            <PrerequisiteNotice severity="warning">
+              {`Buying this charges your workspace's card, which takes the "${orgPermissionLabel('billing.manage')}" permission. Ask someone who manages billing to buy it.`}
+            </PrerequisiteNotice>
+            <Stack direction="row">
+              <Button size="small" onClick={onCancel}>
+                {'Close'}
+              </Button>
+            </Stack>
+          </>
+        )}
       </Stack>
     )
   }
@@ -159,7 +179,10 @@ export function MarketplacePayPanel(props: MarketplacePayPanelProps) {
 
   return (
     <Stack spacing={1.5} data-marketplace-pay="ask-billing">
-      <PrerequisiteNotice severity="warning" href={billingHref ?? undefined} actionLabel="Open Billing">
+      {step.amountCents === null ? null : (
+        <SummaryLine label="Price" value={formatPayCents(step.amountCents)} />
+      )}
+      <PrerequisiteNotice severity="warning">
         {`${
           step.need === 'card_required'
             ? 'This workspace needs a card on file to buy this.'

@@ -349,6 +349,7 @@ describe('prerequisites', () => {
       error: 'Add a card in Billing first',
       code: 'card_required',
       canManageBilling: true,
+      amountCents: 10000,
     })
     expect(stripeCalls).toEqual([])
   })
@@ -363,7 +364,7 @@ describe('prerequisites', () => {
   it('says whether this person can add one here', async () => {
     mockBilling.customerId = undefined
     mockBilling.canManage = false
-    expect((await send()).body.canManageBilling).toBe(false)
+    expect((await send({ action: 'quote' })).body.canManageBilling).toBe(false)
   })
 
   it('a live subscription\'s default is a card on file, and is the one charged', async () => {
@@ -403,6 +404,7 @@ describe('quote', () => {
       totalCents: 10660,
       currency: 'usd',
       card: expect.objectContaining({ brand: 'visa', last4: '4242' }),
+      canPay: true,
     })
     const params = callNamed('tax/calculations')?.params
     expect(params?.get('line_items[0][tax_code]')).toBe('txcd_10103001')
@@ -675,6 +677,88 @@ describe('pay', () => {
     expect(res.statusCode).toBe(200)
     expect(res.body).toEqual({ submitted: true, invoiceId: 'in_1' })
     expect(mockRecord).not.toHaveBeenCalled()
+  })
+})
+
+describe('charging the saved card takes billing.manage (AGL-4049)', () => {
+  beforeEach(() => {
+    mockBilling.canManage = false
+  })
+
+  it('a buyer without it still gets the price, and is told they cannot pay', async () => {
+    const res = await send({ action: 'quote' })
+    expect(res.statusCode).toBe(200)
+    expect(res.body.quote).toMatchObject({ totalCents: 10660, canPay: false })
+  })
+
+  it('a buyer with it is told they can', async () => {
+    mockBilling.canManage = true
+    expect((await send({ action: 'quote' })).body.quote.canPay).toBe(true)
+  })
+
+  it('pay is refused, naming the permission, before anything reaches Stripe', async () => {
+    const res = await send()
+    expect(res.statusCode).toBe(403)
+    expect(res.body).toEqual({
+      error: expect.stringContaining('Manage billing'),
+      code: 'billing_manage_required',
+    })
+    expect(stripeCalls).toEqual([])
+    expect(mockRecord).not.toHaveBeenCalled()
+  })
+
+  it('the buyer permission is still asked first: billing.manage alone buys nothing', async () => {
+    mockBilling.canManage = true
+    mockPermissions['installPlugins'] = false
+    expect((await send()).statusCode).toBe(403)
+    expect(stripeCalls).toEqual([])
+  })
+
+  it('a refusal burns no attempt: the same key works once the permission is held', async () => {
+    expect((await send()).statusCode).toBe(403)
+    mockBilling.canManage = true
+    const res = await send()
+    expect(res.statusCode).toBe(200)
+    expect(res.body.paid).toBe(true)
+  })
+
+  it('settle is no way round it: nothing is read, recorded or voided', async () => {
+    world.invoiceRead = {
+      id: 'in_1',
+      status: 'paid',
+      customer: 'cus_buyer',
+      metadata: { type: 'marketplace-purchase', listingId: 'listing-1', buyerUid: 'buyer-1' },
+    }
+    const res = await send({ action: 'settle', invoiceId: 'in_1' }, null)
+    expect(res.statusCode).toBe(403)
+    expect(res.body.code).toBe('billing_manage_required')
+    expect(stripeCalls).toEqual([])
+    expect(mockRecord).not.toHaveBeenCalled()
+  })
+
+  it('staff pass, as they do at pay-invoice', async () => {
+    const admin = jest.requireMock('@aglyn/tenant-data-admin') as { firebaseAdmin: any }
+    const app = admin.firebaseAdmin.app
+    admin.firebaseAdmin.app = () => ({
+      ...app(),
+      auth: () => ({ verifyIdToken: async () => ({ uid: 'buyer-1', staff: true }) }),
+    })
+    try {
+      expect((await send()).statusCode).toBe(200)
+    } finally {
+      admin.firebaseAdmin.app = app
+    }
+  })
+
+  it('a prerequisite states the price to someone who cannot meet it', async () => {
+    mockBilling.customerId = undefined
+    const res = await send({ action: 'quote' })
+    expect(res.statusCode).toBe(412)
+    expect(res.body).toMatchObject({
+      code: 'card_required',
+      canManageBilling: false,
+      amountCents: 10000,
+    })
   })
 })
 

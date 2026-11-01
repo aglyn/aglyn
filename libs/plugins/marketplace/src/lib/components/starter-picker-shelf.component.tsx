@@ -56,7 +56,11 @@ const PICK_NOTE_SX: SxProps<Theme> = {
   boxShadow: 3,
 }
 
-/** The payment, where the note was: on its own surface, and short of the window on a small one. */
+/**
+ * The payment, where the note was, on its own surface. It may fill the window
+ * below the app bar, so a form that has grown keeps its button on screen; a
+ * smaller window scrolls inside it.
+ */
 const PAY_PANEL_SX: SxProps<Theme> = {
   position: 'sticky',
   bottom: (theme) => theme.spacing(2),
@@ -65,7 +69,7 @@ const PAY_PANEL_SX: SxProps<Theme> = {
   p: 2,
   borderRadius: 1,
   bgcolor: 'background.paper',
-  maxHeight: '70vh',
+  maxHeight: (theme) => `calc(100dvh - ${theme.spacing(10)})`,
   overflow: 'auto',
 }
 

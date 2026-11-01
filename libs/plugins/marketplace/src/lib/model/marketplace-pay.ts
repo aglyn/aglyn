@@ -31,6 +31,8 @@ export interface PayQuote {
   totalCents: number
   /** `null` for someone who may buy but may not see billing. */
   card: PayQuoteCard | null
+  /** Whether this person holds `billing.manage`, which paying takes. */
+  canPay: boolean
 }
 
 /** The two things a workspace needs before it can be charged. */

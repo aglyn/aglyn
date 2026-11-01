@@ -239,6 +239,7 @@ describe('a pick with a price (AGL-4049 lanes 3 and D)', () => {
         taxCents: 79,
         totalCents: 1279,
         card: { type: 'card', brand: 'visa', last4: '4242' },
+        canPay: true,
       },
     },
   }

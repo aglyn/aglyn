@@ -33,6 +33,7 @@ import {
   type AttemptClaim,
   type PluginApiHandler,
 } from '@aglyn/aglyn/server'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import {
   invoicePaymentIntentId,
@@ -76,6 +77,16 @@ import { MARKETPLACE_TAX_CODE, resolveSale, type MarketplaceSale } from './sale'
  *  - `pay` (the default): the Invoice, finalized and paid. Priced by the same
  *    engine, and refused if the total moved from the one the buyer saw.
  *  - `settle`: after the bank's step, whether that attempt paid.
+ *
+ * ## Who may do what
+ *
+ * Two questions, asked separately. The buyer permission (\`hosts.create\` for a
+ * starter, \`plugins.install\` otherwise) decides who may see the price and get
+ * a quote. Charging the workspace's saved card moves money, so \`pay\` also takes
+ * \`billing.manage\`, asked exactly as \`billing/pay-invoice\` asks it, and \`settle\`
+ * does too, so that finishing an attempt is never a way round it. The quote says
+ * whether this person can pay, so the panel can say so before anyone presses
+ * anything.
  *
  * ## The purchase is written here as well as by the webhook
  *
@@ -129,6 +140,7 @@ function stripeCaller(secretKey: string): StripeCaller {
 function prerequisiteRefusal(
   code: 'card_required' | 'billing_address_required',
   canManageBilling: boolean,
+  sale: MarketplaceSale,
 ): { status: number; body: Record<string, unknown> } {
   return {
     status: 412,
@@ -139,9 +151,17 @@ function prerequisiteRefusal(
           : 'Add a billing address in Billing first: sales tax is calculated from it.',
       code,
       canManageBilling,
+      // The price stays in front of someone who cannot meet this themselves.
+      amountCents: sale.amountCents,
     },
   }
 }
+
+/** The refusal for someone who may see the price but may not charge the workspace's card. */
+const billingManageRefusal = () => ({
+  error: permissionRefusalText('billing.manage'),
+  code: 'billing_manage_required',
+})
 
 /** What this person may do with the workspace's billing, as billing itself asks it. */
 async function billingAccess(
@@ -305,6 +325,10 @@ export const payHandler: PluginApiHandler = async (req, res) => {
     const customerId = (await readOrgBilling(orgId)).stripeCustomerId as string | undefined
 
     if (action === 'settle') {
+      // Not a way round \`pay\`: an attempt is finished by someone who could start it.
+      if (!(await billingAccess(decoded, orgId)).canManage) {
+        return res.status(403).json(billingManageRefusal())
+      }
       return await settle({ req, res, stripe, decoded, orgId, listingId, customerId })
     }
 
@@ -317,6 +341,12 @@ export const payHandler: PluginApiHandler = async (req, res) => {
       return res.status(resolved.refusal.status).json(resolved.refusal.body)
     }
     const { sale } = resolved
+
+    // Paying moves money: the same check \`billing/pay-invoice\` makes, on top of
+    // the buyer permission the sale has just asked for.
+    if (action === 'pay' && !(await billingAccess(decoded, orgId)).canManage) {
+      return res.status(403).json(billingManageRefusal())
+    }
 
     const billing: BillingDetails | null = customerId
       ? await readBillingDetails(secretKey, customerId)
@@ -331,7 +361,7 @@ export const payHandler: PluginApiHandler = async (req, res) => {
         : null
     if (needed || !customerId || !billing.paymentMethodId) {
       const access = await billingAccess(decoded, orgId)
-      const refusal = prerequisiteRefusal(needed ?? 'card_required', access.canManage)
+      const refusal = prerequisiteRefusal(needed ?? 'card_required', access.canManage, sale)
       return res.status(refusal.status).json(refusal.body)
     }
 
@@ -339,7 +369,7 @@ export const payHandler: PluginApiHandler = async (req, res) => {
       const priced = await priceSale(stripe, customerId, listingId, sale)
       if (priced === 'no-tax-location') {
         const access = await billingAccess(decoded, orgId)
-        const refusal = prerequisiteRefusal('billing_address_required', access.canManage)
+        const refusal = prerequisiteRefusal('billing_address_required', access.canManage, sale)
         return res.status(refusal.status).json(refusal.body)
       }
       if (!priced) {
@@ -355,6 +385,8 @@ export const payHandler: PluginApiHandler = async (req, res) => {
           // The card itself is billing's to show: someone who may buy but may
           // not see billing is told "the card on file" and nothing about it.
           card: access.canView ? billing.method : null,
+          // Whether \`pay\` would take this person's word for it.
+          canPay: access.canManage,
         },
       })
     }
@@ -465,7 +497,7 @@ export const payHandler: PluginApiHandler = async (req, res) => {
       await claim.release()
       if (finalized.payload?.error?.code === 'customer_tax_location_invalid') {
         const access = await billingAccess(decoded, orgId)
-        const refusal = prerequisiteRefusal('billing_address_required', access.canManage)
+        const refusal = prerequisiteRefusal('billing_address_required', access.canManage, sale)
         return res.status(refusal.status).json(refusal.body)
       }
       console.error('Marketplace invoice not finalized', finalized.payload?.error?.code ?? null)

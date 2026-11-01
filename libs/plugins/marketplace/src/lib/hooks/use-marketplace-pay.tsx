@@ -171,8 +171,15 @@ export function useMarketplacePay(input: {
 
   /** Moves to the step a prerequisite needs: a form here, or who can fix it. */
   const meetPrerequisite = useCallback(
-    async (need: PayPrerequisite, canManageBilling: boolean) => {
-      if (!canManageBilling) return setStep({ kind: 'ask-billing', need })
+    async (need: PayPrerequisite, answer: DoorAnswer) => {
+      if (answer.payload?.['canManageBilling'] !== true) {
+        const amountCents = answer.payload?.['amountCents']
+        return setStep({
+          kind: 'ask-billing',
+          need,
+          amountCents: typeof amountCents === 'number' ? amountCents : null,
+        })
+      }
       if (need === 'billing_address_required') return setStep({ kind: 'address' })
       setStep({ kind: 'card', clientSecret: null })
       try {
@@ -203,7 +210,7 @@ export function useMarketplacePay(input: {
       }
       const need = payPrerequisiteOf(answer.status, answer.payload)
       if (need) {
-        await meetPrerequisite(need, answer.payload?.['canManageBilling'] === true)
+        await meetPrerequisite(need, answer)
         return null
       }
       return {
@@ -329,7 +336,7 @@ export function useMarketplacePay(input: {
         return setError(refusalText(answer))
       }
       const need = payPrerequisiteOf(answer.status, answer.payload)
-      if (need) return await meetPrerequisite(need, answer.payload?.['canManageBilling'] === true)
+      if (need) return await meetPrerequisite(need, answer)
       setError(refusalText(answer))
     } catch (caught) {
       // No answer came back, so this attempt may still be running: the key

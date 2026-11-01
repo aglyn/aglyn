@@ -79,8 +79,13 @@ there, in **Create site**:
 If your workspace has no card on file, the form to add one opens in the same place, and
 then one for a billing address if there is none: sales tax is calculated from it. Both
 stay on file for the workspace under **Organization → Billing**, where you can change
-them. Adding them takes the **Manage billing** permission. Without it, the step says so
-and links to Billing, and someone who has it can add them.
+them. If the card is declined, nothing is charged: the step says why, with a link to
+Billing to change the card.
+
+Paying charges your workspace's card, so it takes the **Manage billing** permission as
+well as **Create sites**. Without it you still see the price, the sales tax and the total,
+but there is no **Pay**, and the step says someone who manages billing can buy it. Once
+they have, anyone who can create sites can use the starter.
 
 The starter belongs to your workspace once it is paid for, so creating another site from
 it later asks for nothing more. **Cancel** charges nothing, and **Buy and continue** is
@@ -111,8 +116,9 @@ changes the starter, and later changes to the starter never change your site.
 
 ## Who can use them {#who-can-use-them}
 
-Choosing a starter, and buying one, takes the **Create sites** permission, the same one
-creating any site does. Without it, **Create site** tells you so before anything is asked.
+Choosing a starter takes the **Create sites** permission, the same one creating any site
+does. Without it, **Create site** tells you so before anything is asked. Paying for one
+also takes **Manage billing**, as [A starter with a price](#a-starter-with-a-price) says.
 
 ## Publishing your own {#publishing-your-own}
 

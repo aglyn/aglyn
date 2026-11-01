@@ -66,6 +66,7 @@ const QUOTE = {
     taxCents: 66,
     totalCents: 1066,
     card: { type: 'card', brand: 'visa', last4: '4242' },
+    canPay: true,
   },
 }
 
@@ -225,6 +226,31 @@ describe('the total comes first', () => {
   })
 })
 
+describe('someone who may buy but not charge the card', () => {
+  it('sees the price and who can buy it, and no Pay button', async () => {
+    door = () => ({ status: 200, body: { quote: { ...QUOTE.quote, canPay: false, card: null } } })
+    const onResult = await open()
+    expect(await screen.findByText('$10.66')).toBeTruthy()
+    expect(screen.getByRole('alert').textContent).toContain('Ask someone who manages billing to buy it.')
+    expect(screen.getByRole('alert').textContent).toContain('permission')
+    expect(screen.queryByRole('button', { name: /^Pay/ })).toBeNull()
+    expect(screen.queryByText(/Charged to/)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(onResult).toHaveBeenCalledWith({ outcome: 'stopped', error: null }))
+    expect(payAttempts()).toEqual([])
+  })
+
+  it('keeps the price on screen when the workspace has no card either', async () => {
+    door = () => ({
+      status: 412,
+      body: { code: 'card_required', canManageBilling: false, amountCents: 1000 },
+    })
+    await open()
+    expect(await screen.findByText('$10.00')).toBeTruthy()
+    expect(screen.getByRole('alert').textContent).toContain('needs a card on file')
+  })
+})
+
 describe('paying', () => {
   it('sends the total the buyer saw, the GA client id and an attempt key', async () => {
     const onResult = await open()
@@ -354,7 +380,7 @@ describe('prerequisites are shown, never failed on', () => {
     return ({ action }) =>
       met && action === 'quote'
         ? { status: 200, body: QUOTE }
-        : { status: 412, body: { error: 'Add a card in Billing first', code, canManageBilling } }
+        : { status: 412, body: { error: 'Add a card in Billing first', code, canManageBilling, amountCents: 1000 } }
   }
 
   it('no card, and this person can add one: the card form opens in place', async () => {
@@ -401,15 +427,12 @@ describe('prerequisites are shown, never failed on', () => {
     expect(await screen.findByRole('button', { name: 'Pay $10.66' })).toBeTruthy()
   })
 
-  it('no card, and this person cannot add one: it says who can, and links Billing', async () => {
+  it('no card, and this person cannot add one: it says who can', async () => {
     door = needing('card_required', false)
     await open()
     const notice = await screen.findByRole('alert')
     expect(notice.textContent).toContain('needs a card on file')
     expect(notice.textContent).toContain('permission')
-    expect(screen.getByRole('button', { name: 'Open Billing' }).getAttribute('href')).toBe(
-      '/acme/billing',
-    )
     expect(billingCalls).toEqual([])
   })
 

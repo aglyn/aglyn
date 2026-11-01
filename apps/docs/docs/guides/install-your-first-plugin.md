@@ -164,9 +164,14 @@ A paid listing is bought first, and you pay right there on the listing. **Buy fo
 opens the price, the sales tax, the total and the card that will be charged, under the
 button. Choose **Pay** and your workspace's card on file is charged. If your bank wants
 to confirm the payment, its own step opens first. If the workspace has no card or billing
-address on file, you add them in the same place, which takes the **Manage billing**
-permission. The receipt is the invoice under **Organization → Billing → Invoices**, and
-the listing's button then reads **Install**.
+address on file, you add them in the same place. If the card is declined, nothing is
+charged: the step says why, with a link to Billing to change the card. The receipt is the
+invoice under **Organization → Billing → Invoices**, and the listing's button then reads
+**Install**.
+
+Paying charges the workspace's card, so it takes the **Manage billing** permission.
+Without it you still see the price, the sales tax and the total, but there is no **Pay**,
+and the step says someone who manages billing can buy it.
 
 Two things happen that are worth knowing:
 
