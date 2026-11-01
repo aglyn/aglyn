@@ -177,10 +177,14 @@ async function priceSale(
     }),
   )
   if (!calculation.ok) {
-    if (calculation.payload?.error?.code === 'customer_tax_location_invalid') {
+    // Measured: an address Stripe cannot place (a country and nothing else)
+    // answers a 400 on the `customer` param with no code. The invoice's own
+    // refusal, `customer_tax_location_invalid`, is the same fact.
+    const refused = calculation.payload?.error
+    if (refused?.code === 'customer_tax_location_invalid' || refused?.param === 'customer') {
       return 'no-tax-location'
     }
-    console.error('Stripe tax calculation failed', calculation.payload?.error?.code ?? null)
+    console.error('Stripe tax calculation failed', refused?.code ?? null)
     return null
   }
   return {

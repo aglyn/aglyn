@@ -419,14 +419,22 @@ describe('quote', () => {
     expect((await send({ action: 'quote' }, null)).statusCode).toBe(200)
   })
 
-  it('an address Stripe cannot place is billing_address_required', async () => {
-    world.calculation = {
-      ok: false,
-      body: { error: { code: 'customer_tax_location_invalid' } },
-    }
+  it.each([
+    ['names the code', { code: 'customer_tax_location_invalid' }],
+    // What test mode answers for a country and nothing else.
+    ['names the customer', { param: 'customer', type: 'invalid_request_error' }],
+  ])('an address Stripe cannot place, when it %s, is billing_address_required', async (_name, error) => {
+    world.calculation = { ok: false, body: { error } }
     const res = await send({ action: 'quote' })
     expect(res.statusCode).toBe(412)
     expect(res.body.code).toBe('billing_address_required')
+  })
+
+  it('any other refusal is a retry, not a thing to add', async () => {
+    world.calculation = { ok: false, body: { error: { code: 'tax_id_invalid' } } }
+    const res = await send({ action: 'quote' })
+    expect(res.statusCode).toBe(502)
+    expect(res.body.code).toBeUndefined()
   })
 })
 
