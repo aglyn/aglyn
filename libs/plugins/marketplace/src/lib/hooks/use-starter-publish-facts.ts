@@ -17,6 +17,7 @@
 'use client'
 
 import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console-routes'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { SITE_STARTER_MAX_SCREENS } from '@aglyn/aglyn/app-utils/site-starter'
 import {
   siteStarterBuiltinThemeOf,
@@ -28,11 +29,13 @@ import {
   useFirestoreCollection,
   useFirestoreDoc,
   usePlanFeature,
+  useUser,
 } from '@aglyn/tenant-feature-instance'
 import { collection, doc, documentId, query, where } from 'firebase/firestore'
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { orgMarketplacePath } from '../model/marketplace-paths'
 import {
+  payoutsReady,
   starterPublishPages,
   type StarterPublishFacts,
   type StarterPublishScreen,
@@ -90,6 +93,25 @@ export function useStarterPublishFacts(input: {
     [firestore, orgId],
   )
   const plan = usePlanFeature(hostId ?? undefined, 'marketplaceSelling')
+  // Asked only of a profile with no payout account: a publisher that has one
+  // has nothing the answer could change, and nearly every publisher does.
+  const { data: user } = useUser()
+  const [sellsAsPlatform, setSellsAsPlatform] = useState(false)
+  const needsStanding = Boolean(profile.data && !payoutsReady(profile.data))
+  useEffect(() => {
+    if (!needsStanding || !orgId || !user) return
+    let current = true
+    authorizedFetch(user, `/api/marketplace/publisher-standing?orgId=${encodeURIComponent(orgId)}`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((answer: { sellsAsPlatform?: unknown } | null) => {
+        if (current) setSellsAsPlatform(answer?.sellsAsPlatform === true)
+      })
+      // Not knowing leaves the payouts step up: the door has the last word.
+      .catch(() => undefined)
+    return () => {
+      current = false
+    }
+  }, [needsStanding, orgId, user])
   const route = useConsoleHostRoute(hostId)
 
   const hostReady = host.status === 'success'
@@ -101,6 +123,7 @@ export function useStarterPublishFacts(input: {
         plan,
         profile:
           profile.status === 'success' ? (profile.data ?? null) : undefined,
+        sellsAsPlatform,
         pages: pagesReady ? starterPublishPages(routing, screens.data) : null,
         marketplacePath: route.orgSlug ? orgMarketplacePath(route.orgSlug) : null,
         pagesPath:
@@ -111,7 +134,7 @@ export function useStarterPublishFacts(input: {
       builtin: hostReady ? siteStarterBuiltinThemeOf(host.data ?? null) : null,
       hostReady,
     }),
-    [plan, profile.status, profile.data, pagesReady, routing, screens.data, route.orgSlug, route.subdomain, hostReady, host.data],
+    [plan, profile.status, profile.data, sellsAsPlatform, pagesReady, routing, screens.data, route.orgSlug, route.subdomain, hostReady, host.data],
   )
 }
 

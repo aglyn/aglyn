@@ -33,6 +33,7 @@ import { publishPluginHandler } from './server/publish-plugin'
 import { verificationRequestHandler } from './server/verification-request'
 import { checkoutHandler } from './server/checkout'
 import { payHandler } from './server/pay'
+import { publisherStandingHandler } from './server/publisher-standing'
 import { connectHandler } from './server/connect'
 import { installHandler } from './server/install'
 import { installPluginHandler } from './server/install-plugin'
@@ -139,6 +140,7 @@ export function registerMarketplaceConsoleApi(): void {
   registerRevenueSource(marketplaceRevenueSource, { pluginId: BUNDLE_ID })
   registerPluginApiRoute('marketplace/checkout', checkoutHandler)
   registerPluginApiRoute('marketplace/pay', payHandler)
+  registerPluginApiRoute('marketplace/publisher-standing', publisherStandingHandler)
   registerPluginApiRoute('marketplace/connect', connectHandler)
   registerPluginApiRoute('marketplace/install', installHandler)
   registerPluginApiRoute('marketplace/install-plugin', installPluginHandler)

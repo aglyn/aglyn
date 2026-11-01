@@ -98,6 +98,11 @@ export interface StarterPublishFacts {
   pages: StarterPublishPages | null
   /** The price typed in the form, in whole dollars. */
   priceUsd: number
+  /**
+   * The server says this org is the platform at the staff fee waiver, so a
+   * price needs no payout account (AGL-4049). Only the server can say.
+   */
+  sellsAsPlatform?: boolean
   /** `/{org}/marketplace`, or `null` until the org's address is known. */
   marketplacePath: string | null
   /** The site's Pages list, or `null` until its address is known. */
@@ -117,7 +122,7 @@ const hasProfile = (profile: Record<string, unknown>) =>
  * world the account belongs to, which only the server knows, and says so if
  * that is what is missing.
  */
-const payoutsReady = (profile: Record<string, unknown>) =>
+export const payoutsReady = (profile: Record<string, unknown>) =>
   typeof profile['stripeAccountId'] === 'string' &&
   !!String(profile['stripeAccountId']).trim() &&
   profile['stripeChargesEnabled'] === true
@@ -145,7 +150,7 @@ export function starterPublishSteps(facts: StarterPublishFacts): StarterPublishS
       href: sectionOf(facts, 'profile'),
       actionLabel: 'Publisher Profile',
     })
-  } else if (profile && facts.priceUsd > 0 && !payoutsReady(profile)) {
+  } else if (profile && facts.priceUsd > 0 && !facts.sellsAsPlatform && !payoutsReady(profile)) {
     steps.push({
       id: 'payouts',
       text: 'Set up payouts first to sell a starter with a price, or publish it free.',

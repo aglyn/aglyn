@@ -101,6 +101,12 @@ describe('starterPublishSteps', () => {
     expect(ids({ ...READY, profile: { displayName: 'Acme' } })).toEqual(['profile'])
   })
 
+  it('asks the platform org at the staff waiver for no payouts (AGL-4049)', () => {
+    const profile = { handle: 'aglyn' }
+    expect(ids({ ...READY, profile, priceUsd: 29, sellsAsPlatform: true })).toEqual([])
+    expect(ids({ ...READY, profile, priceUsd: 29, sellsAsPlatform: false })).toEqual(['payouts'])
+  })
+
   it('asks for payouts only for a starter with a price, linking Marketplace → Payouts', () => {
     const unpaid = { ...READY, profile: { handle: 'acme' } }
     expect(ids(unpaid)).toEqual([])
