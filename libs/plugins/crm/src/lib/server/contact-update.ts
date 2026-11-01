@@ -82,6 +82,7 @@ import {
   type ContactCompanyLinkPlan,
   type ContactCustomValue,
   type ContactFieldDefinition,
+  ORG_CONTACT_HOLDER_ID,
   containerMembershipValue,
   contactContainerFieldPath,
   contactFacetPath,
@@ -96,6 +97,7 @@ import {
   judgeCrmPicklistValue,
   normalizeAddress,
   normalizeContactBirthdate,
+  normalizeContactEmail,
   normalizeCrmMediaIds,
   normalizeCrmPicklistLabel,
   normalizePhone,
@@ -113,6 +115,13 @@ import {
   resolveOrgMembership,
   restampCrmListFieldsOf,
 } from '@aglyn/tenant-data-admin'
+import { personKey } from '@aglyn/aglyn/app-utils/person-key'
+import { scheduleCapturedEmailCheck } from '@aglyn/tenant-data-admin/server/capture-email-check'
+import {
+  emailIndexBeside,
+  findContactByEmail,
+  writeContactEmailIndex,
+} from '@aglyn/tenant-data-admin/server/contact-email-index'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
   CONTACT_UPDATE_FIELDS,
@@ -187,8 +196,6 @@ export const CONTACT_EMAIL_TAKEN_REFUSAL =
 export const CONTACT_EMAIL_CHANGE_REFUSAL =
   'Every site shares this email, so changing it needs access to the whole workspace.'
 
-/** A contact read at the organization level that no site has captured. */
-const NO_HOLDER_REFUSAL = 'No site holds this contact yet, so it has no profile to edit.'
 
 /**
  * The act a request is refused for on a plan without the CRM: the first
@@ -729,6 +736,8 @@ export const crmContactUpdateHandler: PluginApiHandler = async (req, res) => {
     const writes: ContactWrite[] = []
     /** What the one contact answered to before an address change. */
     let previousEmail: string | null = null
+    /** Whether the row passed and its address really moves. */
+    let emailMoved = false
     const rows: Array<{
       contactId: string
       snapshot: FirebaseFirestore.DocumentSnapshot
@@ -751,12 +760,10 @@ export const crmContactUpdateHandler: PluginApiHandler = async (req, res) => {
         outcomes.set(contactId, refused(contactId, 'That contact is not visible to this site.'))
         return
       }
-      const group = siteGroup ?? contactPrimaryGroup(data, writer.org)
-      if (!group.groupId) {
-        outcomes.set(contactId, refused(contactId, NO_HOLDER_REFUSAL))
-        return
-      }
-      rows.push({ contactId, snapshot, data, groupId: group.groupId })
+      // A person no site holds has a profile too, kept for the org (AGL-4122).
+      const groupId =
+        (siteGroup ?? contactPrimaryGroup(data, writer.org)).groupId || ORG_CONTACT_HOLDER_ID
+      rows.push({ contactId, snapshot, data, groupId })
     })
 
     for (const { contactId, snapshot, data, groupId } of rows) {
@@ -810,7 +817,8 @@ export const crmContactUpdateHandler: PluginApiHandler = async (req, res) => {
        */
       if (fields.email) {
         previousEmail = normalizeContactEmail(data['email'])
-        if (previousEmail && previousEmail !== fields.email && scope.level === 'site' && !writer.staff && !isOrgWideMember(writer.member)) {
+        const replacing = previousEmail && previousEmail !== fields.email
+        if (replacing && scope.level === 'site' && !isOrgWideMember(writer.member)) {
           outcomes.set(contactId, refused(contactId, CONTACT_EMAIL_CHANGE_REFUSAL))
           continue
         }
@@ -821,8 +829,9 @@ export const crmContactUpdateHandler: PluginApiHandler = async (req, res) => {
         }
       }
       outcomes.set(contactId, { contactId, ok: true })
+      emailMoved = Boolean(fields.email) && fields.email !== previousEmail
       const update =
-        fields.email && fields.email !== previousEmail
+        emailMoved
           ? {
               ...patch.update,
               email: fields.email,
@@ -837,7 +846,7 @@ export const crmContactUpdateHandler: PluginApiHandler = async (req, res) => {
     }
 
     const failed = await commitContactWrites(firestore, writes)
-    if (fields.email && fields.email !== previousEmail && !failed.has(contactIds[0])) {
+    if (fields.email && emailMoved && !failed.has(contactIds[0])) {
       const index = emailIndexBeside(contacts)
       await writeContactEmailIndex(index, contactIds[0], [fields.email])
       // The old address stops resolving here: this person no longer answers to it.

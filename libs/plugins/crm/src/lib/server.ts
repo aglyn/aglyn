@@ -684,13 +684,12 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
         ...(companyId ? { companyId } : {}),
         ...(address ? { address } : {}),
         ...(ownerUid ? { ownerUid } : {}),
-        ...(rawStage && isContactLifecycleStage(rawStage)
-          ? { lifecycleStage: rawStage }
-          : {}),
         // Written nested into the capturing holder's facet by the upsert,
         // on a new person and on a merge alike.
         ...(custom && Object.keys(custom).length ? { custom } : {}),
     }
+    const stage =
+      rawStage && isContactLifecycleStage(rawStage) ? { lifecycleStage: rawStage } : {}
     // A site and an address are a capture. Anything less is the team adding a
     // person no capture door could take (AGL-4122).
     const captured = Boolean(hostId && email)
@@ -710,7 +709,8 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
           ...(marketingConsent && disclosedConsentGroup
             ? { disclosedConsentGroup }
             : {}),
-          facet,
+          // The door's stage is the one the drawer picked, or none at all.
+          facet: { ...facet, ...stage /* lifecycleStage */ },
         })
       : await addContactByHand({
           orgId: resolved.orgId,
@@ -720,6 +720,7 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
           ...(name ? { name } : {}),
           facet: {
             ...facet,
+            ...stage,
             ...(companyName ? { companyName } : {}),
           },
           tags,

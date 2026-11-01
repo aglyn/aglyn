@@ -30,6 +30,7 @@ import {
   crmDefaultScopeOf,
   crmNewRecordListFields,
   crmReadTokens,
+  createResourceUid,
   MARKETING_CONSENT_BY_HOST_FIELD,
   marketingConsentFieldsForGroup,
   marketingConsentFieldsForHost,
@@ -303,7 +304,8 @@ export async function addContactByHand(
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     }
-    const created = await contacts.add({
+    const created = contacts.doc(createResourceUid())
+    await created.set({
       ...record,
       ...crmNewRecordListFields('contacts', record),
     })

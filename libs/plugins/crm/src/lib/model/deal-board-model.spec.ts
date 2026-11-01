@@ -32,6 +32,8 @@ import {
   newStageId,
   parseAmountInput,
   removeStage,
+  renameStage,
+  settleStageNames,
   setStageProbability,
   setStageForecastCategory,
   stageRemovalRefusal,
@@ -303,5 +305,26 @@ describe('more than one pipeline (AGL-2620)', () => {
     const stages = document.stages as Array<{ id: string }>
     expect(stages.map((stage) => stage.id)).toEqual(DEFAULT_DEAL_STAGES.map((stage) => stage.id))
     expect(stages[0]).not.toBe(DEFAULT_DEAL_STAGES[0])
+  })
+})
+
+/** The space before a second word was eaten by a trim on every keystroke (AGL-4122). */
+describe('naming a stage as it is typed', () => {
+  const stages = [
+    { id: 'won', name: 'Closed', order: 0, probability: 100, kind: 'won' },
+  ] as Parameters<typeof renameStage>[0]
+
+  it('keeps what was typed, a trailing space included', () => {
+    expect(renameStage(stages, 'won', 'Closed ')[0].name).toBe('Closed ')
+    expect(renameStage(stages, 'won', 'Closed Won')[0].name).toBe('Closed Won')
+  })
+
+  it('lets the field be emptied, for the save to refuse', () => {
+    const emptied = renameStage(stages, 'won', '')
+    expect(emptied[0].name).toBe('')
+  })
+
+  it('stores the name tidied', () => {
+    expect(settleStageNames(renameStage(stages, 'won', '  Closed Won '))[0].name).toBe('Closed Won')
   })
 })

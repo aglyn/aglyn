@@ -311,7 +311,9 @@ describe('a stage move', () => {
     pickStage('Customer')
     save()
     await waitFor(() => expect(setContactStage).toHaveBeenCalledTimes(1))
-    expect(setContactStage).toHaveBeenCalledWith(USER, 'host-1', 'c1', 'customer')
+    expect(setContactStage).toHaveBeenCalledWith(USER, 'host-1', 'c1', 'customer', {
+      orgId: 'org-1',
+    })
     expect(order).toEqual(['profile', 'stage'])
     expect(profileSaves()[0].payload['set']).not.toHaveProperty('lifecycleStage')
     expect(writes).toEqual([])
@@ -337,20 +339,16 @@ describe('a stage move', () => {
     expect(notices.map((notice) => notice.message)).not.toContain('Contact saved')
   })
 
-  /** "Contact saved" over a change that went nowhere (AGL-4120). */
-  it('says so when no site holds the stage, rather than reading as saved', async () => {
+  /** A person no site holds is staged at the organization (AGL-4122). */
+  it('goes to the organization when no site holds the person', async () => {
     renderCard({}, false, true)
     pickStage('Customer')
     save()
+    await waitFor(() => expect(setContactStage).toHaveBeenCalledTimes(1))
+    expect(setContactStage).toHaveBeenCalledWith(USER, null, 'c1', 'customer', { orgId: 'org-1' })
     await waitFor(() =>
-      expect(notices).toContainEqual({
-        message:
-          'Saved, but the stage could not be changed: no site has captured this contact yet.',
-        variant: 'warning',
-      }),
+      expect(notices).toContainEqual({ message: 'Contact saved', variant: 'success' }),
     )
-    expect(setContactStage).not.toHaveBeenCalled()
-    expect(notices.map((notice) => notice.message)).not.toContain('Contact saved')
   })
 })
 
@@ -360,7 +358,7 @@ describe('a cleared stage', () => {
     pickStage('Not placed yet')
     save()
     await waitFor(() => expect(setContactStage).toHaveBeenCalledTimes(1))
-    expect(setContactStage).toHaveBeenCalledWith(USER, 'host-1', 'c1', null)
+    expect(setContactStage).toHaveBeenCalledWith(USER, 'host-1', 'c1', null, { orgId: 'org-1' })
     expect(order).toEqual(['profile', 'stage'])
     expect(writes).toEqual([])
   })
