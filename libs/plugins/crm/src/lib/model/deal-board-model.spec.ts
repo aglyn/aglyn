@@ -33,12 +33,12 @@ import {
   parseAmountInput,
   removeStage,
   renameStage,
-  settleStageNames,
   setStageProbability,
   setStageForecastCategory,
   stageRemovalRefusal,
   stagesProblem,
 } from './deal-board-model'
+import { settleStageNames } from './settle-stage-names'
 
 const pipeline = { stages: [...DEFAULT_DEAL_STAGES] }
 

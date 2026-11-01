@@ -165,8 +165,7 @@ export const CONTACT_TRANSFER_FIELDS: readonly TransferField[] = [
     type: 'email',
     matchKey: true,
     aliases: ['email address', 'e-mail', 'e-mail address', 'contact email', 'primary email', 'work email'],
-    description:
-      'Optional. A row with an email merges into the contact who has it. A row with only a name or phone number needs no email.',
+    description: 'Optional. A row with one merges into the contact who has it.',
   },
   {
     id: 'name',

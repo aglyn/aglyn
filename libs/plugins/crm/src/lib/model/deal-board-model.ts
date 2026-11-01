@@ -445,11 +445,6 @@ export function renameStage(
   return stages.map((stage) => (stage.id === stageId ? { ...stage, name: typed } : stage))
 }
 
-/** The stages as they are stored: every name trimmed, as a save writes them. */
-export function settleStageNames(stages: readonly CrmDealStage[]): CrmDealStage[] {
-  return stages.map((stage) => ({ ...stage, name: stage.name.trim() }))
-}
-
 /**
  * Set an OPEN stage's probability. Won is 100 and Lost is 0 by definition —
  * `weightedDealAmountCents` reads the status before the stage, so a Won
