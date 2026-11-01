@@ -2832,10 +2832,12 @@ built page against what the reader read of its source.
   colors and fonts and the credits per arranged and copied page, which is where
   `AI_MEASURED_IMPORT_CREDITS` is read from. A page's source is the job's own
   read while it holds one; the job empties a read once its page is in, so
-  otherwise the page is read again from the source site as a wave reads it, or
-  from saved files with `--source <path>=<file>`. `--page <path>` narrows it,
-  `--job <id>` names the import, `--json <file>` keeps every number. Pages it
-  could not score are listed with why. It exits 1 when anything is below the bar.
+  otherwise the page is read again from the source site as a wave reads it (a
+  source this platform serves needs `SITE_IMPORT_EDGE_TOKEN` for that, as a
+  crawl does), or from saved files with `--source <path>=<file>`.
+  `--page <path>` narrows it, `--job <id>` names the import, `--json <file>`
+  keeps every number. Pages it could not score are listed with why. It exits 1
+  when anything is below the bar.
 
 ## The theme kind
 

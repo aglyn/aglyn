@@ -45,7 +45,10 @@
  * Against production, run it from the repo root with the Admin SDK's
  * credentials in the environment (`set -a; . ./.env; set +a`). With
  * `FIRESTORE_EMULATOR_HOST` set, it reads the emulator instead, in the project
- * `GCLOUD_PROJECT` names.
+ * `GCLOUD_PROJECT` names. A source this platform serves (aglyn.com) answers
+ * AglynBot only with `SITE_IMPORT_EDGE_TOKEN` in the environment, as a crawl
+ * does (`site-import-edge.ts`); without it the edge challenges the read, and
+ * its pages are listed as not scored until they are given with `--source`.
  *
  * It exits 0 when everything scored holds the bar, 1 when something does not,
  * and 2 when it could not report.
@@ -448,7 +451,7 @@ async function hostReportFrom(db: Dict, load: (file: string) => Promise<Dict>, a
     for (const page of toRead) {
       const read = again.get(page.slot)
       if (read && typeof read !== 'string') reads.set(page.slot, read)
-      else left.push({ page: page.path, why: `its source could not be read again (${read ?? crawled.stoppedBy ?? 'not reached'})` })
+      else left.push({ page: page.path, why: `its source could not be read again (${read ?? crawled.stoppedBy ?? 'not reached'})${args.sources.size ? '' : ': a source this platform serves needs SITE_IMPORT_EDGE_TOKEN, or give the page with --source'}` })
     }
   }
 
