@@ -691,8 +691,9 @@ investigating.
 
 The **Install** card on a listing's detail page is where an install happens: choose
 where it lands — all sites, selected sites, or the whole organization for a plugin —
-then confirm. A paid listing asks for the purchase first, and the same card offers
-**Uninstall** (or **Uninstall org-wide**) once it is installed.
+then confirm. A paid listing asks for the purchase first, paid on that card with the
+workspace's card on file, and the same card offers **Uninstall** (or **Uninstall
+org-wide**) once it is installed.
 
 ### Installed from the marketplace {#installed-from-the-marketplace}
 

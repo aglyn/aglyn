@@ -66,17 +66,30 @@ Where **Start your site** is offered, **Choose your starter** has two tabs:
 
 ## A starter with a price {#a-starter-with-a-price}
 
-A card with a price says so when you pick it, with **Buy and continue**:
+A card with a price says so when you pick it, with **Buy and continue**. You pay right
+there, in **Create site**:
 
-1. Choose **Buy and continue**. The payment page opens.
-2. Pay. You come back to **Create site** with the same starter picked and **You own this
-   starter** beneath the cards.
+1. Choose **Buy and continue**. The price, the sales tax, the total and the card that
+   will be charged open under the cards. Nothing is charged yet.
+2. Choose **Pay**. Your workspace's card on file is charged, and **You own this starter**
+   appears beneath the cards. If your bank wants to confirm the payment, its own step
+   opens first.
 3. Choose **Create site**.
 
+If your workspace has no card on file, the form to add one opens in the same place, and
+then one for a billing address if there is none: sales tax is calculated from it. Both
+stay on file for the workspace under **Organization → Billing**, where you can change
+them. Adding them takes the **Manage billing** permission. Without it, the step says so
+and links to Billing, and someone who has it can add them.
+
 The starter belongs to your workspace once it is paid for, so creating another site from
-it later asks for nothing more. If you come back without paying, the starter is still
-picked, and **Buy and continue** is there again. A starter you already own says **You own
-this starter** as soon as you pick it.
+it later asks for nothing more. **Cancel** charges nothing, and **Buy and continue** is
+there again. A starter you already own says **You own this starter** as soon as you pick
+it.
+
+The receipt is the invoice under **Organization → Billing → Invoices**. To ask for a
+refund, contact [support](../../workspace-and-billing/support-and-community.md), as for
+any marketplace purchase.
 
 ## What your site gets {#what-your-site-gets}
 

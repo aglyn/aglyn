@@ -33,7 +33,7 @@ It also registers a `rating` custom field type (`registerCustomFieldType`) with 
 - Install: `marketplace/install`, `install-plugin`, `install-layout`, `install-template`, `install-theme`, `install-dataset-schema`, `install-email-starter`, `install-email-template`, and `update-artifact` for reconciling an installed copy with a newer published version.
 - Publish: `marketplace/publish`, `publish-plugin`, `publish-layout`, `publish-template`, `publish-theme`, `publish-dataset-schema`, `publish-email-starter`, `publish-email-template`, `publisher-profile`, `verification-request`.
 - Listings: `marketplace/listing-versions`, `preview-image`, `reviews`, `report`.
-- Paid listings: `marketplace/checkout` and `marketplace/connect`, plus a handler on the platform billing webhook (`registerBillingWebhookHandler`).
+- Paid listings: `marketplace/pay` (in the console, on the workspace's card on file), `marketplace/checkout` (the hosted page, kept for what still links to it), `marketplace/connect` and `marketplace/publisher-standing`, plus a handler on the platform billing webhook (`registerBillingWebhookHandler`).
 
 The server entry also registers the server side of the `rating` field type, so its validators run on write paths where no client loaded the plugin.
 
