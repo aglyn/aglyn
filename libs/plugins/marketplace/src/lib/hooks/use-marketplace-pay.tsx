@@ -294,7 +294,7 @@ export function useMarketplacePay(input: {
         listing,
         {
           expectedTotalCents: step.quote.totalCents,
-          gaClientId: await readGaClientId(process.env['NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID']),
+          gaClientId: await readGaClientId(process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID),
         },
         key,
       )
