@@ -58,6 +58,25 @@ jest.mock('../hooks/use-crm-picklist', () => {
   }
 })
 
+function renderDrawer(hostId: string | null = 'site-a', org: Record<string, unknown> = {}) {
+  const onSubmit = jest.fn()
+  render(
+    <NewContactDrawer
+      open
+      onClose={() => undefined}
+      hostId={hostId}
+      org={org}
+      owners={[]}
+      ownersReady
+      onSubmit={onSubmit}
+    />,
+  )
+  return onSubmit
+}
+const addContact = () => fireEvent.click(screen.getByRole('button', { name: 'Add contact' }))
+const typeInto = (label: string | RegExp, value: string) =>
+  fireEvent.change(screen.getByLabelText(label), { target: { value } })
+
 const GROUPED = {
   consentGroups: { nw: { name: 'Northwind', hostIds: ['site-a', 'site-b'] } },
 }
@@ -87,6 +106,47 @@ function submitWith(
   expect(onSubmit).toHaveBeenCalledTimes(1)
   return onSubmit.mock.calls[0][0] as NewContactValues
 }
+
+/** A contact needs a name, an email or a number, and any one will do (AGL-4122). */
+describe('who a contact needs to be', () => {
+  it('takes a name with no email', () => {
+    const onSubmit = renderDrawer()
+    typeInto('First name', 'Jordan')
+    addContact()
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({ email: '', name: 'Jordan' })
+  })
+
+  it('takes a phone number with no name and no email', () => {
+    const onSubmit = renderDrawer()
+    typeInto('Mobile phone', '(512) 555-0101')
+    addContact()
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({ email: '', mobilePhone: '+15125550101' })
+  })
+
+  it('says so when there is nothing to call them by', () => {
+    const onSubmit = renderDrawer()
+    addContact()
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(screen.getByText('Enter a name, an email or a phone number.')).toBeTruthy()
+  })
+
+  it('still refuses an address that is not one', () => {
+    const onSubmit = renderDrawer()
+    typeInto(/Email/, 'not an address')
+    addContact()
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(screen.getByText('Enter a valid email address.')).toBeTruthy()
+  })
+
+  it('offers no marketing opt-in without an address to send it to', () => {
+    renderDrawer()
+    const box = screen.getByLabelText('This person opted in to marketing email') as HTMLInputElement
+    expect(box.disabled).toBe(true)
+    typeInto(/Email/, 'ann@example.com')
+    expect(box.disabled).toBe(false)
+  })
+})
 
 describe('the consent box on a grouped site', () => {
   it('shows the group’s sentence and hands over the key of that sentence', () => {

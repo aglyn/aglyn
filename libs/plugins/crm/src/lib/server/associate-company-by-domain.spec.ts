@@ -247,8 +247,8 @@ describe('associateCompanyByDomain', () => {
     expect(docs.get(CONTACT)?.companyIds).toBeUndefined()
   })
 
-  it('creates the company from the domain when the org has switched that on, in one commit', async () => {
-    mockOrg = { crm: { autoCreateCompanies: true } }
+  it('creates the company from the domain when the org has switched that on, in one commit, scoped to the site when the org keeps its sites apart', async () => {
+    mockOrg = { crm: { autoCreateCompanies: true, defaultRecordScope: 'host' } }
 
     const outcome = await associateCompanyByDomain(created)
 

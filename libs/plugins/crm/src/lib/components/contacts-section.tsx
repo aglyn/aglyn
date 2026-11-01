@@ -800,7 +800,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
       setCreateError(null)
       try {
         const { response, payload } = await crmApi('contacts-create', {
-          email: values.email,
+          ...(values.email ? { email: values.email } : {}),
           ...(values.name ? { name: values.name } : {}),
           // Salesforce's standard fields (AGL-3515), each only when given.
           ...(values.salutation ? { salutation: values.salutation } : {}),
@@ -883,7 +883,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
             action: (
               <CrmListActions>
                 {suiteIncluded ? (
-                  <CrmImportButton resource={CRM_CONTACTS_RESOURCE} noun="contacts" hostId={hostId} mappingZone="contacts" />
+                  <CrmImportButton resource={CRM_CONTACTS_RESOURCE} noun="contacts" hostId={hostId} mappingZone="contacts" siteOptional={!crmScope.createNeedsSite} />
                 ) : (
                   <CrmSuiteLockedButton>{'Import'}</CrmSuiteLockedButton>
                 )}
@@ -1069,7 +1069,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                       >
                         {'New contact'}
                       </Button>
-                      <CrmImportButton resource={CRM_CONTACTS_RESOURCE} noun="contacts" hostId={hostId} mappingZone="contacts" />
+                      <CrmImportButton resource={CRM_CONTACTS_RESOURCE} noun="contacts" hostId={hostId} mappingZone="contacts" siteOptional={!crmScope.createNeedsSite} />
                     </Stack>
                   )
                 }

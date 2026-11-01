@@ -168,7 +168,8 @@ describe('RecordActivityCard (AGL-2600)', () => {
         kind: 'call',
         body: 'Toured the roastery',
         companyId: 'co-1',
-        visibleTo: ['host:host-1'],
+        // The org has chosen no default, so the entry is the whole org's.
+        visibleTo: ['org'],
         hostId: 'host-1',
         byUid: 'u-1',
         byName: 'Ada Admin',

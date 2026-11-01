@@ -183,7 +183,7 @@ export type ContactProfileInput = UpsertHostContactFacet
  * left them. An address given as `null` is a deliberate clearing and is kept
  * as `null`; one that normalizes to nothing is the same thing.
  */
-function storableProfile(input: ContactProfileInput | undefined): {
+export function storableProfile(input: ContactProfileInput | undefined): {
   phone?: string
   jobTitle?: string
   leadSource?: string

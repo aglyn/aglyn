@@ -118,6 +118,9 @@ function seedOrg(extra: Data = {}) {
   })
 }
 
+/** The agency's opt-in: each site's records kept apart, so the declared group decides. */
+const KEEPS_SITES_APART: Data = { crm: { defaultRecordScope: 'host' } }
+
 const writer = createCrmRecordTimelineWriter({ firestore: () => mockFirestore as never })
 
 const INBOUND: PluginRecordActivityRequest = {
@@ -166,7 +169,8 @@ describe('the CRM on the record-timeline seam (AGL-2981)', () => {
     expect(pluginRecordTimelineWriter()?.pluginId).toBe('crm')
   })
 
-  it("files an email under the capture address's id for its Message-ID, scoped like a record of the site", async () => {
+  it("files an email under the capture address's id for its Message-ID, scoped like a record of the site when the org keeps its sites apart", async () => {
+    seedOrg(KEEPS_SITES_APART)
     const result = await writer.logActivity(INBOUND)
     const ref = crmCapturedEmailActivityRef(
       mockFirestore as never,
@@ -339,7 +343,9 @@ describe('the CRM on the record-timeline seam (AGL-2981)', () => {
       sourcePluginId: 'outreach',
       contactId: 'contact-1',
       hostId: HOST,
-      visibleTo: ['host:host-1', 'host:host-2'],
+      // The org has chosen no default, so the task is the whole org's even
+      // though the site sits in a declared group.
+      visibleTo: ['org'],
     })
     // The records it names learn their next task once, for the one it made.
     expect(mockRecompute).toHaveBeenCalledTimes(1)

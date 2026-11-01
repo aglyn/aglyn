@@ -147,6 +147,23 @@ const firestoreHandle = {
   },
 }
 
+/** Who the address index says an email belongs to (AGL-4122). */
+let mockEmailHolder: { id: string } | null = null
+const mockIndexed: Array<[string, string[]]> = []
+const mockRetired: string[] = []
+
+jest.mock('@aglyn/tenant-data-admin/server/contact-email-index', () => ({
+  emailIndexBeside: () => ({
+    doc: (key: string) => ({ delete: async () => void mockRetired.push(key) }),
+  }),
+  findContactByEmail: async () => mockEmailHolder,
+  writeContactEmailIndex: async (_index: unknown, id: string, emails: string[]) =>
+    void mockIndexed.push([id, emails]),
+}))
+jest.mock('@aglyn/tenant-data-admin/server/capture-email-check', () => ({
+  scheduleCapturedEmailCheck: () => undefined,
+}))
+
 jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
   FieldValue: {
@@ -195,7 +212,11 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   }
 })
 
-import { crmContactUpdateHandler } from './contact-update'
+import {
+  CONTACT_EMAIL_CHANGE_REFUSAL,
+  CONTACT_EMAIL_TAKEN_REFUSAL,
+  crmContactUpdateHandler,
+} from './contact-update'
 
 const ORG_ID = 'org-1'
 const HOST = 'host-1'
@@ -380,9 +401,12 @@ describe('the gate', () => {
     const tooMany = Array.from({ length: 201 }, (_, index) => `c${index}`)
     expect((await post(onSite({ notes: 'x' }, tooMany))).status).toBe(400)
     expect((await post(onSite({}))).status).toBe(400)
-    const unknown = await post(onSite({ email: 'moved@example.test' }))
+    const unknown = await post(onSite({ nickname: 'Sam' }))
     expect(unknown.status).toBe(400)
-    expect(unknown.payload.error).toMatch(/email/)
+    expect(unknown.payload.error).toMatch(/nickname/)
+    const badEmail = await post(onSite({ email: 'not an address' }))
+    expect(badEmail.status).toBe(400)
+    expect(badEmail.payload.error).toMatch(/valid email/)
     const phone = await post(onSite({ phone: 'call me maybe' }))
     expect(phone.status).toBe(400)
     expect(phone.payload.error).toMatch(/phone number could not be read/)
@@ -675,6 +699,66 @@ describe('the write', () => {
   })
 })
 
+/** An email can come after the person does (AGL-4122). */
+describe('the address', () => {
+  const blank = () => {
+    store[`${CONTACTS}/ada`] = { ...store[`${CONTACTS}/ada`], email: '' }
+  }
+  beforeEach(() => {
+    mockEmailHolder = null
+    mockIndexed.length = 0
+    mockRetired.length = 0
+  })
+
+  it('fills in a blank, and the address then resolves to this person', async () => {
+    blank()
+    const { payload } = await post(onSite({ email: 'Ada@Example.com' }))
+    expect(payload.results).toEqual([{ contactId: 'ada', ok: true }])
+    expect(store[`${CONTACTS}/ada`].email).toBe('ada@example.com')
+    expect(mockIndexed).toEqual([['ada', ['ada@example.com']]])
+    expect(mockRetired).toEqual([])
+  })
+
+  it('replaces an address, and the old one stops resolving here', async () => {
+    store[`${CONTACTS}/ada`] = { ...store[`${CONTACTS}/ada`], email: 'old@example.com' }
+    const { payload } = await post(onSite({ email: 'new@example.com' }))
+    expect(payload.results).toEqual([{ contactId: 'ada', ok: true }])
+    expect(store[`${CONTACTS}/ada`].email).toBe('new@example.com')
+    expect(mockIndexed).toEqual([['ada', ['new@example.com']]])
+    expect(mockRetired).toHaveLength(1)
+  })
+
+  it('refuses an address another contact has, and writes nothing', async () => {
+    blank()
+    mockEmailHolder = { id: 'someone-else' }
+    const { payload } = await post(onSite({ email: 'taken@example.com' }))
+    expect(payload.results).toEqual([
+      { contactId: 'ada', ok: false, error: CONTACT_EMAIL_TAKEN_REFUSAL },
+    ])
+    expect(contactWrites).toEqual([])
+    expect(mockIndexed).toEqual([])
+  })
+
+  it('lets a site collaborator fill in a blank, but not replace what every site shares', async () => {
+    caller = { uid: 'scoped-uid' }
+    blank()
+    const filled = await post(onSite({ email: 'ada@example.com' }))
+    expect(filled.payload.results).toEqual([{ contactId: 'ada', ok: true }])
+
+    const replaced = await post(onSite({ email: 'other@example.com' }))
+    expect(replaced.payload.results).toEqual([
+      { contactId: 'ada', ok: false, error: CONTACT_EMAIL_CHANGE_REFUSAL },
+    ])
+    expect(store[`${CONTACTS}/ada`].email).toBe('ada@example.com')
+  })
+
+  it('names one contact at a time', async () => {
+    const { status } = await post(onSite({ email: 'ada@example.com' }, ['ada', 'theirs']))
+    expect(status).toBe(400)
+    expect(contactWrites).toEqual([])
+  })
+})
+
 describe('the scope', () => {
   it('refuses a contact this site cannot see, and one that is gone, each on its own row', async () => {
     const { status, payload } = await post(onSite({ notes: 'x' }, ['ada', 'theirs', 'gone']))
@@ -707,14 +791,11 @@ describe('the organization variant', () => {
     expect(status).toBe(200)
     expect(payload.results).toEqual([
       { contactId: 'theirs', ok: true },
-      {
-        contactId: 'nobody',
-        ok: false,
-        error: 'No site holds this contact yet, so it has no profile to edit.',
-      },
+      // A person no site holds has a profile too, kept for the org (AGL-4122).
+      { contactId: 'nobody', ok: true },
     ])
     expect(facetOf('theirs', OTHER_HOST).notes).toBe('Seen from the org')
-    expect(contact('nobody')).not.toHaveProperty('facets')
+    expect(contact('nobody').facets).toEqual({ org: { notes: 'Seen from the org' } })
   })
 
   it('refuses a site collaborator the organization level', async () => {

@@ -848,13 +848,20 @@ describe('isPublicMailboxDomain', () => {
  * `upsert-contact.ts` takes.
  */
 describe('crmScopeTokens', () => {
-  it('stamps this site alone when the site pools with nobody', () => {
-    expect(crmScopeTokens({}, soloConsentGroup('host-a'))).toEqual(['host:host-a'])
+  it('stamps the whole org for an org that has not chosen, and the site while the org is unknown', () => {
+    expect(crmScopeTokens({}, soloConsentGroup('host-a'))).toEqual(['org'])
+    // No org document yet: the site the record came in on, never everyone.
     expect(crmScopeTokens(null, soloConsentGroup('host-a'))).toEqual(['host:host-a'])
   })
 
-  it('stamps every site of a declared group', () => {
+  it('stamps this site alone when the org keeps its sites apart and the site pools with nobody', () => {
+    const org = { crm: { defaultRecordScope: 'host' } }
+    expect(crmScopeTokens(org, soloConsentGroup('host-a'))).toEqual(['host:host-a'])
+  })
+
+  it('stamps every site of a declared group when the org keeps its sites apart', () => {
     const org = {
+      crm: { defaultRecordScope: 'host' },
       consentGroups: { brand: { name: 'Brand', hostIds: ['host-b', 'host-a'] } },
     }
     expect(crmScopeTokens(org, consentGroupForHost(org, 'host-a'))).toEqual([
@@ -863,9 +870,8 @@ describe('crmScopeTokens', () => {
     ])
   })
 
-  it("stamps the whole org only when the org has chosen that default", () => {
+  it('reads the dataset default when the CRM has none of its own', () => {
     expect(crmScopeTokens({ defaultResourceScope: 'org' }, soloConsentGroup('host-a'))).toEqual(['org'])
-    // The other value of the same field is the narrow answer, not a third.
     expect(crmScopeTokens({ defaultResourceScope: 'host' }, soloConsentGroup('host-a'))).toEqual(['host:host-a'])
   })
 
@@ -882,14 +888,19 @@ describe('crmScopeTokens', () => {
 })
 
 describe('crmDefaultScopeOf (AGL-3662)', () => {
-  it('is the CRM value when set, the dataset value until then, else undefined', () => {
+  it('is the CRM value when set, the dataset value until then, else the whole org', () => {
     expect(crmDefaultScopeOf({ crm: { defaultRecordScope: 'org' } })).toBe('org')
     expect(crmDefaultScopeOf({ defaultResourceScope: 'org' })).toBe('org')
+    expect(crmDefaultScopeOf({ defaultResourceScope: 'host' })).toBe('host')
     expect(crmDefaultScopeOf({ defaultResourceScope: 'org', crm: { defaultRecordScope: 'host' } })).toBe('host')
-    expect(crmDefaultScopeOf({})).toBeUndefined()
+    expect(crmDefaultScopeOf({})).toBe('org')
+    // A value the select cannot write is not a choice, so the default stands.
+    expect(crmDefaultScopeOf({ crm: { defaultRecordScope: 'everyone' } })).toBe('org')
+  })
+
+  it('has no answer with no org document to read', () => {
     expect(crmDefaultScopeOf(null)).toBeUndefined()
-    // A value the select cannot write is not a choice.
-    expect(crmDefaultScopeOf({ crm: { defaultRecordScope: 'everyone' } })).toBeUndefined()
+    expect(crmDefaultScopeOf(undefined)).toBeUndefined()
   })
 })
 

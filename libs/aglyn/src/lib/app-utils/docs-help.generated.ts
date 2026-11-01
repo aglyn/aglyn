@@ -627,7 +627,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   catalog: ['#products-options-and-variants', '#more-than-100-combinations', '#add-ons', '#price-by-size', '#add-ons-on-the-product-page', '#sell-in-person-only', '#offer-on-the-kiosk', '#billing-modes-and-subscriptions', '#ai', '#categories-and-tags', '#collections', '#product-reviews', '#show-reviews', '#review-settings', '#review-moderation', '#slugs', '#merchant-center-feed', '#related'],
   commerce: ['#products-hub', '#inventory', '#inventory-locations', '#reserved-stock', '#stock-movements', '#gift-cards', '#recovery-and-alerts', '#orders', '#orders-screen', '#order-statuses', '#order-money-tiles', '#a-lost-dispute', '#payment-methods', '#shipping--taxes', '#tax-settings', '#lodging-tax-on-reservations', '#storefront-sales-tax', '#destination-coverage', '#pickup-and-local-delivery', '#dropshipping', '#store-settings', '#discounts-and-coupons', '#discounts', '#coupons', '#commerce-glance', '#commerce-analytics', '#related'],
   commerceEndToEnd: ['#1-connect-payments', '#2-create-products', '#3-design-the-storefront', '#catalog-search-filters-and-sort', '#category-pages', '#the-product-page-template', '#4-what-checkout-does', '#paying-without-leaving-your-site', '#5-run-orders-from-the-console', '#6-subscriptions--the-stripe-portal', '#member-updates', '#related'],
-  companies: ['#the-companies-list', '#create-a-company', '#the-lists-behind-the-choices', '#a-companys-page', '#contacts-at-a-company', '#linked-on-capture', '#import', '#export', '#deleting-a-company', '#who-can-see-a-company', '#files', '#related'],
+  companies: ['#the-companies-list', '#create-a-company', '#the-lists-behind-the-choices', '#a-companys-page', '#contact-roles', '#contacts-at-a-company', '#linked-on-capture', '#import', '#export', '#deleting-a-company', '#who-can-see-a-company', '#files', '#related'],
   connectOtherAccounting: ['#before-you-start', '#connect', '#choose-your-books', '#choose-your-accounts', '#what-is-posted', '#sales-before-you-connected', '#when-something-does-not-post', '#disconnect', '#related'],
   connectQuickbooksOnline: ['#before-you-start', '#connect', '#choose-your-accounts', '#what-is-posted', '#sales-tax-collected-by-aglyn', '#one-summary-a-day-instead', '#currency', '#sales-before-you-connected', '#when-something-does-not-post', '#disconnect'],
   connectXero: ['#before-you-start', '#connect', '#choose-an-organization', '#choose-your-accounts', '#what-is-posted', '#sales-tax-collected-by-aglyn', '#one-summary-a-day-instead', '#currency', '#sales-before-you-connected', '#when-something-does-not-post', '#disconnect'],
@@ -918,6 +918,7 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
   },
   companies: {
     '#a-companys-page': 'A company\'s page',
+    '#contact-roles': 'Contact roles',
     '#contacts-at-a-company': 'Contacts at a company',
     '#create-a-company': 'Create a company',
     '#the-companies-list': 'The companies list',

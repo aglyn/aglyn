@@ -231,7 +231,8 @@ describe('the campaign', () => {
     /*
      * And each lead's Activity says so (AGL-3274): one "Filed under" per
      * lead, named, by the member, into the org's activity collection with
-     * the site's scope — after the batch, never in it.
+     * the scope a record made on the site carries — the whole org's, as this
+     * org has chosen no default — after the batch, never in it.
      */
     await waitFor(() => expect(filings()).toHaveLength(2))
     const adds = filings()
@@ -242,7 +243,7 @@ describe('the campaign', () => {
     expect(adds[0].data).toMatchObject({
       kind: 'note',
       hostId: 'site-1',
-      visibleTo: ['host:site-1'],
+      visibleTo: ['org'],
       byUid: 'uid-a',
       byName: 'Ada Lovelace',
       sourcePluginId: 'crm',
@@ -272,7 +273,7 @@ describe('the campaign', () => {
     expect(filings()).toEqual([])
   })
 
-  it("offers the org's campaigns at the organization level, filing each lead as its own site", async () => {
+  it("offers the org's campaigns at the organization level, filing each lead as its own site when the org keeps its sites apart", async () => {
     render(
       <LeadsBulkBar
         rows={[
@@ -284,7 +285,9 @@ describe('the campaign', () => {
         roster={roster}
         orgId="org-1"
         hostId={null}
-        org={{}}
+        // Kept apart, each site's stamp is its own, so the filings below
+        // show which site each lead was filed as.
+        org={{ crm: { defaultRecordScope: 'host' } }}
       />,
     )
     fireEvent.click(screen.getByRole('button', { name: 'Add to campaign' }))

@@ -21,30 +21,10 @@ import {
   CRM_COLLECTIONS,
   type CrmDealContactRole,
   dealContactRolesOf,
-  dealContactRolesWithout,
-  dealContactRolesWithPrimary,
   pluginDocsHelp,
 } from '@aglyn/aglyn'
-import { mdiAccountPlusOutline, mdiAccountRemoveOutline } from '@aglyn/shared-data-mdi'
-import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
-import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useFirestore, writeGuardedBySeed } from '@aglyn/tenant-feature-instance'
-import {
-  Box,
-  Button,
-  Checkbox,
-  Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  FormControlLabel,
-  IconButton,
-  Stack,
-  Tooltip,
-  Typography,
-} from '@mui/material'
 import { deleteField, doc, updateDoc } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
 import { useCrmPicklist } from '../hooks/use-crm-picklist'
@@ -53,14 +33,8 @@ import { type CrmOrgDoc, useCrmScope } from '../hooks/use-crm-scope'
 import { CRM_DEAL_CONTACT_ROLE_LIST_FIELDS, crmClientListFields } from '../model/crm-list-query'
 import type { CrmRoutes } from '../model/crm-routes'
 import type { DealDoc } from '../model/deal-board-model'
-import {
-  dealContactRoleAddProblem,
-  dealContactRolesAdded,
-  dealContactRolesSave,
-  dealContactRolesWithRole,
-} from '../model/deal-contact-roles'
-import CrmRecordPicker from './crm-record-picker'
-import { CrmPicklistSelect } from './picklist-select'
+import { dealContactRolesSave } from '../model/deal-contact-roles'
+import { ContactRolesEditor } from './contact-roles-editor'
 
 export interface DealContactRolesCardProps {
   deal: DealDoc
@@ -152,206 +126,25 @@ export function DealContactRolesCard(props: DealContactRolesCardProps) {
     [scope.orgId, deal, roleList.picklist, nameOf, unreadable, fromCache, firestore, enqueueSnackbar],
   )
 
-  const addButton = (variant: 'text' | 'contained') => (
-    <Button
-      size="small"
-      variant={variant}
-      startIcon={<MdiIcon path={mdiAccountPlusOutline.path} size={0.8} />}
-      disabled={busy || !scope.orgId}
-      onClick={() => setAdding(true)}
-    >
-      {'Add contact'}
-    </Button>
-  )
-
   return (
-    <>
-      <CardDisplay
-        header={'Contact roles'}
-        help={pluginDocsHelp('deals', { anchor: '#contact-roles' })}
-        HeaderProps={{ action: addButton('text') }}
-        contentGutterX
-        contentGutterY
-      >
-        {roles.length === 0 ? (
-          <EmptyStateComponent
-            compact
-            label={'No contacts on this deal'}
-            description={'Name the people on the deal and the part each plays — one of them Primary.'}
-            action={addButton('contained')}
-          />
-        ) : (
-          <Stack spacing={1.5}>
-            {roles.map((row) => {
-              const name = nameOf('contact', row.contactId) || row.contactId
-              return (
-                <Stack
-                  key={row.contactId}
-                  direction={{ xs: 'column', sm: 'row' }}
-                  spacing={1}
-                  sx={{ alignItems: { sm: 'center' } }}
-                >
-                  <Stack direction="row" spacing={1} sx={{ flex: 1, minWidth: 0, alignItems: 'center' }}>
-                    <Typography variant="body2" noWrap>
-                      <AppLink href={routes.contact(row.contactId)}>{name}</AppLink>
-                    </Typography>
-                    {row.primary ? <Chip size="small" color="primary" label="Primary" /> : null}
-                  </Stack>
-                  <Box sx={{ width: { xs: '100%', sm: 220 } }}>
-                    <CrmPicklistSelect
-                      picklistId="opportunityContactRole"
-                      picklist={roleList.picklist}
-                      label="Role"
-                      value={row.role ?? ''}
-                      stored={row.role}
-                      disabled={busy}
-                      onChange={(role) =>
-                        void save(dealContactRolesWithRole(roles, row.contactId, role), 'Role saved')
-                      }
-                    />
-                  </Box>
-                  <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
-                    {row.primary ? null : (
-                      <Button
-                        size="small"
-                        disabled={busy}
-                        onClick={() =>
-                          void save(dealContactRolesWithPrimary(roles, row.contactId), 'Primary contact set')
-                        }
-                      >
-                        {'Make primary'}
-                      </Button>
-                    )}
-                    <Tooltip title={`Remove ${name} from this deal`}>
-                      <span>
-                        <IconButton
-                          size="small"
-                          aria-label={`Remove ${name} from this deal`}
-                          disabled={busy}
-                          onClick={() =>
-                            void save(dealContactRolesWithout(roles, row.contactId), 'Contact removed')
-                          }
-                        >
-                          <MdiIcon path={mdiAccountRemoveOutline.path} size={0.8} />
-                        </IconButton>
-                      </span>
-                    </Tooltip>
-                  </Stack>
-                </Stack>
-              )
-            })}
-          </Stack>
-        )}
-      </CardDisplay>
-      <AddContactRoleDialog
-        open={adding}
-        busy={busy}
-        roles={roles}
-        hostId={hostId}
-        org={org}
-        picklist={roleList.picklist}
-        onClose={() => setAdding(false)}
-        onAdd={async (added) => {
-          const ok = await save(dealContactRolesAdded(roles, added), 'Contact added')
-          if (ok) setAdding(false)
-          return ok
-        }}
-      />
-    </>
+    <ContactRolesEditor
+      noun="deal"
+      roles={roles}
+      busy={busy}
+      adding={adding}
+      onAddingChange={setAdding}
+      ready={Boolean(scope.orgId)}
+      hostId={hostId}
+      org={org}
+      routes={routes}
+      picklist={roleList.picklist}
+      nameOf={nameOf}
+      help={pluginDocsHelp('deals', { anchor: '#contact-roles' })}
+      emptyDescription="Name the people on the deal and the part each plays — one of them Primary."
+      save={save}
+    />
   )
 }
 DealContactRolesCard.displayName = 'DealContactRolesCard'
-
-interface AddContactRoleDialogProps {
-  open: boolean
-  busy: boolean
-  roles: readonly CrmDealContactRole[]
-  hostId: string | null
-  org: CrmOrgDoc
-  picklist: ReturnType<typeof useCrmPicklist>['picklist']
-  onClose: () => void
-  /** Answers whether the contact was added — the dialog keeps its picks when not. */
-  onAdd: (added: { contactId: string; role?: string; primary: boolean }) => Promise<boolean>
-}
-
-/** Pick a contact, the part they play, and whether they are the Primary. */
-function AddContactRoleDialog(props: AddContactRoleDialogProps) {
-  const { open, busy, roles, hostId, org, picklist, onClose, onAdd } = props
-  const scope = useCrmScope({ hostId, org })
-  const [contactId, setContactId] = useState<string | null>(null)
-  const [role, setRole] = useState('')
-  // The first contact on a deal is always its Primary; later ones when ticked.
-  const [primary, setPrimary] = useState(false)
-  const problem = contactId ? dealContactRoleAddProblem(roles, contactId) : null
-
-  const reset = () => {
-    setContactId(null)
-    setRole('')
-    setPrimary(false)
-  }
-  const close = () => {
-    reset()
-    onClose()
-  }
-
-  return (
-    <Dialog open={open} onClose={busy ? undefined : close} fullWidth maxWidth="xs">
-      <DialogTitle>{'Add a contact to this deal'}</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2} sx={{ pt: 1 }}>
-          <CrmRecordPicker
-            kind="contact"
-            scope={scope.scope}
-            readTokens={scope.visibleTo}
-            groupId={scope.consentGroup?.groupId ?? null}
-            org={(org ?? null) as Record<string, unknown> | null}
-            value={contactId}
-            onChange={setContactId}
-            disabled={busy}
-            helperText={problem ?? undefined}
-          />
-          <CrmPicklistSelect
-            picklistId="opportunityContactRole"
-            picklist={picklist}
-            label="Role"
-            value={role}
-            onChange={setRole}
-            disabled={busy}
-          />
-          <FormControlLabel
-            control={
-              <Checkbox
-                checked={primary || roles.length === 0}
-                disabled={busy || roles.length === 0}
-                onChange={(event) => setPrimary(event.target.checked)}
-              />
-            }
-            label="Primary contact"
-          />
-        </Stack>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={close} disabled={busy}>
-          {'Cancel'}
-        </Button>
-        <Button
-          variant="contained"
-          disabled={busy || !contactId || Boolean(problem)}
-          onClick={async () => {
-            if (!contactId) return
-            const added = await onAdd({
-              contactId,
-              role: role || undefined,
-              primary: primary || roles.length === 0,
-            })
-            if (added) reset()
-          }}
-        >
-          {'Add'}
-        </Button>
-      </DialogActions>
-    </Dialog>
-  )
-}
 
 export default DealContactRolesCard

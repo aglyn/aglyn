@@ -397,7 +397,9 @@ describe('an email offered for the timeline', () => {
       contactId: 'contact-1',
       companyId: 'company-1',
       hostId: HOST_ID,
-      visibleTo: [`host:${HOST_ID}`],
+      // Stamped as a record created on the site is: the org has chosen no
+      // default of its own, so the entry is the whole org's.
+      visibleTo: ['org'],
     })
   })
 
