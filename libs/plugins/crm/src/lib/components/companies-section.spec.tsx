@@ -37,6 +37,8 @@
  * and the write, not MUI's data grid.
  */
 
+import { CrmOrgMountProvider } from '../hooks/use-crm-org-mount'
+import { CompanyEditDrawer } from './company-edit-drawer'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import CrmConsolePage from './crm-console-page'
@@ -328,6 +330,42 @@ describe('the Companies section (AGL-2597)', () => {
     // And the new record's page opens.
     const id = path.slice('orgs/org-1/companies/'.length)
     expect(pushes).toEqual([routes.company(id)])
+  })
+
+  /** A record belongs to the org, and a site is only where it came from (AGL-4122). */
+  it('creates a company at the organization level with no site at all', async () => {
+    render(
+      <CrmOrgMountProvider
+        mount={{
+          orgId: 'org-1',
+          hosts: [
+            { id: 'host-1', name: 'Site A', subdomain: 'a' },
+            { id: 'host-2', name: 'Site B', subdomain: 'b' },
+          ],
+          hostsReady: true,
+          orgSlug: 'acme',
+          hostsPath: '/acme/hosts',
+        }}
+      >
+        <CompanyEditDrawer
+          open
+          onClose={() => undefined}
+          onSaved={() => undefined}
+          hostId={null}
+          org={{ $id: 'org-1' } as any}
+          members={{ options: [], ready: true, memberName: (uid: string) => uid, memberEmail: (uid: string) => uid, labelFor: () => '' } as any}
+        />
+      </CrmOrgMountProvider>,
+    )
+    expect(screen.getByRole('combobox', { name: /Source site/ })).toBeTruthy()
+    await act(async () => {
+      fireEvent.change(field('Name'), { target: { value: 'Acme Coffee' } })
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByText('Create company'))
+    })
+    await waitFor(() => expect(written).toHaveLength(1))
+    expect(written[0].data).toMatchObject({ visibleTo: ['org'], hostId: null })
   })
 
   it('refuses a domain that is not one, and writes nothing', async () => {

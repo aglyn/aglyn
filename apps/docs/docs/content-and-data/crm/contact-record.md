@@ -124,8 +124,10 @@ changes** beside it puts back what you had not saved.
 The fields are grouped the way Salesforce groups a contact's details — see
 [The standard fields](#the-standard-fields) — then an **About** box for your
 team's notes, then under **More fields** one control per
-[custom field](./custom-fields.md) your organization has defined. The email is
-shown but cannot be edited here, because it is the shared identity.
+[custom field](./custom-fields.md) your organization has defined. Add the email
+here whenever you have it. Every site shares a contact's address, so replacing
+one changes it for all of them, needs access to the whole workspace, and is
+refused if another contact already has that address: merge the two instead.
 
 The **Company** field is the same picker the New contact drawer has: search
 the companies your site may see, create one by typing its name, or clear
