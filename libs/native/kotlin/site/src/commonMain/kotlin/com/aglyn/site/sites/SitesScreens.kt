@@ -299,6 +299,12 @@ private fun CreateSiteDialog(context: NativePluginContext, orgId: String, close:
   val options = remember(context.api.origin) {
     SiteStyles.all.map { OptionCardItem(it.id, it.name, it.blurb, mediaPreviewUrl(it.preview, context.api.origin, null, 480), it.alt) }
   }
+  // The site opens as a row of the list does: its own sidebar, on its Home (AGL-4129).
+  fun openNewSite(hostId: String) {
+    context.selectSite(hostId)
+    context.navigate("shell.home")
+    close()
+  }
   missed?.let { (hostId, notice) ->
     ActionDialog(
       title = "Create a site",
@@ -306,8 +312,8 @@ private fun CreateSiteDialog(context: NativePluginContext, orgId: String, close:
       icon = "public",
       confirmLabel = "Open site",
       dismissLabel = "Close",
-      onConfirm = { context.selectSite(hostId); close() },
-      onDismiss = { context.selectSite(hostId); close() },
+      onConfirm = { openNewSite(hostId) },
+      onDismiss = { openNewSite(hostId) },
       modifier = Modifier.testTag("create-site-missed"),
     )
     return
@@ -332,12 +338,7 @@ private fun CreateSiteDialog(context: NativePluginContext, orgId: String, close:
                 // costs the site: it is said once, here, before the site opens.
                 val outcome = saveSiteBrand(context.api, result.hostId, brandFiles)
                 val notice = siteBrandMissedNotice(outcome.missed)
-                if (notice != null) {
-                  missed = result.hostId to notice
-                } else {
-                  context.selectSite(result.hostId)
-                  close()
-                }
+                if (notice != null) missed = result.hostId to notice else openNewSite(result.hostId)
               }
               is CreateSiteResult.Refused -> {
                 suggestions = result.suggestions

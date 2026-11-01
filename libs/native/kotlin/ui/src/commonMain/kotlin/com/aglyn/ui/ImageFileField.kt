@@ -96,7 +96,8 @@ fun ImageFileField(
           below,
           style = MaterialTheme.typography.bodySmall,
           color = if (error != null) colors.error else colors.onSurfaceVariant,
-          maxLines = if (error != null) Int.MAX_VALUE else 1,
+          // A file's name stays on one line; words wrap.
+          maxLines = if (error == null && file != null) 1 else Int.MAX_VALUE,
           overflow = TextOverflow.Ellipsis,
         )
       }

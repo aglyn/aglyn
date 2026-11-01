@@ -60,6 +60,7 @@ class CreateSiteStyleUiTest {
 
   private class Owner(override val api: ConsoleApiClient) : NativePluginContext {
     val opened = mutableListOf<String>()
+    val landed = mutableListOf<String>()
     override val uid = "u1"
     override val orgId = "o1"
     override val hostId: String? = null
@@ -74,7 +75,9 @@ class CreateSiteStyleUiTest {
     override fun selectSite(hostId: String) {
       opened += hostId
     }
-    override fun navigate(screenId: String, params: NativeParams) {}
+    override fun navigate(screenId: String, params: NativeParams) {
+      landed += screenId
+    }
     override fun openBesigner(path: String, scope: ConsoleScope) = false
   }
 
@@ -105,6 +108,9 @@ class CreateSiteStyleUiTest {
     onNodeWithTag("create-site-confirm").performClick()
     waitUntil(timeoutMillis = 5_000) { owner.opened.isNotEmpty() }
     assertEquals(listOf("h9"), owner.opened)
+    // The new site opens on its Home, as a row of the list does.
+    waitUntil(timeoutMillis = 5_000) { owner.landed.isNotEmpty() }
+    assertEquals(listOf("shell.home"), owner.landed)
     val body = Json.parseToJsonElement(bodies.single()).jsonObject
     assertEquals("trades", body["style"]?.jsonPrimitive?.content)
     assertEquals("starter", body["start"]?.jsonPrimitive?.content)

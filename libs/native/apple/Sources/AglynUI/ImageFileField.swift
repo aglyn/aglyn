@@ -83,7 +83,6 @@ public struct AglynImageFileField: View {
 
   public var body: some View {
     let shape = RoundedRectangle(cornerRadius: AglynRadius.control, style: .continuous)
-    let below = error ?? file?.name ?? helper
     HStack(spacing: AglynSpace.oneAndHalf) {
       preview
         .frame(width: AglynImageFileMetrics.tile, height: AglynImageFileMetrics.tile)
@@ -92,9 +91,13 @@ public struct AglynImageFileField: View {
         .accessibilityHidden(true)
       VStack(alignment: .leading, spacing: 2) {
         Text(label).font(AglynFont.subheadline).foregroundStyle(AglynColor.textPrimary)
-        if let below {
-          Text(below).font(AglynFont.caption).foregroundStyle(error == nil ? AglynColor.secondaryText : AglynColor.error)
-            .lineLimit(error == nil ? 1 : nil).truncationMode(.middle)
+        if let error {
+          Text(error).font(AglynFont.caption).foregroundStyle(AglynColor.error)
+        } else if let file {
+          Text(file.name).font(AglynFont.caption).foregroundStyle(AglynColor.secondaryText)
+            .lineLimit(1).truncationMode(.middle)
+        } else if let helper {
+          Text(helper).font(AglynFont.caption).foregroundStyle(AglynColor.secondaryText)
         }
       }
       Spacer(minLength: AglynSpace.one)

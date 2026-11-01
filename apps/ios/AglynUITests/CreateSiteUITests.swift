@@ -25,7 +25,19 @@ final class CreateSiteUITests: XCTestCase {
     add(measured)
   }
 
-  func testCreateSiteWaitsForAStyleThenOpensTheSite() throws {
+  /// Scrolls the sheet until `element` is on screen: a form builds its rows as they come into view, and the styles sit
+  /// below the fold on an iPad's form sheet.
+  private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
+    for _ in 0..<14 where !(element.exists && element.isHittable) {
+      #if os(macOS)
+        app.scrollViews.firstMatch.scroll(byDeltaX: 0, deltaY: -240)
+      #else
+        app.swipeUp(velocity: .slow)
+      #endif
+    }
+  }
+
+  private func launched() -> XCUIApplication {
     let app = XCUIApplication()
     app.launchArguments += [
       "-AglynAutoSignIn", "YES", "-AglynNoPushPrompt", "YES", "-AglynAuthTransport", "rest",
@@ -38,30 +50,69 @@ final class CreateSiteUITests: XCTestCase {
     app.launch()
     let keep = app.buttons["keep-pins-confirm"].firstMatch
     if keep.waitForExistence(timeout: 20) { keep.tap() }
+    return app
+  }
+
+  #if os(iOS)
+    /// A logo chosen from the photo library goes in with the new site, and the favicon left blank follows it. Needs a
+    /// photo on the device (`xcrun simctl addmedia`). The Mac's picker is the system's own window, out of a test's reach.
+    func testALogoGoesInWithTheNewSite() throws {
+      let app = launched()
+      let any = app.descendants(matching: .any)
+      let name = any["site-name"].firstMatch
+      XCTAssertTrue(name.waitForExistence(timeout: 40), "Create site did not open")
+      let site = "Logo \(Int(Date().timeIntervalSince1970) % 1_000_000)"
+      name.tap()
+      name.typeText(site)
+      app.buttons["Choose Logo"].firstMatch.tap()
+      let library = any["image-file-photos"].firstMatch
+      XCTAssertTrue(library.waitForExistence(timeout: 10), "The field offers no photo library")
+      library.tap()
+      let photo = app.images.matching(NSPredicate(format: "label BEGINSWITH 'Photo'")).firstMatch
+      XCTAssertTrue(photo.waitForExistence(timeout: 20), "The photo library did not open")
+      capture(app, "0-library")
+      photo.tap()
+      let held = app.buttons["Replace Logo"].firstMatch
+      XCTAssertTrue(held.waitForExistence(timeout: 20), "The field did not take the picture")
+      capture(app, "1-logo-held")
+
+      let card = any["option-card-business"].firstMatch
+      reveal(card, in: app)
+      XCTAssertTrue(card.waitForExistence(timeout: 10), "The style cards are not in the sheet")
+      card.tap()
+      app.buttons["sheet-confirm"].firstMatch.tap()
+      let named = any.matching(NSPredicate(format: "label CONTAINS %@", site)).firstMatch
+      XCTAssertTrue(named.waitForExistence(timeout: 90), "The new site did not open")
+      capture(app, "2-logo-site-opened")
+    }
+  #endif
+
+  func testCreateSiteWaitsForAStyleThenOpensTheSite() throws {
+    let app = launched()
 
     let any = app.descendants(matching: .any)
     let name = any["site-name"].firstMatch
     XCTAssertTrue(name.waitForExistence(timeout: 40), "Create site did not open")
-    let confirm = any["sheet-confirm"].firstMatch
+    // The button itself: the identifier also lands on the toolbar item around it, which is never disabled.
+    let confirm = app.buttons["sheet-confirm"].firstMatch
     let required = any["site-style-required"].firstMatch
-    XCTAssertTrue(required.waitForExistence(timeout: 10), "The sheet does not say a style is needed")
+    // The logo fields are optional and sit between the address and the styles.
+    XCTAssertTrue(any["site-brand-logo"].firstMatch.waitForExistence(timeout: 10), "The logo field is not in the sheet")
     XCTAssertFalse(confirm.isEnabled, "Create site is on with nothing filled in")
     capture(app, "1-opened")
-    measure(any["option-card-business"].firstMatch, "card")
 
     let site = "Style \(Int(Date().timeIntervalSince1970) % 1_000_000)"
     name.tap()
     name.typeText(site)
     let card = any["option-card-business"].firstMatch
+    reveal(card, in: app)
     XCTAssertTrue(card.waitForExistence(timeout: 10), "The style cards are not in the sheet")
+    XCTAssertTrue(required.exists, "The sheet does not say a style is needed")
+    measure(card, "card")
     XCTAssertFalse(card.isSelected, "A style was picked before anyone chose one")
     XCTAssertFalse(any["option-card-trades"].firstMatch.isSelected, "A style was picked before anyone chose one")
     XCTAssertFalse(confirm.isEnabled, "A name and an address created a site with no style")
     capture(app, "2-named-no-style")
-
-    // The logo fields are optional and sit between the address and the styles.
-    XCTAssertTrue(any["site-brand-logo"].firstMatch.exists, "The logo field is not in the sheet")
-    XCTAssertTrue(any["site-brand-favicon"].firstMatch.exists, "The favicon field is not in the sheet")
 
     card.tap()
     XCTAssertTrue(card.isSelected, "The card did not take the pick")
@@ -75,5 +126,13 @@ final class CreateSiteUITests: XCTestCase {
     let gone = expectation(for: closed, evaluatedWith: name)
     wait(for: [gone], timeout: 90)
     capture(app, "4-created")
+
+    // The site opens on its Home, and Create site does not come back over it (AGL-4129).
+    let named = any.matching(NSPredicate(format: "label CONTAINS %@", site)).firstMatch
+    XCTAssertTrue(named.waitForExistence(timeout: 40), "The new site did not open")
+    sleep(3)
+    XCTAssertFalse(name.exists, "Create site opened again over the new site")
+    XCTAssertFalse(any["sites-list"].firstMatch.exists, "Sites is still in front of the new site")
+    capture(app, "5-opened")
   }
 }
