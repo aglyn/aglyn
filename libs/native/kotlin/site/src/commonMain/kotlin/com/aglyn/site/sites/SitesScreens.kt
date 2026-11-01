@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import com.aglyn.core.HostStatus
 import com.aglyn.core.HostStatusKind
 import com.aglyn.core.Live
+import com.aglyn.core.SiteBrandFiles
 import com.aglyn.core.SiteStyles
 import com.aglyn.core.mediaPreviewUrl
 import com.aglyn.core.nowMillis
@@ -50,6 +51,7 @@ import com.aglyn.core.siteListAddress
 import com.aglyn.pluginhost.ActionRunner
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.site.SiteAreas
+import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
 import com.aglyn.ui.AglynListItem
@@ -58,6 +60,8 @@ import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.DetailRow
 import com.aglyn.ui.EmptyState
 import com.aglyn.ui.EmptyTone
+import com.aglyn.ui.ImageFileField
+import com.aglyn.ui.ImageFileGround
 import com.aglyn.ui.ListHeader
 import com.aglyn.ui.LoadContent
 import com.aglyn.ui.LoadMoreEffect
@@ -66,6 +70,7 @@ import com.aglyn.ui.OptionCardItem
 import com.aglyn.ui.OptionCardList
 import com.aglyn.ui.OutlinedButton
 import com.aglyn.ui.PanelSheet
+import com.aglyn.ui.PickedFile
 import com.aglyn.ui.RefreshableBox
 import com.aglyn.ui.RemoteImage
 import com.aglyn.ui.SearchField
@@ -271,8 +276,9 @@ fun SiteOverview(context: NativePluginContext, hostId: String) {
 
 /**
  * Create a site, as the console's Create site: a name, an address the route checks, the addresses it suggests when the one
- * asked for is taken, and the style the site starts in (AGL-4049), which the person must pick: nothing is chosen for them,
- * so Create site stays off until a card is. The header and its button stay put while the styles scroll.
+ * asked for is taken, an optional logo, dark logo and favicon held until the site exists (AGL-4119), and the style the site
+ * starts in (AGL-4049), which the person must pick: nothing is chosen for them, so Create site stays off until a card is.
+ * The header and its button stay put while the styles scroll.
  */
 @Composable
 private fun CreateSiteDialog(context: NativePluginContext, orgId: String, close: () -> Unit) {
@@ -283,11 +289,28 @@ private fun CreateSiteDialog(context: NativePluginContext, orgId: String, close:
   var edited by remember { mutableStateOf(false) }
   var suggestions by remember { mutableStateOf(emptyList<String>()) }
   var style by remember { mutableStateOf<String?>(null) }
+  var brandFiles by remember { mutableStateOf(emptyMap<String, PickedFile>()) }
+  var brandErrors by remember { mutableStateOf(emptyMap<String, String>()) }
+  // A site made with a file that did not make it: the sheet stays to say so, once, then opens it.
+  var missed by remember { mutableStateOf<Pair<String, String>?>(null) }
   val list = rememberLazyListState()
   // A refusal is read where it is: the button stays in view however far the styles have scrolled.
   LaunchedEffect(runner.error) { if (runner.error != null) list.animateScrollToItem(0) }
   val options = remember(context.api.origin) {
     SiteStyles.all.map { OptionCardItem(it.id, it.name, it.blurb, mediaPreviewUrl(it.preview, context.api.origin, null, 480), it.alt) }
+  }
+  missed?.let { (hostId, notice) ->
+    ActionDialog(
+      title = "Create a site",
+      body = notice,
+      icon = "public",
+      confirmLabel = "Open site",
+      dismissLabel = "Close",
+      onConfirm = { context.selectSite(hostId); close() },
+      onDismiss = { context.selectSite(hostId); close() },
+      modifier = Modifier.testTag("create-site-missed"),
+    )
+    return
   }
   PanelSheet(
     title = "Create a site",
@@ -305,8 +328,16 @@ private fun CreateSiteDialog(context: NativePluginContext, orgId: String, close:
           runner.run {
             when (val result = createSite(context.api, orgId, name, subdomain, chosen)) {
               is CreateSiteResult.Created -> {
-                context.selectSite(result.hostId)
-                close()
+                // The logo, dark logo and favicon go in now the site has a library. A file that does not make it never
+                // costs the site: it is said once, here, before the site opens.
+                val outcome = saveSiteBrand(context.api, result.hostId, brandFiles)
+                val notice = siteBrandMissedNotice(outcome.missed)
+                if (notice != null) {
+                  missed = result.hostId to notice
+                } else {
+                  context.selectSite(result.hostId)
+                  close()
+                }
               }
               is CreateSiteResult.Refused -> {
                 suggestions = result.suggestions
@@ -351,6 +382,35 @@ private fun CreateSiteDialog(context: NativePluginContext, orgId: String, close:
             SuggestionChip(onClick = { subdomain = suggestion; edited = true }, label = { Text(suggestion) })
           }
         }
+      }
+      Column(Modifier.padding(top = space(1f)).testTag("site-brand"), verticalArrangement = Arrangement.spacedBy(space(1f))) {
+        Text("Logo and favicon (optional)", Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium)
+        // All three optional, none ever in the way of Create site; what a route would refuse is said on the field.
+        SiteBrandFiles.slots.forEach { spec ->
+          ImageFileField(
+            label = spec.label,
+            file = brandFiles[spec.slot],
+            ground = when (spec.slot) {
+              "logo" -> ImageFileGround.LIGHT
+              "logoDark" -> ImageFileGround.DARK
+              else -> null
+            },
+            helper = if (spec.slot == "favicon") "Leave this blank to use your logo." else null,
+            error = brandErrors[spec.slot],
+            enabled = !runner.busy,
+            onChoose = { file ->
+              val refusal = siteBrandFileRefusal(file, spec.slot)
+              brandErrors = if (refusal != null) brandErrors + (spec.slot to refusal) else brandErrors - spec.slot
+              if (refusal == null) brandFiles = brandFiles + (spec.slot to file)
+            },
+            onRemove = {
+              brandFiles = brandFiles - spec.slot
+              brandErrors = brandErrors - spec.slot
+            },
+            modifier = Modifier.testTag("site-brand-${spec.slot}"),
+          )
+        }
+        Text(SiteBrandFiles.HINT, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
       }
       Column(Modifier.padding(top = space(1f)), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
         Text("Choose a style", Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium)

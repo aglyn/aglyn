@@ -59,6 +59,10 @@ final class CreateSiteUITests: XCTestCase {
     XCTAssertFalse(confirm.isEnabled, "A name and an address created a site with no style")
     capture(app, "2-named-no-style")
 
+    // The logo fields are optional and sit between the address and the styles.
+    XCTAssertTrue(any["site-brand-logo"].firstMatch.exists, "The logo field is not in the sheet")
+    XCTAssertTrue(any["site-brand-favicon"].firstMatch.exists, "The favicon field is not in the sheet")
+
     card.tap()
     XCTAssertTrue(card.isSelected, "The card did not take the pick")
     XCTAssertFalse(required.exists, "It still asks for a style after one was picked")

@@ -4,6 +4,7 @@
 import AglynContracts
 import AglynCore
 import AglynPluginHost
+import AglynUI
 import XCTest
 
 @testable import AglynSite
@@ -195,6 +196,88 @@ final class SiteTests: XCTestCase {
       XCTAssertEqual(
         mediaPreviewURL(style.preview, origin: "https://app.aglyn.com", hostID: nil, width: 480)?.absoluteString,
         "https://app.aglyn.com/api/media/cdn/site-styles/\(style.id).webp?w=480")
+    }
+  }
+
+  private func file(_ name: String, _ type: String = "image/png", size: Int = 16) -> PickedFile {
+    PickedFile(name: name, mimeType: type, data: Data(repeating: 1, count: size))
+  }
+
+  func testReadsWhatTheLogoFieldsTakeAsTheConsole() {
+    XCTAssertEqual(siteBrandFileType(name: "mark.SVG", mimeType: "", slot: "logo"), "image/svg+xml")
+    XCTAssertEqual(siteBrandFileType(name: "icon.ico", mimeType: "application/octet-stream", slot: "favicon"), "image/x-icon")
+    XCTAssertNil(siteBrandFileType(name: "notes.txt", mimeType: "", slot: "logo"))
+    XCTAssertEqual(siteBrandFileType(name: "photo.jpg", mimeType: "image/jpg", slot: "logo"), "image/jpeg")
+    XCTAssertNil(siteBrandFileRefusal(file("logo.png"), slot: "logo"))
+    XCTAssertEqual(siteBrandFileRefusal(file("logo.tiff", "image/tiff"), slot: "logo"), "Use a PNG, JPEG, WebP or SVG file.")
+    XCTAssertEqual(siteBrandFileRefusal(file("icon.ico", "image/x-icon"), slot: "logo"), "Use a PNG, JPEG, WebP or SVG file.")
+    XCTAssertEqual(siteBrandFileRefusal(file("icon.bmp", "image/bmp"), slot: "favicon"), "Use a PNG, JPEG, WebP, SVG or ICO file.")
+    XCTAssertEqual(siteBrandFileRefusal(file("big.png", size: 16 * 1024 * 1024), slot: "logo"), "That file is over 15 MB.")
+    XCTAssertEqual(siteBrandFileRefusal(file("empty.png", size: 0), slot: "logo"), "That file is empty.")
+    XCTAssertEqual(SiteBrandFiles.hint, "Square, at least 512 px, the logo filling about 80% with a little space around it.")
+  }
+
+  private func saveBrand(
+    _ files: [String: PickedFile], refuse: [String] = [], saveFails: Bool = false
+  ) async -> (outcome: SiteBrandSaveOutcome, uploaded: [String], writes: [SiteBrandFields]) {
+    var uploaded: [String] = []
+    var writes: [SiteBrandFields] = []
+    let outcome = await saveSiteBrandFiles(files) { chosen, _ in
+      if refuse.contains(chosen.name) { throw ConsoleAPIError(status: 413, message: "Storage limit reached", body: nil) }
+      uploaded.append(chosen.name)
+      return "media:\(chosen.name)"
+    } save: { fields in
+      if saveFails { throw ConsoleAPIError(status: 403, message: "Save failed", body: nil) }
+      writes.append(fields)
+    }
+    return (outcome, uploaded, writes)
+  }
+
+  func testSavesWhatTheSheetHeldAsTheConsole() async {
+    let none = await saveBrand([:])
+    XCTAssertEqual(none.outcome, SiteBrandSaveOutcome(saved: nil, missed: []))
+    XCTAssertEqual(none.writes, [])
+    // A logo, and the favicon left blank: the same asset, not a second copy.
+    let logo = await saveBrand(["logo": file("logo.png")])
+    XCTAssertEqual(logo.uploaded, ["logo.png"])
+    XCTAssertEqual(logo.writes, [SiteBrandFields(logoURL: "media:logo.png", favicon: "media:logo.png")])
+    // One at a time, in field order; a favicon of its own wins, a dark logo sits beside it.
+    let all = await saveBrand(["favicon": file("icon.png"), "logoDark": file("dark.png"), "logo": file("logo.png")])
+    XCTAssertEqual(all.uploaded, ["logo.png", "dark.png", "icon.png"])
+    XCTAssertEqual(
+      all.writes, [SiteBrandFields(logoURL: "media:logo.png", logoDarkURL: "media:dark.png", favicon: "media:icon.png")])
+    // A favicon alone writes no logo fields.
+    let favicon = await saveBrand(["favicon": file("icon.png")])
+    XCTAssertEqual(favicon.writes, [SiteBrandFields(favicon: "media:icon.png")])
+  }
+
+  func testAFileThatDoesNotMakeItNeverStopsTheRest() async {
+    let dark = await saveBrand(["logo": file("logo.png"), "logoDark": file("dark.png")], refuse: ["dark.png"])
+    XCTAssertEqual(dark.outcome.missed, ["logoDark"])
+    XCTAssertEqual(dark.writes, [SiteBrandFields(logoURL: "media:logo.png", favicon: "media:logo.png")])
+    let icon = await saveBrand(["logo": file("logo.png"), "favicon": file("icon.png")], refuse: ["icon.png"])
+    XCTAssertEqual(icon.outcome.missed, ["favicon"])
+    XCTAssertEqual(icon.writes, [SiteBrandFields(logoURL: "media:logo.png", favicon: "media:logo.png")])
+    let logo = await saveBrand(["logo": file("logo.png")], refuse: ["logo.png"])
+    XCTAssertEqual(logo.outcome, SiteBrandSaveOutcome(saved: nil, missed: ["logo"]))
+    XCTAssertEqual(logo.writes, [])
+    // A write that fails names every file it carried.
+    let failed = await saveBrand(["logo": file("logo.png"), "favicon": file("icon.png")], saveFails: true)
+    XCTAssertEqual(failed.outcome, SiteBrandSaveOutcome(saved: nil, missed: ["logo", "favicon"]))
+    let answered = await saveSiteBrandFiles(["logo": file("logo.png")]) { _, _ in nil } save: { _ in }
+    XCTAssertEqual(answered, SiteBrandSaveOutcome(saved: nil, missed: ["logo"]))
+  }
+
+  /// Replays derived-values.generated.json's `siteBrand.noticeCases`: the console's own sentence.
+  func testSaysWhatDidNotMakeItAsTheConsole() throws {
+    let url = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+      .appendingPathComponent("contracts/derived-values.generated.json")
+    let root = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+    let cases = try XCTUnwrap((root["siteBrand"] as? [String: Any])?["noticeCases"] as? [[String: Any]])
+    XCTAssertFalse(cases.isEmpty)
+    for entry in cases {
+      XCTAssertEqual(siteBrandMissedNotice(entry["missed"] as? [String] ?? []), entry["notice"] as? String)
     }
   }
 

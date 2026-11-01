@@ -1,5 +1,6 @@
 package com.aglyn.shell
 
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
@@ -7,7 +8,9 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.runDesktopComposeUiTest
@@ -23,10 +26,15 @@ import com.aglyn.pluginhost.NativeParams
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.site.sites.SitesScreen
 import com.aglyn.ui.AglynTheme
+import com.aglyn.ui.LocalMediaPicker
+import com.aglyn.ui.MediaPicker
+import com.aglyn.ui.PickSource
+import com.aglyn.ui.PickedFile
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.OutgoingContent
 import io.ktor.http.headersOf
 import kotlinx.coroutines.flow.Flow
@@ -101,6 +109,79 @@ class CreateSiteStyleUiTest {
     assertEquals("trades", body["style"]?.jsonPrimitive?.content)
     assertEquals("starter", body["start"]?.jsonPrimitive?.content)
     assertEquals("my-shop", body["subdomain"]?.jsonPrimitive?.content)
+  }
+
+  private class OnePicture(private val file: PickedFile) : MediaPicker {
+    override val sources = listOf(PickSource.FILES)
+    override suspend fun pick(source: PickSource, multiple: Boolean) = listOf(file)
+  }
+
+  private fun answers(refuseUpload: Boolean, seen: MutableList<Pair<String, String>>) = MockEngine { request ->
+    val path = request.url.encodedPath
+    seen += path to String((request.body as OutgoingContent.ByteArrayContent).bytes())
+    val json = headersOf(HttpHeaders.ContentType, "application/json")
+    when {
+      path == "/api/hosts/create" -> respond("""{"hostId":"h9","subdomain":"my-shop"}""", headers = json)
+      path == "/api/media/upload" && refuseUpload -> respond("""{"error":"Storage limit reached"}""", HttpStatusCode.PaymentRequired, json)
+      path == "/api/media/upload" -> respond("""{"mediaId":"m1","url":"https://cdn.test/logo.png"}""", headers = json)
+      else -> respond("{}", headers = json)
+    }
+  }
+
+  @Test
+  fun aLogoGoesInAfterTheCreateAndTheFaviconFollowsIt() = runDesktopComposeUiTest(width = 900, height = 1000) {
+    val seen = mutableListOf<Pair<String, String>>()
+    val owner = Owner(ConsoleApiClient("http://localhost", HttpClient(answers(refuseUpload = false, seen)), { "t" }))
+    val picture = PickedFile("logo.png", "image/png", ByteArray(8))
+    setContent {
+      CompositionLocalProvider(LocalMediaPicker provides OnePicture(picture)) { AglynTheme(dark = false) { SitesScreen(owner, startNew = true) } }
+    }
+    onNodeWithTag("site-name").performTextInput("My Shop")
+    onNode(hasContentDescription("Choose Logo")).performClick()
+    waitForIdle()
+    onNodeWithTag("option-card-trades").performClick()
+    onNodeWithTag("create-site-confirm").performClick()
+    waitUntil(timeoutMillis = 5_000) { owner.opened.isNotEmpty() }
+    // The site first, then its library, then the fields, before it opens.
+    assertEquals(listOf("/api/hosts/create", "/api/media/upload", "/api/hosts/sync-memberships"), seen.map { it.first })
+    val fields = Json.parseToJsonElement(seen.last().second).jsonObject
+    assertEquals("h9", fields["hostId"]?.jsonPrimitive?.content)
+    assertEquals("https://cdn.test/logo.png", fields["logoUrl"]?.jsonPrimitive?.content)
+    assertEquals(fields["logoUrl"], fields["favicon"])
+  }
+
+  @Test
+  fun aLogoThatDoesNotMakeItIsSaidOnceAndTheSiteStillOpens() = runDesktopComposeUiTest(width = 900, height = 1000) {
+    val seen = mutableListOf<Pair<String, String>>()
+    val owner = Owner(ConsoleApiClient("http://localhost", HttpClient(answers(refuseUpload = true, seen)), { "t" }))
+    val picture = PickedFile("logo.png", "image/png", ByteArray(8))
+    setContent {
+      CompositionLocalProvider(LocalMediaPicker provides OnePicture(picture)) { AglynTheme(dark = false) { SitesScreen(owner, startNew = true) } }
+    }
+    onNodeWithTag("site-name").performTextInput("My Shop")
+    onNode(hasContentDescription("Choose Logo")).performClick()
+    waitForIdle()
+    onNodeWithTag("option-card-trades").performClick()
+    onNodeWithTag("create-site-confirm").performClick()
+    waitUntil(timeoutMillis = 5_000) { seen.any { it.first == "/api/media/upload" } }
+    onNodeWithText("Your site is ready, but your logo didn’t upload. Add it in Site settings.").assertIsDisplayed()
+    assertEquals(emptyList(), owner.opened)
+    onNodeWithTag("action-dialog-confirm").performClick()
+    waitUntil(timeoutMillis = 5_000) { owner.opened.isNotEmpty() }
+    assertEquals(listOf("h9"), owner.opened)
+    assertEquals(listOf("/api/hosts/create", "/api/media/upload"), seen.map { it.first })
+  }
+
+  @Test
+  fun aFileAFieldDoesNotTakeIsSaidOnTheFieldAndNotHeld() = runDesktopComposeUiTest(width = 900, height = 1000) {
+    val owner = Owner(ConsoleApiClient("http://localhost", HttpClient(MockEngine { respond("{}") }), { "t" }))
+    val tiff = PickedFile("logo.tiff", "image/tiff", ByteArray(8))
+    setContent {
+      CompositionLocalProvider(LocalMediaPicker provides OnePicture(tiff)) { AglynTheme(dark = false) { SitesScreen(owner, startNew = true) } }
+    }
+    onNode(hasContentDescription("Choose Logo")).performClick()
+    onNodeWithText("Use a PNG, JPEG, WebP or SVG file.").assertIsDisplayed()
+    onNode(hasContentDescription("Choose Logo")).assertIsDisplayed()
   }
 
   @Test

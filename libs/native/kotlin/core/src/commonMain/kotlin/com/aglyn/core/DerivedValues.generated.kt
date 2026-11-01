@@ -74,6 +74,20 @@ object SiteStyles {
   )
 }
 
+/** One of the files Create site takes (`site-brand-files.ts`): the host field it fills, its label, how a sentence names it. */
+data class SiteBrandSlot(val slot: String, val label: String, val noun: String)
+
+/** What Create site's logo fields say and take. */
+object SiteBrandFiles {
+  val slots: List<SiteBrandSlot> = listOf(
+    SiteBrandSlot("logo", "Logo", "logo"),
+    SiteBrandSlot("logoDark", "Logo for dark backgrounds", "dark logo"),
+    SiteBrandSlot("favicon", "Favicon", "favicon"),
+  )
+  const val HINT = "Square, at least 512 px, the logo filling about 80% with a little space around it."
+  const val MAX_BYTES = 15728640
+}
+
 /** Each release flag as the Remote Config template publishes it. */
 object ReleaseFlagDefaults {
   val byKey: Map<String, ReleaseFlagValue> = mapOf(

@@ -301,8 +301,9 @@ struct SiteOverview: View {
 }
 
 /// Create a site, as the console's Create site: a name, an address the route checks, the addresses it suggests when the
-/// one asked for is taken, and the style the site starts in (AGL-4049), which the person must pick: nothing is chosen
-/// for them, so Create site stays off until a card is.
+/// one asked for is taken, an optional logo, dark logo and favicon held until the site exists (AGL-4119), and the style
+/// the site starts in (AGL-4049), which the person must pick: nothing is chosen for them, so Create site stays off until
+/// a card is.
 struct CreateSiteSheet: View {
   let context: NativePluginContext
   let orgID: String
@@ -313,6 +314,14 @@ struct CreateSiteSheet: View {
   @State private var edited = false
   @State private var suggestions: [String] = []
   @State private var style: String?
+  /// The files held until the site exists, and why a field refused the last one, each by its slot.
+  @State private var brandFiles: [String: PickedFile] = [:]
+  @State private var brandErrors: [String: String] = [:]
+  /// The one picker every field shares (`AglynImageFileField`), and the field it is choosing for.
+  @State private var pickSource: PickSource?
+  @State private var pickSlot: String?
+  /// A site made with a file that did not make it: the sheet stays to say so, once, then opens it.
+  @State private var madeWithMissing: (hostID: String, notice: String)?
 
   /// What the create would refuse anyway, said first (the console's dialog): nil while unknown or when nothing stops it.
   @State private var blocked: CreateSiteBlock?
@@ -320,11 +329,40 @@ struct CreateSiteSheet: View {
   private var valid: Bool { canCreateSite(name: name, subdomain: subdomain, style: style) }
 
   var body: some View {
-    if let blocked {
+    if let madeWithMissing {
+      missedSheet(madeWithMissing.hostID, notice: madeWithMissing.notice)
+    } else if let blocked {
       blockedSheet(blocked)
     } else {
       form.task(id: orgID) { blocked = await createSiteBlock(context, orgID: orgID) }
     }
+  }
+
+  /// The site is made, and a file it was given did not make it: which, and where to add it. Open site is the way on.
+  private func missedSheet(_ hostID: String, notice: String) -> some View {
+    NavigationStack {
+      Form {
+        Section { AglynNotice(notice, tone: .warning) }
+      }
+      .formStyle(.aglynGrouped)
+      .navigationTitle("Create a site")
+      #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+      #endif
+      .toolbar {
+        ToolbarItem(placement: .confirmationAction) {
+          Button("Open site") {
+            context.selectSite(hostID)
+            dismiss()
+          }
+          .keyboardShortcut(.defaultAction)
+          .accessibilityIdentifier("create-site-open")
+        }
+      }
+    }
+    .interactiveDismissDisabled()
+    .aglynSheetMinimumSize(width: 420, height: 220)
+    .accessibilityIdentifier("create-site-missed")
   }
 
   /// The console's blocked dialog: the reason, Close, and Go to Billing when the plan is what stops it.
@@ -412,9 +450,46 @@ struct CreateSiteSheet: View {
         }
       }
     } below: {
+      brandSection
       styleSection
     }
+    .aglynMediaPicker($pickSource, multiple: false) { files in
+      if let file = files.first, let slot = pickSlot { hold(file, slot: slot) }
+    }
     .aglynSheetMinimumSize(width: 640, height: 700)
+  }
+
+  /// A file a field takes is held; one it does not is said on the field, before anything is created.
+  private func hold(_ file: PickedFile, slot: String) {
+    let refusal = siteBrandFileRefusal(file, slot: slot)
+    brandErrors[slot] = refusal
+    if refusal == nil { brandFiles[slot] = file }
+  }
+
+  /// The console's fields (`useSiteBrandFiles`): all three optional, none ever in the way of Create site.
+  private var brandSection: some View {
+    Section {
+      ForEach(SiteBrandFiles.slots, id: \.slot) { spec in
+        AglynImageFileField(
+          label: spec.label, file: brandFiles[spec.slot],
+          ground: spec.slot == "logo" ? .light : spec.slot == "logoDark" ? .dark : nil,
+          helper: spec.slot == "favicon" ? "Leave this blank to use your logo." : nil, error: brandErrors[spec.slot],
+          enabled: !runner.busy
+        ) { source in
+          pickSlot = spec.slot
+          pickSource = source
+        } onRemove: {
+          brandFiles[spec.slot] = nil
+          brandErrors[spec.slot] = nil
+        }
+        .accessibilityIdentifier("site-brand-\(spec.slot)")
+      }
+    } header: {
+      Text("Logo and favicon (optional)").font(AglynFont.headline).foregroundStyle(AglynColor.textPrimary)
+        .textCase(nil).accessibilityAddTraits(.isHeader)
+    } footer: {
+      Text(SiteBrandFiles.hint)
+    }
   }
 
   /// The console's own choice (`SiteStylePicker`): its heading and words, and every style in its order, each with its
@@ -451,12 +526,19 @@ struct CreateSiteSheet: View {
 
   private func create() {
     guard let style else { return }
-    let (name, subdomain) = (name, subdomain)
+    let (name, subdomain, files) = (name, subdomain, brandFiles)
     runner.run {
       switch try await createSite(context.api, orgID: orgID, name: name, subdomain: subdomain, style: style) {
       case .created(let hostID, _):
-        context.selectSite(hostID)
-        dismiss()
+        // The logo, dark logo and favicon go in now the site has a library. A file that does not make it never costs
+        // the site: it is said once, here, before the site opens.
+        let outcome = await saveSiteBrand(context.api, hostID: hostID, files: files)
+        if let notice = siteBrandMissedNotice(outcome.missed) {
+          madeWithMissing = (hostID, notice)
+        } else {
+          context.selectSite(hostID)
+          dismiss()
+        }
       case .refused(let message, let offered):
         suggestions = offered
         runner.error = message

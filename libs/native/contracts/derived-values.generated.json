@@ -6235,5 +6235,59 @@
       "preview": "/api/media/cdn/site-styles/coming-soon.webp",
       "alt": "A café's coming soon page: its heading and notify button centered over a photo of the café's coffee shelves"
     }
-  ]
+  ],
+  "siteBrand": {
+    "slots": [
+      {
+        "slot": "logo",
+        "label": "Logo",
+        "noun": "logo"
+      },
+      {
+        "slot": "logoDark",
+        "label": "Logo for dark backgrounds",
+        "noun": "dark logo"
+      },
+      {
+        "slot": "favicon",
+        "label": "Favicon",
+        "noun": "favicon"
+      }
+    ],
+    "hint": "Square, at least 512 px, the logo filling about 80% with a little space around it.",
+    "maxBytes": 15728640,
+    "noticeCases": [
+      {
+        "missed": [],
+        "notice": null
+      },
+      {
+        "missed": [
+          "logo"
+        ],
+        "notice": "Your site is ready, but your logo didn’t upload. Add it in Site settings."
+      },
+      {
+        "missed": [
+          "favicon"
+        ],
+        "notice": "Your site is ready, but your favicon didn’t upload. Add it in Site settings."
+      },
+      {
+        "missed": [
+          "logoDark",
+          "logo"
+        ],
+        "notice": "Your site is ready, but your logo and dark logo didn’t upload. Add them in Site settings."
+      },
+      {
+        "missed": [
+          "logo",
+          "logoDark",
+          "favicon"
+        ],
+        "notice": "Your site is ready, but your logo, dark logo and favicon didn’t upload. Add them in Site settings."
+      }
+    ]
+  }
 }

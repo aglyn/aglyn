@@ -79,6 +79,24 @@ public enum SiteStyles {
   ]
 }
 
+/// One of the files Create site takes (`site-brand-files.ts`): the host field it fills, its label, how a sentence names it.
+public struct SiteBrandSlot: Equatable, Hashable, Sendable {
+  public let slot: String
+  public let label: String
+  public let noun: String
+}
+
+/// What Create site's logo fields say and take.
+public enum SiteBrandFiles {
+  public static let slots: [SiteBrandSlot] = [
+    SiteBrandSlot(slot: "logo", label: "Logo", noun: "logo"),
+    SiteBrandSlot(slot: "logoDark", label: "Logo for dark backgrounds", noun: "dark logo"),
+    SiteBrandSlot(slot: "favicon", label: "Favicon", noun: "favicon"),
+  ]
+  public static let hint = "Square, at least 512 px, the logo filling about 80% with a little space around it."
+  public static let maxBytes = 15728640
+}
+
 /// Each release flag as the Remote Config template publishes it.
 public enum ReleaseFlagDefaults {
   public static let byKey: [String: ReleaseFlagValue] = [
