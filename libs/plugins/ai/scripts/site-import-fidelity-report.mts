@@ -212,7 +212,7 @@ function framesTable(frames: ReadonlyArray<{ name: string; report: Dict }>): str
 }
 
 /** What a page is short of: every measure under whole, its numbers, and a few of the words. */
-function shortOf(rows: readonly PageRow[]): string[] {
+function shortOf(rows: readonly PageRow[], frames: ReadonlyArray<{ name: string; report: Dict }>): string[] {
   const out: string[] = []
   for (const { name, report } of rows) {
     const short: string[] = []
@@ -228,6 +228,11 @@ function shortOf(rows: readonly PageRow[]): string[] {
     if (report.bands.ratio < 1) short.push(`bands read ${report.bands.read.join(', ')}; drawn ${report.bands.drawn.join(', ')}`)
     if (short.length) out.push(`- ${name}: ${short.join('; ')}`)
   }
+  for (const { name, report } of frames) {
+    const short = FRAME_MEASURES.filter(([key]) => report[key].ratio < 1).map(([key, label]) => `${label} ${count(report[key])}`)
+    if (!report.inOrder) short.push('items out of the source’s order')
+    if (short.length) out.push(`- header and footer, ${name}: ${short.join('; ')}`)
+  }
   return out
 }
 
@@ -240,6 +245,7 @@ function notScored(rows: readonly PageRow[]): string | null {
 
 /** The result, in one line, and the exit code it means. */
 function verdict(rows: readonly PageRow[], frames: ReadonlyArray<{ report: Dict }>, threshold: number): { line: string; ok: boolean } {
+  if (!rows.length) return { line: 'Result: NO PAGE SCORED, so this says nothing of whether the site holds the bar.', ok: false }
   const pagesHeld = rows.filter(({ report }) => holds(report, threshold)).length
   const framesHeld = frames.filter(({ report }) => report.score >= threshold).length
   const ok = pagesHeld === rows.length && framesHeld === frames.length
@@ -281,7 +287,7 @@ async function recordedReport(load: (file: string) => Promise<Dict>, args: Args)
   const groups = groupsTable(rows)
   // Home is on the table twice; what it leaves out is said once.
   const said = notScored(rows.filter(({ name }) => name !== 'Home, arranged'))
-  const short = shortOf(rows)
+  const short = shortOf(rows, frames)
   console.log(
     [
       '# Bring my site: fidelity report, recorded pages',
@@ -391,7 +397,8 @@ async function hostReport(load: (file: string) => Promise<Dict>, args: Args): Pr
   const { getFirestore } = require('firebase-admin/firestore')
   const emulator = process.env['FIRESTORE_EMULATOR_HOST'] ?? null
   const projectId = process.env['GCLOUD_PROJECT'] ?? (emulator ? 'demo-aglyn' : PRODUCTION_PROJECT)
-  const app = initializeApp(emulator ? { projectId } : { credential: applicationDefault(), projectId }, 'fidelity-report')
+  // The default app: the libs take it wherever one exists, and throw on any other.
+  const app = initializeApp(emulator ? { projectId } : { credential: applicationDefault(), projectId })
   const db = getFirestore(app)
   try {
     return await hostReportFrom(db, load, args, emulator ? `the emulator at ${emulator} (${projectId})` : `production (${projectId}), read only`)
@@ -494,7 +501,7 @@ async function hostReportFrom(db: Dict, load: (file: string) => Promise<Dict>, a
   const result = verdict(rows, frames, threshold)
   const groups = groupsTable(rows)
   const said = notScored(rows)
-  const short = shortOf(rows)
+  const short = shortOf(rows, frames)
   console.log(
     [
       `# Bring my site: fidelity report, ${host.displayName ?? hostId}`,
@@ -530,7 +537,7 @@ async function hostReportFrom(db: Dict, load: (file: string) => Promise<Dict>, a
     ].join('\n'),
   )
   if (args.json) writeFileSync(args.json, JSON.stringify({ threshold, hostId, jobId, pages: rows, frames, notScored: left }, null, 1))
-  return result.ok && rows.length > 0
+  return result.ok
 }
 
 async function main(): Promise<void> {
