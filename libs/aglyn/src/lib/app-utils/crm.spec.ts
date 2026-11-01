@@ -1183,6 +1183,23 @@ describe('crmActivityRecordLink', () => {
   })
 })
 
+describe('crmActivityCeilingLink with a rollup (AGL-4123)', () => {
+  it('never counts the company an entry about somebody or a deal rolled up to', () => {
+    expect(crmActivityCeilingLink({ contactId: 'c', companyId: 'co' })).toEqual({
+      field: 'contactId',
+      id: 'c',
+    })
+    expect(crmActivityCeilingLink({ dealId: 'd', companyId: 'co' })).toEqual({
+      field: 'dealId',
+      id: 'd',
+    })
+    expect(crmActivityCeilingLink({ contactId: 'c', dealId: 'd', companyId: 'co' })).toEqual({
+      field: 'contactId',
+      id: 'c',
+    })
+  })
+})
+
 describe('crmActivityCeilingLink with a lead (AGL-2615)', () => {
   it('counts on the lead only when nothing else is named', () => {
     expect(crmActivityCeilingLink({ leadId: 'l' })).toEqual({ field: 'leadId', id: 'l' })

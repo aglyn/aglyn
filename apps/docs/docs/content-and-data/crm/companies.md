@@ -121,7 +121,8 @@ renames it on every company that holds it.
 
 The page names the company in the heading and the trail, and holds its
 properties, its contacts, its [deals](./deals.md), its open [tasks](./tasks.md)
-and the [activity](./activities.md) logged against it. The header of the
+and the [activity](./activities.md) logged against it and rolled up from its
+people and its deals. The header of the
 first card carries the domain under the company's kind, the type, the
 industry, the rating and the owner as chips, **Back to companies**, **Call** and **Log a call** (see
 [click to call](./activities.md#click-to-call)), and **Edit**, which opens the

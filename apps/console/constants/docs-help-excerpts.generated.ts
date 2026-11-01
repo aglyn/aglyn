@@ -451,7 +451,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#member-updates': 'The Member updates card, in the products hub\'s catalog, posts updates only your subscribers can see, and can email each one to them.',
   },
   companies: {
-    '#a-companys-page': 'The page names the company in the heading and the trail, and holds its properties, its contacts, its deals, its open tasks and the activity logged against it.',
+    '#a-companys-page': 'The page names the company in the heading and the trail, and holds its properties, its contacts, its deals, its open tasks and the activity logged against it and rolled up from its people and its deals.',
     '#contacts-at-a-company': 'The Contacts card lists the people linked to this company a page at a time, most recently updated first, with the total counted by the database in its footer; each row opens the person\'s page.',
     '#create-a-company': 'Choose New company above the list. A company needs a name; everything else is optional: Domain — the bare hostname (acme.com).',
     '#the-companies-list': 'The list shows every company your site may see, most recently changed first, with its domain, how many contacts are linked to it, its owner, when it was last changed and its next activity — when the earliest open…',

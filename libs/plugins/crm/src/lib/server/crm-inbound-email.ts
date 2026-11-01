@@ -29,7 +29,6 @@ import {
   forwardedSection,
   htmlToPlainText,
   personKey,
-  readContactFacet,
   type RosterMember,
 } from '@aglyn/aglyn/server'
 import type { ReceivedEmail } from '@aglyn/shared-util-email'
@@ -50,6 +49,8 @@ import {
   crmCapturedEmailActivityRef,
   newCrmActivityRef,
 } from './crm-email-activity'
+import { crmActivityLinkWithCompany } from './crm-activity-company'
+import { stampCrmActivityCompany } from '../model/crm-activity-link'
 
 /**
  * EMAIL CAPTURE (AGL-2657): the half with Firestore.
@@ -227,14 +228,12 @@ export async function matchCrmInboundCorrespondent(
       const record = (contact.data() ?? {}) as Record<string, unknown>
       const hostId =
         String(record['hostId'] ?? '').trim() || contactCaptureHostIds(record)[0] || ''
-      const link: CrmActivityLink = { contactId: contact.id }
-      if (hostId) {
-        // The company the capturing site files this person under, so the
-        // row shows on the company's log as a sent email's does.
-        const group = consentGroupForHost(org, hostId)
-        const facet = readContactFacet(record, group.groupId)
-        if (facet.companyId) link.companyId = facet.companyId
-      }
+      // The company the capturing site files this person under, so the row
+      // shows on the company's log as a sent email's does.
+      const link: CrmActivityLink = stampCrmActivityCompany(
+        { contactId: contact.id },
+        { contact: record, groupId: hostId ? consentGroupForHost(org, hostId).groupId : null, org },
+      )
       return {
         email: candidate.email,
         direction: candidate.direction,
@@ -259,10 +258,14 @@ export async function matchCrmInboundCorrespondent(
     for (const hostId of input.hostIds.slice(0, CRM_INBOUND_LEAD_HOST_MAX)) {
       if (!lead.exists) break
       if (!visibleToHost(lead.get('visibleTo') as string[] | undefined, hostId)) continue
-      const link: CrmActivityLink = { leadId: lead.id }
-      // A converted lead's mail belongs on the contact it became as well.
+      // A converted lead's mail belongs on the contact it became as well, and
+      // on that contact's company.
       const converted = String(lead.get('convertedContactId') ?? '').trim()
-      if (converted) link.contactId = converted
+      const link = await crmActivityLinkWithCompany(
+        orgRef,
+        { leadId: lead.id, ...(converted ? { contactId: converted } : {}) } as CrmActivityLink,
+        { groupId: consentGroupForHost(org, hostId).groupId, org },
+      )
       return {
         email: candidate.email,
         direction: candidate.direction,

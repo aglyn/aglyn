@@ -403,6 +403,31 @@ describe('a record found rather than named', () => {
     ])
   })
 
+  it('rolls an entry filed on a named contact up to their company (AGL-4123)', async () => {
+    seedContact('contact-rhea', 'rhea@example.com')
+    await writer.logActivity({ ...FOUND, link: { contactId: 'contact-rhea' } })
+    expect(filed()[0]).toMatchObject({ contactId: 'contact-rhea', companyId: 'company-1' })
+  })
+
+  it('rolls an email filed on a named contact up the same way (AGL-4123)', async () => {
+    seedContact('contact-1', 'pat@example.com')
+    await writer.logActivity({ ...INBOUND, link: { contactId: 'contact-1' } })
+    expect(filed()[0]).toMatchObject({ kind: 'email', contactId: 'contact-1', companyId: 'company-1' })
+  })
+
+  it('takes the contact’s company for a deal that names none (AGL-4123)', async () => {
+    seedContact('contact-9', 'pat@example.com')
+    mockDocs.set(`orgs/${ORG}/deals/deal-7`, { visibleTo: SITE, contactId: 'contact-9' })
+    await writer.logActivity({ ...FOUND, link: { record: { kind: 'deal', id: 'deal-7' } } })
+    expect(filed()[0]).toMatchObject({ dealId: 'deal-7', contactId: 'contact-9', companyId: 'company-1' })
+  })
+
+  it('keeps a company the caller named over the contact’s (AGL-4123)', async () => {
+    seedContact('contact-rhea', 'rhea@example.com')
+    await writer.logActivity({ ...FOUND, link: { contactId: 'contact-rhea', companyId: 'company-named' } })
+    expect(filed()[0]).toMatchObject({ companyId: 'company-named' })
+  })
+
   it('the record the link named beats the address', async () => {
     seedContact('contact-work', 'rhea@work.example.com')
     seedContact('contact-rhea', 'rhea@example.com')

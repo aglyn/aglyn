@@ -75,6 +75,7 @@ import { CRM_SUITE_FEATURE } from './suite-gate'
 import { crmTaskReminderAfterEdit } from '../model/crm-task-reminders'
 import { recomputeCrmNextTaskAt } from './crm-next-activity'
 import { newCrmActivityRef, writeCrmEmailActivity } from './crm-email-activity'
+import { stampCrmActivityCompany } from '../model/crm-activity-link'
 
 /**
  * THE AUTOMATION STEPS THAT WRITE THE CRM (AGL-2605), run for the automation
@@ -427,10 +428,10 @@ export async function runCrmAutomationStep(
   if (!env.orgId) return { error: 'this site has no organization' }
   const orgRef = firebaseAdmin.app().firestore().collection('orgs').doc(env.orgId)
   const visibleTo = crmScopeTokens((env.org ?? null) as Record<string, unknown> | null, group)
-  const links = {
-    contactId: contact.id,
-    ...(facet.companyId ? { companyId: facet.companyId } : {}),
-  }
+  const links = stampCrmActivityCompany(
+    { contactId: contact.id },
+    { contact: contact.data, groupId: group.groupId },
+  )
 
   if (step.type === 'createCrmTask') {
     const title = String(step.title ?? '')
@@ -716,14 +717,13 @@ export async function prepareCrmRecordEmail(
       return null
     }
     const group = await consentGroupForSite(hostId)
-    const facet = person.kind === 'contact' ? readContactFacet(person.data, group.groupId) : null
     const link: CrmActivityLink =
       person.kind === 'lead'
         ? { leadId: person.id }
-        : {
-            contactId: person.id,
-            ...(facet?.companyId ? { companyId: facet.companyId } : {}),
-          }
+        : stampCrmActivityCompany(
+            { contactId: person.id },
+            { contact: person.data, groupId: group.groupId },
+          )
     if (!crmActivityLogHasRoom(await countCrmActivitiesForRecord(orgRef, link))) {
       return null
     }

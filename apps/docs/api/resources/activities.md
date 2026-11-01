@@ -9,7 +9,13 @@ description: Log and read what happened with a contact, company or deal — call
 One thing that happened, logged by a person or by an integration: a call made, a
 meeting held, a note taken. An activity hangs off a [contact](contacts.md), a
 [company](companies.md) or a [deal](deals.md) — at least one — because an activity
-attached to nothing is a sentence nobody can find from anywhere.
+attached to nothing is a sentence nobody can find from anywhere. It can name all
+three, and it reads on each of their timelines.
+
+An activity about a deal or a contact **rolls up to their company**: send no
+`companyId` and the activity takes the deal's company, else the contact's, and the
+response says which. That is what puts a call with a person on their company's
+timeline, and it is what `GET /v1/activities?companyId=` lists.
 
 An activity is a **log entry, and a log is written once.** There is no `PATCH`: an
 entry that turns out to be wrong is deleted and logged again, which keeps every row's
@@ -30,7 +36,7 @@ Scopes and the site rule are shared with every CRM resource — see
   "at": "2026-09-05T16:30:00.000Z",
   "byUid": "u_9f1c",
   "contactId": "k7d2b9f104",
-  "companyId": null,
+  "companyId": "c_71be",
   "dealId": "d_3c9a",
   "outcome": "Interested",
   "durationMinutes": 25,
@@ -49,7 +55,8 @@ Scopes and the site rule are shared with every CRM resource — see
 | `body` | string | Required. What happened, 5,000 characters. |
 | `at` | string | When it happened — which is not when it was logged. ISO 8601 instant; defaults to the moment of the request, for the integration logging a call as it ends. |
 | `byUid` | string | Who did it. Must be a member of your organization; `"api"` when not sent. |
-| `contactId`, `companyId`, `dealId` | string \| null | What it is about. **At least one is required**, and each must exist. |
+| `contactId`, `dealId` | string \| null | Who it was with and what it is about. **At least one of these or `companyId` is required**, and each must exist. |
+| `companyId` | string \| null | The company it is about, or the one it rolls up to. A company you send stands; when you send none it is the deal's company, else the contact's. The contact's company is read through `consentSiteId`'s site, or through the person's primary site for an activity from no site. `null` when none of them names one. |
 | `outcome` | string \| null | A short label, 120 characters. |
 | `durationMinutes` | integer \| null | A whole number, `0` or more. |
 | `direction` | string \| null | Which way it went: a `call` takes `outbound`, `inbound` or `internal` (Salesforce's Call Type); an `email` and every message kind (`text`, `whatsapp`, `messenger`, `instagram`, `linkedin`) take `outbound` or `inbound`. Any other kind takes none. Optional. |
@@ -65,7 +72,7 @@ ordered by activity id unless `updatedAfter` is given.
 
 | Param | Notes |
 | --- | --- |
-| `dealId`, `contactId`, `companyId` | Activities about that record. |
+| `dealId`, `contactId`, `companyId` | Activities about that record. `companyId` includes every activity that rolled up to the company. |
 | `kind` | One of the five kinds. Anything else is a `400`. |
 | `updatedAfter` | Activities updated after this instant — the [sync filter](../conventions.md#updated-after). An activity is written once, so this is when it was logged. |
 | `limit`, `cursor` | [Standard pagination](../conventions.md#pagination). |
