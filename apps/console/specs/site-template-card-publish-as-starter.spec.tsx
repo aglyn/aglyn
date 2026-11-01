@@ -50,7 +50,7 @@ jest.mock('../hooks/use-release-flags', () => ({
     staffPreview: flag.isStaff && !flag.released,
   }),
 }))
-jest.mock('@aglyn/tenant-feature-instance', () => ({
+jest.mock('../hooks/use-host', () => ({
   useHost: () => ({
     doc: {
       data: {
