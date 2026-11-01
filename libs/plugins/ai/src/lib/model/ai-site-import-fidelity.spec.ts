@@ -288,7 +288,7 @@ describe('a measure sees what is lost', () => {
 
   it('pictures: counted over what is drawn when the library’s copies are not known', () => {
     const { source, tree } = home()
-    const { photos: _photos, ...read } = source
+    const read = { layout: source.layout, blocks: source.blocks }
     expect(siteImportFidelity(read, tree).pictures).toEqual({ source: 2, built: 2, ratio: 1 })
     expect(siteImportFidelity(read, changed(tree, (nodes) => drop(nodes, idsOf(nodes, (node) => node.componentId === 'image')[0] as string))).pictures).toEqual({ source: 2, built: 1, ratio: 0.5 })
   })
