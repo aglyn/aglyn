@@ -43,6 +43,7 @@ import {
   type AiLayoutPicture,
   type AiLayoutSection,
   type AiLayoutSettlement,
+  type AiLayoutTab,
 } from './ai-layout-language'
 import {
   AI_LAYOUT_HALF_HEROES,
@@ -3886,7 +3887,7 @@ function tabs(scope: SectionScope, block: AiLayoutBlock, room: Room): string | n
   const given = (block.tabs ?? []).filter((tab) => aiLayoutAsWritten(tab.label) || tab.blocks.length)
   if (!given.length) return null
   const labels = given.map((tab) => tabLabel(tab.label))
-  const panels = given.map((tab) => (tab.blocks.length ? compileFlow(scope, tab.blocks, room) : null))
+  const panels = given.map((tab) => (tab.blocks.length ? tabPanel(scope, tab, room) : null))
   const whole =
     given.length >= 2 &&
     given.length <= 8 &&
@@ -3923,6 +3924,34 @@ function tabs(scope: SectionScope, block: AiLayoutBlock, room: Room): string | n
   ].filter((id): id is string => !!id)
   if (!parts.length) return null
   return parts.length === 1 ? parts[0] : tree.add('muiStack', { spacing: '4' }, null, parts, 'tabs')
+}
+
+/**
+ * A tab's panel of a page brought in: its blocks top to bottom, and the row
+ * of columns the source sets in it side by side (AGL-4114), as a section
+ * sets its row — the blocks above the row, its columns, the blocks below.
+ */
+function tabPanel(scope: SectionScope, tab: AiLayoutTab, room: Room): string | null {
+  const cols = tab.cols && tab.cols.length >= 2 && room !== 'narrow' ? tab.cols : null
+  if (!cols || !tab.blocks.some((block) => block.col !== undefined)) return compileFlow(scope, tab.blocks, room)
+  const head: AiLayoutBlock[] = []
+  const tail: AiLayoutBlock[] = []
+  const columns: AiLayoutBlock[][] = cols.map(() => [])
+  for (const block of tab.blocks) {
+    if (block.col !== undefined) {
+      const { col, ...placed } = block
+      columns[Math.min(col, cols.length - 1)]?.push(placed)
+    } else if (columns.some((column) => column.length)) tail.push(block)
+    else head.push(block)
+  }
+  const filled = columns.map((column, position) => ({ column, weight: cols[position] ?? 1 })).filter((entry) => entry.column.length)
+  const parts = [
+    head.length ? compileFlow(scope, head, room) : null,
+    filled.length >= 2 ? compileRow(scope, filled, 'flex-start') : compileFlow(scope, filled.flatMap((entry) => entry.column), room),
+    tail.length ? compileFlow(scope, tail, room) : null,
+  ].filter((id): id is string => !!id)
+  if (parts.length <= 1) return parts[0] ?? null
+  return scope.page.tree.add('muiStack', { spacing: '3' }, null, parts, 'panel')
 }
 
 /** A short line on an outlined surface of the theme's own shape: a label, a tag, a tab the source draws as one. */
