@@ -248,6 +248,7 @@ fun crmSiteField(kind: CrmKind, scope: CrmScope, sites: List<FieldOption>?): Crm
   val required = scope.createNeedsSite || kind == CrmKind.LEAD
   val help = when {
     sites == null -> "Loading your sites…"
+    !required && kind == CrmKind.CONTACT -> "Where they came from, if anywhere. Every site in the organization can see them either way."
     !required -> "Where it came from, if anywhere. Every site in the organization can see it either way."
     sites.isEmpty() -> "This organization has no sites yet, so nothing can be filed."
     kind == CrmKind.CONTACT -> "The site that captures this person — it decides which sites may see them."

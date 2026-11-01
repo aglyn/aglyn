@@ -224,7 +224,10 @@ func crmSiteField(_ kind: CrmKind, _ scope: CrmScope, sites: [NativeSiteRef]) ->
   let options = sites.map { FieldOption($0.id, $0.name) }
   let help: String
   if !required {
-    help = "Where it came from, if anywhere. Every site in the organization can see it either way."
+    help =
+      kind == .contact
+      ? "Where they came from, if anywhere. Every site in the organization can see them either way."
+      : "Where it came from, if anywhere. Every site in the organization can see it either way."
   } else if sites.isEmpty {
     help = "This organization has no sites yet, so nothing can be filed."
   } else {
