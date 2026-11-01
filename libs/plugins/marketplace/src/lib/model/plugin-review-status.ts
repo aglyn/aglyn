@@ -154,6 +154,45 @@ export function revocationWithdrawsReviewedClaim(options: {
   )
 }
 
+/**
+ * What each status means for a SITE STARTER (AGL-4049). A starter is not
+ * installed code: listed is the state in which anyone creating a site can
+ * choose it, and in every other state nobody but its publisher can.
+ */
+export const STARTER_REVIEW_STATUS_MEANINGS: Record<string, ReviewStatusMeaning> = {
+  submitted: {
+    label: 'Submitted',
+    meaning: 'Waiting for a reviewer. Nobody but its publisher can create a site from it.',
+    live: false,
+    color: 'default',
+  },
+  in_review: {
+    label: 'In review',
+    meaning: 'Someone is looking at it. Nobody but its publisher can create a site from it.',
+    live: false,
+    color: 'info',
+  },
+  listed: {
+    label: 'Listed',
+    meaning:
+      'LIVE — in the marketplace, where anyone creating a site can choose it. Sites already created from it keep their own copy of its pages.',
+    live: true,
+    color: 'warning',
+  },
+  rejected: {
+    label: 'Rejected',
+    meaning:
+      'Turned down with a reason its publisher was told. Nobody but its publisher can create a site from it until they publish it again.',
+    live: false,
+    color: 'error',
+  },
+}
+
+/** A site starter's status, in a starter's terms; any other falls back to the plugin meaning. */
+export function starterReviewStatusMeaning(status: string): ReviewStatusMeaning {
+  return STARTER_REVIEW_STATUS_MEANINGS[status] ?? reviewStatusMeaning(status)
+}
+
 export function reviewStatusMeaning(status: string): ReviewStatusMeaning {
   return (
     REVIEW_STATUS_MEANINGS[status] ?? {

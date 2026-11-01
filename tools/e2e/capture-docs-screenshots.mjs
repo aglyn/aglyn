@@ -46,6 +46,7 @@ import {
 import { optimizePng } from './lib/optimize-png.mjs'
 import { chromeExecutable } from './lib/chrome-executable.mjs'
 import { loadFirstPartyStarterSources } from '../scripts/lib/first-party-starters.mjs'
+import { submitSiteStarter } from './lib/submitted-site-starter.mjs'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const IMG_ROOT = join(repoRoot, 'apps/docs/static/img')
@@ -91,7 +92,9 @@ const TIMEOUT_MS = Number(process.env.E2E_TIMEOUT_MS ?? 60_000)
  * and restores the org after it. `siteStarters: true` lists the platform's
  * own site starters in the emulator's marketplace for that one shot (the
  * first-party seed, under a publisher of its own) and removes them after it,
- * so no other shot of Create site meets them. `assertAbsent: [selector, …]` (or a single
+ * so no other shot of Create site meets them. `submittedSiteStarter: true`
+ * puts one site starter in the staff review queue for that one shot, and
+ * takes it out after it. `assertAbsent: [selector, …]` (or a single
  * selector) fails the shot when any of them is visible at the shutter.
  * A step may carry only `settleMs`, which is how a shot waits for the
  * canvas to finish laying out before its first click.
@@ -720,6 +723,21 @@ const shots = [
     out: 'plugins/plugin-reviews.png',
     path: '/admin/plugin-reviews',
     waitFor: 'Review',
+  },
+  {
+    // The Starters section with a starter waiting (AGL-4049): the card alone,
+    // the section the docs describe.
+    out: 'staff-console/review-queue-starters.png',
+    path: '/admin/plugin-reviews',
+    waitFor: 'Site starters awaiting review',
+    submittedSiteStarter: true,
+    actions: [
+      { scroll: 'text=Site starters awaiting review', waitFor: 'Corner Bistro', settleMs: 800 },
+    ],
+    assertAbsent: 'text=No site starters waiting for review.',
+    clipTo: {
+      locator: '.MuiCard-root:has-text("Site starters awaiting review")',
+    },
   },
   {
     out: 'email-campaigns/campaigns-tab.png',
@@ -1684,6 +1702,17 @@ async function listSiteStarters() {
   }
 }
 
+/** The queue's waiting starter, on the site the seed writes (AGL-4049). */
+async function queueSubmittedSiteStarter() {
+  const { agreement } = await loadFirstPartyStarterSources()
+  return submitSiteStarter({
+    firestoreHost: FIRESTORE_HOST,
+    projectId: FIRESTORE_PROJECT,
+    agreementVersion: agreement.version,
+    sourceHostId: HOST,
+  })
+}
+
 let failures = 0
 const skipped = []
 /**
@@ -1775,6 +1804,7 @@ for (const shot of selected) {
   const page = await context.newPage()
   let restoreOrgReleaseFlags = null
   let removeSiteStarters = null
+  let removeSubmittedSiteStarter = null
   try {
     // A taller window for a surface that is genuinely taller than 900px.
     // `clip` is clamped to the viewport, so a dialog that overflows gets
@@ -1803,6 +1833,7 @@ for (const shot of selected) {
       restoreOrgReleaseFlags = await applyOrgReleaseFlags(shot.orgReleaseFlags)
     }
     if (shot.siteStarters) removeSiteStarters = await listSiteStarters()
+    if (shot.submittedSiteStarter) removeSubmittedSiteStarter = await queueSubmittedSiteStarter()
     await page.goto(`${BASE_URL}${shot.path}`, {
       waitUntil: 'domcontentloaded',
       timeout: TIMEOUT_MS,
@@ -1922,6 +1953,12 @@ for (const shot of selected) {
       await removeSiteStarters().catch((error) => {
         failures += 1
         console.error(`FAIL  ${shot.out}: site starters not removed: ${error.message}`)
+      })
+    }
+    if (removeSubmittedSiteStarter) {
+      await removeSubmittedSiteStarter().catch((error) => {
+        failures += 1
+        console.error(`FAIL  ${shot.out}: submitted starter not removed: ${error.message}`)
       })
     }
   }
