@@ -6166,6 +6166,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let crmActivitiesPerRecordCeiling: Int
   public let crmActivityDirectionLabels: [String: String]
   public let crmActivityKindLabels: [String: String]
+  public let crmActivityKindNouns: [String: String]
   public let crmEmailBodyMax: Int
   public let crmEmailSubjectMax: Int
   public let crmFieldObjectLabels: [String: String]
@@ -6272,6 +6273,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let nativeCreatePlanReason: String
   public let nativeCreateSiteRoleReason: String
   public let nativeCrmActivityDirections: [String: [String]]
+  public let nativeCrmActivityIconPaths: [String: String]
   public let nativeCrmActivityKinds: [String]
   public let nativeCrmFieldCurrencies: [String]
   public let nativeCrmFieldDefaultCurrency: String
@@ -6523,6 +6525,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case crmActivitiesPerRecordCeiling = "CRM_ACTIVITIES_PER_RECORD_CEILING"
     case crmActivityDirectionLabels = "CRM_ACTIVITY_DIRECTION_LABELS"
     case crmActivityKindLabels = "CRM_ACTIVITY_KIND_LABELS"
+    case crmActivityKindNouns = "CRM_ACTIVITY_KIND_NOUNS"
     case crmEmailBodyMax = "CRM_EMAIL_BODY_MAX"
     case crmEmailSubjectMax = "CRM_EMAIL_SUBJECT_MAX"
     case crmFieldObjectLabels = "CRM_FIELD_OBJECT_LABELS"
@@ -6629,6 +6632,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case nativeCreatePlanReason = "NATIVE_CREATE_PLAN_REASON"
     case nativeCreateSiteRoleReason = "NATIVE_CREATE_SITE_ROLE_REASON"
     case nativeCrmActivityDirections = "NATIVE_CRM_ACTIVITY_DIRECTIONS"
+    case nativeCrmActivityIconPaths = "NATIVE_CRM_ACTIVITY_ICON_PATHS"
     case nativeCrmActivityKinds = "NATIVE_CRM_ACTIVITY_KINDS"
     case nativeCrmFieldCurrencies = "NATIVE_CRM_FIELD_CURRENCIES"
     case nativeCrmFieldDefaultCurrency = "NATIVE_CRM_FIELD_DEFAULT_CURRENCY"

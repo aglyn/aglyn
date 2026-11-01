@@ -88,6 +88,28 @@ func crmReadTokens(_ group: ConsentGroup) -> [String] {
   Array(([orgScopeToken] + group.hostIDs.map(hostScopeToken)).prefix(maxScopeHosts))
 }
 
+/// What a record created from `hostID` is stamped with. With no site: the whole org when its records belong to every
+/// site, and nothing when it keeps its sites apart, where a create waits for a site (a record stamped with no tokens is
+/// visible to nobody).
+func crmCreateTokens(_ org: [String: Any]?, _ hostID: String?) -> [String] {
+  if let hostID, !hostID.isEmpty { return crmScopeTokens(org, consentGroupForHost(org, hostID)) }
+  return crmDefaultScope(org) == "org" ? [orgScopeToken] : []
+}
+
+/// The site a create comes from at the workspace's level: the last pick while the workspace still has it, its only
+/// site, else none. Nothing else is picked silently: a wrong guess files a person under a brand that never met them.
+func crmCreateHost(picked: String?, sites: [String]) -> String? {
+  if let picked, sites.contains(picked) { return picked }
+  return sites.count == 1 ? sites[0] : nil
+}
+
+/// The site a record came from, as a workspace-wide page reaches it: its own `hostId`, or the site that first captured
+/// a contact (`contactPrimaryGroup`'s capture order).
+func crmRecordSite(_ data: [String: Any]) -> String? {
+  if let site = data["hostId"] as? String, !site.isEmpty { return site }
+  return (data["capturedByHostIds"] as? [Any])?.compactMap { $0 as? String }.first { !$0.isEmpty }
+}
+
 private let crmPlans: Set<String> = ["starter", "pro", "business", "scale", "advanced", "agency", "enterprise"]
 private let lapsed: Set<String> = ["canceled", "unpaid", "incomplete", "incomplete_expired"]
 
@@ -103,10 +125,10 @@ func crmSuiteCarried(_ org: [String: Any]?) -> Bool {
 }
 
 /// The CRM as this member sees it: from the picked site, or for the whole workspace (the console's org CRM page,
-/// `useCrmScope` with no host): every site's records, a new one filed under the site picked for new records.
+/// `useCrmScope` with no host): every site's records, a new one belonging to the whole workspace unless a site is named.
 struct CrmScope: Equatable {
   let orgID: String
-  /// The site the CRM is read from; at the workspace's level the site new records are filed under.
+  /// The site the CRM is read from; empty at the workspace's level, where a create names its site itself.
   let hostID: String
   /// The workspace's own CRM rather than one site's.
   let orgLevel: Bool
@@ -116,13 +138,23 @@ struct CrmScope: Equatable {
   let role: String?
   let orgWide: Bool
   let readTokens: [String]
-  let createTokens: [String]
+  /// What a record created here is stamped with: empty while a kept-apart workspace waits for its site.
+  private(set) var createTokens: [String]
   let suite: Bool
   let org: [String: Any]
+  /// The member's own row, which `forSite` narrows a declared group's reach by.
+  let member: [String: Any]?
 
   var canWrite: Bool { ["owner", "admin", "editor"].contains(role ?? "") }
   var canManage: Bool { ["owner", "admin"].contains(role ?? "") }
-  var routeScope: [String: Any?] { ["hostId": hostID, "orgId": orgID] }
+  /// The site a new record names as its source; nil for a record from no site.
+  var createHostID: String? { hostID.isEmpty ? nil : hostID }
+  /// Whether a create must name a site: the workspace keeps each site's records apart, so the site decides who sees it.
+  var createNeedsSite: Bool { crmDefaultScope(org) != "org" }
+  /// The site and the workspace, as the console's site hub sends them; the workspace alone from its own CRM.
+  var routeScope: [String: Any?] { hostID.isEmpty ? ["orgId": orgID] : ["hostId": hostID, "orgId": orgID] }
+  /// The scope the task routes take: the site, or the workspace from its own CRM (`crmTaskCallScope`).
+  var taskScope: [String: Any?] { orgLevel ? ["orgId": orgID] : ["hostId": hostID] }
 
   static func == (a: CrmScope, b: CrmScope) -> Bool {
     a.orgID == b.orgID && a.hostID == b.hostID && a.orgLevel == b.orgLevel && a.uid == b.uid && a.role == b.role && a.readTokens == b.readTokens
@@ -152,10 +184,31 @@ struct CrmScope: Equatable {
     self.role = role
     self.orgWide = orgWide
     self.readTokens = read
-    self.createTokens = crmScopeTokens(org, group)
+    self.createTokens = crmCreateTokens(org, hostID)
     self.suite = crmSuiteCarried(org)
     self.org = org ?? [:]
+    self.member = member
   }
+
+  /// The same member's CRM on one site: what a record is created under, and a record's own site.
+  func forSite(_ site: String) -> CrmScope { CrmScope(orgID: orgID, hostID: site, uid: uid, org: org, member: member) }
+
+  /// This scope, stamping what a record of no site is already visible to.
+  func stamping(_ tokens: [String]) -> CrmScope {
+    var copy = self
+    copy.createTokens = tokens
+    return copy
+  }
+}
+
+/// The scope a record's own page works in (the Kotlin `recordScope`): from the whole workspace's CRM, the site the
+/// record came from (its tasks, notes and emails belong there), else the workspace's, stamping what the record itself
+/// is visible to.
+func recordScope(_ scope: CrmScope, _ data: [String: Any]) -> CrmScope {
+  guard scope.orgLevel else { return scope }
+  if let site = crmRecordSite(data) { return scope.forSite(site) }
+  let visibleTo = (data["visibleTo"] as? [Any])?.compactMap { $0 as? String } ?? []
+  return scope.stamping(visibleTo.isEmpty ? [orgScopeToken] : visibleTo)
 }
 
 /// The scope, live: the org document and the member's own row.

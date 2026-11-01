@@ -103,6 +103,31 @@ fun crmScopeTokens(org: Map<String, Any?>?, group: ConsentGroup): List<String> =
 /** What a reader of this group lists by: the org's token, then the group's sites, capped. */
 fun crmReadTokens(group: ConsentGroup): List<String> = (listOf(ORG_SCOPE_TOKEN) + consentGroupScope(group)).take(MAX_SCOPE_HOSTS)
 
+/**
+ * What a record created from [hostId] is stamped with. With no site: the whole org when its records belong to every site, and
+ * nothing when it keeps its sites apart, where a create waits for a site (a record stamped with no tokens is visible to nobody).
+ */
+fun crmCreateTokens(org: Map<String, Any?>?, hostId: String?): List<String> = when {
+  !hostId.isNullOrEmpty() -> crmScopeTokens(org, consentGroupForHost(org, hostId))
+  crmDefaultScopeOf(org) == "org" -> listOf(ORG_SCOPE_TOKEN)
+  else -> emptyList()
+}
+
+/**
+ * The site a create comes from at the workspace's level: the last pick while the workspace still has it, its only site, else
+ * none. Nothing else is picked silently: a wrong guess files a person under a brand that never met them.
+ */
+fun crmCreateHost(picked: String?, sites: List<String>): String? = when {
+  picked != null && picked in sites -> picked
+  sites.size == 1 -> sites.single()
+  else -> null
+}
+
+/** The site a record came from, as a workspace-wide page reaches it: its own `hostId`, or the site that first captured a contact. */
+fun crmRecordSite(data: Map<String, Any?>): String? =
+  (data["hostId"] as? String)?.takeIf { it.isNotEmpty() }
+    ?: (data["capturedByHostIds"] as? List<*>).orEmpty().filterIsInstance<String>().firstOrNull { it.isNotEmpty() }
+
 private val CRM_PLANS = setOf("starter", "pro", "business", "scale", "advanced", "agency", "enterprise")
 private val LAPSED = setOf("canceled", "unpaid", "incomplete", "incomplete_expired")
 
@@ -120,7 +145,8 @@ fun crmSuiteCarried(org: Map<String, Any?>?): Boolean {
 
 /**
  * The CRM as this member sees it: from the picked site, or (with no [hostId]) across the whole workspace, as the console's
- * workspace CRM reads it (`useCrmScope` with no host: no `visibleTo` clause, base fields, a site asked for on create).
+ * workspace CRM reads it (`useCrmScope` with no host: no `visibleTo` clause, base fields, a new record belonging to the
+ * whole workspace unless a site is named).
  */
 data class CrmScope(
   val orgId: String,
@@ -132,7 +158,7 @@ data class CrmScope(
   val orgWide: Boolean,
   /** The `visibleTo array-contains-any` every list asks with; null across the whole workspace, which lists every record. */
   val readTokens: List<String>?,
-  /** What a created record is stamped with. */
+  /** What a created record is stamped with: empty while a workspace that keeps its sites apart waits for one. */
   val createTokens: List<String>,
   val suite: Boolean,
   val org: Map<String, Any?>,
@@ -141,6 +167,9 @@ data class CrmScope(
 ) {
   /** The whole workspace's CRM rather than one site's. */
   val workspaceWide: Boolean get() = hostId == null
+
+  /** Whether a create must name a site: the workspace keeps each site's records apart, so the site decides who sees it. */
+  val createNeedsSite: Boolean get() = crmDefaultScopeOf(org) != "org"
 
   /** The same member's CRM on one site: what a record is created under, and a record's own site. */
   fun forSite(siteId: String): CrmScope = crmScopeOf(orgId, siteId, uid, org, member)
@@ -166,8 +195,8 @@ fun crmScopeOf(orgId: String, hostId: String?, uid: String, orgData: Map<String,
   val role = member?.get("role") as? String
   val orgWide = role in setOf("owner", "admin") || member?.get("allHosts") == true
   if (hostId == null) {
-    // The workspace's own CRM: every record, its shared fields, and nothing created until a site is picked.
-    return CrmScope(orgId, null, "", uid, role, orgWide, null, emptyList(), crmSuiteCarried(orgData), orgData, member)
+    // The workspace's own CRM: every record, its shared fields, a new one the whole workspace's unless a site is named.
+    return CrmScope(orgId, null, "", uid, role, orgWide, null, crmCreateTokens(orgData, null), crmSuiteCarried(orgData), orgData, member)
   }
   val group = consentGroupForHost(orgData, hostId)
   val read = crmReadTokens(group).let { if (group.declared) narrowToReach(it, member, orgWide) else it }
