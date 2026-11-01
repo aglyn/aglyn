@@ -106,6 +106,13 @@ describe('convertOpenLeadOntoContact', () => {
     ])
   })
 
+  it('hands over the company the contact is filed under, for the rollup (AGL-4123)', async () => {
+    docs.set(path, { email: EMAIL, status: 'new' })
+    docs.set('orgs/org-1/contacts/c-1', { facets: { [HOST]: { companyId: 'co-1' } } })
+    await convertOpenLeadOntoContact({ hostId: HOST, email: EMAIL, contactId: 'c-1', by: 'signup' })
+    expect(handOffs).toEqual([expect.objectContaining({ contactId: 'c-1', companyId: 'co-1' })])
+  })
+
   it('stamps the org’s own label for Qualified (AGL-3512)', async () => {
     docs.set('orgs/org-1/crmPicklists/leadStatus', {
       values: [{ id: 'qualified', label: 'Converted', active: true }],

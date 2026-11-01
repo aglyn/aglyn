@@ -50,28 +50,42 @@ data class SiteStyle(val id: String, val name: String, val blurb: String, val pr
 /** The styles a new site can start in, in the order a person is shown them; nothing is chosen for them. */
 object SiteStyles {
   val all: List<SiteStyle> = listOf(
-    SiteStyle("business", "Business & services", "Say what you do, why choose you, and how to reach you", "/_static/starter/styles/business.webp", "A cleaning company's home page: its heading beside a photo of gloved hands wiping a desk, then its services as cards"),
-    SiteStyle("trades", "Home services & trades", "Roofers, plumbers, towing, landscaping: bold, direct, built on trust", "/_static/starter/styles/trades.webp", "A roofer's home page: a bold heading over a full-width photo of a roofer carrying shingles, then roofing services"),
-    SiteStyle("professional", "Law, finance & consulting", "Law firms, accountants, advisers: calm, established, credible", "/_static/starter/styles/professional.webp", "A consulting firm's home page: its heading on a white card over a full-width photo of a team at a planning board"),
-    SiteStyle("wellness", "Health & wellness", "Therapists, clinics, dentists, coaches: warm, reassuring, clear", "/_static/starter/styles/wellness.webp", "A therapy practice's home page: half the page a photo of a calm, sunlit room, its heading in the other half, then its sessions"),
-    SiteStyle("restaurant", "Restaurant & café", "Warm, photo-led pages for food, drink and a place to visit", "/_static/starter/styles/restaurant.webp", "A café's home page: its heading centered over a photo of the owner at the counter, then menu highlights"),
-    SiteStyle("store", "Online store", "Product-first pages for things you sell", "/_static/starter/styles/store.webp", "A handmade goods shop's home page: its heading beside two overlapping photos of wax seals, then featured products"),
-    SiteStyle("portfolio", "Portfolio", "Minimal, image-led pages that put the work first", "/_static/starter/styles/portfolio.webp", "A prop stylist's home page: a large heading over a grid of three styled sets"),
-    SiteStyle("studio", "Design studio & agency", "Bold type and case studies for creative teams", "/_static/starter/styles/studio.webp", "A design studio's home page: an oversized heading on black over a wide photo of the team at a brand board"),
-    SiteStyle("photography", "Photography", "Galleries first, words second", "/_static/starter/styles/photography.webp", "A photographer's home page: its heading on black over a gallery of a wedding, a portrait and a maker"),
-    SiteStyle("blog", "Blog & writing", "Reading-first pages with a calm serif voice", "/_static/starter/styles/blog.webp", "A food journal's home page: its heading centered in a narrow column over a wide photo of vegetables on a cutting board"),
-    SiteStyle("events", "Events & weddings", "Dates, places and the details guests need", "/_static/starter/styles/events.webp", "A festival's home page: two overlapping photos of a lantern-lit night market beside its dates, then the program"),
-    SiteStyle("fitness", "Fitness & sports", "Gyms, trainers and studios with energy", "/_static/starter/styles/fitness.webp", "A gym's home page: a bold heading on black beside a photo of rows of dumbbells, then this week's classes"),
-    SiteStyle("yoga", "Yoga & mindfulness", "Calm, spacious pages for classes and retreats", "/_static/starter/styles/yoga.webp", "A yoga studio's home page: a quiet centered heading over a wide photo of a class stretching on mats"),
-    SiteStyle("beauty", "Beauty & salon", "Salons, barbers, spas and studios with style", "/_static/starter/styles/beauty.webp", "A hair salon's home page: its heading beside two overlapping photos of a stylist at work and the salon's chairs"),
-    SiteStyle("realestate", "Real estate", "Agents, brokers and property: polished and local", "/_static/starter/styles/realestate.webp", "A real estate agent's home page: its heading on a white card over a photo of a white house, then new listings"),
-    SiteStyle("education", "Courses & education", "Tutors, schools and courses, clear and encouraging", "/_static/starter/styles/education.webp", "A tutoring center's home page: a photo of a tutor at the whiteboard beside its heading, then its courses"),
-    SiteStyle("nonprofit", "Nonprofit & community", "A cause, its impact and how to help", "/_static/starter/styles/nonprofit.webp", "A food bank's home page: its heading over a full-width photo of volunteers sorting donations, then the ways to help"),
-    SiteStyle("music", "Music & bands", "Artists, bands and DJs, loud and visual", "/_static/starter/styles/music.webp", "A band's home page: its name in large type over a photo of a band under stage lights, then its tour dates"),
-    SiteStyle("personal", "Personal & resume", "A simple page about you and your work", "/_static/starter/styles/personal.webp", "A product manager's personal page: a round portrait over her centered introduction, then her experience"),
-    SiteStyle("landing", "Landing page", "One page that leads to one action", "/_static/starter/styles/landing.webp", "A budgeting app's landing page: its pitch centered on a colored band over a photo of a couple planning on a phone"),
-    SiteStyle("coming-soon", "Coming soon", "A placeholder that collects interest", "/_static/starter/styles/coming-soon.webp", "A café's coming soon page: its heading and notify button centered over a photo of the café's coffee shelves"),
+    SiteStyle("business", "Business & services", "Say what you do, why choose you, and how to reach you", "/api/media/cdn/site-styles/business.webp", "A cleaning company's home page: its heading beside a photo of gloved hands wiping a desk, then its services as cards"),
+    SiteStyle("trades", "Home services & trades", "Roofers, plumbers, towing, landscaping: bold, direct, built on trust", "/api/media/cdn/site-styles/trades.webp", "A roofer's home page: a bold heading over a full-width photo of a roofer carrying shingles, then roofing services"),
+    SiteStyle("professional", "Law, finance & consulting", "Law firms, accountants, advisers: calm, established, credible", "/api/media/cdn/site-styles/professional.webp", "A consulting firm's home page: its heading on a white card over a full-width photo of a team at a planning board"),
+    SiteStyle("wellness", "Health & wellness", "Therapists, clinics, dentists, coaches: warm, reassuring, clear", "/api/media/cdn/site-styles/wellness.webp", "A therapy practice's home page: half the page a photo of a calm, sunlit room, its heading in the other half, then its sessions"),
+    SiteStyle("restaurant", "Restaurant & café", "Warm, photo-led pages for food, drink and a place to visit", "/api/media/cdn/site-styles/restaurant.webp", "A café's home page: its heading centered over a photo of the owner at the counter, then menu highlights"),
+    SiteStyle("store", "Online store", "Product-first pages for things you sell", "/api/media/cdn/site-styles/store.webp", "A handmade goods shop's home page: its heading beside two overlapping photos of wax seals, then featured products"),
+    SiteStyle("portfolio", "Portfolio", "Minimal, image-led pages that put the work first", "/api/media/cdn/site-styles/portfolio.webp", "A prop stylist's home page: a large heading over a grid of three styled sets"),
+    SiteStyle("studio", "Design studio & agency", "Bold type and case studies for creative teams", "/api/media/cdn/site-styles/studio.webp", "A design studio's home page: an oversized heading on black over a wide photo of the team at a brand board"),
+    SiteStyle("photography", "Photography", "Galleries first, words second", "/api/media/cdn/site-styles/photography.webp", "A photographer's home page: its heading on black over a gallery of a wedding, a portrait and a maker"),
+    SiteStyle("blog", "Blog & writing", "Reading-first pages with a calm serif voice", "/api/media/cdn/site-styles/blog.webp", "A food journal's home page: its heading centered in a narrow column over a wide photo of vegetables on a cutting board"),
+    SiteStyle("events", "Events & weddings", "Dates, places and the details guests need", "/api/media/cdn/site-styles/events.webp", "A festival's home page: two overlapping photos of a lantern-lit night market beside its dates, then the program"),
+    SiteStyle("fitness", "Fitness & sports", "Gyms, trainers and studios with energy", "/api/media/cdn/site-styles/fitness.webp", "A gym's home page: a bold heading on black beside a photo of rows of dumbbells, then this week's classes"),
+    SiteStyle("yoga", "Yoga & mindfulness", "Calm, spacious pages for classes and retreats", "/api/media/cdn/site-styles/yoga.webp", "A yoga studio's home page: a quiet centered heading over a wide photo of a class stretching on mats"),
+    SiteStyle("beauty", "Beauty & salon", "Salons, barbers, spas and studios with style", "/api/media/cdn/site-styles/beauty.webp", "A hair salon's home page: its heading beside two overlapping photos of a stylist at work and the salon's chairs"),
+    SiteStyle("realestate", "Real estate", "Agents, brokers and property: polished and local", "/api/media/cdn/site-styles/realestate.webp", "A real estate agent's home page: its heading on a white card over a photo of a white house, then new listings"),
+    SiteStyle("education", "Courses & education", "Tutors, schools and courses, clear and encouraging", "/api/media/cdn/site-styles/education.webp", "A tutoring center's home page: a photo of a tutor at the whiteboard beside its heading, then its courses"),
+    SiteStyle("nonprofit", "Nonprofit & community", "A cause, its impact and how to help", "/api/media/cdn/site-styles/nonprofit.webp", "A food bank's home page: its heading over a full-width photo of volunteers sorting donations, then the ways to help"),
+    SiteStyle("music", "Music & bands", "Artists, bands and DJs, loud and visual", "/api/media/cdn/site-styles/music.webp", "A band's home page: its name in large type over a photo of a band under stage lights, then its tour dates"),
+    SiteStyle("personal", "Personal & resume", "A simple page about you and your work", "/api/media/cdn/site-styles/personal.webp", "A product manager's personal page: a round portrait over her centered introduction, then her experience"),
+    SiteStyle("landing", "Landing page", "One page that leads to one action", "/api/media/cdn/site-styles/landing.webp", "A budgeting app's landing page: its pitch centered on a colored band over a photo of a couple planning on a phone"),
+    SiteStyle("coming-soon", "Coming soon", "A placeholder that collects interest", "/api/media/cdn/site-styles/coming-soon.webp", "A café's coming soon page: its heading and notify button centered over a photo of the café's coffee shelves"),
   )
+}
+
+/** One of the files Create site takes (`site-brand-files.ts`): the host field it fills, its label, how a sentence names it. */
+data class SiteBrandSlot(val slot: String, val label: String, val noun: String)
+
+/** What Create site's logo fields say and take. */
+object SiteBrandFiles {
+  val slots: List<SiteBrandSlot> = listOf(
+    SiteBrandSlot("logo", "Logo", "logo"),
+    SiteBrandSlot("logoDark", "Logo for dark backgrounds", "dark logo"),
+    SiteBrandSlot("favicon", "Favicon", "favicon"),
+  )
+  const val HINT = "Square, at least 512 px, the logo filling about 80% with a little space around it."
+  const val MAX_BYTES = 15728640
 }
 
 /** Each release flag as the Remote Config template publishes it. */

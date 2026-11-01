@@ -27,7 +27,7 @@ public func registerCrmNative(_ r: NativePluginRegistrar) {
     r.screen(kind.detailScreen, title: kind.singular, requiresSite: true, workspaceView: true, icon: kind.symbol) { ctx, params in
       if let id = params[kind.param] ?? params["\(kind.param)Id"] ?? params["id"] {
         CrmGate(context: ctx) { scope, api, reference in
-          RecordDetail(context: ctx, kind: kind, id: id, scope: scope, api: api, reference: reference)
+          RecordDetail(context: ctx, kind: kind, id: id, listScope: scope, listAPI: api, reference: reference)
         }
       } else {
         CrmHubScreen(context: ctx, section: CrmSection.allCases.first { $0.kind == kind } ?? .contacts)
@@ -48,7 +48,7 @@ public func registerCrmNative(_ r: NativePluginRegistrar) {
     CrmTasksDueCard(context: $0, orgLevel: true)
   }
   r.quickAction("crm.open", title: "CRM", icon: "person.2", order: 70, screen: CrmSection.contacts.screen, requiresSite: true)
-  r.quickAction("crm.deals-action", title: "Deals", icon: "dollarsign.circle", order: 72, screen: CrmSection.deals.screen, requiresSite: true)
+  r.quickAction("crm.deals-action", title: CrmSection.deals.label, icon: "dollarsign.circle", order: 72, screen: CrmSection.deals.screen, requiresSite: true)
   r.quickAction("crm.tasks-action", title: "Tasks", icon: "checklist", order: 74, screen: CrmSection.tasks.screen, requiresSite: true)
   r.deepLink("crm.page", path: "/crm", screen: CrmSection.contacts.screen)
   r.deepLink("crm.legacy-contacts", path: "/contacts", screen: CrmSection.contacts.screen)

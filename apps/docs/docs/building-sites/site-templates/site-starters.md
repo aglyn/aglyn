@@ -61,8 +61,11 @@ Where **Start your site** is offered, **Choose your starter** has two tabs:
 - **Starters** are copied into your new site as they are: their pages, their header and
   footer, and their theme.
 - **AI starters** are a starting point for Aglyn AI's start, which writes the pages for
-  your business. Creating a site from an AI starter is not available yet: **Create site**
-  says so, and you can pick a starter from the **Starters** tab instead.
+  your business. Pick one and choose **Continue**: the start's questions open filled in
+  from it, its style and, where it has one, its brand color chosen, for you to change,
+  and **Plan my site**
+  creates the site. See
+  [Start from an AI starter](../../ai/start-with-ai.md#start-from-an-ai-starter).
 
 ## A starter with a price {#a-starter-with-a-price}
 
@@ -75,6 +78,9 @@ there, in **Create site**:
    appears beneath the cards. If your bank wants to confirm the payment, its own step
    opens first.
 3. Choose **Create site**.
+
+An AI starter with a price works the same way, with **Continue** in place of **Create
+site**: its answers are shown only once it is yours.
 
 If your workspace has no card on file, the form to add one opens in the same place, and
 then one for a billing address if there is none: sales tax is calculated from it. Both

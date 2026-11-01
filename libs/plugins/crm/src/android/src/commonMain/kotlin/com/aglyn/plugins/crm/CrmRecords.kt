@@ -198,7 +198,8 @@ fun standardFields(kind: CrmKind, picklists: Picklists, members: List<CrmMember>
   )
   CrmKind.CONTACT -> listOf(
     text("name", "Name"),
-    CrmField(FieldSpec("email", "Email", FieldKind.EMAIL, required = true), editable = false),
+    // A contact needs no address, and one can be added or changed here (`crm/contact-update`).
+    text("email", "Email", FieldKind.EMAIL),
     picklist("salutation", "Salutation", "salutation", picklists),
     text("firstName", "First name"),
     text("lastName", "Last name"),
@@ -411,19 +412,70 @@ data class CrmRow(
 
 fun stageLabel(stage: String?) = stage?.let { Contracts.contactLifecycleStageLabels[it] ?: it }
 
-/** A contact's own fields for this viewer: the holder's facet over the shared record. */
+/** What to call a person (`contactRecordLabel`): their name, then their address, then their number. */
+fun crmContactLabel(data: Map<String, Any?>): String =
+  listOf("name", "email", "phone", "mobilePhone").firstNotNullOfOrNull { (data[it] as? String)?.takeIf(String::isNotBlank) } ?: "Unnamed contact"
+
+/** Whether a contact has an address to write to: a blank one is none. */
+fun crmHasEmail(data: Map<String, Any?>): Boolean = !(data["email"] as? String).isNullOrBlank()
+
+/** Whether a new contact can be told apart: a name, an email or a number (AGL-4122). */
+fun crmContactIdentified(values: Map<String, String>): Boolean = listOf("name", "email", "phone").any { !values[it].isNullOrBlank() }
+
+/** The Email field of a contact's edit sheet, saying what saving it does. */
+fun withContactEmailHelp(fields: List<CrmField>, hasEmail: Boolean): List<CrmField> = fields.map { field ->
+  if (field.spec.key != "email") field
+  else field.copy(spec = field.spec.copy(help = if (hasEmail) "Every site shares this address, so changing it changes it for all of them." else "Add it whenever you have it."))
+}
+
+/**
+ * The holder a cross-site reader shows a contact through (`contactPrimaryGroup`): the organization's own facet, then the first
+ * capturing site whose group holds one, then any facet, then the first capturing site; empty for none.
+ */
+fun crmContactPrimaryHolder(data: Map<String, Any?>, org: Map<String, Any?>?): String {
+  val facets = data["facets"] as? Map<*, *> ?: emptyMap<String, Any?>()
+  if (ORG_CONTACT_HOLDER_ID in facets) return ORG_CONTACT_HOLDER_ID
+  val captured = (data["capturedByHostIds"] as? List<*>).orEmpty().map { it?.toString()?.trim().orEmpty() }.filter { it.isNotEmpty() }
+  captured.firstOrNull { consentGroupForHost(org, it).groupId in facets }?.let { return consentGroupForHost(org, it).groupId }
+  facets.keys.map { it.toString() }.minOrNull()?.let { return it }
+  return captured.firstOrNull()?.let { consentGroupForHost(org, it).groupId }.orEmpty()
+}
+
+/**
+ * `crmActivityCompanyId`: the company an activity rolls up to. One the writer named stands; else the deal's; else the contact's,
+ * as the writer's holder knows it, or the organization's own facet. Never the `companyIds` mirror, which carries every holder's link.
+ */
+fun crmActivityCompanyId(named: String?, deal: Map<String, Any?>?, contact: Map<String, Any?>?, groupId: String?, org: Map<String, Any?>?): String? {
+  fun id(value: Any?) = (value as? String)?.trim()?.takeIf { it.isNotEmpty() }
+  id(named)?.let { return it }
+  id(deal?.get("companyId"))?.let { return it }
+  if (contact == null) return null
+  val facets = contact["facets"] as? Map<*, *>
+  val holder = groupId?.takeIf { it.isNotEmpty() } ?: crmContactPrimaryHolder(contact, org)
+  return id((facets?.get(holder) as? Map<*, *>)?.get("companyId")) ?: id((facets?.get(ORG_CONTACT_HOLDER_ID) as? Map<*, *>)?.get("companyId"))
+}
+
+/** The facet of a person the organization added itself, with no site behind them (`ORG_CONTACT_HOLDER_ID`). */
+const val ORG_CONTACT_HOLDER_ID = "org"
+
+/** A contact's own fields for this viewer: the holder's facet over the shared record, or the one the organization holds. */
 @Suppress("UNCHECKED_CAST")
 fun contactView(data: Map<String, Any?>, groupId: String): Map<String, Any?> {
-  val facet = (data["facets"] as? Map<String, Any?>)?.get(groupId) as? Map<String, Any?> ?: emptyMap()
+  val facets = data["facets"] as? Map<String, Any?>
+  val facet = (facets?.get(groupId) ?: facets?.get(ORG_CONTACT_HOLDER_ID)) as? Map<String, Any?> ?: emptyMap()
   return data + facet.filterValues { it != null } + mapOf("name" to ((facet["name"] as? String)?.takeIf { it.isNotBlank() } ?: data["name"]))
 }
 
 fun crmRow(kind: CrmKind, doc: FirestoreDoc, scope: CrmScope, stages: Map<String, String> = emptyMap()): CrmRow {
-  val data = if (kind == CrmKind.CONTACT) contactView(doc.data, scope.groupId) else doc.data
+  // A whole-workspace reader sees a contact through the person's primary holder, as their page does.
+  val data = if (kind == CrmKind.CONTACT) contactView(doc.data, scope.groupId.ifEmpty { crmContactPrimaryHolder(doc.data, scope.org) }) else doc.data
   fun s(key: String) = (data[key] as? String)?.takeIf { it.isNotBlank() }
   return when (kind) {
     CrmKind.LEAD -> CrmRow(doc.id, kind, s("name") ?: s("email") ?: "Lead", listOfNotNull(s("email")?.takeIf { it != s("name") }, s("company")).joinToString(" · "), s("statusLabel") ?: s("status")?.let { Contracts.crmLeadStatusLabels[it] ?: it }, data)
-    CrmKind.CONTACT -> CrmRow(doc.id, kind, s("name") ?: s("email") ?: "Contact", listOfNotNull(s("email")?.takeIf { it != s("name") }, s("companyName"), s("jobTitle")).joinToString(" · "), stageLabel(s("lifecycleStage")), data)
+    CrmKind.CONTACT -> {
+      val title = crmContactLabel(data)
+      CrmRow(doc.id, kind, title, listOfNotNull(listOfNotNull(s("email"), s("phone"), s("mobilePhone")).firstOrNull { it != title }, s("companyName"), s("jobTitle")).joinToString(" · "), stageLabel(s("lifecycleStage")), data)
+    }
     CrmKind.COMPANY -> CrmRow(doc.id, kind, s("name") ?: "Company", listOfNotNull(s("domain"), s("industry"), (data["contactsCount"] as? Number)?.toLong()?.takeIf { it > 0 }?.let { if (it == 1L) "1 contact" else "$it contacts" }).joinToString(" · "), s("type"), data)
     CrmKind.DEAL -> CrmRow(
       doc.id, kind, s("title") ?: "Deal",
@@ -431,6 +483,61 @@ fun crmRow(kind: CrmKind, doc: FirestoreDoc, scope: CrmScope, stages: Map<String
       when (s("status")) { "won" -> "Won"; "lost" -> "Lost"; else -> null }, data,
     )
   }
+}
+
+/*---------- activity ----------*/
+
+/** `crmActivityKindTitle`: "Inbound call", "Outbound WhatsApp message", or the kind alone with no direction it takes. */
+fun crmActivityKindTitle(kind: String, direction: String? = null): String {
+  val label = Contracts.crmActivityKindLabels[kind] ?: kind
+  val text = direction.orEmpty().trim().lowercase()
+  if (text !in Contracts.nativeCrmActivityDirections[kind].orEmpty()) return label
+  val word = Contracts.crmActivityDirectionLabels[text] ?: return label
+  return "$word ${Contracts.crmActivityKindNouns[kind] ?: label.lowercase()}"
+}
+
+/** A logged activity as the timeline reads it (the console's `ActivityRow`): the chips, the heading, the rest of its words. */
+data class CrmActivityLine(
+  /** A stored kind outside the list reads as `other`. */
+  val kind: String,
+  /** The kind, with the direction a hand-logged entry names ("Outbound WhatsApp message"). */
+  val chip: String,
+  /** "Sent" or "Received": a message the platform carried or captured says so beside the kind. */
+  val state: String?,
+  val heading: String,
+  val detail: String?,
+)
+
+fun crmActivityLine(data: Map<String, Any?>): CrmActivityLine {
+  fun text(key: String) = (data[key] as? String).orEmpty().trim()
+  val stored = text("kind")
+  val kind = if (stored in Contracts.nativeCrmActivityKinds) stored else "other"
+  val captured = text("messageId").isNotEmpty()
+  val direction = text("direction")
+  val sent = direction == "outbound" && (captured || text("deliveryState").isNotEmpty())
+  val received = direction == "inbound" && captured
+  val body = text("body")
+  val subject = text("subject")
+  val lines = body.lines().dropWhile { it.isBlank() }
+  val heading = subject.ifEmpty { lines.firstOrNull().orEmpty().trim() }
+  val rest = (if (subject.isEmpty()) lines.drop(1).joinToString("\n") else body).trim()
+  return CrmActivityLine(
+    kind,
+    if (sent || received || captured) Contracts.crmActivityKindLabels[kind] ?: kind else crmActivityKindTitle(kind, direction),
+    if (received) "Received" else if (captured) "Sent" else null,
+    heading,
+    rest.ifEmpty { null }?.take(240),
+  )
+}
+
+/** The Material icon nearest the console's glyph for a kind, for the kinds that are not a brand (those draw `nativeCrmActivityIconPaths`). */
+fun crmActivityIconName(kind: String): String = when (kind) {
+  "call" -> "call"
+  "email" -> "mail"
+  "text" -> "sms"
+  "meeting" -> "groups"
+  "note" -> "sticky_note"
+  else -> "more_horiz"
 }
 
 /** A deal's line under its title: the amount, then its stage's name ([stageName] of its pipeline and stage ids). */

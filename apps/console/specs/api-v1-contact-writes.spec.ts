@@ -573,6 +573,29 @@ describe('the audience band (AGL-890) is enforced on create', () => {
     mockOrg = overriddenOrg(5)
   })
 
+  /** A contact needs a way to be called, not an address (AGL-4122). */
+  it('creates a contact with a name and no email, and answers null for the address', async () => {
+    const response = await postContact({ name: 'Jordan Lee' })
+    expect(response.status).toBe(201)
+    expect((await response.json()).email).toBeNull()
+  })
+
+  it('refuses a contact with nothing to call them by, naming the field', async () => {
+    const response = await postContact({ tags: ['vip'] })
+    expect(response.status).toBe(400)
+    expect((await response.json()).error.fields).toHaveProperty('email')
+  })
+
+  it('still refuses an email that is not one', async () => {
+    const response = await postContact({ email: 'not an address', name: 'Jordan Lee' })
+    expect(response.status).toBe(400)
+  })
+
+  it('never treats two blank emails as one person', async () => {
+    expect((await postContact({ name: 'Jordan Lee' })).status).toBe(201)
+    expect((await postContact({ name: 'Pat Lee' })).status).toBe(201)
+  })
+
   it('creates the LAST contact inside the band', async () => {
     seedContacts(4)
     const response = await postContact({ email: 'fifth@example.com' })
@@ -951,8 +974,8 @@ describe('what a contact write may NOT do', () => {
     expect(mockDocs.get(`${CONTACTS_PATH}/con_1`)?.sources).toEqual({ api: true })
   })
 
-  it('refuses a create with no usable email, and writes nothing', async () => {
-    const response = await postContact({ name: 'No Email' })
+  it('refuses a create whose email is unusable, and writes nothing', async () => {
+    const response = await postContact({ name: 'No Email', email: 'not an address' })
     expect(response.status).toBe(400)
     expect((await response.json()).error.fields.email).toBeTruthy()
     expect(contactCount()).toBe(0)

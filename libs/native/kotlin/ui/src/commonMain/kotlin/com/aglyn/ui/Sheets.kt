@@ -31,6 +31,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -152,20 +153,21 @@ fun PanelSheet(
   subtitle: String? = null,
   closeLabel: String = "Close",
   action: (@Composable RowScope.() -> Unit)? = null,
-  /** False when the content scrolls on its own (a lazy list) or centers itself (an empty state). */
+  /** False when the content scrolls on its own (a lazy list, which keeps its own padding) or centers itself (an empty state). */
   scroll: Boolean = true,
   content: @Composable () -> Unit,
 ) {
   val compact = currentWidthClass() == WidthClass.COMPACT
   Dialog(onDismissRequest = onDismiss, properties = sheetDialogProperties()) {
     Surface(
-      modifier.safeDrawingPadding().then(
-        if (compact) Modifier.fillMaxSize() else Modifier.widthIn(max = 760.dp).fillMaxWidth(0.94f).heightIn(max = 920.dp).fillMaxHeight(0.92f),
+      // Full screen, the surface runs under the system bars and only its content keeps clear of them.
+      modifier.then(
+        if (compact) Modifier.fillMaxSize() else Modifier.safeDrawingPadding().widthIn(max = 760.dp).fillMaxWidth(0.94f).heightIn(max = 920.dp).fillMaxHeight(0.92f),
       ).sheetEntrance(SheetEntrance.RISE).testTag("panel-sheet"),
-      shape = if (compact) MaterialTheme.shapes.extraSmall else MaterialTheme.shapes.extraLarge,
+      shape = if (compact) RectangleShape else MaterialTheme.shapes.extraLarge,
       color = MaterialTheme.colorScheme.surface,
     ) {
-      Column {
+      Column(if (compact) Modifier.safeDrawingPadding() else Modifier) {
         Row(
           Modifier.fillMaxWidth().padding(start = space(1f), end = space(2f), top = space(1f), bottom = space(1f)),
           verticalAlignment = Alignment.CenterVertically,
@@ -181,8 +183,8 @@ fun PanelSheet(
         HorizontalDivider()
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
           Column(
-            Modifier.widthIn(max = 720.dp).fillMaxWidth().then(if (scroll) Modifier.verticalScroll(rememberScrollState()) else Modifier.fillMaxHeight())
-              .padding(space(2f)),
+            Modifier.widthIn(max = 720.dp).fillMaxWidth()
+              .then(if (scroll) Modifier.verticalScroll(rememberScrollState()).padding(space(2f)) else Modifier.fillMaxHeight()),
             verticalArrangement = Arrangement.spacedBy(space(1.5f)),
           ) { content() }
         }

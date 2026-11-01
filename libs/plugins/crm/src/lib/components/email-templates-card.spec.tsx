@@ -150,8 +150,8 @@ describe('EmailTemplatesCard', () => {
     expect(screen.getAllByRole('button', { name: 'New template' }).length).toBe(2)
   })
 
-  it('creates a shared template through the drawer, stamped for the site', async () => {
-    render(<EmailTemplatesCard hostId="host-1" org={{}} />)
+  it('creates a shared template through the drawer, stamped for the site when the org keeps its sites apart', async () => {
+    render(<EmailTemplatesCard hostId="host-1" org={{ crm: { defaultRecordScope: 'host' } }} />)
     fireEvent.click(screen.getByRole('button', { name: 'New template' }))
     expect(await screen.findByText('New template', { selector: 'h6' })).toBeTruthy()
     const create = () => screen.getByRole('button', { name: 'Create template' }) as HTMLButtonElement

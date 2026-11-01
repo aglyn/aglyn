@@ -84,7 +84,9 @@ const named = (name: string) =>
 beforeEach(() => {
   mockMemory.docs.clear()
   files.clear()
-  mockMemory.seed(`orgs/${ORG}`, { plan: 'starter' })
+  // An agency that keeps each client's records apart — the opt-in — so a
+  // company this import creates is this site's alone.
+  mockMemory.seed(`orgs/${ORG}`, { plan: 'starter', crm: { defaultRecordScope: 'host' } })
   mockMemory.seed(`${COMPANIES}/acme`, {
     name: 'Acme',
     nameLower: 'acme',
@@ -130,7 +132,7 @@ const FILE = [
 ].join('\n')
 
 describe('a Salesforce accounts file', () => {
-  it('matches by domain within the site’s view, creates the parent it was told to, and adds the industry', async () => {
+  it('matches by domain within the site’s view, creates the parent it was told to, and adds the industry, when the org keeps its sites apart', async () => {
     const { job: upload } = await uploadTransferSource(deps, {
       orgId: ORG,
       actorUid: ME,

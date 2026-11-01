@@ -179,28 +179,38 @@ public func cleanSubdomainInput(_ text: String) -> String {
   String(text.lowercased().filter { ($0.isLetter && $0.isASCII) || ($0.isNumber && $0.isASCII) || $0 == "-" }.prefix(30))
 }
 
+/// Whether Create site can go ahead: a name, an address the route's pattern takes, and a style the person picked.
+/// Nothing in Create site is chosen for anyone (AGL-4049), so until a style is picked the button stays off. The starter
+/// site has no "Pick for me": that card is the AI start's, and the route refuses it here.
+public func canCreateSite(name: String, subdomain: String, style: String?) -> Bool {
+  !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && isValidSubdomain(subdomain)
+    && SiteStyles.all.contains { $0.id == style }
+}
+
 /// What Create site sends. `start: "starter"` is the console's own "Create the
 /// starter site" answer: the site is born with the starter website in the same
 /// request. Without it the server may create the site empty to offer the guided
 /// AI start (`guidedStart` in its answer), and the app has no such start to land
-/// on, which would leave an empty site.
-public func createSiteBody(orgID: String, name: String, subdomain: String) -> [String: String] {
+/// on, which would leave an empty site. `style` is the one the person chose: the
+/// site starts in its look, and the route records it on the site.
+public func createSiteBody(orgID: String, name: String, subdomain: String, style: String) -> [String: String] {
   [
     "displayName": name.trimmingCharacters(in: .whitespacesAndNewlines),
     "subdomain": subdomain.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
     "orgId": orgID,
     "start": "starter",
+    "style": style,
   ]
 }
 
 /// `POST /api/hosts/create`, the console's own Create site.
-public func createSite(_ api: ConsoleAPIClient, orgID: String, name: String, subdomain: String) async throws
-  -> CreateSiteResult
+public func createSite(_ api: ConsoleAPIClient, orgID: String, name: String, subdomain: String, style: String)
+  async throws -> CreateSiteResult
 {
   do {
     let answer = try await api.request(
       "/api/hosts/create", method: .post,
-      body: .from(createSiteBody(orgID: orgID, name: name, subdomain: subdomain)))
+      body: .from(createSiteBody(orgID: orgID, name: name, subdomain: subdomain, style: style)))
     return .created(hostID: answer.field("hostId") ?? "", subdomain: answer.field("subdomain") ?? subdomain)
   } catch let error as ConsoleAPIError where error.status != 0 {
     let suggestions = error.body?["suggestions"]?.arrayValue?.compactMap(\.stringValue) ?? []

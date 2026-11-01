@@ -9,6 +9,79 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.2.0 — 2026-11-01
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.1.0...v1.2.0)
+
+### Added
+
+- **crm-native:** a contact needs no email, and native activity rolls up to the company ([AGL-4124](https://linear.app/aglyn/issue/AGL-4124))
+- **crm-native:** the deals section reads Deals / Opportunities in the apps ([AGL-4124](https://linear.app/aglyn/issue/AGL-4124))
+- **crm-native:** Kotlin CRM creates with no site, optional source, real activity marks ([AGL-4124](https://linear.app/aglyn/issue/AGL-4124))
+- **crm-native:** Apple CRM creates with no site, optional source, real activity marks ([AGL-4124](https://linear.app/aglyn/issue/AGL-4124))
+
+### Fixed
+
+- **crm:** what the live check found on company roles, pickers and Known by ([AGL-4122](https://linear.app/aglyn/issue/AGL-4122))
+- **crm-native:** a contact's edit shows at once on the polling reader ([AGL-4124](https://linear.app/aglyn/issue/AGL-4124))
+- **crm-native:** a required Site field reads Choose, not None, on Apple ([AGL-4124](https://linear.app/aglyn/issue/AGL-4124))
+- **crm-native:** a new contact's Source site says them, as the console does ([AGL-4124](https://linear.app/aglyn/issue/AGL-4124))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **crm-native:** land on main ([AGL-4124](https://linear.app/aglyn/issue/AGL-4124))
+
+</details>
+
+## v1.1.0 — 2026-11-01
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0...v1.1.0)
+
+### Added
+
+- **console:** the failure notice stays until it is read, and a docs shot of the fields ([AGL-4119](https://linear.app/aglyn/issue/AGL-4119))
+- **console:** Create site takes a logo, a dark logo and a favicon ([AGL-4119](https://linear.app/aglyn/issue/AGL-4119))
+- **crm:** contact roles on a company, and the label reads Deals / Opportunities ([AGL-4122](https://linear.app/aglyn/issue/AGL-4122))
+- **crm:** the rollup reads the organization's own facet ([AGL-4123](https://linear.app/aglyn/issue/AGL-4123), [AGL-4122](https://linear.app/aglyn/issue/AGL-4122))
+- **crm:** activity rolls up to the company, with Name and Related To ([AGL-4123](https://linear.app/aglyn/issue/AGL-4123))
+- **crm:** the whole-org migration, honest deal totals while loading, and the API's blank address ([AGL-4122](https://linear.app/aglyn/issue/AGL-4122))
+- **crm:** a contact needs no site and no email, and an address can come later ([AGL-4122](https://linear.app/aglyn/issue/AGL-4122))
+- **marketplace:** docs shot of the starter queue, and the starter page names its source site ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **ai:** report an import's fidelity score, from the recordings or a built site ([AGL-4109](https://linear.app/aglyn/issue/AGL-4109), [AGL-4114](https://linear.app/aglyn/issue/AGL-4114))
+- **console:** an AI pick continues to the questions; its site takes the guided path ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **ai:** an AI starter's answers fill the Start with AI questions, its style chosen ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **marketplace:** an AI starter's answers, behind the search's gates, read once it is picked ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+
+### Fixed
+
+- **crm:** the contact form follows the document until it is edited, so a page drawn from the cache can't write old values back over newer ones ([AGL-4122](https://linear.app/aglyn/issue/AGL-4122))
+- **ai:** the chat is told what a thread changed, apart from what it said ([AGL-4116](https://linear.app/aglyn/issue/AGL-4116))
+- **marketplace:** each starter review card has its own help ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **crm:** keep the eager bundle inside its budget, and regenerate the native contracts for the label ([AGL-4122](https://linear.app/aglyn/issue/AGL-4122))
+- **console:** the workspace logo hint names no brand, and the published prune has a spec ([AGL-4119](https://linear.app/aglyn/issue/AGL-4119))
+- **ai:** the fidelity report takes the default app, says when nothing was scored, and lists a frame's shortfalls ([AGL-4109](https://linear.app/aglyn/issue/AGL-4109))
+
+### Documentation
+
+- **claude:** a promotion title follows the version, now the beta series has ended ([AGL-4051](https://linear.app/aglyn/issue/AGL-4051))
+- **ai:** the two AI starter screenshots, shot on the seeded emulator ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **ai:** say what reading a served source again needs in the fidelity report ([AGL-4109](https://linear.app/aglyn/issue/AGL-4109))
+- **ai:** start from an AI starter and its look; shots defined, not yet taken ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+
+<details>
+<summary>Also in this release: 3 test, 2 chore</summary>
+
+- **crm:** regenerate the plugin titles for the Deals / Opportunities label ([AGL-4122](https://linear.app/aglyn/issue/AGL-4122))
+- **tools:** raise the Linear id floor to AGL-4125, read off the workspace ([AGL-4125](https://linear.app/aglyn/issue/AGL-4125))
+- **tenant:** a measured Storage body stays open until it is wired ([AGL-4125](https://linear.app/aglyn/issue/AGL-4125))
+- **ai:** read the fidelity source without its photos by name ([AGL-4109](https://linear.app/aglyn/issue/AGL-4109))
+- **ai:** hold the import's fidelity score and a tab panel's row to the recorded pages ([AGL-4109](https://linear.app/aglyn/issue/AGL-4109), [AGL-4114](https://linear.app/aglyn/issue/AGL-4114))
+
+</details>
+
+4 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
 ## v1.0.0 — 2026-11-01
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.297...v1.0.0)

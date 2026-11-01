@@ -41,6 +41,8 @@ import androidx.compose.ui.unit.dp
 import com.aglyn.core.HostStatus
 import com.aglyn.core.HostStatusKind
 import com.aglyn.core.Live
+import com.aglyn.core.SiteBrandFiles
+import com.aglyn.core.SiteStyles
 import com.aglyn.core.mediaPreviewUrl
 import com.aglyn.core.nowMillis
 import com.aglyn.core.relativeTime
@@ -58,11 +60,17 @@ import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.DetailRow
 import com.aglyn.ui.EmptyState
 import com.aglyn.ui.EmptyTone
+import com.aglyn.ui.ImageFileField
+import com.aglyn.ui.ImageFileGround
 import com.aglyn.ui.ListHeader
 import com.aglyn.ui.LoadContent
 import com.aglyn.ui.LoadMoreEffect
 import com.aglyn.ui.NoticeBanner
+import com.aglyn.ui.OptionCardItem
+import com.aglyn.ui.OptionCardList
 import com.aglyn.ui.OutlinedButton
+import com.aglyn.ui.PanelSheet
+import com.aglyn.ui.PickedFile
 import com.aglyn.ui.RefreshableBox
 import com.aglyn.ui.RemoteImage
 import com.aglyn.ui.SearchField
@@ -71,6 +79,7 @@ import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
+import com.aglyn.ui.controlShape
 import com.aglyn.ui.space
 
 const val SITE_SITES_SCREEN = "site.sites"
@@ -265,6 +274,12 @@ fun SiteOverview(context: NativePluginContext, hostId: String) {
   }
 }
 
+/**
+ * Create a site, as the console's Create site: a name, an address the route checks, the addresses it suggests when the one
+ * asked for is taken, an optional logo, dark logo and favicon held until the site exists (AGL-4119), and the style the site
+ * starts in (AGL-4049), which the person must pick: nothing is chosen for them, so Create site stays off until a card is.
+ * The header and its button stay put while the styles scroll.
+ */
 @Composable
 private fun CreateSiteDialog(context: NativePluginContext, orgId: String, close: () -> Unit) {
   val scope = rememberCoroutineScope()
@@ -273,60 +288,137 @@ private fun CreateSiteDialog(context: NativePluginContext, orgId: String, close:
   var subdomain by remember { mutableStateOf("") }
   var edited by remember { mutableStateOf(false) }
   var suggestions by remember { mutableStateOf(emptyList<String>()) }
-  val valid = name.isNotBlank() && SUBDOMAIN_PATTERN.matches(subdomain)
-  ActionDialog(
+  var style by remember { mutableStateOf<String?>(null) }
+  var brandFiles by remember { mutableStateOf(emptyMap<String, PickedFile>()) }
+  var brandErrors by remember { mutableStateOf(emptyMap<String, String>()) }
+  // A site made with a file that did not make it: the sheet stays to say so, once, then opens it.
+  var missed by remember { mutableStateOf<Pair<String, String>?>(null) }
+  val list = rememberLazyListState()
+  // A refusal is read where it is: the button stays in view however far the styles have scrolled.
+  LaunchedEffect(runner.error) { if (runner.error != null) list.animateScrollToItem(0) }
+  val options = remember(context.api.origin) {
+    SiteStyles.all.map { OptionCardItem(it.id, it.name, it.blurb, mediaPreviewUrl(it.preview, context.api.origin, null, 480), it.alt) }
+  }
+  // The site opens as a row of the list does: its own sidebar, on its Home (AGL-4129).
+  fun openNewSite(hostId: String) {
+    context.selectSite(hostId)
+    context.navigate("shell.home")
+    close()
+  }
+  missed?.let { (hostId, notice) ->
+    ActionDialog(
+      title = "Create a site",
+      body = notice,
+      icon = "public",
+      confirmLabel = "Open site",
+      dismissLabel = "Close",
+      onConfirm = { openNewSite(hostId) },
+      onDismiss = { openNewSite(hostId) },
+      modifier = Modifier.testTag("create-site-missed"),
+    )
+    return
+  }
+  PanelSheet(
     title = "Create a site",
-    body = "You can connect your own domain later.",
-    icon = "public",
-    confirmLabel = "Create site",
-    confirmEnabled = valid,
-    busy = runner.busy,
-    error = runner.error,
-    onDismiss = close,
-    onConfirm = {
-      runner.run {
-        when (val result = createSite(context.api, orgId, name, subdomain)) {
-          is CreateSiteResult.Created -> {
-            context.selectSite(result.hostId)
-            close()
+    onDismiss = { if (!runner.busy) close() },
+    closeLabel = "Cancel",
+    scroll = false,
+    modifier = Modifier.testTag("create-site-sheet"),
+    action = {
+      Button(
+        shape = controlShape(),
+        enabled = canCreateSite(name, subdomain, style) && !runner.busy,
+        modifier = Modifier.testTag("create-site-confirm"),
+        onClick = {
+          val chosen = style ?: return@Button
+          runner.run {
+            when (val result = createSite(context.api, orgId, name, subdomain, chosen)) {
+              is CreateSiteResult.Created -> {
+                // The logo, dark logo and favicon go in now the site has a library. A file that does not make it never
+                // costs the site: it is said once, here, before the site opens.
+                val outcome = saveSiteBrand(context.api, result.hostId, brandFiles)
+                val notice = siteBrandMissedNotice(outcome.missed)
+                if (notice != null) missed = result.hostId to notice else openNewSite(result.hostId)
+              }
+              is CreateSiteResult.Refused -> {
+                suggestions = result.suggestions
+                runner.error = result.message
+              }
+            }
           }
-          is CreateSiteResult.Refused -> {
-            suggestions = result.suggestions
-            runner.error = result.message
+        },
+      ) { Text(if (runner.busy) "Creating…" else "Create site") }
+    },
+  ) {
+    OptionCardList("Style of site", options, style, { style = it }, state = list) {
+      runner.error?.let { NoticeBanner(it, StatusTone.ERROR, Modifier.testTag("create-site-error")) }
+      OutlinedTextField(
+        name,
+        { next ->
+          name = next.take(80)
+          if (!edited) subdomain = suggestSubdomain(next)
+        },
+        label = { Text("Site name") },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth().testTag("site-name"),
+      )
+      OutlinedTextField(
+        subdomain,
+        { next ->
+          edited = true
+          subdomain = next.lowercase().filter { it.isLetterOrDigit() || it == '-' }.take(30)
+        },
+        label = { Text("Address") },
+        suffix = { Text(".${com.aglyn.core.DEFAULT_TENANT_APEX}") },
+        supportingText = { Text("3 to 30 letters, numbers or hyphens.") },
+        isError = subdomain.isNotEmpty() && !SUBDOMAIN_PATTERN.matches(subdomain),
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth().testTag("site-subdomain"),
+      )
+      Text("You can connect your own domain later.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      if (suggestions.isNotEmpty()) {
+        Text("Try one of these:", style = MaterialTheme.typography.labelLarge)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+          suggestions.forEach { suggestion ->
+            SuggestionChip(onClick = { subdomain = suggestion; edited = true }, label = { Text(suggestion) })
           }
         }
       }
-    },
-  ) {
-    OutlinedTextField(
-      name,
-      { next ->
-        name = next.take(80)
-        if (!edited) subdomain = suggestSubdomain(next)
-      },
-      label = { Text("Site name") },
-      singleLine = true,
-      modifier = Modifier.fillMaxWidth().testTag("site-name"),
-    )
-    OutlinedTextField(
-      subdomain,
-      { next ->
-        edited = true
-        subdomain = next.lowercase().filter { it.isLetterOrDigit() || it == '-' }.take(30)
-      },
-      label = { Text("Address") },
-      suffix = { Text(".${com.aglyn.core.DEFAULT_TENANT_APEX}") },
-      supportingText = { Text("3 to 30 letters, numbers or hyphens.") },
-      isError = subdomain.isNotEmpty() && !SUBDOMAIN_PATTERN.matches(subdomain),
-      singleLine = true,
-      modifier = Modifier.fillMaxWidth().testTag("site-subdomain"),
-    )
-    if (suggestions.isNotEmpty()) {
-      Text("Try one of these:", style = MaterialTheme.typography.labelLarge)
-      FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
-        suggestions.forEach { suggestion ->
-          SuggestionChip(onClick = { subdomain = suggestion; edited = true }, label = { Text(suggestion) })
+      Column(Modifier.padding(top = space(1f)).testTag("site-brand"), verticalArrangement = Arrangement.spacedBy(space(1f))) {
+        Text("Logo and favicon (optional)", Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium)
+        // All three optional, none ever in the way of Create site; what a route would refuse is said on the field.
+        SiteBrandFiles.slots.forEach { spec ->
+          ImageFileField(
+            label = spec.label,
+            file = brandFiles[spec.slot],
+            ground = when (spec.slot) {
+              "logo" -> ImageFileGround.LIGHT
+              "logoDark" -> ImageFileGround.DARK
+              else -> null
+            },
+            helper = if (spec.slot == "favicon") "Leave this blank to use your logo." else null,
+            error = brandErrors[spec.slot],
+            enabled = !runner.busy,
+            onChoose = { file ->
+              val refusal = siteBrandFileRefusal(file, spec.slot)
+              brandErrors = if (refusal != null) brandErrors + (spec.slot to refusal) else brandErrors - spec.slot
+              if (refusal == null) brandFiles = brandFiles + (spec.slot to file)
+            },
+            onRemove = {
+              brandFiles = brandFiles - spec.slot
+              brandErrors = brandErrors - spec.slot
+            },
+            modifier = Modifier.testTag("site-brand-${spec.slot}"),
+          )
         }
+        Text(SiteBrandFiles.HINT, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      }
+      Column(Modifier.padding(top = space(1f)), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
+        Text("Choose a style", Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium)
+        val lede = MaterialTheme.typography.bodyMedium
+        val quiet = MaterialTheme.colorScheme.onSurfaceVariant
+        Text("Your site starts with a home page, a header and a footer in the style you choose. You can change everything later.", style = lede, color = quiet)
+        if (style == null) Text("Choose a style to create your site.", Modifier.testTag("site-style-required"), style = lede, color = quiet)
       }
     }
   }

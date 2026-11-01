@@ -666,11 +666,18 @@ function nodeBlocks(scope: MapScope, nodes: readonly SiteImportLayoutNode[], row
         break
       }
       case 'tabs': {
-        const tabs = node.tabs.map((tab) => ({
-          label: tab.label === null ? '' : take(scope, tab.label),
-          ...(tab.selected ? { selected: true } : {}),
-          blocks: mergeLists(nodeBlocks(scope, tab.panel, { cols: null, allowed: false })),
-        }))
+        const tabs = node.tabs.map((tab) => {
+          const label = tab.label === null ? '' : take(scope, tab.label)
+          // A panel sets its first row side by side, as a section does (AGL-4114).
+          const panelRow = { cols: null as number[] | null, allowed: true }
+          const blocks = mergeLists(nodeBlocks(scope, tab.panel, panelRow))
+          return {
+            label,
+            ...(tab.selected ? { selected: true } : {}),
+            blocks,
+            ...(panelRow.cols && blocks.some((block) => block.col !== undefined) ? { cols: panelRow.cols } : {}),
+          }
+        })
         if (tabs.some((tab) => tab.label || tab.blocks.length)) out.push({ kind: 'tabs', tabs })
         break
       }

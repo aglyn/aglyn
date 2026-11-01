@@ -428,6 +428,18 @@ export const FLAG_DOC_PAGES: Partial<
       priceClaimNote:
         'The page opens with a `:::info Plan availability` admonition for the template gallery and sharing, which ship on their own plan gates. The starter section names no plan or price.',
     },
+    // An AI starter fills the AI start's questions (AGL-4049 phase 4): a
+    // section of each AI page, so each discloses beside its own mention.
+    {
+      path: 'docs/ai/start-with-ai.md',
+      disclosure: [/\*\*AI starters are rolling out\*\*,[\s\S]{0,40}may not have them yet\./],
+      checkNoPriceClaim: true,
+    },
+    {
+      path: 'docs/ai/site-looks.md',
+      disclosure: [/\*\*AI starters are rolling out\*\*,[\s\S]{0,40}may not have them yet\./],
+      checkNoPriceClaim: true,
+    },
   ],
   release_accounting: [
     {

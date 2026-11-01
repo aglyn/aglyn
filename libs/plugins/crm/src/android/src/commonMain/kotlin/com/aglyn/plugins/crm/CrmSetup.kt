@@ -271,12 +271,22 @@ fun SettingsSection(context: NativePluginContext, scope: CrmScope, reference: Cr
     ) {
       error?.let { NoticeBanner(it, StatusTone.ERROR) }
       if (!scope.canManage) NoticeBanner("Only the workspace's owners and admins change these.", StatusTone.INFO)
-      SectionCard("Who sees new records", Modifier.fillMaxWidth()) {
-        ChoiceChipRow(
-          listOf(ChipOption("host", "The site that made them"), ChipOption("org", "Every site in the workspace")),
-          crmDefaultScopeOf(scope.org) ?: "host",
+      SectionCard("Default sharing for new records", Modifier.fillMaxWidth()) {
+        FieldEditor(
+          FieldSpec(
+            "defaultRecordScope",
+            "New contacts, companies, deals and tasks are shared with",
+            FieldKind.SELECT,
+            options = listOf(
+              FieldOption("org", "All sites in the organization"),
+              FieldOption("host", "Only the site they came in on (keeps clients apart, for agencies)"),
+            ),
+            help = "Only affects records created from now on. Datasets and media have defaults of their own, on the organization Data and Media pages.",
+            emptyLabel = null,
+          ),
+          crmDefaultScopeOf(scope.org) ?: "org",
           { if (scope.canManage) write(mapOf("defaultRecordScope" to it)) },
-          wrap = true,
+          enabled = scope.canManage,
         )
       }
       SectionCard("Companies", Modifier.fillMaxWidth()) {

@@ -97,7 +97,7 @@ the rest are checked on the page, which can come back
 
 `POST /v1/tasks` — scope `crm:write`. Accepts an
 [`Idempotency-Key`](../conventions.md#idempotency), scoped to the organization.
-`title` and `consentSiteId` are required.
+`title` is required. `consentSiteId` names the site the record came from; leave it out for a record from no site, which belongs to the whole organization. It is required only when your organization [keeps each site's records apart](/content-and-data/crm/sharing).
 
 ```bash
 curl -X POST "https://app.aglyn.com/api/v1/tasks" \
@@ -142,7 +142,7 @@ curl -X PATCH "https://app.aglyn.com/api/v1/tasks/t_5e0d" \
 
 | Status | `type` | When |
 | --- | --- | --- |
-| `400` | `bad_request` | `code: "validation_failed"` — a missing `title` or `consentSiteId`, a `kind`, `priority` or `status` that is neither a meaning nor an active value of your organization's picklist (the error names the values it allows), a `dueAt` or `remindAt` that is not an ISO 8601 instant, an `assigneeUid` who is not a member, or a `contactId`, `companyId` or `dealId` that does not exist. On the list, a `?status=` outside `open`/`done` or a malformed `?updatedAfter=`. `fields` names each key. |
+| `400` | `bad_request` | `code: "validation_failed"` — a missing `title`, a missing `consentSiteId` where the organization keeps its sites apart, a `kind`, `priority` or `status` that is neither a meaning nor an active value of your organization's picklist (the error names the values it allows), a `dueAt` or `remindAt` that is not an ISO 8601 instant, an `assigneeUid` who is not a member, or a `contactId`, `companyId` or `dealId` that does not exist. On the list, a `?status=` outside `open`/`done` or a malformed `?updatedAfter=`. `fields` names each key. |
 | `403` | `insufficient_scope` | Key lacks `crm:read` / `crm:write`. |
 | `404` | `not_found` | `"No such task"`. |
 | `405` | `method_not_allowed` | `Allow`: `GET, POST` on `/v1/tasks`, `GET, PATCH, DELETE` on one task. |

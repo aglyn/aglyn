@@ -82,6 +82,7 @@ import {
   type ContactCompanyLinkPlan,
   type ContactCustomValue,
   type ContactFieldDefinition,
+  ORG_CONTACT_HOLDER_ID,
   containerMembershipValue,
   contactContainerFieldPath,
   contactFacetPath,
@@ -96,6 +97,7 @@ import {
   judgeCrmPicklistValue,
   normalizeAddress,
   normalizeContactBirthdate,
+  normalizeContactEmail,
   normalizeCrmMediaIds,
   normalizeCrmPicklistLabel,
   normalizePhone,
@@ -113,6 +115,13 @@ import {
   resolveOrgMembership,
   restampCrmListFieldsOf,
 } from '@aglyn/tenant-data-admin'
+import { personKey } from '@aglyn/aglyn/app-utils/person-key'
+import { scheduleCapturedEmailCheck } from '@aglyn/tenant-data-admin/server/capture-email-check'
+import {
+  emailIndexBeside,
+  findContactByEmail,
+  writeContactEmailIndex,
+} from '@aglyn/tenant-data-admin/server/contact-email-index'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
   CONTACT_UPDATE_FIELDS,
@@ -147,6 +156,7 @@ const SUITE_ACTS: Record<keyof ContactUpdateFields, string> = {
   salutation: "Editing a contact's profile",
   firstName: "Editing a contact's profile",
   lastName: "Editing a contact's profile",
+  email: "Editing a contact's profile",
   phone: "Editing a contact's profile",
   mobilePhone: "Editing a contact's profile",
   homePhone: "Editing a contact's profile",
@@ -178,8 +188,14 @@ const SUITE_ACTS: Record<keyof ContactUpdateFields, string> = {
 export const CONTACT_COMPOSED_NAME_REFUSAL =
   "This person's name is made of their first and last name — change those instead."
 
-/** A contact read at the organization level that no site has captured. */
-const NO_HOLDER_REFUSAL = 'No site holds this contact yet, so it has no profile to edit.'
+/** The sentence an address another contact already has is refused with. */
+export const CONTACT_EMAIL_TAKEN_REFUSAL =
+  'Another contact already has that email. Open them and merge the two.'
+
+/** The sentence a change to a shared address is refused with below the whole workspace. */
+export const CONTACT_EMAIL_CHANGE_REFUSAL =
+  'Every site shares this email, so changing it needs access to the whole workspace.'
+
 
 /**
  * The act a request is refused for on a plan without the CRM: the first
@@ -210,6 +226,11 @@ export function readContactUpdateFields(
     return { ok: false, error: `"${unknownKey}" is not a field a contact's profile saves.` }
   }
   const fields: ContactUpdateFields = {}
+  if ('email' in raw) {
+    const email = normalizeContactEmail(raw['email'])
+    if (!email) return { ok: false, error: 'Enter a valid email address.' }
+    fields.email = email
+  }
   if ('name' in raw) fields.name = typed(raw['name'], 120)
   for (const key of ['phone', ...CONTACT_EXTRA_PHONE_FIELDS] as const) {
     if (!(key in raw)) continue
@@ -598,6 +619,10 @@ export const crmContactUpdateHandler: PluginApiHandler = async (req, res) => {
     return
   }
   const { fields } = read
+  if (fields.email && contactIds.length !== 1) {
+    res.status(400).json({ error: 'An email address belongs to one contact at a time.' })
+    return
+  }
 
   try {
     const writer = await authorizeCrmWriter(req, scope, { suiteAct: null })
@@ -709,6 +734,10 @@ export const crmContactUpdateHandler: PluginApiHandler = async (req, res) => {
     const snapshots = await firestore.getAll(...contactIds.map((id) => contacts.doc(id)))
     const outcomes = new Map<string, ContactUpdateOutcome>()
     const writes: ContactWrite[] = []
+    /** What the one contact answered to before an address change. */
+    let previousEmail: string | null = null
+    /** Whether the row passed and its address really moves. */
+    let emailMoved = false
     const rows: Array<{
       contactId: string
       snapshot: FirebaseFirestore.DocumentSnapshot
@@ -731,12 +760,10 @@ export const crmContactUpdateHandler: PluginApiHandler = async (req, res) => {
         outcomes.set(contactId, refused(contactId, 'That contact is not visible to this site.'))
         return
       }
-      const group = siteGroup ?? contactPrimaryGroup(data, writer.org)
-      if (!group.groupId) {
-        outcomes.set(contactId, refused(contactId, NO_HOLDER_REFUSAL))
-        return
-      }
-      rows.push({ contactId, snapshot, data, groupId: group.groupId })
+      // A person no site holds has a profile too, kept for the org (AGL-4122).
+      const groupId =
+        (siteGroup ?? contactPrimaryGroup(data, writer.org)).groupId || ORG_CONTACT_HOLDER_ID
+      rows.push({ contactId, snapshot, data, groupId })
     })
 
     for (const { contactId, snapshot, data, groupId } of rows) {
@@ -781,13 +808,59 @@ export const crmContactUpdateHandler: PluginApiHandler = async (req, res) => {
         outcomes.set(contactId, refused(contactId, patch.refused))
         continue
       }
+      /*
+       * THE ADDRESS, the one identity every site shares (AGL-4122). Filling in
+       * a blank is anybody's who can edit this person. Replacing one changes
+       * who the record is for every site, so it needs the whole workspace.
+       * Another contact on the address is the owner's to merge, never a write
+       * here, which would leave two records answering to one person.
+       */
+      if (fields.email) {
+        previousEmail = normalizeContactEmail(data['email'])
+        const replacing = previousEmail && previousEmail !== fields.email
+        if (replacing && scope.level === 'site' && !isOrgWideMember(writer.member)) {
+          outcomes.set(contactId, refused(contactId, CONTACT_EMAIL_CHANGE_REFUSAL))
+          continue
+        }
+        const holder = await findContactByEmail(contacts, fields.email)
+        if (holder && holder.id !== contactId) {
+          outcomes.set(contactId, refused(contactId, CONTACT_EMAIL_TAKEN_REFUSAL))
+          continue
+        }
+      }
       outcomes.set(contactId, { contactId, ok: true })
-      if (patch.update) {
-        writes.push({ contactId, ref: snapshot.ref, update: patch.update, counts: patch.counts })
+      emailMoved = Boolean(fields.email) && fields.email !== previousEmail
+      const update =
+        emailMoved
+          ? {
+              ...patch.update,
+              email: fields.email,
+              // The verdict was on the old address, and the next check judges this one.
+              emailStatus: FieldValue.delete(),
+              updatedAt: FieldValue.serverTimestamp(),
+            }
+          : patch.update
+      if (update) {
+        writes.push({ contactId, ref: snapshot.ref, update, counts: patch.counts })
       }
     }
 
     const failed = await commitContactWrites(firestore, writes)
+    if (fields.email && emailMoved && !failed.has(contactIds[0])) {
+      const index = emailIndexBeside(contacts)
+      await writeContactEmailIndex(index, contactIds[0], [fields.email])
+      // The old address stops resolving here: this person no longer answers to it.
+      const previousKey = previousEmail ? personKey(previousEmail) : null
+      if (index && previousKey) {
+        await index
+          .doc(previousKey)
+          .delete()
+          .catch((error: unknown) => {
+            console.error('[crm] contact-update could not retire an address', error)
+          })
+      }
+      scheduleCapturedEmailCheck({ orgId: writer.orgId, email: fields.email })
+    }
     for (const contactId of failed) {
       outcomes.set(contactId, refused(contactId, 'The contact could not be saved.'))
     }

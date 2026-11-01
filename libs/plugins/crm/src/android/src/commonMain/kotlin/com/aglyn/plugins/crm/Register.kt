@@ -36,7 +36,7 @@ fun registerCrmNative(r: NativePluginRegistrar) {
   r.widget("crm.org-glance", title = "CRM at a glance", order = 70, size = WidgetSize.FULL, slot = CRM_ORG_DASHBOARD_SLOT) { context -> CrmAtAGlanceCard(context, orgLevel = true) }
   r.widget("crm.org-tasks-due", title = "Tasks due", order = 72, size = WidgetSize.HALF, slot = CRM_ORG_DASHBOARD_SLOT) { context -> CrmTasksDueCard(context, orgLevel = true) }
   r.quickAction("crm.open", "CRM", "group", 70, requiresSite = true, screen = CrmSection.CONTACTS.screen)
-  r.quickAction("crm.deals-action", "Deals", "handshake", 72, requiresSite = true, screen = CrmSection.DEALS.screen)
+  r.quickAction("crm.deals-action", CrmSection.DEALS.label, "handshake", 72, requiresSite = true, screen = CrmSection.DEALS.screen)
   r.quickAction("crm.tasks-action", "Tasks", "task", 74, requiresSite = true, screen = CrmSection.TASKS.screen)
   r.deepLink("crm.page", path = "/crm", screen = CrmSection.CONTACTS.screen)
   r.deepLink("crm.legacy-contacts", path = "/contacts", screen = CrmSection.CONTACTS.screen)

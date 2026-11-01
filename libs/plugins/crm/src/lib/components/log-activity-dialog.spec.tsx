@@ -26,7 +26,7 @@
  * activity already logged is the activity's own.
  */
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { LogActivityDialog } from './log-activity-dialog'
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
@@ -36,17 +36,45 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar: jest.fn() }),
 }))
+const mockRecords = new Map<string, Record<string, unknown>>()
+const mockGetCount = jest.fn(async (..._args: unknown[]) => ({ data: () => ({ count: 0 }) }))
 jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...segments: string[]) => segments.join('/'),
   doc: (_db: unknown, ...segments: string[]) => segments.join('/'),
   query: (name: string) => name,
-  where: () => undefined,
-  deleteField: () => undefined,
-  getCountFromServer: async () => ({ data: () => ({ count: 0 }) }),
+  where: (...args: unknown[]) => args,
+  deleteField: () => 'DELETE',
+  getCountFromServer: (...args: unknown[]) => mockGetCount(...args),
+  getDoc: async (path: string) => ({
+    exists: () => mockRecords.has(path),
+    data: () => mockRecords.get(path),
+  }),
   addDoc: jest.fn().mockResolvedValue({ id: 'act-1' }),
   updateDoc: jest.fn().mockResolvedValue(undefined),
 }))
 jest.mock('./crm-site-picker', () => ({ CrmSitePicker: () => null }))
+/** The two fields, as what they hand the dialog: the pickers have their own specs. */
+jest.mock('./activity-link-fields', () => ({
+  ActivityLinkFields: (props: {
+    picks: { contactId: string | null; related: { kind: string; id: string } | null }
+    onChange: (picks: unknown) => void
+  }) => (
+    <div>
+      <output data-testid="name">{props.picks.contactId ?? ''}</output>
+      <output data-testid="related">
+        {props.picks.related ? `${props.picks.related.kind}:${props.picks.related.id}` : ''}
+      </output>
+      <button onClick={() => props.onChange({ ...props.picks, contactId: 'c-picked' })}>pick name</button>
+      <button onClick={() => props.onChange({ ...props.picks, contactId: null })}>clear name</button>
+      <button
+        onClick={() => props.onChange({ ...props.picks, related: { kind: 'deal', id: 'd-picked' } })}
+      >
+        pick deal
+      </button>
+      <button onClick={() => props.onChange({ ...props.picks, related: null })}>clear related</button>
+    </div>
+  ),
+}))
 
 const scope = {
   firestore: {},
@@ -182,5 +210,175 @@ describe('a call’s and an email’s direction (AGL-3517)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Log' }))
     await waitFor(() => expect(addDoc).toHaveBeenCalledTimes(1))
     expect(addDoc.mock.calls[0][1]).toMatchObject({ kind: 'messenger', direction: 'inbound' })
+  })
+})
+
+/**
+ * WHO, WHAT AND WHICH ACCOUNT (AGL-4123). The fields open on the record the
+ * dialog was opened from, and what is saved carries the Who, the What and the
+ * company it rolls up to, so one entry reads on all three pages.
+ */
+describe('Name, Related To and the company it rolls up to (AGL-4123)', () => {
+  const { addDoc, updateDoc } = jest.requireMock('firebase/firestore') as {
+    addDoc: jest.Mock
+    updateDoc: jest.Mock
+  }
+  const shows = (testId: string) => screen.getByTestId(testId).textContent
+  const say = (text: string) =>
+    fireEvent.change(screen.getByRole('textbox', { name: 'What happened' }), {
+      target: { value: text },
+    })
+  const logged = async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Log' }))
+    await waitFor(() => expect(addDoc).toHaveBeenCalledTimes(1))
+    return addDoc.mock.calls[0][1] as Record<string, unknown>
+  }
+  const dialog = (props: Partial<Parameters<typeof LogActivityDialog>[0]>) =>
+    render(
+      <LogActivityDialog open onClose={() => undefined} scope={scope} link={{}} {...props} />,
+    )
+
+  beforeEach(() => {
+    addDoc.mockClear()
+    updateDoc.mockClear()
+    mockGetCount.mockClear()
+    mockRecords.clear()
+    mockRecords.set('orgs/org-1/deals/d-1', { companyId: 'co-deal' })
+    mockRecords.set('orgs/org-1/deals/d-picked', { companyId: 'co-picked' })
+    mockRecords.set('orgs/org-1/contacts/c-1', { facets: { 'host-1': { companyId: 'co-contact' } } })
+  })
+
+  const siteScope = {
+    ...scope,
+    consentGroup: { groupId: 'host-1', hostIds: ['host-1'] },
+  } as typeof scope
+
+  it('from a deal: Related To is the deal, Name its Primary, and it rolls up to the deal’s company', async () => {
+    dialog({
+      scope: siteScope,
+      link: { dealId: 'd-1' },
+      deal: { contactId: 'c-1', contactRoles: [{ contactId: 'c-1', primary: true }] },
+    })
+    expect(shows('name')).toBe('c-1')
+    expect(shows('related')).toBe('deal:d-1')
+    say('Walked through the proposal')
+    expect(await logged()).toMatchObject({ contactId: 'c-1', dealId: 'd-1', companyId: 'co-deal' })
+  })
+
+  it('from a deal: Name is the reader’s to change', async () => {
+    dialog({ scope: siteScope, link: { dealId: 'd-1' }, deal: { contactId: 'c-1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'pick name' }))
+    say('Spoke to their buyer instead')
+    expect(await logged()).toMatchObject({ contactId: 'c-picked', dealId: 'd-1', companyId: 'co-deal' })
+  })
+
+  it('from a contact: rolls up to their company with nothing else named', async () => {
+    dialog({ scope: siteScope, link: { contactId: 'c-1' } })
+    expect(shows('related')).toBe('')
+    say('Called back')
+    const row = await logged()
+    expect(row).toMatchObject({ contactId: 'c-1', companyId: 'co-contact' })
+    expect('dealId' in row).toBe(false)
+  })
+
+  it('from a contact: naming a deal files it on the deal, and the deal’s company wins', async () => {
+    dialog({ scope: siteScope, link: { contactId: 'c-1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'pick deal' }))
+    say('About the renewal')
+    expect(await logged()).toMatchObject({
+      contactId: 'c-1',
+      dealId: 'd-picked',
+      companyId: 'co-picked',
+    })
+  })
+
+  it('from a company: Related To is the company, and a deal named there replaces it as the What', async () => {
+    dialog({ link: { companyId: 'co-1' } })
+    expect(shows('related')).toBe('company:co-1')
+    say('Met the whole team')
+    expect(await logged()).toMatchObject({ companyId: 'co-1' })
+    addDoc.mockClear()
+    cleanup()
+
+    dialog({ link: { companyId: 'co-1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'pick deal' }))
+    say('Met about the renewal')
+    expect(await logged()).toMatchObject({ dealId: 'd-picked', companyId: 'co-picked' })
+  })
+
+  it('counts the ceiling on the Who, not on the company the entry rolls up to', async () => {
+    dialog({ scope: siteScope, link: { contactId: 'c-1' } })
+    say('Called back')
+    await logged()
+    expect(JSON.stringify(mockGetCount.mock.calls[0])).toContain('crmActivities')
+  })
+
+  it('will not log an entry attached to nothing', async () => {
+    dialog({ link: { contactId: 'c-1' } })
+    say('Who was this with?')
+    fireEvent.click(screen.getByRole('button', { name: 'clear name' }))
+    expect((screen.getByRole('button', { name: 'Log' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('a lead’s own log offers neither field and files on the lead alone', async () => {
+    dialog({ link: { leadId: 'l-1' } })
+    expect(screen.queryByTestId('name')).toBeNull()
+    say('Left a message')
+    const row = await logged()
+    expect(row).toMatchObject({ leadId: 'l-1' })
+    expect('contactId' in row).toBe(false)
+    expect('companyId' in row).toBe(false)
+  })
+
+  describe('editing', () => {
+    const row = {
+      $id: 'act-9',
+      kind: 'note',
+      body: 'Noted',
+      atMs: 1_750_000_000_000,
+      byUid: 'u-1',
+      contactId: 'c-1',
+      companyId: 'co-contact',
+    } as Parameters<typeof LogActivityDialog>[0]['activity']
+    const save = async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+      await waitFor(() => expect(updateDoc).toHaveBeenCalledTimes(1))
+      return updateDoc.mock.calls[0][1] as Record<string, unknown>
+    }
+
+    it('opens on what the entry names, and an edit of the words leaves its links alone', async () => {
+      dialog({ scope: siteScope, link: { contactId: 'c-1' }, activity: row })
+      expect(shows('name')).toBe('c-1')
+      expect(shows('related')).toBe('company:co-contact')
+      say('Noted, and corrected')
+      const written = await save()
+      expect(written).toMatchObject({ body: 'Noted, and corrected' })
+      expect('contactId' in written).toBe(false)
+      expect('companyId' in written).toBe(false)
+    })
+
+    it('moves an entry onto a deal, and works the company out again', async () => {
+      dialog({ scope: siteScope, link: { contactId: 'c-1' }, activity: row })
+      fireEvent.click(screen.getByRole('button', { name: 'pick deal' }))
+      expect(await save()).toMatchObject({
+        contactId: 'c-1',
+        dealId: 'd-picked',
+        companyId: 'co-picked',
+      })
+    })
+
+    it('clears a link taken off, so the entry leaves that timeline', async () => {
+      dialog({
+        scope: siteScope,
+        link: { dealId: 'd-1' },
+        activity: { ...row, dealId: 'd-1' } as typeof row,
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'clear related' }))
+      expect(await save()).toMatchObject({
+        contactId: 'c-1',
+        dealId: 'DELETE',
+        companyId: 'co-contact',
+      })
+    })
   })
 })

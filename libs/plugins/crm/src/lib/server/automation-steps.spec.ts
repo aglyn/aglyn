@@ -265,6 +265,18 @@ describe('a CRM step', () => {
     expect(row).toMatchObject({ sourceActionId: 'action-1', byUid: '', contactId: 'contact-1' })
   })
 
+  it('rolls what it logs up to the company the site files the person under (AGL-4123)', async () => {
+    await runCrmAutomationStep(stepRequest({ type: 'logCrmActivity', kind: 'note', body: 'Hi' }))
+    const [row] = childrenOf(`orgs/${ORG_ID}/crmActivities`).map((key) => store[key])
+    expect(row).toMatchObject({ contactId: 'contact-1', companyId: 'company-1' })
+
+    store = { ...store, [contactPath]: { ...store[contactPath], facets: {} } }
+    await runCrmAutomationStep(stepRequest({ type: 'logCrmActivity', kind: 'note', body: 'Again' }))
+    const rows = childrenOf(`orgs/${ORG_ID}/crmActivities`).map((key) => store[key])
+    expect(rows[1]).toMatchObject({ contactId: 'contact-1' })
+    expect('companyId' in rows[1]).toBe(false)
+  })
+
   it('answers why when the event names nobody, or nobody the site can see', async () => {
     expect(
       await runCrmAutomationStep(stepRequest({ type: 'addContactTag', tag: 'vip' }, { path: '/' })),
@@ -397,7 +409,9 @@ describe('an email offered for the timeline', () => {
       contactId: 'contact-1',
       companyId: 'company-1',
       hostId: HOST_ID,
-      visibleTo: [`host:${HOST_ID}`],
+      // Stamped as a record created on the site is: the org has chosen no
+      // default of its own, so the entry is the whole org's.
+      visibleTo: ['org'],
     })
   })
 

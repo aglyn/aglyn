@@ -619,6 +619,23 @@ public struct MediaStorage: Equatable, Sendable {
   public let unlimited: Bool
 }
 
+/// What an upload route stored.
+public struct StoredMedia: Equatable, Sendable {
+  public let mediaID: String?
+  public let url: String?
+  public let cdnPath: String?
+
+  init(mediaID: String?, url: String?, cdnPath: String?) {
+    self.mediaID = mediaID
+    self.url = url
+    self.cdnPath = cdnPath
+  }
+
+  init(_ answer: JSONValue?) {
+    self.init(mediaID: answer.field("mediaId"), url: answer.field("url"), cdnPath: answer.field("cdnPath"))
+  }
+}
+
 /// The library's writes, each the console's own route with the scope in the
 /// body: upload (direct under `signedUploadThresholdBytes`, a signed URL
 /// above it), details, privacy, folders, moves, replace, delete, restore.
@@ -658,6 +675,11 @@ public struct MediaAPI: Sendable {
   /// `rightsConfirmed` says its uploader confirmed they own it or hold a license (`AUDIO_RIGHTS_STATEMENT`).
   @discardableResult
   public func upload(_ file: PickedFile, folderID: String?, rightsConfirmed: Bool = false) async throws -> String? {
+    try await store(file, folderID: folderID, rightsConfirmed: rightsConfirmed).mediaID
+  }
+
+  /// `upload`, answering what the route stored: its id, and the address a field that points at it is written from.
+  public func store(_ file: PickedFile, folderID: String?, rightsConfirmed: Bool = false) async throws -> StoredMedia {
     let contentType = file.mimeType.isEmpty ? "application/octet-stream" : file.mimeType
     let film = await filmFields(file, contentType)
     if file.size <= signedUploadThresholdBytes {
@@ -668,18 +690,20 @@ public struct MediaAPI: Sendable {
             "fileName": file.name, "contentType": contentType, "folderId": folderID,
             "data": file.data.base64EncodedString(),
           ].merging(film) { $1 }, rightsConfirmed))
-      return answer.field("mediaId")
+      return StoredMedia(answer)
     }
     let minted = try await post(
       "/api/media/upload-url",
       withRights(["contentType": contentType, "fileName": file.name, "sizeBytes": file.size, "folderId": folderID], rightsConfirmed))
-    guard let mediaID = minted.field("mediaId"), let uploadURL = minted.field("uploadUrl") else { return nil }
+    guard let mediaID = minted.field("mediaId"), let uploadURL = minted.field("uploadUrl") else {
+      return StoredMedia(mediaID: nil, url: nil, cdnPath: nil)
+    }
     try await api.putSigned(uploadURL, contentType: minted.field("contentType") ?? contentType, data: file.data)
-    try await post(
+    let answer = try await post(
       "/api/media/upload-url",
       withRights(["mediaId": mediaID, "fileName": file.name, "folderId": folderID].merging(film) { $1 }, rightsConfirmed),
       method: .patch)
-    return mediaID
+    return StoredMedia(mediaID: mediaID, url: answer.field("url"), cdnPath: answer.field("cdnPath"))
   }
 
   /// Replaces the file's bytes in place: the same id and address everywhere it is used.

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { SX_SCHEME_DARK_KEY } from '@aglyn/aglyn/app-utils/scheme-sx'
 import type { AiStoreFrameLinks } from '../model/ai-site-store-pages'
 import { AI_ICON_LIBRARY } from '../runtime/ai-icon-library'
 import {
@@ -133,6 +134,10 @@ export interface AiLayoutFramePlan {
 export interface AiLayoutFrameBrand {
   /** The logo, from the site's own media library. */
   logo?: { src: string } | null
+  /** The logo a dark-scheme visitor sees, where the frame draws one for each scheme (AGL-4119). */
+  logoDark?: { src: string } | null
+  /** Whether the footer opens with the logo too (AGL-4119). */
+  footer?: boolean
   /** Whether the header prints the name as words, beside the logo or alone. */
   name: boolean
   /** The logo's words for a screen reader, as the source names it (AGL-4108); the site's name where it gave none. */
@@ -310,7 +315,7 @@ export function aiCompileLayoutFrame(
   const source = plan.source ?? null
   const alt = (plan.brand?.alt ?? '').replace(/\s+/g, ' ').trim().slice(0, 120) || name.slice(0, 40)
   const brand = logo
-    ? brandMark(tree, { src: logo, name: name.slice(0, 40), alt, withName: plan.brand?.name === true, homeId: plan.homeId, centered: centeredNav, grow: !source })
+    ? brandMark(tree, { src: logo, srcDark: plan.brand?.logoDark?.src ?? null, name: name.slice(0, 40), alt, withName: plan.brand?.name === true, homeId: plan.homeId, centered: centeredNav, grow: !source })
     : plan.homeId
     ? tree.add(
         'muiScreenLink',
@@ -769,11 +774,26 @@ function compileFooter(
     [copyright],
     'footerBottom',
   )
+  // The site's own logo, where the header draws it from the site (AGL-4119).
+  const footerLogo = plan.brand?.footer && plan.brand.logo?.src
+    ? tree.add(
+        'muiBox',
+        null,
+        null,
+        logoPictures(tree, {
+          src: plan.brand.logo.src,
+          srcDark: plan.brand.logoDark?.src ?? null,
+          props: { alt: (plan.brand.alt ?? '').trim() || name.slice(0, 40), objectFit: 'contain', width: 'auto', height: AI_LAYOUT_LOGO_HEIGHT },
+          role: 'footerLogo',
+        }),
+        'footerLogoBox',
+      )
+    : null
   const stack = tree.add(
     'muiStack',
     { spacing: '6' },
     null,
-    [top, bottom],
+    footerLogo ? [footerLogo, top, bottom] : [top, bottom],
     'footerStack',
   )
   const container = tree.add(
@@ -817,38 +837,72 @@ function sourceFooter(page: PageScope, source: AiLayoutFrameSource, name: string
 }
 
 /**
+ * A logo as a picture, or as a pair where the site keeps one for dark
+ * backgrounds (AGL-4119): the second takes the first's place in the dark
+ * scheme, so a visitor sees exactly one.
+ */
+function logoPictures(
+  tree: AiLayoutTreeBuilder,
+  input: { src: string; srcDark: string | null; props: Record<string, unknown>; role: string },
+): string[] {
+  const light = tree.add(
+    'image',
+    { src: input.src, ...input.props },
+    input.srcDark ? { [SX_SCHEME_DARK_KEY]: { display: 'none' } } : null,
+    null,
+    input.role,
+  )
+  if (!input.srcDark) return [light]
+  const { loading: _deferred, ...props } = input.props
+  const dark = tree.add(
+    'image',
+    { src: input.srcDark, ...props },
+    { display: 'none', [SX_SCHEME_DARK_KEY]: { display: 'block' } },
+    null,
+    `${input.role}Dark`,
+  )
+  return [light, dark]
+}
+
+/**
  * The header's brand drawn with the site's logo (AGL-4084), as the source's
  * header draws it: the logo alone, named by its alt text, or the logo with
  * the name beside it; either way the link home.
  */
 function brandMark(
   tree: AiLayoutTreeBuilder,
-  input: { src: string; name: string; alt: string; withName: boolean; homeId: string | null; centered: boolean; grow: boolean },
+  input: { src: string; srcDark: string | null; name: string; alt: string; withName: boolean; homeId: string | null; centered: boolean; grow: boolean },
 ): string {
-  const image = (alone: boolean) =>
-    tree.add(
-      'image',
-      {
-        src: input.src,
+  const image = (alone: boolean, linked: boolean) =>
+    logoPictures(tree, {
+      src: input.src,
+      srcDark: input.srcDark,
+      role: 'logo',
+      props: {
         ...(alone ? { alt: input.alt } : { decorative: true }),
         objectFit: 'contain',
         width: 'auto',
         height: AI_LAYOUT_LOGO_HEIGHT,
         loading: 'eager',
-        ...(alone && input.homeId ? { screenId: input.homeId } : {}),
+        ...(linked && input.homeId ? { screenId: input.homeId } : {}),
       },
-      null,
-      null,
-      'logo',
-    )
+    })
   // Never narrower than the logo (AGL-4108); it grows into the room the
   // navigation leaves only where the navigation does not take it itself.
   const grow = input.centered || !input.grow ? null : { flexGrow: 1 }
   if (!input.withName) {
-    return tree.add('muiBox', null, { ...(grow ?? {}), display: 'flex', alignItems: 'center', flexShrink: 0 }, [image(true)], 'brand')
+    // One link around a pair, so the picture out of sight is no stop in the tab order.
+    const homeLink = input.srcDark && input.homeId
+    return tree.add(
+      homeLink ? 'muiLinkBox' : 'muiBox',
+      homeLink ? { screenId: input.homeId } : null,
+      { ...(grow ?? {}), display: 'flex', alignItems: 'center', flexShrink: 0 },
+      image(true, !homeLink),
+      'brand',
+    )
   }
   const words = tree.add('muiTypography', { children: input.name, variant: 'h6', component: 'p' }, { fontWeight: 800, whiteSpace: 'nowrap' }, null, 'brandName')
-  const row = tree.add('muiStack', { direction: 'row', spacing: '1.5', alignItems: 'center' }, null, [image(false), words], 'brandRow')
+  const row = tree.add('muiStack', { direction: 'row', spacing: '1.5', alignItems: 'center' }, null, [...image(false, false), words], 'brandRow')
   return input.homeId
     ? tree.add('muiLinkBox', { screenId: input.homeId, ariaLabel: input.name }, { ...(grow ?? {}), textDecoration: 'none', color: 'inherit', flexShrink: 0 }, [row], 'brand')
     : tree.add('muiBox', null, { ...(grow ?? {}), flexShrink: 0 }, [row], 'brand')

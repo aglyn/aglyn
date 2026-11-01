@@ -77,7 +77,8 @@ ConsentChip.displayName = 'ConsentChip'
  * the person's marketing consent FOR EACH of those sites — one verdict per
  * capturing site, each naming the controller it was read for, because a
  * basis is per (person, controller) and "consented" with nobody attached
- * would be a different and false claim.
+ * would be a different and false claim. A person no site captured shows the
+ * same verdicts, one per site their consent is recorded on.
  *
  * Notes, tags, activity and commercial figures are each holder's own
  * records and are not projected here: `orgContactRow` is an allow-list for
@@ -162,11 +163,24 @@ export function ContactKnownByCard(props: ContactKnownByCardProps) {
             {'No site recorded'}
           </Typography>
         )}
-        <Typography variant="caption" color="text.secondary">
-          {'The profile, notes, tags and timeline on this page are the first ' +
-            "capturing site's. Open the person in another site to see what " +
-            'it holds.'}
-        </Typography>
+        {!capturedByHostIds.length && consent.length ? (
+          <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
+            {consent.map((entry) => (
+              <ConsentChip
+                key={entry.hostId}
+                entry={entry}
+                siteName={mount.siteName(entry.hostId)}
+              />
+            ))}
+          </Stack>
+        ) : null}
+        {capturedByHostIds.length ? (
+          <Typography variant="caption" color="text.secondary">
+            {'The profile, notes, tags and timeline on this page are the first ' +
+              "capturing site's. Open the person in another site to see what " +
+              'it holds.'}
+          </Typography>
+        ) : null}
       </Stack>
     </CardDisplay>
   )

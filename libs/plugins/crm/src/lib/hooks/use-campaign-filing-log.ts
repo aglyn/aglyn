@@ -30,6 +30,8 @@ import {
   buildCampaignFilingActivity,
   type CampaignFilingRef,
 } from '../model/campaign-filing-activity'
+import { resolveCrmActivityCompany } from '../model/crm-activity-link'
+import { crmActivityClientReads } from './crm-activity-client-reads'
 
 /** What one surface's save changed, by campaign, with the names it showed. */
 export interface CampaignFilingChange {
@@ -46,7 +48,8 @@ export interface CampaignFilingChange {
  * so the entry that records it is written the same way, into the org's
  * activity collection the log dialog writes, with the scope a record made
  * on this site carries (`crmScopeTokens`), the signed-in member as author,
- * and the CRM's own id as the filing plugin.
+ * and the CRM's own id as the filing plugin. The entry rolls up to the
+ * record's company (AGL-4123) like any other.
  *
  * The site an entry carries is the hook's, or — for a surface that files
  * leads from several sites at once, the organization-level bulk bar — the
@@ -82,7 +85,13 @@ export function useCampaignFilingLog(input: {
         ...(change.removed ?? []).map((campaign) => ({ action: 'removed' as const, campaign })),
       ]
       if (!entries.length) return
-      const visibleTo = crmScopeTokens(org, consentGroupForHost(org, siteHostId))
+      const group = consentGroupForHost(org, siteHostId)
+      const visibleTo = crmScopeTokens(org, group)
+      const stamped = await resolveCrmActivityCompany(
+        link,
+        { groupId: group.groupId },
+        crmActivityClientReads(firestore, orgId),
+      )
       const atMs = Date.now()
       const activities = collection(firestore, 'orgs', orgId, CRM_COLLECTIONS.activities)
       for (const entry of entries) {
@@ -92,7 +101,7 @@ export function useCampaignFilingLog(input: {
             ...buildCampaignFilingActivity({
               action: entry.action,
               campaign: entry.campaign,
-              link,
+              link: stamped,
               hostId: siteHostId,
               visibleTo,
               atMs,

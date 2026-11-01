@@ -18,10 +18,12 @@
 import {
   type CrmDealContactRole,
   type CrmPicklist,
+  crmDealContactRoleListFields,
   DEAL_CONTACT_ROLES_MAX,
   dealContactRoleFields,
   dealContactRolesOf,
   judgeDealContactRoles,
+  readDealContactRoles,
 } from '@aglyn/aglyn'
 
 /*
@@ -33,11 +35,14 @@ import {
 export function dealContactRoleAddProblem(
   roles: readonly CrmDealContactRole[],
   contactId: string,
+  noun: 'deal' | 'company' = 'deal',
 ): string | null {
   if (!contactId) return 'Pick a contact.'
-  if (roles.some((row) => row.contactId === contactId)) return 'That contact is already on this deal.'
+  if (roles.some((row) => row.contactId === contactId)) {
+    return `That contact is already on this ${noun}.`
+  }
   if (roles.length >= DEAL_CONTACT_ROLES_MAX) {
-    return `A deal names at most ${DEAL_CONTACT_ROLES_MAX} contacts.`
+    return `A ${noun} names at most ${DEAL_CONTACT_ROLES_MAX} contacts.`
   }
   return null
 }
@@ -90,4 +95,38 @@ export function dealContactRolesSave(
   const fields = dealContactRoleFields(judged.roles)
   const before = typeof deal.contactId === 'string' && deal.contactId ? deal.contactId : null
   return { ok: true, ...fields, primaryChanged: fields.contactId !== before }
+}
+
+/**
+ * The roles a company holds, as stored. A deal's reader takes the Primary from
+ * the deal's `contactId`; a company has none, so its Primary is on the row.
+ */
+export function companyContactRolesOf(company: { contactRoles?: unknown }): CrmDealContactRole[] {
+  return readDealContactRoles(company.contactRoles)
+}
+
+/**
+ * What a save of a company's card writes: the roles judged against the org's
+ * list, the ids a merge or an erasure finds the company by, and the keys a
+ * rename of a role does. A company has no `contactId` beside them, so nothing
+ * else moves with the Primary.
+ */
+export function companyContactRolesSave(
+  company: { contactRoles?: unknown },
+  next: readonly CrmDealContactRole[],
+  picklist: CrmPicklist,
+):
+  | {
+      ok: true
+      contactRoles: CrmDealContactRole[]
+      contactRoleContactIds: string[]
+      contactRoleKeys: string[]
+    }
+  | { ok: false; error: string } {
+  const judged = judgeDealContactRoles(picklist, next, companyContactRolesOf(company))
+  if (judged.ok === false) return judged
+  const { contactRoleContactIds, contactRoleKeys } = crmDealContactRoleListFields({
+    contactRoles: judged.roles,
+  })
+  return { ok: true, contactRoles: judged.roles, contactRoleContactIds, contactRoleKeys }
 }

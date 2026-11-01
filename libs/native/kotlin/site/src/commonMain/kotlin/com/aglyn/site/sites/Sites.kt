@@ -9,6 +9,7 @@ import com.aglyn.contracts.ListQueryRequest
 import com.aglyn.core.ApiMethod
 import com.aglyn.core.ConsoleApiClient
 import com.aglyn.core.ConsoleApiError
+import com.aglyn.core.SiteStyles
 import com.aglyn.core.FirestoreDoc
 import com.aglyn.core.FirestoreReader
 import com.aglyn.core.FirestoreTimestamp
@@ -174,18 +175,27 @@ fun suggestSubdomain(name: String): String = name.lowercase()
   .trimEnd('-')
 
 /**
+ * Whether Create site can go ahead: a name, an address the route's pattern takes, and a style the person picked. Nothing in
+ * Create site is chosen for anyone (AGL-4049), so until a style is picked the button stays off. The starter site has no
+ * "Pick for me": that card is the AI start's, and the route refuses it here.
+ */
+fun canCreateSite(name: String, subdomain: String, style: String?): Boolean =
+  name.isNotBlank() && SUBDOMAIN_PATTERN.matches(subdomain) && SiteStyles.all.any { it.id == style }
+
+/**
  * What Create site sends. `start: "starter"` is the console's own "Create the
  * starter site" answer: the site is born with the starter website in the same
  * request. Without it the server may create the site empty to offer the guided
  * AI start (`guidedStart` in its answer), and the app has no such start to
- * land on, which would leave an empty site.
+ * land on, which would leave an empty site. `style` is the one the person
+ * chose: the site starts in its look, and the route records it on the site.
  */
-fun createSiteBody(orgId: String, name: String, subdomain: String): JsonObject =
-  jsonBody("displayName" to name.trim(), "subdomain" to subdomain.trim().lowercase(), "orgId" to orgId, "start" to "starter")
+fun createSiteBody(orgId: String, name: String, subdomain: String, style: String): JsonObject =
+  jsonBody("displayName" to name.trim(), "subdomain" to subdomain.trim().lowercase(), "orgId" to orgId, "start" to "starter", "style" to style)
 
 /** `POST /api/hosts/create`, the console's own Create site. */
-suspend fun createSite(api: ConsoleApiClient, orgId: String, name: String, subdomain: String): CreateSiteResult = try {
-  val answer = api.request("/api/hosts/create", ApiMethod.POST, createSiteBody(orgId, name, subdomain))
+suspend fun createSite(api: ConsoleApiClient, orgId: String, name: String, subdomain: String, style: String): CreateSiteResult = try {
+  val answer = api.request("/api/hosts/create", ApiMethod.POST, createSiteBody(orgId, name, subdomain, style))
   CreateSiteResult.Created(answer.field("hostId").orEmpty(), answer.field("subdomain") ?: subdomain)
 } catch (error: ConsoleApiError) {
   if (error.status == 0) throw error

@@ -31,6 +31,7 @@ import {
   CRM_SALUTATION_PICKLIST,
   crmTelHref,
   normalizeContactBirthdate,
+  normalizeContactEmail,
   normalizePhone,
 } from '@aglyn/aglyn'
 import { mdiPhoneOutline } from '@aglyn/shared-data-mdi'
@@ -269,6 +270,8 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
   const [lastName, setLastName] = useState(record.lastName ?? '')
   const [phones, setPhones] = useState<PhoneDrafts>(() => phoneDraftsFrom(record))
   const [doNotCall, setDoNotCall] = useState(record.doNotCall === true)
+  const [email, setEmail] = useState(record.email)
+  const [emailError, setEmailError] = useState('')
   const [jobTitle, setJobTitle] = useState(record.jobTitle)
   const [department, setDepartment] = useState(record.department ?? '')
   const [birthdate, setBirthdate] = useState(record.birthdate ?? '')
@@ -331,6 +334,8 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
     setLastName(record.lastName ?? '')
     setPhones(phoneDraftsFrom(record))
     setDoNotCall(record.doNotCall === true)
+    setEmail(record.email)
+    setEmailError('')
     setJobTitle(record.jobTitle)
     setDepartment(record.department ?? '')
     setBirthdate(record.birthdate ?? '')
@@ -362,6 +367,18 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
     reseed()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recordId])
+  /*
+   * And it follows the document until somebody edits it (AGL-4122). A page
+   * drawn from the cache seeds these drafts from the cached row, and the
+   * server's answer arrives a moment later with the newer one. Left alone, the
+   * form kept the old values on screen with the seed reading confirmed, and the
+   * next save wrote them back over the new ones without anyone having touched
+   * those fields.
+   */
+  useEffect(() => {
+    if (!edited) reseed()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [record])
 
   const handleSave = useCallback(async () => {
     if (clearingRequired) return
@@ -369,11 +386,19 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
     const storedBirthdate = normalizeContactBirthdate(birthdate)
     setPhoneErrors('errors' in readPhonesResult ? readPhonesResult.errors : {})
     setBirthdateError(storedBirthdate === null ? CONTACT_BIRTHDATE_REFUSAL : '')
+    // The address, only when it moved. It can be filled in or replaced, never
+    // emptied: a person who had one still answers to it (AGL-4122).
+    const typedEmail = email.trim()
+    const nextEmail = typedEmail === record.email ? null : normalizeContactEmail(typedEmail)
+    const emailMoved = typedEmail !== record.email
+    setEmailError(emailMoved && !nextEmail ? 'Enter a valid email address.' : '')
     if ('errors' in readPhonesResult || storedBirthdate === null) return
+    if (emailMoved && !nextEmail) return
     // A stage that differs from the record's is the stage route's to write —
     // see the note above.
     const stageChanged = !suiteLocked && lifecycleStage !== record.lifecycleStage
     const set: ContactUpdateFields = {
+      ...(nextEmail ? { email: nextEmail } : {}),
       // The name is the parts' while there are parts — see the note above.
       ...(composedName ? {} : { name: nameOverride.trim().slice(0, 120) }),
       firstName: firstName.trim(),
@@ -426,21 +451,16 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
       logActivity('Updated contact', {
         type: 'contact',
         id: record.$id,
-        name: record.name || record.email,
+        name: record.name || email.trim() || record.phone,
       })
       // The custom values are stored; the controls read the record again.
       setCustom({})
-      if (stageChanged && !siteHostId) {
-        // The stage lives on a site's facet, and this person has none. Never
-        // "Contact saved" over a change that went nowhere (AGL-4120).
-        return void enqueueSnackbar(
-          'Saved, but the stage could not be changed: no site has captured this contact yet.',
-          { variant: 'warning', persist: false },
-        )
-      }
-      if (stageChanged && siteHostId) {
+      if (stageChanged) {
         try {
-          await setContactStage(user, siteHostId, record.$id, lifecycleStage || null)
+          // A person no site holds is staged at the organization (AGL-4122).
+          await setContactStage(user, siteHostId, record.$id, lifecycleStage || null, {
+            orgId,
+          })
         } catch (error) {
           // The rest of the profile is saved; only the stage was refused, and
           // the route's own sentence says why.
@@ -464,6 +484,8 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
       setSaving(false)
     }
   }, [
+    email,
+    orgId,
     address,
     assistantName,
     birthdate,
@@ -595,9 +617,16 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
           <TextField
             size="small"
             label="Email"
-            value={record.email}
-            slotProps={{ input: { readOnly: true } }}
-            helperText="The identity every site shares — it cannot be edited here."
+            type="email"
+            value={email}
+            onChange={(event) => change(setEmail, event.target.value)}
+            error={Boolean(emailError)}
+            helperText={
+              emailError ||
+              (record.email
+                ? 'Every site shares this address, so changing it changes it for all of them.'
+                : 'Add it whenever you have it.')
+            }
             fullWidth
           />
         </Grid>

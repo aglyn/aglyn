@@ -19,12 +19,16 @@ import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { SITE_STARTER_SEARCH_MAX } from './site-starter-listing'
 import {
   parseStarterSearchAnswer,
+  readStarterAnswersAnswer,
   readStarterSummary,
   readStarterCheckoutReturn,
   STARTER_CHECKOUT_RETURN,
   starterCardFacts,
   starterPagesLabel,
   starterPriceLabel,
+  STARTER_ANSWERS_PATH,
+  starterAnswersParams,
+  starterAnswersQueryFrom,
   starterQueryFrom,
   starterQueryParams,
 } from './starter-query'
@@ -273,5 +277,48 @@ describe('the way back from buying a starter (AGL-4049 lane 3)', () => {
     expect(readStarterCheckoutReturn(STARTER_CHECKOUT_RETURN)).toBe('create-site')
     expect(readStarterCheckoutReturn('/acme/hosts?create=site')).toEqual({ error: 'Unknown return' })
     expect(readStarterCheckoutReturn('https://evil.example')).toEqual({ error: 'Unknown return' })
+  })
+})
+
+describe('an AI starter’s answers, asked and read (AGL-4049 phase 4)', () => {
+  it('asks the workspace and the listing, in that order, at its own path', () => {
+    expect(STARTER_ANSWERS_PATH).toBe('/api/marketplace/starters/answers')
+    expect(starterAnswersParams({ orgId: ' org-1 ', listingId: 'fp-starter-restaurant-ai' }).toString()).toBe(
+      'orgId=org-1&listingId=fp-starter-restaurant-ai',
+    )
+  })
+
+  it('reads the question back, refusing a missing workspace or an id no listing can have', () => {
+    const read = (query: string) => starterAnswersQueryFrom(new URLSearchParams(query))
+    expect(read('orgId=org-1&listingId=fp-starter-restaurant-ai')).toEqual({
+      orgId: 'org-1',
+      listingId: 'fp-starter-restaurant-ai',
+    })
+    expect(read('listingId=x')).toEqual({ error: 'Missing orgId' })
+    for (const listingId of ['', 'a%2Fb', '..', 'x'.repeat(129)]) {
+      expect(read(`orgId=org-1&listingId=${listingId}`)).toEqual({ error: 'Unknown starter' })
+    }
+  })
+
+  it('reads the answer defensively: answers as given, facets as a card reads them, none without answers', () => {
+    expect(
+      readStarterAnswersAnswer({
+        answers: { kind: 'restaurant', brief: '' },
+        facets: { kind: 'restaurant', base: 'starter', fonts: null, pages: 1, mode: 'ai' },
+      }),
+    ).toEqual({
+      answers: { kind: 'restaurant', brief: '' },
+      facets: { kind: 'restaurant', base: 'starter', fonts: null, pages: 1, mode: 'ai' },
+    })
+    expect(readStarterAnswersAnswer({ answers: { kind: 'x' } })?.facets).toEqual({
+      kind: null,
+      base: null,
+      fonts: null,
+      pages: 0,
+      mode: 'base',
+    })
+    for (const value of [null, 'x', {}, { answers: [] }, { answers: 'x' }]) {
+      expect(readStarterAnswersAnswer(value)).toBeNull()
+    }
   })
 })

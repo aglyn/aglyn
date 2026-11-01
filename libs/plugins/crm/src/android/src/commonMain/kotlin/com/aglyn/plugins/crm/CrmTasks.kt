@@ -35,10 +35,12 @@ import com.aglyn.contracts.ListQueryRequest
 import com.aglyn.contracts.ListQuerySort
 import com.aglyn.contracts.ListQuerySortDirection
 import com.aglyn.core.FirestoreDoc
+import com.aglyn.core.Live
 import com.aglyn.core.listquery.planListQuery
 import com.aglyn.core.listquery.toFirestoreQuery
 import com.aglyn.core.nowMillis
 import com.aglyn.pluginhost.NativePluginContext
+import com.aglyn.pluginhost.rememberWorkspaceSites
 import com.aglyn.ui.Busy
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
@@ -175,21 +177,62 @@ fun TaskRow(task: CrmTask, reference: CrmReference, onToggle: (() -> Unit)?, onC
   )
 }
 
+/** The pick that files a task with the organization itself. Never a site's id, which is a Firestore document id. */
+const val CRM_ORGANIZATION_CHOICE = "__organization"
+
+/**
+ * Where a new task at the workspace's level starts filed: the last site picked, the only site, the organization where every
+ * site sees a record, else empty for a workspace that keeps its sites apart, which asks.
+ */
+fun taskSiteStart(scope: CrmScope, sites: List<String>, picked: String?): String =
+  crmCreateHost(picked, sites) ?: if (scope.createNeedsSite) "" else CRM_ORGANIZATION_CHOICE
+
 /** The task form: what it is, when it is due, whose it is and what it is about. */
 @Composable
-fun TaskDialog(title: String, initial: TaskDraft, reference: CrmReference, busy: Busy, onDismiss: () -> Unit, onDelete: (() -> Unit)? = null, onSave: (TaskDraft) -> Unit) {
+fun TaskDialog(
+  title: String,
+  initial: TaskDraft,
+  reference: CrmReference,
+  busy: Busy,
+  onDismiss: () -> Unit,
+  onDelete: (() -> Unit)? = null,
+  /** The workspace's sites and where the form starts: given, it asks where the task is filed (a new task at the workspace's level). */
+  sites: List<FieldOption>? = null,
+  siteStart: String = "",
+  onSave: (TaskDraft) -> Unit,
+) {
   var draft by remember { mutableStateOf(initial) }
+  var site by remember(siteStart) { mutableStateOf(siteStart) }
   ActionDialog(
     title = title,
     icon = "task",
     confirmLabel = "Save",
-    confirmEnabled = draft.title.isNotBlank(),
+    confirmEnabled = draft.title.isNotBlank() && (sites == null || site.isNotEmpty()),
     busy = busy.busy,
     error = busy.error,
     onDismiss = onDismiss,
     dismissLabel = "Cancel",
-    onConfirm = { onSave(draft) },
+    onConfirm = { onSave(draft.copy(sourceSite = site.takeIf { sites != null && it.isNotEmpty() && it != CRM_ORGANIZATION_CHOICE })) },
   ) {
+    if (sites != null) {
+      FieldEditor(
+        FieldSpec(
+          "taskSite",
+          "Site",
+          FieldKind.SELECT,
+          required = true,
+          options = sites + FieldOption(CRM_ORGANIZATION_CHOICE, "This organization (no site)"),
+          help = if (site == CRM_ORGANIZATION_CHOICE) {
+            "A task of the organization itself, listed from the organization hub and from every site. Completing it runs no site's automations."
+          } else {
+            "The site this record belongs to — it decides which of your sites may see it."
+          },
+          emptyLabel = null,
+        ),
+        site,
+        { site = it },
+      )
+    }
     OutlinedTextField(draft.title, { draft = draft.copy(title = it.take(200)) }, label = { Text("Task") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("task-title"))
     ChoiceChipRow(Contracts.crmTaskKindLabels.map { ChipOption(it.key, it.value) }, draft.kind, { draft = draft.copy(kind = it) })
     ChoiceChipRow(listOf("low" to "Low", "normal" to "Normal", "high" to "High").map { ChipOption(it.first, it.second) }, draft.priority, { draft = draft.copy(priority = it) })
@@ -259,8 +302,19 @@ fun TasksSection(context: NativePluginContext, scope: CrmScope, api: CrmApi, ref
   }
   val busy = remember(editing, creating) { Busy() }
   if (creating) {
-    // The task routes take the workspace too: a task made from the workspace's CRM belongs to the workspace.
-    TaskDialog("New task", TaskDraft(title = "", assigneeUid = scope.uid), reference, busy, onDismiss = { creating = false }) { draft ->
+    // From the workspace's CRM the form says where it is filed: a site, or the organization itself.
+    val sites = if (scope.workspaceWide) (rememberWorkspaceSites(context) as? Live.Ready)?.value else null
+    val waiting = scope.workspaceWide && sites == null
+    TaskDialog(
+      "New task",
+      TaskDraft(title = "", assigneeUid = scope.uid),
+      reference,
+      busy,
+      onDismiss = { creating = false },
+      sites = if (scope.workspaceWide) sites.orEmpty().map { FieldOption(it.id, it.name) } else null,
+      siteStart = if (scope.workspaceWide && !waiting) taskSiteStart(scope, sites.orEmpty().map { it.id }, CrmCreateSiteMemory.pick(scope.orgId)) else "",
+    ) { draft ->
+      if (scope.workspaceWide) draft.sourceSite?.let { CrmCreateSiteMemory.remember(it, scope.orgId) }
       busy.run(coroutines, { creating = false }) { api.saveTask(null, draft) }
     }
   }

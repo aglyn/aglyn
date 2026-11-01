@@ -49,7 +49,7 @@ export const PLUGIN_SURFACE_SECTIONS: Readonly<
     contacts: 'Contacts',
     leads: 'Leads',
     companies: 'Companies',
-    deals: 'Deals',
+    deals: 'Deals / Opportunities',
     tasks: 'Tasks',
     reports: 'Reports',
     fields: 'Fields',

@@ -163,10 +163,9 @@ export const CONTACT_TRANSFER_FIELDS: readonly TransferField[] = [
     label: 'Email',
     group: 'person',
     type: 'email',
-    required: true,
     matchKey: true,
     aliases: ['email address', 'e-mail', 'e-mail address', 'contact email', 'primary email', 'work email'],
-    description: 'Who the person is: a contact is found and kept by its email.',
+    description: 'Optional. A row with one merges into the contact who has it.',
   },
   {
     id: 'name',

@@ -279,6 +279,20 @@ describe('filing a message', () => {
     })
   })
 
+  it('files a converted lead’s mail on the contact it became, and on that contact’s company (AGL-4123)', async () => {
+    store.set(`orgs/${ORG}/leads/${personKey('bob@lead.example')}`, {
+      email: 'bob@lead.example',
+      visibleTo: ['host:site-1'],
+      convertedContactId: 'con-2',
+    })
+    store.set(`orgs/${ORG}/contacts/con-2`, {
+      email: 'bob@work.example',
+      facets: { 'site-1': { companyId: 'co-2', sources: {}, interactions: [] } },
+    })
+    await file(message({ from: 'Bob <bob@lead.example>', messageId: '<lead@mail.example>' }))
+    expect(activities()[0]).toMatchObject({ leadId: expect.any(String), contactId: 'con-2', companyId: 'co-2' })
+  })
+
   it('answers duplicate for a second delivery of the same Message-ID and writes nothing more', async () => {
     const first = await file(message())
     const second = await file(message({ id: 'em-redelivered' }))
@@ -297,7 +311,9 @@ describe('filing a message', () => {
     expect(activities()).toHaveLength(3)
   })
 
-  it("files a member's copied send to a lead as outbound, on the lead, stamped with the member and the site's scope", async () => {
+  it("files a member's copied send to a lead as outbound, on the lead, stamped with the member and the site's scope when the org keeps its sites apart", async () => {
+    // The agency's opt-in, which is what keeps this lead on the second site.
+    store.set(`orgs/${ORG}`, { name: 'Acme', plan: 'agency', crm: { defaultRecordScope: 'host' } })
     const result = await file(
       message({
         from: 'Sam Rep <sam@acme.com>',

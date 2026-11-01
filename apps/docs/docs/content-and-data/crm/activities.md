@@ -57,6 +57,10 @@ lead, a company or a deal — is a collapsed row, newest first:
   them again.
 - **Edit** and **Delete** stay on the row they act on.
 
+A company's **Activity** card also says, on each row, who or what it is about:
+the contact and the deal, each a link to its record. See
+[who, what and which company](#who-what-and-which-company).
+
 The list is paged ten at a time by the footer under it, the same footer as
 every list in the console, with a menu for how many rows a page holds.
 
@@ -119,9 +123,8 @@ re-engagement audience can be
 
 Open the record — a contact's page under **CRM › Contacts**, a company's under
 **Companies**, a deal's under **Deals**, or a lead's under **Leads** — and choose
-**Log activity** in the header of the **Timeline** or **Activity** card. The
-activity is filed against that record; there is no picker, because what you are
-looking at is what the activity is about.
+**Log activity** in the header of the **Timeline** or **Activity** card.
+**Name** and **Related To** open on that record, and you can change either one.
 
 Logging an activity is part of the **CRM**, included from **Starter**. On Free the CRM
 is shown locked, so there is no record page to log from.
@@ -134,6 +137,12 @@ is shown locked, so there is no record page to log from.
 | **What happened** | The body of the entry. |
 | **Outcome** | For a call or a meeting: how it ended — "left a voicemail", "agreed to a trial". |
 | **Minutes** | For a call or a meeting: how long it took. |
+| **Name** | The contact it was with. Opened from a contact, that contact; opened from a deal, the deal's Primary, with everyone on the deal at the top of the list, whatever their contact role. |
+| **Related To** | The company or the deal it is about. Opened from a company or a deal, that record. The open deals of the contact in **Name**, and of the company, lead the list. |
+
+An entry needs at least one of **Name** and **Related To**. A lead's own log
+offers neither: the entry is filed on the lead, and it moves to the contact when
+the lead converts.
 
 A call, an email or a message with a direction reads as it in its chip — **Inbound call**,
 **Outbound email**, **Internal call**, **Outbound WhatsApp message**. The **Log a CRM
@@ -143,7 +152,41 @@ activity** automation step and `POST /v1/activities` take the same direction
 Each entry shows who logged it and how long ago. The author can edit or delete
 their own entries; an org-wide member can edit or delete anyone's. A colleague
 with access to only some of your sites can read an entry they did not write, and
-cannot change it.
+cannot change it. Correcting an entry can change its **Name** and **Related To**
+too, and it moves to the timelines they name.
+
+### Who, what and which company {#who-what-and-which-company}
+
+An activity can be about a person, a deal and a company at once, the way one is
+in Salesforce, and it shows on the page of each:
+
+| It shows on | When |
+| --- | --- |
+| **The contact's Timeline** | **Name** is that contact. |
+| **The deal's Activity card** | **Related To** is that deal. |
+| **The company's Activity card** | **Related To** is that company, or the entry rolls up to it. |
+
+An entry about a deal or a contact rolls up to their company on its own, so a
+company's page shows what happened with its people and on its deals as well as
+what was logged on the company itself:
+
+1. A company you chose in **Related To** stays.
+2. Otherwise the entry takes the deal's company.
+3. Otherwise it takes the company of the contact in **Name**, as the site you are
+   logging from has them filed, or as your organization does for a person it
+   added itself.
+
+So a call logged on a deal shows on the deal, on the timeline of the person you
+spoke to, and on their company. Logged on a contact instead, name one of their
+open deals in **Related To** and it shows on the deal too.
+
+The same goes for everything else that writes to a timeline: an automation's
+entries, emails sent from a record or captured, bookings, entries from Sequences,
+campaign filings, and `POST /v1/activities`.
+
+An entry keeps the company it was logged with. When a contact later moves to
+another company, or a deal changes company, their earlier entries stay where
+they are; edit an entry's **Name** or **Related To** to move it.
 
 ### A meeting from a booking {#meeting-from-a-booking}
 
@@ -173,7 +216,7 @@ an extension typed as `x44` — is shown as plain text and **Call** says why
 it is unavailable, rather than offering a link that would ring nothing.
 
 **Log a call** sits beside it and opens the dialog above with the kind
-already set to **Call** and the record already bound, so logging what was
+already set to **Call** and the record already filled in, so logging what was
 said is one button and one sentence. It is there whether or not the record
 has a number: a call placed from your own mobile is still a call to log.
 The kind is a starting point, not a lock — change it in the dialog if the

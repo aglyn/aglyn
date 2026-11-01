@@ -59,6 +59,35 @@ class CrmCasesTest {
   }
 
   @Test
+  fun theDefaultScopeIsTheConsoles() {
+    cases("crmDefaultScopeOf").forEach { (args, result) ->
+      assertEquals((result as? JsonPrimitive)?.contentOrNull, crmDefaultScopeOf(map(args[0])), args.toString())
+    }
+  }
+
+  @Test
+  fun theActivityCompanyIsTheConsoles() {
+    cases("crmActivityCompanyId").forEach { (args, result) ->
+      val link = map(args[0])
+      val sources = map(args[1])
+      @Suppress("UNCHECKED_CAST")
+      assertEquals(
+        (result as? JsonPrimitive)?.contentOrNull,
+        crmActivityCompanyId(link?.get("companyId") as? String, sources?.get("deal") as? Map<String, Any?>, sources?.get("contact") as? Map<String, Any?>, sources?.get("groupId") as? String, sources?.get("org") as? Map<String, Any?>),
+        args.toString(),
+      )
+    }
+  }
+
+  @Test
+  fun activityTitlesAreTheConsoles() {
+    cases("crmActivityKindTitle").forEach { (args, result) ->
+      assertEquals(result.jsonPrimitive.content, crmActivityKindTitle(args[0].jsonPrimitive.content, (args.getOrNull(1) as? JsonPrimitive)?.contentOrNull), args.toString())
+    }
+    assertEquals("Outbound WhatsApp message", crmActivityKindTitle("whatsapp", "outbound"))
+  }
+
+  @Test
   fun scopeTokenCases() {
     cases("crmScopeTokens").forEach { (args, result) ->
       assertEquals(result.jsonArray.map { it.jsonPrimitive.content }, crmScopeTokens(map(args[0]), group(args[1])), args.toString())

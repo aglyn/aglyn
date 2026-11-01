@@ -23,9 +23,11 @@ import {
 } from '../model/assist-page-change'
 import {
   ASSIST_SITE_PAGES_MAX,
+  assistOutcomesBlock,
   assistPageChangeBlock,
   assistPageChangeTool,
   assistSitePagesBlock,
+  parseAssistOutcomes,
   readAssistSitePages,
   resolveAssistPageChange,
   type AssistSitePage,
@@ -120,6 +122,30 @@ describe('the pages the chat may change (AGL-4116)', () => {
     expect(assistSitePagesBlock(PAGES.slice(0, 1), { versioning: false })).toContain(
       'keeps no version history (it comes with Pro), so newVersion is always false',
     )
+  })
+})
+
+describe('what the chat is told happened (AGL-4116)', () => {
+  it('holds a client’s list to what may enter a prompt', () => {
+    expect(parseAssistOutcomes('Saved')).toEqual([])
+    expect(parseAssistOutcomes([' Saved\n\ninto   the draft ', 7, null, '   '])).toEqual(['Saved into the draft'])
+    expect(parseAssistOutcomes(['x'.repeat(5_000)])[0]).toHaveLength(300)
+    const many = Array.from({ length: 40 }, (_, index) => `Change ${index}`)
+    const kept = parseAssistOutcomes(many)
+    expect(kept).toHaveLength(12)
+    expect(kept.at(-1)).toBe('Change 39')
+  })
+
+  it('says nothing when nothing happened', () => {
+    expect(assistOutcomesBlock([])).toBeNull()
+  })
+
+  it('is Aglyn’s record, and sets it apart from what the model proposes', () => {
+    const block = assistOutcomesBlock(['Page change on Home: saved, not published.']) ?? ''
+    expect(block).toContain('as Aglyn recorded it')
+    expect(block).toContain('- Page change on Home: saved, not published.')
+    expect(block).toContain('Never take back anything on this list')
+    expect(block).toContain('The rules about never saying a change is made are for what you propose now')
   })
 })
 

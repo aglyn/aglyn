@@ -19,6 +19,7 @@ import type { NodeInteraction } from './node-interactions'
 import { nodeInteractionSelector } from './node-interactions'
 import { SCREEN_ROOT_PATH } from './screen-route'
 import { applyElementMotion } from './element-motion'
+import { SX_SCHEME_DARK_KEY } from './scheme-sx'
 import {
   buildStarterNodes as buildNodes,
   starterSection as container,
@@ -732,19 +733,55 @@ export interface DefaultSiteLayout {
   nodes: Record<string, any>
 }
 
+/** What decides whether a new site's header and footer show a logo or its name. */
+const SITE_LOGO_TOKEN = '{{host.logo}}'
+const SITE_NAME_TOKEN = '{{host.businessName}}'
+
+/**
+ * A site's logo for the header or the footer (AGL-4119): one picture for each
+ * color scheme, named as the site, the height the band gives it and the width
+ * its shape takes. A wide wordmark stays one line, and past `maxWidth` it fits
+ * inside rather than being cropped.
+ *
+ * Two elements rather than one with two sources: `{{host.logoDark}}` is the
+ * site's logo when it has no dark one, so a visitor always sees exactly one.
+ */
+const logoPictures = (idPrefix: string, height: string, maxWidth: unknown): NodeSpec[] => {
+  const picture = (id: string, src: string, sx: Record<string, unknown>): NodeSpec => ({
+    id,
+    componentId: 'image',
+    props: { src, alt: SITE_NAME_TOKEN, objectFit: 'contain', width: 'auto', height },
+    sx: { maxWidth, objectPosition: 'left center', ...sx },
+  })
+  return [
+    picture(`${idPrefix}Light`, SITE_LOGO_TOKEN, { [SX_SCHEME_DARK_KEY]: { display: 'none' } }),
+    picture(`${idPrefix}Dark`, '{{host.logoDark}}', {
+      display: 'none',
+      [SX_SCHEME_DARK_KEY]: { display: 'block' },
+    }),
+  ]
+}
+
 /**
  * The header and footer a new site is born with (AGL-3497).
  *
  * The brand reads `{{host.businessName}}`, so it follows the site's name in
- * Setup rather than freezing the one it was created under. The header's
- * Contact button scrolls to the home page's contact section; on another page
- * it has nothing to scroll to and does nothing, which is the step's own rule.
+ * Setup rather than freezing the one it was created under, and the site's
+ * logo takes its place wherever it has one (AGL-4119): the logo carries
+ * `hideUnless` and the name `hideIf`, both bound to `{{host.logo}}`, and the
+ * published page drops the one the site does not use. The logo comes first
+ * in the toolbar so what is added after the brand link stays after both.
+ * The © line keeps the name either way.
+ *
+ * The header's Contact button scrolls to the home page's contact section; on
+ * another page it has nothing to scroll to and does nothing, which is the
+ * step's own rule.
  *
  * `homeScreenId` is the home page the brand and the footer's Home link point
  * at — a link by id, so it survives a slug change.
  */
 export function buildDefaultSiteLayout(homeScreenId: string): DefaultSiteLayout {
-  const brand = '{{host.businessName}}'
+  const brand = SITE_NAME_TOKEN
   return {
     displayName: 'Site header and footer',
     description: 'The header and footer every page of this site shows.',
@@ -767,9 +804,22 @@ export function buildDefaultSiteLayout(homeScreenId: string): DefaultSiteLayout 
                 sx: { columnGap: 2 },
                 children: [
                   {
+                    id: 'dl_brandLogo',
+                    componentId: 'muiLinkBox',
+                    props: { screenId: homeScreenId, hideUnless: SITE_LOGO_TOKEN },
+                    sx: { display: 'flex', alignItems: 'center', flexGrow: 1, minWidth: 0 },
+                    children: logoPictures('dl_brandLogo', '40px', { xs: '100%', sm: 280 }),
+                  },
+                  {
                     id: 'dl_brand',
                     componentId: 'muiScreenLink',
-                    props: { children: brand, screenId: homeScreenId, renderAs: 'link', color: 'inherit' },
+                    props: {
+                      children: brand,
+                      screenId: homeScreenId,
+                      renderAs: 'link',
+                      color: 'inherit',
+                      hideIf: SITE_LOGO_TOKEN,
+                    },
                     sx: { fontWeight: 800, fontSize: '1.25rem', textDecoration: 'none', flexGrow: 1 },
                   },
                   {
@@ -807,7 +857,13 @@ export function buildDefaultSiteLayout(homeScreenId: string): DefaultSiteLayout 
                   componentId: 'muiStack',
                   props: { spacing: 1.5 },
                   children: [
-                    text('dl_footerName', 'h6', brand, { component: 'p' }),
+                    {
+                      id: 'dl_footerLogo',
+                      componentId: 'muiBox',
+                      props: { hideUnless: SITE_LOGO_TOKEN },
+                      children: logoPictures('dl_footerLogo', '48px', 280),
+                    },
+                    text('dl_footerName', 'h6', brand, { component: 'p', hideIf: SITE_LOGO_TOKEN }),
                     text(
                       'dl_footerAbout',
                       'body2',

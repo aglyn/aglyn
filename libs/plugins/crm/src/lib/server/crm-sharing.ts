@@ -81,6 +81,7 @@ import {
   withManualShares,
   withoutManualShares,
 } from '../model/crm-sharing'
+import { stampCrmActivityCompany } from '../model/crm-activity-link'
 import { readLeadSourcePicklist } from './lead-source-picklist'
 import { authorizeOrgCaller, orgHostIds, readCrmRouteScope } from './org-caller'
 import { crmSuiteRefusal } from './suite-gate'
@@ -317,8 +318,13 @@ async function fileSharingActivity(
     const held = recordHeldScope(record)
     const visibleTo = [...new Set([...held, ...input.targets])]
     if (!visibleTo.length) return
-    const link: CrmActivityLink = { [LINK_FIELD[input.object]]: input.id }
-    if (!crmActivityLogHasRoom(await countCrmActivitiesForRecord(orgRef, link))) return
+    const named: CrmActivityLink = { [LINK_FIELD[input.object]]: input.id }
+    if (!crmActivityLogHasRoom(await countCrmActivitiesForRecord(orgRef, named))) return
+    // The record just read is the deal or the contact the entry rolls up from.
+    const link = stampCrmActivityCompany(named, {
+      ...(input.object === 'deals' ? { deal: record } : {}),
+      ...(input.object === 'contacts' ? { contact: record } : {}),
+    })
     const hostId =
       typeof record['hostId'] === 'string' && record['hostId']
         ? record['hostId']

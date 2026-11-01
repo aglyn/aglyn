@@ -117,6 +117,27 @@ describe('ContactKnownByCard', () => {
     // No site is named — the card's docs link is the only anchor left.
     expect(screen.queryByRole('link', { name: /^Site/ })).toBeNull()
     expect(screen.queryByText(/Opted|No record/)).toBeNull()
+    expect(screen.queryByText(/first capturing site/)).toBeNull()
+  })
+
+  it('names the sites a person added with no source site opted in on', () => {
+    render(
+      <ContactKnownByCard
+        row={{
+          email: 'x@example.com',
+          marketingConsentByHost: {
+            'host-b': { marketingConsent: true, marketingConsentAtMs: 1 },
+            'host-a': { marketingConsent: true, marketingConsentAtMs: 1 },
+          },
+        }}
+        contactId="con-3"
+        org={ORG}
+      />,
+      { wrapper: Mount },
+    )
+    expect(screen.getByText('No site recorded')).toBeTruthy()
+    expect(screen.getAllByText(/Opted in/)).toHaveLength(2)
+    expect(screen.queryByText(/first capturing site/)).toBeNull()
   })
 
   it('renders nothing at all under a site', () => {

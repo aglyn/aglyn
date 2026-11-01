@@ -568,7 +568,8 @@ describe('records beside the contact (claim 3)', () => {
       contactId: 'contact-1',
       companyId: 'company-1',
       hostId: MOCK_HOST_ID,
-      visibleTo: [`host:${MOCK_HOST_ID}`],
+      // The org has chosen no default, so the record is the whole org's.
+      visibleTo: ['org'],
       createdAt: 'server-timestamp',
     })
     expect(task.dueAtMs).toBeGreaterThanOrEqual(before + 2 * DAY_MS)
@@ -646,7 +647,8 @@ describe('records beside the contact (claim 3)', () => {
       contactId: 'contact-1',
       companyId: 'company-1',
       hostId: MOCK_HOST_ID,
-      visibleTo: [`host:${MOCK_HOST_ID}`],
+      // The org has chosen no default, so the record is the whole org's.
+      visibleTo: ['org'],
     })
     expect(history()[0].summary).toBe('logged activity note')
   })
@@ -761,7 +763,8 @@ describe('an email to the contact, on the contact’s timeline (claim 6, AGL-261
       contactId: 'contact-1',
       companyId: 'company-1',
       hostId: MOCK_HOST_ID,
-      visibleTo: [`host:${MOCK_HOST_ID}`],
+      // The org has chosen no default, so the record is the whole org's.
+      visibleTo: ['org'],
       createdAt: 'server-timestamp',
     })
     // The id on the row is the id on the message, which is how the delivery

@@ -82,7 +82,7 @@ the rest are checked on the page, which can come back
 
 `POST /v1/email-templates` — scope `crm:write`. Accepts an
 [`Idempotency-Key`](../conventions.md#idempotency), scoped to the organization.
-`name`, `body` and `consentSiteId` are required.
+`name` and `body` are required. `consentSiteId` names the site the record came from; leave it out for a record from no site, which belongs to the whole organization. It is required only when your organization [keeps each site's records apart](/content-and-data/crm/sharing).
 
 ```bash
 curl -X POST "https://app.aglyn.com/api/v1/email-templates" \
@@ -120,7 +120,7 @@ already sent from the template are not changed.
 
 | Status | `type` | When |
 | --- | --- | --- |
-| `400` | `bad_request` | `code: "validation_failed"` — a missing `name`, `body` or `consentSiteId`, a `kind` or `visibility` outside its list, a personal template with no `ownerUid` or a shared one with one, an `ownerUid` who is not a member, or a `subject`/`body` that is not a string. On the list, a `?kind=` or `?visibility=` outside its list or a malformed `?updatedAfter=`. `fields` names each key. |
+| `400` | `bad_request` | `code: "validation_failed"` — a missing `name` or `body`, a missing `consentSiteId` where the organization keeps its sites apart, a `kind` or `visibility` outside its list, a personal template with no `ownerUid` or a shared one with one, an `ownerUid` who is not a member, or a `subject`/`body` that is not a string. On the list, a `?kind=` or `?visibility=` outside its list or a malformed `?updatedAfter=`. `fields` names each key. |
 | `403` | `insufficient_scope` | Key lacks `crm:read` / `crm:write`. |
 | `403` | `plan_required` | `code: "crm"` — the plan carries no CRM suite. |
 | `404` | `not_found` | `"No such email template"`. |

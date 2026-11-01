@@ -24,8 +24,12 @@ import {
   DEFAULT_SITE_THEME,
   defaultSiteSeo,
 } from './default-site'
+import { applyLayoutProps } from './compose-layout-props'
+import { pruneHostHiddenNodes } from './compose-reusable-components'
 import { formFieldDeclsFromNodes } from './forms'
+import { resolveNodesHostTokens, type HostTokenSource } from './host-tokens'
 import { nodeIdFromInteractionSelector } from './node-interactions'
+import { resolveSchemeSx } from './scheme-sx'
 import { validateThemeForPublish } from './site-theme'
 
 /**
@@ -46,6 +50,8 @@ const layout = buildDefaultSiteLayout('home-screen-id')
 type StoredNode = {
   componentId: string
   props: Record<string, unknown>
+  nodes?: string[]
+  sx?: unknown
   interactions?: Array<{ steps: Array<{ type: string; selector?: string }> }>
 }
 const nodesOf = (map: Record<string, StoredNode>) =>
@@ -119,6 +125,89 @@ describe('AGL-3497 · the default header and footer', () => {
     expect(brand.props['screenId']).toBe('home-screen-id')
     expect(scrollTargets(layout.nodes)).toEqual([DEFAULT_HOME_CONTACT_SECTION_ID])
     expect(home.nodes[DEFAULT_HOME_CONTACT_SECTION_ID]).toBeDefined()
+  })
+})
+
+describe('AGL-4119 · the logo in the header and footer', () => {
+  const LIGHT = 'media:host-1/light'
+  const DARK = 'media:host-1/dark'
+  /** The layout as the published page composes it for a site with these fields. */
+  const composed = (host: HostTokenSource) => {
+    const applied = applyLayoutProps(layout.nodes as never, null, null) as Record<string, StoredNode>
+    return resolveNodesHostTokens(pruneHostHiddenNodes(applied as never, host), host) as Record<string, StoredNode>
+  }
+  const named = { displayName: 'Corner bistro' }
+
+  it('shows the name and no logo on a site without one', () => {
+    const nodes = composed(named)
+    expect(nodes['dl_brand'].props['children']).toBe('Corner bistro')
+    expect(nodes['dl_footerName'].props['children']).toBe('Corner bistro')
+    expect(nodes['dl_brandLogo']).toBeUndefined()
+    expect(nodes['dl_brandLogoLight']).toBeUndefined()
+    expect(nodes['dl_brandLogoDark']).toBeUndefined()
+    expect(nodes['dl_footerLogo']).toBeUndefined()
+    expect(nodes['dl_footerLogoLight']).toBeUndefined()
+  })
+
+  it('shows the logo in place of the name on a site with one', () => {
+    const nodes = composed({ ...named, logoUrl: LIGHT })
+    expect(nodes['dl_brand']).toBeUndefined()
+    expect(nodes['dl_footerName']).toBeUndefined()
+    expect(nodes['dl_brandLogoLight'].props['src']).toBe(LIGHT)
+    expect(nodes['dl_footerLogoLight'].props['src']).toBe(LIGHT)
+    expect(nodes['dl_toolbar'].nodes).toEqual(['dl_brandLogo', 'dl_search', 'dl_mode', 'dl_contact'])
+  })
+
+  it('keeps the name in the © line either way', () => {
+    expect(composed({ ...named, logoUrl: LIGHT })['dl_footerCopyright'].props['children']).toBe(
+      '© Corner bistro. All rights reserved.',
+    )
+  })
+
+  it('names the logo for a screen reader as the site, and links it home once', () => {
+    const nodes = composed({ ...named, logoUrl: LIGHT })
+    expect(nodes['dl_brandLogoLight'].props['alt']).toBe('Corner bistro')
+    expect(nodes['dl_brandLogoDark'].props['alt']).toBe('Corner bistro')
+    expect(nodes['dl_footerLogoLight'].props['alt']).toBe('Corner bistro')
+    expect(nodes['dl_brandLogo'].props['screenId']).toBe('home-screen-id')
+    expect(nodes['dl_brandLogoLight'].props['screenId']).toBeUndefined()
+  })
+
+  it('sizes it for the band, width following its shape, however wide', () => {
+    const header = layout.nodes['dl_brandLogoLight'] as StoredNode
+    expect(header.props).toMatchObject({ height: '40px', width: 'auto', objectFit: 'contain' })
+    expect((layout.nodes['dl_footerLogoLight'] as StoredNode).props).toMatchObject({ height: '48px', width: 'auto' })
+  })
+
+  it('shows one logo in each scheme, the dark one where the site has one', () => {
+    const nodes = composed({ ...named, logoUrl: LIGHT, logoDarkUrl: DARK })
+    expect(nodes['dl_brandLogoDark'].props['src']).toBe(DARK)
+    expect(nodes['dl_footerLogoDark'].props['src']).toBe(DARK)
+    const light = nodes['dl_brandLogoLight'].sx as Record<string, unknown>
+    const dark = nodes['dl_brandLogoDark'].sx as Record<string, unknown>
+    expect(resolveSchemeSx(light, 'light')['display']).toBeUndefined()
+    expect(resolveSchemeSx(light, 'dark')['display']).toBe('none')
+    expect(resolveSchemeSx(dark, 'light')['display']).toBe('none')
+    expect(resolveSchemeSx(dark, 'dark')['display']).toBe('block')
+  })
+
+  it('shows the one logo in the dark scheme too, on a site with no dark logo', () => {
+    expect(composed({ ...named, logoUrl: LIGHT })['dl_brandLogoDark'].props['src']).toBe(LIGHT)
+  })
+
+  it('stays after the brand link for what is added beside it', () => {
+    const toolbar = layout.nodes['dl_toolbar'] as StoredNode & { nodes: string[] }
+    expect(toolbar.nodes.indexOf('dl_brandLogo')).toBeLessThan(toolbar.nodes.indexOf('dl_brand'))
+    expect(toolbar.nodes.indexOf('dl_brand')).toBe(1)
+  })
+
+  it('leaves no directive on what survives', () => {
+    for (const host of [named, { ...named, logoUrl: LIGHT }]) {
+      for (const node of Object.values(composed(host))) {
+        expect(node.props?.['hideIf']).toBeUndefined()
+        expect(node.props?.['hideUnless']).toBeUndefined()
+      }
+    }
   })
 })
 
