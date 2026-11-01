@@ -121,25 +121,60 @@ struct TaskRowView: View {
   }
 }
 
+/// The pick that files a task with the organization itself. Never a site's id, which is a Firestore document id.
+let crmOrganizationChoice = "__organization"
+
+/// Where a new task at the workspace's level is filed: a site, or the organization (the console's `noSite` choice).
+struct TaskSiteChoice {
+  let sites: [NativeSiteRef]
+  /// The form's start: the last site picked, the only site, the organization where every site sees a record, else empty
+  /// for a workspace that keeps its sites apart, which asks.
+  let start: String
+
+  init(_ scope: CrmScope, sites: [NativeSiteRef], picked: String?) {
+    self.sites = sites
+    start = crmCreateHost(picked: picked, sites: sites.map(\.id)) ?? (scope.createNeedsSite ? "" : crmOrganizationChoice)
+  }
+}
+
 /// The task form: what it is, when it is due, whose it is and what it is about.
 struct TaskSheet: View {
   let title: String
   let initial: TaskDraft
   let reference: CrmReference
+  /// Given, the form asks where the task is filed (a new task at the workspace's level).
+  var siteChoice: TaskSiteChoice?
   var onDelete: (() async throws -> Void)?
   let save: (TaskDraft) async throws -> Void
   @State private var draft = TaskDraft()
   @State private var loaded = false
   @State private var hasDue = false
   @State private var due = Date()
+  @State private var site = ""
   @Environment(\.dismiss) private var dismiss
 
   var body: some View {
-    AglynFormSheet(title, canConfirm: !draft.title.trimmingCharacters(in: .whitespaces).isEmpty, save: {
+    AglynFormSheet(title, canConfirm: !draft.title.trimmingCharacters(in: .whitespaces).isEmpty && (siteChoice == nil || !site.isEmpty), save: {
       var final = draft
       final.dueAtMs = hasDue ? Int64(due.timeIntervalSince1970 * 1000) : nil
+      final.sourceSite = site.isEmpty || site == crmOrganizationChoice ? nil : site
       try await save(final)
     }) {
+      if let siteChoice {
+        Section {
+          Picker("Site", selection: $site) {
+            if site.isEmpty { Text("Choose").tag("") }
+            ForEach(siteChoice.sites) { Text($0.name).tag($0.id) }
+            Text("This organization (no site)").tag(crmOrganizationChoice)
+          }
+          .accessibilityIdentifier("task-site")
+        } footer: {
+          Text(
+            site == crmOrganizationChoice
+              ? "A task of the organization itself, listed from the organization hub and from every site. Completing it runs no site's automations."
+              : "The site this record belongs to — it decides which of your sites may see it.")
+        }
+      }
       Section {
         TextField("Task", text: $draft.title).accessibilityIdentifier("task-title")
         Picker("Type", selection: $draft.kind) {
@@ -184,6 +219,7 @@ struct TaskSheet: View {
       guard !loaded else { return }
       loaded = true
       draft = initial
+      site = siteChoice?.start ?? ""
       if let dueAt = initial.dueAtMs {
         hasDue = true
         due = Date(timeIntervalSince1970: Double(dueAt) / 1000)
@@ -254,7 +290,13 @@ struct TasksSection: View {
     }
     .onDisappear { list.stop() }
     .sheet(isPresented: $creating) {
-      TaskSheet(title: "New task", initial: TaskDraft(assigneeUID: scope.uid), reference: reference) { try await api.saveTask(nil, $0) }
+      TaskSheet(
+        title: "New task", initial: TaskDraft(assigneeUID: scope.uid), reference: reference,
+        siteChoice: scope.orgLevel ? TaskSiteChoice(scope, sites: context.sites, picked: CrmCreateSiteMemory.pick(scope.orgID)) : nil
+      ) { draft in
+        if scope.orgLevel, let site = draft.sourceSite { CrmCreateSiteMemory.remember(site, scope.orgID) }
+        try await api.saveTask(nil, draft)
+      }
     }
     .sheet(item: $editing) { task in
       TaskSheet(title: "Edit task", initial: task.draft, reference: reference, onDelete: { try await api.deleteTask(task) }) {

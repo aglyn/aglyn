@@ -411,7 +411,7 @@ describe('crm/picklist-values on a deal’s contact roles (AGL-3521)', () => {
 
   it('renames a role in every entry holding it and restamps the keys', async () => {
     const out = await route({ action: 'rename', valueId: 'champion', label: 'Internal champion' })
-    expect(out.payload).toEqual({ ok: true, updated: { deal: 1 } })
+    expect(out.payload).toEqual({ ok: true, updated: { deal: 1, company: 0 } })
     expect(store[`${DEALS}/d1`]).toMatchObject({
       contactId: 'c1',
       contactRoles: [
@@ -423,15 +423,28 @@ describe('crm/picklist-values on a deal’s contact roles (AGL-3521)', () => {
     expect(store[`${DEALS}/d2`]).toMatchObject({ contactRoleKeys: ['evaluator'] })
   })
 
+  it('renames a role on a company’s contact roles too', async () => {
+    store[`orgs/${ORG}/companies/co1`] = {
+      contactRoles: [{ contactId: 'c1', role: 'Champion', primary: true }],
+      contactRoleKeys: ['champion'],
+    }
+    const out = await route({ action: 'rename', valueId: 'champion', label: 'Internal champion' })
+    expect(out.payload).toEqual({ ok: true, updated: { deal: 1, company: 1 } })
+    expect(store[`orgs/${ORG}/companies/co1`]).toMatchObject({
+      contactRoles: [{ contactId: 'c1', role: 'Internal champion', primary: true }],
+      contactRoleKeys: ['internal champion'],
+    })
+  })
+
   it('a case-only rename rewrites each deal once and ends', async () => {
     const out = await route({ action: 'rename', valueId: 'champion', label: 'CHAMPION' })
-    expect(out.payload).toEqual({ ok: true, updated: { deal: 1 } })
+    expect(out.payload).toEqual({ ok: true, updated: { deal: 1, company: 0 } })
     expect(store[`${DEALS}/d1`]).toMatchObject({ contactRoleKeys: ['champion', 'evaluator'] })
   })
 
   it('a delete without a replacement keeps the contact on the deal, with no role', async () => {
     const out = await route({ action: 'delete', valueId: 'champion', replaceWith: null })
-    expect(out.payload).toEqual({ ok: true, updated: { deal: 1 } })
+    expect(out.payload).toEqual({ ok: true, updated: { deal: 1, company: 0 } })
     expect(store[`${DEALS}/d1`]).toMatchObject({
       contactRoles: [
         { contactId: 'c1', primary: true },

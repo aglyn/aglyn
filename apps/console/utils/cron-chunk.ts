@@ -79,3 +79,60 @@ export function selectCronChunk(
     total: ordered.length,
   }
 }
+
+/**
+ * How long a sweep's later chunks may keep using its listing.
+ *
+ * Far longer than a sweep takes (23 chunks took about 90 s on 2026-11-01) and
+ * far shorter than the gap between two scheduled sweeps. This is a backstop:
+ * what normally replaces a listing is the next sweep's first chunk.
+ */
+const SWEEP_LISTING_MAX_AGE_MS = 10 * 60_000
+
+const sweepListings = new Map<string, { at: number; listing: Promise<unknown> }>()
+
+/**
+ * A sweep's subjects, listed once per sweep rather than once per chunk
+ * (AGL-4121).
+ *
+ * `report-usage` read every `orgs` and `hosts` document on each chunk, then
+ * took ten orgs from them: 423 documents, 23 times, about 9,700 of the 15,000
+ * reads a run costs, twice a day.
+ *
+ * Paging those collections with a cursor, as `usage-alerts` does, is not an
+ * option there. Its subjects are the org ids AND every org id a site names, so
+ * a site whose org has no document is still swept, and a cursor over `orgs`
+ * would never reach it. That miss would be a month unbilled with nothing to say
+ * so. Holding the list changes what a chunk costs and nothing about what the
+ * sweep covers:
+ *
+ * - **A first chunk always lists.** Only the start of a sweep has no cursor, so
+ *   no sweep ever starts from another sweep's list.
+ * - **A later chunk with nothing to reuse lists for itself**, on a cold instance
+ *   or past the age limit. That is what every chunk used to do, so losing the
+ *   listing costs reads and never coverage.
+ * - **A failed listing is not kept**, or every later chunk would fail with it.
+ *
+ * @param sweep names the sweep; sweeps never share a listing.
+ * @param cursor the cursor this invocation resumes from, if any.
+ * @param list reads the subjects.
+ */
+export function listOncePerSweep<T>(
+  sweep: string,
+  cursor: string | null | undefined,
+  list: () => Promise<T>,
+  now: number = Date.now(),
+): Promise<T> {
+  const held = sweepListings.get(sweep)
+  if (cursor && held && now - held.at < SWEEP_LISTING_MAX_AGE_MS) {
+    return held.listing as Promise<T>
+  }
+  const listing = list()
+  sweepListings.set(sweep, { at: now, listing })
+  listing.catch(() => {
+    if (sweepListings.get(sweep)?.listing === listing) {
+      sweepListings.delete(sweep)
+    }
+  })
+  return listing
+}
