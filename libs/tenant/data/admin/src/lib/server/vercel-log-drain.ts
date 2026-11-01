@@ -496,7 +496,12 @@ export interface DrainIngestResult {
  * `{rate: 0}` rule with no path prefix — literally "drop everything" — changed
  * delivery volume from 31 to 32 per five minutes. The whole `schemas.log`
  * filter block is accepted by the API, echoed back on `GET`, and never
- * applied. Separation is the only control that works.
+ * applied. Separation is what stops the loop.
+ *
+ * The drain's newer top-level OData `filter` IS applied, and is what keeps the
+ * delivery volume down (AGL-4121). It cannot replace the gate here: Vercel's
+ * `log/statusCode` reads only `proxy.statusCode`, so the drains drop what is
+ * proven healthy and this module still decides what is a server error.
  *
  * The default keeps every existing caller on the Firebase admin credential.
  * A receiver hosted off Vercel (Cloud Run in `aglyn-main`) passes its own

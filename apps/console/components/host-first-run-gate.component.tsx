@@ -17,12 +17,18 @@
 
 'use client'
 
+import {
+  readSiteBrandMissed,
+  SITE_BRAND_MISSED_PARAM,
+  siteBrandMissedNotice,
+} from '@aglyn/aglyn/app-utils/site-brand-files'
 import SiteLiveNotice from '@aglyn/shared-ui-jsx/components/site-live-notice.component'
+import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import Dialog from '@mui/material/Dialog'
 import DialogContent from '@mui/material/DialogContent'
 import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import useCurrentOrg from '../hooks/use-current-org'
 import { useHost } from '../hooks/use-host'
 import { useOrgSlug } from '../hooks/use-org-scope'
@@ -70,12 +76,41 @@ export function HostFirstRunGate() {
   const hostId = useHostId()
   const searchParams = useSearchParams()
   const asked = searchParams?.get(SITE_START_PARAM)
+  const missed = searchParams?.get(SITE_BRAND_MISSED_PARAM)
   if (!hostId) return null
-  if (asked === SITE_START_LIVE_VALUE) {
-    return <HostLiveLanding hostId={hostId} starterName={searchParams?.get(SITE_LIVE_STARTER_PARAM) ?? null} />
-  }
-  if (asked !== SITE_START_VALUE) return null
-  return <HostFirstRunOffer hostId={hostId} />
+  return (
+    <>
+      {missed ? <SiteBrandMissedLanding named={missed} /> : null}
+      {asked === SITE_START_LIVE_VALUE ? (
+        <HostLiveLanding hostId={hostId} starterName={searchParams?.get(SITE_LIVE_STARTER_PARAM) ?? null} />
+      ) : asked === SITE_START_VALUE ? (
+        <HostFirstRunOffer hostId={hostId} />
+      ) : null}
+    </>
+  )
+}
+
+/**
+ * A create's notice, for a landing reached by a full page load (AGL-4119):
+ * the files that did not make it, said once, and dropped from the address so a
+ * reload does not say it again.
+ */
+function SiteBrandMissedLanding({ named }: { named: string }) {
+  const searchParams = useSearchParams()
+  const pathname = usePathname()
+  const router = useRouter()
+  const { enqueueSnackbar } = useSnackbar()
+  const said = useRef(false)
+  useEffect(() => {
+    if (said.current) return
+    said.current = true
+    const notice = siteBrandMissedNotice(readSiteBrandMissed(named))
+    if (notice) enqueueSnackbar(notice, { variant: 'warning', persist: true, allowDuplicate: true })
+    const rest = new URLSearchParams(searchParams?.toString() ?? '')
+    rest.delete(SITE_BRAND_MISSED_PARAM)
+    if (pathname) router.replace(rest.size ? `${pathname}?${rest.toString()}` : pathname)
+  }, [enqueueSnackbar, named, pathname, router, searchParams])
+  return null
 }
 
 /** "Your site is live", for a site born with the starter it was created for. */

@@ -81,6 +81,18 @@ lines under thin rules, or icons), whether its sections of text take a photo bes
 and whether a heading sits beside its items. The words, the sections and their order are
 still written for your business.
 
+## An AI starter's look {#an-ai-starters-look}
+
+**AI starters are rolling out**, and your workspace may not have them yet. When you
+[start from an AI starter](./start-with-ai.md#start-from-an-ai-starter), its style arrives
+chosen on the **Style** step, and its card says which starter it came from. Its brand
+color arrives picked under **More details** on the same step, as **Chosen color**. Choose
+another style card or another brand color, or **Let the style choose**, to change them.
+Your site's look is then made from them as for any start: its own variation of the
+style, with its fonts chosen within the style, in the brand color you kept.
+
+![The Style step opened from an AI starter: the Restaurant & café card chosen, saying From Restaurant & café with AI. Change it if you like., among Pick for me and the other style cards](/img/ai/start-with-ai-from-starter-style.png)
+
 ## How the look is made {#how-the-look-is-made}
 
 The style sets the range the look is chosen within: which base themes suit it, the range of

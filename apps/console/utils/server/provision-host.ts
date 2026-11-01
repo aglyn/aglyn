@@ -152,6 +152,14 @@ export interface ClaimHostInput {
    */
   style?: SiteStyleInstall
   /**
+   * An AI starter the site is created for (AGL-4049 phase 4): the listing
+   * whose answers filled in the AI start's questions. The site is born as a
+   * guided start's is (`starter: false`) — the start builds its pages — and
+   * records the starter in `starterChoice` with `mode: 'ai'`, so leaving the
+   * start gives it that starter's own pages (`provisionStarterSite`).
+   */
+  aiStarter?: SiteStarterInstall['listing']
+  /**
    * How the site was started, recorded in `starterChoice`: `starter` for the
    * starter site (the default when the site is born with it), `ai` for the
    * AI start (the default for a site born without it), `import` for a site
@@ -340,16 +348,23 @@ export interface ProvisionStarterResult {
  * page somebody made — is left exactly as it is and answers `provisioned:
  * false`. Two calls racing commit at most one starter, because each reads the
  * same documents the other would write.
+ *
+ * `starter` is the AI starter the site was created for (AGL-4049 phase 4),
+ * resolved by the caller: the site gets THAT starter's own pages, layout and
+ * theme (`siteStarterWrites`) in place of the default site, under the same
+ * rules — written only to a site with nothing on it, once. A `style` beside
+ * it is recorded and lends no look: the starter brings its own.
  */
 export async function provisionStarterSite(
   firestore: FirebaseFirestore.Firestore,
   hostId: string,
-  options: { style?: SiteStyleInstall | null } = {},
+  options: { style?: SiteStyleInstall | null; starter?: SiteStarterInstall | null } = {},
 ): Promise<ProvisionStarterResult> {
   const hostRef = firestore.collection('hosts').doc(hostId)
   // Planned before the transaction: it reads no document, and a retry of the
   // transaction writes the same fields.
-  const styled = siteStyleThemeFields(options.style)
+  const install = options.starter ? siteStarterWrites(options.starter) : null
+  const styled = install ? null : siteStyleThemeFields(options.style)
   return firestore.runTransaction(async (tx): Promise<ProvisionStarterResult> => {
     const [host, screens, layouts] = await Promise.all([
       tx.get(hostRef),
@@ -363,7 +378,7 @@ export async function provisionStarterSite(
     if (routed || host.get('defaultHomeScreenId') || !screens.empty || !layouts.empty) {
       return { provisioned: false }
     }
-    const home = defaultSiteWrites(String(host.get('displayName') ?? '') || 'My site')
+    const displayName = String(host.get('displayName') ?? '') || 'My site'
     // A style chosen for it (AGL-4049) is recorded beside how the site was
     // started; a site created before the record existed starts one here.
     const choice = options.style
@@ -374,6 +389,23 @@ export async function provisionStarterSite(
           },
         }
       : {}
+    if (install) {
+      // The AI starter's own site (AGL-4049 phase 4): every page it routes,
+      // its Home named as the placeholder, its theme over the one the site
+      // was born with.
+      tx.update(hostRef, {
+        ...Object.fromEntries(Object.entries(install.routing).map(([id, slug]) => [`screens.${id}`, slug])),
+        ...(install.homeScreenId ? { defaultHomeScreenId: install.homeScreenId } : {}),
+        starterProvisionedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+        ...install.host,
+        ...(host.get('seo') ? {} : { seo: defaultSiteSeo(displayName) }),
+        ...choice,
+        updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+      })
+      queueSiteStarterWrites(tx, hostRef, hostId, install)
+      return { provisioned: true, ...(install.homeScreenId ? { screenId: install.homeScreenId } : {}) }
+    }
+    const home = defaultSiteWrites(displayName)
     tx.update(hostRef, {
       [`screens.${home.screenId}`]: home.path,
       defaultHomeScreenId: home.screenId,
@@ -434,11 +466,15 @@ export async function claimHostForOrg(
   const styled = !install && starter ? siteStyleThemeFields(input.style) : null
   // What the site was created with (AGL-4049), on the host itself.
   const picked = input.starter && typeof input.starter === 'object' ? input.starter : null
+  // An AI starter is recorded the same way, the site born without its pages.
+  const ai = !picked && input.aiStarter ? input.aiStarter : null
   const starterChoice: HostStarterChoice = hostStarterChoice({
-    listingId: picked ? picked.listing.listingId : null,
-    version: picked ? String(picked.listing.version) : null,
-    kind: input.style?.id ?? (picked ? (picked.listing.kind ?? picked.payload.facets?.kind ?? null) : null),
-    mode: picked ? picked.payload.mode : 'base',
+    listingId: picked ? picked.listing.listingId : (ai?.listingId ?? null),
+    version: picked ? String(picked.listing.version) : ai ? String(ai.version) : null,
+    kind:
+      input.style?.id ??
+      (picked ? (picked.listing.kind ?? picked.payload.facets?.kind ?? null) : (ai?.kind ?? null)),
+    mode: picked ? picked.payload.mode : ai ? 'ai' : 'base',
     start: input.start ?? (starter ? 'starter' : 'ai'),
   })
   // Annotated rather than inferred. The body has three exits and an inferred

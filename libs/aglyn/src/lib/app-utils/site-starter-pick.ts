@@ -58,8 +58,8 @@ export interface SiteStarterPickRefused {
  * answers as it always has. A refusal of a pick names its listing: a 402 is
  * a price to pay, and the pick stays with "Buy and continue"; anything else
  * (the release not open to the workspace, a starter that is gone, one with
- * more pages than the plan holds, an AI starter before the AI start takes
- * them) clears the pick, with the reason said.
+ * more pages than the plan holds, an AI starter where the AI start is not
+ * offered) clears the pick, with the reason said.
  */
 export function readSiteStarterPickRefusal(
   status: number,

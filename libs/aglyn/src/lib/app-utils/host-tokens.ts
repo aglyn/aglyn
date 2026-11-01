@@ -83,6 +83,7 @@ export type HostTokenEmptyBehaviour =
 export interface HostTokenSource {
   displayName?: string
   logoUrl?: string
+  logoDarkUrl?: string
   subdomain?: string
   cname?: string
   /** Contact details a publisher template can reference (AGL-1022). */
@@ -140,6 +141,10 @@ function businessName(host: HostTokenSource): string | undefined {
   return trimmed(host.seo?.entity?.name) ?? trimmed(host.displayName)
 }
 
+function logo(host: HostTokenSource): string | undefined {
+  return trimmed(host.logoUrl) ?? trimmed(host.seo?.entity?.logo)
+}
+
 /**
  * The closed registry.
  *
@@ -161,10 +166,20 @@ export const HOST_TOKENS: Record<string, HostTokenDefinition> = {
     type: 'image',
     label: 'Logo',
     description: 'The site’s logo image.',
-    resolve: (host) =>
-      trimmed(host.logoUrl) ?? trimmed(host.seo?.entity?.logo),
+    resolve: logo,
     // No image: the block is dropped and the business name carries the brand
     // instead, which is what the block was for.
+    whenEmpty: 'omit-block',
+  },
+  logoDark: {
+    key: 'logoDark',
+    type: 'image',
+    label: 'Logo for dark backgrounds',
+    description:
+      'The logo to show on a dark background. The site’s logo when it has no dark one.',
+    // The pair a header toggles by color scheme (AGL-4119): a site with one
+    // logo shows it in both schemes, and one with none shows neither.
+    resolve: (host) => trimmed(host.logoDarkUrl) ?? logo(host),
     whenEmpty: 'omit-block',
   },
   url: {
@@ -232,6 +247,20 @@ export function hostTokenDefinition(
  * segment. `host.a.b` does not match, so there is no path syntax to abuse.
  */
 export const HOST_TOKEN_PATTERN = /\{\{\s*host\.([a-zA-Z][a-zA-Z0-9_]*)\s*\}\}/g
+
+/**
+ * Whether a value is exactly one image token, like `{{host.logo}}`: what a
+ * picture's `src` may be when it is the installing site's own logo. It becomes
+ * that site's stored value at render, so it names nothing of the publisher's.
+ */
+export function isHostImageToken(value: string): boolean {
+  const keys = hostTokensIn(value)
+  return (
+    keys.length === 1 &&
+    value.replace(HOST_TOKEN_PATTERN, '').trim() === '' &&
+    hostTokenDefinition(keys[0])?.type === 'image'
+  )
+}
 
 /** Every `host.*` token in a string, in order, including unknown ones. */
 export function hostTokensIn(text: string): string[] {

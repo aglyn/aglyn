@@ -139,6 +139,18 @@ defined on the **Companies** tab of the Fields section, and **Edit** carries a c
 for each, so a company's own properties are saved in the same form as its name and
 domain.
 
+## Contact roles {#contact-roles}
+
+The **Contact roles** card says who at the company plays which part, the way
+Salesforce's Account Contact Roles do. **Add contact** picks a person and their
+role, and one person is the **Primary**. **Make primary** moves it, and a role
+can be changed in place.
+
+The roles come from the same list as a deal's, kept under
+[CRM → Fields](./custom-fields.md). They are separate from the
+[roles on a deal](./deals.md#contact-roles): someone's part in the company is a
+fact about the account, and their part in one deal can differ.
+
 ## Contacts at a company
 
 The **Contacts** card lists the people linked to this company a page at a

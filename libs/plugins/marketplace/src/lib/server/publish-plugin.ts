@@ -58,6 +58,9 @@ import {
   validateListingContent,
 } from '../model/marketplace'
 import { publisherAgreementConsentRefusal } from '../model/publisher-agreement'
+import { listingArtifactType } from '../model/listing-visibility'
+import { siteStarterCategoryUpdate } from '../model/starter-category'
+import { SITE_STARTER_ARTIFACT_TYPE } from '@aglyn/aglyn/app-utils/site-starter'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import type { DecodedIdToken } from 'firebase-admin/auth'
 
@@ -90,7 +93,12 @@ const updateListingContent: PluginApiHandler = async (req, res) => {
     ? authorization.slice('Bearer '.length)
     : undefined
   if (!idToken) return res.status(401).json({ error: 'Unauthenticated' })
-  const verdict = validateListingContent(req.body ?? {})
+  // The category is checked once the listing says what it is (AGL-4049): a
+  // site starter is filed under a kind of site, every other listing under
+  // the plugin taxonomy, so everything else is checked here.
+  const { categories: sentCategories, category: sentCategory, ...content } =
+    (req.body ?? {}) as Record<string, unknown>
+  const verdict = validateListingContent(content)
   if (!verdict.ok) return res.status(400).json({ error: verdict.error })
   let decoded: DecodedIdToken
   try {
@@ -117,6 +125,28 @@ const updateListingContent: PluginApiHandler = async (req, res) => {
     )
     if (!isPublisher && decoded['staff'] !== true) {
       return res.status(403).json({ error: 'Not your listing' })
+    }
+    // A site starter's category is its own `category`, one of the kinds of
+    // site or the one it has (AGL-4049); the first of `categories` is read the
+    // same way, as the native editors send it. Everything else keeps the
+    // fixed taxonomy in `categories`.
+    let categoryPatch: Record<string, unknown> = {}
+    if (listingArtifactType(listing) === SITE_STARTER_ARTIFACT_TYPE) {
+      const update = siteStarterCategoryUpdate(
+        { category: sentCategory, categories: sentCategories },
+        listing.category,
+      )
+      if (update.ok === false) return res.status(400).json({ error: update.error })
+      if (update.category !== undefined) {
+        categoryPatch = {
+          category:
+            update.category ?? firebaseAdmin.firestore.FieldValue.delete(),
+        }
+      }
+    } else if (sentCategories !== undefined) {
+      const categories = validateListingContent({ categories: sentCategories })
+      if (!categories.ok) return res.status(400).json({ error: categories.error })
+      categoryPatch = { categories: categories.content?.categories }
     }
     // Name and description are the whole first impression of a listing in
     // browse, and until AGL-793 they were the only listing-content fields with
@@ -161,6 +191,7 @@ const updateListingContent: PluginApiHandler = async (req, res) => {
     await listingRef.set(
       {
         ...verdict.content,
+        ...categoryPatch,
         ...(typeof description === 'string'
           ? { description: description.slice(0, 500) }
           : {}),

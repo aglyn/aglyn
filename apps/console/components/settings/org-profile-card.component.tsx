@@ -30,7 +30,7 @@ import {
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useDeferredValue, useEffect, useState } from 'react'
 import MediaUrlField from '../media-url-field.component'
-import { SITE_LOGO_HINT } from '../../constants/media-size-hints'
+import { LOGO_SPACING_HINT, WORKSPACE_LOGO_HINT } from '../../constants/media-size-hints'
 import { docsHelp } from '../../constants/docs-links'
 import { buildRoute, Route } from '../../constants/route-links'
 import useCurrentOrg from '../../hooks/use-current-org'
@@ -178,7 +178,7 @@ export function OrgProfileCard() {
       </Avatar>
       <MediaUrlField
         label="Logo URL"
-        helperText={`Browse the org media library or paste an https URL. ${SITE_LOGO_HINT}`}
+        helperText={`Browse the org media library or paste an https URL. ${WORKSPACE_LOGO_HINT}`}
         orgId={currentOrg.$id}
         value={profile.logoUrl}
         onChange={(logoUrl) =>
@@ -206,7 +206,7 @@ export function OrgProfileCard() {
       </Avatar>
       <MediaUrlField
         label="Dark mode logo URL"
-        helperText="Shown in place of the logo above when the console is in dark mode. Leave it blank to use the same logo in both."
+        helperText={`Shown in place of the logo above when the console is in dark mode. Leave it blank to use the same logo in both. ${LOGO_SPACING_HINT}`}
         orgId={currentOrg.$id}
         value={profile.logoDarkUrl}
         onChange={(logoDarkUrl) =>

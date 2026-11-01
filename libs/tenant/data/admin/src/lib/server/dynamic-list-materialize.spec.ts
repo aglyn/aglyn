@@ -35,6 +35,11 @@ jest.mock('firebase-admin/firestore', () => ({
 }))
 
 const store: Record<string, Record<string, any>> = {}
+/** Every member row written or deleted, and every keyed read's doc count. */
+let memberWrites: string[] = []
+let getAllDocs: number[] = []
+/** Reads of the rule's own rows, by the query the sweep runs for them. */
+let ruleRowReads = 0
 
 /** `orderBy(FieldPath.documentId())` — the sentinel the fake recognizes. */
 const DOCUMENT_ID = { __documentId: true }
@@ -107,11 +112,13 @@ function docRef(path: string): any {
     },
     get: async () => snapshotOf(path),
     set: async (value: Record<string, any>, options?: { merge?: boolean }) => {
+      if (path.includes('/members/')) memberWrites.push(path)
       store[path] = options?.merge
         ? { ...(store[path] ?? {}), ...value }
         : { ...value }
     },
     delete: async () => {
+      if (path.includes('/members/')) memberWrites.push(path)
       delete store[path]
     },
     collection: (name: string) => collectionRef(`${path}/${name}`),
@@ -140,6 +147,7 @@ function collectionRef(path: string): any {
       return docRef(path.split('/').slice(0, -1).join('/'))
     },
     get: async () => {
+      if (path.endsWith('/members') && state.filters.length) ruleRowReads += 1
       let keys = childrenOf(path)
       if (state.after) {
         keys = keys.filter((key) => (key.split('/').pop() as string) > state.after)
@@ -157,12 +165,15 @@ function collectionRef(path: string): any {
 
 const firestore: any = {
   collection: (name: string) => collectionRef(name),
-  getAll: async (...refs: Array<{ path: string }>) =>
-    refs.map((ref) => snapshotOf(ref.path)),
+  getAll: async (...refs: Array<{ path: string }>) => {
+    getAllDocs.push(refs.length)
+    return refs.map((ref) => snapshotOf(ref.path))
+  },
 }
 
 import { personKey } from '@aglyn/aglyn/server'
 import { materializeDynamicList } from './dynamic-list-materialize'
+import { listMemberDocIds } from './list-members'
 
 const LIST = 'orgs/org-1/lists/list-1'
 const listRef = () => docRef(LIST)
@@ -174,6 +185,9 @@ const memberEmails = () =>
 
 beforeEach(() => {
   for (const key of Object.keys(store)) delete store[key]
+  memberWrites = []
+  getAllDocs = []
+  ruleRowReads = 0
   groupLookups = []
   mockOrg = {}
   store['hosts/host-1'] = { subdomain: 'acme' }
@@ -299,6 +313,121 @@ describe('reconciliation removes for MEMBERSHIP, never for capacity', () => {
       'legacy@example.com',
       'person0@example.com',
     ])
+  })
+})
+
+/**
+ * Enrolling cost three reads and a write per person on every sweep, so a list
+ * that had not changed rewrote itself every hour (AGL-4121). These hold the
+ * saving to its promise, and hold it to nothing else: everything that moved a
+ * row or removed one before still does.
+ */
+describe('an unchanged list costs the sweep nothing per person', () => {
+  const sweep = (extra: Record<string, unknown> = {}) =>
+    materializeDynamicList({
+      listRef: listRef(),
+      hostId: 'host-1',
+      rule: VIP_RULE,
+      ...extra,
+    })
+  const rememberFirstSweep = async () => {
+    seedMatchingContacts(3)
+    await sweep()
+    memberWrites = []
+    getAllDocs = []
+    ruleRowReads = 0
+  }
+
+  it('writes no member and reads the rule rows once', async () => {
+    await rememberFirstSweep()
+    const before = memberRows().map((key) => store[key])
+    const result = await sweep()
+    expect(result).toMatchObject({ matched: 3, enrolled: 0, removed: 0, complete: true })
+    expect(memberWrites).toEqual([])
+    expect(getAllDocs).toEqual([])
+    expect(ruleRowReads).toBe(1)
+    memberRows().forEach((key, index) => expect(store[key]).toBe(before[index]))
+    // The list's own record still moves: it is what the sweep's cadence reads.
+    expect(store[LIST]).toMatchObject({ memberCount: 3, evaluationCursor: null })
+    expect(store[LIST]['lastEvaluatedAt']).toBeDefined()
+  })
+
+  it('writes only the person who changed', async () => {
+    await rememberFirstSweep()
+    store['orgs/org-1/contacts/c00001']['name'] = 'Renamed'
+    await sweep()
+    expect(memberWrites).toEqual([`${LIST}/members/${personKey('person1@example.com')}`])
+    expect(store[`${LIST}/members/${personKey('person1@example.com')}`]['name']).toBe('Renamed')
+  })
+
+  it('enrolls a new match and removes a lapsed one in the same run', async () => {
+    await rememberFirstSweep()
+    store['orgs/org-1/contacts/c00001']['tags'] = []
+    store['orgs/org-1/contacts/c00009'] = {
+      email: 'newcomer@example.com',
+      name: 'Newcomer',
+      tags: ['vip'],
+      sources: {},
+    }
+    const result = await sweep()
+    expect(result).toMatchObject({ enrolled: 1, removed: 1, matched: 3 })
+    expect(memberEmails()).toEqual([
+      'newcomer@example.com',
+      'person0@example.com',
+      'person2@example.com',
+    ])
+    // Somebody was written, so reconciliation asks again rather than trust
+    // rows read before the writes.
+    expect(ruleRowReads).toBe(2)
+  })
+
+  it('takes a lapsed person off, and puts them back when they match again', async () => {
+    await rememberFirstSweep()
+    const row = `${LIST}/members/${personKey('person1@example.com')}`
+    store['orgs/org-1/contacts/c00001']['tags'] = []
+    expect(await sweep()).toMatchObject({ removed: 1 })
+    expect(store[row]).toBeUndefined()
+
+    store['orgs/org-1/contacts/c00001']['tags'] = ['vip']
+    expect(await sweep()).toMatchObject({ enrolled: 1, removed: 0 })
+    expect(store[row]).toMatchObject({ via: 'rule' })
+  })
+
+  it('still takes over a matching row somebody added by hand', async () => {
+    seedMatchingContacts(1)
+    const row = `${LIST}/members/${personKey('person0@example.com')}`
+    store[row] = { email: 'person0@example.com', via: 'manual', addedAt: 1 }
+    await sweep()
+    expect(store[row]['via']).toBe('rule')
+  })
+
+  it('finds a row under a legacy id rather than filing a second one', async () => {
+    seedMatchingContacts(1)
+    const legacyId = listMemberDocIds('person0@example.com')[1] as string
+    store[`${LIST}/members/${legacyId}`] = { email: 'person0@example.com', via: 'rule', addedAt: 1 }
+    expect(await sweep()).toMatchObject({ enrolled: 0, removed: 0 })
+    expect(memberRows()).toEqual([`${LIST}/members/${legacyId}`])
+  })
+
+  it('leaves a recorded refusal alone, unwritten', async () => {
+    seedMatchingContacts(1)
+    const row = `${LIST}/members/${personKey('person0@example.com')}`
+    store[row] = { email: 'person0@example.com', via: 'rule', marketingConsent: false, addedAt: 1 }
+    const before = store[row]
+    expect(await sweep()).toMatchObject({ enrolled: 0, removed: 0 })
+    expect(memberWrites).toEqual([])
+    expect(store[row]).toBe(before)
+  })
+
+  it('reads a partial run’s matches by key, and never the whole list', async () => {
+    await rememberFirstSweep()
+    // Three contacts are read before the budget of one page ends the run.
+    const result = await sweep({ scanBudget: 1 })
+    expect(result.complete).toBe(false)
+    expect(getAllDocs).toEqual([3])
+    expect(ruleRowReads).toBe(0)
+    expect(memberWrites).toEqual([])
+    expect(result.removed).toBe(0)
   })
 })
 

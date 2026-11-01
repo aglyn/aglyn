@@ -61,13 +61,13 @@ import {
   type PipelineDoc,
   removeStage,
   renameStage,
-  settleStageNames,
   setStageForecastCategory,
   setStageProbability,
   sortedStages,
   stageRemovalRefusal,
   stagesProblem,
 } from '../model/deal-board-model'
+import { settleStageNames } from '../model/settle-stage-names'
 
 export interface PipelineStagesDialogProps {
   open: boolean

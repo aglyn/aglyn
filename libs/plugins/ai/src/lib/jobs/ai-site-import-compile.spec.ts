@@ -330,6 +330,18 @@ describe('aglyn.com /pricing', () => {
     expect(role(tree, 'tab').filter((id) => tree.nodes[id].sx?.['bgcolor'] === 'primary.main')).toHaveLength(3)
   })
 
+  it('sets the row a tab’s panel holds side by side, as the source does (AGL-4114)', () => {
+    const { doc } = build('pricing')
+    const layout = doc.layout as NonNullable<AiSiteImportDocument['layout']>
+    const panels = layout.sections.flatMap((section) => section.nodes).flatMap((node) => (node.kind === 'tabs' ? node.tabs.map((tab) => tab.panel) : []))
+    const read = panels.flatMap((panel) => panel.filter((node) => node.kind === 'row'))
+    expect(read).toHaveLength(1)
+    const inTabs = new Set(role(tree, 'tabs').flatMap((id) => under(tree, id)))
+    const rows = role(tree, 'row').filter((id) => inTabs.has(id) && tree.nodes[id].componentId === 'muiGrid')
+    expect(rows).toHaveLength(1)
+    expect(tree.nodes[rows[0]].nodes).toHaveLength((read[0] as Extract<(typeof read)[number], { kind: 'row' }>).cells.filter((cell) => cell.nodes.length).length)
+  })
+
   it('draws its plan comparison and its add-on rates as tables, every cell kept', () => {
     const tables = Object.values(stored).filter((node) => node.componentId === 'dataTable')
     expect(tables).toHaveLength(3)

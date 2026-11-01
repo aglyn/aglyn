@@ -272,13 +272,26 @@ function configuredMinimumTraffic(): number | undefined {
 }
 
 /**
- * One marker per instance per minute bucket, so a 60-minute window is bounded
- * by (minutes × instances) exactly as the refusal listing is. The verdict only
- * needs to know whether traffic cleared a single-digit floor, so a cap far
- * above that floor changes no answer while keeping the probe's cost flat under
- * a launch-day rush.
+ * Every minute of the drought window, and not one document fewer (AGL-4121).
+ *
+ * A serve or attempt marker's id is `{prefix}{minute}` with no instance in it,
+ * and every instance merges its increment into that one document, so a minute
+ * holds at most one marker and a 60-minute window at most 61: its 60 minutes
+ * and the partial minute the cutoff lands in. This used to be 240, on the
+ * premise of one marker per instance, which the writers never did: the cap
+ * could not bind, so lowering it to the true ceiling changes no answer. It also
+ * saves no read, because a query is billed for what it returns.
+ *
+ * It stops at 61 because of the body, not the verdict. `signupDrought` needs
+ * only `minimumTraffic` attempt markers (each holds at least one attempt, so
+ * the newest three clear a floor of three) and no serve markers at all. But
+ * `signupPagesServed` and `signupAttempts` are printed sums, so a lower cap
+ * would turn them into floors that read as totals during a busy hour.
+ *
+ * `SIGNUP_DROUGHT_WINDOW_MINUTES + 1`, so a change to the window cannot leave
+ * the cap behind it.
  */
-const SERVED_MARKER_READ_LIMIT = 240
+const SERVED_MARKER_READ_LIMIT = SIGNUP_DROUGHT_WINDOW_MINUTES + 1
 
 /**
  * Signup pages served in the trailing hour — the drought DENOMINATOR.
@@ -386,6 +399,24 @@ const attemptsProbe = memoizeWithTtl<{
  */
 const LANDING_ORG_READ_LIMIT = 200
 
+/**
+ * The org fields the landing check reads, and only those (AGL-4121). An org
+ * document carries its whole billing and settings shape, and the check wants
+ * five facts from it.
+ *
+ * Absent and null survive a field mask as themselves, which `landed` below
+ * depends on: an org with no `landedAtMs` predates the marker and the check
+ * abstains on it. Billed reads are unchanged, a masked document costs the same
+ * one read; this saves the bytes.
+ */
+const LANDING_ORG_FIELDS = [
+  'hosts',
+  'createdAt',
+  'acquisition.capturedAt',
+  'ownerUid',
+  ORG_LANDED_AT_PATH,
+] as const
+
 const landingProbe = memoizeWithTtl<{
   orgs: SignupLandingOrg[] | null
   ms: number
@@ -407,6 +438,7 @@ const landingProbe = memoizeWithTtl<{
         '<=',
         Timestamp.fromMillis(now - SIGNUP_LANDING_GRACE_MINUTES * 60_000),
       )
+      .select(...LANDING_ORG_FIELDS)
       .limit(LANDING_ORG_READ_LIMIT)
       .get()
     const orgs: SignupLandingOrg[] = snapshot.docs.map(
@@ -465,6 +497,17 @@ const landingProbe = memoizeWithTtl<{
  */
 const SIGNUP_WORKSPACE_GRADED_SINCE_MS = Date.parse('2026-10-21T23:00:00Z')
 
+/**
+ * The account fields the workspace check reads, and only those (AGL-4121). A
+ * `users/{uid}` document is a person's whole profile, and this body is public,
+ * so what the probe never reads it also never holds. The same one billed read
+ * per account either way.
+ */
+const WORKSPACE_ACCOUNT_FIELDS = [
+  'acquisition.door',
+  'acquisition.accountCreatedAt',
+] as const
+
 const workspaceProbe = memoizeWithTtl<{
   accounts: SignupWorkspaceAccount[] | null
   ms: number
@@ -490,6 +533,7 @@ const workspaceProbe = memoizeWithTtl<{
         '<=',
         now - SIGNUP_LANDING_GRACE_MINUTES * 60_000,
       )
+      .select(...WORKSPACE_ACCOUNT_FIELDS)
       .limit(LANDING_ORG_READ_LIMIT)
       .get()
     const docs = snapshot.docs as Array<{

@@ -313,3 +313,92 @@ describe('a pick with a price, and the way back to it (AGL-4049 lane 3)', () => 
     expect(link.getAttribute('href')).toMatch(/\/building-sites\/site-templates\/site-starters$/)
   })
 })
+
+/**
+ * An AI starter fills the AI start's questions (AGL-4049 phase 4): once one
+ * the workspace may use is picked, the shelf reads the answers it carries and
+ * hands them to the dialog with the pick. A priced one is bought first; its
+ * answers are what it sells.
+ */
+describe('an AI starter’s answers, read once it is picked (AGL-4049)', () => {
+  const ANSWERS = { kind: 'restaurant', brief: '', brandColors: { primary: '#8a3b12' } }
+  const FACETS = AI.facets
+  const PAID_AI = {
+    ...AI,
+    listingId: 'northwind-ai',
+    displayName: 'Studio North, written for you',
+    authorName: 'Northwind',
+    official: false,
+    priceUsd: 12,
+  }
+  const ANSWERS_PATH = '/api/marketplace/starters/answers'
+  /** Answers the search with `rows` and the answers door with `answers`. */
+  const answeringAi = (rows: unknown[], answers: { status: number; body: unknown }) =>
+    mockFetch.mockImplementation((_user: unknown, url: string) =>
+      String(url).startsWith(ANSWERS_PATH)
+        ? respond(answers.status, answers.body)
+        : respond(200, { rows, labels: { base: {}, fonts: {} } }),
+    )
+  const answerCalls = () => mockFetch.mock.calls.filter(([, url]) => String(url).startsWith(ANSWERS_PATH))
+  const ready = { status: 200, body: { answers: ANSWERS, facets: FACETS } }
+
+  it('reads a free AI starter’s answers when it is picked, and hands them to the dialog with it', async () => {
+    answeringAi([AI], ready)
+    const { props } = shelf({ mode: 'ai' })
+    fireEvent.click(await screen.findByRole('radio', { name: /^Corner bistro, written for you/ }))
+    // The pick first, so the dialog shows it chosen while the answers are read.
+    expect(props.onPick).toHaveBeenNthCalledWith(1, AI)
+    await waitFor(() => expect(props.onPick).toHaveBeenLastCalledWith(AI, { answers: ANSWERS }))
+    expect(answerCalls().map(([, url]) => url)).toEqual([`${ANSWERS_PATH}?orgId=org-1&listingId=fp-starter-restaurant-ai`])
+  })
+
+  it('reads none for a starter site', async () => {
+    answeringAi([OFFICIAL], ready)
+    const { props } = shelf()
+    fireEvent.click(await screen.findByRole('radio', { name: /^Corner bistro/ }))
+    expect(props.onPick).toHaveBeenCalledWith(OFFICIAL)
+    await waitFor(() => expect(mockFetch).toHaveBeenCalled())
+    expect(answerCalls()).toHaveLength(0)
+  })
+
+  it('reads no answers of a priced AI starter the workspace has not bought, and offers Buy', async () => {
+    answeringAi([PAID_AI], ready)
+    shelf({ mode: 'ai' })
+    fireEvent.click(await screen.findByRole('radio', { name: /^Studio North, written for you/ }))
+    expect(screen.getByRole('button', { name: 'Buy and continue' })).toBeTruthy()
+    expect(answerCalls()).toHaveLength(0)
+  })
+
+  it('reads them for one the workspace owns', async () => {
+    answeringAi([{ ...PAID_AI, owned: true }], ready)
+    const { props } = shelf({ mode: 'ai' })
+    fireEvent.click(await screen.findByRole('radio', { name: /^Studio North, written for you/ }))
+    await waitFor(() =>
+      expect(props.onPick).toHaveBeenLastCalledWith({ ...PAID_AI, owned: true }, { answers: ANSWERS }),
+    )
+  })
+
+  it('hands back unowned, with Buy, a pick the door still asks payment for', async () => {
+    answeringAi([{ ...PAID_AI, owned: true }], {
+      status: 402,
+      body: { error: 'Purchase required', code: 'purchase_required', listingId: PAID_AI.listingId, priceUsd: 12 },
+    })
+    const { props } = shelf({ mode: 'ai' })
+    fireEvent.click(await screen.findByRole('radio', { name: /^Studio North, written for you/ }))
+    await waitFor(() => expect(props.onPick).toHaveBeenLastCalledWith({ ...PAID_AI, owned: false }))
+    expect(await screen.findByRole('button', { name: 'Buy and continue' })).toBeTruthy()
+    expect(answerCalls()).toHaveLength(1)
+  })
+
+  it('says when the answers could not be read, with a way to ask again', async () => {
+    answeringAi([AI], { status: 500, body: { error: 'This starter could not be read' } })
+    const { props } = shelf({ mode: 'ai' })
+    fireEvent.click(await screen.findByRole('radio', { name: /^Corner bistro, written for you/ }))
+    expect(await screen.findByText('This starter could not be read')).toBeTruthy()
+    expect(props.onPick).toHaveBeenCalledTimes(1)
+    answeringAi([AI], ready)
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    await waitFor(() => expect(props.onPick).toHaveBeenLastCalledWith(AI, { answers: ANSWERS }))
+    expect(answerCalls()).toHaveLength(2)
+  })
+})

@@ -483,6 +483,61 @@ export function aiSiteStartAnswersFromInputs(
   }
 }
 
+// ── An AI starter's answers (AGL-4049) ──────────────────────────────────────
+
+/** A brand color as the questions hold one: six hex digits. */
+const STARTER_BRAND_HEX = /^#[0-9a-f]{6}$/i
+
+const isAnswersRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
+  !!value && typeof value === 'object' && !Array.isArray(value)
+
+/**
+ * The questions' answers an AI starter fills in (AGL-4049), from the answers
+ * its listing carries: what "Choose your starter" hands the start when a
+ * person picks one. Every answer stays the person's to change.
+ *
+ * Read from the keys a starter writes (`first-party-starters.mjs`, and a
+ * publisher's AI starter in the same shape):
+ *
+ *  - `kind` → the style chosen, and the kind it names. The person chose it by
+ *    picking the starter, so it arrives chosen; a kind this deployment does
+ *    not know chooses nothing, and the Style step asks as ever.
+ *  - `brandColors.primary` → the brand color, when it is a color.
+ *  - `pages`, when it is a whole number → how many pages to plan, held to the
+ *    workspace's band. A description of the pages is the kind's own guidance,
+ *    which the kind already carries to the plan.
+ *  - `brief` → what the site is for, as typed on the first question.
+ *
+ * Anything else a starter carries is left out — `style`'s finer tokens and
+ * `fonts` included: the questions ask neither, and the kind's look and the
+ * brand color are what carry a starter's look into the job. Every other
+ * answer starts where the questions start, so a starter never answers for
+ * the person what it does not say. Anything that is not a set of answers
+ * reads as none.
+ */
+export function aiSiteStartAnswersFromStarter(
+  answers: Readonly<Record<string, unknown>> | null | undefined,
+  options: { freeTaste?: boolean } = {},
+): AiSiteStartAnswers {
+  if (!isAnswersRecord(answers)) return { ...AI_SITE_START_ANSWERS }
+  const band = aiSitePagesBand(options.freeTaste)
+  const kind = aiSiteKind(typeof answers['kind'] === 'string' ? answers['kind'] : null)
+  const colors = isAnswersRecord(answers['brandColors']) ? answers['brandColors'] : {}
+  const primary = typeof colors['primary'] === 'string' ? colors['primary'].trim() : ''
+  const pages = answers['pages']
+  const brief = typeof answers['brief'] === 'string' ? answers['brief'] : ''
+  return {
+    ...AI_SITE_START_ANSWERS,
+    siteType: bounded(brief, AI_SITE_INPUT_MAX_CHARS),
+    ...(kind ? aiSiteStartStyleAnswer(kind.id) : {}),
+    pages:
+      typeof pages === 'number' && Number.isInteger(pages)
+        ? Math.min(band.max, Math.max(band.min, pages))
+        : Math.min(band.max, Math.max(band.min, AI_SITE_START_ANSWERS.pages)),
+    brand: STARTER_BRAND_HEX.test(primary) ? primary.toLowerCase() : '',
+  }
+}
+
 // ── A build staff run for a client (AGL-3958) ───────────────────────────────
 
 /** Shortens an answer to what a scalar input admits, on a word where it can. */

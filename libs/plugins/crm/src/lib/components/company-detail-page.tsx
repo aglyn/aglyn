@@ -26,6 +26,7 @@ import { CrmCreateSiteDefault } from '../hooks/use-crm-org-mount'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import { useOrgMemberOptions } from '../hooks/use-org-member-options'
 import { type CrmDetailPageProps, crmRoutes } from '../model/crm-routes'
+import CompanyContactRolesCard from './company-contact-roles-card'
 import CompanyContactsCard from './company-contacts-card'
 import CompanyDealsCard from './company-deals-card'
 import { CrmRecordHeader } from './crm-record-header'
@@ -135,6 +136,15 @@ export function CompanyDetailPage(props: CrmDetailPageProps) {
           crmScope={crmScope}
           org={org as Record<string, unknown> | undefined}
           routes={routes}
+        />
+        <CompanyContactRolesCard
+          companyId={id}
+          company={company}
+          hostId={hostId}
+          org={org}
+          routes={routes}
+          fromCache={fromCache}
+          unreadable={status === 'error'}
         />
         <CompanyDealsCard
           hostId={hostId}

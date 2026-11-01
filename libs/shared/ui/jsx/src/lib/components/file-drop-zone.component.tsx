@@ -42,8 +42,10 @@ export interface FileDropZoneProps {
   label: ReactNode
   /** One line under it, e.g. the formats and the size limit. */
   hint?: ReactNode
-  /** An mdi path for the icon above the label. */
-  icon?: string
+  /** An mdi path for the icon above the label; `null` draws none. */
+  icon?: string | null
+  /** The button's name, when the label is a picture rather than words. */
+  ariaLabel?: string
   /** Called with the files `accept` refused, so the caller can say why. */
   onRejected?: (files: File[]) => void
   sx?: SxProps<Theme>
@@ -66,7 +68,18 @@ export function fileMatchesAccept(file: Pick<File, 'name' | 'type'>, accept: str
 }
 
 export function FileDropZone(props: FileDropZoneProps) {
-  const { onFiles, accept, multiple = true, disabled, label, hint, icon = mdiTrayArrowUp, onRejected, sx } = props
+  const {
+    onFiles,
+    accept,
+    multiple = true,
+    disabled,
+    label,
+    hint,
+    icon = mdiTrayArrowUp,
+    ariaLabel,
+    onRejected,
+    sx,
+  } = props
   const input = useRef<HTMLInputElement>(null)
   const hintId = useId()
   const [dragging, setDragging] = useState(false)
@@ -113,6 +126,7 @@ export function FileDropZone(props: FileDropZoneProps) {
     <ButtonBase
       component="div"
       role="button"
+      aria-label={ariaLabel}
       aria-describedby={hint ? hintId : undefined}
       aria-disabled={disabled || undefined}
       disabled={disabled}
@@ -158,7 +172,7 @@ export function FileDropZone(props: FileDropZoneProps) {
         ...(Array.isArray(sx) ? sx : [sx]),
       ]}
     >
-      <MdiIcon path={icon} fontSize="medium" color="inherit" />
+      {icon ? <MdiIcon path={icon} fontSize="medium" color="inherit" /> : null}
       <Typography variant="body2" sx={{ fontWeight: 'fontWeightMedium', color: 'inherit' }}>
         {label}
       </Typography>

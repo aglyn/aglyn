@@ -1262,6 +1262,41 @@ describe('validateAiNodeTree site references (AGL-2935)', () => {
   })
 })
 
+describe('validateAiNodeTree a logo for one color scheme (AGL-4119)', () => {
+  const picture = (sx: Record<string, unknown>) =>
+    tree({
+      componentId: 'div',
+      children: [
+        {
+          componentId: 'section',
+          props: { element: 'section' },
+          children: [{ componentId: 'image', props: { src: 'https://example.com/a.png', alt: 'A' }, sx }],
+        },
+      ],
+    })
+  const sxOf = (result: AiNodeTreeResult) =>
+    result.ok ? Object.values(result.nodes).find((node) => node.componentId === 'image')?.sx : undefined
+
+  it('drops the scheme key from what a model writes', () => {
+    const result = validateAiNodeTree(picture({ '@scheme dark': { display: 'none' } }), 'screen')
+    expect(sxOf(result)).toBeUndefined()
+  })
+
+  it('keeps whether the picture shows, and nothing else, from what code builds', () => {
+    const result = validateAiNodeTree(
+      picture({ display: 'none', '@scheme dark': { display: 'block', color: 'red' } }),
+      'screen',
+      { codeBuilt: true },
+    )
+    expect(sxOf(result)).toEqual({ display: 'none', '@scheme dark': { display: 'block' } })
+  })
+
+  it('still drops a scheme key that does anything else', () => {
+    const result = validateAiNodeTree(picture({ '@scheme dark': { color: 'red' } }), 'screen', { codeBuilt: true })
+    expect(sxOf(result)).toBeUndefined()
+  })
+})
+
 describe('validateAiNodeTree binding tokens (AGL-2909)', () => {
   const bound = (image: Record<string, unknown>) =>
     tree({

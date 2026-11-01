@@ -30,6 +30,7 @@
 
 import { isFirstPartyMediaSrc } from './media-ref'
 import { matchComponentPropToken } from './compose-reusable-components'
+import { isHostImageToken } from './host-tokens'
 import {
   isSafeNodeUrl,
   type NodeUrlProp,
@@ -232,6 +233,9 @@ function urlBindingsOf(
  *   is published, and whatever value a page sets where the graft substitutes
  *   it (`resolveComponentPropTokens`). A token that is only part of the value,
  *   or names a property of another kind or none, is refused as before.
+ * - A `src` that is exactly one image `{{host.*}}` token is kept too (AGL-4119):
+ *   it is the installing site's own logo, read from its own document at render
+ *   (`isHostImageToken`), so a new site's header carries it from a starter.
  *
  * Deliberately shallow: only top-level props are spread onto the DOM. A nested
  * object (`icon: { path }`) is consumed by the component, never spread, so
@@ -250,7 +254,8 @@ function sanitizePublishedNodeProps(
       const bound = matchComponentPropToken(trimmed)
       const keep =
         isSafeNodeUrl(key, trimmed) ||
-        (bound !== null && urlBindings.get(bound) === key)
+        (bound !== null && urlBindings.get(bound) === key) ||
+        (key === 'src' && isHostImageToken(trimmed))
       if (keep) safe[key] = trimmed
       continue
     }

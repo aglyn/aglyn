@@ -51,7 +51,7 @@ function row(scope: 'org' | 'host', order: number): NativeNavRow {
       nativeNavHubSection(scope, '/crm', 'contacts', 'Contacts', 'crm.contacts'),
       nativeNavHubSection(scope, '/crm', 'leads', 'Leads', 'crm.leads'),
       nativeNavHubSection(scope, '/crm', 'companies', 'Companies', 'crm.companies'),
-      nativeNavHubSection(scope, '/crm', 'deals', 'Deals', 'crm.deals'),
+      nativeNavHubSection(scope, '/crm', 'deals', 'Deals / Opportunities', 'crm.deals'),
       nativeNavHubSection(scope, '/crm', 'tasks', 'Tasks', 'crm.tasks'),
       nativeNavHubSection(scope, '/crm', 'reports', 'Reports', 'crm.reports'),
       nativeNavHubSection(scope, '/crm', 'fields', 'Fields', 'crm.fields'),

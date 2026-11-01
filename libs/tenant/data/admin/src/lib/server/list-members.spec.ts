@@ -103,7 +103,11 @@ const firestoreHandle: any = {
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { enrollListMember, listMemberSearchTokens } from './list-members'
+import {
+  enrollListMember,
+  listMemberDocIds,
+  listMemberSearchTokens,
+} from './list-members'
 import {
   consentGroupDisclosureKey,
   grantEntriesAsRecorded,
@@ -479,5 +483,100 @@ describe('the keys the membership table queries', () => {
     store[`${MEMBERS_PATH}/${KEY}`] = { email: EMAIL, via: 'manual', addedAt: joined }
     await enroll({ marketingConsent: true })
     expect(theRow()?.addedAt).toBe(joined)
+  })
+})
+
+describe('a row the caller already holds (AGL-4121)', () => {
+  const canonical = `${MEMBERS_PATH}/${KEY}`
+  /** What a sweep's enrollment of this person would leave on the row. */
+  const SWEPT = {
+    email: EMAIL,
+    name: 'Priya',
+    searchTokens: listMemberSearchTokens(EMAIL, 'Priya'),
+    source: 'rule:contacts',
+    via: 'rule',
+    addedAt: { seconds: 1_600_000_000, nanoseconds: 0 },
+  }
+  const sweep = (input: Record<string, unknown> = {}) =>
+    enroll({
+      name: 'Priya',
+      source: 'rule:contacts',
+      via: 'rule',
+      heldRow: snapshotFor(canonical),
+      ...input,
+    })
+
+  let getAll: jest.SpyInstance
+  let row: Record<string, any>
+  beforeEach(() => {
+    getAll = jest.spyOn(firestoreHandle, 'getAll')
+    row = { ...SWEPT }
+    store[canonical] = row
+  })
+  afterEach(() => getAll.mockRestore())
+
+  it('writes nothing and looks nothing up when the row is already what the write would leave', async () => {
+    const result = await sweep()
+    expect(result).toMatchObject({ enrolled: true, created: false, unchanged: true })
+    expect(getAll).not.toHaveBeenCalled()
+    // The very object: a `set` would have replaced it, merge or no merge.
+    expect(theRow()).toBe(row)
+  })
+
+  it.each([
+    ['a changed name', { name: 'Priya Rao' }, { name: 'Priya Rao' }],
+    ['another silo', { source: 'rule:leads' }, { source: 'rule:leads' }],
+  ])('writes %s', async (_name, input, expected) => {
+    const result = await sweep(input)
+    expect(result).toMatchObject({ enrolled: true, created: false })
+    expect(result).not.toHaveProperty('unchanged')
+    expect(theRow()).toMatchObject(expected)
+    expect(theRow()?.searchTokens).toEqual(
+      listMemberSearchTokens(EMAIL, (input as { name?: string }).name ?? 'Priya'),
+    )
+  })
+
+  it('still takes a manual row over, as a rule match always has', async () => {
+    row.via = 'manual'
+    expect(await sweep()).not.toHaveProperty('unchanged')
+    expect(theRow()?.via).toBe('rule')
+  })
+
+  it('repairs a row missing a field the table queries by', async () => {
+    delete row.searchTokens
+    expect(await sweep()).not.toHaveProperty('unchanged')
+    expect(theRow()?.searchTokens).toEqual(SWEPT.searchTokens)
+  })
+
+  it('dates a held legacy row by its create time rather than calling it unchanged', async () => {
+    delete row.addedAt
+    expect(await sweep()).not.toHaveProperty('unchanged')
+    expect(theRow()?.addedAt).toEqual(CREATED)
+  })
+
+  it('still refuses a recorded refusal, with no write', async () => {
+    row.marketingConsent = false
+    expect(await sweep({ name: 'Somebody Else' })).toEqual({ enrolled: false, refusal: 'declined' })
+    expect(theRow()).toBe(row)
+    expect(theRow()?.name).toBe('Priya')
+  })
+
+  it('ignores a held row that does not exist, and looks the person up', async () => {
+    // Nobody at the canonical id is not nobody on the list: the legacy lookup
+    // is what stops a second row beside one written under an old id.
+    delete store[canonical]
+    const legacyId = (listMemberDocIds(EMAIL) as string[])[1]
+    store[`${MEMBERS_PATH}/${legacyId}`] = { ...SWEPT }
+    const result = await sweep()
+    expect(getAll).toHaveBeenCalledTimes(1)
+    expect(result).toMatchObject({ enrolled: true, created: false, memberId: legacyId, adopted: true })
+    expect(rowCount()).toBe(1)
+  })
+
+  it('never skips a write for a caller that holds no row', async () => {
+    const result = await enroll({ name: 'Priya', source: 'rule:contacts', via: 'rule' })
+    expect(result).not.toHaveProperty('unchanged')
+    expect(getAll).toHaveBeenCalledTimes(1)
+    expect(theRow()).not.toBe(row)
   })
 })
