@@ -99,6 +99,29 @@ const twoHostContact = () => ({
   },
 })
 
+describe('orgContactRow — a person no site captured', () => {
+  const consentByHost = {
+    'host-b': { marketingConsent: true, marketingConsentAtMs: 1 },
+    'host-a': { marketingConsent: true, marketingConsentAtMs: 1 },
+  }
+
+  it('reads the consent recorded on each site, sorted', () => {
+    const row = orgContactRow({ marketingConsentByHost: consentByHost }, 'contact-1', null)
+    expect(row.capturedByHostIds).toEqual([])
+    expect(row.consent.map((entry) => entry.hostId)).toEqual(['host-a', 'host-b'])
+    expect(row.consent.map((entry) => entry.basis)).toEqual(['granted', 'granted'])
+  })
+
+  it('stays with the capturing sites once one has met them', () => {
+    const row = orgContactRow(
+      { capturedByHostIds: ['host-c'], marketingConsentByHost: consentByHost },
+      'contact-1',
+      null,
+    )
+    expect(row.consent.map((entry) => entry.hostId)).toEqual(['host-c'])
+  })
+})
+
 describe('orgContactRow — one person, every site that knows them', () => {
   it('renders a person captured on two hosts ONCE, naming both', () => {
     const row = orgContactRow(twoHostContact(), 'contact-1', null)
