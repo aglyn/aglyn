@@ -64,7 +64,7 @@ export const DOCS_HELP_EXCERPTS = {
   billing: 'How Aglyn\'s tiers, entitlements, quotas, usage meters, and seat add-ons work.',
   bindings: 'Live values in your content — typed variables, no-code functions, and rename-safe id tokens.',
   bookings: 'Offer services with availability, let visitors book, take payment, and send reminders.',
-  bringMySite: 'Bring the website you have now into Aglyn, its pages, words and photos, in waves you review and start yourself, once you have proved the site is yours.',
+  bringMySite: 'Bring the website you have now into Aglyn, every word as you wrote it, laid out as your pages are, in waves you review and start yourself, once you have proved the site is yours.',
   buildABlog: 'Create a collection, publish rich entries, and design how its list and entries look with template pages.',
   buildAndPublishASurvey: 'Create a dataset with a typed schema, design a survey form with dropdowns, radios, checkboxes, and a star rating, publish it, and watch responses arrive.',
   buildAWorkflow: 'Create a multi-step workflow that runs when a site event fires.',
@@ -518,7 +518,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#deals-on-a-record': 'The Deals card on a contact\'s or a company\'s page lists every deal that names that record, newest first, and New deal in its header starts one already linked to them.',
     '#line-items': 'A deal\'s amount can be a number you type, or the sum of the products behind it.',
     '#moving-winning-and-losing': 'Stage changes go through the server rather than being written directly, so that automations can hear them.',
-    '#the-board-and-the-table': 'The section opens as a board of the chosen pipeline: one column per open stage, with Won and Lost folded away at the end until you expand them; a board wider than the window scrolls sideways.',
+    '#the-board-and-the-table': 'The section opens as a board of the chosen pipeline: one column per open stage, with Won and Lost folded away at the end until you expand them.',
   },
   designedEmails: {
     '#find-a-template': 'The templates table filters through its toolbar by Template, the name (it contains a word, it is, or it starts with), and Search matches the start of any word of a template\'s name, up to its first twelve characters.',

@@ -22,8 +22,10 @@
  * sees its notice, and its team sees the whole site. So when a wave closes,
  * its pages go live INTO THE PREVIEW through the same writes a guided
  * start's publish makes (`aiPublishGuidedSite`): each page takes its
- * address, Home takes `/`, the links to a page still a draft come out, and
- * the cached pages go. The team opens the site and sees the wave; the public
+ * address, Home takes `/`, a link to a page that will not come in goes
+ * nowhere with its words kept, and the cached pages go. A link to a page of a
+ * later wave keeps its place (AGL-4107): until that page is live a visitor
+ * sees its words, and once the page's wave lands it goes there. The team opens the site and sees the wave; the public
  * still sees the notice until the person makes the site public.
  *
  * Only into a preview. A site that is not in preview keeps the wave's pages
@@ -51,10 +53,23 @@ async function readInPreview(firestore: FirebaseFirestore.Firestore, hostId: str
 
 const delivered = (row: AiJobItemLedger | undefined) => row?.status === 'succeeded' || row?.status === 'degraded'
 
-/** The pages of the import a link may not go to yet: every one not in, the wave's own failures included. */
+const open = (row: AiJobItemLedger | undefined) => row?.status === 'pending' || row?.status === 'running'
+
+/**
+ * The pages of the import that will never be in (AGL-4107): left out, or
+ * settled without coming in — a wave's own failures included. A page of a
+ * wave still to come is not one: a link to it keeps its place and shows its
+ * words, which the site's pages show for a page that is not live, and goes
+ * there once that page's wave lands.
+ */
 export function aiSiteImportUnbuilt(state: AiSiteImportState, items: readonly AiJobItemLedger[]): string[] {
   const rows = new Map(items.map((row) => [row.slot, row]))
-  return state.pages.filter((page) => !delivered(rows.get(page.slot))).map((page) => page.draftId)
+  return state.pages
+    .filter((page) => {
+      const row = rows.get(page.slot)
+      return page.refused || (!delivered(row) && !open(row))
+    })
+    .map((page) => page.draftId)
 }
 
 /** The wave's pages that came in, as the outputs that publish them, in the wave's order. */
@@ -106,8 +121,10 @@ export async function aiPublishImportedWave(
       job: input.job,
       outputs: pages,
       now: input.now,
-      // The links to a page still to come, or one that did not come in, come out.
+      // The links to a page that did not come in go nowhere, their words kept;
+      // a page still to come keeps its links (AGL-4107).
       unbuiltScreenIds: aiSiteImportUnbuilt(input.state, input.items),
+      keepLinkWords: true,
       siteOrder: input.state.pages.map((page) => page.draftId),
       // A later wave joins what is live: it never takes the home address again.
       ...(already?.published.length ? { retry: true } : {}),

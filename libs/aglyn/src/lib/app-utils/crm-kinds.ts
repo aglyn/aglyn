@@ -99,8 +99,25 @@ export const CONTACT_TAG_MAX_LENGTH = 60
  * neither can be done over a string somebody typed. `note` is the plain
  * entry — something worth writing down that was not a conversation — and
  * `other` the escape hatch for the kind none of these name.
+ *
+ * The message kinds — a text, WhatsApp, Facebook Messenger, Instagram and
+ * LinkedIn — are the channels a conversation with a customer actually runs
+ * on beside a call or an email. Each is its own kind rather than an `other`
+ * with the channel typed into the body, so the timeline shows the channel
+ * and a report counts it.
  */
-export const CRM_ACTIVITY_KINDS = ['call', 'email', 'meeting', 'note', 'other'] as const
+export const CRM_ACTIVITY_KINDS = [
+  'call',
+  'email',
+  'text',
+  'whatsapp',
+  'messenger',
+  'instagram',
+  'linkedin',
+  'meeting',
+  'note',
+  'other',
+] as const
 
 export type CrmActivityKind = (typeof CRM_ACTIVITY_KINDS)[number]
 

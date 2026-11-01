@@ -137,10 +137,14 @@ public let contactLifecycleStages = [
 ]
 public let crmTaskKinds = ["call", "email", "meeting", "todo"]
 public let crmTaskPriorities = ["low", "normal", "high"]
-public let crmActivityKinds = ["call", "email", "meeting", "note", "other"]
-/// The directions a logged call or email takes; no other kind takes one.
+public let crmActivityKinds = [
+  "call", "email", "text", "whatsapp", "messenger", "instagram", "linkedin", "meeting", "note", "other",
+]
+/// The directions a logged call, email or message takes; no other kind takes one.
 public let crmActivityDirections: [String: [String]] = [
   "call": ["outbound", "inbound", "internal"], "email": ["outbound", "inbound"],
+  "text": ["outbound", "inbound"], "whatsapp": ["outbound", "inbound"], "messenger": ["outbound", "inbound"],
+  "instagram": ["outbound", "inbound"], "linkedin": ["outbound", "inbound"],
 ]
 
 /// The interaction recipes the first-party plugins declare.

@@ -927,8 +927,9 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // funnel" trigger joins the host events the draft may start on.
       // Up 249 at AGL-3611, the order and return triggers the draft may start
       // on, and 7 for the two steps that ride a larger variant naming its
-      // empty field.
-      'workflow-draft': { prefixTokens: 5_025, minimum: 512, caches: true, toolsStable: true },
+      // empty field. Up 13 at #2191: the CRM's five messaging activity kinds
+      // a logged activity may now be.
+      'workflow-draft': { prefixTokens: 5_038, minimum: 512, caches: true, toolsStable: true },
       'workflow-explain': { prefixTokens: 2_240, minimum: 512, caches: true, toolsStable: true },
       // The listing doors were under Claude Haiku 4.5's 4,096-token minimum
       // and are over Claude Haiku 5.5's 512 since it became the fast default
@@ -966,8 +967,12 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // Both up 106 at AGL-3838: the protocol's Animation line, the
       // vocabulary's presets, triggers, easings and caps an updateProps may set.
       // Both up 9 at AGL-3886 for the List Item Text's secondary text color.
-      'edit-screen': { prefixTokens: 6_202, minimum: 512, caches: true, toolsStable: true },
-      'edit-layout': { prefixTokens: 6_190, minimum: 512, caches: true, toolsStable: true },
+      // Both up 406 at AGL-4116: the protocol names every style key sx takes
+      // (read from the validator's own set) and how a look no single setting
+      // makes is composed. An edit job could only guess at both, and a change
+      // that needed a key it guessed wrong came back as nothing.
+      'edit-screen': { prefixTokens: 6_608, minimum: 512, caches: true, toolsStable: true },
+      'edit-layout': { prefixTokens: 6_596, minimum: 512, caches: true, toolsStable: true },
       // Both insight requests are up 60 or 61 at AGL-3663: a site's published
       // state comes only from its Site status table, never from its traffic.
       // Both up 25 at AGL-3834: so does which pages are published, never the

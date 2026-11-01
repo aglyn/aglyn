@@ -439,13 +439,39 @@ describe('activityLeaderboard', () => {
     { kind: 'note', byUid: '', atMs: 50, sourceActionId: 'act-1' },
   ] as const
 
+  const none = {
+    call: 0,
+    email: 0,
+    text: 0,
+    whatsapp: 0,
+    messenger: 0,
+    instagram: 0,
+    linkedin: 0,
+    meeting: 0,
+    note: 0,
+    other: 0,
+  }
+
   it('groups activities by who logged them and counts every kind', () => {
     const rows = activityLeaderboard(activities, [])
     const grace = rows.find((row) => row.uid === 'u-grace')
-    expect(grace?.kinds).toEqual({ call: 0, email: 0, meeting: 1, note: 2, other: 1 })
+    expect(grace?.kinds).toEqual({ ...none, meeting: 1, note: 2, other: 1 })
     expect(grace?.activities).toBe(4)
     const ada = rows.find((row) => row.uid === 'u-ada')
-    expect(ada?.kinds).toEqual({ call: 1, email: 1, meeting: 0, note: 0, other: 0 })
+    expect(ada?.kinds).toEqual({ ...none, call: 1, email: 1 })
+  })
+
+  it('counts a message under its own channel', () => {
+    const rows = activityLeaderboard(
+      [
+        { kind: 'whatsapp', byUid: 'u-ada', byName: 'Ada', atMs: 1 },
+        { kind: 'messenger', byUid: 'u-ada', byName: 'Ada', atMs: 2 },
+        { kind: 'text', byUid: 'u-ada', byName: 'Ada', atMs: 3 },
+      ],
+      [],
+    )
+    expect(rows[0]?.kinds).toEqual({ ...none, text: 1, whatsapp: 1, messenger: 1 })
+    expect(rows[0]?.activities).toBe(3)
   })
 
   it('signs each row with the name on the newest activity', () => {

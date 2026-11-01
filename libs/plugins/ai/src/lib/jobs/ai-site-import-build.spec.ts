@@ -180,7 +180,6 @@ function harness(patch: Partial<AiSiteImportStepDeps> = {}, theme: 'applied' | '
     ingest: () => lib,
     readRoom: async () => ({ limit: null, used: 0 }),
     readSiteName: async () => SITE_NAME,
-    fileReview: async () => 'row',
     pageWritten: async () => true,
     draftWords: async () => 120,
     publishWave: async (_firestore, input) => {
@@ -387,7 +386,6 @@ describe('a wave’s close lands in the site’s preview (AGL-4084, on AGL-4086�
     leftOut: [],
     leftOutCount: {},
     frame: { draftId: 'd-frame' },
-    reviewId: 'row',
     look: { at: NOW.toISOString(), theme: 'applied', colors: [], logo: null, seo: false, seed: 1 },
   })
   const ledger = (): AiJobItemLedger[] =>
@@ -422,8 +420,9 @@ describe('a wave’s close lands in the site’s preview (AGL-4084, on AGL-4086�
     )
     expect(result?.published.map((page) => page.path)).toEqual(['/'])
     expect((calls[0].input['outputs'] as AiJobOutput[]).map((output) => output.id)).toEqual(['d-home', 'd-contact'])
-    // The pages still to come are no link's destination yet.
-    expect(calls[0].input['unbuiltScreenIds']).toEqual(['d-privacy'])
+    // A page of a wave still to come keeps its links (AGL-4107): its words show until it is live.
+    expect(calls[0].input['unbuiltScreenIds']).toEqual([])
+    expect(calls[0].input['keepLinkWords']).toBe(true)
     // The first wave takes the home address; nothing announces the site.
     expect(calls[0].input['retry']).toBeUndefined()
     expect(await (calls[0].deps['sendSitePublished'] as () => Promise<unknown>)()).toBeUndefined()

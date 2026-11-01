@@ -17,19 +17,20 @@
 
 /**
  * Bring my site never rewrites (AGL-4084), replayed on aglyn.com as AglynBot
- * read it on 2026-10-28: a page copied as it is keeps every word in order
- * with no model at all, and an arranged page places every source line
- * exactly once whatever its answer says, rewording none.
+ * read it on 2026-10-28, before the reader kept a page's layout: a page copied
+ * as it is keeps every word in order with no model at all, and a main page
+ * places every source line exactly once whatever its design answer says,
+ * rewording none (AGL-4107).
  */
 
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import { AGLYN_ORIGIN, aglynPage } from '../site-import/fixtures/aglyn-com-recordings'
 import { extractSiteImportPage, type SiteImportBlock } from '../site-import/site-import-html'
 import { siteImportPageRead } from '../site-import/site-import-page'
-import { aiImportedPageCheck, aiLayoutArrangePrompt, aiRunLayoutPage, AI_LAYOUT_ARRANGE_TEXT } from './ai-job-page-language'
+import { aiImportedPageCheck, aiLayoutDesignPrompt, aiRunLayoutPage, AI_LAYOUT_DESIGN_TEXT } from './ai-job-page-language'
+import { aiCompileImportedPage } from './ai-site-import-compile'
 import {
   AI_LAYOUT_IMPORTED_SECTIONS_INPUT,
-  aiCompileImportedDocument,
   aiSiteImportDocLines,
   aiSiteImportDocumentOf,
   aiSiteImportTextParts,
@@ -162,51 +163,27 @@ describe('a page copied as it is keeps every word, in order, with no model (AGL-
   })
 })
 
-describe('an arranged page places every source line exactly once and rewords none (AGL-4084)', () => {
+describe('a page read before its layout was kept is built from its lines, every one once, whatever its design answer says (AGL-4107)', () => {
   const doc = docOf('/', 'arranged', 'Home')
   const lines = aiSiteImportDocLines(doc.blocks, doc.title)
   const sourceLines = lines.lines.filter((line) => line.block.kind !== 'image').map((line) => textOf(line.block))
 
-  /** A recorded-shape arrangement: the opening in two columns, a later section's lines as cards, one line named twice, one reworded. */
+  /** A recorded-shape answer: an older arrangement's words and line numbers, and a design that names choices only. */
   function answer() {
-    const [opening, second] = lines.sections
     return {
-      sections: lines.sections.map((section, index) => {
-        if (index === 0) {
-          const [first, ...rest] = opening.lines
-          return {
-            band: 'plain',
-            cols: [7, 5],
-            align: 'start',
-            blocks: [
-              { kind: 'heading', col: 0, from: [first], style: 'none', items: [], text: 'A heading the model wrote itself' },
-              { kind: 'lede', col: 0, from: rest.slice(0, 1), style: 'none', items: [] },
-              { kind: 'text', col: 1, from: rest.slice(1, 3), style: 'none', items: [] },
-            ],
-          }
-        }
-        if (section === second) {
-          const [title, ...rest] = second.lines
-          return {
-            band: 'dark',
-            cols: [],
-            align: 'center',
-            blocks: [
-              { kind: 'heading', col: -1, from: [title], style: 'none', items: [] },
-              { kind: 'cards', col: -1, from: [], style: 'none', items: [{ from: rest.slice(0, 2) }, { from: rest.slice(2, 4) }] },
-              // Names a line already placed: dropped, its other line added at the end.
-              { kind: 'text', col: -1, from: [title, ...rest.slice(4, 5)], style: 'none', items: [] },
-              // A line of another section is not taken from it.
-              { kind: 'text', col: -1, from: [opening.lines[opening.lines.length - 1]], style: 'none', items: [] },
-            ],
-          }
-        }
-        return { band: index % 2 ? 'soft' : 'plain', cols: [], align: 'start', blocks: [{ kind: 'text', col: -1, from: section.lines, style: 'none', items: [], text: 'Reworded.' }] }
-      }),
+      sections: lines.sections.map((_, index) => ({
+        hero: index === 0 ? 'split' : 'none',
+        band: index === 1 ? 'dark' : 'source',
+        align: 'source',
+        groups: [{ kind: 'cards', style: 'ruled' }],
+        // What an older answer carried, which has nowhere to go now.
+        blocks: [{ kind: 'heading', from: [1], text: 'A heading the model wrote itself' }],
+        text: 'Reworded.',
+      })),
     }
   }
 
-  it('home: nine sections and its opening, every source line on the page once, none reworded', () => {
+  it('home: its opening and nine sections, every source line on the page once, none reworded', () => {
     expect(lines.sections).toHaveLength(10)
     const result = checkFor(doc).check(answer())
     expect(result.violations).toEqual([])
@@ -214,24 +191,34 @@ describe('an arranged page places every source line exactly once and rewords non
     const joined = words.join('\n')
     expect(joined).not.toContain('A heading the model wrote itself')
     expect(joined).not.toContain('Reworded.')
-    // Each source line once: a card's text is its text lines joined, so compare the words.
     const tally = (list: string[]) => (list.join(' ').match(/[\p{L}\p{N}]+/gu) ?? []).sort()
     expect(tally(words)).toEqual(tally(sourceLines))
   })
 
-  it('compiles the same lines whatever the answer, and keeps the page’s one h1', () => {
-    const { sectionIds } = checkFor(doc)
-    const compiled = aiCompileImportedDocument({ doc, sectionIds, pages: [], arrangement: { sections: lines.sections.map(() => null) } })
-    expect([...compiled.placed].sort((a, b) => a - b)).toEqual(lines.lines.filter((line) => line.block.kind !== 'image').map((line) => line.n))
+  it('places the same lines with no answer, and keeps the page’s one h1', () => {
+    const { sectionIds, screen } = checkFor(doc)
+    const compiled = aiCompileImportedPage({
+      doc,
+      sectionIds,
+      plan: { title: doc.title, sections: screen.sections },
+      targets: { pageId: 'p0', pages: [], homeIds: [], forms: [], formPageId: null, components: [], facts: '' },
+    })
+    const lineRefs = doc.blocks.flatMap((block, index) => (block.kind !== 'image' && !(block.kind === 'link' && block.inline) && textOf(block) ? [index] : []))
+    expect(compiled.placed).toEqual(lineRefs)
+    expect(compiled.words).toBe(compiled.sourceWords)
     const h1s = Object.values(compiled.tree.nodes).filter((node) => node.props?.['component'] === 'h1')
     expect(h1s).toHaveLength(1)
   })
 
-  it('is told to arrange only, with the lines fenced as the owner’s data', () => {
-    expect(AI_LAYOUT_ARRANGE_TEXT).toContain('Arrange; keep every line as written; add nothing; reword nothing.')
-    const prompt = aiLayoutArrangePrompt({ job: { $id: 'job-home', inputs: {} }, screen: { title: 'Home', slug: '/', sections: [] }, doc })
-    expect(prompt).toContain('[2] (heading 1) Build your website.')
+  it('is asked its design only, over the page’s structure, the section names fenced as the owner’s data', () => {
+    expect(AI_LAYOUT_DESIGN_TEXT).toContain('you never write a word')
+    const prompt = aiLayoutDesignPrompt({ job: { $id: 'job-home', inputs: {} }, screen: { title: 'Home', slug: '/', sections: [] }, doc })
+    expect(prompt).toContain('Section 1 "')
     expect(prompt).toMatch(/<untrusted[^>]*>/i)
+    // No line of the page is in it but its sections' names: only what each section shows.
+    const paragraphs = doc.blocks.filter((block) => block.kind === 'paragraph').map(textOf).filter((text) => text.length > 30)
+    expect(paragraphs.length).toBeGreaterThan(10)
+    for (const text of paragraphs) expect(prompt).not.toContain(text)
   })
 })
 

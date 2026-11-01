@@ -20,6 +20,7 @@ import { authorizedFetch, type MaybeTokenSource } from '@aglyn/shared-util-http/
 import { AI_CREDITS_CONFIRM_CODE, type AiCreditsPrompt } from '../model/ai-credit-estimate'
 import type { AiJobSummary } from '../model/ai-jobs.types'
 import { assistBuildJobRequest, type AssistBuildProposal } from '../model/assist-build'
+import { assistPageChangeJobRequest, type AssistPageChangeProposal } from '../model/assist-page-change'
 import { publishAiJob } from './ai-jobs-store'
 
 /**
@@ -134,6 +135,39 @@ export async function startAssistBuildRequest(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(assistBuildJobRequest(orgId, proposal)),
+    })
+    const payload = await response.json().catch(() => null)
+    const next = (payload?.job as AiJobSummary | undefined) ?? null
+    if (response.ok && next) publishAiJob(next)
+    return {
+      job: response.ok ? next : null,
+      error: response.ok && next ? null : String(payload?.error ?? failed),
+      ...(payload?.meter ? { meter: payload.meter } : {}),
+    }
+  } catch {
+    return { job: null, error: failed }
+  }
+}
+
+/**
+ * Starts the change to a page a chat turn asked for (AGL-4116): one `edit`
+ * job on that page, through the door every job is created by, which checks
+ * the page and the plan again. There is no plan to confirm: what comes back
+ * is the job making the draft, or the reason it could not start.
+ * `versionId` continues the draft an earlier change in the conversation made.
+ */
+export async function startAssistPageChangeRequest(
+  user: MaybeTokenSource,
+  orgId: string,
+  proposal: AssistPageChangeProposal,
+  versionId: string | null,
+): Promise<AiJobDecision> {
+  const failed = 'The change could not be started — try asking again.'
+  try {
+    const response = await authorizedFetch(user, '/api/ai/jobs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(assistPageChangeJobRequest(orgId, proposal, versionId)),
     })
     const payload = await response.json().catch(() => null)
     const next = (payload?.job as AiJobSummary | undefined) ?? null

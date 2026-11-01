@@ -55,6 +55,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#usage-strip': 'The assistant panel and the AI dialogs in the Besigner show a compact usage line once you have made a request: You — your credits this month, against your allotment when one applies.',
   },
   aiAssistBuilds: {
+    '#change-a-page': 'Ask for a change to a page the site already has, such as make the image at the top of the home page fill the background, and Assist makes it on that page.',
     '#the-plan-card': 'The card shows Planning what to build on this site… while the plan is made, then the Proposed plan, one line per part: Reuses something the site already has, and what for;',
   },
   aiAutomations: {
@@ -110,7 +111,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#asking-a-question': 'Choose Ask a question on the Ask AI about these numbers card — on a site\'s dashboard, its Analytics page, and your organization\'s Sites page — or open the Assist panel on one of these pages and choose Ask about your…',
   },
   aiJobs: {
-    '#ai-jobs-in-assist': 'The AI jobs list at the top of the Assist panel follows the workspace\'s jobs wherever you are in the console.',
+    '#ai-jobs-in-assist': 'The AI jobs row at the top of the Assist panel follows your jobs wherever you are in the console, and counts the jobs that need you and are running.',
   },
   aiLayout: {
     '#generate-a-layout-with-aglyn-ai': 'An AI build job can make a layout from a brief: the header, navigation and footer you have in mind.',
@@ -299,7 +300,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#lead-details': 'Details is the lead\'s profile, laid out as Salesforce lays out a lead: the salutation and the name\'s parts, then Lead information — company, job title, industry, rating, lead source, tags, employees and annual…',
   },
   crmReports: {
-    '#activity-by-teammate': 'Who did what in the period, busiest first. Activities logged — every call, email, meeting, note and other activity logged in the period, counted on the server, with the change against the previous period.',
+    '#activity-by-teammate': 'Who did what in the period, busiest first. Activities logged — every call, email, message, meeting, note and other activity logged in the period, counted on the server, with the change against the previous period.',
     '#contacts': 'New contacts in the period, with the change against the previous period.',
     '#conversion-by-source': 'Of the people each capture surface brought in during the period, how many are customers now.',
     '#crm-at-a-glance': 'The site dashboard carries a CRM at a glance card with five numbers: contacts, new contacts this week, the value of every open deal, tasks due today or overdue, and leads to work — the leads on this site that are…',
@@ -345,7 +346,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#deals-on-a-record': 'The Deals card on a contact\'s or a company\'s page lists every deal that names that record, newest first, and New deal in its header starts one already linked to them.',
     '#line-items': 'A deal\'s amount can be a number you type, or the sum of the products behind it.',
     '#moving-winning-and-losing': 'Stage changes go through the server rather than being written directly, so that automations can hear them.',
-    '#the-board-and-the-table': 'The section opens as a board of the chosen pipeline: one column per open stage, with Won and Lost folded away at the end until you expand them; a board wider than the window scrolls sideways.',
+    '#the-board-and-the-table': 'The section opens as a board of the chosen pipeline: one column per open stage, with Won and Lost folded away at the end until you expand them.',
   },
   deliveryApps: {
     '#taking-orders': 'Delivery orders appear on the register, oldest first, and a short message announces each new one.',
