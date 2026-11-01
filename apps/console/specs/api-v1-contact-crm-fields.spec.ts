@@ -211,15 +211,15 @@ describe('POST /v1/contacts with a CRM profile', () => {
     expect(stored).not.toHaveProperty('marketingConsent')
   })
 
-  it('requires the site a profile field is written for', async () => {
+  it('files a profile for the organization when no site was named (AGL-4122)', async () => {
     const response = await call('POST', 'contacts', {
-      email: 'robin@example.com',
+      email: 'robin.org@example.com',
       phone: '+15125550123',
     })
-    expect(response.status).toBe(400)
-    expect((await json(response)).error.fields.consentSiteId).toMatch(
-      /Required with a CRM profile field/,
-    )
+    expect(response.status).toBe(201)
+    expect(mockDocs.get(`${CONTACTS}/${(await json(response)).id}`)).toMatchObject({
+      facets: { org: { phone: '+15125550123' } },
+    })
     // The site alone, with nothing for it to qualify, is still refused.
     const alone = await call('POST', 'contacts', {
       email: 'robin@example.com',

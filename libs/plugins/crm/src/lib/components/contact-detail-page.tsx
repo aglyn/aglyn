@@ -36,7 +36,7 @@ import { useCrmActivityLogger } from '../hooks/use-crm-activity-logger'
 import { CrmCreateSiteDefault, useCrmOrgMount } from '../hooks/use-crm-org-mount'
 import { crmShareChipFor } from '../model/crm-sharing'
 import { useCrmScope } from '../hooks/use-crm-scope'
-import { contactPrimaryGroup, contactRecordFromDoc } from '../model/contact-record'
+import { contactPrimaryGroup, contactRecordFromDoc, contactRecordLabel } from '../model/contact-record'
 import { type CrmDetailPageProps, crmRoutes } from '../model/crm-routes'
 import ContactAssociationsCard from './contact-associations-card'
 import ContactDuplicatesCard from './contact-duplicates-card'
@@ -250,7 +250,7 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
     const confirmed = await confirm({
       title: 'Delete this contact?',
       description:
-        `"${record?.email ?? id}" is removed from ${siteLabel}'s ` +
+        `"${record ? contactRecordLabel(record) : id}" is removed from ${siteLabel}'s ` +
         'Contacts, along with its notes, tags and timeline. Other sites ' +
         'that captured the same person keep their own records. Their form ' +
         'submissions, orders, bookings, and membership records are ' +
@@ -271,7 +271,7 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
       logActivity(`Removed contact from ${siteLabel}`, {
         type: 'contact',
         id,
-        name: record?.name || record?.email,
+        name: record ? contactRecordLabel(record) : undefined,
       })
       enqueueSnackbar(
         removed === 'deleted'
@@ -366,11 +366,13 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
     <Stack spacing={3}>
       <CrmRecordHeader
         kind="Contact"
-        title={record ? record.name || record.email : undefined}
+        title={record ? contactRecordLabel(record) : undefined}
         // The identity, and the other addresses a merge folded into it.
         subtitle={
           record
-            ? [record.email, ...record.alternateEmails.map((email) => `also ${email}`)].join(' · ')
+            ? [record.email, ...record.alternateEmails.map((email) => `also ${email}`)]
+                .filter(Boolean)
+                .join(' · ')
             : undefined
         }
         help={contactDocsHelp}
@@ -379,7 +381,10 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
         actions={
           record ? (
             <>
-              <AddToListButton hostId={hostId} org={org} contactId={id} email={record.email} />
+              {/* A list is for mail, and this person may not have an address yet. */}
+              {record.email ? (
+                <AddToListButton hostId={hostId} org={org} contactId={id} email={record.email} />
+              ) : null}
               {/* Dial the number, and log the call it was (AGL-2661). */}
               <CrmCallButton
                 hostId={siteHostId}
@@ -399,15 +404,17 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
                 name={record.name}
                 email={record.email || null}
               />
-              <CrmSendEmailButton
-                hostId={siteHostId}
-                org={org}
-                contactId={id}
-                email={record.email}
-                name={record.name}
-                emailState={record.emailState}
-                suiteLocked={!suiteIncluded}
-              />
+              {record.email ? (
+                <CrmSendEmailButton
+                  hostId={siteHostId}
+                  org={org}
+                  contactId={id}
+                  email={record.email}
+                  name={record.name}
+                  emailState={record.emailState}
+                  suiteLocked={!suiteIncluded}
+                />
+              ) : null}
               {/* What another plugin does with the person, such as start a quote (AGL-4098). */}
               <CrmRecordActionsZone
                 hostId={siteHostId}
@@ -440,12 +447,12 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
                 hostId={siteHostId}
                 email={record.email}
                 emailState={record.emailState}
-                enabled={suiteIncluded}
+                enabled={suiteIncluded && Boolean(record.email)}
               />
               <CrmAccountLockChip
                 hostId={siteHostId}
                 email={record.email}
-                enabled={suiteIncluded}
+                enabled={suiteIncluded && Boolean(record.email)}
               />
               <CrmRecordChip
                 label="Stage"
@@ -518,7 +525,7 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
               org={org as Record<string, unknown> | undefined}
               kind="contact"
               recordId={id}
-              name={record.name || record.email}
+              name={contactRecordLabel(record)}
               taskLink={{ contactId: id }}
             />
           ) : null}
@@ -572,7 +579,7 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
                 org={org}
                 basePath={basePath}
                 contactId={id}
-                contactName={record.name || record.email}
+                contactName={contactRecordLabel(record)}
               />
               <RecordTasksCard hostId={hostId} org={org} basePath={basePath} contactId={id} />
               {/*

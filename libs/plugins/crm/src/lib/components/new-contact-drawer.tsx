@@ -69,6 +69,7 @@ import type { OrgMemberOption } from './use-org-members'
 
 /** What the drawer hands back — already normalized where the route would. */
 export interface NewContactValues {
+  /** Normalized, or `''` for a person with no address yet (AGL-4122). */
   email: string
   /** The name as typed, or the first and last names' composition when either was given. */
   name: string
@@ -104,8 +105,9 @@ export interface NewContactDrawerProps {
   /**
    * The site the contact is being added from — what scopes the company list
    * and the controller the consent checkbox records a basis for. `null` at
-   * the organization level (AGL-2630), where the drawer asks which site
-   * with a picker and holds its submit until one is named.
+   * the organization level (AGL-2630), where the drawer asks which site with
+   * a picker. An org whose records belong to every site may leave it empty,
+   * and one that keeps them apart holds the submit until one is named.
    */
   hostId: string | null
   /** The org document the shell passed, for the company picker's scope. */
@@ -134,7 +136,9 @@ export interface NewContactDrawerProps {
  * The two fields a person can mistype in a way the record cannot hold — the
  * email and the phone number — are checked before the request leaves, with
  * the same normalizers the route runs, so the refusal lands under the field
- * rather than as a sentence from the server. Everything else is the route's
+ * rather than as a sentence from the server. Neither is required: a contact
+ * needs a name, an email or a number, because the team works a deal with the
+ * person in front of them and the address can come later (AGL-4122). Everything else is the route's
  * to decide: whether the address already belongs to somebody (it merges),
  * whether the plan's band has room (it refuses, and its sentence is shown
  * above the form unchanged).
@@ -175,7 +179,7 @@ export function NewContactDrawer(props: NewContactDrawerProps) {
    * the route will capture the contact under. `null` until a site is
    * picked, and the submit waits on it.
    */
-  const { createHostId, createGroup, orgId } = useCrmScope({ hostId, org })
+  const { createHostId, createGroup, createNeedsSite, orgId } = useCrmScope({ hostId, org })
   const consentGroup: ConsentGroup | null = createGroup
   const salutations = useCrmPicklist(CRM_SALUTATION_PICKLIST, open ? orgId : null)
   const companies = useCompanyOptions({ hostId, org, enabled: open })
@@ -202,6 +206,7 @@ export function NewContactDrawer(props: NewContactDrawerProps) {
   const [marketingConsent, setMarketingConsent] = useState(false)
   const [emailError, setEmailError] = useState('')
   const [phoneError, setPhoneError] = useState('')
+  const [identityError, setIdentityError] = useState('')
 
   /*
    * A fresh form on every opening. The drawer stays mounted behind the list
@@ -229,13 +234,15 @@ export function NewContactDrawer(props: NewContactDrawerProps) {
     setMarketingConsent(false)
     setEmailError('')
     setPhoneError('')
+    setIdentityError('')
   }, [open])
 
   const handleSubmit = () => {
-    const normalizedEmail = normalizeContactEmail(email)
+    const trimmedEmail = email.trim()
+    const normalizedEmail = trimmedEmail ? normalizeContactEmail(trimmedEmail) : ''
     const trimmedPhone = phone.trim()
     const normalizedPhone = trimmedPhone ? normalizePhone(trimmedPhone) : ''
-    setEmailError(normalizedEmail ? '' : 'Enter a valid email address.')
+    setEmailError(trimmedEmail && !normalizedEmail ? 'Enter a valid email address.' : '')
     setPhoneError(
       trimmedPhone && !normalizedPhone
         ? 'Enter it with its country code, like +1 512 555 0107.'
@@ -248,15 +255,20 @@ export function NewContactDrawer(props: NewContactDrawerProps) {
         ? 'Enter it with its country code, like +1 512 555 0107.'
         : '',
     )
+    const identified = Boolean(
+      trimmedEmail || trimmedPhone || trimmedMobile || composedName || name.trim(),
+    )
+    setIdentityError(identified ? '' : 'Enter a name, an email or a phone number.')
     if (
-      !normalizedEmail ||
+      !identified ||
+      (trimmedEmail && !normalizedEmail) ||
       (trimmedPhone && !normalizedPhone) ||
       (trimmedMobile && !normalizedMobile)
     ) {
       return
     }
     onSubmit({
-      email: normalizedEmail,
+      email: normalizedEmail ?? '',
       name: composedName || name.trim().slice(0, 120),
       salutation,
       firstName: firstName.trim(),
@@ -272,7 +284,7 @@ export function NewContactDrawer(props: NewContactDrawerProps) {
       lifecycleStage,
       tags: parseContactTags(tags),
       address: normalizeAddress(address),
-      marketingConsent,
+      marketingConsent: marketingConsent && Boolean(normalizedEmail),
       disclosedConsentGroup: consentGroup
         ? consentGroupDisclosureKey(consentGroup)
         : null,
@@ -280,6 +292,7 @@ export function NewContactDrawer(props: NewContactDrawerProps) {
   }
 
   const disclosure = consentGroup ? consentGroupDisclosure(consentGroup) : null
+  const hasEmail = Boolean(email.trim())
   // While a first or last name is typed, the name is theirs (AGL-3515).
   const composedName = composeContactName(firstName, lastName)
 
@@ -316,16 +329,20 @@ export function NewContactDrawer(props: NewContactDrawerProps) {
       <Container gutterY>
         <Stack spacing={2}>
           {error ? <Alert severity="warning">{error}</Alert> : null}
+          {identityError ? <Alert severity="warning">{identityError}</Alert> : null}
           {/*
-            First, because everything below it is filed under the answer: the
-            site decides which of the org's sites may see the person and whose
-            consent the checkbox at the foot records. Renders nothing under a
-            site (AGL-2630).
+            First, because the consent at the foot is recorded against the
+            answer. Renders nothing under a site (AGL-2630).
           */}
           <CrmSitePicker
             hostId={hostId}
+            optional={!createNeedsSite}
             disabled={Boolean(busy)}
-            helperText="The site that captures this person — it decides which sites may see them and whose marketing consent the checkbox below records."
+            helperText={
+              createNeedsSite
+                ? 'The site that captures this person — it decides which sites may see them and whose marketing consent the checkbox below records.'
+                : 'Where they came from, if anywhere. Every site in the organization can see them either way.'
+            }
           />
           <TextField
             size="small"
@@ -336,9 +353,8 @@ export function NewContactDrawer(props: NewContactDrawerProps) {
             error={Boolean(emailError)}
             helperText={
               emailError ||
-              'The one field that is required — it is what makes two captures one person.'
+              'Optional. You can add it later, and an address already on a contact merges into them.'
             }
-            required
             fullWidth
             autoFocus
           />
@@ -489,23 +505,26 @@ export function NewContactDrawer(props: NewContactDrawerProps) {
             <FormControlLabel
               control={
                 <Checkbox
-                  checked={marketingConsent}
+                  checked={marketingConsent && hasEmail}
+                  disabled={!hasEmail}
                   onChange={(event) => setMarketingConsent(event.target.checked)}
                 />
               }
               label="This person opted in to marketing email"
             />
             <FormHelperText>
-              {(disclosure ? `${disclosure} ` : '') +
-                'Tick it only if they agreed. Adding a contact is never itself consent.'}
+              {!hasEmail
+                ? 'Add an email first: there is nowhere to send marketing without one.'
+                : (disclosure ? `${disclosure} ` : '') +
+                  (createHostId ? '' : 'With no source site, this records it on every site. ') +
+                  'Tick it only if they agreed. Adding a contact is never itself consent.'}
             </FormHelperText>
           </Stack>
           <Button
             variant="contained"
             color="primary"
-            // Held until the capturing site is known: the route resolves the
-            // org from it and stamps the record with it.
-            disabled={Boolean(busy) || !createHostId}
+            // Held only where the site decides who may see the record.
+            disabled={Boolean(busy) || (createNeedsSite && !createHostId)}
             onClick={handleSubmit}
           >
             {busy ? 'Adding…' : 'Add contact'}

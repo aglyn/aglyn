@@ -24,6 +24,7 @@ import {
   CONTACT_COMPANY_IDS_FIELD,
   CONTACT_EXTRA_PHONE_FIELDS,
   CONTACT_FACETS_FIELD,
+  ORG_CONTACT_HOLDER_ID,
   CONTACT_FIELDS_MAX_PER_ORG,
   CONTACT_LIFECYCLE_STAGES,
   CONTACT_NAME_PART_MAX,
@@ -264,7 +265,8 @@ function contactView(
   return {
     id: doc.id,
     object: 'contact',
-    email: data.email ?? null,
+    // Blank in the store so a sort lists them; no address to an integrator.
+    email: data.email || null,
     name: data.name ?? null,
     tags: data.tags ?? [],
     notes: data.notes ?? null,
@@ -471,9 +473,13 @@ function readContactInput(
     // The SAME normalizer every capture point uses. Re-implementing the
     // check here would let the API accept an address `upsertHostContact`
     // would reject, and the two would then disagree about who is a duplicate.
-    const email = normalizeContactEmail(body.email)
-    if (!email) errors.email = 'A valid email address is required'
-    else values.email = email
+    // Optional (AGL-4122): an address that was sent still has to be one, and
+    // a person with none is named below instead.
+    if (body.email !== undefined && body.email !== null && body.email !== '') {
+      const email = normalizeContactEmail(body.email)
+      if (!email) errors.email = 'A valid email address is required'
+      else values.email = email
+    }
   }
 
   if (body.name !== undefined) {
@@ -670,9 +676,26 @@ function readContactInput(
    * learn two names for it. Beside a refusal the site is accepted, since the
    * refusal still applies to every site and the site now names the facet.
    */
-  if (writesCrm && !values.consentSiteId) {
+  if (writesCrm && !values.consentSiteId && partial) {
     errors.consentSiteId =
       'Required with a CRM profile field — name the site whose profile of this person to write'
+  }
+  /*
+   * WHO THIS IS (AGL-4122). A contact needs no address, so a create needs
+   * something else to call them by. With no site and no address the profile is
+   * the organization's own, and nothing here narrows that.
+   */
+  if (
+    !partial &&
+    !values.email &&
+    !values.name &&
+    !values.crm.phone &&
+    !values.crm.mobilePhone &&
+    !values.crm.firstName &&
+    !values.crm.lastName &&
+    !errors.email
+  ) {
+    errors.email = 'Send an email, a name or a phone number'
   }
   if (values.marketingConsent === false && values.consentSiteId && !writesCrm) {
     errors.consentSiteId =
@@ -825,17 +848,20 @@ async function contactReportsToError(
 function contactCrmCreateFields(
   ctx: ApiV1Context,
   crm: ContactCrmInput,
-  siteId: string,
+  siteId: string | undefined,
 ): Record<string, unknown> {
   const stored = createPayload(crm)
   if (Object.keys(stored).length === 0) return {}
   // The holder's name is the first and last names' when either was given.
   const composed = composeContactName(crm.firstName, crm.lastName)
   if (composed) stored['name'] = composed
-  const group = consentGroupForHost(ctx.org as Record<string, unknown>, siteId)
+  // The person's holder, or the organization when no site was named (AGL-4122).
+  const groupId = siteId
+    ? consentGroupForHost(ctx.org as Record<string, unknown>, siteId).groupId
+    : ORG_CONTACT_HOLDER_ID
   return {
     [CONTACT_FACETS_FIELD]: {
-      [group.groupId]: { sources: { api: true }, interactions: [], ...stored },
+      [groupId]: { sources: { api: true }, interactions: [], ...stored },
     },
     ...(crm.companyId ? { companyIds: [crm.companyId] } : {}),
   }
@@ -1091,13 +1117,20 @@ async function createContact(
     // Through the org's address index (AGL-2633): an address a merge folded
     // into another record is that record's, and a create on it would mint
     // the duplicate the merge removed.
-    const existing = await findContactByEmail(collection, email)
+    // With no address the number is who they are, and with neither nobody is:
+    // two blank emails are not the same person (AGL-4122).
+    const phone = crm.phone || crm.mobilePhone || ''
+    const existing = email
+      ? await findContactByEmail(collection, email)
+      : phone
+        ? ((await collection.where('phone', '==', phone).limit(1).get()).docs[0] ?? null)
+        : null
     if (existing) {
       // Released: the conflict clears if that contact is deleted or merged
       // upstream, and the retry that should then succeed must not replay it.
       await claim.release()
       return ApiErrors.conflict({
-        message: `A contact with this email already exists (${existing.id}). Update it instead.`,
+        message: `A contact with this ${email ? 'email' : 'phone number'} already exists (${existing.id}). Update it instead.`,
         code: 'contact_exists',
         headers: ctx.headers,
       })
@@ -1129,7 +1162,11 @@ async function createContact(
 
     const id = createResourceUid()
     await collection.doc(id).create({
-      email,
+      // Blank rather than absent, so a sort by email still lists them.
+      email: email ?? '',
+      // The number IS who they are with no address: it stays at the top only
+      // then, because a profile field otherwise belongs to its holder alone.
+      ...(!email && phone ? { phone } : {}),
       // The search keys travel with the name — the console's contact list
       // searches the whole collection, not the page it fetched.
       ...(canonicalName ? nameSearchFields(canonicalName) : {}),
@@ -1150,9 +1187,9 @@ async function createContact(
       // A refusal carries no site: it stands against every brand in the
       // account — see `readMarketingBasis` for the asymmetry.
       ...(marketingConsent === false ? { marketingConsent: false } : {}),
-      // The CRM profile, when the body carried one — under the named site's
-      // facet, which `readContactInput` has already required it to name.
-      ...(consentSiteId ? contactCrmCreateFields(ctx, crm, consentSiteId) : {}),
+      // The CRM profile, when the body carried one: under the named site's
+      // facet, or the organization's when it named none.
+      ...contactCrmCreateFields(ctx, crm, consentSiteId),
       // `sources.api` — a first-class provenance value beside `form`,
       // `member`, `order` and `booking`, so a merchant reading the console
       // can see which people an integration put there.
@@ -1171,11 +1208,11 @@ async function createContact(
     await restampCrmListFieldsAt(collection.doc(id), 'contacts')
     // The address's domain, checked after the response (AGL-3328): a domain
     // that takes no mail makes the new contact read "Would bounce".
-    scheduleCapturedEmailCheck({ orgId: ctx.orgId, email })
+    if (email) scheduleCapturedEmailCheck({ orgId: ctx.orgId, email })
     // The company the body named has one more contact naming it (AGL-2613);
     // a fresh row's plan is the trivial one, and `crmRefErrors` has already
     // required the company to exist.
-    if (consentSiteId && crm.companyId) {
+    if (crm.companyId) {
       await settleCompanyContactsCounts(
         companiesCollection(ctx),
         planContactCompanyLink(

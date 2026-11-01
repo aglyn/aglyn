@@ -54,10 +54,11 @@ export interface ContactStageResult {
  */
 export async function setContactStage(
   user: MaybeTokenSource,
-  hostId: string,
+  /** The site, or `null` for a person no site holds (AGL-4122), named by `orgId`. */
+  hostId: string | null,
   contactId: string,
   stage: ContactLifecycleStage | null,
-  options: { fetchImpl?: typeof fetch } = {},
+  options: { fetchImpl?: typeof fetch; orgId?: string | null } = {},
 ): Promise<ContactStageResult> {
   const response = await authorizedFetch(
     user,
@@ -65,7 +66,12 @@ export async function setContactStage(
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ hostId, contactId, lifecycleStage: stage }),
+      body: JSON.stringify({
+        hostId,
+        ...(hostId ? {} : { orgId: options.orgId }),
+        contactId,
+        lifecycleStage: stage,
+      }),
     },
     options.fetchImpl ? { fetchImpl: options.fetchImpl } : {},
   )

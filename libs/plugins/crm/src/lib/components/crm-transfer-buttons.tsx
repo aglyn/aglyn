@@ -67,18 +67,23 @@ export interface CrmImportButtonProps {
   /** What the `importMapping` zone's widgets know the file as (`contacts`). */
   mappingZone?: string
   label?: string
+  /**
+   * The file needs no site: the org's records belong to every site, so a site
+   * is only where these came from, and the reader may name none (AGL-4122).
+   */
+  siteOptional?: boolean
 }
 
 /** Opens the import wizard on a CRM resource, under the list's site or one the reader picks. */
 export function CrmImportButton(props: CrmImportButtonProps) {
-  const { resource, noun, hostId, mappingZone, label = 'Import' } = props
+  const { resource, noun, hostId, mappingZone, label = 'Import', siteOptional = false } = props
   const transfer = useTransferLauncher()
   const mount = useCrmOrgMount()
   const [asking, setAsking] = useState(false)
   // Importing needs "Manage data" (AGL-3546); a reader sees no Import.
   if (!transfer?.can('import', { resource, scope: 'org', hostId })) return null
 
-  const open = (site: string) =>
+  const open = (site: string | null) =>
     transfer.openImport({ resource, scope: 'org', hostId: site, ...(mappingZone ? { mappingZone } : {}) })
 
   const site = hostId ?? mount?.createHostId ?? null
@@ -99,18 +104,24 @@ export function CrmImportButton(props: CrmImportButtonProps) {
         <DialogTitle id={`${resource}-import-site`}>{`Import ${noun}`}</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            {`Every new record is filed under a site — it decides which of your sites may see the ${noun}.`}
+            {siteOptional
+              ? `Every site in the organization can see these ${noun}. Name the site they came from, if any.`
+              : `Every new record is filed under a site — it decides which of your sites may see the ${noun}.`}
           </Typography>
-          <CrmSitePicker hostId={null} helperText={`The site these ${noun} are imported into.`} />
+          <CrmSitePicker
+            hostId={null}
+            optional={siteOptional}
+            {...(siteOptional ? {} : { helperText: `The site these ${noun} are imported into.` })}
+          />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setAsking(false)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            disabled={!mount?.createHostId}
+            disabled={!siteOptional && !mount?.createHostId}
             onClick={() => {
               setAsking(false)
-              if (mount?.createHostId) open(mount.createHostId)
+              open(mount?.createHostId ?? null)
             }}
           >
             {'Continue'}

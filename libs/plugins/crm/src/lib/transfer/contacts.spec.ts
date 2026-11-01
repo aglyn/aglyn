@@ -358,8 +358,21 @@ describe('a Salesforce contacts file', () => {
   })
 })
 
+describe('a file with no site (AGL-4122)', () => {
+  const NO_EMAIL_FILE = ['First Name,Last Name,Phone', 'Jordan,Lee,+15125550107'].join('\n')
+
+  it('files the people under the organization, with no email needed', async () => {
+    const atOrg = await uploaded(NO_EMAIL_FILE, null)
+    const { match } = await analyzeTransferJob(deps, { orgId: ORG, jobId: atOrg.id, actorUid: ME })
+    await expect(
+      planTransferJob(deps, { orgId: ORG, jobId: atOrg.id, actorUid: ME, choices: { mapping: match.mapping } }),
+    ).resolves.toBeDefined()
+  })
+})
+
 describe('who and where', () => {
-  it('needs a site to import into, and the CRM on the plan', async () => {
+  it('needs a site to import into when the org keeps its sites apart, and the CRM on the plan', async () => {
+    mockMemory.seed(`orgs/${ORG}`, { plan: 'starter', crm: { defaultRecordScope: 'host' } })
     const atOrg = await uploaded(SALESFORCE_FILE, null)
     const { match } = await analyzeTransferJob(deps, { orgId: ORG, jobId: atOrg.id, actorUid: ME })
     const choices = { mapping: match.mapping, lookupChoices: { company: { globex: { action: 'leaveBlank' as const } } } }

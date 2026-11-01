@@ -251,7 +251,6 @@ jest.mock('../../../../../tenant/data/admin/src/lib/server/host-visitor-records'
     existed: docs.has(`orgs/${ORG}/leads/${key}`),
     carried: false,
   }),
-  leadScopeForHost: async (hostId: string) => [`host:${hostId}`],
 }))
 
 jest.mock('../../../../../tenant/data/admin/src/lib/server/firebase-admin', () => ({

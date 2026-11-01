@@ -61,6 +61,7 @@ import {
   type PipelineDoc,
   removeStage,
   renameStage,
+  settleStageNames,
   setStageForecastCategory,
   setStageProbability,
   sortedStages,
@@ -174,7 +175,7 @@ export function PipelineStagesDialog(props: PipelineStagesDialogProps) {
         async () => {
           await updateDoc(
             doc(firestore, 'orgs', orgId, CRM_COLLECTIONS.pipelines, pipeline.$id),
-            { stages, updatedAt: new Date() },
+            { stages: settleStageNames(stages), updatedAt: new Date() },
           )
         },
       )
@@ -273,6 +274,7 @@ export function PipelineStagesDialog(props: PipelineStagesDialogProps) {
                       <span>
                         <IconButton
                           size="small"
+                          aria-label={`Move ${stage.name} up`}
                           disabled={first}
                           onClick={() =>
                             setStages((current) => moveStage(current, stage.id, 'up'))
@@ -286,6 +288,7 @@ export function PipelineStagesDialog(props: PipelineStagesDialogProps) {
                       <span>
                         <IconButton
                           size="small"
+                          aria-label={`Move ${stage.name} down`}
                           disabled={lastOpen}
                           onClick={() =>
                             setStages((current) => moveStage(current, stage.id, 'down'))
@@ -300,6 +303,7 @@ export function PipelineStagesDialog(props: PipelineStagesDialogProps) {
                         <IconButton
                           size="small"
                           color="error"
+                          aria-label={`Remove ${stage.name}`}
                           disabled={counting === stage.id || busy}
                           onClick={() => void handleRemove(stage.id)}
                         >
