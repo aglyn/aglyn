@@ -36,6 +36,7 @@
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { setSeedConfirmWaitMs } from '@aglyn/tenant-feature-instance/hooks/helpers/listen-confirmation'
 import { setDoc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
 import HostActionsCard from './host-actions-card.component'
@@ -142,6 +143,10 @@ function editFirstActionAndSave() {
   fireEvent.click(screen.getByRole('button', { name: 'Save action' }))
 }
 
+// This spec pins the refusal, not the wait before it (AGL-4120).
+beforeAll(() => setSeedConfirmWaitMs(0))
+afterAll(() => setSeedConfirmWaitMs())
+
 describe('HostActionsCard (AGL-1358)', () => {
   it('REFUSES to rewrite an action seeded from an unconfirmed read', async () => {
     listener.fromCache = true
@@ -156,7 +161,7 @@ describe('HostActionsCard (AGL-1358)', () => {
     // like a save that quietly did nothing.
     const [message] = enqueueSnackbar.mock.calls[0]
     expect(message).toEqual(expect.stringContaining('action'))
-    expect(message).toEqual(expect.stringMatching(/reload/i))
+    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
     // …and the editor is still open with the name that was there.
     expect((screen.getByLabelText('Name') as HTMLInputElement).value).toEqual(
       'Welcome banner',

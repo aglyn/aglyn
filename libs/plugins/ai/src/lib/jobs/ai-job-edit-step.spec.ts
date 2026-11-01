@@ -326,7 +326,7 @@ describe('the inputs', () => {
     expect(context?.whole).toBe(true)
     expect(context?.nodes.find((node) => node.id === 'img0')).toMatchObject({ componentId: 'image', sx: { borderRadius: 2 } })
     expect(context?.nodes).toHaveLength(1 + 8 * 10)
-    const block = editSelectionBlock(context as AssistEditCanvasContext)
+    const block = editSelectionBlock(context as AssistEditCanvasContext, { job: true })
     expect(block).toContain('Every element of the document is described, in the order it reads on the page')
     expect(block).not.toContain('ask the user to select')
   })
@@ -406,11 +406,51 @@ describe('the page’s draft, on every plan (AGL-4116)', () => {
           hostSubdomain: 'brightside',
           label: 'Home',
           inDraft: true,
-          note: expect.stringContaining('Saved as this page’s draft. Nothing visitors see has changed: open the page in the Besigner and choose Open draft'),
+          note: expect.stringContaining('Saved as this page’s draft. Nothing visitors see has changed: open it in the Besigner to review it'),
         },
       ])
       expect(outcome.usage).toEqual(USAGE)
     }
+  })
+
+  describe('the co-edit mirror', () => {
+    const step = (clearMirror: jest.Mock, patch: Partial<AiJob> = {}, org: object = PRO) =>
+      createAiJobEditStep({ clearMirror })({ job: job(patch), stepIndex: 0, now: NOW, firestore, org } as never)
+
+    it('is cleared of the version whose draft was written, or unsaved work replays over it', async () => {
+      seed()
+      mockRunAiRequest.mockResolvedValueOnce(completion(ANSWER))
+      const clearMirror = jest.fn(async () => undefined)
+      const outcome = await step(clearMirror)
+      expect(outcome.failure).toBeUndefined()
+      expect(clearMirror).toHaveBeenCalledTimes(1)
+      expect(clearMirror).toHaveBeenCalledWith({ orgId: 'org-1', hostId: 'host-1', kind: 'screen', id: 'home', versionId: 'v-live' })
+    })
+
+    it('is left alone by a new version, which has no room of its own yet', async () => {
+      seed()
+      mockRunAiRequest.mockResolvedValueOnce(completion(ANSWER))
+      const clearMirror = jest.fn(async () => undefined)
+      const outcome = await step(clearMirror, { inputs: { target: 'home', newVersion: true } })
+      expect(outcome.failure).toBeUndefined()
+      expect(docs.has(`${SCREEN}/versions/job-1`)).toBe(true)
+      expect(clearMirror).not.toHaveBeenCalled()
+    })
+
+    it('that cannot be cleared leaves the draft saved and the job a success', async () => {
+      seed()
+      mockRunAiRequest.mockResolvedValueOnce(completion(ANSWER))
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+      const clearMirror = jest.fn(async () => {
+        throw new Error('the mirror is down')
+      })
+      const outcome = await step(clearMirror)
+      expect(outcome.failure).toBeUndefined()
+      expect(docs.get(DRAFT)).toMatchObject({ aiEditJobId: 'job-1' })
+      expect(outcome.outputs[0]).toMatchObject({ inDraft: true })
+      expect(warn).toHaveBeenCalledWith('[ai edit] the co-edit mirror could not be cleared', expect.anything())
+      warn.mockRestore()
+    })
   })
 
   it('spends nothing when a run of the job already wrote the draft', async () => {

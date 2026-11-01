@@ -217,13 +217,17 @@ const members = {
   memberEmail: (uid: string) => uid,
 }
 
-function renderCard(seeded: Partial<ContactRecord> = {}, suiteLocked = false) {
+function renderCard(
+  seeded: Partial<ContactRecord> = {},
+  suiteLocked = false,
+  noSite = false,
+) {
   return render(
     <ContactPropertiesCard
-      hostId="host-1"
+      hostId={noSite ? null : 'host-1'}
       orgId="org-1"
       record={{ ...record, ...seeded }}
-      consentGroup={GROUP}
+      consentGroup={noSite ? { ...GROUP, hostId: '' } : GROUP}
       seed={{ status: 'success', fromCache: false }}
       members={members}
       suiteLocked={suiteLocked}
@@ -330,6 +334,22 @@ describe('a stage move', () => {
         variant: 'warning',
       }),
     )
+    expect(notices.map((notice) => notice.message)).not.toContain('Contact saved')
+  })
+
+  /** "Contact saved" over a change that went nowhere (AGL-4120). */
+  it('says so when no site holds the stage, rather than reading as saved', async () => {
+    renderCard({}, false, true)
+    pickStage('Customer')
+    save()
+    await waitFor(() =>
+      expect(notices).toContainEqual({
+        message:
+          'Saved, but the stage could not be changed: no site has captured this contact yet.',
+        variant: 'warning',
+      }),
+    )
+    expect(setContactStage).not.toHaveBeenCalled()
     expect(notices.map((notice) => notice.message)).not.toContain('Contact saved')
   })
 })

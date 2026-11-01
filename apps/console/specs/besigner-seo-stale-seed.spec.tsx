@@ -43,6 +43,7 @@
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { setSeedConfirmWaitMs } from '@aglyn/tenant-feature-instance/hooks/helpers/listen-confirmation'
 import type { ReactNode } from 'react'
 
 const mockEnqueueSnackbar = jest.fn()
@@ -248,6 +249,7 @@ jest.mock('@aglyn/besigner-ui', () => ({
   // prompt may be offered at all (AGL-2486); this spec is about what Save
   // writes, and an alone room is the neutral answer.
   recoverableRoomSessions: () => 0,
+  useBesignerOpenDraftParam: () => false,
   LayoutChromeContext: {
     Provider: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   },
@@ -538,6 +540,10 @@ const editDescriptionAndSave = () => {
 const storedSeoKeys = () =>
   Object.keys(stored.seo as Record<string, unknown>).sort()
 
+// This spec pins the refusal, not the wait before it (AGL-4120).
+beforeAll(() => setSeedConfirmWaitMs(0))
+afterAll(() => setSeedConfirmWaitMs())
+
 describe('besigner SEO · the invented social-image keys (AGL-1437)', () => {
   it('does NOT introduce image keys when only a description is saved', async () => {
     render(<ScreenBesigner />)
@@ -622,7 +628,7 @@ describe('besigner SEO · the missing seed guard (AGL-1437, AGL-1358)', () => {
     expect(mockUpdateScreenDoc).not.toHaveBeenCalled()
     const [message] = mockEnqueueSnackbar.mock.calls[0]
     expect(message).toEqual(expect.stringContaining('SEO settings'))
-    expect(message).toEqual(expect.stringMatching(/reload/i))
+    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
     // The typed value stays on screen. A refusal that also cleared the field
     // would send the author back to retype a form refused just as quietly.
     expect(

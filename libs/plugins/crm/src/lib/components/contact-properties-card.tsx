@@ -430,6 +430,14 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
       })
       // The custom values are stored; the controls read the record again.
       setCustom({})
+      if (stageChanged && !siteHostId) {
+        // The stage lives on a site's facet, and this person has none. Never
+        // "Contact saved" over a change that went nowhere (AGL-4120).
+        return void enqueueSnackbar(
+          'Saved, but the stage could not be changed: no site has captured this contact yet.',
+          { variant: 'warning', persist: false },
+        )
+      }
       if (stageChanged && siteHostId) {
         try {
           await setContactStage(user, siteHostId, record.$id, lifecycleStage || null)

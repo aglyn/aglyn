@@ -40,6 +40,7 @@
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { setSeedConfirmWaitMs } from '@aglyn/tenant-feature-instance/hooks/helpers/listen-confirmation'
 import { setDoc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
 import HostFunctionsCard from './host-functions-card.component'
@@ -170,6 +171,10 @@ beforeEach(() => {
   listener.status = 'success'
 })
 
+// This spec pins the refusal, not the wait before it (AGL-4120).
+beforeAll(() => setSeedConfirmWaitMs(0))
+afterAll(() => setSeedConfirmWaitMs())
+
 describe('HostVariablesCard (AGL-1358)', () => {
   const editFirstVariableAndSave = () => {
     fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
@@ -187,7 +192,7 @@ describe('HostVariablesCard (AGL-1358)', () => {
     expect(setDoc).not.toHaveBeenCalled()
     const [message] = enqueueSnackbar.mock.calls[0]
     expect(message).toEqual(expect.stringContaining('variable'))
-    expect(message).toEqual(expect.stringMatching(/reload/i))
+    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
     // …and the dialog is still open with what was being edited.
     expect((screen.getByLabelText(/^Name/) as HTMLInputElement).value).toEqual(
       'siteTagline',
@@ -254,7 +259,7 @@ describe('HostFunctionsCard (AGL-1358)', () => {
     expect(setDoc).not.toHaveBeenCalled()
     const [message] = enqueueSnackbar.mock.calls[0]
     expect(message).toEqual(expect.stringContaining('function'))
-    expect(message).toEqual(expect.stringMatching(/reload/i))
+    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
     // Parameter rows reuse the `Name` label, so the function's own field is
     // the first one in the dialog.
     expect(

@@ -112,10 +112,10 @@ export const ASSIST_EDIT_SELECTED_TEXT_CHARS = 400
 export const ASSIST_EDIT_OUTLINE_TEXT_CHARS = 80
 /**
  * Elements a whole-document outline describes at most: one the server reads
- * from the stored document for an edit job, where nothing is selected and
- * nobody can be asked to select what the outline leaves out. Far past a page
- * an AI build or a starter makes (the starter home has 182), so in practice
- * the model sees every element it could be asked about.
+ * from the stored document for an edit job, or the chat in the Besigner sends
+ * of the open canvas (AGL-4116). Far past a page an AI build or a starter makes
+ * (the starter home has 182), so in practice the model sees every element it
+ * could be asked about.
  */
 export const ASSIST_EDIT_WHOLE_MAX_NODES = 400
 
@@ -223,9 +223,10 @@ export interface AssistEditCanvasContext {
   total?: number
   nodes: AssistEditCanvasNode[]
   /**
-   * The document as stored, read on the server for a job: every element in
-   * page order up to {@link ASSIST_EDIT_WHOLE_MAX_NODES}, each with its
-   * settings and styles, and nobody to ask. Never read from a request body.
+   * The whole document, every element in page order up to
+   * {@link ASSIST_EDIT_WHOLE_MAX_NODES}, each with its settings and styles:
+   * read from the store for a job, or from the open canvas for the chat in the
+   * Besigner (AGL-4116).
    */
   whole?: true
 }

@@ -30,7 +30,7 @@ import { aiJobOutputHref } from './ai-job-links'
 /**
  * A change to a page the site already has, asked in the chat (AGL-4116):
  * the edit job making it, then the page's draft it wrote, opened in the
- * Besigner with Open draft, where the person checks it and publishes it. No
+ * Besigner on that draft, where the person checks it and publishes it. No
  * plan, no AI jobs page. On every plan: a new version is made only when one
  * was asked for, and the job's note says which it was.
  */
@@ -54,7 +54,7 @@ export interface AssistPageChangeCardProps {
 const ASSIST_PAGE_CHANGE_HELP = pluginDocsHelp('aiAssistBuilds', {
   anchor: '#change-a-page',
   excerpt:
-    'The change is saved into the page’s draft. Open the page in the Besigner and choose Open draft to check it, then publish it; until then visitors see the page as it is.',
+    'The change is saved into the page’s draft. Open it in the Besigner to check it, then publish it; until then visitors see the page as it is.',
 })
 
 export function assistPageChangeMakingCopy(pageName: string): string {
@@ -62,7 +62,7 @@ export function assistPageChangeMakingCopy(pageName: string): string {
 }
 
 export function assistPageChangeReadyCopy(pageName: string): string {
-  return `Your draft of ${pageName} is ready. Open it in the Besigner and choose Open draft to check it. Visitors see the page as it is until you publish.`
+  return `Your draft of ${pageName} is ready. Open it in the Besigner to check it. Visitors see the page as it is until you publish.`
 }
 
 export function AssistPageChangeCard({

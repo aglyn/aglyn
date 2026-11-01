@@ -61,16 +61,22 @@ jest.mock('./firestore-denial-reporter', () => ({
   subscribeFirestoreSessionHeal: () => jest.fn(),
 }))
 
-import { FIRESTORE_STALL_MS } from './firebase/firestore-stall-recovery'
+import {
+  FIRESTORE_STALL_MS,
+  STALL_RECOVERY_COOLDOWN_MS,
+} from './firebase/firestore-stall-recovery'
+import { writeGuardedBySeed } from './helpers/guarded-seed-write'
 import { useFirestoreCollection } from './use-firestore-collection'
 import { useFirestoreDoc } from './use-firestore-doc'
 
 const collectionSnapshot = (fromCache: boolean) => ({
   docs: [],
+  docChanges: () => [],
   metadata: { fromCache, hasPendingWrites: false },
 })
 const docSnapshot = (fromCache: boolean) => ({
   exists: () => false,
+  data: () => undefined,
   metadata: { fromCache, hasPendingWrites: false },
 })
 
@@ -139,5 +145,74 @@ describe.each([
       await jest.advanceTimersByTimeAsync(FIRESTORE_STALL_MS * 2)
     })
     expect(mockDisableNetwork).not.toHaveBeenCalled()
+  })
+
+  /**
+   * The bug itself (AGL-4120): one slow listener beside listeners the server had
+   * just confirmed cycled the network, which handed away the lease and put every
+   * confirmed listener back on the cache.
+   */
+  it('leaves a slow listener alone while the server is answering its neighbour', async () => {
+    render()
+    render()
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(FIRESTORE_STALL_MS - 1)
+    })
+    act(() => listeners[1].onNext(snapshot(false)))
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(1)
+    })
+    expect(mockDisableNetwork).not.toHaveBeenCalled()
+  })
+
+  it('rescues that listener once the client really has gone silent', async () => {
+    render()
+    render()
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(FIRESTORE_STALL_MS - 1)
+    })
+    act(() => listeners[1].onNext(snapshot(false)))
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(FIRESTORE_STALL_MS)
+    })
+    expect(mockDisableNetwork).not.toHaveBeenCalled()
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(FIRESTORE_STALL_MS)
+    })
+    expect(mockDisableNetwork).toHaveBeenCalledTimes(1)
+  })
+
+  it('reaches a listener that mounts inside another recovery cooldown', async () => {
+    render()
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(FIRESTORE_STALL_MS)
+    })
+    expect(mockDisableNetwork).toHaveBeenCalledTimes(1)
+
+    render()
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(
+        STALL_RECOVERY_COOLDOWN_MS + FIRESTORE_STALL_MS,
+      )
+    })
+    expect(mockDisableNetwork).toHaveBeenCalledTimes(2)
+  })
+
+  it('holds a save until the server confirms this listener, then runs it', async () => {
+    const view = render()
+    act(() => listeners[0].onNext(snapshot(true)))
+    const write = jest.fn(async () => undefined)
+    const saved = writeGuardedBySeed(
+      { subject: 'record', fromCache: view.result.current.fromCache, checkSession: false },
+      write,
+    )
+    await Promise.resolve()
+    expect(write).not.toHaveBeenCalled()
+
+    act(() => listeners[0].onNext(snapshot(false)))
+
+    await expect(saved).resolves.toEqual({ ok: true })
+    expect(write).toHaveBeenCalledTimes(1)
+    view.unmount()
   })
 })
