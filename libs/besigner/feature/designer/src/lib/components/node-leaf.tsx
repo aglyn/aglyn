@@ -24,6 +24,7 @@ import {
   FORM_COMPONENT_ID,
   hasBindings,
   HostViewType,
+  isNodeHiddenByHost,
   LAYOUT_SLOT_COMPONENT_ID,
   NODE_ROOT_ID,
   placedFormPlacement,
@@ -58,6 +59,7 @@ import CanvasChromeThemeContext from '../contexts/canvas-chrome-theme-context'
 import CanvasRevealContext, {
   CanvasMutedClassesContext,
 } from '../contexts/canvas-reveal-context'
+import CanvasHostTokensContext from '../contexts/canvas-host-tokens-context'
 import ComponentPromotionContext from '../contexts/component-promotion-context'
 import { useRenderedCanvasElements } from '../contexts/rendered-canvas-elements'
 import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
@@ -98,10 +100,14 @@ import { REPEAT_COPY_ATTR } from '../utils/repeat-copy'
  */
 export const MediaFactsLeaf = forwardRef<any, LeafProps>((props, ref) => {
   const { node, ...rest } = props
+  const host = useContext(CanvasHostTokensContext)
   const withBindings = useNodeWithBindings(node)
   const withHostTokens = useNodeWithHostTokens(withBindings)
   const withRecord = useNodeWithRepeatRecord(withHostTokens)
   const shown = useNodeWithMediaAssetFacts(withRecord)
+  // What the site's own values hide is not on the published page (AGL-4119),
+  // and these nodes are never selected, so here it is simply not drawn.
+  if (host && isNodeHiddenByHost(node?.props, host)) return null
   return <Leaf ref={ref} node={shown} {...rest} />
 })
 MediaFactsLeaf.displayName = 'MediaFactsLeaf'
@@ -466,6 +472,7 @@ export const NodeLeaf = observer(
     // context rather than the flag itself: the canvas subscribes once and
     // every leaf reads the result.
     const revealedNodeIds = useContext(CanvasRevealContext)
+    const canvasHost = useContext(CanvasHostTokensContext)
     const mutedClasses = useContext(CanvasMutedClassesContext)
 
     // WYSIWYG bindings (AGL-97): resolve variable/function tokens
@@ -887,6 +894,22 @@ export const NodeLeaf = observer(
         sx: { ...((sx as Record<string, unknown> | undefined) ?? {}), position: 'relative' },
       } as typeof shownLeafNode
     }, [repeatPreview, shownLeafNode])
+    /**
+     * What the site's own values hide (AGL-4119), like a header's logo on a
+     * site that has none, or its name on one that does. The canvas shows what
+     * a visitor sees, and an element picked in the hierarchy shows for as long
+     * as it is being worked on, so it stays an ordinary element to edit.
+     * Through `hidden` on the render copy, never on the node that is saved.
+     */
+    const hostHidden =
+      Boolean(canvasHost) &&
+      isNodeHiddenByHost(node?.props, canvasHost) &&
+      !Besigner.focus.isNodeOrDescendantSelected(node) &&
+      !revealedNodeIds?.some((id) => id === node?.$id)
+    const drawnNode = useMemo(
+      () => (hostHidden ? ({ ...(leafNode as Record<string, unknown>), hidden: true } as typeof leafNode) : leafNode),
+      [hostHidden, leafNode],
+    )
 
     return (
       <DraggableDroppable
@@ -897,7 +920,7 @@ export const NodeLeaf = observer(
       >
         <Leaf
           ref={registerElement}
-          node={leafNode as typeof node}
+          node={drawnNode as typeof node}
           data-aglyn-selected={Besigner.focus.isNodeSelected(node)}
           // Present while the selection lives in this node's subtree (the
           // node itself or any descendant). Canvas-aware components (nav

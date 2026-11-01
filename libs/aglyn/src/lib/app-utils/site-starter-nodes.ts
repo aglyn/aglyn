@@ -70,6 +70,7 @@ export const SITE_STARTER_COMPONENT_IDS: readonly string[] = [
     'muiCard',
     'muiCardContent',
     'muiGrid',
+    'muiLinkBox',
     'themeModeSwitcher',
     // The AI site build's presentational elements.
     'dataTable',

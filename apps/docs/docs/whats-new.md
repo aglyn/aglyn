@@ -12,6 +12,10 @@ for the how-to.
 
 ## November 2026 — Aglyn 1.0 (newest)
 
+- **Your logo from the start.** [Create site](getting-started/create-a-site.md#logo-and-favicon)
+  takes a logo, a logo for dark backgrounds and a favicon. A new site's header and footer
+  show your logo in place of its name, visitors in dark mode see the dark one, and the
+  browser tab shows your favicon, or your logo when you leave that blank.
 - **Aglyn is generally available.** The platform is out of beta: building and
   publishing sites, the store and point of sale, forms and the inbox, the CRM,
   media, datasets, marketing and automation are released for every workspace on

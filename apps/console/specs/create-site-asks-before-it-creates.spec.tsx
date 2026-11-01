@@ -47,7 +47,7 @@
  *   Plan my site creates the site with the starter named.
  */
 
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import React from 'react'
 
 const mockPush = jest.fn()
@@ -99,12 +99,19 @@ let mockCreateAnswer: FetchAnswer
 let mockValidateAnswer: Record<string, unknown>
 // Holds the create's answer back, so the workspace's own read can land first.
 let mockCreateGate: Promise<void> | null
-const mockFetch = jest.fn(async (_user: unknown, url: string, _init?: { body?: string }) => {
+// What a logo's upload and the write after it answer, by route (AGL-4119).
+let mockUploadAnswer: (fileName: string) => FetchAnswer
+let mockSyncAnswer: FetchAnswer
+const mockFetch = jest.fn(async (_user: unknown, url: string, init?: { body?: string }) => {
   if (url === '/api/hosts/create' && mockCreateGate) await mockCreateGate
   const answer: FetchAnswer =
     url === '/api/hosts/validate-name'
       ? { status: 200, body: mockValidateAnswer }
-      : mockCreateAnswer
+      : url === '/api/media/upload'
+        ? mockUploadAnswer(String(JSON.parse(String(init?.body ?? '{}')).fileName))
+        : url === '/api/hosts/sync-memberships'
+          ? mockSyncAnswer
+          : mockCreateAnswer
   return {
     ok: answer.status < 400,
     status: answer.status,
@@ -247,6 +254,14 @@ beforeEach(() => {
   mockCan = true
   mockLanding = (url) => url
   mockCreateGate = null
+  mockUploadAnswer = (fileName) => ({
+    status: 200,
+    body: {
+      mediaId: fileName,
+      url: `https://firebasestorage.googleapis.com/v0/b/bucket/o/hosts%2Fhost-1%2Fmedia%2F${fileName}?alt=media&token=t`,
+    },
+  })
+  mockSyncAnswer = { status: 200, body: { ok: true } }
   mockValidateAnswer ={ subdomainValid: true, subdomainTaken: false, suggestions: [] }
   mockCreateAnswer = {
     status: 200,
@@ -987,5 +1002,187 @@ describe('AGL-4049 phase 4 · an AI starter picked in Choose your starter', () =
     act(() => mockPicker?.ready(true))
     expect(screen.getByRole('button', { name: 'Create site' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Continue' })).toBeNull()
+  })
+})
+
+describe('AGL-4119 · a logo, a dark logo and a favicon, in every create', () => {
+  const png = (name: string, size = 2048) => {
+    const file = new File(['x'], name, { type: 'image/png' })
+    Object.defineProperty(file, 'size', { value: size })
+    return file
+  }
+  const choose = (label: string, file: File) => {
+    const field = screen.getByRole('button', { name: `Choose ${label}` })
+    fireEvent.change(field.querySelector('input[type="file"]') as HTMLInputElement, {
+      target: { files: [file] },
+    })
+  }
+  const calls = (url: string) => mockFetch.mock.calls.filter(([, called]) => called === url)
+  const uploaded = () => calls('/api/media/upload').map((call) => JSON.parse(String(call[2]?.body)))
+  const written = () => calls('/api/hosts/sync-memberships').map((call) => JSON.parse(String(call[2]?.body)))
+  const plainForm = async () => {
+    mockWidgets = []
+    render(<CreateHostDialog open onClose={jest.fn()} />)
+    await flush()
+    typeName()
+    fireEvent.click(screen.getByRole('radio', { name: /Business & services/ }))
+  }
+  const createAndSettle = async () => {
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Create site' }))
+    })
+    // Reading a file takes the browser a task, so the landing is what says
+    // the create is done.
+    await waitFor(() =>
+      expect(mockPush.mock.calls.length + mockHardNavigate.mock.calls.length).toBeGreaterThan(0),
+    )
+  }
+
+  beforeEach(() => {
+    URL.createObjectURL = jest.fn(() => 'blob:preview')
+    URL.revokeObjectURL = jest.fn()
+  })
+
+  it('offers all three, optional, beside the name in the plain dialog', async () => {
+    await plainForm()
+    expect(screen.getByRole('button', { name: 'Choose Logo' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Choose Logo for dark backgrounds' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Choose Favicon' })).toBeTruthy()
+    expect(screen.getByText('Leave this blank to use your logo.')).toBeTruthy()
+    expect(
+      screen.getByText('Square, at least 512 px, the logo filling about 80% with a little space around it.'),
+    ).toBeTruthy()
+  })
+
+  it('creates with none of them and writes nothing more', async () => {
+    await plainForm()
+    await createAndSettle()
+    expect(createCalls()).toHaveLength(1)
+    expect(calls('/api/media/upload')).toHaveLength(0)
+    expect(calls('/api/hosts/sync-memberships')).toHaveLength(0)
+    expect(mockPush).toHaveBeenCalledTimes(1)
+  })
+
+  it('uploads to the new site once it exists, and writes the logo as the favicon too', async () => {
+    await plainForm()
+    choose('Logo', png('logo.png'))
+    choose('Logo for dark backgrounds', png('dark.png'))
+    expect(calls('/api/media/upload')).toHaveLength(0)
+    await createAndSettle()
+    expect(uploaded().map((body) => [body.hostId, body.fileName])).toEqual([
+      ['host-1', 'logo.png'],
+      ['host-1', 'dark.png'],
+    ])
+    expect(written()).toHaveLength(1)
+    const { hostId, logoUrl, logoDarkUrl, favicon } = written()[0]
+    expect(hostId).toBe('host-1')
+    expect(logoUrl).toContain('logo.png')
+    expect(logoDarkUrl).toContain('dark.png')
+    expect(favicon).toBe(logoUrl)
+    expect(mockSnackbar.mock.calls.filter(([, options]) => options?.variant === 'warning')).toEqual([])
+  })
+
+  it('finishes the upload before the create answers, so an AI start reads it', async () => {
+    await openStart()
+    typeName()
+    choose('Logo', png('logo.png'))
+    let answered = false
+    await act(async () => {
+      await mockZone?.pendingSite.create()
+      answered = true
+    })
+    expect(answered).toBe(true)
+    expect(uploaded().map((body) => body.fileName)).toEqual(['logo.png'])
+    expect(written()).toHaveLength(1)
+  })
+
+  it('uploads once however often the start asks for the site', async () => {
+    await openStart()
+    typeName()
+    choose('Logo', png('logo.png'))
+    await act(async () => {
+      await mockZone?.pendingSite.create()
+    })
+    await act(async () => {
+      await mockZone?.pendingSite.create()
+    })
+    expect(calls('/api/media/upload')).toHaveLength(1)
+  })
+
+  it('refuses the wrong file on the field, and Create still works', async () => {
+    await plainForm()
+    choose('Logo', new File(['x'], 'photo.tiff', { type: 'image/tiff' }))
+    expect(screen.getByRole('alert').textContent).toBe('Use a PNG, JPEG, WebP or SVG file.')
+    choose('Logo', png('huge.png', 16 * 1024 * 1024))
+    expect(screen.getByRole('alert').textContent).toBe('That file is over 15 MB.')
+    await createAndSettle()
+    expect(createCalls()).toHaveLength(1)
+    expect(calls('/api/media/upload')).toHaveLength(0)
+  })
+
+  it.each([
+    ['a storage limit', { status: 402, body: { error: 'Storage limit reached (250 MB)' } }],
+    ['a refused type', { status: 415, body: { error: 'That file is not what it says it is' } }],
+    ['no permission', { status: 403, body: { error: 'Not allowed' } }],
+    ['a server fault', { status: 500, body: { error: 'Upload failed' } }],
+  ])('keeps the site through %s, and says which file and where to add it', async (_name, refusal) => {
+    mockUploadAnswer = () => refusal
+    await plainForm()
+    choose('Logo', png('logo.png'))
+    await createAndSettle()
+    expect(createCalls()).toHaveLength(1)
+    expect(mockPush).toHaveBeenCalledTimes(1)
+    expect(calls('/api/hosts/sync-memberships')).toHaveLength(0)
+    // Kept until it is read: "Your site is live" draws over the landing.
+    expect(mockSnackbar).toHaveBeenCalledWith(
+      'Your site is ready, but your logo didn’t upload. Add it in Site settings.',
+      expect.objectContaining({ variant: 'warning', persist: true }),
+    )
+  })
+
+  it('keeps what did upload when one file is refused', async () => {
+    mockUploadAnswer = (fileName) =>
+      fileName === 'dark.png'
+        ? { status: 413, body: { error: 'Too large' } }
+        : { status: 200, body: { mediaId: 'm', url: `https://cdn.example/${fileName}` } }
+    await plainForm()
+    choose('Logo', png('logo.png'))
+    choose('Logo for dark backgrounds', png('dark.png'))
+    await createAndSettle()
+    expect(written()[0].logoUrl).toContain('logo.png')
+    expect(written()[0].logoDarkUrl).toBeUndefined()
+    expect(mockSnackbar).toHaveBeenCalledWith(
+      'Your site is ready, but your dark logo didn’t upload. Add it in Site settings.',
+      expect.objectContaining({ variant: 'warning' }),
+    )
+  })
+
+  it('keeps the site when the write after the uploads fails', async () => {
+    mockSyncAnswer = { status: 403, body: { error: 'Not allowed' } }
+    await plainForm()
+    choose('Logo', png('logo.png'))
+    await createAndSettle()
+    expect(mockPush).toHaveBeenCalledTimes(1)
+    expect(mockSnackbar).toHaveBeenCalledWith(
+      'Your site is ready, but your logo didn’t upload. Add it in Site settings.',
+      expect.objectContaining({ variant: 'warning' }),
+    )
+  })
+
+  it('carries what did not make it over a landing on another host', async () => {
+    mockLanding = (url) => `https://app.example${url}`
+    mockUploadAnswer = () => ({ status: 500, body: {} })
+    await plainForm()
+    choose('Logo', png('logo.png'))
+    await createAndSettle()
+    expect(mockHardNavigate).toHaveBeenCalledWith(expect.stringMatching(/[?&]missed=logo$/))
+  })
+
+  it('adds nothing to a landing when everything made it', async () => {
+    mockLanding = (url) => `https://app.example${url}`
+    await plainForm()
+    choose('Logo', png('logo.png'))
+    await createAndSettle()
+    expect(mockHardNavigate).toHaveBeenCalledWith(expect.not.stringContaining('missed='))
   })
 })

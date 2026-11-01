@@ -620,7 +620,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#display-name': 'The Display name is what the site is called inside the console — the site switcher, breadcrumbs, the Sites list and notifications — up to 30 characters.',
     '#site-admin': 'Site Admin holds the controls only a site\'s owners and admins should touch, kept apart from Setup so a collaborator never trips over them.',
     '#site-emails': 'Setup → Emails lists the emails your site sends its own customers, grouped by the feature that sends them.',
-    '#site-logo': 'The Site logo card sets your brand mark: pick a Light mode logo from your media library — an SVG, or a PNG at least 400px wide — and add a Dark mode one if yours is hard to see on a dark background.',
+    '#site-logo': 'The Site logo card sets your brand mark: pick a Light mode logo from your media library — square, at least 512 px, the logo filling about 80% with a little space around it, as an SVG or a PNG — and add a Dark mode…',
     '#subdomain': 'The Subdomain is your site\'s free address, up to 15 characters, and it works from the moment the site exists.',
     '#who-can-open-site-admin': 'Only a site\'s admins can open Site Admin; anyone else who follows a link to it is told so instead of seeing the sections.',
   },

@@ -41,6 +41,9 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
  * for good. So a body naming `displayName` or `favicon` is WRITTEN here, then
  * re-fanned, in one awaited request. A body naming neither only re-fans.
  *
+ * A new site's logos ride the same write (AGL-4119): Create site saves them
+ * with the favicon, awaited, before its AI start may begin.
+ *
  * Open to the roles the rules let write those fields from the browser
  * (`canWriteHostContent`): an `author` may rename a site there, so refusing
  * the author here left an author's rename unmirrored. It grants nothing the

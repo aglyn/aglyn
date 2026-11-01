@@ -21,6 +21,7 @@ import {
   hostTokenDefinition,
   hostTokenMerge,
   hostTokensIn,
+  isHostImageToken,
   resolveHostToken,
   resolveHostTokens,
   resolveNodesHostTokens,
@@ -209,6 +210,49 @@ describe('resolveHostTokens', () => {
         site({ business: { socialLinks: [{ url: 'https://x.com/nw' }] } }),
       ),
     ).toBe('https://x.com/nw')
+  })
+})
+
+describe('the dark logo (AGL-4119)', () => {
+  it('is the dark logo where the site has one', () => {
+    expect(resolveHostToken('logoDark', { logoUrl: 'light', logoDarkUrl: 'dark' })).toBe('dark')
+  })
+
+  it('is whatever the logo is otherwise, so a site with one logo shows it in both schemes', () => {
+    expect(resolveHostToken('logoDark', { logoUrl: 'light' })).toBe('light')
+    expect(resolveHostToken('logoDark', { logoUrl: 'light', logoDarkUrl: '  ' })).toBe('light')
+    expect(resolveHostToken('logoDark', { seo: { entity: { logo: 'listed' } } })).toBe('listed')
+  })
+
+  it('is nothing on a site with no logo at all', () => {
+    expect(resolveHostToken('logoDark', {})).toBeUndefined()
+    expect(shouldOmitBlock('{{host.logoDark}}', {})).toBe(true)
+  })
+
+  it('never changes what the logo token means', () => {
+    expect(resolveHostToken('logo', { logoUrl: 'light', logoDarkUrl: 'dark' })).toBe('light')
+    expect(resolveHostToken('logo', { logoDarkUrl: 'dark' })).toBeUndefined()
+  })
+
+  it('is listed with the other tokens, as an image', () => {
+    expect(hostTokenDefinition('logoDark')?.type).toBe('image')
+    expect(describeHostTokens({ logoUrl: 'light' }).map(({ key }) => key)).toContain('logoDark')
+    expect(hostTokenMerge({ logoUrl: 'light' })['host.logoDark']).toBe('light')
+  })
+})
+
+describe('isHostImageToken (AGL-4119)', () => {
+  it('takes exactly one image token', () => {
+    expect(isHostImageToken('{{host.logo}}')).toBe(true)
+    expect(isHostImageToken('{{ host.logoDark }}')).toBe(true)
+  })
+
+  it('takes no other token, no mixture and no address', () => {
+    expect(isHostImageToken('{{host.businessName}}')).toBe(false)
+    expect(isHostImageToken('{{host.nope}}')).toBe(false)
+    expect(isHostImageToken('https://evil.example/{{host.logo}}')).toBe(false)
+    expect(isHostImageToken('{{host.logo}}{{host.logoDark}}')).toBe(false)
+    expect(isHostImageToken('')).toBe(false)
   })
 })
 

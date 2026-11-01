@@ -452,7 +452,9 @@ yet finished. Only staff can open it.
    registration is not set up, the search choice is not shown and the other two
    still work. A domain can be added any time later from Setup.
 3. **Site and photos.** **Create the site** makes it now, empty, on the comped plan,
-   with the address filled in from the business name. A QR code then appears: the
+   with the address filled in from the business name. It doesn't ask for a logo or a
+   favicon as **Create site** does: the site is the owner's, so theirs go in under
+   **Setup** once you have them. A QR code then appears: the
    owner scans it with their phone camera and picks their photos, with no sign-in.
    The count of photos received updates on its own. **Continue** when they are in,
    or **Continue without photos**. See

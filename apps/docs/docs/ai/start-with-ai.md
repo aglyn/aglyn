@@ -37,6 +37,10 @@ offers two cards:
 **Bring my site** is a third card for moving the website
 you have now into Aglyn. See [Bring my site](./bring-my-site.md).
 
+The first step also takes your [logo and favicon](../getting-started/create-a-site.md#logo-and-favicon).
+They are optional. A logo you add there is in your site's header and footer when the AI
+builds them, in place of its name.
+
 No site exists until you choose, and nothing is chosen for you. **Create site**, after
 you choose a style for the starter site, creates the site with the starter home page in
 that style and opens it. **Plan my site** creates the site and starts planning it. The

@@ -321,6 +321,17 @@ export function projectedHostFieldsUpdate(
     }
     update['seo.favicon'] = favicon.trim()
   }
+  // The logos a create writes with its favicon, in the one request (AGL-4119).
+  // Not mirrored into any row; they ride this write so a new site's three
+  // fields land together, with no client write to wait on.
+  for (const field of ['logoUrl', 'logoDarkUrl']) {
+    if (!body || !(field in body)) continue
+    const value = body[field]
+    if (typeof value !== 'string' || value.length > 2_048) {
+      return { error: 'A logo must be a link or a media reference.' }
+    }
+    update[field] = value.trim()
+  }
   return { update: Object.keys(update).length ? update : null }
 }
 
