@@ -18,7 +18,6 @@
 
 import {
   type ConsentGroup,
-  contactDisplayName,
   nameSearchKey,
   normalizeContactEmail,
   readContactFacet,
@@ -27,7 +26,7 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { type ContactMergePreviewRow, contactMergePreview } from '../model/contact-merge'
-import { useCrmRecordNames } from '../hooks/use-crm-record-names'
+import { crmRecordName, useCrmRecordNames } from '../hooks/use-crm-record-names'
 import {
   Alert,
   Button,
@@ -147,7 +146,13 @@ export interface ContactMergeDialogProps extends ContactMergeDialogState {
 }
 
 const label = (pick: ContactPick, groupId: string) =>
-  contactDisplayName(pick.doc, groupId) || String(pick.doc['email'] ?? pick.id)
+  crmRecordName('contact', pick.doc, groupId) || pick.id
+
+/** A Keep choice: the person, with the address when they have one. */
+const keepLabel = (pick: ContactPick, name: string) => {
+  const email = String(pick.doc['email'] ?? '')
+  return email ? `${name} (${email})` : name
+}
 
 /**
  * MERGE TWO RECORDS FOR ONE PERSON (AGL-2625).
@@ -367,12 +372,12 @@ export function ContactMergeDialog(props: ContactMergeDialogProps) {
                   <FormControlLabel
                     value="current"
                     control={<Radio size="small" />}
-                    label={`${currentLabel} (${String(current.doc['email'] ?? '')})`}
+                    label={keepLabel(current, currentLabel)}
                   />
                   <FormControlLabel
                     value="other"
                     control={<Radio size="small" />}
-                    label={`${otherLabel} (${String(other.doc['email'] ?? '')})`}
+                    label={keepLabel(other, otherLabel)}
                   />
                 </RadioGroup>
               </FormControl>
