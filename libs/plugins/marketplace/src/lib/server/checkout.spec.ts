@@ -663,3 +663,43 @@ describe('a site starter bought from Create site (AGL-4049 lane 3)', () => {
     expect(stripeCalls).toHaveLength(0)
   })
 })
+
+describe('the platform org at the staff waiver (AGL-4049 decision 8)', () => {
+  beforeEach(() => {
+    mockPermissions['installPlugins'] = true
+    mockPermissions['createHosts'] = true
+  })
+
+  afterEach(() => {
+    delete process.env.AGLYN_PLATFORM_ORG_ID
+  })
+
+  const WAIVED = { plan: 'pro', slug: 'aglyn', entitlements: { marketplaceFeePct: 0 } }
+
+  it('sells with no transfer and no payout account', async () => {
+    process.env.AGLYN_PLATFORM_ORG_ID = 'seller-org'
+    seed({ sellerOrg: WAIVED })
+    publisherMock.__publisher = { orgId: 'seller-org', handle: 'aglyn' }
+    const res = makeRes()
+    await checkoutHandler(makeReq(), res)
+    expect(res.statusCode).toBe(200)
+    const { params } = stripeCalls[0]
+    expect(params.has('payment_intent_data[transfer_data][destination]')).toBe(false)
+    expect(params.has('payment_intent_data[transfer_data][amount]')).toBe(false)
+    expect(params.get('metadata[feeCents]')).toBe('0')
+    expect(params.get('metadata[transferCents]')).toBe('0')
+    // Tax and the receipt are unchanged.
+    expect(params.get('automatic_tax[enabled]')).toBe('true')
+  })
+
+  it('a waiver on any other seller still pays that seller', async () => {
+    process.env.AGLYN_PLATFORM_ORG_ID = 'platform-org'
+    seed({ sellerOrg: WAIVED })
+    const res = makeRes()
+    await checkoutHandler(makeReq(), res)
+    expect(res.statusCode).toBe(200)
+    const { params } = stripeCalls[0]
+    expect(params.get('payment_intent_data[transfer_data][destination]')).toBe('acct_seller')
+    expect(params.get('payment_intent_data[transfer_data][amount]')).toBe('10000')
+  })
+})

@@ -140,6 +140,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       amountCents,
       feeCents,
       transferCents,
+      platformSale,
     } = resolved.sale
 
     const origin = req.headers.origin ?? `https://${req.headers.host}`
@@ -204,8 +205,14 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       'line_items[0][price_data][product_data][tax_code]': MARKETPLACE_TAX_CODE,
       'automatic_tax[enabled]': 'true',
       billing_address_collection: 'required',
-      'payment_intent_data[transfer_data][destination]': String(accountId),
-      'payment_intent_data[transfer_data][amount]': String(transferCents),
+      // Nobody to pay when the platform's own org is the seller (AGL-4049):
+      // the sale stays on the platform's account, tax and all.
+      ...(platformSale
+        ? {}
+        : {
+            'payment_intent_data[transfer_data][destination]': String(accountId),
+            'payment_intent_data[transfer_data][amount]': String(transferCents),
+          }),
       // THE DISCRIMINATOR THE REFUND DOOR HAS NO OTHER WAY TO GET (AGL-2148).
       //
       // `metadata[type]` below rides on the SESSION, and `charge.refunded`

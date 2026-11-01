@@ -25,6 +25,8 @@ import {
 import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import { SITE_STARTER_ARTIFACT_TYPE } from '@aglyn/aglyn/app-utils/site-starter'
 import { isListingBrowsable, isPrivateListing, listingArtifactType } from '../model/marketplace'
+import { sellsAsPlatform } from '../model/platform-seller'
+import { readPlatformOrgId } from './platform-org'
 import { canActAsPublisher, resolvePublisherProfile } from './publisher-profile'
 import { hasLivePurchase } from './purchase-entitlement'
 import { isOrgMember } from './sale-risk'
@@ -284,7 +286,27 @@ export async function resolveSale(input: {
   }
   const publisher = await resolvePublisherProfile(firestore, sellerOrgId)
   const accountId = publisher?.stripeAccountId
+  // The platform's cut comes from ENTITLEMENTS (AGL-1543), never the raw
+  // `plan` field: `resolveMarketplaceFeePct` prices a dead subscription
+  // as free-plan (30%) while the stale field still says pro, and honors
+  // a negotiated per-org `marketplaceFeePct` override. Same read gates
+  // SALE time on `marketplaceSelling` — publish already refuses without
+  // it, and a publisher who downgrades must stop selling, not merely
+  // stop publishing. Resolved per request; entitlements are never cached.
+  const sellerOrgDoc = await firestore.collection('orgs').doc(sellerOrgId).get()
+  const sellerOrg = (sellerOrgDoc.data() ?? {}) as any
+  const feePercent = resolveMarketplaceFeePct(sellerOrg)
+  // THE PLATFORM'S OWN ORG, AT THE STAFF WAIVER (AGL-4049). Nobody to pay, so
+  // no account to be ready and no transfer to make. Asked here, ahead of the
+  // payout gate, which is the only refusal it changes: a lock and the plan
+  // below hold for it as for anyone.
+  const platformSale = sellsAsPlatform({
+    sellerOrgId,
+    feePercent,
+    platformOrgId: readPlatformOrgId(),
+  })
   if (
+    !platformSale &&
     !merchantAccountIsReady(
       {
         accountId,
@@ -296,16 +318,6 @@ export async function resolveSale(input: {
   ) {
     return refuse(409, { error: 'The publisher has not enabled payouts yet' })
   }
-
-  // The platform's cut comes from ENTITLEMENTS (AGL-1543), never the raw
-  // `plan` field: `resolveMarketplaceFeePct` prices a dead subscription
-  // as free-plan (30%) while the stale field still says pro, and honors
-  // a negotiated per-org `marketplaceFeePct` override. Same read gates
-  // SALE time on `marketplaceSelling` — publish already refuses without
-  // it, and a publisher who downgrades must stop selling, not merely
-  // stop publishing. Resolved per request; entitlements are never cached.
-  const sellerOrgDoc = await firestore.collection('orgs').doc(sellerOrgId).get()
-  const sellerOrg = (sellerOrgDoc.data() ?? {}) as any
   // A LOCKED publisher sells nothing (AGL-3365). Any lock, not only a
   // security one: a sale to a workspace staff have stopped is money moving
   // to it, and the lockdown's payout pause cannot reach a share that is
@@ -320,7 +332,6 @@ export async function resolveSale(input: {
         "The publisher's current plan does not include marketplace selling",
     })
   }
-  const feePercent = resolveMarketplaceFeePct(sellerOrg)
   const amountCents = Math.round(priceUsd * 100)
   const feeCents = Math.round((amountCents * feePercent) / 100)
   return {
@@ -331,9 +342,9 @@ export async function resolveSale(input: {
       feePercent,
       amountCents,
       feeCents,
-      transferCents: amountCents - feeCents,
-      accountId,
-      platformSale: false,
+      transferCents: platformSale ? 0 : amountCents - feeCents,
+      accountId: platformSale ? undefined : accountId,
+      platformSale,
     },
   }
 }
