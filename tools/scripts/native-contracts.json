@@ -377,6 +377,7 @@
         "DEFAULT_DEAL_STAGES",
         "CRM_TASK_KIND_LABELS",
         "CRM_ACTIVITY_KIND_LABELS",
+        "CRM_ACTIVITY_KIND_NOUNS",
         "CRM_ACTIVITY_DIRECTION_LABELS",
         "CRM_FIELD_OBJECT_LABELS",
         "CRM_LEAD_STATUS_LABELS",
@@ -430,6 +431,7 @@
         "NATIVE_CRM_ACTIVITY_DIRECTIONS",
         "NATIVE_CRM_PICKLISTS",
         "NATIVE_CRM_ACTIVITY_KINDS",
+        "NATIVE_CRM_ACTIVITY_ICON_PATHS",
         "NATIVE_CRM_FIELD_TYPES",
         "NATIVE_CRM_FIELD_TYPE_LABELS",
         "NATIVE_CRM_FIELD_CURRENCIES",
@@ -6832,6 +6834,171 @@
             ],
             "declared": false,
             "awaitsConfirmation": false
+          }
+        ]
+      ]
+    },
+    "crmActivityKindTitle": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "args": [
+        [
+          "call"
+        ],
+        [
+          "email"
+        ],
+        [
+          "text"
+        ],
+        [
+          "whatsapp"
+        ],
+        [
+          "messenger"
+        ],
+        [
+          "instagram"
+        ],
+        [
+          "linkedin"
+        ],
+        [
+          "meeting"
+        ],
+        [
+          "note"
+        ],
+        [
+          "other"
+        ],
+        [
+          "call",
+          "outbound"
+        ],
+        [
+          "call",
+          "inbound"
+        ],
+        [
+          "email",
+          "outbound"
+        ],
+        [
+          "email",
+          "inbound"
+        ],
+        [
+          "text",
+          "outbound"
+        ],
+        [
+          "text",
+          "inbound"
+        ],
+        [
+          "whatsapp",
+          "outbound"
+        ],
+        [
+          "whatsapp",
+          "inbound"
+        ],
+        [
+          "messenger",
+          "outbound"
+        ],
+        [
+          "messenger",
+          "inbound"
+        ],
+        [
+          "instagram",
+          "outbound"
+        ],
+        [
+          "instagram",
+          "inbound"
+        ],
+        [
+          "linkedin",
+          "outbound"
+        ],
+        [
+          "linkedin",
+          "inbound"
+        ],
+        [
+          "call",
+          "internal"
+        ],
+        [
+          "whatsapp",
+          "internal"
+        ],
+        [
+          "note",
+          "outbound"
+        ],
+        [
+          "meeting",
+          "inbound"
+        ],
+        [
+          "text",
+          "sideways"
+        ],
+        [
+          "text",
+          null
+        ]
+      ]
+    },
+    "crmDefaultScopeOf": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {}
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "org"
+            }
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host"
+            }
+          }
+        ],
+        [
+          {
+            "defaultResourceScope": "host"
+          }
+        ],
+        [
+          {
+            "defaultResourceScope": "org"
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "org"
+            },
+            "defaultResourceScope": "host"
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "nonsense"
+            }
           }
         ]
       ]

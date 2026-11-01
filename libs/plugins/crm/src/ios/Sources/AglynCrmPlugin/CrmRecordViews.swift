@@ -51,7 +51,7 @@ struct RecordsSection: View {
             listPane(selectable: true)
           } detail: {
             if let selection {
-              RecordDetail(context: context, kind: kind, id: selection, scope: scope, api: api, reference: reference).id(selection)
+              RecordDetail(context: context, kind: kind, id: selection, listScope: scope, listAPI: api, reference: reference).id(selection)
             } else {
               AglynSelectionPlaceholder("No \(kind.singular.lowercased()) selected", systemImage: kind.symbol)
             }
@@ -74,7 +74,7 @@ struct RecordsSection: View {
       shortcut: KeyboardShortcut("n", modifiers: .command)
     ) { creating = true }
     .sheet(isPresented: $creating) {
-      CreateRecordSheet(kind: kind, scope: scope, api: api, reference: reference) { id in selection = id }
+      CreateRecordSheet(context: context, kind: kind, scope: scope, api: api, reference: reference) { id in selection = id }
     }
     .onAppear {
       guard startNew, !startedNew, scope.canWrite else { return }
@@ -145,7 +145,7 @@ struct RecordsSection: View {
           CrmRowView(row: row, reference: reference).aglynSelectableRow(row.id, selection: $selection)
         } else {
           AglynPushLink {
-            RecordDetail(context: context, kind: kind, id: row.id, scope: scope, api: api, reference: reference)
+            RecordDetail(context: context, kind: kind, id: row.id, listScope: scope, listAPI: api, reference: reference)
           } label: {
             CrmRowView(row: row, reference: reference)
           }
@@ -190,8 +190,9 @@ struct RecordDetail: View {
   let context: NativePluginContext
   let kind: CrmKind
   let id: String
-  let scope: CrmScope
-  let api: CrmAPI
+  /// What the list reads with; `scope` is the record's own (`recordScope`).
+  let listScope: CrmScope
+  let listAPI: CrmAPI
   let reference: CrmReference
   @State private var doc = ObservedDocument()
   @State private var tasks = LiveQueryList(pageSize: 25, map: crmTask)
@@ -200,6 +201,9 @@ struct RecordDetail: View {
   @State private var action: RecordAction?
   @State private var notice: String?
   @State private var error: String?
+
+  private var scope: CrmScope { doc.document.map { recordScope(listScope, $0.data) } ?? listScope }
+  private var api: CrmAPI { CrmAPI(api: listAPI.api, reader: listAPI.reader, scope: scope) }
 
   var body: some View {
     Group {
@@ -225,6 +229,8 @@ struct RecordDetail: View {
 
   private func start() {
     let reader = context.firestore
+    // A record's page reads as its list does: a whole-workspace reader sees every site's entries on it.
+    let scope = listScope
     doc.start(reader, crmPath(scope.orgID, kind.collection) + [id])
     if kind != .lead {
       tasks.show(reader) { _ in
@@ -450,29 +456,18 @@ struct RecordDetail: View {
   }
 
   private func activityRow(_ entry: FirestoreDocument) -> some View {
-    let activityKind = entry.string("kind") ?? "note"
     let at = millis(entry.data["atMs"]).map { Date(timeIntervalSince1970: Double($0) / 1000) }
-    let symbol: String =
-      switch activityKind {
-      case "call": "phone"
-      case "email": "envelope"
-      case "meeting": "person.2"
-      default: "note.text"
-      }
     let meta = [
       entry.string("byName"), at.map { relativeTime($0) }, entry.string("outcome"),
       (entry.data["durationMinutes"] as? NSNumber).map { "\($0.intValue) min" },
     ].compactMap { $0 }.joined(separator: " · ")
-    return AglynRow(
-      entry.string("subject").flatMap { $0.isEmpty ? nil : $0 } ?? (ContractValues.shared.crmActivityKindLabels[activityKind] ?? activityKind),
-      subtitle: [entry.string("body").map { String($0.prefix(240)) }, meta.isEmpty ? nil : meta].compactMap { $0 }.joined(separator: "\n"),
-      systemImage: symbol
-    )
-    .swipeActions {
-      if scope.canWrite && entry.string("byUid") == scope.uid && activityKind != "email" {
-        Button("Delete", role: .destructive) { Task { try? await api.deleteActivity(entry.id) } }
+    return CrmActivityRow(line: crmActivityLine(entry.data), meta: meta)
+      .swipeActions {
+        if scope.canWrite && entry.string("byUid") == scope.uid && entry.string("kind") != "email" {
+          Button("Delete", role: .destructive) { Task { try? await api.deleteActivity(entry.id) } }
+        }
       }
-    }
+      .accessibilityIdentifier("crm-activity-\(entry.id)")
   }
 
   @ViewBuilder
@@ -565,6 +560,39 @@ struct RecordDetail: View {
     case .lead: break
     }
     return draft
+  }
+}
+
+/// One entry in a record's activity (the console's `ActivityRow`): the kind's mark, its chips, what was said, and who and
+/// when. The channels that are brands draw the console's own glyph; the others the nearest SF Symbol.
+struct CrmActivityRow: View {
+  let line: CrmActivityLine
+  let meta: String
+
+  var body: some View {
+    HStack(alignment: .top, spacing: 12) {
+      Group {
+        if let path = ContractValues.shared.nativeCrmActivityIconPaths[line.kind] {
+          SvgPathIcon(path, size: 20)
+        } else {
+          Image(systemName: crmActivitySymbol(line.kind))
+        }
+      }
+      .foregroundStyle(AglynColor.tint)
+      .frame(width: 28, alignment: .leading)
+      .accessibilityHidden(true)
+      VStack(alignment: .leading, spacing: 4) {
+        HStack(spacing: 4) {
+          StatusChip(line.chip, tone: .neutral)
+          if let state = line.state { StatusChip(state, tone: state == "Received" ? .info : .neutral) }
+        }
+        if !line.heading.isEmpty { Text(line.heading).font(AglynFont.body).lineLimit(2) }
+        if let detail = line.detail { Text(detail).font(AglynFont.subheadline).foregroundStyle(.secondary) }
+        if !meta.isEmpty { Text(meta).font(AglynFont.caption).foregroundStyle(.secondary) }
+      }
+      Spacer(minLength: 0)
+    }
+    .accessibilityElement(children: .combine)
   }
 }
 
@@ -675,7 +703,8 @@ struct LogActivitySheet: View {
         Picker("Kind", selection: $kind) {
           ForEach(kinds, id: \.self) { Text(ContractValues.shared.crmActivityKindLabels[$0] ?? $0).tag($0) }
         }
-        .pickerStyle(.segmented)
+        .accessibilityIdentifier("activity-kind")
+        .onChange(of: kind) { direction = "" }
         TextField(kind == "note" ? "Note" : "What happened", text: $text, axis: .vertical).lineLimit(3...10)
           .accessibilityIdentifier("activity-body")
         if kind == "call" || kind == "meeting" {
@@ -806,6 +835,7 @@ func createFields(_ kind: CrmKind, _ reference: CrmReference) -> [CrmField] {
 }
 
 struct CreateRecordSheet: View {
+  let context: NativePluginContext
   let kind: CrmKind
   let scope: CrmScope
   let api: CrmAPI
@@ -815,8 +845,18 @@ struct CreateRecordSheet: View {
   @State private var stageID = ""
 
   var body: some View {
-    let fields = createFields(kind, reference)
-    EditRecordSheet(title: "New \(kind.singular.lowercased())", fields: fields, initial: ["ownerUid": scope.uid], confirm: "Create") { values in
+    // At the workspace's level a new record names its site in its own form; none is an answer unless the workspace
+    // keeps its sites apart.
+    let site = crmSiteField(kind, scope, sites: context.sites)
+    let fields = (site.map { [$0] } ?? []) + createFields(kind, reference)
+    let startSite = scope.orgLevel ? crmCreateHost(picked: CrmCreateSiteMemory.pick(scope.orgID), sites: context.sites.map(\.id)) : nil
+    EditRecordSheet(
+      title: "New \(kind.singular.lowercased())", fields: fields, initial: ["ownerUid": scope.uid, crmSiteFieldKey: startSite ?? ""],
+      confirm: "Create"
+    ) { values in
+      let picked = values[crmSiteFieldKey].flatMap { $0.isEmpty ? nil : $0 }
+      if scope.orgLevel { CrmCreateSiteMemory.remember(picked, scope.orgID) }
+      let api = CrmAPI(api: api.api, reader: api.reader, scope: scope.orgLevel ? picked.map(scope.forSite) ?? scope : scope)
       let created = createdFields(fields, values)
       var id: String?
       switch kind {

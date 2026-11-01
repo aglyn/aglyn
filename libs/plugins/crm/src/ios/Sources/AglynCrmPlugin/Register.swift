@@ -27,7 +27,7 @@ public func registerCrmNative(_ r: NativePluginRegistrar) {
     r.screen(kind.detailScreen, title: kind.singular, requiresSite: true, workspaceView: true, icon: kind.symbol) { ctx, params in
       if let id = params[kind.param] ?? params["\(kind.param)Id"] ?? params["id"] {
         CrmGate(context: ctx) { scope, api, reference in
-          RecordDetail(context: ctx, kind: kind, id: id, scope: scope, api: api, reference: reference)
+          RecordDetail(context: ctx, kind: kind, id: id, listScope: scope, listAPI: api, reference: reference)
         }
       } else {
         CrmHubScreen(context: ctx, section: CrmSection.allCases.first { $0.kind == kind } ?? .contacts)

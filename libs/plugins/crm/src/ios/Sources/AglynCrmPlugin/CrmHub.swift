@@ -114,14 +114,6 @@ struct CrmGate<Content: View>: View {
   @ViewBuilder let content: (CrmScope, CrmAPI, CrmReference) -> Content
   @State private var scopeModel = CrmScopeModel()
   @State private var reference = CrmReference()
-  /// At the workspace's level: the site new records are filed under (the console's `createHostId`).
-  @AppStorage("aglyn.crm.createSite") private var storedCreateHost = ""
-
-  private var createHost: String? {
-    guard context.hostID == nil else { return nil }
-    if context.sites.contains(where: { $0.id == storedCreateHost }) { return storedCreateHost }
-    return context.sites.first?.id
-  }
 
   var body: some View {
     Group {
@@ -144,13 +136,13 @@ struct CrmGate<Content: View>: View {
         List { SkeletonRows(count: 6) }.aglynListBackground()
       }
     }
-    .task(id: "\(context.orgID ?? "")|\(context.hostID ?? "")|\(createHost ?? "")") {
+    .task(id: "\(context.orgID ?? "")|\(context.hostID ?? "")") {
       guard let orgID = context.orgID else { return }
       if let hostID = context.hostID {
         scopeModel.start(context.firestore, orgID: orgID, hostID: hostID, uid: context.uid)
       } else {
-        // The workspace's CRM: every site's records, new ones filed under the site picked for them.
-        scopeModel.start(context.firestore, orgID: orgID, hostID: createHost ?? "", uid: context.uid, orgLevel: true)
+        // The workspace's CRM: every site's records, a new one naming its site in its own form.
+        scopeModel.start(context.firestore, orgID: orgID, hostID: "", uid: context.uid, orgLevel: true)
       }
     }
     .onDisappear {
@@ -185,7 +177,6 @@ struct CrmHubScreen: View {
           .padding(.vertical, AglynSpace.one)
         }
         .accessibilityIdentifier("crm-sections")
-        if scope.orgLevel { CrmCreateSitePick(context: context, scope: scope) }
         sectionView(context, scope, api, reference).frame(maxWidth: .infinity, maxHeight: .infinity)
       }
       .background(AglynGround())
@@ -213,28 +204,41 @@ struct CrmHubScreen: View {
   }
 }
 
-/// The workspace's CRM: every site's records; a new record is filed under the site picked here (the console's org
-/// page asks the same).
-struct CrmCreateSitePick: View {
-  let context: NativePluginContext
-  let scope: CrmScope
-  @AppStorage("aglyn.crm.createSite") private var storedCreateHost = ""
+/// The site a create came from last, per workspace, for this run of the app (the console keeps it for the session): a
+/// site remembered across weeks would stamp a record onto a site the reader had forgotten choosing.
+@MainActor
+enum CrmCreateSiteMemory {
+  private static var picks: [String: String] = [:]
 
-  var body: some View {
-    if context.sites.count > 1 {
-      HStack(spacing: AglynSpace.one) {
-        Text("Every site's records. New ones go to").font(AglynFont.subheadline).foregroundStyle(.secondary)
-        Menu {
-          ForEach(context.sites) { site in Button(site.name) { storedCreateHost = site.id } }
-        } label: {
-          Label(context.siteName(scope.hostID), systemImage: "globe").font(AglynFont.strongSubheadline)
-        }
-        .fixedSize()
-        .accessibilityIdentifier("crm-create-site")
-        Spacer(minLength: 0)
-      }
-      .aglynContentEdges()
-      .padding(.bottom, AglynSpace.one)
-    }
-  }
+  static func pick(_ orgID: String) -> String? { picks[orgID] }
+  static func remember(_ site: String?, _ orgID: String) { picks[orgID] = site }
 }
+
+/// The field a create at the workspace's level asks with (the console's `CrmSitePicker`): the record's optional source
+/// where every site sees it, or the site it belongs to where the workspace keeps them apart. Nil under a site, and with
+/// one site, which is then the answer (`crmCreateHost`).
+func crmSiteField(_ kind: CrmKind, _ scope: CrmScope, sites: [NativeSiteRef]) -> CrmField? {
+  guard scope.orgLevel, sites.count != 1 else { return nil }
+  // A lead is the one record a site always files: it is private to that site.
+  let required = scope.createNeedsSite || kind == .lead
+  let options = sites.map { FieldOption($0.id, $0.name) }
+  let help: String
+  if !required {
+    help = "Where it came from, if anywhere. Every site in the organization can see it either way."
+  } else if sites.isEmpty {
+    help = "This organization has no sites yet, so nothing can be filed."
+  } else {
+    help =
+      switch kind {
+      case .contact: "The site that captures this person — it decides which sites may see them."
+      case .lead: "The site this lead is filed under — a lead is private to one site."
+      case .company: "The site this company belongs to — it decides which of your sites may see it."
+      case .deal: "The site this deal belongs to — it decides which of your sites may see it."
+      }
+  }
+  return CrmField(
+    FieldSpec(crmSiteFieldKey, required ? "Site" : "Source site", kind: .select, required: required, options: options, help: help),
+    editable: false)
+}
+
+let crmSiteFieldKey = "crmSourceSite"

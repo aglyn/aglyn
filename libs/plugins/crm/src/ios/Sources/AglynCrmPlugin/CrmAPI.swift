@@ -39,6 +39,8 @@ struct TaskDraft: Equatable {
   var contactID: String?
   var companyID: String?
   var dealID: String?
+  /// A new task's site, at the workspace's level; nil files it with the organization.
+  var sourceSite: String?
 }
 
 struct ConvertDraft {
@@ -74,7 +76,9 @@ struct CrmAPI {
 
   private func path(_ kind: CrmKind, _ id: String) -> [String] { crmPath(scope.orgID, kind.collection) + [id] }
   private func body(_ fields: [String: Any?]) -> JSONValue { routeBody(scope.routeScope, fields) }
-  private func taskBody(_ fields: [String: Any?]) -> JSONValue { routeBody(["hostId": scope.hostID], fields) }
+  private func taskBody(_ fields: [String: Any?]) -> JSONValue { routeBody(scope.taskScope, fields) }
+  /// A record's own provenance: its site, or JSON null for a record from no site.
+  private var stampedHost: Any { scope.createHostID.map { $0 as Any } ?? NSNull() }
 
   func afterClientWrite(_ kind: CrmKind, _ id: String) async {
     _ = try? await api.request(CrmRoutes.listFields, method: .post, body: body(["collection": kind.collection, "ids": [id]]))
@@ -97,7 +101,7 @@ struct CrmAPI {
     var all = fields
     for (key, value) in extra { all[key] = value }
     all["visibleTo"] = scope.createTokens
-    all["hostId"] = scope.hostID
+    all["hostId"] = stampedHost
     all["createdByUid"] = scope.uid
     all["nextTaskAtMs"] = NSNull()
     all["createdAt"] = FirestoreSentinel.serverTimestamp
@@ -126,7 +130,8 @@ struct CrmAPI {
   }
 
   func setContactStage(_ id: String, _ stage: String?) async throws {
-    var object: [String: JSONValue] = ["hostId": .string(scope.hostID), "orgId": .string(scope.orgID), "contactId": .string(id)]
+    var object: [String: JSONValue] = ["orgId": .string(scope.orgID), "contactId": .string(id)]
+    if let site = scope.createHostID { object["hostId"] = .string(site) }
     object["lifecycleStage"] = stage.map { .string($0) } ?? .null
     _ = try await api.request(CrmRoutes.contactStage, method: .post, body: .object(object))
   }
@@ -189,7 +194,14 @@ struct CrmAPI {
     task["contactId"] = draft.contactID.map { .string($0) } ?? .null
     task["companyId"] = draft.companyID.map { .string($0) } ?? .null
     task["dealId"] = draft.dealID.map { .string($0) } ?? .null
-    var object: [String: JSONValue] = ["hostId": .string(scope.hostID), "task": .object(task)]
+    var object: [String: JSONValue] = ["task": .object(task)]
+    if scope.orgLevel {
+      object["orgId"] = .string(scope.orgID)
+      // A new task names the site it is filed from; with none it is the organization's own.
+      if taskID == nil, let site = draft.sourceSite { object["hostId"] = .string(site) }
+    } else {
+      object["hostId"] = .string(scope.hostID)
+    }
     if let taskID { object["taskId"] = .string(taskID) }
     _ = try await api.request(CrmRoutes.taskSave, method: .post, body: .object(object))
   }
@@ -228,7 +240,7 @@ struct CrmAPI {
   ) async throws {
     var fields: [String: Any] = [
       "kind": kind, "body": text.trimmingCharacters(in: .whitespacesAndNewlines),
-      "atMs": Int64(Date().timeIntervalSince1970 * 1000), "visibleTo": scope.createTokens, "hostId": scope.hostID,
+      "atMs": Int64(Date().timeIntervalSince1970 * 1000), "visibleTo": scope.createTokens, "hostId": stampedHost,
       "byUid": scope.uid, "createdAt": FirestoreSentinel.serverTimestamp,
     ]
     for (key, value) in links { fields[key] = value }

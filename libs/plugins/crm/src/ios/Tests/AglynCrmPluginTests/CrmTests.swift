@@ -3,6 +3,7 @@
 
 import AglynContracts
 import AglynCore
+import AglynPluginHost
 import AglynUI
 import Foundation
 import XCTest
@@ -41,6 +42,141 @@ final class CrmTests: XCTestCase {
     for (index, item) in try functionCases("crmReadTokens").enumerated() {
       XCTAssertEqual(crmReadTokens(group(item.args[0])), item.result as? [String], "case \(index)")
     }
+  }
+
+  func testDefaultScopeIsTheConsoles() throws {
+    for (index, item) in try functionCases("crmDefaultScopeOf").enumerated() {
+      XCTAssertEqual(crmDefaultScope(item.args[0] as? [String: Any]), item.result as? String, "case \(index)")
+    }
+  }
+
+  func testActivityTitlesAreTheConsoles() throws {
+    for (index, item) in try functionCases("crmActivityKindTitle").enumerated() {
+      XCTAssertEqual(
+        crmActivityKindTitle(item.args[0] as! String, item.args.count > 1 ? item.args[1] as? String : nil), item.result as? String, "case \(index)")
+    }
+    XCTAssertEqual(crmActivityKindTitle("whatsapp", "outbound"), "Outbound WhatsApp message")
+  }
+
+  /// A record created at the workspace's level belongs to the whole org with no site, and with one it names its source;
+  /// a workspace that keeps its sites apart stamps nothing until a site is named.
+  func testAWorkspaceLevelCreateNeedsASiteOnlyWhenTheOrgKeepsThemApart() {
+    let owner: [String: Any] = ["role": "owner"]
+    let shared = CrmScope(orgID: "o1", hostID: "", uid: "u1", org: [:], member: owner, orgLevel: true)
+    XCTAssertEqual(shared.createTokens, ["org"])
+    XCTAssertNil(shared.createHostID)
+    XCTAssertFalse(shared.createNeedsSite)
+    XCTAssertEqual(shared.routeScope.keys.sorted(), ["orgId"])
+    XCTAssertEqual(shared.taskScope.keys.sorted(), ["orgId"])
+    XCTAssertEqual(shared.forSite("h1").createTokens, ["org"])
+    XCTAssertEqual(shared.forSite("h1").createHostID, "h1")
+    XCTAssertEqual(shared.forSite("h1").routeScope.keys.sorted(), ["hostId", "orgId"])
+
+    let apart = CrmScope(
+      orgID: "o1", hostID: "", uid: "u1", org: ["crm": ["defaultRecordScope": "host"]], member: owner, orgLevel: true)
+    XCTAssertEqual(apart.createTokens, [])
+    XCTAssertTrue(apart.createNeedsSite)
+    XCTAssertEqual(apart.forSite("h1").createTokens, ["host:h1"])
+
+    // Under a site nothing is asked: the site is known.
+    let site = CrmScope(orgID: "o1", hostID: "h1", uid: "u1", org: [:], member: owner)
+    XCTAssertEqual(site.createTokens, ["org"])
+    XCTAssertEqual(site.createHostID, "h1")
+    XCTAssertEqual(site.taskScope.keys.sorted(), ["hostId"])
+  }
+
+  /// Nothing is picked silently: only an earlier pick the workspace still has, or its one site.
+  func testTheSiteACreateStartsFrom() {
+    XCTAssertNil(crmCreateHost(picked: nil, sites: ["h1", "h2"]))
+    XCTAssertEqual(crmCreateHost(picked: "h2", sites: ["h1", "h2"]), "h2")
+    XCTAssertNil(crmCreateHost(picked: "gone", sites: ["h1", "h2"]))
+    XCTAssertEqual(crmCreateHost(picked: nil, sites: ["h1"]), "h1")
+    XCTAssertNil(crmCreateHost(picked: nil, sites: []))
+  }
+
+  func testTheSiteFieldAsksOnlyWhatTheOrgNeeds() {
+    let owner: [String: Any] = ["role": "owner"]
+    let sites = [NativeSiteRef(id: "h1", name: "One", subdomain: "one", role: "admin"), NativeSiteRef(id: "h2", name: "Two", subdomain: "two", role: "admin")]
+    let shared = CrmScope(orgID: "o1", hostID: "", uid: "u1", org: [:], member: owner, orgLevel: true)
+    let apart = CrmScope(
+      orgID: "o1", hostID: "", uid: "u1", org: ["crm": ["defaultRecordScope": "host"]], member: owner, orgLevel: true)
+    XCTAssertEqual(crmSiteField(.deal, shared, sites: sites)?.spec.label, "Source site")
+    XCTAssertEqual(crmSiteField(.deal, shared, sites: sites)?.spec.required, false)
+    XCTAssertEqual(crmSiteField(.deal, shared, sites: sites)?.spec.emptyLabel, "None")
+    XCTAssertEqual(crmSiteField(.deal, apart, sites: sites)?.spec.label, "Site")
+    XCTAssertEqual(crmSiteField(.deal, apart, sites: sites)?.spec.required, true)
+    // A lead is private to one site, whatever the org keeps.
+    XCTAssertEqual(crmSiteField(.lead, shared, sites: sites)?.spec.required, true)
+    XCTAssertNil(crmSiteField(.deal, shared, sites: [sites[0]]))
+    XCTAssertNil(crmSiteField(.deal, CrmScope(orgID: "o1", hostID: "h1", uid: "u1", org: [:], member: owner), sites: sites))
+    // The field picks; it is never a field of the record.
+    XCTAssertTrue(createdFields([crmSiteField(.deal, shared, sites: sites)!], [crmSiteFieldKey: "h1"]).isEmpty)
+  }
+
+  /// From the workspace's CRM a record's page works in the site it came from, else stamps what it is visible to.
+  func testARecordsOwnPageWorksInTheSiteItCameFrom() {
+    let shared = CrmScope(orgID: "o1", hostID: "", uid: "u1", org: [:], member: ["role": "owner"], orgLevel: true)
+    XCTAssertEqual(recordScope(shared, ["hostId": "h1"]).createHostID, "h1")
+    XCTAssertEqual(recordScope(shared, ["capturedByHostIds": ["h2", "h3"]]).createHostID, "h2")
+    let noSite = recordScope(shared, ["hostId": NSNull(), "visibleTo": ["org"]])
+    XCTAssertNil(noSite.createHostID)
+    XCTAssertEqual(noSite.createTokens, ["org"])
+    XCTAssertEqual(recordScope(shared, ["visibleTo": ["host:h9"]]).createTokens, ["host:h9"])
+    let site = CrmScope(orgID: "o1", hostID: "h1", uid: "u1", org: [:], member: ["role": "owner"])
+    XCTAssertEqual(recordScope(site, ["hostId": "h2"]).hostID, "h1")
+  }
+
+  func testATaskStartsFiledWhereTheOrgFilesIt() {
+    let owner: [String: Any] = ["role": "owner"]
+    let sites = [NativeSiteRef(id: "h1", name: "One", subdomain: "one", role: "admin"), NativeSiteRef(id: "h2", name: "Two", subdomain: "two", role: "admin")]
+    let shared = CrmScope(orgID: "o1", hostID: "", uid: "u1", org: [:], member: owner, orgLevel: true)
+    let apart = CrmScope(
+      orgID: "o1", hostID: "", uid: "u1", org: ["crm": ["defaultRecordScope": "host"]], member: owner, orgLevel: true)
+    XCTAssertEqual(TaskSiteChoice(shared, sites: sites, picked: nil).start, crmOrganizationChoice)
+    XCTAssertEqual(TaskSiteChoice(shared, sites: sites, picked: "h2").start, "h2")
+    XCTAssertEqual(TaskSiteChoice(apart, sites: sites, picked: nil).start, "")
+  }
+
+  /// The timeline's line: the chip names the channel and the way it went, the heading what was said.
+  func testAnActivityReadsAsTheConsoleReadsIt() {
+    let message = crmActivityLine(["kind": "whatsapp", "direction": "outbound", "body": "Sent the proposal\nThey asked about hosting"])
+    XCTAssertEqual(message.chip, "Outbound WhatsApp message")
+    XCTAssertEqual(message.heading, "Sent the proposal")
+    XCTAssertEqual(message.detail, "They asked about hosting")
+    XCTAssertNil(message.state)
+
+    let inbound = crmActivityLine(["kind": "messenger", "direction": "inbound", "body": "Thanks"])
+    XCTAssertEqual(inbound.chip, "Inbound Messenger message")
+    XCTAssertNil(inbound.detail)
+
+    XCTAssertEqual(crmActivityLine(["kind": "instagram", "body": "Liked it"]).chip, "Instagram")
+    XCTAssertEqual(crmActivityLine(["kind": "linkedin", "direction": "outbound", "subject": "Intro", "body": "Hello"]).heading, "Intro")
+    XCTAssertEqual(crmActivityLine(["kind": "linkedin", "direction": "outbound", "subject": "Intro", "body": "Hello"]).detail, "Hello")
+    // A stored kind outside the list reads as Other, as the console draws it.
+    XCTAssertEqual(crmActivityLine(["kind": "telegram", "body": "x"]).chip, "Other")
+
+    // A message the platform carried names the kind alone, and says it was sent or received.
+    let sent = crmActivityLine(["kind": "email", "direction": "outbound", "messageId": "m1", "subject": "Hi", "body": "Hello"])
+    XCTAssertEqual(sent.chip, "Email")
+    XCTAssertEqual(sent.state, "Sent")
+    XCTAssertEqual(crmActivityLine(["kind": "email", "direction": "inbound", "messageId": "m2", "body": "Hello"]).state, "Received")
+  }
+
+  /// Every kind draws its own mark: the brands from the console's glyphs, which parse; the rest from SF Symbols.
+  func testEveryActivityKindHasItsOwnIcon() {
+    let paths = ContractValues.shared.nativeCrmActivityIconPaths
+    XCTAssertEqual(paths.keys.sorted(), ["instagram", "linkedin", "messenger", "whatsapp"])
+    for path in paths.values { XCTAssertNotNil(svgPath(path)) }
+    XCTAssertEqual(crmActivitySymbol("text"), "message")
+    XCTAssertEqual(crmActivitySymbol("other"), "ellipsis.circle")
+  }
+
+  /// A person the organization added holds their fields in its own facet, read wherever no site's facet answers.
+  func testAnOrgHeldContactReadsItsOwnFacet() {
+    let data: [String: Any] = ["name": "Base", "facets": ["org": ["phone": "+1 555 0100"], "g1": ["phone": "+1 555 0199"]]]
+    XCTAssertEqual(contactView(data, groupID: "")["phone"] as? String, "+1 555 0100")
+    XCTAssertEqual(contactView(data, groupID: "g2")["phone"] as? String, "+1 555 0100")
+    XCTAssertEqual(contactView(data, groupID: "g1")["phone"] as? String, "+1 555 0199")
   }
 
   /// A currency field (AGL-3971) shows and stores its own currency's minor units: USD cents, whole yen, BHD fils. A

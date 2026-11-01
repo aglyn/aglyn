@@ -446,9 +446,13 @@ struct CrmRow: Identifiable {
   }
 }
 
-/// A contact's own fields for this viewer: the holder's facet over the shared record.
+/// The facet of a person the organization added itself, with no site behind them (`ORG_CONTACT_HOLDER_ID`).
+let orgContactHolderID = "org"
+
+/// A contact's own fields for this viewer: the holder's facet over the shared record, or the one the organization holds.
 func contactView(_ data: [String: Any], groupID: String) -> [String: Any] {
-  let facet = (data["facets"] as? [String: Any])?[groupID] as? [String: Any] ?? [:]
+  let facets = data["facets"] as? [String: Any]
+  let facet = (facets?[groupID] ?? facets?[orgContactHolderID]) as? [String: Any] ?? [:]
   var merged = data
   for (key, value) in facet where !(value is NSNull) { merged[key] = value }
   if let name = facet["name"] as? String, !name.isEmpty { merged["name"] = name } else { merged["name"] = data["name"] }
@@ -503,6 +507,61 @@ func dealSubtitle(_ data: [String: Any], stageName: (_ pipelineID: String?, _ st
   let amount = (data["amountCents"] as? NSNumber).map { formatCents($0.int64Value, currency: s("currency")) }
   let stage = s("stageId").map { stageName(s("pipelineId"), $0) }
   return [amount, stage].compactMap { $0 }.joined(separator: " · ")
+}
+
+// MARK: Activity
+
+/// `crmActivityKindTitle`: "Inbound call", "Outbound WhatsApp message", or the kind alone with no direction it takes.
+func crmActivityKindTitle(_ kind: String, _ direction: String? = nil) -> String {
+  let values = ContractValues.shared
+  let label = values.crmActivityKindLabels[kind] ?? kind
+  let text = (direction ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+  guard (values.nativeCrmActivityDirections[kind] ?? []).contains(text), let word = values.crmActivityDirectionLabels[text] else { return label }
+  return "\(word) \(values.crmActivityKindNouns[kind] ?? label.lowercased())"
+}
+
+/// A logged activity as the timeline reads it (the console's `ActivityRow`): the chips, the heading, the rest of its words.
+struct CrmActivityLine: Equatable {
+  /// A stored kind outside the list reads as `other`.
+  let kind: String
+  /// The kind, with the direction a hand-logged entry names ("Outbound WhatsApp message").
+  let chip: String
+  /// "Sent" or "Received": a message the platform carried or captured says so beside the kind.
+  let state: String?
+  let heading: String
+  let detail: String?
+}
+
+func crmActivityLine(_ data: [String: Any]) -> CrmActivityLine {
+  func text(_ key: String) -> String { (data[key] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
+  let values = ContractValues.shared
+  let stored = text("kind")
+  let kind = values.nativeCrmActivityKinds.contains(stored) ? stored : "other"
+  let captured = !text("messageId").isEmpty
+  let direction = text("direction")
+  let sent = direction == "outbound" && (captured || !text("deliveryState").isEmpty)
+  let received = direction == "inbound" && captured
+  let body = text("body")
+  let subject = text("subject")
+  let lines = body.components(separatedBy: .newlines).drop { $0.trimmingCharacters(in: .whitespaces).isEmpty }
+  let heading = subject.isEmpty ? (lines.first ?? "").trimmingCharacters(in: .whitespaces) : subject
+  let rest = (subject.isEmpty ? lines.dropFirst().joined(separator: "\n") : body).trimmingCharacters(in: .whitespacesAndNewlines)
+  return CrmActivityLine(
+    kind: kind, chip: sent || received || captured ? (values.crmActivityKindLabels[kind] ?? kind) : crmActivityKindTitle(kind, direction),
+    state: received ? "Received" : captured ? "Sent" : nil, heading: heading, detail: rest.isEmpty ? nil : String(rest.prefix(240)))
+}
+
+/// The SF Symbol nearest the console's glyph for a kind, for the kinds that are not a brand (those draw their mark from
+/// `nativeCrmActivityIconPaths`).
+func crmActivitySymbol(_ kind: String) -> String {
+  switch kind {
+  case "call": "phone"
+  case "email": "envelope"
+  case "text": "message"
+  case "meeting": "person.2"
+  case "note": "note.text"
+  default: "ellipsis.circle"
+  }
 }
 
 // MARK: Pipelines

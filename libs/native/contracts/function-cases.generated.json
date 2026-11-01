@@ -5838,6 +5838,285 @@
         }
       ]
     },
+    "crmActivityKindTitle": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "cases": [
+        {
+          "args": [
+            "call"
+          ],
+          "result": "Call"
+        },
+        {
+          "args": [
+            "email"
+          ],
+          "result": "Email"
+        },
+        {
+          "args": [
+            "text"
+          ],
+          "result": "Text message"
+        },
+        {
+          "args": [
+            "whatsapp"
+          ],
+          "result": "WhatsApp"
+        },
+        {
+          "args": [
+            "messenger"
+          ],
+          "result": "Facebook Messenger"
+        },
+        {
+          "args": [
+            "instagram"
+          ],
+          "result": "Instagram"
+        },
+        {
+          "args": [
+            "linkedin"
+          ],
+          "result": "LinkedIn"
+        },
+        {
+          "args": [
+            "meeting"
+          ],
+          "result": "Meeting"
+        },
+        {
+          "args": [
+            "note"
+          ],
+          "result": "Note"
+        },
+        {
+          "args": [
+            "other"
+          ],
+          "result": "Other"
+        },
+        {
+          "args": [
+            "call",
+            "outbound"
+          ],
+          "result": "Outbound call"
+        },
+        {
+          "args": [
+            "call",
+            "inbound"
+          ],
+          "result": "Inbound call"
+        },
+        {
+          "args": [
+            "email",
+            "outbound"
+          ],
+          "result": "Outbound email"
+        },
+        {
+          "args": [
+            "email",
+            "inbound"
+          ],
+          "result": "Inbound email"
+        },
+        {
+          "args": [
+            "text",
+            "outbound"
+          ],
+          "result": "Outbound text message"
+        },
+        {
+          "args": [
+            "text",
+            "inbound"
+          ],
+          "result": "Inbound text message"
+        },
+        {
+          "args": [
+            "whatsapp",
+            "outbound"
+          ],
+          "result": "Outbound WhatsApp message"
+        },
+        {
+          "args": [
+            "whatsapp",
+            "inbound"
+          ],
+          "result": "Inbound WhatsApp message"
+        },
+        {
+          "args": [
+            "messenger",
+            "outbound"
+          ],
+          "result": "Outbound Messenger message"
+        },
+        {
+          "args": [
+            "messenger",
+            "inbound"
+          ],
+          "result": "Inbound Messenger message"
+        },
+        {
+          "args": [
+            "instagram",
+            "outbound"
+          ],
+          "result": "Outbound Instagram message"
+        },
+        {
+          "args": [
+            "instagram",
+            "inbound"
+          ],
+          "result": "Inbound Instagram message"
+        },
+        {
+          "args": [
+            "linkedin",
+            "outbound"
+          ],
+          "result": "Outbound LinkedIn message"
+        },
+        {
+          "args": [
+            "linkedin",
+            "inbound"
+          ],
+          "result": "Inbound LinkedIn message"
+        },
+        {
+          "args": [
+            "call",
+            "internal"
+          ],
+          "result": "Internal call"
+        },
+        {
+          "args": [
+            "whatsapp",
+            "internal"
+          ],
+          "result": "WhatsApp"
+        },
+        {
+          "args": [
+            "note",
+            "outbound"
+          ],
+          "result": "Note"
+        },
+        {
+          "args": [
+            "meeting",
+            "inbound"
+          ],
+          "result": "Meeting"
+        },
+        {
+          "args": [
+            "text",
+            "sideways"
+          ],
+          "result": "Text message"
+        },
+        {
+          "args": [
+            "text",
+            null
+          ],
+          "result": "Text message"
+        }
+      ]
+    },
+    "crmDefaultScopeOf": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {}
+          ],
+          "result": "org"
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "org"
+              }
+            }
+          ],
+          "result": "org"
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "host"
+              }
+            }
+          ],
+          "result": "host"
+        },
+        {
+          "args": [
+            {
+              "defaultResourceScope": "host"
+            }
+          ],
+          "result": "host"
+        },
+        {
+          "args": [
+            {
+              "defaultResourceScope": "org"
+            }
+          ],
+          "result": "org"
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "org"
+              },
+              "defaultResourceScope": "host"
+            }
+          ],
+          "result": "org"
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "nonsense"
+              }
+            }
+          ],
+          "result": "org"
+        }
+      ]
+    },
     "crmFieldListFields": {
       "module": "libs/aglyn/src/lib/app-utils/crm.ts",
       "cases": [

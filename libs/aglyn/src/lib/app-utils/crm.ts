@@ -984,7 +984,7 @@ export const CRM_ACTIVITY_KIND_LABELS: Record<CrmActivityKind, string> = {
  * message". Its own map rather than the label lowercased, because a brand
  * keeps its capitals and a channel's name is not the thing that was sent.
  */
-const CRM_ACTIVITY_KIND_NOUNS: Record<CrmActivityKind, string> = {
+export const CRM_ACTIVITY_KIND_NOUNS: Record<CrmActivityKind, string> = {
   call: 'call',
   email: 'email',
   text: 'text message',
