@@ -64,6 +64,7 @@ import { settleCompanyContactsCounts } from '@aglyn/tenant-data-admin/server/con
 import { restampCrmListFieldsAt } from '@aglyn/tenant-data-admin/server/crm-records'
 import { logHostActivity } from '@aglyn/tenant-data-admin/server/organizations'
 import { recomputeCrmNextTaskAt } from './crm-next-activity'
+import { crmActivityLinkWithCompany } from './crm-activity-company'
 
 /** How many pointing rows one repoint pass reads — and one batch writes. */
 const REPOINT_PAGE = 400
@@ -320,6 +321,8 @@ export async function mergeContacts(
    * not read as a merge that did not happen.
    */
   try {
+    // Read after the swap, so a company only the merged record named counts.
+    const link = await crmActivityLinkWithCompany(orgRef, { contactId: survivorId })
     await orgRef.collection(CRM_COLLECTIONS.activities).add({
       kind: 'note',
       body: `Merged with ${mergedEmail}`,
@@ -328,7 +331,7 @@ export async function mergeContacts(
       ...(options.actorName || actor.email
         ? { byName: options.actorName || actor.email }
         : {}),
-      contactId: survivorId,
+      ...link,
       visibleTo: plan.visibleTo,
       hostId: hostId ?? String(survivorData['hostId'] ?? ''),
       createdByUid: actor.uid,

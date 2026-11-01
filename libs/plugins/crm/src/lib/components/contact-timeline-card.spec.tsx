@@ -147,6 +147,8 @@ jest.mock('firebase/firestore', () => ({
 /** Activities the record already carries, as the ceiling's aggregate answers. */
 let mockLogged = 0
 const enqueueSnackbar = jest.fn()
+// **Name** and **Related To** have their own spec (`activity-link-fields`).
+jest.mock('./activity-link-fields', () => ({ ActivityLinkFields: () => null }))
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar }),
 }))

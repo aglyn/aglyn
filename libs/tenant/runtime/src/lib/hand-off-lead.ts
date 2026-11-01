@@ -29,7 +29,10 @@
  * Three things move, once the lead carries `convertedContactId`:
  *
  *  - every activity filed on the lead gains the contact, and keeps the
- *    lead: the contact's timeline reads it, and the lead's page still does;
+ *    lead: the contact's timeline reads it, and the lead's page still does.
+ *    It gains the company the contact rolls up to as well, the one the
+ *    converting door names, so what was logged while working the lead reads
+ *    on the company's timeline like everything logged since;
  *  - every task filed on the lead gains the contact the same way;
  *  - every plugin with a lead-conversion listener is told — a sequence
  *    enrollment naming the lead re-points itself to the contact.
@@ -59,6 +62,8 @@ export interface HandOffLeadRecordsInput {
   hostId: string
   leadId: string
   contactId: string
+  /** The company the contact rolls up to, when the converting door knows one. */
+  companyId?: string | null
   email: unknown
   by: PluginLeadConversionBy
 }
@@ -70,25 +75,32 @@ export interface HandOffLeadRecordsReport {
   plugins: Record<string, Readonly<Record<string, number | boolean | null>> | null>
 }
 
-/** Stamp `contactId` onto every row of `collection` that names the lead and not the contact yet. */
+/**
+ * Stamp `contactId` onto every row of `collection` that names the lead and
+ * not the contact yet, and `companyId`, when one is named, onto those of them
+ * that name no company of their own.
+ */
 async function pointAtContact(
   firestore: FirebaseFirestore.Firestore,
   collection: FirebaseFirestore.CollectionReference,
   leadId: string,
   contactId: string,
+  companyId?: string | null,
 ): Promise<number> {
   const rows = await collection.where('leadId', '==', leadId).limit(ROWS_LIMIT).get()
-  const refs = rows.docs
-    .filter((row) => String(row.get('contactId') ?? '') !== contactId)
-    .map((row) => row.ref)
-  for (let start = 0; start < refs.length; start += BATCH_LIMIT) {
+  const moving = rows.docs.filter((row) => String(row.get('contactId') ?? '') !== contactId)
+  for (let start = 0; start < moving.length; start += BATCH_LIMIT) {
     const batch = firestore.batch()
-    for (const ref of refs.slice(start, start + BATCH_LIMIT)) {
-      batch.update(ref, { contactId, updatedAt: FieldValue.serverTimestamp() })
+    for (const row of moving.slice(start, start + BATCH_LIMIT)) {
+      batch.update(row.ref, {
+        contactId,
+        ...(companyId && !row.get('companyId') ? { companyId } : {}),
+        updatedAt: FieldValue.serverTimestamp(),
+      })
     }
     await batch.commit()
   }
-  return refs.length
+  return moving.length
 }
 
 export async function handOffLeadRecords(
@@ -103,6 +115,7 @@ export async function handOffLeadRecords(
       orgRef.collection(CRM_COLLECTIONS.activities),
       leadId,
       contactId,
+      input.companyId,
     )
   } catch (error) {
     console.error('handOffLeadRecords: activities', hostId, leadId, error)

@@ -171,7 +171,7 @@ export function CompanyDetailPage(props: CrmDetailPageProps) {
           org={org}
           viewingHostIds={crmScope.consentGroup?.hostIds}
         />
-        <RecordActivityCard hostId={hostId} org={org} companyId={id} />
+        <RecordActivityCard hostId={hostId} org={org} companyId={id} basePath={basePath} />
       </Stack>
     </CrmCreateSiteDefault>
   )

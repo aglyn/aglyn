@@ -33,6 +33,7 @@ import {
   type CampaignFilingAction,
   type CampaignFilingRef,
 } from '../model/campaign-filing-activity'
+import { crmActivityLinkWithCompany } from './crm-activity-company'
 
 /**
  * FILES A FILING ON THE RECORD'S TIMELINE (AGL-3274), from the server.
@@ -122,11 +123,13 @@ export async function fileCampaignFilingActivities(
     const orgRef = firestore.collection('orgs').doc(input.orgId)
     const org =
       input.org ?? ((await orgRef.get()).data() as Record<string, unknown> | undefined) ?? null
-    const visibleTo = crmScopeTokens(org, consentGroupForHost(org, input.hostId))
+    const group = consentGroupForHost(org, input.hostId)
+    const visibleTo = crmScopeTokens(org, group)
     if (!crmActivityLogHasRoom(await countCrmActivitiesForRecord(orgRef, input.link))) {
       console.warn('[crm] the filing was not written on the timeline: the record’s log is full', input.link)
       return 0
     }
+    const link = await crmActivityLinkWithCompany(orgRef, input.link, { groupId: group.groupId })
     const activities = orgRef.collection(CRM_COLLECTIONS.activities)
     let written = 0
     for (const campaign of input.campaigns) {
@@ -134,7 +137,7 @@ export async function fileCampaignFilingActivities(
         ...buildCampaignFilingActivity({
           action: input.action,
           campaign,
-          link: input.link,
+          link,
           hostId: input.hostId,
           visibleTo,
           atMs: input.atMs,

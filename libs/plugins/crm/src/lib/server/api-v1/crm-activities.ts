@@ -34,6 +34,7 @@ import {
   CRM_ACTIVITY_KINDS,
   CRM_ACTIVITY_LOG_FULL_MESSAGE,
   type CrmActivityDirection,
+  consentGroupForHost,
   createResourceUid,
   crmActivityDirection,
   crmActivityLogHasRoom,
@@ -70,6 +71,7 @@ import {
   readRefId,
   refuseUnknownKeys,
 } from './crm-shared'
+import { crmActivityLinkWithCompany } from '../crm-activity-company'
 
 /** The kinds the API accepts: the CRM's own list, so a kind the console logs is one the API takes. */
 const ACTIVITY_KINDS = CRM_ACTIVITY_KINDS
@@ -188,7 +190,9 @@ function readActivityInput(
 /**
  * `POST /v1/activities`. `at` defaults to now and `byUid` to `'api'`: an
  * integration logging a call as it ends is the common case, and the one
- * logging it on behalf of a member names them.
+ * logging it on behalf of a member names them. An activity that names no
+ * company rolls up to its deal's, else its contact's (AGL-4123), as every
+ * writer's does, and the response says which.
  */
 async function createActivity(request: Request, ctx: ApiV1Context): Promise<Response> {
   const body = await readJsonBody(request)
@@ -221,6 +225,7 @@ async function createActivity(request: Request, ctx: ApiV1Context): Promise<Resp
 
   try {
     const { kind, atMs, byUid, ...rest } = parsed.values
+    const org = ctx.org as Record<string, unknown>
     // The per-record ceiling (AGL-2611): one aggregate on the record the
     // activity is filed under. A platform bound rather than a plan one, so
     // it is a conflict with the record's state, not a plan refusal.
@@ -238,13 +243,18 @@ async function createActivity(request: Request, ctx: ApiV1Context): Promise<Resp
     }
     const id = createResourceUid()
     const stamp = crmCreateStamp(ctx, site.siteId)
+    const { companyId } = await crmActivityLinkWithCompany(
+      ctx.firestore.collection('orgs').doc(ctx.orgId),
+      parsed.values,
+      { groupId: site.siteId ? consentGroupForHost(org, site.siteId).groupId : null, org },
+    )
     await collection.doc(id).create({
       kind: kind ?? 'note',
       // The instant the record was created, from the same clock as its
       // `createdAt`, so an activity logged as it happened reads as one moment.
       atMs: atMs ?? stamp.createdAt.toMillis(),
       byUid: byUid ?? 'api',
-      ...createPayload(rest),
+      ...createPayload({ ...rest, companyId }),
       ...stamp,
     })
     const view = activityView(await collection.doc(id).get())

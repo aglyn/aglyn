@@ -39,8 +39,9 @@ import { crmVisibleToClause, useCrmScope } from '../hooks/use-crm-scope'
 export type CrmOrg = Partial<AglynOrgBilling> | null | undefined
 
 /**
- * Which record an activity surface is about. Exactly one of the three is set
- * by a record page; a feed across the CRM sets none.
+ * Which record an activity surface is about. Exactly one is set by a record
+ * page; a feed across the CRM sets none. An entry can carry several links
+ * (`model/crm-activity-link.ts`), and each timeline still lists by its own.
  */
 export interface ActivityRecordLink {
   contactId?: string
@@ -105,6 +106,8 @@ export function useActivityScope(hostId: string | null, org: CrmOrg) {
       writeTokens,
       /** Whether a new activity must name a site — see `useCrmScope`'s `createNeedsSite`. */
       needsSite: createNeedsSite,
+      /** The org document, for the holder a contact is read through at the org level. */
+      org: (org ?? null) as Record<string, unknown> | null,
     }),
     [
       firestore,
@@ -116,6 +119,7 @@ export function useActivityScope(hostId: string | null, org: CrmOrg) {
       readTokens,
       writeTokens,
       createNeedsSite,
+      org,
     ],
   )
 }

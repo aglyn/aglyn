@@ -1346,6 +1346,59 @@ describe('/v1/tasks picklists (AGL-3517)', () => {
 })
 
 describe('/v1/activities', () => {
+  describe('the company an activity rolls up to (AGL-4123)', () => {
+    const logged = async (links: Record<string, string>, consentSiteId = 'host-1') =>
+      json(
+        await call('POST', 'activities', {
+          kind: 'note',
+          body: 'Spoke',
+          consentSiteId,
+          ...links,
+        }),
+      )
+
+    beforeEach(() => {
+      mockDocs.set(`${ORG}/contacts/c-1`, {
+        email: 'avery@example.com',
+        capturedByHostIds: ['host-1'],
+        facets: { 'host-1': { companyId: 'co-contact' } },
+      })
+      mockDocs.set(`${COMPANIES}/co-named`, { name: 'Named', visibleTo: ['org'] })
+      mockDocs.set(`${DEALS}/d-1`, { title: 'Deal', companyId: 'co-deal', visibleTo: ['org'] })
+      mockDocs.set(`${DEALS}/d-2`, { title: 'No company', visibleTo: ['org'] })
+    })
+
+    it('takes the contact’s company through the logging site’s holder', async () => {
+      const activity = await logged({ contactId: 'c-1' })
+      expect(activity).toMatchObject({ contactId: 'c-1', companyId: 'co-contact' })
+      expect(mockDocs.get(`${ACTIVITIES}/${activity.id}`)!.companyId).toBe('co-contact')
+    })
+
+    it('takes the deal’s company over the contact’s', async () => {
+      expect(await logged({ contactId: 'c-1', dealId: 'd-1' })).toMatchObject({
+        contactId: 'c-1',
+        dealId: 'd-1',
+        companyId: 'co-deal',
+      })
+    })
+
+    it('falls through a deal with no company to the contact’s', async () => {
+      expect(await logged({ contactId: 'c-1', dealId: 'd-2' })).toMatchObject({
+        companyId: 'co-contact',
+      })
+    })
+
+    it('keeps a company the caller named', async () => {
+      expect(await logged({ contactId: 'c-1', companyId: 'co-named' })).toMatchObject({
+        companyId: 'co-named',
+      })
+    })
+
+    it('stamps no company when nothing names one', async () => {
+      expect(await logged({ dealId: 'd-2' })).toMatchObject({ companyId: null })
+    })
+  })
+
   it('records which way a call or an email went, and refuses one the kind does not take (AGL-3517)', async () => {
     const call1 = await json(
       await call('POST', 'activities', {

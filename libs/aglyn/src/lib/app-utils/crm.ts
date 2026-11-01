@@ -188,7 +188,11 @@ export const CRM_ACTIVITY_LOG_FULL_MESSAGE =
     'en-US',
   )} activities, which is the most one record can carry.`
 
-/** The record an activity is filed under: its links, of which one leads. */
+/**
+ * The records an activity is about, of which one leads. Salesforce's model
+ * (AGL-4123): `contactId` is the Who, `dealId` the What, and `companyId` the
+ * Account it rolls up to, or a What of its own on an entry about a company.
+ */
 export interface CrmActivityLink {
   contactId?: string | null
   companyId?: string | null
@@ -206,20 +210,20 @@ export interface CrmActivityLink {
  * The field the per-record activity ceiling is counted on, or `null` for an
  * activity that names no record at all.
  *
- * The contact leads, then the company, then the deal: an activity logged
- * from a contact's page carries the company beside it (the automation step
- * copies the facet's `companyId` onto every record it creates), and a
+ * The contact leads, then the deal, then the company: every activity about
+ * a contact or a deal carries the company it rolls up to (AGL-4123), and a
  * ceiling counted on the company would let one busy account exhaust every
- * contact filed under it. The record whose PAGE the log is read on is the
- * one whose log has the limit. Shared by the client dialog and the two
+ * contact and deal filed under it. The record whose PAGE the log is read on
+ * is the one whose log has the limit, so a company's own entries are counted
+ * with everything that rolled up to it. Shared by the client dialog and the
  * server writers so they count the same thing.
  */
 export function crmActivityCeilingLink(
   link: CrmActivityLink,
 ): { field: 'contactId' | 'companyId' | 'dealId' | 'leadId'; id: string } | null {
   if (link.contactId) return { field: 'contactId', id: String(link.contactId) }
-  if (link.companyId) return { field: 'companyId', id: String(link.companyId) }
   if (link.dealId) return { field: 'dealId', id: String(link.dealId) }
+  if (link.companyId) return { field: 'companyId', id: String(link.companyId) }
   // Last, because a converted lead's activities carry the contact beside it
   // and the contact is the record whose page they are read on.
   if (link.leadId) return { field: 'leadId', id: String(link.leadId) }
@@ -1244,8 +1248,15 @@ export interface CrmActivity extends CrmScoped {
    * without parsing a sentence.
    */
   campaignId?: string
+  /** Who it was with — see {@link CrmActivityLink}. */
   contactId?: string
+  /**
+   * The company it rolls up to, stamped from the deal's company, else the
+   * contact's, by every writer when none was named — see `stampCrmActivityCompany`
+   * in the CRM plugin. What a company's timeline lists by.
+   */
   companyId?: string
+  /** The deal it is about — see {@link CrmActivityLink}. */
   dealId?: string
   /** The lead it was filed under (AGL-2615) — see {@link CrmActivityLink.leadId}. */
   leadId?: string

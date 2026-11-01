@@ -295,6 +295,33 @@ describe('a manual share (AGL-3336)', () => {
     expect('writeTo' in store[lead('l1')]).toBe(false)
   })
 
+  it('rolls the entry on a deal or a contact up to their company (AGL-4123)', async () => {
+    store[`orgs/${ORG}/deals/d1`] = {
+      title: 'Renewal',
+      hostId: 'site-a',
+      visibleTo: [A],
+      companyId: 'co-deal',
+    }
+    store[`orgs/${ORG}/contacts/c1`] = {
+      email: 'one@acme.test',
+      hostId: 'site-a',
+      capturedByHostIds: ['site-a'],
+      visibleTo: [A],
+      facets: { 'site-a': { companyId: 'co-contact' } },
+    }
+    await call({ hostId: 'site-a', action: 'share', object: 'deals', ids: ['d1'], targets: ['site-b'] })
+    await call({ hostId: 'site-a', action: 'share', object: 'contacts', ids: ['c1'], targets: ['site-b'] })
+    const entries = Object.entries(store)
+      .filter(([path]) => path.startsWith(`orgs/${ORG}/crmActivities/`))
+      .map(([, row]) => row)
+    expect(entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ dealId: 'd1', companyId: 'co-deal' }),
+        expect.objectContaining({ contactId: 'c1', companyId: 'co-contact' }),
+      ]),
+    )
+  })
+
   it('is an org manager’s: anyone else is refused and nothing is written', async () => {
     authorizeOrgCaller.mockResolvedValueOnce({ ok: false, status: 403, error: 'No' })
     const before = clone(store)

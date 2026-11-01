@@ -241,7 +241,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#member-updates': 'The Member updates card, in the products hub\'s catalog, posts updates only your subscribers can see, and can email each one to them.',
   },
   companies: {
-    '#a-companys-page': 'The page names the company in the heading and the trail, and holds its properties, its contacts, its deals, its open tasks and the activity logged against it.',
+    '#a-companys-page': 'The page names the company in the heading and the trail, and holds its properties, its contacts, its deals, its open tasks and the activity logged against it and rolled up from its people and its deals.',
     '#contact-roles': 'The Contact roles card says who at the company plays which part, the way Salesforce\'s Account Contact Roles do.',
     '#contacts-at-a-company': 'The Contacts card lists the people linked to this company a page at a time, most recently updated first, with the total counted by the database in its footer; each row opens the person\'s page.',
     '#create-a-company': 'Choose New company above the list. A company needs a name; everything else is optional: Domain — the bare hostname (acme.com).',

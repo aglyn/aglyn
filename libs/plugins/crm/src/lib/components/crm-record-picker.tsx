@@ -46,6 +46,12 @@ const PICKER_LABELS: Record<CrmRecordKind, string> = {
   deal: 'Deal',
 }
 
+const PICKER_PLURALS: Record<CrmRecordKind, string> = {
+  contact: 'contacts',
+  company: 'companies',
+  deal: 'deals',
+}
+
 export interface CrmRecordPickerProps {
   kind: CrmRecordKind
   scope: readonly [string, string] | null
@@ -77,6 +83,41 @@ export interface CrmRecordPickerProps {
    */
   lazy?: boolean
   helperText?: string
+  /**
+   * Records offered first, whatever the window holds, under their own
+   * {@link pinnedLabel} heading: a deal's contact roles on an activity's
+   * **Name** field. Each needs its name already resolved.
+   */
+  pinned?: ReadonlyArray<{ id: string; label: string }>
+  /** The heading over {@link pinned}. */
+  pinnedLabel?: string
+}
+
+/**
+ * The hundred most recently updated records of a kind this reader may see,
+ * the one window every record picker offers. `enabled` holds the listener
+ * shut until the picker needs it.
+ */
+export function useCrmRecordWindow(
+  kind: CrmRecordKind,
+  scope: readonly [string, string] | null,
+  readTokens: readonly string[] | null,
+  enabled = true,
+) {
+  const firestore = useFirestore()
+  return useFirestoreCollection<Record<string, unknown> & { $id: string }>(
+    () =>
+      scope && enabled
+        ? query(
+            collection(firestore, scope[0], scope[1], CRM_RECORD_COLLECTIONS[kind]),
+            ...crmVisibleToClause(readTokens),
+            orderBy('updatedAt', 'desc'),
+            limit(CRM_RECORD_PICKER_LIMIT),
+          )
+        : null,
+    [firestore, scope, readTokens, kind, enabled],
+    { idField: '$id' },
+  )
 }
 
 /**
@@ -93,22 +134,10 @@ export interface CrmRecordPickerProps {
 export function CrmRecordPicker(props: CrmRecordPickerProps) {
   const { kind, scope, readTokens, groupId, org, value, onChange, disabled } = props
   const { label, excludeId, valueLabel, lazy = false, helperText } = props
-  const firestore = useFirestore()
+  const { pinned, pinnedLabel } = props
   const [opened, setOpened] = useState(!lazy)
-  const { data, status } = useFirestoreCollection<Record<string, unknown> & { $id: string }>(
-    () =>
-      scope && opened
-        ? query(
-            collection(firestore, scope[0], scope[1], CRM_RECORD_COLLECTIONS[kind]),
-            ...crmVisibleToClause(readTokens),
-            orderBy('updatedAt', 'desc'),
-            limit(CRM_RECORD_PICKER_LIMIT),
-          )
-        : null,
-    [firestore, scope, readTokens, kind, opened],
-    { idField: '$id' },
-  )
-  const options = useMemo(
+  const { data, status } = useCrmRecordWindow(kind, scope, readTokens, opened)
+  const windowOptions = useMemo(
     () =>
       (data ?? [])
         .filter((row) => row.$id !== excludeId)
@@ -124,6 +153,13 @@ export function CrmRecordPicker(props: CrmRecordPickerProps) {
         .sort((a, b) => a.label.localeCompare(b.label)),
     [data, kind, groupId, org, excludeId],
   )
+  // Pinned first, and each record once: `groupBy` needs a group's rows adjacent.
+  const options = useMemo(() => {
+    if (!pinned?.length) return windowOptions
+    const held = new Set(pinned.map((option) => option.id))
+    return [...pinned, ...windowOptions.filter((option) => !held.has(option.id))]
+  }, [pinned, windowOptions])
+  const pinnedIds = useMemo(() => new Set(pinned?.map((option) => option.id)), [pinned])
   /*
    * The linked record may sit outside the window — an old contact a record
    * page's button linked — so the value is a placeholder carrying its id
@@ -144,6 +180,14 @@ export function CrmRecordPicker(props: CrmRecordPickerProps) {
       onOpen={() => setOpened(true)}
       getOptionLabel={(option) => option.label}
       isOptionEqualToValue={(option, current) => option.id === current.id}
+      groupBy={
+        pinned?.length
+          ? (option) =>
+              pinnedIds.has(option.id)
+                ? (pinnedLabel ?? PICKER_LABELS[kind])
+                : `All ${PICKER_PLURALS[kind]}`
+          : undefined
+      }
       loading={opened && status === 'loading'}
       disabled={disabled}
       size="small"
