@@ -9,6 +9,31 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.2.0 — 2026-11-01
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.1.0...v1.2.0)
+
+### Added
+
+- **crm-native:** a contact needs no email, and native activity rolls up to the company ([AGL-4124](https://linear.app/aglyn/issue/AGL-4124))
+- **crm-native:** the deals section reads Deals / Opportunities in the apps ([AGL-4124](https://linear.app/aglyn/issue/AGL-4124))
+- **crm-native:** Kotlin CRM creates with no site, optional source, real activity marks ([AGL-4124](https://linear.app/aglyn/issue/AGL-4124))
+- **crm-native:** Apple CRM creates with no site, optional source, real activity marks ([AGL-4124](https://linear.app/aglyn/issue/AGL-4124))
+
+### Fixed
+
+- **crm:** what the live check found on company roles, pickers and Known by ([AGL-4122](https://linear.app/aglyn/issue/AGL-4122))
+- **crm-native:** a contact's edit shows at once on the polling reader ([AGL-4124](https://linear.app/aglyn/issue/AGL-4124))
+- **crm-native:** a required Site field reads Choose, not None, on Apple ([AGL-4124](https://linear.app/aglyn/issue/AGL-4124))
+- **crm-native:** a new contact's Source site says them, as the console does ([AGL-4124](https://linear.app/aglyn/issue/AGL-4124))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **crm-native:** land on main ([AGL-4124](https://linear.app/aglyn/issue/AGL-4124))
+
+</details>
+
 ## v1.1.0 — 2026-11-01
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0...v1.1.0)
