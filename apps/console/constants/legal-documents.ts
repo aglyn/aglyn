@@ -72,7 +72,7 @@
 
 import { LEGAL_URLS } from './shared'
 
-export const LEGAL_DOCUMENT_VERSION = 'v20'
+export const LEGAL_DOCUMENT_VERSION = 'v21'
 
 export interface LegalDocumentManifestEntry {
   /** Stable key, and the snapshot's filename under `legal/{version}/`. */
@@ -1030,6 +1030,44 @@ export interface LegalDocumentManifestEntry {
  * `80ef32…`, privacy 31383 bytes / `4209f2…`) byte for byte across the same
  * three requests.
  *
+ * v21 (2026-11-01): general availability, and two commerce changes to the
+ * terms of sale (AGL-4053, AGL-4038).
+ *
+ *   - The Terms and the EULA stop describing the Services, or any part of
+ *     them, as early access, pre-release or unfinished. Terms §1.1 becomes
+ *     Beta and Preview Features, and §6 becomes Beta Features & Related
+ *     Terms: §6.1 defines a Beta Feature as new and still changing, §6.2 "No
+ *     Reliance" is removed outright and its number holds how a Beta Feature
+ *     moves between plans, §6.4 drops the acceptance of risk, §6.5 becomes
+ *     Pricing & Features Are Not Commitments, and §14.3 and §15.3 are scoped
+ *     to Beta Features. §4.7, §5.2 and §5.5 lose their pre-1.0 and
+ *     not-yet-available wording. No section is added, removed or renumbered,
+ *     so every cross-reference still holds. The §14 and §15 disclaimers, caps
+ *     and the $50 unpaid cap's mechanics are unchanged.
+ *   - Terms §4.30: the console's return request now covers Hardware shipped
+ *     to you, once it has shipped (#2062), and a return that does not meet
+ *     the Section may be declined.
+ *   - Terms §4.32: 4G cellular data is turned on per store, covers every
+ *     reader there that can use it, needs the devices and billing
+ *     permissions, and is billed monthly in arrears, with service off after
+ *     14 unpaid days (#2060, #2094, #2106). "We do not promise" becomes a
+ *     neutral statement that not every feature supports every item.
+ *   - EULA §1 becomes Beta and Preview Features and its date moves. The EULA
+ *     is not pinned: the Terms incorporate it and it rides this bump.
+ *   - Privacy Policy unchanged, so its pin is unchanged and it is the control.
+ *
+ * `POS_HARDWARE_TERMS_VERSION` moves to `v21` with this entry, because §4.30
+ * and §4.32 are inside the §4.26–§4.32 terms of sale.
+ *
+ * Publication-first: the Google Doc masters were edited and verified through
+ * the Docs API (17 edits, nothing else), Publish now was pressed for Terms,
+ * EULA and the `/legal` index, the live pages confirmed serving the new text
+ * on two consecutive checks, and only then was terms captured: 70966 bytes
+ * (`c6d848…`), identical across two requests and a cache-busting query, and
+ * archived in `Acceptance-Snapshots/v21`. Privacy reproduced its `v20` pin,
+ * 38630 bytes / `b315fe…`, byte for byte across the same three requests both
+ * before and after publication, and terms reproduced its `v20` pin before.
+ *
  * ## ONE snapshot in the tree, and why that is enough
  *
  * Only the CURRENT version is checked out. Superseded text is not deleted —
@@ -1089,8 +1127,8 @@ export const LEGAL_DOCUMENTS: LegalDocumentManifestEntry[] = [
     key: 'terms',
     url: LEGAL_URLS.TERMS,
     sha256:
-      '5d7acb59fa2a1aa6b2cfabff3e848f3325486d8bbddb94f282f9bd1b1db068fb',
-    bytes: 69816,
+      'c6d84807349a34f97b22e8468e28a5c60c674216d464928362ec5f57374b2b38',
+    bytes: 70966,
   },
   {
     key: 'privacy',
