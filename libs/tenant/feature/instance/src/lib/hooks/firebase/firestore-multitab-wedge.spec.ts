@@ -156,6 +156,45 @@ describe('probePrimaryLease (AGL-3428)', () => {
     expect(idb.connections[0].closed).toBe(true)
   })
 
+  /**
+   * While the main thread is frozen, the read's answer waits in the same task
+   * queue as the timeout. On a wall clock a four-second freeze therefore reads
+   * as a locked store, and a healthy tab gets reloaded, losing what was typed
+   * (AGL-4120). The probe counts ticks, and a browser coalesces the ones a
+   * frozen thread missed.
+   */
+  it('does not take a frozen main thread for a locked store (AGL-4120)', async () => {
+    const lease = { ownerId: 'tab', allowTabSynchronization: true, leaseTimestampMs: 1_000 }
+    const idb = fakeIndexedDb({ lease, locked: true })
+    let tick: () => void = () => undefined
+    const interval = jest
+      .spyOn(global, 'setInterval')
+      .mockImplementation(((callback: () => void) => {
+        tick = callback
+        return 1
+      }) as never)
+    const clock = jest.spyOn(Date, 'now').mockReturnValue(1_000)
+    try {
+      const probe = probePrimaryLease(idb.factory, DATABASE, { timeoutMs: 4_000 })
+      await new Promise((resolve) => queueMicrotask(() => resolve(undefined)))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+
+      // A freeze far longer than the timeout, then the one tick it leaves.
+      clock.mockReturnValue(61_000)
+      tick()
+      idb.release()
+
+      await expect(probe).resolves.toEqual({
+        state: 'leased',
+        ownerId: 'tab',
+        ageMs: 60_000,
+      })
+    } finally {
+      interval.mockRestore()
+      clock.mockRestore()
+    }
+  })
+
   it('reads who holds the lease and how long ago it was renewed', async () => {
     const idb = fakeIndexedDb({
       lease: { ownerId: 'hCao0NnJ', allowTabSynchronization: true, leaseTimestampMs: NOW - 90_000 },

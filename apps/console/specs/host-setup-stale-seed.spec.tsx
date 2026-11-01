@@ -44,6 +44,7 @@
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { setSeedConfirmWaitMs } from '@aglyn/tenant-feature-instance/hooks/helpers/listen-confirmation'
 import type { ReactNode } from 'react'
 
 /**
@@ -386,6 +387,10 @@ const HostAdmin = ({ section = 'general' }: { section?: string } = {}) => {
 }
 /* eslint-enable @typescript-eslint/no-var-requires */
 
+// This spec pins the refusal, not the wait before it (AGL-4120).
+beforeAll(() => setSeedConfirmWaitMs(0))
+afterAll(() => setSeedConfirmWaitMs())
+
 /** No network: a refused save must never have reached the rename API. */
 const fetchMock = jest.fn().mockResolvedValue({
   ok: true,
@@ -423,7 +428,7 @@ describe('Host Setup theme save (AGL-1358)', () => {
     expect(mockSetDoc).not.toHaveBeenCalled()
     const [message] = mockEnqueueSnackbar.mock.calls[0]
     expect(message).toEqual(expect.stringContaining('theme'))
-    expect(message).toEqual(expect.stringMatching(/reload/i))
+    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
   })
 
   it('SAVES the theme once the server has confirmed the seed', async () => {

@@ -34,6 +34,7 @@
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { setSeedConfirmWaitMs } from '@aglyn/tenant-feature-instance/hooks/helpers/listen-confirmation'
 import { setDoc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
 import HostWorkflowsCard from './host-workflows-card.component'
@@ -150,6 +151,10 @@ function editFirstWorkflowAndSave() {
   fireEvent.click(screen.getByRole('button', { name: 'Done' }))
 }
 
+// This spec pins the refusal, not the wait before it (AGL-4120).
+beforeAll(() => setSeedConfirmWaitMs(0))
+afterAll(() => setSeedConfirmWaitMs())
+
 describe('HostWorkflowsCard (AGL-1358)', () => {
   it('REFUSES to rewrite a workflow seeded from an unconfirmed read', async () => {
     listener.fromCache = true
@@ -163,7 +168,7 @@ describe('HostWorkflowsCard (AGL-1358)', () => {
     // The refusal explains itself and names a next step.
     const [message] = enqueueSnackbar.mock.calls[0]
     expect(message).toEqual(expect.stringContaining('workflow'))
-    expect(message).toEqual(expect.stringMatching(/reload/i))
+    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
     // …and the dialog is still open with what was being edited.
     expect((screen.getByLabelText(/^Name/) as HTMLInputElement).value).toEqual(
       'Notify on signup',

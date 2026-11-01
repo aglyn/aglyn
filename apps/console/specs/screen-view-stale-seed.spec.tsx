@@ -40,6 +40,7 @@
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { setSeedConfirmWaitMs } from '@aglyn/tenant-feature-instance/hooks/helpers/listen-confirmation'
 import type { ReactNode } from 'react'
 
 const mockUpdateDoc = jest.fn().mockReturnValue(Promise.resolve())
@@ -250,6 +251,10 @@ beforeEach(() => {
   mockScreenDoc.status = 'success'
 })
 
+// This spec pins the refusal, not the wait before it (AGL-4120).
+beforeAll(() => setSeedConfirmWaitMs(0))
+afterAll(() => setSeedConfirmWaitMs())
+
 describe('Screen rename (AGL-1358)', () => {
   const renameAndSave = () => {
     fireEvent.change(screen.getByLabelText('Display name'), {
@@ -269,7 +274,7 @@ describe('Screen rename (AGL-1358)', () => {
     expect(mockUpdateDoc).not.toHaveBeenCalled()
     const [message] = mockEnqueueSnackbar.mock.calls[0]
     expect(message).toEqual(expect.stringContaining('page details'))
-    expect(message).toEqual(expect.stringMatching(/reload/i))
+    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
     // The dialog stays open with what was typed.
     expect(
       (screen.getByLabelText('Display name') as HTMLInputElement).value,
@@ -323,7 +328,7 @@ describe('Screen SEO (AGL-1358)', () => {
     expect(mockUpdateDoc).not.toHaveBeenCalled()
     const [message] = mockEnqueueSnackbar.mock.calls[0]
     expect(message).toEqual(expect.stringContaining('SEO settings'))
-    expect(message).toEqual(expect.stringMatching(/reload/i))
+    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
     // The staged title is still on screen.
     expect((screen.getByLabelText('Title') as HTMLInputElement).value).toEqual(
       'Pricing and plans',

@@ -175,8 +175,8 @@ export function PicklistValuesCard(props: PicklistValuesCardProps) {
 
   /** Write the whole list — the list-only moves above. */
   const save = useCallback(
-    async (next: CrmPicklist, done: string) => {
-      if (!orgId || busy) return
+    async (next: CrmPicklist, done: string): Promise<boolean> => {
+      if (!orgId || busy) return false
       setBusy(true)
       try {
         const verdict = await writeGuardedBySeed({ subject: `${field} list`, fromCache }, () =>
@@ -201,12 +201,14 @@ export function PicklistValuesCard(props: PicklistValuesCardProps) {
         )
         if (!verdict.ok) {
           enqueueSnackbar(verdict.message, { variant: 'warning', persist: false })
-          return
+          return false
         }
         enqueueSnackbar(done, { variant: 'success', persist: false })
+        return true
       } catch (error) {
         console.error(error)
         enqueueSnackbar(failed, { variant: 'error', allowDuplicate: true })
+        return false
       } finally {
         setBusy(false)
       }
@@ -292,8 +294,9 @@ export function PicklistValuesCard(props: PicklistValuesCardProps) {
         })
         return
       }
-      setNameDialog(null)
-      await save(move.picklist, `“${draftName.trim()}” added`)
+      // The dialog holds what was typed until the list has really saved
+      // (AGL-4120): closing first made a refused add read as done.
+      if (await save(move.picklist, `“${draftName.trim()}” added`)) setNameDialog(null)
       return
     }
     const result = await post({ action: 'rename', valueId: nameDialog.value.id, label: draftName })

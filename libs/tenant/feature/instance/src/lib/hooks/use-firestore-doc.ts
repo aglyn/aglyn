@@ -20,6 +20,7 @@ import {
   onSnapshot,
   type DocumentData,
   type DocumentReference,
+  type DocumentSnapshot,
   type FirestoreError,
 } from 'firebase/firestore'
 import { useEffect, useRef, useState, type DependencyList } from 'react'
@@ -32,7 +33,11 @@ import {
   scheduleRefusedReopen,
   subscribeFirestoreSessionHeal,
 } from './firestore-denial-reporter'
-import { armFirestoreStallWatch } from './firebase/firestore-stall-recovery'
+import {
+  armFirestoreStallWatch,
+  noteFirestoreServerAnswer,
+} from './firebase/firestore-stall-recovery'
+import { sameDocument, trackListenConfirmation } from './helpers/listen-confirmation'
 
 const RETRY_DELAY_MS = 400
 const MAX_RETRIES = 5
@@ -162,6 +167,10 @@ export function useFirestoreDoc<T = DocumentData>(
      * stall) and by cleanup.
      */
     const disarmStall = armFirestoreStallWatch(ref.firestore)
+    /** What a save waits on while this listener is unconfirmed (AGL-4120). */
+    const confirmation = trackListenConfirmation()
+    /** The cached snapshot on screen, while one is (AGL-4120). */
+    let shownFromCache: DocumentSnapshot<DocumentData> | null = null
 
     const subscribe = () => {
       unsubscribe = onSnapshot(
@@ -178,11 +187,19 @@ export function useFirestoreDoc<T = DocumentData>(
           }
           setHasPendingWrites(snapshot.metadata.hasPendingWrites)
           setFromCache(snapshot.metadata.fromCache)
+          confirmation.report(
+            snapshot.metadata.fromCache,
+            !snapshot.metadata.fromCache &&
+              shownFromCache !== null &&
+              !sameDocument(shownFromCache, snapshot),
+          )
+          shownFromCache = snapshot.metadata.fromCache ? snapshot : null
           // Only the SERVER answering is evidence the session can read — and
           // the only thing that refunds the retry budget (AGL-1066). See the
           // long note on the same gate in `use-firestore-collection`.
           if (!snapshot.metadata.fromCache) {
             disarmStall()
+            noteFirestoreServerAnswer(ref.firestore)
             attempt = 0
             terminal = false
             setStatus('success')
@@ -212,6 +229,7 @@ export function useFirestoreDoc<T = DocumentData>(
         (err) => {
           if (cancelled) return
           disarmStall()
+          confirmation.release()
           unsubscribe?.()
           // Say so once per outage, and only for a refusal — a lost network
           // produces no error callback at all, so this cannot fire offline.
@@ -277,6 +295,7 @@ export function useFirestoreDoc<T = DocumentData>(
     return () => {
       cancelled = true
       disarmStall()
+      confirmation.release()
       unsubscribeHeal()
       if (timer) clearTimeout(timer)
       cancelRefusedReopen?.()
