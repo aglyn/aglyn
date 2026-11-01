@@ -73,6 +73,7 @@ import {
   useCanvasLayoutStyleOverrides,
   useAddElementDrawerCallback,
   useBesignerDocument,
+  useBesignerOpenDraftParam,
   useComponentPropagationNotice,
   useRenderedCanvasElements,
   useLayoutChromeCanvas,
@@ -348,6 +349,8 @@ function BesignerPage(props) {
   // The server put the id in the title; this swaps in the loaded name.
   useDeclareDocumentSubject(screenId, screenResult?.data?.displayName)
   const firestore = useFirestore()
+  // An AI change's link opens on its draft (AGL-4116).
+  const openSharedDraft = useBesignerOpenDraftParam()
   const { doc: result, setDoc: updateVersionDoc } = useScreenVersion({
     hostId: hostId as string,
     screenId: screenId as string,
@@ -633,7 +636,7 @@ function BesignerPage(props) {
     // alone and never offers a draft that should not exist there.
     // An email screen's save IS the promote, so a working draft would be a
     // second copy of state the send path never reads — it stays off there.
-    firestore: editingLiveVersion && !isEmailScreen ? firestore : undefined,
+    firestore: (editingLiveVersion || openSharedDraft) && !isEmailScreen ? firestore : undefined,
     // The crash-recovery prompt is withheld while anyone else is in this
     // room (AGL-2486): the mirror already has the unsaved work, so there is
     // nothing to recover and both of its buttons could only take something
@@ -643,6 +646,12 @@ function BesignerPage(props) {
       presence.status,
       presence.entries.length,
     ),
+    // An AI change's link opens over the author's own other tabs (AGL-4116).
+    roomPeople: recoverableRoomSessions(
+      presence.status,
+      presence.entries.filter((entry) => !entry.isSelf).length,
+    ),
+    openSharedDraft,
     // A save inside Save & publish keeps its refusals (they stop the publish
     // and say why) and drops its success, which the publish reports.
     notify: (message, options) =>

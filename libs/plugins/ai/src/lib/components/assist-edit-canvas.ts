@@ -43,6 +43,7 @@ import {
   ASSIST_EDIT_CONTEXT_MAX_PROPS,
   ASSIST_EDIT_OUTLINE_TEXT_CHARS,
   ASSIST_EDIT_SELECTED_TEXT_CHARS,
+  ASSIST_EDIT_WHOLE_MAX_NODES,
   assistEditOpCounts,
   type AssistEditCanvasContext,
   type AssistEditCanvasNode,
@@ -63,9 +64,9 @@ import {
  * `batch`, so the whole proposal is one undo step and a guard that refuses
  * part-way leaves nothing behind. Every change is an unsaved edit on the
  * version the editor has open; saving it stays the author's act, with the
- * editor's own control. A version the live site serves is never edited:
- * the check refuses it, and the card offers the editor's own new-version
- * flow instead.
+ * editor's own control. On a version the live site serves, that save writes
+ * the page's draft and never the version, so a change lands there too and
+ * reaches visitors only when the author publishes (AGL-4116).
  */
 
 /** A node as the canvas holds it — the fields this module reads. */
@@ -241,6 +242,12 @@ function countElements(canvas: Pick<AssistEditCanvas, 'getNode'>): number {
  * inside each: enough for a change to the page as a whole, and the prompt asks
  * for a selection before anything more specific.
  *
+ * With `whole`, it is the whole document instead (AGL-4116), up to
+ * `ASSIST_EDIT_WHOLE_MAX_NODES`: every element, in the order it reads on the
+ * page, with its settings and its styles. That is what the chat in the
+ * Besigner sends, so "change the Get in touch button" finds the button with
+ * nothing selected. A document past the cap falls back to the two tiers.
+ *
  * An element is only ever described after its parent, so every ancestor chain
  * the server checks is whole. `total` counts the document, and each element's
  * `childCount` stays its real one, so the server can tell the model what the
@@ -250,9 +257,12 @@ function countElements(canvas: Pick<AssistEditCanvas, 'getNode'>): number {
 export function describeAssistEditCanvas(
   canvas: Pick<AssistEditCanvas, 'getNode'>,
   selectedId: string | null,
+  options: { whole?: boolean } = {},
 ): AssistEditCanvasContext | null {
   const root = canvas.getNode(CANVAS_ROOT_ELEMENT_ID)
   if (!root) return null
+  const whole = options.whole ? describeWholeCanvas(canvas, selectedId) : null
+  if (whole) return whole
   const order: string[] = []
   const seen = new Set<string>()
   const brief = new Set<string>()
@@ -331,39 +341,87 @@ export function describeAssistEditCanvas(
     }
   }
 
-  const nodes: AssistEditCanvasNode[] = order.map((id) => {
-    const node = canvas.getNode(id) as AssistEditCanvasNodeLike
-    const isRoot = id === CANVAS_ROOT_ELEMENT_ID
-    const parentId = isRoot ? null : (node.parentId ?? null)
-    const parent = parentId ? canvas.getNode(parentId) : undefined
+  const nodes = order.map((id) => {
     const isSelected = id === selected?.$id
-    const isBrief = brief.has(id)
-    const props = isBrief
-      ? undefined
-      : describeProps(
-          node.props,
-          isSelected ? ASSIST_EDIT_SELECTED_TEXT_CHARS : ASSIST_EDIT_OUTLINE_TEXT_CHARS,
-        )
-    const sx = isSelected ? describeSx(node.sx) : undefined
-    const model = like.get(id)
-    return {
-      id,
-      componentId: String(node.componentId ?? ''),
-      parentId,
-      index: Math.max(0, parent?.nodes?.indexOf(id) ?? 0),
-      childCount: node.nodes?.length ?? 0,
-      ...(node.name ? { name: String(node.name) } : {}),
-      ...(props ? { props } : {}),
-      ...(sx ? { sx } : {}),
-      ...(isBrief ? { brief: true } : {}),
-      ...(model ? { like: model } : {}),
-      ...(isSelected ? summarizeInteractions(node.interactions) : {}),
-    }
+    return outlineElement(canvas, id, {
+      selected: isSelected,
+      brief: brief.has(id),
+      like: like.get(id),
+      textChars: isSelected ? ASSIST_EDIT_SELECTED_TEXT_CHARS : ASSIST_EDIT_OUTLINE_TEXT_CHARS,
+      styles: isSelected,
+    })
   })
   return {
     selectedId: selected?.$id && seen.has(selected.$id) ? selected.$id : null,
     total: countElements(canvas),
     nodes,
+  }
+}
+
+/** One element as an outline carries it, at the tier it was described in. */
+function outlineElement(
+  canvas: Pick<AssistEditCanvas, 'getNode'>,
+  id: string,
+  tier: { selected: boolean; brief?: boolean; like?: string; textChars: number; styles: boolean },
+): AssistEditCanvasNode {
+  const node = canvas.getNode(id) as AssistEditCanvasNodeLike
+  const parentId = id === CANVAS_ROOT_ELEMENT_ID ? null : (node.parentId ?? null)
+  const parent = parentId ? canvas.getNode(parentId) : undefined
+  const props = tier.brief ? undefined : describeProps(node.props, tier.textChars)
+  const sx = tier.styles ? describeSx(node.sx) : undefined
+  return {
+    id,
+    componentId: String(node.componentId ?? ''),
+    parentId,
+    index: Math.max(0, parent?.nodes?.indexOf(id) ?? 0),
+    childCount: node.nodes?.length ?? 0,
+    ...(node.name ? { name: String(node.name) } : {}),
+    ...(props ? { props } : {}),
+    ...(sx ? { sx } : {}),
+    ...(tier.brief ? { brief: true } : {}),
+    ...(tier.like ? { like: tier.like } : {}),
+    ...(tier.selected ? summarizeInteractions(node.interactions) : {}),
+  }
+}
+
+/**
+ * The whole document as the chat in the Besigner sends it (AGL-4116): every
+ * element depth first, children in their stored order, so the outline reads
+ * as the page does and each element follows its parent. Null past the cap.
+ */
+function describeWholeCanvas(
+  canvas: Pick<AssistEditCanvas, 'getNode'>,
+  selectedId: string | null,
+): AssistEditCanvasContext | null {
+  const total = countElements(canvas)
+  if (total > ASSIST_EDIT_WHOLE_MAX_NODES) return null
+  const selected = selectedId !== CANVAS_ROOT_ELEMENT_ID ? selectedId : null
+  const nodes: AssistEditCanvasNode[] = []
+  const seen = new Set<string>([CANVAS_ROOT_ELEMENT_ID])
+  const pending = [CANVAS_ROOT_ELEMENT_ID]
+  while (pending.length) {
+    const id = pending.pop() as string
+    const node = canvas.getNode(id)
+    if (!node) continue
+    nodes.push(
+      outlineElement(canvas, id, {
+        selected: id === selected,
+        textChars: ASSIST_EDIT_SELECTED_TEXT_CHARS,
+        styles: true,
+      }),
+    )
+    const children = node.nodes ?? []
+    for (let index = children.length - 1; index >= 0; index -= 1) {
+      if (seen.has(children[index])) continue
+      seen.add(children[index])
+      pending.push(children[index])
+    }
+  }
+  return {
+    selectedId: selected && nodes.some((node) => node.id === selected) ? selected : null,
+    total,
+    nodes,
+    whole: true,
   }
 }
 

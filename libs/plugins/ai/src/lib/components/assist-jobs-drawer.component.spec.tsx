@@ -462,6 +462,15 @@ describe('cancel', () => {
   })
 })
 
+describe('aiJobOutputHref on a change in a page’s draft (AGL-4116)', () => {
+  it('opens that draft, and a change saved as a version opens the version', () => {
+    const page = { resource: 'screen', id: 'home', versionId: 'v-1', hostSubdomain: 'roofers', label: 'Home' } as never
+    const inDraft = { ...(page as object), inDraft: true } as never
+    expect(aiJobOutputHref(page, 'acme')).toBe('/acme/hosts/roofers/screens/home/versions/v-1/besigner')
+    expect(aiJobOutputHref(inDraft, 'acme')).toBe('/acme/hosts/roofers/screens/home/versions/v-1/besigner?draft=open')
+  })
+})
+
 describe('aiJobOutputHref', () => {
   /*
    * A campaign's and a product's pages are other plugins' (AGL-3080): the

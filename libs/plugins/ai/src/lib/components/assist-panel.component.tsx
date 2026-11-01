@@ -97,6 +97,7 @@ import type { AiJobSummary } from '../model/ai-jobs.types'
 import { cancelAiJobRequest, startAssistBuildRequest, startAssistPageChangeRequest } from './ai-job-requests'
 import {
   assistPageChangeDraftVersion,
+  assistPageChangeHistoryNote,
   isAssistPageChangeProposal,
   type AssistPageChangeProposal,
 } from '../model/assist-page-change'
@@ -224,6 +225,19 @@ interface AssistMessage {
   pageChangeJob?: AiJobSummary | null
   /** Why the change could not be started. */
   pageChangeNotice?: string | null
+}
+
+/**
+ * A turn as the next question's history carries it (AGL-4116): its words, and
+ * what became of the change it made, which the words alone never say.
+ */
+function assistHistoryText(message: AssistMessage): string {
+  const note =
+    assistPageChangeHistoryNote(message) ??
+    (message.edit && message.editOutcome?.kind === 'applied'
+      ? `(Applied to the open canvas as an unsaved change: ${message.edit.summary})`
+      : null)
+  return note ? `${message.text}\n\n${note}` : message.text
 }
 
 /** The key a follow-up waiting for its canvas is kept under, per org (AGL-3616). */
@@ -919,7 +933,7 @@ export function AssistPanelComponent(props: AssistDockProps) {
     // lands in the thread it was asked in.
     const history = messages
       .slice(-HISTORY_TURNS_SENT)
-      .map(({ role, text }) => ({ role, text }))
+      .map((message) => ({ role: message.role, text: assistHistoryText(message) }))
     const askedIn = threadKey
     updateThread(askedIn, (prior) => [
       ...prior,
@@ -950,9 +964,9 @@ export function AssistPanelComponent(props: AssistDockProps) {
     let proposedChange: AssistPageChangeProposal | null = null
     try {
       // The canvas outline rides along from the besigner document the open
-      // editor holds — ids, component ids and short values, never the stored
-      // document — and only while that editor is on the version the route
-      // names, so the outline and the selection are the ones on screen.
+      // editor holds, every element with its settings and styles (AGL-4116),
+      // and only while that editor is on the version the route names, so the
+      // outline and the selection are the ones on screen.
       const editDocument = editRungHint ? assistEditDocumentOf(pathname ?? '') : null
       const session = editDocument ? openEditorSession() : undefined
       const canvasOutline =
@@ -961,7 +975,7 @@ export function AssistPanelComponent(props: AssistDockProps) {
         session.documentKind === editDocument.kind &&
         session.documentId === editDocument.documentId &&
         session.versionId === editDocument.versionId
-          ? describeAssistEditCanvas(canvas, session.selectedNodeId?.() ?? null)
+          ? describeAssistEditCanvas(canvas, session.selectedNodeId?.() ?? null, { whole: true })
           : null
       const response = await authorizedFetch(user, '/api/assist/chat', {
         method: 'POST',

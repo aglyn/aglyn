@@ -35,6 +35,7 @@ import {
   recoverableRoomSessions,
   useAddElementDrawerCallback,
   useBesignerDocument,
+  useBesignerOpenDraftParam,
   useRenderedCanvasElements,
   withBesignerContext,
   type BesignerSaveBaseline,
@@ -184,6 +185,8 @@ function LayoutBesignerPage(props) {
   // live, so the canvas needs the routing map to resolve hrefs and the
   // Attributes panel needs screen names for the screen-select field.
   const firestore = useFirestore()
+  // An AI change's link opens on its draft (AGL-4116).
+  const openSharedDraft = useBesignerOpenDraftParam()
   /**
    * The live site, so a draft there answers a question versions already
    * answer. A layout is the sharper case for the gate, not the softer one: it
@@ -338,7 +341,7 @@ function LayoutBesignerPage(props) {
       versionId,
     },
     // The SHARED working draft, live version only.
-    firestore: editingLiveVersion ? firestore : undefined,
+    firestore: editingLiveVersion || openSharedDraft ? firestore : undefined,
     // The crash-recovery prompt is withheld while anyone else is in this
     // room (AGL-2486): the mirror already has the unsaved work, so there is
     // nothing to recover and both of its buttons could only take something
@@ -348,6 +351,12 @@ function LayoutBesignerPage(props) {
       presence.status,
       presence.entries.length,
     ),
+    // An AI change's link opens over the author's own other tabs (AGL-4116).
+    roomPeople: recoverableRoomSessions(
+      presence.status,
+      presence.entries.filter((entry) => !entry.isSelf).length,
+    ),
+    openSharedDraft,
     notify: enqueueSnackbar,
     // Tell the author what happens next when they are editing the LIVE
     // version. Without it the only feedback is "saved", the live page keeps

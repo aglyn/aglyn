@@ -33,6 +33,22 @@ export const VERSION_DRAFT_COLLECTION = 'draft'
 /** The only id a draft may have. One per version, by construction. */
 export const VERSION_DRAFT_DOC_ID = 'current'
 
+/**
+ * The query a link into the Besigner carries to open the version's saved
+ * draft on arrival (AGL-4116), rather than leave it behind the Open draft
+ * banner. An AI edit's Open in the Besigner uses it: the person asked for the
+ * change, so the change is what they should land on.
+ */
+export const BESIGNER_OPEN_DRAFT_PARAM = 'draft'
+
+/** The value of {@link BESIGNER_OPEN_DRAFT_PARAM} that asks for the draft to open. */
+export const BESIGNER_OPEN_DRAFT_VALUE = 'open'
+
+/** A Besigner address that opens the version's saved draft on arrival. */
+export function besignerOpenDraftHref(href: string): string {
+  return `${href}?${BESIGNER_OPEN_DRAFT_PARAM}=${BESIGNER_OPEN_DRAFT_VALUE}`
+}
+
 /** The version segment of a document with no versions of its own, as the mirror writes it. */
 export const COEDIT_MIRROR_CURRENT_VERSION = 'current'
 

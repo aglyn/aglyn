@@ -177,7 +177,7 @@ export function aiJobEditPrompt(input: {
 }): string {
   const datasets = editDatasetsBlock(input.datasets ?? [])
   return [
-    editSelectionBlock(input.context),
+    editSelectionBlock(input.context, { job: true }),
     ...(datasets ? ['', datasets] : []),
     '',
     `Request: ${input.brief.slice(0, AI_JOB_BRIEF_MAX_CHARS)}`,
