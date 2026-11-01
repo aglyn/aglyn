@@ -165,7 +165,8 @@ const CORE_LOCKDOWN_FEATURES: readonly PluginLockdownFeatureDeclaration[] = [
     // `marketplace/checkout` creates NEW Stripe checkout sessions exactly
     // like the billing route (AGL-1545); it is also the front door of a paid
     // install, so it carries BOTH keys and each keeps its own bypass rule.
-    apiPaths: { exact: ['marketplace/checkout'] },
+    // `marketplace/pay` is the same purchase, paid in the console (AGL-4049).
+    apiPaths: { exact: ['marketplace/checkout', 'marketplace/pay'] },
   },
   {
     key: 'marketplace-installs',
@@ -182,7 +183,12 @@ const CORE_LOCKDOWN_FEATURES: readonly PluginLockdownFeatureDeclaration[] = [
     // Publish/review/report paths map to nothing: a marketplace incident
     // must not stop publishers reporting or staff reviewing.
     apiPaths: {
-      exact: ['marketplace/checkout', 'marketplace/install', 'marketplace/update-artifact'],
+      exact: [
+        'marketplace/checkout',
+        'marketplace/pay',
+        'marketplace/install',
+        'marketplace/update-artifact',
+      ],
       prefixes: ['marketplace/install-'],
     },
   },

@@ -143,7 +143,10 @@ jest.mock('@aglyn/tenant-data-admin', () => {
 
 import type { Ga4PurchaseInput, Ga4SendResult } from '@aglyn/tenant-data-admin'
 
-import { marketplaceBillingWebhookHandler } from './billing-webhook'
+import {
+  marketplaceBillingWebhookHandler,
+  recordMarketplaceInvoicePurchase,
+} from './billing-webhook'
 
 const adminMock = jest.requireMock('@aglyn/tenant-data-admin') as {
   __writes: Array<{ path: string; data: Record<string, unknown> }>
@@ -168,6 +171,37 @@ const completedSession = (over: Record<string, unknown> = {}) => ({
       type: 'marketplace-purchase',
       listingId: 'listing-1',
       buyerUid: 'buyer-1',
+      sellerOrgId: 'seller-org',
+      feeCents: '2000',
+      transferCents: '8000',
+    },
+    ...over,
+  },
+  event: {},
+})
+
+/** The same sale, paid in the console (AGL-4049), as the test-mode run shaped it. */
+const paidInvoice = (over: Record<string, unknown> = {}) => ({
+  type: 'invoice.paid',
+  object: {
+    id: 'in_test_1',
+    status: 'paid',
+    customer: 'cus_buyer',
+    currency: 'usd',
+    livemode: false,
+    payment_intent: 'pi_1',
+    amount_paid: 10825,
+    // Measured beside `total_taxes[]` on a computed invoice: the scalar can
+    // be 0 or null, so the breakdown is what is read.
+    tax: 0,
+    total_taxes: [{ amount: 825, taxable_amount: 8000 }],
+    customer_address: { country: 'US', state: 'TX', city: 'Austin', postal_code: '78701' },
+    metadata: {
+      type: 'marketplace-purchase',
+      pluginSale: 'true',
+      listingId: 'listing-1',
+      buyerUid: 'buyer-1',
+      buyerOrgId: 'buyer-org',
       sellerOrgId: 'seller-org',
       feeCents: '2000',
       transferCents: '8000',
@@ -319,6 +353,160 @@ describe('marketplace purchase record (AGL-46/1544)', () => {
     expect(
       adminMock.__store['marketplacePurchases/cs_test_9']['createdAt'],
     ).toBe('NOW')
+  })
+})
+
+describe('a purchase paid in the console (AGL-4049)', () => {
+  it('invoice.paid writes the document a session writes, keyed by the invoice', async () => {
+    await marketplaceBillingWebhookHandler(paidInvoice() as any)
+    await marketplaceBillingWebhookHandler(
+      completedSession({
+        metadata: { ...completedSession().object.metadata, buyerOrgId: 'buyer-org' },
+        customer_details: { address: { country: 'US', state: 'TX' } },
+      }) as any,
+    )
+    const [invoiceWrite, sessionWrite] = adminMock.__writes
+    expect(invoiceWrite.path).toBe('marketplacePurchases/in_test_1')
+    expect(sessionWrite.path).toBe('marketplacePurchases/cs_test_1')
+    // Identical in shape and in value: `hasLivePurchase`, the seller ledger
+    // and the refund doors cannot tell the two doors apart.
+    expect(invoiceWrite.data).toEqual(sessionWrite.data)
+    expect(invoiceWrite.data).toMatchObject({
+      amountCents: 10825,
+      taxCents: 825,
+      feeCents: 2000,
+      transferCents: 8000,
+      paymentIntentId: 'pi_1',
+      buyerOrgId: 'buyer-org',
+      customerAddress: { country: 'US', state: 'TX' },
+      refundedAt: null,
+    })
+  })
+
+  it('ignores every other invoice on the endpoint', async () => {
+    await marketplaceBillingWebhookHandler(paidInvoice({ metadata: {} }) as any)
+    await marketplaceBillingWebhookHandler(
+      paidInvoice({ metadata: { type: 'subscription' } }) as any,
+    )
+    expect(adminMock.__writes).toEqual([])
+  })
+
+  it('a marketplace invoice that is not paid records nothing', async () => {
+    const { object } = paidInvoice()
+    await marketplaceBillingWebhookHandler({
+      type: 'invoice.payment_failed',
+      object,
+      event: {},
+    } as any)
+    expect(adminMock.__writes).toEqual([])
+  })
+
+  it('reports the platform net under the invoice id', async () => {
+    await marketplaceBillingWebhookHandler(paidInvoice() as any)
+    expect(adminMock.__ga4[0]).toMatchObject({
+      transactionId: 'in_test_1',
+      value: 20,
+      currency: 'usd',
+      stripeCustomerId: 'cus_buyer',
+    })
+  })
+
+  it('the webhook landing after the door changes nothing and reports nothing twice', async () => {
+    await recordMarketplaceInvoicePurchase(paidInvoice().object)
+    const first = { ...adminMock.__store['marketplacePurchases/in_test_1'] }
+    await marketplaceBillingWebhookHandler(paidInvoice() as any)
+    expect(adminMock.__store['marketplacePurchases/in_test_1']).toEqual(first)
+    // GA de-duplicates on the transaction id, and it is the same one.
+    expect(new Set(adminMock.__ga4.map((sent) => sent.transactionId))).toEqual(
+      new Set(['in_test_1']),
+    )
+  })
+
+  it('reads the payment intent from a newer API shape too', async () => {
+    await marketplaceBillingWebhookHandler(
+      paidInvoice({
+        payment_intent: undefined,
+        payments: { data: [{ payment: { payment_intent: 'pi_nested' } }] },
+      }) as any,
+    )
+    expect(adminMock.__writes[0].data['paymentIntentId']).toBe('pi_nested')
+  })
+
+  it('a refund finds a purchase made this way by its payment intent', async () => {
+    await marketplaceBillingWebhookHandler(paidInvoice() as any)
+    await marketplaceBillingWebhookHandler({
+      type: 'charge.refunded',
+      object: {
+        id: 'ch_1',
+        payment_intent: 'pi_1',
+        refunded: true,
+        amount_refunded: 10825,
+        currency: 'usd',
+      },
+      event: {},
+    } as any)
+    expect(adminMock.__store['marketplacePurchases/in_test_1']).toMatchObject({
+      refundedAt: 'NOW',
+      refundedCents: 10825,
+    })
+  })
+
+  describe('a sale by the platform org, where nobody was paid', () => {
+    const waived = {
+      metadata: {
+        ...paidInvoice().object.metadata,
+        feeCents: '0',
+        transferCents: '0',
+      },
+    }
+
+    beforeEach(() => {
+      process.env.STRIPE_SECRET_KEY = 'sk_test_spec'
+      // A read would find no transfer on the charge. Nothing should ask.
+      global.fetch = jest.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ amount: 10825, amount_refunded: 500 }),
+      })) as never
+    })
+
+    it('a full refund settles with nothing to pull back, and no recovery row', async () => {
+      await marketplaceBillingWebhookHandler(paidInvoice(waived) as any)
+      await marketplaceBillingWebhookHandler({
+        type: 'charge.refunded',
+        object: {
+          id: 'ch_1',
+          payment_intent: 'pi_1',
+          refunded: true,
+          amount_refunded: 10825,
+          currency: 'usd',
+        },
+        event: {},
+      } as any)
+      const purchase = adminMock.__store['marketplacePurchases/in_test_1'] ?? {}
+      expect(purchase['reversedTransferCents']).toBe(0)
+      expect(purchase['reversalFailedAt']).toBeUndefined()
+      expect(purchase['refundedCents']).toBe(10825)
+      expect(global.fetch).not.toHaveBeenCalled()
+    })
+
+    it('a partial refund records what came back, with no transfer to touch', async () => {
+      await marketplaceBillingWebhookHandler(paidInvoice(waived) as any)
+      await marketplaceBillingWebhookHandler({
+        type: 'charge.refunded',
+        object: {
+          id: 'ch_1',
+          payment_intent: 'pi_1',
+          refunded: false,
+          amount_refunded: 500,
+          currency: 'usd',
+        },
+        event: {},
+      } as any)
+      const purchase = adminMock.__store['marketplacePurchases/in_test_1'] ?? {}
+      expect(purchase['partialRefundedCents']).toBe(500)
+      expect(purchase['reversalFailedAt']).toBeUndefined()
+    })
   })
 })
 

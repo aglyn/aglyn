@@ -32,6 +32,7 @@ import { registerMarketplaceLockdown } from './server/publisher-lockdown'
 import { publishPluginHandler } from './server/publish-plugin'
 import { verificationRequestHandler } from './server/verification-request'
 import { checkoutHandler } from './server/checkout'
+import { payHandler } from './server/pay'
 import { connectHandler } from './server/connect'
 import { installHandler } from './server/install'
 import { installPluginHandler } from './server/install-plugin'
@@ -137,6 +138,7 @@ export function registerMarketplaceConsoleApi(): void {
   // unread there rather than counted as zero.
   registerRevenueSource(marketplaceRevenueSource, { pluginId: BUNDLE_ID })
   registerPluginApiRoute('marketplace/checkout', checkoutHandler)
+  registerPluginApiRoute('marketplace/pay', payHandler)
   registerPluginApiRoute('marketplace/connect', connectHandler)
   registerPluginApiRoute('marketplace/install', installHandler)
   registerPluginApiRoute('marketplace/install-plugin', installPluginHandler)
