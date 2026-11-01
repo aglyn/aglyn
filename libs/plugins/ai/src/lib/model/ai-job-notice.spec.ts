@@ -175,6 +175,13 @@ describe('a finished job', () => {
     )
   })
 
+  it('opens a change in the page’s draft on that draft (AGL-4116)', () => {
+    const notice = aiJobNotice(source({ kind: 'edit', outputs: [{ ...screen('pricing'), inDraft: true }] }), 'done')
+    expect(normalizeNotificationLink(notice.link, context)).toBe(
+      '/acme/hosts/roofers/screens/pricing/versions/pricing-v1/besigner?draft=open',
+    )
+  })
+
   it('opens AI jobs on a job with nothing of its own to open', () => {
     const notice = aiJobNotice(source({ kind: 'insight', hostId: null }), 'done')
     expect(normalizeNotificationLink(notice.link, { orgSlug: 'acme' })).toBe('/acme?aiJob=job-1')

@@ -39,6 +39,7 @@
  */
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { setSeedConfirmWaitMs } from '@aglyn/tenant-feature-instance/hooks/helpers/listen-confirmation'
 import { setFirestoreSessionReporters } from '@aglyn/tenant-feature-instance'
 import { deleteField, setDoc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
@@ -166,6 +167,10 @@ function editFirstEventAndSave() {
   fireEvent.click(screen.getByRole('button', { name: 'Save event' }))
 }
 
+// This spec pins the refusal, not the wait before it (AGL-4120).
+beforeAll(() => setSeedConfirmWaitMs(0))
+afterAll(() => setSeedConfirmWaitMs())
+
 describe('EventsConsolePage (AGL-1358)', () => {
   it('REFUSES to rewrite an event seeded from an unconfirmed read', async () => {
     listener.fromCache = true
@@ -178,7 +183,7 @@ describe('EventsConsolePage (AGL-1358)', () => {
     expect(setDoc).not.toHaveBeenCalled()
     const [message] = enqueueSnackbar.mock.calls[0]
     expect(message).toEqual(expect.stringContaining('event'))
-    expect(message).toEqual(expect.stringMatching(/reload/i))
+    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
     // …and the dialog is still open with what was being edited.
     expect((screen.getByLabelText('Title') as HTMLInputElement).value).toEqual(
       'Launch party',

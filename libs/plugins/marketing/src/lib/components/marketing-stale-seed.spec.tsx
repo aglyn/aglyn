@@ -43,6 +43,7 @@
  */
 
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { setSeedConfirmWaitMs } from '@aglyn/tenant-feature-instance/hooks/helpers/listen-confirmation'
 import { useListQueryDouble } from '@aglyn/tenant-feature-instance/testing/list-query-double'
 import { setDoc, updateDoc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
@@ -194,6 +195,10 @@ beforeEach(() => {
   listener.status = 'success'
 })
 
+// This spec pins the refusal, not the wait before it (AGL-4120).
+beforeAll(() => setSeedConfirmWaitMs(0))
+afterAll(() => setSeedConfirmWaitMs())
+
 describe('PopupCard (AGL-1358)', () => {
   /** Save is disabled until the form differs from the seed. */
   const editHeadlineAndSave = () => {
@@ -216,7 +221,7 @@ describe('PopupCard (AGL-1358)', () => {
     expect(mockLogActivity).not.toHaveBeenCalled()
     const [message] = enqueueSnackbar.mock.calls[0]
     expect(message).toEqual(expect.stringContaining('popup'))
-    expect(message).toEqual(expect.stringMatching(/reload/i))
+    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
     // The form keeps what was typed, so the refusal is not a silent no-op.
     expect(
       (screen.getByLabelText('Headline') as HTMLInputElement).value,
@@ -270,7 +275,7 @@ describe('AnnouncementBarCard (AGL-1358)', () => {
     expect(mockLogActivity).not.toHaveBeenCalled()
     const [message] = enqueueSnackbar.mock.calls[0]
     expect(message).toEqual(expect.stringContaining('announcement bar'))
-    expect(message).toEqual(expect.stringMatching(/reload/i))
+    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
     expect((screen.getByLabelText('Text') as HTMLInputElement).value).toEqual(
       'Free shipping all month',
     )
@@ -330,7 +335,7 @@ describe('HostExperimentsCard (AGL-1358)', () => {
     expect(mockLogActivity).not.toHaveBeenCalled()
     const [message] = enqueueSnackbar.mock.calls[0]
     expect(message).toEqual(expect.stringContaining('experiment'))
-    expect(message).toEqual(expect.stringMatching(/reload/i))
+    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
     // The editor stays open with the row that was being edited.
     expect((screen.getByLabelText(/^Name/) as HTMLInputElement).value).toEqual(
       'Hero copy',

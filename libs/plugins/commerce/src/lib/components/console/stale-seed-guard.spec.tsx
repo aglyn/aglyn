@@ -46,6 +46,7 @@
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { setSeedConfirmWaitMs } from '@aglyn/tenant-feature-instance/hooks/helpers/listen-confirmation'
 import { addDoc, getDoc, setDoc, updateDoc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
 import DiscountsCard from './discounts-card.component'
@@ -270,6 +271,10 @@ function editFirstRowAndSave() {
   fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 }
 
+// This spec pins the refusal, not the wait before it (AGL-4120).
+beforeAll(() => setSeedConfirmWaitMs(0))
+afterAll(() => setSeedConfirmWaitMs())
+
 describe('SuppliersCard (AGL-1358)', () => {
   it('REFUSES to rewrite a supplier seeded from an unconfirmed read', async () => {
     listener.fromCache = true
@@ -284,7 +289,7 @@ describe('SuppliersCard (AGL-1358)', () => {
     // like a save that quietly did nothing.
     const [message] = enqueueSnackbar.mock.calls[0]
     expect(message).toEqual(expect.stringContaining('supplier'))
-    expect(message).toEqual(expect.stringMatching(/reload/i))
+    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
     // …and the dialog is still open with what was typed.
     expect(screen.getByLabelText('Webhook secret')).toBeTruthy()
   })
@@ -482,7 +487,7 @@ describe('ProductEditorDialog (AGL-1358)', () => {
     expect(setDoc).not.toHaveBeenCalled()
     const [message] = enqueueSnackbar.mock.calls[0]
     expect(message).toEqual(expect.stringContaining('product'))
-    expect(message).toEqual(expect.stringMatching(/reload/i))
+    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
   })
 
   it('SAVES the product once the server has confirmed the seed', async () => {

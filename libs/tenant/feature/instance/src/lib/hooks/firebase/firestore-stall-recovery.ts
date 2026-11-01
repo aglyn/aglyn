@@ -90,12 +90,33 @@ import { browserWedgeEscalationFor } from './firestore-multitab-wedge'
  * - **Once per {@link STALL_RECOVERY_COOLDOWN_MS} per client.** Every list on
  *   a page stalls together, and one cycle serves them all. A concurrent
  *   request shares the cycle already running.
+ * - **A client the server is answering is not stalled (AGL-4120).** See below.
  * - **The network is always re-enabled**, including when disabling fails.
  * - **Each step is bounded by {@link NETWORK_STEP_TIMEOUT_MS}.** Both calls are
  *   queued on the client's AsyncQueue, and when another tab has locked the
  *   shared IndexedDB they queue behind an operation that never finishes
  *   (AGL-3428). Unbounded, the first such cycle never settled, and every
  *   later recovery request shared it forever.
+ *
+ * ## The cycle is not free, so it needs a silent client (AGL-4120)
+ *
+ * A stall watch knows one thing: ITS listener has not been confirmed. That used
+ * to be enough to cycle, so one slow listener among thirty-five took the whole
+ * client off the network, and the cycle did real damage to one that was working.
+ * `disableNetwork` makes a primary ineligible for its own lease
+ * (`canActAsPrimary`), so it hands the lease over, to a hidden tab if one is
+ * waiting: captured in production as `NET-OFF, LEASE-RELEASE, NET-ON`. And while
+ * the network is off, every view in a primary goes Offline, so every listener the
+ * server had already confirmed reads `fromCache` again until it is confirmed a
+ * second time. A contact page read server-confirmed at 9 s and unconfirmed from
+ * 14 s to past a minute, on a page nobody touched, refusing every save on it. A
+ * slow page was turned into a broken one by the code meant to rescue it.
+ *
+ * So every server-confirmed snapshot stamps the client
+ * ({@link noteFirestoreServerAnswer}), and a recovery within
+ * {@link FIRESTORE_STALL_MS} of one answers `'answering'` and does nothing. A
+ * client that is working through a page is left to finish. One that has really
+ * gone silent stops stamping, and the next watch to fire gets its cycle.
  *
  * ## When the cycle is not enough (AGL-3428)
  *
@@ -118,6 +139,13 @@ export const FIRESTORE_STALL_MS = 8_000
 export const STALL_RECOVERY_COOLDOWN_MS = 30_000
 
 /**
+ * The longest the wait between two cycles grows to, on a client that cycling is
+ * not bringing back. Doubling, so that a connection too slow to answer inside
+ * one cooldown is not restarted before it can.
+ */
+export const STALL_RECOVERY_MAX_COOLDOWN_MS = 5 * 60_000
+
+/**
  * The longest `disableNetwork` or `enableNetwork` may take. Both finish in
  * milliseconds on a client whose queue is moving.
  */
@@ -131,6 +159,8 @@ export type StallRecoveryOutcome =
   | 'hidden'
   /** A recovery ran moments ago; this request rode on it. */
   | 'cooling'
+  /** The server answered this client moments ago: it is busy, not stalled. */
+  | 'answering'
   /** The network was cycled. */
   | 'recovered'
   /** The cycle threw or timed out; the network was still re-enabled if at all possible. */
@@ -148,6 +178,13 @@ export interface StallRecoveryDeps {
   /** Whether the document is visible, or `true` where there is none. */
   isVisible?: () => boolean
   now?: () => number
+  /**
+   * When the server last confirmed anything for this client, or `undefined`
+   * if it has not. Without one, every stall is taken at its word.
+   */
+  lastServerAnswerAt?: () => number | undefined
+  /** How recent an answer proves the client is alive. */
+  answeringWindowMs?: number
   cooldownMs?: number
   /** The bound on each of `disable` and `enable`. */
   stepTimeoutMs?: number
@@ -176,11 +213,15 @@ export function createStallRecovery(deps: StallRecoveryDeps): StallRecovery {
     isOnline = browserOnline,
     isVisible = documentVisible,
     now = Date.now,
+    lastServerAnswerAt,
+    answeringWindowMs = FIRESTORE_STALL_MS,
     cooldownMs = STALL_RECOVERY_COOLDOWN_MS,
     stepTimeoutMs = NETWORK_STEP_TIMEOUT_MS,
     afterCycle,
   } = deps
   let lastStartedAt: number | undefined
+  /** Cycles in a row that the server has not answered since. */
+  let quietCycles = 0
   let running: Promise<StallRecoveryOutcome> | undefined
 
   /** Whether `step` settled successfully within `stepTimeoutMs`. */
@@ -221,8 +262,19 @@ export function createStallRecovery(deps: StallRecoveryDeps): StallRecovery {
       if (!isOnline()) return Promise.resolve('offline')
       if (!isVisible()) return Promise.resolve('hidden')
       const at = now()
-      if (lastStartedAt !== undefined && at - lastStartedAt < cooldownMs) {
-        return Promise.resolve('cooling')
+      const answeredAt = lastServerAnswerAt?.()
+      if (answeredAt !== undefined && at - answeredAt < answeringWindowMs) {
+        return Promise.resolve('answering')
+      }
+      if (lastStartedAt !== undefined) {
+        const cooldown = Math.min(
+          cooldownMs * 2 ** quietCycles,
+          STALL_RECOVERY_MAX_COOLDOWN_MS,
+        )
+        if (at - lastStartedAt < cooldown) return Promise.resolve('cooling')
+        const answeredSince =
+          answeredAt !== undefined && answeredAt >= lastStartedAt
+        quietCycles = answeredSince ? 0 : quietCycles + 1
       }
       lastStartedAt = at
       running = cycle().finally(() => {
@@ -234,6 +286,22 @@ export function createStallRecovery(deps: StallRecoveryDeps): StallRecovery {
 }
 
 const recoveries = new WeakMap<Firestore, StallRecovery>()
+
+/** When the server last confirmed a snapshot for each client. */
+const serverAnswers = new WeakMap<Firestore, number>()
+
+/**
+ * Records that the server just confirmed something for `firestore`: the
+ * evidence a stall watch does not have that this client is alive. Every listener
+ * that arms a watch calls this on a server-confirmed snapshot.
+ */
+export function noteFirestoreServerAnswer(
+  firestore: Firestore | null | undefined,
+): void {
+  if (firestore && typeof firestore === 'object') {
+    serverAnswers.set(firestore, Date.now())
+  }
+}
 
 /**
  * Recovers `firestore` if it has stalled. Safe to call from every reader
@@ -251,6 +319,7 @@ export function recoverStalledFirestore(
     recovery = createStallRecovery({
       disable: () => disableNetwork(firestore),
       enable: () => enableNetwork(firestore),
+      lastServerAnswerAt: () => serverAnswers.get(firestore),
       afterCycle: browserWedgeEscalationFor(firestore),
     })
     recoveries.set(firestore, recovery)
@@ -259,10 +328,16 @@ export function recoverStalledFirestore(
 }
 
 /**
- * Arms a stall timer for one read or listen. If `disarm` has not been called
- * within `stallMs`, `onStall` runs (by default, {@link recoverStalledFirestore}).
- * A tab that is hidden when the timer fires waits until it is shown, since
- * that is when a reader is waiting again.
+ * Arms a stall timer for one read or listen. Until `disarm` is called, `onStall`
+ * runs (by default, {@link recoverStalledFirestore}) every `stallMs`. A tab that
+ * is hidden when the timer fires waits until it is shown, since that is when a
+ * reader is waiting again.
+ *
+ * It keeps firing because one call can do nothing: the request may land inside
+ * a cooldown, or on a client that is still answering. A watch that spent itself
+ * there left its listener unconfirmed for life (AGL-4120), which is how a tab's
+ * first page worked and a later page's saves were refused. The calls cost nothing
+ * until one of them finds a client that really needs a cycle.
  *
  * Returns `disarm`, which is idempotent.
  */
@@ -274,6 +349,7 @@ export function armFirestoreStallWatch(
   const onStall =
     options.onStall ?? (() => void recoverStalledFirestore(firestore))
   let done = false
+  let timer: ReturnType<typeof setTimeout> | undefined
   let onVisible: (() => void) | undefined
   const fire = () => {
     if (done) return
@@ -287,10 +363,10 @@ export function armFirestoreStallWatch(
       document.addEventListener('visibilitychange', onVisible)
       return
     }
-    done = true
     onStall()
+    timer = setTimeout(fire, stallMs)
   }
-  const timer = setTimeout(fire, stallMs)
+  timer = setTimeout(fire, stallMs)
   return () => {
     if (done) return
     done = true

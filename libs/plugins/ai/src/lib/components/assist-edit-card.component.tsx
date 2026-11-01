@@ -42,11 +42,13 @@ import {
  * It says what would change — the counts, and what validation left out —
  * and offers exactly one way forward for the editor as it stands:
  *
- *  - on the document the proposal was made for, on a version the live site
- *    does not serve: **Apply as draft**, which the panel carries out through
- *    the canvas's own mutators as one undoable, unsaved change;
- *  - on the version the live site serves: **Make a new version**, the
- *    editor's own flow, after which the same card offers Apply there;
+ *  - on the document the proposal was made for: **Apply as draft**, which the
+ *    panel carries out through the canvas's own mutators as one undoable,
+ *    unsaved change. On the version the live site serves too (AGL-4116): the
+ *    Besigner saves that version's changes into the page's draft, never the
+ *    version itself, so the change is as safe there as an edit by hand, and
+ *    **Make a new version** is offered beside it for an author who wants the
+ *    change kept apart;
  *  - anywhere else: nothing to press but **No thanks**.
  *
  * The card makes no request and holds no write of its own: its buttons call
@@ -148,8 +150,8 @@ export function AssistEditCard(props: AssistEditCardProps) {
       >
         {!onDocument
           ? `Open this ${noun} in the Besigner to apply the change.`
-          : live
-            ? `This is the version your live site shows. Make a new version first — the change is applied there, and the live ${noun} stays as it is.`
+          : live && !savesComponent
+            ? `${brand} Assist changes nothing until you apply. Applying adds these changes to the open canvas as unsaved edits that undo takes back. This is the version your live site shows: Save draft keeps them in this ${noun}’s draft, and visitors see them only when you publish.`
             : savesComponent
               ? `${brand} Assist changes nothing until you apply. Applying saves the component to your library, and swaps this element for one that follows it — an unsaved edit on the open canvas that undo takes back. Nothing is published.`
               : `${brand} Assist changes nothing until you apply. Applying adds these changes to the open canvas as unsaved edits: undo takes them back, and nothing is saved or published until you save.`}
@@ -160,13 +162,13 @@ export function AssistEditCard(props: AssistEditCardProps) {
         </Alert>
       ) : null}
       <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
-        {onDocument && !live ? (
+        {onDocument ? (
           <Button variant="contained" size="small" onClick={onApply}>
             Apply as draft
           </Button>
         ) : null}
         {onDocument && live && session?.createVersion ? (
-          <Button variant="contained" size="small" onClick={onCreateVersion}>
+          <Button size="small" onClick={onCreateVersion}>
             Make a new version
           </Button>
         ) : null}

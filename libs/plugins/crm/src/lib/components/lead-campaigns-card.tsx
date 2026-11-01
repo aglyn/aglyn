@@ -144,19 +144,31 @@ export function LeadCampaignsCard(props: LeadCampaignsCardProps) {
     }
     setSaving(true)
     const next = containerMembershipValue(selected)
-    const verdict = await writeGuardedBySeed(
-      { subject: 'lead', fromCache, unreadable: leadStatus === 'error' },
-      async () => {
-        await updateDoc(doc(firestore, 'orgs', orgId, 'leads', leadId), {
-          campaignIds: next,
-          // The Leads list's Campaign filter under a site reads these
-          // (AGL-3321), from the lead with its new campaigns.
-          ...crmClientListFields('leads', lead, { campaignIds: next }, LEAD_CAMPAIGN_LIST_FIELDS),
-          updatedAt: serverTimestamp(),
-        })
-      },
-    )
-    setSaving(false)
+    let verdict: Awaited<ReturnType<typeof writeGuardedBySeed>>
+    try {
+      verdict = await writeGuardedBySeed(
+        { subject: 'lead', fromCache, unreadable: leadStatus === 'error' },
+        async () => {
+          await updateDoc(doc(firestore, 'orgs', orgId, 'leads', leadId), {
+            campaignIds: next,
+            // The Leads list's Campaign filter under a site reads these
+            // (AGL-3321), from the lead with its new campaigns.
+            ...crmClientListFields('leads', lead, { campaignIds: next }, LEAD_CAMPAIGN_LIST_FIELDS),
+            updatedAt: serverTimestamp(),
+          })
+        },
+      )
+    } catch (error) {
+      // A refused write has to say so, not leave the button spinning (AGL-4120).
+      console.error(error)
+      enqueueSnackbar('The filing could not be saved.', {
+        variant: 'error',
+        allowDuplicate: true,
+      })
+      return
+    } finally {
+      setSaving(false)
+    }
     // A rule may share by campaign (AGL-3336).
     if (verdict.ok) followUpSharing('leads', [leadId])
     if (!verdict.ok) {

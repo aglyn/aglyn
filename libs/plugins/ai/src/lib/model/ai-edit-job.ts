@@ -155,7 +155,7 @@ export function aiEditOutputNote(input: {
   const noun = NOUNS[input.kind]
   const where =
     input.placement === 'draft'
-      ? `Saved as this ${noun}’s draft. Nothing visitors see has changed: open the ${noun} in the Besigner and choose Open draft to review it, then publish it when it is ready.`
+      ? `Saved as this ${noun}’s draft. Nothing visitors see has changed: open it in the Besigner to review it, then publish it when it is ready.`
       : input.placement === 'new-current'
         ? `Saved as a new version, now this ${noun}’s current one. The ${noun} is not published, so no visitor sees it until you publish it.`
         : input.placement === 'new-beside'
