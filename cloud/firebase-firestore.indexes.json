@@ -2027,6 +2027,20 @@
       ]
     },
     {
+      "collectionGroup": "crmTasks",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "remindAtMs",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "crmActivities",
       "queryScope": "COLLECTION",
       "fields": [
