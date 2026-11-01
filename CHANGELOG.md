@@ -9,6 +9,23 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0 — 2026-11-01
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.297...v1.0.0)
+
+### Fixed
+
+- **ai:** AI page changes open on their draft; Assist reads the whole page ([AGL-4116](https://linear.app/aglyn/issue/AGL-4116))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **release:** v1.0.0-beta.298 ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
+
+</details>
+
+1 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
 ## v1.0.0-beta.298 — 2026-11-01
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.297...v1.0.0-beta.298)
