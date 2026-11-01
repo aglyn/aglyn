@@ -266,11 +266,14 @@ export const publishStarterHandler: PluginApiHandler = async (req, res) => {
       return res.status(403).json({ error: siteKeyRefusal('site.publish') })
     }
 
-    // Plan gate rides the owning org's doc (AGL-238).
+    // Plan gate rides the owning org's doc (AGL-238). A setup step the
+    // workspace takes elsewhere, as the profile and payouts are, so it is
+    // the same 412 the publish dialog shows as a warning with where to fix
+    // it (AGL-4049), rather than a refusal of the person.
     const orgForHost = await getOrgForHost(hostId)
     const org = orgForHost?.org ?? {}
     if (!checkEntitlement(org as any, 'marketplaceSelling')) {
-      return res.status(403).json({
+      return res.status(412).json({
         error: 'Publishing to the marketplace requires a Pro plan',
       })
     }

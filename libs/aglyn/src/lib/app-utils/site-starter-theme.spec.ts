@@ -16,10 +16,10 @@
  */
 
 import type { HostTheme } from '@aglyn/shared-data-types'
-import { readArtifactOverride, resolveOverride } from './artifact-overrides'
+import { diffOverride, overrideWriteValue, readArtifactOverride, resolveOverride } from './artifact-overrides'
 import { DEFAULT_SITE_THEME } from './default-site'
 import type { SiteStarterTheme } from './site-starter'
-import { planSiteStarterTheme, siteStarterTheme } from './site-starter-theme'
+import { planSiteStarterTheme, siteStarterBuiltinThemeOf, siteStarterTheme } from './site-starter-theme'
 import { THEME_FIELD_DELETE } from './theme-library'
 
 /**
@@ -174,5 +174,113 @@ describe('planSiteStarterTheme', () => {
   it('reads a malformed theme as the starter base with nothing over it', () => {
     expect(plan(undefined as never).host).toEqual({ theme: DEFAULT_SITE_THEME })
     expect(plan({ kind: 'full', theme: null } as never).host).toEqual({ theme: DEFAULT_SITE_THEME })
+  })
+})
+
+/**
+ * AGL-4049 phase 5 · "Publish as a starter": a site that wears a built-in
+ * theme publishes it as that built-in, with the brand colors and the font
+ * pairing it set over it, read so that a site created from the starter wears
+ * what the publisher's site wears.
+ */
+describe('siteStarterBuiltinThemeOf', () => {
+  beforeEach(() => {
+    ids = 0
+  })
+
+  /** A site born from a built-in starter theme, as the create writes it. */
+  const siteFrom = (theme: Extract<SiteStarterTheme, { kind: 'builtin' }>) => plan(theme).host
+
+  /** What a host renders: its theme with its override over it. */
+  const renders = (host: Record<string, unknown>) =>
+    resolved((host['theme'] ?? {}) as HostTheme, host['themeOverride'])
+
+  it('reads a built-in site as its base, the brand colors it set over it and its pairing', () => {
+    const reading = siteStarterBuiltinThemeOf(
+      siteFrom(builtin({ light: { primary: '#0a4' }, dark: { primary: '#6f6' } }, 'inter')),
+    )
+    expect(reading).toEqual({
+      theme: {
+        kind: 'builtin',
+        base: 'bootstrap',
+        brand: { light: { primary: '#0a4' }, dark: { primary: '#6f6' } },
+        fonts: 'inter',
+      },
+      baseName: 'Bootstrap',
+      fontsCarried: true,
+    })
+  })
+
+  it('reads back what the site wears: a site created from the reading renders the same theme', () => {
+    const site = siteFrom(builtin({ light: { primary: '#0a4', tertiary: '#b45309' } }, 'editorial'))
+    const reading = siteStarterBuiltinThemeOf(site)
+    expect(reading).not.toBeNull()
+    expect(renders(plan(reading!.theme).host)).toEqual(renders(site))
+  })
+
+  it("keeps each scheme's own colors: a light brand never recolors the base's dark scheme", () => {
+    const site = siteFrom(builtin({ light: { primary: '#0a4' }, dark: {} }))
+    const reading = siteStarterBuiltinThemeOf(site)
+    expect(reading?.theme.brand).toEqual({ light: { primary: '#0a4' }, dark: {} })
+    expect(renders(plan(reading!.theme).host).colorSchemes?.dark?.primary).toEqual(BOOTSTRAP.colorSchemes?.dark?.primary)
+  })
+
+  it('names no brand colors and no fonts for a built-in the site has not changed', () => {
+    expect(siteStarterBuiltinThemeOf(siteFrom(builtin({ light: {} })))?.theme).toEqual({
+      kind: 'builtin',
+      base: 'bootstrap',
+      brand: { light: {}, dark: {} },
+      fonts: null,
+    })
+  })
+
+  it('reads the theme every site is born with as the starter base', () => {
+    const reading = siteStarterBuiltinThemeOf({ theme: DEFAULT_SITE_THEME })
+    expect(reading?.theme).toEqual({ kind: 'builtin', base: 'starter', brand: { light: {}, dark: {} }, fonts: null })
+    expect(reading?.baseName).toBe('Site theme')
+    const recolored = siteFrom(builtin({ light: { primary: '#0a4' } }, null, 'starter'))
+    expect(siteStarterBuiltinThemeOf(recolored)?.theme).toMatchObject({
+      base: 'starter',
+      brand: { light: { primary: '#0a4' } },
+    })
+  })
+
+  it("is null for a site's own theme, a marketplace theme, the platform default or another plugin's built-in", () => {
+    expect(siteStarterBuiltinThemeOf({ theme: BOOTSTRAP })).toBeNull()
+    expect(
+      siteStarterBuiltinThemeOf({ theme: BOOTSTRAP, themeInstalledFrom: { listingId: 'listing-9' } }),
+    ).toBeNull()
+    expect(siteStarterBuiltinThemeOf({})).toBeNull()
+    expect(
+      siteStarterBuiltinThemeOf({
+        theme: BOOTSTRAP,
+        themeSelection: { kind: 'preset', id: 'preset--themes.bootstrap', name: 'Bootstrap' },
+      }),
+    ).toBeNull()
+    // A preset registered under the starter's name is not what `starter` creates.
+    expect(
+      siteStarterBuiltinThemeOf({
+        theme: BOOTSTRAP,
+        themeSelection: { kind: 'preset', id: 'preset--theme-presets.starter', name: 'Starter' },
+      }),
+    ).toBeNull()
+    expect(siteStarterBuiltinThemeOf(null)).toBeNull()
+  })
+
+  it('says so when the site sets fonts no pairing names, which a built-in starter cannot carry', () => {
+    const site = siteFrom(builtin({ light: {} }))
+    // A font the site picked in the theme editor, stored as the override
+    // over the built-in's copy, as the editor stores every edit.
+    const comic: HostTheme = {
+      ...BOOTSTRAP,
+      fonts: [{ family: 'Comic Neue', weights: [400], source: 'google' }],
+      typography: { fontFamily: '"Comic Neue", sans-serif' },
+    }
+    const reading = siteStarterBuiltinThemeOf({
+      ...site,
+      themeOverride: overrideWriteValue(diffOverride(BOOTSTRAP, comic), null),
+    })
+    expect(reading?.theme.fonts).toBeNull()
+    expect(reading?.fontsCarried).toBe(false)
   })
 })

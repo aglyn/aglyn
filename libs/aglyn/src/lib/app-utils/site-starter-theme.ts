@@ -16,18 +16,25 @@
  */
 
 import type { HostTheme, HostThemeSchemeColors } from '@aglyn/shared-data-types'
-import { writeThemeFonts } from '@aglyn/shared-util-tools/theme-fonts'
+import {
+  readThemeFonts,
+  writeThemeFonts,
+  type ThemeFontSelection,
+} from '@aglyn/shared-util-tools/theme-fonts'
 import type { ConsoleThemePreset } from '../plugin-manager/feature-plugins'
 import { diffOverride, overrideWriteValue } from './artifact-overrides'
 import { DEFAULT_SITE_THEME } from './default-site'
-import { siteFontPairing } from './site-font-pairings'
+import { SITE_FONT_PAIRINGS, siteFontPairing, type SiteFontPairing } from './site-font-pairings'
 import type { SiteStarterTheme } from './site-starter'
-import { themeArtifactContent } from './site-theme'
+import { parseColor, resolveSiteTheme, themeArtifactContent } from './site-theme'
 import {
   planThemeLibraryAction,
+  presetEntryId,
+  readThemeSelection,
   THEME_FIELD_DELETE,
   type ThemeLibraryAction,
   type ThemeLibraryEntryWrite,
+  type ThemeLibraryHost,
 } from './theme-library'
 
 /**
@@ -240,5 +247,116 @@ export function planSiteStarterTheme(input: {
       themeOverride: starterOverride(builtin, DEFAULT_SITE_THEME),
     }),
     entries: [],
+  }
+}
+
+/*==========================================
+ * A SITE'S OWN BUILT-IN, READ BACK AS A STARTER THEME (AGL-4049).
+ *
+ * "Publish as a starter" offers a site that wears a built-in theme the
+ * starter's built-in shape: the base it picked, the brand colors it set over
+ * it, and its font pairing. Read so that a site created from the starter
+ * wears what the publisher's site wears: a color the site never changed is
+ * left to the base (its hand-tuned shades kept), each scheme names its own
+ * colors (so a light brand never recolors the base's dark scheme), and fonts
+ * the site never changed name no pairing.
+ *=========================================*/
+
+/** A site's built-in theme as a starter would carry it. */
+export interface SiteStarterBuiltinReading {
+  theme: BuiltinStarterTheme
+  /** What the site's theme library calls the built-in it wears. */
+  baseName: string
+  /**
+   * False when the site sets fonts that no pairing names: a built-in starter
+   * names its fonts by pairing, so the starter wears the base's own fonts
+   * and only the full theme keeps the site's.
+   */
+  fontsCarried: boolean
+}
+
+/** The `themeSelection` id a built-in starter base is picked under. */
+const STARTER_PRESET_SELECTION = presetEntryId(siteStarterPresetId(''))
+
+/** The `main` of one palette color, as the theme stores it. */
+function paletteMain(colors: HostThemeSchemeColors | undefined, key: string): string | null {
+  const value = (colors as Record<string, unknown> | undefined)?.[key]
+  const main = isRecord(value) ? value['main'] : undefined
+  return typeof main === 'string' && main.trim() ? main.trim() : null
+}
+
+/** A font selection's families, as one comparable key. */
+const fontKey = (fonts: ThemeFontSelection) =>
+  `${fonts.body?.family.trim().toLowerCase() ?? ''}|${fonts.heading?.family.trim().toLowerCase() ?? ''}`
+
+/** A pairing's families, keyed as `readThemeFonts` reads them back once written. */
+const pairingKey = (pairing: SiteFontPairing) => {
+  const body = pairing.body.family.trim().toLowerCase()
+  const heading = pairing.heading.family.trim().toLowerCase()
+  return `${body}|${heading === body ? '' : heading}`
+}
+
+/**
+ * The built-in theme a site wears, as a starter's `builtin` theme, or `null`
+ * when it wears no built-in a starter can name: its own theme, a marketplace
+ * theme, the platform default, or a built-in another plugin contributes.
+ *
+ * - `base` is the built-in the site picked (`themeSelection`), or `starter`
+ *   for the theme every new site is born with, unchanged as its own.
+ * - `brand` holds, per scheme, each of the three brand colors whose `main`
+ *   the site changed from the base's.
+ * - `fonts` is the pairing whose families the site sets, or `null` when it
+ *   sets the base's own (or a pair no pairing names: `fontsCarried` false).
+ *
+ * Pure: reads the host document only.
+ */
+export function siteStarterBuiltinThemeOf(
+  host: ThemeLibraryHost | null | undefined,
+): SiteStarterBuiltinReading | null {
+  if (!isRecord(host)) return null
+  const base = themeArtifactContent(host.theme)
+  const selection = readThemeSelection(host)
+  let baseId: string | null = null
+  if (selection.kind === 'preset' && selection.id.startsWith(STARTER_PRESET_SELECTION)) {
+    const id = selection.id.slice(STARTER_PRESET_SELECTION.length)
+    // A built-in registered under the starter's own name is never what
+    // `starter` creates (`planSiteStarterTheme`).
+    baseId = id && id !== 'starter' ? id : null
+  } else if (
+    selection.kind === 'custom' &&
+    diffOverride(base, themeArtifactContent(DEFAULT_SITE_THEME)) === undefined
+  ) {
+    baseId = 'starter'
+  }
+  if (!baseId) return null
+
+  const wears = resolveSiteTheme(host) ?? {}
+  const brandOf = (scheme: Scheme): Record<string, string> => {
+    const out: Record<string, string> = {}
+    for (const key of SITE_STARTER_BRAND_KEYS) {
+      const main = paletteMain(wears.colorSchemes?.[scheme], key)
+      if (!main || !parseColor(main)) continue
+      if (main.toLowerCase() === paletteMain(base.colorSchemes?.[scheme], key)?.toLowerCase()) continue
+      out[key] = main
+    }
+    return out
+  }
+
+  const siteFonts = readThemeFonts(wears)
+  const sameFonts = fontKey(siteFonts) === fontKey(readThemeFonts(base))
+  const pairing = sameFonts
+    ? null
+    : (SITE_FONT_PAIRINGS.find((entry) => pairingKey(entry) === fontKey(siteFonts)) ?? null)
+
+  return {
+    theme: {
+      kind: 'builtin',
+      base: baseId,
+      // Both schemes always: a `dark` left out would be colored with `light`.
+      brand: { light: brandOf('light'), dark: brandOf('dark') },
+      fonts: pairing?.id ?? null,
+    },
+    baseName: selection.name,
+    fontsCarried: sameFonts || !!pairing,
   }
 }

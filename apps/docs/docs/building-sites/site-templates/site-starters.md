@@ -102,9 +102,18 @@ changes the starter, and later changes to the starter never change your site.
 Choosing a starter, and buying one, takes the **Create sites** permission, the same one
 creating any site does. Without it, **Create site** tells you so before anything is asked.
 
+## Publishing your own {#publishing-your-own}
+
+Any workspace whose plan includes selling on the marketplace can publish one of its sites
+as a starter, free or with a price: **Admin → Backup & template → Publish as a starter**.
+You choose whether it carries your site's built-in theme with its brand colors, or your
+site's full theme. A new starter is reviewed before anyone else can see it.
+[Publish as a starter](save-a-template.md#publish-as-a-starter) walks through it.
+
 ## Related {#related}
 
 - [Create a site](../../getting-started/create-a-site.md)
 - [Your templates library](templates-library.md), for the starter templates every site
   can use to add pages
 - [Start a new site with AI](../../ai/start-with-ai.md)
+- [Publish as a starter](save-a-template.md#publish-as-a-starter)
