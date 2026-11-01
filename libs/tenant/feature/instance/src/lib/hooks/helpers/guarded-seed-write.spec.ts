@@ -109,7 +109,7 @@ describe('writeGuardedBySeed (AGL-1356)', () => {
     // Specifically NOT the blanks explanation, which is the one that is false
     // when there is cached content on screen.
     expect(verdict.message).not.toEqual(expect.stringMatching(/blanks/i))
-    expect(verdict.message).toEqual(expect.stringMatching(/out of date/i))
+    expect(verdict.message).toEqual(expect.stringMatching(/could not confirm/i))
   })
 
   /**
@@ -125,7 +125,7 @@ describe('writeGuardedBySeed (AGL-1356)', () => {
       expect(verdict.ok).toBe(false)
       expect(verdict.message).toEqual(expect.stringContaining('supplier'))
       // Every refusal names a next step rather than only a diagnosis.
-      expect(verdict.message).toEqual(expect.stringMatching(/[Rr]eload/))
+      expect(verdict.message).toEqual(expect.stringMatching(/reload|save again/i))
     }
   })
 
@@ -147,15 +147,13 @@ describe('writeGuardedBySeed (AGL-1356)', () => {
    *    it instantly. See the note on `refusalMessage` for why this is copy
    *    rather than a branch.
    */
-  it('reads correctly for a PLURAL subject, and names BOTH remedies (AGL-1446)', () => {
+  it('reads correctly for a PLURAL subject, and says nothing was saved (AGL-4120)', () => {
     expect(
       checkSeedFreshness({ subject: 'SEO settings', fromCache: true }).message,
     ).toBe(
-      'We could not confirm your SEO settings with the server, so what is on ' +
-        'screen may be out of date — saving now could overwrite newer values. ' +
-        'Check your connection and reload; if it is refused again, open this ' +
-        'page in a new browser tab — reloading cannot restore a connection ' +
-        'this tab never opened.',
+      'We could not confirm your SEO settings with the server yet, so nothing ' +
+        'was saved. What you entered is still here. Check your connection and ' +
+        'save again in a moment.',
     )
 
     expect(
@@ -174,19 +172,17 @@ describe('writeGuardedBySeed (AGL-1356)', () => {
   })
 
   /**
-   * The remedy that is missing is the one the message has to carry, because
-   * the guard cannot tell the two states apart — see `refusalMessage`. A
-   * later change that "tightens" this back to reload-only would restore the
-   * exact defect AGL-1446 was filed for, so assert the second remedy on its
-   * own rather than only inside the exact-copy pin above.
+   * "Open a new tab" and "this tab never opened a connection" were a diagnosis,
+   * and a wrong one: the connection was never lost (AGL-4120). A refusal states
+   * what is true and what to do, and an instruction that reads as a superstition
+   * is one nobody should be given.
    */
-  it('tells an author what to do when RELOADING does not clear it (AGL-1446)', () => {
-    const { message } = checkSeedFreshness({
-      subject: 'settings',
-      fromCache: true,
-    })
-    expect(message).toEqual(expect.stringMatching(/reload/i))
-    expect(message).toEqual(expect.stringMatching(/new browser tab/i))
+  it('no longer blames a connection the tab never lost (AGL-4120)', () => {
+    const { message } = checkSeedFreshness({ subject: 'settings', fromCache: true })
+    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
+    expect(message).toEqual(expect.stringMatching(/still here/i))
+    expect(message).not.toEqual(expect.stringMatching(/new browser tab/i))
+    expect(message).not.toEqual(expect.stringMatching(/never opened/i))
   })
 
   /**

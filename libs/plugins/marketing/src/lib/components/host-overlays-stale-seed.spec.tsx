@@ -35,6 +35,7 @@
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { setSeedConfirmWaitMs } from '@aglyn/tenant-feature-instance/hooks/helpers/listen-confirmation'
 import { setDoc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
 import HostOverlaysCard from './host-overlays-card.component'
@@ -120,6 +121,10 @@ function editFirstOverlayAndSave() {
   fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 }
 
+// This spec pins the refusal, not the wait before it (AGL-4120).
+beforeAll(() => setSeedConfirmWaitMs(0))
+afterAll(() => setSeedConfirmWaitMs())
+
 describe('HostOverlaysCard (AGL-1358)', () => {
   it('REFUSES to replace an overlay seeded from an unconfirmed read', async () => {
     listener.fromCache = true
@@ -134,7 +139,7 @@ describe('HostOverlaysCard (AGL-1358)', () => {
     expect(mockLogActivity).not.toHaveBeenCalled()
     const [message] = enqueueSnackbar.mock.calls[0]
     expect(message).toEqual(expect.stringContaining('overlay'))
-    expect(message).toEqual(expect.stringMatching(/reload/i))
+    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
     // The editor stays open with what was typed.
     expect(
       (screen.getByDisplayValue('Spring sale on now') as HTMLInputElement)

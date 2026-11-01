@@ -43,6 +43,7 @@
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { setSeedConfirmWaitMs } from '@aglyn/tenant-feature-instance/hooks/helpers/listen-confirmation'
 import type { ReactNode } from 'react'
 import {
   __resetSessionHealth,
@@ -157,6 +158,10 @@ const killTheSession = () => {
   reportDeniedRead('hosts/host-1/screens')
 }
 
+// This spec pins the refusal, not the wait before it (AGL-4120).
+beforeAll(() => setSeedConfirmWaitMs(0))
+afterAll(() => setSeedConfirmWaitMs())
+
 describe('PluginConfigCard seed guard (AGL-1449)', () => {
   it('REFUSES a save seeded from an unconfirmed read', async () => {
     mockSettingsDoc.fromCache = true
@@ -168,10 +173,9 @@ describe('PluginConfigCard seed guard (AGL-1449)', () => {
     expect(mockSetDoc).not.toHaveBeenCalled()
     const [message] = mockEnqueueSnackbar.mock.calls[0]
     expect(message).toEqual(expect.stringContaining('plugin settings'))
-    expect(message).toEqual(expect.stringMatching(/reload/i))
-    // AGL-1446's remedy reaches this call site now, which it could not while
-    // the card carried its own copy.
-    expect(message).toEqual(expect.stringMatching(/new browser tab/i))
+    // The guard's words reach this call site, which they could not while the
+    // card carried its own copy.
+    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
     // And it is the guard's words, not the card's old ones.
     expect(message).not.toEqual(
       expect.stringContaining('These settings have not been confirmed'),

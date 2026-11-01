@@ -132,6 +132,12 @@ export interface BesignerDraftState {
    * must not delete it on the way past.
    */
   sharedDraftUnopened: boolean
+  /**
+   * A link asked for the saved draft to open on arrival (AGL-4116), and
+   * someone else's work on this page is keeping it closed. True while that
+   * holds; it opens by itself once the room clears.
+   */
+  openWithheld: boolean
   /** Puts the draft into the canvas as an undoable, unsaved change. */
   restore: () => void
   /** Drops the offer and the stored draft. */
@@ -145,6 +151,7 @@ const EMPTY_STATE: BesignerDraftState = {
   origin: 'browser',
   restoreBlockedBy: null,
   sharedDraftUnopened: false,
+  openWithheld: false,
   restore: () => undefined,
   discard: () => undefined,
 }
@@ -221,6 +228,22 @@ export interface UseBesignerDraftOptions {
    * session by construction, and must keep its crash net.
    */
   roomSessions?: number | null
+  /**
+   * The saved draft was asked for by the link that opened this editor
+   * (`BESIGNER_OPEN_DRAFT_PARAM`, AGL-4116): put it on the canvas as soon as
+   * it answers, with the same undoable step Open draft takes, under the same
+   * conditions the offer is made on. A crash-net draft is never opened this
+   * way: it is residue, and it stays a choice.
+   */
+  openShared?: boolean
+  /**
+   * The other PEOPLE in this room, leaving out this author's own other tabs,
+   * or null while unknown. Read only by {@link openShared}: a link the author
+   * followed is their own say-so over a tab of their own, which is the room
+   * an Assist chat leaves open behind it. Somebody else's session still holds
+   * it. Omitted, it is {@link roomSessions}.
+   */
+  roomPeople?: number | null
 }
 
 /**
@@ -272,6 +295,8 @@ export function useBesignerDraft(
   // and you are alone".
   const roomSessions =
     options.roomSessions === undefined ? 0 : options.roomSessions
+  const roomPeople =
+    options.roomPeople === undefined ? roomSessions : options.roomPeople
   const key = ids ? besignerDraftKey(ids) : null
 
   /** The draft being offered, held in memory for the life of the offer. */
@@ -608,6 +633,22 @@ export function useBesignerDraft(
 
   const sharedDraftUnopened = Boolean(offer && offerOrigin === 'shared')
 
+  // The draft a link asked for (AGL-4116), on the document the link opened:
+  // an editor that stays mounted across a version switch must not open the
+  // next version's draft too. Everything but the room is the offer's own
+  // rule, so what opens here is what Open draft would have opened.
+  const askedKeyRef = useRef<string | null>(null)
+  if (options.openShared && askedKeyRef.current === null) askedKeyRef.current = key
+  const openRequested =
+    key !== null && askedKeyRef.current === key && sharedDraftUnopened && !restoreBlockedBy
+  const openRoomClear = roomPeople === 0 && !canvasHasRemoteEdits
+  useEffect(() => {
+    if (!openRequested || !openRoomClear || !offer) return
+    canvas.applyNodes(offer.nodes)
+    setOffer(null)
+  }, [openRequested, openRoomClear, offer])
+  const openWithheld = openRequested && roomPeople !== null && !openRoomClear
+
   return useMemo(() => {
     if (!key || !offer) return EMPTY_STATE
     // No prompt at all in a shared room — not a re-worded one. The draft is
@@ -616,7 +657,7 @@ export function useBesignerDraft(
     // the crash net of the very tab that is still holding the work.
     if (roomIsShared) {
       return sharedDraftUnopened
-        ? { ...EMPTY_STATE, sharedDraftUnopened }
+        ? { ...EMPTY_STATE, sharedDraftUnopened, openWithheld }
         : EMPTY_STATE
     }
     return {
@@ -626,6 +667,7 @@ export function useBesignerDraft(
       origin: offerOrigin,
       restoreBlockedBy,
       sharedDraftUnopened,
+      openWithheld: false,
       restore,
       discard,
     }
@@ -637,6 +679,7 @@ export function useBesignerDraft(
     staleAgainstDocument,
     restoreBlockedBy,
     sharedDraftUnopened,
+    openWithheld,
     restore,
     discard,
   ])

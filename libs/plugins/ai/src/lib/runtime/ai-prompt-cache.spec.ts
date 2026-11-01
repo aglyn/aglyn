@@ -927,8 +927,9 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // funnel" trigger joins the host events the draft may start on.
       // Up 249 at AGL-3611, the order and return triggers the draft may start
       // on, and 7 for the two steps that ride a larger variant naming its
-      // empty field.
-      'workflow-draft': { prefixTokens: 5_025, minimum: 512, caches: true, toolsStable: true },
+      // empty field. Up 13 at #2191: the CRM's five messaging activity kinds
+      // a logged activity may now be.
+      'workflow-draft': { prefixTokens: 5_038, minimum: 512, caches: true, toolsStable: true },
       'workflow-explain': { prefixTokens: 2_240, minimum: 512, caches: true, toolsStable: true },
       // The listing doors were under Claude Haiku 4.5's 4,096-token minimum
       // and are over Claude Haiku 5.5's 512 since it became the fast default

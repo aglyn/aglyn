@@ -136,3 +136,31 @@ export function assistPageChangeDraftVersion(
   }
   return null
 }
+
+/** What a page change came to, as the turn that asked for it holds it. */
+export interface AssistPageChangeTurn {
+  pageChange?: AssistPageChangeProposal | null
+  pageChangeJob?: AiJobSummary | null
+  pageChangeNotice?: string | null
+}
+
+/**
+ * What became of a turn's page change, in the words the next question's
+ * history carries it (AGL-4116), or null when the turn asked for none. The
+ * chat sees a thread's text and nothing else, so without this it read its own
+ * "I'll make this change" with no outcome and told the person nothing in the
+ * chat had changed their page.
+ */
+export function assistPageChangeHistoryNote(turn: AssistPageChangeTurn): string | null {
+  const proposal = turn.pageChange
+  if (!proposal) return null
+  const change = `Page change on ${proposal.pageName}`
+  if (turn.pageChangeNotice) return `(${change} not started: ${turn.pageChangeNotice})`
+  const job = turn.pageChangeJob ?? null
+  const output = assistPageChangeOutput(job)
+  if (output) return `(${change}: ${output.note ?? 'saved, not published.'})`
+  if (job?.status === 'failed' || job?.status === 'canceled') {
+    return `(${change} not made: ${job.error ?? job.status})`
+  }
+  return `(${change} being made.)`
+}

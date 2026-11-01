@@ -46,7 +46,9 @@
  *    per-listener ground truth from the SDK, so it needs no threshold and no
  *    window, and it clears itself the instant a server snapshot lands. It
  *    leads because it is also the more ACCURATE explanation whenever it is
- *    true — see the ordering note on `checkSeedFreshness`.
+ *    true — see the ordering note on `checkSeedFreshness`. It is also the one
+ *    signal that a little patience answers, so `writeGuardedBySeed` waits for
+ *    the confirmation before it refuses on this alone (AGL-4120).
  * 2. `unreadable` — the read FAILED and there is nothing cached behind it
  *    (AGL-1143). Saving would write blanks over a populated document.
  * 3. `staleSession` — the console's own heuristic. Kept because it means
@@ -73,7 +75,14 @@
  * ones the doc above says must carry the guard anyway.
  */
 
-export type StaleSeedReason = 'unreadable' | 'unconfirmed' | 'stale-session'
+import { whenListensConfirmed } from './listen-confirmation'
+
+export type StaleSeedReason =
+  | 'unreadable'
+  | 'unconfirmed'
+  | 'stale-session'
+  /** The server's confirmation changed the values the form was built from. */
+  | 'refreshed'
 
 /**
  * The console's `session-health` verdict, injected because it is app state.
@@ -144,45 +153,20 @@ export interface GuardedSeedWriteResult {
  * `guarded-seed-write.spec.ts` pins all three verbatim against a plural
  * subject so it stays that way.
  *
- * ## Why `unconfirmed` names a SECOND remedy (AGL-1446)
+ * ## What `unconfirmed` may claim (AGL-4120)
  *
- * "Reload" was the only instruction, and it is the one that fails in the case
- * where an author is most stuck. A long-lived console tab can go permanently
- * cache-only: no Firestore `Listen` channel is ever established, every
- * listener is served from IndexedDB, `fromCache` never clears, and this guard
- * correctly refuses every save — forever. Observed on 2026-08-12 (AGL-1066):
- * refused three times ACROSS A FULL RELOAD with the session entirely healthy
- * (`securetoken` 200, `runAggregationQuery` 200). A brand-new tab fixed it on
- * the first try.
+ * It used to tell people a tab could be "permanently cache-only" and to open a
+ * new one, "because reloading cannot restore a connection this tab never
+ * opened". That theory was wrong twice over. AGL-2486 showed the Listen channel
+ * open and answering all along, and AGL-4120 measured what was left: nothing
+ * had disconnected, the console's own stall recovery had taken a healthy client
+ * off the network. A fresh tab only looked like a cure because it had not been
+ * knocked off yet.
  *
- * ## Why this is copy rather than a branch
- *
- * Three different states reach this message with byte-identical evidence:
- *
- * 1. the server has not confirmed the read YET (reload, or just wait);
- * 2. the client is OFFLINE (reconnect — the case `persistentLocalCache` was
- *    added for in the first place);
- * 3. the tab is permanently cache-only (only a new tab helps).
- *
- * In all three, `fromCache` is true, `unreadable` is false, and
- * `session-health` reports nothing: a listen that is never issued and a listen
- * that has not been answered yet both produce no error callback, so no
- * `permission-denied` is ever counted and `staleSession` cannot fire. The one
- * signal that separates (3) from (1) — whether {@link
- * reportFirestoreServerRead} has EVER fired in this tab — is dispatched
- * straight into `session-health.reportSuccessfulRead`, which returns early
- * when there is no denial evidence and retains nothing; `getSessionHealth()`
- * exposes only the denial verdict. So the bit is produced and discarded, and
- * latching it would still not be enough: a freshly-opened tab and an offline
- * tab have not had a listen answered either, so a detector would need a time
- * threshold AND an online check (which lives in the app, behind another seam)
- * before it could say "stuck" without mislabelling both. That is a new tuned
- * heuristic in the path of every save, to choose between two remedies that
- * cost the reader one sentence to be told both of.
- *
- * So the message names all three: connection, reload, and the new tab — with
- * the reason the new tab is not just "reload harder", because an instruction
- * that reads as a superstition is one people skip.
+ * By the time this reads, the save has waited {@link SEED_CONFIRM_WAIT_MS} for
+ * the confirmation. So it says the three things that are true, which are the
+ * three a person acting on it needs: the save did not happen, what they typed
+ * is still there, and trying again in a moment is the remedy.
  */
 function refusalMessage(subject: string, reason: StaleSeedReason): string {
   switch (reason) {
@@ -194,11 +178,14 @@ function refusalMessage(subject: string, reason: StaleSeedReason): string {
       )
     case 'unconfirmed':
       return (
-        `We could not confirm your ${subject} with the server, so what is ` +
-        'on screen may be out of date — saving now could overwrite newer ' +
-        'values. Check your connection and reload; if it is refused again, ' +
-        'open this page in a new browser tab — reloading cannot restore a ' +
-        'connection this tab never opened.'
+        `We could not confirm your ${subject} with the server yet, so nothing ` +
+        'was saved. What you entered is still here. Check your connection and ' +
+        'save again in a moment.'
+      )
+    case 'refreshed':
+      return (
+        `Your ${subject} just updated from the server, so nothing was saved ` +
+        'yet. Check the latest values, then save again.'
       )
     case 'stale-session':
       return (
@@ -246,15 +233,36 @@ export function checkSeedFreshness(
  * Never throws on refusal — the caller reports `message` and leaves the
  * user's typed values on screen, because the whole point is that we are not
  * confident enough to touch the stored document, not that the input was bad.
+ *
+ * A seed that is only UNCONFIRMED is waited for before it is refused
+ * (AGL-4120): the save stays in its busy state while the server answers, which
+ * is normally a moment. The other reasons are facts about the read or the
+ * session that waiting does not change, and they refuse at once.
  */
 export async function writeGuardedBySeed(
   options: GuardedSeedWriteOptions,
   write: () => Promise<void>,
 ): Promise<GuardedSeedWriteResult> {
   const verdict = checkSeedFreshness(options)
-  if (!verdict.ok) return verdict
+  if (verdict.ok) {
+    await write()
+    return verdict
+  }
+  if (verdict.reason !== 'unconfirmed') return verdict
+  const settlement = await whenListensConfirmed()
+  if (settlement === 'refreshed') {
+    return {
+      ok: false,
+      reason: 'refreshed',
+      message: refusalMessage(options.subject, 'refreshed'),
+    }
+  }
+  if (settlement !== 'confirmed') return verdict
+  // The wait took time, and the session may not have survived it.
+  const confirmed = checkSeedFreshness({ ...options, fromCache: false })
+  if (!confirmed.ok) return confirmed
   await write()
-  return verdict
+  return confirmed
 }
 
 export default writeGuardedBySeed

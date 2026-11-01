@@ -48,9 +48,12 @@ import {
   CircularProgress,
   Paper,
   Stack,
+  TabScrollButton,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import { useCallback, useMemo, useState } from 'react'
+import { useScrollEdges } from '../hooks/use-scroll-edges'
 import {
   daysInStage,
   type DealDoc,
@@ -112,6 +115,16 @@ export interface DealBoardProps {
  * two closed columns start collapsed to a count-free stub and expand on
  * request, which is also when their rows are read — a collapsed column
  * costs no listener.
+ *
+ * ## Empty stages fold too, and the board says when there is more
+ *
+ * A pipeline with Salesforce's ten stages is wider than the card, and the
+ * stages with deals in them were off the edge with nothing to say so. An
+ * open stage with no deals folds to the same narrow stub, labelled and still
+ * a drop target, so the stages that hold work get the room. When the row is
+ * still wider than the card, chevrons at either end page it sideways the way
+ * MUI's scrollable Tabs do — the scrollbar alone stays hidden on a trackpad
+ * until the reader already knows to scroll.
  */
 export function DealBoard(props: DealBoardProps) {
   const {
@@ -130,6 +143,8 @@ export function DealBoard(props: DealBoardProps) {
     nowMs,
   } = props
   const stages = useMemo(() => openStages(pipeline), [pipeline])
+  const edges = useScrollEdges()
+  const overflowing = edges.start || edges.end
   const byStage = useMemo(() => {
     const map = new Map<string, DealDoc[]>()
     for (const stage of stages) map.set(stage.id, [])
@@ -228,64 +243,87 @@ export function DealBoard(props: DealBoardProps) {
         `minWidth: 0` is what lets this box be narrower than its content,
         which is the whole condition for the scrollbar to appear on it.
        */}
-      <Box sx={{ overflowX: 'auto', pb: 1, minWidth: 0, width: '100%' }}>
-        <Stack direction="row" spacing={1.5} sx={{ alignItems: 'stretch', minWidth: 'max-content' }}>
-          {stages.map((stage) => (
-            <StageColumn
-              key={stage.id}
-              stage={stage}
-              count={byStage.map.get(stage.id)?.length ?? 0}
-              total={(byStage.map.get(stage.id) ?? []).reduce(
-                (sum, deal) => sum + (Number(deal.amountCents) || 0),
-                0,
-              )}
-              currency={byStage.map.get(stage.id)?.[0]?.currency}
-            >
-              {(byStage.map.get(stage.id) ?? []).map(renderCard)}
-            </StageColumn>
-          ))}
-          {byStage.orphans.length ? (
-            <StageColumn
-              stage={{
-                id: '__orphans',
-                name: 'No stage',
-                order: Number.MAX_SAFE_INTEGER,
-                probability: 0,
-                kind: 'open',
-              }}
-              count={byStage.orphans.length}
-              total={0}
-              currency={undefined}
-              droppable={false}
-              caption="These deals sit in a stage the pipeline no longer has. Move them."
-            >
-              {byStage.orphans.map(renderCard)}
-            </StageColumn>
-          ) : null}
-          {closedStages.map((stage) => {
-            const rows = stage.kind === 'won' ? won : lost
-            return (
+      <Stack direction="row" sx={{ alignItems: 'stretch', minWidth: 0, width: '100%' }}>
+        {overflowing ? (
+          <TabScrollButton
+            direction="left"
+            orientation="horizontal"
+            disabled={!edges.start}
+            onClick={() => edges.page(-1)}
+            aria-label="Show earlier stages"
+            data-testid="deal-board-scroll-start"
+          />
+        ) : null}
+        <Box ref={edges.ref} sx={{ overflowX: 'auto', pb: 1, minWidth: 0, flex: 1 }}>
+          <Stack direction="row" spacing={1.5} sx={{ alignItems: 'stretch', minWidth: 'max-content' }}>
+            {stages.map((stage) => (
               <StageColumn
                 key={stage.id}
                 stage={stage}
-                count={rows?.length ?? null}
-                total={null}
-                currency={undefined}
-                collapsed={!closedExpanded}
-                onToggle={onToggleClosed}
-              >
-                {closedExpanded && rows === null ? (
-                  <Stack sx={{ alignItems: 'center', py: 2 }}>
-                    <CircularProgress size={20} />
-                  </Stack>
-                ) : (
-                  (rows ?? []).map(renderCard)
+                folded={!byStage.map.get(stage.id)?.length}
+                count={byStage.map.get(stage.id)?.length ?? 0}
+                total={(byStage.map.get(stage.id) ?? []).reduce(
+                  (sum, deal) => sum + (Number(deal.amountCents) || 0),
+                  0,
                 )}
+                currency={byStage.map.get(stage.id)?.[0]?.currency}
+              >
+                {(byStage.map.get(stage.id) ?? []).map(renderCard)}
               </StageColumn>
-            )
-          })}
-        </Stack>
-      </Box>
+            ))}
+            {byStage.orphans.length ? (
+              <StageColumn
+                stage={{
+                  id: '__orphans',
+                  name: 'No stage',
+                  order: Number.MAX_SAFE_INTEGER,
+                  probability: 0,
+                  kind: 'open',
+                }}
+                count={byStage.orphans.length}
+                total={0}
+                currency={undefined}
+                droppable={false}
+                caption="These deals sit in a stage the pipeline no longer has. Move them."
+              >
+                {byStage.orphans.map(renderCard)}
+              </StageColumn>
+            ) : null}
+            {closedStages.map((stage) => {
+              const rows = stage.kind === 'won' ? won : lost
+              return (
+                <StageColumn
+                  key={stage.id}
+                  stage={stage}
+                  count={rows?.length ?? null}
+                  total={null}
+                  currency={undefined}
+                  collapsed={!closedExpanded}
+                  onToggle={onToggleClosed}
+                >
+                  {closedExpanded && rows === null ? (
+                    <Stack sx={{ alignItems: 'center', py: 2 }}>
+                      <CircularProgress size={20} />
+                    </Stack>
+                  ) : (
+                    (rows ?? []).map(renderCard)
+                  )}
+                </StageColumn>
+              )
+            })}
+          </Stack>
+        </Box>
+        {overflowing ? (
+          <TabScrollButton
+            direction="right"
+            orientation="horizontal"
+            disabled={!edges.end}
+            onClick={() => edges.page(1)}
+            aria-label="Show later stages"
+            data-testid="deal-board-scroll-end"
+          />
+        ) : null}
+      </Stack>
       <DragOverlay dropAnimation={null}>
         {dragging ? (
           <DealCardBody
@@ -310,6 +348,12 @@ interface StageColumnProps {
   currency: string | undefined
   droppable?: boolean
   collapsed?: boolean
+  /**
+   * An open stage with no deals, drawn as a narrow labelled stub — still a
+   * drop target, unlike a collapsed closed column, so a deal can be dragged
+   * into it.
+   */
+  folded?: boolean
   onToggle?: () => void
   caption?: string
   children?: React.ReactNode
@@ -323,6 +367,7 @@ function StageColumn(props: StageColumnProps) {
     currency,
     droppable = true,
     collapsed = false,
+    folded = false,
     onToggle,
     caption,
     children,
@@ -337,7 +382,7 @@ function StageColumn(props: StageColumnProps) {
       ref={setNodeRef}
       variant="outlined"
       sx={{
-        width: collapsed ? 56 : 260,
+        width: collapsed || folded ? 56 : 260,
         flexShrink: 0,
         display: 'flex',
         flexDirection: 'column',
@@ -347,7 +392,25 @@ function StageColumn(props: StageColumnProps) {
         minHeight: 240,
       }}
     >
-      {collapsed ? (
+      {folded && !collapsed ? (
+        <Tooltip title={`${stage.name}: no deals · ${stage.probability}% likely to close`} placement="top">
+          <Typography
+            variant="subtitle2"
+            color="text.secondary"
+            data-testid="deal-board-folded-stage"
+            sx={{
+              flex: 1,
+              writingMode: 'vertical-rl',
+              textOrientation: 'mixed',
+              textAlign: 'center',
+              py: 2,
+              alignSelf: 'center',
+            }}
+          >
+            {stage.name}
+          </Typography>
+        </Tooltip>
+      ) : collapsed ? (
         <Button
           onClick={onToggle}
           sx={{

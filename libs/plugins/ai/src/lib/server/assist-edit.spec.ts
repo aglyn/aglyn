@@ -282,11 +282,12 @@ describe('the canvas outline a request carried', () => {
     ]
     const whole = parseAssistEditContext({ selectedId: 'a', total: 452, nodes }, { whole: true })
     expect(whole?.whole).toBe(true)
-    expect(whole?.selectedId).toBeNull()
+    // The chat in the Besigner sends a selection with its whole page (AGL-4116).
+    expect(whole?.selectedId).toBe('a')
     expect(whole?.nodes).toHaveLength(ASSIST_EDIT_WHOLE_MAX_NODES)
     expect(whole?.nodes[1]).toMatchObject({ props: { children: long }, sx: { color: 'primary.main' } })
     expect(whole?.nodes[2].sx).toEqual({ p: 2 })
-    // A request body cannot claim it: only the server's own option does.
+    // The outline's own field never decides it: only the caller's option does.
     const claimed = parseAssistEditContext({ selectedId: null, whole: true, nodes })
     expect(claimed).not.toHaveProperty('whole')
     expect(claimed?.nodes).toHaveLength(60)
@@ -358,6 +359,49 @@ describe('the canvas block the model reads', () => {
     )
     expect(block).toContain('This outline is only the top of the document: 4 of its 9 elements')
     expect(block).not.toContain('Selected element')
+  })
+
+  describe('the whole page, as the chat in the Besigner sends it (AGL-4116)', () => {
+    const page = (selectedId: string | null) =>
+      parseAssistEditContext(
+        {
+          selectedId,
+          total: 3,
+          nodes: [
+            { id: ROOT, componentId: 'div', parentId: null, index: 0, childCount: 1 },
+            { id: 'hero', componentId: 'muiStack', parentId: ROOT, index: 0, childCount: 1, sx: { py: 8 } },
+            { id: 'cta', componentId: 'muiButton', parentId: 'hero', index: 0, childCount: 0, props: { children: 'Get in touch' } },
+          ],
+        },
+        { whole: true },
+      )!
+
+    it('with nothing selected: finds the element itself, and asks only when two fit', () => {
+      const block = editSelectionBlock(page(null))
+      expect(block).toContain('Nothing is selected.')
+      expect(block).toContain('Find the element the request means below')
+      expect(block).toContain('Only when more than one element fits equally, ask which one they mean.')
+      expect(block).toContain('Every element of the document is described, in the order it reads on the page')
+      expect(block).toContain('"children":"Get in touch"')
+      expect(block).toContain('"sx":{"py":8}')
+      expect(block).not.toContain('ask the user to select it')
+      // It reads as this question's canvas, not a job's document.
+      expect(block).toContain('It replaces every canvas, selection and element list')
+      expect(block).not.toContain('read for this change')
+    })
+
+    it('with a selection: names it, whatever else is on the page', () => {
+      const block = editSelectionBlock(page('cta'))
+      expect(block).toContain('Selected element: "cta" (muiButton).')
+      expect(block).not.toContain('Nothing is selected')
+    })
+
+    it('a job’s framing is only ever asked for: nobody is there to ask', () => {
+      const block = editSelectionBlock(page(null), { job: true })
+      expect(block).toContain('The document as it is stored, read for this change.')
+      expect(block).not.toContain('Nothing is selected')
+      expect(block).not.toContain('ask which one')
+    })
   })
 
   it('a whole document is said to be whole, with nothing marked as left out', () => {
@@ -509,6 +553,35 @@ describe('proposals — the closed world', () => {
     ])
     expect(proposal?.ops.map((entry) => entry.op)).toEqual(['remove'])
     expect(proposal?.dropped.join(' ')).toContain('earlier change removes')
+  })
+
+  it('a change to an element an earlier move took out of what is then removed is kept, in either order of the change (AGL-4116)', () => {
+    // The live check's answer: the picture moved out of its column, the column
+    // removed, then the picture restyled. The canvas applies them in order.
+    const { proposal } = resolve([
+      op({ op: 'move', nodeId: 'headline', parentId: ROOT, index: 0 }),
+      op({ op: 'remove', nodeId: 'hero' }),
+      op({ op: 'updateSx', nodeId: 'headline', sx: [{ key: 'position', value: 'absolute', breakpoint: '' }] }),
+      op({ op: 'updateProps', nodeId: 'headline', props: [{ name: 'children', value: 'Still here' }] }),
+    ])
+    expect(proposal?.ops.map((entry) => entry.op)).toEqual(['move', 'remove', 'updateSx', 'updateProps'])
+    expect(proposal?.dropped).toEqual([])
+    // Removed first, the element went with its holder: nothing may move it out.
+    const late = resolve([
+      op({ op: 'remove', nodeId: 'hero' }),
+      op({ op: 'move', nodeId: 'headline', parentId: ROOT, index: 0 }),
+    ])
+    expect(late.proposal?.ops.map((entry) => entry.op)).toEqual(['remove'])
+    expect(late.proposal?.dropped.join(' ')).toContain('earlier change removes')
+  })
+
+  it('a move into the element’s own subtree is dropped, as the moves before it leave the tree', () => {
+    // The CTA moved under the footer, then the footer moved under the CTA.
+    const { proposal } = resolve([
+      op({ op: 'move', nodeId: 'cta', parentId: 'footer', index: -1 }),
+      op({ op: 'move', nodeId: 'footer', parentId: 'cta', index: -1 }),
+    ])
+    expect(proposal?.dropped.join(' ')).toContain('inside itself')
   })
 
   it('a move into the element’s own subtree is dropped', () => {

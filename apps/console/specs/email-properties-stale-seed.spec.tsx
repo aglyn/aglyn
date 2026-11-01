@@ -39,6 +39,7 @@
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { setSeedConfirmWaitMs } from '@aglyn/tenant-feature-instance/hooks/helpers/listen-confirmation'
 import type { ReactNode } from 'react'
 import { PlatformMarketingHostProvider } from '../components/platform-marketing-host.context'
 
@@ -303,6 +304,10 @@ async function typeSubjectAndSave(): Promise<void> {
   fireEvent.click(screen.getByRole('button', { name: 'Save subject' }))
 }
 
+// This spec pins the refusal, not the wait before it (AGL-4120).
+beforeAll(() => setSeedConfirmWaitMs(0))
+afterAll(() => setSeedConfirmWaitMs())
+
 describe.each(PAGES)('%s besigner properties (AGL-1358)', (_label, Page) => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -320,7 +325,7 @@ describe.each(PAGES)('%s besigner properties (AGL-1358)', (_label, Page) => {
     expect(mockSetDoc).not.toHaveBeenCalled()
     const [message] = mockEnqueueSnackbar.mock.calls[0]
     expect(message).toEqual(expect.stringContaining('email'))
-    expect(message).toEqual(expect.stringMatching(/reload/i))
+    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
     // The typed value stays on screen. A refusal that also cleared the field
     // would send the author back to retype a form that will be refused again
     // just as quietly.

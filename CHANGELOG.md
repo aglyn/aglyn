@@ -9,6 +9,55 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0 — 2026-11-01
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.297...v1.0.0)
+
+### Fixed
+
+- **ai:** AI page changes open on their draft; Assist reads the whole page ([AGL-4116](https://linear.app/aglyn/issue/AGL-4116))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **release:** v1.0.0-beta.298 ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
+
+</details>
+
+1 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
+## v1.0.0-beta.298 — 2026-11-01
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.297...v1.0.0-beta.298)
+
+### Fixed
+
+- **ai:** AI page changes open on their draft; Assist reads the whole page ([AGL-4116](https://linear.app/aglyn/issue/AGL-4116))
+
+1 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
+## v1.0.0-beta.297 — 2026-10-30
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.296...v1.0.0-beta.297)
+
+### Fixed
+
+- **ai:** an edit keeps a change to an element it moved out of what it then removes ([AGL-4116](https://linear.app/aglyn/issue/AGL-4116))
+
+## v1.0.0-beta.296 — 2026-10-30
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.295...v1.0.0-beta.296)
+
+### Added
+
+- **crm:** the deal Stage card draws the whole path through to a closing step
+- **crm:** log a text, WhatsApp, Messenger, Instagram or LinkedIn message as its own activity kind
+
+### Fixed
+
+- **ai:** an edit sees the whole page and lands in its draft on every plan ([AGL-4116](https://linear.app/aglyn/issue/AGL-4116))
+- **crm:** the deal board folds empty stages and pages sideways with arrows
+
 ## v1.0.0-beta.295 — 2026-10-29
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/7016b756b...v1.0.0-beta.295)

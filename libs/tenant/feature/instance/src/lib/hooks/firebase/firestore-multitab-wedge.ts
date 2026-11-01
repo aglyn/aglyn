@@ -147,8 +147,21 @@ export const STALE_PRIMARY_LEASE_MS = 15_000
 /**
  * How long the lease read may take before the store is judged locked. The
  * SDK's own transactions take milliseconds.
+ *
+ * Measured in time this tab was RUNNING, not on the wall clock (AGL-4120). While
+ * the main thread is frozen, the read's answer sits unhandled in the same task
+ * queue as the timeout, so a four-second freeze used to read as a locked store:
+ * an `owner` read measured 3,945 ms in a freeze and 0 ms after it. On that false
+ * verdict a healthy tab was reloaded, losing whatever was typed into it, and
+ * every tab opened for the next five minutes started on the memory cache.
  */
 export const LEASE_PROBE_TIMEOUT_MS = 4_000
+
+/**
+ * The probe's clock. A browser coalesces the ticks a frozen thread missed, so
+ * counting ticks counts only the time the tab could have heard the answer.
+ */
+export const LEASE_PROBE_TICK_MS = 250
 
 /**
  * How long after the network cycle the lease is read, so the election the
@@ -233,7 +246,7 @@ export async function probePrimaryLease(
     const settle = (probe: PrimaryLeaseProbe) => {
       if (settled) return
       settled = true
-      clearTimeout(timer)
+      clearInterval(clock)
       resolve(probe)
     }
     const close = () => {
@@ -245,7 +258,12 @@ export async function probePrimaryLease(
     }
     // Only a lock can hold a read-only request this long; the connection is
     // closed when the request finally lands.
-    const timer = setTimeout(() => settle({ state: 'locked' }), timeoutMs)
+    const tickMs = Math.min(LEASE_PROBE_TICK_MS, timeoutMs)
+    let ticks = Math.ceil(timeoutMs / tickMs)
+    const clock = setInterval(() => {
+      ticks -= 1
+      if (ticks <= 0) settle({ state: 'locked' })
+    }, tickMs)
 
     let request: IDBOpenDBRequest
     try {
