@@ -93,7 +93,11 @@ function docRef(path: string): any {
   return {
     id: path.split('/').pop(),
     path,
-    parent: { parent: { id: path.split('/').slice(-3, -2)[0] } },
+    parent: {
+      get parent() {
+        return docRef(path.split('/').slice(0, -2).join('/'))
+      },
+    },
     get: async () => snapshotFor(path),
     set: async (value: Record<string, any>) => {
       writes.push(`set ${path}`)
@@ -269,6 +273,53 @@ describe('AGL-2495 · commerce#abandoned-checkout-recovery honours a lockdown', 
     expect(emails).toEqual([])
   })
 
+  it('asks no verdict for a checkout that is owed nothing (AGL-4121)', async () => {
+    // Three reads a verdict, and this window is mostly rows like these: too
+    // young to remind, already reminded, or with nobody to write to. None of
+    // the three writes or mails, so none needs the answer.
+    const hour = 60 * 60 * 1000
+    rows['checkouts'] = [
+      hostDoc('quiet', 'checkouts', 'young', {
+        status: 'open',
+        email: 'shopper@example.com',
+        createdAtMs: Date.now() - 60 * 1000,
+      }),
+      hostDoc('quiet', 'checkouts', 'reminded', {
+        status: 'open',
+        email: 'shopper@example.com',
+        remindedAtMs: Date.now() - hour,
+        createdAtMs: Date.now() - 2 * hour,
+      }),
+      hostDoc('quiet', 'checkouts', 'anonymous', {
+        status: 'open',
+        createdAtMs: Date.now() - 2 * hour,
+      }),
+    ]
+    const result = await scanAbandonedCheckouts(gate)
+    expect(asked).toEqual([])
+    expect(writes).toEqual([])
+    expect(emails).toEqual([])
+    expect(result.scanned).toBe(3)
+  })
+
+  it('still asks before reminding, and a lock stops the reminder (AGL-4121)', async () => {
+    // Moving the filters ahead of the gate must not move the email with them.
+    rows['checkouts'] = [
+      hostDoc('locked', 'checkouts', 'c1', {
+        status: 'open',
+        email: 'shopper@example.com',
+        createdAtMs: Date.now() - 2 * 60 * 60 * 1000,
+      }),
+    ]
+    lockedHosts.add('locked')
+    const result = await scanAbandonedCheckouts(gate)
+    expect(asked).toEqual(['locked'])
+    expect(result.skippedLocked).toBe(1)
+    expect(emails).toEqual([])
+    expect(writes).toEqual([])
+    expect(stored['hosts/locked/checkouts/c1'].remindedAtMs).toBeUndefined()
+  })
+
   it('a locked host has NOTHING written and NOTHING mailed', async () => {
     abandoned('locked')
     lockedHosts.add('locked')
@@ -311,6 +362,48 @@ describe('AGL-2495 · commerce#back-in-stock-alerts honours a lockdown', () => {
     await scanRestockAlerts(gate)
     expect(asked).toEqual(['healthy'])
     expect(writes).toEqual(['set hosts/healthy/restockAlerts/a1'])
+  })
+
+  it('asks no verdict while the product is still out of stock (AGL-4121)', async () => {
+    // The usual row here: a shopper waiting on an empty shelf. It reads the
+    // product, once per run, and leaves unstamped with no verdict asked.
+    stored['hosts/quiet/products/p1'] = {
+      name: 'Widget',
+      variants: [{ id: 'v1', inventory: 0 }],
+    }
+    rows['restockAlerts'] = ['a1', 'a2'].map((id) =>
+      hostDoc('quiet', 'restockAlerts', id, {
+        email: `${id}@example.com`,
+        productId: 'p1',
+        notifiedAtMs: null,
+      }),
+    )
+    await scanRestockAlerts(gate)
+    expect(asked).toEqual([])
+    expect(writes).toEqual([])
+    expect(emails).toEqual([])
+    expect(stored['hosts/quiet/restockAlerts/a1'].notifiedAtMs).toBe(null)
+  })
+
+  it('still asks before mailing a product back in stock, and a lock stops it (AGL-4121)', async () => {
+    stored['hosts/locked/products/p1'] = {
+      name: 'Widget',
+      slug: 'widget',
+      variants: [{ id: 'v1', inventory: 3 }],
+    }
+    rows['restockAlerts'] = [
+      hostDoc('locked', 'restockAlerts', 'a1', {
+        email: 'shopper@example.com',
+        productId: 'p1',
+        notifiedAtMs: null,
+      }),
+    ]
+    lockedHosts.add('locked')
+    const result = await scanRestockAlerts(gate)
+    expect(asked).toEqual(['locked'])
+    expect(result.skippedLocked).toBe(1)
+    expect(emails).toEqual([])
+    expect(writes).toEqual([])
   })
 
   it('a locked host has NOTHING stamped', async () => {
