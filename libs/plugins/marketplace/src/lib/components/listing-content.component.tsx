@@ -134,6 +134,7 @@ import ListingReviews from './listing-reviews.component'
 import ReportTarget from './report-target.component'
 import PluginSiteSet from './plugin-site-set.component'
 import { MenuItem, TextField } from '@mui/material'
+import { SITE_STARTER_ARTIFACT_TYPE } from '@aglyn/aglyn/app-utils/site-starter'
 import { useMarketplaceActions } from '../hooks/use-marketplace-actions'
 import { useArtifactUpdate } from '../hooks/use-artifact-update'
 import ArtifactUpdateDialog from './artifact-update-dialog.component'
@@ -1979,7 +1980,12 @@ export function MarketplaceListingContent({
                                 installPlanSteps.length === 0)
                             }
                             onClick={
-                              permissions.installPlugins
+                              // A site starter is bought to create a site
+                              // with, so that is the permission it asks for,
+                              // as the pay door does (AGL-4049).
+                              (artifactType === SITE_STARTER_ARTIFACT_TYPE
+                                ? permissions.createHosts
+                                : permissions.installPlugins)
                                 ? () =>
                                     // Buying opens the payment panel below,
                                     // which is its own confirmation; a free or
