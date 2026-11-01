@@ -89,6 +89,8 @@ const NOT_SCREEN_CREATES: Readonly<Record<string, string>> = {
     'reads a held page’s screen and version; merge-sets the abuse report row (AGL-3450)',
   'libs/tenant/runtime/src/lib/apply-publish-schedule.ts':
     'unpublishes the placeholder home page, a screen that exists (AGL-3408)',
+  'libs/plugins/marketplace/src/lib/server/admin-reviews.ts':
+    'reads the pages stored in a site starter’s version so staff can review them; writes no screen (AGL-4049)',
   'libs/plugins/ai/src/lib/server/ai-seo-apply.ts': 'creates a version under a screen that exists',
   'libs/plugins/ai/src/lib/jobs/ai-empty-site-sweep.ts':
     'reads whether a site has any screens; writes its own sweep marker and the job\'s siteRemoved, never a screen (AGL-3936)',
