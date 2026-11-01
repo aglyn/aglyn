@@ -80,10 +80,10 @@ import { MARKETPLACE_TAX_CODE, resolveSale, type MarketplaceSale } from './sale'
  *
  * ## Who may do what
  *
- * Two questions, asked separately. The buyer permission (\`hosts.create\` for a
- * starter, \`plugins.install\` otherwise) decides who may see the price and get
- * a quote. Charging the workspace's saved card moves money, so \`pay\` also takes
- * \`billing.manage\`, asked exactly as \`billing/pay-invoice\` asks it, and \`settle\`
+ * Two questions, asked separately. The buyer permission (`hosts.create` for a
+ * starter, `plugins.install` otherwise) decides who may see the price and get
+ * a quote. Charging the workspace's saved card moves money, so `pay` also takes
+ * `billing.manage`, asked exactly as `billing/pay-invoice` asks it, and `settle`
  * does too, so that finishing an attempt is never a way round it. The quote says
  * whether this person can pay, so the panel can say so before anyone presses
  * anything.
@@ -325,7 +325,7 @@ export const payHandler: PluginApiHandler = async (req, res) => {
     const customerId = (await readOrgBilling(orgId)).stripeCustomerId as string | undefined
 
     if (action === 'settle') {
-      // Not a way round \`pay\`: an attempt is finished by someone who could start it.
+      // Not a way round `pay`: an attempt is finished by someone who could start it.
       if (!(await billingAccess(decoded, orgId)).canManage) {
         return res.status(403).json(billingManageRefusal())
       }
@@ -342,7 +342,7 @@ export const payHandler: PluginApiHandler = async (req, res) => {
     }
     const { sale } = resolved
 
-    // Paying moves money: the same check \`billing/pay-invoice\` makes, on top of
+    // Paying moves money: the same check `billing/pay-invoice` makes, on top of
     // the buyer permission the sale has just asked for.
     if (action === 'pay' && !(await billingAccess(decoded, orgId)).canManage) {
       return res.status(403).json(billingManageRefusal())
@@ -385,7 +385,7 @@ export const payHandler: PluginApiHandler = async (req, res) => {
           // The card itself is billing's to show: someone who may buy but may
           // not see billing is told "the card on file" and nothing about it.
           card: access.canView ? billing.method : null,
-          // Whether \`pay\` would take this person's word for it.
+          // Whether `pay` would take this person's word for it.
           canPay: access.canManage,
         },
       })
