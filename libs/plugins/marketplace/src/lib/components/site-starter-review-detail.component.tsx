@@ -198,7 +198,7 @@ export function SiteStarterReviewBody({
     <Stack spacing={3}>
       <CardDisplay
         header="Status"
-        help={pluginDocsHelp('staffConsole', { anchor: '#plugin-reviews-site-starters' })}
+        help={pluginDocsHelp('staffConsole', { anchor: '#plugin-review-starter-status' })}
         contentGutterX
         contentGutterY
       >
@@ -257,7 +257,12 @@ export function SiteStarterReviewBody({
         </Stack>
       </CardDisplay>
 
-      <CardDisplay header="Overview" contentGutterX contentGutterY>
+      <CardDisplay
+        header="Overview"
+        help={pluginDocsHelp('staffConsole', { anchor: '#plugin-review-starter-overview' })}
+        contentGutterX
+        contentGutterY
+      >
         <Stack spacing={1.5}>
           {detail.previewImageUrl ? (
             <Box
@@ -285,7 +290,12 @@ export function SiteStarterReviewBody({
         </Stack>
       </CardDisplay>
 
-      <CardDisplay header={`Pages (${detail.pages.length})`} contentGutterX contentGutterY>
+      <CardDisplay
+        header={`Pages (${detail.pages.length})`}
+        help={pluginDocsHelp('staffConsole', { anchor: '#plugin-review-starter-pages' })}
+        contentGutterX
+        contentGutterY
+      >
         <Stack spacing={1.5}>
           <Typography variant="body2" color="text.secondary">
             {`What a site created from v${detail.reviewVersion} starts with. Each published page links to the same page on ${siteName}, as that site is now.`}
@@ -333,7 +343,12 @@ export function SiteStarterReviewBody({
         </Stack>
       </CardDisplay>
 
-      <CardDisplay header="Theme" contentGutterX contentGutterY>
+      <CardDisplay
+        header="Theme"
+        help={pluginDocsHelp('staffConsole', { anchor: '#plugin-review-starter-theme' })}
+        contentGutterX
+        contentGutterY
+      >
         {detail.theme?.kind === 'builtin' ? (
           <Stack spacing={1.5}>
             <Typography variant="body2">{'Built-in theme with its brand colors'}</Typography>
@@ -379,7 +394,7 @@ export function SiteStarterReviewBody({
 
       <CardDisplay
         header={`Review checklist — v${detail.reviewVersion} (${ticked}/${SITE_STARTER_REVIEW_CHECKLIST.length})`}
-        help={pluginDocsHelp('staffConsole', { anchor: '#plugin-reviews-site-starters' })}
+        help={pluginDocsHelp('staffConsole', { anchor: '#plugin-review-starter-checklist' })}
         contentGutterX
         contentGutterY
       >
@@ -440,7 +455,7 @@ export function SiteStarterReviewBody({
 
       <CardDisplay
         header="Review verdict"
-        help={pluginDocsHelp('staffConsole', { anchor: '#plugin-reviews-site-starters' })}
+        help={pluginDocsHelp('staffConsole', { anchor: '#plugin-review-starter-verdict' })}
         contentGutterX
         contentGutterY
       >
@@ -534,7 +549,12 @@ export function SiteStarterReviewBody({
         </Stack>
       </CardDisplay>
 
-      <CardDisplay header="Versions" contentGutterX contentGutterY>
+      <CardDisplay
+        header="Versions"
+        help={pluginDocsHelp('staffConsole', { anchor: '#plugin-review-starter-versions' })}
+        contentGutterX
+        contentGutterY
+      >
         <Stack divider={<Divider flexItem />} spacing={1}>
           {detail.versions.map((entry) => (
             <Stack
@@ -568,7 +588,12 @@ export function SiteStarterReviewBody({
         </Stack>
       </CardDisplay>
 
-      <CardDisplay header="Danger zone" contentGutterX contentGutterY>
+      <CardDisplay
+        header="Danger zone"
+        help={pluginDocsHelp('staffConsole', { anchor: '#plugin-review-starter-danger-zone' })}
+        contentGutterX
+        contentGutterY
+      >
         <Stack spacing={1.5}>
           <Typography variant="body2" color="text.secondary">
             {'Taking a starter down takes it out of the marketplace and refuses every new site from it, whatever its review status. Sites already created from it keep their own copy. Restoring returns it to the status it had.'}
