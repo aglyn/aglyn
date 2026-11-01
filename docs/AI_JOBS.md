@@ -2701,8 +2701,10 @@ whose passes each do one unit (`aiSiteImportNextWork`):
      cover, `below` → column by default). A table is the `dataTable` element
      (`rows`, code-only); tabs whose every panel the source drew are `muiTabs`
      with a `muiTabPanel` each, else the labels as a strip, the open one
-     filled, over the panel the source drew. A page past
-     `AI_SITE_IMPORT_DOC_MAX_NODES` keeps its last sections by name, `cut`.
+     filled, over the panel the source drew; a panel sets its first row of
+     columns side by side, as a section does (`AiLayoutTab.cols`, AGL-4114). A
+     page past `AI_SITE_IMPORT_DOC_MAX_NODES` keeps its last sections by name,
+     `cut`.
    - **copied** (a collection's page): the compile alone, NO model, nothing
      spent but a listing the source left empty;
    - **arranged** (every main page, whatever its length): the same compile
@@ -2769,6 +2771,71 @@ whose passes each do one unit (`aiSiteImportNextWork`):
   the site and the job; the job's page (`AiSiteImportJob`, under the site's
   `/ai-jobs/{jobId}`) shows the read, each wave and its review, and the next
   wave's button with its quote.
+
+### How an import is checked (AGL-4109)
+
+The import of aglyn.com on 10/29 came out as one column of lines under a header
+of page titles, with every spec green: they asked whether the words came
+through, never how the page was laid out. The fidelity score asks that, with no
+model and no browser. `model/ai-site-import-fidelity.ts` is pure, and scores a
+built page against what the reader read of its source.
+
+- **What it compares.** `siteImportFidelity({ layout, blocks, photos }, tree)`
+  takes the page's `SiteImportLayout`, the main-region blocks the layout's lines
+  are indexes of, and the library's copies of its photos, against the page's
+  nodes. `siteImportFrameFidelity({ nav, footer }, tree)` takes the home page's
+  menu and footer against the header and footer's layout. A tree is the same
+  to it as the compiler draws it or as Firestore stores it, decoded
+  (`siteImportFidelityTreeOf`).
+- **Anchored to the source's lines.** Each line is found on the built page, in
+  its own section, nearest after the line before it, and the structure is asked
+  of the elements holding the lines: are a group's thirteen items thirteen
+  elements, or one stack? No measure relies on a compiler's element ids, so a
+  stored page scores as a compiled one does.
+- **Words: exactly 1.** The source's lines against what the page shows, each
+  word as often as it is said. A word missing or a word extra (a line doubled,
+  or a line of the page's own) takes the ratio under 1, and the report names a
+  few of them.
+- **Structure: the lowest ratio.** Sections; bands in order; rows of two or
+  more columns set side by side; groups by kind, each item its own element with
+  its parts (an FAQ's question on an accordion, a card that is a link still
+  going there, an item's picture); tables, each with every cell in one Table
+  element; tab strips; pictures placed, by the library's copy; icons, each item's
+  and each bullet's; buttons in the source's style with a destination; headings;
+  forms. `score` is the lowest of them and `lowest` names it.
+- **The frame.** The row's items by name in order, over the larger of the two
+  counts, so a row of page titles scores low; the menus under their names, their
+  entries, the entries' lines and icons; the buttons in the source's style with
+  destinations; the phone menu holding every name, entry and button, with the
+  button that opens it; the row's labels on one line; the footer's columns,
+  links, profiles and facts as written.
+- **The bar.** `SITE_IMPORT_FIDELITY_THRESHOLD`, 0.9 on structure, with words at
+  exactly 1. Today's recorded pages and frames score 1.00; the same pages built
+  as 10/29 built them score 0.
+- **Reported, not scored, by name.** An icon standing alone in the source (a
+  video's play mark), which the build leaves out; a button that goes nowhere a
+  page can send a visitor (a film's play button), kept as its words; a byline
+  (a portrait beside a few words), drawn small over its words and not as a row;
+  a `text` group, lines that only share a shape.
+- **The spec.** `model/ai-site-import-fidelity.spec.ts` replays the recordings in
+  `site-import/fixtures/site-layout/` through the reader and the import's compile
+  and page check, offline (`site-import/fixtures/site-import-fidelity-replay.ts`;
+  a design answer there is a recorded one). Each page and frame holds the bar
+  with the source's own counts, msgpack-stored nodes score as compiled ones, the
+  lines-only build scores 0, and each measure falls when its thing is taken off
+  the page. A change that costs a page structure goes red here first.
+- **The report.** `node libs/plugins/ai/scripts/site-import-fidelity-report.mts`
+  prints the recorded pages, the frames and the 10/29 control as tables, built
+  over source. With `--host <id>` it reports a built site for a live check:
+  Admin SDK `get()`s only (the host, the import job, each screen and version, the
+  layout and version), no model, nothing written, and it prints the look's
+  colors and fonts and the credits per arranged and copied page, which is where
+  `AI_MEASURED_IMPORT_CREDITS` is read from. A page's source is the job's own
+  read while it holds one; the job empties a read once its page is in, so
+  otherwise the page is read again from the source site as a wave reads it, or
+  from saved files with `--source <path>=<file>`. `--page <path>` narrows it,
+  `--job <id>` names the import, `--json <file>` keeps every number. Pages it
+  could not score are listed with why. It exits 1 when anything is below the bar.
 
 ## The theme kind
 

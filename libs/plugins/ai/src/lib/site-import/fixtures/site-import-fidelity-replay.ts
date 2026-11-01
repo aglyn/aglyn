@@ -179,7 +179,6 @@ function replayState(name: SiteImportReplayHome): AiSiteImportState {
     leftOut: [],
     leftOutCount: {},
     frame: { draftId: 'frameDraft' },
-    reviewId: null,
     home: aiSiteImportHomeOf({ pages: [crawledHome(name)] }),
     look: {
       at: NOW.toISOString(),
