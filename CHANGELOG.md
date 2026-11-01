@@ -21,6 +21,11 @@ content on the marketing site and is written separately.
 ### Changed
 
 - **legal:** pin Legal v21: Terms and EULA GA wording, §4.30 console return requests for shipped hardware, §4.32 per-store 4G billed monthly in arrears; members who accepted v20 see one re-acceptance banner ([AGL-4053](https://linear.app/aglyn/issue/AGL-4053), [AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **functions:** scheduled wrappers run on a quarter vCPU ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
+- **monitoring:** short Cloud Run jobs become request-billed services, and the drain filter is recorded ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
+- **health:** the funnel probe, the signup-volume marker and the edge admission sampler read less, with no timing or coverage change ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
+- **emails:** dormant accounts are asked about once a day, everyone else hourly ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
+- **commerce, lists, crm:** cart and restock scans, dynamic list sweeps and CRM task reminders stop re-reading unchanged data ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
 
 ### Documentation
 
