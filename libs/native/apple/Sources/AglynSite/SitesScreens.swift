@@ -414,7 +414,7 @@ struct CreateSiteSheet: View {
     } below: {
       styleSection
     }
-    .aglynSheetMinimumSize(width: 640, height: 640)
+    .aglynSheetMinimumSize(width: 640, height: 700)
   }
 
   /// The console's own choice (`SiteStylePicker`): its heading and words, and every style in its order, each with its
