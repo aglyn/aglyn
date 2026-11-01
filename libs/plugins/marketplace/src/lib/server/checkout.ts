@@ -16,80 +16,20 @@
  */
 
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import { merchantAccountIsReady } from '@aglyn/tenant-data-admin/server/payment-provider'
 import { checkoutSessionCardAuthenticationParams } from '@aglyn/tenant-data-admin/server/stripe-card-authentication'
 import {
   buildRoute,
-  checkEntitlement,
   claimAttempt,
-  isListingWideRevocation,
-  resolveMarketplaceFeePct,
   Route,
   type AttemptClaim,
   type PluginApiHandler,
-  type PluginRevocation,
 } from '@aglyn/aglyn/server'
-import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import { siteCreateReturnQuery } from '@aglyn/aglyn/app-utils/site-create-return'
-import { SITE_STARTER_ARTIFACT_TYPE } from '@aglyn/aglyn/app-utils/site-starter'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
-import { isListingBrowsable, isPrivateListing, listingArtifactType } from '../model/marketplace'
 import { readStarterCheckoutReturn } from '../model/starter-query'
-import {
-  canActAsPublisher,
-  resolvePublisherProfile,
-} from './publisher-profile'
-import { hasLivePurchase } from './purchase-entitlement'
-import { isOrgMember } from './sale-risk'
+import { MARKETPLACE_TAX_CODE, resolveSale } from './sale'
 
-/**
- * THE TAX CLASSIFICATION OF A MARKETPLACE SALE (AGL-1553).
- *
- * "Software as a service (SaaS) — business use". Sent explicitly on the line
- * item below, because this session builds its product ad hoc from
- * `price_data` and an ad-hoc product with no `tax_code` is classified by the
- * ACCOUNT-LEVEL preset instead — a value set by hand in the Stripe Dashboard
- * for Aglyn's own subscription products (AGL-1537/1877), which happens to be
- * this same string.
- *
- * So this is not a change of tax position, and deliberately not: it is the
- * position Aglyn already collects on, already verified, and already states in
- * a signed filing. The pending Texas private letter ruling request proposes at
- * Part 6.1 that plugin charges are DATA PROCESSING SERVICES under Tax Code
- * § 151.0035, of which § 151.351 exempts 20%, so tax is due on 80% of the
- * charge; Part 4.5 ¶ 4 represents to the Comptroller that "the payment
- * processor's tax classification applied to these charges is the
- * software-as-a-service category" and that the 80% measure was confirmed by
- * computation. AGL-1817 ran that computation against the live account: $6.60
- * of tax on a $100.00 charge at an 8.25% Texas address — 8.25% x $80.
- *
- * What was actually broken is that none of that was expressed HERE. The
- * classification of every marketplace sale hung on a Dashboard field owned by
- * a different product line. Re-preset the account for storefront goods or
- * bookings and these sales silently re-classify, moving the Texas base off the
- * 80% the filing describes — with no diff to review, no failing test, and no
- * symptom short of reconciling a return. Naming it here is what makes the
- * filed representation survive a Dashboard edit.
- *
- * NOT merged with `PLATFORM_TAX_CODE` in `tools/scripts/lib/stripe-tax-code.mjs`,
- * which stamps Aglyn's OWN products with the same string today. They answer
- * different questions — Aglyn's first-party subscription vs. a third party's
- * sale through Aglyn's marketplace — and the ruling request itself flags at
- * Part 8 ¶ 8 that the Comptroller could characterize the two differently. One
- * shared constant would make a divergence the filing anticipates impossible to
- * express without touching the other business.
- *
- * DO NOT change this value to a downloadable-software code (`txcd_10202003`,
- * `txcd_10203001`) on the reasoning that a plugin is "downloaded". That is the
- * OPPOSING characterization — tangible personal property under Rule 3.308,
- * taxable in full — which Part 6.1 argues against and which the filing already
- * states against itself, in full, at Part 8 ¶¶ 1-2. Adopting
- * it here would raise the tax charged to every buyer by a quarter of the base
- * and make Part 4.5 ¶ 4 false. It is the Comptroller's call, and if the ruling
- * goes that way the change is a one-line edit at this constant plus a
- * prospective conformance — which is exactly what naming it here buys.
- */
-export const MARKETPLACE_TAX_CODE = 'txcd_10103001'
+export { MARKETPLACE_TAX_CODE }
 
 /**
  * Checkout for a paid marketplace listing (AGL-46): one-time destination
@@ -182,196 +122,25 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       return res.status(403).json({ error: 'Not a member of that organization' })
     }
     const firestore = firebaseAdmin.app().firestore()
-    const listingSnapshot = await firestore
-      .collection('marketplaceListings')
-      .doc(listingId)
-      .get()
-    const listing = listingSnapshot.data() as any
-    if (!listing || listing.deletedAt) {
-      return res.status(404).json({ error: 'Unknown listing' })
+    // Everything a sale decides before Stripe (AGL-4049), shared with the
+    // in-app payment so the two doors cannot disagree about what is on sale.
+    const resolved = await resolveSale({
+      firestore,
+      listingId,
+      buyer: { uid: decoded.uid, orgId: buyerOrgId, permissions: membership.permissions },
+    })
+    if ('refusal' in resolved) {
+      return res.status(resolved.refusal.status).json(resolved.refusal.body)
     }
-    // A site starter is bought to create a site with (AGL-4049), so buying
-    // one takes the permission that creates sites, as picking one in Create
-    // site does; everything else is bought to install, as before. Asked of
-    // the listing, never of the request, and before anything else about the
-    // sale is read.
-    const siteStarter = listingArtifactType(listing) === SITE_STARTER_ARTIFACT_TYPE
-    if (siteStarter ? !membership.permissions.createHosts : !membership.permissions.installPlugins) {
-      return res.status(403).json({
-        error: siteStarter
-          ? permissionRefusalText('hosts.create')
-          : 'Your organization role does not allow installing from the marketplace',
-      })
-    }
-    // Review gating holds on the PAID path too (AGL-1543): browse hides
-    // rejected/submitted/in_review listings, so a direct checkout call must
-    // not be a side door that takes money for one. Absent = legacy = listed
-    // (AGL-432), and the same 404 as an unknown listing — purchasability is
-    // not a probe for review state.
-    const reviewStatus = listing.reviewStatus as string | undefined
-    if (reviewStatus && reviewStatus !== 'listed' && reviewStatus !== 'verified') {
-      return res.status(404).json({ error: 'Unknown listing' })
-    }
-    // A TAKEN-DOWN or PRIVATE listing is not on sale (AGL-2288).
-    //
-    // The check above is a hand-rolled subset of `isListingBrowsable`, and
-    // the two lines it dropped are the two that matter here: `hiddenAt` and
-    // `isPrivateListing`. A staff takedown does NOT set a blocking
-    // `reviewStatus` — `plugin-reviews` demotes a verified listing to
-    // `VERIFIED_STRIPPED_STATUS`, which is literally `'listed'` — so after a
-    // takedown this route read `reviewStatus: 'listed'` and sold the listing
-    // in full, while `install-plugin` refused the very same listing at
-    // `hiddenAt` with a 404. The buyer was charged for something the platform
-    // had already decided nobody may install, and the only way out was a
-    // refund — which is Aglyn's Stripe fee, Aglyn's support time, and (until
-    // the partial-refund fix) a real hole in the split.
-    //
-    // Both tests are kept rather than replaced by the shared predicate: for a
-    // NON-plugin artifact `isListingBrowsable` returns true whatever the
-    // review status says, because pre-publication review is plugin-only. This
-    // route has always been stricter than that, and a sale is the wrong place
-    // to loosen a gate.
-    //
-    // No owner exemption, unlike the install routes: `canActAsPublisher`
-    // below already refuses a publisher buying their own listing, so the
-    // buyer here is never the owner.
-    if (!isListingBrowsable(listing) || isPrivateListing(listing)) {
-      return res.status(404).json({ error: 'Unknown listing' })
-    }
-    const priceUsd = Number(listing.priceUsd ?? 0)
-    if (!(priceUsd > 0)) {
-      return res.status(400).json({ error: 'Listing is free' })
-    }
-    // Publishing is org-owned (AGL-652): `profileId` IS the publisher org id.
-    const sellerOrgId = String(listing.profileId ?? '')
-    // ANY member of the publishing workspace, and any purchase FOR it
-    // (AGL-3365). `canActAsPublisher` asks only for an owner or admin, so an
-    // editor of the publisher — or an owner buying "for" the publisher's own
-    // workspace through a role that can install — passed it, and a publisher
-    // could pay itself: the stolen-card cash-out the payout exists to make
-    // worth doing. A workspace one step removed is the sale screen's to flag.
-    if (
-      buyerOrgId === sellerOrgId ||
-      (await canActAsPublisher(firestore, decoded.uid, sellerOrgId)) ||
-      (await isOrgMember(firestore, sellerOrgId, decoded.uid))
-    ) {
-      return res.status(400).json({ error: 'Your organization published this listing' })
-    }
-    // You cannot buy the same component twice (AGL-1697).
-    //
-    // This route validated review status, self-purchase and the seller's
-    // entitlements, and then never asked the one question the buyer cares
-    // about: do they already own it. A marketplace listing is a buy-once good —
-    // a second purchase buys nothing, since `requirePurchase` is satisfied by
-    // the first — so a buyer who clicked Buy again from a stale tab, or came
-    // back through a bookmarked checkout, was simply charged twice for it.
-    //
-    // Deliberately the SAME predicate the seven install routes gate on
-    // (AGL-1546/1699) rather than a second query beside it: "has this buyer
-    // paid for this listing" must have one answer, or the marketplace can take
-    // money for something it will not install, or refuse to sell something it
-    // will not install either. That predicate reads a fully REFUNDED purchase
-    // as absent, which is exactly right here too — a refunded buyer must be
-    // able to buy again, and a refunded row sitting beside a live one does not
-    // veto it.
-    //
-    // 409 rather than 400: nothing about the request is malformed, the buyer
-    // is just asking for a state that already holds.
-    //
-    // KEYED ON THE ORGANIZATION SINCE AGL-2331, and that is what turns this
-    // guard from a blocked sale back into a real one. A licence belongs to a
-    // workspace, so an agency developer who bought a component for one client
-    // must be able to buy it again for the next — the person-keyed version of
-    // this check answered `409 already_purchased` to exactly the second sale
-    // we want. It still refuses the case it was written for: the same
-    // workspace buying the same listing twice.
-    //
-    // A pre-AGL-2331 purchase still refuses, through the legacy grant inside
-    // the shared predicate: that buyer can already install this listing
-    // anywhere, so selling them a second copy would take money for nothing.
-    if (
-      await hasLivePurchase({
-        firestore,
-        buyerUid: decoded.uid,
-        buyerOrgId,
-        listingId,
-      })
-    ) {
-      return res.status(409).json({
-        error:
-          'This organization already owns this listing — install it from ' +
-          'your library.',
-        code: 'already_purchased',
-      })
-    }
-    // The kill switch, on the SELL side too (AGL-2288).
-    //
-    // `revocations/{listingId}` with `versions: 'all'` is the listing-wide
-    // kill: `install-plugin` 409s on it through this same predicate, and the
-    // tenant runtime renders the disabled placeholder for anything already
-    // pinned. Selling into that state takes money for an artifact the
-    // platform has switched off.
-    //
-    // Only `'all'` is consulted, deliberately. A per-version revocation
-    // (AGL-1085) stops one build while other approved versions stay
-    // installable, and refusing the sale for it would turn a targeted control
-    // into a de-listing. Whether the newest approved version happens to be
-    // the revoked one is a question `install-plugin` answers with live data;
-    // duplicating that resolution here would be a second copy of it.
-    //
-    // One extra read on a path that already makes several Firestore and
-    // Stripe round trips, and it is the cheap half of the takedown check
-    // above: a hand-written revocation doc — which the rules permit any staff
-    // client to write — is caught here even when `hiddenAt` was never set.
-    const revocation = (
-      await firestore.collection('revocations').doc(listingId).get()
-    ).data() as PluginRevocation | undefined
-    if (isListingWideRevocation(revocation)) {
-      return res.status(404).json({ error: 'Unknown listing' })
-    }
-    const publisher = await resolvePublisherProfile(firestore, sellerOrgId)
-    const accountId = publisher?.stripeAccountId
-    if (
-      !merchantAccountIsReady(
-        {
-          accountId,
-          chargesEnabled: publisher?.stripeChargesEnabled,
-          accountLivemode: publisher?.stripeAccountLivemode,
-        },
-        { subject: `marketplace publisher org ${sellerOrgId}` },
-      )
-    ) {
-      return res
-        .status(409)
-        .json({ error: 'The publisher has not enabled payouts yet' })
-    }
-
-    // The platform's cut comes from ENTITLEMENTS (AGL-1543), never the raw
-    // `plan` field: `resolveMarketplaceFeePct` prices a dead subscription
-    // as free-plan (30%) while the stale field still says pro, and honors
-    // a negotiated per-org `marketplaceFeePct` override. Same read gates
-    // SALE time on `marketplaceSelling` — publish already refuses without
-    // it, and a publisher who downgrades must stop selling, not merely
-    // stop publishing. Resolved per request; entitlements are never cached.
-    const sellerOrgDoc = await firestore.collection('orgs').doc(sellerOrgId).get()
-    const sellerOrg = (sellerOrgDoc.data() ?? {}) as any
-    // A LOCKED publisher sells nothing (AGL-3365). Any lock, not only a
-    // security one: a sale to a workspace staff have stopped is money moving
-    // to it, and the lockdown's payout pause cannot reach a share that is
-    // never charged. The same answer as a taken-down listing — a lock is not
-    // a buyer's business.
-    if (sellerOrg.suspendedAt != null) {
-      return res.status(404).json({ error: 'Unknown listing' })
-    }
-    if (!checkEntitlement(sellerOrg, 'marketplaceSelling')) {
-      return res.status(409).json({
-        error:
-          "The publisher's current plan does not include marketplace selling",
-      })
-    }
-    const feePercent = resolveMarketplaceFeePct(sellerOrg)
-    const amountCents = Math.round(priceUsd * 100)
-    const feeCents = Math.round((amountCents * feePercent) / 100)
+    const {
+      listing,
+      siteStarter,
+      sellerOrgId,
+      accountId,
+      amountCents,
+      feeCents,
+      transferCents,
+    } = resolved.sale
 
     const origin = req.headers.origin ?? `https://${req.headers.host}`
     // Stripe returns the BUYER to the org marketplace (AGL-775) — the
@@ -417,7 +186,6 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     // the pre-tax price) rather than `application_fee_amount`, because the
     // fee form makes Stripe transfer `amount_total − fee` — and amount_total
     // includes the tax, which must stay with the platform that owes it.
-    const transferCents = amountCents - feeCents
     const params = new URLSearchParams({
       mode: 'payment',
       // 3-D Secure, from the one seam every card payment shares (AGL-3360).
