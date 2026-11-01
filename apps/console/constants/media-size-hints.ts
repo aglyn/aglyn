@@ -99,7 +99,7 @@ export const SITE_LOGO_HINT =
  * so this one steers to the two formats every surface can show.
  */
 export const WORKSPACE_LOGO_HINT =
-  `${LOGO_SPACING_HINT} Use a PNG or JPEG so it shows in the Aglyn apps too.`
+  `${LOGO_SPACING_HINT} Use a PNG or JPEG so it shows in the apps too.`
 
 /** A byline avatar: square, small on the page, crisp on retina. */
 export const AVATAR_HINT =
