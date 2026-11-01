@@ -11,7 +11,8 @@ import SwiftUI
 enum CrmSection: String, CaseIterable, Identifiable {
   case contacts, leads, companies, deals, tasks, reports, fields, settings
   var id: String { rawValue }
-  var label: String { rawValue.capitalized }
+  /// As the console's hub and the shell's rows name it; the record itself stays a deal.
+  var label: String { self == .deals ? "Deals / Opportunities" : rawValue.capitalized }
   var screen: String { "crm.\(rawValue)" }
 
   var symbol: String {

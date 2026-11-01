@@ -39,7 +39,7 @@ enum class CrmSection(val key: String, val label: String, val screen: String, va
   CONTACTS("contacts", "Contacts", "crm.contacts", "person"),
   LEADS("leads", "Leads", "crm.leads", "person_add"),
   COMPANIES("companies", "Companies", "crm.companies", "business"),
-  DEALS("deals", "Deals", "crm.deals", "handshake"),
+  DEALS("deals", "Deals / Opportunities", "crm.deals", "handshake"),
   TASKS("tasks", "Tasks", "crm.tasks", "task"),
   REPORTS("reports", "Reports", "crm.reports", "bar_chart"),
   FIELDS("fields", "Fields", "crm.fields", "tune"),

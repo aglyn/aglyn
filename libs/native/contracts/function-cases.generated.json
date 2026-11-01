@@ -53929,7 +53929,7 @@
                         },
                         "docs": "/content-and-data/crm/overview",
                         "id": "deals",
-                        "label": "Deals",
+                        "label": "Deals / Opportunities",
                         "screen": "crm.deals"
                       },
                       {
@@ -54404,7 +54404,7 @@
                         },
                         "docs": "/content-and-data/crm/overview#at-the-organization-level",
                         "id": "deals",
-                        "label": "Deals",
+                        "label": "Deals / Opportunities",
                         "screen": "crm.deals"
                       },
                       {
@@ -55230,7 +55230,7 @@
                         },
                         "docs": "/content-and-data/crm/overview",
                         "id": "deals",
-                        "label": "Deals",
+                        "label": "Deals / Opportunities",
                         "screen": "crm.deals"
                       },
                       {
@@ -56474,7 +56474,7 @@
                         },
                         "docs": "/content-and-data/crm/overview#at-the-organization-level",
                         "id": "deals",
-                        "label": "Deals",
+                        "label": "Deals / Opportunities",
                         "screen": "crm.deals"
                       },
                       {
@@ -61220,7 +61220,7 @@
                 "detail": "Site · Customers · CRM",
                 "group": "appScreens",
                 "id": "site.crm.deals",
-                "label": "Deals",
+                "label": "Deals / Opportunities",
                 "screen": "crm.deals"
               },
               "score": 800
