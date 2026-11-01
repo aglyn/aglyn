@@ -56,6 +56,19 @@ const PICK_NOTE_SX: SxProps<Theme> = {
   boxShadow: 3,
 }
 
+/** The payment, where the note was: on its own surface, and short of the window on a small one. */
+const PAY_PANEL_SX: SxProps<Theme> = {
+  position: 'sticky',
+  bottom: (theme) => theme.spacing(2),
+  zIndex: 1,
+  boxShadow: 3,
+  p: 2,
+  borderRadius: 1,
+  bgcolor: 'background.paper',
+  maxHeight: '70vh',
+  overflow: 'auto',
+}
+
 /** The guide to site starters, linked from what the shelf says when it has nothing to show. */
 const STARTERS_HELP = pluginDocsHelp('siteStarters')
 
@@ -282,7 +295,7 @@ export function StarterPickerShelf(props: ConsoleHostStarterPickerZoneProps) {
             {'You own this starter. Create your site from it whenever you are ready.'}
           </Alert>
         ) : purchase.panel ? (
-          <Box data-starter-pay={pickedRow.listingId} sx={PICK_NOTE_SX}>
+          <Box data-starter-pay={pickedRow.listingId} sx={PAY_PANEL_SX}>
             {purchase.panel}
           </Box>
         ) : (

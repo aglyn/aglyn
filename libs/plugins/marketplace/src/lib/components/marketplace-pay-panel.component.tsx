@@ -78,6 +78,10 @@ const FormLoading = () => <CircularProgress size={24} aria-label="Loading the ca
  *
  * The total is on screen before the Pay button is: a saved card charged
  * without one is not a purchase anybody agreed to.
+ *
+ * Figma: "Aglyn Console (web)" → page "Marketplace · Publish & review" →
+ * section "✅ CURRENT · Paying in the console", and page "Sites · Create site"
+ * → frames "Choose your starter · Buy (card on file)" and "· Buy (add a card)".
  */
 export function MarketplacePayPanel(props: MarketplacePayPanelProps) {
   const { step, listingName, busy, error, billingHref, onPay, onCardSaved, onAddressSaved, onCancel } =
@@ -155,7 +159,7 @@ export function MarketplacePayPanel(props: MarketplacePayPanelProps) {
 
   return (
     <Stack spacing={1.5} data-marketplace-pay="ask-billing">
-      <PrerequisiteNotice href={billingHref ?? undefined} actionLabel="Open Billing">
+      <PrerequisiteNotice severity="warning" href={billingHref ?? undefined} actionLabel="Open Billing">
         {`${
           step.need === 'card_required'
             ? 'This workspace needs a card on file to buy this.'
