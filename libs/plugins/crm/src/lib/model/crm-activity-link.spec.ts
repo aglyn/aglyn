@@ -70,6 +70,14 @@ describe('crmActivityCompanyId', () => {
     expect(crmActivityCompanyId({}, { contact, groupId: 'site-1' })).toBeNull()
   })
 
+  it('reads the organization’s own facet for a site with no link of its own (AGL-4122)', () => {
+    const contact = { facets: { org: { companyId: 'co-org' } } }
+    expect(crmActivityCompanyId({}, { contact, groupId: 'site-1' })).toBe('co-org')
+    expect(crmActivityCompanyId({}, { contact })).toBe('co-org')
+    const both = { facets: { org: { companyId: 'co-org' }, 'site-1': { companyId: 'co-site' } } }
+    expect(crmActivityCompanyId({}, { contact: both, groupId: 'site-1' })).toBe('co-site')
+  })
+
   it('reads the person’s primary holder for a writer at the organization', () => {
     expect(crmActivityCompanyId({}, { contact: contactAt('co-contact') })).toBe('co-contact')
   })

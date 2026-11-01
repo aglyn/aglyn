@@ -92,6 +92,13 @@ describe('the contact’s company is one holder’s knowledge', () => {
     assert.equal(contactCompanyId(contact, { hostId: 'site-1' }, {}), '')
   })
 
+  it('reads the organization’s own facet for a site with no link of its own', () => {
+    const contact = { facets: { org: { companyId: 'co-org' } } }
+    assert.equal(contactCompanyId(contact, { hostId: 'site-1' }, {}), 'co-org')
+    assert.equal(contactCompanyId(contact, { hostId: null }, {}), 'co-org')
+    assert.equal(primaryGroupId({ capturedByHostIds: ['site-1'], facets: { 'site-1': {}, org: {} } }, {}), 'org')
+  })
+
   it('reads the primary holder for an entry from no site', () => {
     assert.equal(contactCompanyId(contactAt('co-1'), { hostId: null }, {}), 'co-1')
     const both = {
@@ -131,10 +138,13 @@ describe('the restatement', () => {
   it('reads the facet the writers read, through the same holder', () => {
     assert.match(owner, /sources\.groupId \|\| contactPrimaryGroup\(contact, org\)\.groupId/)
     assert.match(owner, /readContactFacet\(contact, groupId\)\.companyId/)
+    assert.match(owner, /readContactFacet\(contact, ORG_CONTACT_HOLDER_ID\)\.companyId/)
   })
 
   it('restates the primary holder as its source says it', () => {
     const holder = read('libs/plugins/crm/src/lib/model/contact-holder.ts')
+    assert.match(read('libs/aglyn/src/lib/app-utils/contacts.ts'), /ORG_CONTACT_HOLDER_ID = 'org'/)
+    assert.match(holder, /if \(facetKeys\.includes\(ORG_CONTACT_HOLDER_ID\)\) return ORG_HOLDER_GROUP/)
     assert.match(holder, /for \(const hostId of captured\)/)
     assert.match(holder, /if \(facetKeys\.includes\(group\.groupId\)\) return group/)
     assert.match(holder, /if \(captured\.length\) return consentGroupForHost\(org, captured\[0\]\)/)

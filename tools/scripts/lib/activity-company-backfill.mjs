@@ -29,9 +29,14 @@
 // of the holder the entry was logged as: the site's group, or the person's
 // primary holder for an entry from no site. `companyIds`, the mirror carrying
 // every holder's link, is never read: that would file one business's call
-// under a company only a sibling brand knows the person by.
+// under a company only a sibling brand knows the person by. The facet of a
+// person the organization added itself is the whole org's, so it answers for
+// any site with no link of its own.
 
 import { readConsentGroups } from './enrollment-activity-backfill.mjs'
+
+/** `ORG_CONTACT_HOLDER_ID`, restated: the facet the organization itself holds. */
+export const ORG_HOLDER = 'org'
 
 /** A stored id, or `''` for anything that is not one. */
 const idOf = (value) => (typeof value === 'string' ? value.trim() : '')
@@ -45,12 +50,14 @@ export function groupIdForHost(org, hostId) {
 }
 
 /**
- * `contactPrimaryGroup(...).groupId`, restated: the first capturing site whose
- * group holds a facet, then any facet, then the first capturing site.
+ * `contactPrimaryGroup(...).groupId`, restated: the organization's own facet,
+ * then the first capturing site whose group holds a facet, then any facet, then
+ * the first capturing site.
  */
 export function primaryGroupId(contact, org) {
   const facets = contact?.facets
   const keys = facets && typeof facets === 'object' && !Array.isArray(facets) ? Object.keys(facets) : []
+  if (keys.includes(ORG_HOLDER)) return ORG_HOLDER
   const raw = contact?.capturedByHostIds
   const captured = (Array.isArray(raw) ? raw : []).map((id) => String(id ?? '').trim()).filter(Boolean)
   for (const hostId of captured) {
@@ -66,7 +73,7 @@ export function contactCompanyId(contact, activity, org) {
   if (!contact) return ''
   const hostId = idOf(activity.hostId)
   const groupId = hostId ? groupIdForHost(org, hostId) : primaryGroupId(contact, org)
-  return idOf(contact.facets?.[groupId]?.companyId)
+  return idOf(contact.facets?.[groupId]?.companyId) || idOf(contact.facets?.[ORG_HOLDER]?.companyId)
 }
 
 /**

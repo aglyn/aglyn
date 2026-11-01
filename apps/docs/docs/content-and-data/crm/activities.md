@@ -173,7 +173,8 @@ what was logged on the company itself:
 1. A company you chose in **Related To** stays.
 2. Otherwise the entry takes the deal's company.
 3. Otherwise it takes the company of the contact in **Name**, as the site you are
-   logging from has them filed.
+   logging from has them filed, or as your organization does for a person it
+   added itself.
 
 So a call logged on a deal shows on the deal, on the timeline of the person you
 spoke to, and on their company. Logged on a contact instead, name one of their

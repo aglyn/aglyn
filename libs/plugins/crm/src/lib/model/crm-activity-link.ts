@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { readContactFacet } from '@aglyn/aglyn/app-utils/contacts'
+import { ORG_CONTACT_HOLDER_ID, readContactFacet } from '@aglyn/aglyn/app-utils/contacts'
 import type { CrmActivityLink } from '@aglyn/aglyn/app-utils/crm'
 import { contactPrimaryGroup } from './contact-holder'
 
@@ -46,7 +46,10 @@ import { contactPrimaryGroup } from './contact-holder'
  * holder's link, so reading it here would file one business's call under a
  * company only a sibling brand knows the person by. A writer standing on a
  * site names that site's group; one standing at the organization names none
- * and reads the person's primary holder, the one their page shows.
+ * and reads the person's primary holder, the one their page shows. The facet
+ * of a person the organization added itself (AGL-4122) is the one exception:
+ * it is the whole org's, so it answers for any site that has no link of its
+ * own.
  */
 
 /** What the Account is worked out from, as the writer already holds it. */
@@ -78,7 +81,11 @@ export function crmActivityCompanyId(
   const { contact, org } = sources
   if (!contact) return null
   const groupId = sources.groupId || contactPrimaryGroup(contact, org).groupId
-  return idOf(readContactFacet(contact, groupId).companyId) || null
+  return (
+    idOf(readContactFacet(contact, groupId).companyId) ||
+    idOf(readContactFacet(contact, ORG_CONTACT_HOLDER_ID).companyId) ||
+    null
+  )
 }
 
 /**
