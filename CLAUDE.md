@@ -90,8 +90,8 @@ push, before you do anything else — and the TITLE is updated too, so it
 names what the PR now carries. A body that lags the branch by even one commit,
 says "plus a few fixes", or lists only the headline PRs, is incomplete.
 
-⛔ A promotion PR's title is exactly `Release v1.0.0-beta.N` and never
-changes; its themes go in the body, not the title (Zach, 2026-10-09).
+⛔ A promotion PR's title is exactly `Release v<version>`, for example
+`Release v1.1.0`, and never changes; its themes go in the body, not the title (Zach, 2026-10-09).
 
 ## Verify in the cheapest tier that can see the mistake
 
