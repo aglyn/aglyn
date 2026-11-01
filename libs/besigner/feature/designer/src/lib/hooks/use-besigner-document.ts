@@ -184,6 +184,18 @@ export interface UseBesignerDocumentOptions<TData = unknown>
    * protected whether or not presence is working at all.
    */
   roomSessions?: number | null
+  /**
+   * The other people in this room, leaving out this author's own other tabs,
+   * or null while unknown (AGL-4116). Only a draft a link asked for reads it;
+   * see `UseBesignerDraftOptions.roomPeople`.
+   */
+  roomPeople?: number | null
+  /**
+   * The link that opened this editor asked for its saved draft
+   * (`useBesignerOpenDraftParam`, AGL-4116). See
+   * `UseBesignerDraftOptions.openShared`.
+   */
+  openSharedDraft?: boolean
   notify?: BesignerNotify
   queueLoading?: BesignerQueueLoading
   /** Called after a successful save, for activity logging. */
@@ -388,6 +400,10 @@ export interface UseBesignerDocumentResult {
 
 const noopQueueLoading: BesignerQueueLoading = () => () => undefined
 const noopNotify: BesignerNotify = () => undefined
+
+/** Why a draft a link asked for did not open, and when it will. */
+export const BESIGNER_DRAFT_OPEN_WITHHELD_COPY =
+  'Someone else’s unsaved work is on this page, so its saved draft stayed closed. It opens when they’re done.'
 
 /**
  * Pushes a stored node map into the shared canvas singleton.
@@ -691,7 +707,19 @@ export function useBesignerDocument<TData = unknown>(
     storedStamp: versionStamp(updatedAt),
     storedNodes: nodes,
     roomSessions,
+    roomPeople: options.roomPeople,
+    openShared: options.openSharedDraft,
   })
+
+  // A link asked for this draft and someone's work is holding it (AGL-4116):
+  // said once, because the alternative is landing on the live version with no
+  // word of where the change went.
+  const openWithheldSaidRef = useRef(false)
+  useEffect(() => {
+    if (!draft.openWithheld || openWithheldSaidRef.current) return
+    openWithheldSaidRef.current = true
+    ;(options.notify ?? noopNotify)(BESIGNER_DRAFT_OPEN_WITHHELD_COPY, { variant: 'info' })
+  }, [draft.openWithheld, options.notify])
 
   const unopenedDraftOnOffer =
     draft.available &&
