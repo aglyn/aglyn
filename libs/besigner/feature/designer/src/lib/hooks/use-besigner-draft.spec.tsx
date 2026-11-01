@@ -652,6 +652,141 @@ describe('useBesignerDraft unopened saved draft (AGL-2874)', () => {
  * browser caught it — wrong on both counts, and the reasonable reading is
  * that the editor loses work.
  */
+describe('useBesignerDraft a draft a link asks for (AGL-4116)', () => {
+  const IDS: BesignerDraftIds = {
+    scope: 'host-1',
+    kind: 'screen',
+    docId: 'home',
+    versionId: 'v1',
+  }
+  const DRAFT_NODES = { root: { $id: 'root', componentId: 'div' } } as never
+  const SAVED_DRAFT = {
+    nodes: DRAFT_NODES,
+    baseStamp: 'ms:100',
+    updatedByUid: 'uid-1',
+    updatedByEmail: null,
+    updatedAt: Date.now() - 60_000,
+  }
+
+  interface HarnessProps {
+    ids?: BesignerDraftIds
+    openShared?: boolean
+    roomSessions?: number | null
+    roomPeople?: number | null
+  }
+
+  function setup(initial: HarnessProps = {}) {
+    const seen: BesignerDraftState[] = []
+    const firestore = {} as never
+    function Harness(props: HarnessProps) {
+      seen.push(
+        useBesignerDraft({
+          ids: props.ids ?? IDS,
+          firestore,
+          loaded: true,
+          dirty: false,
+          storedStamp: 'ms:100',
+          storedNodes: {},
+          roomSessions: props.roomSessions,
+          roomPeople: props.roomPeople,
+          openShared: props.openShared,
+        }),
+      )
+      return null
+    }
+    const rendered = render(<Harness {...initial} />)
+    return {
+      state: () => seen[seen.length - 1],
+      rerender: (props: HarnessProps) => rendered.rerender(<Harness {...props} />),
+    }
+  }
+
+  async function settle() {
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+  }
+
+  beforeEach(() => {
+    localStorage.clear()
+    mockCanvas.applyNodes.mockClear()
+    mockCanvas.hasRemoteEdits = false
+    mockReadServerDraft.mockReset()
+    mockReadServerDraft.mockResolvedValue(SAVED_DRAFT)
+  })
+
+  it('opens the saved draft on arrival, once, with no offer left behind', async () => {
+    const { state, rerender } = setup({ openShared: true })
+    await settle()
+    expect(mockCanvas.applyNodes).toHaveBeenCalledTimes(1)
+    expect(mockCanvas.applyNodes).toHaveBeenCalledWith(DRAFT_NODES)
+    expect(state().available).toBe(false)
+    expect(state().sharedDraftUnopened).toBe(false)
+    rerender({ openShared: true })
+    await settle()
+    expect(mockCanvas.applyNodes).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves it behind the banner when no link asked', async () => {
+    const { state } = setup()
+    await settle()
+    expect(mockCanvas.applyNodes).not.toHaveBeenCalled()
+    expect(state()).toMatchObject({ available: true, origin: 'shared', openWithheld: false })
+  })
+
+  it('never opens a crash-net draft: that stays a choice', async () => {
+    mockReadServerDraft.mockResolvedValue(null)
+    writeBesignerDraft(IDS, { nodes: DRAFT_NODES, baseStamp: 'ms:100' })
+    const { state } = setup({ openShared: true })
+    await settle()
+    expect(mockCanvas.applyNodes).not.toHaveBeenCalled()
+    expect(state()).toMatchObject({ available: true, origin: 'browser' })
+  })
+
+  it('opens over the author’s own other tab, which the link overrules', async () => {
+    const { state } = setup({ openShared: true, roomSessions: 1, roomPeople: 0 })
+    await settle()
+    expect(mockCanvas.applyNodes).toHaveBeenCalledTimes(1)
+    expect(state().openWithheld).toBe(false)
+  })
+
+  it('waits for someone else to leave, says so, then opens', async () => {
+    const { state, rerender } = setup({ openShared: true, roomSessions: 1, roomPeople: 1 })
+    await settle()
+    expect(mockCanvas.applyNodes).not.toHaveBeenCalled()
+    expect(state()).toMatchObject({ available: false, openWithheld: true, sharedDraftUnopened: true })
+
+    rerender({ openShared: true, roomSessions: 0, roomPeople: 0 })
+    await settle()
+    expect(mockCanvas.applyNodes).toHaveBeenCalledTimes(1)
+    expect(state().openWithheld).toBe(false)
+  })
+
+  it('waits quietly while presence has not answered', async () => {
+    const { state } = setup({ openShared: true, roomSessions: null, roomPeople: null })
+    await settle()
+    expect(mockCanvas.applyNodes).not.toHaveBeenCalled()
+    expect(state().openWithheld).toBe(false)
+  })
+
+  it('holds for work already replayed onto the canvas', async () => {
+    mockCanvas.hasRemoteEdits = true
+    const { state } = setup({ openShared: true, roomSessions: 0, roomPeople: 0 })
+    await settle()
+    expect(mockCanvas.applyNodes).not.toHaveBeenCalled()
+    expect(state().openWithheld).toBe(true)
+  })
+
+  it('asks for the document the link opened, not the next version the editor moves to', async () => {
+    const { rerender } = setup({ openShared: true, roomSessions: 1, roomPeople: 1 })
+    await settle()
+    rerender({ openShared: true, ids: { ...IDS, versionId: 'v2' }, roomSessions: 0, roomPeople: 0 })
+    await settle()
+    expect(mockCanvas.applyNodes).not.toHaveBeenCalled()
+  })
+})
+
 describe('describeDraftOffer origin (AGL-2508)', () => {
   const base = {
     available: true,
@@ -659,6 +794,7 @@ describe('describeDraftOffer origin (AGL-2508)', () => {
     staleAgainstDocument: false,
     restoreBlockedBy: null,
     sharedDraftUnopened: false,
+    openWithheld: false,
     restore: () => undefined,
     discard: () => undefined,
   }
