@@ -799,13 +799,6 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
     dataReceived:
       "The project id, the resource names of alert policies and notification channels, and the operator's own access token. No customer, member or visitor personal data exists anywhere in this path to send; what comes back is the project's own alerting configuration.",
   },
-  'run.googleapis.com': {
-    disposition: 'not-a-subprocessor',
-    reason:
-      'The Cloud Run Admin API `jobs.run` address, written by `tools/scripts/setup-edge-admission-run.mjs` and `tools/scripts/setup-github-app-dispatch.mjs` as the target of a Cloud Scheduler HTTP job. Scheduler POSTs to it on a cron, with an OAuth token for the job\'s dedicated service account, to start the edge-admission sampler or the job that dispatches the signup canary workflow. The same scripts deploy those jobs through `gcloud run jobs`, as the operator. No console or tenant code imports either script.',
-    dataReceived:
-      "Job definitions — a container built from the repository's own scripts, its service account, non-secret identifiers as environment variables, and Secret Manager references by name, never a secret value — and bodiless run requests naming a job. Nothing personal is in either: no customer, member or visitor record is read or sent to define or start a job.",
-  },
 
   // MARK – Literals that are never fetched
   //
