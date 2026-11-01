@@ -16,12 +16,15 @@
  */
 
 import {
+  CRM_COLLECTIONS,
   type CrmDealContactRole,
+  crmDealContactRoleListFields,
   crmListFieldsPatch,
   dealContactRoleFields,
   dealContactRolesOf,
   dealContactRolesRepointed,
   dealContactRolesWithout,
+  readDealContactRoles,
 } from '@aglyn/aglyn/app-utils/crm'
 import { FieldValue } from 'firebase-admin/firestore'
 
@@ -38,6 +41,9 @@ import { FieldValue } from 'firebase-admin/firestore'
  * (`dealContactRolesWithout` / `dealContactRolesRepointed`), its Primary and
  * `contactId` written together and its list fields restamped, so a written
  * deal falls out of both queries and the next pass finds only what is left.
+ *
+ * A company's Account Contact Roles (AGL-4122) follow the same person, so the
+ * sweep takes them too and no caller has to remember them.
  */
 
 /** How many deals one pass reads, and one batch writes. */
@@ -61,6 +67,13 @@ export async function sweepDealContactRoles(
   label: string,
 ): Promise<number> {
   if (!contactId || contactId === to) return 0
+  await sweepCompanyContactRoles(
+    firestore,
+    deals.parent?.collection(CRM_COLLECTIONS.companies),
+    contactId,
+    to,
+    label,
+  )
   let written = 0
   // Each query on its own: a deal the first could not reach may still name
   // the contact as its `contactId`.
@@ -83,6 +96,50 @@ export async function sweepDealContactRoles(
     }
   }
   return written
+}
+
+/** The companies naming `contactId`, moved to `to` or taken off for `null`. */
+async function sweepCompanyContactRoles(
+  firestore: FirebaseFirestore.Firestore,
+  companies: FirebaseFirestore.CollectionReference | undefined,
+  contactId: string,
+  to: string | null,
+  label: string,
+): Promise<void> {
+  if (!companies) return
+  try {
+    const query = companies.where('contactRoleContactIds', 'array-contains', contactId)
+    for (let pass = 0; pass < PASSES; pass += 1) {
+      const page = await query.limit(PAGE).get()
+      if (page.empty) break
+      const batch = firestore.batch()
+      for (const company of page.docs) {
+        batch.update(company.ref, companyContactRolesUpdate(company.data() ?? {}, contactId, to))
+      }
+      await batch.commit()
+      if (page.size < PAGE) break
+    }
+  } catch (error) {
+    console.error(`${label}: company contact roles sweep failed`, error)
+  }
+}
+
+/** One company's update once `contactId` is moved to `to`, or taken off for `null`. */
+export function companyContactRolesUpdate(
+  company: Record<string, unknown>,
+  contactId: string,
+  to: string | null,
+): Record<string, unknown> {
+  const roles = readDealContactRoles(company['contactRoles'])
+  const contactRoles =
+    to === null ? dealContactRolesWithout(roles, contactId) : dealContactRolesRepointed(roles, contactId, to)
+  const { contactRoleContactIds, contactRoleKeys } = crmDealContactRoleListFields({ contactRoles })
+  return {
+    contactRoles,
+    contactRoleContactIds,
+    contactRoleKeys,
+    updatedAt: FieldValue.serverTimestamp(),
+  }
 }
 
 /** One deal's update once `contactId` is moved to `to`, or taken off for `null`. */

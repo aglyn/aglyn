@@ -15,8 +15,12 @@
  * limitations under the License.
  */
 
-import { dealContactRolesWithPrimary, effectiveCrmPicklist } from '@aglyn/aglyn'
-import { dealContactRoleAddProblem, companyContactRolesSave } from '../model/deal-contact-roles'
+import { crmPicklistKey, dealContactRolesWithPrimary, effectiveCrmPicklist } from '@aglyn/aglyn'
+import {
+  companyContactRolesOf,
+  companyContactRolesSave,
+  dealContactRoleAddProblem,
+} from '../model/deal-contact-roles'
 
 /** Salesforce's Account Contact Roles: the model the company's card saves through (AGL-4122). */
 describe('a company’s contact roles', () => {
@@ -35,7 +39,19 @@ describe('a company’s contact roles', () => {
         { contactId: 'jordan', role, primary: true },
         { contactId: 'pat', primary: false },
       ],
+      contactRoleContactIds: ['jordan', 'pat'],
+      contactRoleKeys: [crmPicklistKey(role)],
     })
+  })
+
+  it('reads the Primary off the row, because a company has no contactId', () => {
+    const roles = companyContactRolesOf({
+      contactRoles: [
+        { contactId: 'jordan', role, primary: true },
+        { contactId: 'pat', primary: false },
+      ],
+    })
+    expect(roles.map((row) => row.primary)).toEqual([true, false])
   })
 
   it('moves the Primary, and only one person holds it', () => {

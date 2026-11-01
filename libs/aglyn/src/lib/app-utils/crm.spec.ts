@@ -2271,6 +2271,7 @@ describe("a deal's contact roles (AGL-3521)", () => {
     )
     expect(crmPicklistDefinition('opportunityContactRole')?.targets).toEqual([
       { object: 'deal', field: 'contactRoles', arrayKey: 'role', keyField: 'contactRoleKeys' },
+      { object: 'company', field: 'contactRoles', arrayKey: 'role', keyField: 'contactRoleKeys' },
     ])
     expect(effectiveCrmPicklist('opportunityContactRole', undefined).values.map((value) => value.label)).toEqual([
       'Business User',
