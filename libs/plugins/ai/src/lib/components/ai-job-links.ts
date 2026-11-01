@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console-routes'
+import { besignerOpenDraftHref } from '@aglyn/aglyn/app-utils/version-draft'
 import {
   pluginRecordHref,
   pluginRecordListHref,
@@ -30,7 +31,8 @@ import { AI_BUILD_STORE_LINKS_DRAFT_STEP, AI_BUILD_STORE_LINKS_MISSING_STEP } fr
 /**
  * Where "open draft" goes, or `null` when the output has no page of its
  * own — a `text` output carries its copy on the job and is shown inline.
- * A versioned resource opens in the besigner on the version the job wrote;
+ * A versioned resource opens in the besigner on the version the job wrote,
+ * on its draft when that is where the change went;
  * one the console lists without a detail page opens its list; a `theme`
  * proposal opens the site's Theme section, where it is put in the editor.
  *
@@ -45,7 +47,11 @@ export function aiJobOutputHref(output: AiJobOutput, orgSlug: string): string | 
   const segment = BESIGNER_SEGMENT[output.resource]
   if (segment) {
     const base = `/${orgSlug}/hosts/${host}/${segment}/${output.id}`
-    return output.versionId ? `${base}/versions/${output.versionId}/besigner` : base
+    if (!output.versionId) return base
+    const besigner = `${base}/versions/${output.versionId}/besigner`
+    // A change in the version's draft opens on that draft (AGL-4116), so the
+    // person lands on what they asked for rather than on the live version.
+    return output.inDraft ? besignerOpenDraftHref(besigner) : besigner
   }
   if (output.resource === 'product') {
     // The catalog a drafted product lands in: the commerce plugin's address

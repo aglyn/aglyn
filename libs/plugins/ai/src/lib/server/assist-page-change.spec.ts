@@ -109,7 +109,7 @@ describe('the pages the chat may change (AGL-4116)', () => {
     const block = assistPageChangeBlock()
     expect(block).toMatch(/do not plan a build/)
     expect(block).toMatch(/saved into that page’s draft, on any plan/)
-    expect(block).toMatch(/Open in the Besigner, where Open draft shows the change/)
+    expect(block).toMatch(/Open in the Besigner, which opens that draft/)
     expect(block).toMatch(/newVersion: true only when they ask for the change as a new or separate version/)
     expect(block).toMatch(/Never say you cannot use a draft/)
     expect(assistPageChangeTool().inputSchema).toMatchObject({ required: ['summary', 'page', 'change', 'newVersion'] })

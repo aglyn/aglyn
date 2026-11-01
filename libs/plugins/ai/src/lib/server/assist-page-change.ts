@@ -80,7 +80,7 @@ export function assistPageChangeBlock(): string {
     '- page: the id of that page from the list. Where two pages share a name or an address, it is the live one unless the user names the other.',
     '- change: exactly what they asked to change on that page, in their words, with what this conversation settled about it. Add nothing they did not ask for.',
     '- summary: one short sentence, such as "Make the top image fill the background on Home".',
-    '- The change is saved into that page’s draft, on any plan: the published page stays as it is until they publish. When it is ready, the chat shows Open in the Besigner, where Open draft shows the change and they publish it. A further change to the same page is made on that draft.',
+    '- The change is saved into that page’s draft, on any plan: the published page stays as it is until they publish. When it is ready, the chat shows Open in the Besigner, which opens that draft, and they publish it there. A further change to the same page is made on that draft.',
     '- newVersion: true only when they ask for the change as a new or separate version of the page; otherwise false. Never offer a new version they did not ask for.',
     '- Nothing is changed when you call the tool: never say it is done. Never say you cannot use a draft, cannot edit the page or cannot give a link.',
     `- One page per message. For changes to several pages, change the first and say to ask for the next. A request that also asks for new pages, forms or anything else to be made is a build: call ${ASSIST_BUILD_TOOL_NAME} with the whole request instead.`,

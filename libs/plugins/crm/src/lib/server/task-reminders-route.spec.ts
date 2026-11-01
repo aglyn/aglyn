@@ -32,7 +32,8 @@
  * suppression gate are the seams, in the digest spec's shape.
  */
 
-export {}
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 
 // ---------------------------------------------------------------------------
 // In-memory Firestore: nested collections, equality and range filters, one
@@ -80,7 +81,19 @@ interface MockQueryState {
   order: { field: string; dir: 'asc' | 'desc' } | null
   limitN: number | null
   after: string | null
+  /** A real projection, so a field the rule needs and the query left out fails. */
+  fields: string[] | null
 }
+
+/** The collection-group query, or its refusal while the index is not built. */
+let mockGroupRefusal: Error | null = null
+/** Every org document the sweep read, by point read or by list. */
+let mockOrgReads: string[] = []
+/** The group queries the route ran, and the page size it asked for. */
+let mockGroupQueries: Array<{ limitN: number | null }> = []
+
+/** A path under `mockQuery` that means "every collection of this name". */
+const MOCK_GROUP = 'group:'
 
 function mockMatches(data: Record<string, any>, id: string, filter: MockFilter): boolean {
   const actual = filter.field === '__name__' ? id : data[filter.field]
@@ -101,8 +114,13 @@ function mockMatches(data: Record<string, any>, id: string, filter: MockFilter):
   }
 }
 
-function mockSnapshot(path: string) {
-  const data = mockStore.get(path)
+function mockSnapshot(path: string, fields: string[] | null = null) {
+  const stored = mockStore.get(path)
+  const data =
+    stored && fields
+      ? Object.fromEntries(Object.entries(stored).filter(([key]) => fields.includes(key)))
+      : stored
+  if (/^orgs\/[^/]+$/.test(path)) mockOrgReads.push(mockLast(path))
   return {
     id: mockLast(path),
     path,
@@ -115,7 +133,7 @@ function mockSnapshot(path: string) {
 
 function mockQuery(
   path: string,
-  state: MockQueryState = { filters: [], order: null, limitN: null, after: null },
+  state: MockQueryState = { filters: [], order: null, limitN: null, after: null, fields: null },
 ): any {
   return {
     where: (field: string, op: string, value: unknown) =>
@@ -123,9 +141,18 @@ function mockQuery(
     orderBy: (field: string, dir: 'asc' | 'desc' = 'asc') =>
       mockQuery(path, { ...state, order: { field, dir } }),
     limit: (limitN: number) => mockQuery(path, { ...state, limitN }),
+    select: (...fields: string[]) => mockQuery(path, { ...state, fields }),
     startAfter: (ref: { id: string }) => mockQuery(path, { ...state, after: ref.id }),
     get: async () => {
-      let rows = mockChildren(path).map((child) => ({
+      const group = path.startsWith(MOCK_GROUP) ? path.slice(MOCK_GROUP.length) : null
+      if (group) {
+        mockGroupQueries.push({ limitN: state.limitN })
+        if (mockGroupRefusal) throw mockGroupRefusal
+      }
+      const paths = group
+        ? [...mockStore.keys()].filter((key) => key.split('/').slice(-2, -1)[0] === group)
+        : mockChildren(path)
+      let rows = paths.map((child) => ({
         id: mockLast(child),
         path: child,
         data: mockStore.get(child) as Record<string, any>,
@@ -147,7 +174,7 @@ function mockQuery(
         rows = at >= 0 ? rows.slice(at + 1) : rows
       }
       if (state.limitN !== null) rows = rows.slice(0, state.limitN)
-      const docs = rows.map((row) => mockSnapshot(row.path))
+      const docs = rows.map((row) => mockSnapshot(row.path, state.fields))
       return { docs, size: docs.length, empty: docs.length === 0 }
     },
   }
@@ -157,6 +184,13 @@ function mockDocRef(path: string): any {
   return {
     id: mockLast(path),
     path,
+    get parent() {
+      const segments = path.split('/')
+      return {
+        id: segments[segments.length - 2],
+        parent: segments.length > 2 ? mockDocRef(segments.slice(0, -2).join('/')) : null,
+      }
+    },
     get: async () => mockSnapshot(path),
     set: async (value: Record<string, any>, options?: { merge?: boolean }) => {
       mockStore.set(
@@ -185,6 +219,7 @@ const mockBatches: number[] = []
 
 const mockFirestore: any = {
   collection: (name: string) => mockCollection(name),
+  collectionGroup: (name: string) => mockQuery(`${MOCK_GROUP}${name}`),
   getAll: async (...refs: any[]) => Promise.all(refs.map((ref) => ref.get())),
   batch: () => {
     const queued: Array<() => Promise<void>> = []
@@ -387,6 +422,9 @@ function seedPlatform() {
 
 beforeEach(() => {
   mockStore.clear()
+  mockGroupRefusal = null
+  mockOrgReads = []
+  mockGroupQueries = []
   mockNotified.length = 0
   mockSent.length = 0
   mockBatches.length = 0
@@ -515,7 +553,8 @@ describe('POST /api/crm/task-reminders (AGL-2659)', () => {
     await post()
     const again = await (await post()).json()
     expect(again).toMatchObject({ due: 0, handled: 0, notified: 0, emailed: 0 })
-    expect(again.orgs['org-a'].skipped).toBe('nothing-due')
+    // Nothing owed, so the org is not even read (AGL-4121).
+    expect(again.orgs['org-a']).toBeUndefined()
     expect(mockNotified).toHaveLength(3)
     expect(mockSent).toHaveLength(2)
   })
@@ -574,6 +613,120 @@ describe('POST /api/crm/task-reminders (AGL-2659)', () => {
     expect(Object.keys(third.orgs)).toEqual(['org-off'])
   })
 
+  describe('finds the orgs from the tasks (AGL-4121)', () => {
+    /** A dozen orgs with nothing owed: none due, one already told, one done. */
+    const seedQuietOrgs = () => {
+      for (let index = 0; index < 12; index += 1) {
+        seed(`orgs/quiet-${index}`, { name: 'Quiet', plan: 'business', entitlements: { features: { crm: true } } })
+      }
+      seed('orgs/quiet-1/crmTasks/later', { status: 'open', remindAtMs: NOW + DAY })
+      seed('orgs/quiet-2/crmTasks/told', { status: 'open', remindAtMs: NOW - DAY, reminderSentAtMs: NOW - DAY })
+      seed('orgs/quiet-3/crmTasks/done', { status: 'done', remindAtMs: NOW - DAY })
+    }
+
+    it('reads no org with nothing owed, and sends what it always sent', async () => {
+      seedQuietOrgs()
+      const body = await (await post()).json()
+      expect(body).toMatchObject({ swept: 3, due: 6, handled: 6, notified: 3, emailed: 2, done: true })
+      expect(new Set(mockOrgReads)).toEqual(new Set(['org-a', 'org-free', 'org-off']))
+      expect(Object.keys(body.orgs).sort()).toEqual(['org-a', 'org-free', 'org-off'])
+      expect(mockGroupQueries).toHaveLength(1)
+    })
+
+    it('an hour with nothing owed anywhere reads no org at all, and still leaves its beat', async () => {
+      mockStore.clear()
+      seedQuietOrgs()
+      const body = await (await post()).json()
+      expect(body).toMatchObject({ swept: 0, due: 0, done: true, nextCursor: null })
+      expect(mockOrgReads).toEqual([])
+      expect(mockStore.has(`platformCronBeats/${CRM_TASK_REMINDERS_JOB_ID}`)).toBe(true)
+    })
+
+    it('ignores a task under anything but an org', async () => {
+      mockStore.clear()
+      seed('hosts/site-a/crmTasks/stray', { status: 'open', remindAtMs: NOW - HOUR, assigneeUid: 'ann' })
+      const body = await (await post()).json()
+      expect(body).toMatchObject({ swept: 0, due: 0 })
+    })
+
+    it('skips an org that is gone, and still moves the cursor past it', async () => {
+      mockStore.delete('orgs/org-a')
+      const first = await (await post({ limit: 1 })).json()
+      expect(first).toMatchObject({ swept: 0, done: false, nextCursor: 'org-a' })
+    })
+
+    it('reads every page: a busy org’s handled reminders never bury a quiet org', async () => {
+      mockStore.clear()
+      seed('orgs/org-a', { name: 'Acme', slug: 'acme', plan: 'business', entitlements: { features: { crm: true } } })
+      seed('orgs/org-a/members/ann', { role: 'admin', email: 'ann@acme.com' })
+      seed('users/ann', {})
+      seed('orgs/org-a/crmTasks/oldest', { status: 'open', remindAtMs: NOW - 2 * DAY, assigneeUid: 'ann', title: 'Oldest' })
+      seed('orgs/org-busy', { name: 'Busy', plan: 'business', entitlements: { features: { crm: true } } })
+      for (let index = 0; index < 500; index += 1) {
+        seed(`orgs/org-busy/crmTasks/t${index}`, {
+          status: 'open',
+          remindAtMs: NOW - HOUR - index,
+          reminderSentAtMs: NOW - HOUR,
+        })
+      }
+      const body = await (await post()).json()
+      expect(mockGroupQueries).toEqual([{ limitN: 500 }, { limitN: 500 }])
+      expect(Object.keys(body.orgs)).toEqual(['org-a'])
+      expect(body).toMatchObject({ due: 1, notified: 1 })
+    })
+
+    it('falls back to every org while the query is refused, and misses nobody', async () => {
+      // The promotion's tail deploys the index after the code that needs it.
+      jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+      mockGroupRefusal = Object.assign(new Error('9 FAILED_PRECONDITION: The query requires an index.'), {
+        code: 9,
+      })
+      seedQuietOrgs()
+      const body = await (await post()).json()
+      expect(body).toMatchObject({ swept: 15, due: 6, handled: 6, notified: 3, emailed: 2, done: true })
+      expect(body.orgs['quiet-0'].skipped).toBe('nothing-due')
+      expect(console.warn).toHaveBeenCalledTimes(1)
+    })
+
+    it('keeps its cursor while the query is refused', async () => {
+      jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+      mockGroupRefusal = new Error('unavailable')
+      const first = await (await post({ limit: 1 })).json()
+      expect(first).toMatchObject({ swept: 1, done: false, nextCursor: 'org-a' })
+      const second = await (await post({ limit: 1, cursor: first.nextCursor })).json()
+      expect(second).toMatchObject({ swept: 1, done: false, nextCursor: 'org-free' })
+    })
+
+    it('has the index the query needs in the deployed file', () => {
+      // Firestore's automatic indexes stop at COLLECTION scope, and the
+      // COLLECTION twin of this one says nothing about the group.
+      const { indexes } = JSON.parse(
+        readFileSync(
+          join(__dirname, '../../../../../../cloud/firebase-firestore.indexes.json'),
+          'utf8',
+        ),
+      ) as {
+        indexes: Array<{
+          collectionGroup: string
+          queryScope: string
+          fields: Array<{ fieldPath: string; order?: string }>
+        }>
+      }
+      expect(
+        indexes.filter(
+          (index) =>
+            index.collectionGroup === 'crmTasks' &&
+            index.queryScope === 'COLLECTION_GROUP' &&
+            JSON.stringify(index.fields) ===
+              JSON.stringify([
+                { fieldPath: 'status', order: 'ASCENDING' },
+                { fieldPath: 'remindAtMs', order: 'DESCENDING' },
+              ]),
+        ),
+      ).toHaveLength(1)
+    })
+  })
+
   it('stops when the send-rate governor refuses, stamping nobody it did not reach', async () => {
     mockSendResults = [{ sent: false, reason: 'rate-limited', retryAtMs: NOW + HOUR }]
     const body = await (await post()).json()
@@ -602,10 +755,15 @@ describe('POST /api/crm/task-reminders (AGL-2659)', () => {
 
   it('reports an org that threw as 207 and sweeps the rest', async () => {
     // Only org-a reads user documents (the others are skipped before), so
-    // one failing `getAll` is one failing org.
-    jest.spyOn(mockFirestore, 'getAll').mockImplementationOnce(async () => {
-      throw new Error('users unreadable')
-    })
+    // one failing `getAll` is one failing org. The first one is the org
+    // documents themselves, which fail the chunk and not an org.
+    const getAll = mockFirestore.getAll
+    jest
+      .spyOn(mockFirestore, 'getAll')
+      .mockImplementationOnce(getAll)
+      .mockImplementationOnce(async () => {
+        throw new Error('users unreadable')
+      })
     const response = await post()
     expect(response.status).toBe(207)
     const body = await response.json()

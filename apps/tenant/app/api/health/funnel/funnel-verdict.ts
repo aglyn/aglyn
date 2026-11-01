@@ -280,10 +280,10 @@ export function funnelFormFacts(
  * cannot drift into disagreeing about which forms a page can actually render.
  *
  * The decode is why this is asked only of a form whose pointer says it was
- * published. A site's whole form catalog is read on a public endpoint, and
- * msgpack over every document in it would be paid for documents this never
- * grades — a freshly created form carries the canvas it was seeded with, and
- * that seed is not a publication.
+ * published. A site's lead forms are read on a public endpoint, and msgpack
+ * over every one of them would be paid for documents this never grades — a
+ * freshly created form carries the canvas it was seeded with, and that seed is
+ * not a publication.
  */
 function hasResolvableDesign(data: Record<string, unknown>): boolean {
   const rootId = typeof data['rootId'] === 'string' ? data['rootId'] : ''

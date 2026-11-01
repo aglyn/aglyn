@@ -21,6 +21,7 @@
  *   node tools/scripts/setup-github-app-dispatch.mjs --dry-run
  *   node tools/scripts/setup-github-app-dispatch.mjs
  *   node tools/scripts/setup-github-app-dispatch.mjs --retire-pat
+ *   node tools/scripts/setup-github-app-dispatch.mjs --retire-jobs
  *
  * `signup-canary-dispatch` held a fine-grained PAT in its own headers and that
  * token expires 2026-12-09. The org policy is "fine-grained personal access
@@ -29,8 +30,8 @@
  *
  * A GitHub App sidesteps the policy entirely: the private key does not expire,
  * and what crosses the network hourly is a one-hour installation token minted
- * from it. The key lives in Secret Manager and is mounted into the job at run
- * time, so it is never in a scheduler header, a repo secret, or this repo.
+ * from it. The key lives in Secret Manager and is mounted into the service at
+ * run time, so it is never in a scheduler header, a repo secret, or this repo.
  *
  * ## Why the canary could not move into GCP the way the sampler did
  *
@@ -43,11 +44,15 @@
  * the files it lists). So the walk stays on Actions, where minutes are free and
  * those secrets already live, and only the TRIGGER moves here.
  *
- * ## ⚠️ OAuth, not OIDC, again
+ * ## ⚠️ A service, not a job, and OIDC, not OAuth
  *
- * Scheduler starts a Cloud Run JOB through the Run admin API, which is a Google
- * API wanting an OAuth token. OIDC is for invoking a Cloud Run SERVICE and
- * yields a 401 that reads like a permissions problem.
+ * This was two Cloud Run JOBS. A dispatch takes two seconds and a job bills at
+ * least a minute at 1 vCPU, so `run-once-server.mjs` now serves the dispatcher
+ * from one request-billed service on a quarter vCPU. Do not move it back.
+ *
+ * Scheduler calls a SERVICE directly, which wants an OIDC identity token whose
+ * audience is the service URL. An OAuth token here yields a 401 that reads like
+ * a permissions problem.
  */
 
 import { execFileSync } from 'node:child_process'
@@ -61,9 +66,10 @@ const REPO_ROOT = resolve(HERE, '../..')
 
 const PROJECT = process.env.GCP_PROJECT ?? 'aglyn-main'
 const REGION = process.env.GCP_RUN_REGION ?? 'us-central1'
-const JOB = 'github-dispatch-signup-canary'
-const SCHEDULER_JOB = 'signup-canary-dispatch-app'
-/** The PAT-based row this replaces. Removed only under an explicit flag. */
+const SERVICE = 'github-dispatch'
+/** The jobs the service replaced. Removed only under an explicit flag. */
+const RETIRED_JOBS = ['github-dispatch-signup-canary', 'github-dispatch-uptime-probe']
+/** The PAT-based row the App replaced. Removed only under an explicit flag. */
 const OLD_SCHEDULER_JOB = 'signup-canary-dispatch'
 const SA_ID = 'github-dispatch'
 const SA_EMAIL = `${SA_ID}@${PROJECT}.iam.gserviceaccount.com`
@@ -71,12 +77,25 @@ const SECRET = 'github-dispatch-app-key'
 /** Non-secret identifiers of the App and its single installation. */
 const APP_ID = process.env.GITHUB_APP_ID ?? '4901513'
 const INSTALLATION_ID = process.env.GITHUB_APP_INSTALLATION_ID ?? '160694363'
-const WORKFLOW = 'signup-canary.yml'
-/** Unchanged from the row it replaces. */
-const SCHEDULE = '25 * * * *'
+/** One Scheduler row per workflow, each POSTing to its own route. */
+const DISPATCHES = [
+  {
+    route: '/signup-canary',
+    workflow: 'signup-canary.yml',
+    schedulerJob: 'signup-canary-dispatch-app',
+    schedule: '25 * * * *',
+  },
+  {
+    route: '/uptime-probe',
+    workflow: 'uptime-probe.yml',
+    schedulerJob: 'uptime-probe-dispatch-app',
+    schedule: '7,22,37,52 * * * *',
+  },
+]
 
 const DRY_RUN = process.argv.includes('--dry-run')
 const RETIRE = process.argv.includes('--retire-pat')
+const RETIRE_JOBS = process.argv.includes('--retire-jobs')
 
 function gcloud(args, { allowFail = false } = {}) {
   if (DRY_RUN && !args.includes('describe') && !args.includes('list')) {
@@ -98,7 +117,7 @@ function gcloud(args, { allowFail = false } = {}) {
   }
 }
 
-/** The dispatcher plus a package.json, and nothing else — it has no deps. */
+/** The dispatcher, its server and a package.json. It has no dependencies. */
 function stageSource() {
   const dir = mkdtempSync(join(tmpdir(), 'github-dispatch-'))
   mkdirSync(join(dir, 'scripts'), { recursive: true })
@@ -106,6 +125,24 @@ function stageSource() {
     join(REPO_ROOT, 'tools/scripts/github-app-dispatch.mjs'),
     join(dir, 'scripts/github-app-dispatch.mjs'),
   )
+  cpSync(
+    join(REPO_ROOT, 'tools/scripts/run-once-server.mjs'),
+    join(dir, 'run-once-server.mjs'),
+  )
+  writeFileSync(
+    join(dir, 'run-once-routes.json'),
+    `${JSON.stringify({
+      script: 'scripts/github-app-dispatch.mjs',
+      routes: Object.fromEntries(
+        DISPATCHES.map(({ route, workflow }) => [
+          route,
+          { GITHUB_WORKFLOW_FILE: workflow },
+        ]),
+      ),
+    })}\n`,
+  )
+  // Straight to node: npm alone costs seconds of a quarter vCPU on a cold start.
+  writeFileSync(join(dir, 'Procfile'), 'web: node run-once-server.mjs\n')
   writeFileSync(
     join(dir, 'package.json'),
     `${JSON.stringify(
@@ -114,7 +151,7 @@ function stageSource() {
         private: true,
         type: 'module',
         engines: { node: '>=22' },
-        scripts: { start: 'node scripts/github-app-dispatch.mjs' },
+        scripts: { start: 'node run-once-server.mjs' },
       },
       null,
       2,
@@ -157,33 +194,36 @@ function ensureServiceAccount() {
   ])
 }
 
-function deployJob(sourceDir) {
-  console.log(`  deploying Cloud Run job ${JOB}`)
+function deployService(sourceDir) {
+  console.log(`  deploying Cloud Run service ${SERVICE}`)
   gcloud([
     'run',
-    'jobs',
     'deploy',
-    JOB,
+    SERVICE,
     `--source=${sourceDir}`,
     `--region=${REGION}`,
     `--project=${PROJECT}`,
     `--service-account=${SA_EMAIL}`,
     `--set-secrets=GITHUB_APP_PRIVATE_KEY=${SECRET}:latest`,
-    `--set-env-vars=GITHUB_APP_ID=${APP_ID},GITHUB_APP_INSTALLATION_ID=${INSTALLATION_ID},GITHUB_WORKFLOW_FILE=${WORKFLOW},GITHUB_REPOSITORY=aglyn/aglyn`,
-    // A dispatch is not idempotent -- a retry would start a second walk.
-    '--max-retries=0',
-    '--task-timeout=120s',
-    // 512Mi is the FLOOR, not a sizing judgement: the gen2 execution
-    // environment refuses anything smaller when CPU is always allocated, and
-    // 256Mi is rejected at deploy time after the container has already built.
-    '--memory=512Mi',
+    `--set-env-vars=GITHUB_APP_ID=${APP_ID},GITHUB_APP_INSTALLATION_ID=${INSTALLATION_ID},GITHUB_REPOSITORY=aglyn/aglyn`,
+    // Private, and reachable only from Scheduler inside this project.
+    '--no-allow-unauthenticated',
+    '--ingress=internal',
+    // A quarter vCPU needs a concurrency of one; two instances cover overlap.
+    '--cpu=0.25',
+    '--memory=256Mi',
+    '--concurrency=1',
+    '--min-instances=0',
+    '--max-instances=2',
+    '--no-cpu-boost',
+    '--timeout=120',
     '--quiet',
   ])
   gcloud([
     'run',
-    'jobs',
+    'services',
     'add-iam-policy-binding',
-    JOB,
+    SERVICE,
     `--region=${REGION}`,
     `--project=${PROJECT}`,
     `--member=serviceAccount:${SA_EMAIL}`,
@@ -192,38 +232,72 @@ function deployJob(sourceDir) {
   ])
 }
 
-function ensureScheduler() {
-  const uri =
-    `https://run.googleapis.com/v2/projects/${PROJECT}` +
-    `/locations/${REGION}/jobs/${JOB}:run`
+function serviceUrl() {
+  if (DRY_RUN) return `https://${SERVICE}.example.run.app`
+  return gcloud([
+    'run',
+    'services',
+    'describe',
+    SERVICE,
+    `--region=${REGION}`,
+    `--project=${PROJECT}`,
+    '--format=value(status.url)',
+  ])
+}
+
+function ensureScheduler(url, { route, schedulerJob, schedule }) {
   const exists = gcloud(
     [
       'scheduler',
       'jobs',
       'describe',
-      SCHEDULER_JOB,
+      schedulerJob,
       `--project=${PROJECT}`,
       `--location=${REGION}`,
     ],
     { allowFail: true },
   )
   const verb = exists === null ? 'create' : 'update'
-  console.log(`  ${verb} scheduler job ${SCHEDULER_JOB} (${SCHEDULE} UTC)`)
+  console.log(`  ${verb} scheduler job ${schedulerJob} (${schedule} UTC)`)
   gcloud([
     'scheduler',
     'jobs',
     verb,
     'http',
-    SCHEDULER_JOB,
+    schedulerJob,
     `--project=${PROJECT}`,
     `--location=${REGION}`,
-    `--schedule=${SCHEDULE}`,
+    `--schedule=${schedule}`,
     '--time-zone=Etc/UTC',
-    `--uri=${uri}`,
+    `--uri=${url}${route}`,
     '--http-method=POST',
-    `--oauth-service-account-email=${SA_EMAIL}`,
+    `--oidc-service-account-email=${SA_EMAIL}`,
+    `--oidc-token-audience=${url}`,
     '--quiet',
   ])
+}
+
+function retireJobs() {
+  for (const job of RETIRED_JOBS) {
+    const exists = gcloud(
+      ['run', 'jobs', 'describe', job, `--project=${PROJECT}`, `--region=${REGION}`],
+      { allowFail: true },
+    )
+    if (exists === null) {
+      console.log(`  ${job} is already gone`)
+      continue
+    }
+    console.log(`  deleting ${job}`)
+    gcloud([
+      'run',
+      'jobs',
+      'delete',
+      job,
+      `--project=${PROJECT}`,
+      `--region=${REGION}`,
+      '--quiet',
+    ])
+  }
 }
 
 function retirePat() {
@@ -267,9 +341,11 @@ function main() {
   ensureServiceAccount()
   const staged = stageSource()
   console.log(`  staged dispatcher at ${staged}`)
-  deployJob(staged)
-  ensureScheduler()
+  deployService(staged)
+  const url = serviceUrl()
+  for (const dispatch of DISPATCHES) ensureScheduler(url, dispatch)
 
+  if (RETIRE_JOBS) retireJobs()
   if (RETIRE) {
     retirePat()
   } else {
@@ -283,8 +359,8 @@ function main() {
 
   console.log(
     `\nNext: force one run and look for a workflow_dispatch within seconds.\n` +
-      `  gcloud scheduler jobs run ${SCHEDULER_JOB} --location=${REGION} --project=${PROJECT}\n` +
-      `  gh run list --workflow=${WORKFLOW} --event workflow_dispatch --limit 3`,
+      `  gcloud scheduler jobs run ${DISPATCHES[0].schedulerJob} --location=${REGION} --project=${PROJECT}\n` +
+      `  gh run list --workflow=${DISPATCHES[0].workflow} --event workflow_dispatch --limit 3`,
   )
 }
 

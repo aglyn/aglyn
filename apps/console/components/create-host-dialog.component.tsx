@@ -33,7 +33,7 @@ import {
   SITE_CREATE_VALUE,
   type SiteCreateStarterReturn,
 } from '@aglyn/aglyn/app-utils/site-create-return'
-import type { SiteStarterMode } from '@aglyn/aglyn/app-utils/site-starter'
+import type { SiteStarterChoice, SiteStarterMode } from '@aglyn/aglyn/app-utils/site-starter'
 import {
   readSiteStarterPickRefusal,
   siteStarterPickBlock,
@@ -42,6 +42,7 @@ import {
 import {
   CONSOLE_WIDGET_SLOTS,
   type ConsoleCreatedSite,
+  type ConsoleHostFirstRunStarter,
   type ConsolePendingSite,
 } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import type { SiteStarterSummary } from '@aglyn/aglyn/plugin-manager/plugin-site-starters'
@@ -286,6 +287,11 @@ function CreateSiteFlow({
     initialStarter?.purchase === 'success' ? { listingId: initialStarter.listingId, owned: true } : null,
   )
   const [pickNotice, setPickNotice] = useState<string | null>(null)
+  // The answers an AI starter picked carries, once the picker has read them
+  // (AGL-4049 phase 4), and the starter the start's questions are filled in
+  // from once the person continues with it. Neither creates anything.
+  const [pickAnswers, setPickAnswers] = useState<{ listingId: string; answers: Record<string, unknown> } | null>(null)
+  const [aiStarter, setAiStarter] = useState<ConsoleHostFirstRunStarter | null>(null)
   // The style chosen when the picker has nothing to offer and the styles are
   // drawn in its place.
   const [chooseStyle, setChooseStyle] = useState<string | null>(null)
@@ -341,7 +347,7 @@ function CreateSiteFlow({
   const requestCreate = useCallback(
     (
       start?: 'starter' | 'import',
-      options: { style?: string; starter?: { listingId: string } } = {},
+      options: { style?: string; starter?: SiteStarterChoice } = {},
     ): Promise<CreateOutcome> => {
       if (inFlight.current) return inFlight.current
       setMadeHere(true)
@@ -362,8 +368,16 @@ function CreateSiteFlow({
               // and what the site records it was created with.
               ...(options.style ? { style: options.style } : {}),
               // A starter picked in "Choose your starter" (AGL-4049): the
-              // site is born from that listing instead.
-              ...(options.starter ? { starter: { listingId: options.starter.listingId } } : {}),
+              // site is born from that listing instead, or, for an AI
+              // starter, born empty for the start its answers filled in.
+              ...(options.starter
+                ? {
+                    starter: {
+                      listingId: options.starter.listingId,
+                      ...(options.starter.version ? { version: options.starter.version } : {}),
+                    },
+                  }
+                : {}),
               // Start in preview (AGL-4086), as the switch reads for this start.
               preview: previewForRef.current(start ?? 'ai'),
               // A first site can provision the workspace too, which records
@@ -468,12 +482,18 @@ function CreateSiteFlow({
       dirty: address.dirty,
       created,
       ready: (shown: boolean) => setVerdict(shown),
-      create: async (options?: { start?: 'import'; style?: string }) => {
+      create: async (options?: { start?: 'import'; style?: string; starter?: SiteStarterChoice }) => {
         if (createdRef.current) return createdRef.current
         if (!address.check()) {
           return { error: 'Name your site and choose its address first.', address: true }
         }
-        const outcome = await requestCreate(options?.start, { style: options?.style })
+        // The AI starter the start's questions were filled in from (AGL-4049),
+        // recorded on the site; never for a site brought in from elsewhere.
+        const starter = options?.start === 'import' ? undefined : options?.starter
+        const outcome = await requestCreate(options?.start, {
+          style: options?.style,
+          ...(starter ? { starter } : {}),
+        })
         if ('error' in outcome) return outcome
         setCreated(outcome.site)
         return outcome.site
@@ -538,6 +558,9 @@ function CreateSiteFlow({
   // ── Choose your starter: the pick, and the create from it ───────────────
   const openChoose = useCallback(() => {
     setPickNotice(null)
+    // The starter path again: an AI starter the questions were filled in
+    // from is left behind, and the start opens as it was before it.
+    setAiStarter(null)
     setChoosing(true)
   }, [])
   const pickOwned =
@@ -553,10 +576,19 @@ function CreateSiteFlow({
           ...(ownedOverride?.listingId === restoring.listingId ? { owned: ownedOverride.owned } : {}),
         }
       : null
-  const onPick = useCallback((next: SiteStarterSummary) => {
+  const onPick = useCallback((next: SiteStarterSummary, extra?: { answers?: Record<string, unknown> }) => {
     setPickNotice(null)
     setRestoring(null)
     setPick(next)
+    // An AI starter's answers, once the picker has read them (AGL-4049);
+    // another pick's are not this one's.
+    setPickAnswers((current) =>
+      extra?.answers
+        ? { listingId: next.listingId, answers: extra.answers }
+        : current?.listingId === next.listingId && next.owned !== false
+          ? current
+          : null,
+    )
     // A pick the picker restored can be of the other kind of starter: its tab
     // is shown, with it chosen.
     setStarterMode((current) => (next.facets?.mode && next.facets.mode !== current ? next.facets.mode : current))
@@ -574,6 +606,7 @@ function CreateSiteFlow({
     // is not carried across, so nothing is chosen that is not on screen.
     setStarterMode(next)
     setPick(null)
+    setPickAnswers(null)
     setRestoring(null)
     setPickNotice(null)
   }, [])
@@ -582,15 +615,42 @@ function CreateSiteFlow({
   // style chosen, as the plain dialog does.
   const usingStyles = pickerVerdict === false
   const pickBlock = usingStyles ? (chooseStyle ? null : 'none') : siteStarterPickBlock(pick, pickOwned)
-  const chooseBlocked: string | null = !address.usable
-    ? 'Name your site and choose its address to create it.'
-    : pickBlock === 'none'
-      ? usingStyles
-        ? 'Choose a style to create your site.'
-        : 'Choose a starter to create your site.'
-      : pickBlock === 'purchase'
-        ? 'Buy this starter to create your site from it.'
-        : null
+  // The AI starters tab (AGL-4049 phase 4): a pick there goes on to the
+  // start's questions, filled in from its answers, and creates nothing.
+  const aiTab = starterMode === 'ai' && !usingStyles
+  const answersRead = Boolean(pick && pickAnswers?.listingId === pick.listingId)
+  const chooseBlocked: string | null = aiTab
+    ? !address.usable
+      ? 'Name your site and choose its address to continue.'
+      : pickBlock === 'none'
+        ? 'Choose an AI starter to continue.'
+        : pickBlock === 'purchase'
+          ? 'Buy this starter to continue with it.'
+          : !answersRead
+            ? 'Reading this starter’s answers…'
+            : null
+    : !address.usable
+      ? 'Name your site and choose its address to create it.'
+      : pickBlock === 'none'
+        ? usingStyles
+          ? 'Choose a style to create your site.'
+          : 'Choose a starter to create your site.'
+        : pickBlock === 'purchase'
+          ? 'Buy this starter to create your site from it.'
+          : null
+
+  // On to the questions with an AI starter's answers. The site is created by
+  // the start's own Plan my site, which names the starter.
+  const continueWithAiStarter = useCallback(() => {
+    if (!pick || !pickAnswers || pickAnswers.listingId !== pick.listingId) return
+    if (siteStarterPickBlock(pick, pickOwned) || !address.check()) return
+    setAiStarter({
+      choice: { listingId: pick.listingId },
+      displayName: pick.displayName,
+      answers: pickAnswers.answers,
+    })
+    setChoosing(false)
+  }, [address, pick, pickAnswers, pickOwned])
 
   const createFromPick = useCallback(async () => {
     if (busy || !address.check()) return
@@ -676,6 +736,8 @@ function CreateSiteFlow({
       pendingSite={pendingSite}
       // The starter path through "Choose your starter", where it is offered.
       {...(pickerOn ? { chooseStarter: openChoose } : {})}
+      // The AI starter its questions are filled in from (AGL-4049 phase 4).
+      {...(aiStarter ? { starter: aiStarter } : {})}
     />
   ) : null
 
@@ -720,7 +782,9 @@ function CreateSiteFlow({
         onDismissNotice={() => setPickNotice(null)}
         blocked={chooseBlocked}
         busy={busy}
-        onCreate={() => void createFromPick()}
+        onCreate={() => (aiTab ? continueWithAiStarter() : void createFromPick())}
+        // An AI starter goes on to the questions; the site is made after them.
+        {...(aiTab ? { actionLabel: 'Continue' } : {})}
         onClose={onClose}
         // Back to the start it was opened from; the plain path has none.
         {...(mode === 'start' ? { onBack: () => setChoosing(false) } : {})}

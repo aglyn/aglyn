@@ -36,6 +36,7 @@
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { setSeedConfirmWaitMs } from '@aglyn/tenant-feature-instance/hooks/helpers/listen-confirmation'
 import type { ReactNode } from 'react'
 import SitePluginsCard from '../components/site-plugins-card.component'
 
@@ -119,6 +120,10 @@ const save = () =>
 const toggleFirstSwitch = () =>
   fireEvent.click(document.querySelectorAll('input[type="checkbox"]')[0])
 
+// This spec pins the refusal, not the wait before it (AGL-4120).
+beforeAll(() => setSeedConfirmWaitMs(0))
+afterAll(() => setSeedConfirmWaitMs())
+
 describe('SitePluginsCard (AGL-1358)', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -137,7 +142,7 @@ describe('SitePluginsCard (AGL-1358)', () => {
     expect(mockSetDoc).not.toHaveBeenCalled()
     const [message] = mockEnqueueSnackbar.mock.calls[0]
     expect(message).toEqual(expect.stringContaining('site plugin list'))
-    expect(message).toEqual(expect.stringMatching(/reload/i))
+    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
     // The switches keep their positions and Save stays live, so the user can
     // retry rather than discover later that nothing was stored.
     expect(

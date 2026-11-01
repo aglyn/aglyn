@@ -43,7 +43,9 @@ import {
   createStallRecovery,
   FIRESTORE_STALL_MS,
   recoverStalledFirestore,
+  noteFirestoreServerAnswer,
   STALL_RECOVERY_COOLDOWN_MS,
+  STALL_RECOVERY_MAX_COOLDOWN_MS,
 } from './firestore-stall-recovery'
 
 describe('createStallRecovery (AGL-3373)', () => {
@@ -107,6 +109,70 @@ describe('createStallRecovery (AGL-3373)', () => {
     advance(1)
     await expect(recovery.recover()).resolves.toBe('recovered')
     expect(calls).toEqual(['disable', 'enable', 'disable', 'enable'])
+  })
+
+  /**
+   * The cycle gives up the lease and flips every confirmed view back to
+   * `fromCache` (AGL-4120), so it is only for a client that has gone silent.
+   * One slow listener among many that were just confirmed is not that.
+   */
+  it('leaves a client alone while the server is answering it (AGL-4120)', async () => {
+    const answered: { at?: number } = {}
+    const { calls, recovery, advance } = setup({
+      lastServerAnswerAt: () => answered.at,
+    })
+    answered.at = 1_000_000
+    advance(FIRESTORE_STALL_MS - 1)
+    await expect(recovery.recover()).resolves.toBe('answering')
+    expect(calls).toEqual([])
+  })
+
+  it('cycles once the client has been silent for the stall window (AGL-4120)', async () => {
+    const { calls, recovery, advance } = setup({
+      lastServerAnswerAt: () => 1_000_000,
+    })
+    advance(FIRESTORE_STALL_MS)
+    await expect(recovery.recover()).resolves.toBe('recovered')
+    expect(calls).toEqual(['disable', 'enable'])
+  })
+
+  /** Without it, a connection slower than the cooldown is restarted forever. */
+  it('waits longer between cycles the server does not answer (AGL-4120)', async () => {
+    const { calls, recovery, advance } = setup({ lastServerAnswerAt: () => undefined })
+    await recovery.recover()
+    advance(STALL_RECOVERY_COOLDOWN_MS)
+    await recovery.recover()
+    expect(calls).toHaveLength(4)
+
+    advance(STALL_RECOVERY_COOLDOWN_MS)
+    await expect(recovery.recover()).resolves.toBe('cooling')
+    advance(STALL_RECOVERY_COOLDOWN_MS)
+    await expect(recovery.recover()).resolves.toBe('recovered')
+    expect(calls).toHaveLength(6)
+  })
+
+  it('caps the wait, and starts over once the server answers again (AGL-4120)', async () => {
+    const answered: { at?: number } = {}
+    const { recovery, advance } = setup({ lastServerAnswerAt: () => answered.at })
+    let clock = 1_000_000
+    const step = (ms: number) => {
+      advance(ms)
+      clock += ms
+    }
+    await recovery.recover()
+    for (let cycle = 0; cycle < 6; cycle += 1) {
+      step(STALL_RECOVERY_MAX_COOLDOWN_MS)
+      await expect(recovery.recover()).resolves.toBe('recovered')
+    }
+    step(STALL_RECOVERY_COOLDOWN_MS)
+    await expect(recovery.recover()).resolves.toBe('cooling')
+
+    step(STALL_RECOVERY_MAX_COOLDOWN_MS)
+    answered.at = clock
+    step(FIRESTORE_STALL_MS)
+    await expect(recovery.recover()).resolves.toBe('recovered')
+    step(STALL_RECOVERY_COOLDOWN_MS)
+    await expect(recovery.recover()).resolves.toBe('recovered')
   })
 
   it('re-enables the network even when disabling it throws', async () => {
@@ -181,6 +247,13 @@ describe('recoverStalledFirestore (AGL-3373)', () => {
     expect(mockClearIndexedDbPersistence).not.toHaveBeenCalled()
   })
 
+  it('does not cycle a client that was just answered (AGL-4120)', async () => {
+    const firestore = {} as never
+    noteFirestoreServerAnswer(firestore)
+    await expect(recoverStalledFirestore(firestore)).resolves.toBe('answering')
+    expect(mockDisableNetwork).not.toHaveBeenCalled()
+  })
+
   it('answers without a client instead of throwing', async () => {
     await expect(recoverStalledFirestore(undefined)).resolves.toBe('failed')
     expect(mockDisableNetwork).not.toHaveBeenCalled()
@@ -212,6 +285,39 @@ describe('armFirestoreStallWatch (AGL-3373)', () => {
     disarm()
     disarm()
     jest.advanceTimersByTime(FIRESTORE_STALL_MS * 2)
+    expect(onStall).not.toHaveBeenCalled()
+  })
+
+  /**
+   * One call can do nothing, inside a cooldown or on a client still answering.
+   * A watch that spent itself there left its listener unconfirmed for life,
+   * which is how a tab's first page worked and a later page's saves were refused.
+   */
+  it('keeps asking for as long as the read stays unanswered (AGL-4120)', () => {
+    const onStall = jest.fn()
+    const disarm = armFirestoreStallWatch({} as never, { onStall })
+    jest.advanceTimersByTime(FIRESTORE_STALL_MS * 3)
+    expect(onStall).toHaveBeenCalledTimes(3)
+    disarm()
+    jest.advanceTimersByTime(FIRESTORE_STALL_MS * 3)
+    expect(onStall).toHaveBeenCalledTimes(3)
+  })
+
+  it('keeps asking after a hidden tab is shown, and can be disarmed there (AGL-4120)', () => {
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      value: 'hidden',
+    })
+    const onStall = jest.fn()
+    const disarm = armFirestoreStallWatch({} as never, { onStall })
+    jest.advanceTimersByTime(FIRESTORE_STALL_MS)
+    disarm()
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      value: 'visible',
+    })
+    document.dispatchEvent(new Event('visibilitychange'))
+    jest.advanceTimersByTime(FIRESTORE_STALL_MS)
     expect(onStall).not.toHaveBeenCalled()
   })
 

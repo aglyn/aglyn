@@ -23,11 +23,11 @@ node prepare.mjs
 
 echo "==> deploying to Cloud Run (${PROJECT}/${REGION})"
 # max-instances is a deliberate blast-radius cap, not a capacity estimate:
-# measured steady state is ~840 requests/hour (~20K/day, ~604K/month), about
-# 30% of the free request tier. A drain delivers EVERY request log for both
-# projects and the gate discards the non-5xx, so this volume tracks total site
-# traffic, not the error rate — ~20K deliveries a day currently carry ~180
-# writes a week.
+# measured steady state is ~360 requests/hour (~8K/day) since the drains' OData
+# filter went on (AGL-4121), down from 34K/day. Cloud Run bills each delivery
+# at least 100 ms however fast it is, so the drain filter is the cost control.
+# What still arrives is mostly logs with no proxy status, so this volume tracks
+# site traffic, not the error rate.
 gcloud run deploy log-drain-receiver \
   --project "$PROJECT" \
   --region "$REGION" \

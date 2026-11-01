@@ -53,6 +53,7 @@
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { setSeedConfirmWaitMs } from '@aglyn/tenant-feature-instance/hooks/helpers/listen-confirmation'
 import { deleteDoc, setDoc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
 import CatalogOrganizationCard from './catalog-organization-card.component'
@@ -253,6 +254,10 @@ beforeEach(() => {
   ;(globalThis as any).fetch = fetchMock
 })
 
+// This spec pins the refusal, not the wait before it (AGL-4120).
+beforeAll(() => setSeedConfirmWaitMs(0))
+afterAll(() => setSeedConfirmWaitMs())
+
 describe('StoreSettingsCard (AGL-1358)', () => {
   /** Save is disabled until the form differs from the seed. */
   const editAndSave = () => {
@@ -275,7 +280,7 @@ describe('StoreSettingsCard (AGL-1358)', () => {
     expect(setDoc).not.toHaveBeenCalled()
     const [message] = enqueueSnackbar.mock.calls[0]
     expect(message).toEqual(expect.stringContaining('store settings'))
-    expect(message).toEqual(expect.stringMatching(/reload/i))
+    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
     // The form keeps what was typed, so the refusal is not a silent no-op.
     expect(
       (screen.getByLabelText('Terms URL') as HTMLInputElement).value,
@@ -327,7 +332,7 @@ describe('ShippingSettingsCard (AGL-1358)', () => {
     expect(setDoc).not.toHaveBeenCalled()
     const [message] = enqueueSnackbar.mock.calls[0]
     expect(message).toEqual(expect.stringContaining('shipping settings'))
-    expect(message).toEqual(expect.stringMatching(/reload/i))
+    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
   })
 
   it('SAVES normally once the server has confirmed the seed', async () => {
@@ -414,7 +419,7 @@ describe('ReservationsCard (AGL-1358)', () => {
     expect(setDoc).not.toHaveBeenCalled()
     const [message] = enqueueSnackbar.mock.calls[0]
     expect(message).toEqual(expect.stringContaining('resource'))
-    expect(message).toEqual(expect.stringMatching(/reload/i))
+    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
     // The dialog is still open with what was being edited.
     expect((screen.getByLabelText('Name') as HTMLInputElement).value).toEqual(
       'Garden suite',
@@ -506,7 +511,7 @@ describe('CatalogOrganizationCard (AGL-1358)', () => {
     expect(deleteDoc).not.toHaveBeenCalled()
     const [message] = enqueueSnackbar.mock.calls[0]
     expect(message).toEqual(expect.stringContaining('categories'))
-    expect(message).toEqual(expect.stringMatching(/reload/i))
+    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
   })
 
   it('DELETES and reparents normally once the server has confirmed the seed', async () => {

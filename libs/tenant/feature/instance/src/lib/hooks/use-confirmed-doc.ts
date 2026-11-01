@@ -26,6 +26,7 @@ import {
   type Firestore,
 } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
+import { trackListenConfirmation } from './helpers/listen-confirmation'
 
 const RETRY_DELAY_MS = 400
 const MAX_RETRIES = 8
@@ -185,19 +186,30 @@ export function useConfirmedDoc<T extends Record<string, unknown>>(
     let confirmTimer: ReturnType<typeof setTimeout> | null = null
     let confirmRequested = false
     const ref = doc(firestore, pathKey)
+    /** What a save waits on while this read is unconfirmed (AGL-4120). */
+    const confirmation = trackListenConfirmation()
+    /** The cached values on screen, while they are (AGL-4120). */
+    let shownFromCache: string | undefined
 
     const deliver = (
       exists: boolean,
       id: string,
       payload: Record<string, unknown> | undefined,
       fromCache: boolean,
-    ) =>
+    ) => {
+      const values = JSON.stringify(exists ? (payload ?? null) : undefined)
+      confirmation.report(
+        fromCache,
+        !fromCache && shownFromCache !== undefined && shownFromCache !== values,
+      )
+      shownFromCache = fromCache ? (values ?? 'missing') : undefined
       setState({
         data: exists ? ({ $id: id, ...payload } as unknown as T) : undefined,
         ready: true,
         error: false,
         fromCache,
       })
+    }
 
     const subscribe = () => {
       unsubscribe = onSnapshot(
@@ -281,6 +293,7 @@ export function useConfirmedDoc<T extends Record<string, unknown>>(
 
     return () => {
       cancelled = true
+      confirmation.release()
       if (timer) clearTimeout(timer)
       if (confirmTimer) clearTimeout(confirmTimer)
       unsubscribe?.()

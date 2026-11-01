@@ -72,6 +72,12 @@ export interface ChooseStarterDialogProps {
   blocked: string | null
   busy: boolean
   onCreate: () => void
+  /**
+   * The primary action's words: "Create site", or "Continue" for an AI
+   * starter, which goes on to the AI start's questions and creates nothing
+   * yet (AGL-4049).
+   */
+  actionLabel?: string
   /** Leaves Create site with nothing created. */
   onClose: () => void
   /** Back to the start this was opened from, when there is one. */
@@ -116,6 +122,7 @@ export function ChooseStarterDialog(props: ChooseStarterDialogProps) {
     blocked,
     busy,
     onCreate,
+    actionLabel = 'Create site',
     onClose,
     onBack,
     title,
@@ -151,7 +158,7 @@ export function ChooseStarterDialog(props: ChooseStarterDialogProps) {
             </Button>
           ) : null}
           <Button variant="contained" disabled={Boolean(blocked) || busy} onClick={onCreate}>
-            {busy ? 'Creating…' : 'Create site'}
+            {busy ? 'Creating…' : actionLabel}
           </Button>
         </Toolbar>
       </AppBar>

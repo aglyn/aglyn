@@ -18,7 +18,10 @@
 
 import type { UserOrgMembership } from '@aglyn/aglyn'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
-import { armFirestoreStallWatch } from '@aglyn/tenant-feature-instance/hooks/firebase/firestore-stall-recovery'
+import {
+  armFirestoreStallWatch,
+  noteFirestoreServerAnswer,
+} from '@aglyn/tenant-feature-instance/hooks/firebase/firestore-stall-recovery'
 import {
   collection,
   doc,
@@ -287,6 +290,7 @@ export function OrgScopeProvider(props: { children?: ReactNode }) {
           retried = 0
           if (!snapshot.metadata.fromCache) {
             disarmStall()
+            noteFirestoreServerAnswer(firestore)
             setConfirmed(true)
           }
           // Metadata-only ticks carry no doc changes — skip the list write so

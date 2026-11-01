@@ -453,10 +453,9 @@ describe('Content entry seed guard (AGL-1449)', () => {
     expect(mockSetDoc).not.toHaveBeenCalled()
     const [message] = mockEnqueueSnackbar.mock.calls[0]
     expect(message).toEqual(expect.stringContaining('entry'))
-    expect(message).toEqual(expect.stringMatching(/reload/i))
-    // AGL-1446's remedy reaches this call site now, which it could not while
-    // the page carried its own copy.
-    expect(message).toEqual(expect.stringMatching(/new browser tab/i))
+    // The guard's words reach this call site, which they could not while the
+    // page carried its own copy.
+    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
     // The editor stays open with what was typed, so the author can retry
     // rather than discover later that nothing was stored.
     expect((screen.getByLabelText('Title') as HTMLInputElement).value).toEqual(

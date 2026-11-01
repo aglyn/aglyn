@@ -27,6 +27,7 @@
  */
 
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { setSeedConfirmWaitMs } from '@aglyn/tenant-feature-instance/hooks/helpers/listen-confirmation'
 import type { ReactNode } from 'react'
 import { soloConsentGroup } from '@aglyn/aglyn'
 import type { ContactRecord } from '../model/contact-record'
@@ -154,6 +155,10 @@ beforeEach(() => {
   posted = []
 })
 
+// This spec pins the refusal, not the wait before it (AGL-4120).
+beforeAll(() => setSeedConfirmWaitMs(0))
+afterAll(() => setSeedConfirmWaitMs())
+
 describe('saving the filing', () => {
   it('files the person through crm/contact-update, and writes nothing client-direct', async () => {
     renderCard()
@@ -174,7 +179,7 @@ describe('saving the filing', () => {
     fireEvent.click(screen.getByRole('button', { name: 'File under Spring push' }))
     fireEvent.click(saveFiling())
     await waitFor(() => expect(notices).toHaveLength(1))
-    expect(notices[0]).toMatch(/reload/i)
+    expect(notices[0]).toMatch(/nothing was saved/i)
     expect(posted).toEqual([])
     expect(writes).toEqual([])
   })
