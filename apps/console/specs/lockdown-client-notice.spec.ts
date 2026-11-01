@@ -190,9 +190,10 @@ describe('AGL-1532 · client surfaces read the 423 feature body', () => {
       // The notice must not have REPLACED the error handling — a 500 is
       // still a 500, and `parseLockdownRefusal` returns null for it. Every
       // one of these sites reached its generic toast through a `payload
-      // ?? '<copy>'` fallback or a catch; that fallback must survive.
+      // ?? '<copy>'` fallback or a catch; that fallback must survive. A surface
+      // that says it in place rather than in a toast sets its own error.
       const hasGeneric =
-        site.source.includes('?? ') && /enqueueSnackbar\(/.test(site.source)
+        site.source.includes('?? ') && /enqueueSnackbar\(|setError\(/.test(site.source)
       expect(`${site.file} keeps a generic toast: ${hasGeneric}`).toBe(
         `${site.file} keeps a generic toast: true`,
       )

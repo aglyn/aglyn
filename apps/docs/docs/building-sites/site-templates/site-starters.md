@@ -88,8 +88,7 @@ there again. A starter you already own says **You own this starter** as soon as 
 it.
 
 The receipt is the invoice under **Organization → Billing → Invoices**. To ask for a
-refund, contact [support](../../workspace-and-billing/support-and-community.md), as for
-any marketplace purchase.
+refund, contact support, as for any marketplace purchase.
 
 ## What your site gets {#what-your-site-gets}
 

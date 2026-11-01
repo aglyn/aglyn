@@ -21,13 +21,47 @@ import {
   type ConsolePublishableArtifact,
 } from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
-import { useHost } from '@aglyn/tenant-feature-instance'
 import { Alert, Button, Stack, Typography } from '@mui/material'
 import { useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
 import useCurrentOrg from '../hooks/use-current-org'
+import { useHost } from '../hooks/use-host'
 import { useReleaseFlag } from '../hooks/use-release-flags'
 import PluginWidgetSlot, { useSlotWidgets } from './plugin-widget-slot.component'
+
+/**
+ * "Publish as a starter", which starts from the site's own name and
+ * description. Its own component so the host listen it needs is taken only
+ * where the offer is on: the section reads that document from its layout.
+ */
+function PublishAsStarterButton(props: {
+  hostId: string
+  orgId: string | null
+  onPublish: (target: ConsolePublishableArtifact) => void
+}) {
+  const { hostId, orgId, onPublish } = props
+  const {
+    doc: { data: host },
+  } = useHost({ hostId })
+  return (
+    <Button
+      size="small"
+      variant="outlined"
+      color="primary"
+      onClick={() =>
+        onPublish({
+          kind: 'siteStarter',
+          hostId,
+          orgId,
+          displayName: host?.displayName ?? '',
+          description: host?.seo?.description ?? '',
+        })
+      }
+    >
+      {'Publish as a starter'}
+    </Button>
+  )
+}
 
 /**
  * Save-as-template (AGL-137): publishes this host's published screens +
@@ -52,9 +86,6 @@ export function SiteTemplateCard(props: { hostId: string }) {
   const [target, setTarget] = useState<ConsolePublishableArtifact | null>(null)
   const { widgets } = useSlotWidgets([CONSOLE_WIDGET_SLOTS.hostArtifactPublish])
   const starters = useReleaseFlag('release_site_starters')
-  const {
-    doc: { data: host },
-  } = useHost({ hostId })
   if (!widgets.length) return null
 
   return (
@@ -96,22 +127,7 @@ export function SiteTemplateCard(props: { hostId: string }) {
             {'Publish as template'}
           </Button>
           {starters.visible ? (
-            <Button
-              size="small"
-              variant="outlined"
-              color="primary"
-              onClick={() =>
-                setTarget({
-                  kind: 'siteStarter',
-                  hostId,
-                  orgId: orgId ?? null,
-                  displayName: host?.displayName ?? '',
-                  description: host?.seo?.description ?? '',
-                })
-              }
-            >
-              {'Publish as a starter'}
-            </Button>
+            <PublishAsStarterButton hostId={hostId} orgId={orgId ?? null} onPublish={setTarget} />
           ) : null}
         </Stack>
       </Stack>
