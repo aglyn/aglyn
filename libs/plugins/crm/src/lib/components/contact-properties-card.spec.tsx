@@ -305,6 +305,40 @@ describe('the profile', () => {
   })
 })
 
+/**
+ * A page drawn from the cache seeds the form, and the server's answer arrives a
+ * moment later (AGL-4122). The form has to take it, or the next save writes the
+ * old values back over the new ones.
+ */
+describe('a record that changes under the form', () => {
+  const card = (seeded: Partial<ContactRecord>) => (
+    <ContactPropertiesCard
+      hostId="host-1"
+      orgId="org-1"
+      record={{ ...record, ...seeded }}
+      consentGroup={GROUP}
+      seed={{ status: 'success', fromCache: false }}
+      members={members}
+      suiteLocked={false}
+    />
+  )
+  const jobTitle = () => screen.getByLabelText('Job title') as HTMLInputElement
+
+  it('follows the record while nobody has touched the form', () => {
+    const view = render(card({ jobTitle: 'From the cache' }))
+    view.rerender(card({ jobTitle: 'From the server' }))
+    expect(jobTitle().value).toBe('From the server')
+    expect(saveButton().disabled).toBe(true)
+  })
+
+  it('never takes what somebody is typing away from them', () => {
+    const view = render(card({ jobTitle: 'From the cache' }))
+    typeJobTitle('Being typed')
+    view.rerender(card({ jobTitle: 'From the server' }))
+    expect(jobTitle().value).toBe('Being typed')
+  })
+})
+
 describe('a stage move', () => {
   it('goes through crm/contact-stage once the profile has landed', async () => {
     renderCard()

@@ -124,16 +124,32 @@ and the one that was reviewed.
 
 ![The Site starters awaiting review card in the staff review queue, listing a submitted starter with its publisher, pages, price, submitted date and Submitted status](/img/staff-console/review-queue-starters.png)
 
-Opening a starter shows what a site created from it gets:
+Opening a starter shows what a site created from it gets, one card at a time.
 
-- **Overview**: its picture, description, category and style.
-- **Pages**: every page with its address, or **Not published**. Each published
-  page links to the same page on the site it was published from, as that site
-  is now.
-- **Theme**: a built-in theme with its base theme, fonts and brand colors in
-  light and in dark, or the site's own full theme.
-- **Versions**: each version with the day it was published. **Read this
-  version** shows an older one.
+#### Starter status {#plugin-review-starter-status}
+
+The **Status** card says where a starter stands, which version it is on, what it
+costs and who published it. It warns when the publisher has not accepted the
+current Marketplace Publisher Agreement, and when a version was published after
+the one that was last reviewed.
+
+#### Starter overview {#plugin-review-starter-overview}
+
+The **Overview** card shows the starter's picture, description, category and
+style.
+
+#### Starter pages {#plugin-review-starter-pages}
+
+The **Pages** card lists every page with its address, or **Not published**. Each
+published page links to the same page on the site it was published from, as that
+site is now.
+
+#### Starter theme {#plugin-review-starter-theme}
+
+The **Theme** card shows a built-in theme with its base theme, fonts and brand
+colors in light and in dark, or the site's own full theme.
+
+#### Starter review checklist {#plugin-review-starter-checklist}
 
 Every checklist item is required before **List in marketplace** is available.
 A tick counts for the version it was made on, so publishing the starter again
@@ -147,12 +163,22 @@ starts the list over.
 | **Publisher is identifiable and contactable** | The same check a plugin gets. |
 | **Listing does not misrepresent or disparage Aglyn's plans or pricing** | The same check a plugin gets. |
 
+#### Starter review verdict {#plugin-review-starter-verdict}
+
 **List in marketplace** lets anyone creating a site choose the starter, and tells
 its publisher. **Reject** takes one of a starter's own reasons and an optional
 comment (required for **Other**). The publisher is told the reason and what to
 do about it, and publishing the starter again sends it back here. Neither
-verdict changes a site already created from the starter, and neither does
-**Take down**: it takes the starter out of the marketplace and refuses every new
+verdict changes a site already created from the starter.
+
+#### Starter versions {#plugin-review-starter-versions}
+
+The **Versions** card lists each version with the day it was published and how
+many pages it has. **Read this version** shows an older one.
+
+#### Starter danger zone {#plugin-review-starter-danger-zone}
+
+**Take down** takes the starter out of the marketplace and refuses every new
 site from it, while each site created from it keeps its own copy.
 
 ### Organization management {#organizations-admin}

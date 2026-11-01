@@ -162,4 +162,11 @@ class CrmWorkspaceScopeTest {
     assertEquals(listOf("org", "host:h1"), site.readTokens)
     assertEquals(listOf("org"), site.createTokens)
   }
+
+  @Test
+  fun aNewRecordStaysOnItsSiteWhenTheOrgKeepsThemApart() {
+    val apart = mapOf("crm" to mapOf("defaultRecordScope" to "host"))
+    val site = crmScopeOf("o1", null, "u1", apart, owner).forSite("h1")
+    assertEquals(listOf("host:h1"), site.createTokens)
+  }
 }

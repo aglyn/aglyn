@@ -367,6 +367,18 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
     reseed()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recordId])
+  /*
+   * And it follows the document until somebody edits it (AGL-4122). A page
+   * drawn from the cache seeds these drafts from the cached row, and the
+   * server's answer arrives a moment later with the newer one. Left alone, the
+   * form kept the old values on screen with the seed reading confirmed, and the
+   * next save wrote them back over the new ones without anyone having touched
+   * those fields.
+   */
+  useEffect(() => {
+    if (!edited) reseed()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [record])
 
   const handleSave = useCallback(async () => {
     if (clearingRequired) return

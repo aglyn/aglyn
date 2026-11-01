@@ -92,9 +92,11 @@ import {
 import { ASSIST_BUILD_TOOL_NAME, type AssistBuildProposal } from '../model/assist-build'
 import { ASSIST_PAGE_CHANGE_TOOL_NAME, type AssistPageChangeProposal } from '../model/assist-page-change'
 import {
+  assistOutcomesBlock,
   assistPageChangeBlock,
   assistPageChangeTool,
   assistSitePagesBlock,
+  parseAssistOutcomes,
   readAssistSitePages,
   resolveAssistPageChange,
   type AssistSitePage,
@@ -501,6 +503,11 @@ interface AssistRequestBody {
    * what a follow-up may offer to open. Held to `parseAssistBuildDrafts`.
    */
   drafts: AssistBuildDraft[]
+  /**
+   * What this thread's changes came to (AGL-4116). Held to
+   * `parseAssistOutcomes`.
+   */
+  outcomes: string[]
 }
 
 /** A posted turn the route will read: a known role with words in it. */
@@ -593,6 +600,7 @@ export function parseAssistBody(payload: unknown): AssistRequestBody | null {
     model: model && model !== AI_MODEL_AUTO ? model : null,
     canvas: body.canvas ?? null,
     drafts: parseAssistBuildDrafts(body.drafts),
+    outcomes: parseAssistOutcomes(body.outcomes),
   }
 }
 
@@ -1563,6 +1571,7 @@ async function handler(request: Request): Promise<Response> {
       canvasRead: Boolean(editRung),
     })
     const draftsBlock = assistBuildDraftsBlock(drafts)
+    const outcomesBlock = assistOutcomesBlock(body.outcomes)
     const proposalView = guide ? withAssistOpenDraftAction(guide.view, drafts) : null
 
     // The site's business profile, status and memory (AGL-3661), for a turn
@@ -1627,6 +1636,8 @@ async function handler(request: Request): Promise<Response> {
       ...(guide ? [{ text: guide.facts, volatile: true as const }] : []),
       // The drafts a follow-up may open: the person's own labels, so volatile.
       ...(draftsBlock ? [{ text: draftsBlock, volatile: true as const }] : []),
+      // What this chat changed: the person's own page names, so volatile.
+      ...(outcomesBlock ? [{ text: outcomesBlock, volatile: true as const }] : []),
       // The canvas the author has open — their own content, so volatile.
       ...(editRung
         ? [{ text: editSelectionBlock(editRung.context), volatile: true as const }]
