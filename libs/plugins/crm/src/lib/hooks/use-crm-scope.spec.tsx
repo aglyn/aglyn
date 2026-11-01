@@ -178,6 +178,30 @@ describe('useCrmScope at the organization level', () => {
     expect(picked.current.visibleTo).toBeNull()
   })
 
+  /** The site is a source to tag, not a scope to choose (AGL-4122). */
+  it('files a create for the whole org with no site picked, when the org keeps nothing apart', () => {
+    const { result } = renderHook(() => useCrmScope({ hostId: null, org: { $id: 'org-1' } }), {
+      wrapper: orgMount(),
+    })
+    expect(result.current.createHostId).toBeNull()
+    expect(result.current.createTokens).toEqual(['org'])
+    expect(result.current.createNeedsSite).toBe(false)
+  })
+
+  it('needs a site in an org that keeps them apart, and before the org has loaded', () => {
+    const apart = renderHook(() => useCrmScope({ hostId: null, org: KEPT_APART }), {
+      wrapper: orgMount(),
+    })
+    expect(apart.result.current.createNeedsSite).toBe(true)
+    expect(apart.result.current.createTokens).toEqual([])
+
+    const unloaded = renderHook(() => useCrmScope({ hostId: null, org: null }), {
+      wrapper: orgMount(),
+    })
+    expect(unloaded.result.current.createNeedsSite).toBe(true)
+    expect(unloaded.result.current.createTokens).toEqual([])
+  })
+
   it('picks the only site silently when there is nothing to choose', () => {
     const { result } = renderHook(() => useCrmScope({ hostId: null, org: ORG }), {
       wrapper: orgMount([HOSTS[1]]),

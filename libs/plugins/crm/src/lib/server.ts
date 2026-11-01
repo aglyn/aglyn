@@ -92,6 +92,12 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { emitHostEvent } from '@aglyn/tenant-runtime'
+import { ORG_CONTACT_HOLDER_ID } from '@aglyn/aglyn/app-utils/contacts'
+import { crmDefaultScopeOf } from '@aglyn/aglyn/app-utils/crm'
+import { logOrgActivity } from '@aglyn/tenant-data-admin/server/organizations'
+import { contactPrimaryGroup } from './model/contact-holder'
+import { addContactByHand } from './server/add-contact-by-hand'
+import { authorizeOrgCaller, readOrgForCreate } from './server/org-caller'
 import { captureHostContact } from './server/capture-host-contact'
 import { FieldValue } from 'firebase-admin/firestore'
 import { CRM_API_ROUTES } from './constants/api-routes'
@@ -238,9 +244,10 @@ export const contactStageHandler: PluginApiHandler = async (req, res) => {
     return
   }
   const hostId = String(req.body?.hostId ?? '').trim()
+  const orgId = String(req.body?.orgId ?? '').trim()
   const contactId = String(req.body?.contactId ?? '').trim()
   const requested: unknown = req.body?.lifecycleStage
-  if (!hostId || !contactId) {
+  if ((!hostId && !orgId) || !contactId) {
     res.status(400).json({ error: 'Missing hostId or contactId' })
     return
   }
@@ -253,6 +260,60 @@ export const contactStageHandler: PluginApiHandler = async (req, res) => {
       : null
   if (lifecycleStage === null) {
     res.status(400).json({ error: 'Pick a lifecycle stage' })
+    return
+  }
+  /*
+   * A person no site holds is staged at the organization level (AGL-4122): the
+   * stage is in their org-held facet, and no site has an automation to tell.
+   */
+  if (!hostId) {
+    const caller = await authorizeOrgCaller(req, orgId, {
+      needs: 'data.manage',
+      refusal: 'Moving a contact’s stage requires the "Manage data" permission.',
+    })
+    if (caller.ok === false) {
+      res.status(caller.status).json({ error: caller.error })
+      return
+    }
+    try {
+      const suite = crmSuiteRefusal(caller.org, "Moving a contact's lifecycle stage")
+      if (suite) {
+        res.status(suite.status).json(suite.body)
+        return
+      }
+      const snapshot = await firebaseAdmin
+        .app()
+        .firestore()
+        .collection('orgs')
+        .doc(orgId)
+        .collection('contacts')
+        .doc(contactId)
+        .get()
+      if (!snapshot.exists) {
+        res.status(404).json({ error: 'Unknown contact' })
+        return
+      }
+      const data = snapshot.data() as Record<string, unknown>
+      const groupId =
+        contactPrimaryGroup(data, caller.org as Record<string, unknown>).groupId ||
+        ORG_CONTACT_HOLDER_ID
+      const previousStage = readContactFacet(data, groupId).lifecycleStage ?? ''
+      if (previousStage === lifecycleStage) {
+        res.status(200).json({ ok: true, changed: false, lifecycleStage, previousStage })
+        return
+      }
+      await snapshot.ref.update({
+        [contactFacetPath(groupId, 'lifecycleStage')]: clearing
+          ? FieldValue.delete()
+          : lifecycleStage,
+        updatedAt: FieldValue.serverTimestamp(),
+      })
+      await restampCrmListFieldsAt(snapshot.ref, 'contacts')
+      res.status(200).json({ ok: true, changed: true, lifecycleStage, previousStage })
+    } catch (error) {
+      console.error('[crm] contact-stage failed', orgId, contactId, error)
+      res.status(500).json({ error: 'The stage could not be changed' })
+    }
     return
   }
   const caller = await authorizeSiteEditor(req, hostId)
@@ -399,12 +460,16 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
 
   const body = (req.body ?? {}) as Record<string, unknown>
   const hostId = typed(body['hostId'], 128)
-  if (!hostId) {
+  // The organization, for a person added there with no Source site (AGL-4122).
+  const orgIdInBody = typed(body['orgId'], 128)
+  if (!hostId && !orgIdInBody) {
     res.status(400).json({ error: 'Missing hostId' })
     return
   }
-  const email = normalizeContactEmail(body['email'])
-  if (!email) {
+  // An address is optional, and one that was typed still has to be an address.
+  const rawEmail = typed(body['email'], 320)
+  const email = rawEmail ? normalizeContactEmail(rawEmail) : null
+  if (rawEmail && !email) {
     res.status(400).json({ error: 'Enter a valid email address.' })
     return
   }
@@ -426,6 +491,17 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
   }
   const extras = profile.fields
   const name = typed(body['name'], 120)
+  // Somebody to call them: a name, an address or a number (AGL-4122).
+  if (
+    !email &&
+    !phone &&
+    !extras.mobilePhone &&
+    !name &&
+    !composeContactName(extras.firstName, extras.lastName)
+  ) {
+    res.status(400).json({ error: 'Enter a name, an email or a phone number.' })
+    return
+  }
   const jobTitle = typed(body['jobTitle'], 120)
   let companyName = typed(body['companyName'], 120)
   const companyId = typed(body['companyId'], 128)
@@ -463,9 +539,20 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
 
   try {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
-    const resolved = await getOrgForHost(hostId)
+    const resolved = hostId
+      ? await getOrgForHost(hostId)
+      : await readOrgForCreate(orgIdInBody)
     if (!resolved) {
-      res.status(404).json({ error: 'Unknown site' })
+      res.status(404).json({ error: hostId ? 'Unknown site' : 'Unknown workspace' })
+      return
+    }
+    // The org's records belong to every site unless it keeps them apart, and
+    // then a record has to come from one (AGL-4122).
+    if (
+      !hostId &&
+      crmDefaultScopeOf(resolved.org as Record<string, unknown>) !== 'org'
+    ) {
+      res.status(400).json({ error: 'Choose the site this contact came from.' })
       return
     }
     const isStaff = decoded['staff'] === true
@@ -473,7 +560,8 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
       const membership = await resolveOrgMembership(decoded.uid, resolved.orgId)
       const member = membership?.member ?? null
       const reaches =
-        isOrgWideMember(member) || Boolean(member?.hostAccess?.[hostId])
+        isOrgWideMember(member) ||
+        Boolean(hostId && member?.hostAccess?.[hostId])
       const allowed =
         member &&
         reaches &&
@@ -547,11 +635,17 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
     }
 
     if (companyId) {
-      const group = await consentGroupForSite(
-        hostId,
-        resolved.org as Record<string, unknown>,
-      )
-      const readable = new Set<string>(crmReadTokens(group))
+      // With no site the caller is org-wide, and every company is theirs.
+      const readable = hostId
+        ? new Set<string>(
+            crmReadTokens(
+              await consentGroupForSite(
+                hostId,
+                resolved.org as Record<string, unknown>,
+              ),
+            ),
+          )
+        : null
       const companySnapshot = await firebaseAdmin
         .app()
         .firestore()
@@ -564,7 +658,9 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
         ? companySnapshot.get('visibleTo')
         : undefined
       const visible =
-        Array.isArray(tokens) && tokens.some((token) => readable.has(String(token)))
+        companySnapshot.exists &&
+        (!readable ||
+          (Array.isArray(tokens) && tokens.some((token) => readable.has(String(token)))))
       if (!visible) {
         res.status(404).json({ error: 'Unknown company' })
         return
@@ -572,22 +668,7 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
       companyName = typed(companySnapshot.get('name'), 120) || companyName
     }
 
-    const result = await captureHostContact({
-      hostId,
-      email,
-      ...(name ? { name } : {}),
-      source: 'manual',
-      interaction: { summary: 'Added by hand' },
-      actor: {
-        kind: 'member',
-        uid: decoded.uid,
-        email: typeof decoded.email === 'string' ? decoded.email : null,
-      },
-      marketingConsent,
-      ...(marketingConsent && disclosedConsentGroup
-        ? { disclosedConsentGroup }
-        : {}),
-      facet: {
+    const facet = {
         ...(phone ? { phone } : {}),
         ...(jobTitle ? { jobTitle } : {}),
         // Salesforce's standard fields (AGL-3515); the capture composes the
@@ -603,14 +684,49 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
         ...(companyId ? { companyId } : {}),
         ...(address ? { address } : {}),
         ...(ownerUid ? { ownerUid } : {}),
-        ...(rawStage && isContactLifecycleStage(rawStage)
-          ? { lifecycleStage: rawStage }
-          : {}),
         // Written nested into the capturing holder's facet by the upsert,
         // on a new person and on a merge alike.
         ...(custom && Object.keys(custom).length ? { custom } : {}),
-      },
-    })
+    }
+    const stage =
+      rawStage && isContactLifecycleStage(rawStage) ? { lifecycleStage: rawStage } : {}
+    // A site and an address are a capture. Anything less is the team adding a
+    // person no capture door could take (AGL-4122).
+    const captured = Boolean(hostId && email)
+    const result = captured
+      ? await captureHostContact({
+          hostId,
+          email: email as string,
+          ...(name ? { name } : {}),
+          source: 'manual',
+          interaction: { summary: 'Added by hand' },
+          actor: {
+            kind: 'member',
+            uid: decoded.uid,
+            email: typeof decoded.email === 'string' ? decoded.email : null,
+          },
+          marketingConsent,
+          ...(marketingConsent && disclosedConsentGroup
+            ? { disclosedConsentGroup }
+            : {}),
+          // The door's stage is the one the drawer picked, or none at all.
+          facet: { ...facet, ...stage /* lifecycleStage */ },
+        })
+      : await addContactByHand({
+          orgId: resolved.orgId,
+          org: resolved.org as Record<string, unknown>,
+          sourceHostId: hostId || null,
+          email,
+          ...(name ? { name } : {}),
+          facet: {
+            ...facet,
+            ...stage,
+            ...(companyName ? { companyName } : {}),
+          },
+          tags,
+          marketingConsent,
+          ...(disclosedConsentGroup ? { disclosedConsentGroup } : {}),
+        })
 
     if ('refused' in result) {
       if (result.refused === 'band') {
@@ -632,7 +748,7 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
       return
     }
 
-    if (tags.length || companyName) {
+    if (captured && (tags.length || companyName)) {
       const group = await consentGroupForSite(
         hostId,
         resolved.org as Record<string, unknown>,
@@ -667,16 +783,21 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
      * a person the org already held is said to be one — the row was
      * updated, not added — so the feed cannot claim two people for one.
      */
-    await logHostActivity(
-      hostId,
-      { uid: decoded.uid, email: decoded.email ?? null },
-      result.created ? 'Added contact' : 'Updated contact',
-      {
-        type: 'contact',
-        id: result.contactId,
-        name: name || composeContactName(extras.firstName, extras.lastName) || email,
-      },
-    )
+    const added = result.created ? 'Added contact' : 'Updated contact'
+    const addedActor = { uid: decoded.uid, email: decoded.email ?? null }
+    const addedTarget = {
+      type: 'contact' as const,
+      id: result.contactId,
+      name:
+        name ||
+        composeContactName(extras.firstName, extras.lastName) ||
+        email ||
+        phone ||
+        '',
+    }
+    await (hostId
+      ? logHostActivity(hostId, addedActor, added, addedTarget)
+      : logOrgActivity(resolved.orgId, addedActor, added, addedTarget))
 
     res
       .status(result.created ? 201 : 200)

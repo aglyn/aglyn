@@ -29,7 +29,10 @@
  * feature plugin (AGL-2662).
  */
 
-import { CONTACT_FACETS_FIELD } from '@aglyn/aglyn/app-utils/contacts'
+import {
+  CONTACT_FACETS_FIELD,
+  ORG_CONTACT_HOLDER_ID,
+} from '@aglyn/aglyn/app-utils/contacts'
 import { CAPTURED_BY_HOST_FIELD } from '@aglyn/aglyn/app-utils/marketing-consent'
 import {
   type ConsentGroup,
@@ -54,6 +57,22 @@ import {
 export const NO_HOLDER_GROUP: ConsentGroup = Object.freeze({
   hostId: '',
   groupId: '',
+  name: null,
+  hostIds: [],
+  declared: false,
+  awaitsConfirmation: false,
+}) as ConsentGroup
+
+/**
+ * The holder of a person the organization added itself, with no site behind
+ * them (AGL-4122). Like {@link NO_HOLDER_GROUP} it names no site, so `hostId`
+ * is empty and a surface asking "is there a site here at all" gets the same
+ * answer. Unlike it, it names a facet, so the record has a profile to show and
+ * an edit has somewhere to go.
+ */
+export const ORG_HOLDER_GROUP: ConsentGroup = Object.freeze({
+  hostId: '',
+  groupId: ORG_CONTACT_HOLDER_ID,
   name: null,
   hostIds: [],
   declared: false,
@@ -114,6 +133,10 @@ export function leadPrimaryGroup(
  * facet yet (the facet is written on the first edit). A row nobody captured
  * and nobody wrote a facet for reads through {@link NO_HOLDER_GROUP}.
  *
+ * A person the organization added itself reads through {@link ORG_HOLDER_GROUP}
+ * first, whatever has captured them since: that facet is the record the team
+ * built, and a form fill on a site later adds a holder without replacing it.
+ *
  * Capture order rather than sorted order, deliberately: `capturedByHostIds`
  * is maintained by `arrayUnion`, so its first entry is the site that met
  * the person first, and that site's profile is the one a person reading
@@ -130,6 +153,7 @@ export function contactPrimaryGroup(
     facets && typeof facets === 'object' && !Array.isArray(facets)
       ? Object.keys(facets as Record<string, unknown>)
       : []
+  if (facetKeys.includes(ORG_CONTACT_HOLDER_ID)) return ORG_HOLDER_GROUP
   const captured = captureOrder(record)
   for (const hostId of captured) {
     const group = consentGroupForHost(org, hostId)

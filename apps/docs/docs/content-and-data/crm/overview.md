@@ -222,15 +222,15 @@ listed there, and opening it edits the same record the site's own hub edits.
 
 What differs from a site's hub:
 
-- **A create can name the site it came from.** **New company**, **New deal**
-  and **Log activity** begin with an optional **Source site**. Leave it on
+- **A create can name the site it came from.** **New contact**, **Import**,
+  **New company**, **New deal** and **Log activity** begin with an optional
+  **Source site**. Leave it on
   **None** for a record that came from no site; every site sees the record
   either way, because the CRM's records belong to the whole workspace. In a
   workspace that [keeps each site's records apart](./sharing.md), the site
   decides who may see the record, so the field is required and reads **Site**.
-  **New contact** and **Import** still ask for the site, because that is whose
-  marketing consent a contact's checkbox records. The pick is remembered for
-  the session, and an organization with exactly one site never sees the field.
+  On **New contact**, a marketing opt-in is recorded for the site you name, or
+  for every site when you name none. The pick is remembered for the session, and an organization with exactly one site never sees the field.
   The REST API takes the same answer as `consentSiteId`, which may be left out
   unless the workspace keeps its sites apart. A **task** also offers **This
   organization (no site)**, for work the organization itself owes — see
