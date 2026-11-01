@@ -18,10 +18,12 @@
 import {
   type CrmDealContactRole,
   type CrmPicklist,
+  crmDealContactRoleListFields,
   DEAL_CONTACT_ROLES_MAX,
   dealContactRoleFields,
   dealContactRolesOf,
   judgeDealContactRoles,
+  readDealContactRoles,
 } from '@aglyn/aglyn'
 
 /*
@@ -96,16 +98,35 @@ export function dealContactRolesSave(
 }
 
 /**
+ * The roles a company holds, as stored. A deal's reader takes the Primary from
+ * the deal's `contactId`; a company has none, so its Primary is on the row.
+ */
+export function companyContactRolesOf(company: { contactRoles?: unknown }): CrmDealContactRole[] {
+  return readDealContactRoles(company.contactRoles)
+}
+
+/**
  * What a save of a company's card writes: the roles judged against the org's
- * list. A company has no `contactId` beside them, so nothing else moves with
- * the Primary.
+ * list, the ids a merge or an erasure finds the company by, and the keys a
+ * rename of a role does. A company has no `contactId` beside them, so nothing
+ * else moves with the Primary.
  */
 export function companyContactRolesSave(
   company: { contactRoles?: unknown },
   next: readonly CrmDealContactRole[],
   picklist: CrmPicklist,
-): { ok: true; contactRoles: CrmDealContactRole[] } | { ok: false; error: string } {
-  const judged = judgeDealContactRoles(picklist, next, dealContactRolesOf(company))
+):
+  | {
+      ok: true
+      contactRoles: CrmDealContactRole[]
+      contactRoleContactIds: string[]
+      contactRoleKeys: string[]
+    }
+  | { ok: false; error: string } {
+  const judged = judgeDealContactRoles(picklist, next, companyContactRolesOf(company))
   if (judged.ok === false) return judged
-  return { ok: true, contactRoles: judged.roles }
+  const { contactRoleContactIds, contactRoleKeys } = crmDealContactRoleListFields({
+    contactRoles: judged.roles,
+  })
+  return { ok: true, contactRoles: judged.roles, contactRoleContactIds, contactRoleKeys }
 }
