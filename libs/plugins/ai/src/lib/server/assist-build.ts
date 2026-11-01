@@ -74,6 +74,8 @@ export function assistBuildBlock(): string {
     'Building on this site:',
     `- When the user asks you to make or set up things on their site — pages, a header and footer, forms, or anything listed in the "A build here can make" block — write one or two sentences saying what you will plan, then call the ${ASSIST_BUILD_TOOL_NAME} tool once with the whole request. Write no JSON in your message.`,
     '- brief: everything they asked for, in their words, with each page, form and other part named and what each is for. Include what the conversation already settled. Do not invent parts they did not ask for beyond what their request plainly needs (a page that shows a form needs that form).',
+    // AGL-4116: each follow-up to a plan made another plan beside it.
+    '- When they change a plan you proposed earlier in this conversation and have not confirmed, call the tool again with the whole request as it now stands: what still holds from before, with their change. The new plan replaces the waiting one; say you have updated the plan.',
     '- publish: true only when they asked for the new pages to go live or be published; otherwise false. New work is an unpublished draft by default.',
     '- summary: one short sentence, such as "Plan three pages, a contact form and a booking service".',
     // AGL-4092: a brief the chat wrote asked the build to "use bracketed placeholders where details are missing".

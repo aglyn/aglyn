@@ -23,22 +23,38 @@ import '../../../../../../../../../../constants/app-setup'
 // via the org-gated loader; the page gates the canvas on readiness.
 import { withSitePlugins } from '../../../../../../../../../../components/console-plugins-gate.component'
 import DocumentPreview from '../../../../../../../../../../components/document-preview.component'
-import { useHostId } from '../../../../../../../../../../components/host-id-provider'
+import { useHostId, useHostSubdomain } from '../../../../../../../../../../components/host-id-provider'
+import ScreenVersionReviewBar from '../../../../../../../../../../components/screen-version-review-bar.component'
+import { useOrgSlug } from '../../../../../../../../../../hooks/use-org-scope'
 
 function ScreenPreviewPage() {
   const params = useParams<{ screenId: string; versionId: string }>()
   const hostId = useHostId()
+  const host = useHostSubdomain()
+  const orgSlug = useOrgSlug()
   const screenId = params?.screenId as string
   const versionId = params?.versionId as string
 
   return (
-    <DocumentPreview
-      ids={
-        hostId && screenId
-          ? { hostId, kind: 'screen', docId: screenId, versionId }
-          : null
-      }
-    />
+    <>
+      <DocumentPreview
+        ids={
+          hostId && screenId
+            ? { hostId, kind: 'screen', docId: screenId, versionId }
+            : null
+        }
+      />
+      {/* Publish it, or open it in the Besigner (AGL-3616). */}
+      {screenId && versionId ? (
+        <ScreenVersionReviewBar
+          hostId={hostId}
+          orgSlug={orgSlug}
+          host={host}
+          screenId={screenId}
+          versionId={versionId}
+        />
+      ) : null}
+    </>
   )
 }
 

@@ -979,6 +979,11 @@ export type AiNodePatchResult =
  * value grammar. The one difference is `required`: a patch is merged over the
  * props the element already has, so a required prop the patch does not name
  * is not missing.
+ *
+ * Styles belong to every element, so an element the palette does not list —
+ * one a plugin added since, or a marketplace one — can still be restyled:
+ * `sx` is held to the same key set and grammar whatever the element is. Its
+ * props cannot, because the palette is what they are checked against.
  */
 export function validateAiNodePatch(
   componentId: string,
@@ -987,11 +992,16 @@ export function validateAiNodePatch(
 ): AiNodePatchResult {
   const entry = AI_PALETTE[componentId]
   if (!entry) {
-    return {
-      ok: false,
-      code: 'component',
-      error: `Component "${componentId}" is not in the palette`,
+    const props = isRecord(patch.props) ? patch.props : {}
+    if (Object.keys(props).length || patch.sx === undefined) {
+      return {
+        ok: false,
+        code: 'component',
+        error: `Component "${componentId}" is not in the palette`,
+      }
     }
+    const repairs: string[] = []
+    return { ok: true, props: {}, sx: sanitizeSx(componentId, patch.sx, repairs), repairs }
   }
   const repairs: string[] = []
   const props = sanitizeProps(

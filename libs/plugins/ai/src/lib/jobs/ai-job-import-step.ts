@@ -22,8 +22,8 @@
  *
  *   1. READ the proved site (no model): the crawler reads it as AglynBot,
  *      main pages first, up to the plan's page count; the inventory is cut
- *      into waves (`model/ai-site-import.ts`), every page gets a ledger row,
- *      and Trust & Safety gets its row. The job then WAITS (`needs_review`,
+ *      into waves (`model/ai-site-import.ts`) and every page gets a ledger
+ *      row. The job then WAITS (`needs_review`,
  *      reason `wave`): nothing is brought in until the person starts wave 1.
  *   2. START A WAVE (no model), on the person's say-so: the proof is still
  *      current, the day's limit has room, the plan still has room; the
@@ -119,10 +119,10 @@ import { aiSiteKindFor } from '../model/ai-site-kinds'
 import { AI_LAYOUT_SITE_BRAND_INPUT, AI_LAYOUT_SITE_FACTS_INPUT, AI_LAYOUT_SITE_FRAME_INPUT } from './ai-job-layout-language'
 import { aiLayoutTelHref, type AiLayoutFrameSource, type AiLayoutFrameSourceGround, type AiLayoutFrameSourceTo } from '../layout-language/ai-layout-frame-source'
 import { aiHexOklch } from '../model/ai-site-look'
-import { AI_LAYOUT_IMPORTED_SECTIONS_INPUT, aiSiteImportDocLines, type AiSiteImportDocument } from './ai-site-import-document'
+import { AI_LAYOUT_IMPORTED_SECTIONS_INPUT, type AiSiteImportDocument } from './ai-site-import-document'
+import { aiSiteImportSectionNames } from './ai-site-import-compile'
 import { aiRunSiteImportLook, type AiSiteImportLookDeps } from './ai-site-import-look'
 import { aiPublishImportedWave } from './ai-site-import-publish'
-import { fileSiteImportReview } from '../site-import/site-import-review'
 import { aiUnitErrorRetryable, aiUnitFailure, aiUnitSpend } from './ai-build-unit-outcome'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
 import { AI_JOB_STEP_OVERHEAD_MS } from './ai-job-budget'
@@ -222,7 +222,6 @@ export interface AiSiteImportStepDeps {
   fetchImage?: SiteImportPhotosDeps['fetch']
   readRoom?: typeof readAiScreenRoom
   readSiteName?: (firestore: FirebaseFirestore.Firestore, hostId: string) => Promise<string>
-  fileReview?: typeof fileSiteImportReview
   pageWritten?: typeof aiSitePageWritten
   mintId?: () => string
   clock?: () => number
@@ -512,9 +511,13 @@ export function aiSiteImportDocumentFor(state: AiSiteImportState, page: AiSiteIm
     url: page.url,
     blocks,
     photos: page.photos?.assets ?? [],
-    // Home's own links are words: a link home says home, which the source's words may not.
+    // Every page the import plans, in any wave (AGL-4107): a link to one still
+    // to come shows its words until it is live. Home's own links are words: a
+    // link home says home, which the source's words may not.
     links: state.pages.filter((entry) => entry.slug !== '/' && !entry.refused).map((entry) => ({ path: entry.path.replace(/\/+$/, '') || '/', id: entry.draftId })),
     origins: [`https://${state.domain}`, `https://www.${state.domain.replace(/^www\./, '')}`],
+    // How the source lays it out (AGL-4106), which the site compiler builds it from (AGL-4107).
+    ...(page.read?.layout ? { layout: page.read.layout } : {}),
   }
 }
 
@@ -526,8 +529,9 @@ export function aiSiteImportPageJob(
   items: readonly AiJobItemLedger[],
 ): AiJob {
   const doc = aiSiteImportDocumentFor(state, page)
-  // The page's sections are the source's own (AGL-4084): its opening, then one at each second-level heading.
-  const names = doc ? aiSiteImportDocLines(doc.blocks, doc.title).sections.map((section) => section.name) : page.read?.sections ?? []
+  // The page's sections are the source's own (AGL-4107): as its layout names
+  // them, else its opening and one at each second-level heading.
+  const names = doc ? aiSiteImportSectionNames(doc) : page.read?.sections ?? []
   const sections = (names.length ? names : ['Introduction']).map((name) => ({
     name: name.slice(0, AI_SITE_IMPORT_LABEL_MAX_CHARS),
     uses: [],
@@ -541,8 +545,9 @@ export function aiSiteImportPageJob(
     template: null,
     duplicateOf: null,
     nav: false,
-    seoTitle: page.title,
-    seoDescription: '',
+    // The source's own title and description, word for word (AGL-4107).
+    seoTitle: page.read?.meta?.title || page.title,
+    seoDescription: page.read?.meta?.description ?? '',
     sections,
     record: null,
     id: page.draftId,
@@ -723,7 +728,6 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
   const ingestOf = deps.ingest ?? pluginMediaIngest
   const readRoom = deps.readRoom ?? readAiScreenRoom
   const siteNameOf = deps.readSiteName ?? readSiteName
-  const fileReview = deps.fileReview ?? fileSiteImportReview
   const pageWritten = deps.pageWritten ?? aiSitePageWritten
   const mintId = deps.mintId ?? createResourceUid
   const clock = deps.clock ?? Date.now
@@ -743,8 +747,6 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
     const items = job.items ?? []
     const work = aiSiteImportNextWork(state, items)
     const nowIso = now.toISOString()
-    const review = (event: 'read' | 'wave-started' | 'wave-finished', next: AiSiteImportState, ledger: readonly AiJobItemLedger[], wave?: number) =>
-      fileReview(firestore, { orgId: job.orgId, hostId, jobId: job.$id, state: next, items: ledger, event, nowMs: now.getTime(), ...(wave !== undefined ? { wave } : {}) })
 
     /** Closes the wave when this pass settled its last row: the review, or the job's end after the last wave. */
     const closing = async (
@@ -771,7 +773,6 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
         console.error('ai site import: a wave could not be published into the preview', { orgId: job.orgId, jobId: job.$id, wave: wave.index, error })
       }
       const published = sitePublish ? { sitePublish } : {}
-      await review('wave-finished', closed, ledger, wave.index)
       const waiting = closed.waves.find((entry) => entry.index === wave.index)?.status === 'review'
       if (waiting) {
         const message = sitePublish?.published.length ? aiSiteImportPreviewMessage(closed, wave, sitePublish.published.length) : aiSiteImportWaveMessage(closed, ledger)
@@ -851,9 +852,7 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
       )
       const planned = { ...aiSiteImportWithBuilds(inventory, mainWords), home: aiSiteImportHomeOf(crawled) }
       const ledger = aiSiteImportLedger(planned)
-      const reviewId = await review('read', planned, ledger)
-      const next = { ...planned, reviewId }
-      return unspent({ items: ledger, siteImport: next, review: waveReview(aiSiteImportWaveMessage(next, ledger)) })
+      return unspent({ items: ledger, siteImport: planned, review: waveReview(aiSiteImportWaveMessage(planned, ledger)) })
     }
 
     if (!state) return unspent({ failure: AI_SITE_IMPORT_COPY.badDomain })
@@ -910,7 +909,6 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
         )
       }
       const started = aiSiteImportWithBuilds(aiSiteImportWaveStarted(state, wave.index, nowIso, reads))
-      await review('wave-started', started, ledger, wave.index)
       const running = started.waves.find((entry) => entry.index === wave.index) as AiSiteImportWave
       return closing(started, ledger, running, unspent({ items: ledger }))
     }

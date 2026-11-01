@@ -18,6 +18,8 @@
 import type * as Aglyn from '@aglyn/aglyn'
 import { canvas } from '@aglyn/aglyn'
 import { REPEAT_NODE_ID_PREFIX } from '@aglyn/aglyn/app-utils/expand-repeatables'
+import * as Besigner from '@aglyn/besigner'
+import { makeAutoObservable, observableRef, reaction } from 'mobx'
 
 const LEAF_STAMP = '[data-aglyn^="leaf:"]'
 
@@ -41,9 +43,17 @@ export function repeatTemplateIdOf(id: string): string {
   return current
 }
 
+/** A repeat copy the pointer is on, and the real element it is a picture of. */
+export interface RepeatCopyHit {
+  /** The element the copy draws: the one an edit changes. */
+  original: Aglyn.NodeSchema<any>
+  /** The copy's own id, `rep__…`, as its rendered stamp carries it. */
+  copyId: string
+}
+
 /**
- * The real element a repeat copy under the pointer is a picture of, or null
- * when the pointer is not on a copy.
+ * The repeat copy under the pointer and the real element it is a picture of,
+ * or null when the pointer is not on a copy.
  *
  * The copies (Sam, Jordan beside the real Avery) are inert drawings: nothing
  * in them is a document, so none of them can be selected. A click on one
@@ -51,35 +61,97 @@ export function repeatTemplateIdOf(id: string): string {
  * change every copy at once — and the repeating element's own handlers,
  * which the copies are drawn inside, send it there.
  */
-export function repeatOriginalAt(
-  target: EventTarget | null,
-): Aglyn.NodeSchema<any> | null {
+export function repeatCopyAt(target: EventTarget | null): RepeatCopyHit | null {
   const leaf = target instanceof Element ? target.closest(LEAF_STAMP) : null
-  const id = leaf?.getAttribute('data-aglyn')?.slice('leaf:'.length)
-  if (!id?.startsWith(REPEAT_NODE_ID_PREFIX)) return null
-  return canvas.getNode(repeatTemplateIdOf(id)) ?? null
+  const copyId = leaf?.getAttribute('data-aglyn')?.slice('leaf:'.length)
+  if (!copyId?.startsWith(REPEAT_NODE_ID_PREFIX)) return null
+  const original = canvas.getNode(repeatTemplateIdOf(copyId))
+  return original ? { original, copyId } : null
+}
+
+/** A copy the canvas outlines in place of the element it draws. */
+export interface RepeatCopyStandIn {
+  /** The element hovered or selected. */
+  nodeId: string
+  /** The copy of it the pointer is on, or was on when it was clicked. */
+  copyId: string
 }
 
 /**
- * Every drawn copy of the node `id` in the canvas `element` lives in: the
- * copies a repeat draws of it, at any depth — a Typography inside a repeated
- * card has a copy inside each copy of the card.
+ * Which copy the canvas outlines for the hovered and the selected element
+ * (AGL-3111).
  *
- * Read off the rendered stamps (`leaf:rep__…__<id>`), because the copies are
- * pictures, not canvas nodes: the refs registry has no entry for them.
+ * Pointing at or clicking a copy hovers or selects the element it draws, so
+ * an edit changes the element and every copy with it — but the outline goes
+ * where the pointer is: round that copy, exactly, and nothing else. It used
+ * to go round the element, or round the element and all its copies at once,
+ * and either way the box was somewhere other than the thing just clicked.
+ *
+ * Kept by the copy's id rather than its element, since the copies are drawn
+ * again whenever what they repeat is edited; and by the element's id with it.
+ * A stand-in is dropped the moment the hover or the selection moves to
+ * another element, however it moves — the hierarchy, the breadcrumbs, a
+ * shortcut — so coming back to the element later outlines the element, not
+ * a copy clicked some time before.
  */
-export function repeatCopyElementsOf(element: Element, id: string): Element[] {
+class RepeatCopyStandIns {
+  hovered?: RepeatCopyStandIn = undefined
+  selected?: RepeatCopyStandIn = undefined
+
+  constructor() {
+    makeAutoObservable(this, {
+      hovered: observableRef,
+      selected: observableRef,
+    })
+    reaction(
+      () => Besigner.focus.getHovered()?.$id,
+      (id) => this.forgetUnless('hovered', id),
+    )
+    reaction(
+      () => Besigner.focus.getLastSelected()?.$id,
+      (id) => this.forgetUnless('selected', id),
+    )
+  }
+
+  private forgetUnless(variant: 'hovered' | 'selected', nodeId?: string) {
+    if (this[variant] && this[variant]?.nodeId !== nodeId) {
+      this[variant] = undefined
+    }
+  }
+
+  /** Records the copy a hover or a selection was made on, or clears it. */
+  set(variant: 'hovered' | 'selected', hit: RepeatCopyHit | null) {
+    const current = this[variant]
+    // Every mouseover lands here; one that changes nothing must not
+    // re-render the overlay reading it.
+    if (
+      current?.nodeId === hit?.original.$id &&
+      current?.copyId === hit?.copyId
+    ) {
+      return
+    }
+    this[variant] = hit
+      ? { nodeId: hit.original.$id, copyId: hit.copyId }
+      : undefined
+  }
+
+  /** The copy to outline for `nodeId`, if the hover or selection was made on one. */
+  copyIdFor(variant: 'hovered' | 'selected', nodeId: string | undefined) {
+    const standIn = this[variant]
+    return nodeId && standIn?.nodeId === nodeId ? standIn.copyId : undefined
+  }
+}
+
+export const repeatCopyStandIns = new RepeatCopyStandIns()
+
+/** The drawn copy `copyId`, in the canvas `element` lives in, or null. */
+export function repeatCopyElementIn(
+  element: Element,
+  copyId: string,
+): Element | null {
   const root = element.getRootNode() as ParentNode | null
-  if (!root?.querySelectorAll || !id) return []
-  const escaped = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id
-  return Array.from(
-    root.querySelectorAll(
-      `[data-aglyn^="leaf:${REPEAT_NODE_ID_PREFIX}"][data-aglyn$="__${escaped}"]`,
-    ),
-  ).filter(
-    (copy) =>
-      repeatTemplateIdOf(
-        copy.getAttribute('data-aglyn')?.slice('leaf:'.length) ?? '',
-      ) === id,
-  )
+  if (!root?.querySelector) return null
+  const escaped =
+    typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(copyId) : copyId
+  return root.querySelector(`[data-aglyn="leaf:${escaped}"]`)
 }

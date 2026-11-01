@@ -45,14 +45,14 @@ Scopes and the site rule are shared with every CRM resource — see
 | --- | --- | --- |
 | `id` | string | Opaque activity id. |
 | `object` | string | Always `"activity"`. |
-| `kind` | string | `call`, `email`, `meeting`, `note` or `other`. `note` when not sent. |
+| `kind` | string | `call`, `email`, `text`, `whatsapp`, `messenger`, `instagram`, `linkedin`, `meeting`, `note` or `other`. `note` when not sent. |
 | `body` | string | Required. What happened, 5,000 characters. |
 | `at` | string | When it happened — which is not when it was logged. ISO 8601 instant; defaults to the moment of the request, for the integration logging a call as it ends. |
 | `byUid` | string | Who did it. Must be a member of your organization; `"api"` when not sent. |
 | `contactId`, `companyId`, `dealId` | string \| null | What it is about. **At least one is required**, and each must exist. |
 | `outcome` | string \| null | A short label, 120 characters. |
 | `durationMinutes` | integer \| null | A whole number, `0` or more. |
-| `direction` | string \| null | Which way it went: a `call` takes `outbound`, `inbound` or `internal` (Salesforce's Call Type), an `email` `outbound` or `inbound`. Any other kind takes none. Optional. |
+| `direction` | string \| null | Which way it went: a `call` takes `outbound`, `inbound` or `internal` (Salesforce's Call Type); an `email` and every message kind (`text`, `whatsapp`, `messenger`, `instagram`, `linkedin`) take `outbound` or `inbound`. Any other kind takes none. Optional. |
 | `siteId` | string | The site the activity was logged from. **Read-only.** |
 | `created` / `updated` | string \| null | ISO 8601. |
 

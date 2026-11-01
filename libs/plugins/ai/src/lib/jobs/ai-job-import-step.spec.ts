@@ -18,8 +18,7 @@
 /**
  * The import step's own rules (AGL-3976), pass by pass against fakes for
  * everything outside it: who may start an import and when, what a page's
- * model answer is told and how its text is fenced, what Trust & Safety reads,
- * what a wave leaves out when the site changed since it was read, and how
+ * model answer is told and how its text is fenced, what a wave leaves out when the site changed since it was read, and how
  * long each pass may take. The machine's half — waves started by a person,
  * the review between them, refunds — is in `ai-jobs.spec.ts`.
  */
@@ -43,8 +42,10 @@ import {
   aiSiteImportLedger,
   aiSiteImportWaveStarted,
   type AiSiteImportState,
+  type SiteImportLayout,
 } from '../model/ai-site-import'
-import { siteImportReviewDetails, fileSiteImportReview, SITE_IMPORT_REVIEW_SOURCE } from '../site-import/site-import-review'
+import type { SiteImportBlock } from '../site-import/site-import-html'
+import { AI_LAYOUT_IMPORTED_SECTIONS_INPUT, type AiSiteImportDocument } from './ai-site-import-document'
 import {
   HARBOR_DOMAIN,
   HARBOR_INJECTION,
@@ -132,7 +133,6 @@ function deps(patch: Partial<AiSiteImportStepDeps> = {}): AiSiteImportStepDeps {
     ingest: () => null,
     readRoom: async () => ({ limit: 25, used: 0 }),
     readSiteName: async () => 'Harbor Dental',
-    fileReview: async () => 'row',
     pageWritten: async () => true,
     ...patch,
   }
@@ -250,6 +250,49 @@ describe('what a page’s model answer is told: its text, fenced, under the rule
     expect(frame).toMatchObject({ kind: 'layout', $id: state.frame?.draftId })
     expect(frame.inputs['businessName']).toBe('Harbor Dental')
     expect((frame.inputs['sitePages'] as Array<{ slug: string }>).map((page) => page.slug)).toEqual(['/', '/about', '/login', '/services', '/team'])
+  })
+})
+
+describe('a page job carries the source’s layout, links every planned page and keeps the source’s title and description (AGL-4107)', () => {
+  const base = harborState()
+  const services = base.pages.find((page) => page.path === '/services') as AiSiteImportState['pages'][number]
+  const blocks: SiteImportBlock[] = [
+    { kind: 'heading', level: 1, text: 'Services', region: 'main' },
+    { kind: 'paragraph', text: 'Cleanings, fillings and crowns.', region: 'main' },
+    { kind: 'heading', level: 2, text: 'Preventive care', region: 'main' },
+    { kind: 'paragraph', text: 'Two cleanings a year.', region: 'main' },
+  ]
+  const layout: SiteImportLayout = {
+    v: 1,
+    sections: [
+      { name: 'Our services', from: 'landmark', band: 'plain', background: '#ffffff', align: 'start', nodes: [0, 1].map((line) => ({ kind: 'line' as const, line })), lines: [0, 1] },
+      { name: 'Prevention', from: 'landmark', band: 'soft', background: '#f5f5f5', align: 'center', nodes: [2, 3].map((line) => ({ kind: 'line' as const, line })), lines: [2, 3] },
+    ],
+    icons: [],
+    look: { fonts: { body: null, headings: null, google: [] }, background: null, text: null, buttonFill: null, buttonText: null, buttonRadius: null, link: null, header: null },
+  }
+  const meta = { title: 'Services | Harbor Dental — Portland’s family dentist since 1998', description: 'Cleanings, fillings and crowns for the whole family, in Portland, Maine.' }
+  const state = aiSiteImportWaveStarted(
+    base,
+    0,
+    NOW.toISOString(),
+    new Map([[services.slot, { at: 'x', title: 'Services', text: '', sections: ['Services'], images: [], blocks, layout, meta }]]),
+  )
+  const job = aiSiteImportPageJob(importJob({ siteImport: state }), state, state.pages.find((page) => page.slot === services.slot) as typeof services, aiSiteImportLedger(state))
+  const doc = job.inputs[AI_LAYOUT_IMPORTED_SECTIONS_INPUT] as AiSiteImportDocument
+
+  it('plans the page in the source’s own sections, by the names its layout gives them', () => {
+    expect(job.plan?.screens[0].sections.map((section) => section.name)).toEqual(['Our services', 'Prevention'])
+    expect(doc.layout).toEqual(layout)
+  })
+
+  it('keeps the source’s title and description word for word, never the page’s short name', () => {
+    expect(job.plan?.screens[0]).toMatchObject({ title: 'Services', seoTitle: meta.title, seoDescription: meta.description })
+  })
+
+  it('may link every page the import plans, in any wave, by the id its draft is written under', () => {
+    const planned = base.pages.filter((page) => page.slug !== '/' && !page.refused).map((page) => page.draftId)
+    expect(doc.links.map((link) => link.id)).toEqual(planned)
   })
 })
 
@@ -373,64 +416,6 @@ describe('a wave reads its pages again, and leaves out what changed', () => {
     const result = await run(step, importJob({ siteImport: state, items: aiSiteImportLedger(state) }))
     expect(result.review).toMatchObject({ reason: 'wave', message: AI_SITE_IMPORT_COPY.unavailable })
     expect(result.siteImport).toBeUndefined()
-  })
-})
-
-describe('the Trust & Safety row every import files', () => {
-  const state = harborState()
-  const input = {
-    orgId: 'org-pro',
-    hostId: 'host-1',
-    jobId: 'importJob1',
-    state,
-    items: aiSiteImportLedger(state),
-    event: 'read' as const,
-    nowMs: NOW.getTime(),
-  }
-
-  it('says what was proved and how, what was read, kept and left out, and that nothing is published', () => {
-    const details = siteImportReviewDetails(input)
-    expect(details).toContain(`Site import: ${HARBOR_DOMAIN} into site host-1 (AI job importJob1).`)
-    expect(details).toContain('Ownership proven by a DNS TXT record (_aglyn-challenge.harbor-dental.com) on 2026-10-19.')
-    expect(details).toContain('Read 5 pages; bringing in 5 pages in 1 wave (plan page count 25, 0 already on the site).')
-    expect(details).toContain('Left out: robots 1.')
-    expect(details).toContain('Nothing is published by the import')
-  })
-
-  it('is written in the abuse queue’s own shape, as the outbound screen files a hold', async () => {
-    const writes: Array<{ path: string; data: Record<string, unknown> }> = []
-    const firestore = {
-      collection: (name: string) => ({
-        doc: (id: string) => ({
-          get: async () => ({ exists: false }),
-          set: async (data: Record<string, unknown>) => {
-            writes.push({ path: `${name}/${id}`, data })
-          },
-        }),
-      }),
-    } as unknown as FirebaseFirestore.Firestore
-    expect(await fileSiteImportReview(firestore, input)).toBe('site-import-importJob1')
-    expect(writes[0].path).toBe('abuseReports/site-import-importJob1')
-    expect(writes[0].data).toMatchObject({
-      reference: 'SI-IMPORTJOB1',
-      category: 'impersonation',
-      severity: 'normal',
-      source: SITE_IMPORT_REVIEW_SOURCE,
-      url: `https://${HARBOR_DOMAIN}/`,
-      reportedHostname: HARBOR_DOMAIN,
-      hostId: 'host-1',
-      orgId: 'org-pro',
-      reporterEmail: null,
-      dmca: null,
-      status: 'open',
-      siteImport: { jobId: 'importJob1', domain: HARBOR_DOMAIN, method: 'dns', kept: 5, waves: 1 },
-    })
-  })
-
-  it('never stops an import when the row cannot be written', async () => {
-    const firestore = { collection: () => ({ doc: () => ({ get: async () => Promise.reject(new Error('down')) }) }) } as never
-    jest.spyOn(console, 'error').mockImplementation(() => undefined)
-    expect(await fileSiteImportReview(firestore, input)).toBeNull()
   })
 })
 

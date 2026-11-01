@@ -341,6 +341,8 @@ describe('readSiteInventory — what is listed', () => {
         fieldIds: ['name', 'handle', 'slug'],
         addressField: 'handle',
         recordBase: 'people',
+        // The page those records are served by, which an edit to it reads (AGL-3616).
+        recordScreenId: 'scr-person',
         siteOnly: true,
       },
       { id: 'ds-work', name: 'Work', fields: ['Title'], fieldIds: ['title'], siteOnly: true },

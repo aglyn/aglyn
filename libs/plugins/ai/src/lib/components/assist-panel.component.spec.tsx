@@ -32,7 +32,7 @@
  * positive asserts the request still carries the real org id.
  */
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 // The component streams the answer through a TextDecoder. jsdom does not
 // ship one; without this the send path throws before the assertion.
@@ -102,9 +102,11 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   MdiIcon: () => <span />,
 }))
 
+const routerPush = jest.fn()
 jest.mock('next/navigation', () => ({
   __esModule: true,
   usePathname: () => routeScope.pathname,
+  useRouter: () => ({ push: routerPush, prefetch: () => undefined }),
 }))
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
@@ -115,7 +117,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 // The AI add-on as its plugin declares it (AGL-2939): the entitlement gate
 // folds `aiAddon` only once the declaration is registered.
 import '../declarations'
-import AssistPanelComponent from './assist-panel.component'
+import AssistPanelComponent, { assistSiteAiJobsHref, assistThreadKey } from './assist-panel.component'
 import { openAiJobs, resetAiJobsStoreForTests } from './ai-jobs-store'
 
 /**
@@ -541,6 +543,51 @@ describe('the launcher and the open action (AGL-3593)', () => {
     render(<AssistPanelComponent {...dockProps()} />)
     expect(await screen.findByLabelText('Open Aglyn Assist')).toBeTruthy()
     expect(screen.queryByLabelText('Hide AI jobs')).toBeNull()
+  })
+})
+
+/**
+ * A site's jobs are read on its AI jobs page (AGL-4116): the list in the
+ * chat was too cramped, and "Open in AI jobs" scrolled the chat to its top.
+ */
+describe('AI jobs on a site open its page (AGL-4116)', () => {
+  beforeEach(() => {
+    currentOrg.org = { plan: 'pro', billingStatus: 'active', seatAddons: { aiAddon: true } }
+    routeScope.pathname = '/acme/hosts/maple/screens'
+    routerPush.mockClear()
+    activeJobs = []
+  })
+
+  it('names the page of the site in the address', () => {
+    expect(assistSiteAiJobsHref('/acme/hosts/maple/screens', 'acme', 'host-1')).toBe('/acme/hosts/maple/ai-jobs')
+    expect(assistSiteAiJobsHref('/acme/hosts', 'acme', 'host-1')).toBeNull()
+    expect(assistSiteAiJobsHref('/acme/hosts/maple', 'acme', null)).toBeNull()
+    expect(assistSiteAiJobsHref('/other/hosts/maple', 'acme', 'host-1')).toBeNull()
+  })
+
+  it('goes to the job on the AI jobs page instead of opening a list in the chat', async () => {
+    render(<AssistPanelComponent {...dockProps()} />)
+    await waitFor(() => expect(posts.length).toBe(1))
+    act(() => openAiJobs({ jobId: 'job-plan' }))
+    await waitFor(() => expect(routerPush).toHaveBeenCalledWith('/acme/hosts/maple/ai-jobs/job-plan'))
+    expect(screen.queryByLabelText('Hide AI jobs')).toBeNull()
+  })
+
+  it('links the row in the chat to the page, never expanding it', async () => {
+    render(<AssistPanelComponent {...dockProps()} />)
+    fireEvent.click(await screen.findByLabelText('Open Aglyn Assist'))
+    const viewAll = await screen.findByText('View all')
+    expect(viewAll.closest('a')?.getAttribute('href')).toBe('/acme/hosts/maple/ai-jobs')
+    expect(screen.queryByLabelText('Show AI jobs')).toBeNull()
+  })
+})
+
+/** One thread per site (AGL-4116): another site's request never rides a question here. */
+describe('a thread per site (AGL-4116)', () => {
+  it('keys each site apart from the workspace and from each other', () => {
+    expect(assistThreadKey('org-1', null)).toBe('aglyn-assist:org-1')
+    expect(assistThreadKey('org-1', 'host-1')).toBe('aglyn-assist:org-1:host-1')
+    expect(assistThreadKey('org-1', 'host-2')).not.toBe(assistThreadKey('org-1', 'host-1'))
   })
 })
 

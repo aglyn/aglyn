@@ -302,40 +302,31 @@ export function aiJobKindNoun(kind: AiJobKind): string {
  */
 export const AI_PAGE_BUILDING_JOB_KINDS: readonly AiJobKind[] = ['page', 'site', 'build', 'import']
 
-/**
- * How long a plan waiting for its confirmation still counts as a build on its
- * way (AGL-3765): one the person is reading now, not one left unconfirmed
- * days ago.
- */
-export const AI_SITE_BUILD_PLAN_FRESH_MS = 15 * 60_000
-
 /** What a door that starts a page says while another is being built on the site (AGL-3765). */
 export const AI_SITE_BUILD_IN_FLIGHT_COPY = 'A page is already being built. Wait for it, or start another anyway.'
 
 /**
  * Another job building pages on this site (AGL-3765): queued, planning or
- * building, or a plan that waits for its confirmation and moved in the last
- * {@link AI_SITE_BUILD_PLAN_FRESH_MS}. `null` when there is none. A door warns
- * with it and still starts the job: two builds can share a site, they just
- * cannot both make what its plan holds only one of.
+ * building. `null` when there is none. A door warns with it and still starts
+ * the job: two builds can share a site, they just cannot both make what its
+ * plan holds only one of. A plan waiting for its confirmation is not one
+ * (AGL-4116): nothing is being built until it is confirmed, and saying so
+ * over an unconfirmed plan told a person a page was being built that they
+ * had never asked for.
  */
 export function aiSiteBuildInFlight<
   T extends AiJobPhaseSource & { id: string; kind: AiJobKind | string; hostId?: string | null },
 >(
   jobs: readonly T[],
-  input: { hostId: string | null | undefined; exceptJobId?: string | null; now?: number },
+  input: { hostId: string | null | undefined; exceptJobId?: string | null },
 ): T | null {
   if (!input.hostId) return null
-  const now = input.now ?? Date.now()
   return (
     jobs.find((job) => {
       if (job.id === input.exceptJobId || job.hostId !== input.hostId) return false
       if (!AI_PAGE_BUILDING_JOB_KINDS.includes(job.kind as AiJobKind)) return false
       const phase = aiJobPhase(job)
-      if (phase === 'queued' || phase === 'planning' || phase === 'building') return true
-      if (phase !== 'plan-ready') return false
-      const at = typeof job.updatedAt === 'string' ? Date.parse(job.updatedAt) : NaN
-      return Number.isFinite(at) && now - at < AI_SITE_BUILD_PLAN_FRESH_MS
+      return phase === 'queued' || phase === 'planning' || phase === 'building'
     }) ?? null
   )
 }
