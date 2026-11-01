@@ -67,6 +67,9 @@ export {}
 
 const mockDocs = new Map<string, Record<string, any>>()
 
+/** How many times each collection was listed, by path (AGL-4121). */
+const mockListings = new Map<string, number>()
+
 /** Direct children of `path` — a collection read must not return grandchildren. */
 function mockChildPaths(path: string): string[] {
   const prefix = `${path}/`
@@ -98,7 +101,10 @@ function mockQuery(path: string) {
     select: () => chainable,
     startAfter: () => chainable,
     limit: () => chainable,
-    get: async () => build(),
+    get: async () => {
+      mockListings.set(path, (mockListings.get(path) ?? 0) + 1)
+      return build()
+    },
     // `contacts.count().get()` — an aggregate, whose result is read through
     // `.data().count`, not `.get('count')`. Modelled exactly: the route reads
     // `contactsSnap.data().count` and `apiUsageSnap.get('count')`, two
@@ -461,5 +467,97 @@ describe('report-usage: a free org blowing every band posts NO meter event (AGL-
     await runRollup(loadRoute())
     expect(meterEvents).toHaveLength(0)
     expect(mockDocs.get(`orgs/org-1/usage/${MONTH}`)!['billedCents']).toBe(0)
+  })
+})
+
+describe('report-usage: a sweep lists its subjects once and still reaches all of them (AGL-4121)', () => {
+  const ORPHAN = 'org-no-document'
+
+  /** 23 orgs, plus a site whose org has no document: three chunks of ten. */
+  function seedOrgs() {
+    mockDocs.clear()
+    mockListings.clear()
+    for (let index = 0; index < 23; index += 1) {
+      mockDocs.set(`orgs/org-${String(index).padStart(2, '0')}`, {
+        plan: 'free',
+      })
+    }
+    mockDocs.set('hosts/host-orphan', { orgId: ORPHAN, screens: {} })
+  }
+
+  async function postChunk(
+    post: (request: Request) => Promise<Response>,
+    cursor: string | null,
+  ) {
+    const response = await post(
+      new Request('https://app.aglyn.com/api/billing/report-usage', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-cron-secret': 'test-cron-secret',
+        },
+        body: JSON.stringify({ month: MONTH, ...(cursor ? { cursor } : {}) }),
+      }),
+    )
+    const result = await response.json()
+    return {
+      swept: Object.keys(result.orgs),
+      nextCursor: result.nextCursor as string | null,
+    }
+  }
+
+  /** Drives one whole sweep the way the scheduled wrapper does. */
+  async function sweep(post: (request: Request) => Promise<Response>) {
+    const swept: string[] = []
+    let chunks = 0
+    let cursor: string | null = null
+    do {
+      const chunk = await postChunk(post, cursor)
+      swept.push(...chunk.swept)
+      cursor = chunk.nextCursor
+      chunks += 1
+    } while (cursor)
+    return { swept, chunks }
+  }
+
+  it('reads orgs and hosts once across every chunk', async () => {
+    seedOrgs()
+    const { swept, chunks } = await sweep(loadRoute())
+
+    expect(chunks).toBe(3)
+    expect(mockListings.get('orgs')).toBe(1)
+    expect(mockListings.get('hosts')).toBe(1)
+    // Holding the list must cost no coverage. Every org exactly once, and the
+    // site with no org document, which a cursor over `orgs` would never reach.
+    expect(swept).toHaveLength(24)
+    expect(new Set(swept).size).toBe(24)
+    expect(swept).toContain(ORPHAN)
+  })
+
+  it('lists afresh for the next sweep, so an org created in between is swept', async () => {
+    seedOrgs()
+    const post = loadRoute()
+    await sweep(post)
+    mockDocs.set('orgs/org-new', { plan: 'free' })
+
+    const { swept } = await sweep(post)
+
+    expect(mockListings.get('orgs')).toBe(2)
+    expect(swept).toContain('org-new')
+  })
+
+  it('a chunk landing on a cold instance lists for itself and misses nobody', async () => {
+    seedOrgs()
+    const first = await postChunk(loadRoute(), null)
+    // `loadRoute` resets the module registry, so nothing is held any more:
+    // what a resumed sweep sees when the next chunk reaches another instance.
+    const second = await postChunk(loadRoute(), first.nextCursor)
+    const third = await postChunk(loadRoute(), second.nextCursor)
+
+    expect(third.nextCursor).toBeNull()
+    expect(mockListings.get('orgs')).toBe(3)
+    expect(
+      new Set([...first.swept, ...second.swept, ...third.swept]).size,
+    ).toBe(24)
   })
 })
