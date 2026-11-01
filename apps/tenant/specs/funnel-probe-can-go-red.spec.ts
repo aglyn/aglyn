@@ -418,3 +418,96 @@ describe('/api/health/funnel', () => {
     expect(serialized).not.toMatch(/@|marketingOptIn|password|secret|token|Bearer/i)
   })
 })
+
+/**
+ * The read itself (AGL-4121). The probe module is real here, over a fake
+ * Firestore that APPLIES the filter the way Firestore does: an equality with
+ * the boolean `true`, so a string `'true'` or a form with no `routing` is not
+ * returned. What this has to hold is that asking for less changes no verdict.
+ */
+describe('the routing read', () => {
+  async function routingOver(forms: Array<Record<string, unknown>>) {
+    const wheres: unknown[][] = []
+    const snapshotOf = (docs: Array<Record<string, unknown>>) => ({
+      docs: docs.map((form) => ({ data: () => form })),
+    })
+    const formsQuery = {
+      where: (field: string, op: string, value: unknown) => {
+        wheres.push([field, op, value])
+        const kept = forms.filter(
+          (form) =>
+            (form['routing'] as { lead?: unknown } | undefined)?.lead === value,
+        )
+        return { limit: () => ({ get: async () => snapshotOf(kept) }) }
+      },
+    }
+    const hostSnapshot = { get: () => ({ owner: 'admin' }), data: () => ({}) }
+    const firestore = {
+      collection: () => ({
+        where: () => ({
+          select: () => ({
+            limit: () => ({
+              get: async () => ({ size: 1, docs: [{ id: 'host-1' }] }),
+            }),
+          }),
+        }),
+        doc: () => ({
+          get: async () => hostSnapshot,
+          collection: () => formsQuery,
+        }),
+      }),
+    }
+    jest.resetModules()
+    jest.dontMock(PROBE)
+    jest.doMock('../app/api/health/render/canary', () => ({
+      __esModule: true,
+      marketingHost: () => null,
+    }))
+    jest.doMock('@aglyn/aglyn/plugin-manager/plugin-declarations-repair', () => ({
+      __esModule: true,
+      runPluginDeclarationsRepair: async () => false,
+    }))
+    jest.doMock('@aglyn/tenant-data-admin', () => ({
+      __esModule: true,
+      firebaseAdmin: { app: () => ({ firestore: () => firestore }) },
+      getOrgForHost: async () => null,
+      visitorWriteRefusal: async () => null,
+    }))
+    const { probeFunnel } = await import(PROBE)
+    const { routing } = await probeFunnel('marketing', 3)
+    return { routing, wheres }
+  }
+
+  /** The whole catalog through the reduction, the way the probe used to. */
+  const graded = (forms: Array<Record<string, unknown>>) =>
+    funnelRoutingHealth(
+      forms.flatMap((form) => funnelFormFacts(form) ?? []),
+      3,
+      0,
+    )
+
+  const lead = storedForm()
+  const notLeads = [
+    storedForm({ routing: { lead: false } }),
+    storedForm({ routing: { lead: 'true' } }),
+    storedForm({ routing: undefined }),
+    storedForm({ routing: {} }),
+  ]
+
+  it('asks for the lead forms alone', async () => {
+    const { wheres } = await routingOver([lead])
+    expect(wheres).toEqual([['routing.lead', '==', true]])
+  })
+
+  it.each<[string, Array<Record<string, unknown>>]>([
+    ['the floor met', [lead, lead, lead, ...notLeads]],
+    ['a form that stopped routing', [lead, lead, ...notLeads]],
+    ['an archived lead form', [lead, lead, lead, storedForm({ archivedAt: 1 })]],
+    ['an unpublished lead form', [lead, lead, lead, storedForm({ versionId: '' })]],
+    ['a surplus lead form', [lead, lead, lead, lead, ...notLeads]],
+    ['a misrouted lead form', [lead, lead, storedForm({ campaignIds: [] })]],
+  ])('grades %s the way the whole catalog does', async (_name, catalog) => {
+    const { routing } = await routingOver(catalog)
+    expect({ ...routing, ms: 0 }).toEqual(graded(catalog))
+  })
+})

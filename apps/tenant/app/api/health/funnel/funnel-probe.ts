@@ -78,10 +78,9 @@
  * ## Cost
  *
  * One alias query, one host document, one org document, the form door's own
- * reads (its month counter) and one small collection read of the host's
- * forms, memoised per instance
- * for `PROBE_TTL_MS`. The endpoint is public, so that memo is what bounds
- * what anyone can make it spend.
+ * reads (its month counter) and one small read of the host's lead forms,
+ * memoised per instance for `PROBE_TTL_MS`. The endpoint is public, so that
+ * memo is what bounds what anyone can make it spend.
  */
 import * as Aglyn from '@aglyn/aglyn/server'
 // The registries' own modules: the form door's gates are the plugin's that
@@ -280,12 +279,17 @@ async function probeIntake(
 /**
  * The site's lead-routing forms, reduced to the facts the verdict needs.
  *
- * The whole catalog is read and `funnelFormFacts` decides what each document
- * is: which forms are lead surfaces, and which of those a visitor can
- * actually reach. That reduction is pure and lives beside the verdict rather
- * than here, so the red-proof can drive real stored shapes — a document with
- * no `versionId`, a published one whose design went missing — without an
- * admin credential.
+ * `funnelFormFacts` decides what each document is: which forms are lead
+ * surfaces, and which of those a visitor can actually reach. That reduction
+ * is pure and lives beside the verdict rather than here, so the red-proof can
+ * drive real stored shapes — a document with no `versionId`, a published one
+ * whose design went missing — without an admin credential.
+ *
+ * The query asks only for `routing.lead == true`, the first thing that
+ * reduction requires, so it can never hold back a form the reduction would
+ * have kept; every other form was read and discarded (AGL-4121). One equality
+ * on one field, served by the automatic single-field index. A form that stops
+ * routing still leaves the set, which is what the floor exists to count.
  */
 async function probeRouting(
   hostId: string,
@@ -300,6 +304,7 @@ async function probeRouting(
       .collection('hosts')
       .doc(hostId)
       .collection('forms')
+      .where('routing.lead', '==', true)
       .limit(FORM_READ_LIMIT)
       .get()
     const forms: FunnelFormFacts[] = []
