@@ -692,7 +692,11 @@ async function assistEditRung(input: {
   const hostId = sanitiseId(body.context.hostId)
   if (!document || !hostId) return null
   if (!checkEntitlement(org as never, 'aiGenerative')) return null
-  const context = parseAssistEditContext(body.canvas)
+  // The chat in the Besigner sends the whole page when it fits (AGL-4116),
+  // held to the same limits as a job's read of it.
+  const context = parseAssistEditContext(body.canvas, {
+    whole: (body.canvas as { whole?: unknown }).whole === true,
+  })
   if (!context) return null
   if (!staff && !(await isServerReleaseFlagOnForOrg('release_ai_generative', body.orgId))) {
     return null

@@ -42,7 +42,7 @@ import {
   resetEditorSessionsForTests,
 } from '@aglyn/aglyn/plugin-manager/editor-sessions'
 import * as Besigner from '@aglyn/besigner'
-import { ASSIST_EDIT_CONTEXT_MAX_NODES } from '../model/assist-edit'
+import { ASSIST_EDIT_CONTEXT_MAX_NODES, ASSIST_EDIT_WHOLE_MAX_NODES } from '../model/assist-edit'
 import { AI_CACHE_PREFIX_TOKEN_CHARS } from '../runtime/ai-runtime'
 import { editSelectionBlock, parseAssistEditContext } from '../server/assist-edit'
 import { describeAssistEditCanvas } from './assist-edit-canvas'
@@ -413,6 +413,64 @@ describe('the block the model reads for the reported document', () => {
     expect({ selected: measure(LINK), nothingSelected: measure(null) }).toEqual({
       selected: { chars: 4_127, tokens: 1_032 },
       nothingSelected: { chars: 1_750, tokens: 438 },
+    })
+  })
+})
+
+describe('the whole page, as the chat in the Besigner sends it (AGL-4116)', () => {
+  const whole = () => describeAssistEditCanvas(canvas, Besigner.focus.getLastSelected()?.$id ?? null, { whole: true })
+
+  it('describes every element in page order, each after its parent, with its settings and styles', () => {
+    const outline = whole()!
+    expect(outline.whole).toBe(true)
+    expect(outline.selectedId).toBeNull()
+    expect(outline.total).toBe(88)
+    expect(outline.nodes).toHaveLength(88)
+    const ids = outline.nodes.map((entry) => entry.id)
+    expect(ids.slice(0, 5)).toEqual([ROOT, 'eoSwQte8ZK', 'pNVe99s0FD', '3mIFFfgw_z', 'x-_avNOyba'])
+    outline.nodes.forEach((entry, index) => {
+      if (entry.parentId) expect(ids.indexOf(entry.parentId)).toBeLessThan(index)
+    })
+    // The button deep inside the tenth card is there with nothing selected.
+    const deep = outline.nodes.find((entry) => entry.id === CARDS[9][6])
+    expect(deep).toMatchObject({ componentId: 'muiScreenLink', props: { children: 'Marketing' } })
+    expect(outline.nodes.find((entry) => entry.id === LINK)?.sx).toEqual({ fontWeight: 600, textDecoration: 'none' })
+    expect(outline.nodes.some((entry) => entry.brief || entry.like)).toBe(false)
+  })
+
+  it('keeps the selection, and what the server reads of it', () => {
+    clickHierarchyRow(LINK)
+    const outline = whole()!
+    expect(outline.selectedId).toBe(LINK)
+    const context = parseAssistEditContext(JSON.parse(JSON.stringify(outline)), { whole: outline.whole === true })
+    expect(context).toMatchObject({ selectedId: LINK, total: 88, whole: true })
+    expect(context?.nodes).toHaveLength(88)
+    expect(editSelectionBlock(context!)).toContain(`Selected element: "${LINK}" (muiScreenLink).`)
+  })
+
+  it('falls back to the neighborhood past the cap, where the whole page would not fit', () => {
+    const rows = Array.from({ length: ASSIST_EDIT_WHOLE_MAX_NODES }, (_, index) => `row${index}`)
+    const tree = new Map<string, { $id: string; componentId: string; parentId: string | null; nodes?: string[] }>([
+      [ROOT, { $id: ROOT, componentId: 'div', parentId: null, nodes: rows }],
+      ...rows.map((id) => [id, { $id: id, componentId: 'muiBox', parentId: ROOT }] as const),
+    ])
+    const outline = describeAssistEditCanvas({ getNode: (id) => tree.get(id) }, null, { whole: true })!
+    expect(outline).not.toHaveProperty('whole')
+    expect(outline.nodes).toHaveLength(ASSIST_EDIT_CONTEXT_MAX_NODES)
+    expect(outline.total).toBe(ASSIST_EDIT_WHOLE_MAX_NODES + 1)
+  })
+
+  it('holds its size for this document', () => {
+    // What a Besigner chat turn now carries for this 88-element band, up from
+    // the neighborhood's 1,750 characters with nothing selected, meant: the
+    // model reads the whole page and finds the element itself (AGL-4116). The
+    // block is the volatile turn, paid on a question asked in the Besigner and
+    // nowhere else, and it is capped at ASSIST_EDIT_WHOLE_MAX_NODES.
+    const context = parseAssistEditContext(JSON.parse(JSON.stringify(whole())), { whole: true })
+    const block = editSelectionBlock(context!)
+    expect({ chars: block.length, tokens: Math.round(block.length / AI_CACHE_PREFIX_TOKEN_CHARS) }).toEqual({
+      chars: 13_321,
+      tokens: 3_330,
     })
   })
 })
