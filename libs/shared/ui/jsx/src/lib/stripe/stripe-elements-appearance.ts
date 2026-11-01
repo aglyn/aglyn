@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { Theme } from '@mui/material/styles'
+import { getLuminance, type Theme } from '@mui/material/styles'
 
 /**
  * Stripe Elements' `appearance`, built from the RESOLVED MUI theme.
@@ -80,6 +80,15 @@ export function resolveThemeColor(
   return fallback ? resolveThemeColor(fallback, resolveCssVar, depth + 1) : ''
 }
 
+/** Whether a resolved surface color reads as dark, or `fallback` when it cannot be read. */
+function surfaceIsDark(surface: string, fallback: boolean): boolean {
+  try {
+    return getLuminance(surface) < 0.5
+  } catch {
+    return fallback
+  }
+}
+
 /** The subset of Stripe's appearance object this builds. */
 export interface StripeAppearance {
   theme: 'stripe' | 'night'
@@ -94,20 +103,30 @@ export interface StripeAppearance {
  * base theme decides things the variables do not reach — icon artwork, the
  * dropdown surface, autofill styling — and a light base wearing dark colors
  * shows through on exactly those.
+ *
+ * ## The scheme comes off the resolved surface
+ *
+ * On a `cssVariables` theme, `theme.palette` is the DEFAULT scheme whichever
+ * one is showing: `useTheme()` hands the light palette to a page painted dark,
+ * and the fields came out white on a dark panel with their labels unreadable.
+ * `theme.vars.palette` holds the variables that do change, so those are what
+ * gets resolved, and the base theme is read from the surface they resolve to.
  */
 export function stripeAppearanceFromTheme(
   theme: Theme,
   resolveCssVar: CssVarResolver = documentResolver,
 ): StripeAppearance {
   const color = (value: unknown) => resolveThemeColor(value, resolveCssVar)
-  const palette = theme.palette
+  const palette = (theme.vars?.palette ?? theme.palette) as Theme['palette']
   const radius =
     typeof theme.shape?.borderRadius === 'number'
       ? `${theme.shape.borderRadius}px`
       : String(theme.shape?.borderRadius ?? '4px')
 
+  const dark = surfaceIsDark(color(palette.background?.paper), theme.palette.mode === 'dark')
+
   return {
-    theme: palette.mode === 'dark' ? 'night' : 'stripe',
+    theme: dark ? 'night' : 'stripe',
     variables: {
       colorPrimary: color(palette.primary?.main),
       // The card's own surface, not the page's — Elements sits inside a

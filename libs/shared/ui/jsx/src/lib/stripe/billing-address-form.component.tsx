@@ -18,7 +18,7 @@
 'use client'
 
 import { AddressElement, Elements, useElements } from '@stripe/react-stripe-js'
-import { Alert, Box, Button, Stack, useTheme } from '@mui/material'
+import { Alert, Box, Button, Stack, useColorScheme, useTheme } from '@mui/material'
 import { useMemo, useState } from 'react'
 import { getBrowserStripe } from './browser-stripe'
 import { stripeAppearanceFromTheme } from './stripe-elements-appearance'
@@ -101,7 +101,10 @@ function AddressFields({ onConfirmed, onCancel }: BillingAddressFormProps) {
 export default function BillingAddressFormComponent(props: BillingAddressFormProps) {
   const theme = useTheme()
   const stripe = useMemo(() => getBrowserStripe(), [])
-  const appearance = useMemo(() => stripeAppearanceFromTheme(theme), [theme])
+  const { mode, systemMode } = useColorScheme()
+  // The scheme is not on `theme`, which stays the same object across a flip.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const appearance = useMemo(() => stripeAppearanceFromTheme(theme), [theme, mode, systemMode])
   if (!stripe) return null
   return (
     <Box>

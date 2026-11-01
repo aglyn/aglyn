@@ -23,7 +23,7 @@ import {
   useElements,
   useStripe,
 } from '@stripe/react-stripe-js'
-import { Alert, Box, Button, Stack, useTheme } from '@mui/material'
+import { Alert, Box, Button, Stack, useColorScheme, useTheme } from '@mui/material'
 import { useMemo, useState } from 'react'
 import { getBrowserStripe } from './browser-stripe'
 import { stripeAppearanceFromTheme } from './stripe-elements-appearance'
@@ -148,14 +148,18 @@ export default function BillingCardFormComponent({
   const stripe = useMemo(() => getBrowserStripe(), [])
   // Rebuilt when the scheme flips, so a customer who switches to dark mode
   // mid-form does not keep a light card form.
+  const { mode, systemMode } = useColorScheme()
   const appearance = useMemo(
     () => stripeAppearanceFromTheme(theme),
-    [theme],
+    // The scheme is not on `theme`, which stays the same object across a flip.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [theme, mode, systemMode],
   )
   if (!stripe) return null
   return (
     <Box>
-      <Elements stripe={stripe} options={{ clientSecret, appearance }}>
+      {/* Stripe's own skeleton, so a slow first load is not an empty box. */}
+      <Elements stripe={stripe} options={{ clientSecret, appearance, loader: 'always' }}>
         <CardFields onConfirmed={onConfirmed} onCancel={onCancel} />
       </Elements>
     </Box>
