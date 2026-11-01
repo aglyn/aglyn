@@ -25,8 +25,8 @@ import {
 } from '@stripe/react-stripe-js'
 import { Alert, Box, Button, Stack, useTheme } from '@mui/material'
 import { useMemo, useState } from 'react'
-import { getBrowserStripe } from '../../utils/browser-stripe'
-import { stripeAppearanceFromTheme } from '../../utils/stripe-elements-appearance'
+import { getBrowserStripe } from './browser-stripe'
+import { stripeAppearanceFromTheme } from './stripe-elements-appearance'
 
 /**
  * Add a card WITHOUT leaving the page or the design (AGL follow-up to the

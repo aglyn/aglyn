@@ -38,11 +38,15 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
   authorizedFetch: (...args: unknown[]) => mockFetch(...args),
 }))
+jest.mock('@aglyn/shared-ui-jsx/stripe/lazy-stripe', () => ({
+  LazyBillingCardForm: () => null,
+  LazyBillingAddressForm: () => null,
+  handleStripeNextAction: async () => null,
+}))
 jest.mock('@aglyn/aglyn/app-utils/analytics-events', () => ({
   readGaClientId: async () => null,
 }))
 
-import { starterPurchaseNavigation } from '../hooks/use-starter-purchase'
 import { StarterPickerShelf } from './starter-picker-shelf.component'
 
 const OFFICIAL = {
@@ -213,21 +217,37 @@ describe('what each card says', () => {
   })
 })
 
-describe('a pick with a price, and the way back to it (AGL-4049 lane 3)', () => {
-  const assign = jest.spyOn(starterPurchaseNavigation, 'assign').mockImplementation(() => undefined)
-  /** Answers the search with `rows`, and the checkout with `checkout`. */
-  const answeringWith = (rows: unknown[], checkout: { status: number; body: unknown }) =>
-    mockFetch.mockImplementation((_user: unknown, url: string) =>
-      url === '/api/marketplace/checkout'
-        ? respond(checkout.status, checkout.body)
-        : respond(200, { rows, labels: { base: {}, fonts: {} } }),
-    )
-  const checkoutCalls = () => mockFetch.mock.calls.filter(([, url]) => url === '/api/marketplace/checkout')
+describe('a pick with a price (AGL-4049 lanes 3 and D)', () => {
+  /** Answers the search with `rows`, and the pay door with what each action gets. */
+  const answeringWith = (
+    rows: unknown[],
+    door: Record<string, { status: number; body: unknown }>,
+  ) =>
+    mockFetch.mockImplementation((_user: unknown, url: string, init?: { body?: string }) => {
+      if (url !== '/api/marketplace/pay') return respond(200, { rows, labels: { base: {}, fonts: {} } })
+      const action = String(JSON.parse(String(init?.body ?? '{}')).action ?? 'pay')
+      const answer = door[action] ?? { status: 500, body: {} }
+      return respond(answer.status, answer.body)
+    })
+  const payCalls = () => mockFetch.mock.calls.filter(([, url]) => url === '/api/marketplace/pay')
+  const QUOTE = {
+    status: 200,
+    body: {
+      quote: {
+        listingName: 'Studio North',
+        amountCents: 1200,
+        taxCents: 79,
+        totalCents: 1279,
+        card: { type: 'card', brand: 'visa', last4: '4242' },
+      },
+    },
+  }
 
-  beforeEach(() => assign.mockClear())
-
-  it('says the price of a paid pick, and opens its payment with Create site as the way back', async () => {
-    answeringWith([OFFICIAL, PAID], { status: 200, body: { url: 'https://checkout.stripe.test/c/1' } })
+  it('says the price of a paid pick, the total before charging, and pays in place', async () => {
+    answeringWith([OFFICIAL, PAID], {
+      quote: QUOTE,
+      pay: { status: 200, body: { paid: true, invoiceId: 'in_1' } },
+    })
     const { props } = shelf()
     // Nothing to buy until a priced starter is picked.
     await screen.findAllByRole('radio')
@@ -237,9 +257,19 @@ describe('a pick with a price, and the way back to it (AGL-4049 lane 3)', () => 
     const note = document.querySelector('[data-starter-buy="northwind-studio"]') as HTMLElement
     expect(note.textContent).toContain('Studio North costs $12.')
     fireEvent.click(within(note).getByRole('button', { name: 'Buy and continue' }))
-    await waitFor(() => expect(assign).toHaveBeenCalledWith('https://checkout.stripe.test/c/1'))
-    const [, , init] = checkoutCalls()[0] as [unknown, string, { body: string; headers: Record<string, string> }]
-    expect(JSON.parse(init.body)).toEqual({ listingId: 'northwind-studio', orgId: 'org-1', return: 'create-site' })
+    const pay = await screen.findByRole('button', { name: 'Pay $12.79' })
+    expect(screen.getByText(/VISA •••• 4242/)).toBeTruthy()
+    // Pressing Buy charged nothing: the buyer has only seen the total.
+    expect(payCalls()).toHaveLength(1)
+    fireEvent.click(pay)
+    await screen.findByText(/You own this starter/)
+    expect(props.onPick).toHaveBeenLastCalledWith({ ...PAID, owned: true })
+    const [, , init] = payCalls()[1] as [unknown, string, { body: string; headers: Record<string, string> }]
+    expect(JSON.parse(init.body)).toMatchObject({
+      listingId: 'northwind-studio',
+      orgId: 'org-1',
+      expectedTotalCents: 1279,
+    })
     expect(init.headers['Idempotency-Key']).toBeTruthy()
   })
 
@@ -259,17 +289,31 @@ describe('a pick with a price, and the way back to it (AGL-4049 lane 3)', () => 
   })
 
   it('learns from the payment that the workspace owns it already, and tells the dialog', async () => {
-    answeringWith([OFFICIAL, PAID], { status: 409, body: { code: 'already_purchased', error: 'owned' } })
+    answeringWith([OFFICIAL, PAID], {
+      quote: { status: 409, body: { code: 'already_purchased', error: 'owned' } },
+    })
     const { props } = shelf()
     fireEvent.click(await screen.findByRole('radio', { name: /^Studio North/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Buy and continue' }))
     await screen.findByText(/You own this starter/)
     expect(props.onPick).toHaveBeenLastCalledWith({ ...PAID, owned: true })
-    expect(assign).not.toHaveBeenCalled()
+  })
+
+  it('Cancel goes back to the pick, with nothing charged', async () => {
+    answeringWith([OFFICIAL, PAID], { quote: QUOTE })
+    const { props } = shelf()
+    fireEvent.click(await screen.findByRole('radio', { name: /^Studio North/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Buy and continue' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
+    await screen.findByRole('button', { name: 'Buy and continue' })
+    expect(payCalls()).toHaveLength(1)
+    expect(props.onPick).not.toHaveBeenLastCalledWith({ ...PAID, owned: true })
   })
 
   it('says why a payment did not open, and stays on the pick', async () => {
-    answeringWith([OFFICIAL, PAID], { status: 409, body: { error: 'The publisher has not enabled payouts yet' } })
+    answeringWith([OFFICIAL, PAID], {
+      quote: { status: 409, body: { error: 'The publisher has not enabled payouts yet' } },
+    })
     shelf()
     fireEvent.click(await screen.findByRole('radio', { name: /^Studio North/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Buy and continue' }))

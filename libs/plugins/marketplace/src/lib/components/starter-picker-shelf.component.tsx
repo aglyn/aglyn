@@ -141,14 +141,14 @@ function emptyMessage(props: ConsoleHostStarterPickerZoneProps): string {
  * failure is said here with a way to ask again.
  *
  * A picked starter with a price the workspace has not paid says so under
- * the cards, with "Buy and continue": the marketplace's payment, which brings
- * the person back to Create site on the same pick. One it owns says that
+ * the cards, with "Buy and continue": the marketplace's payment, in place, on
+ * the card on file, with the site still to be created. One it owns says that
  * instead. The dialog's own `selected` wins over the shelf's pick: it is how
  * a pick restored after paying is shown chosen, and how one the create
  * refused is cleared.
  */
 export function StarterPickerShelf(props: ConsoleHostStarterPickerZoneProps) {
-  const { orgId, mode, search, filter, onPick, ready, selected } = props
+  const { orgId, orgSlug, mode, search, filter, onPick, ready, selected } = props
   // The pick the dialog opened on, restored after paying for it: asked for
   // by every search from then on, so it is listed (first) wherever the
   // search would have put it, and never moves under the person's cursor.
@@ -158,7 +158,7 @@ export function StarterPickerShelf(props: ConsoleHostStarterPickerZoneProps) {
   const [shown, setShown] = useState(false)
   // Starters a purchase attempt found this workspace already owns.
   const [ownedHere, setOwnedHere] = useState<ReadonlySet<string>>(() => new Set())
-  const purchase = useStarterPurchase(orgId)
+  const purchase = useStarterPurchase(orgId, orgSlug)
   const value = selected !== undefined ? (selected?.listingId ?? null) : picked
   const pickedRow = value ? (found.rows.find((row) => row.listingId === value) ?? null) : null
   const ownedOverride = (row: SiteStarterSummary): boolean | undefined =>
@@ -208,7 +208,7 @@ export function StarterPickerShelf(props: ConsoleHostStarterPickerZoneProps) {
   const options = useMemo(() => found.rows.map(cardOf), [found.rows])
 
   const buy = async (row: SiteStarterSummary) => {
-    const outcome = await purchase.buy(row.listingId)
+    const outcome = await purchase.buy({ listingId: row.listingId, displayName: row.displayName })
     if (outcome !== 'owned') return
     setOwnedHere((current) => new Set(current).add(row.listingId))
     onPick({ ...row, owned: true })
@@ -281,6 +281,10 @@ export function StarterPickerShelf(props: ConsoleHostStarterPickerZoneProps) {
           <Alert severity="success" data-starter-owned={pickedRow.listingId} sx={PICK_NOTE_SX}>
             {'You own this starter. Create your site from it whenever you are ready.'}
           </Alert>
+        ) : purchase.panel ? (
+          <Box data-starter-pay={pickedRow.listingId} sx={PICK_NOTE_SX}>
+            {purchase.panel}
+          </Box>
         ) : (
           <Alert
             severity="info"
@@ -298,7 +302,7 @@ export function StarterPickerShelf(props: ConsoleHostStarterPickerZoneProps) {
             }
           >
             {`${pickedRow.displayName || 'This starter'} costs ${starterPriceLabel(pickedRow.priceUsd)}. ` +
-              'Buy it first; once paid, you come back here to create your site from it.'}
+              'Buy it here, then create your site from it.'}
           </Alert>
         )
       ) : null}
