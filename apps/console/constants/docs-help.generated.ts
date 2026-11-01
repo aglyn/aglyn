@@ -1061,7 +1061,7 @@ export const DOCS_HELP_ANCHORS = {
   generateASite: ['#starting-a-new-site-from-a-few-questions', '#on-the-free-plan', '#if-the-plan-does-not-work-out', '#what-a-scaffold-builds', '#what-is-published', '#what-it-costs-before-it-starts', '#watching-it-build', '#generate-for-several-sites-at-once'],
   generateSection: ['#use-it', '#what-it-builds', '#tips', '#who-can-use-it', '#related'],
   generateWithAi: ['#where-to-start-it', '#what-you-get', '#write-the-brief', '#products', '#who-receives-it', '#merge-tokens', '#what-it-will-not-do', '#where-it-runs', '#related'],
-  gettingStarted: ['#create-your-first-site', '#what-a-site-contains', '#site-details', '#basic-details', '#display-name', '#subdomain', '#site-logo', '#site-emails', '#site-admin', '#who-can-open-site-admin', '#switching-between-sites', '#next'],
+  gettingStarted: ['#create-your-first-site', '#logo-and-favicon', '#what-a-site-contains', '#site-details', '#basic-details', '#display-name', '#subdomain', '#site-logo', '#site-emails', '#site-admin', '#who-can-open-site-admin', '#switching-between-sites', '#next'],
   glossary: ['#the-hierarchy', '#organization-org', '#workspace', '#tenant', '#tenant-vs-host--not-the-same-thing', '#quick-reference'],
   googleAnalytics: ['#setup', '#consent', '#automatic', '#engagement', '#commerce', '#web-vitals', '#authored-events', '#never-sent', '#related'],
   helpDesks: ['#before-you-start', '#connect', '#credentials', '#what-agents-see', '#contact-form-tickets', '#settings', '#sync-log', '#disconnect', '#related'],

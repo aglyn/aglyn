@@ -23,6 +23,7 @@ import type {
   ReusableComponentIcon,
   ReusableComponentProp,
 } from '../foundation'
+import { CANVAS_ROOT_ELEMENT_ID } from '../foundation/constants/canvas'
 import {
   type ReusablePropValueClass,
   reusablePropValueClass,
@@ -46,6 +47,7 @@ import {
   withoutRepeatDirective,
 } from './expand-repeatables'
 import { FORM_COMPONENT_ID, FORM_ID_PROP } from './forms'
+import { hostTokensIn, resolveHostTokens, type HostTokenSource } from './host-tokens'
 
 /** The Form's after-submit reveal target: a node id (`form.tsx`). */
 const FORM_REVEAL_NODE_PROP = 'revealNodeId'
@@ -1216,18 +1218,110 @@ function hasVisibilityDirective(props: unknown): boolean {
   return NODE_HIDE_IF_PROP in bag || NODE_HIDE_UNLESS_PROP in bag
 }
 
+/** A directive bound to the site's own values, like `{{host.logo}}`. */
+function namesHostToken(value: unknown): boolean {
+  return typeof value === 'string' && hostTokensIn(value).length > 0
+}
+
+/**
+ * Whether the site's own values hide this node (AGL-4119): `hideIf` or
+ * `hideUnless` bound to a `{{host.*}}` token, read against `host`. A header
+ * shows the logo when the site has one and the name when it does not, and
+ * each carries the directive that says so.
+ *
+ * Only a directive naming a host token is read. A directive with a literal
+ * value on an ordinary page's own node stays as inert as it has always been
+ * ({@link isNodeHiddenByDirective} says why it is the graft that reads those).
+ */
+export function isNodeHiddenByHost(
+  props: unknown,
+  host: HostTokenSource | null | undefined,
+): boolean {
+  if (!props || typeof props !== 'object' || Array.isArray(props)) return false
+  const bag = props as Record<string, unknown>
+  const hideIf = bag[NODE_HIDE_IF_PROP]
+  const hideUnless = bag[NODE_HIDE_UNLESS_PROP]
+  if (namesHostToken(hideIf) && readYesNoValue(resolveHostTokens(String(hideIf), host)) === true) {
+    return true
+  }
+  return namesHostToken(hideUnless) && readYesNoValue(resolveHostTokens(String(hideUnless), host)) === false
+}
+
 /**
  * The node minus its visibility directives — they are compose-time
  * instructions, and `Leaf` spreads whatever survives onto the component,
  * so leaving them would put `hideif="…"` on the DOM of every node that
  * declared one and stayed.
+ *
+ * One bound to a `{{host.*}}` token stays: the site's values fill in later,
+ * and {@link pruneHostHiddenNodes} reads it then.
  */
 function withoutVisibilityDirectives<N extends AglynNodeSchema>(node: N): N {
   if (!hasVisibilityDirective(node?.props)) return node
   const props = { ...(node.props as Record<string, unknown>) }
-  delete props[NODE_HIDE_IF_PROP]
-  delete props[NODE_HIDE_UNLESS_PROP]
+  if (!namesHostToken(props[NODE_HIDE_IF_PROP])) delete props[NODE_HIDE_IF_PROP]
+  if (!namesHostToken(props[NODE_HIDE_UNLESS_PROP])) delete props[NODE_HIDE_UNLESS_PROP]
   return { ...node, props: props as N['props'] }
+}
+
+/** The node minus the directives bound to a `{{host.*}}` token, now they have been read. */
+function withoutHostDirectives<N extends AglynNodeSchema>(node: N): N {
+  const bag = node?.props as Record<string, unknown> | undefined
+  if (!bag || !(namesHostToken(bag[NODE_HIDE_IF_PROP]) || namesHostToken(bag[NODE_HIDE_UNLESS_PROP]))) {
+    return node
+  }
+  const props = { ...bag }
+  if (namesHostToken(props[NODE_HIDE_IF_PROP])) delete props[NODE_HIDE_IF_PROP]
+  if (namesHostToken(props[NODE_HIDE_UNLESS_PROP])) delete props[NODE_HIDE_UNLESS_PROP]
+  return { ...node, props: props as N['props'] }
+}
+
+/**
+ * Drops every node under `rootId` that `isHidden` answers for, along with its
+ * subtree and its entry in its parent's child list, and hands every survivor
+ * to `keep`. The walk both prunes below share.
+ */
+function pruneNodes<N extends AglynNodeSchema = AglynNodeSchema>(
+  nodes: NormalizedNodes<N>,
+  rootId: NodeId,
+  isHidden: (node: N) => boolean,
+  keep: (node: N) => N,
+): NormalizedNodes<N> {
+  const hidden = new Set<NodeId>()
+  const seen = new Set<NodeId>()
+  const walk = (id: NodeId) => {
+    const node = nodes[id]
+    // `seen` bounds the walk: a definition that referenced an ancestor
+    // would otherwise recurse until the stack gave out.
+    if (!node || seen.has(id)) return
+    seen.add(id)
+    const children = Array.isArray(node.nodes) ? (node.nodes as NodeId[]) : []
+    for (const childId of children) {
+      if (typeof childId !== 'string' || !nodes[childId]) continue
+      if (isHidden(nodes[childId] as N)) {
+        hidden.add(childId)
+        for (const descendant of collectDescendantIds(nodes, childId)) {
+          hidden.add(descendant)
+        }
+        continue
+      }
+      walk(childId)
+    }
+  }
+  walk(rootId)
+
+  const next: NormalizedNodes<N> = {}
+  for (const [id, node] of Object.entries(nodes)) {
+    if (hidden.has(id)) continue
+    const kept = keep(node as N)
+    const children = Array.isArray(kept?.nodes) ? (kept.nodes as NodeId[]) : null
+    const survivors =
+      children && children.some((childId) => hidden.has(childId as NodeId))
+        ? children.filter((childId) => !hidden.has(childId as NodeId))
+        : null
+    next[id] = survivors ? ({ ...kept, nodes: survivors } as N) : kept
+  }
+  return next
 }
 
 /**
@@ -1262,42 +1356,40 @@ export function pruneHiddenNodes<N extends AglynNodeSchema = AglynNodeSchema>(
     }
   }
   if (!sawDirective) return nodes
+  return pruneNodes(
+    nodes,
+    rootId,
+    (node) => isNodeHiddenByDirective(node?.props),
+    withoutVisibilityDirectives,
+  )
+}
 
-  const hidden = new Set<NodeId>()
-  const seen = new Set<NodeId>()
-  const walk = (id: NodeId) => {
-    const node = nodes[id]
-    // `seen` bounds the walk: a definition that referenced an ancestor
-    // would otherwise recurse until the stack gave out.
-    if (!node || seen.has(id)) return
-    seen.add(id)
-    const children = Array.isArray(node.nodes) ? (node.nodes as NodeId[]) : []
-    for (const childId of children) {
-      if (typeof childId !== 'string' || !nodes[childId]) continue
-      if (isNodeHiddenByDirective(nodes[childId]?.props)) {
-        hidden.add(childId)
-        for (const descendant of collectDescendantIds(nodes, childId)) {
-          hidden.add(descendant)
-        }
-        continue
-      }
-      walk(childId)
-    }
-  }
-  walk(rootId)
-
-  const next: NormalizedNodes<N> = {}
-  for (const [id, node] of Object.entries(nodes)) {
-    if (hidden.has(id)) continue
-    const kept = withoutVisibilityDirectives(node as N)
-    const children = Array.isArray(kept?.nodes) ? (kept.nodes as NodeId[]) : null
-    const survivors =
-      children && children.some((childId) => hidden.has(childId as NodeId))
-        ? children.filter((childId) => !hidden.has(childId as NodeId))
-        : null
-    next[id] = survivors ? ({ ...kept, nodes: survivors } as N) : kept
-  }
-  return next
+/**
+ * {@link pruneHiddenNodes} for the directives bound to a `{{host.*}}` token
+ * (AGL-4119), once the site is known: over the composed tree, ahead of the
+ * host tokens themselves, by every surface that fills those in. What a page
+ * hides for itself has been pruned by then.
+ *
+ * Returns the input unchanged when no node names one, which is every page of
+ * a site whose layout does not.
+ */
+export function pruneHostHiddenNodes<N extends AglynNodeSchema = AglynNodeSchema>(
+  nodes: NormalizedNodes<N>,
+  host: HostTokenSource | null | undefined,
+  rootId: NodeId = CANVAS_ROOT_ELEMENT_ID,
+): NormalizedNodes<N> {
+  if (!nodes) return nodes
+  const named = Object.values(nodes).some((node) => {
+    const bag = node?.props as Record<string, unknown> | undefined
+    return Boolean(bag && (namesHostToken(bag[NODE_HIDE_IF_PROP]) || namesHostToken(bag[NODE_HIDE_UNLESS_PROP])))
+  })
+  if (!named) return nodes
+  return pruneNodes(
+    nodes,
+    rootId,
+    (node) => isNodeHiddenByHost(node?.props, host),
+    withoutHostDirectives,
+  )
 }
 
 /**

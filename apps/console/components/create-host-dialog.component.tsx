@@ -46,6 +46,11 @@ import {
   type ConsolePendingSite,
 } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import type { SiteStarterSummary } from '@aglyn/aglyn/plugin-manager/plugin-site-starters'
+import {
+  SITE_BRAND_MISSED_PARAM,
+  siteBrandMissedNotice,
+  type SiteBrandSlot,
+} from '@aglyn/aglyn/app-utils/site-brand-files'
 import { useLoading } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -56,6 +61,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Stack,
   Typography,
 } from '@mui/material'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
@@ -80,6 +86,7 @@ import {
 import PluginWidgetSlot, { useSlotWidgets } from './plugin-widget-slot.component'
 import StartInPreviewSwitch from './start-in-preview-switch.component'
 import { useSiteAddress } from './site-address-fields.component'
+import { useSiteBrandFiles } from './site-brand-fields.component'
 import SiteStylePicker from './site-style-picker.component'
 
 /** The zone "Create site" draws its start through (AGL-3761). */
@@ -160,6 +167,13 @@ type CreateOutcome =
  * - a start the `hostFirstRun` zone's widget begins (the guided AI start's
  *   Plan my site): created empty, and the widget starts its job on it.
  *
+ * Beside the name and address, in every one of these: an optional logo, dark
+ * logo and favicon (AGL-4119). A first-time account has no workspace to open a
+ * media picker on, so the files are held here and go into the new site's own
+ * library inside the create, before it answers, and so before an AI start
+ * begins its job. A file that does not make it leaves the site created, and
+ * the person is told which and where to add it.
+ *
  * Closing, cancelling, Back and leaving the page create nothing. That used to
  * be the other way round: the dialog created the site from its name and only
  * then opened the start, so every start closed unanswered left an empty site
@@ -216,6 +230,18 @@ function CreateSiteFlow({
   // and unmount the start that is about to begin its job on it (AGL-4017).
   const [madeHere, setMadeHere] = useState(false)
   const address = useSiteAddress({ autoFocus: true })
+  const brand = useSiteBrandFiles()
+  // What the last create could not save, for a landing that loses the notice.
+  const brandMissed = useRef<SiteBrandSlot[]>([])
+  const siteFields = useMemo(
+    () => (
+      <Stack spacing={2}>
+        {address.fields}
+        {brand.fields}
+      </Stack>
+    ),
+    [address.fields, brand.fields],
+  )
   const orgSlug = currentOrg?.slug ?? null
   /**
    * "Start in preview" (AGL-4086): the person's choice, or `null` while they
@@ -332,8 +358,14 @@ function CreateSiteFlow({
       // A site made on the auth host lands on the console host: `auth.`
       // refuses console paths with a 404 (AGL-3090, AGL-3742).
       const landing = currentConsoleLandingHref(target)
-      if (landing !== target) hardNavigate(landing)
-      else void router.push(target)
+      if (landing === target) return void router.push(target)
+      // A full page load, which takes a notice with it: the landing says it.
+      const missed = brandMissed.current.join(',')
+      hardNavigate(
+        missed
+          ? `${landing}${landing.includes('?') ? '&' : '?'}${SITE_BRAND_MISSED_PARAM}=${missed}`
+          : landing,
+      )
     },
     [router],
   )
@@ -425,6 +457,12 @@ function CreateSiteFlow({
           }
           const starterName =
             typeof payload.starter?.displayName === 'string' ? payload.starter.displayName : null
+          // The logo, dark logo and favicon go in now the site has a library.
+          // Awaited, so an AI start reads them, and never fails the create.
+          const { missed } = await brand.save(site.hostId)
+          brandMissed.current = missed
+          const notice = siteBrandMissedNotice(missed)
+          if (notice) enqueueSnackbar(notice, { variant: 'warning', allowDuplicate: true })
           return { site, ...(starterName ? { starterName } : {}) }
         } catch (error) {
           console.error(error)
@@ -441,7 +479,7 @@ function CreateSiteFlow({
       })
       return request
     },
-    [address, currentOrg, enqueueSnackbar, orgSlug],
+    [address, brand, currentOrg, enqueueSnackbar, orgSlug],
   )
 
   // ── The plain dialog ──────────────────────────────────────────────────────
@@ -477,7 +515,7 @@ function CreateSiteFlow({
   createdRef.current = created
   const pendingSite = useMemo<ConsolePendingSite>(
     () => ({
-      fields: address.fields,
+      fields: siteFields,
       check: address.check,
       dirty: address.dirty,
       created,
@@ -506,7 +544,7 @@ function CreateSiteFlow({
         />
       ),
     }),
-    [address, created, requestCreate, previewFor],
+    [address, created, requestCreate, previewFor, siteFields],
   )
 
   // The starter site, in the style the person chose. Before the site exists
@@ -744,7 +782,7 @@ function CreateSiteFlow({
   const chooseView =
     currentOrg && orgSlug ? (
       <ChooseStarterDialog
-        fields={address.fields}
+        fields={siteFields}
         previewControl={
           <StartInPreviewSwitch
             checked={previewFor('starter')}
@@ -879,7 +917,7 @@ function CreateSiteFlow({
             : `Your site goes live on its ${TENANT_APEX} subdomain ` +
               'immediately; connect a custom domain any time from Setup.'}
         </Typography>
-        {address.fields}
+        {siteFields}
         <Typography variant="subtitle1" component="h2" sx={{ mt: 1 }}>
           {'Choose a style'}
         </Typography>

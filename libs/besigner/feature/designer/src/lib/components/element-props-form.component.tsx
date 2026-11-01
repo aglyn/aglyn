@@ -2376,15 +2376,20 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       ],
     )
 
-    // Visibility directives (AGL-1314), inside a component editor only —
-    // `componentProps` is the same "am I editing a definition" signal the
-    // insert picker keys `{{prop.*}}` off.
+    // Visibility directives (AGL-1314), inside a component editor — and on
+    // an element that already carries one, like the logo and name of a new
+    // site's header (AGL-4119), so what decides whether it shows can be read
+    // and changed there. `componentProps` is the same "am I editing a
+    // definition" signal the insert picker keys `{{prop.*}}` off.
+    const carriesVisibility = Boolean(
+      nodeProps?.[NODE_HIDE_IF_PROP] || nodeProps?.[NODE_HIDE_UNLESS_PROP],
+    )
     const visibilityFields = useMemo(
       () =>
-        editedComponentProps
+        editedComponentProps || carriesVisibility
           ? buildVisibilityFields(insertOptions, tokenLabelContext)
           : [],
-      [editedComponentProps, insertOptions, tokenLabelContext],
+      [carriesVisibility, editedComponentProps, insertOptions, tokenLabelContext],
     )
 
     // Element animation (AGL-2486). Static, so it is built once rather than

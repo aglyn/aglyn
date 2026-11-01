@@ -21,6 +21,9 @@ settings. Everything you build lives under a site, and you can own several.
    you type, so the site has a real address from the first moment — you can attach a
    [custom domain](../building-sites/custom-domains/overview.md) later.
 
+   Under the name, you can add your [logo and favicon](#logo-and-favicon) now, or leave
+   them for later.
+
    When you can use Aglyn AI, **Create site** opens **Start your site**, which asks
    for the name and address and how you want to start: **Start from the starter
    site**, or **Start with AI**, which plans your pages from a few questions — see
@@ -58,8 +61,8 @@ settings. Everything you build lives under a site, and you can own several.
      working contact form. Each section says how to make it yours, and the photos
      are placeholders to swap for your own under **Media**;
    - a shared **header and footer** layout every page you add renders inside, with
-     your site's name, search, a light/dark switch and a Contact button. It is the
-     site's one shared layout on the Free plan;
+     your logo or, without one, your site's name, and search, a light/dark switch and a
+     Contact button. It is the site's one shared layout on the Free plan;
    - a **theme** in the style you chose — a built-in theme with that style's brand
      color and fonts — under **Setup → Theme**, where you can pick another or
      change its colors and fonts any time, and a title, description and sharing
@@ -81,6 +84,32 @@ settings. Everything you build lives under a site, and you can own several.
 Site names must be unique enough to generate a valid subdomain. If a name is taken,
 the console says so as you type and suggests available variations to pick.
 :::
+
+## Add your logo and favicon {#logo-and-favicon}
+
+**Create site** has three optional fields under the name. None of them is needed to
+create the site, and you can add or change all three later in **Setup**.
+
+| Field | What it does |
+| --- | --- |
+| **Logo** | Shown in the header and the footer in place of your site's name. |
+| **Logo for dark backgrounds** | Shown in place of the logo to visitors in dark mode. Without one, they see the logo. |
+| **Favicon** | The small icon in the browser tab. Leave this blank to use your logo. |
+
+Choose a PNG, JPEG, WebP or SVG file, up to 15 MB; a favicon can also be an ICO file. For
+a logo, a square image at least 512 px wide, with the logo filling about 80% of it and a
+little space around it, looks right everywhere it is shown. Each field shows a preview,
+and **Remove** takes the file away again.
+
+The files go into your new site's media library when the site is created, before an AI
+start begins, so the AI uses your logo too. If one can't be uploaded, your site is still
+created, and Aglyn tells you which file didn't make it. Add it under **Setup**: the logos
+are in **Basic details → Site logo**, and the favicon is in **SEO → Favicon**.
+
+![Create a new site: the name and subdomain fields, then Logo and favicon with a logo chosen and a logo for dark backgrounds chosen, each previewed on the background it will be seen on, and Favicon empty with Leave this blank to use your logo, then Choose a style](/img/getting-started/create-site-logo.png)
+
+The header and footer that show your logo are the starter's. To change how the logo sits
+in them, open the layout under **Layouts**: each logo is an ordinary **Image** element.
 
 ## What a site contains
 
@@ -130,10 +159,12 @@ Changing it changes that address, so links to the old one stop working.
 ### Site logo {#site-logo}
 
 The **Site logo** card sets your brand mark: pick a **Light mode** logo from your media
-library — an SVG, or a PNG at least 400px wide — and add a **Dark mode** one if yours is
-hard to see on a dark background. Your live site shows it on the loading overlay between
-pages, and on error pages; without a logo it shows the site name instead, and dark-mode
-visitors see the light logo when no dark one is set.
+library — square, at least 512 px, the logo filling about 80% with a little space around
+it, as an SVG or a PNG — and add a **Dark mode** one if yours is hard to see on a dark
+background. Your live site shows it on the loading overlay between pages, and on error
+pages, and a site created since November 2026 shows it in its header and footer too;
+without a logo it shows the site name instead, and dark-mode visitors see the light logo
+when no dark one is set.
 
 ### Emails this site sends {#site-emails}
 

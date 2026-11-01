@@ -82,10 +82,24 @@ export const ENTITY_LOGO_HINT =
   'Recommended: at least 112×112, PNG or SVG — search engines skip a ' +
   'publisher logo smaller than that rather than scaling it up.'
 
+/**
+ * The spacing a logo looks right with everywhere it is shown (AGL-4119): tiles
+ * and rails draw the picture edge to edge, so the margin has to be its own.
+ * Words the founder approved. Every logo upload says them.
+ */
+export const LOGO_SPACING_HINT =
+  'Square, at least 512 px, the logo filling about 80% with a little space around it.'
+
 /** A site's own mark, rendered at whatever height the layout gives it. */
 export const SITE_LOGO_HINT =
-  'Recommended: SVG, or a PNG at least 400px wide — it renders at different ' +
-  'sizes across your site and on retina screens.'
+  `${LOGO_SPACING_HINT} SVG or PNG keeps it sharp at every size.`
+
+/**
+ * A workspace's mark, which the native apps draw too. They cannot draw an SVG,
+ * so this one steers to the two formats every surface can show.
+ */
+export const WORKSPACE_LOGO_HINT =
+  `${LOGO_SPACING_HINT} Use a PNG or JPEG so it shows in the Aglyn apps too.`
 
 /** A byline avatar: square, small on the page, crisp on retina. */
 export const AVATAR_HINT =

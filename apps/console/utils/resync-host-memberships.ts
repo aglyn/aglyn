@@ -24,6 +24,10 @@ export interface MirroredHostFields {
   displayName?: string
   /** `seo.favicon`; `''` clears it, as the Remove button does. */
   favicon?: string
+  /** `logoUrl`, as a new site's create writes it with its favicon (AGL-4119). */
+  logoUrl?: string
+  /** `logoDarkUrl`, likewise. */
+  logoDarkUrl?: string
 }
 
 /**
