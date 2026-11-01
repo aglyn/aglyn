@@ -28,7 +28,7 @@ import { NODE_MAP_MAX_BYTES } from '@aglyn/aglyn/app-utils/measure-node-map'
 import { encodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 
-import { validateAiNodeTree, type AiNodeTreeResult } from './ai-node-tree'
+import { validateAiNodePatch, validateAiNodeTree, type AiNodeTreeResult } from './ai-node-tree'
 
 type Node = {
   $id: string
@@ -1455,5 +1455,15 @@ describe('validateAiNodeTree component definitions (AGL-2908)', () => {
     expect(
       propsOf(validateAiNodeTree(placed, 'component', { ...context, definesComponent: false }), 'reusableInstance'),
     ).toEqual({ refId: 'cmp-avatar' })
+  })
+})
+
+describe('a patch on an element the palette does not list (AGL-4116)', () => {
+  it('restyles it, held to the same style keys and values, and refuses its settings', () => {
+    expect(AI_PALETTE['acmeCountdown']).toBeUndefined()
+    const styled = validateAiNodePatch('acmeCountdown', { sx: { mt: 4, bgcolor: 'primary.main', '&:hover': { color: 'red' } } })
+    expect(styled).toMatchObject({ ok: true, props: {}, sx: { mt: 4, bgcolor: 'primary.main' } })
+    expect(validateAiNodePatch('acmeCountdown', { props: { label: 'Soon' } })).toMatchObject({ ok: false, code: 'component' })
+    expect(validateAiNodePatch('acmeCountdown', { props: { label: 'Soon' }, sx: { mt: 4 } })).toMatchObject({ ok: false })
   })
 })

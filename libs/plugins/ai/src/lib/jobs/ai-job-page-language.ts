@@ -28,11 +28,12 @@ import { AI_LAYOUT_POST_ADDRESS_TOKENS, aiCompileLayoutPage } from '../layout-la
 import { aiSiteMotionStyle, aiWithSiteMotion, type AiSiteMotionStyle } from '../layout-language/ai-layout-motion'
 import { aiLayoutListingAt, aiLayoutListingsOf, aiLayoutRecordHref, type AiLayoutListing } from '../layout-language/ai-layout-listings'
 import {
-  AI_LAYOUT_ARRANGE_TOOL,
+  AI_LAYOUT_DESIGN_TOOL,
   AI_LAYOUT_LANGUAGE_TEXT,
   AI_LAYOUT_PAGE_TOOL,
-  aiReadLayoutArrangement,
+  aiReadLayoutDesign,
   aiReadLayoutPage,
+  type AiLayoutDesignAnswer,
   type AiLayoutSection,
   type AiLayoutSettlement,
 } from '../layout-language/ai-layout-language'
@@ -73,14 +74,13 @@ import { aiJobBriefLine, aiPlanReferenceLines } from './ai-job-generation'
 import { aiLayoutIsHomeSlug, aiLayoutSiteAliases, aiLayoutSitePages } from './ai-job-layout-site-pages'
 import { aiLayoutInventedContactViolations } from './ai-layout-site-facts'
 import { aiSiteContactOf } from '../model/ai-site-details'
+import { aiSiteImportDocumentOf, type AiSiteImportDocument } from './ai-site-import-document'
 import {
-  AI_SITE_IMPORT_ARRANGE_MAX_CHARS,
-  aiCompileImportedDocument,
-  aiSiteImportArrangeText,
-  aiSiteImportDocLines,
-  aiSiteImportDocumentOf,
-  type AiSiteImportDocument,
-} from './ai-site-import-document'
+  AI_SITE_IMPORT_DESIGN_MAX_CHARS,
+  aiCompileImportedPage,
+  aiSiteImportDesignText,
+  aiSiteImportSectionNames,
+} from './ai-site-import-compile'
 
 /**
  * A page built in the compact layout language (AGL-3660): the page step's
@@ -1075,68 +1075,87 @@ export async function aiRunLayoutPage(input: AiLayoutPageRunInput): Promise<AiVa
 }
 
 /*------------------------------------------
- * A page brought in: copied, or arranged (AGL-4084)
+ * A page brought in: built by the site compiler (AGL-4084, AGL-4107)
  *-----------------------------------------*/
 
 /**
- * What an arranged page's answer is told (AGL-4084), cached: the page's words
- * are the source's and fixed, and the answer only lays them out. The tool has
- * no field for a word of copy, so a rewording has nowhere to go.
+ * What a main page's design answer is told (AGL-4107), cached: the page's
+ * words and structure are the source's and fixed, read by code, and the
+ * answer only chooses how its sections are drawn. The tool has no field for
+ * a word of copy, a line or a block, so nothing it says can reword or move
+ * one.
  */
-export const AI_LAYOUT_ARRANGE_TEXT = [
-  "You arrange a page brought in from its owner's own website. Arrange; keep every line as written; add nothing; reword nothing. Its words are fixed: every line of the page is shown numbered, and the platform places each line you name exactly as its source wrote it, in the site's theme. You never write a word of copy.",
+export const AI_LAYOUT_DESIGN_TEXT = [
+  "You design how a page brought in from its owner's own website is drawn. Its words, its sections and what each section shows are fixed: the platform reads them from the source and places every line exactly as written, in the site's theme. You choose only the design; you never write a word.",
   '',
-  'Answer with submit_arrangement: one entry in sections for each section of the page, in order. A section has:',
-  '- band: plain (the page background), soft (a light band) or dark. Vary the bands down the page so neighboring sections read apart, and keep dark to one or two sections a page.',
-  '- cols: [] for one column, or relative column widths for a row, such as [1, 1] or [7, 5]; at most 4.',
-  '- align: start or center.',
-  '- blocks: top to bottom. A block has kind, col (-1 to span the section, or the column of the row it sits in, 0 first), from (the numbers of the lines it shows, in order), style (primary, secondary or quiet for a button, none otherwise) and items.',
-  '',
-  'Block kinds: heading, eyebrow, lede, text and note show their lines one under another; list shows each of its lines as an item; cards, steps, stats and faq show items, each item\'s from its title line first and then its text lines (from is then []); button is a line that is a link; image is a line that is a picture.',
-  "Every line goes in exactly one block of its own section. Name no line twice and no line of another section. A line you leave out is still shown, at the end of its section, so leave none out on purpose. The page's first section opens with its heading line.",
+  'Answer with submit_design: one entry in sections for each section listed, in order. A section has:',
+  '- hero: for the first section, where it opens the page with a picture: split or bleed (the words beside the picture), cover or poster (the words over the picture, dimmed), panel (the words on a card over the picture), column or editorial (the words above a wide picture). Choose the one closest to how the source places its picture unless another reads better for this site; none keeps the source\'s own arrangement. Every other section: none.',
+  "- band: source keeps the section's own background. Only a section with no band of its own may take plain, soft or dark, so neighboring sections read apart; every other section: source.",
+  '- align: source, start or center.',
+  "- groups: one entry for each of the section's groups, in the order they are numbered. kind: source, or cards, steps, stats or list where the group plainly is one (numbered items are steps, a figure over its label is stats). style: cards (the theme's cards), ruled (open columns under a thin rule), icons (open columns led by their icons, only where each item has one), pictures (each item's picture over its words, open) or articles (the same, in cards), pictures and articles only where each item has a picture.",
+  'Draw the page at least as well as its source: keep its boxes where it boxes its items, its icons where it draws them and its pictures where it shows them.',
 ].join('\n')
 
-/** The arranged page's cached instructions, and the rule that fenced text is data. */
-export const AI_JOB_PAGE_ARRANGE_INSTRUCTIONS: readonly AiSystemBlock[] = [
-  { text: AI_LAYOUT_ARRANGE_TEXT, cacheBreakpoint: true },
+/** The design answer's cached instructions, and the rule that fenced text is data. */
+export const AI_JOB_PAGE_DESIGN_INSTRUCTIONS: readonly AiSystemBlock[] = [
+  { text: AI_LAYOUT_DESIGN_TEXT, cacheBreakpoint: true },
   { text: UNTRUSTED_TEXT_RULE },
 ]
 
-/** An arranged page's user turn: the page, the kind of site it is, and its numbered lines, fenced. */
-export function aiLayoutArrangePrompt(input: {
+/** A design answer's user turn: the page, the kind of site it is, and its structure, the sections' names fenced. */
+export function aiLayoutDesignPrompt(input: {
   job: Pick<AiJob, 'inputs' | '$id'>
   screen: Pick<AiBuildPlanScreen, 'title' | 'slug' | 'sections'>
-  doc: Pick<AiSiteImportDocument, 'blocks' | 'title' | 'url'>
+  doc: Pick<AiSiteImportDocument, 'blocks' | 'title' | 'url' | 'layout'>
 }): string {
-  const { sections } = aiSiteImportDocLines(input.doc.blocks, input.doc.title)
+  const count = aiSiteImportSectionNames(input.doc).length
   return [
     `Page: "${input.screen.title}" at ${input.screen.slug}`,
     ...aiSiteKindDesignLines(input.job.inputs),
-    `Its ${sections.length === 1 ? 'one section' : `${sections.length} sections`}, each with its numbered lines:`,
-    fenceUntrustedText(`The owner's page ${input.doc.url}`, aiSiteImportArrangeText(input.doc), { maxChars: AI_SITE_IMPORT_ARRANGE_MAX_CHARS }),
+    `Its ${count === 1 ? 'one section' : `${count} sections`}, each with what it shows:`,
+    fenceUntrustedText(`The structure of the owner's page ${input.doc.url}`, aiSiteImportDesignText(input.doc), { maxChars: AI_SITE_IMPORT_DESIGN_MAX_CHARS }),
     `Design seed: ${input.job.$id.slice(-6)}.`,
   ].join('\n')
 }
 
+/** The site a page brought in is drawn for: its design, else the page's own, so its hero has a home to open (AGL-4107). */
+function importedDesign(design: AiLayoutDesign | null | undefined, screen: Pick<AiBuildPlanScreen, 'slug'>): AiLayoutDesign {
+  return design ?? { kind: 'business', seed: 0, home: aiLayoutIsHomeSlug(screen.slug) }
+}
+
 /**
- * The check a page brought in is held to (AGL-4084): the arrangement read
- * (or none, for a page copied as it is), the source's lines substituted
- * into it, the page stored and checked whole as a page of the owner's own
- * words. Nothing in an answer can change a word.
+ * The check a page brought in is held to (AGL-4084, AGL-4107): its layout
+ * compiled by the site compiler with every word as written — with the design
+ * answer where one is given — stored, and checked whole as a page of its
+ * owner's own words. An answer whose design cannot be drawn is set aside and
+ * the page is drawn as its source lays it out, so no answer is asked again
+ * for what code decides. Nothing in an answer can change a word.
  */
 export function aiImportedPageCheck(
-  input: Pick<AiLayoutPageCheckInput, 'screen' | 'sectionIds' | 'targets' | 'context' | 'motion' | 'design'> & { doc: AiSiteImportDocument },
+  input: Pick<AiLayoutPageCheckInput, 'screen' | 'sectionIds' | 'targets' | 'context' | 'motion' | 'design'> & { doc: AiSiteImportDocument; language?: string },
 ): (answer: Record<string, unknown> | null) => { value: AiLayoutPageBuilt | null; violations: AiDoctrineViolation[] } {
   const context = { ...aiLayoutListingContext(input.context, input.targets), ownWords: true }
-  return (answer) => {
-    const arrangement = answer && input.doc.build === 'arranged' ? aiReadLayoutArrangement(answer, input.sectionIds.length) : null
-    const compiled = aiCompileImportedDocument({ doc: input.doc, sectionIds: input.sectionIds, pages: input.targets.pages, arrangement })
+  const plan = {
+    title: input.screen.title,
+    sections: input.screen.sections.map((section) => ({ name: section.name, uses: [] as string[], items: 0 })),
+  }
+  const build = (design: AiLayoutDesignAnswer | null) => {
+    const compiled = aiCompileImportedPage({
+      doc: input.doc,
+      sectionIds: input.sectionIds,
+      plan,
+      targets: input.targets,
+      design: importedDesign(input.design, input.screen),
+      answer: design,
+      ...(input.language ? { language: input.language } : {}),
+    })
     const stored = aiLayoutStoredTree(compiled.tree, 'screen', context, input.sectionIds)
     if (stored.ok === false) {
       console.error('ai imported page: a compiled page did not store', { error: stored.error })
       return {
+        compiled,
         value: null,
-        violations: [{ rule: null, code: 'layout-compile', message: 'This page could not be built. Try again.', detail: stored.error }],
+        violations: [{ rule: null, code: 'layout-compile', message: 'This page could not be built. Try again.', detail: stored.error }] as AiDoctrineViolation[],
       }
     }
     const report = validateAiDoctrineTree({ rootId: CANVAS_ROOT_ELEMENT_ID, nodes: stored.nodes }, 'page', {
@@ -1144,29 +1163,47 @@ export function aiImportedPageCheck(
       scrollTargetIds: input.sectionIds,
       repeatsCompiled: true,
     })
-    if (report.violations.length) return { value: null, violations: report.violations }
+    if (report.violations.length) return { compiled, value: null, violations: report.violations }
     return {
+      compiled,
       value: {
         nodes: aiWithSiteMotion(stored.nodes, input.motion ?? input.design ?? { seed: 0 }, { sectionIds: input.sectionIds }),
         load: report.load,
-        settled: [],
+        settled: compiled.settled,
         dropped: [],
-        items: input.sectionIds.map(() => 0),
-      },
-      violations: [],
+        items: compiled.sectionRoots.map(() => 0),
+      } satisfies AiLayoutPageBuilt,
+      violations: [] as AiDoctrineViolation[],
     }
+  }
+  return (answer) => {
+    const design = answer ? aiReadLayoutDesign(answer, input.sectionIds.length) : null
+    const designed = build(design)
+    if (designed.value || !design) return { value: designed.value, violations: designed.violations }
+    // The answer's design could not be drawn: the page as its source lays it out.
+    const plain = build(null)
+    if (plain.value) plain.value.settled.push({ at: 'design', what: `the design answer set aside: ${designed.violations[0]?.code ?? 'not drawn'}` })
+    return { value: plain.value, violations: plain.violations }
   }
 }
 
-/** The most an arrangement answer runs to: a few hundred tokens of line numbers, inside a page's ceiling. */
-export const AI_LAYOUT_ARRANGE_KIND = AI_LAYOUT_PAGE_KIND
+/** The design answer's kind of generation, which shares the page's ceilings. */
+export const AI_LAYOUT_DESIGN_KIND = AI_LAYOUT_PAGE_KIND
+
+/**
+ * The most a design answer runs to (AGL-4107): a few tokens a section and a
+ * group, with room to think, inside a page's ceiling on the balanced tier.
+ */
+export const AI_LAYOUT_DESIGN_MAX_TOKENS = 3_000
 
 const NO_USAGE: AiUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }
 
 /**
- * A page brought in (AGL-4084). Copied as it is: compiled by code, no model
- * at all, nothing spent. Arranged: one answer on the page step's tier that
- * lays the numbered lines out, every word still the source's.
+ * A page brought in (AGL-4084, AGL-4107). Its layout is compiled first with
+ * no model: a page of a collection is that page, nothing spent; a page that
+ * cannot be built so is reviewed before anything is spent on it. A main page
+ * then asks one design answer on the page step's balanced tier and is drawn
+ * with it, every word still the source's.
  */
 async function aiRunImportedPage(input: AiLayoutPageRunInput, doc: AiSiteImportDocument): Promise<AiValidatedGeneration<AiLayoutPageBuilt>> {
   const check = aiImportedPageCheck({
@@ -1176,26 +1213,26 @@ async function aiRunImportedPage(input: AiLayoutPageRunInput, doc: AiSiteImportD
     context: input.context,
     design: aiLayoutDesignOf(input.job, input.screen.slug),
     motion: aiLayoutMotionSiteOf(input.job, input.screen.slug),
+    ...(input.plan.language ? { language: input.plan.language } : {}),
     doc,
   })
-  if (doc.build === 'copied') {
-    const spend = { attempts: 0, usage: NO_USAGE, estCostUsd: 0, model: input.model, stopReason: null, effort: null }
-    const result = check(null)
-    return result.value
-      ? { ...spend, status: 'ok', value: result.value }
-      : { ...spend, status: 'needs_input', violations: result.violations, message: aiDoctrineNeedsInputMessage(result.violations), answer: null }
+  const spend = { attempts: 0, usage: NO_USAGE, estCostUsd: 0, model: input.model, stopReason: null, effort: null }
+  const plain = check(null)
+  if (!plain.value) {
+    return { ...spend, status: 'needs_input', violations: plain.violations, message: aiDoctrineNeedsInputMessage(plain.violations), answer: null }
   }
+  if (doc.build === 'copied') return { ...spend, status: 'ok', value: plain.value }
   const observe = input.observe ?? ((inner) => inner)
-  return runValidatedGeneration<AiLayoutPageBuilt>(AI_LAYOUT_ARRANGE_KIND, {
+  return runValidatedGeneration<AiLayoutPageBuilt>(AI_LAYOUT_DESIGN_KIND, {
     step: 'job.page',
     model: input.model,
-    instructions: AI_JOB_PAGE_ARRANGE_INSTRUCTIONS,
-    // The lines are the whole question: no lookup of the site is offered.
+    instructions: AI_JOB_PAGE_DESIGN_INSTRUCTIONS,
+    // The structure is the whole question: no lookup of the site is offered.
     inventory: null,
-    messages: [{ role: 'user', content: aiLayoutArrangePrompt({ job: input.job, screen: input.screen, doc }) }],
-    tool: AI_LAYOUT_ARRANGE_TOOL,
-    maxTokens: AI_JOB_PAGE_LANGUAGE_BUDGET.maxTokens(input.model),
-    cutOff: { noun: 'page', smaller: 'Use fewer blocks: give each block more of its lines.' },
+    messages: [{ role: 'user', content: aiLayoutDesignPrompt({ job: input.job, screen: input.screen, doc }) }],
+    tool: AI_LAYOUT_DESIGN_TOOL,
+    maxTokens: Math.min(AI_LAYOUT_DESIGN_MAX_TOKENS, AI_JOB_PAGE_LANGUAGE_BUDGET.maxTokens(input.model)),
+    cutOff: { noun: 'design', smaller: 'Answer with the choices alone.' },
     ...AI_LAYOUT_LANGUAGE_THINKING,
     check: observe((answer) => check(answer)),
     ...(input.signal ? { signal: input.signal } : {}),

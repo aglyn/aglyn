@@ -31,12 +31,15 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import SignIn from '../app/(auth)/signin/page'
+import { isSignUpLandingHeld } from '../utils/sign-up-landing-hold'
 
 const mockPopup = jest.fn()
 const mockSendToGate = jest.fn()
 const mockSignOut = jest.fn(async (..._args: unknown[]) => undefined)
 const mockSignInWithPassword = jest.fn()
 let mockIsNewUser = false
+let mockRedirectSettled: (() => void) | undefined
+let mockPendingSignIn = false
 let mockRedirectCallback:
   | ((credential: unknown) => void | Promise<void>)
   | undefined
@@ -118,8 +121,11 @@ jest.mock('../hooks/use-google-redirect-result', () => ({
     _onError: unknown,
     _enabled: boolean,
     onCredential?: (c: unknown) => void | Promise<void>,
+    _campaign?: unknown,
+    onSettled?: () => void,
   ) => {
     mockRedirectCallback = onCredential
+    mockRedirectSettled = onSettled
   },
 }))
 jest.mock('../utils/oauth-providers', () => ({
@@ -134,6 +140,7 @@ jest.mock('@aglyn/shared-util-dom/is-mobile-browser', () => ({
   default: () => false,
 }))
 jest.mock('../utils/interactive-signin', () => ({
+  hasPendingInteractiveSignIn: () => mockPendingSignIn,
   markInteractiveSignIn: jest.fn(),
   markInteractiveSignOut: jest.fn(),
 }))
@@ -164,6 +171,8 @@ describe('sign-in never creates an unconsented account', () => {
     jest.clearAllMocks()
     mockIsNewUser = false
     mockRedirectCallback = undefined
+    mockRedirectSettled = undefined
+    mockPendingSignIn = false
     mockPopup.mockResolvedValue(credential)
     mockSignInWithPassword.mockResolvedValue(credential)
   })
@@ -208,5 +217,41 @@ describe('sign-in never creates an unconsented account', () => {
     await waitFor(() => expect(mockSignInWithPassword).toHaveBeenCalled())
     expect(mockSignOut).not.toHaveBeenCalled()
     expect(mockSendToGate).not.toHaveBeenCalled()
+  })
+
+  /**
+   * AGL-4113. The auth layout pushes a signed-in visitor to `/` the moment the
+   * credential lands. For a brand-new account that push beat the stand-down,
+   * the sign-out then ran inside the console, and its guard sent the person to
+   * /signin, signed out, with no workspace and no terms. The page holds the
+   * layout until the bounce has run.
+   */
+  it('holds the layout while a popup account is stood down, then lets go', async () => {
+    mockIsNewUser = true
+    let heldAtSignOut: boolean | undefined
+    mockSignOut.mockImplementationOnce(async () => {
+      heldAtSignOut = isSignUpLandingHeld()
+      return undefined
+    })
+    render(<SignIn />)
+    await act(async () => {
+      clickGoogle()
+    })
+    await waitFor(() => expect(mockSendToGate).toHaveBeenCalled())
+    expect(heldAtSignOut).toBe(true)
+    await waitFor(() => expect(isSignUpLandingHeld()).toBe(false))
+  })
+
+  it('holds the layout while a Google redirect may be landing, until it settles', async () => {
+    mockPendingSignIn = true
+    render(<SignIn />)
+    expect(isSignUpLandingHeld()).toBe(true)
+    act(() => mockRedirectSettled?.())
+    expect(isSignUpLandingHeld()).toBe(false)
+  })
+
+  it('raises no hold on a plain visit', () => {
+    render(<SignIn />)
+    expect(isSignUpLandingHeld()).toBe(false)
   })
 })

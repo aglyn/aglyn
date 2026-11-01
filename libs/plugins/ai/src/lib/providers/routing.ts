@@ -21,6 +21,7 @@ import {
   AI_STEP_TIERS,
   aiCatalogEntry,
   aiDefaultModelFor,
+  type AiCatalogEntry,
   type AiStepKind,
 } from './catalog'
 import type { AiEvalKind } from '../runtime/ai-eval'
@@ -476,6 +477,27 @@ export function aiRouteSettings(kind: AiStepKind): { thinking?: AiThinking; effo
     ...(row.thinking ? { thinking: row.thinking } : {}),
     ...(row.effort ? { effort: row.effort } : {}),
   }
+}
+
+const TIER_RANK: Readonly<Record<AiCatalogEntry['tier'], number>> = { fast: 0, balanced: 1, deep: 2 }
+
+/**
+ * The model a step runs on held to at least the step's own tier (AGL-4107):
+ * `chosen`, the model the job's switch picked, where it serves the step's
+ * tier or a higher one; else the provider's own model of that tier. The
+ * deployment's `AI_DEFAULT_MODEL` names a model for EVERY step, so a smaller
+ * one named there served the balanced step a page brought in asks its design
+ * of, and laid the 10/29 import out wrong. A step this holds keeps its tier
+ * whatever the environment says; one the catalog does not know is the
+ * provider's own model of the tier.
+ */
+export function aiModelAtLeastStepTier(kind: AiStepKind, chosen: string | undefined, settings?: AiPluginSettings): string {
+  const tier = AI_STEP_TIERS[kind]
+  const provider = resolveAiProvider(settings)
+  const serving = chosen ? aiCatalogEntry(aiServingModelId(chosen)) : undefined
+  if (serving && (!provider || serving.provider === provider.id) && TIER_RANK[serving.tier] >= TIER_RANK[tier]) return serving.id
+  const floor = provider ? aiDefaultModelFor(provider.id, tier) : undefined
+  return floor ?? chosen ?? aiModelForStep(kind, settings)
 }
 
 /** The model id alone — what a door records on the meter and the job. */

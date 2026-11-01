@@ -24,10 +24,12 @@ import { SCREEN_SEO_TEXT_FIELDS } from '@aglyn/aglyn/app-utils/screen-seo-fields
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import {
   ASSIST_EDIT_TOOL_NAME,
+  ASSIST_EDIT_WHOLE_MAX_NODES,
   type AssistEditInsertOp,
   type AssistEditTarget,
 } from '../model/assist-edit'
 import { validateStreamedGeneration } from '../runtime/ai-doctrine'
+import { AI_SX_ALLOWED_KEYS } from '../runtime/ai-node-tree'
 import { AI_PALETTE_CATALOG } from '../runtime/ai-palette.generated'
 import {
   ANIMATION_EASINGS,
@@ -36,13 +38,16 @@ import {
   NODE_ANIMATION_PROPS,
 } from '@aglyn/aglyn/app-utils/element-animation'
 import {
+  ASSIST_EDIT_COMPOSE_LINE,
   ASSIST_EDIT_MAX_INSERT_NODES,
   ASSIST_EDIT_MAX_OPS,
   ASSIST_EDIT_MOTION_LINE,
+  ASSIST_EDIT_STYLE_KEYS_LINE,
   assistEditMotionPatch,
   assistEditTool,
   checkAssistEditAnswer,
   editCanvasBlock,
+  editDatasetsBlock,
   editSelectionBlock,
   parseAssistEditContext,
   resolveAssistEdit,
@@ -173,6 +178,15 @@ describe('the cached block', () => {
     expect(editCanvasBlock('component')).not.toContain('setSeo')
     expect(editCanvasBlock('component')).toContain(AI_PALETTE_CATALOG.component)
   })
+
+  it('names every style key the check keeps, read from the check’s own set, and how a look is composed (AGL-4116)', () => {
+    for (const kind of ['screen', 'layout', 'component'] as const) {
+      expect(editCanvasBlock(kind)).toContain(ASSIST_EDIT_STYLE_KEYS_LINE)
+      expect(editCanvasBlock(kind)).toContain(ASSIST_EDIT_COMPOSE_LINE)
+    }
+    const listed = ASSIST_EDIT_STYLE_KEYS_LINE.replace(/^.*no others: /, '').replace(/\.$/, '').split(', ')
+    expect(new Set(listed)).toEqual(new Set(AI_SX_ALLOWED_KEYS))
+  })
 })
 
 describe('the canvas outline a request carried', () => {
@@ -257,6 +271,26 @@ describe('the canvas outline a request carried', () => {
     })
     expect(styled?.nodes[1].sx).toEqual({ bgcolor: 'primary.main' })
     expect(styled?.nodes[2].sx).toBeUndefined()
+  })
+
+  it('reads a whole document for a job: every element to its own cap, each with its styles and its text at a selection’s length', () => {
+    const long = 'A sentence that runs well past the outline’s eighty characters, as a paragraph on a page does.'
+    const nodes = [
+      { id: ROOT, componentId: 'div', parentId: null },
+      { id: 'a', componentId: 'muiTypography', parentId: ROOT, props: { children: long }, sx: { color: 'primary.main', '&:hover': { color: 'red' } } },
+      ...Array.from({ length: 450 }, (_, i) => ({ id: `n${i}`, componentId: 'muiBox', parentId: ROOT, sx: { p: 2 } })),
+    ]
+    const whole = parseAssistEditContext({ selectedId: 'a', total: 452, nodes }, { whole: true })
+    expect(whole?.whole).toBe(true)
+    expect(whole?.selectedId).toBeNull()
+    expect(whole?.nodes).toHaveLength(ASSIST_EDIT_WHOLE_MAX_NODES)
+    expect(whole?.nodes[1]).toMatchObject({ props: { children: long }, sx: { color: 'primary.main' } })
+    expect(whole?.nodes[2].sx).toEqual({ p: 2 })
+    // A request body cannot claim it: only the server's own option does.
+    const claimed = parseAssistEditContext({ selectedId: null, whole: true, nodes })
+    expect(claimed).not.toHaveProperty('whole')
+    expect(claimed?.nodes).toHaveLength(60)
+    expect(claimed?.nodes[2].sx).toBeUndefined()
   })
 
   it('keeps the document’s size only when it is a whole number the outline could come from', () => {
@@ -475,6 +509,35 @@ describe('proposals — the closed world', () => {
     ])
     expect(proposal?.ops.map((entry) => entry.op)).toEqual(['remove'])
     expect(proposal?.dropped.join(' ')).toContain('earlier change removes')
+  })
+
+  it('a change to an element an earlier move took out of what is then removed is kept, in either order of the change (AGL-4116)', () => {
+    // The live check's answer: the picture moved out of its column, the column
+    // removed, then the picture restyled. The canvas applies them in order.
+    const { proposal } = resolve([
+      op({ op: 'move', nodeId: 'headline', parentId: ROOT, index: 0 }),
+      op({ op: 'remove', nodeId: 'hero' }),
+      op({ op: 'updateSx', nodeId: 'headline', sx: [{ key: 'position', value: 'absolute', breakpoint: '' }] }),
+      op({ op: 'updateProps', nodeId: 'headline', props: [{ name: 'children', value: 'Still here' }] }),
+    ])
+    expect(proposal?.ops.map((entry) => entry.op)).toEqual(['move', 'remove', 'updateSx', 'updateProps'])
+    expect(proposal?.dropped).toEqual([])
+    // Removed first, the element went with its holder: nothing may move it out.
+    const late = resolve([
+      op({ op: 'remove', nodeId: 'hero' }),
+      op({ op: 'move', nodeId: 'headline', parentId: ROOT, index: 0 }),
+    ])
+    expect(late.proposal?.ops.map((entry) => entry.op)).toEqual(['remove'])
+    expect(late.proposal?.dropped.join(' ')).toContain('earlier change removes')
+  })
+
+  it('a move into the element’s own subtree is dropped, as the moves before it leave the tree', () => {
+    // The CTA moved under the footer, then the footer moved under the CTA.
+    const { proposal } = resolve([
+      op({ op: 'move', nodeId: 'cta', parentId: 'footer', index: -1 }),
+      op({ op: 'move', nodeId: 'footer', parentId: 'cta', index: -1 }),
+    ])
+    expect(proposal?.dropped.join(' ')).toContain('inside itself')
   })
 
   it('a move into the element’s own subtree is dropped', () => {
@@ -885,5 +948,137 @@ describe('an element’s animation, set, changed or removed by updateProps (AGL-
     for (const prop of NODE_ANIMATION_PROPS.filter((prop) => prop !== 'aglynAnimationRepeat')) {
       expect(ASSIST_EDIT_MOTION_LINE).toContain(prop)
     }
+  })
+})
+
+describe('a repeat over the site’s datasets (AGL-3616)', () => {
+  /** A page with a section that already lists one dataset's records. */
+  const LISTED = {
+    selectedId: null,
+    nodes: [
+      { id: ROOT, componentId: 'div', parentId: null, index: 0, childCount: 2 },
+      { id: 'about', componentId: 'section', parentId: ROOT, index: 0, childCount: 1, props: { element: 'section' } },
+      {
+        id: 'areas',
+        componentId: 'muiBox',
+        parentId: 'about',
+        index: 0,
+        childCount: 1,
+        props: { repeatLimit: '3', repeatDataset: 'ds-areas' },
+      },
+      { id: 'area-name', componentId: 'muiTypography', parentId: 'areas', index: 0, childCount: 0, props: { children: '{{item.town}}' } },
+      { id: 'services', componentId: 'section', parentId: ROOT, index: 1, childCount: 0, props: { element: 'section' } },
+    ],
+  }
+  const listed = () => {
+    const parsed = parseAssistEditContext(LISTED)
+    if (!parsed) throw new Error('the fixture canvas must parse')
+    return parsed
+  }
+  const SERVICES = {
+    id: 'ds-services',
+    name: 'Services',
+    fields: ['Name', 'Summary', 'Photo'],
+    fieldIds: ['name', 'summary', 'photo'],
+    imageField: 'photo',
+  }
+  const AREAS = { id: 'ds-areas', name: 'Areas', fields: ['Town'], fieldIds: ['town'] }
+  /** A job's check: the site's datasets read, as the edit job reads them. */
+  const job = (ops: unknown[], extra: { recordDatasetId?: string } = {}) =>
+    checkAssistEditAnswer({ summary: 'Add a services grid', ops }, { context: listed(), target: PAGE, datasets: [SERVICES, AREAS], ...extra })
+  /** A grid of cards, the repeat on the grid around one item. */
+  const grid = (repeat: Array<{ name: string; value: string }>, copy = '{{item.name}}') =>
+    op({
+      op: 'insertSubtree',
+      parentId: 'services',
+      nodes: [
+        { id: 'grid', componentId: 'muiGrid', children: ['cell'], props: [{ name: 'container', value: 'true' }, ...repeat], sx: [] },
+        { id: 'cell', componentId: 'muiGrid', children: ['card'], props: [{ name: 'size', value: 'xs:12 md:4' }], sx: [] },
+        { id: 'card', componentId: 'muiCard', children: ['photo', 'title'], props: [], sx: [] },
+        { id: 'photo', componentId: 'image', children: [], props: [{ name: 'src', value: '{{item.photo}}' }, { name: 'alt', value: '{{item.name}}' }], sx: [] },
+        { id: 'title', componentId: 'muiTypography', children: [], props: [{ name: 'children', value: copy }], sx: [] },
+      ],
+    })
+  const insertOf = (value: { value: unknown }) => (value.value as { ops: AssistEditInsertOp[] } | null)?.ops[0]
+
+  it('keeps a new repeat over one of the site’s datasets, with its record’s copy and photo', () => {
+    const result = job([grid([{ name: 'repeatDataset', value: 'ds-services' }])])
+    expect(result.violations).toEqual([])
+    const nodes = Object.values(insertOf(result)?.nodes ?? {})
+    expect(nodes.find((node) => node.componentId === 'muiGrid' && node.props['container'])?.props['repeatDataset']).toBe('ds-services')
+    expect(nodes.find((node) => node.componentId === 'image')?.props['src']).toBe('{{item.photo}}')
+    expect(nodes.find((node) => node.componentId === 'muiTypography')?.props['children']).toBe('{{item.name}}')
+  })
+
+  it('refuses a record’s tokens where nothing around them repeats, so the job asks again', () => {
+    const result = job([grid([])])
+    expect(result.value).toBeNull()
+    expect(result.violations.map((one) => one.message).join(' ')).toContain('sits in no element that repeats over a dataset')
+  })
+
+  it('refuses a field the dataset does not have, naming the ones it does', () => {
+    const result = job([grid([{ name: 'repeatDataset', value: 'ds-services' }], '{{item.price}}')])
+    expect(result.value).toBeNull()
+    expect(result.violations.map((one) => one.message).join(' ')).toContain(
+      '{{item.price}} is not a field of the dataset "Services" (its fields: name, summary, photo)',
+    )
+  })
+
+  it('drops a dataset the site does not have', () => {
+    const result = job([grid([{ name: 'repeatDataset', value: 'ds-invented' }])])
+    expect(result.value).toBeNull()
+  })
+
+  it('fills a record page’s tokens anywhere on it', () => {
+    const result = job([grid([])], { recordDatasetId: 'ds-services' })
+    expect(result.violations).toEqual([])
+  })
+
+  it('binds an element already on the page, and keeps copy inside a repeat the page has', () => {
+    const result = job([
+      op({ op: 'updateProps', nodeId: 'services', props: [{ name: 'repeatDataset', value: 'ds-services' }] }),
+      op({ op: 'updateProps', nodeId: 'area-name', props: [{ name: 'children', value: '{{item.town}}, Texas' }] }),
+    ])
+    expect(result.violations).toEqual([])
+    expect(result.value?.ops).toEqual([
+      { op: 'updateProps', nodeId: 'services', componentId: 'section', props: { repeatDataset: 'ds-services' } },
+      { op: 'updateProps', nodeId: 'area-name', componentId: 'muiTypography', props: { children: '{{item.town}}, Texas' } },
+    ])
+  })
+
+  it('refuses binding an element already on the page to a dataset the site does not have', () => {
+    const result = job([op({ op: 'updateProps', nodeId: 'services', props: [{ name: 'repeatDataset', value: 'ds-invented' }] })])
+    expect(result.value).toBeNull()
+    expect(result.violations.map((one) => one.message).join(' ')).toContain('names a dataset this site does not have')
+  })
+
+  it('admits, in the chat, a dataset the canvas already repeats over, and judges no tokens it cannot see the site for', () => {
+    const chat = checkAssistEditAnswer(
+      { summary: 'Add a grid', ops: [grid([{ name: 'repeatDataset', value: 'ds-areas' }], '{{item.town}}')] },
+      { context: listed(), target: PAGE },
+    )
+    expect(chat.violations).toEqual([])
+    const nodes = Object.values(insertOf(chat)?.nodes ?? {})
+    expect(nodes.find((node) => node.props['container'])?.props['repeatDataset']).toBe('ds-areas')
+  })
+
+  it('lists each dataset’s field ids, with names where they differ, and its picture; nothing where there are none', () => {
+    const block = editDatasetsBlock([SERVICES, { id: 'ds-faq', name: 'FAQ', fields: ['question'], fieldIds: ['question'] }])
+    expect(block).toContain('- ds-services · Services · name (Name), summary (Summary), photo (Photo) · picture: photo')
+    expect(block).toContain('- ds-faq · FAQ · question\n')
+    expect(block).toContain('repeatDataset')
+    expect(editDatasetsBlock([])).toBe('')
+  })
+
+  it('keeps an element’s dataset in the outline ahead of the settings the cap cuts', () => {
+    const many = Object.fromEntries(Array.from({ length: 20 }, (_, index) => [`setting${index}`, 'x']))
+    const parsed = parseAssistEditContext({
+      selectedId: null,
+      nodes: [
+        { id: ROOT, componentId: 'div', parentId: null, index: 0, childCount: 1 },
+        { id: 'list', componentId: 'muiBox', parentId: ROOT, index: 0, childCount: 0, props: { ...many, repeatDataset: 'ds-services' } },
+      ],
+    })
+    expect(parsed?.nodes[1]?.props?.['repeatDataset']).toBe('ds-services')
   })
 })

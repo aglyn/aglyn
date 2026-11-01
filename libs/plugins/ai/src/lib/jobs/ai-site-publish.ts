@@ -291,7 +291,15 @@ const LINK_FRAMES = new Set(['muiStack', 'muiBox', 'muiGrid', 'muiButtonGroup', 
  * Link to one of `screenIds`; anything else that opens one (a picture) keeps
  * its place and loses the link. `null` when nothing links one. Pure.
  */
-export function aiPageWithoutLinksTo(nodes: NodesMap, screenIds: readonly string[]): NodesMap | null {
+export function aiPageWithoutLinksTo(
+  nodes: NodesMap,
+  screenIds: readonly string[],
+  /**
+   * A page brought in from its owner's site keeps every word (AGL-4107): its
+   * Page Links to such a page keep their places and their words, going nowhere.
+   */
+  options: { keepWords?: boolean } = {},
+): NodesMap | null {
   const missing = new Set(screenIds.filter(Boolean))
   if (!missing.size) return null
   const map: Record<string, MutableNode> = {}
@@ -309,7 +317,7 @@ export function aiPageWithoutLinksTo(nodes: NodesMap, screenIds: readonly string
   for (const id of ids) {
     const node = map[id]
     if (!node) continue
-    if (node.componentId !== 'muiScreenLink') {
+    if (node.componentId !== 'muiScreenLink' || options.keepWords) {
       const props = { ...(node.props ?? {}) }
       delete props['screenId']
       node.props = props
@@ -525,6 +533,8 @@ export async function aiPublishGuidedSite(
      * a page this publish leaves a draft.
      */
     unbuiltScreenIds?: readonly string[]
+    /** A link to a page not live keeps its words, going nowhere, rather than coming out (AGL-4107). */
+    keepLinkWords?: boolean
     /**
      * The start's pages in the order the site lists them (AGL-3988): a page
      * going live with no place of its own in Pages takes its place there, so
@@ -615,7 +625,7 @@ export async function aiPublishGuidedSite(
         hostId,
         id: page.id,
         now,
-        update: (nodes) => aiPageWithoutLinksTo(nodes, notLive),
+        update: (nodes) => aiPageWithoutLinksTo(nodes, notLive, { keepWords: input.keepLinkWords === true }),
       }).catch((error: unknown) => {
         console.error('ai site publish: links to an unbuilt page not taken out', { hostId, jobId: job.$id, pageId: page.id, error })
       })

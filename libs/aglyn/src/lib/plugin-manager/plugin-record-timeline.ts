@@ -109,8 +109,21 @@ export interface PluginRecordEntryContext {
   sourcePluginId: string
 }
 
-/** What an activity is, in the record system's own words. */
-export type PluginRecordActivityKind = 'email' | 'call' | 'meeting' | 'note' | 'other'
+/**
+ * What an activity is, in the record system's own words — a message kind
+ * (`text`, `whatsapp`, …) for a plugin that carries one on that channel.
+ */
+export type PluginRecordActivityKind =
+  | 'email'
+  | 'call'
+  | 'text'
+  | 'whatsapp'
+  | 'messenger'
+  | 'instagram'
+  | 'linkedin'
+  | 'meeting'
+  | 'note'
+  | 'other'
 
 /** The message an `email` activity is about. */
 export interface PluginRecordEmail {

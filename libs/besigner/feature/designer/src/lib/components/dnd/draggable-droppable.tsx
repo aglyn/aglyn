@@ -64,7 +64,7 @@ import {
 import { pickPlacementPart } from '../../utils/placement-part-pick'
 import { findLeafTextElement } from '../../utils/in-place-edit-surface'
 import { holdKeyboardForEdit } from '../../utils/touch-keyboard'
-import { repeatOriginalAt } from '../../utils/repeat-copy'
+import { repeatCopyAt, repeatCopyStandIns } from '../../utils/repeat-copy'
 import { DropSurface } from './drop-surface'
 
 /** A pointer position, from a mouse event or a touch. */
@@ -372,9 +372,12 @@ export const DraggableDroppable = observer(
         }
         e.preventDefault()
         e.stopPropagation()
-        // On a repeat copy, the menu is the element the copy draws.
-        const target = repeatOriginalAt(e.target) ?? node
+        // On a repeat copy, the menu is the element the copy draws, and the
+        // selection is outlined on the copy (`repeatCopyStandIns`).
+        const copy = repeatCopyAt(e.target)
+        const target = copy?.original ?? node
         Besigner.focus.setSelectedNode(target)
+        repeatCopyStandIns.set('selected', copy)
         requestCanvasContextMenu(target?.$id)
       }
       function handleMouseOver(e: Event) {
@@ -387,7 +390,10 @@ export const DraggableDroppable = observer(
         }
         e.preventDefault()
         e.stopPropagation()
-        Besigner.focus.setHoveredNode(repeatOriginalAt(e.target) ?? node)
+        // On a repeat copy: the element it draws, outlined on the copy.
+        const copy = repeatCopyAt(e.target)
+        Besigner.focus.setHoveredNode(copy?.original ?? node)
+        repeatCopyStandIns.set('hovered', copy)
       }
       function handleMouseDown(e: Event) {
         // Stand down while an edit is open in this leaf OR ANY LEAF INSIDE
@@ -420,8 +426,9 @@ export const DraggableDroppable = observer(
         e.stopPropagation()
         // A press on one of this element's repeat copies (Sam, Jordan) means
         // the element that copy draws, not this one around it — see
-        // `repeatOriginalAt`.
-        const original = repeatOriginalAt(e.target)
+        // `repeatCopyAt`. Its selection is outlined on the copy pressed.
+        const copy = repeatCopyAt(e.target)
+        const original = copy?.original ?? null
         const target = original ?? node
         // Element-picker capture (AGL-574): while the interaction builder is
         // picking, this click resolves the target and exits pick mode —
@@ -445,6 +452,7 @@ export const DraggableDroppable = observer(
             pickPartUnder(pointer)
           }
         }
+        repeatCopyStandIns.set('selected', copy)
       }
       /**
        * A plain click on a placement (a component instance or a placed form)

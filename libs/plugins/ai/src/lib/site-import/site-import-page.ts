@@ -182,7 +182,18 @@ export function siteImportPageRead(page: SiteImportPage, at: string): AiSiteImpo
     words: siteImportPageWords({ title: '', blocks: main }),
     forms: page.forms.kept,
     ...(layout ? { layout } : {}),
+    // The source's own title and description, for the page's listing (AGL-4107).
+    meta: { title: siteImportMetaText(page.title, SITE_IMPORT_META_TITLE_MAX_CHARS), description: siteImportMetaText(page.description, SITE_IMPORT_META_DESCRIPTION_MAX_CHARS) },
   }
+}
+
+/** The most characters of a source's title and description a read keeps: far past what any listing shows. */
+export const SITE_IMPORT_META_TITLE_MAX_CHARS = 300
+export const SITE_IMPORT_META_DESCRIPTION_MAX_CHARS = 1_000
+
+/** A title or a description as the source writes it, one line, neutralized; a longer one is kept to its ceiling. */
+function siteImportMetaText(text: string | null | undefined, max: number): string {
+  return neutralizeUntrustedText(String(text ?? '')).replace(/\s+/g, ' ').trim().slice(0, max)
 }
 
 /*------------------------------------------

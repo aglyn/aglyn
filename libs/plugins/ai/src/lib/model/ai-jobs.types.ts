@@ -352,6 +352,12 @@ export interface AiJobOutput {
    * its writer is registered on the resource-draft seam.
    */
   draftResource?: string
+  /**
+   * The change is in the WORKING DRAFT of `versionId` (AGL-4116), which the
+   * Besigner offers with Open draft, not in the version itself — so the
+   * version's preview does not show it, and only the Besigner is linked.
+   */
+  inDraft?: true
 }
 
 export interface AiJobLease {
