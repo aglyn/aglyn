@@ -16,6 +16,7 @@
  */
 
 import {
+  ASSIST_OUTCOMES_SENT,
   ASSIST_PAGE_CHANGE_ACTION_ID,
   ASSIST_PAGE_CHANGE_SUMMARY_MAX_CHARS,
   ASSIST_PAGE_CHANGE_TOOL_NAME,
@@ -84,6 +85,37 @@ export function assistPageChangeBlock(): string {
     '- newVersion: true only when they ask for the change as a new or separate version of the page; otherwise false. Never offer a new version they did not ask for.',
     '- Nothing is changed when you call the tool: never say it is done. Never say you cannot use a draft, cannot edit the page or cannot give a link.',
     `- One page per message. For changes to several pages, change the first and say to ask for the next. A request that also asks for new pages, forms or anything else to be made is a build: call ${ASSIST_BUILD_TOOL_NAME} with the whole request instead.`,
+  ].join('\n')
+}
+
+/** How long one outcome may be, so a client's list stays a list. */
+const ASSIST_OUTCOME_MAX_CHARS = 300
+
+/**
+ * The outcomes a question carries, held to what may enter a prompt. A client
+ * posts these as it posts its own history, so they are bounded the same way.
+ */
+export function parseAssistOutcomes(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .filter((outcome): outcome is string => typeof outcome === 'string')
+    .map((outcome) => outcome.replace(/\s+/g, ' ').trim().slice(0, ASSIST_OUTCOME_MAX_CHARS))
+    .filter(Boolean)
+    .slice(-ASSIST_OUTCOMES_SENT)
+}
+
+/**
+ * What happened in this chat, as Aglyn recorded it (AGL-4116). Its own block,
+ * in Aglyn's voice, and never added to the assistant's turns: the rules about
+ * a change not being made yet are about what is proposed now, and a record in
+ * the assistant's own words read as breaking them.
+ */
+export function assistOutcomesBlock(outcomes: readonly string[]): string | null {
+  if (!outcomes.length) return null
+  return [
+    'What has happened in this chat, as Aglyn recorded it. You did not write this, and it is what actually happened:',
+    ...outcomes.map((outcome) => `- ${outcome}`),
+    'Earlier messages only show what was proposed. When asked what has changed, answer from this list, and say the canvas shows those changes because they were made here. Never take back anything on this list. The rules about never saying a change is made are for what you propose now, not for this list.',
   ].join('\n')
 }
 
