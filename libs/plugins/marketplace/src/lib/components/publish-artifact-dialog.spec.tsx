@@ -37,7 +37,9 @@
  * than silent.
  */
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { DEFAULT_SITE_THEME } from '@aglyn/aglyn/app-utils/default-site'
+import { planSiteStarterTheme } from '@aglyn/aglyn/app-utils/site-starter-theme'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import PublishArtifactDialog from './publish-artifact-dialog.component'
 import {
   PUBLISHER_AGREEMENT_TITLE,
@@ -69,8 +71,47 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar }),
 }))
 
+/**
+ * What a starter publish reads before the click (AGL-4049): documents by
+ * path, a routed-pages read by id, the plan and the workspace address. Every
+ * other kind reads none of it.
+ */
+const reads = {
+  docs: new Map<string, Record<string, unknown>>(),
+  plan: { ready: true, entitled: true, locked: false, planLabel: 'Pro', upgradeHref: '/acme/billing#plans' } as Record<
+    string,
+    unknown
+  >,
+}
+
+jest.mock('firebase/firestore', () => ({
+  doc: (_firestore: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
+  collection: (_firestore: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
+  documentId: () => '__name__',
+  where: (_field: unknown, _op: unknown, ids: string[]) => ({ ids }),
+  query: (ref: { path: string }, clause: { ids: string[] }) => ({ path: ref.path, ids: clause.ids }),
+}))
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => ({ data: { uid: 'me', getIdToken: async () => 'token' } }),
+  useFirestore: () => ({}),
+  useFirestoreDoc: (build: () => { path: string } | null) => {
+    const ref = build()
+    return ref ? { data: reads.docs.get(ref.path), status: 'success' } : { data: undefined, status: 'loading' }
+  },
+  useFirestoreCollection: (build: () => { path: string; ids: string[] } | null) => {
+    const ref = build()
+    if (!ref) return { data: [], status: 'loading' }
+    const data = ref.ids
+      .filter((id) => reads.docs.has(`${ref.path}/${id}`))
+      .map((id) => ({ $id: id, ...reads.docs.get(`${ref.path}/${id}`) }))
+    return { data, status: 'success' }
+  },
+  usePlanFeature: () => reads.plan,
+  useConsoleHostRoute: (hostId: string | null) =>
+    hostId
+      ? { base: '/acme/hosts/bistro', orgSlug: 'acme', subdomain: 'bistro' }
+      : { base: null, orgSlug: null, subdomain: null },
 }))
 
 beforeEach(() => {
@@ -78,6 +119,8 @@ beforeEach(() => {
   responseStatus = 200
   responseBody = { listingId: 'listing-1', version: 1 }
   enqueueSnackbar.mockClear()
+  reads.docs.clear()
+  reads.plan = { ready: true, entitled: true, locked: false, planLabel: 'Pro', upgradeHref: '/acme/billing#plans' }
 })
 
 /** Ticks the publisher agreement above Publish (AGL-4105). */
@@ -258,5 +301,252 @@ describe('the publisher agreement', () => {
     )
     const box = screen.getByRole('checkbox', { name: `Agree to the ${PUBLISHER_AGREEMENT_TITLE}` }) as HTMLInputElement
     expect(box.checked).toBe(false)
+  })
+})
+
+/**
+ * A WHOLE SITE AS A SITE STARTER (AGL-4049).
+ *
+ * The starter form adds what only a starter has: the theme it carries,
+ * chosen by the publisher (a built-in with this site's brand colors, or the
+ * site's full theme — neither chosen for them), the style it is listed
+ * under, the pages it captures, and every setup step in its way said before
+ * the click. The door's refusals are shown in its own words, in the dialog.
+ */
+describe('publishing a site as a starter', () => {
+  const STARTER = {
+    kind: 'siteStarter',
+    hostId: 'h1',
+    orgId: 'org-1',
+    displayName: 'Corner bistro',
+    description: 'A warm neighborhood restaurant',
+  }
+
+  /** A built-in the themes plugin contributes, as the theme library stores a pick of it. */
+  const BOOTSTRAP = {
+    id: 'theme-presets.bootstrap',
+    name: 'Bootstrap',
+    theme: {
+      colorSchemes: {
+        light: { primary: { main: '#0d6efd' }, background: { default: '#ffffff' } },
+        dark: { primary: { main: '#6ea8fe' }, background: { default: '#212529' } },
+      },
+      shape: { borderRadius: 6 },
+    },
+  }
+
+  /** A site that picked Bootstrap and set its own primary over it. */
+  function seedBuiltinSite() {
+    const { host } = planSiteStarterTheme({
+      theme: { kind: 'builtin', base: 'bootstrap', brand: { light: { primary: '#1b5e20' }, dark: {} }, fonts: 'inter' },
+      presets: [BOOTSTRAP],
+      listing: { listingId: '', version: '', displayName: '' },
+      newId: () => 'unused',
+    })
+    seedSite(host)
+  }
+
+  function seedSite(theme: Record<string, unknown>) {
+    reads.docs.set('hosts/h1', { ...theme, screens: { s_home: '/', s_about: 'about', s_draft: 'draft' } })
+    reads.docs.set('hosts/h1/screens/s_home', { displayName: 'Home', versionId: 'v1' })
+    reads.docs.set('hosts/h1/screens/s_about', { displayName: 'About', versionId: 'v2' })
+    reads.docs.set('hosts/h1/screens/s_draft', { displayName: 'Draft' })
+    reads.docs.set('publisherProfiles/org-1', { handle: 'bistro', displayName: 'Bistro' })
+  }
+
+  const onClose = jest.fn()
+  beforeEach(() => onClose.mockClear())
+
+  const open = () => render(<PublishArtifactDialog artifact={STARTER as never} onClose={onClose} />)
+  const publishButton = () => screen.getByRole('button', { name: 'Publish' }) as HTMLButtonElement
+  const radio = (name: RegExp) => screen.getByRole('radio', { name }) as HTMLInputElement
+  /** Where a notice sends the publisher: the shared notice draws its link as a button. */
+  const fixedAt = (name: string) => (screen.getByRole('button', { name }) as HTMLAnchorElement).getAttribute('href')
+  const BUILTIN = /^This site's built-in theme with its brand colors/
+  const FULL = /^The site's full theme/
+
+  function chooseStyle(name: string) {
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Closest style' }))
+    fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name }))
+  }
+
+  it('names what it publishes, and opens with neither theme chosen, Publish waiting for one', () => {
+    seedBuiltinSite()
+    open()
+    expect(screen.getByRole('heading', { name: 'Publish as a starter' })).toBeTruthy()
+    expect(radio(BUILTIN).checked).toBe(false)
+    expect(radio(FULL).checked).toBe(false)
+    agree()
+    expect(publishButton().disabled).toBe(true)
+    fireEvent.click(radio(FULL))
+    expect(publishButton().disabled).toBe(false)
+  })
+
+  it('says how many published pages it captures, as the door counts them', () => {
+    seedBuiltinSite()
+    open()
+    expect(screen.getByText(/^Captures its 2 published pages, the shared header and footer/)).toBeTruthy()
+  })
+
+  it("sends the site's built-in theme with its brand colors, a base starter and the closest style", async () => {
+    seedBuiltinSite()
+    open()
+    expect(screen.getByText(/^Bootstrap, with the brand colors this site set over it, set in Inter\./)).toBeTruthy()
+    fireEvent.click(radio(BUILTIN))
+    chooseStyle('Restaurant & café')
+    fireEvent.change(screen.getByLabelText('What kind of site is it?'), { target: { value: 'Bistro' } })
+    agree()
+    fireEvent.click(publishButton())
+    await waitFor(() => expect(posted).toHaveLength(1))
+    expect(posted[0].url).toBe('/api/marketplace/publish-starter')
+    expect(posted[0].body).toEqual({
+      hostId: 'h1',
+      displayName: 'Corner bistro',
+      description: 'A warm neighborhood restaurant',
+      category: 'Bistro',
+      priceUsd: 0,
+      agreement: { version: PUBLISHER_AGREEMENT_VERSION, accepted: true },
+      theme: {
+        kind: 'builtin',
+        base: 'bootstrap',
+        brand: { light: { primary: '#1b5e20' }, dark: {} },
+        fonts: 'inter',
+      },
+      mode: 'base',
+      facets: { kind: 'restaurant' },
+    })
+    await waitFor(() => expect(onClose).toHaveBeenCalled())
+    expect(enqueueSnackbar).toHaveBeenCalledWith(
+      expect.stringMatching(/review/i),
+      expect.objectContaining({ variant: 'success' }),
+    )
+  })
+
+  it("sends the full theme for the door to read off the site, with no style when none is chosen", async () => {
+    seedBuiltinSite()
+    open()
+    fireEvent.click(radio(FULL))
+    agree()
+    fireEvent.click(publishButton())
+    await waitFor(() => expect(posted).toHaveLength(1))
+    expect(posted[0].body).toMatchObject({ theme: { kind: 'full' }, mode: 'base', facets: { kind: null } })
+  })
+
+  it('offers a site that wears its own theme only its full theme, saying why', () => {
+    seedSite({ theme: { colorSchemes: { light: { primary: { main: '#123456' } } } } })
+    open()
+    expect(radio(BUILTIN).disabled).toBe(true)
+    expect(screen.getByText(/^This site wears its own theme, not a built-in one/)).toBeTruthy()
+    expect(radio(FULL).disabled).toBe(false)
+  })
+
+  it('reads the theme every site is born with as a built-in', () => {
+    seedSite({ theme: DEFAULT_SITE_THEME })
+    open()
+    expect(radio(BUILTIN).disabled).toBe(false)
+  })
+
+  describe('blocked before the click, with where each is fixed', () => {
+    const ready = () => {
+      seedBuiltinSite()
+      open()
+      fireEvent.click(radio(FULL))
+      agree()
+    }
+
+    it('by a plan that does not sell on the marketplace', () => {
+      reads.plan = { ...reads.plan, entitled: false, locked: true }
+      ready()
+      expect(screen.getByText('Publishing to the marketplace is included from Pro.')).toBeTruthy()
+      expect(fixedAt('See plans')).toBe('/acme/billing#plans')
+      expect(publishButton().disabled).toBe(true)
+    })
+
+    it('by a workspace with no publisher profile', () => {
+      seedBuiltinSite()
+      reads.docs.delete('publisherProfiles/org-1')
+      open()
+      fireEvent.click(radio(FULL))
+      agree()
+      expect(screen.getByText(/^Set up your publisher profile first/)).toBeTruthy()
+      expect(fixedAt('Publisher Profile')).toBe('/acme/marketplace/profile')
+      expect(publishButton().disabled).toBe(true)
+    })
+
+    it('by payouts, for a starter with a price only', () => {
+      ready()
+      expect(screen.queryByRole('button', { name: 'Payouts' })).toBeNull()
+      fireEvent.change(screen.getByLabelText('Price (USD)'), { target: { value: '29' } })
+      expect(screen.getByText(/^Set up payouts first to sell a starter with a price/)).toBeTruthy()
+      expect(fixedAt('Payouts')).toBe('/acme/marketplace/payouts')
+      expect(publishButton().disabled).toBe(true)
+      fireEvent.change(screen.getByLabelText('Price (USD)'), { target: { value: '0' } })
+      expect(publishButton().disabled).toBe(false)
+    })
+
+    it('by a site with no published Home page, in the starter check’s words', () => {
+      seedBuiltinSite()
+      reads.docs.set('hosts/h1/screens/s_home', { displayName: 'Home' })
+      open()
+      fireEvent.click(radio(FULL))
+      agree()
+      expect(screen.getByText(/^A starter needs a published Home page at \//)).toBeTruthy()
+      expect(publishButton().disabled).toBe(true)
+    })
+  })
+
+  describe("the door's refusals, in its own words, in the dialog", () => {
+    const publishFull = async () => {
+      seedBuiltinSite()
+      open()
+      fireEvent.click(radio(FULL))
+      agree()
+      fireEvent.click(publishButton())
+      await waitFor(() => expect(posted).toHaveLength(1))
+    }
+
+    it('shows a 422 verbatim with every problem it names, and keeps the form open to fix it', async () => {
+      responseStatus = 422
+      responseBody = {
+        error: 'The light primary color #777777 is 2.1:1 against the light page background, below 3:1.',
+        errors: [
+          { path: 'colorSchemes.light.primary.main', message: 'The light primary color #777777 is 2.1:1 against the light page background, below 3:1.' },
+          { path: 'colorSchemes.dark.primary.main', message: 'The dark primary color #222222 is 1.4:1 against the dark page background, below 3:1.' },
+        ],
+      }
+      await publishFull()
+      expect(
+        await screen.findByText('The light primary color #777777 is 2.1:1 against the light page background, below 3:1.'),
+      ).toBeTruthy()
+      expect(
+        screen.getByText('The dark primary color #222222 is 1.4:1 against the dark page background, below 3:1.'),
+      ).toBeTruthy()
+      expect(onClose).not.toHaveBeenCalled()
+      expect(enqueueSnackbar).not.toHaveBeenCalled()
+    })
+
+    it('shows a page the starter rule refuses, naming the page', async () => {
+      responseStatus = 422
+      responseBody = { error: 'Page "Menu": a script cannot be published' }
+      await publishFull()
+      expect(await screen.findByText('Page "Menu": a script cannot be published')).toBeTruthy()
+    })
+
+    it('shows a setup refusal as a warning, with where it is fixed', async () => {
+      responseStatus = 412
+      responseBody = { error: 'Publishing to the marketplace requires a Pro plan' }
+      await publishFull()
+      expect(await screen.findByText('Publishing to the marketplace requires a Pro plan')).toBeTruthy()
+      expect(fixedAt('Publisher Profile')).toBe('/acme/marketplace/profile')
+    })
+
+    it('puts an agreement refusal on the box, unticked for the next try', async () => {
+      responseStatus = 409
+      responseBody = { error: 'The Marketplace Publisher Agreement changed while this was open.' }
+      await publishFull()
+      expect(await screen.findByText('The Marketplace Publisher Agreement changed while this was open.')).toBeTruthy()
+      const box = screen.getByRole('checkbox', { name: `Agree to the ${PUBLISHER_AGREEMENT_TITLE}` }) as HTMLInputElement
+      expect(box.checked).toBe(false)
+    })
   })
 })

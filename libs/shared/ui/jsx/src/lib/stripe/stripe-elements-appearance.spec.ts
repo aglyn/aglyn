@@ -131,6 +131,35 @@ describe('the appearance is built from the theme, not written down', () => {
     )
   })
 
+  it('reads a cssVariables theme by its variables, which change with the scheme', () => {
+    // `theme.palette` on such a theme is the default scheme whichever one is
+    // showing. This is the page painted dark, handed the light palette.
+    const painted = createTheme({
+      cssVariables: { colorSchemeSelector: 'class' },
+      colorSchemes: { light: true, dark: true },
+    })
+    expect(painted.palette.mode).toBe('light')
+    const dark: Record<string, string> = {
+      '--mui-palette-background-paper': '#2a3440',
+      '--mui-palette-text-primary': '#ffffff',
+      '--mui-palette-text-secondary': 'rgba(255, 255, 255, 0.7)',
+    }
+    const appearance = stripeAppearanceFromTheme(painted, (name) => dark[name] ?? '')
+    expect(appearance.theme).toBe('night')
+    expect(appearance.variables.colorBackground).toBe('#2a3440')
+    expect(appearance.variables.colorText).toBe('#ffffff')
+    expect(appearance.rules['.Label'].color).toBe('rgba(255, 255, 255, 0.7)')
+  })
+
+  it('the same theme painted light stays on the light base', () => {
+    const painted = createTheme({
+      cssVariables: { colorSchemeSelector: 'class' },
+      colorSchemes: { light: true, dark: true },
+    })
+    const light: Record<string, string> = { '--mui-palette-background-paper': '#ffffff' }
+    expect(stripeAppearanceFromTheme(painted, (name) => light[name] ?? '').theme).toBe('stripe')
+  })
+
   it('draws the input border from the token that exists for it', () => {
     // `inputOutline` is a token because MUI has none — `OutlinedInput`
     // hardcodes the value inside its own styles. Using `divider` instead

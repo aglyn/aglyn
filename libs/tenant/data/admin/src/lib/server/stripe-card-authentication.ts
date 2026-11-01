@@ -71,6 +71,17 @@ export function cardAuthenticationParams(
   return { [REQUEST_THREE_D_SECURE_PARAM]: requestThreeDSecureFor(use) }
 }
 
+/** The param on an Invoice, whose PaymentIntent reads its options from `payment_settings`. */
+export const INVOICE_REQUEST_THREE_D_SECURE_PARAM =
+  'payment_settings[payment_method_options][card][request_three_d_secure]'
+
+/** The same choice for an Invoice raised in this one's place. */
+export function invoiceCardAuthenticationParams(
+  use: CardAuthenticationUse,
+): Record<string, string> {
+  return { [INVOICE_REQUEST_THREE_D_SECURE_PARAM]: requestThreeDSecureFor(use) }
+}
+
 /**
  * The same params for a Checkout Session, chosen by its `mode`: a
  * `subscription` or `setup` session keeps the card for off-session charges,

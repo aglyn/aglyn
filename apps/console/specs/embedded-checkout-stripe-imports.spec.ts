@@ -51,13 +51,10 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 /** The card form takes the React components; the loader takes `loadStripe`. */
-const CARD_FORM = join(
-  __dirname,
-  '..',
-  'components',
-  'billing/billing-card-form.component.tsx',
-)
-const LOADER = join(__dirname, '..', 'utils', 'browser-stripe.ts')
+const STRIPE_DIR = join(__dirname, '..', '..', '..', 'libs/shared/ui/jsx/src/lib/stripe')
+const CARD_FORM = join(STRIPE_DIR, 'billing-card-form.component.tsx')
+const ADDRESS_FORM = join(STRIPE_DIR, 'billing-address-form.component.tsx')
+const LOADER = join(STRIPE_DIR, 'browser-stripe.ts')
 
 /**
  * The named VALUE imports taken from one module specifier.
@@ -102,6 +99,7 @@ describe('the console card form imports symbols the package really has', () => {
       '@stripe/react-stripe-js',
       ['Elements', 'PaymentElement', 'useElements', 'useStripe'],
     ],
+    [ADDRESS_FORM, '@stripe/react-stripe-js', ['AddressElement', 'Elements', 'useElements']],
     [LOADER, '@stripe/stripe-js', ['loadStripe']],
   ])('%s: %s exports every symbol it imports', (file, specifier, expected) => {
     const source = readFileSync(file as string, 'utf8')

@@ -91,20 +91,23 @@ const COLLECTS_CARD_DATA: Array<{ pattern: RegExp; what: string }> = [
 ]
 
 /** The surfaces swept: everything that could plausibly grow a form. */
+const STRIPE_FORMS_ROOT = join(REPO_ROOT, 'libs', 'shared', 'ui', 'jsx', 'src', 'lib', 'stripe')
+
 const SWEPT_ROOTS = [
   join(CONSOLE_ROOT, 'app', 'api', 'billing'),
   join(CONSOLE_ROOT, 'components', 'billing'),
   join(CONSOLE_ROOT, 'app', '(app)', '[orgSlug]', 'billing'),
+  // The card and address forms a purchase mounts too (AGL-4049).
+  STRIPE_FORMS_ROOT,
 ]
 
 /**
- * The shared Stripe loader sits outside `components/billing`, so the directory
- * sweep would miss it. Named explicitly rather than by widening the sweep to
- * all of `utils/`, which would drag in most of the console.
+ * The console's re-export of the Stripe loader sits outside
+ * `components/billing`, so the directory sweep would miss it. Named explicitly
+ * rather than by widening the sweep to all of `utils/`, which would drag in
+ * most of the console.
  */
-const SWEPT_FILES_EXTRA = [
-  join(CONSOLE_ROOT, 'utils', 'browser-stripe.ts'),
-]
+const SWEPT_FILES_EXTRA = [join(CONSOLE_ROOT, 'utils', 'browser-stripe.ts')]
 
 function walk(dir: string, out: string[] = []): string[] {
   let entries
@@ -207,12 +210,7 @@ describe('the billing surface does not collect card data', () => {
     // the sweep alone cannot (a file containing no card fields and no Stripe
     // component would pass it).
     const form = readFileSync(
-      join(
-        CONSOLE_ROOT,
-        'components',
-        'billing',
-        'billing-card-form.component.tsx',
-      ),
+      join(STRIPE_FORMS_ROOT, 'billing-card-form.component.tsx'),
       'utf8',
     )
     expect(form).toContain('@stripe/react-stripe-js')
@@ -262,12 +260,7 @@ describe('the billing surface does not collect card data', () => {
     // What is left of the presentation objection: the one payment surface
     // renders in the flow of the Billing page. A `Dialog` reappearing here is
     // the regression worth naming.
-    const file = join(
-      CONSOLE_ROOT,
-      'components',
-      'billing',
-      'billing-card-form.component.tsx',
-    )
+    const file = join(STRIPE_FORMS_ROOT, 'billing-card-form.component.tsx')
     const source = stripTypeScriptComments(readFileSync(file, 'utf8'))
     expect(
       `card form: ${/<Dialog[\s>]/.test(source) ? 'MODAL' : 'in place'}`,

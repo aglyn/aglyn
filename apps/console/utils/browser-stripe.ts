@@ -15,30 +15,7 @@
  * limitations under the License.
  */
 
-import { loadStripe, type Stripe } from '@stripe/stripe-js'
-
-/**
- * ONE browser Stripe instance for the whole console.
- *
- * `loadStripe` injects a script tag, so a per-component singleton means a tag
- * per component that ever mounts. There were two; the SCA step on the billing
- * page would have made a third.
- *
- * Null when `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` is unset, which every caller
- * must handle: it is the state a self-hosted deployment with no Stripe keys is
- * in, and rendering a payment surface against it produces an empty white box
- * that looks like a broken form.
- */
-const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
-let stripePromise: Promise<Stripe | null> | null = null
-
-export function getBrowserStripe(): Promise<Stripe | null> | null {
-  if (!publishableKey) return null
-  if (!stripePromise) stripePromise = loadStripe(publishableKey)
-  return stripePromise
-}
-
-/** Whether this browser bundle can render a Stripe payment surface at all. */
-export function browserStripeConfigured(): boolean {
-  return Boolean(publishableKey)
-}
+export {
+  browserStripeConfigured,
+  getBrowserStripe,
+} from '@aglyn/shared-ui-jsx/stripe/browser-stripe'

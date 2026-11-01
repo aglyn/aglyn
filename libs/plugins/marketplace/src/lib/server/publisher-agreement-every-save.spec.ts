@@ -269,6 +269,8 @@ const PUBLISHER_SAVES: Record<string, string> = {
 }
 const NOT_PUBLISHER_SAVES: Record<string, string> = {
   'marketplace/checkout': 'a buyer paying for a listing (merchant)',
+  'marketplace/pay': 'a buyer paying for a listing in the console (merchant)',
+  'marketplace/publisher-standing': 'reading whether a workspace sells as the platform (a read)',
   'marketplace/connect': 'payout onboarding, handed to Stripe under its own agreement; writes no listing',
   'marketplace/install': 'installing a component (merchant)',
   'marketplace/install-plugin': 'installing a plugin (merchant)',

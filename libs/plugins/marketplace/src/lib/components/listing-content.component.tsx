@@ -134,6 +134,7 @@ import ListingReviews from './listing-reviews.component'
 import ReportTarget from './report-target.component'
 import PluginSiteSet from './plugin-site-set.component'
 import { MenuItem, TextField } from '@mui/material'
+import { SITE_STARTER_ARTIFACT_TYPE } from '@aglyn/aglyn/app-utils/site-starter'
 import { useMarketplaceActions } from '../hooks/use-marketplace-actions'
 import { useArtifactUpdate } from '../hooks/use-artifact-update'
 import ArtifactUpdateDialog from './artifact-update-dialog.component'
@@ -568,9 +569,10 @@ export function MarketplaceListingContent({
   // than let the server infer it from whichever site the surface happens to
   // be acting through.
   const orgId = useHostOrgId(hostId)
-  const { install, installPlan, buy, uninstall } = useMarketplaceActions(
+  const { install, installPlan, buy, uninstall, payPanel, buying } = useMarketplaceActions(
     hostId,
     orgId,
+    orgSlug ? buildRoute(Route.MANAGE_BILLING, { orgSlug }) : null,
   )
   /** The uninstall awaiting its impact check and confirmation (AGL-1027). */
   const [pendingUninstall, setPendingUninstall] = useState<{
@@ -1968,6 +1970,9 @@ export function MarketplaceListingContent({
                             disabled={
                               Boolean(upToDate) ||
                               !listing?.profileId ||
+                              // Paying is under way in the panel below.
+                              buying ||
+                              Boolean(payPanel) ||
                               // Nothing selected to install to (AGL-773).
                               (orgTargeting &&
                                 !installed &&
@@ -1975,9 +1980,14 @@ export function MarketplaceListingContent({
                                 installPlanSteps.length === 0)
                             }
                             onClick={
-                              permissions.installPlugins
+                              // A site starter is bought to create a site
+                              // with, so that is the permission it asks for,
+                              // as the pay door does (AGL-4049).
+                              (artifactType === SITE_STARTER_ARTIFACT_TYPE
+                                ? permissions.createHosts
+                                : permissions.installPlugins)
                                 ? () =>
-                                    // Buying goes straight to Stripe checkout,
+                                    // Buying opens the payment panel below,
                                     // which is its own confirmation; a free or
                                     // entitled install confirms its targets
                                     // first (AGL-867). Updating a copied
@@ -2031,6 +2041,8 @@ export function MarketplaceListingContent({
                                       : 'Add to this site'}
                           </Button>
                         </Box>
+                        {/* Paying for it, in place under the button (AGL-4049). */}
+                        {payPanel}
                         {/* Uninstall from the listing too (AGL-881), not only
                             the installed add-ons card; targets the effective
                             pin's scope. Demoted to a quiet full-width

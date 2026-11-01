@@ -76,7 +76,7 @@ const LOCKABLE_FETCH = [
   '/api/billing/checkout',
   '/api/marketplace/install',
   '/api/marketplace/update-artifact',
-  '/api/marketplace/checkout',
+  '/api/marketplace/pay',
   // The theme library (AGL-3404): picking, saving and restoring a theme.
   '/api/hosts/theme',
   '/api/ai/assist',
@@ -142,8 +142,8 @@ const CALL_SITES: CallSite[] = SEARCH_ROOTS.flatMap((root) =>
  */
 const NAMED_SURFACES = {
   'billing / upgrade': 'apps/console/app/(app)/[orgSlug]/billing/(sections)/page.tsx',
-  'marketplace install + purchase':
-    'libs/plugins/marketplace/src/lib/hooks/use-marketplace-actions.ts',
+  'marketplace install': 'libs/plugins/marketplace/src/lib/hooks/use-marketplace-actions.ts',
+  'marketplace purchase': 'libs/plugins/marketplace/src/lib/hooks/use-marketplace-pay.tsx',
   'AI-assist drawer':
     'libs/plugins/ai/src/lib/components/ai-assist-provider.component.tsx',
 } as const
@@ -190,9 +190,10 @@ describe('AGL-1532 · client surfaces read the 423 feature body', () => {
       // The notice must not have REPLACED the error handling — a 500 is
       // still a 500, and `parseLockdownRefusal` returns null for it. Every
       // one of these sites reached its generic toast through a `payload
-      // ?? '<copy>'` fallback or a catch; that fallback must survive.
+      // ?? '<copy>'` fallback or a catch; that fallback must survive. A surface
+      // that says it in place rather than in a toast sets its own error.
       const hasGeneric =
-        site.source.includes('?? ') && /enqueueSnackbar\(/.test(site.source)
+        site.source.includes('?? ') && /enqueueSnackbar\(|setError\(/.test(site.source)
       expect(`${site.file} keeps a generic toast: ${hasGeneric}`).toBe(
         `${site.file} keeps a generic toast: true`,
       )

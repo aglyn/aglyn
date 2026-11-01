@@ -132,8 +132,12 @@ export function publishPreconditionRefusal(
   // paid listing go live behind a linkage no sale will ever be allowed to use
   // just moves the same lie one step earlier, to the point where the seller
   // stops checking.
+  //
+  // The platform's own org at the staff waiver (AGL-4049) has nobody to pay,
+  // so it never onboards Connect: the one seller this does not apply to.
   if (
     options.priceUsd > 0 &&
+    !publisher.sellsAsPlatform &&
     !merchantAccountIsReady(
       {
         accountId: publisher.stripeAccountId,

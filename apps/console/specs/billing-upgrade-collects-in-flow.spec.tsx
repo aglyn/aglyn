@@ -134,7 +134,7 @@ jest.mock('@stripe/react-stripe-js', () => ({
   }),
 }))
 
-jest.mock('../utils/browser-stripe', () => ({
+jest.mock('@aglyn/shared-ui-jsx/stripe/browser-stripe', () => ({
   __esModule: true,
   getBrowserStripe: () => ({
     handleNextAction: async () => ({ paymentIntent: { status: 'succeeded' } }),

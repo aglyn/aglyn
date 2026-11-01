@@ -24,7 +24,6 @@ import {
   readStarterCheckoutReturn,
   STARTER_CHECKOUT_RETURN,
   starterCardFacts,
-  starterCheckoutBody,
   starterPagesLabel,
   starterPriceLabel,
   STARTER_ANSWERS_PATH,
@@ -278,16 +277,6 @@ describe('the way back from buying a starter (AGL-4049 lane 3)', () => {
     expect(readStarterCheckoutReturn(STARTER_CHECKOUT_RETURN)).toBe('create-site')
     expect(readStarterCheckoutReturn('/acme/hosts?create=site')).toEqual({ error: 'Unknown return' })
     expect(readStarterCheckoutReturn('https://evil.example')).toEqual({ error: 'Unknown return' })
-  })
-
-  it('sends the starter, the workspace and the return in the body', () => {
-    expect(starterCheckoutBody({ listingId: 'l-1', orgId: 'org-1', gaClientId: '1.2' })).toEqual({
-      listingId: 'l-1',
-      orgId: 'org-1',
-      return: 'create-site',
-      gaClientId: '1.2',
-    })
-    expect(starterCheckoutBody({ listingId: 'l-1', orgId: 'org-1', gaClientId: null })).not.toHaveProperty('gaClientId')
   })
 })
 

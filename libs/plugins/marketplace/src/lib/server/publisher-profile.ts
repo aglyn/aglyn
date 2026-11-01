@@ -16,8 +16,11 @@
  */
 
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { resolveMarketplaceFeePct } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { type PublisherAgreementAcceptance } from '../model/publisher-agreement'
 import { isValidPublisherHandle } from '../model/marketplace'
+import { sellsAsPlatform } from '../model/platform-seller'
+import { readPlatformOrgId } from './platform-org'
 
 /** `publisherProfiles/{orgId}` — the org's marketplace identity (AGL-652). */
 export const PUBLISHER_PROFILES = 'publisherProfiles'
@@ -47,6 +50,30 @@ export interface ResolvedPublisher {
    * why publishing refuses rather than assuming consent.
    */
   agreement?: PublisherAgreementAcceptance
+  /**
+   * This org is the platform itself at the staff fee waiver (AGL-4049), so a
+   * priced listing needs no payout account: there is nobody to pay.
+   */
+  sellsAsPlatform?: boolean
+}
+
+/**
+ * Whether this org is the platform at the waived fee. Costs one extra read,
+ * for the platform's own org only: every other publisher answers `false`
+ * without touching its org document.
+ */
+async function publisherSellsAsPlatform(
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
+): Promise<boolean> {
+  const platformOrgId = readPlatformOrgId()
+  if (platformOrgId !== orgId) return false
+  const org = await firestore.collection('orgs').doc(orgId).get()
+  return sellsAsPlatform({
+    sellerOrgId: orgId,
+    feePercent: resolveMarketplaceFeePct((org.data() ?? {}) as any),
+    platformOrgId,
+  })
 }
 
 /**
@@ -82,6 +109,7 @@ export async function resolvePublisherProfile(
     agreement: snapshot.get('publisherAgreement') as
       | PublisherAgreementAcceptance
       | undefined,
+    sellsAsPlatform: await publisherSellsAsPlatform(firestore, orgId),
   }
 }
 

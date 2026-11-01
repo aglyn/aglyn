@@ -412,6 +412,7 @@ the signing secrets, and **Product catalog** → each price → its price id.
 | `STRIPE_WEBHOOK_URL` | Optional | Runtime | The endpoint URL the billing health check expects to find registered in your Stripe account. **Default is Aglyn's URL**, so a self-host operator who leaves it unset gets a permanent `endpoint-missing` red on `/api/health/billing`. Must match the URL exactly as Stripe stores it. |
 | `STRIPE_LIVEMODE` | Optional | Runtime | Overrides whether this deployment considers itself the live one. Normally inferred from the key prefix. Exactly `true` or `false` — anything else, `1` included, falls through to inference. |
 | `STRIPE_TERMINAL_LIVE_ENABLED` | Optional | Runtime | Exactly `true` turns on Stripe Terminal card readers for **live** register payments, once Terminal is activated for live payments on your platform Stripe account. With a test key (`sk_test_…`) Stripe's simulated reader works without it. Unset, the register and its settings hide every card-reader control and the server refuses a card-present payment. |
+| `AGLYN_PLATFORM_ORG_ID` | Optional | Runtime | The id of the organization that runs this deployment. With the marketplace fee waived for it, that organization sells without a payout account: there is nobody to pay, so a sale makes no transfer. Leave it unset if you do not sell on your own marketplace. Never client-readable. |
 
 :::danger Localhost with live keys
 `STRIPE_SECRET_KEY` does not know it is on your laptop. If you copy a filled-in

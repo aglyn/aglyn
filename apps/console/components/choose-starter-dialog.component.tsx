@@ -134,6 +134,10 @@ export function ChooseStarterDialog(props: ChooseStarterDialogProps) {
       open
       fullScreen
       onClose={() => (busy ? null : onClose())}
+      // A paid starter is bought in this window, and the bank's own step draws
+      // over it from outside, in Stripe's frame: a trap on focus here would
+      // keep a person from typing the code their bank sent.
+      disableEnforceFocus
       aria-labelledby={TITLE_ID}
       data-create-area="choose-starter"
       slotProps={{ paper: { elevation: 0, sx: SURFACE_SX } }}

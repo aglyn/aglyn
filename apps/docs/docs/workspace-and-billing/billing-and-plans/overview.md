@@ -668,6 +668,8 @@ The **Billing history** table on the **Invoices** tab lists every invoice Stripe
 issued your workspace — its number, date, status and amount — with links to view it,
 download the PDF and open the receipt. Stripe lists invoices newest first; **Load older
 invoices** reaches further back, and the filters above the table narrow what is shown.
+Marketplace purchases paid from your card on file are listed here too, each named after
+what was bought.
 
 ### Billing email {#billing-email}
 

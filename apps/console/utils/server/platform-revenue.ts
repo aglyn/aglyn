@@ -174,8 +174,9 @@ function taxLines(invoice: any): PlatformRevenueTaxLine[] {
  * The caller decides WHOSE invoice this is — the webhook only records
  * invoices whose customer resolves through the `stripeCustomers` index,
  * which `writeOrgBilling` stamps for Aglyn's own billing customers and
- * nothing else stamps. A tenant store's shopper or a marketplace buyer
- * never appears in it, so their charges never reach this record.
+ * nothing else stamps, and that are not a plugin's sale (`isPluginSale`,
+ * AGL-4049): a marketplace purchase paid from a workspace's card on file
+ * resolves there too, and its tax row is the marketplace's own.
  */
 export function platformInvoiceRevenue(
   invoice: unknown,

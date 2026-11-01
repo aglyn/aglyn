@@ -636,7 +636,7 @@ function tenantFormActionDirective(
  */
 const SCRIPT_ORIGINS = [
   // Stripe.js. `loadStripe` injects the tag from
-  // `apps/console/utils/browser-stripe.ts`, which the Billing page's card form,
+  // `libs/shared/ui/jsx/src/lib/stripe/browser-stripe.ts`, which the Billing page's card form,
   // open-invoices card and pending-charge confirmation share.
   // Not path-scoped: `js.stripe.com` is a dedicated host, and Stripe moves the
   // bundle path between versions (`/v3/`, `/basil/`) without notice — a path

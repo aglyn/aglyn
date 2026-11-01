@@ -343,9 +343,6 @@ export function readStarterAnswersAnswer(json: unknown): StarterAnswersAnswer | 
   return { answers: json['answers'], facets }
 }
 
-/** Where a purchase is opened. */
-export const STARTER_CHECKOUT_PATH = '/api/marketplace/checkout'
-
 /**
  * The one place other than the marketplace a purchase may send its buyer
  * back to (AGL-4049): Create site, reopened on the starter they picked. A
@@ -362,18 +359,4 @@ export type StarterCheckoutReturn = typeof STARTER_CHECKOUT_RETURN
 export function readStarterCheckoutReturn(value: unknown): StarterCheckoutReturn | null | { error: string } {
   if (value === undefined || value === null || value === '') return null
   return value === STARTER_CHECKOUT_RETURN ? STARTER_CHECKOUT_RETURN : { error: 'Unknown return' }
-}
-
-/** The body "Buy and continue" sends: the starter, the workspace buying it, and the way back. */
-export function starterCheckoutBody(input: {
-  listingId: string
-  orgId: string
-  gaClientId?: string | null
-}): Record<string, string> {
-  return {
-    listingId: input.listingId,
-    orgId: input.orgId,
-    return: STARTER_CHECKOUT_RETURN,
-    ...(input.gaClientId ? { gaClientId: input.gaClientId } : {}),
-  }
 }

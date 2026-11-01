@@ -18,6 +18,7 @@
 'use client'
 
 import { useConfirmationContext, useLoading } from '@aglyn/shared-ui-jsx'
+import BillingCardFormComponent from '@aglyn/shared-ui-jsx/stripe/billing-card-form.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Button,
@@ -30,7 +31,6 @@ import {
 } from '@mui/material'
 import { useState } from 'react'
 import BillingProfileGateComponent from './billing-profile-gate.component'
-import BillingCardFormComponent from './billing-card-form.component'
 import type { BillingPaymentMethod, BillingProfile } from './use-billing-profile'
 
 export interface BillingPaymentMethodsCardProps {

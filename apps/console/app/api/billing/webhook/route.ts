@@ -56,6 +56,7 @@ import {
   updateExisting,
   writeOrgBilling,
 } from '@aglyn/tenant-data-admin'
+import { isPluginSale } from '@aglyn/aglyn/app-utils/plugin-sale'
 import { isLiveSubscriptionStatus } from '@aglyn/aglyn/app-utils/org-billing-doc'
 import { runPluginEventHandlers } from '@aglyn/aglyn/server'
 // The branch decision, kept in its own module so it can be exercised without
@@ -1466,6 +1467,16 @@ async function handler(request: Request): Promise<Response> {
         const orgId = await findOrgIdByStripeCustomer(customerId)
         if (!orgId) ledger.skip('invoice-customer-is-not-a-workspace')
         if (orgId) {
+          // A PLUGIN'S SALE ON THIS CUSTOMER (AGL-4049). The workspace's own
+          // card on file paid for something a plugin sells, so the customer
+          // resolves here without the charge being Aglyn's. The plugin records
+          // it in its own ledger, with its own tax row, and an attempt that
+          // fails was answered to the buyer on the spot and leaves nothing
+          // owing. So this branch writes no revenue, sends no GA hit, and tells
+          // nobody a payment failed or an invoice was withdrawn. Only the paid
+          // notice stays: it is the workspace's receipt.
+          const pluginSale = isPluginSale(object)
+          if (pluginSale) ledger.skip('invoice-is-a-plugin-sale')
           const amount = Number(object?.amount_due ?? object?.amount_paid ?? 0)
           const dollars = (amount / 100).toFixed(2)
           // GA4 revenue (AGL-1561), sent server-side because this is where the
@@ -1499,16 +1510,19 @@ async function handler(request: Request): Promise<Response> {
           //
           // Scoped to this branch because `findOrgIdByStripeCustomer`
           // resolving IS the "whose charge is this" test: the index is
-          // stamped only by `writeOrgBilling`, so a tenant shopper's or
-          // marketplace buyer's invoice — same endpoint, same event type —
-          // never lands here. AWAITED, unlike the cosmetic writes around
-          // it: a lost row here is a wrong tax return, and the doc id makes
-          // the redelivery this may cause converge instead of duplicate.
+          // stamped only by `writeOrgBilling`, so a tenant shopper's invoice
+          // — same endpoint, same event type — never lands here, and a
+          // plugin's sale on a workspace's own customer is `pluginSale`
+          // above. AWAITED, unlike the cosmetic writes around it: a lost row
+          // here is a wrong tax return, and the doc id makes the redelivery
+          // this may cause converge instead of duplicate.
           // ONE decomposition for both consumers below: the tax record and
           // the GA `purchase` read the same gross/tax split, so the two can
           // never drift apart (AGL-1872).
           const revenue =
-            type === 'invoice.paid' ? platformInvoiceRevenue(object) : null
+            type === 'invoice.paid' && !pluginSale
+              ? platformInvoiceRevenue(object)
+              : null
           // Is this OUR transaction rather than a customer's (AGL-1582)?
           // Checkout stamps it on the SUBSCRIPTION's metadata from a browser
           // we declared ours, so it is present on the renewal too, and it is
@@ -1538,14 +1552,14 @@ async function handler(request: Request): Promise<Response> {
                   recordedAt:
                     firebaseAdmin.firestore.FieldValue.serverTimestamp(),
                 })
-            } else {
+            } else if (!pluginSale) {
               // An invoice this deployment cannot decompose into revenue —
               // a $0 or fully-credited invoice, say. Deliberate, and named
               // so it is not mistaken for a dropped write.
               ledger.skip('invoice-carries-no-platform-revenue')
             }
           }
-          if (type === 'invoice.paid') {
+          if (type === 'invoice.paid' && !pluginSale) {
             // NET of tax (AGL-1872): `amount_paid` became tax-INCLUSIVE the
             // day AGL-1811 landed, and the tax is the Comptroller's money,
             // not revenue — GA reporting it as revenue would overstate by
@@ -1644,9 +1658,9 @@ async function handler(request: Request): Promise<Response> {
           // so the three notifying events keep the notice and the other two
           // pass straight to the plugin raise below.
           if (
-            type === 'invoice.finalized' ||
             type === 'invoice.paid' ||
-            type === 'invoice.payment_failed'
+            (!pluginSale &&
+              (type === 'invoice.finalized' || type === 'invoice.payment_failed'))
           ) {
             ledger.effect('org-admins-notified')
             // Each event its own copy, naming the workspace (AGL-3432): a paid
@@ -1721,7 +1735,7 @@ async function handler(request: Request): Promise<Response> {
               metadata: invoiceMetadata,
             })
           }
-          if (type === 'invoice.payment_failed') {
+          if (type === 'invoice.payment_failed' && !pluginSale) {
             /*
              * AND STAFF HEAR IT TOO (AGL-3267), beside the workspace's own
              * dunning notice above and deliberately not instead of it.
@@ -1765,7 +1779,10 @@ async function handler(request: Request): Promise<Response> {
               metadata: invoiceMetadata,
             })
           }
-          if (type === 'invoice.voided' || type === 'invoice.marked_uncollectible') {
+          if (
+            !pluginSale &&
+            (type === 'invoice.voided' || type === 'invoice.marked_uncollectible')
+          ) {
             await runPluginEventHandlers('billing.invoice.closed', {
               orgId,
               invoiceId: String(object?.id ?? ''),
@@ -1912,11 +1929,12 @@ async function handler(request: Request): Promise<Response> {
     // uses, because `charge.refunded` arrives on this endpoint for tenant
     // storefront orders and marketplace sales too: the charge must belong to
     // an INVOICE (a subscription charge carries one; a storefront session's
-    // or marketplace sale's does not), and its customer must resolve through
-    // the `stripeCustomers` index that only `writeOrgBilling` stamps. The
-    // marketplace's own full-refund reversal lives in its webhook section
-    // and reports platform-net under the session id — different id space,
-    // no double count.
+    // or a hosted marketplace sale's does not), and its customer must resolve
+    // through the `stripeCustomers` index that only `writeOrgBilling` stamps.
+    // The marketplace's own full-refund reversal lives in its webhook section
+    // and reports platform-net under the session or invoice id; a sale paid
+    // from the card on file is told apart by `isPluginSale`, so nothing is
+    // reported twice.
     //
     // `transaction_id` is the INVOICE id — the same id the original
     // `purchase` reported — which is what tells GA to net the two rather
@@ -1947,10 +1965,16 @@ async function handler(request: Request): Promise<Response> {
       // carries neither, and the plugins own those. Refunds are the single
       // most common event type on this endpoint that we correctly do nothing
       // with, so an unnamed no-op here would be the loudest false alarm.
-      if (!(invoiceId && customerId && refundedCents > 0)) {
+      //
+      // A plugin's sale paid from the workspace's card on file (AGL-4049) has
+      // both, so it says whose it is on the charge itself. Its plugin reports
+      // the refund, in its own accounting.
+      const pluginSaleCharge = isPluginSale(object)
+      if (pluginSaleCharge) ledger.skip('refund-is-a-plugin-sale')
+      if (!pluginSaleCharge && !(invoiceId && customerId && refundedCents > 0)) {
         ledger.skip('refund-is-not-a-subscription-charge')
       }
-      if (invoiceId && customerId && refundedCents > 0) {
+      if (!pluginSaleCharge && invoiceId && customerId && refundedCents > 0) {
         const orgId = await findOrgIdByStripeCustomer(customerId)
         if (!orgId) ledger.skip('refund-customer-is-not-a-workspace')
         if (orgId) {

@@ -35,6 +35,11 @@ import {
   sendGa4Refund,
 } from '@aglyn/tenant-data-admin'
 import { paymentProvider } from '@aglyn/tenant-data-admin/server/payment-provider'
+import {
+  invoicePaymentIntentId,
+  invoiceTaxCents,
+  isMarketplaceInvoice,
+} from '../model/marketplace-invoice'
 import { screenMarketplaceSale } from './sale-risk'
 
 /** Stripe failures a redelivery can actually fix. */
@@ -67,9 +72,8 @@ function isTransientStripeStatus(status: number): boolean {
  * reconstructed after the fact is a guess handed to a tax authority as a fact.
  */
 function buyerTaxJurisdiction(
-  object: any,
+  address: any,
 ): { country: string; state: string | null } | null {
-  const address = object?.customer_details?.address
   const country =
     typeof address?.country === 'string' ? address.country.trim() : ''
   if (!country) return null
@@ -189,6 +193,13 @@ async function reverseMarketplaceSellerShare(
   if (snapshot.get('reversedTransferCents') != null) return
   const causeAmountCents = Math.round(Number(cause?.amountCents ?? 0))
   if (!(causeAmountCents > 0)) return
+  // NOBODY WAS PAID (AGL-4049): a sale by the platform's own org. There is no
+  // transfer to pull back, and that is the sale working, so it settles here
+  // rather than landing in the recovery queue as a share that was lost.
+  if (snapshot.get('transferCents') === 0) {
+    await purchaseRef.set({ reversedTransferCents: 0 }, { merge: true })
+    return
+  }
   const stripeKey = process.env.STRIPE_SECRET_KEY
   if (!stripeKey) {
     console.error(
@@ -469,8 +480,13 @@ async function reverseMarketplacePartialRefundShare(
   if (!(chargeAmountCents > 0) || !(refundedCents > 0)) return
   const transferId = String(charge.body?.transfer ?? '')
   if (!transferId) {
-    // No destination transfer means no seller share to pull back — a
+    // No destination transfer means no seller share to pull back. A sale by
+    // the platform's own org has none by design (AGL-4049), and what the
+    // buyer had back is still recorded for the revenue report; any other
     // marketplace charge always has one, so this is a charge we do not own.
+    if (snapshot.get('transferCents') === 0) {
+      await purchaseRef.set({ partialRefundedCents: refundedCents }, { merge: true })
+    }
     return
   }
   const transfer = await stripeGet(
@@ -882,6 +898,271 @@ async function recordDisputeOrphanIfMarketplace(
   return true
 }
 
+/** One paid marketplace sale, read off whichever Stripe object paid it. */
+interface PaidMarketplaceSale {
+  /** The purchase document's id: the session or invoice that paid. */
+  recordId: string
+  metadata: Record<string, any>
+  /** The tax-inclusive gross the buyer paid. */
+  grossCents: number
+  taxCents: number
+  jurisdiction: { country: string; state: string | null } | null
+  paymentIntentId: string
+  currency: string
+  stripeCustomerId: string
+  livemode: boolean
+}
+
+/**
+ * Writes one sale's purchase document, the buyer's entitlement, the seller
+ * ledger and the tax row, and everything that follows it: the GA hit, the
+ * sale's fraud screen and the drain of any refund that got here first.
+ *
+ * ONE function for both doors (AGL-4049), so a sale paid in the console and one
+ * paid at the hosted checkout are the same document, and `hasLivePurchase`,
+ * the seller ledger and the refund doors cannot tell them apart. Keyed by the
+ * object that paid, and idempotent: a redelivery changes nothing.
+ */
+async function recordMarketplacePurchase(sale: PaidMarketplaceSale): Promise<void> {
+  const {
+    recordId,
+    metadata,
+    grossCents,
+    taxCents,
+    jurisdiction,
+    paymentIntentId,
+    currency,
+    stripeCustomerId,
+    livemode,
+  } = sale
+  // Sellers are orgs (AGL-652) — the ledger records which ORG earned it.
+  const { listingId, buyerUid, buyerOrgId, sellerOrgId, feeCents, transferCents } =
+    metadata
+  if (listingId && buyerUid && sellerOrgId) {
+    // The remittance-correct split (AGL-1544), read ONCE and used by both
+    // the ledger and the GA hit (AGL-1639) — the two must not be able to
+    // describe the same sale differently.
+    //
+    // `amount_total` is the tax-inclusive GROSS the buyer paid. Out of it:
+    // `taxCents` is what the PLATFORM owes the state (collected under the
+    // marketplace-provider registration, never ours), and `sellerCents` is
+    // the fixed transfer the seller's Connect account received (their
+    // share of the pre-tax price). What is left is what Aglyn keeps.
+    const sellerCents = Number(transferCents ?? 0)
+    const netCents = grossCents - taxCents - sellerCents
+    const purchaseRef = firebaseAdmin
+      .app()
+      .firestore()
+      .collection('marketplacePurchases')
+      .doc(recordId)
+    // `createdAt` is stamped ONCE (AGL-2109). Merging the write below fixed
+    // the erasure but introduced its own drift: `serverTimestamp()` on a
+    // redelivery would move a three-day-old sale to today, which is the
+    // field the seller ledger and every revenue period read. One read, on a
+    // path that already makes several Stripe round trips, buys a date that
+    // means what it says.
+    const alreadyRecorded = (await purchaseRef.get()).exists
+    await purchaseRef
+      .set({
+        listingId,
+        buyerUid,
+        // THE ORG THE PURCHASE LICENSES (AGL-2331).
+        //
+        // The one field that makes this document an ORGANIZATIONAL licence
+        // rather than a personal one. `hasLivePurchase` keys the eight
+        // paid-content doors and the duplicate-purchase guard on it; a
+        // document written without it falls back to the legacy person-scoped
+        // grant, which is exactly right for the purchases that predate
+        // AGL-2331 and exactly wrong for anything written after it. Checkout
+        // therefore refuses to open a session that cannot name a validated
+        // buyer org, so `metadata.buyerOrgId` is present on every session
+        // this branch can see from now on.
+        //
+        // Written CONDITIONALLY, and the merge is why: a redelivery of an
+        // older session — Stripe retries for up to three days — carries no
+        // `buyerOrgId`, and `{ merge: true }` with an explicit `undefined`
+        // is a no-op in the Admin SDK but an explicit `''` is not. Spreading
+        // nothing keeps a redelivery from overwriting a real org id with an
+        // empty string, which would strip the licence off the org that
+        // bought it.
+        ...(buyerOrgId ? { buyerOrgId: String(buyerOrgId) } : {}),
+        sellerOrgId,
+        // Gross − tax − transfer = the platform fee, which feeCents also
+        // records independently from the rate resolved at checkout.
+        amountCents: grossCents,
+        feeCents: Number(feeCents ?? 0),
+        taxCents,
+        transferCents: sellerCents,
+        // The refund trail (AGL-1546): `charge.refunded` carries the
+        // payment intent, not the session — without this id a refund
+        // could never find the purchase it revokes.
+        paymentIntentId,
+        ...(alreadyRecorded
+          ? {}
+          : {
+              createdAt:
+                firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+              // THE JURISDICTION THE TAX WAS COMPUTED FOR (AGL-2137).
+              //
+              // Here, inside the first-record branch, for a stronger reason
+              // than `createdAt`'s: a row that exists without a jurisdiction
+              // must keep not having one. Stripe redelivers this event for
+              // up to three days, and a redelivery that stamped a
+              // jurisdiction onto an older sale would restate which state a
+              // past period's tax is attributed to — a period that may
+              // already have been filed. Recording forward is an
+              // improvement; reaching backwards is a restatement.
+              //
+              // Absent, rather than null, when the session states no
+              // country: see `buyerTaxJurisdiction`.
+              ...(jurisdiction ? { customerAddress: jurisdiction } : {}),
+              // WHAT THE LICENSES TAB QUERIES BY (AGL-3321), explicit from
+              // the first record. A query cannot ask for an ABSENT field,
+              // so "not refunded" is `refundedAt == null` and "licenses no
+              // workspace in particular" is `buyerOrgId == null` — both
+              // only reach a document that carries the null. Here, in the
+              // first-record branch, and nowhere else: a redelivery landing
+              // after a refund must never write `refundedAt` back to null,
+              // which would hand the refunded buyer their install back.
+              refundedAt: null,
+              ...(buyerOrgId ? {} : { buyerOrgId: null }),
+            }),
+      },
+      // MERGED, like every other write on this path (AGL-2109). This one
+      // was a full document REPLACE, and the document it replaces is not
+      // only the sale: it is the buyer's ENTITLEMENT (`hasLivePurchase`
+      // reads `refundedAt`), the refund trail, the dispute trail, and the
+      // transfer-reversal SETTLE MARKER (`reversedTransferCents`, which
+      // `reverseMarketplaceSellerShare` short-circuits on so a publisher is
+      // never debited twice).
+      //
+      // Stripe redelivers `checkout.session.completed` for up to three days
+      // after any 500, and this endpoint 500s on purpose — for every
+      // transient Stripe failure raised in this file and for any throw from
+      // a sibling plugin handler that runs after this one
+      // (`runBillingWebhookHandlers` awaits them in sequence and lets a
+      // throw propagate). So the redelivery is expected traffic, not an
+      // exotic race. Landing after a refund it erased `refundedAt` — the
+      // refunded buyer silently got their install back — and erased
+      // `reversedTransferCents`, re-opening a second reversal against the
+      // publisher's Connect account.
+      //
+      // Merging is safe in the other direction too: every field written
+      // here is derived from the session event, so a redelivery restamps
+      // identical values.
+      { merge: true },
+    )
+    // Marketplace sales are real revenue and belong in the same GA
+    // `purchase` stream as subscriptions (AGL-1561), separated by
+    // `item_category` so plugin revenue and subscription revenue can be
+    // read apart or together.
+    //
+    // After the ledger write, and fire-and-forget: the ledger is what
+    // grants the install entitlement, and an analytics failure must never
+    // throw here — the route deletes its idempotency claim on any throw,
+    // which would make Stripe redeliver a purchase that already landed.
+    //
+    // `transaction_id` is the checkout session id — the same key the
+    // ledger doc uses — so GA de-duplicates a redelivery exactly as
+    // Firestore does.
+    // WHAT COUNTS AS REVENUE ON A MARKETPLACE SALE (AGL-1639)
+    //
+    // Our NET — the platform fee — and not the gross the buyer paid.
+    // Decided once here rather than inferred from whichever Stripe field
+    // was nearest, because the three candidates are genuinely different
+    // numbers:
+    //
+    //   gross incl. tax  reconciles with nothing we own
+    //   GMV ex-tax       what the SELLERS earned, not what we did
+    //   platform net     our books, our MRR, our balance     ← this one
+    //
+    // This is *our* GA property and every other number in it is ours;
+    // subscription `purchase` already reports what Aglyn was paid, and
+    // marketplace revenue has to mean the same thing or the combined
+    // total, ARPA and every revenue-based audience are nonsense. The two
+    // stay separable by `item_category`.
+    //
+    // Tax is excluded rather than folded in, and is deliberately NOT sent
+    // as GA4's `tax` param either: `value` is our fee, so a `tax` beside
+    // it would not be a component of it, and asserting in GA that Aglyn
+    // took this tax is exactly the question the publisher agreement's
+    // seller-of-record clause has open. The ledger doc above keeps the
+    // full split for anyone who needs it.
+    after(() => sendGa4Purchase({
+      transactionId: recordId,
+      value: netCents / 100,
+      currency,
+      items: [
+        {
+          item_id: String(listingId),
+          // The listing id, not the display name: a listing's name is
+          // seller-authored free text and is not worth risking in a
+          // dimension when the id already identifies it.
+          item_name: String(listingId),
+          item_category: 'marketplace',
+          // GA expects the items to sum to `value`; one item, one price.
+          price: netCents / 100,
+          quantity: 1,
+        },
+      ],
+      clientId: metadata['ga_client_id'],
+      stripeCustomerId: stripeCustomerId || String(buyerUid),
+    }).catch(() => undefined))
+    // The sale's fraud shape (AGL-3365): the publisher paying itself, one
+    // card buying for several workspaces, a brand-new publisher's large
+    // sale — and a young publisher's payouts held. Once per sale, after the
+    // response like the GA hit: it reads and files, and the sale it reads
+    // is already recorded. `screenMarketplaceSale` never throws.
+    if (!alreadyRecorded) {
+      after(() =>
+        screenMarketplaceSale(
+          {
+            purchaseRef,
+            sessionId: recordId,
+            buyerUid: String(buyerUid),
+            buyerOrgId: buyerOrgId ? String(buyerOrgId) : null,
+            sellerOrgId: String(sellerOrgId),
+            amountCents: grossCents - taxCents,
+            paymentIntentId,
+            livemode,
+          },
+          { stripeKey: process.env.STRIPE_SECRET_KEY, notifyRisk: notifyRiskEvent },
+        ).catch(() => undefined),
+      )
+    }
+    // A refund or a lost dispute that arrived before this document existed
+    // is applied NOW (AGL-2148) — revocation, GA and the transfer reversal,
+    // by the same function the refund door uses. Last on this path, and
+    // awaited: it can throw on a transient Stripe failure, which is exactly
+    // the redelivery this branch is already idempotent under.
+    await drainMarketplaceRefundOrphan(
+      firebaseAdmin.app().firestore(),
+      purchaseRef,
+      paymentIntentId,
+    )
+  }
+}
+
+/**
+ * A paid marketplace invoice, recorded (AGL-4049). `amount_paid` is the
+ * tax-inclusive gross, as a session's `amount_total` is, and `customer_address`
+ * is the address Stripe computed the tax from, frozen at finalize.
+ */
+export async function recordMarketplaceInvoicePurchase(invoice: any): Promise<void> {
+  const customer = invoice?.customer
+  await recordMarketplacePurchase({
+    recordId: String(invoice?.id ?? ''),
+    metadata: invoice?.metadata ?? {},
+    grossCents: Number(invoice?.amount_paid ?? 0),
+    taxCents: invoiceTaxCents(invoice),
+    jurisdiction: buyerTaxJurisdiction(invoice?.customer_address),
+    paymentIntentId: invoicePaymentIntentId(invoice),
+    currency: String(invoice?.currency ?? 'usd'),
+    stripeCustomerId: String(typeof customer === 'string' ? customer : (customer?.id ?? '')),
+    livemode: invoice?.livemode === true,
+  })
+}
+
 /**
  * Marketplace-purchase section of the platform Stripe webhook (AGL-46/418):
  * keyed by session id (idempotent on Stripe redelivery) — relocated
@@ -963,217 +1244,28 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
     object?.metadata?.type === 'marketplace-purchase' &&
     object?.payment_status === 'paid'
   ) {
-    // Sellers are orgs (AGL-652) — the ledger records which ORG earned it.
-    const { listingId, buyerUid, buyerOrgId, sellerOrgId, feeCents, transferCents } =
-      object.metadata ?? {}
-    if (listingId && buyerUid && sellerOrgId) {
-      // The remittance-correct split (AGL-1544), read ONCE and used by both
-      // the ledger and the GA hit (AGL-1639) — the two must not be able to
-      // describe the same sale differently.
-      //
-      // `amount_total` is the tax-inclusive GROSS the buyer paid. Out of it:
-      // `taxCents` is what the PLATFORM owes the state (collected under the
-      // marketplace-provider registration, never ours), and `sellerCents` is
-      // the fixed transfer the seller's Connect account received (their
-      // share of the pre-tax price). What is left is what Aglyn keeps.
-      const grossCents = Number(object?.amount_total ?? 0)
-      const taxCents = Number(object?.total_details?.amount_tax ?? 0)
-      const sellerCents = Number(transferCents ?? 0)
-      const netCents = grossCents - taxCents - sellerCents
-      // WHERE that tax is owed. Read from the session Stripe computed it
-      // from — see `buyerTaxJurisdiction`.
-      const jurisdiction = buyerTaxJurisdiction(object)
-      const purchaseRef = firebaseAdmin
-        .app()
-        .firestore()
-        .collection('marketplacePurchases')
-        .doc(String(object.id))
-      // `createdAt` is stamped ONCE (AGL-2109). Merging the write below fixed
-      // the erasure but introduced its own drift: `serverTimestamp()` on a
-      // redelivery would move a three-day-old sale to today, which is the
-      // field the seller ledger and every revenue period read. One read, on a
-      // path that already makes several Stripe round trips, buys a date that
-      // means what it says.
-      const alreadyRecorded = (await purchaseRef.get()).exists
-      await purchaseRef
-        .set({
-          listingId,
-          buyerUid,
-          // THE ORG THE PURCHASE LICENSES (AGL-2331).
-          //
-          // The one field that makes this document an ORGANIZATIONAL licence
-          // rather than a personal one. `hasLivePurchase` keys the eight
-          // paid-content doors and the duplicate-purchase guard on it; a
-          // document written without it falls back to the legacy person-scoped
-          // grant, which is exactly right for the purchases that predate
-          // AGL-2331 and exactly wrong for anything written after it. Checkout
-          // therefore refuses to open a session that cannot name a validated
-          // buyer org, so `metadata.buyerOrgId` is present on every session
-          // this branch can see from now on.
-          //
-          // Written CONDITIONALLY, and the merge is why: a redelivery of an
-          // older session — Stripe retries for up to three days — carries no
-          // `buyerOrgId`, and `{ merge: true }` with an explicit `undefined`
-          // is a no-op in the Admin SDK but an explicit `''` is not. Spreading
-          // nothing keeps a redelivery from overwriting a real org id with an
-          // empty string, which would strip the licence off the org that
-          // bought it.
-          ...(buyerOrgId ? { buyerOrgId: String(buyerOrgId) } : {}),
-          sellerOrgId,
-          // Gross − tax − transfer = the platform fee, which feeCents also
-          // records independently from the rate resolved at checkout.
-          amountCents: grossCents,
-          feeCents: Number(feeCents ?? 0),
-          taxCents,
-          transferCents: sellerCents,
-          // The refund trail (AGL-1546): `charge.refunded` carries the
-          // payment intent, not the session — without this id a refund
-          // could never find the purchase it revokes.
-          paymentIntentId: String(object?.payment_intent ?? ''),
-          ...(alreadyRecorded
-            ? {}
-            : {
-                createdAt:
-                  firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-                // THE JURISDICTION THE TAX WAS COMPUTED FOR (AGL-2137).
-                //
-                // Here, inside the first-record branch, for a stronger reason
-                // than `createdAt`'s: a row that exists without a jurisdiction
-                // must keep not having one. Stripe redelivers this event for
-                // up to three days, and a redelivery that stamped a
-                // jurisdiction onto an older sale would restate which state a
-                // past period's tax is attributed to — a period that may
-                // already have been filed. Recording forward is an
-                // improvement; reaching backwards is a restatement.
-                //
-                // Absent, rather than null, when the session states no
-                // country: see `buyerTaxJurisdiction`.
-                ...(jurisdiction ? { customerAddress: jurisdiction } : {}),
-                // WHAT THE LICENSES TAB QUERIES BY (AGL-3321), explicit from
-                // the first record. A query cannot ask for an ABSENT field,
-                // so "not refunded" is `refundedAt == null` and "licenses no
-                // workspace in particular" is `buyerOrgId == null` — both
-                // only reach a document that carries the null. Here, in the
-                // first-record branch, and nowhere else: a redelivery landing
-                // after a refund must never write `refundedAt` back to null,
-                // which would hand the refunded buyer their install back.
-                refundedAt: null,
-                ...(buyerOrgId ? {} : { buyerOrgId: null }),
-              }),
-        },
-        // MERGED, like every other write on this path (AGL-2109). This one
-        // was a full document REPLACE, and the document it replaces is not
-        // only the sale: it is the buyer's ENTITLEMENT (`hasLivePurchase`
-        // reads `refundedAt`), the refund trail, the dispute trail, and the
-        // transfer-reversal SETTLE MARKER (`reversedTransferCents`, which
-        // `reverseMarketplaceSellerShare` short-circuits on so a publisher is
-        // never debited twice).
-        //
-        // Stripe redelivers `checkout.session.completed` for up to three days
-        // after any 500, and this endpoint 500s on purpose — for every
-        // transient Stripe failure raised in this file and for any throw from
-        // a sibling plugin handler that runs after this one
-        // (`runBillingWebhookHandlers` awaits them in sequence and lets a
-        // throw propagate). So the redelivery is expected traffic, not an
-        // exotic race. Landing after a refund it erased `refundedAt` — the
-        // refunded buyer silently got their install back — and erased
-        // `reversedTransferCents`, re-opening a second reversal against the
-        // publisher's Connect account.
-        //
-        // Merging is safe in the other direction too: every field written
-        // here is derived from the session event, so a redelivery restamps
-        // identical values.
-        { merge: true },
-      )
-      // Marketplace sales are real revenue and belong in the same GA
-      // `purchase` stream as subscriptions (AGL-1561), separated by
-      // `item_category` so plugin revenue and subscription revenue can be
-      // read apart or together.
-      //
-      // After the ledger write, and fire-and-forget: the ledger is what
-      // grants the install entitlement, and an analytics failure must never
-      // throw here — the route deletes its idempotency claim on any throw,
-      // which would make Stripe redeliver a purchase that already landed.
-      //
-      // `transaction_id` is the checkout session id — the same key the
-      // ledger doc uses — so GA de-duplicates a redelivery exactly as
-      // Firestore does.
-      // WHAT COUNTS AS REVENUE ON A MARKETPLACE SALE (AGL-1639)
-      //
-      // Our NET — the platform fee — and not the gross the buyer paid.
-      // Decided once here rather than inferred from whichever Stripe field
-      // was nearest, because the three candidates are genuinely different
-      // numbers:
-      //
-      //   gross incl. tax  reconciles with nothing we own
-      //   GMV ex-tax       what the SELLERS earned, not what we did
-      //   platform net     our books, our MRR, our balance     ← this one
-      //
-      // This is *our* GA property and every other number in it is ours;
-      // subscription `purchase` already reports what Aglyn was paid, and
-      // marketplace revenue has to mean the same thing or the combined
-      // total, ARPA and every revenue-based audience are nonsense. The two
-      // stay separable by `item_category`.
-      //
-      // Tax is excluded rather than folded in, and is deliberately NOT sent
-      // as GA4's `tax` param either: `value` is our fee, so a `tax` beside
-      // it would not be a component of it, and asserting in GA that Aglyn
-      // took this tax is exactly the question the publisher agreement's
-      // seller-of-record clause has open. The ledger doc above keeps the
-      // full split for anyone who needs it.
-      after(() => sendGa4Purchase({
-        transactionId: String(object.id),
-        value: netCents / 100,
-        currency: String(object?.currency ?? 'usd'),
-        items: [
-          {
-            item_id: String(listingId),
-            // The listing id, not the display name: a listing's name is
-            // seller-authored free text and is not worth risking in a
-            // dimension when the id already identifies it.
-            item_name: String(listingId),
-            item_category: 'marketplace',
-            // GA expects the items to sum to `value`; one item, one price.
-            price: netCents / 100,
-            quantity: 1,
-          },
-        ],
-        clientId: object?.metadata?.ga_client_id,
-        stripeCustomerId: String(object?.customer ?? '') || String(buyerUid),
-      }).catch(() => undefined))
-      // The sale's fraud shape (AGL-3365): the publisher paying itself, one
-      // card buying for several workspaces, a brand-new publisher's large
-      // sale — and a young publisher's payouts held. Once per sale, after the
-      // response like the GA hit: it reads and files, and the sale it reads
-      // is already recorded. `screenMarketplaceSale` never throws.
-      if (!alreadyRecorded) {
-        after(() =>
-          screenMarketplaceSale(
-            {
-              purchaseRef,
-              sessionId: String(object.id),
-              buyerUid: String(buyerUid),
-              buyerOrgId: buyerOrgId ? String(buyerOrgId) : null,
-              sellerOrgId: String(sellerOrgId),
-              amountCents: grossCents - taxCents,
-              paymentIntentId: String(object?.payment_intent ?? ''),
-              livemode: event?.livemode === true,
-            },
-            { stripeKey: process.env.STRIPE_SECRET_KEY, notifyRisk: notifyRiskEvent },
-          ).catch(() => undefined),
-        )
-      }
-      // A refund or a lost dispute that arrived before this document existed
-      // is applied NOW (AGL-2148) — revocation, GA and the transfer reversal,
-      // by the same function the refund door uses. Last on this path, and
-      // awaited: it can throw on a transient Stripe failure, which is exactly
-      // the redelivery this branch is already idempotent under.
-      await drainMarketplaceRefundOrphan(
-        firebaseAdmin.app().firestore(),
-        purchaseRef,
-        String(object?.payment_intent ?? ''),
-      )
-    }
+    // `amount_total` is the tax-inclusive GROSS the buyer paid. WHERE the tax
+    // is owed is read from the session Stripe computed it from — see
+    // `buyerTaxJurisdiction`.
+    await recordMarketplacePurchase({
+      recordId: String(object.id),
+      metadata: object.metadata ?? {},
+      grossCents: Number(object?.amount_total ?? 0),
+      taxCents: Number(object?.total_details?.amount_tax ?? 0),
+      jurisdiction: buyerTaxJurisdiction(object?.customer_details?.address),
+      paymentIntentId: String(object?.payment_intent ?? ''),
+      currency: String(object?.currency ?? 'usd'),
+      stripeCustomerId: String(object?.customer ?? ''),
+      livemode: event?.livemode === true,
+    })
+  }
+
+  // The same purchase, paid in the console (AGL-4049). `pay.ts` has usually
+  // written it already; this is the record of every other way the invoice
+  // gets paid (the bank's step finishing after the tab closed, Billing's own
+  // Pay button), and it lands on the same document.
+  if (type === 'invoice.paid' && isMarketplaceInvoice(object)) {
+    await recordMarketplaceInvoicePurchase(object)
   }
 
   // Refund revocation (AGL-1546): a FULL refund un-buys the listing —

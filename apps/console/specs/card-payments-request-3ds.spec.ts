@@ -36,6 +36,8 @@ import { readdirSync, readFileSync, statSync } from 'fs'
 import { join, relative, resolve } from 'path'
 import {
   cardAuthenticationParams,
+  INVOICE_REQUEST_THREE_D_SECURE_PARAM,
+  invoiceCardAuthenticationParams,
   checkoutSessionCardAuthenticationParams,
   REQUEST_THREE_D_SECURE_PARAM,
   requestThreeDSecureFor,
@@ -145,6 +147,21 @@ describe('3-D Secure is requested by every card payment, at one seam', () => {
 })
 
 describe('stripe-card-authentication', () => {
+  it('an Invoice asks the same question, under its own param (AGL-4049)', () => {
+    expect(invoiceCardAuthenticationParams('one-time')).toEqual({
+      'payment_settings[payment_method_options][card][request_three_d_secure]': 'automatic',
+    })
+    expect(invoiceCardAuthenticationParams('off-session')).toEqual({
+      [INVOICE_REQUEST_THREE_D_SECURE_PARAM]: 'any',
+    })
+    const door = readFileSync(
+      resolve(REPO_ROOT, 'libs/plugins/marketplace/src/lib/server/pay.ts'),
+      'utf8',
+    )
+    expect(door).toContain("invoiceCardAuthenticationParams('one-time')")
+    expect(door).not.toContain('request_three_d_secure')
+  })
+
   it('asks for automatic 3DS on a one-time payment', () => {
     expect(requestThreeDSecureFor('one-time')).toBe('automatic')
     expect(checkoutSessionCardAuthenticationParams('payment')).toEqual({
