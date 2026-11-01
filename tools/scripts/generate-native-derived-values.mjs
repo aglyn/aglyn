@@ -222,7 +222,8 @@ async function build() {
   // The styles a new site can start in (AGL-4049): Create site asks one before
   // it creates anything, on every door the native apps included.
   const styles = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/site-styles.ts'))
-  const siteStyles = styles.SITE_STYLES.map(({ id, name, blurb, preview, alt }) => ({ id, name, blurb, preview, alt }))
+  // Each picture on the path an app can read: `/_static` answers URLSession and OkHttp with a challenge.
+  const siteStyles = styles.SITE_STYLES.map(({ id, name, blurb, alt }) => ({ id, name, blurb, preview: styles.siteStyleAppPreview(id), alt }))
   const proposalCases = PROPOSAL_CASE_ORGS.map((org) => {
     const standing = proposal.standingUpgradeProposal(org)
     const summary = standing ? proposal.upgradeProposalSummary(standing) : null
