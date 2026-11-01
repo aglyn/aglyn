@@ -20,7 +20,6 @@
 import {
   CRM_COLLECTIONS,
   type CrmDealContactRole,
-  dealContactRolesOf,
   pluginDocsHelp,
 } from '@aglyn/aglyn'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -31,7 +30,7 @@ import { useCrmPicklist } from '../hooks/use-crm-picklist'
 import { useCrmRecordNames } from '../hooks/use-crm-record-names'
 import { type CrmOrgDoc, useCrmScope } from '../hooks/use-crm-scope'
 import type { CrmRoutes } from '../model/crm-routes'
-import { companyContactRolesSave } from '../model/deal-contact-roles'
+import { companyContactRolesOf, companyContactRolesSave } from '../model/deal-contact-roles'
 import { ContactRolesEditor } from './contact-roles-editor'
 
 export interface CompanyContactRolesCardProps {
@@ -58,7 +57,7 @@ export function CompanyContactRolesCard(props: CompanyContactRolesCardProps) {
   const { enqueueSnackbar } = useSnackbar()
   const scope = useCrmScope({ hostId, org })
   const groupId = scope.consentGroup?.groupId ?? null
-  const roles = useMemo(() => dealContactRolesOf(company), [company])
+  const roles = useMemo(() => companyContactRolesOf(company), [company])
   const roleList = useCrmPicklist('opportunityContactRole', scope.orgId)
   const nameOf = useCrmRecordNames({
     orgId: scope.orgId,
@@ -84,7 +83,12 @@ export function CompanyContactRolesCard(props: CompanyContactRolesCardProps) {
           async () => {
             await updateDoc(
               doc(firestore, 'orgs', scope.orgId as string, CRM_COLLECTIONS.companies, companyId),
-              { contactRoles: verdict.contactRoles, updatedAt: new Date() },
+              {
+                contactRoles: verdict.contactRoles,
+                contactRoleContactIds: verdict.contactRoleContactIds,
+                contactRoleKeys: verdict.contactRoleKeys,
+                updatedAt: new Date(),
+              },
             )
           },
         )

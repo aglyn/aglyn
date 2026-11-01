@@ -968,7 +968,10 @@ export interface OrgContactRow {
   name: string
   /** Every site that has captured this person, sorted for a stable render. */
   capturedByHostIds: string[]
-  /** One verdict per capturing site, in the same order. */
+  /**
+   * One verdict per capturing site, in the same order. For a person no site
+   * captured, one per site their consent is recorded on, sorted.
+   */
   consent: OrgContactHostConsent[]
 }
 
@@ -1009,12 +1012,19 @@ export function orgContactRow(
 ): OrgContactRow {
   const record = contact ?? {}
   const capturedByHostIds = contactCaptureHostIds(record)
+  // A person no site captured was added at the organization level, and their
+  // consent is recorded on each site without one having met them.
+  const consentByHost = record[MARKETING_CONSENT_BY_HOST_FIELD]
+  const consentHostIds =
+    capturedByHostIds.length || !consentByHost || typeof consentByHost !== 'object'
+      ? capturedByHostIds
+      : Object.keys(consentByHost).sort()
   return {
     $id: contactId,
     email: typeof record['email'] === 'string' ? record['email'] : '',
     name: typeof record['name'] === 'string' ? record['name'] : '',
     capturedByHostIds,
-    consent: capturedByHostIds.map((hostId) => {
+    consent: consentHostIds.map((hostId) => {
       /*
        * READ FOR THE SITE, one call per site. `readMarketingBasis` requires
        * the group it is being read for and has no default, so this cannot

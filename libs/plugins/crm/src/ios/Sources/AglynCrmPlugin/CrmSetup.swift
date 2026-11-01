@@ -112,7 +112,7 @@ private struct NewFieldSheet: View {
         let order = (reference.customFields.filter { $0.object == object }.map(\.order).max() ?? -1) + 1
         var fields: [String: Any] = [
           "key": key, "label": label.trimmingCharacters(in: .whitespaces), "type": type, "required": required, "order": order,
-          "retiredAt": NSNull(), "hostId": scope.hostID, "visibleTo": [orgScopeToken],
+          "retiredAt": NSNull(), "hostId": scope.createHostID.map { $0 as Any } ?? NSNull(), "visibleTo": [orgScopeToken],
           "createdAt": FirestoreSentinel.serverTimestamp, "updatedAt": FirestoreSentinel.serverTimestamp,
         ]
         if type == "select" { fields["options"] = options.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty } }
@@ -216,13 +216,21 @@ struct SettingsSection: View {
     Form {
       if let error { AglynNotice(error, tone: .error) { self.error = nil } }
       if !scope.canManage { AglynNotice("Only the workspace's owners and admins change these.", tone: .info) }
-      Section("Who sees new records") {
-        Picker("New records", selection: Binding(get: { crmDefaultScope(scope.org) ?? "org" }, set: { write(["defaultRecordScope": $0]) })) {
-          Text("The site that made them").tag("host")
-          Text("Every site in the workspace").tag("org")
+      Section {
+        Text("New contacts, companies, deals and tasks are shared with").font(AglynFont.subheadline).foregroundStyle(.secondary)
+        Picker(
+          "New contacts, companies, deals and tasks are shared with",
+          selection: Binding(get: { crmDefaultScope(scope.org) ?? "org" }, set: { write(["defaultRecordScope": $0]) })
+        ) {
+          Text("All sites in the organization").tag("org")
+          Text("Only the site they came in on (keeps clients apart, for agencies)").tag("host")
         }
         .pickerStyle(.inline)
         .labelsHidden()
+      } header: {
+        Text("Default sharing for new records")
+      } footer: {
+        Text("Only affects records created from now on. Datasets and media have defaults of their own, on the organization Data and Media pages.")
       }
       Section {
         Toggle(
@@ -231,15 +239,18 @@ struct SettingsSection: View {
       } footer: {
         Text("When someone writes in from a business domain no company has yet.")
       }
-      Section("Default owner for this site") {
-        Picker(
-          "Owner",
-          selection: Binding(
-            get: { hostSettings?["defaultOwnerUid"] as? String ?? "" },
-            set: { uid in write(["hosts": [scope.hostID: ["defaultOwnerUid": uid.isEmpty ? FirestoreSentinel.delete as Any : uid as Any]]]) })
-        ) {
-          Text("Nobody").tag("")
-          ForEach(reference.members) { Text($0.label).tag($0.uid) }
+      // A site's own default owner is set from that site; the workspace's page has none of its own.
+      if !scope.orgLevel {
+        Section("Default owner for this site") {
+          Picker(
+            "Owner",
+            selection: Binding(
+              get: { hostSettings?["defaultOwnerUid"] as? String ?? "" },
+              set: { uid in write(["hosts": [scope.hostID: ["defaultOwnerUid": uid.isEmpty ? FirestoreSentinel.delete as Any : uid as Any]]]) })
+          ) {
+            Text("Nobody").tag("")
+            ForEach(reference.members) { Text($0.label).tag($0.uid) }
+          }
         }
       }
       Section {

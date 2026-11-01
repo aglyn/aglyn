@@ -3,6 +3,7 @@ package com.aglyn.plugins.crm
 import com.aglyn.ui.MenuAction
 import com.aglyn.ui.OutlinedButton
 import com.aglyn.ui.OverflowMenu
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,8 +13,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
@@ -37,9 +40,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -52,6 +57,7 @@ import com.aglyn.core.Live
 import com.aglyn.core.nowMillis
 import com.aglyn.core.relativeTime
 import com.aglyn.pluginhost.NativePluginContext
+import com.aglyn.pluginhost.rememberWorkspaceSites
 import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.FormSheet
 import com.aglyn.ui.Busy
@@ -78,6 +84,7 @@ import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
+import com.aglyn.ui.SvgPathIcon
 import com.aglyn.ui.TextButton
 import com.aglyn.ui.WithTooltip
 import com.aglyn.ui.fieldDisplay
@@ -179,44 +186,18 @@ fun RecordsSection(
     },
   )
   if (creating) {
-    WithSiteScope(context, scope, api, kind.singular.lowercase(), onDismiss = { creating = false }) { siteScope, siteApi ->
-      CreateRecordDialog(kind, siteScope, siteApi, reference, onDismiss = { creating = false }) { id -> creating = false; picked = id }
-    }
+    CreateRecordDialog(context, kind, scope, api, reference, onDismiss = { creating = false }) { id -> creating = false; picked = id }
   }
 }
 
 /**
- * The scope a new record is made in: the site's own, or (from the whole workspace's CRM) the site the person picks first,
- * as the console's workspace page asks.
- */
-@Composable
-internal fun WithSiteScope(
-  context: NativePluginContext,
-  scope: CrmScope,
-  api: CrmApi,
-  noun: String,
-  onDismiss: () -> Unit,
-  content: @Composable (CrmScope, CrmApi) -> Unit,
-) {
-  if (!scope.workspaceWide) return content(scope, api)
-  var site by remember { mutableStateOf<String?>(null) }
-  val picked = site
-  if (picked == null) {
-    com.aglyn.pluginhost.WhichSiteDialog(context, noun, onPick = { site = it.id }, onDismiss = onDismiss)
-  } else {
-    val siteScope = remember(scope, picked) { scope.forSite(picked) }
-    val siteApi = remember(siteScope, context.api, context.writer) { CrmApi(context.api, context.writer, siteScope) }
-    content(siteScope, siteApi)
-  }
-}
-
-/**
- * The scope a record's own page works in: from the whole workspace's CRM, the site the record was made on (its tasks,
- * notes and emails belong there), else the workspace's, stamping what the record itself is visible to.
+ * The scope a record's own page works in: from the whole workspace's CRM, the site the record came from (its tasks, notes
+ * and emails belong there), else the workspace's, stamping what the record itself is visible to. It reads as the list
+ * does: a whole-workspace reader sees every site's entries on it.
  */
 internal fun recordScope(scope: CrmScope, doc: com.aglyn.core.FirestoreDoc): CrmScope {
   if (!scope.workspaceWide) return scope
-  doc.string("hostId")?.takeIf { it.isNotEmpty() }?.let { return scope.forSite(it) }
+  crmRecordSite(doc.data)?.let { return scope.forSite(it).copy(readTokens = scope.readTokens) }
   val visibleTo = (doc.data["visibleTo"] as? List<*>).orEmpty().filterIsInstance<String>()
   return scope.copy(createTokens = visibleTo.ifEmpty { listOf(ORG_SCOPE_TOKEN) })
 }
@@ -258,8 +239,8 @@ fun RecordDetail(context: NativePluginContext, kind: CrmKind, id: String, listSc
         EmptyState("This ${kind.singular.lowercase()} is gone", body = "It may have been deleted or converted.", icon = AglynIcons.named(kind.icon))
         return
       }
-      val scope = remember(listScope, doc.string("hostId")) { recordScope(listScope, doc) }
-      val api = remember(scope, listApi) { if (scope == listScope) listApi else CrmApi(context.api, context.writer, scope) }
+      val scope = remember(listScope, crmRecordSite(doc.data)) { recordScope(listScope, doc) }
+      val api = remember(scope, listApi) { if (scope == listScope) listApi else CrmApi(context.api, context.writer, scope, context.firestore) }
       val stages = reference.pipeline(doc.string("pipelineId")).stages.associate { it.id to it.name }
       val row = crmRow(kind, doc, scope, stages)
       val fields = reference.fields(kind)
@@ -319,7 +300,7 @@ private fun recordActions(kind: CrmKind, row: CrmRow, open: (RecordDialog) -> Un
   val all = buildList {
     add(act("Edit", "edit", RecordDialog.EDIT))
     add(act("Log activity", "sticky_note", RecordDialog.LOG))
-    if (kind != CrmKind.COMPANY && row.data["email"] != null || kind == CrmKind.DEAL) add(act("Email", "mail", RecordDialog.EMAIL))
+    if (kind != CrmKind.COMPANY && crmHasEmail(row.data) || kind == CrmKind.DEAL) add(act("Email", "mail", RecordDialog.EMAIL))
     add(act("New task", "task", RecordDialog.TASK))
     when (kind) {
       CrmKind.LEAD -> {
@@ -339,7 +320,7 @@ private fun recordActions(kind: CrmKind, row: CrmRow, open: (RecordDialog) -> Un
   }
   val next = when (kind) {
     CrmKind.LEAD -> if (row.data["status"] == "qualified" && row.data["convertedContactId"] == null) RecordDialog.CONVERT else RecordDialog.LOG
-    CrmKind.CONTACT -> if (row.data["email"] != null) RecordDialog.EMAIL else RecordDialog.LOG
+    CrmKind.CONTACT -> if (crmHasEmail(row.data)) RecordDialog.EMAIL else RecordDialog.LOG
     CrmKind.DEAL -> if (row.data["status"] == "open" || row.data["status"] == null) RecordDialog.MOVE else RecordDialog.LOG
     CrmKind.COMPANY -> RecordDialog.LOG
   }
@@ -466,16 +447,12 @@ private fun TimelineCard(context: NativePluginContext, kind: CrmKind, id: String
     val rows = (live as? Live.Ready)?.value.orEmpty()
     if (rows.isEmpty() && live is Live.Ready) Text("Nothing logged yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
     rows.forEach { doc ->
-      val activityKind = doc.string("kind") ?: "note"
       val at = millisOf(doc.data["atMs"])
-      AglynListItem(
-        title = doc.string("subject")?.takeIf { it.isNotBlank() } ?: (Contracts.crmActivityKindLabels[activityKind] ?: activityKind),
-        supporting = listOfNotNull(
-          doc.string("body")?.take(240),
-          listOfNotNull(doc.string("byName"), at?.let { relativeTime(it, now) }, doc.string("outcome"), (doc.data["durationMinutes"] as? Number)?.let { "${it.toLong()} min" }).joinToString(" · ").ifBlank { null },
-        ).joinToString("\n"),
-        icon = AglynIcons.named(when (activityKind) { "call" -> "call"; "email" -> "mail"; "meeting" -> "groups"; else -> "sticky_note" }),
-        trailing = if (scope.canWrite && doc.string("byUid") == scope.uid && activityKind != "email") ({
+      ActivityRow(
+        crmActivityLine(doc.data),
+        meta = listOfNotNull(doc.string("byName"), at?.let { relativeTime(it, now) }, doc.string("outcome"), (doc.data["durationMinutes"] as? Number)?.let { "${it.toLong()} min" }).joinToString(" · "),
+        modifier = Modifier.testTag("crm-activity-${doc.id}"),
+        trailing = if (scope.canWrite && doc.string("byUid") == scope.uid && doc.string("kind") != "email") ({
           WithTooltip("Delete this entry") { IconButton(onClick = { deleting = doc.id }) { Icon(AglynIcons.named("delete"), contentDescription = "Delete this entry") } }
         }) else null,
       )
@@ -493,6 +470,35 @@ private fun TimelineCard(context: NativePluginContext, kind: CrmKind, id: String
       onDismiss = { deleting = null },
       onConfirm = { busy.run(coroutines, { deleting = null }) { api.deleteActivity(activityId) } },
     )
+  }
+}
+
+/**
+ * One entry in a record's activity (the console's `ActivityRow`): the kind's mark, its chips, what was said, and who and
+ * when. The channels that are brands draw the console's own glyph; the others the nearest Material icon.
+ */
+@Composable
+private fun ActivityRow(line: CrmActivityLine, meta: String, modifier: Modifier = Modifier, trailing: (@Composable () -> Unit)? = null) {
+  val colors = MaterialTheme.colorScheme
+  Row(modifier.fillMaxWidth().padding(vertical = space(1f)), horizontalArrangement = Arrangement.spacedBy(space(2f))) {
+    Box(Modifier.size(40.dp).clip(CircleShape).background(colors.primaryContainer), contentAlignment = Alignment.Center) {
+      val path = Contracts.nativeCrmActivityIconPaths[line.kind]
+      if (path != null) {
+        SvgPathIcon(path, contentDescription = null, tint = colors.onPrimaryContainer)
+      } else {
+        Icon(AglynIcons.named(crmActivityIconName(line.kind)), contentDescription = null, tint = colors.onPrimaryContainer)
+      }
+    }
+    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
+      FlowRow(horizontalArrangement = Arrangement.spacedBy(space(0.5f)), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
+        StatusChip(line.chip, StatusTone.NEUTRAL)
+        line.state?.let { StatusChip(it, if (it == "Received") StatusTone.INFO else StatusTone.NEUTRAL) }
+      }
+      if (line.heading.isNotEmpty()) Text(line.heading, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+      line.detail?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant) }
+      if (meta.isNotEmpty()) Text(meta, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+    }
+    trailing?.invoke()
   }
 }
 
@@ -517,7 +523,7 @@ private fun RecordDialogs(
     null -> Unit
     RecordDialog.EDIT -> EditSheet(
       title = "Edit ${kind.singular.lowercase()}",
-      fields = fields.filter { it.editable },
+      fields = fields.filter { it.editable }.let { if (kind == CrmKind.CONTACT) withContactEmailHelp(it, crmHasEmail(row.data)) else it },
       initial = values,
       busy = busy,
       onDismiss = onClose,
@@ -726,13 +732,17 @@ internal fun createFields(kind: CrmKind, reference: CrmReference): List<CrmField
 }
 
 @Composable
-private fun CreateRecordDialog(kind: CrmKind, scope: CrmScope, api: CrmApi, reference: CrmReference, onDismiss: () -> Unit, onCreated: (String) -> Unit) {
+private fun CreateRecordDialog(context: NativePluginContext, kind: CrmKind, scope: CrmScope, api: CrmApi, reference: CrmReference, onDismiss: () -> Unit, onCreated: (String) -> Unit) {
   val coroutines = rememberCoroutineScope()
   val busy = remember { Busy() }
-  val fields = remember(kind, reference) { createFields(kind, reference) }
+  // At the workspace's level a new record names its site in its own form; none is an answer unless the workspace keeps
+  // its sites apart.
+  val sites = if (scope.workspaceWide) (rememberWorkspaceSites(context) as? Live.Ready)?.value else emptyList()
+  val siteField = crmSiteField(kind, scope, sites?.map { FieldOption(it.id, it.name) })
+  val fields = listOfNotNull(siteField) + remember(kind, reference) { createFields(kind, reference) }
   var pipelineId by remember { mutableStateOf(reference.pipeline(null).id) }
   var stageId by remember { mutableStateOf(reference.pipeline(null).stages.firstOrNull { it.kind == "open" }?.id ?: "") }
-  val initial = remember { if (kind == CrmKind.CONTACT || kind == CrmKind.LEAD || kind == CrmKind.DEAL) mapOf("ownerUid" to scope.uid) else mapOf("ownerUid" to scope.uid) }
+  val initial = remember { mapOf("ownerUid" to scope.uid, CRM_SITE_FIELD_KEY to CrmCreateSiteMemory.pick(scope.orgId).orEmpty()) }
   EditSheet(
     title = "New ${kind.singular.lowercase()}",
     fields = fields,
@@ -751,17 +761,25 @@ private fun CreateRecordDialog(kind: CrmKind, scope: CrmScope, api: CrmApi, refe
       FieldEditor(FieldSpec("stageId", "Stage", FieldKind.SELECT, required = true, options = pipeline.stages.filter { it.kind == "open" }.map { FieldOption(it.id, it.name) }, emptyLabel = null), stageId, { stageId = it })
     }) else null,
   ) { values ->
+    if (kind == CrmKind.CONTACT && !crmContactIdentified(values)) {
+      busy.error = "Enter a name, an email or a phone number."
+      return@EditSheet
+    }
+    val site = if (scope.workspaceWide) crmCreateHost(values[CRM_SITE_FIELD_KEY]?.ifEmpty { null }, sites?.map { it.id }.orEmpty()) else null
+    if (scope.workspaceWide) CrmCreateSiteMemory.remember(site, scope.orgId)
+    val siteScope = site?.let(scope::forSite) ?: scope
+    val siteApi = if (siteScope == scope) api else CrmApi(context.api, context.writer, siteScope, context.firestore)
     busy.run(coroutines) {
       val created = createdFields(fields, values)
       val id = when (kind) {
-        CrmKind.CONTACT -> api.createContact(created)
-        CrmKind.LEAD -> api.createLead(created)
-        CrmKind.COMPANY -> api.createRecord(kind, created + mapOf("contactsCount" to 0L))
+        CrmKind.CONTACT -> siteApi.createContact(created)
+        CrmKind.LEAD -> siteApi.createLead(created)
+        CrmKind.COMPANY -> siteApi.createRecord(kind, created + mapOf("contactsCount" to 0L))
         CrmKind.DEAL -> {
           val pipeline = reference.pipeline(pipelineId)
           val stage = pipeline.stages.firstOrNull { it.id == stageId }
           val contact = created["contactId"] as? String
-          api.createRecord(
+          siteApi.createRecord(
             kind,
             created,
             mapOf(

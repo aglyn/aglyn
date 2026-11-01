@@ -35,8 +35,9 @@ export const CRM_RECORD_COLLECTIONS: Record<CrmRecordKind, string> = {
  *
  * A contact's name is read through the viewing group's facet, the way the
  * people list reads it, so one business renaming a person does not change
- * what an unrelated business's task list shows; the email stands in for a
- * contact nobody has named. A company has a name and a deal a title.
+ * what an unrelated business's task list shows; the email, then the phone
+ * number, stands in for a contact nobody has named. A company has a name and
+ * a deal a title.
  */
 export function crmRecordName(
   kind: CrmRecordKind,
@@ -46,7 +47,9 @@ export function crmRecordName(
   if (!data) return ''
   switch (kind) {
     case 'contact':
-      return contactDisplayName(data, groupId) || String(data['email'] ?? '')
+      return (
+        contactDisplayName(data, groupId) || String(data['email'] || data['phone'] || '')
+      )
     case 'company':
       return String(data['name'] ?? '')
     case 'deal':

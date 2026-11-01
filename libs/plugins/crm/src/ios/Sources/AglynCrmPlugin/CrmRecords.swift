@@ -245,8 +245,9 @@ func standardFields(
     ]
   case .contact:
     return [
-      text("name", "Name"), email, picklist("salutation", "Salutation", "salutation"), text("firstName", "First name"),
-      text("lastName", "Last name"), text("jobTitle", "Title"), text("department", "Department"), company,
+      // A contact needs no address, and one can be added or changed here (`crm/contact-update`).
+      text("name", "Name"), text("email", "Email", .email), picklist("salutation", "Salutation", "salutation"),
+      text("firstName", "First name"), text("lastName", "Last name"), text("jobTitle", "Title"), text("department", "Department"), company,
       text("phone", "Phone", .phone), text("mobilePhone", "Mobile", .phone), text("homePhone", "Home phone", .phone),
       text("otherPhone", "Other phone", .phone), text("fax", "Fax", .phone),
       CrmField(FieldSpec("birthdate", "Birthdate", kind: .date), stored: .day), text("assistantName", "Assistant"),
@@ -446,9 +447,69 @@ struct CrmRow: Identifiable {
   }
 }
 
-/// A contact's own fields for this viewer: the holder's facet over the shared record.
+/// What to call a person (`contactRecordLabel`): their name, then their address, then their number.
+func crmContactLabel(_ data: [String: Any]) -> String {
+  ["name", "email", "phone", "mobilePhone"].lazy.compactMap { key in
+    (data[key] as? String).flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
+  }.first ?? "Unnamed contact"
+}
+
+/// Whether a contact has an address to write to: a blank one is none.
+func crmHasEmail(_ data: [String: Any]) -> Bool {
+  !(data["email"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+}
+
+/// Whether a new contact can be told apart: a name, an email or a number (AGL-4122).
+func crmContactIdentified(_ values: [String: String]) -> Bool {
+  ["name", "email", "phone"].contains { !(values[$0] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+}
+
+/// The Email field of a contact's edit sheet, saying what saving it does.
+func withContactEmailHelp(_ fields: [CrmField], hasEmail: Bool) -> [CrmField] {
+  fields.map { field in
+    guard field.spec.key == "email" else { return field }
+    let help = hasEmail ? "Every site shares this address, so changing it changes it for all of them." : "Add it whenever you have it."
+    return CrmField(FieldSpec(field.spec.key, field.spec.label, kind: field.spec.kind, help: help), path: field.path, stored: field.stored, editable: field.editable)
+  }
+}
+
+/// The holder a cross-site reader shows a contact through (`contactPrimaryGroup`): the organization's own facet, then
+/// the first capturing site whose group holds one, then any facet, then the first capturing site; empty for none.
+func crmContactPrimaryHolder(_ data: [String: Any], org: [String: Any]?) -> String {
+  let facets = data["facets"] as? [String: Any] ?? [:]
+  if facets[orgContactHolderID] != nil { return orgContactHolderID }
+  let captured = (data["capturedByHostIds"] as? [Any] ?? []).map { "\($0)".trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+  for host in captured {
+    let group = consentGroupForHost(org, host)
+    if facets[group.groupID] != nil { return group.groupID }
+  }
+  if let key = facets.keys.sorted().first { return key }
+  return captured.first.map { consentGroupForHost(org, $0).groupID } ?? ""
+}
+
+/// `crmActivityCompanyId`: the company an activity rolls up to. One the writer named stands; else the deal's; else the
+/// contact's, as the writer's holder knows it, or the organization's own facet. Never the `companyIds` mirror, which
+/// carries every holder's link.
+func crmActivityCompanyID(
+  named: String?, deal: [String: Any]?, contact: [String: Any]?, groupID: String?, org: [String: Any]?
+) -> String? {
+  func id(_ value: Any?) -> String? {
+    (value as? String).flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+  }
+  if let company = id(named) ?? id(deal?["companyId"]) { return company }
+  guard let contact else { return nil }
+  let facets = contact["facets"] as? [String: Any]
+  let holder = groupID.flatMap { $0.isEmpty ? nil : $0 } ?? crmContactPrimaryHolder(contact, org: org)
+  return id((facets?[holder] as? [String: Any])?["companyId"]) ?? id((facets?[orgContactHolderID] as? [String: Any])?["companyId"])
+}
+
+/// The facet of a person the organization added itself, with no site behind them (`ORG_CONTACT_HOLDER_ID`).
+let orgContactHolderID = "org"
+
+/// A contact's own fields for this viewer: the holder's facet over the shared record, or the one the organization holds.
 func contactView(_ data: [String: Any], groupID: String) -> [String: Any] {
-  let facet = (data["facets"] as? [String: Any])?[groupID] as? [String: Any] ?? [:]
+  let facets = data["facets"] as? [String: Any]
+  let facet = (facets?[groupID] ?? facets?[orgContactHolderID]) as? [String: Any] ?? [:]
   var merged = data
   for (key, value) in facet where !(value is NSNull) { merged[key] = value }
   if let name = facet["name"] as? String, !name.isEmpty { merged["name"] = name } else { merged["name"] = data["name"] }
@@ -469,7 +530,9 @@ func crmRowLine(_ parts: [String?], fallback: String?) -> String {
 }
 
 func crmRow(_ kind: CrmKind, _ doc: FirestoreDocument, _ scope: CrmScope, stages: [String: String] = [:]) -> CrmRow {
-  let data = kind == .contact ? contactView(doc.data, groupID: scope.groupID) : doc.data
+  // A whole-workspace reader sees a contact through the person's primary holder, as their page does.
+  let holder = scope.groupID.isEmpty ? crmContactPrimaryHolder(doc.data, org: scope.org) : scope.groupID
+  let data = kind == .contact ? contactView(doc.data, groupID: holder) : doc.data
   func s(_ key: String) -> String? { (data[key] as? String).flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 } }
   switch kind {
   case .lead:
@@ -478,9 +541,10 @@ func crmRow(_ kind: CrmKind, _ doc: FirestoreDocument, _ scope: CrmScope, stages
       subtitle: crmRowLine([s("company")], fallback: s("email") == s("name") ? nil : s("email")),
       chip: s("statusLabel") ?? s("status").map(leadStatusLabel), data: data)
   case .contact:
+    let title = crmContactLabel(data)
     return CrmRow(
-      id: doc.id, kind: kind, title: s("name") ?? s("email") ?? "Contact",
-      subtitle: crmRowLine([s("companyName"), s("jobTitle")], fallback: s("email") == s("name") ? nil : s("email")),
+      id: doc.id, kind: kind, title: title,
+      subtitle: crmRowLine([s("companyName"), s("jobTitle")], fallback: [s("email"), s("phone"), s("mobilePhone")].compactMap { $0 }.first { $0 != title }),
       chip: stageLabel(s("lifecycleStage")), data: data)
   case .company:
     let count = (data["contactsCount"] as? NSNumber)?.intValue ?? 0
@@ -503,6 +567,61 @@ func dealSubtitle(_ data: [String: Any], stageName: (_ pipelineID: String?, _ st
   let amount = (data["amountCents"] as? NSNumber).map { formatCents($0.int64Value, currency: s("currency")) }
   let stage = s("stageId").map { stageName(s("pipelineId"), $0) }
   return [amount, stage].compactMap { $0 }.joined(separator: " · ")
+}
+
+// MARK: Activity
+
+/// `crmActivityKindTitle`: "Inbound call", "Outbound WhatsApp message", or the kind alone with no direction it takes.
+func crmActivityKindTitle(_ kind: String, _ direction: String? = nil) -> String {
+  let values = ContractValues.shared
+  let label = values.crmActivityKindLabels[kind] ?? kind
+  let text = (direction ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+  guard (values.nativeCrmActivityDirections[kind] ?? []).contains(text), let word = values.crmActivityDirectionLabels[text] else { return label }
+  return "\(word) \(values.crmActivityKindNouns[kind] ?? label.lowercased())"
+}
+
+/// A logged activity as the timeline reads it (the console's `ActivityRow`): the chips, the heading, the rest of its words.
+struct CrmActivityLine: Equatable {
+  /// A stored kind outside the list reads as `other`.
+  let kind: String
+  /// The kind, with the direction a hand-logged entry names ("Outbound WhatsApp message").
+  let chip: String
+  /// "Sent" or "Received": a message the platform carried or captured says so beside the kind.
+  let state: String?
+  let heading: String
+  let detail: String?
+}
+
+func crmActivityLine(_ data: [String: Any]) -> CrmActivityLine {
+  func text(_ key: String) -> String { (data[key] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
+  let values = ContractValues.shared
+  let stored = text("kind")
+  let kind = values.nativeCrmActivityKinds.contains(stored) ? stored : "other"
+  let captured = !text("messageId").isEmpty
+  let direction = text("direction")
+  let sent = direction == "outbound" && (captured || !text("deliveryState").isEmpty)
+  let received = direction == "inbound" && captured
+  let body = text("body")
+  let subject = text("subject")
+  let lines = body.components(separatedBy: .newlines).drop { $0.trimmingCharacters(in: .whitespaces).isEmpty }
+  let heading = subject.isEmpty ? (lines.first ?? "").trimmingCharacters(in: .whitespaces) : subject
+  let rest = (subject.isEmpty ? lines.dropFirst().joined(separator: "\n") : body).trimmingCharacters(in: .whitespacesAndNewlines)
+  return CrmActivityLine(
+    kind: kind, chip: sent || received || captured ? (values.crmActivityKindLabels[kind] ?? kind) : crmActivityKindTitle(kind, direction),
+    state: received ? "Received" : captured ? "Sent" : nil, heading: heading, detail: rest.isEmpty ? nil : String(rest.prefix(240)))
+}
+
+/// The SF Symbol nearest the console's glyph for a kind, for the kinds that are not a brand (those draw their mark from
+/// `nativeCrmActivityIconPaths`).
+func crmActivitySymbol(_ kind: String) -> String {
+  switch kind {
+  case "call": "phone"
+  case "email": "envelope"
+  case "text": "message"
+  case "meeting": "person.2"
+  case "note": "note.text"
+  default: "ellipsis.circle"
+  }
 }
 
 // MARK: Pipelines

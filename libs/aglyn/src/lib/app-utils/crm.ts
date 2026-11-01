@@ -990,7 +990,7 @@ export const CRM_ACTIVITY_KIND_LABELS: Record<CrmActivityKind, string> = {
  * message". Its own map rather than the label lowercased, because a brand
  * keeps its capitals and a channel's name is not the thing that was sent.
  */
-const CRM_ACTIVITY_KIND_NOUNS: Record<CrmActivityKind, string> = {
+export const CRM_ACTIVITY_KIND_NOUNS: Record<CrmActivityKind, string> = {
   call: 'call',
   email: 'email',
   text: 'text message',
@@ -3948,9 +3948,9 @@ const OPPORTUNITY_TYPE_DEFINITION = {
 
 /**
  * Salesforce's Opportunity Contact Role (AGL-3521): the part a contact
- * plays on a deal. Plain; the label sits in each entry of the deal's
- * `contactRoles`, and `contactRoleKeys` lists their keys, which is how a
- * rename or a delete finds the deals to rewrite.
+ * plays on a deal, and on a company (AGL-4122). Plain; the label sits in each
+ * entry of the record's `contactRoles`, and `contactRoleKeys` lists their
+ * keys, which is how a rename or a delete finds the records to rewrite.
  */
 const OPPORTUNITY_CONTACT_ROLE_DEFINITION = {
   id: 'opportunityContactRole',
@@ -3969,7 +3969,10 @@ const OPPORTUNITY_CONTACT_ROLE_DEFINITION = {
     { id: 'technical-buyer', label: 'Technical Buyer' },
     { id: 'other', label: 'Other' },
   ],
-  targets: [{ object: 'deal', field: 'contactRoles', arrayKey: 'role', keyField: 'contactRoleKeys' }],
+  targets: [
+    { object: 'deal', field: 'contactRoles', arrayKey: 'role', keyField: 'contactRoleKeys' },
+    { object: 'company', field: 'contactRoles', arrayKey: 'role', keyField: 'contactRoleKeys' },
+  ],
 } as const satisfies CrmPicklistDefinition
 
 /*

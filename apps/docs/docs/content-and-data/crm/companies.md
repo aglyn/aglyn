@@ -149,7 +149,9 @@ can be changed in place.
 The roles come from the same list as a deal's, kept under
 [CRM → Fields](./custom-fields.md). They are separate from the
 [roles on a deal](./deals.md#contact-roles): someone's part in the company is a
-fact about the account, and their part in one deal can differ.
+fact about the account, and their part in one deal can differ. Renaming a role
+renames it here too, and merging or deleting a contact moves or removes their
+row.
 
 ## Contacts at a company
 

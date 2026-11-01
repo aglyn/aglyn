@@ -25,7 +25,9 @@ import com.aglyn.ui.ChipOption
 import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.EmptyState
 import com.aglyn.ui.EmptyTone
+import com.aglyn.ui.FieldKind
 import com.aglyn.ui.FieldOption
+import com.aglyn.ui.FieldSpec
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.space
 import kotlinx.coroutines.CancellationException
@@ -37,7 +39,7 @@ enum class CrmSection(val key: String, val label: String, val screen: String, va
   CONTACTS("contacts", "Contacts", "crm.contacts", "person"),
   LEADS("leads", "Leads", "crm.leads", "person_add"),
   COMPANIES("companies", "Companies", "crm.companies", "business"),
-  DEALS("deals", "Deals", "crm.deals", "handshake"),
+  DEALS("deals", "Deals / Opportunities", "crm.deals", "handshake"),
   TASKS("tasks", "Tasks", "crm.tasks", "task"),
   REPORTS("reports", "Reports", "crm.reports", "bar_chart"),
   FIELDS("fields", "Fields", "crm.fields", "tune"),
@@ -140,7 +142,7 @@ fun rememberCrmReference(context: NativePluginContext, scope: CrmScope, api: Crm
     customFields = ready(fieldDocs, { docs -> docs.map(::customFieldOf) }, emptyList()),
     pipelines = ready(pipelineDocs, { docs -> docs.map(::pipelineOf) }, emptyList()),
     companies = ready(companyDocs, { docs -> docs.map { FieldOption(it.id, it.string("name") ?: it.id) } }, emptyList()),
-    contacts = ready(contactDocs, { docs -> docs.map { FieldOption(it.id, it.string("name")?.takeIf(String::isNotBlank) ?: it.string("email") ?: it.id) } }, emptyList()),
+    contacts = ready(contactDocs, { docs -> docs.map { FieldOption(it.id, crmContactLabel(contactView(it.data, crmContactPrimaryHolder(it.data, null)))) } }, emptyList()),
   )
 }
 
@@ -183,7 +185,7 @@ fun CrmGate(context: NativePluginContext, content: @Composable (CrmScope, CrmApi
         )
         return
       }
-      val api = remember(scope, context.api, context.writer) { CrmApi(context.api, context.writer, scope) }
+      val api = remember(scope, context.api, context.writer) { CrmApi(context.api, context.writer, scope, context.firestore) }
       val reference = rememberCrmReference(context, scope, api)
       content(scope, api, reference)
     }
@@ -217,6 +219,55 @@ fun CrmHubScreen(context: NativePluginContext, initial: CrmSection, params: Map<
       }
     }
   }
+}
+
+/**
+ * The site a create came from last, per workspace, for this run of the app (the console keeps it for the session): a site
+ * remembered across weeks would stamp a record onto a site the reader had forgotten choosing.
+ */
+internal object CrmCreateSiteMemory {
+  private val picks = mutableMapOf<String, String>()
+
+  fun pick(orgId: String): String? = picks[orgId]
+
+  fun remember(site: String?, orgId: String) {
+    if (site == null) picks.remove(orgId) else picks[orgId] = site
+  }
+}
+
+internal const val CRM_SITE_FIELD_KEY = "crmSourceSite"
+
+/**
+ * The field a create at the workspace's level asks with (the console's `CrmSitePicker`): the record's optional source where
+ * every site sees it, or the site it belongs to where the workspace keeps them apart. Null under a site, and with one site,
+ * which is then the answer ([crmCreateHost]).
+ */
+fun crmSiteField(kind: CrmKind, scope: CrmScope, sites: List<FieldOption>?): CrmField? {
+  if (!scope.workspaceWide || sites?.size == 1) return null
+  // A lead is the one record a site always files: it is private to that site.
+  val required = scope.createNeedsSite || kind == CrmKind.LEAD
+  val help = when {
+    sites == null -> "Loading your sites…"
+    !required && kind == CrmKind.CONTACT -> "Where they came from, if anywhere. Every site in the organization can see them either way."
+    !required -> "Where it came from, if anywhere. Every site in the organization can see it either way."
+    sites.isEmpty() -> "This organization has no sites yet, so nothing can be filed."
+    kind == CrmKind.CONTACT -> "The site that captures this person — it decides which sites may see them."
+    kind == CrmKind.LEAD -> "The site this lead is filed under — a lead is private to one site."
+    kind == CrmKind.COMPANY -> "The site this company belongs to — it decides which of your sites may see it."
+    else -> "The site this deal belongs to — it decides which of your sites may see it."
+  }
+  return CrmField(
+    FieldSpec(
+      CRM_SITE_FIELD_KEY,
+      if (required) "Site" else "Source site",
+      FieldKind.SELECT,
+      required = required,
+      options = sites.orEmpty(),
+      help = help,
+      emptyLabel = if (required) null else "None",
+    ),
+    editable = false,
+  )
 }
 
 @Composable
