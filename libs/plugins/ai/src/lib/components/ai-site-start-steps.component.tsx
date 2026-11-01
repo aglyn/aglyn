@@ -293,6 +293,10 @@ export function AudienceStep({ answers, answer, tracker, errors, fieldRef }: Ste
  * clicked (AGL-4049), and the step does not go forward before one is. "Pick
  * for me" is a card too: it leaves the kind unset, so the kind the first
  * answer suggests is the one used, and the card says which.
+ *
+ * Questions filled in from an AI starter arrive with its style chosen, and
+ * `starterStyle` names that card: it says which starter it came from, and
+ * that it is the person's to change.
  */
 export function StyleStep({
   answers,
@@ -301,7 +305,11 @@ export function StyleStep({
   errors,
   fieldRef,
   inspiration,
-}: StepProps & { inspiration?: AiSiteStartInspirationOffer | null }) {
+  starterStyle = null,
+}: StepProps & {
+  inspiration?: AiSiteStartInspirationOffer | null
+  starterStyle?: { id: string; name: string } | null
+}) {
   const suggested = aiSiteStartKind({ ...answers, kind: null })
   const cards = (
     <OptionCardGrid
@@ -315,7 +323,11 @@ export function StyleStep({
           description: `From your answer: ${suggested.label}`,
           icon: mdiCreation.path,
         },
-        ...aiSiteStyleCards(),
+        ...aiSiteStyleCards().map((card) =>
+          card.id === starterStyle?.id
+            ? { ...card, description: `From ${starterStyle.name}. Change it if you like.` }
+            : card,
+        ),
       ]}
       value={answers.style}
       onChange={(id) => {
@@ -661,16 +673,34 @@ function PriceRangeField({ answers, answer, tracker, errors, fieldRef }: StepPro
   )
 }
 
-/** The brand color, picked from named swatches. */
+/**
+ * What a brand color the swatches do not name is called (AGL-4049): one an AI
+ * starter brought, or a start reopened on its own. Shown as its swatch and by
+ * this name, never as a color code.
+ */
+export const AI_SITE_START_OWN_BRAND_LABEL = 'Chosen color'
+
+/** A brand color's name: a swatch's, else {@link AI_SITE_START_OWN_BRAND_LABEL} for a color code, else as given. */
+export function aiSiteStartBrandLabel(brand: string): string {
+  const swatch = AI_SITE_START_BRAND_COLORS.find((color) => color.hex === brand)
+  if (swatch) return swatch.label
+  return /^#[0-9a-f]{6}$/i.test(brand) ? AI_SITE_START_OWN_BRAND_LABEL : brand
+}
+
+/** The brand color, picked from named swatches, with a color the swatches do not name kept as one more. */
 function BrandField({ answers, answer, tracker }: StepProps) {
   const labelId = useId()
+  const own = aiSiteStartBrandLabel(answers.brand) === AI_SITE_START_OWN_BRAND_LABEL ? answers.brand : null
+  const swatches = own
+    ? [...AI_SITE_START_BRAND_COLORS, { label: AI_SITE_START_OWN_BRAND_LABEL, hex: own }]
+    : AI_SITE_START_BRAND_COLORS
   return (
     <Stack spacing={1} data-start-area="field-brand">
       <Typography variant="body2" color="text.secondary" id={labelId}>
         {'Brand color'}
       </Typography>
       <Stack direction="row" role="radiogroup" aria-labelledby={labelId} sx={{ flexWrap: 'wrap', gap: 1 }}>
-        {[{ label: 'Let the style choose', hex: '' }, ...AI_SITE_START_BRAND_COLORS].map((color) => {
+        {[{ label: 'Let the style choose', hex: '' }, ...swatches].map((color) => {
           const picked = (answers.brand || '') === color.hex
           return (
             <Tooltip key={color.label} title={color.label}>
@@ -855,8 +885,7 @@ export function aiSiteStartExtraRows(answers: AiSiteStartAnswers): Array<{ label
   add('Areas you serve', aiSiteServiceAreas(answers.serviceArea).join(', '), 'audience')
   add('Price range', answers.priceRange, 'audience')
   add('Languages', answers.languages, 'audience')
-  const brand = AI_SITE_START_BRAND_COLORS.find((color) => color.hex === answers.brand)
-  add('Brand color', brand?.label ?? answers.brand, 'style')
+  add('Brand color', answers.brand ? aiSiteStartBrandLabel(answers.brand) : '', 'style')
   const regional = [answers.region, answers.postalCode].map((part) => part.trim()).filter(Boolean).join(' ')
   const address = [answers.street, answers.city, regional, answers.country]
     .map((part) => part.trim())

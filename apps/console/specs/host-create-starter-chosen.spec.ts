@@ -35,6 +35,12 @@
  * one, the look its plugin answers given to a site born with the starter, the
  * default theme with the choice still recorded when no plugin answers, and
  * recorded only for a guided start. Absent, nothing changes.
+ *
+ * AGL-4049 phase 4 · an AI starter (`mode: 'ai'`) is no longer refused: the
+ * site takes the guided path — born empty for the AI start its answers
+ * filled in, the starter recorded, the install counted — where the creator
+ * is offered the AI start, and is refused before anything is spent where
+ * they are not.
  */
 
 export {}
@@ -296,16 +302,6 @@ describe('POST /api/hosts/create with a starter from the marketplace (AGL-4049)'
     expect(mockClaim).not.toHaveBeenCalled()
   })
 
-  it('answers 409 for an AI starter until the AI start takes one', async () => {
-    mockResolve.mockResolvedValue(starterPayload(3, 'ai'))
-    const response = await create({ starter: { listingId: 'listing-1' } })
-    expect(response.status).toBe(409)
-    await expect(response.json()).resolves.toEqual({
-      error: 'This starter needs the AI start, which is coming soon',
-      listingId: 'listing-1',
-    })
-    expect(mockClaim).not.toHaveBeenCalled()
-  })
 
   it("refuses more pages than Free's real ceiling, and passes exactly as many", async () => {
     mockOrg = { plan: 'free', slug: 'acme' }
@@ -444,5 +440,98 @@ describe('POST /api/hosts/create with a style (AGL-4049)', () => {
     expect(mockLook).not.toHaveBeenCalled()
     expect(mockClaim.mock.calls[0][0]).not.toHaveProperty('style')
     expect(mockClaim).toHaveBeenCalledWith(expect.objectContaining({ starter: true, start: 'starter' }))
+  })
+})
+
+describe('POST /api/hosts/create with an AI starter (AGL-4049 phase 4)', () => {
+  it('takes the guided path: born empty for the start, the starter recorded, the install counted', async () => {
+    mockResolve.mockResolvedValue(starterPayload(1, 'ai'))
+    mockDescribe.mockResolvedValue({
+      listingId: 'listing-ai',
+      displayName: 'Restaurant & café with AI',
+      description: '',
+      authorName: 'Aglyn',
+      official: true,
+      priceUsd: 0,
+      previewImageUrl: null,
+      facets: { kind: 'restaurant', base: 'starter', fonts: null, pages: 1, mode: 'ai' },
+    })
+    mockClaim.mockResolvedValueOnce({
+      allowed: true,
+      hostId: 'host-1',
+      starterChoice: { listingId: 'listing-ai', version: 'latest', kind: 'yoga', mode: 'ai', start: 'ai' },
+    })
+    const response = await create({ starter: { listingId: 'listing-ai' }, style: 'yoga' })
+    // Red before: 409, "which is coming soon".
+    expect(response.status).toBe(200)
+    expect(mockResolve).toHaveBeenCalledWith({ listingId: 'listing-ai' }, { orgId: 'org-1', uid: 'user-1' })
+    // Asked once: whether this creator is offered the AI start at all.
+    expect(mockGuidedStart).toHaveBeenCalledTimes(1)
+    expect(mockClaim).toHaveBeenCalledWith(
+      expect.objectContaining({
+        starter: false,
+        start: 'ai',
+        aiStarter: { listingId: 'listing-ai', version: 'latest', displayName: 'Restaurant & café with AI', kind: 'restaurant' },
+        // The style the questions took, recorded; its look is the start's to build.
+        style: { id: 'yoga', theme: null },
+      }),
+    )
+    expect(mockLook).not.toHaveBeenCalled()
+    await expect(response.json()).resolves.toMatchObject({
+      hostId: 'host-1',
+      guidedStart: true,
+      starterChoice: { listingId: 'listing-ai', mode: 'ai', start: 'ai' },
+      starter: { listingId: 'listing-ai', version: null, displayName: 'Restaurant & café with AI' },
+    })
+    expect(mockInstalled).toHaveBeenCalledWith(
+      { listingId: 'listing-ai' },
+      { orgId: 'org-1', uid: 'user-1' },
+      { hostId: 'host-1' },
+    )
+    expect(mockAnnounceNewSite).toHaveBeenCalledWith(expect.objectContaining({ start: 'guided-ai' }))
+  })
+
+  it('refuses it before anything is spent where the creator is not offered the AI start', async () => {
+    mockResolve.mockResolvedValue(starterPayload(1, 'ai'))
+    mockGuidedStart.mockResolvedValue(false)
+    const response = await create({ starter: { listingId: 'listing-ai' } })
+    expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toEqual({
+      error: 'This starter needs the AI start, which is not available to you in this workspace',
+      listingId: 'listing-ai',
+    })
+    expect(mockClaim).not.toHaveBeenCalled()
+    expect(mockRateLimit).not.toHaveBeenCalled()
+    expect(mockInstalled).not.toHaveBeenCalled()
+  })
+
+  it('holds it to the start’s own page band, never the starter pages’ ceiling', async () => {
+    mockOrg = { plan: 'free', slug: 'acme' }
+    mockResolve.mockResolvedValue(starterPayload(6, 'ai'))
+    const response = await create({ starter: { listingId: 'listing-ai' } })
+    expect(response.status).toBe(200)
+    expect(mockClaim).toHaveBeenCalledWith(expect.objectContaining({ starter: false, start: 'ai' }))
+  })
+
+  it('takes the guided path for an AI starter even beside `start: starter`', async () => {
+    mockResolve.mockResolvedValue(starterPayload(1, 'ai'))
+    const response = await create({ start: 'starter', starter: { listingId: 'listing-ai', version: '3' } })
+    expect(response.status).toBe(200)
+    expect(mockClaim).toHaveBeenCalledWith(
+      expect.objectContaining({
+        starter: false,
+        start: 'ai',
+        aiStarter: { listingId: 'listing-ai', version: '3', displayName: 'Starter', kind: null },
+      }),
+    )
+    await expect(response.json()).resolves.toMatchObject({ guidedStart: true })
+  })
+
+  it('a 402 for an unpaid AI starter is answered as for any starter, before anything is spent', async () => {
+    mockResolve.mockResolvedValue({ error: 'Purchase required', status: 402, priceUsd: 12 })
+    const response = await create({ starter: { listingId: 'listing-ai' } })
+    expect(response.status).toBe(402)
+    expect(mockGuidedStart).not.toHaveBeenCalled()
+    expect(mockClaim).not.toHaveBeenCalled()
   })
 })

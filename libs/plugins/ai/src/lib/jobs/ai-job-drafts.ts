@@ -25,6 +25,7 @@ import {
   type FormRouting,
 } from '@aglyn/aglyn/app-utils/forms'
 import { artifactCreateListKeys } from '@aglyn/aglyn/app-utils/artifact-list-keys'
+import type { HostTokenSource } from '@aglyn/aglyn/app-utils/host-tokens'
 import {
   checkDatasetQuota,
   checkEntitlement,
@@ -934,6 +935,12 @@ export async function writeAiDraftScreenSeo(
 /** The site's subdomain, which a console link names the site by. */
 export async function aiSiteSubdomain(firestore: Firestore, hostId: string): Promise<string | null> {
   return subdomainOf(await firestore.collection('hosts').doc(hostId).get())
+}
+
+/** The site document, for the logo tokens to read (AGL-4119). */
+export async function aiSiteLogoFields(firestore: Firestore, hostId: string): Promise<HostTokenSource | null> {
+  const site = await firestore.collection('hosts').doc(hostId).get()
+  return (site.data() as HostTokenSource | undefined) ?? null
 }
 
 /**

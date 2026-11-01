@@ -65,6 +65,23 @@ describe('what a site starter may hold (AGL-4049)', () => {
     expect(storedLayout).toEqual({ ok: true, rootId: ROOT, nodes: keptWhole(layout.nodes) })
   })
 
+  it('keeps the site’s own logo in a picture, and no other token or address (AGL-4119)', () => {
+    const picture = (src: string) =>
+      sanitizeSiteStarterNodes({
+        rootId: ROOT,
+        nodes: {
+          [ROOT]: { $id: ROOT, componentId: 'div', nodes: ['n1'] },
+          n1: { $id: 'n1', componentId: 'image', parentId: ROOT, props: { src }, nodes: [] },
+        },
+      })
+    const srcOf = (stored: ReturnType<typeof picture>) =>
+      stored.ok ? stored.nodes['n1'].props?.['src'] : 'refused'
+    expect(srcOf(picture('{{host.logo}}'))).toBe('{{host.logo}}')
+    expect(srcOf(picture('{{host.logoDark}}'))).toBe('{{host.logoDark}}')
+    expect(srcOf(picture('{{host.businessName}}'))).toBeUndefined()
+    expect(srcOf(picture('javascript:{{host.logo}}'))).toBeUndefined()
+  })
+
   it('widens nothing for the other artifact types: the portable rule is unchanged and smaller', () => {
     for (const id of PORTABLE_COMPONENT_ID_ALLOWLIST) expect(SITE_STARTER_COMPONENT_IDS).toContain(id)
     expect(PORTABLE_COMPONENT_ID_ALLOWLIST).not.toContain('muiGrid')

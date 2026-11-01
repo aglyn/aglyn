@@ -34,7 +34,18 @@
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { missingListQueryIndexes } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import {
+  listQueryIndexes,
+  missingListQueryIndexes,
+  planListQuery,
+} from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
+import {
+  reviewQueueBase,
+  reviewQueueStatusClauses,
+  STARTER_REVIEW_QUEUE_BASE_PATHS,
+  STARTER_REVIEW_QUEUE_QUERY,
+} from '../model/listing-query'
 
 type Clause = { field: string; op: string }
 const recorded: Array<{ clauses: Clause[]; order: { field: string; direction: string } | null }> = []
@@ -133,5 +144,57 @@ describe('starter search indexes (AGL-4049)', () => {
       (entry) => entry.collectionGroup === 'marketplaceListings' && starterFields.includes(entry.fieldPath),
     )
     expect(overrides).toEqual([])
+  })
+})
+
+/*
+ * The staff review queue's Starters section (AGL-4049) reads newest first, so
+ * unlike the plugin sections, which read in id order and need no composite,
+ * every predicate it can carry is paired with `createdAt` descending, the same
+ * merge the starter search leans on. These are owed to production before the
+ * promotion that carries the section.
+ */
+describe('the review queue’s Starters section indexes (AGL-4049)', () => {
+  const shape = (index: { fields: Array<{ fieldPath: string; order?: string; arrayConfig?: string }> }) =>
+    index.fields.map((field) => `${field.fieldPath} ${field.order ?? field.arrayConfig}`).join(', ')
+
+  it('pins its composites: each field it can ask paired with created, newest first', () => {
+    const needed = listQueryIndexes(STARTER_REVIEW_QUEUE_QUERY, STARTER_REVIEW_QUEUE_BASE_PATHS)
+    expect(needed.map(shape)).toEqual([
+      'artifactType ASCENDING, createdAt DESCENDING',
+      'deletedAt ASCENDING, createdAt DESCENDING',
+      'reviewStatus ASCENDING, createdAt DESCENDING',
+      'nameTokens CONTAINS, createdAt DESCENDING',
+      'takenDown ASCENDING, createdAt DESCENDING',
+    ])
+    expect(missingListQueryIndexes(INDEXES, 'marketplaceListings', needed)).toEqual([])
+  })
+
+  it.each([
+    ['the default (Submitted)', '', []],
+    ['a status', 'listed', []],
+    ['Taken down', 'hidden', []],
+    ['a word', '', ['roof']],
+    ['a status and a word', 'rejected', ['roof']],
+  ])('declares what %s leans on', (_name, status, words) => {
+    const clauses = reviewQueueStatusClauses(status)
+    const base = reviewQueueBase('starters', clauses)
+    expect(base).not.toBeNull()
+    const plan = planListQuery(
+      STARTER_REVIEW_QUEUE_QUERY,
+      { clauses, search: words, base: base ?? [] },
+      nameSearchNormalizers,
+    )
+    expect(plan.refused).toEqual([])
+    expect(plan.orderBy).toMatchObject({ path: 'createdAt', direction: 'desc' })
+    const needed = plan.filters.map((filter) => ({
+      fields: [
+        filter.op === 'array-contains'
+          ? { fieldPath: filter.path, arrayConfig: 'CONTAINS' as const }
+          : { fieldPath: filter.path, order: 'ASCENDING' as const },
+        { fieldPath: 'createdAt', order: 'DESCENDING' as const },
+      ],
+    }))
+    expect(missingListQueryIndexes(INDEXES, 'marketplaceListings', needed)).toEqual([])
   })
 })

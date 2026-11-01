@@ -66,7 +66,7 @@ describe('readSiteStarterPickRefusal', () => {
   it.each([
     [403, 'Site starters are not available for this workspace yet'],
     [404, 'That starter is no longer available'],
-    [409, 'This starter needs the AI start, which is coming soon'],
+    [409, 'This starter needs the AI start, which is not available to you in this workspace'],
     [403, 'This starter has 6 pages; your plan includes 5. Pick a smaller starter or upgrade in Billing.'],
   ])('clears a pick refused with a %i, in the create’s words', (status, error) => {
     expect(readSiteStarterPickRefusal(status, { error, listingId: 'l-1' }, 'l-1')).toEqual({

@@ -711,6 +711,43 @@ describe('the layout step', () => {
       expect(mockRunAiRequest).toHaveBeenCalledTimes(1)
       expect(outcome.outputs).toHaveLength(1)
     })
+
+    /** A frame the model designs, for a site created with a logo (AGL-4119). */
+    const designedFrame = {
+      kind: 'completion',
+      text: '',
+      toolUse: [{ name: 'submit_frame', input: { header: { band: 'plain', align: 'start', cols: [], blocks: [] }, footer: { band: 'soft', align: 'start', cols: [], blocks: [{ kind: 'text', col: -1, text: 'Family-run roofers in Springfield since 1998.', to: '', icon: '', style: 'none', items: [] }] } } }],
+      usage: USAGE,
+      estCostUsd: 0.02,
+      stopReason: 'tool_use',
+    }
+    const logosIn = (id: string) =>
+      Object.values(storedNodes(id)).filter((node) => node.componentId === 'image').map((node) => node.props?.['src'])
+
+    it('draws the logo the site was created with, in the header and the footer (AGL-4119)', async () => {
+      mockDocs.set('hosts/host-1', { subdomain: 'acme', logoUrl: 'media:host-1/logo' })
+      mockRunAiRequest.mockResolvedValue(designedFrame)
+      const outcome = await createAiJobLayoutStep()(context(importedJob({})))
+      expect(outcome.outputs).toHaveLength(1)
+      expect(logosIn(LAYOUT_ID)).toEqual(['{{host.logo}}', '{{host.logo}}'])
+    })
+
+    it('draws the name on a site with no logo, as it always has (AGL-4119)', async () => {
+      mockRunAiRequest.mockResolvedValue(designedFrame)
+      await createAiJobLayoutStep()(context(importedJob({})))
+      expect(logosIn(LAYOUT_ID)).toEqual([])
+    })
+
+    it('tells the model nothing of the logo: the request is the same with one or without (AGL-4119)', async () => {
+      mockRunAiRequest.mockResolvedValue(designedFrame)
+      await createAiJobLayoutStep()(context(importedJob({})))
+      const without = JSON.stringify(mockRunAiRequest.mock.calls[0][0])
+      mockRunAiRequest.mockClear()
+      mockDocs.delete(`hosts/host-1/layouts/${LAYOUT_ID}`)
+      mockDocs.set('hosts/host-1', { subdomain: 'acme', logoUrl: 'media:host-1/logo' })
+      await createAiJobLayoutStep()(context({ ...importedJob({}), id: 'job-2' } as never))
+      expect(JSON.stringify(mockRunAiRequest.mock.calls[0][0])).toBe(without)
+    })
   })
 
   describe('a plan that starts from a copy', () => {
