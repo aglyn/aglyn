@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn'
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import {
   ASSIST_OUTCOMES_SENT,
   ASSIST_PAGE_CHANGE_ACTION_ID,
