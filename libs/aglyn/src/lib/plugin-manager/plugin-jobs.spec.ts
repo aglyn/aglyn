@@ -88,6 +88,50 @@ describe('AGL-2495 · the host lockdown resolver registry', () => {
     expect(asked).toEqual(['locked', 'healthy'])
   })
 
+  it('asks once per host per gate, and a new gate asks afresh (AGL-4121)', async () => {
+    // Three Firestore reads a verdict, and the scans ask per row. The runner
+    // mints a gate per job per run, so a lifted lock reaches the next beat.
+    const asked: string[] = []
+    let locked = true
+    registerPluginJobHostLockdown(async (hostId) => {
+      asked.push(hostId)
+      return locked
+    })
+    const gate = pluginJobHostGate()
+    expect(await gate.isLocked('site-a')).toBe(true)
+    expect(await gate.isLocked('site-a')).toBe(true)
+    expect(await gate.isLocked('site-b')).toBe(true)
+    expect(asked).toEqual(['site-a', 'site-b'])
+
+    locked = false
+    expect(await pluginJobHostGate().isLocked('site-a')).toBe(false)
+    expect(asked).toEqual(['site-a', 'site-b', 'site-a'])
+  })
+
+  it('shares one read between askers running side by side (AGL-4121)', async () => {
+    const asked: string[] = []
+    registerPluginJobHostLockdown(async (hostId) => {
+      asked.push(hostId)
+      return false
+    })
+    const gate = pluginJobHostGate()
+    await Promise.all([gate.isLocked('site-a'), gate.isLocked('site-a')])
+    expect(asked).toEqual(['site-a'])
+  })
+
+  it('keeps no verdict from a resolver that failed (AGL-4121)', async () => {
+    let attempts = 0
+    registerPluginJobHostLockdown(async () => {
+      attempts += 1
+      if (attempts === 1) throw new Error('read failed')
+      return true
+    })
+    const gate = pluginJobHostGate()
+    await expect(gate.isLocked('site-a')).rejects.toThrow('read failed')
+    expect(await gate.isLocked('site-a')).toBe(true)
+    expect(attempts).toBe(2)
+  })
+
   it('only the exact answer TRUE locks — a truthy value does not', async () => {
     // The `lockdownEnforcement` posture, one level out: a resolver that
     // answered with an object, a string, or anything a future refactor might

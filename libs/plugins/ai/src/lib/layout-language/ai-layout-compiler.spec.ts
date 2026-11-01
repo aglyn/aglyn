@@ -1247,3 +1247,72 @@ describe('every page drawn with a site design (AGL-3660) compiles into a page th
     expect(failures.slice(0, 5)).toEqual([])
   })
 })
+
+describe('a tab of a page brought in sets its row of columns side by side (AGL-4114)', () => {
+  const PLAN: AiLayoutPagePlan = { title: 'Plans', sections: [{ name: 'Plans', uses: [], items: 0 }] }
+
+  const line = (words: string, col?: number): AiLayoutBlock => ({ kind: 'text', text: words, ...(col === undefined ? {} : { col }) })
+
+  /** A page of one section of tabs, compiled as the import compiles it. */
+  function compiled(tabs: NonNullable<AiLayoutBlock['tabs']>, room?: { cols: number[]; col: number }) {
+    const block: AiLayoutBlock = { kind: 'tabs', tabs, ...(room ? { col: room.col } : {}) }
+    const sections: AiLayoutSection[] = [{ band: 'plain', blocks: room ? [block, line('Beside the tabs', 1 - room.col)] : [block], ...(room ? { cols: room.cols } : {}) }]
+    return aiCompileLayoutPage(sections, PLAN, TARGETS, { reusableComponents: false, sectionIds: ['sec-1'] }).tree
+  }
+
+  const ofComponent = (tree: ReturnType<typeof compiled>, componentId: string) => Object.keys(tree.nodes).filter((id) => tree.nodes[id]?.componentId === componentId)
+
+  const wordsUnder = (tree: ReturnType<typeof compiled>, id: string): string[] => {
+    const node = tree.nodes[id]
+    const own = typeof node?.props?.['children'] === 'string' ? [node.props['children'] as string] : []
+    return [...own, ...(node?.nodes ?? []).flatMap((child) => wordsUnder(tree, child))]
+  }
+
+  const TWO_TABS: NonNullable<AiLayoutBlock['tabs']> = [
+    { label: 'Monthly', selected: true, cols: [2, 1], blocks: [line('Above the row'), line('The plan', 0), line('The price', 1), line('Below the row')] },
+    { label: 'Annual', blocks: [line('Save a third')] },
+  ]
+
+  it('draws the blocks above the row, its columns by the source’s widths, and the blocks below it', () => {
+    const tree = compiled(TWO_TABS)
+    const [panel] = ofComponent(tree, 'muiTabPanel')
+    const stack = tree.nodes[panel as string]?.nodes?.[0] as string
+    expect(tree.nodes[stack]?.componentId).toBe('muiStack')
+    expect(wordsUnder(tree, stack)).toEqual(['Above the row', 'The plan', 'The price', 'Below the row'])
+    const [row] = ofComponent(tree, 'muiGrid').filter((id) => tree.nodes[id]?.props?.['container'] === true)
+    const columns = tree.nodes[row as string]?.nodes ?? []
+    expect(columns.map((id) => wordsUnder(tree, id))).toEqual([['The plan'], ['The price']])
+    expect(columns.map((id) => tree.nodes[id]?.props?.['size'])).toEqual(['xs:12 md:8', 'xs:12 md:4'])
+  })
+
+  it('leaves a tab with no row as its blocks, top to bottom', () => {
+    const tree = compiled(TWO_TABS)
+    const annual = ofComponent(tree, 'muiTabPanel')[1] as string
+    expect(wordsUnder(tree, annual)).toEqual(['Save a third'])
+    expect(ofComponent(tree, 'muiGrid').filter((id) => tree.nodes[id]?.props?.['container'] === true)).toHaveLength(1)
+  })
+
+  it('draws a row that fills one column as that column’s blocks, with no row of one', () => {
+    const tree = compiled([
+      { label: 'Monthly', cols: [1, 1], blocks: [line('Only the left', 0)] },
+      { label: 'Annual', blocks: [line('Save a third')] },
+    ])
+    expect(ofComponent(tree, 'muiGrid').filter((id) => tree.nodes[id]?.props?.['container'] === true)).toEqual([])
+    expect(wordsUnder(tree, ofComponent(tree, 'muiTabPanel')[0] as string)).toEqual(['Only the left'])
+  })
+
+  it('stacks the row in a column with no room for one, every word kept', () => {
+    const tree = compiled(TWO_TABS, { cols: [1, 3], col: 0 })
+    const panels = ofComponent(tree, 'muiTabPanel')
+    expect(wordsUnder(tree, panels[0] as string)).toEqual(['Above the row', 'The plan', 'The price', 'Below the row'])
+    // The section's own two columns, and no row inside the narrow one.
+    expect(ofComponent(tree, 'muiGrid').filter((id) => tree.nodes[id]?.props?.['container'] === true)).toHaveLength(1)
+  })
+
+  it('stores with no violation, in a strip of labels as in the Tabs element', () => {
+    const sections: AiLayoutSection[] = [{ band: 'plain', blocks: [{ kind: 'tabs', tabs: [{ label: 'Open', selected: true, cols: [1, 1], blocks: [line('One', 0), line('Two', 1)] }, { label: 'Closed', blocks: [] }] }] }]
+    const { report, stored } = build(sections, PLAN, false)
+    expect(report.violations).toEqual([])
+    expect(stored.ok && stored.repairs).toEqual([])
+  })
+})

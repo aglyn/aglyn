@@ -126,6 +126,11 @@ async function probe(
       return { origin, path, service, status: 'unreachable', httpStatus: response.status }
     }
     const { status, detail } = healthStateOfBody(body, response.status)
+    // Not a duplicate of the door's own `recordHealthResponse`. Each instance
+    // skips the store while a verdict matches the last one IT wrote, so a warm
+    // door instance can sit on a verdict another instance has since changed:
+    // it stays silent through a recovery, and through the next incident. This
+    // call is the second instance, and it is what puts the store right.
     await recordHealthState(service, status, detail, {
       label: HEALTH_SERVICE_LABELS[service] ?? service,
     })

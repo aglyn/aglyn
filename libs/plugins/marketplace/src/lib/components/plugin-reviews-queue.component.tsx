@@ -36,7 +36,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { pluginDocsHelp } from '@aglyn/aglyn'
-import { reviewStatusMeaning } from '../model/plugin-review-status'
+import {
+  reviewStatusMeaning,
+  starterReviewStatusMeaning,
+} from '../model/plugin-review-status'
 import {
   REVIEW_QUEUE_QUERY,
   type ReviewQueueSection,
@@ -72,12 +75,31 @@ interface ListedRow {
   private: boolean
 }
 
+/** A site starter's row (AGL-4049): what a reviewer scans a starter by. */
+interface StarterRow {
+  listingId: string
+  displayName: string
+  profileId: string
+  reviewStatus: string
+  priceUsd: number
+  pages: number
+  version: string
+  /** The version the last verdict was given on, or null before one. */
+  reviewedVersion: string | null
+  submittedAt: string | null
+  hidden: boolean
+  official: boolean
+}
+
 const STATUS_FILTERS = [
   { value: 'all', label: 'All statuses' },
   { value: 'submitted', label: 'Submitted' },
   { value: 'in_review', label: 'In review' },
   { value: 'listed', label: 'Listed' },
   { value: 'verified', label: 'Verified' },
+  // A rejected site starter stays rejected until its publisher publishes it
+  // again (AGL-4049), so the Starters section needs a way to find it.
+  { value: 'rejected', label: 'Rejected' },
   { value: 'hidden', label: 'Taken down' },
 ]
 
@@ -101,12 +123,17 @@ const NO_MORE: Record<ReviewQueueSection, boolean> = {
   queue: false,
   listed: false,
   verification: false,
+  starters: false,
 }
 const FIRST_PAGES: Record<ReviewQueueSection, number> = {
   queue: 0,
   listed: 0,
   verification: 0,
+  starters: 0,
 }
+
+const plural = (count: number, one: string) =>
+  `${count} ${one}${count === 1 ? '' : 's'}`
 
 /**
  * Staff marketplace review index (AGL-961).
@@ -133,6 +160,7 @@ export function PluginReviewsQueue({ basePath }: { basePath: string }) {
   const [verificationRequests, setVerificationRequests] = useState<QueueRow[]>(
     [],
   )
+  const [starters, setStarters] = useState<StarterRow[]>([])
   const [publishers, setPublishers] = useState<Record<string, string>>({})
   const [loaded, setLoaded] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -175,6 +203,7 @@ export function PluginReviewsQueue({ basePath }: { basePath: string }) {
       setQueue(payload?.queue ?? [])
       setListed(payload?.listed ?? [])
       setVerificationRequests(payload?.verificationRequests ?? [])
+      setStarters(payload?.starters ?? [])
       setPublishers(payload?.publishers ?? {})
       setMore({ ...NO_MORE, ...(payload?.more ?? {}) })
       setRefused(payload?.refused ?? [])
@@ -205,10 +234,12 @@ export function PluginReviewsQueue({ basePath }: { basePath: string }) {
   const visibleQueue = pageOf('queue', queue)
   const visibleListed = pageOf('listed', listed)
   const visibleVerification = pageOf('verification', verificationRequests)
+  const visibleStarters = pageOf('starters', starters)
   const total: Record<ReviewQueueSection, number> = {
     queue: queue.length,
     listed: listed.length,
     verification: verificationRequests.length,
+    starters: starters.length,
   }
   const filtering = asked.length > 0 || status !== 'all'
   const refusals = useMemo(
@@ -298,7 +329,7 @@ export function PluginReviewsQueue({ basePath }: { basePath: string }) {
             >
               <TextField
                 size="small"
-                placeholder="Search plugin names"
+                placeholder="Search plugin and starter names"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 sx={{ minWidth: 320 }}
@@ -452,6 +483,84 @@ export function PluginReviewsQueue({ basePath }: { basePath: string }) {
                       {filtering
                         ? 'No submissions match this filter.'
                         : 'No plugin submissions waiting for review.'}
+                    </Alert>
+                  )}
+                </CardDisplay>
+
+                {/* Site starters (AGL-4049), their own card: a starter is a
+                    whole site someone creates the moment they pick it, not
+                    code, so a row says what it is made of and costs rather
+                    than a version's review state. With All statuses it holds
+                    the ones waiting; a status names the rest. */}
+                <CardDisplay
+                  header={`${status === 'all' ? 'Site starters awaiting review' : 'Site starters'} (${total.starters}${more.starters ? '+' : ''})`}
+                  help={pluginDocsHelp('staffConsole', {
+                    anchor: '#plugin-reviews-site-starters',
+                  })}
+                  contentGutterX
+                  contentGutterY
+                >
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ display: 'block', mb: 1 }}
+                  >
+                    {'Nobody but its publisher can create a site from a ' +
+                      'starter until it is listed. Pick a status above to see ' +
+                      'listed, rejected or taken-down starters.'}
+                  </Typography>
+                  {visibleStarters.length ? (
+                    <Stack>
+                      {visibleStarters.map((entry) => {
+                        const meaning = starterReviewStatusMeaning(entry.reviewStatus)
+                        return row(
+                          `starter-${entry.listingId}`,
+                          entry.listingId,
+                          entry.displayName,
+                          entry.profileId,
+                          <>
+                            <Chip size="small" color={meaning.color} label={meaning.label} />
+                            <Chip
+                              size="small"
+                              variant="outlined"
+                              label={`v${entry.version || '—'}`}
+                            />
+                            {/* Listed stays listed when it is published again,
+                                so a newer version than the one reviewed is
+                                what a reviewer looks for under Listed. */}
+                            {entry.reviewedVersion &&
+                            entry.reviewedVersion !== entry.version ? (
+                              <Chip
+                                size="small"
+                                color="warning"
+                                label={`v${entry.version} since review (v${entry.reviewedVersion})`}
+                              />
+                            ) : null}
+                            {entry.official ? (
+                              <Chip size="small" variant="outlined" label="Official" />
+                            ) : null}
+                            {entry.hidden ? (
+                              <Chip size="small" color="error" label="Taken down" />
+                            ) : null}
+                          </>,
+                          [
+                            plural(entry.pages, 'page'),
+                            entry.priceUsd > 0 ? `$${entry.priceUsd}` : 'Free',
+                            entry.submittedAt
+                              ? `Submitted ${new Date(entry.submittedAt).toLocaleDateString()}`
+                              : '',
+                          ]
+                            .filter(Boolean)
+                            .join(' · '),
+                        )
+                      })}
+                      {pager('starters', visibleStarters.length)}
+                    </Stack>
+                  ) : (
+                    <Alert severity={filtering ? 'info' : 'success'}>
+                      {filtering
+                        ? 'No site starters match this filter.'
+                        : 'No site starters waiting for review.'}
                     </Alert>
                   )}
                 </CardDisplay>
