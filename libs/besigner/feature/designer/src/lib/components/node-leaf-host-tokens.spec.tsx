@@ -83,9 +83,13 @@ const STORED_PROPS = {
 /** Props each probe received, by the leaf's `data-aglyn` id. */
 const mockReceived = new Map<string, Record<string, unknown>>()
 
+/** The styles each probe received, by the same id. */
+const mockReceivedSx = new Map<string, unknown>()
+
 const Probe = forwardRef<HTMLDivElement, Record<string, any>>((props, ref) => {
-  const { children, sx: _sx, className, style, ...received } = props
+  const { children, sx, className, style, ...received } = props
   mockReceived.set(String(received['data-aglyn']), received)
+  mockReceivedSx.set(String(received['data-aglyn']), sx)
   return (
     <div
       ref={ref}
@@ -371,6 +375,72 @@ describe('the canvas draws host variables as the published page resolves them (A
     )
     setResolveBindings(false)
     expect(receivedBy('footer')['title']).toBe('{{host.url}}')
+  })
+})
+
+describe('what the site’s own values hide, on the canvas (AGL-4119)', () => {
+  const LOGO = { ...SITE, logoUrl: 'media:h/logo' }
+  const withDirective = (props: Record<string, unknown>) => {
+    const node = Aglyn.canvas.getNode('statement') as unknown as { props: Record<string, unknown> }
+    Object.assign(node.props, props)
+  }
+  const drawn = (host: Aglyn.HostTokenSource | null) =>
+    render(
+      <Canvas host={host}>
+        <ElementLeafComponent node={statementNode()} />
+      </Canvas>,
+    ).container
+  const collapsed = (_drawnTo: HTMLElement) =>
+    JSON.stringify(mockReceivedSx.get('leaf:statement') ?? null).includes('"display":"none')
+
+  it('collapses the name on a site with a logo, keeping the element for the hierarchy', () => {
+    withDirective({ hideIf: '{{host.logo}}' })
+    expect(collapsed(drawn(LOGO))).toBe(true)
+  })
+
+  it('collapses the logo on a site without one, and shows the name', () => {
+    withDirective({ hideUnless: '{{host.logo}}' })
+    expect(collapsed(drawn(SITE))).toBe(true)
+  })
+
+  it('CONTROL — shows what the site does not hide', () => {
+    withDirective({ hideUnless: '{{host.logo}}' })
+    expect(collapsed(drawn(LOGO))).toBe(false)
+  })
+
+  it('never writes that to the node a save reads', () => {
+    withDirective({ hideIf: '{{host.logo}}' })
+    drawn(LOGO)
+    expect((Aglyn.canvas.getNode('statement') as unknown as { hidden?: boolean }).hidden).toBeFalsy()
+  })
+
+  it('shows every part as written in the raw-token view', () => {
+    withDirective({ hideIf: '{{host.logo}}' })
+    const container = drawn(LOGO)
+    setResolveBindings(false)
+    expect(collapsed(container)).toBe(false)
+  })
+
+  it('draws nothing for a hidden node outside the document, as the layout chrome is', () => {
+    const name = {
+      $id: 'brand',
+      componentId: PROBE,
+      props: { children: '{{host.businessName}}', hideIf: '{{host.logo}}' },
+      nodes: [],
+    }
+    const shown = render(
+      <Canvas host={SITE}>
+        <MediaFactsLeaf node={name as never} />
+      </Canvas>,
+    )
+    expect(textOf(shown.container, 'brand')).toBe('Aglyn')
+    shown.unmount()
+    const hidden = render(
+      <Canvas host={LOGO}>
+        <MediaFactsLeaf node={name as never} />
+      </Canvas>,
+    )
+    expect(hidden.container.querySelector('[data-aglyn="brand"]')).toBeNull()
   })
 })
 

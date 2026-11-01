@@ -33,6 +33,8 @@ import {
   parseAiSiteJobInputs,
 } from './ai-site-job'
 import { AI_SITE_NO_DETAILS } from './ai-site-details'
+import { AI_SITE_KINDS } from './ai-site-kinds'
+import { aiSiteKindDefaultLook } from './ai-site-look'
 import {
   AI_SITE_START_ANSWERS,
   AI_SITE_START_EXAMPLES,
@@ -373,5 +375,118 @@ describe('a style card clicked (AGL-4049)', () => {
   it('reopens a start that ran on its style, chosen', () => {
     const inputs = start.aiSiteStartInputs({ ...AI_SITE_START_ANSWERS, siteType: 'a bakery', ...start.aiSiteStartStyleAnswer('restaurant') })
     expect(start.aiSiteStartAnswersFromInputs(inputs)).toMatchObject({ style: 'restaurant', kind: 'restaurant' })
+  })
+})
+
+/**
+ * An AI starter picked in "Choose your starter" (AGL-4049 phase 4): the
+ * answers its listing carries become the questions' answers, every one of
+ * them the person's to change. The fixture is built the way the platform's
+ * own `fp-starter-{kind}-ai` listings are (`first-party-starters.mjs`), from
+ * the one derivation both use: `aiSiteKindDefaultLook`.
+ */
+describe('an AI starter’s answers fill the questions (AGL-4049)', () => {
+  const kindOf = (id: string) => {
+    const kind = AI_SITE_KINDS.find((entry) => entry.id === id)
+    if (!kind) throw new Error(`no kind ${id}`)
+    return kind
+  }
+  /** What the seed writes on a kind's AI starter: kind, style, fonts, brand colors, pages, brief. */
+  const seeded = (id: string, patch: Record<string, unknown> = {}) => {
+    const kind = kindOf(id)
+    const look = aiSiteKindDefaultLook(kind, { presetIds: new Set(['theme-presets.material3', 'theme-presets.bootstrap']) })
+    return {
+      kind: kind.id,
+      style: look.answerStyle,
+      fonts: look.theme.fonts,
+      brandColors: look.theme.brand.light,
+      pages: kind.pages,
+      brief: '',
+      ...patch,
+    }
+  }
+
+  it('chooses the starter’s style, and keeps its brand color as the brand answer', () => {
+    const answers = seeded('restaurant')
+    const mapped = start.aiSiteStartAnswersFromStarter(answers)
+    expect(mapped).toMatchObject({ style: 'restaurant', kind: 'restaurant' })
+    const primary = (answers.brandColors as Record<string, string>)['primary']
+    expect(primary).toMatch(/^#[0-9a-f]{6}$/i)
+    expect(mapped.brand).toBe(primary.toLowerCase())
+  })
+
+  it('leaves what a site is FOR to the person when the starter gives no brief, and every other answer at its start', () => {
+    const mapped = start.aiSiteStartAnswersFromStarter(seeded('restaurant'))
+    expect(mapped).toEqual({
+      ...AI_SITE_START_ANSWERS,
+      style: 'restaurant',
+      kind: 'restaurant',
+      brand: mapped.brand,
+    })
+    // So the questions still ask the one answer with no default.
+    expect(aiSiteStartRefusal(mapped)).toBe('Say what kind of site this is.')
+    expect(aiSiteStartRefusal({ ...mapped, siteType: 'a corner bistro' })).toBeNull()
+  })
+
+  it('takes a brief as what the site is for, held to the length the question allows', () => {
+    expect(start.aiSiteStartAnswersFromStarter(seeded('restaurant', { brief: '  a corner bistro  ' })).siteType).toBe(
+      'a corner bistro',
+    )
+    const long = start.aiSiteStartAnswersFromStarter(seeded('restaurant', { brief: 'word '.repeat(60) })).siteType
+    expect(long.length).toBeLessThanOrEqual(AI_SITE_INPUT_MAX_CHARS)
+    expect(long.endsWith(' ')).toBe(false)
+  })
+
+  it('a kind that suits any hue names no brand color, and the style chooses one', () => {
+    const anyHue = AI_SITE_KINDS.find((kind) => kind.look.hues.some(([from, to]) => from === 0 && to === 360))
+    expect(anyHue).toBeTruthy()
+    const mapped = start.aiSiteStartAnswersFromStarter(seeded(anyHue!.id))
+    expect(mapped).toMatchObject({ style: anyHue!.id, brand: '' })
+  })
+
+  it('takes a page count, held to the workspace’s band, and ignores a description of the pages', () => {
+    expect(start.aiSiteStartAnswersFromStarter(seeded('restaurant')).pages).toBe(AI_SITE_START_ANSWERS.pages)
+    expect(start.aiSiteStartAnswersFromStarter(seeded('restaurant', { pages: 6 })).pages).toBe(6)
+    expect(start.aiSiteStartAnswersFromStarter(seeded('restaurant', { pages: 99 })).pages).toBe(AI_SITE_PAGES.max)
+    expect(start.aiSiteStartAnswersFromStarter(seeded('restaurant', { pages: 0 })).pages).toBe(AI_SITE_PAGES.min)
+    expect(start.aiSiteStartAnswersFromStarter(seeded('restaurant', { pages: 2.5 })).pages).toBe(AI_SITE_START_ANSWERS.pages)
+    expect(start.aiSiteStartAnswersFromStarter(seeded('restaurant', { pages: 6 }), { freeTaste: true }).pages).toBe(2)
+  })
+
+  it('chooses nothing for a kind this deployment does not know, nor a brand that is not a color', () => {
+    const mapped = start.aiSiteStartAnswersFromStarter(
+      seeded('restaurant', { kind: 'nope', brandColors: { primary: 'tomato' } }),
+    )
+    expect(mapped).toMatchObject({ style: null, kind: null, brand: '' })
+  })
+
+  it('drops every key a starter does not carry, and reads anything that is not answers as none', () => {
+    const mapped = start.aiSiteStartAnswersFromStarter(
+      seeded('restaurant', {
+        siteType: 'not a starter key',
+        audience: 'nor this',
+        businessName: 'Somebody',
+        phone: '+1 555 0100',
+        welcomeEmail: false,
+        submissions: 'leads',
+      }),
+    )
+    expect(mapped).toMatchObject({
+      siteType: '',
+      audience: '',
+      phone: '',
+      welcomeEmail: AI_SITE_START_ANSWERS.welcomeEmail,
+      submissions: AI_SITE_START_ANSWERS.submissions,
+    })
+    expect(mapped).not.toHaveProperty('businessName')
+    for (const value of [null, undefined, 'answers', 7, ['restaurant']]) {
+      expect(start.aiSiteStartAnswersFromStarter(value as never)).toEqual(AI_SITE_START_ANSWERS)
+    }
+  })
+
+  it('becomes a job the door admits once the person says what the site is for', () => {
+    const mapped = { ...start.aiSiteStartAnswersFromStarter(seeded('restaurant', { pages: 6 })), siteType: 'a corner bistro' }
+    const inputs = parseAiSiteJobInputs(aiSiteStartInputs(mapped))
+    expect(inputs).toMatchObject({ siteKind: 'restaurant', pages: 6, brand: mapped.brand })
   })
 })

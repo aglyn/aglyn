@@ -37,6 +37,10 @@ offers two cards:
 **Bring my site** is a third card for moving the website
 you have now into Aglyn. See [Bring my site](./bring-my-site.md).
 
+The first step also takes your [logo and favicon](../getting-started/create-a-site.md#logo-and-favicon).
+They are optional. A logo you add there is in your site's header and footer when the AI
+builds them, in place of its name.
+
 No site exists until you choose, and nothing is chosen for you. **Create site**, after
 you choose a style for the starter site, creates the site with the starter home page in
 that style and opens it. **Plan my site** creates the site and starts planning it. The
@@ -50,6 +54,34 @@ the site. If it cannot, the window says why and no site is made. On the Free pla
 that may need more credits than you have left asks first, and the site is created only once
 you choose. If planning still cannot start after the site is created, the window says why;
 leaving then gives that site the starter home page, so it is never left empty.
+
+## Start from an AI starter {#start-from-an-ai-starter}
+
+**AI starters are rolling out**, and your workspace may not have them yet. Where they
+are on, **Start from a starter site** opens **Choose your starter**, and its **AI
+starters** tab lists starters Aglyn AI writes your pages from. An AI starter is a set of
+answers and a look for one kind of site, never ready-made pages.
+
+1. On the first step, name your site and choose its address, then choose **Start from a
+   starter site**.
+2. Choose the **AI starters** tab and pick a starter.
+3. Choose **Continue**.
+
+**Start your site** opens on **Your site** with its questions filled in from the starter,
+and says so above the first question. The starter's style is chosen on the
+[Style](#style) step, and its card says which starter it came from. Its brand color is
+picked under that step's **More details**, as **Chosen color**. When the starter says what
+the site is for, that answer is filled in too. Otherwise you say it, as you would for any
+start. Change any answer you like, then choose **Plan my site** on **Review**. It works as
+always: it creates the site, then plans, writes and publishes its pages for your business.
+
+![Start your site opened from an AI starter: Filled in from Restaurant & café with AI above the question What kind of site are you creating?, the progress bar on Your site, the cards to pick the closest kind, and Back and Next at the bottom](/img/ai/start-with-ai-from-starter.png)
+
+A starter with a price is bought before its answers are shown. Picking one says its price,
+with **Buy and continue**, and **Continue** waits until it is yours. Nothing is created
+until **Plan my site**, so closing the window before then leaves nothing behind. If the
+site is created and its pages cannot be planned, leaving gives it the starter's own pages,
+so it is never left empty.
 
 ## The questions, one at a time {#the-questions}
 

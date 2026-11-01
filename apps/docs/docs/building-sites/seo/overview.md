@@ -135,7 +135,9 @@ stands for.
 The **Favicon** is the small icon browsers show in tabs and bookmarks. Press **Choose
 from media** and pick one square PNG, SVG or JPG of 512×512 or larger, and every size is
 [generated for you](#every-icon-size-is-generated-for-you). You can paste an icon URL
-instead, which is used as it is, at the one size the file has.
+instead, which is used as it is, at the one size the file has. A favicon added when the
+site was [created](../../getting-started/create-a-site.md#logo-and-favicon) lands here,
+and a site created with a logo and no favicon starts with its logo here.
 
 #### App icon {#app-icon}
 

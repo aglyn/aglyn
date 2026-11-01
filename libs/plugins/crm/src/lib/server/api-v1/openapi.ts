@@ -374,7 +374,7 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
       at: isoField('When the interaction happened — not when it was logged.'),
       byUid: nullableField(stringField('User who logged it.')),
       contactId: nullableField(stringField('Associated contact.')),
-      companyId: nullableField(stringField('Associated company.')),
+      companyId: nullableField(stringField('Associated company. When none is sent, the company of the deal, else of the contact.')),
       dealId: nullableField(stringField('Associated deal.')),
       outcome: nullableField(stringField('Outcome label.')),
       durationMinutes: nullableField(integerField('Duration, for calls and meetings.')),

@@ -532,6 +532,24 @@ describe('the recipient comes off the record', () => {
     })
   })
 
+  it('rolls a deal’s email up to the deal’s company, over the contact’s own (AGL-4123)', async () => {
+    store[DEAL].companyId = 'co-deal'
+    await call({ dealId: 'deal-1', subject: 'Proposal', body: 'Attached.' })
+    expect(writeCrmEmailActivity.mock.calls[0][1]).toMatchObject({
+      contactId: 'contact-1',
+      dealId: 'deal-1',
+      companyId: 'co-deal',
+    })
+  })
+
+  it('rolls a contact’s email up to the company the sending site files them under (AGL-4123)', async () => {
+    await call(MESSAGE)
+    expect(writeCrmEmailActivity.mock.calls[0][1]).toMatchObject({
+      contactId: 'contact-1',
+      companyId: 'co-1',
+    })
+  })
+
   it('refuses a deal that names no contact', async () => {
     delete store[DEAL].contactId
     const { status, body } = await call({ dealId: 'deal-1', subject: 'x', body: 'y' })

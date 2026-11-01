@@ -911,9 +911,13 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
         // the function the tenant composes with, so a token inside a
         // component, a form or the layout chrome fills in as the page's
         // own do — and a field the site has not set renders as nothing,
-        // exactly as it does for a visitor.
+        // exactly as it does for a visitor. What the site's values hide
+        // goes first, as it does there (AGL-4119).
         (hostDoc
-          ? Aglyn.resolveNodesHostTokens(grafted as any, hostDoc)
+          ? Aglyn.resolveNodesHostTokens(
+              Aglyn.pruneHostHiddenNodes(grafted as any, hostDoc),
+              hostDoc,
+            )
           : grafted) as any,
       )
     }

@@ -72,13 +72,19 @@ import { getStorage } from 'firebase-admin/storage'
 const { openStorageReadStream, readStorageObject } = await import(process.env.MODULE_UNDER_TEST)
 
 const CHUNK = ${CHUNK}
+// What a body waits for before it ends. Part of the Storage client's fan-out is
+// attached a beat after 'response', and pipeline attaches nothing to a stream
+// that has already finished, so a two-chunk body that wins that race shows a
+// true peak of 8 where a longer one shows 12. Peaks compare only once every
+// body measured has outlived the wiring.
+let whenWired = Promise.resolve()
 const server = http.createServer((req, res) => {
   const match = /chunks-(\d+)/.exec(req.url ?? '')
   const chunks = match ? Number(match[1]) : 1
   res.writeHead(200, { 'content-type': 'application/octet-stream' })
   let sent = 0
   const next = () => {
-    if (sent++ >= chunks) return void res.end()
+    if (sent++ >= chunks) return void whenWired.then(() => res.end())
     res.write(Buffer.alloc(CHUNK, sent % 251))
     setImmediate(next)
   }
@@ -110,6 +116,10 @@ const slowSink = () =>
   new Writable({ highWaterMark: 1, write: (_c, _e, callback) => void setImmediate(callback) })
 async function peakBodyListeners(name) {
   const peak = {}
+  let wired
+  whenWired = new Promise((settle) => {
+    wired = settle
+  })
   const stream = openStorageReadStream(file(name), { validation: false })
   stream.once('response', (body) => {
     const record = () => {
@@ -119,8 +129,10 @@ async function peakBodyListeners(name) {
     }
     body.on('newListener', () => setImmediate(record))
     record()
+    setTimeout(wired, 20)
   })
   await pipeline(stream, slowSink())
+  whenWired = Promise.resolve()
   return peak
 }
 

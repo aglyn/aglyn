@@ -121,6 +121,8 @@ details.
 | Token | Fills in |
 | --- | --- |
 | `{{host.businessName}}` | **Setup → SEO → Entity → Name**, or the site name when that is empty |
+| `{{host.logo}}` | The site's logo, from **Setup → Details → Site logo** |
+| `{{host.logoDark}}` | The site's dark mode logo from the same card, or its logo when it has no dark one |
 | `{{host.url}}` | The site's address — its custom domain when one is connected |
 | `{{host.supportEmail}}` | **Support email**, from **Setup → Details → Business details** |
 | `{{host.address}}` | **Postal address**, from the same card |

@@ -107,10 +107,20 @@ jest.mock('@aglyn/aglyn/server', () => ({
 }))
 
 const { GET, POST } = require('../app/api/admin/retention-emails/route')
+const { retentionTurnHour } = jest.requireActual('../utils/server/retention-emails')
 
 const ROUTE = 'https://app.aglyn.com/api/admin/retention-emails'
 const NOW = Date.now()
 const HOUR = 60 * 60 * 1000
+
+/** A uid this run asks about, or one it leaves for its turn (AGL-4121). */
+function uidOnTurn(base: string, onTurn = true): string {
+  const hour = new Date(NOW).getUTCHours()
+  for (let index = 0; ; index += 1) {
+    const uid = `${base}-${index}`
+    if ((retentionTurnHour(uid) === hour) === onTurn) return uid
+  }
+}
 
 function account(uid: string, overrides: Record<string, unknown> = {}) {
   return {
@@ -139,6 +149,8 @@ function call(method: 'GET' | 'POST', authorized = true) {
 
 beforeEach(() => {
   jest.clearAllMocks()
+  // Held, so a case that runs across the top of an hour keeps its uid's turn.
+  jest.spyOn(Date, 'now').mockReturnValue(NOW)
   process.env.CRON_SECRET = 'cron-secret'
   mockUserDocs = {}
   mockSuppressed.mockResolvedValue(false)
@@ -236,7 +248,7 @@ describe('/api/admin/retention-emails', () => {
   })
 
   it('sends a product tip with the way out, and never to someone who said No', async () => {
-    const stalled = account('stalled', {
+    const stalled = account(uidOnTurn('stalled'), {
       emailVerified: true,
       metadata: {
         creationTime: new Date(NOW - 30 * HOUR).toUTCString(),
@@ -251,9 +263,54 @@ describe('/api/admin/retention-emails', () => {
     expect((sent['headers'] as Record<string, string>)['List-Unsubscribe']).toContain('/manage/user/emails')
 
     jest.clearAllMocks()
-    mockUserDocs = { stalled: { marketingConsent: false } }
+    mockUserDocs = { [stalled.uid]: { marketingConsent: false } }
     await POST(call('POST'))
     expect(mockSendEmail).not.toHaveBeenCalled()
+  })
+
+  it('leaves a confirmed account for its own hour, and spends no read on it (AGL-4121)', async () => {
+    const stalled = account(uidOnTurn('stalled', false), {
+      emailVerified: true,
+      metadata: {
+        creationTime: new Date(NOW - 30 * HOUR).toUTCString(),
+        lastSignInTime: new Date(NOW - 29 * HOUR).toUTCString(),
+        lastRefreshTime: null,
+      },
+    })
+    mockListUsers.mockResolvedValue({ users: [stalled], pageToken: undefined })
+    const body = await (await POST(call('POST'))).json()
+    expect(body).toMatchObject({ scanned: 1, candidates: 0, waiting: 1, rows: [] })
+    expect(mockSendEmail).not.toHaveBeenCalled()
+  })
+
+  it('plans the hour a POST would send, so a dry run reports what this run would do (AGL-4121)', async () => {
+    const owed = (uid: string) =>
+      account(uid, {
+        emailVerified: true,
+        metadata: {
+          creationTime: new Date(NOW - 30 * HOUR).toUTCString(),
+          lastSignInTime: new Date(NOW - 29 * HOUR).toUTCString(),
+          lastRefreshTime: null,
+        },
+      })
+    const up = uidOnTurn('up')
+    mockListUsers.mockResolvedValue({
+      users: [owed(up), owed(uidOnTurn('waiting', false))],
+      pageToken: undefined,
+    })
+    const body = await (await GET(call('GET'))).json()
+    expect(body).toMatchObject({ dryRun: true, candidates: 1, waiting: 1 })
+    expect(body.rows.map((row: { uid: string }) => row.uid)).toEqual([up])
+  })
+
+  it('still asks an unconfirmed account every hour: its reminder cannot wait a day (AGL-4121)', async () => {
+    mockListUsers.mockResolvedValue({
+      users: [account(uidOnTurn('fresh', false))],
+      pageToken: undefined,
+    })
+    const body = await (await POST(call('POST'))).json()
+    expect(body).toMatchObject({ candidates: 1, waiting: 0 })
+    expect(mockSendEmail).toHaveBeenCalledTimes(1)
   })
 
   it('never mails staff or disabled accounts', async () => {

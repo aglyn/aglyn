@@ -138,6 +138,7 @@ import { assignOwnerForCapture, notifyRecordAssigned } from './assign-contact-ow
 import { captureHostContact } from './capture-host-contact'
 import { readCrmPicklist } from './read-picklist'
 import { handOffLeadRecords } from '@aglyn/tenant-runtime/hand-off-lead'
+import { crmActivityLinkWithCompany } from './crm-activity-company'
 import { readContainerIds } from '@aglyn/aglyn/app-utils/container-membership'
 
 /** Who is converting, as far as the writes need to know. */
@@ -793,14 +794,21 @@ export async function convertHostLead(
    * contact, and every plugin with a listener — Sequences, for an
    * enrollment naming the lead — re-points its own records. After the
    * stamp, so a listener reading the lead finds the conversion on it; it
-   * never throws.
+   * never throws. The activities roll up to the company this conversion
+   * linked, else the one the contact was already filed under (AGL-4123).
    */
+  const rollup = await crmActivityLinkWithCompany(
+    orgRef,
+    { contactId, ...(companyId ? { companyId } : {}) },
+    { groupId: group.groupId, org },
+  )
   await handOffLeadRecords({
     firestore,
     orgId,
     hostId,
     leadId,
     contactId,
+    companyId: rollup.companyId,
     email,
     by: actor.kind === 'member' ? 'member' : 'api',
   })

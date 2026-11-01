@@ -182,12 +182,6 @@ Two things worth knowing before you ask us to switch it on:
 
 Enforcement is switched on by us, at your request.
 
-:::note Pricing is provisional (pre-release)
-Aglyn is in pre-release: prices, plans, tiers, quotas, and the features included in each
-tier are provisional and may change at any time — including for existing subscribers.
-Nothing here guarantees that a price or feature set will remain the same.
-:::
-
 - Each tier maps to a set of **entitlements** and quota limits.
 - The runtime enforces them with `checkEntitlement` and `checkQuota`, so gated features are
   consistent across the console and the live site.

@@ -733,8 +733,12 @@ export async function composeNodesWithChrome(options: {
   // site, late — at render, never at install — so a rebrand propagates to
   // every artifact that names the host instead of hard-coding it. Same
   // registry the email path uses, so a token means one thing in both.
+  //
+  // What the site's own values hide goes first (AGL-4119): a header's logo
+  // where it has none, its name where it does. Hidden in the tree rather than
+  // by style, so a visitor is sent neither the markup nor the image.
   const withHostTokens = Aglyn.resolveNodesHostTokens(
-    bound as any,
+    Aglyn.pruneHostHiddenNodes(bound as any, options.host),
     options.host,
   )
   // Function-running elements run client-side: embed their definitions

@@ -40,7 +40,12 @@
  * delivery volume from 31 to 32 per five minutes. The whole `schemas.log`
  * filter block (`sources`, `environments`, `sampling`) is accepted by
  * `POST`/`PATCH /v1/drains`, echoed back on `GET`, and never applied. Do not
- * try to solve this with drain configuration.
+ * try to solve the LOOP with drain configuration.
+ *
+ * The VOLUME is a different matter (AGL-4121). The top-level OData `filter` on
+ * a drain is applied, and both drains now use it to drop logs proven healthy,
+ * which took deliveries from about 60 a minute to about 6. See
+ * docs/UPTIME_AND_SLA.md before changing it: a stricter filter loses crashes.
  *
  * ## Why here specifically
  *

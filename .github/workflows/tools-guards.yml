@@ -1166,6 +1166,11 @@ jobs:
       # and which enrollments are owed nothing.
       - run: npm run test:enrollment-activity-backfill
 
+      # AGL-4123. The activity rollup backfill's decisions — the company a row
+      # is owed, restated and held to the TypeScript every writer stamps it
+      # with, one holder's facet and never another's.
+      - run: npm run test:activity-company-backfill
+
       # AGL-3458. The lead form-campaign backfill's decisions — which campaigns
       # a form lead is missing, the Campaign filter's keys they imply, that
       # nothing is ever taken away and a filed lead plans zero — with the

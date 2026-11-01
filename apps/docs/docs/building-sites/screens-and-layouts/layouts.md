@@ -66,7 +66,9 @@ worded per page — without a second layout.
 3. Inside the layout, put the property's token — `{{prop.bannerText}}` — in any text or
    string attribute, or bind a field to it with the field's `{}` button: a switch to a
    Yes / no, an icon picker to an Icon. **Hide when** and **Hide unless** take a property
-   too, so a page can remove part of the layout's chrome.
+   too, so a page can remove part of the layout's chrome. They also take a site detail:
+   a new site's header shows its logo with **Hide unless** set to the **Logo** detail, and
+   its name with **Hide when** set to the same one, so it shows whichever the site has.
 
 Each page sets the values in **Page Properties**, under **Shared layout**, below the
 **Layout** picker: one field per property, drawn with the control its type names. Leave a

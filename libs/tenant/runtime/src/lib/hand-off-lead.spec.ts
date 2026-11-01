@@ -104,6 +104,23 @@ describe('handOffLeadRecords', () => {
     ])
   })
 
+  it('rolls what moves up to the company the door names, on activities alone (AGL-4123)', async () => {
+    docs.set(`orgs/${ORG}/crmActivities/a-1`, { leadId: 'lead-key', kind: 'call' })
+    docs.set(`orgs/${ORG}/crmActivities/a-2`, { leadId: 'lead-key', companyId: 'co-own' })
+    docs.set(`orgs/${ORG}/crmTasks/t-1`, { leadId: 'lead-key', title: 'Call back' })
+    await handOffLeadRecords({ ...input, companyId: 'co-1' })
+    expect(docs.get(`orgs/${ORG}/crmActivities/a-1`)).toMatchObject({
+      contactId: 'c-1',
+      companyId: 'co-1',
+    })
+    // A company the row already names stands.
+    expect(docs.get(`orgs/${ORG}/crmActivities/a-2`)).toMatchObject({
+      contactId: 'c-1',
+      companyId: 'co-own',
+    })
+    expect(docs.get(`orgs/${ORG}/crmTasks/t-1`)).not.toHaveProperty('companyId')
+  })
+
   it('tells every plugin listener, with the address normalized', async () => {
     const heard: Array<Record<string, unknown>> = []
     registerPluginLeadConversionListener(

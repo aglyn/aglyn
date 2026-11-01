@@ -40,16 +40,16 @@ import {
  *
  * ## Stopping once the person acts
  *
- * Nothing is scheduled ahead. Each hourly run asks the account's state NOW,
- * so the verification reminder stops at verification, the build nudge at the
- * first page of their own, the publish reminder at a publish, and the idle
- * nudge at the next sign-in.
+ * Nothing is scheduled ahead. Each run asks the account's state NOW, so the
+ * verification reminder stops at verification, the build nudge at the first
+ * page of their own, the publish reminder at a publish, and the idle nudge at
+ * the next sign-in.
  *
  * ## At most one email per account per run
  *
  * The first rule that applies wins, in the order below. An account that is
- * owed two things gets the second one an hour later at the earliest, and only
- * if it is still owed.
+ * owed two things gets the second one on its next run at the earliest (see
+ * {@link isRetentionTurn}), and only if it is still owed.
  */
 
 export const HOUR_MS = 60 * 60 * 1000
@@ -192,6 +192,84 @@ export function isRetentionCandidate(input: {
     input.nowMs - input.lastSeenMs >= 7 * DAY_MS &&
     input.nowMs - input.lastSeenMs < RETENTION_LOOKBACK_MS
   )
+}
+
+/**
+ * Long enough for the run that should catch an opening and the one after it, so
+ * one lost run does not cost a day.
+ */
+const RULE_OPENING_MS = 2 * HOUR_MS
+
+/** Where the age rules in {@link planRetentionEmail} open. */
+const AGE_RULES_OPEN_AT_MS = [DAY_MS, 3 * DAY_MS]
+
+/** Where the quiet rules in {@link planRetentionEmail} open. */
+const QUIET_RULES_OPEN_AT_MS = [7 * DAY_MS, 14 * DAY_MS]
+
+/**
+ * A day and the two runs after it. `publish` comes due a day after the last
+ * edit, and the edit is the last time the account was seen.
+ */
+const RECENT_SESSION_MS = DAY_MS + RULE_OPENING_MS
+
+/**
+ * Which hour of the UTC day a confirmed account is asked in: a stable hash of
+ * its uid (FNV-1a), so the hour never moves and the accounts spread across the
+ * day rather than arriving together.
+ */
+export function retentionTurnHour(uid: string): number {
+  let hash = 0x811c9dc5
+  for (let index = 0; index < uid.length; index += 1) {
+    hash ^= uid.charCodeAt(index)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return (hash >>> 0) % 24
+}
+
+/**
+ * Whether this run asks about this account at all (AGL-4121).
+ *
+ * The sweep runs every hour, and asking every confirmed account every hour was
+ * nearly all of its Firestore reads, since each one costs a profile, workspaces,
+ * a site and pages. Most of those accounts are dormant, sitting in the middle of
+ * a window where nothing is about to change. So an account is asked hourly only
+ * while an email could be coming due for it, which the auth record alone can
+ * tell, before any read:
+ *
+ * - it is unconfirmed: its reminder is due an hour after sign-up;
+ * - it was here in the last {@link RECENT_SESSION_MS}: `next-steps` and
+ *   `publish` hang off a publish or an edit, and those happen in a session;
+ * - an age rule opened in the last {@link RULE_OPENING_MS} (`build-24h`,
+ *   `build-3d`), or a quiet rule did (`idle-7d`, `idle-14d`).
+ *
+ * Everyone else is asked once a day, in an hour of their own.
+ *
+ * ## No email moves
+ *
+ * Each email still goes out in the run after it comes due, and
+ * `retention-emails.spec.ts` walks that off the planner itself. What moves is a
+ * retry: a send that failed or was deferred past the opening hours waits for the
+ * account's daily turn. No email can be lost to that, since a turn comes round
+ * every 24 hours and the narrowest confirmed window is `build-24h`, two days.
+ */
+export function isRetentionTurn(input: {
+  nowMs: number
+  uid: string
+  emailVerified: boolean
+  createdAtMs: number
+  lastSeenMs: number | null
+}): boolean {
+  const { nowMs, createdAtMs, lastSeenMs } = input
+  if (!input.emailVerified) return true
+  const justOpened = (elapsedMs: number, opensAtMs: number[]) =>
+    opensAtMs.some((at) => elapsedMs >= at && elapsedMs < at + RULE_OPENING_MS)
+  if (justOpened(nowMs - createdAtMs, AGE_RULES_OPEN_AT_MS)) return true
+  if (lastSeenMs !== null) {
+    const sinceSeen = nowMs - lastSeenMs
+    if (sinceSeen < RECENT_SESSION_MS) return true
+    if (justOpened(sinceSeen, QUIET_RULES_OPEN_AT_MS)) return true
+  }
+  return new Date(nowMs).getUTCHours() === retentionTurnHour(input.uid)
 }
 
 /**

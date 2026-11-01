@@ -1723,10 +1723,13 @@ had stopped working.
 
 **The GitHub uptime probe is dispatched by Cloud Scheduler (AGL-3580).** GitHub ran
 its own `*/15` schedule four times on 2026-10-05. Since 2026-10-06 the scheduler row
-`uptime-probe-dispatch-app` (`7,22,37,52 * * * *` UTC) runs the Cloud Run job
-`github-dispatch-uptime-probe`, a copy of the signup canary's dispatcher with
-`GITHUB_WORKFLOW_FILE=uptime-probe.yml`, under the same `github-dispatch` service
-account and GitHub App. To check it:
+`uptime-probe-dispatch-app` (`7,22,37,52 * * * *` UTC) POSTs to the `/uptime-probe`
+route of the Cloud Run service `github-dispatch`, the signup canary's dispatcher
+with `GITHUB_WORKFLOW_FILE=uptime-probe.yml`, under the same `github-dispatch`
+service account and GitHub App. It was a Cloud Run job until AGL-4121: a job bills
+a minute at 1 vCPU for a two-second dispatch, a service bills the two seconds on a
+quarter vCPU. `tools/scripts/setup-github-app-dispatch.mjs` owns both rows. To
+check it:
 
 ```bash
 gcloud scheduler jobs run uptime-probe-dispatch-app --location=us-central1 --project=aglyn-main
@@ -2455,14 +2458,30 @@ step 5 onward costs money and is a decision, not a task.
      the CDN's, not ours.
    - **Environments** `production` only. Preview 5xx are expected and would
      page on unfinished work.
-   - **Sampling** none (100%). The receiver's own 5xx filter is the cost
-     control, and sampling a rare error is how you miss it. ⛔ Do not reach for
-     sampling as a cost or loop control regardless: measured 2026-08-26, a
-     single `{environment:"production", rate:0}` rule with no path prefix —
-     literally "drop everything" — moved delivery volume from 31 to 32 per
-     five minutes. The whole `schemas.log` filter block (`sources`,
+   - **Sampling** none (100%). Sampling a rare error is how you miss it. ⛔ Do
+     not reach for sampling as a cost or loop control regardless: measured
+     2026-08-26, a single `{environment:"production", rate:0}` rule with no path
+     prefix — literally "drop everything" — moved delivery volume from 31 to 32
+     per five minutes. The whole `schemas.log` filter block (`sources`,
      `environments`, `sampling`) is accepted by the API, echoed back on `GET`,
      and never applied.
+   - **Filter** (AGL-4121) the OData filter below. This one IS applied, and it
+     is the cost control: measured 2026-11-01 with a shadow drain, deliveries
+     fell from about 60 a minute to about 6, and 34 forwarded errors in the
+     previous 30 days all carried a 5xx `proxy.statusCode`.
+
+     ```text
+     not (log/statusCode ge 200 and log/statusCode lt 500)
+     ```
+
+     ⛔ **Do not tighten this to `log/statusCode ge 500`.** `log/statusCode`
+     reads `proxy.statusCode`, and Vercel leaves that undefined on streaming
+     function logs and edge logs, so the strict form drops a crash whose only
+     signal is a top-level `statusCode: -1` or a `fatal` line, the entries
+     `isServerErrorEntry` exists to catch. The exclusion form removes only
+     logs PROVEN healthy and lets everything unknown through to the receiver's
+     gate. It also keeps step 8's watcher meaningful: that alert fires after an
+     hour with no deliveries, which a strict filter would trip every quiet hour.
 
    Equivalent REST payload, if you would rather not click — note the current
    endpoint is `POST /v1/drains`; `POST /v2/integrations/log-drains` is
@@ -2481,6 +2500,13 @@ step 5 onward costs money and is a decision, not a task.
        "encoding": "ndjson",
        "headers": {},                       // required, even when empty
        "secret": "<the same VERCEL_LOG_DRAIN_SECRET>"
+     },
+     "filter": {                            // PATCH /v1/drains/<id> takes this too
+       "version": "v2",
+       "filter": {
+         "type": "odata",
+         "text": "not (log/statusCode ge 200 and log/statusCode lt 500)"
+       }
      }
    }
    ```
@@ -2603,7 +2629,8 @@ step 5 onward costs money and is a decision, not a task.
    A threshold policy over a log-based counter metric was the original
    proposal. The match form was taken instead because it needs no derived
    metric to exist first, and because the volume does not warrant a rate
-   threshold: 180 entries in seven days, against ~20K drain deliveries a day.
+   threshold: 180 entries in seven days, against ~7K filtered drain deliveries
+   a day (34K unfiltered, before AGL-4121).
    If that ratio changes, a counter metric grouped by project is the next
    step, not a tighter match filter.
 7. **Then reconcile the three.** With the drain live it sees a superset of what
