@@ -54,6 +54,7 @@
 import { FieldValue } from 'firebase-admin/firestore'
 import type {
   DocumentReference,
+  DocumentSnapshot,
   Query,
   QueryDocumentSnapshot,
 } from 'firebase-admin/firestore'
@@ -762,10 +763,61 @@ export async function materializeDynamicList(options: {
     if (key) matches.set(key, candidate)
   }
 
+  /*
+   * Reconciliation is allowed only for a run that saw the WHOLE population:
+   * one that started at the beginning AND finished.
+   *
+   * `complete` alone is not enough, and that is the trap. A run that RESUMES
+   * from a cursor finishes the tail of the scan and reports `complete: true`
+   * having examined only the tail — so its match set is the remainder, and
+   * reconciling against it would delete every member found by the earlier
+   * runs of the same sweep. That is a quota drop wearing the costume of a
+   * membership change: nothing about it looks like a limit, and it removes
+   * people for no reason but how the work was chunked.
+   *
+   * The cost is that a list whose population exceeds one run's scan budget
+   * never reconciles, so somebody who stops matching stays enrolled until a
+   * sweep fits in one run. That is the right way round: an over-full list is
+   * a wrong count, which is recoverable, and a deleted enrollment destroys
+   * the record that says the person asked to be there, which is not.
+   */
+  const sawWholePopulation = complete && !options.resume
+
+  /*
+   * WHO IS ALREADY HERE, read once (AGL-4121).
+   *
+   * Enrolling costs three reads and a write per person, and nearly everyone a
+   * sweep matches was enrolled by the sweep before it, so an unchanged list
+   * used to pay that for its whole membership every hour to rewrite each row
+   * as it stood. What is held below lets `enrollListMember` settle those
+   * people with no read and no write. It decides nothing itself: a person it
+   * does not hold, a manual row the rule is about to take over, a row under a
+   * legacy id, all go through the same enrollment they always did.
+   *
+   * A run that saw everybody is about to read the rule's rows to reconcile, so
+   * it reads them here and reuses them. A partial run reconciles nothing and
+   * its list may be far longer than this run's matches, so it reads only those
+   * matches, one key each.
+   */
+  const members = options.listRef.collection('members')
+  const readRuleRows = () => members.where('via', '==', 'rule').get()
+  const ruleRowsBefore = sawWholePopulation ? await readRuleRows() : null
+  const heldRows = new Map<string, DocumentSnapshot>()
+  for (const doc of ruleRowsBefore?.docs ?? []) heldRows.set(doc.id, doc)
+  if (!ruleRowsBefore && matches.size) {
+    const rows = await options.listRef.firestore.getAll(
+      ...[...matches.keys()].map((key) => members.doc(key)),
+    )
+    for (const row of rows) if (row.exists) heldRows.set(row.id, row)
+  }
+
   let enrolled = 0
-  for (const candidate of matches.values()) {
+  let wrote = false
+  for (const [key, candidate] of matches) {
+    const heldRow = heldRows.get(key)
     const result = await enrollListMember({
       listRef: options.listRef,
+      ...(heldRow ? { heldRow } : {}),
       // A group of one, and it costs nothing: the materializer passes NO
       // consent (see below), so the group decides only which site is recorded
       // as having captured the row.
@@ -791,27 +843,9 @@ export async function materializeDynamicList(options: {
     // person whose row records a refusal are both simply not on this list,
     // and a rule that selected them does not overrule either.
     if (result.enrolled && result.created) enrolled += 1
+    if (result.enrolled && !result.unchanged) wrote = true
   }
 
-  /*
-   * Reconciliation is allowed only for a run that saw the WHOLE population:
-   * one that started at the beginning AND finished.
-   *
-   * `complete` alone is not enough, and that is the trap. A run that RESUMES
-   * from a cursor finishes the tail of the scan and reports `complete: true`
-   * having examined only the tail — so its match set is the remainder, and
-   * reconciling against it would delete every member found by the earlier
-   * runs of the same sweep. That is a quota drop wearing the costume of a
-   * membership change: nothing about it looks like a limit, and it removes
-   * people for no reason but how the work was chunked.
-   *
-   * The cost is that a list whose population exceeds one run's scan budget
-   * never reconciles, so somebody who stops matching stays enrolled until a
-   * sweep fits in one run. That is the right way round: an over-full list is
-   * a wrong count, which is recoverable, and a deleted enrollment destroys
-   * the record that says the person asked to be there, which is not.
-   */
-  const sawWholePopulation = complete && !options.resume
   let removed = 0
   if (sawWholePopulation) {
     /*
@@ -828,11 +862,14 @@ export async function materializeDynamicList(options: {
      * This is the one removal in this file and it is a MEMBERSHIP change —
      * the person stopped matching the rule. It is not a capacity decision and
      * there is no count in the condition.
+     *
+     * Read again only when the loop above wrote: then time has passed and
+     * somebody's hand-enrollment may have taken a row off the rule meanwhile,
+     * which this must see before it deletes. A loop that wrote nothing took no
+     * time, so the rows above are the read this would have made.
      */
-    const existing = await options.listRef
-      .collection('members')
-      .where('via', '==', 'rule')
-      .get()
+    const existing =
+      ruleRowsBefore && !wrote ? ruleRowsBefore : await readRuleRows()
     for (const doc of existing.docs) {
       if (matches.has(doc.id)) continue
       // A row adopted under a legacy id is keyed by neither `personKey` nor
