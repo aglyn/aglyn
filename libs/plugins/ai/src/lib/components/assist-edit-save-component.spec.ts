@@ -25,8 +25,8 @@
  *    unsaved edit on the open canvas, which undo takes back.
  *  - DEFAULTS ARE TODAY'S VALUES, read off the fields the tokens replace, so
  *    the instance renders what was there. A `Hide …` starts at no.
- *  - NOTHING PUBLISHED. The live version is refused before the component is
- *    created, so a refusal leaves no orphan.
+ *  - NOTHING PUBLISHED. The swap is an unsaved change on the canvas, on the live
+ *    version too, and only the author's save stores it (AGL-4116).
  *  - A CLOSED WORLD, checked again on the client: a binding outside the
  *    selection, or an element that changed since, refuses the whole apply.
  */
@@ -272,20 +272,20 @@ describe('what the open page keeps', () => {
 })
 
 describe('nothing published, and a closed world', () => {
-  it('refuses the version the live site serves before the component is created', async () => {
+  it('on the version the live site serves, the page keeps it as an unsaved change (AGL-4116)', async () => {
     unregister()
     unregister = openEditor({ live: true })
-    const before = JSON.stringify(canvas.toJSON())
     const result = await applyAssistEditSavingComponent(
       surface(),
       proposalOf(),
       openEditorSession(),
       writer(),
     )
-    expect(result).toMatchObject({ ok: false, reason: 'live-version' })
-    // No orphan: the component was never created either.
-    expect(created).toEqual([])
-    expect(JSON.stringify(canvas.toJSON())).toBe(before)
+    expect(result).toMatchObject({ ok: true })
+    expect(created).toHaveLength(1)
+    // The swap is on the canvas, undoable; only the author's save stores it,
+    // and on this version that save writes the draft.
+    expect(canvas.canUndo).toBe(true)
   })
 
   it('refuses a binding on an element outside the section', async () => {

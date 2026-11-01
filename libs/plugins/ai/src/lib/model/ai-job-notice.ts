@@ -16,6 +16,7 @@
  */
 
 import type { AglynNotification } from '@aglyn/aglyn/app-utils/notifications'
+import { besignerOpenDraftHref } from '@aglyn/aglyn/app-utils/version-draft'
 import { aiBuildOutcomeLine, aiSitePartialCopy } from './ai-build-progress'
 import { aiJobKindNoun } from './ai-job-activity'
 import { aiCustomerSafeCopy, aiJobRefundCopy } from './ai-job-failure-copy'
@@ -118,7 +119,8 @@ export function aiJobNoticeLink(job: AiJobNoticeSource, to: AiJobNoticeTransitio
     )
     if (own.length === 1 && versioned) {
       const segment = AI_JOB_BESIGNER_SEGMENT[versioned.resource]
-      return `${base}/${segment}/${versioned.id}/versions/${versioned.versionId}/besigner`
+      const besigner = `${base}/${segment}/${versioned.id}/versions/${versioned.versionId}/besigner`
+      return versioned.inDraft ? besignerOpenDraftHref(besigner) : besigner
     }
   }
   return `${base}?${AI_JOB_LINK_PARAM}=${encodeURIComponent(job.$id)}`

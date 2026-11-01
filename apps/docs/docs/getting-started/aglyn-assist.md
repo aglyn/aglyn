@@ -141,16 +141,18 @@ filled in. Anything it could not match to your canvas is listed under **Left out
   the whole change back. Nothing is saved or published until you do that
   yourself. A proposed search title or description is filled into
   **Page Properties**, where **Save SEO** stores it.
-- **The live version is never edited in place.** When the version open is the
-  one your live site shows, the card offers **Make a new version** instead —
-  the same **New version** you would use yourself. Once the new version opens,
-  the card offers **Apply as draft** there.
-- **Select the element you mean.** The assistant sees the element you have
-  selected, everything inside it, what surrounds it and the page's sections —
-  not your whole site — and it can only change elements it was shown. With
-  nothing selected it sees only the top of the page and asks you to select
-  one. If the canvas changes before you apply, the card says so and applies
-  nothing.
+- **The version your live site shows takes the change too.** **Apply as draft**
+  works there the same way, as unsaved edits on the canvas. **Save draft** keeps
+  them in the page's draft, and visitors see nothing until you publish. To make
+  the change on a copy instead, choose **Make a new version**, the same **New
+  version** you would use yourself.
+- **It sees the whole page.** The assistant reads every element on the page you
+  have open, with its settings and styles, so *change the Get in touch button
+  to say Let's talk* finds the button with nothing selected. Select an element
+  when you mean that one: "this" and "it" then mean what you selected. On a very
+  large page it sees what you have selected, everything inside it, what
+  surrounds it and the page's sections. It never sees the rest of your site, and
+  if the canvas changes before you apply, the card says so and applies nothing.
 - **Who can use it.** Your role needs the **Generate with AI** permission (a
   site collaborator needs it on that site). Asking uses AI credits like any
   other assistant message; applying uses none. Each applied change is recorded

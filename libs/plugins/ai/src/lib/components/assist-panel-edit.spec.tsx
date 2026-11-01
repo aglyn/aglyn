@@ -272,7 +272,7 @@ afterEach(() => {
 })
 
 describe('the question carries the canvas it is about', () => {
-  it('sends an outline of the open canvas — ids, components, short values — and the selection', async () => {
+  it('sends the whole open canvas, in page order, and the selection (AGL-4116)', async () => {
     openEditor()
     armChat('I would darken the hero.')
     render(<AssistPanelComponent {...dockProps()} />)
@@ -281,10 +281,12 @@ describe('the question carries the canvas it is about', () => {
     const outline = posts[0][1]['canvas'] as {
       selectedId: string
       total: number
+      whole: boolean
       nodes: Array<Record<string, unknown>>
     }
     expect(outline.selectedId).toBe('hero')
-    expect(outline.nodes.map((node) => node['id'])).toEqual([ROOT, 'hero', 'footer', 'headline'])
+    expect(outline.whole).toBe(true)
+    expect(outline.nodes.map((node) => node['id'])).toEqual([ROOT, 'hero', 'headline', 'footer'])
     expect(outline.total).toBe(4)
     expect(outline.nodes.find((node) => node['id'] === 'headline')).toMatchObject({
       componentId: 'muiTypography',
@@ -356,25 +358,21 @@ describe('GUARD: nothing is written before confirm', () => {
     expect(posts.map(([url]) => url)).toEqual(['/api/assist/chat'])
   })
 
-  it('on the version the live site serves, offers the editor’s own new-version flow and applies nothing', async () => {
+  it('on the version the live site serves, applies as a draft and still offers a new version (AGL-4116)', async () => {
     const live = openEditor({ live: true })
     const before = canvasJson()
     armChat('I would darken the hero.')
     render(<AssistPanelComponent {...dockProps()} />)
     await ask()
     expect(await screen.findByText(/version your live site shows/)).toBeTruthy()
-    expect(screen.queryByText('Apply as draft')).toBeNull()
 
     fireEvent.click(screen.getByText('Make a new version'))
     expect(live.state.versionFlows).toBe(1)
     expect(canvasJson()).toBe(before)
-    expect(posts.map(([url]) => url)).toEqual(['/api/assist/chat'])
 
-    // The new version opens; the same card now offers Apply there.
-    live.unregister()
-    openEditor({ versionId: 'v-3' })
-    expect(await screen.findByText('Apply as draft')).toBeTruthy()
-    expect(canvasJson()).toBe(before)
+    fireEvent.click(screen.getByText('Apply as draft'))
+    await waitFor(() => expect(canvasJson()).not.toBe(before))
+    expect(canvas.canUndo).toBe(true)
   })
 
   it('off the document the proposal was made for, there is nothing to apply', async () => {
