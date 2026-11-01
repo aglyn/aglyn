@@ -151,6 +151,7 @@ jest.mock('@aglyn/besigner-ui', () => ({
   // prompt may be offered at all (AGL-2486); this spec is about what Save
   // writes, and an alone room is the neutral answer.
   recoverableRoomSessions: () => 0,
+  useBesignerOpenDraftParam: () => false,
   // Rendered unconditionally: the drawer's open state is chrome, and what
   // this spec is about is what the Save button does.
   CloseableDrawerComponent: ({ children }: { children: ReactNode }) => (

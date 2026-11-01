@@ -211,6 +211,7 @@ jest.mock('@aglyn/besigner-ui', () => ({
   },
   BesignerDraftAlertComponent: () => null,
   recoverableRoomSessions: () => 0,
+  useBesignerOpenDraftParam: () => false,
   LayoutChromeContext: {
     Provider: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   },
