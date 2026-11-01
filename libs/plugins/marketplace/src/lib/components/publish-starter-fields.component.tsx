@@ -88,6 +88,9 @@ function OptionLabel(props: { title: string; detail: ReactNode }) {
  *
  * A theme shape this site cannot be published as stays on screen, disabled,
  * with the reason: a site that wears its own theme has no built-in to name.
+ *
+ * Figma: "Aglyn Console (web)" → page "Marketplace · Publish & review" →
+ * section "✅ CURRENT · Publish as a starter, behind release_site_starters".
  */
 export function PublishStarterFields(props: PublishStarterFieldsProps) {
   const {
