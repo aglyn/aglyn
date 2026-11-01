@@ -294,6 +294,55 @@ export function starterCardFacts(row: SiteStarterSummary): StarterCardFact[] {
   return facts
 }
 
+// ── An AI starter's answers (AGL-4049 phase 4) ─────────────────────────────
+
+/** Where the console reads the answers an AI starter carries. */
+export const STARTER_ANSWERS_PATH = '/api/marketplace/starters/answers'
+
+/** One AI starter's answers, asked for a workspace. */
+export interface StarterAnswersQuery {
+  orgId: string
+  listingId: string
+}
+
+/** What the route answers: the starter's answers, and its facets. */
+export interface StarterAnswersAnswer {
+  answers: Record<string, unknown>
+  facets: SiteStarterFacets
+}
+
+/** The query string for one starter's answers, `orgId` then `listingId`. */
+export function starterAnswersParams(input: StarterAnswersQuery): URLSearchParams {
+  const params = new URLSearchParams()
+  params.set('orgId', trimmed(input.orgId))
+  params.set('listingId', trimmed(input.listingId))
+  return params
+}
+
+/**
+ * The route's reading of the question, or the refusal a 400 answers with:
+ * the workspace, and a listing id as a listing may have one, since it
+ * becomes a document path on the way to the listing.
+ */
+export function starterAnswersQueryFrom(params: URLSearchParams): StarterAnswersQuery | { error: string } {
+  const orgId = trimmed(params.get('orgId'))
+  if (!ORG_ID.test(orgId)) return { error: 'Missing orgId' }
+  const listingId = trimmed(params.get('listingId'))
+  if (!LISTING_ID.test(listingId)) return { error: 'Unknown starter' }
+  return { orgId, listingId }
+}
+
+/**
+ * The route's answer, read defensively: the answers as a plain object, and
+ * the facets as a summary reads them; `null` for anything without answers.
+ */
+export function readStarterAnswersAnswer(json: unknown): StarterAnswersAnswer | null {
+  if (!isRecord(json) || !isRecord(json['answers'])) return null
+  const facets = readStarterSummary({ listingId: 'answers', facets: json['facets'] })?.facets
+  if (!facets) return null
+  return { answers: json['answers'], facets }
+}
+
 /** Where a purchase is opened. */
 export const STARTER_CHECKOUT_PATH = '/api/marketplace/checkout'
 
