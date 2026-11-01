@@ -110,7 +110,7 @@ fun OptionCardList(
 
 /**
  * One card of an [OptionCardList]: a surface outlined as strongly as a field, its picture square so the grid never shifts
- * while it loads. Once picked it is outlined 2 dp in the primary color and carries a check in a disc at its top corner.
+ * while it loads. Once picked it is outlined 2 dp in the primary color and carries a check on a disc at its top corner.
  */
 @Composable
 internal fun OptionCard(option: OptionCardItem, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
@@ -136,12 +136,9 @@ internal fun OptionCard(option: OptionCardItem, selected: Boolean, onClick: () -
       }
     }
     if (selected) {
-      Icon(
-        AglynIcons.named("check_circle"),
-        contentDescription = null,
-        tint = colors.primary,
-        modifier = Modifier.align(Alignment.TopEnd).padding(space(1f)).size(24.dp).background(colors.surface, CircleShape),
-      )
+      Box(Modifier.align(Alignment.TopEnd).padding(space(1f)).size(24.dp).background(colors.primary, CircleShape), contentAlignment = Alignment.Center) {
+        Icon(AglynIcons.named("check"), contentDescription = null, tint = colors.onPrimary, modifier = Modifier.size(16.dp))
+      }
     }
   }
 }

@@ -291,7 +291,6 @@ private fun CreateSiteDialog(context: NativePluginContext, orgId: String, close:
   }
   PanelSheet(
     title = "Create a site",
-    subtitle = "You can connect your own domain later.",
     onDismiss = { if (!runner.busy) close() },
     closeLabel = "Cancel",
     scroll = false,
@@ -344,6 +343,7 @@ private fun CreateSiteDialog(context: NativePluginContext, orgId: String, close:
         singleLine = true,
         modifier = Modifier.fillMaxWidth().testTag("site-subdomain"),
       )
+      Text("You can connect your own domain later.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
       if (suggestions.isNotEmpty()) {
         Text("Try one of these:", style = MaterialTheme.typography.labelLarge)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
