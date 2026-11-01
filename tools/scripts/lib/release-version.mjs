@@ -317,6 +317,20 @@ export function assertForward(current, next) {
   }
 }
 
+/**
+ * Whether `next` starts a new major version.
+ *
+ * Semver says a breaking change is a major, and that stands. When there is one
+ * is the owner's decision, so `release:prepare` stops on this instead of
+ * cutting it. Moving through a prerelease series, or leaving one, is not a new
+ * major: `1.0.0` is the version `1.0.0-beta.N` was already heading for.
+ */
+export function startsNewMajor(current, next) {
+  const from = typeof current === 'string' ? parseVersion(current) : current
+  const to = typeof next === 'string' ? parseVersion(next) : next
+  return to.major > from.major
+}
+
 /** The git tag for a version. One place, so the writer and reader agree. */
 export function tagForVersion(version) {
   return `v${typeof version === 'string' ? version : formatVersion(version)}`
