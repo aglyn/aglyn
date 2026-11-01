@@ -127,6 +127,8 @@ struct CrmAPI {
     for (key, value) in all { if let value, let json = jsonValue(value) { object[key] = json } }
     object["set"] = contactSetBody(changes)
     _ = try await api.request(CrmRoutes.contactUpdate, method: .post, body: .object(object))
+    // The route wrote it, so a polling reader would show the old record for up to its interval; the SDK's listeners hear it.
+    RestFirestoreReader.rereadNow()
   }
 
   func setContactStage(_ id: String, _ stage: String?) async throws {
