@@ -44,23 +44,13 @@ import {
   usePublisherAgreementConsent,
 } from './publisher-agreement-checkbox.component'
 
-// Mirrors the server's fixed taxonomy (marketplace plugin model), which the
-// console can't import across the aglyn:addons boundary. The server
-// re-validates, so drift fails the save rather than corrupting a listing.
-const LISTING_CATEGORIES = [
-  'analytics',
-  'automation',
-  'commerce',
-  'communication',
-  'content',
-  'design',
-  'forms',
-  'integrations',
-  'marketing',
-  'productivity',
-  'seo',
-  'security',
-] as const
+// The plugin taxonomy the server validates `categories` against, from the one
+// list it is defined in (the editor lives in the plugin it belongs to now).
+import { LISTING_CATEGORIES } from '../model/marketplace-catalog'
+import { listingArtifactType } from '../model/listing-visibility'
+import { siteStarterCategoryOptions } from '../model/starter-category'
+import { SITE_STARTER_ARTIFACT_TYPE } from '@aglyn/aglyn/app-utils/site-starter'
+
 const MAX_SCREENSHOTS = 6
 
 /** Which image field / target the DAM picker is currently filling. */
@@ -107,6 +97,16 @@ export function ListingDetailEditor(props: ListingDetailEditorProps) {
   const [readme, setReadme] = useState('')
   const [screenshots, setScreenshots] = useState<string[]>([])
   const originalPreview = useRef<string>('')
+  /*
+   * A site starter is filed under the kind of site it is (AGL-4049), in its
+   * own `category`, from the style names; every other listing under the
+   * plugin taxonomy, in `categories`. The menu keeps a starter's stored
+   * category when it is not a kind, so it never opens on a value it lacks.
+   */
+  const isStarter = listingArtifactType(listing ?? {}) === SITE_STARTER_ARTIFACT_TYPE
+  const categoryOptions: readonly string[] = isStarter
+    ? siteStarterCategoryOptions(listing?.category)
+    : LISTING_CATEGORIES
 
   useEffect(() => {
     setValues({
@@ -117,7 +117,10 @@ export function ListingDetailEditor(props: ListingDetailEditorProps) {
       homepageUrl: listing?.homepageUrl ?? '',
       repositoryUrl: listing?.repositoryUrl ?? '',
       license: listing?.license ?? '',
-      category: listing?.categories?.[0] ?? listing?.category ?? '',
+      category:
+        listingArtifactType(listing ?? {}) === SITE_STARTER_ARTIFACT_TYPE
+          ? String(listing?.category ?? '').trim()
+          : (listing?.categories?.[0] ?? listing?.category ?? ''),
     })
     setReadme(listing?.readme ?? '')
     setScreenshots(
@@ -231,7 +234,9 @@ export function ListingDetailEditor(props: ListingDetailEditorProps) {
             homepageUrl: values.homepageUrl,
             repositoryUrl: values.repositoryUrl,
             license: values.license,
-            categories: values.category ? [values.category] : [],
+            ...(isStarter
+              ? { category: values.category }
+              : { categories: values.category ? [values.category] : [] }),
             screenshots,
             agreement: agreement.consent,
           }),
@@ -439,7 +444,7 @@ export function ListingDetailEditor(props: ListingDetailEditorProps) {
             sx={{ flex: 1 }}
           >
             <MenuItem value="">{'None'}</MenuItem>
-            {LISTING_CATEGORIES.map((entry) => (
+            {categoryOptions.map((entry) => (
               <MenuItem key={entry} value={entry}>
                 {entry}
               </MenuItem>

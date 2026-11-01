@@ -49,6 +49,8 @@
 import {
   composeContactName,
   type ConsentGroup,
+  crmDefaultScopeOf,
+  ORG_CONTACT_HOLDER_ID,
   contactDisplayName,
   contactFacetPath,
   type ContactFieldDefinition,
@@ -82,7 +84,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { emitHostEvent } from '@aglyn/tenant-runtime'
 import { FieldValue } from 'firebase-admin/firestore'
-import { contactPrimaryGroup } from '../model/contact-holder'
+import { contactPrimaryGroup, ORG_HOLDER_GROUP } from '../model/contact-holder'
 import type { ContactUpdateFields } from '../model/contact-update'
 import { captureHostContact } from '../server/capture-host-contact'
 import { CONTACT_NOTES_MAX } from '../server/contact-profile'
@@ -129,6 +131,7 @@ import {
   visibleIn,
 } from './common'
 import { companyForName } from './companies'
+import { addContactByHand } from '../server/add-contact-by-hand'
 import {
   CONTACT_TRANSFER_DERIVED,
   CONTACT_TRANSFER_FIELDS,
@@ -245,7 +248,8 @@ interface CompanyLink {
 /** Everything one apply call shares across its rows. */
 interface ApplyRun {
   env: CrmTransferEnv
-  hostId: string
+  /** The Source site, or `null` for a file with none (AGL-4122). */
+  hostId: string | null
   group: ConsentGroup
   actorUid: string | null
   definitions: ContactFieldDefinition[]
@@ -338,7 +342,10 @@ async function writeContact(
   if (!snapshot.exists || !contact || !visibleIn(run.env, contact['visibleTo'])) {
     throw new TransferEngineError('notFound', 404, 'That contact no longer exists.')
   }
-  const groupId = run.group.groupId
+  // With no site the row is written to the holder the person already has.
+  const groupId =
+    (run.hostId ? run.group : contactPrimaryGroup(contact, run.env.org)).groupId ||
+    ORG_CONTACT_HOLDER_ID
   const stored = readContactFacet(contact, groupId)
   const { fields, skipped } = profileFields(values, stored)
   let linkedCompanyName = ''
@@ -376,7 +383,7 @@ async function writeContact(
   await settleCompanyCounts(run.env.orgRef.collection(CRM_COLLECTIONS.companies), [
     { contactId, ref, update, counts: patch.counts },
   ])
-  if (movedFrom !== null) {
+  if (movedFrom !== null && run.hostId) {
     await emitHostEvent(
       run.hostId,
       'contactStageChanged',
@@ -392,6 +399,18 @@ async function writeContact(
   return { skipped }
 }
 
+/**
+ * The site a contact import is filed under. None, when the org's records belong
+ * to every site (AGL-4122): the file then has no Source site, and the people in
+ * it are the organization's. An org that keeps its sites apart must name one.
+ */
+function contactImportSite(env: CrmTransferEnv): { hostId: string | null; group: ConsentGroup } {
+  if (!env.hostId && crmDefaultScopeOf(env.org) === 'org') {
+    return { hostId: null, group: ORG_HOLDER_GROUP }
+  }
+  return requireSite(env, 'contacts')
+}
+
 /** Creates one person through the capture door, then what the door does not take. */
 async function createContact(
   run: ApplyRun,
@@ -404,38 +423,61 @@ async function createContact(
   const custom = customWriteValues(values, run.definitions, 'contact')
   if ('error' in custom) throw new TransferEngineError('invalid', 422, custom.error)
   const stage = crmLifecycleStageOf(values['lifecycleStage'])
-  const verdict = await captureHostContact({
-    hostId: run.hostId,
-    email,
-    ...(fields.name ? { name: fields.name } : {}),
-    source: 'import',
-    ...(run.actorUid ? { actor: { kind: 'member' as const, uid: run.actorUid, email: null } } : {}),
-    interaction: { summary: CONTACT_TRANSFER_INTERACTION_SUMMARY },
-    tags: fields.tags ?? [],
-    facet: {
-      ...(fields.phone ? { phone: fields.phone } : {}),
-      ...(fields.jobTitle ? { jobTitle: fields.jobTitle } : {}),
-      ...(fields.salutation ? { salutation: fields.salutation } : {}),
-      ...(fields.firstName ? { firstName: fields.firstName } : {}),
-      ...(fields.lastName ? { lastName: fields.lastName } : {}),
-      ...(fields.department ? { department: fields.department } : {}),
-      ...Object.fromEntries(PHONE_FIELDS.filter((key) => fields[key]).map((key) => [key, fields[key]])),
-      ...(fields.birthdate ? { birthdate: fields.birthdate } : {}),
-      ...(fields.assistantName ? { assistantName: fields.assistantName } : {}),
-      ...(fields.leadSource ? { leadSource: fields.leadSource } : {}),
-      ...(fields.doNotCall ? { doNotCall: true } : {}),
-      ...(fields.address ? { address: fields.address } : {}),
-      ...(fields.otherAddress ? { otherAddress: fields.otherAddress } : {}),
-      // The link AND the name: the merge fields read the facet's name.
-      ...(link?.id ? { companyId: link.id, companyName: link.name } : {}),
-      ...(fields.ownerUid ? { ownerUid: fields.ownerUid } : {}),
-      ...(stage ? { lifecycleStage: stage } : {}),
-      ...(Object.keys(custom.values).length ? { custom: custom.values } : {}),
-    },
-    // An import files nobody under a campaign; the record's picker does.
-    campaignIds: [],
-    ...(batch ? { batch } : {}),
-  })
+  const facet = {
+    ...(fields.phone ? { phone: fields.phone } : {}),
+    ...(fields.jobTitle ? { jobTitle: fields.jobTitle } : {}),
+    ...(fields.salutation ? { salutation: fields.salutation } : {}),
+    ...(fields.firstName ? { firstName: fields.firstName } : {}),
+    ...(fields.lastName ? { lastName: fields.lastName } : {}),
+    ...(fields.department ? { department: fields.department } : {}),
+    ...Object.fromEntries(PHONE_FIELDS.filter((key) => fields[key]).map((key) => [key, fields[key]])),
+    ...(fields.birthdate ? { birthdate: fields.birthdate } : {}),
+    ...(fields.assistantName ? { assistantName: fields.assistantName } : {}),
+    ...(fields.leadSource ? { leadSource: fields.leadSource } : {}),
+    ...(fields.doNotCall ? { doNotCall: true } : {}),
+    ...(fields.address ? { address: fields.address } : {}),
+    ...(fields.otherAddress ? { otherAddress: fields.otherAddress } : {}),
+    // The link AND the name: the merge fields read the facet's name.
+    ...(link?.id ? { companyId: link.id, companyName: link.name } : {}),
+    ...(fields.ownerUid ? { ownerUid: fields.ownerUid } : {}),
+    ...(Object.keys(custom.values).length ? { custom: custom.values } : {}),
+  }
+  const staged = stage ? { lifecycleStage: stage } : {}
+  /*
+   * A SITE AND AN ADDRESS ARE A CAPTURE. Anything less is a person no capture
+   * door could take, so a file can hold people with no email and be imported
+   * with no site (AGL-4122). A row still has to say who it is about.
+   */
+  if (!email && !fields.name && !facet.phone && !facet.firstName && !facet.lastName && !fields['mobilePhone']) {
+    throw new TransferEngineError('invalid', 422, 'A row needs a name, an email or a phone number.')
+  }
+  const verdict =
+    run.hostId && email
+      ? await captureHostContact({
+          hostId: run.hostId,
+          email,
+          ...(fields.name ? { name: fields.name } : {}),
+          source: 'import',
+          ...(run.actorUid
+            ? { actor: { kind: 'member' as const, uid: run.actorUid, email: null } }
+            : {}),
+          interaction: { summary: CONTACT_TRANSFER_INTERACTION_SUMMARY },
+          tags: fields.tags ?? [],
+          // The file's own stage, or none: `lifecycleStage` from the column.
+          facet: { ...facet, ...staged },
+          // An import files nobody under a campaign; the record's picker does.
+          campaignIds: [],
+          ...(batch ? { batch } : {}),
+        })
+      : await addContactByHand({
+          orgId: run.env.orgId,
+          org: run.env.org,
+          sourceHostId: run.hostId,
+          email: email || null,
+          ...(fields.name ? { name: fields.name } : {}),
+          facet: { ...facet, ...staged },
+          tags: fields.tags ?? [],
+        })
   if ('refused' in verdict) {
     throw new TransferEngineError('invalid', 422, CAPTURE_REFUSALS[verdict.refused] ?? CAPTURE_REFUSALS['error'] as string)
   }
@@ -591,7 +633,7 @@ export function contactsTransferResource(): TransferRecordsHooks {
     async plan(ctx, input) {
       const env = await crmTransferEnv(ctx)
       requireCrmSuite(env, SUITE_ACT)
-      requireSite(env, 'contacts')
+      contactImportSite(env)
       const plan = buildTransferPlan(input)
       return holdBackChanges(plan, (row, change) => {
         const before = row.recordId ? input.existing.get(row.recordId) : undefined
@@ -616,7 +658,7 @@ export function contactsTransferResource(): TransferRecordsHooks {
     async apply(ctx, chunk, writer) {
       const env = await crmTransferEnv(ctx)
       requireCrmSuite(env, SUITE_ACT)
-      const { hostId, group } = requireSite(env, 'contacts')
+      const { hostId, group } = contactImportSite(env)
       const run: ApplyRun = {
         env,
         hostId,
@@ -636,7 +678,8 @@ export function contactsTransferResource(): TransferRecordsHooks {
         }
       }
       // The capture door's lookups for every new person at once (AGL-3423).
-      const batch = creating.length ? await prepareContactCaptureBatch(hostId, creating) : undefined
+      const batch =
+        hostId && creating.length ? await prepareContactCaptureBatch(hostId, creating) : undefined
       const results: TransferRowResult[] = []
       const undo: TransferUndoEntry[] = []
 
@@ -701,7 +744,7 @@ export function contactsTransferResource(): TransferRecordsHooks {
 
     async revert(ctx, snapshot, decisions) {
       const env = await crmTransferEnv(ctx)
-      const { hostId, group } = requireSite(env, 'contacts')
+      const { hostId, group } = contactImportSite(env)
       const run: ApplyRun = {
         env,
         hostId,

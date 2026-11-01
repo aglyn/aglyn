@@ -580,6 +580,64 @@ describe('a picture lightbox driven by component properties (AGL-3717)', () => {
  * declared properties arriving with its published version, and the rest of
  * the pipeline leaving the typed values as they were applied.
  */
+describe('what a site’s own values hide on the published page (AGL-4119)', () => {
+  /** A header showing the site's logo or its name, as a new site's does. */
+  const compose = (host: Record<string, unknown>) => {
+    const brand = (id: string, props: Record<string, unknown>) => ({
+      $id: id,
+      componentId: 'muiTypography',
+      parentId: ROOT,
+      props,
+    })
+    return composeNodesWithChrome({
+      hostId: 'h1',
+      host: host as never,
+      screenNodes: {
+        [ROOT]: { $id: ROOT, componentId: 'div', nodes: ['logo', 'name', 'own'] },
+        logo: {
+          $id: 'logo',
+          componentId: 'image',
+          parentId: ROOT,
+          props: { src: '{{host.logo}}', alt: '{{host.businessName}}', hideUnless: '{{host.logo}}' },
+        },
+        name: brand('name', { children: '{{host.businessName}}', hideIf: '{{host.logo}}' }),
+        // A literal directive on a page's own node stays as inert as it was.
+        own: brand('own', { children: 'Mine', hideIf: 'true' }),
+      } as never,
+    }) as Promise<any>
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockGetPublishedLayoutVersion.mockResolvedValue({ version: { nodes: {} }, layout: {} })
+    mockGetComponents.mockResolvedValue({ definitions: {} })
+    mockGetVariables.mockResolvedValue([])
+    mockGetFunctions.mockResolvedValue([])
+    mockReadRepeatRows.mockResolvedValue([])
+    mockGetPluginInstalls.mockResolvedValue([])
+    mockGetForms.mockResolvedValue({ forms: {} })
+  })
+
+  it('ships the name and no picture for a site with no logo', async () => {
+    const tree = await compose({ displayName: 'Corner bistro' })
+    expect(Object.keys(tree)).not.toContain('logo')
+    expect(tree['name'].props).toEqual({ children: 'Corner bistro' })
+    expect(tree[ROOT].nodes).toEqual(['name', 'own'])
+  })
+
+  it('ships the picture, named as the site, and no name for a site with one', async () => {
+    const tree = await compose({ displayName: 'Corner bistro', logoUrl: 'media:h1/logo' })
+    expect(Object.keys(tree)).not.toContain('name')
+    expect(tree['logo'].props).toMatchObject({ src: 'media:h1/logo', alt: 'Corner bistro' })
+    expect(tree['logo'].props).not.toHaveProperty('hideUnless')
+  })
+
+  it('leaves a page’s own literal directive alone', async () => {
+    const tree = await compose({ displayName: 'Corner bistro' })
+    expect(tree['own']).toBeDefined()
+  })
+})
+
 describe("a layout's properties on the published page (AGL-2893)", () => {
   const mockGetScreenVersion = jest.requireMock('./get-screen-version')
     .default as jest.Mock

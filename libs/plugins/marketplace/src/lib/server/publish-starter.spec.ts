@@ -95,7 +95,10 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     get: async () => snapshotOf(path),
     set: async (data: Data, options?: { merge?: boolean }) => {
       state.writes.push({ path, data })
-      state.docs.set(path, options?.merge ? { ...(state.docs.get(path) ?? {}), ...data } : data)
+      const merged: Data = options?.merge ? { ...(state.docs.get(path) ?? {}), ...data } : { ...data }
+      // A merge honors the delete sentinel, as Firestore does.
+      for (const [key, value] of Object.entries(merged)) if (value === 'DELETE') delete merged[key]
+      state.docs.set(path, merged)
     },
     collection: (name: string) => collectionRef(`${path}/${name}`),
   })
@@ -119,7 +122,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
         firestore: () => ({ collection: (name: string) => collectionRef(name) }),
       }),
       firestore: {
-        FieldValue: { serverTimestamp: () => 'NOW', arrayUnion: (value: unknown) => [value] },
+        FieldValue: { serverTimestamp: () => 'NOW', arrayUnion: (value: unknown) => [value], delete: () => 'DELETE' },
         Timestamp: { now: () => 'NOW' },
       },
     },
@@ -335,6 +338,23 @@ describe('a site publishes as a starter (AGL-4049)', () => {
     expect(res.body).toEqual({ listingId: 'listing-new', version: 2 })
     expect(version(2)).toBeDefined()
     expect(listing()).toMatchObject({ latestVersion: 2, reviewStatus: 'listed' })
+  })
+
+  it('sends a rejected starter back for review when it is published again', async () => {
+    // The rejection tells the publisher to publish it again; the queue's
+    // Starters section reads `submitted`, so a re-publish that kept
+    // `rejected` would never be seen by anyone.
+    await publish()
+    state.docs.set('marketplaceListings/listing-new', {
+      ...listing(),
+      reviewStatus: 'rejected',
+      rejectionCategory: 'starter-theme',
+      rejectionReason: 'The dark scheme hides the menu.',
+    })
+    await publish()
+    expect(listing()).toMatchObject({ latestVersion: 2, reviewStatus: 'submitted' })
+    expect(listing()).not.toHaveProperty('rejectionCategory')
+    expect(listing()).not.toHaveProperty('rejectionReason')
   })
 
   it('never takes another listing of the same site for its own', async () => {

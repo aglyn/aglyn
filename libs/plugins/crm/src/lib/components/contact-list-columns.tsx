@@ -32,7 +32,7 @@ import {
   CONTACT_LIST_FILTER_FIELDS,
   CONTACT_LIST_FILTER_HEADERS,
 } from '../constants/contact-filters'
-import type { ContactRecord } from '../model/contact-record'
+import { contactRecordLabel, type ContactRecord } from '../model/contact-record'
 import type { CrmShareChip } from '../model/crm-sharing'
 import { CrmEmailStateChip } from './crm-email-state-chip'
 import { nextActivityColumn } from './crm-next-activity-column'
@@ -113,26 +113,26 @@ export function contactListColumns(
       minWidth: 220,
       ...listFilterColumn(CONTACT_LIST_FILTER_FIELDS, 'name'),
       valueGetter: (_value, row: ContactRecord) =>
-        String(row.name || row.email || ''),
+        contactRecordLabel(row),
       renderCell: ({ row }: { row: ContactRecord }) => (
         <Stack sx={{ justifyContent: 'center', height: '100%', lineHeight: 1.25 }}>
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
             <Typography variant="body2" sx={{ lineHeight: 1.25 }}>
-              {row.name || row.email}
+              {contactRecordLabel(row)}
             </Typography>
             {/* Seen on this site only through a share (AGL-3336). */}
             {row.shareChip && shareChipLabel ? (
               <Chip size="small" variant="outlined" color="info" label={shareChipLabel(row.shareChip)} />
             ) : null}
           </Stack>
-          {row.name ? (
+          {row.name && (row.email || row.phone || row.mobilePhone) ? (
             <Typography
               variant="caption"
               color="text.secondary"
               sx={{ lineHeight: 1.25 }}
               noWrap
             >
-              {row.email}
+              {row.email || row.phone || row.mobilePhone}
             </Typography>
           ) : null}
         </Stack>

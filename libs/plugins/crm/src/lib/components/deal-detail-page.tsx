@@ -290,7 +290,7 @@ export function DealDetailPage(props: CrmDetailPageProps) {
               org={org}
               viewingHostIds={scope.consentGroup?.hostIds}
             />
-            <RecordActivityCard hostId={hostId} org={org} dealId={deal.$id} />
+            <RecordActivityCard hostId={hostId} org={org} dealId={deal.$id} deal={deal} />
           </>
         ) : null}
       </Stack>

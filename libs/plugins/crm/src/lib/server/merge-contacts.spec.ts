@@ -442,6 +442,19 @@ describe('mergeContacts', () => {
     )
   })
 
+  it('rolls the note up to the company the survivor is filed under (AGL-4123)', async () => {
+    const survivor = docs.get(SURVIVOR)!
+    docs.set(SURVIVOR, {
+      ...survivor,
+      facets: { h1: { ...survivor.facets.h1, companyId: 'co-both' } },
+    })
+    await merge()
+    const [note] = childPaths(`${ORG}/crmActivities`)
+      .map((path) => docs.get(path)!)
+      .filter((row) => row.kind === 'note')
+    expect(note.companyId).toBe('co-both')
+  })
+
   it('writes no feed entry for a door with no site, and files the note under the survivor’s first site', async () => {
     await merge({ hostId: null })
     expect(mockLogHostActivity).not.toHaveBeenCalled()

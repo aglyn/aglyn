@@ -82,6 +82,8 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 }))
 
 const ORG = { $id: 'org-1' }
+/** The agency's opt-in: each site's records kept apart, so a create must come from a site. */
+const KEPT_APART = { $id: 'org-1', crm: { defaultRecordScope: 'host' as const } }
 const HOSTS = [
   { id: 'host-a', name: 'Site A', subdomain: 'a' },
   { id: 'host-b', name: 'Site B', subdomain: 'b' },
@@ -148,8 +150,8 @@ describe('useCrmScope at the organization level', () => {
     expect(crmScopeListable(result.current.visibleTo)).toBe(true)
   })
 
-  it('stamps a create from the SITE THE READER PICKED, and nothing before', () => {
-    const { result } = renderHook(() => useCrmScope({ hostId: null, org: ORG }), {
+  it('stamps a create from the SITE THE READER PICKED, and nothing before, when the org keeps its sites apart', () => {
+    const { result } = renderHook(() => useCrmScope({ hostId: null, org: KEPT_APART }), {
       wrapper: orgMount(),
     })
     // Two sites and no pick: nothing is guessed.
@@ -162,18 +164,42 @@ describe('useCrmScope at the organization level', () => {
       window.sessionStorage.setItem('aglyn.crm.createSite.org-1', 'host-b')
     })
     const { result: picked } = renderHook(
-      () => useCrmScope({ hostId: null, org: ORG }),
+      () => useCrmScope({ hostId: null, org: KEPT_APART }),
       { wrapper: orgMount() },
     )
-    const group = consentGroupForHost(ORG, 'host-b')
+    const group = consentGroupForHost(KEPT_APART, 'host-b')
     expect(picked.current.createHostId).toBe('host-b')
     expect(picked.current.createGroup).toEqual(group)
-    expect(picked.current.createTokens).toEqual(crmScopeTokens(ORG, group))
+    expect(picked.current.createTokens).toEqual(crmScopeTokens(KEPT_APART, group))
     // The picked site's, not the other site's.
     expect(picked.current.createGroup?.hostIds).not.toContain('host-a')
     expect(hostScopeToken('host-b')).toBeDefined()
     // Reads stay unscoped whatever was picked: the pick is about writes.
     expect(picked.current.visibleTo).toBeNull()
+  })
+
+  /** The site is a source to tag, not a scope to choose (AGL-4122). */
+  it('files a create for the whole org with no site picked, when the org keeps nothing apart', () => {
+    const { result } = renderHook(() => useCrmScope({ hostId: null, org: { $id: 'org-1' } }), {
+      wrapper: orgMount(),
+    })
+    expect(result.current.createHostId).toBeNull()
+    expect(result.current.createTokens).toEqual(['org'])
+    expect(result.current.createNeedsSite).toBe(false)
+  })
+
+  it('needs a site in an org that keeps them apart, and before the org has loaded', () => {
+    const apart = renderHook(() => useCrmScope({ hostId: null, org: KEPT_APART }), {
+      wrapper: orgMount(),
+    })
+    expect(apart.result.current.createNeedsSite).toBe(true)
+    expect(apart.result.current.createTokens).toEqual([])
+
+    const unloaded = renderHook(() => useCrmScope({ hostId: null, org: null }), {
+      wrapper: orgMount(),
+    })
+    expect(unloaded.result.current.createNeedsSite).toBe(true)
+    expect(unloaded.result.current.createTokens).toEqual([])
   })
 
   it('picks the only site silently when there is nothing to choose', () => {

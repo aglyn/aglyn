@@ -46,6 +46,7 @@ import {
 import { optimizePng } from './lib/optimize-png.mjs'
 import { chromeExecutable } from './lib/chrome-executable.mjs'
 import { loadFirstPartyStarterSources } from '../scripts/lib/first-party-starters.mjs'
+import { submitSiteStarter } from './lib/submitted-site-starter.mjs'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const IMG_ROOT = join(repoRoot, 'apps/docs/static/img')
@@ -91,7 +92,9 @@ const TIMEOUT_MS = Number(process.env.E2E_TIMEOUT_MS ?? 60_000)
  * and restores the org after it. `siteStarters: true` lists the platform's
  * own site starters in the emulator's marketplace for that one shot (the
  * first-party seed, under a publisher of its own) and removes them after it,
- * so no other shot of Create site meets them. `assertAbsent: [selector, …]` (or a single
+ * so no other shot of Create site meets them. `submittedSiteStarter: true`
+ * puts one site starter in the staff review queue for that one shot, and
+ * takes it out after it. `assertAbsent: [selector, …]` (or a single
  * selector) fails the shot when any of them is visible at the shutter.
  * A step may carry only `settleMs`, which is how a shot waits for the
  * canvas to finish laying out before its first click.
@@ -144,6 +147,32 @@ function starterStyleStep() {
     { click: 'role=button[name=/Create site/] >> nth=0', waitFor: 'How do you want to start?', settleMs: 1500 },
     { fill: ['role=textbox[name=/Site name/]', 'Hillside Dog Grooming'], settleMs: 1200 },
     { click: 'role=button[name="Start from the starter site"]', waitFor: 'Choose a style', settleMs: 2500 },
+  ]
+}
+
+/**
+ * Sites → Create site → Start from a starter site → AI starters (AGL-4049
+ * phase 4): the platform's Restaurant & café AI starter picked, then
+ * Continue, which opens the questions filled in from it; on to the Style step
+ * for `style`, what the site is for typed first. It stops there, so nothing
+ * is created and no AI runs.
+ */
+function aiStarterTo(step) {
+  const actions = [
+    { click: 'role=button[name=/Create site/] >> nth=0', waitFor: 'How do you want to start?', settleMs: 1500 },
+    { fill: ['role=textbox[name=/Site name/]', 'Corner Bistro'], settleMs: 1200 },
+    { click: 'role=button[name="Start from a starter site"]', waitFor: 'Choose your starter', settleMs: 4000 },
+    { click: 'role=tab[name="AI starters"]', settleMs: 4000 },
+    { click: 'role=radio[name=/^Restaurant & café with AI/]', settleMs: 3000 },
+    { click: 'role=button[name="Continue"]', waitFor: 'What are you building?', settleMs: 2500 },
+  ]
+  if (step === 'kind') return actions
+  return [
+    ...actions,
+    { fill: ['role=textbox[name=/What kind of site are you creating/]', 'a corner bistro with a seasonal menu'], settleMs: 400 },
+    { click: 'role=button[name="Next"]', waitFor: 'Who is it for?', settleMs: 600 },
+    { click: 'role=button[name="Next"]', waitFor: 'Choose a style', settleMs: 2500 },
+    { scroll: 'role=radio[name=/^Restaurant & café: From/]', settleMs: 1200 },
   ]
 }
 
@@ -386,6 +415,21 @@ const shots = [
     actions: starterStyleStep(),
   },
   {
+    // The logo, dark logo and favicon fields (AGL-4119), the first two chosen,
+    // each previewed on the ground it will be seen on. Nothing is created.
+    out: 'getting-started/create-site-logo.png',
+    path: `/${ORG_SLUG}/hosts`,
+    waitFor: 'Demo Bakery',
+    orgReleaseFlags: { release_ai_generative: true },
+    viewport: { width: 1440, height: 760 },
+    actions: [
+      { click: 'role=button[name=/Create site/] >> nth=0', waitFor: 'How do you want to start?', settleMs: 1500 },
+      { fill: ['role=textbox[name=/Site name/]', 'Hillside Dog Grooming'], settleMs: 1200 },
+      { files: ['[data-create-area="site-brand"] input[type="file"] >> nth=0', 'tools/e2e/fixtures/docs-logo-light.png'] },
+      { files: ['[data-create-area="site-brand"] input[type="file"] >> nth=1', 'tools/e2e/fixtures/docs-logo-dark.png'], settleMs: 1000 },
+    ],
+  },
+  {
     // "Choose your starter" (AGL-4049 lane 3), behind `release_site_starters`:
     // the platform's styles as starters, nothing chosen. Staff see the flagged
     // surface; its staff note is marked staff-only and stripped like any other.
@@ -518,6 +562,27 @@ const shots = [
     waitFor: 'Demo Bakery',
     orgReleaseFlags: { release_ai_generative: true },
     actions: guidedStartTo('style'),
+  },
+  // Start from an AI starter (AGL-4049 phase 4), behind `release_site_starters`:
+  // Choose your starter's AI starters tab, a first-party AI starter picked and
+  // Continue, which opens the questions filled in from it. Nothing is created;
+  // Plan my site is never pressed.
+  {
+    out: 'ai/start-with-ai-from-starter.png',
+    path: `/${ORG_SLUG}/hosts`,
+    waitFor: 'Demo Bakery',
+    orgReleaseFlags: { release_ai_generative: true, release_site_starters: true },
+    siteStarters: true,
+    actions: aiStarterTo('kind'),
+  },
+  {
+    out: 'ai/start-with-ai-from-starter-style.png',
+    path: `/${ORG_SLUG}/hosts`,
+    waitFor: 'Demo Bakery',
+    orgReleaseFlags: { release_ai_generative: true, release_site_starters: true },
+    siteStarters: true,
+    viewport: { width: 1440, height: 1300 },
+    actions: aiStarterTo('style'),
   },
   {
     out: 'ai/start-with-ai-review.png',
@@ -673,6 +738,21 @@ const shots = [
     out: 'plugins/plugin-reviews.png',
     path: '/admin/plugin-reviews',
     waitFor: 'Review',
+  },
+  {
+    // The Starters section with a starter waiting (AGL-4049): the card alone,
+    // the section the docs describe.
+    out: 'staff-console/review-queue-starters.png',
+    path: '/admin/plugin-reviews',
+    waitFor: 'Site starters awaiting review',
+    submittedSiteStarter: true,
+    actions: [
+      { scroll: 'text=Site starters awaiting review', waitFor: 'Corner Bistro', settleMs: 800 },
+    ],
+    assertAbsent: 'text=No site starters waiting for review.',
+    clipTo: {
+      locator: '.MuiCard-root:has-text("Site starters awaiting review")',
+    },
   },
   {
     out: 'email-campaigns/campaigns-tab.png',
@@ -1637,6 +1717,17 @@ async function listSiteStarters() {
   }
 }
 
+/** The queue's waiting starter, on the site the seed writes (AGL-4049). */
+async function queueSubmittedSiteStarter() {
+  const { agreement } = await loadFirstPartyStarterSources()
+  return submitSiteStarter({
+    firestoreHost: FIRESTORE_HOST,
+    projectId: FIRESTORE_PROJECT,
+    agreementVersion: agreement.version,
+    sourceHostId: HOST,
+  })
+}
+
 let failures = 0
 const skipped = []
 /**
@@ -1728,6 +1819,7 @@ for (const shot of selected) {
   const page = await context.newPage()
   let restoreOrgReleaseFlags = null
   let removeSiteStarters = null
+  let removeSubmittedSiteStarter = null
   try {
     // A taller window for a surface that is genuinely taller than 900px.
     // `clip` is clamped to the viewport, so a dialog that overflows gets
@@ -1756,6 +1848,7 @@ for (const shot of selected) {
       restoreOrgReleaseFlags = await applyOrgReleaseFlags(shot.orgReleaseFlags)
     }
     if (shot.siteStarters) removeSiteStarters = await listSiteStarters()
+    if (shot.submittedSiteStarter) removeSubmittedSiteStarter = await queueSubmittedSiteStarter()
     await page.goto(`${BASE_URL}${shot.path}`, {
       waitUntil: 'domcontentloaded',
       timeout: TIMEOUT_MS,
@@ -1780,6 +1873,9 @@ for (const shot of selected) {
         await page.mouse.click(action.dblclickXY[0], action.dblclickXY[1])
         await page.waitForTimeout(action.selectMs ?? 1200)
         await page.mouse.dblclick(action.dblclickXY[0], action.dblclickXY[1])
+      }
+      if (action.files) {
+        await scope.locator(action.files[0]).setInputFiles(join(repoRoot, action.files[1]))
       }
       if (action.fill) {
         await scope.locator(action.fill[0]).first().fill(action.fill[1])
@@ -1875,6 +1971,12 @@ for (const shot of selected) {
       await removeSiteStarters().catch((error) => {
         failures += 1
         console.error(`FAIL  ${shot.out}: site starters not removed: ${error.message}`)
+      })
+    }
+    if (removeSubmittedSiteStarter) {
+      await removeSubmittedSiteStarter().catch((error) => {
+        failures += 1
+        console.error(`FAIL  ${shot.out}: submitted starter not removed: ${error.message}`)
       })
     }
   }

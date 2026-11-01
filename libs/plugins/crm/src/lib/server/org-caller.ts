@@ -215,6 +215,17 @@ export async function authorizeOrgCaller(
 }
 
 /**
+ * The organization a create names when it comes with no site, in the shape
+ * `getOrgForHost` answers for one that does, or `null` when there is none.
+ */
+export async function readOrgForCreate(
+  orgId: string,
+): Promise<{ orgId: string; org: Partial<AglynOrganization> } | null> {
+  const org = await getOrgDoc(orgId).catch(() => null)
+  return org ? { orgId, org } : null
+}
+
+/**
  * Every site of the organization, by document id — the host set an
  * org-level act sweeps when it needs one (AGL-2634). One equality on
  * `hosts.orgId`, the query the erasure route already ran, which needs no

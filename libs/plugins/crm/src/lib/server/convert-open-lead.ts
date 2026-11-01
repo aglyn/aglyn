@@ -44,6 +44,7 @@
  */
 
 import {
+  consentGroupForHost,
   CRM_LEAD_STATUS_PICKLIST,
   type CrmLeadFields,
   crmLeadStatusLabelFor,
@@ -53,6 +54,7 @@ import {
 } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost, leadForWrite } from '@aglyn/tenant-data-admin'
 import { handOffLeadRecords } from '@aglyn/tenant-runtime/hand-off-lead'
+import { crmActivityLinkWithCompany } from './crm-activity-company'
 import { FieldValue } from 'firebase-admin/firestore'
 import { readCrmPicklist } from './read-picklist'
 
@@ -107,12 +109,18 @@ export async function convertOpenLeadOntoContact(
       { merge: true },
     )
     if (resolved) {
+      const { companyId } = await crmActivityLinkWithCompany(
+        firestore.collection('orgs').doc(resolved.orgId),
+        { contactId: input.contactId },
+        { groupId: consentGroupForHost(resolved.org, input.hostId).groupId },
+      )
       await handOffLeadRecords({
         firestore,
         orgId: resolved.orgId,
         hostId: input.hostId,
         leadId: key,
         contactId: input.contactId,
+        companyId,
         email,
         by: input.by,
       })

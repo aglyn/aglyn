@@ -33,6 +33,7 @@ import {
   buildAnimationFields,
   buildInstancePropFields,
   buildVisibilityFields,
+  offersVisibilityFields,
   elementPropsComponentMapper,
   inheritedAltPatch,
   isFormattedText,
@@ -358,6 +359,19 @@ describe('buildInstancePropFields (AGL-1247)', () => {
 // Making part of a component optional (AGL-1314). The contract that matters
 // is the same one AGL-1247 has: the field NAME must be the prop key the
 // graft evaluates, or the toggle saves somewhere nothing reads.
+describe('offersVisibilityFields (AGL-4119)', () => {
+  it('offers them inside a component editor, and on no ordinary element elsewhere', () => {
+    expect(offersVisibilityFields({}, true)).toBe(true)
+    expect(offersVisibilityFields({ children: 'Hi' }, false)).toBe(false)
+    expect(offersVisibilityFields(undefined, false)).toBe(false)
+  })
+
+  it('offers them on an element that already carries one, wherever it is', () => {
+    expect(offersVisibilityFields({ hideIf: '{{host.logo}}' }, false)).toBe(true)
+    expect(offersVisibilityFields({ hideUnless: '{{host.logo}}' }, false)).toBe(true)
+  })
+})
+
 describe('buildVisibilityFields (AGL-1314)', () => {
   it('names each field for the directive the graft evaluates', () => {
     const fields = buildVisibilityFields()

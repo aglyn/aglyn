@@ -169,6 +169,16 @@ describe('carryLeadCampaignsToContact', () => {
     ])
   })
 
+  it('rolls the entry it files up to the contact’s company (AGL-4123)', async () => {
+    docs.set('orgs/org-1/leads/lead-key', { email: 'dana@example.com', campaignIds: ['spring'] })
+    docs.set('orgs/org-1/contacts/c-1', {
+      email: 'dana@example.com',
+      facets: { 'site-1': { companyId: 'co-1' } },
+    })
+    await carryLeadCampaignsToContact(firestore, request)
+    expect(filed()).toEqual([expect.objectContaining({ contactId: 'c-1', companyId: 'co-1' })])
+  })
+
   it('files "Filed under" on the contact per campaign carried, by the conversion, once across runs (AGL-3274)', async () => {
     // Named from the org's container; the site path is not read.
     docs.set('orgs/org-1/emailCampaigns/founder-icp2', { name: 'Founder · ICP 2' })

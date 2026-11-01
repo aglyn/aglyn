@@ -305,13 +305,49 @@ describe('the profile', () => {
   })
 })
 
+/**
+ * A page drawn from the cache seeds the form, and the server's answer arrives a
+ * moment later (AGL-4122). The form has to take it, or the next save writes the
+ * old values back over the new ones.
+ */
+describe('a record that changes under the form', () => {
+  const card = (seeded: Partial<ContactRecord>) => (
+    <ContactPropertiesCard
+      hostId="host-1"
+      orgId="org-1"
+      record={{ ...record, ...seeded }}
+      consentGroup={GROUP}
+      seed={{ status: 'success', fromCache: false }}
+      members={members}
+      suiteLocked={false}
+    />
+  )
+  const jobTitle = () => screen.getByLabelText('Job title') as HTMLInputElement
+
+  it('follows the record while nobody has touched the form', () => {
+    const view = render(card({ jobTitle: 'From the cache' }))
+    view.rerender(card({ jobTitle: 'From the server' }))
+    expect(jobTitle().value).toBe('From the server')
+    expect(saveButton().disabled).toBe(true)
+  })
+
+  it('never takes what somebody is typing away from them', () => {
+    const view = render(card({ jobTitle: 'From the cache' }))
+    typeJobTitle('Being typed')
+    view.rerender(card({ jobTitle: 'From the server' }))
+    expect(jobTitle().value).toBe('Being typed')
+  })
+})
+
 describe('a stage move', () => {
   it('goes through crm/contact-stage once the profile has landed', async () => {
     renderCard()
     pickStage('Customer')
     save()
     await waitFor(() => expect(setContactStage).toHaveBeenCalledTimes(1))
-    expect(setContactStage).toHaveBeenCalledWith(USER, 'host-1', 'c1', 'customer')
+    expect(setContactStage).toHaveBeenCalledWith(USER, 'host-1', 'c1', 'customer', {
+      orgId: 'org-1',
+    })
     expect(order).toEqual(['profile', 'stage'])
     expect(profileSaves()[0].payload['set']).not.toHaveProperty('lifecycleStage')
     expect(writes).toEqual([])
@@ -337,20 +373,16 @@ describe('a stage move', () => {
     expect(notices.map((notice) => notice.message)).not.toContain('Contact saved')
   })
 
-  /** "Contact saved" over a change that went nowhere (AGL-4120). */
-  it('says so when no site holds the stage, rather than reading as saved', async () => {
+  /** A person no site holds is staged at the organization (AGL-4122). */
+  it('goes to the organization when no site holds the person', async () => {
     renderCard({}, false, true)
     pickStage('Customer')
     save()
+    await waitFor(() => expect(setContactStage).toHaveBeenCalledTimes(1))
+    expect(setContactStage).toHaveBeenCalledWith(USER, null, 'c1', 'customer', { orgId: 'org-1' })
     await waitFor(() =>
-      expect(notices).toContainEqual({
-        message:
-          'Saved, but the stage could not be changed: no site has captured this contact yet.',
-        variant: 'warning',
-      }),
+      expect(notices).toContainEqual({ message: 'Contact saved', variant: 'success' }),
     )
-    expect(setContactStage).not.toHaveBeenCalled()
-    expect(notices.map((notice) => notice.message)).not.toContain('Contact saved')
   })
 })
 
@@ -360,7 +392,7 @@ describe('a cleared stage', () => {
     pickStage('Not placed yet')
     save()
     await waitFor(() => expect(setContactStage).toHaveBeenCalledTimes(1))
-    expect(setContactStage).toHaveBeenCalledWith(USER, 'host-1', 'c1', null)
+    expect(setContactStage).toHaveBeenCalledWith(USER, 'host-1', 'c1', null, { orgId: 'org-1' })
     expect(order).toEqual(['profile', 'stage'])
     expect(writes).toEqual([])
   })

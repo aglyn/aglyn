@@ -48,6 +48,7 @@ import { aiJobDraftId, aiOriginJobId } from './ai-job-draft-ids'
 import {
   aiDraftAdmissionRefusal,
   aiDraftAllowanceRefusal,
+  aiSiteLogoFields,
   aiSiteSubdomain,
   readAiDraft,
   readAiDraftNodes,
@@ -84,7 +85,7 @@ import {
   aiLayoutFrameTargets,
   aiLayoutHomeId,
   aiLayoutNavPages,
-  aiLayoutSiteBrandOf,
+  aiLayoutFrameBrandOf,
   aiLayoutSiteFactsText,
   aiLayoutSiteFrameOf,
   aiLayoutSiteName,
@@ -417,7 +418,7 @@ export function createAiJobLayoutStep(deps: AiJobLayoutStepDeps = {}): AiJobStep
         // A site brought in may state what its own header and footer state (AGL-4084).
         extend: aiLayoutChecks(inventory, plan, [job.brief, aiLayoutSiteFactsText(job.inputs)].filter(Boolean).join('\n')),
         design: aiLayoutDesignOf(job, '/'),
-        brand: aiLayoutSiteBrandOf(job.inputs),
+        brand: aiLayoutFrameBrandOf(job.inputs, await aiSiteLogoFields(firestore, hostId)),
         storeLinks: aiStoreFrameLinksOf(job.inputs),
         // The frame's own words in the site's language (AGL-3760).
         ...(job.plan?.language ? { language: job.plan.language } : {}),

@@ -10,10 +10,11 @@ Your organization's [contacts](/content-and-data/crm/overview) — the unified l
 built from form submissions, member sign-ups, orders, and bookings, plus anyone your
 own systems add through this API.
 
-A contact is unified on its **email address**. Everything else about the resource
-follows from that: the email is the identity, so the API will not let you change it,
-and a second create for an address already present is a conflict rather than a second
-row.
+A contact with an address is unified on its **email address**. The email is the
+identity, so the API will not let you change it, and a second create for an address
+already present is a conflict rather than a second row. An address is optional: a
+contact can start as a name or a phone number, and two contacts with no address are
+two people. A phone number already on a contact with no email is a conflict the same way.
 
 ## The contact object
 
@@ -60,7 +61,7 @@ row.
 | --- | --- | --- |
 | `id` | string | Opaque contact id. |
 | `object` | string | Always `"contact"`. |
-| `email` | string \| null | The identity a contact is unified on. **Read-only.** |
+| `email` | string \| null | The identity a contact is unified on, or `null` for a contact with no address yet. **Read-only.** |
 | `name` | string \| null | Display name, when known. Writable. |
 | `tags` | string[] | Tags, the same ones the console's tag editor writes. Writable. |
 | `notes` | string \| null | Free-text notes, the same field the console's contact record writes. Writable. |
@@ -237,13 +238,13 @@ Returns a contact object, or `404 not_found` (`"No such contact"`).
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `email` | string | **yes** | Normalized before storing: trimmed and lowercased. An address that isn't usable is a `400`. |
+| `email` | string | one of `email`, `name`, `phone`, `mobilePhone`, `firstName` or `lastName` | Normalized before storing: trimmed and lowercased. An address that isn't usable is a `400`. |
 | `name` | string | no | Trimmed, truncated to 120 characters. An explicitly empty string is a `400` rather than a way to clear it. |
 | `tags` | string[] | no | Blanks dropped; each tag truncated to 60 characters, at most 50 kept. |
 | `notes` | string | no | Truncated to 2,000 characters. |
 | `marketingConsent` | boolean | no | `true` also stamps the consent timestamp, and requires `consentSiteId`. |
 | `phone`, `jobTitle`, `companyId`, `address`, `ownerUid`, `lifecycleStage`, `leadSource` | see [the object](#the-contact-object) | no | The [CRM profile](#crm-profile). Each requires `consentSiteId`, and lands on that site's profile of the person. |
-| `consentSiteId` | string | with `marketingConsent: true` or any profile field | The site this write is made on behalf of: the site the person opted in to, and the site whose profile the fields land on. Required for an opt-in and for a profile field; rejected alongside `marketingConsent: false` unless a profile field needs it. A site your organization does not own is a `400`. |
+| `consentSiteId` | string | with `marketingConsent: true`, or when the organization keeps each site's records apart | The site this write is made on behalf of: the site the person opted in to, and the site whose profile the fields land on. Required for an opt-in and for a profile field; rejected alongside `marketingConsent: false` unless a profile field needs it. A site your organization does not own is a `400`. |
 | `consentGroupId` | string | no | With `marketingConsent: true`, the id of the [consent group](/marketing-and-automation/email-campaigns/overview#consent-groups) `consentSiteId` belongs to — see [opting in for a whole group](#consent-group-opt-in). Without it the opt-in is recorded for `consentSiteId` alone. |
 
 ```bash

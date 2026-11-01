@@ -320,8 +320,30 @@ export const REVIEW_QUEUE_QUERY: ListQueryDeclaration = {
   search: { tokensPath: LISTING_NAME_TOKENS },
 }
 
-/** The three sections the queue reads, each its own query. */
-export type ReviewQueueSection = 'queue' | 'listed' | 'verification'
+/** The sections the queue reads, each its own query. */
+export type ReviewQueueSection = 'queue' | 'listed' | 'verification' | 'starters'
+
+/**
+ * The Starters section's query (AGL-4049): the same Status select and search
+ * as the plugin sections, read newest first. The plugin sections read in id
+ * order, which equality alone serves; this one pairs each field it can ask
+ * with `createdAt` descending, the composites the index file carries for it.
+ */
+export const STARTER_REVIEW_QUEUE_QUERY: ListQueryDeclaration = {
+  fields: REVIEW_QUEUE_QUERY.fields,
+  sorts: [{ path: 'createdAt', direction: 'desc' }],
+  search: REVIEW_QUEUE_QUERY.search,
+}
+
+/** What the Starters section shows while the Status select says All: the starters waiting for review. */
+export const STARTER_AWAITING_REVIEW_STATUS = 'submitted'
+
+/** The predicates the Starters section can scope by, for its index enumeration. */
+export const STARTER_REVIEW_QUEUE_BASE_PATHS: readonly { path: string }[] = [
+  { path: 'artifactType' },
+  { path: 'deletedAt' },
+  { path: 'reviewStatus' },
+]
 
 /** A listing's newest bytes have no approval: the `latestVersionReviewState` values that mean it. */
 export const AWAITING_REVIEW_STATES = ['pending', 'rejected'] as const
@@ -332,11 +354,30 @@ export const LISTED_REVIEW_STATUSES = ['listed', 'verified'] as const
  * Listed section's own `reviewStatus in [...]` steps aside for a Status
  * clause that names one of its two values, and a clause naming any other
  * value leaves the section empty by definition — `null`, never queried.
+ *
+ * The Starters section is live site starter listings (AGL-4049): those
+ * waiting for review, or, once the Status select names a status or Taken
+ * down, those the select names in their place. It holds every status, so it
+ * is never empty by definition.
  */
 export function reviewQueueBase(
   section: ReviewQueueSection,
   clauses: readonly ListFilterClause[],
 ): ListQueryFilter[] | null {
+  if (section === 'starters') {
+    const starters: ListQueryFilter[] = [
+      { path: 'artifactType', op: '==', value: 'siteStarter' },
+      { path: 'deletedAt', op: '==', value: null },
+    ]
+    const narrowed = clauses.some(
+      (clause) =>
+        (clause.field === 'reviewStatus' && clause.value) || clause.field === LISTING_TAKEN_DOWN,
+    )
+    if (!narrowed) {
+      starters.push({ path: 'reviewStatus', op: '==', value: STARTER_AWAITING_REVIEW_STATUS })
+    }
+    return starters
+  }
   const base: ListQueryFilter[] = [
     { path: 'type', op: '==', value: 'plugin' },
     { path: 'deletedAt', op: '==', value: null },

@@ -142,11 +142,20 @@ export function ContactAssociationsCard(props: ContactAssociationsCardProps) {
 
   const [campaigns, setCampaigns] = useState<string[]>(record.campaignIds)
   const [saving, setSaving] = useState(false)
+  /** The filing was edited since it was seeded or last saved. */
+  const [edited, setEdited] = useState(false)
   const recordId = record.$id
   useEffect(() => {
     setCampaigns(record.campaignIds)
+    setEdited(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recordId])
+  // The draft follows the document until it is edited (AGL-4122): a page drawn
+  // from the cache must not hold on to the cached filing once the server answers.
+  useEffect(() => {
+    if (!edited) setCampaigns(record.campaignIds)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [record.campaignIds])
 
   /*
    * The campaigns, read because this page IS the ask: one picker on one
@@ -183,6 +192,7 @@ export function ContactAssociationsCard(props: ContactAssociationsCardProps) {
           persist: false,
         })
       }
+      setEdited(false)
       enqueueSnackbar('Filing saved', { variant: 'success', persist: false })
     } catch (error) {
       console.error(error)
@@ -310,7 +320,10 @@ export function ContactAssociationsCard(props: ContactAssociationsCardProps) {
           kind="campaign"
           options={siteCampaigns.options}
           value={campaigns}
-          onChange={setCampaigns}
+          onChange={(next) => {
+            setCampaigns(next)
+            setEdited(true)
+          }}
           label="Filed under campaigns"
           helperText="Your own filing. It never adds anyone to a send — a campaign mails its lists."
           empty={siteCampaigns.ready && !siteCampaigns.options.length}

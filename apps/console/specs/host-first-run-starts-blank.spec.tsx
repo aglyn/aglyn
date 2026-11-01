@@ -68,6 +68,10 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   useUser: () => ({ data: mockUser }),
 }))
+const mockSnackbar = jest.fn()
+jest.mock('@aglyn/shared-ui-snackstack', () => ({
+  useSnackbar: () => ({ enqueueSnackbar: mockSnackbar }),
+}))
 jest.mock('../hooks/use-host', () => ({
   __esModule: true,
   useHost: () => ({ doc: { data: mockHost, status: mockHostStatus } }),
@@ -207,5 +211,38 @@ describe('"Your site is live" names the starter a site was made from (AGL-4049 l
     render(<HostFirstRunGate />)
     expect(screen.getByText('Your site is live')).toBeTruthy()
     expect(screen.queryByText(/Made from the starter/)).toBeNull()
+  })
+})
+
+describe('a create’s notice, on a landing reached by a full page load (AGL-4119)', () => {
+  beforeEach(() => {
+    mockSnackbar.mockClear()
+    mockReplace.mockClear()
+  })
+
+  it('says which files did not make it, and drops them from the address', () => {
+    mockSearch = 'missed=logo,favicon'
+    mockHost = { subdomain: 'shop' }
+    render(<HostFirstRunGate />)
+    expect(mockSnackbar).toHaveBeenCalledWith(
+      'Your site is ready, but your logo and favicon didn’t upload. Add them in Site settings.',
+      expect.objectContaining({ variant: 'warning' }),
+    )
+    expect(mockReplace).toHaveBeenCalledWith('/acme/hosts/shop')
+  })
+
+  it('keeps the rest of the address, and "Your site is live" with it', () => {
+    mockSearch = 'start=live&missed=logoDark'
+    mockHost = { subdomain: 'shop' }
+    render(<HostFirstRunGate />)
+    expect(screen.getByText('Your site is live')).toBeTruthy()
+    expect(mockReplace).toHaveBeenCalledWith('/acme/hosts/shop?start=live')
+  })
+
+  it('says nothing for a name that is not one of the fields', () => {
+    mockSearch = 'missed=everything'
+    mockHost = { subdomain: 'shop' }
+    render(<HostFirstRunGate />)
+    expect(mockSnackbar).not.toHaveBeenCalled()
   })
 })

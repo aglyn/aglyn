@@ -147,6 +147,8 @@ jest.mock('firebase/firestore', () => ({
 /** Activities the record already carries, as the ceiling's aggregate answers. */
 let mockLogged = 0
 const enqueueSnackbar = jest.fn()
+// **Name** and **Related To** have their own spec (`activity-link-fields`).
+jest.mock('./activity-link-fields', () => ({ ActivityLinkFields: () => null }))
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar }),
 }))
@@ -393,9 +395,9 @@ describe('ContactTimelineCard (AGL-2600)', () => {
         kind: 'call',
         body: 'Agreed to a trial',
         contactId: 'con-1',
-        // The contact create path's own stamp: this site, since the org has
-        // declared no group and no org-wide default.
-        visibleTo: ['host:host-1'],
+        // The contact create path's own stamp: the whole org, since the org
+        // has chosen no default of its own.
+        visibleTo: ['org'],
         hostId: 'host-1',
         byUid: 'u-1',
         byName: 'Ada Admin',

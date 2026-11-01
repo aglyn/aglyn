@@ -154,6 +154,16 @@ export interface ContactRecord {
 export { contactPrimaryGroup, NO_HOLDER_GROUP } from './contact-holder'
 
 /** A document off the wire, flattened through one group's facet. */
+/**
+ * What to call a person: their name, then their address, then their number. A
+ * contact needs no email (AGL-4122), so no surface may assume one is there.
+ */
+export function contactRecordLabel(
+  record: Pick<ContactRecord, 'name' | 'email' | 'phone' | 'mobilePhone'>,
+): string {
+  return record.name || record.email || record.phone || record.mobilePhone || 'Unnamed contact'
+}
+
 export function contactRecordFromDoc(
   row: Record<string, any>,
   group: ConsentGroup,

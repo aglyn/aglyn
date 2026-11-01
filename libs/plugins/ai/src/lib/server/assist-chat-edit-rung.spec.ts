@@ -371,6 +371,23 @@ describe('on the edit rung', () => {
     }
   })
 
+  it('tells the model what this chat changed, as Aglyn’s record and after every breakpoint (AGL-4116)', async () => {
+    armStream([OPENING, text('The headline and the button changed.'), ...closing()])
+    const outcomes = ['Page change on Home: saved, not published.']
+    await (await POST(post({ ...editBody(ADDON_ORG), outcomes }))).text()
+    const system = providerRequest().system as SystemBlock[]
+    const record = system.findIndex((block) => block.text.includes('as Aglyn recorded it'))
+    expect(system[record].text).toContain(`- ${outcomes[0]}`)
+    expect(system[record].cache_control).toBeUndefined()
+    expect(record).toBeGreaterThan(system.findLastIndex((block) => block.cache_control))
+  })
+
+  it('tells the model nothing of the kind when nothing has changed', async () => {
+    armStream([OPENING, text('Darkening the hero.'), ...closing()])
+    await (await POST(post(editBody(ADDON_ORG)))).text()
+    expect(JSON.stringify(providerRequest().system)).not.toContain('as Aglyn recorded it')
+  })
+
   it('beside level 2, the besigner screen block names the tool and the edit block follows it', async () => {
     armStream([OPENING, text('Darkening the hero.'), ...closing()])
     await (await POST(post(editBody(ADDON_ORG)))).text()

@@ -35,6 +35,7 @@ import {
   nodeMapBytes,
 } from '@aglyn/aglyn/app-utils/measure-node-map'
 import { parseMediaRef } from '@aglyn/aglyn/app-utils/media-ref'
+import { SX_SCHEME_DARK_KEY } from '@aglyn/aglyn/app-utils/scheme-sx'
 import {
   COMPONENT_PROP_NAME_PATTERN,
   REUSABLE_INSTANCE_COMPONENT_ID,
@@ -1347,7 +1348,12 @@ function validate(
         error: `${entry.displayName} (${id}) is missing its required "${propsResult.missing}" prop`,
       }
     }
-    const sx = sanitizeSx(id, sxByNodeId.get(id), repairs)
+    // A logo code draws for one color scheme (AGL-4119): whether it shows, and
+    // nothing else. A model never writes this key, and its own sx never keeps it.
+    const { [SX_SCHEME_DARK_KEY]: schemeSx, ...ownSx } = (sxByNodeId.get(id) ?? {}) as Record<string, unknown>
+    const shownInDark = codeBuilt && isRecord(schemeSx) && ['none', 'block'].includes(String(schemeSx['display']))
+    const kept = sanitizeSx(id, shownInDark ? ownSx : sxByNodeId.get(id), repairs)
+    const sx = shownInDark ? { ...kept, [SX_SCHEME_DARK_KEY]: { display: schemeSx['display'] } } : kept
     output[newId] = {
       $id: newId,
       type: NodeType.NODE,

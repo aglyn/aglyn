@@ -274,7 +274,7 @@ fun SettingsSection(context: NativePluginContext, scope: CrmScope, reference: Cr
       SectionCard("Who sees new records", Modifier.fillMaxWidth()) {
         ChoiceChipRow(
           listOf(ChipOption("host", "The site that made them"), ChipOption("org", "Every site in the workspace")),
-          crmDefaultScopeOf(scope.org) ?: "host",
+          crmDefaultScopeOf(scope.org) ?: "org",
           { if (scope.canManage) write(mapOf("defaultRecordScope" to it)) },
           wrap = true,
         )

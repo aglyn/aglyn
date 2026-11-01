@@ -286,7 +286,7 @@ describe('crm/task-save', () => {
     expect(stored()).toEqual([])
   })
 
-  it('creates a task in the site’s scope, stamped with provenance, telling nobody about a note to self', async () => {
+  it('creates a task in the org’s default scope, stamped with the site as provenance, telling nobody about a note to self', async () => {
     const { status, body } = await call(crmTaskSaveHandler, {
       body: { hostId: HOST_ID, task: task({ contactId: 'c-1', dueAtMs: 1757062800000 }) },
     })
@@ -310,14 +310,15 @@ describe('crm/task-save', () => {
       priorityLabel: 'Normal',
       statusLabel: 'Not Started',
       completedAtMs: null,
-      // An undeclared site is a group of one: this site's token alone.
-      visibleTo: ['host:site-1'],
+      // The org has chosen no default, so the task is the whole org's; the
+      // site it was filed from is its provenance.
+      visibleTo: ['org'],
       hostId: HOST_ID,
       createdByUid: WRITER,
       createdAt: SERVER_TIMESTAMP,
       updatedAt: SERVER_TIMESTAMP,
       // What the Tasks list searches by (AGL-3321), from the title and scope.
-      ...crmTaskListFields({ title: 'Call back about the quote', visibleTo: ['host:site-1'] }),
+      ...crmTaskListFields({ title: 'Call back about the quote', visibleTo: ['org'] }),
     })
     // Unset optionals are ABSENT, not null — the record cards' equality
     // queries and the "my tasks" view depend on it.
@@ -357,6 +358,13 @@ describe('crm/task-save', () => {
     org = { plan: 'starter', defaultResourceScope: 'org' }
     await call(crmTaskSaveHandler, { body: { hostId: HOST_ID, task: task() } })
     expect(stored()[0]?.visibleTo).toEqual(['org'])
+  })
+
+  it('stamps this site alone when the org keeps its sites apart', async () => {
+    org = { plan: 'starter', crm: { defaultRecordScope: 'host' } }
+    await call(crmTaskSaveHandler, { body: { hostId: HOST_ID, task: task() } })
+    // An undeclared site is a group of one: this site's token alone.
+    expect(stored()[0]?.visibleTo).toEqual(['host:site-1'])
   })
 
   it('leaves an unassigned task with no assignee key at all', async () => {
@@ -824,7 +832,10 @@ describe('crm/task-save at the organization level (AGL-2637)', () => {
     expect('hostId' in payload).toBe(false)
   })
 
-  it("files a task from a site named beside the org, stamped as that site's console would", async () => {
+  it("files a task from a site named beside the org, stamped as that site's console would when the org keeps its sites apart", async () => {
+    // Kept apart, the site's stamp differs from the org task's `['org']`,
+    // so the assertion below can tell which one the route chose.
+    org = { plan: 'starter', crm: { defaultRecordScope: 'host' } }
     // No site role on the roster: the org variant reads the org gate — the
     // caller's org-wide membership and the permission catalog — never a
     // site role.

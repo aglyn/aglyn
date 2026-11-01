@@ -277,7 +277,14 @@ async function handler(request: Request): Promise<Response> {
     // refused pick burns no token, and before the claim, so no site exists
     // for one. A 402 answers with the listing and its price; once bought, the
     // same request again creates the site.
+    //
+    // An AI starter (phase 4) creates nothing of its own: its answers filled
+    // in the AI start's questions, so the site takes the guided path, born
+    // empty for the start, with the starter recorded — and only for a
+    // creator who is offered the AI start, asked here, before anything is
+    // spent. The start's own page band applies, not the starter's pages.
     let starterInstall: SiteStarterInstall | null = null
+    let aiStarter: SiteStarterInstall['listing'] | null = null
     let starterSource: PluginSiteStarterSource | null = null
     if (starterChoice) {
       if (
@@ -308,9 +315,22 @@ async function handler(request: Request): Promise<Response> {
         orgId: orgMembership.orgId,
         uid: decoded.uid,
       })
+      const aiPick =
+        !!resolved && typeof resolved === 'object' && !('error' in resolved) && resolved.mode === 'ai'
       const refused = siteStarterPickRefusal(resolved, {
         listingId: starterChoice.listingId,
         pagesAllowed: checkQuota(org as never, 'screensPerHost', 0).limit,
+        ...(aiPick
+          ? {
+              aiStart: await guidedStartOffered({
+                orgId: orgMembership.orgId,
+                org,
+                host: { enabledPlugins: [...NEW_SITE_ENABLED_PLUGINS] },
+                member: orgMembership.member,
+                staff: decoded['staff'] === true,
+              }),
+            }
+          : {}),
       })
       if (refused) return Response.json(refused.body, { status: refused.status })
       // The listing as the source describes it for this viewer: its name, for
@@ -324,15 +344,14 @@ async function handler(request: Request): Promise<Response> {
         uid: decoded.uid,
       })
       const payload = resolved as SiteStarterPayload
-      starterInstall = {
-        payload,
-        listing: {
-          listingId: starterChoice.listingId,
-          version: starterChoice.version ?? 'latest',
-          displayName: described?.displayName?.trim() || 'Starter',
-          kind: described?.facets?.kind ?? payload.facets?.kind ?? null,
-        },
+      const listing = {
+        listingId: starterChoice.listingId,
+        version: starterChoice.version ?? 'latest',
+        displayName: described?.displayName?.trim() || 'Starter',
+        kind: described?.facets?.kind ?? payload.facets?.kind ?? null,
       }
+      if (aiPick) aiStarter = listing
+      else starterInstall = { payload, listing }
     }
 
     // Rate limit (AGL-1968) — the always-on layer under the hostLimit quota.
@@ -407,16 +426,20 @@ async function handler(request: Request): Promise<Response> {
     //
     // A starter picked from the marketplace (AGL-4049) is a choice too, the
     // more specific one: the site is born with that starter instead.
-    const starterChosen = body?.start === 'starter' || starterChoice !== null
+    //
+    // An AI starter (phase 4) is the guided start itself, already offered:
+    // the site is born empty for it.
+    const starterChosen = !aiStarter && (body?.start === 'starter' || starterChoice !== null)
     const guidedStart =
-      !starterChosen &&
-      (await guidedStartOffered({
-        orgId: orgMembership.orgId,
-        org,
-        host: { enabledPlugins: [...NEW_SITE_ENABLED_PLUGINS] },
-        member: orgMembership.member,
-        staff: decoded['staff'] === true,
-      }))
+      aiStarter !== null ||
+      (!starterChosen &&
+        (await guidedStartOffered({
+          orgId: orgMembership.orgId,
+          org,
+          host: { enabledPlugins: [...NEW_SITE_ENABLED_PLUGINS] },
+          member: orgMembership.member,
+          staff: decoded['staff'] === true,
+        })))
     // "Start in preview" (AGL-4086): the person's choice when they made one,
     // else in preview for a site brought in from somewhere else
     // (`start: 'import'`) and public for every other start.
@@ -453,6 +476,7 @@ async function handler(request: Request): Promise<Response> {
       starter: starterInstall ?? !guidedStart,
       preview,
       ...(style ? { style } : {}),
+      ...(aiStarter ? { aiStarter } : {}),
       start,
     })
     // Lost the subdomain to a concurrent create between the pre-check above
@@ -487,9 +511,10 @@ async function handler(request: Request): Promise<Response> {
       'Created the site',
       { type: 'host', id: hostId, name: displayName },
     )
-    // The starter's listing counts the install. Best-effort by contract; a
-    // throw is caught anyway, since the site already exists.
-    if (starterInstall && starterSource?.installed) {
+    // The starter's listing counts the install, an AI starter's too.
+    // Best-effort by contract; a throw is caught anyway, since the site
+    // already exists.
+    if ((starterInstall || aiStarter) && starterSource?.installed) {
       await starterSource
         .installed(starterChoice, { orgId: orgMembership.orgId, uid: decoded.uid }, { hostId })
         .catch((error: unknown) => {
@@ -569,7 +594,7 @@ async function handler(request: Request): Promise<Response> {
               starter: {
                 listingId: starterChoice.listingId,
                 version: starterChoice.version ?? null,
-                displayName: starterInstall?.listing.displayName ?? 'Starter',
+                displayName: (starterInstall?.listing ?? aiStarter)?.displayName ?? 'Starter',
               },
             }
           : {}),

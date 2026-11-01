@@ -46,7 +46,7 @@ flowchart LR
 | **[Contacts](./contact-record.md)** | `/crm/contacts` | Every person your site may see, as a list with Owner and Stage columns, filters and search; a person's own page is `/crm/contacts/{id}`. [import](./import.md) and [export](./export.md), [bulk actions](./bulk-actions.md), [saved views](./views.md) and the [timeline](./activities.md) live here too. |
 | **[Leads](./leads.md)** | `/crm/leads` | People a site has captured but not yet qualified — a status, an owner and notes on each, and a conversion into a contact, a company and a deal. [CSV import and export](./leads.md#import-from-csv) too. |
 | **[Companies](./companies.md)** | `/crm/companies` | The organizations your contacts belong to, keyed by domain — a captured contact is linked to the company at their email domain on its own; a company's page is `/crm/companies/{id}`. [import](./companies.md#import) and [export](./companies.md#export) and [bulk actions](./bulk-actions.md#companies) too. |
-| **[Deals](./deals.md)** | `/crm/deals` | The sales pipeline — open deals by stage, with an amount, an owner and an expected close, as a board or a table with [export and bulk actions](./bulk-actions.md#deals); a deal's page is `/crm/deals/{id}`. |
+| **[Deals / Opportunities](./deals.md)** | `/crm/deals` | The sales pipeline — open deals by stage, with an amount, an owner and an expected close, as a board or a table with [export and bulk actions](./bulk-actions.md#deals); a deal's page is `/crm/deals/{id}`. |
 | **[Tasks](./tasks.md)** | `/crm/tasks` | Calls, emails, meetings and to-dos by due date, each linked to the contact, company or deal it is for, with [export and bulk actions](./bulk-actions.md#tasks). |
 | **[Reports](./reports.md)** | `/crm/reports` | New contacts over time, sources and the lifecycle funnel, conversion by source, the lead funnel, the open pipeline and its forecast, won and lost, activity by teammate, and the task load — every table exportable as CSV. |
 | **[Fields](./custom-fields.md)** | `/crm/fields` | The custom fields on a contact — text, number, date, choice, checkbox, link or currency — which a form field can save into. |
@@ -222,15 +222,18 @@ listed there, and opening it edits the same record the site's own hub edits.
 
 What differs from a site's hub:
 
-- **Every create names a site.** A contact, company, deal or logged activity
-  is always captured *by* a site — that is what decides which of your sites may
-  see it and whose marketing consent a contact's checkbox records — so **New
-  contact**, **New company**, **New deal**, **Log activity** and **Import**
-  each begin with a required **Site** picker. The pick is remembered for the
-  session, and an organization with exactly one site never sees the field. The
-  REST API asks the same question as `consentSiteId`. A **task** is the one
-  exception: **New task** offers **This organization (no site)** beside the
-  sites, for work the organization itself owes — see
+- **A create can name the site it came from.** **New contact**, **Import**,
+  **New company**, **New deal** and **Log activity** begin with an optional
+  **Source site**. Leave it on
+  **None** for a record that came from no site; every site sees the record
+  either way, because the CRM's records belong to the whole workspace. In a
+  workspace that [keeps each site's records apart](./sharing.md), the site
+  decides who may see the record, so the field is required and reads **Site**.
+  On **New contact**, a marketing opt-in is recorded for the site you name, or
+  for every site when you name none. The pick is remembered for the session, and an organization with exactly one site never sees the field.
+  The REST API takes the same answer as `consentSiteId`, which may be left out
+  unless the workspace keeps its sites apart. A **task** also offers **This
+  organization (no site)**, for work the organization itself owes — see
   [Organization tasks](./tasks.md#organization-tasks).
 - **The cross-site facts.** The contacts list gains a **Known by** column — the
   sites that have captured each person — and a contact's page gains a **Known

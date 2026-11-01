@@ -239,6 +239,33 @@ describe('a change to a page the site has (AGL-4116)', () => {
     expect(screen.queryByRole('button', { name: 'Confirm plan' })).toBeNull()
   })
 
+  it('tells the next question what became of the change, apart from what the chat said', async () => {
+    turns = [{ pageChange: CHANGE }, {}]
+    editJobs = [drafted('v-draft-1')]
+    render(<AssistPanelComponent {...dockProps()} />)
+    await ask('Make the image in the top of the home page fill the entire background')
+    await screen.findByText('Open in the Besigner')
+    await ask('What changed?')
+    await waitFor(() => expect(posts.filter(([path]) => path === '/api/assist/chat')).toHaveLength(2))
+    const [, second] = posts.filter(([path]) => path === '/api/assist/chat')[1]
+    expect(second['outcomes']).toEqual([expect.stringContaining('Page change on Home')])
+    // Added to the assistant's own turn, the model read this as its own claim
+    // and took the change back.
+    const history = second['history'] as { role: string; text: string }[]
+    expect(history.map((turn) => turn.text)).toEqual([
+      'Make the image in the top of the home page fill the entire background',
+      'I will make that change as a draft of Home.',
+    ])
+  })
+
+  it('sends no outcomes when nothing has happened', async () => {
+    turns = [{}]
+    render(<AssistPanelComponent {...dockProps()} />)
+    await ask('Hello')
+    await waitFor(() => expect(posts.filter(([path]) => path === '/api/assist/chat')).toHaveLength(1))
+    expect(posts.find(([path]) => path === '/api/assist/chat')?.[1]).not.toHaveProperty('outcomes')
+  })
+
   it('asks for a new version only when the chat said one was asked for, and shows where the job put the change', async () => {
     turns = [{ pageChange: { ...CHANGE, newVersion: true } }]
     const note = 'A new version needs version history, which requires a Pro plan, so the change went into the draft instead.'

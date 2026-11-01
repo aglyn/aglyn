@@ -6,17 +6,22 @@ description: Let another of your sites see a lead, a contact, a company or a dea
 
 # Share records across sites
 
-Each site in your workspace sees the people it captured. A site in a
-[consent group](./overview.md) also sees the records of the group's other
-sites. Every other record is hidden from it, which is what keeps one agency
-client's CRM apart from another's.
+A record in your CRM belongs to the whole workspace: every site sees the
+contacts, companies, deals and tasks, whichever site they came in on. The site
+a record came from is kept as its **source**, so you can still tell which
+brand met the person.
 
-To start every new record on **All sites** instead, a workspace owner or
-admin can change **Default sharing for new records** in the CRM's
-**Settings**. It covers new contacts, companies, deals and tasks, and changes
-nothing that already exists. It is separate from the defaults for new
-datasets and media files, which are set on the organization **Data** and
-**Media** pages.
+An agency that keeps each client's records apart can change that. A workspace
+owner or admin sets **Default sharing for new records** in the CRM's
+**Settings** to **Only the site they came in on**. Each site then sees the
+people it captured, a site in a [consent group](./overview.md) also sees the
+records of the group's other sites, and every other record is hidden from it,
+so one client's collaborator never sees another client's people. The setting
+covers new contacts, companies, deals and tasks, and changes nothing that
+already exists. It is separate from the defaults for new datasets and media
+files, which are set on the organization **Data** and **Media** pages.
+
+The rest of this page is for a workspace that keeps its sites apart.
 
 When you run several brands and want one brand's team to work records
 another brand captured, a workspace **owner or admin** can share them. You
