@@ -16,11 +16,17 @@ content on the marketing site and is written separately.
 ### Fixed
 
 - **ai:** AI page changes open on their draft; Assist reads the whole page ([AGL-4116](https://linear.app/aglyn/issue/AGL-4116))
+- **console:** a save waits for the server instead of being refused with "We could not confirm", and a slow page no longer disconnects a working tab ([AGL-4120](https://linear.app/aglyn/issue/AGL-4120))
+
+### Documentation
+
+- **billing:** remove the pre-release pricing note ([AGL-4051](https://linear.app/aglyn/issue/AGL-4051))
 
 <details>
-<summary>Also in this release: 1 chore</summary>
+<summary>Also in this release: 1 chore, 1 test</summary>
 
 - **release:** v1.0.0-beta.298 ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
+- **console:** the Besigner page specs mock the open-draft hook, so the promotion's test shards pass ([AGL-4116](https://linear.app/aglyn/issue/AGL-4116))
 
 </details>
 
