@@ -612,6 +612,9 @@ data class MediaStorage(val usedBytes: Long, val allowanceMb: Long?, val unlimit
  * body: upload (direct under [SIGNED_UPLOAD_THRESHOLD_BYTES], a signed URL
  * above it), details, privacy, folders, moves, replace, delete, restore.
  */
+/** What an upload route stored. */
+data class StoredMedia(val mediaId: String?, val url: String?, val cdnPath: String?)
+
 @OptIn(ExperimentalEncodingApi::class)
 class MediaApi(private val api: ConsoleApiClient, private val scope: MediaScope, private val videoProbe: VideoProbe? = null) {
   private fun body(vararg fields: Pair<String, Any?>): JsonElement = jsonValue(
@@ -627,7 +630,10 @@ class MediaApi(private val api: ConsoleApiClient, private val scope: MediaScope,
     if (contentType.startsWith("video/") && videoProbe != null) videoProbeFields(videoProbe.probe(file)).toList().toTypedArray() else emptyArray()
 
   /** Uploads one picked file into [folderId]; answers its media id. */
-  suspend fun upload(file: PickedFile, folderId: String?, rightsConfirmed: Boolean = false): String? {
+  suspend fun upload(file: PickedFile, folderId: String?, rightsConfirmed: Boolean = false): String? = store(file, folderId, rightsConfirmed).mediaId
+
+  /** [upload], answering what the route stored: its id, and the address a field that points at it is written from. */
+  suspend fun store(file: PickedFile, folderId: String?, rightsConfirmed: Boolean = false): StoredMedia {
     val contentType = file.mimeType.ifBlank { "application/octet-stream" }
     val film = filmFields(file, contentType)
     // An audio file is refused unless its uploader confirmed they own it or hold a license (AUDIO_RIGHTS_FIELD).
@@ -638,17 +644,17 @@ class MediaApi(private val api: ConsoleApiClient, private val scope: MediaScope,
         ApiMethod.POST,
         body("fileName" to file.name, "contentType" to contentType, "folderId" to folderId, "data" to Base64.encode(file.bytes), *film, *rights),
       )
-      return answer.field("mediaId")
+      return StoredMedia(answer.field("mediaId"), answer.field("url"), answer.field("cdnPath"))
     }
     val minted = api.request(
       "/api/media/upload-url",
       ApiMethod.POST,
       body("contentType" to contentType, "fileName" to file.name, "sizeBytes" to file.size, "folderId" to folderId, *rights),
     )
-    val mediaId = minted.field("mediaId") ?: return null
-    api.putSigned(minted.field("uploadUrl") ?: return null, minted.field("contentType") ?: contentType, file.bytes)
-    api.request("/api/media/upload-url", ApiMethod.PATCH, body("mediaId" to mediaId, "fileName" to file.name, "folderId" to folderId, *film, *rights))
-    return mediaId
+    val mediaId = minted.field("mediaId") ?: return StoredMedia(null, null, null)
+    api.putSigned(minted.field("uploadUrl") ?: return StoredMedia(null, null, null), minted.field("contentType") ?: contentType, file.bytes)
+    val answer = api.request("/api/media/upload-url", ApiMethod.PATCH, body("mediaId" to mediaId, "fileName" to file.name, "folderId" to folderId, *film, *rights))
+    return StoredMedia(mediaId, answer.field("url"), answer.field("cdnPath"))
   }
 
   /** Replaces the file's bytes in place: the same id and address everywhere it is used. */

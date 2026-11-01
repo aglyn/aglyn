@@ -273,8 +273,14 @@ final class AppModel {
         guard hostID != nil, let navigation else { return }
         navigation.inSite = true
         // Opening a site from a workspace screen (a Sites row) drills into it, on its Home; a screen of the site that
-        // asked for one stays where it is.
-        if let self, navigation.section != .home, ShellScope(model: self, navigation: navigation).row(for: navigation.section) == nil {
+        // asked for one stays where it is. Sites pushed over Home is a workspace screen too: on a phone it stayed on the
+        // stack, and its `new=1` opened Create site again as the picked site rebuilt it (AGL-4129).
+        let sitesInFront: Bool
+        switch navigation.paths[navigation.section]?.last {
+        case .screen(let screen, _), .area(let screen, _): sitesInFront = screen == siteSitesScreen
+        default: sitesInFront = false
+        }
+        if let self, sitesInFront || (navigation.section != .home && ShellScope(model: self, navigation: navigation).row(for: navigation.section) == nil) {
           navigation.enterSite()
         }
       },

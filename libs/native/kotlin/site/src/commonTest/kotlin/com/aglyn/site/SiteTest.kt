@@ -4,6 +4,9 @@ import com.aglyn.contracts.MediaSort
 import com.aglyn.core.ConsoleApiClient
 import com.aglyn.core.ConsoleApiError
 import com.aglyn.core.FilterOp
+import com.aglyn.core.SiteBrandFiles
+import com.aglyn.core.SiteStyles
+import com.aglyn.core.mediaPreviewUrl
 import com.aglyn.ui.PickedFile
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
@@ -41,7 +44,13 @@ import com.aglyn.site.pages.pageStatus
 import com.aglyn.site.pages.pageTree
 import com.aglyn.site.sites.SiteDomainFilter
 import com.aglyn.site.sites.SUBDOMAIN_PATTERN
+import com.aglyn.site.sites.SiteBrandFields
+import com.aglyn.site.sites.SiteBrandSaveOutcome
+import com.aglyn.site.sites.canCreateSite
 import com.aglyn.site.sites.createSiteBody
+import com.aglyn.site.sites.saveSiteBrandFiles
+import com.aglyn.site.sites.siteBrandFileRefusal
+import com.aglyn.site.sites.siteBrandFileType
 import com.aglyn.site.sites.suggestSubdomain
 import com.aglyn.core.listquery.planListQuery
 import com.aglyn.core.listquery.toFirestoreQuery
@@ -157,13 +166,113 @@ class SiteTest {
   }
 
   @Test
-  fun createsTheSiteWithTheStarterInTheSameRequest() {
-    val body = createSiteBody("org1", "  My Shop ", " MyShop ")
+  fun createsTheSiteWithTheStarterInTheChosenStyle() {
+    val body = createSiteBody("org1", "  My Shop ", " MyShop ", "trades")
     assertEquals("My Shop", body["displayName"]?.jsonPrimitive?.content)
     assertEquals("myshop", body["subdomain"]?.jsonPrimitive?.content)
     assertEquals("org1", body["orgId"]?.jsonPrimitive?.content)
     // The console's "Create the starter site"; without it the server may leave the site empty for a guided start the app does not have.
     assertEquals("starter", body["start"]?.jsonPrimitive?.content)
+    assertEquals("trades", body["style"]?.jsonPrimitive?.content)
+  }
+
+  @Test
+  fun createSiteWaitsForAStyleThePersonPicked() {
+    assertFalse(canCreateSite("My Shop", "my-shop", null))
+    assertTrue(canCreateSite("My Shop", "my-shop", "trades"))
+    // "Pick for me" is the AI start's card: the route refuses it for the starter site.
+    assertFalse(canCreateSite("My Shop", "my-shop", "auto"))
+    assertFalse(canCreateSite("My Shop", "my-shop", "nope"))
+    // The other two still count.
+    assertFalse(canCreateSite("  ", "my-shop", "trades"))
+    assertFalse(canCreateSite("My Shop", "ab", "trades"))
+  }
+
+  @Test
+  fun offersEveryStyleWithAPictureAnAppCanRead() {
+    assertEquals(21, SiteStyles.all.size)
+    assertEquals("business", SiteStyles.all.first().id)
+    assertEquals("Business & services", SiteStyles.all.first().name)
+    assertEquals("coming-soon", SiteStyles.all.last().id)
+    SiteStyles.all.forEach { style ->
+      // Under the public media path: `/_static` answers OkHttp with a bot challenge it cannot solve.
+      assertEquals(
+        "https://app.aglyn.com/api/media/cdn/site-styles/${style.id}.webp?w=480",
+        mediaPreviewUrl(style.preview, "https://app.aglyn.com", null, 480),
+      )
+    }
+  }
+
+  private fun file(name: String, type: String = "image/png", size: Int = 16) = PickedFile(name, type, ByteArray(size))
+
+  @Test
+  fun readsWhatTheLogoFieldsTakeAsTheConsole() {
+    assertEquals("image/svg+xml", siteBrandFileType("mark.SVG", "", "logo"))
+    assertEquals("image/x-icon", siteBrandFileType("icon.ico", "application/octet-stream", "favicon"))
+    assertNull(siteBrandFileType("notes.txt", "", "logo"))
+    assertEquals("image/jpeg", siteBrandFileType("photo.jpg", "image/jpg", "logo"))
+    assertNull(siteBrandFileRefusal(file("logo.png"), "logo"))
+    assertEquals("Use a PNG, JPEG, WebP or SVG file.", siteBrandFileRefusal(file("logo.tiff", "image/tiff"), "logo"))
+    assertEquals("Use a PNG, JPEG, WebP or SVG file.", siteBrandFileRefusal(file("icon.ico", "image/x-icon"), "logo"))
+    assertEquals("Use a PNG, JPEG, WebP, SVG or ICO file.", siteBrandFileRefusal(file("icon.bmp", "image/bmp"), "favicon"))
+    assertEquals("That file is over 15 MB.", siteBrandFileRefusal(file("big.png", size = 16 * 1024 * 1024), "logo"))
+    assertEquals("That file is empty.", siteBrandFileRefusal(file("empty.png", size = 0), "logo"))
+    assertEquals("Square, at least 512 px, the logo filling about 80% with a little space around it.", SiteBrandFiles.HINT)
+  }
+
+  private class BrandRun(val outcome: SiteBrandSaveOutcome, val uploaded: List<String>, val writes: List<SiteBrandFields>)
+
+  private suspend fun saveBrand(files: Map<String, PickedFile>, refuse: List<String> = emptyList(), saveFails: Boolean = false): BrandRun {
+    val uploaded = mutableListOf<String>()
+    val writes = mutableListOf<SiteBrandFields>()
+    val outcome = saveSiteBrandFiles(
+      files,
+      upload = { chosen, _ ->
+        if (chosen.name in refuse) throw ConsoleApiError("Storage limit reached", 413, null)
+        uploaded += chosen.name
+        "media:${chosen.name}"
+      },
+      save = { fields ->
+        if (saveFails) throw ConsoleApiError("Save failed", 403, null)
+        writes += fields
+      },
+    )
+    return BrandRun(outcome, uploaded, writes)
+  }
+
+  @Test
+  fun savesWhatTheSheetHeldAsTheConsole() = runTest {
+    val none = saveBrand(emptyMap())
+    assertEquals(SiteBrandSaveOutcome(null, emptyList()), none.outcome)
+    assertEquals(emptyList(), none.writes)
+    // A logo, and the favicon left blank: the same asset, not a second copy.
+    val logo = saveBrand(mapOf("logo" to file("logo.png")))
+    assertEquals(listOf("logo.png"), logo.uploaded)
+    assertEquals(listOf(SiteBrandFields(logoUrl = "media:logo.png", favicon = "media:logo.png")), logo.writes)
+    // One at a time, in field order; a favicon of its own wins, a dark logo sits beside it.
+    val all = saveBrand(mapOf("favicon" to file("icon.png"), "logoDark" to file("dark.png"), "logo" to file("logo.png")))
+    assertEquals(listOf("logo.png", "dark.png", "icon.png"), all.uploaded)
+    assertEquals(listOf(SiteBrandFields("media:logo.png", "media:dark.png", "media:icon.png")), all.writes)
+    // A favicon alone writes no logo fields.
+    assertEquals(listOf(SiteBrandFields(favicon = "media:icon.png")), saveBrand(mapOf("favicon" to file("icon.png"))).writes)
+  }
+
+  @Test
+  fun aFileThatDoesNotMakeItNeverStopsTheRest() = runTest {
+    val dark = saveBrand(mapOf("logo" to file("logo.png"), "logoDark" to file("dark.png")), refuse = listOf("dark.png"))
+    assertEquals(listOf("logoDark"), dark.outcome.missed)
+    assertEquals(listOf(SiteBrandFields(logoUrl = "media:logo.png", favicon = "media:logo.png")), dark.writes)
+    val icon = saveBrand(mapOf("logo" to file("logo.png"), "favicon" to file("icon.png")), refuse = listOf("icon.png"))
+    assertEquals(listOf("favicon"), icon.outcome.missed)
+    assertEquals(listOf(SiteBrandFields(logoUrl = "media:logo.png", favicon = "media:logo.png")), icon.writes)
+    val logo = saveBrand(mapOf("logo" to file("logo.png")), refuse = listOf("logo.png"))
+    assertEquals(SiteBrandSaveOutcome(null, listOf("logo")), logo.outcome)
+    assertEquals(emptyList(), logo.writes)
+    // A write that fails names every file it carried.
+    val failed = saveBrand(mapOf("logo" to file("logo.png"), "favicon" to file("icon.png")), saveFails = true)
+    assertEquals(SiteBrandSaveOutcome(null, listOf("logo", "favicon")), failed.outcome)
+    val answered = saveSiteBrandFiles(mapOf("logo" to file("logo.png")), upload = { _, _ -> null }, save = {})
+    assertEquals(SiteBrandSaveOutcome(null, listOf("logo")), answered)
   }
 
   @Test
