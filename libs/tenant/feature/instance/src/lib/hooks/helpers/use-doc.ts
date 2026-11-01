@@ -15,7 +15,12 @@
  * limitations under the License.
  */
 
-import { onSnapshot, type DocumentReference } from 'firebase/firestore'
+import {
+  onSnapshot,
+  type DocumentData,
+  type DocumentReference,
+  type DocumentSnapshot,
+} from 'firebase/firestore'
 import { useEffect, useRef, useState } from 'react'
 import type { ObservableStatus, FirestoreDocOptions } from '../firebase/firebase-services'
 import {
@@ -24,6 +29,7 @@ import {
   scheduleRefusedReopen,
   subscribeFirestoreSessionHeal,
 } from '../firestore-denial-reporter'
+import { sameDocument, trackListenConfirmation } from './listen-confirmation'
 import { CONFIRMABLE_LISTEN_OPTIONS } from './listen-options'
 import useModifyDocCallback, {
   type UseModifyDocCallback,
@@ -101,6 +107,10 @@ export function useDocData<T>(
      * on the same variable in `use-firestore-collection`.
      */
     let terminal = false
+    /** What a save waits on while this listener is unconfirmed (AGL-4120). */
+    const confirmation = trackListenConfirmation()
+    /** The cached snapshot on screen, while one is (AGL-4120). */
+    let shownFromCache: DocumentSnapshot<DocumentData> | null = null
 
     const subscribe = () => {
       unsubscribe = onSnapshot(
@@ -145,6 +155,13 @@ export function useDocData<T>(
           // know the difference.
           setHasPendingWrites(snapshot.metadata.hasPendingWrites)
           setFromCache(snapshot.metadata.fromCache)
+          confirmation.report(
+            snapshot.metadata.fromCache,
+            !snapshot.metadata.fromCache &&
+              shownFromCache !== null &&
+              !sameDocument(shownFromCache, snapshot),
+          )
+          shownFromCache = snapshot.metadata.fromCache ? snapshot : null
           const value = snapshot.exists()
             ? ({
                 ...(snapshot.data() as object),
@@ -156,6 +173,7 @@ export function useDocData<T>(
         },
         (err) => {
           if (cancelled) return
+          confirmation.release()
           unsubscribe?.()
           // Only a refusal — a lost network produces no error callback at
           // all, and anything that does surface one carries `unavailable`,
@@ -221,6 +239,7 @@ export function useDocData<T>(
 
     return () => {
       cancelled = true
+      confirmation.release()
       unsubscribeHeal()
       if (timer) clearTimeout(timer)
       cancelRefusedReopen?.()

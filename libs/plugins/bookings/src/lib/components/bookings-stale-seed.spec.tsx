@@ -31,6 +31,7 @@
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { setSeedConfirmWaitMs } from '@aglyn/tenant-feature-instance/hooks/helpers/listen-confirmation'
 import { setDoc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
 import BookingsConsolePage from './bookings-console-page'
@@ -131,6 +132,10 @@ function editFirstServiceAndSave() {
   fireEvent.click(screen.getByRole('button', { name: 'Save service' }))
 }
 
+// This spec pins the refusal, not the wait before it (AGL-4120).
+beforeAll(() => setSeedConfirmWaitMs(0))
+afterAll(() => setSeedConfirmWaitMs())
+
 describe('BookingsConsolePage (AGL-1358)', () => {
   it('REFUSES to rewrite a service seeded from an unconfirmed read', async () => {
     listener.fromCache = true
@@ -143,7 +148,7 @@ describe('BookingsConsolePage (AGL-1358)', () => {
     expect(setDoc).not.toHaveBeenCalled()
     const [message] = enqueueSnackbar.mock.calls[0]
     expect(message).toEqual(expect.stringContaining('service'))
-    expect(message).toEqual(expect.stringMatching(/reload/i))
+    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
     // …and the dialog is still open with what was being edited.
     expect((screen.getByLabelText('Name') as HTMLInputElement).value).toEqual(
       'Consultation',

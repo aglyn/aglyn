@@ -34,6 +34,7 @@
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { setSeedConfirmWaitMs } from '@aglyn/tenant-feature-instance/hooks/helpers/listen-confirmation'
 import { setDoc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
 import RedirectsConsolePage from './redirects-console-page'
@@ -134,6 +135,10 @@ function editFirstRuleAndSave() {
   fireEvent.click(screen.getByRole('button', { name: 'Save redirect' }))
 }
 
+// This spec pins the refusal, not the wait before it (AGL-4120).
+beforeAll(() => setSeedConfirmWaitMs(0))
+afterAll(() => setSeedConfirmWaitMs())
+
 describe('RedirectsConsolePage (AGL-1358)', () => {
   it('REFUSES to rewrite a rule seeded from an unconfirmed read', async () => {
     listener.fromCache = true
@@ -146,7 +151,7 @@ describe('RedirectsConsolePage (AGL-1358)', () => {
     expect(setDoc).not.toHaveBeenCalled()
     const [message] = enqueueSnackbar.mock.calls[0]
     expect(message).toEqual(expect.stringContaining('redirect'))
-    expect(message).toEqual(expect.stringMatching(/reload/i))
+    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
     // …and the dialog is still open with what was being edited.
     expect((screen.getByLabelText('To') as HTMLInputElement).value).toEqual(
       '/pricing',
