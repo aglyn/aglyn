@@ -3554,7 +3554,8 @@ describe('a site import brings a proved site in, wave by wave, each started by a
     expect(new Set(urls).size).toBe(urls.length)
     // Drafts only: nothing is published, by this wave or any.
     expect(first.sitePublish).toBeUndefined()
-    expect(first.outputs.map((output) => output.resource)).toEqual(['layout', ...Array(6).fill('screen')])
+    expect(first.outputs.map((output) => output.resource).filter((resource) => resource !== 'form')).toEqual(['layout', ...Array(6).fill('screen')])
+    expect(first.outputs.filter((output) => output.resource === 'form')).toHaveLength(1)
     // Only a person starts the next wave.
     expect((await runAiJobStep(firestore, ORG, read.$id, { owner: 'beat-2', now: NOW })).outcome).toBe('not-claimable')
     await resumeAiJob(firestore, ORG, read.$id, { uid: 'uid-1' }, NOW)
