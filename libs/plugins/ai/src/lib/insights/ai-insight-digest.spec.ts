@@ -43,12 +43,11 @@ jest.mock('../jobs/ai-jobs', () => ({
 
 import type { AglynOrgMember } from '@aglyn/aglyn/foundation/definitions/organization.types'
 import { INSIGHT_DIGESTS_FIELD } from '@aglyn/aglyn/app-utils/notifications'
-import { registerPluginFigureReader } from '@aglyn/aglyn/plugin-manager/plugin-figures'
 import type { AiInsight, AiInsightTable } from '../model/ai-insight'
 import {
   AI_INSIGHT_DIGEST_MARKERS,
   AI_INSIGHT_DIGEST_MAX_ROWS,
-  AI_INSIGHT_DIGEST_MAX_TILES,
+  AI_INSIGHT_DIGEST_MIN_VIEWS,
   AI_INSIGHT_DIGEST_QUEUE,
   aiInsightDigestEmailHtml,
   aiInsightDigestEmailParts,
@@ -66,6 +65,8 @@ import {
 const MONDAY = new Date('2026-09-14T06:00:00.000Z')
 const MONDAY_AFTERNOON = new Date('2026-09-14T14:00:00.000Z')
 const TUESDAY = new Date('2026-09-15T06:00:00.000Z')
+/** The Monday-to-Sunday week before that Monday. */
+const WEEK = ['2026-09-07', '2026-09-08', '2026-09-09', '2026-09-10', '2026-09-11', '2026-09-12', '2026-09-13']
 
 function merge(target: Data, patch: Data): Data {
   const out: Data = { ...target }
@@ -179,9 +180,37 @@ beforeEach(() => {
   mockDocs.set('hosts/host-1', { orgId: 'org-1', displayName: 'Acme Roofing', subdomain: 'acme' })
   mockDocs.set('users/asker', { [INSIGHT_DIGESTS_FIELD]: { 'org-1': true } })
   mockDocs.set('users/quiet', {})
+  for (const day of WEEK) mockDocs.set(`hosts/host-1/analytics/${day}`, { total: 10 })
 })
 
 describe('Monday', () => {
+  it('makes no job for a week too quiet to explain, and says so in the marker', async () => {
+    for (const day of WEEK) mockDocs.set(`hosts/host-1/analytics/${day}`, { total: 1 })
+    const report = await runAiInsightDigestSweep(deps(MONDAY), { cursor: null })
+    expect(report).toMatchObject({ created: 0, done: true })
+    expect(mockCreated).toEqual([])
+    expect(mockDocs.get(`orgs/org-1/${AI_INSIGHT_DIGEST_MARKERS}/2026-W38`)?.['sites']).toEqual({
+      'host-1': { jobId: '', name: 'Acme Roofing', state: 'quiet' },
+    })
+    expect(mockDocs.get(`${AI_INSIGHT_DIGEST_QUEUE}/2026-W38`)).toBeUndefined()
+  })
+
+  it('counts the whole week, and makes a job at the threshold', async () => {
+    for (const day of WEEK) mockDocs.set(`hosts/host-1/analytics/${day}`, { total: 0 })
+    mockDocs.set(`hosts/host-1/analytics/${WEEK[2]}`, { total: AI_INSIGHT_DIGEST_MIN_VIEWS })
+    expect((await runAiInsightDigestSweep(deps(MONDAY), { cursor: null })).created).toBe(1)
+  })
+
+  it('delivers nothing for a quiet site, and leaves the rest of the workspace alone', async () => {
+    mockDocs.set('hosts/host-2', { orgId: 'org-1', displayName: 'Acme Blog', subdomain: 'blog' })
+    await runAiInsightDigestSweep(deps(MONDAY), { cursor: null })
+    expect(mockCreated.map((job) => job['hostId'])).toEqual(['host-1'])
+    expect(mockDocs.get(`orgs/org-1/${AI_INSIGHT_DIGEST_MARKERS}/2026-W38`)?.['sites']).toMatchObject({
+      'host-1': { state: 'pending' },
+      'host-2': { state: 'quiet' },
+    })
+  })
+
   it('makes one digest a site for the people who asked, once a week', async () => {
     const report = await runAiInsightDigestSweep(deps(MONDAY), { cursor: null })
     expect(report).toMatchObject({ week: '2026-W38', swept: 1, created: 1, done: true })
@@ -224,22 +253,6 @@ describe('Monday', () => {
 })
 
 describe('the email’s body (AGL-4130)', () => {
-  const figureReader = (id: string, stats: Array<{ label: string; change?: number }>) =>
-    registerPluginFigureReader(
-      {
-        id,
-        scope: 'site',
-        windows: [7],
-        title: id,
-        description: id,
-        read: async () => ({ ok: false, reason: 'not read here' }),
-        weeklySummary: {
-          order: id === 'digestspec.traffic' ? 1 : 2,
-          summarize: () => ({ title: id, stats: stats.map((stat) => ({ ...stat, value: '10' })) }),
-        },
-      } as never,
-      { pluginId: 'ai' },
-    )
   const table = (patch: Partial<AiInsightTable>) =>
     ({ days: 7, scope: 'site', source: { label: 'Analytics', path: 'analytics' }, period: null, omitted: 0, notes: [], ...patch }) as AiInsightTable
   const TRAFFIC = table({
@@ -300,20 +313,13 @@ describe('the email’s body (AGL-4130)', () => {
     text,
     cites: [{ table: ref, rows }],
   })
-  beforeAll(() => {
-    figureReader('digestspec.traffic', [
-      { label: 'Visitors', change: 22.5 },
-      { label: 'Page views', change: -3.3 },
-    ])
-    figureReader('digestspec.pages', [
-      { label: 'Pages', change: 1 },
-      { label: 'Sessions', change: 1 },
-      { label: 'Exits', change: 1 },
-    ])
-    figureReader('digestspec.forms', [{ label: 'Submissions since Oct 1' }])
-  })
-  const email = (insights: AiInsight[], tables: readonly AiInsightTable[] = TABLES) =>
+  const email = (
+    insights: AiInsight[],
+    tables: readonly AiInsightTable[] = TABLES,
+    extra: { overview?: string | null; gap?: string | null } = {},
+  ) =>
     aiInsightDigestEmailHtml({
+      ...extra,
       insights,
       tables,
       colors: COLORS,
@@ -324,34 +330,69 @@ describe('the email’s body (AGL-4130)', () => {
     })
   const html = (insights: AiInsight[], tables?: readonly AiInsightTable[]) => email(insights, tables)['digest.html']
 
-  it('leads with the figures, as tiles, then the topics', () => {
+  it('opens with the week in short, then a block for each insight', () => {
+    const body = email([said('The home page led.', 't2')], TABLES, { overview: 'A busier week, mostly from search.' })['digest.html']
+    expect(body.indexOf('The week in short')).toBeLessThan(body.indexOf('A busier week, mostly from search.'))
+    expect(body.indexOf('A busier week, mostly from search.')).toBeLessThan(body.indexOf('The home page led.'))
+  })
+
+  it('opens with the insights on an answer from before it wrote an overview', () => {
     const body = html([said('The home page led.', 't2')])
-    expect(body.indexOf('Visitors')).toBeLessThan(body.indexOf('Top pages'))
-    expect(body.indexOf('Top pages')).toBeLessThan(body.indexOf('The home page led.'))
-  })
-
-  it('holds its tiles to one row', () => {
-    expect(html([said('x', 't2')]).match(/background-color:#f5f5f5/g)).toHaveLength(AI_INSIGHT_DIGEST_MAX_TILES)
-  })
-
-  it('gives a tile only to a figure compared with the week before', () => {
-    expect(html([said('x', 't2')])).not.toContain('Submissions since Oct 1')
-  })
-
-  it('tells a topic once, however many insights cite it', () => {
-    const body = html([said('The home page led.', 't2', [0]), said('Pricing grew.', 't2', [1])])
-    expect(body.match(/Top pages/g)).toHaveLength(1)
+    expect(body).not.toContain('The week in short')
     expect(body).toContain('The home page led.')
-    expect(body).toContain('Pricing grew.')
   })
 
-  it('lists each row once, in the order the insights cite them, and no more than it should', () => {
-    const body = html([said('One.', 't2', [1, 0]), said('Two.', 't2', [1, 2, 3, 4, 5])])
+  it('carries no tiles, no chart and no topic headings: the free email lists the figures', () => {
+    const body = html([said('The home page led.', 't2'), said('Monday led.', 't3', [0])])
+    expect(body).not.toContain('Top pages')
+    expect(body).not.toContain('Traffic by day')
+    expect(body).not.toContain('Mon, Oct 26')
+    expect(body).not.toContain('border-radius:8px')
+  })
+
+  it('gives each insight its likely reason and its next step, linked to the report', () => {
+    const insight = { ...said('Pricing grew.', 't4', [0]), why: 'Likely the Contact page published Monday.', next: 'Add a form to the page.' }
+    const body = html([insight])
+    expect(body).toContain('Likely why:')
+    expect(body).toContain('Likely the Contact page published Monday.')
+    expect(body).toContain('Try this:')
+    expect(body).toContain('Add a form to the page.')
+    expect(body).toContain('href="https://app.example.com/forms"')
+    expect(body.indexOf('Likely why:')).toBeLessThan(body.indexOf('Try this:'))
+    expect(body.indexOf('Try this:')).toBeLessThan(body.indexOf('14 views'))
+  })
+
+  it('draws no reason line and no link for an insight without them', () => {
+    const body = html([said('x', 't4')])
+    expect(body).not.toContain('Likely why:')
+    expect(body).not.toContain('Try this:')
+    expect(body).not.toContain('https://app.example.com/forms')
+  })
+
+  it('puts what the figures could not answer in small print under the insights', () => {
+    const body = email([said('The home page led.', 't2')], TABLES, { gap: 'No campaign ran.' })['digest.html']
+    expect(body.indexOf('The home page led.')).toBeLessThan(body.indexOf('No campaign ran.'))
+    expect(body).toContain('font-size:13px')
+  })
+
+  it('lists each cited row once, in the order cited, and no more than three', () => {
+    const body = html([said('One.', 't2', [1, 0, 1, 2, 3, 4])])
     expect(body.match(/>\/pricing</g)).toHaveLength(1)
     expect(body.indexOf('>/pricing<')).toBeLessThan(body.indexOf('>Home<'))
-    expect(body).toContain('>/c<')
-    expect(body).not.toContain('>/d<')
-    expect(AI_INSIGHT_DIGEST_MAX_ROWS).toBe(5)
+    expect(body).toContain('>/a<')
+    expect(body).not.toContain('>/b<')
+    expect(AI_INSIGHT_DIGEST_MAX_ROWS).toBe(3)
+  })
+
+  it('takes its rows from the first cited table that has any', () => {
+    const insight: AiInsight = {
+      text: 'Pricing grew.',
+      cites: [
+        { table: 't3', rows: [0] },
+        { table: 't2', rows: [1] },
+      ],
+    }
+    expect(html([insight])).toContain('95 views')
   })
 
   it('leaves the column’s word off a row that names its own figure', () => {
@@ -390,29 +431,6 @@ describe('the email’s body (AGL-4130)', () => {
     expect(html([said('x', 't4')])).toContain('14 views · 3 submissions')
   })
 
-  it('links a topic to where its figures live, by that page’s name', () => {
-    const body = html([said('x', 't4')])
-    expect(body).toContain('href="https://app.example.com/forms"')
-  })
-
-  it('draws a table of days as a chart of the whole week, the cited days marked', () => {
-    const body = html([said('Monday led.', 't3', [0])])
-    expect(body).toContain('Mon, Oct 26')
-    expect(body).toContain('Tue, Oct 27')
-    expect(body.match(/background-color:#00aaff/g)).toHaveLength(1)
-    expect(body.match(/background-color:#dddddd;border-radius:2px/g)).toHaveLength(1)
-  })
-
-  it('never says twice what the first tiles already show', () => {
-    const body = html([said('Visitors rose.', 't1'), said('The home page led.', 't2')])
-    expect(body).not.toContain('Visitors rose.')
-    expect(body).toContain('The home page led.')
-  })
-
-  it('keeps an insight about the tiles when it is all there is', () => {
-    expect(html([said('Visitors rose.', 't1')])).toContain('Visitors rose.')
-  })
-
   it('leads a point with its headline', () => {
     const body = html([said('It came from search.', 't2', [0], 'Home page up 12%')])
     expect(body.indexOf('Home page up 12%')).toBeLessThan(body.indexOf('It came from search.'))
@@ -423,9 +441,7 @@ describe('the email’s body (AGL-4130)', () => {
   })
 
   it('still draws an answer with no tables', () => {
-    const body = html([said('Page views rose.', 't1')], [])
-    expect(body).toContain('Page views rose.')
-    expect(body).not.toContain('background-color:#f5f5f5')
+    expect(html([said('Page views rose.', 't1')], [])).toContain('Page views rose.')
   })
 
   it('leaves out a cited row the table does not have', () => {
@@ -447,7 +463,21 @@ describe('the email’s body (AGL-4130)', () => {
       creditsSpent: 17,
     })
     expect(parts['digest.why']).toContain('17 of Acme Co’s AI credits')
+    expect(parts['digest.why']).toContain("the AI's reading")
     expect(parts['digest.why']).not.toContain('https:')
+  })
+
+  it('says the same in plain text: the week in short, each reason and each next step', () => {
+    const text = aiInsightDigestEmailText({
+      siteName: 'Acme Roofing',
+      productName: 'Aglyn',
+      overview: 'A busier week, mostly from search.',
+      insights: [{ headline: 'Pricing doubled', text: 'It rose into second place.', why: 'Likely the new page.', next: 'Link to it.' }],
+      analyticsUrl: null,
+      settingsUrl: null,
+    })
+    expect(text).toContain('The week in short: A busier week, mostly from search.')
+    expect(text).toContain('1. Pricing doubled: It rose into second place.\nLikely why: Likely the new page.\nTry this: Link to it.')
   })
 })
 

@@ -1679,7 +1679,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         { name: 'digest.why', description: 'Why the figures can be trusted, and what it cost', sample: `Every number here is checked against Test Site's own figures. Writing these used 21 of Test Org’s AI credits.` },
         {
           name: 'digest.html',
-          description: 'The week’s figures as tiles, then one section a topic with its figures and links, in the email’s theme',
+          description: 'The AI’s read of the week, then each insight with its likely reason, one next step and the rows behind it, in the email’s theme',
           sample:
             '<div style="padding:8px 0 18px;"><div style="font-family:Helvetica, Arial, sans-serif;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;">Top pages</div>' +
             '<div style="font-family:Helvetica, Arial, sans-serif;font-size:16px;font-weight:700;padding:6px 0 0;">Visits from search rose 18%</div></div>',

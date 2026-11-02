@@ -380,13 +380,23 @@ export interface WeeklySummarySectionBar {
   marked: boolean
 }
 
+/** One point of a section: a line to scan, the sentence behind it and, in the AI note, why and what next. */
+export interface WeeklySummarySectionPoint {
+  headline: string | null
+  text: string | null
+  why?: string | null
+  next?: string | null
+  /** The report a next step points at. */
+  nextLink?: { label: string; url: string } | null
+}
+
 /** One topic of a weekly email, told once: what stood out, and the figures behind it. */
 export interface WeeklySummarySection {
-  title: string
+  /** Absent in the AI note, where each point names its own topic. */
+  title?: string | null
   /** Where the figures can be seen in full. */
   link?: { label: string; url: string } | null
-  /** What was said about it: a line to scan and, if it needs one, the sentence behind it. */
-  points: ReadonlyArray<{ headline: string | null; text: string | null }>
+  points: readonly WeeklySummarySectionPoint[]
   stats?: readonly PluginFigureSummaryStat[]
   rows?: readonly WeeklySummarySectionRow[]
   bars?: readonly WeeklySummarySectionBar[]
@@ -395,6 +405,26 @@ export interface WeeklySummarySection {
 /** Tiles on their own, for an email that leads with its headline figures. */
 export function weeklySummaryTilesHtml(stats: readonly PluginFigureSummaryStat[], colors: WeeklySummaryColors): string {
   return stats.length ? `<div style="padding:12px 0 8px;">${tilesHtml(stats, colors)}</div>` : ''
+}
+
+/** A tinted block with an accent rule: a heading, then what it says, already drawn. */
+function calloutHtml(heading: string, bodyHtml: string, colors: WeeklySummaryColors): string {
+  return (
+    `<div style="margin:16px 0 0;background-color:${colors.surface};border-left:3px solid ${colors.accent};border-radius:4px;padding:14px 16px;">` +
+    `<div style="font-family:${FONT};font-size:14px;line-height:1.5;font-weight:700;color:${colors.text};">${esc(heading)}</div>` +
+    `<div style="font-family:${FONT};font-size:14px;line-height:1.5;color:${colors.text};">${bodyHtml}</div>` +
+    `</div>`
+  )
+}
+
+/** What an email opens with: its own read of the week, under a heading. */
+export function weeklySummaryLeadHtml(heading: string, text: string, colors: WeeklySummaryColors): string {
+  return calloutHtml(heading, figuresHtml(text, colors), colors)
+}
+
+/** A line of small print inside an email's body. */
+export function weeklySummaryNoteHtml(text: string, colors: WeeklySummaryColors): string {
+  return `<div style="font-family:${FONT};font-size:13px;line-height:1.5;color:${colors.muted};padding:4px 0 8px;">${unlinked(text)}</div>`
 }
 
 function sectionRowsHtml(rows: readonly WeeklySummarySectionRow[], colors: WeeklySummaryColors): string {
@@ -436,6 +466,23 @@ function sectionBarsHtml(bars: readonly WeeklySummarySectionBar[], colors: Weekl
   return `<table role="presentation" style="width:100%;border-collapse:collapse;margin-top:8px;">${trs.join('')}</table>`
 }
 
+/** "Likely why: …": a labeled line under a point, a link at its end when it has one. */
+function pointLineHtml(
+  label: string,
+  text: string,
+  link: { label: string; url: string } | null,
+  colors: WeeklySummaryColors,
+): string {
+  return (
+    `<div style="font-family:${FONT};font-size:14px;line-height:1.5;color:${colors.muted};padding:6px 0 0;">` +
+    `<strong style="font-weight:700;color:${colors.text};">${esc(label)}:</strong> ${figuresHtml(text, colors)}` +
+    (link
+      ? ` <a href="${esc(link.url)}" style="font-weight:600;color:${colors.link};text-decoration:none;white-space:nowrap;">${esc(link.label)}&nbsp;→</a>`
+      : '') +
+    `</div>`
+  )
+}
+
 function sectionHtml(section: WeeklySummarySection, colors: WeeklySummaryColors, first: boolean): string {
   const link = section.link
     ? `<td style="padding:0;text-align:right;vertical-align:baseline;white-space:nowrap;">` +
@@ -451,14 +498,18 @@ function sectionHtml(section: WeeklySummarySection, colors: WeeklySummaryColors,
       (point.text
         ? `<div style="font-family:${FONT};font-size:14px;line-height:1.5;color:${colors.muted};">${figuresHtml(point.text, colors)}</div>`
         : '') +
+      (point.why ? pointLineHtml('Likely why', point.why, null, colors) : '') +
+      (point.next ? pointLineHtml('Try this', point.next, point.nextLink ?? null, colors) : '') +
       `</div>`,
   )
   return (
     `<div style="padding:${first ? '8px' : '18px'} 0 18px;${first ? '' : `border-top:1px solid ${colors.border};`}">` +
-    `<table role="presentation" style="width:100%;border-collapse:collapse;"><tr>` +
-    `<td style="font-family:${FONT};font-size:12px;line-height:1.4;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:${colors.muted};padding:0;">${esc(section.title)}</td>` +
-    link +
-    `</tr></table>` +
+    (section.title
+      ? `<table role="presentation" style="width:100%;border-collapse:collapse;"><tr>` +
+        `<td style="font-family:${FONT};font-size:12px;line-height:1.4;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:${colors.muted};padding:0;">${esc(section.title)}</td>` +
+        link +
+        `</tr></table>`
+      : '') +
     points.join('') +
     (section.stats?.length ? `<div style="padding:8px 0 0;">${tilesHtml(section.stats, colors)}</div>` : '') +
     (section.rows?.length ? sectionRowsHtml(section.rows, colors) : '') +
@@ -514,13 +565,11 @@ function addressHtml(site: WeeklySummarySite, workspaceName: string, colors: Wee
 }
 
 function insightsHtml(url: string, colors: WeeklySummaryColors): string {
-  return (
-    `<div style="margin:16px 0 0;background-color:${colors.surface};border-left:3px solid ${colors.accent};border-radius:4px;padding:14px 16px;">` +
-    `<div style="font-family:${FONT};font-size:14px;line-height:1.5;font-weight:700;color:${colors.text};">Want to know why the numbers moved?</div>` +
-    `<div style="font-family:${FONT};font-size:14px;line-height:1.5;color:${colors.text};">` +
-    `AI weekly insights explain each site's week in a few plain sentences. ` +
-    `<a href="${esc(url)}" style="color:${colors.link};text-decoration:underline;">Turn them on from Ask about your numbers</a>.` +
-    `</div></div>`
+  return calloutHtml(
+    'Want to know why the numbers moved?',
+    `AI weekly insights read each site's week for you: why the numbers moved, and one thing to do next. ` +
+      `<a href="${esc(url)}" style="color:${colors.link};text-decoration:underline;">Turn them on from Ask about your numbers</a>.`,
+    colors,
   )
 }
 
@@ -609,7 +658,7 @@ export function composeWeeklySummarySiteEmail(
     ...workspace.flatMap((part) => ['', ...partText({ ...part, title: `${input.workspaceName} · ${part.title}` })]),
     ...(input.site.url ? ['', `Open ${input.site.name} in ${input.productName}: ${input.site.url}`] : []),
     ...(input.aiInsightsUrl
-      ? ['', `Want to know why the numbers moved? Turn on AI weekly insights from Ask about your numbers: ${input.aiInsightsUrl}`]
+      ? ['', `Want to know why the numbers moved, and what to do next? Turn on AI weekly insights from Ask about your numbers: ${input.aiInsightsUrl}`]
       : []),
     ...closing(input),
   ].join('\n')
@@ -729,7 +778,7 @@ export function composeWeeklySummaryOverviewEmail(
       : []),
     ...input.workspace.flatMap((part) => ['', ...partText(part)]),
     ...(input.aiInsightsUrl
-      ? ['', `Want to know why the numbers moved? Turn on AI weekly insights from Ask about your numbers: ${input.aiInsightsUrl}`]
+      ? ['', `Want to know why the numbers moved, and what to do next? Turn on AI weekly insights from Ask about your numbers: ${input.aiInsightsUrl}`]
       : []),
     ...closing(input),
   ].join('\n')

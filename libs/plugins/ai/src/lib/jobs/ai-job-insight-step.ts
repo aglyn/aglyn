@@ -67,7 +67,12 @@ import {
 } from '../insights/ai-insight-readers'
 import { assistExchangeExpiry } from '../usage/assist-usage'
 import { registerAiJobAdmission, type AiJobAdmissionContext, type AiJobAdmissionRefusal } from './ai-job-admission'
-import { AI_INSIGHT_READ_MAX_TOKENS, AI_JOB_INSIGHT_STEP_BUDGET, AI_JOB_INSIGHT_STEP_MINIMUM_MS } from './ai-job-insight-budget'
+import {
+  AI_INSIGHT_DIGEST_THINKING,
+  AI_INSIGHT_READ_MAX_TOKENS,
+  AI_JOB_INSIGHT_STEP_BUDGET,
+  AI_JOB_INSIGHT_STEP_MINIMUM_MS,
+} from './ai-job-insight-budget'
 import type { AiJobStepContext, AiJobStepOutcome, AiJobStepRunner } from './ai-job-text-step'
 import { registerAiJobStep } from './ai-jobs'
 
@@ -85,7 +90,9 @@ import { registerAiJobStep } from './ai-jobs'
  *    defaults. A weekly digest makes no read call: code reads the digest's
  *    readers.
  * 2. **The answer.** Code reads the tables through the owners' readers, and the
- *    model is shown them and answers `submit_insights`. The trace
+ *    model is shown them and answers `submit_insights`. A digest thinks here
+ *    (`AI_INSIGHT_DIGEST_THINKING`), and writes an overview of the week and,
+ *    for each insight, what most likely drove it and one next step. The trace
  *    (`runtime/ai-insight-check.ts`) keeps each insight whose every number is
  *    in a row it cites and leaves out the rest. An answer that is not a call,
  *    or whose every insight was left out, is asked for once more with the
@@ -123,9 +130,9 @@ export const AI_INSIGHT_NO_READERS_COPY =
 export const AI_INSIGHT_NO_TABLES_COPY = 'The figures could not be read. Try again in a moment.'
 export const AI_INSIGHT_UNREADABLE_COPY = 'The AI did not answer with insights. Try asking in different words.'
 
-/** The digest's question: what a week's insights cover, in the order a person reads them. */
+/** The digest's question: what the week meant, why and what to do, in the owner's words. */
 export const AI_INSIGHT_DIGEST_QUESTION =
-  'What changed on this site last week, Monday to Sunday? Write the week’s insights: the change in traffic, the most viewed page, the form that turned the most views into submissions, a campaign that did better than the rest, and any day that stood out — only those the tables support. The email shows the week’s visitors and page views above your insights, so do not restate those totals: say what moved them and what stood out.'
+  'What happened on this site last week, Monday to Sunday, why, and what should the owner do next? The owner already gets an email listing the week’s figures, so never recite them. Write the overview, then the moves worth talking about, each with what most likely drove it: compare the days and pages that moved with what changed on the site, where visits came from and any campaign. Only what the tables support.'
 
 /** The rules both calls are sent: static, byte-identical for every workspace. */
 export const AI_INSIGHT_RULES = [
@@ -135,6 +142,7 @@ export const AI_INSIGHT_RULES = [
   '',
   `When you are given tables, call ${AI_INSIGHT_ANSWER_TOOL_NAME} once. Each table has a handle (t1, t2, …) and numbered rows. Rules for the insights:`,
   '- Say what matters most to the question first. Leave out what the tables do not support.',
+  '- Read the figures like the owner’s analyst: say what a move means and connect the tables, never just repeat a row.',
   '- Every insight cites the table and the rows its figures come from.',
   '- Every number you write appears in a row you cite, as the table shows it or rounded. Never add, subtract, average or otherwise compute a figure yourself. The only other numbers you may write are the length of a table’s window, a date in it, and how many rows you cite.',
   '- Say a figure rose or fell only when a change you quote shows it.',
@@ -144,6 +152,9 @@ export const AI_INSIGHT_RULES = [
   '- Write for someone reading on a phone: say one thing, and only what they would want to know.',
   '- Write a date the way a person says it: Monday, Oct 26, never 2026-10-26.',
   '- Leave out a percent change that rests on a handful of views.',
+  '- why says what most likely drove a move, in one short sentence, and must cite the row it rests on: a dated change, a source or a campaign. Write the reason alone: a label already calls it likely. Two things happening together does not prove one caused the other. When nothing in those tables explains a move, set why to null and say so in text.',
+  '- next is one concrete step the owner can take in the console or on their site, for this insight. Name only something that exists, and never promise a result. null when none fits.',
+  '- overview is for a weekly digest: what the week meant in two or three sentences of your own, not a list of figures. On a question, overview is null, and why and next are null unless the question asks why or what to do.',
   '- When the tables cannot answer part of the question, say so in gap in one sentence with no numbers; otherwise gap is null.',
   '- Whether the site is published, its address and which pages are published come only from the Site status table. Page views and visitors never show whether a site or a page is live: never say or suggest a site is not live, not launched or not published because of its traffic, and never call the pages a views table lists the published ones.',
   '- Write in the language of the question.',
@@ -282,7 +293,10 @@ export const runAiJobInsightStep: AiJobStepRunner = async (context: AiJobStepCon
   const digest = surface === 'digest'
   const days = digest ? AI_INSIGHT_DIGEST_DAYS : aiInsightDays(job.inputs?.['days'])
   const question = digest ? AI_INSIGHT_DIGEST_QUESTION : job.brief.slice(0, AI_INSIGHT_QUESTION_MAX_CHARS)
-  const maxTokens = AI_JOB_INSIGHT_STEP_BUDGET.maxTokens(model)
+  const route = AI_ROUTING_TABLE['job.insight']
+  // The budget is sized for a digest's ceiling; a question keeps the row's.
+  const fits = AI_JOB_INSIGHT_STEP_BUDGET.maxTokens(model)
+  const maxTokens = digest ? fits : Math.min(fits, route.maxTokens)
   const allowance = AI_GENERATION_MAX_ATTEMPTS * maxTokens
   const left = () => allowance - spend.usage.outputTokens
   // What the business is and what the owner's edits showed (AGL-3661), so an
@@ -296,8 +310,9 @@ export const runAiJobInsightStep: AiJobStepRunner = async (context: AiJobStepCon
       siteContext ? { ...siteContext, publish: null, contact: false } : null,
     ),
   ]
-  // A development run's effort A/B arm (AGL-3781), else the row's.
-  const effort = aiDevEffortFor('job.insight') ?? AI_ROUTING_TABLE['job.insight'].effort
+  // A development run's effort A/B arm (AGL-3781), else the digest's or the row's.
+  const effort = aiDevEffortFor('job.insight') ?? (digest ? AI_INSIGHT_DIGEST_THINKING.effort : route.effort)
+  const thinking = digest ? AI_INSIGHT_DIGEST_THINKING.thinking : route.thinking
   // Both tools on both calls, so the answer call reads the prefix the read call wrote (AGL-4076).
   const tools = aiInsightTools()
   const ask = (messages: AiMessage[], tool: 'read' | 'answer', ceiling: number) =>
@@ -308,7 +323,7 @@ export const runAiJobInsightStep: AiJobStepRunner = async (context: AiJobStepCon
       tools,
       toolChoice: tool === 'read' ? AI_INSIGHT_READ_TOOL_NAME : AI_INSIGHT_ANSWER_TOOL_NAME,
       maxTokens: Math.max(1, Math.min(ceiling, left())),
-      ...(AI_ROUTING_TABLE['job.insight'].thinking ? { thinking: AI_ROUTING_TABLE['job.insight'].thinking } : {}),
+      ...(thinking ? { thinking } : {}),
       ...(effort ? { effort } : {}),
       stream: false,
       ...(signal ? { signal } : {}),
@@ -374,6 +389,7 @@ export const runAiJobInsightStep: AiJobStepRunner = async (context: AiJobStepCon
     createdBy: job.createdBy,
     question: digest ? str(job.brief) || 'Weekly insights' : question,
     days,
+    overview: digest ? checked.overview : null,
     insights: checked.kept,
     gap: checked.gap,
     tables,

@@ -71,7 +71,10 @@ export const SOURCES_WEEKLY_SUMMARY: PluginFigureWeeklySummary = {
   order: 30,
   summarize: (table) => {
     const rows = figureHasColumn(table, 'views') ? figureRanked(table, 'source', 'views') : []
-    return rows.length ? { title: 'Where visits came from', rows: rows.map((row) => ({ ...row, value: `${row.value} views` })) } : null
+    // Each row's change is for the AI note: this list says where visits came from, not how that moved.
+    return rows.length
+      ? { title: 'Where visits came from', rows: rows.map(({ label, value }) => ({ label, value: `${value} views` })) }
+      : null
   },
 }
 

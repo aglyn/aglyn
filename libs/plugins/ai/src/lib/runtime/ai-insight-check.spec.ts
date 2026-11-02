@@ -283,7 +283,93 @@ describe('an answer', () => {
   })
 
   it('reads nothing from an answer that is not one', () => {
-    expect(checkAiInsightAnswer(null, TABLES)).toEqual({ kept: [], left: [], gap: null, findings: [] })
+    expect(checkAiInsightAnswer(null, TABLES)).toEqual({ overview: null, kept: [], left: [], gap: null, findings: [] })
+  })
+})
+
+describe('what the note says beside an insight (AGL-4131)', () => {
+  const CHANGES: AiInsightTable = {
+    ...TRAFFIC,
+    ref: 't9',
+    reader: 'traffic.changes',
+    title: 'What changed on the site',
+    columns: [
+      { key: 'day', label: 'Day', kind: 'date' },
+      { key: 'what', label: 'What changed', kind: 'text' },
+      { key: 'kind', label: 'Kind', kind: 'text' },
+    ],
+    rows: [{ day: '2026-09-10', what: 'Pricing', kind: 'Page published' }],
+  }
+  const tables = [TRAFFIC, CHANGES]
+  const insight = (patch: Record<string, unknown> = {}) => ({
+    text: 'Page views rose 14.7%.',
+    cites: [
+      { table: 't1', rows: [0] },
+      { table: 't9', rows: [0] },
+    ],
+    ...patch,
+  })
+  const kept = (patch: Record<string, unknown>) =>
+    checkAiInsightAnswer({ insights: [insight(patch)], gap: null }, tables).kept[0]
+
+  it('keeps a reason that cites a row of a table that can hold a cause, and a next step', () => {
+    expect(kept({ why: 'Likely the Pricing page published that week.', next: 'Link to Pricing from the home page.' })).toMatchObject({
+      why: 'Likely the Pricing page published that week.',
+      next: 'Link to Pricing from the home page.',
+    })
+  })
+
+  it('drops a reason with no cause to rest on, and the insight stands', () => {
+    const check = checkAiInsightAnswer(
+      { insights: [insight({ why: 'Likely a good week.', cites: [{ table: 't1', rows: [0] }] })], gap: null },
+      tables,
+    )
+    expect(check.kept).toHaveLength(1)
+    expect(check.kept[0].why).toBeUndefined()
+    expect(check.left).toEqual([])
+    expect(check.findings).toContain('insight-why-no-cause')
+  })
+
+  it('holds a reason to the rows it cites: a figure they do not have drops the reason alone', () => {
+    const result = kept({ why: 'Likely 500 people found the Pricing page.', next: 'Keep going.' })
+    expect(result.why).toBeUndefined()
+    expect(result.next).toBe('Keep going.')
+    expect(result.text).toBe('Page views rose 14.7%.')
+  })
+
+  it('holds a next step to the same rows', () => {
+    expect(kept({ next: 'Aim for 900 views.' }).next).toBeUndefined()
+  })
+
+  it('drops a line that runs long or names someone', () => {
+    expect(kept({ why: `Likely ${'x'.repeat(200)}` }).why).toBeUndefined()
+    expect(kept({ next: 'y'.repeat(161) }).next).toBeUndefined()
+    expect(kept({ next: 'Write to sam.rep@example.org.' }).next).toBeUndefined()
+  })
+
+  it('drops a next step that promises a result', () => {
+    expect(kept({ next: 'Add a link, which will increase your views.' }).next).toBeUndefined()
+    expect(kept({ next: 'Add a link from the home page.' }).next).toBe('Add a link from the home page.')
+  })
+
+  it('reads an answer from before these were asked for', () => {
+    expect(kept({})).toEqual({ text: 'Page views rose 14.7%.', cites: insight().cites })
+  })
+
+  it('keeps an overview that holds to the rows the kept insights cite', () => {
+    const check = checkAiInsightAnswer(
+      { overview: ' A stronger week: page views rose 14.7%. ', insights: [insight()], gap: null },
+      tables,
+    )
+    expect(check.overview).toBe('A stronger week: page views rose 14.7%.')
+  })
+
+  it('drops an overview whose figure no kept insight cites, or that runs long, and keeps the insights', () => {
+    for (const overview of ['Visitors reached 830.', 'y'.repeat(421)]) {
+      const check = checkAiInsightAnswer({ overview, insights: [insight()], gap: null }, tables)
+      expect(check.overview).toBeNull()
+      expect(check.kept).toHaveLength(1)
+    }
   })
 })
 

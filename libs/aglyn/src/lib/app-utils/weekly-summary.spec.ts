@@ -33,6 +33,8 @@ import {
   weeklySummaryChange,
   weeklySummaryPeriod,
   weeklySummaryFootnoteHtml,
+  weeklySummaryLeadHtml,
+  weeklySummaryNoteHtml,
   weeklySummaryPlainDates,
   weeklySummaryRowLink,
   weeklySummarySectionsHtml,
@@ -311,6 +313,8 @@ describe('the weekly summary emails', () => {
 
   it('offers AI weekly insights only when handed where to turn them on', () => {
     const url = 'https://app.example.com/acme/hosts/shop/analytics'
+    expect(composeWeeklySummarySiteEmail({ ...common, site: site('Shop', 10), aiInsightsUrl: url })?.html).toContain('one thing to do next')
+    expect(composeWeeklySummarySiteEmail({ ...common, site: site('Shop', 10), aiInsightsUrl: url })?.text).toContain('and what to do next?')
     expect(composeWeeklySummarySiteEmail({ ...common, site: site('Shop', 10), aiInsightsUrl: url })?.html).toContain(
       `<a href="${url}" style="color:#0077ad;`,
     )
@@ -349,6 +353,44 @@ describe('the AI digest’s drawing (AGL-4130)', () => {
 
   it('writes a day as a chart labels it', () => {
     expect(weeklySummaryWeekday('2026-10-26')).toBe('Mon, Oct 26')
+  })
+
+  it('opens the AI note with its read of the week, its figures in bold', () => {
+    const html = weeklySummaryLeadHtml('The week in short', 'Visitors rose 22.5% on search.', COLORS)
+    expect(html).toContain('The week in short')
+    expect(html).toContain(strong('22.5%'))
+    expect(html).toContain('border-left:3px solid #00aaff')
+  })
+
+  it('draws a point’s likely reason, then its next step with its report', () => {
+    const html = weeklySummarySectionsHtml(
+      [
+        {
+          points: [
+            {
+              headline: 'Pricing doubled',
+              text: 'It rose into second place.',
+              why: 'Likely the new page, published Monday.',
+              next: 'Link to it from the home page.',
+              nextLink: { label: 'Analytics', url: 'https://app.example.com/analytics' },
+            },
+          ],
+        },
+      ],
+      COLORS,
+    )
+    expect(html.indexOf('Likely why:')).toBeGreaterThan(html.indexOf('It rose into second place.'))
+    expect(html.indexOf('Try this:')).toBeGreaterThan(html.indexOf('Likely the new page'))
+    expect(html).toContain('href="https://app.example.com/analytics"')
+    expect(html).toContain('Analytics&nbsp;→')
+  })
+
+  it('draws no heading for a section with no title', () => {
+    expect(weeklySummarySectionsHtml([{ points: [sentence('Just this.')] }], COLORS)).not.toContain('text-transform:uppercase')
+  })
+
+  it('puts a line of small print inside the body', () => {
+    expect(weeklySummaryNoteHtml('No campaign ran.', COLORS)).toContain('font-size:13px')
   })
 
   it('draws a section’s title, its link, its headline, then its sentence', () => {

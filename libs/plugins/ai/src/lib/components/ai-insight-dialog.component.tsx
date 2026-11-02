@@ -318,12 +318,25 @@ export function AiInsightDialog(props: AiInsightDialogProps) {
           {phase === 'answer' && answer ? (
             <Stack spacing={1.5}>
               <Typography variant="subtitle2">{answer.question}</Typography>
+              {answer.overview ? (
+                <Typography variant="body2">{weeklySummaryPlainDates(answer.overview)}</Typography>
+              ) : null}
               {answer.insights.length ? (
                 <Stack component="ol" spacing={1.5} sx={{ pl: 2.5, m: 0 }}>
                   {answer.insights.map((insight, index) => (
                     <Box component="li" key={index}>
                       {insight.headline ? <Typography variant="subtitle2">{insight.headline}</Typography> : null}
                       <Typography variant="body2">{weeklySummaryPlainDates(insight.text)}</Typography>
+                      {insight.why ? (
+                        <Typography variant="body2" color="text.secondary">
+                          {`Likely why: ${weeklySummaryPlainDates(insight.why)}`}
+                        </Typography>
+                      ) : null}
+                      {insight.next ? (
+                        <Typography variant="body2" color="text.secondary">
+                          {`Try this: ${weeklySummaryPlainDates(insight.next)}`}
+                        </Typography>
+                      ) : null}
                       <Button
                         size="small"
                         onClick={() => setOpenCitations((current) => (current === index ? null : index))}
