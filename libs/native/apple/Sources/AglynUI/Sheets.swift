@@ -27,11 +27,14 @@ public struct AglynActionSheet<Fields: View, Below: View>: View {
   let onConfirm: () -> Void
   let fields: Fields
   let below: Below
+  /// Held at the foot of the sheet while the form scrolls above it: what the person's choice needs next, in view however
+  /// long the form.
+  let foot: AnyView?
 
   public init(
     _ title: String, message: String? = nil, confirmLabel: String, confirmEnabled: Bool = true,
     destructive: Bool = false, busy: Bool, error: String?, onCancel: @escaping () -> Void,
-    onConfirm: @escaping () -> Void, @ViewBuilder fields: () -> Fields, @ViewBuilder below: () -> Below
+    onConfirm: @escaping () -> Void, foot: AnyView? = nil, @ViewBuilder fields: () -> Fields, @ViewBuilder below: () -> Below
   ) {
     self.title = title
     self.message = message
@@ -44,6 +47,7 @@ public struct AglynActionSheet<Fields: View, Below: View>: View {
     self.onConfirm = onConfirm
     self.fields = fields()
     self.below = below()
+    self.foot = foot
   }
 
   private static var errorID: String { "sheet-error" }
@@ -65,6 +69,7 @@ public struct AglynActionSheet<Fields: View, Below: View>: View {
           below
         }
         .formStyle(.grouped)
+        .safeAreaInset(edge: .bottom, spacing: 0) { foot }
         // A long form's refusal is read where it is: the confirm stays in view however far the form has scrolled.
         .onChange(of: error) { _, error in
           guard error != nil else { return }

@@ -426,7 +426,7 @@ struct CreateSiteSheet: View {
     AglynActionSheet(
       "Create a site", message: "You can connect your own domain later.", confirmLabel: "Create site",
       confirmEnabled: valid, busy: runner.busy, error: runner.error, onCancel: { dismiss() },
-      onConfirm: create
+      onConfirm: create, foot: usingStarters ? siteStarterPickNote(pick).map { AnyView(pickNote($0)) } : nil
     ) {
       TextField(
         "Site name",
@@ -485,7 +485,6 @@ struct CreateSiteSheet: View {
         styleSection
       }
     }
-    .safeAreaInset(edge: .bottom) { if usingStarters, let note = siteStarterPickNote(pick) { pickNote(note) } }
     .aglynMediaPicker($pickSource, multiple: false) { files in
       if let file = files.first, let slot = pickSlot { hold(file, slot: slot) }
     }
