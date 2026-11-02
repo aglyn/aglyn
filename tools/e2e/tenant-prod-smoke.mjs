@@ -144,11 +144,14 @@ const clientPages = (host) => [
   },
 ]
 /**
- * The site's 503 answer goes out as a 503 (AGL-4110), asked of a real
- * production server, because only one can prove it: the middleware asks for
- * the status on its rewrite, and whether the catch-all's ISR render keeps it
- * is Next's behavior, which jest cannot see. Each address is the built-in
- * notice (no 503 page is assigned on these copies), never the site.
+ * The site's 503 answer goes out as a 503 with the notice as its body
+ * (AGL-4110), asked of a real server: the middleware reads the page back
+ * through itself, which jest cannot see. Each address is the built-in notice
+ * (no 503 page is assigned on these copies), never the site.
+ *
+ * `next start` is not Vercel, and it cannot stand in for it here: a status on
+ * the rewrite passed this check and showed visitors a platform error on
+ * Vercel. A change to this answer is measured on Vercel as well.
  *
  * `SITE_UNAVAILABLE_RETRY_AFTER_SECONDS` in `site-unavailable.ts`, spelled out:
  * this script cannot import TypeScript, and that file's spec pins the value.
