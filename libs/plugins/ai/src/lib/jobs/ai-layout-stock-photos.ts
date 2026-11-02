@@ -91,7 +91,7 @@ import { aiStockBusinessNoun } from './ai-stock-business-nouns'
  *    never fills anything. A picture of a thing takes only a hit naming its
  *    OBJECT (the head noun, past "set", "gift", "kit": "bowl" in "nesting
  *    bowl set", "candle" in "candle gift set") AND either the site's domain
- *    or the subject's own two-word phrase ("bud vase"). A broad, hero or
+ *    or the thing's own two-word name ("bud vase"). A broad, hero or
  *    about search takes only a hit naming the domain. The accepted are
  *    ranked: the object in the hit's first tags (what the photo is OF) over
  *    a mention in its last, the subject's other words, the domain. Among
@@ -3276,11 +3276,11 @@ function hitWords(photo: Pick<StockPhoto, 'tags' | 'alt' | 'pageUrl'>) {
   // and "dirt bike" are phrases a world names; the page address is read whole.
   const lead = termsOf([...tags.slice(0, 3), slug])
   const all = termsOf([...tags, photo.alt ?? '', slug])
-  const phrases = [
-    ...tags.map((tag) => stemList(tag).join(' ')),
-    stemList(photo.alt ?? '').join(' '),
-    stemList(slug).join(' '),
-  ]
+  const said = [...tags.map((tag) => stemList(tag).join(' ')), stemList(photo.alt ?? '').join(' ')]
+  const phrases = [...said, stemList(slug).join(' ')]
+  // The opening of its page address and no further: past that it runs its tags
+  // together, and "kitesurfer-young-rider-kitesurfing" says no "young rider" (AGL-4092).
+  const whole = [...said, stemList(slug).slice(0, 2).join(' ')]
   const leadPhrases = [
     ...tags.slice(0, 3).map((tag) => stemList(tag).join(' ')),
     stemList(slug).join(' '),
@@ -3300,7 +3300,7 @@ function hitWords(photo: Pick<StockPhoto, 'tags' | 'alt' | 'pageUrl'>) {
       .filter((word) => word.length > 1)
       .map(aiStockStem),
   )
-  return { lead, all, phrases, leadPhrases, firstPhrase, rejected, words }
+  return { lead, all, phrases, whole, leadPhrases, firstPhrase, rejected, words }
 }
 
 /** Whether a phrase is among a hit's phrases, word for word. */
@@ -3322,6 +3322,26 @@ function leadsWithWorld(tags: readonly string[], world: ReadonlySet<string>, dom
       (term) => Boolean(term) && (world.has(term) || domain.has(term)),
     )
   })
+}
+
+/**
+ * People named by what they do in any world, which says nothing of which
+ * (AGL-4092): a rider rides a dirt bike, a horse or a kite, and a driver a race
+ * car or a bus.
+ */
+const ANY_WORLD_PEOPLE = words('rider racer driver player member competitor champion')
+
+/**
+ * Whether a subject's last two words, as stems, are a thing's own name, which
+ * says what a photo is OF in any world (AGL-3660): a potter's "bud vase",
+ * "espresso cup". Never what someone or something is like, and never a person
+ * (AGL-4092): a motocross team's "young rider" took a kitesurfer, and a
+ * person's world is whatever they do there, which the two words do not say.
+ */
+function aiStockPhraseNamesAThing(pair: string): boolean {
+  const [kind = '', head = ''] = pair.split(' ')
+  if (DESCRIBING.has(kind) || QUALITIES.has(kind)) return false
+  return !PEOPLE_NOUNS.has(head) && !ANY_WORLD_PEOPLE.has(head) && !ADULT_PEOPLE_STEMS.includes(head)
 }
 
 /**
@@ -3438,8 +3458,9 @@ export function aiStockSensitive(
  * How well a hit shows what a slot needs (AGL-3660), or 0 when it must not
  * fill it: a mockup or a blank never; a topic the site never named never
  * ({@link aiStockSensitive}); a picture of a thing only when the hit
- * names its object AND either the site's world or the subject's own
- * two-word phrase ("bud vase", "wick trimmer"); anything else only when it
+ * names its object AND either the site's world or, said whole, the thing's own
+ * two-word name ("bud vase", "wick trimmer", never "young rider",
+ * {@link aiStockPhraseNamesAThing}); anything else only when it
  * names the site's world (when the site names one). Among the accepted, the
  * object among the hit's first tags counts 4 (a mention among its last, 2),
  * the subject's two-word phrase 3, each of its other words 1, and the
@@ -3572,6 +3593,8 @@ export function aiStockRelevance(
     phrases.some((phrase) => Boolean(phrase) && among([hit.firstPhrase], phrase))
   const pair = subject.length >= 2 ? subject.slice(-2).join(' ') : ''
   const phrased = Boolean(pair) && among(hit.phrases, pair)
+  // Its own name, which stands for the business's world where the hit names none of it.
+  const itsOwnThing = phrased && among(hit.whole, pair) && aiStockPhraseNamesAThing(pair)
   let score = 0
   if (judgement.strict && object) {
     // An object with kin is named only by them: "melt" alone is resin art.
@@ -3583,7 +3606,7 @@ export function aiStockRelevance(
     // The business's own world, never any word of its type (AGL-4092): a cat
     // tagged "hungry" named "breakfast", and a European alley "street", of
     // "Taco food trailer: street and breakfast tacos".
-    if (own.length && !ownWorld && !phrased) return 0
+    if (own.length && !ownWorld && !itsOwnThing) return 0
     score += leading ? 4 : 2
     if (kinNamed) score += 3
     if (firstNamed(kin.length ? kin : [object])) score += 1
