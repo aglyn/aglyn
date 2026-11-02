@@ -2760,6 +2760,26 @@ whose passes each do one unit (`aiSiteImportNextWork`):
 - **A cancel settles every wave** (AGL-4107): `aiSiteImportCanceled`, in the
   cancel's own write and in a step's write a pending cancel ends, marks a
   running or waiting wave `stopped` and a wave in review `done`.
+- **An import never ends with work left** (AGL-4083). Its whole run can take
+  hours, so nothing written for one build ends it: where a build would settle
+  because it stopped (its attempts used up, the bound on its passes, a step's
+  failure), an import registers a stop review (`registerAiJobStopReview`,
+  `aiSiteImportStopReview`) and waits `needs_review` on `wave`, saying how many
+  pages are not in yet and which wave brings them in, with its ledger as it
+  stood and its attempts and passes counted afresh. Start goes on from there.
+  With nothing left to do it settles as any build.
+- **One document holds the whole run** (AGL-4083). Every page rides the job's
+  document, under Firestore's 1 MiB. A settled page keeps only what its row
+  shows (`aiSiteImportPageSettled`), and a wave's reads are held to
+  `AI_SITE_IMPORT_JOB_MAX_BYTES` (`aiSiteImportReadsWithin`): pages past it are
+  read once the pages before them are in, which is why a wave builds the pages
+  in hand before it reads on. On 11/1 a 400-page import's 344 settled pages
+  still held their pictures and sections, its next wave's read could not be
+  written, and the pass failed until its attempts ran out.
+- **A pass that asks no model needs no model's time** (AGL-4083):
+  `aiSiteImportRunMinimumMs` holds a copied page whose listing is the source's
+  own, and a page with no pictures to fetch, to the machine's least, not to a
+  model's whole answer, which only the first seconds of a beat can give.
 - **Priced by how a page is built.** `AI_MEASURED_IMPORT_CREDITS`: an
   arranged page at `arranged` (its design answer), a copied page at `copied`, the
   header its layout, or nothing where it is drawn from the source's menu; each wave is quoted before it starts

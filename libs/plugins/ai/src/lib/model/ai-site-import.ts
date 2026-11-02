@@ -1361,20 +1361,21 @@ export function aiSiteImportNextWork(
     const next = aiSiteImportNextWave(state)
     return next ? { kind: 'start-wave', wave: next } : { kind: 'done' }
   }
-  // A page the wave's read has not reached yet is read before anything is built.
-  const unread = running.slots
+  const open = running.slots
+    .filter((slot) => aiSiteImportItemOpen(items, slot))
     .map((slot) => state.pages.find((page) => page.slot === slot))
-    .filter((page): page is AiSiteImportPage => !!page && !page.read && !page.refused && aiSiteImportItemOpen(items, page.slot))
-  if (unread.length) return { kind: 'read', wave: running, pages: unread }
+    .filter((page): page is AiSiteImportPage => !!page)
+  const unread = open.filter((page) => !page.read && !page.refused)
+  const reached = open.filter((page) => !unread.includes(page))
+  // Nothing in hand: the wave's read goes on first. Pages in hand are built
+  // first (AGL-4083): a read that stopped short, or that left pages out to keep
+  // the job within what one document holds, goes on once their words are gone.
+  if (unread.length && !reached.length) return { kind: 'read', wave: running, pages: unread }
   if (running.frame && state.frame && aiSiteImportItemOpen(items, AI_SITE_IMPORT_FRAME_SLOT)) {
     return { kind: 'frame', wave: running }
   }
-  for (const slot of running.slots) {
-    if (!aiSiteImportItemOpen(items, slot)) continue
-    const page = state.pages.find((entry) => entry.slot === slot)
-    if (!page) continue
-    return page.photos ? { kind: 'page', wave: running, page } : { kind: 'images', wave: running, page }
-  }
+  const page = reached[0]
+  if (page) return page.photos ? { kind: 'page', wave: running, page } : { kind: 'images', wave: running, page }
   return { kind: 'close-wave', wave: running }
 }
 
@@ -1491,11 +1492,19 @@ export function aiSiteImportPhotosIn(
   return withPage(state, slot, { photos })
 }
 
-/** A page is in: its text and its blocks are no longer kept. */
+/**
+ * A page is in: nothing of its read is kept but what its row shows (AGL-4083).
+ * Every page rides one job document, and on 11/1 what 344 settled pages still
+ * held left a 400-page import too little room for the next wave's read.
+ */
 export function aiSiteImportPageSettled(state: AiSiteImportState, slot: string): AiSiteImportState {
   const page = state.pages.find((entry) => entry.slot === slot)
   if (!page?.read) return state
-  return withPage(state, slot, { read: { ...page.read, text: '', blocks: [], layout: null } })
+  const { meta: _meta, ...read } = page.read
+  return withPage(state, slot, {
+    read: { ...read, text: '', sections: [], images: [], blocks: [], forms: [], layout: null },
+    ...(page.photos ? { photos: { ...page.photos, assets: [] } } : {}),
+  })
 }
 
 /** A wave is in: waiting for its review, or done when no wave follows it. */

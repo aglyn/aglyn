@@ -259,7 +259,11 @@ import {
   listAiJobs,
   aiJobTransitionListenerRegistered,
   registerAiJobPlanStep,
+  AI_BUILD_NOT_REACHED_COPY,
+  aiJobStopReviewFor,
   registerAiJobStep,
+  registerAiJobStepPasses,
+  registerAiJobStopReview,
   registerAiJobTransitionListener,
   resumeAiJob,
   retryAiBuildJob,
@@ -274,7 +278,7 @@ import type { AiBuildPlan } from '../model/ai-build-plan'
 import type { AiJob, AiJobDraftSlot, AiJobPlan } from '../model/ai-jobs.types'
 import { aiJobDraftId, aiPlanWithDraftIds } from './ai-job-draft-ids'
 import { createAiJobSiteStep } from './ai-job-site-step'
-import { createAiJobImportStep, SITE_IMPORT_WAVES_PER_ORG_PER_DAY } from './ai-job-import-step'
+import { AI_SITE_IMPORT_MAX_PASSES, createAiJobImportStep, SITE_IMPORT_WAVES_PER_ORG_PER_DAY, aiSiteImportStopReview, registerAiSiteImportJob } from './ai-job-import-step'
 import { AI_LAYOUT_IMPORTED_PAGE_INPUT } from './ai-job-page-language'
 import { AI_LAYOUT_IMPORTED_SECTIONS_INPUT, type AiSiteImportDocument } from './ai-site-import-document'
 import { AI_LAYOUT_PAGE_PHOTOS_INPUT } from './ai-layout-owner-photos'
@@ -3338,6 +3342,7 @@ describe('a site import brings a proved site in, wave by wave, each started by a
   let proof: { current: boolean; method: string; provenAt: number; detail: string } | null
   let allowed: boolean
   let failing: Set<string>
+  let aborting: Set<string>
   let handed: AiJob[]
   let stored: PluginMediaIngestRequest[]
   let limited: Array<{ key: string; limit: number }>
@@ -3346,6 +3351,8 @@ describe('a site import brings a proved site in, wave by wave, each started by a
     proof = { current: true, method: 'dns', provenAt: NOW.getTime(), detail: '_aglyn-challenge.harbor-dental.com' }
     allowed = true
     failing = new Set()
+    aborting = new Set()
+    registerAiJobStopReview('import', aiSiteImportStopReview)
     handed = []
     stored = []
     limited = []
@@ -3360,6 +3367,7 @@ describe('a site import brings a proved site in, wave by wave, each started by a
         handed.push(job)
         const title = job.plan?.screens[0]?.title ?? ''
         if (failing.has(title)) return { outputs: [], ...spend, failure: `${title} could not be written.` }
+        if (aborting.has(title)) throw Object.assign(new Error('aborted'), { name: 'AbortError' })
         const pass = (passes.get(job.$id) ?? 0) + 1
         passes.set(job.$id, pass)
         if (pass === 1) return { outputs: [], ...spend, continue: true }
@@ -3407,6 +3415,72 @@ describe('a site import brings a proved site in, wave by wave, each started by a
       NOW,
     )
   }
+
+  describe('a run that stops with work left never says it is done (AGL-4083)', () => {
+    /** An import asked to bring in everything, its first wave started and its pages on their way. */
+    async function started(): Promise<AiJob> {
+      const job = await importJob()
+      await untilParked(job.$id)
+      await resumeAiJob(firestore, ORG, job.$id, { uid: 'uid-1' }, NOW)
+      return job
+    }
+
+    it('registers the wait with the import itself', () => {
+      registerAiJobStopReview('import', () => null)
+      registerAiSiteImportJob({ runnerFor: () => null })
+      expect(aiJobStopReviewFor('import')).toBe(aiSiteImportStopReview)
+    })
+
+    it('a pass that keeps failing leaves the import waiting on what it did not reach, every page of it still to do', async () => {
+      const job = await started()
+      aborting.add('Services')
+      const parked = await untilParked(job.$id)
+      expect(parked.status).toBe('needs_review')
+      expect(parked.review).toMatchObject({ reason: 'wave', message: expect.stringContaining('not in yet') })
+      expect(parked.items?.filter((row) => row.status === 'skipped')).toEqual([])
+      expect(parked.items?.some((row) => row.note === AI_BUILD_NOT_REACHED_COPY)).toBe(false)
+      expect(parked.steps.at(-1)).toMatchObject({ status: 'pending', attempts: 0, passes: 0 })
+      expect(parked.lease ?? null).toBeNull()
+    })
+
+    it('starts again where it stopped when the person starts it, and only then ends', async () => {
+      const job = await started()
+      aborting.add('Services')
+      await untilParked(job.$id)
+      aborting.clear()
+      const { job: resumed } = await resumeAiJob(firestore, ORG, job.$id, { uid: 'uid-1' }, NOW)
+      expect(resumed.status).toBe('queued')
+      const after = await untilParked(job.$id)
+      const wave = after.siteImport?.waves[0]
+      const pages = (after.items ?? []).filter((row) => wave?.slots.includes(row.slot))
+      expect(pages.length).toBeGreaterThan(0)
+      expect(pages.map((row) => row.status)).toEqual(pages.map(() => 'succeeded'))
+      expect(pages.some((row) => row.note === AI_BUILD_NOT_REACHED_COPY)).toBe(false)
+    })
+
+    it('a run past the bound on its passes waits too, and has them all again', async () => {
+      registerAiJobStepPasses('import', 4)
+      try {
+        const job = await started()
+        const parked = await untilParked(job.$id)
+        expect(parked.status).toBe('needs_review')
+        expect(parked.review?.reason).toBe('wave')
+        expect(parked.items?.filter((row) => row.status === 'skipped')).toEqual([])
+        expect(parked.steps.at(-1)).toMatchObject({ passes: 0, attempts: 0 })
+      } finally {
+        registerAiJobStepPasses('import', AI_SITE_IMPORT_MAX_PASSES)
+      }
+    })
+
+    it('a kind with no wait of its own ends as it did, what it did not reach skipped', async () => {
+      registerAiJobStopReview('import', () => null)
+      const job = await started()
+      aborting.add('Services')
+      const ended = await untilParked(job.$id)
+      expect(ended.status).toBe('done')
+      expect(ended.items?.some((row) => row.status === 'skipped' && row.note === AI_BUILD_NOT_REACHED_COPY)).toBe(true)
+    })
+  })
 
   /** The beat, until the job stops for a person or ends. */
   async function untilParked(jobId: string): Promise<AiJob> {

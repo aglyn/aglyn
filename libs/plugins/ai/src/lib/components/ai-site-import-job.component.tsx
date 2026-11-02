@@ -54,6 +54,7 @@ import {
   aiSiteImportPlanText,
   aiSiteImportStartAction,
   aiSiteImportStartAllAction,
+  aiSiteImportStoppedCopy,
   aiSiteImportVerdictNote,
   aiSiteImportWaveRows,
   aiSiteImportWaveSpent,
@@ -323,7 +324,7 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
 
   if (phase === 'ready' && state) {
     return (
-      <Frame siteName={siteName} heading="Your site is read" lede={job.review?.message ?? undefined}>
+      <Frame siteName={siteName} heading={aiSiteImportStoppedCopy(job) ? 'Your import is waiting for you' : 'Your site is read'} lede={job.review?.message ?? undefined}>
         {notice && <Alert severity="warning">{notice}</Alert>}
         {aiSiteImportVerdictNote(state) ? <Alert severity="warning">{aiSiteImportVerdictNote(state)}</Alert> : null}
         <Stack spacing={1}>

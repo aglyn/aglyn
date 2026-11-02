@@ -40,10 +40,17 @@ import {
   AI_SITE_IMPORT_LEFT_OUT_COPY,
   aiSiteImportInventory,
   aiSiteImportLedger,
+  aiSiteImportNextWork,
+  aiSiteImportPageSettled,
+  aiSiteImportPagesRead,
+  aiSiteImportPhotosIn,
+  aiSiteImportWaveClosed,
   aiSiteImportWaveStarted,
+  type AiSiteImportPageRead,
   type AiSiteImportState,
   type SiteImportLayout,
 } from '../model/ai-site-import'
+import { aiSiteImportStartAction, aiSiteImportStoppedCopy } from '../model/ai-site-import-view'
 import type { SiteImportBlock } from '../site-import/site-import-html'
 import { AI_LAYOUT_IMPORTED_SECTIONS_INPUT, type AiSiteImportDocument } from './ai-site-import-document'
 import {
@@ -54,10 +61,14 @@ import {
 } from '../site-import/fixtures/site-import-wave-recordings'
 import {
   AI_SITE_IMPORT_COPY,
+  AI_SITE_IMPORT_JOB_MAX_BYTES,
+  AI_SITE_IMPORT_MAX_PASSES,
   AI_SITE_IMPORT_PASS_MINIMUM_MS,
   aiSiteImportFrameJob,
   aiSiteImportPageJob,
+  aiSiteImportReadsWithin,
   aiSiteImportRunMinimumMs,
+  aiSiteImportStopReview,
   createAiJobImportStep,
   createAiSiteImportAdmission,
   type AiSiteImportStepDeps,
@@ -345,7 +356,10 @@ describe('a wave reads its pages again, and leaves out what changed', () => {
       ['/team', null],
     ])
     expect(first.items?.filter((row) => row.status === 'skipped')).toEqual([])
-    const second = await run(step, importJob({ siteImport: first.siteImport, items: first.items }))
+    // The pages in hand go in first; the read goes on once their words are gone (AGL-4083).
+    const inHand = first.siteImport?.pages.filter((page) => page.read).map((page) => page.slot) ?? []
+    const built = (first.items ?? []).map((row): AiJobItemLedger => (row.slot === 'frame' || inHand.includes(row.slot) ? { ...row, status: 'succeeded' } : row))
+    const second = await run(step, importJob({ siteImport: first.siteImport, items: built }))
     expect(after(second)).toEqual([
       ['/', 'read'],
       ['/about', 'read'],
@@ -353,7 +367,7 @@ describe('a wave reads its pages again, and leaves out what changed', () => {
       ['/services', 'read'],
       ['/team', 'read'],
     ])
-    expect(aiSiteImportRunMinimumMs(importJob({ siteImport: first.siteImport, items: first.items }))).toBe(AI_SITE_IMPORT_PASS_MINIMUM_MS.wave)
+    expect(aiSiteImportRunMinimumMs(importJob({ siteImport: first.siteImport, items: built }))).toBe(AI_SITE_IMPORT_PASS_MINIMUM_MS.wave)
   })
 
   it('stops for the person when robots.txt cannot be read, reading nothing else', async () => {
@@ -433,7 +447,7 @@ describe('each pass’s least time', () => {
     expect(aiSiteImportRunMinimumMs(importJob({ siteImport: aiSiteImportWaveStarted(state, 0, 'x', new Map()), items: ledger }))).toBe(
       AI_SITE_IMPORT_PASS_MINIMUM_MS.wave,
     )
-    const read = new Map(state.waves[0].slots.map((slot) => [slot, { at: 'x', title: 'T', text: 'words', sections: ['Hero'], images: [] }]))
+    const read = new Map(state.waves[0].slots.map((slot) => [slot, { at: 'x', title: 'T', text: 'words', sections: ['Hero'], images: [{ url: 'https://harbor-dental.com/p.jpg', alt: '' }] }]))
     let started = aiSiteImportWaveStarted(state, 0, 'x', read)
     const framed = ledger.map((row): AiJobItemLedger => (row.slot === 'frame' ? { ...row, status: 'succeeded' } : row))
     expect(aiSiteImportRunMinimumMs(importJob({ siteImport: started, items: framed }))).toBe(AI_SITE_IMPORT_PASS_MINIMUM_MS.photos)
@@ -441,5 +455,136 @@ describe('each pass’s least time', () => {
     expect(aiSiteImportRunMinimumMs(importJob({ siteImport: started, items: framed }))).toBeGreaterThanOrEqual(aiJobStepMinimumMs('page', 'generate'))
     // Every pass fits what one beat can give it.
     for (const ms of Object.values(AI_SITE_IMPORT_PASS_MINIMUM_MS)) expect(ms).toBeLessThanOrEqual(276_000)
+  })
+
+  it('never holds a pass that asks no model to a model’s whole answer (AGL-4083)', () => {
+    const state = harborState()
+    const ledger = aiSiteImportLedger(state).map((row): AiJobItemLedger => (row.slot === 'frame' ? { ...row, status: 'succeeded' } : row))
+    const read = (meta: { title: string; description: string }, images: AiSiteImportPageRead['images'] = []) =>
+      new Map(state.waves[0].slots.map((slot) => [slot, { at: 'x', title: 'T', text: 'words', sections: ['Hero'], images, meta }]))
+    const built = (next: AiSiteImportState, build: 'copied' | 'arranged') => ({ ...next, pages: next.pages.map((page) => ({ ...page, build, photos: { brought: 0, reused: 0, skipped: 0, assets: [] } })) })
+    const listed = { title: 'A release', description: 'What changed in it.' }
+    const minimum = (next: AiSiteImportState) => aiSiteImportRunMinimumMs(importJob({ siteImport: next, items: ledger }))
+
+    // A page of no pictures and no answer: nothing to fetch and nothing to wait on.
+    expect(minimum(aiSiteImportWaveStarted(state, 0, 'x', read(listed)))).toBe(0)
+    expect(minimum(built(aiSiteImportWaveStarted(state, 0, 'x', read(listed)), 'copied'))).toBe(0)
+    // Pictures to fetch still have their clock, and an answer still has a model's.
+    expect(minimum(aiSiteImportWaveStarted(state, 0, 'x', read(listed, [{ url: 'https://harbor-dental.com/p.jpg', alt: '' }])))).toBe(AI_SITE_IMPORT_PASS_MINIMUM_MS.photos)
+    expect(minimum(built(aiSiteImportWaveStarted(state, 0, 'x', read(listed)), 'arranged'))).toBeGreaterThanOrEqual(aiJobStepMinimumMs('page', 'generate'))
+    // A copied page whose source left its listing empty asks a model for it.
+    expect(minimum(built(aiSiteImportWaveStarted(state, 0, 'x', read({ title: 'A release', description: '' })), 'copied'))).toBeGreaterThanOrEqual(aiJobStepMinimumMs('page', 'generate'))
+  })
+
+  it('gives a 400-page site room for every pass a page can take', () => {
+    expect(AI_SITE_IMPORT_MAX_PASSES).toBe(3_260)
+  })
+})
+
+describe('a whole site fits the one document its import rides (AGL-4083)', () => {
+  const readOf = (chars: number): AiSiteImportPageRead => ({ at: 'x', title: 'T', text: 'w'.repeat(chars), sections: ['Hero'], images: [{ url: 'https://harbor-dental.com/p.jpg', alt: 'A photo' }], blocks: [], meta: { title: 'T', description: 'D' } })
+  const pages = (state: AiSiteImportState) => state.waves.flatMap((wave) => wave.slots)
+  const weight = (job: AiJob) => Buffer.byteLength(JSON.stringify(job))
+
+  it('reads pages in order up to what the document can take, and every page the read left out', () => {
+    const state = harborState()
+    const [a, b, c, d] = pages(state)
+    const room = AI_SITE_IMPORT_JOB_MAX_BYTES - weight(importJob({ siteImport: state }))
+    const reads = new Map<string, AiSiteImportPageRead | 'blocked'>([
+      [a, readOf(room - 2_000)],
+      [b, readOf(4_000)],
+      [c, 'blocked'],
+      [d, readOf(10)],
+    ])
+    const kept = aiSiteImportReadsWithin(importJob({ siteImport: state }), state, reads)
+    expect([...kept.keys()]).toEqual([a, c])
+  })
+
+  it('never leaves a wave with nothing to go on: with nothing held, its first page goes', () => {
+    const state = harborState()
+    const [a, b] = pages(state)
+    const kept = aiSiteImportReadsWithin(importJob({ siteImport: state }), state, new Map([[a, readOf(AI_SITE_IMPORT_JOB_MAX_BYTES)], [b, readOf(10)]]))
+    expect([...kept.keys()]).toEqual([a])
+  })
+
+  it('builds the pages a wave read, then reads the rest, so a wave held back still ends', () => {
+    const state = harborState()
+    const ledger = aiSiteImportLedger(state).map((row): AiJobItemLedger => (row.slot === 'frame' ? { ...row, status: 'succeeded' } : row))
+    const [a, b, ...others] = state.waves[0].slots
+    const started = aiSiteImportWaveStarted(state, 0, 'x', new Map([[a, readOf(10)], [b, readOf(10)]]))
+    expect(aiSiteImportNextWork(started, ledger)).toMatchObject({ kind: 'images', page: { slot: a } })
+    const settled = ledger.map((row): AiJobItemLedger => (row.slot === a || row.slot === b ? { ...row, status: 'succeeded' } : row))
+    expect(aiSiteImportNextWork(started, settled)).toMatchObject({ kind: 'read', pages: others.map((slot) => expect.objectContaining({ slot })) })
+  })
+
+  it('keeps nothing of a page that is in but what its row shows', () => {
+    const state = harborState()
+    const [a] = state.waves[0].slots
+    let held = aiSiteImportWaveStarted(state, 0, 'x', new Map([[a, { ...readOf(50_000), words: 900 }]]))
+    held = aiSiteImportPhotosIn(held, a, { brought: 3, reused: 1, skipped: 1, assets: [{ mediaId: 'm', src: 'media:h/m', from: 'https://harbor-dental.com/p.jpg', width: 10, height: 10 }] })
+    const page = aiSiteImportPageSettled(held, a).pages.find((entry) => entry.slot === a)
+    expect(page?.read).toEqual({ at: 'x', title: 'T', text: '', sections: [], images: [], blocks: [], forms: [], layout: null, words: 900 })
+    expect(page?.photos).toEqual({ brought: 3, reused: 1, skipped: 1, assets: [] })
+    expect(page?.title).toBeTruthy()
+  })
+
+  it('holds a whole 400-page site, with room for a wave as big as the one that stopped the 11/1 import', () => {
+    const base = harborState()
+    const template = base.pages[0]
+    const asset = { mediaId: 'mXXXXXXXXX', src: 'media:4G9dGlSk9y/mXXXXXXXXX', from: 'https://aglyn.com/api/media/cdn/org:jWmGooWE3L:DXnRbPH4CQ/hWwBgGtkiM?v=9c7e958bf4277afb.2', width: 1600, height: 900, alt: 'A photo of the page' }
+    let state: AiSiteImportState = { ...base, pages: Array.from({ length: 400 }, (_, at) => ({ ...template, slot: `p${at}`, url: `https://aglyn.com/changelog/release-${at}`, path: `/changelog/release-${at}`, draftId: `draft-${at}` })) }
+    for (const page of state.pages) {
+      state = aiSiteImportPagesRead(state, new Map([[page.slot, { ...readOf(4_000), images: Array.from({ length: 8 }, () => ({ url: asset.from, alt: asset.alt })) }]]))
+      state = aiSiteImportPhotosIn(state, page.slot, { brought: 8, reused: 0, skipped: 0, assets: Array.from({ length: 8 }, () => asset) })
+      state = aiSiteImportPageSettled(state, page.slot)
+    }
+    const items = state.pages.map((page): AiJobItemLedger => ({ slot: page.slot, op: 'page', label: page.title, status: 'succeeded', attempt: 1, creditsSpent: 0, creditsRefunded: 0, outputs: [page.draftId] }))
+    const job = importJob({ siteImport: state, items, outputs: state.pages.map((page) => ({ resource: 'screen', id: page.draftId, versionId: 'v', hostId: 'h', hostSubdomain: 's', label: page.title })) as never })
+    // The 224 KB that ten changelog pages read to on the wave that stopped it, with room left over.
+    expect(AI_SITE_IMPORT_JOB_MAX_BYTES - weight(job)).toBeGreaterThan(400_000)
+  })
+})
+
+describe('an import that stops with work left waits, and never says it is done (AGL-4083)', () => {
+  const stoppedAt = (state: AiSiteImportState, items: AiJobItemLedger[]) => aiSiteImportStopReview(importJob({ siteImport: state, items }))
+
+  it('says what is not in yet and which wave brings in the rest', () => {
+    const base = harborState()
+    const [first, second, ...rest] = base.waves[0].slots
+    const state: AiSiteImportState = {
+      ...base,
+      autoContinue: true,
+      waves: [
+        { ...base.waves[0], slots: [first, second], status: 'done' },
+        { ...base.waves[0], index: 1, label: 'Blog, 1 of 2', frame: false, slots: rest, status: 'waiting', startedAt: null, finishedAt: null },
+      ],
+    }
+    const settled = aiSiteImportLedger(state).map((row): AiJobItemLedger => (row.slot === first || row.slot === second || row.slot === 'frame' ? { ...row, status: 'succeeded' } : row))
+    expect(stoppedAt(state, settled)).toEqual({ reason: 'wave', message: AI_SITE_IMPORT_COPY.stopped(rest.length, 'Blog, 1 of 2'), findings: [] })
+    expect(AI_SITE_IMPORT_COPY.stopped(57, 'Changelog, 25 of 27')).toBe(
+      'Your import stopped before it finished, so 57 pages are not in yet. Everything brought in so far is safe. Start Changelog, 25 of 27 to bring in the rest.',
+    )
+    expect(AI_SITE_IMPORT_COPY.stopped(1, 'Legal')).toContain('so 1 page is not in yet')
+  })
+
+  it('offers the wave it stopped inside, which starts again where it stopped', () => {
+    const state = harborState()
+    const [a] = state.waves[0].slots
+    const started = aiSiteImportWaveStarted(state, 0, 'x', new Map([[a, { at: 'x', title: 'T', text: '', sections: [], images: [] }]]))
+    const job = importJob({ siteImport: started, items: aiSiteImportLedger(state), status: 'needs_review', review: { reason: 'wave', message: 'Stopped.', findings: [] } })
+    expect(aiSiteImportStartAction(job as never)).toMatchObject({ wave: { index: 0 } })
+    // While it runs, nothing is offered: the wave is on its way.
+    expect(aiSiteImportStartAction({ ...job, status: 'running' } as never)).toBeNull()
+    expect(aiSiteImportStoppedCopy(job as never)).toBe('Stopped.')
+  })
+
+  it('tells a person who has not started yet nothing about a stop', () => {
+    const state = harborState()
+    expect(aiSiteImportStoppedCopy({ status: 'needs_review', review: { reason: 'wave', message: 'Start your first wave.', findings: [] }, siteImport: state } as never)).toBeNull()
+  })
+
+  it('leaves an import with nothing left to do to end as any build ends', () => {
+    expect(stoppedAt({ ...harborState(), waves: harborState().waves.map((wave) => ({ ...wave, status: 'done' as const })) }, [])).toBeNull()
+    expect(aiSiteImportStopReview(importJob())).toBeNull()
   })
 })
