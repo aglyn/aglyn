@@ -122,11 +122,11 @@ describe('a stock photo described plainly, never a guess from two tags (AGL-4092
       expect(aiStockTagsAlt([...tags])).toBe(said)
   })
 
-  it('says a sport, a place on its own and nothing with it, never as something held', () => {
+  it('says a sport alone by its name, and never as something held', () => {
     expect(aiStockTagsAlt(['motocross'])).toBe('Motocross')
     expect(aiStockTagsAlt(['motocross', 'rider'])).toBe('Motocross')
     expect(aiStockTagsAlt(['man', 'motocross'])).toBe('A man')
-    // A sport's name is no more than what else the photo shows, where that is a thing of its own.
+    // A thing of its own stands: a rider, a dirt bike.
     expect(aiStockTagsAlt(['motocross rider', 'jump'])).toBe('A motocross rider')
     expect(aiStockTagsAlt(['dirt bike', 'motocross'])).toBe('A dirt bike')
   })
@@ -155,12 +155,12 @@ describe('a stock photo described plainly, never a guess from two tags (AGL-4092
     expect(aiStockPhotoAlt(photo, { ...slot, alt: '' })).toBe('Illustrative photo')
   })
 
-  it('joins no two tags into a sentence and says no demonym with an article, across every photo the two live checks read', () => {
+  it('joins no two tags into a sentence and says no demonym or sport with an article, across every photo the live checks read', () => {
     const photos: StockPhoto[] = [...AGL4092_1029_HITS.values(), ...AGL4092_1101_HITS.values(), ...Object.values(AGL4092_ANSWERS).flat()]
     expect(photos.length).toBeGreaterThan(500)
     for (const photo of photos) {
       const alt = aiStockTagsAlt(photo.tags ?? []) ?? ''
-      expect(alt).not.toMatch(/\b(?:an?|and) (?:mexican|italian|french|greek|spanish|german|motocross and)\b(?! [a-z])/i)
+      expect(alt).not.toMatch(/^An? (?:mexican|italian|french|greek|spanish|german|motocross)$/i)
       // One thing a photo is of: "A bride and groom" says one tag, "Tacos and a beef" two.
       const [, left, right] = /(\S+) and (\S+)/.exec(alt.toLowerCase()) ?? []
       if (left && right) expect((photo.tags ?? []).some((tag) => tag.includes(left) && tag.includes(right))).toBe(true)

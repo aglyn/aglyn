@@ -50,10 +50,10 @@ const INPUTS = {
   businessType: 'Amateur motocross race team: rider profiles, race schedule and results, sponsors, and sponsor inquiries',
   audience: 'Local businesses that sponsor riders, race fans and families following the team, and young riders who want to join',
   siteKind: 'fitness',
-  businessName: 'Rut Runners Racing',
+  businessName: 'Example Race Team',
 }
 const SITE = { business: INPUTS.businessType, ...aiStockPhotoWordsOf({ plan: { language: 'en' } as never, inputs: INPUTS }) }
-const HOST = 'rut-runners-1101'
+const HOST = 'race-team-1101'
 
 const KITESURFER = '7288297'
 
