@@ -88,6 +88,15 @@ object SiteBrandFiles {
   const val MAX_BYTES = 15728640
 }
 
+/** Where Choose your starter asks, and how much a search may ask for. */
+object SiteStarterSearch {
+  const val PATH = "/api/marketplace/starters"
+  const val TITLE = "Choose your starter"
+  const val LEDE = "Aglyn's styles come first, then starters from the marketplace. Nothing is chosen for you, and you can change everything later."
+  const val WORD_MAX = 200
+  const val MAX = 50
+}
+
 /** Each release flag as the Remote Config template publishes it. */
 object ReleaseFlagDefaults {
   val byKey: Map<String, ReleaseFlagValue> = mapOf(

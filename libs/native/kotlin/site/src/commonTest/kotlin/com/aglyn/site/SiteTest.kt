@@ -46,7 +46,14 @@ import com.aglyn.site.sites.SiteDomainFilter
 import com.aglyn.site.sites.SUBDOMAIN_PATTERN
 import com.aglyn.site.sites.SiteBrandFields
 import com.aglyn.site.sites.SiteBrandSaveOutcome
+import com.aglyn.core.SiteStarterMode
+import com.aglyn.core.SiteStarterPickNote
+import com.aglyn.core.SiteStarterSummary
+import com.aglyn.core.siteCreateWebUrl
+import com.aglyn.core.siteStarterPickNote
+import com.aglyn.site.sites.SiteStart
 import com.aglyn.site.sites.canCreateSite
+import com.aglyn.site.sites.canCreateSiteFromStarter
 import com.aglyn.site.sites.createSiteBody
 import com.aglyn.site.sites.saveSiteBrandFiles
 import com.aglyn.site.sites.siteBrandFileRefusal
@@ -186,6 +193,57 @@ class SiteTest {
     // The other two still count.
     assertFalse(canCreateSite("  ", "my-shop", "trades"))
     assertFalse(canCreateSite("My Shop", "ab", "trades"))
+  }
+
+  @Test
+  fun createsTheSiteFromAPickedStarterWithNoStyle() {
+    val body = createSiteBody("org1", "  My Shop ", " MyShop ", SiteStart.Starter("l1"))
+    assertEquals("My Shop", body["displayName"]?.jsonPrimitive?.content)
+    assertEquals("myshop", body["subdomain"]?.jsonPrimitive?.content)
+    assertEquals("starter", body["start"]?.jsonPrimitive?.content)
+    // The console's "Choose your starter": the listing, and no style, since the starter brings its own look.
+    assertEquals("l1", body["starter"]?.jsonObject?.get("listingId")?.jsonPrimitive?.content)
+    assertEquals(null, body["style"])
+  }
+
+  @Test
+  fun createSiteWaitsForAStarterItCanCreateFromHere() {
+    val starter = SiteStarterSummary("l1", "Bakery")
+    // Nothing is picked for anyone.
+    assertFalse(canCreateSiteFromStarter("My Shop", "my-shop", null))
+    assertTrue(canCreateSiteFromStarter("My Shop", "my-shop", starter))
+    assertFalse(canCreateSiteFromStarter("  ", "my-shop", starter))
+    assertFalse(canCreateSiteFromStarter("My Shop", "ab", starter))
+    // A price not paid waits to be bought on the web; one the workspace owns creates at once.
+    val paid = SiteStarterSummary("l2", "Studio", priceUsd = 12.0)
+    assertFalse(canCreateSiteFromStarter("My Shop", "my-shop", paid))
+    assertTrue(canCreateSiteFromStarter("My Shop", "my-shop", paid.copy(owned = true)))
+    assertFalse(canCreateSiteFromStarter("My Shop", "my-shop", paid.copy(owned = true), owned = false))
+    // An AI starter goes on to its questions, which the app does not ask, so it never creates an empty site from here.
+    assertFalse(canCreateSiteFromStarter("My Shop", "my-shop", SiteStarterSummary("l3", "AI", mode = SiteStarterMode.AI)))
+  }
+
+  @Test
+  fun saysWhatAPickNeedsNextWhereItStaysInView() {
+    // A free base starter needs nothing said.
+    assertEquals(null, siteStarterPickNote(null))
+    assertEquals(null, siteStarterPickNote(SiteStarterSummary("l1", "Bakery")))
+    val paid = SiteStarterSummary("l2", "Studio", priceUsd = 12.0)
+    assertEquals(SiteStarterPickNote("Studio costs $12. Buy it on the web, then create your site from it.", "Buy on the web"), siteStarterPickNote(paid))
+    assertEquals(SiteStarterPickNote("You own this starter. Create your site from it whenever you are ready.", null), siteStarterPickNote(paid.copy(owned = true)))
+    assertEquals("Continue on the web", siteStarterPickNote(SiteStarterSummary("l3", "AI", mode = SiteStarterMode.AI))?.webAction)
+    // A paid AI starter is bought before its questions.
+    assertEquals("Buy on the web", siteStarterPickNote(SiteStarterSummary("l4", "AI", priceUsd = 9.0, mode = SiteStarterMode.AI))?.webAction)
+  }
+
+  @Test
+  fun aPaidPickOpensTheConsolesCreateSiteOnThatPick() {
+    assertEquals(
+      "https://app.aglyn.com/acme/hosts?create=site&starter=fp-starter-trades-base",
+      siteCreateWebUrl("https://app.aglyn.com/", "acme", "fp-starter-trades-base"),
+    )
+    assertEquals(null, siteCreateWebUrl("https://app.aglyn.com", null, "l1"))
+    assertEquals(null, siteCreateWebUrl("https://app.aglyn.com", "acme", "not a listing"))
   }
 
   @Test

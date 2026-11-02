@@ -22,6 +22,7 @@ import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { PLAN_ENTITLEMENTS, resolveMarketplaceFeePct } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { LISTING_CATEGORIES } from './marketplace-catalog'
 import { PUBLISHER_ATTESTATION, requiredAttestationIds } from './publisher-attestation'
+import { SITE_STYLES } from '@aglyn/aglyn/app-utils/site-styles'
 import {
   marketplaceMinPriceUsd,
   marketplacePriceFloorHint,
@@ -58,8 +59,8 @@ interface Screen {
     when?: string
     text?: string
     title?: string
-    fields?: Array<{ key: string; label?: string; kind?: string; coversAll?: boolean; help?: string; required?: boolean; options?: Array<{ value: string; label: string; detail?: string }> }>
-    submit?: { url: string; body: Record<string, unknown>; gate?: unknown }
+    fields?: Array<{ key: string; label?: string; kind?: string; coversAll?: boolean; help?: string; required?: boolean; placeholder?: string; initial?: string; options?: Array<{ value: string; label: string; detail?: string; enabled?: string }> }>
+    submit?: { url: string; body: Record<string, unknown>; gate?: unknown; disabledWhen?: string; report?: Array<{ when?: string; text: string }>; failure?: Array<{ each?: string; text: string }> }
     items?: Array<{ id?: string; url?: string; body?: Record<string, string>; label?: string }>
     filter?: string
   }>
@@ -76,6 +77,7 @@ const flat = (source: string) => source.replace(/\s+/g, ' ').replace(/[`'"] \+ [
 /** Every screen that publishes: the site template, each other kind, and a plugin. */
 const PUBLISH_SCREENS = [
   'marketplace.publishTemplate',
+  'marketplace.publishStarter',
   'marketplace.publishLayout',
   'marketplace.publishComponent',
   'marketplace.publishTheme',
@@ -170,6 +172,114 @@ describe('native publishing to the marketplace', () => {
     expect(price?.help).toBe(marketplacePriceFloorHint('Paid listings need payouts set up on your marketplace profile.'))
     expect(price?.help).toContain(`$${marketplaceMinPriceUsd()} and up`)
     expect(form?.fields?.find((field) => field.key === 'name')?.required).toBe(true)
+  })
+
+  it('publishes a site starter through the route and payload the console dialog sends', () => {
+    const publish = screen('marketplace.publishStarter') as Screen & { showWhen?: string; load?: Record<string, { url?: string; optional?: boolean }> }
+    expect(publish.zones).toEqual(['siteTemplate'])
+    expect(publish.scope).toBe('site')
+    // Offered only where the server says the workspace can: the facts route is behind the release flag, which staff pass.
+    expect(publish.load?.['facts']).toEqual({ url: '/api/marketplace/starter-publish-facts?hostId={site.id}', optional: true })
+    expect(publish.showWhen).toBe('data.facts.captures')
+    expect(read('libs/plugins/marketplace/src/lib/server.ts')).toContain("registerPluginApiRoute('marketplace/starter-publish-facts'")
+
+    const form = publish.blocks.find((block) => block.type === 'form')
+    const field = (key: string) => form?.fields?.find((one) => one.key === key)
+    expect(form?.submit?.url).toBe('/api/marketplace/publish-starter')
+    const source = flat(publishDialog)
+    expect(source).toContain("endpoint: 'marketplace/publish-starter', payload: { hostId }")
+    // The listing every kind sends, and the starter's half, under `starterPublishBody`'s keys.
+    expect(Object.keys(form?.submit?.body ?? {}).sort()).toEqual(
+      ['agreement', 'category', 'description', 'displayName', 'facets', 'hostId', 'mode', 'priceUsd', 'theme'],
+    )
+    const body = form?.submit?.body ?? {}
+    expect(body['mode']).toBe('base')
+    expect(body['theme']).toEqual({ $if: 'form.theme == builtin', then: '{data.facts.builtin}', else: { kind: 'full' } })
+    expect(body['facets']).toEqual({ kind: { $if: 'form.style', then: '{form.style}' } })
+    const model = read('libs/plugins/marketplace/src/lib/model/starter-publish.ts')
+    expect(model).toContain("return { theme: { kind: 'full' }, mode: 'base', facets }")
+    expect(model).toContain("return { theme: input.builtin.theme, mode: 'base', facets }")
+
+    // The dialog's own words, for what only a starter asks.
+    expect(source).toContain(`categoryLabel: '${field('category')?.label}'`)
+    expect(source).toContain(`categoryPlaceholder: '${field('category')?.placeholder}'`)
+    const notice = publish.blocks.find((block) => block.id === 'intro')?.text ?? ''
+    expect(source).toContain(notice.slice(0, 40))
+    expect(source).toContain(notice.slice(-60))
+    const fields = flat(read('libs/plugins/marketplace/src/lib/components/publish-starter-fields.component.tsx'))
+    const [builtin, full] = field('theme')?.options ?? []
+    expect([builtin?.value, full?.value]).toEqual(['builtin', 'full'])
+    expect(fields).toContain(`"${builtin?.label}"`)
+    expect(fields).toContain(`title="${full?.label}"`)
+    expect(fields).toContain(`detail="${full?.detail}"`)
+    expect(fields).toContain(`label="${field('style')?.label}"`)
+    expect(fields).toContain(`helperText="${field('style')?.help}"`)
+    // The built-in is shown, off, for a site that wears none: a theme it cannot carry stays on screen with the reason.
+    expect(builtin?.enabled).toBe('data.facts.builtin')
+    expect(builtin?.detail).toBe('{data.facts.builtinDetail}')
+    // Neither theme is chosen for the publisher, and every style is offered, in the console's order.
+    expect(field('theme')?.required).toBe(true)
+    expect(field('style')?.options).toEqual([{ value: '', label: 'None' }, ...SITE_STYLES.map(({ id, name }) => ({ value: id, label: name }))])
+
+    // The setup steps are the door's, said before the click; one a free publish needs turns Publish off.
+    expect(form?.submit?.disabledWhen).toBe('data.facts.blocked')
+    expect(publish.blocks.filter((block) => block.id?.startsWith('step-') && block.type === 'notice').map((block) => block.id)).toEqual(
+      ['step-plan', 'step-profile', 'step-payouts', 'step-home', 'step-pages'],
+    )
+    // What the door says back, in the dialog's words, with every problem a theme check names.
+    expect(form?.submit?.report?.map((line) => line.text)).toEqual([
+      'Published v{response.version} of your starter',
+      'Sent your starter for review. It is listed once it has been reviewed.',
+    ])
+    expect(source).toContain('Published v${payload.version} of your starter')
+    expect(source).toContain('Sent your starter for review. It is listed once it has been reviewed.')
+    expect(form?.submit?.failure?.[0]?.each).toBe('response.errors')
+
+    const price = field('price')
+    expect(price?.help).toBe(marketplacePriceFloorHint('Paid listings need payouts set up on your marketplace profile.'))
+    expect(field('name')?.required).toBe(true)
+    expect(publish.constants?.agreement).toEqual(screen('marketplace.publishTemplate').constants?.agreement)
+  })
+
+  it('offers a site starter on the hub only where the server does', () => {
+    const hub = screen('marketplace.publish') as Screen & { load?: Record<string, unknown> }
+    expect(hub.load?.['starter']).toEqual({ url: '/api/marketplace/starter-publish-facts?hostId={site.id}', optional: true })
+    const link = hub.blocks.flatMap((block) => block.items ?? []).find((item) => (item as { screen?: string }).screen === 'marketplace.publishStarter') as
+      | { title?: string; when?: string }
+      | undefined
+    expect([link?.title, link?.when]).toEqual(['A site starter', 'data.starter.captures'])
+  })
+
+  it('says in Create site what the console says, and sends what its dialog sends', () => {
+    const dialog = flat(read('apps/console/components/create-host-dialog.component.tsx'))
+    const shelf = flat(read('libs/plugins/marketplace/src/lib/components/starter-picker-shelf.component.tsx'))
+    const sheets = {
+      swift: read('libs/native/apple/Sources/AglynSite/SitesScreens.swift'),
+      kotlin: read('libs/native/kotlin/site/src/commonMain/kotlin/com/aglyn/site/sites/SitesScreens.kt'),
+    }
+    for (const words of [
+      'Choose a starter to create your site.',
+      'Choose an AI starter to continue.',
+      'Buy this starter to create your site from it.',
+      'Buy this starter to continue with it.',
+    ]) {
+      expect(dialog).toContain(words)
+      for (const source of Object.values(sheets)) expect(source).toContain(words)
+    }
+    const pickers = {
+      swift: read('libs/plugins/marketplace/src/ios/Sources/AglynMarketplacePlugin/StarterPicker.swift'),
+      kotlin: read('libs/plugins/marketplace/src/android/src/commonMain/kotlin/com/aglyn/plugins/marketplace/StarterPicker.kt'),
+    }
+    for (const words of ['No starters match — try fewer words', 'No AI starters yet', 'No starters yet']) {
+      expect(shelf).toContain(words)
+      for (const source of Object.values(pickers)) expect(source).toContain(words)
+    }
+    const owned = 'You own this starter. Create your site from it whenever you are ready.'
+    expect(shelf).toContain(owned)
+    expect(read('libs/native/apple/Sources/AglynCore/SiteStarters.swift')).toContain(owned)
+    expect(read('libs/native/kotlin/core/src/commonMain/kotlin/com/aglyn/core/SiteStarters.kt')).toContain(owned)
+    // The console's own create from a pick: the listing, and no style.
+    expect(dialog).toContain("requestCreate('starter', { starter: { listingId: pick.listingId } })")
   })
 
   it('publishes every other artifact kind through the route and payload the console sends', () => {

@@ -256,6 +256,9 @@ public struct ActionSpec: Sendable, Identifiable {
   public let prompt: [FieldSpec]
   let promptRaw: [JSONValue]
   public let success: String?
+  /// A form's submit: the button stays, off, while this condition holds (a setup step the screen says above it), where a
+  /// `when` would hide it.
+  public let disabledWhen: String?
   /// A prompt sheet's own title (`Edit category`) and its button (`Save`), where the action's label (`Edit`) would say neither.
   public let promptTitle: String?
   public let submitLabel: String?
@@ -388,6 +391,7 @@ public struct ActionSpec: Sendable, Identifiable {
     self.prompt = json["prompt"].array.compactMap(FieldSpec.init)
     self.promptRaw = json["prompt"].array
     self.success = json["success"]?.stringValue
+    self.disabledWhen = json["disabledWhen"]?.stringValue
     self.promptTitle = json["promptTitle"]?.stringValue
     self.submitLabel = json["submitLabel"]?.stringValue
     self.openURL = json["open"]?.stringValue

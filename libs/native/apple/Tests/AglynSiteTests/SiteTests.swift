@@ -186,6 +186,110 @@ final class SiteTests: XCTestCase {
     XCTAssertFalse(canCreateSite(name: "My Shop", subdomain: "ab", style: "trades"))
   }
 
+  func testCreatesTheSiteFromAPickedStarterWithNoStyle() {
+    XCTAssertEqual(
+      createSiteBody(orgID: "org1", name: "  My Shop ", subdomain: " MyShop ", starter: "l1"),
+      // The console's "Choose your starter": the listing, and no style, since the starter brings its own look.
+      ["displayName": "My Shop", "subdomain": "myshop", "orgId": "org1", "start": "starter", "starter": ["listingId": "l1"]])
+  }
+
+  func testCreateSiteWaitsForAStarterItCanCreateFromHere() {
+    let starter = SiteStarterSummary(listingID: "l1", displayName: "Bakery")
+    // Nothing is picked for anyone.
+    XCTAssertFalse(canCreateSite(name: "My Shop", subdomain: "my-shop", pick: nil))
+    XCTAssertTrue(canCreateSite(name: "My Shop", subdomain: "my-shop", pick: starter))
+    XCTAssertFalse(canCreateSite(name: "  ", subdomain: "my-shop", pick: starter))
+    XCTAssertFalse(canCreateSite(name: "My Shop", subdomain: "ab", pick: starter))
+    // A price not paid waits to be bought on the web; one the workspace owns creates at once.
+    let paid = SiteStarterSummary(listingID: "l2", displayName: "Studio", priceUsd: 12)
+    XCTAssertFalse(canCreateSite(name: "My Shop", subdomain: "my-shop", pick: paid))
+    XCTAssertTrue(canCreateSite(name: "My Shop", subdomain: "my-shop", pick: paid.owned(true)))
+    XCTAssertFalse(canCreateSite(name: "My Shop", subdomain: "my-shop", pick: paid.owned(true), owned: false))
+    // An AI starter goes on to its questions, which the app does not ask, so it never creates an empty site from here.
+    let ai = SiteStarterSummary(listingID: "l3", displayName: "AI", mode: .ai)
+    XCTAssertFalse(canCreateSite(name: "My Shop", subdomain: "my-shop", pick: ai))
+  }
+
+  func testSaysWhatAPickNeedsNextWhereItStaysInView() {
+    // A free base starter needs nothing said.
+    XCTAssertNil(siteStarterPickNote(nil))
+    XCTAssertNil(siteStarterPickNote(SiteStarterSummary(listingID: "l1", displayName: "Bakery")))
+    let paid = SiteStarterSummary(listingID: "l2", displayName: "Studio", priceUsd: 12)
+    XCTAssertEqual(
+      siteStarterPickNote(paid),
+      SiteStarterPickNote(message: "Studio costs $12. Buy it on the web, then create your site from it.", webAction: "Buy on the web"))
+    XCTAssertEqual(
+      siteStarterPickNote(paid.owned(true)),
+      SiteStarterPickNote(message: "You own this starter. Create your site from it whenever you are ready.", webAction: nil))
+    XCTAssertEqual(
+      siteStarterPickNote(SiteStarterSummary(listingID: "l3", displayName: "AI", mode: .ai))?.webAction, "Continue on the web")
+    // A paid AI starter is bought before its questions.
+    XCTAssertEqual(
+      siteStarterPickNote(SiteStarterSummary(listingID: "l4", displayName: "AI", priceUsd: 9, mode: .ai))?.webAction, "Buy on the web")
+  }
+
+  func testAPaidPickOpensTheConsolesCreateSiteOnThatPick() {
+    XCTAssertEqual(
+      siteCreateWebURL(origin: "https://app.aglyn.com/", orgSlug: "acme", listingID: "fp-starter-trades-base")?.absoluteString,
+      "https://app.aglyn.com/acme/hosts?create=site&starter=fp-starter-trades-base")
+    XCTAssertNil(siteCreateWebURL(origin: "https://app.aglyn.com", orgSlug: nil, listingID: "l1"))
+    XCTAssertNil(siteCreateWebURL(origin: "https://app.aglyn.com", orgSlug: "acme", listingID: "not a listing"))
+  }
+
+  func testACreateThatRefusesThePickSaysSoAndNotTheName() async throws {
+    func answer(_ status: Int, _ body: String) async throws -> CreateSiteResult {
+      let transport = FontsTransport()
+      transport.answers["/api/hosts/create"] = (status, body)
+      let api = ConsoleAPIClient(origin: "https://console.test", getIDToken: { _ in "t" }, transport: transport, sleep: { _ in }, maxAttempts: 1)
+      return try await createSite(api, orgID: "o1", name: "Shop", subdomain: "shop", start: .starter(listingID: "l1"))
+    }
+    let price = try await answer(402, #"{"error":"Buy it first","code":"purchase_required","listingId":"l1","priceUsd":12}"#)
+    XCTAssertEqual(price, .pickRefused(SiteStarterPickRefused(keep: true, purchase: true, message: "Buy it first")))
+    let gone = try await answer(404, #"{"error":"That starter is gone","listingId":"l1"}"#)
+    XCTAssertEqual(gone, .pickRefused(SiteStarterPickRefused(keep: false, purchase: false, message: "That starter is gone")))
+    let taken = try await answer(409, #"{"error":"That subdomain is taken","suggestions":["shop-2"]}"#)
+    XCTAssertEqual(taken, .refused(message: "That subdomain is taken", suggestions: ["shop-2"]))
+  }
+
+  /// Replays derived-values.generated.json's `siteStarters`: what the console decides about a pick.
+  func testDecidesAboutAPickAsTheConsole() throws {
+    let url = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+      .appendingPathComponent("contracts/derived-values.generated.json")
+    let root = try XCTUnwrap(JSONValue.decode(try Data(contentsOf: url)))
+    let starters = try XCTUnwrap(root["siteStarters"])
+    let blocks = starters["blockCases"]?.arrayValue ?? []
+    XCTAssertFalse(blocks.isEmpty)
+    for entry in blocks {
+      let pick = entry["pick"].flatMap { row -> SiteStarterSummary? in
+        guard row != JSONValue.null else { return nil }
+        return SiteStarterSummary(
+          listingID: "l", displayName: "", priceUsd: row["priceUsd"]?.numberValue ?? 0,
+          owned: { if case .bool(let owned)? = row["owned"] { owned } else { nil } }())
+      }
+      let owned: Bool? = { if case .bool(let owned)? = entry["owned"] { owned } else { nil } }()
+      XCTAssertEqual(siteStarterPickBlock(pick, owned: owned)?.rawValue, entry["block"]?.stringValue, "\(entry)")
+    }
+    let refusals = starters["refusalCases"]?.arrayValue ?? []
+    XCTAssertFalse(refusals.isEmpty)
+    for entry in refusals {
+      let refused = entry["refused"]
+      let expected = refused == nil || refused == JSONValue.null
+        ? nil
+        : SiteStarterPickRefused(
+          keep: refused?["keep"] == JSONValue.bool(true), purchase: refused?["purchase"] == JSONValue.bool(true),
+          message: refused?["message"]?.stringValue ?? "")
+      XCTAssertEqual(
+        readSiteStarterPickRefusal(
+          status: Int(entry["status"]?.numberValue ?? 0), payload: entry["payload"], listingID: entry["listingId"]?.stringValue ?? ""),
+        expected, "\(entry)")
+    }
+    for entry in starters["returnCases"]?.arrayValue ?? [] {
+      let expected: [[String]]? = entry["params"]?.arrayValue?.map { pair in pair.arrayValue?.compactMap { $0.stringValue } ?? [] }
+      XCTAssertEqual(siteCreateReturnQuery(listingID: entry["listingId"]?.stringValue ?? "")?.map { [$0.0, $0.1] }, expected, "\(entry)")
+    }
+  }
+
   func testOffersEveryStyleWithAPictureAnAppCanRead() {
     XCTAssertEqual(SiteStyles.all.count, 21)
     XCTAssertEqual(SiteStyles.all.first?.id, "business")

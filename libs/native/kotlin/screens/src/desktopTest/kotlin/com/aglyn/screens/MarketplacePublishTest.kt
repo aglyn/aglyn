@@ -83,8 +83,8 @@ class MarketplacePublishTest {
   fun everyPublishAsksForTheAgreementInABoxAboveItsButton() {
     for (
       id in listOf(
-        "marketplace.publishTemplate", "marketplace.publishLayout", "marketplace.publishComponent", "marketplace.publishTheme",
-        "marketplace.publishDatasetSchema", "marketplace.publishEmailTemplate", "marketplace.publishEmailStarter", "marketplace.publishPlugin",
+        "marketplace.publishTemplate", "marketplace.publishStarter", "marketplace.publishLayout", "marketplace.publishComponent",
+        "marketplace.publishTheme", "marketplace.publishDatasetSchema", "marketplace.publishEmailTemplate", "marketplace.publishEmailStarter", "marketplace.publishPlugin",
       )
     ) {
       val publish = spec(id)
@@ -129,6 +129,98 @@ class MarketplacePublishTest {
     val (never, neverBlocks) = shown(agreement, """{"handle":"s"}""")
     assertEquals(listOf(everySave), texts(neverBlocks, never))
     assertFalse(agreement.blocks.any { block -> (block.raw.obj("items") as? JsonArray).orEmpty().any { it.str("url") != null } })
+  }
+
+  @Test
+  fun theSiteStarterSitsBesideTheTemplateOnlyWhereTheServerOffersIt() {
+    val contribution = spec("marketplace.publishStarter")
+    assertEquals(listOf("siteTemplate"), contribution.zones)
+    assertEquals("Publish as a starter", contribution.label)
+    // The route answers 403 while the release flag is off for the workspace, and the row is not offered.
+    assertFalse(ScreenValues.condition(contribution.showWhen, json("""{"data":{"facts":null}}""")))
+    assertTrue(ScreenValues.condition(contribution.showWhen, json("""{"data":{"facts":{"captures":"Captures its one published page"}}}""")))
+    val hub = spec("marketplace.publish")
+    val link = hub.blocks.filter { it.type == "links" }.flatMap { (it.raw.obj("items") as JsonArray).toList() }.first { it.str("screen") == "marketplace.publishStarter" }
+    assertEquals("A site starter", link.str("title"))
+    assertFalse(ScreenValues.condition(link.str("when"), json("""{"data":{"starter":null}}""")))
+  }
+
+  @Test
+  fun aStarterSendsTheThemeChosenAndWhatItIsListedUnder() = runTest {
+    val publish = spec("marketplace.publishStarter")
+    val form = publish.blocks.first { it.type == "form" }
+    val submit = ActionSpec.parse(form["submit"])!!
+    val sent = mutableListOf<HttpRequestData>()
+    val model = ScreenModel(publish, JsonObject(emptyMap()), client(200 to """{"listingId":"l1","version":1}""", 200 to """{"listingId":"l1","version":2}""", sent = sent))
+    val version = agreementVersion(publish)
+    val builtin = """{"kind":"builtin","base":"material3","brand":{"light":{"primary":"#123456"},"dark":{}},"fonts":null}"""
+    val first = model.run(
+      submit,
+      withConstants(json("""{"site":{"id":"h1"},"data":{"facts":{"builtin":$builtin}},"form":{"name":"Bakery","description":"A bakery","category":"Bakery","price":0,"theme":"builtin","style":"shop","agreement":["agreed"]}}"""), publish),
+    )
+    assertEquals(ActionOutcome.Done("Sent your starter for review. It is listed once it has been reviewed.", json("""{"listingId":"l1","version":1}""")), first)
+    assertEquals("/api/marketplace/publish-starter", sent[0].url.encodedPath)
+    val sentBody = body(sent, 0)
+    assertEquals(json(builtin), sentBody["theme"])
+    assertEquals(
+      listOf("Bakery", "base", "shop"),
+      listOf(sentBody["displayName"], sentBody["mode"], (sentBody["facets"] as JsonObject)["kind"]).map { (it as JsonPrimitive).content },
+    )
+    assertEquals(json("""{"version":"$version","accepted":true}"""), sentBody["agreement"])
+    // The site's full theme names only its shape, the door reads the rest; no closest style names none.
+    val second = model.run(
+      submit,
+      withConstants(json("""{"site":{"id":"h1"},"data":{"facts":{"builtin":$builtin}},"form":{"name":"Bakery","theme":"full","style":"","agreement":["agreed"]}}"""), publish),
+    )
+    assertEquals(ActionOutcome.Done("Published v2 of your starter", json("""{"listingId":"l1","version":2}""")), second)
+    val again = body(sent, 1)
+    assertEquals(json("""{"kind":"full"}"""), again["theme"])
+    assertEquals(null, (again["facets"] as JsonObject)["kind"])
+  }
+
+  @Test
+  fun aStarterWaitsForATheme() {
+    val publish = spec("marketplace.publishStarter")
+    val form = publish.blocks.first { it.type == "form" }
+    val fields = (form.raw.obj("fields") as JsonArray).mapNotNull { FieldSpec.parse(it) }
+    val theme = fields.first { it.key == "theme" }
+    // Neither shape is chosen for the publisher.
+    assertEquals(null, theme.initial)
+    assertTrue(theme.unmet(JsonNull, JsonObject(emptyMap())))
+    assertFalse(theme.unmet(JsonPrimitive("full"), JsonObject(emptyMap())))
+    // A site that wears its own theme keeps the built-in on screen, off, with the reason.
+    val rows = theme.choiceRows(json("""{"data":{"facts":{"builtin":null,"builtinDetail":"This site wears its own theme"}}}"""))
+    assertEquals(listOf(false, true), rows.map { it.enabled })
+    assertEquals("This site wears its own theme", rows.first().detail)
+    // The closest style is the console's list, optional.
+    val style = fields.first { it.key == "style" }
+    assertEquals(22, style.options.size)
+    assertFalse(style.unmet(JsonNull, JsonObject(emptyMap())))
+  }
+
+  @Test
+  fun aSetupStepTurnsPublishOffAndSaysWhereItIsFixed() {
+    val publish = spec("marketplace.publishStarter")
+    val submit = ActionSpec.parse(publish.blocks.first { it.type == "form" }["submit"])!!
+    fun shownSteps(facts: String): Triple<List<String>, List<String>, Boolean> {
+      val context = json("""{"data":{"facts":$facts}}""")
+      val blocks = publish.blocks.filter { it.string("id").orEmpty().startsWith("step-") && ScreenValues.condition(it.whenCondition, context) }
+      return Triple(
+        texts(blocks, context),
+        blocks.filter { it.type == "links" }.flatMap { (it.raw.obj("items") as JsonArray).mapNotNull { link -> link.str("screen") } },
+        ScreenValues.condition(submit.disabledWhen, context),
+      )
+    }
+    assertEquals(Triple(emptyList(), emptyList(), false), shownSteps("""{"steps":{},"blocked":false}"""))
+    assertEquals(
+      Triple(listOf("Set up your publisher profile first."), listOf("marketplace.sell"), true),
+      shownSteps("""{"steps":{"profile":"Set up your publisher profile first."},"blocked":true}"""),
+    )
+    // What a price needs is said ahead of a price, and leaves a free publish on.
+    assertEquals(
+      Triple(listOf("Set up payouts first."), listOf("marketplace.sell"), false),
+      shownSteps("""{"steps":{"payouts":"Set up payouts first."},"blocked":false}"""),
+    )
   }
 
   @Test
@@ -234,7 +326,7 @@ class MarketplacePublishTest {
     assertEquals("marketplace.publishEmailStarter", rows("Emails").single().second)
     // A dataset is named as the Data page names it.
     assertEquals(listOf("Menu items", "Staff"), rows("Dataset schemas").map { it.first })
-    assertEquals(listOf("marketplace.publishTemplate", "marketplace.publishTheme", "marketplace.publishPlugin"), hub.blocks.first { it.type == "links" && it.whenCondition == null }.raw.arr("items").mapNotNull { it.str("screen") })
+    assertEquals(listOf("marketplace.publishTemplate", "marketplace.publishStarter", "marketplace.publishTheme", "marketplace.publishPlugin"), hub.blocks.first { it.type == "links" && it.whenCondition == null }.raw.arr("items").mapNotNull { it.str("screen") })
     // What it reads: this site's collections, and the workspace's datasets.
     val paths = (hub.raw.obj("load") as JsonObject).filterValues { (it as JsonObject).obj("query") != null }.mapValues { (_, load) -> ((load as JsonObject).obj("query") as JsonObject).str("collection") }
     assertEquals(
