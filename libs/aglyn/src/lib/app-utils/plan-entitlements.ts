@@ -4480,6 +4480,19 @@ export function planLabelGrantingFeature(
 }
 
 /**
+ * The one sentence a locked control carries, on hover and for a screen
+ * reader: "Scheduled publishing is included from Business."
+ */
+export function planLockReason(
+  subject: string,
+  planLabel: string | undefined,
+): string {
+  return planLabel
+    ? `${subject} is included from ${planLabel}.`
+    : `${subject} is a paid add-on.`
+}
+
+/**
  * The cheapest plan whose base `quota` is at least `atLeast`, in the same
  * ladder order as {@link planGrantingFeature} — the quota half of "which plan
  * do I need for this?". `atLeast` of 1 asks which plan includes the quota at

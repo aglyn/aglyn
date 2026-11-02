@@ -251,6 +251,8 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
   val prompt: List<FieldSpec> = json.arr("prompt").mapNotNull { FieldSpec.parse(it) }
   private val promptRaw: List<JsonElement> = json.arr("prompt")
   val success: String? = json.str("success")
+  /** A form's submit: the button stays, off, while this condition holds (a setup step the screen says above it), where a `when` would hide it. */
+  val disabledWhen: String? = json.str("disabledWhen")
   /** A prompt dialog's own title (`Edit category`) and its button (`Save`), where the action's label (`Edit`) would say neither. */
   val promptTitle: String? = json.str("promptTitle")
   val submitLabel: String? = json.str("submitLabel")

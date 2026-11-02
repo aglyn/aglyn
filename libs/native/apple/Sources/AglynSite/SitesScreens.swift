@@ -32,6 +32,7 @@ struct SitesScreen: View {
   @State private var searchText = ""
   @State private var creating = false
   @Environment(\.aglynWideChrome) private var wide
+  @Environment(\.openURL) private var openURL
 
   private var canCreate: Bool { siteCreatorRoles.contains(context.orgRole ?? "") }
 
@@ -40,7 +41,13 @@ struct SitesScreen: View {
       if let orgID = context.orgID {
         // One list on every device (Figma Mac Sites 13:3): a site opens on its own page.
         list(selectable: false)
-        .sheet(isPresented: $creating) { CreateSiteSheet(context: context, orgID: orgID) }
+        .sheet(isPresented: $creating) {
+          // Buying a starter leaves the sheet for the console's own Create site, which opens on that pick.
+          CreateSiteSheet(context: context, orgID: orgID) { address in
+            creating = false
+            openURL(address)
+          }
+        }
         .task(id: orgID) {
           // Create new's Site and the site switcher's Create site land here; the sheet says first when the role or the
           // plan stops it, as the console's dialog does.
@@ -301,12 +308,14 @@ struct SiteOverview: View {
 }
 
 /// Create a site, as the console's Create site: a name, an address the route checks, the addresses it suggests when the
-/// one asked for is taken, an optional logo, dark logo and favicon held until the site exists (AGL-4119), and the style
-/// the site starts in (AGL-4049), which the person must pick: nothing is chosen for them, so Create site stays off until
-/// a card is.
+/// one asked for is taken, an optional logo, dark logo and favicon held until the site exists (AGL-4119), and what the site
+/// starts from (AGL-4049), which the person must pick: the style, or a starter where the marketplace's are offered to the
+/// workspace. Nothing is chosen for them, so Create site stays off until one is.
 struct CreateSiteSheet: View {
   let context: NativePluginContext
   let orgID: String
+  /// Leaves the sheet for the console's own Create site, at this address.
+  var openWeb: @MainActor (URL) -> Void = { _ in }
   @Environment(\.dismiss) private var dismiss
   @State private var runner = ActionRunner(roleHint: "a workspace owner or admin")
   @State private var name = ""
@@ -326,7 +335,24 @@ struct CreateSiteSheet: View {
   /// What the create would refuse anyway, said first (the console's dialog): nil while unknown or when nothing stops it.
   @State private var blocked: CreateSiteBlock?
 
-  private var valid: Bool { canCreateSite(name: name, subdomain: subdomain, style: style) }
+  /// Whether the marketplace's starters are offered to this workspace: nil until it is read.
+  @State private var startersOffered: Bool?
+  /// The picker's own answer: false hands back to the styles, as the console's dialog does for a workspace with nothing to
+  /// offer. Nil until it answers.
+  @State private var pickerShown: Bool?
+  @State private var starterMode = SiteStarterMode.base
+  @State private var starterSearch = ""
+  /// The words the picker asks with, once the typing has settled.
+  @State private var settledSearch = ""
+  @State private var pick: SiteStarterSummary?
+
+  private var usingStarters: Bool { startersOffered == true && pickerShown != false }
+
+  private var valid: Bool {
+    usingStarters
+      ? canCreateSite(name: name, subdomain: subdomain, pick: pick)
+      : canCreateSite(name: name, subdomain: subdomain, style: style)
+  }
 
   var body: some View {
     if let madeWithMissing {
@@ -334,7 +360,9 @@ struct CreateSiteSheet: View {
     } else if let blocked {
       blockedSheet(blocked)
     } else {
-      form.task(id: orgID) { blocked = await createSiteBlock(context, orgID: orgID) }
+      form
+        .task(id: orgID) { blocked = await createSiteBlock(context, orgID: orgID) }
+        .task(id: orgID) { startersOffered = await siteStartersOffered(context, orgID: orgID) }
     }
   }
 
@@ -398,7 +426,7 @@ struct CreateSiteSheet: View {
     AglynActionSheet(
       "Create a site", message: "You can connect your own domain later.", confirmLabel: "Create site",
       confirmEnabled: valid, busy: runner.busy, error: runner.error, onCancel: { dismiss() },
-      onConfirm: create
+      onConfirm: create, foot: usingStarters ? siteStarterPickNote(pick).map { AnyView(pickNote($0)) } : nil
     ) {
       TextField(
         "Site name",
@@ -451,12 +479,34 @@ struct CreateSiteSheet: View {
       }
     } below: {
       brandSection
-      styleSection
+      if usingStarters {
+        starterSection
+      } else if startersOffered == false || pickerShown == false {
+        styleSection
+      }
     }
     .aglynMediaPicker($pickSource, multiple: false) { files in
       if let file = files.first, let slot = pickSlot { hold(file, slot: slot) }
     }
     .aglynSheetMinimumSize(width: 640, height: 700)
+  }
+
+  /// What the pick needs next, held at the foot of the sheet so it is beside whichever row was tapped, however long the list.
+  private func pickNote(_ note: SiteStarterPickNote) -> some View {
+    AglynNotice(
+      note.message, tone: note.webAction == nil ? .success : .info, actionTitle: note.webAction, action: note.webAction.map { _ in leaveForTheWeb })
+      .padding(AglynSpace.two)
+      .background(AglynColor.paper)
+      .overlay(alignment: .top) { Divider() }
+      .accessibilityIdentifier("starter-note")
+  }
+
+  /// The console's own Create site, on this pick: where it is bought, or where an AI starter's questions are asked.
+  private func leaveForTheWeb() {
+    guard let pick, let url = siteCreateWebURL(origin: context.api.origin, orgSlug: context.orgSlug, listingID: pick.listingID)
+    else { return }
+    dismiss()
+    openWeb(url)
   }
 
   /// A file a field takes is held; one it does not is said on the field, before anything is created.
@@ -524,11 +574,89 @@ struct CreateSiteSheet: View {
     }
   }
 
+  /// The console's "Choose your starter": its words, the marketplace's starters through the zone a plugin fills, and
+  /// whichever starters and AI starters it offers. Nothing is picked until a row is.
+  private var starterSection: some View {
+    Section {
+      Picker("Kind of starter", selection: Binding(get: { starterMode }, set: changeStarterMode)) {
+        Text("Starters").tag(SiteStarterMode.base)
+        Text("AI starters").tag(SiteStarterMode.ai)
+      }
+      .pickerStyle(.segmented)
+      .labelsHidden()
+      .accessibilityIdentifier("starter-mode")
+      .listRowBackground(Color.clear)
+      .listRowInsets(EdgeInsets())
+      HStack(spacing: AglynSpace.one) {
+        Image(systemName: "magnifyingglass").foregroundStyle(AglynColor.secondaryText).accessibilityHidden(true)
+        TextField("Search starters", text: $starterSearch)
+          .autocorrectionDisabled()
+          .accessibilityIdentifier("starter-search")
+      }
+      SlotWidgets(context: context, slot: StarterPickerZone.slot)
+        .environment(\.starterPickerZone, starterZone)
+        .listRowInsets(EdgeInsets())
+        .task(id: starterSearch) {
+          try? await Task.sleep(nanoseconds: 300_000_000)
+          if !Task.isCancelled { settledSearch = starterSearch }
+        }
+    } header: {
+      VStack(alignment: .leading, spacing: AglynSpace.half) {
+        Text(SiteStarterSearch.title).font(AglynFont.headline).foregroundStyle(AglynColor.textPrimary)
+          .accessibilityAddTraits(.isHeader)
+        Text(SiteStarterSearch.lede).font(AglynFont.subheadline).foregroundStyle(AglynColor.secondaryText)
+        if let needed = starterStillNeeded {
+          Text(needed).font(AglynFont.subheadline).foregroundStyle(AglynColor.secondaryText)
+            .accessibilityIdentifier("site-starter-required")
+        }
+      }
+      .textCase(nil)
+      .padding(.bottom, AglynSpace.half)
+    }
+  }
+
+  /// Why Create site is off, in the console's words (`CreateHostDialog`), until a pick it can create from.
+  private var starterStillNeeded: String? {
+    switch (siteStarterPickBlock(pick), starterMode) {
+    case (.some(.none), .base): "Choose a starter to create your site."
+    case (.some(.none), .ai): "Choose an AI starter to continue."
+    case (.some(.purchase), .base): "Buy this starter to create your site from it."
+    case (.some(.purchase), .ai): "Buy this starter to continue with it."
+    case (nil, .ai): "Continue on the web to answer this starter's questions."
+    case (nil, .base): nil
+    }
+  }
+
+  private var starterZone: StarterPickerZone {
+    StarterPickerZone(
+      orgID: orgID, mode: starterMode, search: settledSearch, selected: pick,
+      onPick: { picked in
+        pick = picked
+        runner.error = nil
+      },
+      ready: { pickerShown = $0 })
+  }
+
+  /// Another kind of starter is another list: what was picked in this one is not carried across, so nothing is chosen
+  /// that is not on screen.
+  private func changeStarterMode(_ next: SiteStarterMode) {
+    starterMode = next
+    pick = nil
+    runner.error = nil
+  }
+
   private func create() {
-    guard let style else { return }
+    let start: SiteStart
+    if usingStarters {
+      guard let pick else { return }
+      start = .starter(listingID: pick.listingID)
+    } else {
+      guard let style else { return }
+      start = .style(style)
+    }
     let (name, subdomain, files) = (name, subdomain, brandFiles)
     runner.run {
-      switch try await createSite(context.api, orgID: orgID, name: name, subdomain: subdomain, style: style) {
+      switch try await createSite(context.api, orgID: orgID, name: name, subdomain: subdomain, start: start) {
       case .created(let hostID, _):
         // The logo, dark logo and favicon go in now the site has a library. A file that does not make it never costs
         // the site: it is said once, here, before the site opens.
@@ -542,6 +670,10 @@ struct CreateSiteSheet: View {
       case .refused(let message, let offered):
         suggestions = offered
         runner.error = message
+      case .pickRefused(let refused):
+        // A price still asked keeps the pick, which offers to buy it; anything else clears it, with the reason.
+        pick = refused.keep ? pick?.owned(false) : nil
+        runner.error = refused.message
       }
     }
   }
@@ -574,9 +706,16 @@ func createSiteBlock(_ context: NativePluginContext, orgID: String) async -> Cre
   guard let entitlements = try? await context.api.request("/api/orgs/entitlements", query: [("orgId", orgID)]),
     let limit = entitlements["quotas"]?["hostLimit"]?.numberValue
   else { return nil }
-  // The org document, read once: its `hosts` directory is what the console's dialog counts. Nil only when the read
-  // failed; a workspace with no directory yet counts none, as the dialog's does.
-  let directory: [String: Any]? = await withCheckedContinuation { continuation in
+  // Its `hosts` directory is what the console's dialog counts. A workspace with no directory yet counts none, as the
+  // dialog's does.
+  guard let org = await workspaceDocumentOnce(context, orgID: orgID) else { return nil }
+  return siteLimitBlock(limit: Int(limit), directory: org["hosts"] as? [String: Any] ?? [:])
+}
+
+/// The workspace's document, read once; nil only when the read failed.
+@MainActor
+private func workspaceDocumentOnce(_ context: NativePluginContext, orgID: String) async -> [String: Any]? {
+  await withCheckedContinuation { continuation in
     var listener: FirestoreListening?
     var answered = false
     listener = context.firestore.listenDocument(["orgs", orgID]) { result in
@@ -584,11 +723,19 @@ func createSiteBlock(_ context: NativePluginContext, orgID: String) async -> Cre
       answered = true
       listener?.remove()
       guard let document = try? result.get() else { return continuation.resume(returning: nil) }
-      continuation.resume(returning: document.data["hosts"] as? [String: Any] ?? [:])
+      continuation.resume(returning: document.data)
     }
   }
-  guard let directory else { return nil }
-  return siteLimitBlock(limit: Int(limit), directory: directory)
+}
+
+/// Whether Create site offers the marketplace's starters: a plugin fills the zone, and `release_site_starters` is on for
+/// the workspace or the person is staff. The picker's first answer then decides, as the route is the judge.
+@MainActor
+func siteStartersOffered(_ context: NativePluginContext, orgID: String) async -> Bool {
+  guard !context.slotWidgets(StarterPickerZone.slot).isEmpty else { return false }
+  let staff = context.staff != nil
+  let org = staff ? nil : await workspaceDocumentOnce(context, orgID: orgID)
+  return releaseFlagOn("release_site_starters", org: org, orgID: orgID, staff: staff)
 }
 
 /// The console dialog's count of a workspace's sites against its plan's `hostLimit`: the entries of the org's `hosts`

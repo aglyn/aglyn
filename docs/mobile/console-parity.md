@@ -335,8 +335,10 @@ Setup's Integrations section (the cards of the plugins running on the site)
 - Plugin marketplace: built (AGL-3668), unticked until a listing is driven
   (see "Not yet driven"). Publishing a plugin (its
   bundle and manifest, the listing and every publisher statement), a
-  component, layout, site template, theme, dataset schema, email template or
-  email starter; the publisher agreement asked for and resumed by every
+  component, layout, site template, site starter, theme, dataset schema, email
+  template or email starter; choosing a marketplace starter in Create site
+  (a paid or AI pick goes on to the console's Create site); the publisher
+  agreement asked for and resumed by every
   publish; the publish hub's take-rate notice for the workspace's plan; the
   seller panel (profile, listings with their preview image, screenshots and
   logo from the media library, payouts, sales); a listing's owner actions; and

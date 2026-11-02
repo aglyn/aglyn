@@ -1296,7 +1296,7 @@ private fun FormBlock(block: BlockSpec, context: JsonElement, busy: Boolean, sub
       FilledTonalButton(
         colors = com.aglyn.ui.aglynTonalButtonColors(),
         onClick = { submit(action, visibleOnly(filled, fields)) },
-        enabled = !busy && !missing,
+        enabled = !busy && !missing && action.disabledWhen?.let { ScreenValues.condition(it, scope) } != true,
         modifier = Modifier.align(Alignment.End).testTag("submit-${block.id}"),
       ) {
         if (busy) CircularProgressIndicator(Modifier.size(16.dp).padding(end = space(1f)), strokeWidth = 2.dp)

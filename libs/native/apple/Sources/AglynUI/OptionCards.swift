@@ -30,11 +30,13 @@ public enum AglynOptionCardMetrics {
   // The Mac's own sizes (Figma Density=Compact): 13 and 11 point words, a smaller check.
   #if os(macOS)
     static let check: CGFloat = 20
+    static let rowPicture: CGFloat = 44
     static let textInset = EdgeInsets(top: 8, leading: 10, bottom: 10, trailing: 10)
     static var title: Font { AglynFont.body.weight(.semibold) }
     static var line: Font { AglynFont.subheadline }
   #else
     static let check: CGFloat = 24
+    static let rowPicture: CGFloat = 56
     static let textInset = EdgeInsets(top: 10, leading: 12, bottom: 12, trailing: 12)
     static var title: Font { AglynFont.strongSubheadline }
     static var line: Font { AglynFont.caption }

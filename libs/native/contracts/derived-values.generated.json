@@ -6289,5 +6289,797 @@
         "notice": "Your site is ready, but your logo, dark logo and favicon didn’t upload. Add them in Site settings."
       }
     ]
+  },
+  "siteStarters": {
+    "path": "/api/marketplace/starters",
+    "title": "Choose your starter",
+    "lede": "Aglyn's styles come first, then starters from the marketplace. Nothing is chosen for you, and you can change everything later.",
+    "wordMax": 200,
+    "searchMax": 50,
+    "paramCases": [
+      {
+        "input": {
+          "orgId": " o1 ",
+          "mode": "base"
+        },
+        "params": [
+          [
+            "orgId",
+            "o1"
+          ],
+          [
+            "mode",
+            "base"
+          ],
+          [
+            "limit",
+            "50"
+          ]
+        ]
+      },
+      {
+        "input": {
+          "orgId": "o1",
+          "mode": "ai",
+          "word": "  bakery  ",
+          "limit": 12
+        },
+        "params": [
+          [
+            "orgId",
+            "o1"
+          ],
+          [
+            "mode",
+            "ai"
+          ],
+          [
+            "q",
+            "bakery"
+          ],
+          [
+            "limit",
+            "12"
+          ]
+        ]
+      },
+      {
+        "input": {
+          "orgId": "o1",
+          "mode": "base",
+          "word": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "filter": {
+            "kind": "trades",
+            "base": "material3",
+            "fonts": "inter"
+          },
+          "limit": 500
+        },
+        "params": [
+          [
+            "orgId",
+            "o1"
+          ],
+          [
+            "mode",
+            "base"
+          ],
+          [
+            "q",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ],
+          [
+            "kind",
+            "trades"
+          ],
+          [
+            "base",
+            "material3"
+          ],
+          [
+            "fonts",
+            "inter"
+          ],
+          [
+            "limit",
+            "50"
+          ]
+        ]
+      },
+      {
+        "input": {
+          "orgId": "o1",
+          "mode": "base",
+          "word": "   ",
+          "filter": {
+            "kind": " "
+          },
+          "limit": 0
+        },
+        "params": [
+          [
+            "orgId",
+            "o1"
+          ],
+          [
+            "mode",
+            "base"
+          ],
+          [
+            "limit",
+            "50"
+          ]
+        ]
+      },
+      {
+        "input": {
+          "orgId": "o1",
+          "mode": "base",
+          "include": "fp-starter-trades-base"
+        },
+        "params": [
+          [
+            "orgId",
+            "o1"
+          ],
+          [
+            "mode",
+            "base"
+          ],
+          [
+            "limit",
+            "50"
+          ],
+          [
+            "include",
+            "fp-starter-trades-base"
+          ]
+        ]
+      },
+      {
+        "input": {
+          "orgId": "o1",
+          "mode": "base",
+          "include": "not a listing id"
+        },
+        "params": [
+          [
+            "orgId",
+            "o1"
+          ],
+          [
+            "mode",
+            "base"
+          ],
+          [
+            "limit",
+            "50"
+          ]
+        ]
+      }
+    ],
+    "summaryCases": [
+      {
+        "value": {
+          "listingId": "fp-starter-trades-base",
+          "displayName": "Home services & trades",
+          "description": "A trades site",
+          "authorName": "Aglyn",
+          "official": true,
+          "priceUsd": 0,
+          "previewImageUrl": "https://console.test/_static/starter/styles/trades.webp",
+          "facets": {
+            "kind": "trades",
+            "base": "material3",
+            "fonts": null,
+            "pages": 5,
+            "mode": "base"
+          },
+          "category": "Home services & trades"
+        },
+        "summary": {
+          "listingId": "fp-starter-trades-base",
+          "displayName": "Home services & trades",
+          "description": "A trades site",
+          "authorName": "Aglyn",
+          "official": true,
+          "priceUsd": 0,
+          "previewImageUrl": "https://console.test/_static/starter/styles/trades.webp",
+          "facets": {
+            "kind": "trades",
+            "base": "material3",
+            "fonts": null,
+            "pages": 5,
+            "mode": "base"
+          },
+          "category": "Home services & trades"
+        }
+      },
+      {
+        "value": {
+          "listingId": "fp-starter-trades-base",
+          "displayName": "Home services & trades",
+          "description": "A trades site",
+          "authorName": "Northwind",
+          "official": false,
+          "priceUsd": 12,
+          "previewImageUrl": "https://console.test/_static/starter/styles/trades.webp",
+          "facets": {
+            "kind": "trades",
+            "base": "material3",
+            "fonts": null,
+            "pages": 5,
+            "mode": "base"
+          },
+          "category": "Home services & trades",
+          "owned": false
+        },
+        "summary": {
+          "listingId": "fp-starter-trades-base",
+          "displayName": "Home services & trades",
+          "description": "A trades site",
+          "authorName": "Northwind",
+          "official": false,
+          "priceUsd": 12,
+          "previewImageUrl": "https://console.test/_static/starter/styles/trades.webp",
+          "facets": {
+            "kind": "trades",
+            "base": "material3",
+            "fonts": null,
+            "pages": 5,
+            "mode": "base"
+          },
+          "category": "Home services & trades",
+          "owned": false
+        }
+      },
+      {
+        "value": {
+          "listingId": "fp-starter-trades-base",
+          "displayName": "Home services & trades",
+          "description": "A trades site",
+          "authorName": "Aglyn",
+          "official": true,
+          "priceUsd": 12.5,
+          "previewImageUrl": "https://console.test/_static/starter/styles/trades.webp",
+          "facets": {
+            "kind": "trades",
+            "base": "material3",
+            "fonts": null,
+            "pages": 5,
+            "mode": "base"
+          },
+          "category": "Home services & trades",
+          "owned": true
+        },
+        "summary": {
+          "listingId": "fp-starter-trades-base",
+          "displayName": "Home services & trades",
+          "description": "A trades site",
+          "authorName": "Aglyn",
+          "official": true,
+          "priceUsd": 12.5,
+          "previewImageUrl": "https://console.test/_static/starter/styles/trades.webp",
+          "facets": {
+            "kind": "trades",
+            "base": "material3",
+            "fonts": null,
+            "pages": 5,
+            "mode": "base"
+          },
+          "category": "Home services & trades",
+          "owned": true
+        }
+      },
+      {
+        "value": {
+          "listingId": "fp-starter-trades-base",
+          "displayName": "Home services & trades",
+          "description": "A trades site",
+          "authorName": "Aglyn",
+          "official": true,
+          "priceUsd": "7",
+          "previewImageUrl": "https://console.test/_static/starter/styles/trades.webp",
+          "facets": {
+            "kind": "trades",
+            "base": "material3",
+            "fonts": null,
+            "pages": 5,
+            "mode": "base"
+          },
+          "category": "Home services & trades"
+        },
+        "summary": {
+          "listingId": "fp-starter-trades-base",
+          "displayName": "Home services & trades",
+          "description": "A trades site",
+          "authorName": "Aglyn",
+          "official": true,
+          "priceUsd": 7,
+          "previewImageUrl": "https://console.test/_static/starter/styles/trades.webp",
+          "facets": {
+            "kind": "trades",
+            "base": "material3",
+            "fonts": null,
+            "pages": 5,
+            "mode": "base"
+          },
+          "category": "Home services & trades"
+        }
+      },
+      {
+        "value": {
+          "listingId": "fp-starter-trades-base",
+          "displayName": "Home services & trades",
+          "description": "A trades site",
+          "authorName": "Aglyn",
+          "official": true,
+          "priceUsd": -3,
+          "previewImageUrl": "",
+          "facets": {
+            "kind": "trades",
+            "base": "material3",
+            "fonts": null,
+            "pages": 5,
+            "mode": "base"
+          },
+          "category": "  ",
+          "owned": "yes"
+        },
+        "summary": {
+          "listingId": "fp-starter-trades-base",
+          "displayName": "Home services & trades",
+          "description": "A trades site",
+          "authorName": "Aglyn",
+          "official": true,
+          "priceUsd": 0,
+          "previewImageUrl": null,
+          "facets": {
+            "kind": "trades",
+            "base": "material3",
+            "fonts": null,
+            "pages": 5,
+            "mode": "base"
+          },
+          "category": null
+        }
+      },
+      {
+        "value": {
+          "listingId": "fp-starter-trades-base",
+          "displayName": "Home services & trades",
+          "description": "A trades site",
+          "authorName": "Aglyn",
+          "official": true,
+          "priceUsd": 0,
+          "previewImageUrl": "https://console.test/_static/starter/styles/trades.webp",
+          "facets": {
+            "pages": 2.9,
+            "mode": "ai"
+          },
+          "category": "Home services & trades",
+          "answers": {
+            "brief": "never read"
+          },
+          "screens": []
+        },
+        "summary": {
+          "listingId": "fp-starter-trades-base",
+          "displayName": "Home services & trades",
+          "description": "A trades site",
+          "authorName": "Aglyn",
+          "official": true,
+          "priceUsd": 0,
+          "previewImageUrl": "https://console.test/_static/starter/styles/trades.webp",
+          "facets": {
+            "kind": null,
+            "base": null,
+            "fonts": null,
+            "pages": 2,
+            "mode": "ai"
+          },
+          "category": "Home services & trades"
+        }
+      },
+      {
+        "value": {
+          "listingId": "bare"
+        },
+        "summary": {
+          "listingId": "bare",
+          "displayName": "",
+          "description": "",
+          "authorName": "",
+          "official": false,
+          "priceUsd": 0,
+          "previewImageUrl": null,
+          "facets": {
+            "kind": null,
+            "base": null,
+            "fonts": null,
+            "pages": 0,
+            "mode": "base"
+          },
+          "category": null
+        }
+      },
+      {
+        "value": {
+          "listingId": "   "
+        },
+        "summary": null
+      },
+      {
+        "value": {
+          "displayName": "no id"
+        },
+        "summary": null
+      },
+      {
+        "value": "not a row",
+        "summary": null
+      },
+      {
+        "value": null,
+        "summary": null
+      }
+    ],
+    "answerCases": [
+      {
+        "json": {
+          "rows": [
+            {
+              "listingId": "fp-starter-trades-base",
+              "displayName": "Home services & trades",
+              "description": "A trades site",
+              "authorName": "Aglyn",
+              "official": true,
+              "priceUsd": 0,
+              "previewImageUrl": "https://console.test/_static/starter/styles/trades.webp",
+              "facets": {
+                "kind": "trades",
+                "base": "material3",
+                "fonts": null,
+                "pages": 5,
+                "mode": "base"
+              },
+              "category": "Home services & trades"
+            },
+            {
+              "listingId": "fp-starter-trades-base",
+              "displayName": "Home services & trades",
+              "description": "A trades site",
+              "authorName": "Aglyn",
+              "official": true,
+              "priceUsd": 0,
+              "previewImageUrl": "https://console.test/_static/starter/styles/trades.webp",
+              "facets": {
+                "kind": "trades",
+                "base": "material3",
+                "fonts": null,
+                "pages": 5,
+                "mode": "base"
+              },
+              "category": "Home services & trades"
+            },
+            "junk",
+            {
+              "listingId": "two"
+            }
+          ],
+          "labels": {
+            "base": {
+              "material3": "Material"
+            }
+          }
+        },
+        "rows": [
+          "fp-starter-trades-base",
+          "two"
+        ]
+      },
+      {
+        "json": {
+          "rows": "nope"
+        },
+        "rows": []
+      },
+      {
+        "json": "nope",
+        "rows": []
+      },
+      {
+        "json": null,
+        "rows": []
+      }
+    ],
+    "priceCases": [
+      {
+        "usd": 0,
+        "label": "Free"
+      },
+      {
+        "usd": -1,
+        "label": "Free"
+      },
+      {
+        "usd": 12,
+        "label": "$12"
+      },
+      {
+        "usd": 12.5,
+        "label": "$12.50"
+      },
+      {
+        "usd": 3.1,
+        "label": "$3.10"
+      },
+      {
+        "usd": null,
+        "label": "Free"
+      }
+    ],
+    "pagesCases": [
+      {
+        "pages": 0,
+        "label": null
+      },
+      {
+        "pages": -1,
+        "label": null
+      },
+      {
+        "pages": 1,
+        "label": "1 page"
+      },
+      {
+        "pages": 2,
+        "label": "2 pages"
+      },
+      {
+        "pages": 3.9,
+        "label": "3 pages"
+      }
+    ],
+    "blockCases": [
+      {
+        "pick": null,
+        "owned": null,
+        "block": "none"
+      },
+      {
+        "pick": {
+          "listingId": "fp-starter-trades-base",
+          "displayName": "Home services & trades",
+          "description": "A trades site",
+          "authorName": "Aglyn",
+          "official": true,
+          "priceUsd": 0,
+          "previewImageUrl": "https://console.test/_static/starter/styles/trades.webp",
+          "facets": {
+            "kind": "trades",
+            "base": "material3",
+            "fonts": null,
+            "pages": 5,
+            "mode": "base"
+          },
+          "category": "Home services & trades"
+        },
+        "owned": null,
+        "block": null
+      },
+      {
+        "pick": {
+          "listingId": "fp-starter-trades-base",
+          "displayName": "Home services & trades",
+          "description": "A trades site",
+          "authorName": "Aglyn",
+          "official": true,
+          "priceUsd": 12,
+          "previewImageUrl": "https://console.test/_static/starter/styles/trades.webp",
+          "facets": {
+            "kind": "trades",
+            "base": "material3",
+            "fonts": null,
+            "pages": 5,
+            "mode": "base"
+          },
+          "category": "Home services & trades"
+        },
+        "owned": null,
+        "block": "purchase"
+      },
+      {
+        "pick": {
+          "listingId": "fp-starter-trades-base",
+          "displayName": "Home services & trades",
+          "description": "A trades site",
+          "authorName": "Aglyn",
+          "official": true,
+          "priceUsd": 12,
+          "previewImageUrl": "https://console.test/_static/starter/styles/trades.webp",
+          "facets": {
+            "kind": "trades",
+            "base": "material3",
+            "fonts": null,
+            "pages": 5,
+            "mode": "base"
+          },
+          "category": "Home services & trades",
+          "owned": true
+        },
+        "owned": null,
+        "block": null
+      },
+      {
+        "pick": {
+          "listingId": "fp-starter-trades-base",
+          "displayName": "Home services & trades",
+          "description": "A trades site",
+          "authorName": "Aglyn",
+          "official": true,
+          "priceUsd": 12,
+          "previewImageUrl": "https://console.test/_static/starter/styles/trades.webp",
+          "facets": {
+            "kind": "trades",
+            "base": "material3",
+            "fonts": null,
+            "pages": 5,
+            "mode": "base"
+          },
+          "category": "Home services & trades",
+          "owned": false
+        },
+        "owned": null,
+        "block": "purchase"
+      },
+      {
+        "pick": {
+          "listingId": "fp-starter-trades-base",
+          "displayName": "Home services & trades",
+          "description": "A trades site",
+          "authorName": "Aglyn",
+          "official": true,
+          "priceUsd": 12,
+          "previewImageUrl": "https://console.test/_static/starter/styles/trades.webp",
+          "facets": {
+            "kind": "trades",
+            "base": "material3",
+            "fonts": null,
+            "pages": 5,
+            "mode": "base"
+          },
+          "category": "Home services & trades",
+          "owned": true
+        },
+        "owned": false,
+        "block": "purchase"
+      },
+      {
+        "pick": {
+          "listingId": "fp-starter-trades-base",
+          "displayName": "Home services & trades",
+          "description": "A trades site",
+          "authorName": "Aglyn",
+          "official": true,
+          "priceUsd": 12,
+          "previewImageUrl": "https://console.test/_static/starter/styles/trades.webp",
+          "facets": {
+            "kind": "trades",
+            "base": "material3",
+            "fonts": null,
+            "pages": 5,
+            "mode": "base"
+          },
+          "category": "Home services & trades",
+          "owned": false
+        },
+        "owned": true,
+        "block": null
+      }
+    ],
+    "refusalCases": [
+      {
+        "status": 402,
+        "payload": {
+          "error": "Buy it first",
+          "code": "purchase_required",
+          "listingId": "l1",
+          "priceUsd": 12
+        },
+        "listingId": "l1",
+        "refused": {
+          "keep": true,
+          "purchase": true,
+          "message": "Buy it first"
+        }
+      },
+      {
+        "status": 404,
+        "payload": {
+          "error": "That starter is gone",
+          "listingId": "l1"
+        },
+        "listingId": "l1",
+        "refused": {
+          "keep": false,
+          "purchase": false,
+          "message": "That starter is gone"
+        }
+      },
+      {
+        "status": 403,
+        "payload": {
+          "error": "  ",
+          "listingId": "l1"
+        },
+        "listingId": "l1",
+        "refused": {
+          "keep": false,
+          "purchase": false,
+          "message": "That starter cannot be used."
+        }
+      },
+      {
+        "status": 409,
+        "payload": {
+          "error": "That subdomain is taken",
+          "suggestions": []
+        },
+        "listingId": "l1",
+        "refused": null
+      },
+      {
+        "status": 402,
+        "payload": {
+          "error": "Buy it first",
+          "listingId": "l2"
+        },
+        "listingId": "l1",
+        "refused": null
+      },
+      {
+        "status": 402,
+        "payload": null,
+        "listingId": "l1",
+        "refused": null
+      }
+    ],
+    "returnCases": [
+      {
+        "listingId": "fp-starter-trades-base",
+        "params": [
+          [
+            "create",
+            "site"
+          ],
+          [
+            "starter",
+            "fp-starter-trades-base"
+          ]
+        ]
+      },
+      {
+        "listingId": " l1 ",
+        "params": [
+          [
+            "create",
+            "site"
+          ],
+          [
+            "starter",
+            "l1"
+          ]
+        ]
+      },
+      {
+        "listingId": "not a listing id",
+        "params": null
+      },
+      {
+        "listingId": "",
+        "params": null
+      }
+    ]
   }
 }

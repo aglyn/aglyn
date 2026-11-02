@@ -88,6 +88,9 @@ interface NativePluginContext {
   /** The person's role in the picked workspace (`owner`, `admin`, `editor`, `viewer`). */
   val orgRole: String? get() = null
 
+  /** Whether the signed-in person is Aglyn staff, as their token says. For what to show only: the routes decide. */
+  suspend fun isStaff(): Boolean = false
+
   /** Makes [hostId] the picked site, as the site switcher does. */
   fun selectSite(hostId: String) {}
 

@@ -18,7 +18,11 @@
 import { SITE_STARTER_MAX_SCREENS } from '@aglyn/aglyn/app-utils/site-starter'
 import type { SiteStarterBuiltinReading } from '@aglyn/aglyn/app-utils/site-starter-theme'
 import {
+  starterBuiltinDetail,
+  starterCapturesSentence,
+  starterFontsNote,
   starterPublishBody,
+  starterPublishFactsAnswer,
   starterPublishPages,
   starterPublishSteps,
   starterRefusalLink,
@@ -196,5 +200,54 @@ describe('starterPublishBody', () => {
 
   it('sends nothing for a built-in the site does not wear', () => {
     expect(starterPublishBody({ choice: 'builtin', builtin: null, kind: null })).toBeNull()
+  })
+})
+
+describe('the words a starter publish shows', () => {
+  const builtin = (over: Partial<SiteStarterBuiltinReading['theme']> = {}, fontsCarried = true): SiteStarterBuiltinReading => ({
+    theme: { kind: 'builtin', base: 'material3', brand: { light: {}, dark: {} }, fonts: null, ...over },
+    baseName: 'Material',
+    fontsCarried,
+  })
+
+  it('says what it captures', () => {
+    expect(starterCapturesSentence({ count: 1, hasHome: true })).toBe(
+      'Captures its one published page, the shared header and footer they sit in, and the theme you choose below.',
+    )
+    expect(starterCapturesSentence({ count: 4, hasHome: true })).toContain('Captures its 4 published pages, ')
+  })
+
+  it('says what the built-in choice carries, and why a site has none', () => {
+    expect(starterBuiltinDetail(builtin())).toBe(
+      'Material, in its own colors. A site created from it can switch to another built-in theme.',
+    )
+    expect(starterBuiltinDetail(builtin({ brand: { light: { primary: '#123456' } } }))).toContain(
+      'with the brand colors this site set over it',
+    )
+    expect(starterBuiltinDetail(null)).toContain('wears its own theme')
+    expect(starterBuiltinDetail(null, false)).toBe("Reading this site's theme…")
+  })
+
+  it('warns only when the fonts stay behind', () => {
+    expect(starterFontsNote(builtin())).toBeNull()
+    expect(starterFontsNote(null)).toBeNull()
+    expect(starterFontsNote(builtin({}, false))).toContain("so the starter uses Material's own fonts")
+  })
+
+  it('answers the native apps with those words, and the steps by id', () => {
+    const { priceUsd: _priceUsd, ...facts } = READY
+    expect(starterPublishFactsAnswer({ facts, builtin: builtin() })).toMatchObject({
+      builtin: { kind: 'builtin', base: 'material3' },
+      steps: {},
+      blocked: false,
+    })
+    const blocked = starterPublishFactsAnswer({ facts: { ...facts, profile: null }, builtin: null })
+    expect(blocked.builtin).toBeNull()
+    expect(Object.keys(blocked.steps)).toEqual(['profile'])
+    expect(blocked.blocked).toBe(true)
+    // What a price needs is said ahead of a price, and turns nothing off.
+    const unpaid = starterPublishFactsAnswer({ facts: { ...facts, profile: { handle: 'acme' } }, builtin: null })
+    expect(Object.keys(unpaid.steps)).toEqual(['payouts'])
+    expect(unpaid.blocked).toBe(false)
   })
 })

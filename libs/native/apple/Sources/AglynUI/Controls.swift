@@ -38,22 +38,32 @@ public struct AglynChoiceChip: View {
 
 /// One row of a single choice (an Aglyn AI tier, a plan): a ring that fills when it is the one chosen, its label with
 /// a line under it, and a mark beside it ("Current"). A row that cannot be chosen stays on screen, dimmed, its line
-/// saying why (a prerequisite is shown, never hidden).
+/// saying why (a prerequisite is shown, never hidden). A row with a `picture` shows what it picks beside its label, in the
+/// words a card of pictures uses (a site starter).
 public struct AglynChoiceRow: View {
   let title: String
   let detail: String?
   let badge: (text: String, tone: AglynTone)?
+  let picture: Picture?
   let selected: Bool
   let enabled: Bool
   let action: () -> Void
 
+  /// What a row shows beside its label, its address nil until there is one.
+  public struct Picture {
+    let url: URL?
+
+    public init(_ url: URL?) { self.url = url }
+  }
+
   public init(
-    _ title: String, detail: String? = nil, badge: (text: String, tone: AglynTone)? = nil, selected: Bool,
-    enabled: Bool = true, action: @escaping () -> Void
+    _ title: String, detail: String? = nil, badge: (text: String, tone: AglynTone)? = nil, picture: Picture? = nil,
+    selected: Bool, enabled: Bool = true, action: @escaping () -> Void
   ) {
     self.title = title
     self.detail = detail
     self.badge = badge
+    self.picture = picture
     self.selected = selected
     self.enabled = enabled
     self.action = action
@@ -66,10 +76,17 @@ public struct AglynChoiceRow: View {
           .font(AglynFont.body)
           .foregroundStyle(selected ? AglynColor.tint : AglynColor.secondaryText)
           .accessibilityHidden(true)
+        if let picture {
+          AglynRemoteImage(picture.url, systemImage: "photo")
+            .frame(width: AglynOptionCardMetrics.rowPicture, height: AglynOptionCardMetrics.rowPicture)
+            .clipShape(RoundedRectangle(cornerRadius: AglynRadius.control, style: .continuous))
+            .accessibilityHidden(true)
+        }
         VStack(alignment: .leading, spacing: 2) {
-          Text(title).font(AglynFont.body).foregroundStyle(AglynColor.textPrimary)
+          Text(title).font(picture == nil ? AglynFont.body : AglynOptionCardMetrics.title).foregroundStyle(AglynColor.textPrimary)
           if let detail {
-            Text(detail).font(AglynFont.caption).foregroundStyle(AglynColor.secondaryText)
+            Text(detail).font(picture == nil ? AglynFont.caption : AglynOptionCardMetrics.line)
+              .foregroundStyle(AglynColor.secondaryText)
               .fixedSize(horizontal: false, vertical: true)
           }
         }
