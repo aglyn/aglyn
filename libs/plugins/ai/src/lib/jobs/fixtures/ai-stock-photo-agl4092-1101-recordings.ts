@@ -28,9 +28,10 @@ import type { StockPhoto } from '@aglyn/aglyn/plugin-manager/stock-photo-provide
  * other search of the replay is {@link AGL4092_1029_ANSWERS}'s.
  *
  * Each list is the first 20 hits of its answer, in its order. A hit's tags are
- * the provider's, less any that names a person; its size is its large copy's.
- * Each contributor is a number, one per contributor; no name, no contact
- * details. Keyed as `aiAgl40921029AnswerKey` keys them.
+ * the provider's, less one that names a person and one the marketplace's naming
+ * sweep refuses, neither of them read; its size is its large copy's. Each
+ * contributor is a number, one per contributor; no name, no contact details.
+ * Keyed as `aiAgl40921029AnswerKey` keys them.
  */
 
 const hit = (id: number, width: number, height: number, slug: string, contributor: number, tags: string): StockPhoto =>
@@ -52,7 +53,7 @@ export const AGL4092_1101_HITS: ReadonlyMap<string, StockPhoto> = new Map(
     hit(3372907, 1280, 720, 'reiter-horse-water-sunset-dawn', 2, 'reiter, nature, horse, water, sunset, dawn, sky, sun, waters, mirroring, reflection, silhouette, lake, pond, bank, equestrian, ride, freedom, indians, horse wallpaper'),
     hit(407123, 1280, 853, 'biker-motorcycle-ride-vehicle', 3, 'biker, motorcycle, ride, vehicle, motorbike, road, travel, asphalt, vintage, motorcycle ride, motorcycle rider, riding, motorcycle, motorcycle, motorcycle, motorcycle, motorcycle, motorbike'),
     hit(9331340, 1280, 853, 'horse-pony-woman-nature-animal', 4, 'horse, pony, woman, nature, animal'),
-    hit(9702440, 1280, 1280, 'cartoon-hands-joining-hands', 5, 'cartoon hands, joining hands, unity circle, teamwork symbol, friendship hands, hands together, support icon, community symbol, diversity hands, connected hands, group unity, circle of hands, togetherness vector, cooperation symbol, helping hands, solidarity icon, team support, round hands shape, cartoon unity, collective support, friendly gesture, partnership icon'),
+    hit(9702440, 1280, 1280, 'cartoon-hands-joining-hands', 5, 'cartoon hands, joining hands, unity circle, teamwork symbol, friendship hands, hands together, support icon, diversity hands, connected hands, group unity, circle of hands, togetherness vector, cooperation symbol, helping hands, solidarity icon, team support, round hands shape, cartoon unity, collective support, friendly gesture, partnership icon'),
     hit(8209523, 1280, 854, 'horse-rider-rodeo-cowboy-show', 6, 'horse, rider, rodeo, cowboy, nature, show, agriculture, animal, livestock'),
     hit(3237649, 1280, 856, 'teamwork-match-together', 7, 'teamwork, match, together, hand in hand, connect, connection, collaboration, hands, keep, join, partnership, people, piece, puzzle, solution, team, two, unit, characters, wood, doll, articulated manikin, match, connect, connect, connect, connect, connect, collaboration, collaboration, collaboration, collaboration, join, partnership, partnership, partnership, puzzle, puzzle, solution'),
     hit(7469078, 1280, 853, 'girl-horse-happy-rider-joy-fun', 6, 'girl, horse, happy, rider, joy, fun, smile, young, nature, saddle, riding'),
