@@ -134,6 +134,20 @@ You choose whether it carries your site's built-in theme with its brand colors, 
 site's full theme. A new starter is reviewed before anyone else can see it.
 [Publish as a starter](save-a-template.md#publish-as-a-starter) walks through it.
 
+## In the Aglyn app {#in-the-aglyn-app}
+
+**Create site** in the Aglyn app on iPhone, iPad, Mac and Android lists the same starters, and
+nothing is chosen for you there either. A free starter, or one your workspace owns, creates your
+site at once.
+
+The app doesn't take payment for a starter and doesn't ask an AI starter's questions. A starter
+with a price shows it with **Buy on the web**, and an AI starter shows **Continue on the web**. Either
+one opens **Create site** in the console on that starter, where you finish. You may be asked to sign
+in there first.
+
+You can also publish from the app: **Site settings → Backup & template → Publish as a starter**,
+or **A site starter** on its **Publish to the marketplace** page.
+
 ## Related {#related}
 
 - [Create a site](../../getting-started/create-a-site.md)
