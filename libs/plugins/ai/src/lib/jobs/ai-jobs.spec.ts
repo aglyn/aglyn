@@ -3403,6 +3403,10 @@ describe('a site import brings a proved site in, wave by wave, each started by a
         readSiteName: async () => 'Harbor Dental',
         pageWritten: async () => true,
         mintId: () => `drft${String(++minted).padStart(4, '0')}`,
+        forms: {
+          readInventory: (async () => ({ forms: [] })) as never,
+          writeDraft: (async () => ({ ok: true, replayed: false, id: 'form-1', versionId: null, name: 'Contact form', hostSubdomain: 'harbor' })) as never,
+        },
       }),
       { minimumMs: 1 },
     )
@@ -3526,7 +3530,9 @@ describe('a site import brings a proved site in, wave by wave, each started by a
       ['layout', 'succeeded'],
       ...Array(6).fill(['page', 'succeeded']),
     ])
-    expect(first.items?.slice(7).every((row) => row.status === 'pending')).toBe(true)
+    expect(first.items?.slice(7).filter((row) => row.op === 'page').every((row) => row.status === 'pending')).toBe(true)
+    // The contact page's form, rebuilt at no credits.
+    expect(first.items?.filter((row) => row.op === 'form')).toEqual([expect.objectContaining({ status: 'succeeded', creditsSpent: 0 })])
     // The header and footer first, then the pages inside it, each told its own text and photos.
     expect(handed[0].kind).toBe('layout')
     const pages = handed.filter((job) => job.kind === 'page')
@@ -3588,7 +3594,7 @@ describe('a site import brings a proved site in, wave by wave, each started by a
     expect(first.status).toBe('needs_review')
     const row = first.items?.find((entry) => entry.label === 'Services')
     expect(row).toMatchObject({ status: 'failed', failure: { ours: true }, creditsRefunded: 6 })
-    expect(first.items?.filter((entry) => entry.status === 'succeeded')).toHaveLength(6)
+    expect(first.items?.filter((entry) => entry.status === 'succeeded' && entry.op !== 'form')).toHaveLength(6)
     expect(first.refundedCredits).toBe(6)
   })
 
