@@ -128,6 +128,14 @@ const ALLOWED = new Map<string, string>([
     'libs/native/kotlin/core/src/commonMain/kotlin/com/aglyn/core/DerivedValues.generated.kt',
     'Generated from site-styles.ts: the "Nonprofit & community" style for the native Create site — AGL-4049.',
   ],
+  [
+    'libs/plugins/marketplace/src/ios/Sources/AglynMarketplacePlugin/Resources/marketplace.screens.json',
+    'The "Nonprofit & community" style in Publish as a starter\'s Closest style list, the same list as site-styles.ts — AGL-4049.',
+  ],
+  [
+    'libs/plugins/marketplace/src/android/screens/marketplace.screens.json',
+    'The "Nonprofit & community" style in Publish as a starter\'s Closest style list, the same list as site-styles.ts — AGL-4049.',
+  ],
   // ---- The forum. This is the meaning the rename exists to protect. ----
   [
     'apps/console/app/api/support/forum/route.ts',

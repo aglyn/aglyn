@@ -17,7 +17,6 @@
 import {
   checkEntitlement,
   planLabelGrantingFeature,
-  planLockReason,
   type OrgFeatureFlags,
 } from '@aglyn/aglyn'
 
@@ -77,4 +76,4 @@ export function resolvePlanFeatureLock(input: {
   }
 }
 
-export { planLockReason }
+export { planLockReason } from '@aglyn/aglyn/app-utils/plan-entitlements'
