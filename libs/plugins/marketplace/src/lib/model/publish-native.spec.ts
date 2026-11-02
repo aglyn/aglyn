@@ -55,6 +55,7 @@ interface Screen {
   scope?: string
   constants?: { agreement?: Record<string, unknown> }
   blocks: Array<{
+    id?: string
     type: string
     when?: string
     text?: string

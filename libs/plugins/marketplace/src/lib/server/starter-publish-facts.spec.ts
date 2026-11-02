@@ -98,7 +98,7 @@ async function ask(query: Record<string, unknown> = { hostId: 'h1' }, method = '
       return res
     },
   }
-  await starterPublishFactsHandler({ method, query, headers: { authorization } } as never, res, undefined as never)
+  await starterPublishFactsHandler({ method, query, headers: { authorization } } as never, res)
   return res
 }
 
