@@ -74,11 +74,11 @@ final class SellerTests: XCTestCase {
   }
 
   /// The publisher agreement a save agrees to (AGL-4105), as each seller save sends it.
-  private let agreed = PublisherAgreementConsent(version: "2026-08-24.1")
+  private let agreed = PublisherAgreementConsent(version: "2026-11-02.1")
 
   private func assertAgreed(_ body: [String: Any], file: StaticString = #filePath, line: UInt = #line) {
     let agreement = body["agreement"] as? [String: Any]
-    XCTAssertEqual(agreement?["version"] as? String, "2026-08-24.1", file: file, line: line)
+    XCTAssertEqual(agreement?["version"] as? String, "2026-11-02.1", file: file, line: line)
     XCTAssertEqual(agreement?["accepted"] as? Bool, true, file: file, line: line)
   }
 

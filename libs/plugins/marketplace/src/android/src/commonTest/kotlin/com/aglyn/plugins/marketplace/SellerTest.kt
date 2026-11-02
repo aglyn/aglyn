@@ -92,11 +92,11 @@ class SellerTest {
   }
 
   /** The publisher agreement a save agrees to (AGL-4105), as each seller save sends it. */
-  private val agreed = PublisherAgreementConsent("2026-08-24.1")
+  private val agreed = PublisherAgreementConsent("2026-11-02.1")
 
   private fun assertAgreed(body: Map<String, kotlinx.serialization.json.JsonElement>) {
     val agreement = body["agreement"]!!.jsonObject
-    assertEquals("2026-08-24.1", agreement["version"]?.jsonPrimitive?.content)
+    assertEquals("2026-11-02.1", agreement["version"]?.jsonPrimitive?.content)
     assertEquals("true", agreement["accepted"]?.jsonPrimitive?.content)
   }
 

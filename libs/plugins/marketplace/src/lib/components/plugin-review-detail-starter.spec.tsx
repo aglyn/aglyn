@@ -71,7 +71,7 @@ function starterBody() {
     publisherId: 'org-pub',
     publisherName: 'Northwind Coffee',
     publisherSlug: 'northwind',
-    publisherAgreement: { version: '2026-08-24.1', acceptedAt: null, required: '2026-08-24.1', state: 'current' },
+    publisherAgreement: { version: '2026-11-02.1', acceptedAt: null, required: '2026-11-02.1', state: 'current' },
     reviewStatus: 'submitted',
     rejectionReason: '',
     rejectionCategory: '',
