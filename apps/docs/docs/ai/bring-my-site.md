@@ -243,6 +243,10 @@ your new site's share image unless you already chose one.
 
 ## When an import waits for you {#when-an-import-waits}
 
+- **Your import stopped before it finished.** Something kept a page or a wave from going on.
+  The import says how many pages are not in yet, and everything already brought in is safe.
+  Choose **Start** for the wave it names and it goes on from where it stopped. If you chose
+  **Start every remaining wave**, the waves after it keep going too.
 - **Verify your site again.** A wave starts only while your proof is less than 30 days old.
   Choose **Verify again**, prove the site is yours once more, then start the wave again.
 - **The day's limit.** A workspace can start 12 waves a day, counting each time a site is
