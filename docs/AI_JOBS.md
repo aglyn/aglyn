@@ -2752,8 +2752,10 @@ whose passes each do one unit (`aiSiteImportNextWork`):
 - **Priced by how a page is built.** `AI_MEASURED_IMPORT_CREDITS`: an
   arranged page at `arranged` (its design answer), a copied page at `copied`, the
   header its layout, or nothing where it is drawn from the source's menu; each wave is quoted before it starts
-  (`aiSiteImportWaveCreditRange`), naming both. Both rows are provisional until
-  the live check measures them.
+  (`aiSiteImportWaveCreditRange`), naming both. Both rows are the 11/1 import's
+  ledger, read by the fidelity report (`AI_MEASURED_IMPORT_AT`): 77 arranged
+  pages at a median of 10 and a p90 of 12, and copied pages at 0, the 1 at the
+  p90 covering a listing the source left empty.
 - **Published only into a preview.** A wave's pages go live only on a site in
   preview, where the public sees the notice; `sitePublish` carries what went
   live. On a site not in preview every output stays a draft.
@@ -2828,9 +2830,11 @@ built page against what the reader read of its source.
   prints the recorded pages, the frames and the 10/29 control as tables, built
   over source. With `--host <id>` it reports a built site for a live check:
   Admin SDK `get()`s only (the host, the import job, each screen and version, the
-  layout and version), no model, nothing written, and it prints the look's
-  colors and fonts and the credits per arranged and copied page, which is where
-  `AI_MEASURED_IMPORT_CREDITS` is read from. A page's source is the job's own
+  layout and version), no model, nothing written. It prints the look the site
+  wears (`resolveSiteTheme`: the base with the saved override, its base's name
+  and the job that saved it), the median, p90 and mean credits per arranged and
+  copied page, which is where `AI_MEASURED_IMPORT_CREDITS` is read from, and each
+  page's ledger status and note. A page's source is the job's own
   read while it holds one; the job empties a read once its page is in, so
   otherwise the page is read again from the source site as a wave reads it (a
   source this platform serves needs `SITE_IMPORT_EDGE_TOKEN` for that, as a

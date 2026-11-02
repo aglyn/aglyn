@@ -253,6 +253,18 @@ function verdict(rows: readonly PageRow[], frames: ReadonlyArray<{ report: Dict 
   return { line: `${ok ? 'Result: holds the bar' : 'Result: BELOW THE BAR'}: ${parts.join(' and ')} at ${score(threshold)} or above on structure, words exactly 1.`, ok }
 }
 
+/** Each page asked for, as its row of the ledger stands: how it was built, what it came to and what it said. */
+function ledgerTable(pages: readonly Dict[], items: readonly Dict[]): string {
+  const row = new Map(items.map((item) => [item.slot, item]))
+  return table(
+    ['page', 'build', 'status', 'credits', 'note'],
+    pages.map((page) => {
+      const item = row.get(page.slot)
+      return [String(page.path), String(page.build ?? '-'), String(item?.status ?? 'no row'), String(item?.creditsSpent ?? 0), String(item?.note ?? '-')]
+    }),
+  )
+}
+
 /*------------------------------------------
  * The recorded pages
  *-----------------------------------------*/
@@ -374,24 +386,6 @@ function savedSite(sources: ReadonlyMap<string, string>) {
   }
 }
 
-const money = (value: number) => (Number.isInteger(value) ? String(value) : value.toFixed(1))
-
-/** What the ledger says each kind of page cost, for `AI_MEASURED_IMPORT_CREDITS`. */
-function creditsLine(state: Dict, items: readonly Dict[]): string {
-  const spent = new Map(items.map((item) => [item.slot, Number(item.creditsSpent ?? 0)]))
-  const parts: string[] = []
-  for (const build of ['arranged', 'copied']) {
-    const each = (state.pages as Dict[])
-      .filter((page) => page.build === build && page.brought)
-      .map((page) => spent.get(page.slot) ?? 0)
-      .sort((a, b) => a - b)
-    if (!each.length) continue
-    const total = each.reduce((sum, value) => sum + value, 0)
-    parts.push(`${each.length} ${build}, mean ${money(total / each.length)}, p90 ${money(each[Math.ceil(each.length * 0.9) - 1] as number)}`)
-  }
-  return parts.length ? parts.join('; ') : 'no page in yet'
-}
-
 async function hostReport(load: (file: string) => Promise<Dict>, args: Args): Promise<boolean> {
   const { initializeApp, applicationDefault, deleteApp } = require('firebase-admin/app')
   const { getFirestore } = require('firebase-admin/firestore')
@@ -409,6 +403,7 @@ async function hostReport(load: (file: string) => Promise<Dict>, args: Args): Pr
 
 async function hostReportFrom(db: Dict, load: (file: string) => Promise<Dict>, args: Args, where: string): Promise<boolean> {
   const fidelity = await load(`${AI}/model/ai-site-import-fidelity.ts`)
+  const { siteImportCreditsLine, siteImportCreditsMeasured, siteImportLookLine } = await load(`${AI}/model/ai-site-import-report.ts`)
   const { decodeStoredNodes } = await load('libs/aglyn/src/lib/app-utils/stored-nodes.ts')
   const threshold = fidelity.SITE_IMPORT_FIDELITY_THRESHOLD as number
   const hostId = args.host as string
@@ -488,11 +483,6 @@ async function hostReportFrom(db: Dict, load: (file: string) => Promise<Dict>, a
   if (frame) frames.push({ name: 'this site', report: fidelity.siteImportFrameFidelity({ nav: state.home?.nav ?? null, footer: state.home?.footer ?? null }, frame.tree) })
   else left.push({ page: 'header and footer', why: 'not built yet' })
 
-  const theme = (host.theme ?? {}) as Dict
-  const light = (theme.colorSchemes?.light ?? {}) as Dict
-  const colors = ['primary', 'secondary', 'tertiary'].map((key) => `${key} ${light[key]?.main ?? 'not set'}`).join(', ')
-  const fonts = ((theme.fonts ?? []) as Dict[]).map((font) => font.family).join(', ') || 'not set'
-  const look = state.look as Dict | null
   const items = (job.items ?? []) as Dict[]
   const frameSpent = items.find((item) => item.op === 'layout' || item.slot === 'frame')?.creditsSpent
   const inNow = all.filter((page) => page.brought).length
@@ -514,8 +504,8 @@ async function hostReportFrom(db: Dict, load: (file: string) => Promise<Dict>, a
           ['read from', where],
           ['import job', `${jobId}, ${job.status}; ${inNow} of ${all.length} pages in`],
           ['scored', `${rows.length} of ${chosen.length} page${chosen.length === 1 ? '' : 's'} asked for; sources: ${sourced}`],
-          ['look', `${look?.theme ?? 'not run'}; ${colors}; ${fonts}`],
-          ['credits', `${creditsLine(state, items)}${frameSpent !== undefined ? `; header and footer ${frameSpent}` : ''}; job total ${job.creditsSpent ?? 0}`],
+          ['look', siteImportLookLine(host, state, jobId)],
+          ['credits', `${siteImportCreditsLine(siteImportCreditsMeasured(state, items))}${frameSpent !== undefined ? `; header and footer ${frameSpent}` : ''}; job total ${job.creditsSpent ?? 0}`],
         ],
       ),
       '',
@@ -532,6 +522,10 @@ async function hostReportFrom(db: Dict, load: (file: string) => Promise<Dict>, a
       '',
       ...(short.length ? ['## Short of the source', '', ...short, ''] : []),
       ...(left.length ? ['## Not scored', '', ...left.map(({ page, why }) => `- ${page}: ${why}`), ''] : []),
+      '## The ledger',
+      '',
+      ledgerTable(chosen, items),
+      '',
       ...(said ? [said, ''] : []),
       left.length ? `${result.line} ${left.length} not scored.` : result.line,
     ].join('\n'),

@@ -163,8 +163,8 @@ Each page is built one of two ways, and the wave's row for the page says which:
 
 To start a wave, choose its **Start** button, for example **Start Main pages**. Each wave
 shows its cost before you start it, and how many of its pages are arranged and how many are
-copied. A page copied as it is costs far less than a page Aglyn AI arranges. Credits are used
-as each page is brought in. A page that fails on our side gives its credits back.
+copied. A page copied as it is uses no AI credits unless its listing has to be written. Credits
+are used as each page is brought in. A page that fails on our side gives its credits back.
 
 **Start every remaining wave** starts every wave that is left, one after another, with no
 review between them. It shows the cost of all of them before you choose it. You review the

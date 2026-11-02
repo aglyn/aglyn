@@ -17,6 +17,8 @@
 
 import {
   AI_MEASURED_AT,
+  AI_MEASURED_IMPORT_AT,
+  AI_MEASURED_IMPORT_CREDITS,
   AI_MEASURED_FREE_SITE_CREDITS,
   AI_MEASURED_PAGE_SECTIONS,
   AI_MEASURED_UNIT_CREDITS,
@@ -28,6 +30,7 @@ import {
   aiCreditsSmallerText,
   aiMeasuredPageCredits,
 } from './ai-credit-estimate'
+import { aiSiteImportCreditRange } from './ai-site-import'
 import { aiFreeSiteCreditEstimate, aiFreeSiteCreditRange } from './ai-site-job'
 
 /**
@@ -46,6 +49,16 @@ describe('what a job is quoted from (AGL-3722)', () => {
       theme: { median: 1, p90: 2 },
       plan: { median: 4, p90: 70 },
     })
+  })
+
+  it('holds what a whole import measured, as read from its ledger on 2026-11-01 (AGL-4083)', () => {
+    expect(AI_MEASURED_IMPORT_AT).toEqual({ read: '2026-11-01', job: 'mxOkjt2ff7', arranged: 77, copied: 136 })
+    expect(AI_MEASURED_IMPORT_CREDITS.arranged).toEqual({ median: 10, p90: 12 })
+    expect(AI_MEASURED_IMPORT_CREDITS.copied).toEqual({ median: 0, p90: 1 })
+  })
+
+  it('quotes a wave of copied pages at nothing likely, up to its ceiling', () => {
+    expect(aiCreditRangeText(aiSiteImportCreditRange(0, { copied: 3 }))).toBe('About 0 credits (up to 150)')
   })
 
   it('scales a page by its sections around the ~5-section median: about 6 a section, 8 at the p90', () => {
