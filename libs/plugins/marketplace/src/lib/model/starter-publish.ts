@@ -15,9 +15,10 @@
  * limitations under the License.
  */
 
+import { planLockReason } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { siteFontPairing } from '@aglyn/aglyn/app-utils/site-font-pairings'
 import { SITE_STARTER_MAX_SCREENS } from '@aglyn/aglyn/app-utils/site-starter'
 import type { SiteStarterBuiltinReading } from '@aglyn/aglyn/app-utils/site-starter-theme'
-import { planLockReason } from '@aglyn/tenant-feature-instance/hooks/plan-feature-lock'
 
 /*==========================================
  * "PUBLISH AS A STARTER", BEFORE THE CLICK (AGL-4049).
@@ -227,4 +228,94 @@ export function starterPublishBody(input: {
     return { theme: input.builtin.theme, mode: 'base', facets }
   }
   return null
+}
+
+/** What a publish captures, in a sentence, from the pages counted before the click. */
+export function starterCapturesSentence(pages: StarterPublishPages): string {
+  return (
+    (pages.count === 1
+      ? 'Captures its one published page, '
+      : `Captures its ${pages.count} published pages, `) +
+    'the shared header and footer they sit in, and the theme you choose below.'
+  )
+}
+
+/** The fonts a pairing sets, as a person names them. */
+function pairingLabel(id: string | null): string | null {
+  const pairing = siteFontPairing(id)
+  if (!pairing) return null
+  return pairing.heading.family === pairing.body.family
+    ? pairing.body.family
+    : `${pairing.heading.family} and ${pairing.body.family}`
+}
+
+/**
+ * The line under the built-in theme choice: what the starter would carry, or
+ * why this site has no built-in to name. `hostReady` is false while the site
+ * is still being read.
+ */
+export function starterBuiltinDetail(
+  builtin: SiteStarterBuiltinReading | null,
+  hostReady = true,
+): string {
+  if (!hostReady) return "Reading this site's theme…"
+  if (!builtin) {
+    return 'This site wears its own theme, not a built-in one, so a starter can carry it only as its full theme.'
+  }
+  const fonts = pairingLabel(builtin.theme.fonts)
+  const recolored = Object.values(builtin.theme.brand).some((colors) => colors && Object.keys(colors).length)
+  return (
+    `${builtin.baseName}, ${recolored ? 'with the brand colors this site set over it' : 'in its own colors'}` +
+    `${fonts ? `, set in ${fonts}` : ''}. A site created from it can switch to another built-in theme.`
+  )
+}
+
+/** What the built-in choice leaves behind, for a site whose fonts it cannot name, or `null`. */
+export function starterFontsNote(builtin: SiteStarterBuiltinReading | null): string | null {
+  if (!builtin || builtin.fontsCarried) return null
+  return (
+    `This site's fonts are not a pairing a built-in theme can name, so the starter uses ` +
+    `${builtin.baseName}'s own fonts. Choose the full theme to keep them.`
+  )
+}
+
+/**
+ * What "Publish as a starter" reads before the click, for a surface that
+ * cannot read it (AGL-4049): the native apps ask
+ * `GET /api/marketplace/starter-publish-facts`, and show these words.
+ */
+export interface StarterPublishFactsAnswer {
+  /** What the publish captures, in a sentence. */
+  captures: string
+  /** The site's built-in theme as the publish body sends it, or `null` when it wears none. */
+  builtin: SiteStarterBuiltinReading['theme'] | null
+  /** The line under the built-in choice. */
+  builtinDetail: string
+  /** What the built-in choice leaves behind, or `null`. */
+  fontsNote: string | null
+  /**
+   * What stands in the way, by step: a step left out is one that is done.
+   * `payouts` says what a price would need, whether or not one is typed yet.
+   */
+  steps: Partial<Record<StarterPublishStepId, string>>
+  /** Whether a step stands in the way of a free publish too, so Publish is off. */
+  blocked: boolean
+}
+
+/** The answer, from what the door would read. Pure: the route hands in what it read. */
+export function starterPublishFactsAnswer(input: {
+  facts: Omit<StarterPublishFacts, 'priceUsd'>
+  builtin: SiteStarterBuiltinReading | null
+}): StarterPublishFactsAnswer {
+  const { facts, builtin } = input
+  const free = starterPublishSteps({ ...facts, priceUsd: 0 })
+  const priced = starterPublishSteps({ ...facts, priceUsd: 1 })
+  return {
+    captures: starterCapturesSentence(facts.pages ?? { count: 0, hasHome: false }),
+    builtin: builtin?.theme ?? null,
+    builtinDetail: starterBuiltinDetail(builtin),
+    fontsNote: starterFontsNote(builtin),
+    steps: Object.fromEntries(priced.map((step) => [step.id, step.text])),
+    blocked: free.length > 0,
+  }
 }

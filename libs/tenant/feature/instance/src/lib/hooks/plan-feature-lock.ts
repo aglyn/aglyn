@@ -17,6 +17,7 @@
 import {
   checkEntitlement,
   planLabelGrantingFeature,
+  planLockReason,
   type OrgFeatureFlags,
 } from '@aglyn/aglyn'
 
@@ -76,15 +77,4 @@ export function resolvePlanFeatureLock(input: {
   }
 }
 
-/**
- * The one sentence a locked control carries, on hover and for a screen
- * reader: "Scheduled publishing is included from Business."
- */
-export function planLockReason(
-  subject: string,
-  planLabel: string | undefined,
-): string {
-  return planLabel
-    ? `${subject} is included from ${planLabel}.`
-    : `${subject} is a paid add-on.`
-}
+export { planLockReason }
