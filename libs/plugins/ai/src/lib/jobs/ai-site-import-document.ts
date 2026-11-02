@@ -70,6 +70,8 @@ export interface AiSiteImportDocument {
    * absent on a read made before the reader, or one past its budget.
    */
   layout?: SiteImportLayout | null
+  /** Each form of the read, by its index, and the saved form that takes its place (AGL-4083); absent on a page that asked for none. */
+  forms?: Array<{ index: number; formId: string | null }> | null
 }
 
 /** The most characters a text element holds (the palette's ceiling for body copy). */

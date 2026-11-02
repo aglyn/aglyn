@@ -114,9 +114,26 @@ export interface SiteImportNavLink {
   url: string
 }
 
+/** One field of a form that was kept: what it asks, never what was typed (AGL-4083). */
+export interface SiteImportFormField {
+  /** `text`, `email`, `tel`, `url`, `number`, `date`, `time`, `textarea`, `select`, `radio` or `checkbox`. */
+  type: string
+  name: string
+  /** The words a visitor reads for it. Absent on a read kept before they were. */
+  label?: string
+  required?: true
+  /** A list's choices, or the boxes of one question. */
+  options?: string[]
+  placeholder?: string
+}
+
 /** A form that was kept: what it asks, never what was typed. */
 export interface SiteImportForm {
-  fields: { type: string; name: string }[]
+  fields: SiteImportFormField[]
+  /** The words on its button. */
+  submit?: string
+  /** The fields no form element can take, by the words they ask with: a file to attach. */
+  leftOut?: string[]
 }
 
 export interface SiteImportExtract {
@@ -488,6 +505,88 @@ function removeElements(html: string, tags: readonly string[]): string {
   return out
 }
 
+/** The input types a form rebuilt as an Aglyn form keeps as they are; any other reads as text. */
+const FORM_FIELD_TYPES: ReadonlySet<string> = new Set(['text', 'email', 'tel', 'url', 'number', 'date', 'time', 'textarea', 'select', 'radio', 'checkbox'])
+
+/** A control's words, as a visitor reads them: no mark hidden from a reader, no control, no required star. */
+function formWords(html: string): string {
+  const shown = html
+    .replace(/<(\w+)\b(?:[^>"']|"[^"]*"|'[^']*')*\baria-hidden\s*=\s*["']?true["']?(?:[^>"']|"[^"]*"|'[^']*')*>[\s\S]*?<\/\1\s*>/gi, ' ')
+    .replace(/<(select|textarea|svg)\b[\s\S]*?<\/\1\s*>/gi, ' ')
+    .replace(/<[^>]*>/g, ' ')
+  return collapse(decodeHtmlEntities(shown)).replace(/\s*[*:]+$/, '').trim()
+}
+
+/** A field's name as words, where nothing else names it: `first_name` is "First name". */
+function humanizedName(name: string): string {
+  const words = name.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_.\-[\]]+/g, ' ').trim().toLowerCase()
+  return words ? `${words[0]?.toUpperCase()}${words.slice(1)}` : ''
+}
+
+/** What a form asks, in order: each field's words, its choices, whether it must be answered, and its button's words. */
+function formContents(form: string): SiteImportForm {
+  const labels = [...form.matchAll(/<label\b((?:[^>"']|"[^"]*"|'[^']*')*)>([\s\S]*?)<\/label\s*>/gi)].map((match) => ({
+    for: parseAttributes(match[1])['for'] ?? '',
+    start: match.index,
+    end: match.index + match[0].length,
+    words: formWords(match[2]),
+  }))
+  const legends = [...form.matchAll(/<fieldset\b((?:[^>"']|"[^"]*"|'[^']*')*)>([\s\S]*?)<\/fieldset\s*>/gi)].flatMap((match) => {
+    const legend = /<legend\b[^>]*>([\s\S]*?)<\/legend\s*>/i.exec(match[2])
+    const words = legend ? formWords(legend[1]) : ''
+    return words ? [{ start: match.index, end: match.index + match[0].length, words }] : []
+  })
+  const fields: SiteImportFormField[] = []
+  const leftOut: string[] = []
+  const groups = new Map<string, SiteImportFormField>()
+  for (const match of form.matchAll(/<(input|textarea|select)\b((?:[^>"']|"[^"]*"|'[^']*')*)>/gi)) {
+    const tag = match[1].toLowerCase()
+    const attributes = parseAttributes(match[2])
+    const type = tag === 'input' ? (attributes['type'] || 'text').toLowerCase() : tag
+    if (type === 'hidden' || type === 'submit' || type === 'button' || type === 'image' || type === 'reset') continue
+    // A field no visitor sees is a trap for bots or a widget's shadow, not a question (AGL-4083).
+    if ((attributes['aria-hidden'] ?? '').toLowerCase() === 'true' || attributes['tabindex'] === '-1') continue
+    const name = clip(attributes['name'] || attributes['id'] || '', 80)
+    const own = (labels.find((label) => !!attributes['id'] && label.for === attributes['id']) ?? labels.find((label) => match.index >= label.start && match.index < label.end))?.words ?? ''
+    const label = clip(own || attributes['aria-label'] || attributes['placeholder'] || humanizedName(name), 200)
+    if (type === 'file') {
+      leftOut.push(label)
+      continue
+    }
+    // Radios of one name, and boxes of one name, are one question.
+    if (type === 'radio' || type === 'checkbox') {
+      const held = name ? groups.get(`${type}:${name}`) : undefined
+      const question = legends.find((legend) => match.index >= legend.start && match.index < legend.end)?.words ?? ''
+      if (held) {
+        const first = held.options ?? [held.label ?? '']
+        held.options = [...first, label].filter(Boolean)
+        if (question) held.label = clip(question, 200)
+        continue
+      }
+      const field: SiteImportFormField = { type, name, label: type === 'radio' ? clip(question, 200) || humanizedName(name) : label, ...(type === 'radio' ? { options: [own || attributes['value'] || label] } : {}) }
+      if (attributes['required'] !== undefined) field.required = true
+      if (name) groups.set(`${type}:${name}`, field)
+      if (fields.length < SITE_IMPORT_PAGE_LIMITS.fieldsPerForm) fields.push(field)
+      continue
+    }
+    const placeholder = clip(attributes['placeholder'] ?? '', 200)
+    const field: SiteImportFormField = { type: FORM_FIELD_TYPES.has(type) ? type : 'text', name, label, ...(attributes['required'] !== undefined || attributes['aria-required'] === 'true' ? { required: true as const } : {}), ...(placeholder ? { placeholder } : {}) }
+    if (tag === 'select') {
+      const body = form.slice(match.index + match[0].length, form.indexOf('</select', match.index))
+      const options = [...body.matchAll(/<option\b((?:[^>"']|"[^"]*"|'[^']*')*)>([\s\S]*?)(?=<option\b|<\/option|$)/gi)].map((option) => ({ value: parseAttributes(option[1])['value'], words: clip(formWords(option[2]), 200) }))
+      // An option with no value is the list's prompt, never an answer.
+      const prompt = options.find((option) => option.value === '')?.words
+      if (prompt && !field.placeholder) field.placeholder = prompt
+      field.options = options.filter((option) => option.value !== '' && option.words).map((option) => option.words)
+    }
+    if (fields.length < SITE_IMPORT_PAGE_LIMITS.fieldsPerForm) fields.push(field)
+  }
+  const button = [...form.matchAll(/<button\b((?:[^>"']|"[^"]*"|'[^']*')*)>([\s\S]*?)<\/button\s*>/gi)].find((match) => /^(?:submit)?$/i.test(parseAttributes(match[1])['type'] ?? ''))
+  const input = [...form.matchAll(/<input\b((?:[^>"']|"[^"]*"|'[^']*')*)>/gi)].map((match) => parseAttributes(match[1])).find((attributes) => (attributes['type'] ?? '').toLowerCase() === 'submit')
+  const submit = clip((button ? formWords(button[2]) : '') || input?.['value'] || '', 120)
+  return { fields, ...(submit ? { submit } : {}), ...(leftOut.length ? { leftOut } : {}) }
+}
+
 /** Forms with a payment field go whole; the rest are summarized, then go. */
 function takeForms(html: string): { html: string; kept: SiteImportForm[]; removed: number } {
   const kept: SiteImportForm[] = []
@@ -498,17 +597,7 @@ function takeForms(html: string): { html: string; kept: SiteImportForm[]; remove
       return ' '
     }
     if (kept.length < SITE_IMPORT_PAGE_LIMITS.forms) {
-      const fields: SiteImportForm['fields'] = []
-      for (const match of form.matchAll(/<(input|textarea|select)\b((?:[^>"']|"[^"]*"|'[^']*')*)>/gi)) {
-        const attributes = parseAttributes(match[2])
-        const type = match[1].toLowerCase() === 'input' ? (attributes['type'] || 'text').toLowerCase() : match[1].toLowerCase()
-        if (type === 'hidden' || type === 'submit' || type === 'button' || type === 'image') continue
-        // A field no visitor sees is a trap for bots or a widget's shadow, not a question (AGL-4083).
-        if ((attributes['aria-hidden'] ?? '').toLowerCase() === 'true' || attributes['tabindex'] === '-1') continue
-        fields.push({ type, name: clip(attributes['name'] || attributes['id'] || '', 80) })
-        if (fields.length >= SITE_IMPORT_PAGE_LIMITS.fieldsPerForm) break
-      }
-      kept.push({ fields })
+      kept.push(formContents(form))
       // Where the form sat, for the layout (AGL-4106): a marker, never words.
       return ` <aglyn-form data-form="${kept.length - 1}"> `
     }

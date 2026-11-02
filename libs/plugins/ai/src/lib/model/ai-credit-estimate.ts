@@ -114,32 +114,31 @@ export const AI_MEASURED_PAID_SITE_CREDITS = {
 } as const satisfies Record<string, AiMeasuredCredits>
 
 /**
- * A page brought in from a person's own website (AGL-3976), priced as an AI
- * page: a paid site start's page as measured above, since an imported page is
- * one answer in the layout language and its listing, written inside one job
- * the way a site start writes its pages. Its site's header and footer, built
- * once in an import's first wave, is that table's layout.
+ * A page brought in from a person's own website (AGL-3976), priced by how it
+ * is built. `page` is a page no step has chosen a build for yet, priced as an
+ * AI page: a paid site start's page as measured above. Its site's header and
+ * footer, built once in an import's first wave, is that table's layout.
  *
- * Re-measure from done `import` jobs' item ledgers once production has run
- * them: their `page` rows' `creditsSpent`, as the paid table is read.
+ * `arranged` and `copied` are measured from the one whole import production
+ * has run (`AI_MEASURED_IMPORT_AT`, AGL-4083).
+ *
+ * HOW TO RE-MEASURE: `site-import-fidelity-report.mts --host <id> --job <id>`,
+ * read-only, prints each row's count, median, p90 and mean over the ledger's
+ * items that succeeded and gave nothing back, grouped by the page's `build`
+ * (`siteImportCreditsMeasured`). Each figure here is that reading rounded up:
+ * a quote is never under what is drawn.
  */
 export const AI_MEASURED_IMPORT_CREDITS = {
   page: AI_MEASURED_PAID_SITE_CREDITS.page,
   frame: AI_MEASURED_PAID_SITE_CREDITS.layout,
-  /**
-   * A main page whose design Aglyn AI answers (AGL-4107): one small answer on
-   * the balanced tier over the page's read structure — about 1,000 to 1,300
-   * tokens in, two thirds of them its cached instructions, and 500 to 900 out
-   * with its thinking, $0.009–$0.017 at Sonnet 5.5's billed rates over the
-   * recorded aglyn.com pages — and no listing, the source's own being kept.
-   * The 10/29 run spent 36–58 a page on a smaller model for a line-by-line
-   * answer twenty times the size. PROVISIONAL until the next live import
-   * measures it.
-   */
-  arranged: { median: 16, p90: 30 },
-  /** A page copied as it is (AGL-4083): no model, and a listing only where the source has none. Provisional, as `arranged`. */
-  copied: { median: 1, p90: 2 },
+  /** A main page, its one design answer on the balanced tier over the page's read structure: 77 pages, mean 9.5, median 10, p90 12. */
+  arranged: { median: 10, p90: 12 },
+  /** A page copied as it is: no model. It spends only where its source left its listing empty, which the 1 at the p90 covers. */
+  copied: { median: 0, p90: 1 },
 } as const satisfies Record<string, AiMeasuredCredits>
+
+/** When `AI_MEASURED_IMPORT_CREDITS` was read, from which import, over how many pages of each build. */
+export const AI_MEASURED_IMPORT_AT = { read: '2026-11-01', job: 'mxOkjt2ff7', arranged: 77, copied: 266 } as const
 
 /**
  * When the table above was read, and from when its jobs ran. Both tables

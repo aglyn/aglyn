@@ -367,6 +367,24 @@ export function registerAiJobStepPasses(kind: AiJobKind, maxPasses: number): voi
   stepPassCaps.set(kind, Math.max(1, Math.floor(maxPasses)))
 }
 
+/**
+ * What a kind's build waits on when it stops with work left (AGL-4083), where
+ * ending would leave that work out for good: an import asked to bring in
+ * every wave, whose run takes hours, never reports `done` with pages missing.
+ * `null` from it settles the build as any other.
+ */
+const stopReviews = new Map<AiJobKind, (job: AiJob) => AiJobReview | null>()
+
+/** Registers what a kind's stopped build waits on (AGL-4083). */
+export function registerAiJobStopReview(kind: AiJobKind, review: (job: AiJob) => AiJobReview | null): void {
+  stopReviews.set(kind, review)
+}
+
+/** What a kind's stopped build waits on; `undefined` for a kind that ends. */
+export function aiJobStopReviewFor(kind: AiJobKind): ((job: AiJob) => AiJobReview | null) | undefined {
+  return stopReviews.get(kind)
+}
+
 /** The passes a kind's step may take; the default where it registered none. */
 export function aiJobStepMaxPasses(kind: AiJobKind): number {
   return stepPassCaps.get(kind) ?? AI_JOB_STEP_MAX_PASSES
@@ -1692,6 +1710,8 @@ function aiBuildPlanCredits(job: Pick<AiJob, 'steps'>): number {
  * the items it never reached `skipped`. Then: anything delivered, and its
  * planning is charged and the job is `done`, failed items and all; nothing
  * delivered, and its planning is given back too and the job is `failed`.
+ * A kind that registered a stop review (`registerAiJobStopReview`) waits on
+ * it instead, with what it never reached still to do.
  */
 export async function settleAiBuildJob(
   firestore: Firestore,
@@ -1709,6 +1729,29 @@ export async function settleAiBuildJob(
   // A cancel asked before the build settled is how it ends (AGL-3616).
   if (aiJobCancelPending(job)) return completeAiJob(firestore, orgId, jobId, now)
   const stopped = input.stopped
+  // What was left stays to do, the row it stopped on with the rest, and the
+  // person starts it (AGL-4083): the step is handed back with its attempts and
+  // passes counted afresh, as a run the person started.
+  const stopReview = stopped ? (stopReviews.get(job.kind)?.(job) ?? null) : null
+  if (stopReview) {
+    const { job: parked, changed } = await transition(firestore, orgId, jobId, (current) =>
+      isAiJobTerminal(current.status)
+        ? null
+        : {
+            status: 'needs_review',
+            review: stopReview,
+            steps: current.steps.map((step) =>
+              step.name === AI_JOB_PLAN_STEP ? step : { ...step, status: 'pending', attempts: 0, passes: 0, endedAt: null, error: null },
+            ),
+            error: null,
+            lease: null,
+            creditsReserved: 0,
+            updatedAt: now,
+          },
+    )
+    if (changed) await announceAiJobTransition(parked, 'needs-review')
+    return parked
+  }
   if (stopped && (job.items ?? []).some((row) => row.status === 'pending' || row.status === 'running')) {
     const refunds = new Map<string, { credits: number; key: string }>()
     for (const row of job.items ?? []) {

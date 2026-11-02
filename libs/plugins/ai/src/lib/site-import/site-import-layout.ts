@@ -74,6 +74,7 @@ import {
   type SiteImportLookFacts,
 } from '../model/ai-site-import'
 import {
+  SITE_IMPORT_CSS_WIDE_WIDTH,
   siteImportBackgroundOf,
   siteImportColorOf,
   siteImportCssOf,
@@ -83,6 +84,7 @@ import {
   siteImportHasBorder,
   siteImportHasShadow,
   siteImportHex,
+  siteImportLengthPx,
   siteImportLuminance,
   siteImportRadiusPx,
   siteImportSaturation,
@@ -129,6 +131,22 @@ const BOOTSTRAP_COL = /\bcol-(?:(sm|md|lg|xl)-)?(\d{1,2})\b/g
 const BREAKPOINT_RANK: Record<string, number> = { xs: 0, sm: 1, md: 2, lg: 3, xl: 4 }
 const PRICE = /(?:[$€£¥₹]\s?\d|\d+(?:[.,]\d+)?\s?(?:USD|EUR|GBP|CAD|AUD)\b)/
 const PERIOD = /\/\s?(?:mo|month|yr|year|user|seat|site)\b|\bper (?:month|year|user|seat)\b|\bmonthly\b|\bannual(?:ly)?\b|\bbilled\b|\ba month\b|\ba year\b/i
+/** A tag on an item: its longest words, and the corners a pill is drawn with. */
+const BADGE_MAX_CHARS = 20
+const BADGE_MAX_WORDS = 2
+const BADGE_MIN_RADIUS = 12
+/** The longest line a price's period is: "/mo", "per seat". */
+const PERIOD_MAX_CHARS = 12
+/** The columns a framework's own class caps itself at, where the page's sheets do not say. */
+const WIDTH_CLASSES: ReadonlyArray<readonly [RegExp, number]> = [
+  [/\bMuiContainer-maxWidthXl\b/, 1536],
+  [/\bMuiContainer-maxWidthLg\b/, 1200],
+  [/\bMuiContainer-maxWidthMd\b/, 900],
+  [/\bMuiContainer-maxWidthSm\b/, 600],
+  [/\balignfull\b/, 1536],
+  [/\balignwide\b/, 1200],
+  [/(?:^|\s)container(?:\s|$)/, 1320],
+]
 const STEP_NUMBER = /^(?:step\s*)?(?:0?\d{1,2}|[ivx]{1,4})[.):]?$/i
 const FIGURE = /^[^\s]{0,3}[\d][\d.,:/x×+%kmb$€£-]*\s?[^\s]{0,12}$|^\d+-[a-z]+$/i
 
@@ -140,9 +158,10 @@ const FIGURE = /^[^\s]{0,3}[\d][\d.,:/x×+%kmb$€£-]*\s?[^\s]{0,12}$|^\d+-[a-z
 export function siteImportLayout(page: SiteImportLayoutSource, stylesheets: readonly string[] = []): SiteImportLayout | null {
   const { structure, blocks } = page
   if (!structure) return null
-  const css = siteImportCssOf([...structure.styles, ...stylesheets])
+  const sheets = [...structure.styles, ...stylesheets]
+  const css = siteImportCssOf(sheets)
   const styles = siteImportStylesOf(structure, css)
-  const reader = new LayoutReader(structure, blocks, styles)
+  const reader = new LayoutReader(structure, blocks, styles, () => siteImportStylesOf(structure, siteImportCssOf(sheets, SITE_IMPORT_CSS_WIDE_WIDTH)))
   const sections = reader.sections()
   if (!sections.length) return null
   return {
@@ -164,11 +183,13 @@ class LayoutReader {
   /** Tab panels a tab strip has read already. */
   private readonly usedPanels = new Set<number>()
   private bodySize = 16
+  private wideStyles: SiteImportStyles | null = null
 
   constructor(
     private readonly structure: SiteImportStructure,
     private readonly blocks: readonly SiteImportBlock[],
     private readonly styles: SiteImportStyles,
+    private readonly wideStylesOf: () => SiteImportStyles,
   ) {
     this.elements = structure.elements
     this.mainIndex = []
@@ -367,6 +388,7 @@ class LayoutReader {
     if (!lines.length && !nodes.some((node) => node.kind === 'icon' || node.kind === 'form')) return null
     const name = this.nameOf(cut.anchor, lines, index)
     const band = cut.anchor !== null ? this.bandOf(cut.anchor, false) : this.bandOf(container, true)
+    const width = this.widthOf(cut.anchor ?? container)
     return {
       name,
       from,
@@ -374,6 +396,7 @@ class LayoutReader {
       background: band.background,
       ...(band.backdrop ? { backdrop: band.backdrop } : {}),
       align: this.alignOf(scope, lines),
+      ...(width !== null ? { width } : {}),
       nodes,
       lines,
     }
@@ -407,18 +430,22 @@ class LayoutReader {
 
   /*---------------- bands ----------------*/
 
+  /** An element and the wrappers inside it that hold all it holds, one in another. */
+  private wrappersOf(element: number): number[] {
+    const chain: number[] = []
+    let at = element
+    for (let depth = 0; depth < 4 && at >= 0; depth += 1) {
+      chain.push(at)
+      const children = (this.elements[at]?.children ?? []).filter((child) => this.leaves(child).length)
+      if (children.length !== 1) break
+      at = children[0] as number
+    }
+    return chain
+  }
+
   private bandOf(element: number, inherited: boolean): { band: SiteImportBand; background: string | null; backdrop?: SiteImportLayoutSection['backdrop'] } {
     // The section's own background, else the one wrapper inside it that covers it.
-    const chain: number[] = []
-    if (!inherited) {
-      let at = element
-      for (let depth = 0; depth < 4 && at >= 0; depth += 1) {
-        chain.push(at)
-        const children = (this.elements[at]?.children ?? []).filter((child) => this.leaves(child).length)
-        if (children.length !== 1) break
-        at = children[0] as number
-      }
-    }
+    const chain = inherited ? [] : this.wrappersOf(element)
     for (const at of chain) {
       const found = this.backgroundBand(at)
       if (found) return found
@@ -452,6 +479,30 @@ class LayoutReader {
       if (/^white/.test(theme)) return { band: 'plain', background: null }
     }
     return null
+  }
+
+  /*---------------- widths ----------------*/
+
+  /** The cap one element sets, in px: its own rule on a wide screen, else what its framework's class says. */
+  private capOf(element: number): number | null {
+    this.wideStyles ??= this.wideStylesOf()
+    const style = this.wideStyles.of(element)
+    for (const property of ['max-width', 'width']) {
+      const value = style.get(property)
+      const px = value ? siteImportLengthPx(value) : null
+      if (px !== null && px > 0) return px
+    }
+    const classes = this.elements[element]?.attrs.class ?? ''
+    return WIDTH_CLASSES.find(([pattern]) => pattern.test(classes))?.[1] ?? null
+  }
+
+  /** The narrowest cap a section's content sits under: on it, around it, or on the wrappers inside it. */
+  private widthOf(element: number): number | null {
+    if (element < 0) return null
+    const around: number[] = []
+    for (let at = this.elements[element]?.parent ?? -1; at >= 0; at = this.elements[at]?.parent ?? -1) around.push(at)
+    const caps = [...around, ...this.wrappersOf(element)].flatMap((at) => this.capOf(at) ?? [])
+    return caps.length ? Math.min(...caps) : null
   }
 
   private alignOf(scope: number, lines: SiteImportLineRef[]): 'start' | 'center' {
@@ -613,7 +664,7 @@ class LayoutReader {
     const weights = this.weightsOf(element, parts)
     // Cells that are each one group of one kind are one group in columns.
     const groups = cells.map((cell) => (cell.length === 1 && cell[0]?.kind === 'group' ? (cell[0] as SiteImportLayoutGroup) : null))
-    if (cells.length >= 2 && groups.every((group) => group && group.group === groups[0]?.group && group.columns === 1)) {
+    if (cells.length >= 2 && groups.every((group) => group && !group.inline && group.group === groups[0]?.group && group.columns === 1)) {
       const first = groups[0] as SiteImportLayoutGroup
       return { kind: 'group', group: first.group, columns: cells.length, boxed: groups.every((group) => group?.boxed), items: groups.flatMap((group) => group?.items ?? []) }
     }
@@ -788,8 +839,67 @@ class LayoutReader {
         if (item.text && !item.text.length) delete item.text
         if (item.list && !item.list.length) delete item.list
       }
+      items.forEach((item, at) => this.takePeriod(item, parts[at]?.element as number, range))
     }
-    return { kind: 'group', group: kind, columns, boxed, items }
+    if (kind === 'cards' || kind === 'pricing') items.forEach((item, at) => this.takeBadge(item, parts[at]?.element as number, range))
+    const inline = columns === 1 && (kind === 'cards' || kind === 'pricing') && parts.every((part) => this.isWordRow(part.element, range))
+    return { kind: 'group', group: kind, columns, boxed, ...(inline ? { inline: true as const } : {}), items }
+  }
+
+  /** The line of an item that says what its price is for, beside the price: taken out of its words. */
+  private takePeriod(item: SiteImportLayoutItem, element: number, range: readonly [number, number]): void {
+    if (item.figure === undefined) return
+    const leaves = this.leaves(element).filter((leaf) => leaf.kind === 'line' && this.inRange(leaf, range))
+    const price = leaves.find((leaf) => leaf.ref === item.figure)
+    const next = item.lines[item.lines.indexOf(item.figure) + 1]
+    const period = (item.text ?? []).find((ref) => {
+      const text = this.lineText(ref).trim()
+      if (text.length > PERIOD_MAX_CHARS || !PERIOD.test(text)) return false
+      const leaf = leaves.find((entry) => entry.ref === ref)
+      return ref === next || (!!leaf && !!price && this.elements[leaf.element]?.parent === this.elements[price.element]?.parent)
+    })
+    if (period === undefined) return
+    item.period = period
+    dropLine(item, 'text', period)
+  }
+
+  /** The line of an item drawn as a tag on it, a short line in a filled pill: taken out of its words. */
+  private takeBadge(item: SiteImportLayoutItem, element: number, range: readonly [number, number]): void {
+    const leaves = this.leaves(element).filter((leaf) => leaf.kind === 'line' && this.inRange(leaf, range))
+    const badge = (item.text ?? []).find((ref) => {
+      const leaf = leaves.find((entry) => entry.ref === ref)
+      return !!leaf && this.isBadge(leaf)
+    })
+    if (badge === undefined) return
+    item.badge = badge
+    dropLine(item, 'text', badge)
+  }
+
+  /** Whether a line is a tag: a word or two on a fill of its own, its corners rounded to a pill. */
+  private isBadge(leaf: Leaf): boolean {
+    const block = this.block(leaf)
+    if (block?.kind !== 'paragraph') return false
+    const words = block.text.trim().split(/\s+/)
+    if (block.text.trim().length > BADGE_MAX_CHARS || words.length > BADGE_MAX_WORDS) return false
+    // The pill may be the line's own element, or the wrapper that holds only it.
+    for (let at = leaf.element, depth = 0; at >= 0 && depth < 2; at = this.elements[at]?.parent ?? -1, depth += 1) {
+      if (this.leaves(at).length !== 1) return false
+      const style = this.style(at)
+      const fill = siteImportBackgroundOf(style).color
+      if (fill && fill.a >= 0.5 && siteImportHex(fill) !== this.backgroundUnder(at) && (siteImportRadiusPx(style) ?? 0) >= BADGE_MIN_RADIUS) return true
+    }
+    return false
+  }
+
+  /** Whether an item is a row of its own, its parts side by side and two of them words: a plan's row, a label and its value. */
+  private isWordRow(element: number, range: readonly [number, number]): boolean {
+    const row = this.unwrap(element, range)
+    if (!this.isRow(row)) return false
+    const cells = this.parts(row, range).filter((part) => {
+      if (!isElementPart(part)) return part.leaf.kind === 'line' && this.block(part.leaf)?.kind !== 'image'
+      return this.leaves(part.element).some((leaf) => leaf.kind === 'line' && this.inRange(leaf, range) && this.block(leaf)?.kind !== 'image')
+    })
+    return cells.length >= 2
   }
 
   private lineText(ref: SiteImportLineRef): string {
@@ -822,15 +932,19 @@ class LayoutReader {
     const image = rest.find((leaf) => this.block(leaf)?.kind === 'image')
     if (image) item.image = image.ref
     const words = rest.filter((leaf) => leaf !== image)
-    // Its own call to action: the links and buttons that close it.
+    // Its own calls to action: every link it draws as a button, wherever it
+    // sits (a plan's button sits above its features), and the links and
+    // buttons that close it.
+    let drawn = words.filter((leaf) => this.block(leaf)?.kind === 'link' && !!this.buttonStyle(leaf))
+    const loose = words.filter((leaf) => !drawn.includes(leaf))
     const trailing: Leaf[] = []
-    for (let index = words.length - 1; index >= 0; index -= 1) {
-      const leaf = words[index] as Leaf
+    for (let index = loose.length - 1; index >= 0; index -= 1) {
+      const leaf = loose[index] as Leaf
       const block = this.block(leaf)
       if (block?.kind === 'link' || this.buttonStyle(leaf)) trailing.unshift(leaf)
       else break
     }
-    const body = words.slice(0, words.length - trailing.length)
+    const body = loose.slice(0, loose.length - trailing.length)
     let title: Leaf | undefined = body.find((leaf) => this.block(leaf)?.kind === 'heading')
     if (!title) {
       const first = body[0]
@@ -838,19 +952,23 @@ class LayoutReader {
       if (first && block?.kind === 'link' && body.length >= 2) title = first
       else if (first && block && block.kind !== 'image' && block.text.length <= 80 && block.text.split(/\s+/).length <= 12 && body.length >= 2) title = first
     }
-    if (!title && trailing.length === words.length && trailing.length >= 1 && words.length >= 2) {
+    let closing = [...drawn, ...trailing].sort((a, b) => a.order - b.order)
+    if (!title && closing.length === words.length && closing.length >= 1 && words.length >= 2) {
       // Only links: the first names the item.
-      title = trailing.shift()
+      title = closing[0]
+      closing = closing.slice(1)
+      drawn = drawn.filter((leaf) => leaf !== title)
     }
     if (title) item.title = title.ref
     const text = body.filter((leaf) => leaf !== title).map((leaf) => leaf.ref)
     if (text.length) item.text = text
     if (listed.size) item.list = lines.filter((leaf) => listed.has(leaf.ref)).map((leaf) => leaf.ref)
-    if (trailing.length) item.link = trailing.map((leaf) => leaf.ref)
+    if (closing.length) item.link = closing.map((leaf) => leaf.ref)
+    if (drawn.length) item.ctas = drawn.map((leaf) => ({ line: leaf.ref, style: this.buttonStyle(leaf) as SiteImportButtonStyle }))
     const titleBlock = title ? this.block(title) : undefined
     if (titleBlock?.kind === 'link') item.to = titleBlock.href
-    else if (trailing.length === 1) {
-      const only = this.block(trailing[0] as Leaf)
+    else if (closing.length === 1) {
+      const only = this.block(closing[0] as Leaf)
       if (only?.kind === 'link') item.to = only.href
     } else {
       const wrap = this.wrapperOf(element, ['a'], 0)

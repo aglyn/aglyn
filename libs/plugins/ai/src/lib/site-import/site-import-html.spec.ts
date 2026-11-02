@@ -72,8 +72,46 @@ describe('forms', () => {
 
   it('keeps a contact form as its field list, and none of what was typed', () => {
     const page = extract('<form><input name="email" type="email" value="me@x.test"><select name="topic"><option>Hi</option></select></form>')
-    expect(page.forms.kept).toEqual([{ fields: [{ type: 'email', name: 'email' }, { type: 'select', name: 'topic' }] }])
+    expect(page.forms.kept).toEqual([{ fields: [{ type: 'email', name: 'email', label: 'Email' }, { type: 'select', name: 'topic', label: 'Topic', options: ['Hi'] }] }])
     expect(JSON.stringify(page)).not.toContain('me@x.test')
+  })
+
+  const asked = (markup: string) => extract(`<form>${markup}</form>`).forms.kept[0]
+
+  it('reads what names a field: its label, the one around it, then what else it says (AGL-4083)', () => {
+    expect(asked('<label for="a">Your name <span aria-hidden="true">*</span></label><input id="a" name="n" required>')?.fields).toEqual([{ type: 'text', name: 'n', label: 'Your name', required: true }])
+    expect(asked('<label>Phone: <input type="tel" name="phone"></label>')?.fields).toEqual([{ type: 'tel', name: 'phone', label: 'Phone' }])
+    expect(asked('<input name="x" aria-label="Company">')?.fields[0]?.label).toBe('Company')
+    expect(asked('<input name="x" placeholder="Your town">')?.fields[0]).toMatchObject({ label: 'Your town', placeholder: 'Your town' })
+    expect(asked('<input name="first_name">')?.fields[0]?.label).toBe('First name')
+    expect(asked('<input name="companySize">')?.fields[0]?.label).toBe('Company size')
+  })
+
+  it('folds radios and boxes of one name into one question, under their legend (AGL-4083)', () => {
+    const radios = '<fieldset><legend>Preferred contact</legend><label><input type="radio" name="how" value="e" required>Email</label><label><input type="radio" name="how" value="p">Phone</label></fieldset>'
+    expect(asked(radios)?.fields).toEqual([{ type: 'radio', name: 'how', label: 'Preferred contact', options: ['Email', 'Phone'], required: true }])
+    const boxes = '<fieldset><legend>Interests</legend><label><input type="checkbox" name="i" value="a">Pots</label><label><input type="checkbox" name="i" value="b">Bowls</label></fieldset>'
+    expect(asked(boxes)?.fields).toEqual([{ type: 'checkbox', name: 'i', label: 'Interests', options: ['Pots', 'Bowls'] }])
+    expect(asked('<label><input type="checkbox" name="terms" required> I agree</label>')?.fields).toEqual([{ type: 'checkbox', name: 'terms', label: 'I agree', required: true }])
+  })
+
+  it('keeps a list’s choices, its empty first choice as its prompt (AGL-4083)', () => {
+    const list = '<label for="t">Topic</label><select id="t" name="topic"><option value="">Choose one</option><option value="s">Sales</option><option>Support &amp; help</option></select>'
+    expect(asked(list)?.fields).toEqual([{ type: 'select', name: 'topic', label: 'Topic', placeholder: 'Choose one', options: ['Sales', 'Support & help'] }])
+  })
+
+  it('reads the button’s words, and leaves out what no form can take (AGL-4083)', () => {
+    expect(asked('<input name="a"><button type="submit">Book a call</button>')?.submit).toBe('Book a call')
+    expect(asked('<input name="a"><button>Send it</button>')?.submit).toBe('Send it')
+    expect(asked('<input name="a"><button type="button">Add another</button><input type="submit" value="Go">')?.submit).toBe('Go')
+    expect(asked('<label for="f">Your résumé</label><input id="f" type="file" name="cv"><input name="a">')).toMatchObject({ leftOut: ['Your résumé'], fields: [{ name: 'a' }] })
+  })
+
+  it('never keeps a value that was typed, a trap for bots or a field no visitor sees (AGL-4083)', () => {
+    const form = asked('<input name="a" value="typed@x.test"><input type="text" name="website" tabindex="-1" aria-hidden="true"><input type="hidden" name="token" value="s3cret"><textarea aria-hidden="true" readonly></textarea>')
+    expect(form?.fields).toEqual([{ type: 'text', name: 'a', label: 'A' }])
+    expect(JSON.stringify(form)).not.toContain('typed@x.test')
+    expect(JSON.stringify(form)).not.toContain('s3cret')
   })
 })
 
@@ -193,14 +231,14 @@ describe('aglyn.com: the words as the page shows them', () => {
 
   it('keeps a contact form’s fields, the hidden trap field left out', () => {
     expect(aglyn('/contact').forms.kept).toEqual([
-      {
+      expect.objectContaining({
         fields: [
-          { type: 'text', name: 'name' },
-          { type: 'email', name: 'email' },
-          { type: 'textarea', name: 'message' },
-          { type: 'checkbox', name: 'marketingOptIn' },
+          { type: 'text', name: 'name', label: 'Name', required: true },
+          { type: 'email', name: 'email', label: 'Email', required: true },
+          { type: 'textarea', name: 'message', label: 'Message', required: true },
+          { type: 'checkbox', name: 'marketingOptIn', label: 'Yes' },
         ],
-      },
+      }),
     ])
   })
 

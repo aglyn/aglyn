@@ -146,6 +146,17 @@ export function aiSiteImportHeldCopy(
   }
 }
 
+/**
+ * Why an import that had started is waiting with no wave to review (AGL-4083):
+ * the sentence its stop left, which says what is not in yet and what to start.
+ * `null` for one that has not started, and one waiting for its review.
+ */
+export function aiSiteImportStoppedCopy(job: Pick<AiJobSummary, 'status' | 'review' | 'siteImport'>): string | null {
+  const state = job.siteImport ?? null
+  if (aiSiteImportPhaseOf(job) !== 'ready' || !state?.waves.some((wave) => wave.startedAt)) return null
+  return job.review?.message || null
+}
+
 export type AiSiteImportRowState = 'waiting' | 'active' | 'done' | 'failed' | 'skipped'
 
 export interface AiSiteImportRowView {
@@ -344,10 +355,11 @@ export function aiSiteImportLeftOutLines(state: AiSiteImportState): Array<{ reas
 
 /** The wave a page offers to start next, and its button's words. */
 export function aiSiteImportStartAction(
-  job: Pick<AiJobSummary, 'siteImport' | 'items'>,
+  job: Pick<AiJobSummary, 'siteImport' | 'items'> & Partial<Pick<AiJobSummary, 'status'>>,
 ): { wave: AiSiteImportWave; label: string; quote: string } | null {
   const state = job.siteImport ?? null
-  const wave = aiSiteImportNextWave(state)
+  // An import that stopped inside a wave waits on that wave, which starts again where it stopped (AGL-4083).
+  const wave = (job.status === 'needs_review' ? aiSiteImportRunningWave(state) : null) ?? aiSiteImportNextWave(state)
   if (!state || !wave) return null
   return { wave, label: `Start ${wave.label}`, quote: aiSiteImportWaveQuote(job, wave) }
 }
