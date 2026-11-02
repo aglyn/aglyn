@@ -345,13 +345,32 @@ describe('the email’s body (AGL-4130)', () => {
     expect(body).toContain('Pricing grew.')
   })
 
-  it('lists each row once, in the table’s order, and no more than it should', () => {
+  it('lists each row once, in the order the insights cite them, and no more than it should', () => {
     const body = html([said('One.', 't2', [1, 0]), said('Two.', 't2', [1, 2, 3, 4, 5])])
     expect(body.match(/>\/pricing</g)).toHaveLength(1)
-    expect(body.indexOf('Home')).toBeLessThan(body.indexOf('/pricing'))
+    expect(body.indexOf('>/pricing<')).toBeLessThan(body.indexOf('>Home<'))
     expect(body).toContain('>/c<')
     expect(body).not.toContain('>/d<')
     expect(AI_INSIGHT_DIGEST_MAX_ROWS).toBe(5)
+  })
+
+  it('leaves the column’s word off a row that names its own figure', () => {
+    const traffic = {
+      ref: 't1',
+      title: 'Traffic',
+      source: { label: 'Analytics', path: 'analytics' },
+      scope: 'site',
+      reader: 'digestspec.none',
+      columns: [
+        { key: 'figure', label: 'Figure', kind: 'text' },
+        { key: 'current', label: 'This window', kind: 'count' },
+        { key: 'change', label: 'Change', kind: 'change' },
+      ],
+      rows: [{ figure: 'Visitors', current: 642, change: 22.5 }],
+    } as unknown as AiInsightTable
+    const body = html([said('x', 't1', [0])], [traffic])
+    expect(body).toContain('642')
+    expect(body).not.toContain('this window')
   })
 
   it('links each page it lists to the page itself, the home page as Home', () => {

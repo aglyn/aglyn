@@ -284,7 +284,7 @@ describe('the AI digest’s drawing (AGL-4130)', () => {
     expect(weeklySummaryPlainDates('Code 2026-13-45.')).toBe('Code 2026-13-45.')
   })
 
-  const sentence = (text: string) => ({ headline: null, text })
+  const sentence = (text: string): { headline: string | null; text: string } => ({ headline: null, text })
 
   it('writes a day as a chart labels it', () => {
     expect(weeklySummaryWeekday('2026-10-26')).toBe('Mon, Oct 26')

@@ -780,7 +780,9 @@ export function sanitizeAuthorHtml(
     }
     justOpenedPre = false
     if (!value) return
-    out.push(escapeText(value))
+    // Decoded first: a reference already in the source is one character, and
+    // escaping it as written would show a reader `&amp;` or `&nbsp;` as text.
+    out.push(escapeText(decodeCharacterReferences(value)))
   }
 
   while (index < html.length) {

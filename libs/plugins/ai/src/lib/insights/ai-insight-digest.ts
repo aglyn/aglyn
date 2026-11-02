@@ -285,12 +285,12 @@ function aiInsightDigestTiles(tables: readonly AiInsightTable[]): Array<{ ref: s
     .sort((a, b) => a.order - b.order)
 }
 
-/** The row numbers a set of insights cite in a table, each once, in the table's order. */
+/** The row numbers a set of insights cite in a table, each once, in the order they cite them. */
 function citedRows(insights: readonly AiInsight[], table: AiInsightTable): number[] {
   const rows = insights.flatMap((insight) =>
     insight.cites.filter((cite) => cite.table === table.ref).flatMap((cite) => cite.rows),
   )
-  return [...new Set(rows)].filter((row) => Number.isInteger(row) && table.rows[row]).sort((a, b) => a - b)
+  return [...new Set(rows)].filter((row) => Number.isInteger(row) && table.rows[row])
 }
 
 /** A row's label as a person reads it, and the page it names, when it names one. */
@@ -315,9 +315,11 @@ function aiInsightDigestFigures(
   const figures = table.columns.filter((column) => FIGURE_KINDS.includes(column.kind))
   const change = table.columns.find((column) => column.kind === 'change')
   if (!label || !figures.length || !cited.length) return {}
+  // A `figure` row names what it counts. Any other row's count takes its column's word.
+  const counted = label.key !== 'figure'
   const text = (column: PluginFigureColumn, row: AiInsightTable['rows'][number]) => {
     const cell = pluginFigureCellText(table, column.key, row[column.key])
-    return column.kind === 'count' ? `${cell} ${column.label.toLowerCase()}` : cell
+    return counted && column.kind === 'count' ? `${cell} ${column.label.toLowerCase()}` : cell
   }
   if (label.kind === 'date') {
     const [figure] = figures
