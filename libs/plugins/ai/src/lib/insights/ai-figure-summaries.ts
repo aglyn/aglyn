@@ -17,6 +17,7 @@
 
 import type { PluginFigureWeeklySummary } from '@aglyn/aglyn/plugin-manager/plugin-figures'
 import {
+  figureBars,
   figureCount,
   figureHasColumn,
   figureRanked,
@@ -47,6 +48,14 @@ export const TRAFFIC_WEEKLY_SUMMARY: PluginFigureWeeklySummary = {
         ...(views ? [figureStat(table, views, 'current', 'Page views', { change: 'change' })] : []),
       ],
     }
+  },
+}
+
+export const TRAFFIC_DAILY_WEEKLY_SUMMARY: PluginFigureWeeklySummary = {
+  order: 15,
+  summarize: (table) => {
+    const bars = figureHasColumn(table, 'views') ? figureBars(table, 'day', 'views') : []
+    return bars.length ? { title: 'Traffic by day', bars } : null
   },
 }
 
