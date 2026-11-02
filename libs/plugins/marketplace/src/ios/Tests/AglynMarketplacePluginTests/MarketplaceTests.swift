@@ -138,10 +138,12 @@ final class MarketplaceTests: XCTestCase {
     let specs = ScreenCatalog.load(from: .module)
     let ids = [
       "marketplace.publish", "marketplace.publishComponent", "marketplace.publishDatasetSchema", "marketplace.publishEmailStarter", "marketplace.publishEmailTemplate",
-      "marketplace.publishLayout", "marketplace.publishPlugin", "marketplace.publishTemplate", "marketplace.publishTheme", "marketplace.publisherAgreement",
+      "marketplace.publishLayout", "marketplace.publishPlugin", "marketplace.publishStarter", "marketplace.publishTemplate", "marketplace.publishTheme",
+      "marketplace.publisherAgreement",
     ]
     XCTAssertEqual(specs.map(\.id).sorted(), ids)
     XCTAssertEqual(specs.first { $0.id == "marketplace.publishTemplate" }?.zones, ["siteTemplate"])
+    XCTAssertEqual(specs.first { $0.id == "marketplace.publishStarter" }?.zones, ["siteTemplate"])
     let declared = SpecScreens.declaration(specs).screens
     XCTAssertEqual(declared.sorted(), ids)
   }
@@ -338,9 +340,10 @@ final class MarketplaceTests: XCTestCase {
         "marketplace.browse", "marketplace.installed", "marketplace.licenses", "marketplace.listing", "marketplace.plugin-settings", "marketplace.sell",
         "marketplace.publish", "marketplace.publishTemplate", "marketplace.publisherAgreement", "marketplace.publishLayout", "marketplace.publishComponent",
         "marketplace.publishTheme", "marketplace.publishDatasetSchema", "marketplace.publishEmailTemplate", "marketplace.publishEmailStarter",
-        "marketplace.publishPlugin",
+        "marketplace.publishPlugin", "marketplace.publishStarter",
       ],
-      widgets: ["marketplace.artifact-publish", "marketplace.org-installs", "marketplace.plugin-installation"], quickActions: ["marketplace.open"],
+      widgets: ["marketplace.artifact-publish", "marketplace.org-installs", "marketplace.plugin-installation", "marketplace.starter-picker"],
+      quickActions: ["marketplace.open"],
       deepLinks: ["marketplace.listing-page", "marketplace.page"])
     let result = NativePluginLoader.load(
       [NativePluginManifestEntry(id: "marketplace", contributes: declared, register: registerMarketplaceNative)], into: registry)
@@ -349,6 +352,8 @@ final class MarketplaceTests: XCTestCase {
     XCTAssertEqual(registry.widgets(for: .aglyn, slot: "pluginInstallation").map(\.id), ["marketplace.plugin-installation"])
     // A site's component and layout pages offer Publish to marketplace because this slot is filled.
     XCTAssertEqual(registry.widgets(for: .aglyn, slot: "hostArtifactPublish").map(\.id), ["marketplace.artifact-publish"])
+    // Create site lists the starters because this slot is filled, and never names the plugin that fills it.
+    XCTAssertEqual(registry.widgets(for: .aglyn, slot: "hostStarterPicker").map(\.id), ["marketplace.starter-picker"])
     XCTAssertEqual(registry.widgets(for: .aglyn).filter { $0.pluginID == "marketplace" }.map(\.id), [], "never on Home")
   }
 }

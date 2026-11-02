@@ -220,8 +220,9 @@ describe('every publish door runs the shared gate (AGL-2282)', () => {
     // decides the buyer's doors, not a publish, and the agreement is not its
     // question: an org that stopped accepting must stop publishing, not have
     // its already-listed artifacts stop selling. `publisher-standing.ts` only
-    // tells a member whether their workspace sells as the platform.
-    expect(nonDoors.sort()).toEqual(['publisher-standing.ts', 'sale.ts'])
+    // tells a member whether their workspace sells as the platform, and
+    // `starter-publish-facts.ts` only reads what a starter publish would need.
+    expect(nonDoors.sort()).toEqual(['publisher-standing.ts', 'sale.ts', 'starter-publish-facts.ts'])
   })
 
   it.each(

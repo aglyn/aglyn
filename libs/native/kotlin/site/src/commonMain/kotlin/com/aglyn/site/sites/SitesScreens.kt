@@ -19,14 +19,19 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -42,14 +47,25 @@ import com.aglyn.core.HostStatus
 import com.aglyn.core.HostStatusKind
 import com.aglyn.core.Live
 import com.aglyn.core.SiteBrandFiles
+import com.aglyn.core.SiteStarterMode
+import com.aglyn.core.SiteStarterPickBlock
+import com.aglyn.core.SiteStarterSearch
+import com.aglyn.core.SiteStarterSummary
 import com.aglyn.core.SiteStyles
 import com.aglyn.core.mediaPreviewUrl
 import com.aglyn.core.nowMillis
 import com.aglyn.core.relativeTime
+import com.aglyn.core.releaseFlagOn
 import com.aglyn.core.siteAddress
+import com.aglyn.core.siteCreateWebUrl
 import com.aglyn.core.siteListAddress
+import com.aglyn.core.siteStarterPickBlock
+import com.aglyn.core.siteStarterPickNote
 import com.aglyn.pluginhost.ActionRunner
+import com.aglyn.pluginhost.LocalStarterPickerZone
 import com.aglyn.pluginhost.NativePluginContext
+import com.aglyn.pluginhost.SlotWidgets
+import com.aglyn.pluginhost.StarterPickerZone
 import com.aglyn.site.SiteAreas
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
@@ -81,6 +97,7 @@ import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
 import com.aglyn.ui.controlShape
 import com.aglyn.ui.space
+import kotlinx.coroutines.delay
 
 const val SITE_SITES_SCREEN = "site.sites"
 const val SITE_SITE_SCREEN = "site.site"
@@ -275,10 +292,21 @@ fun SiteOverview(context: NativePluginContext, hostId: String) {
 }
 
 /**
+ * Whether Create site offers the marketplace's starters: a plugin fills the zone, and `release_site_starters` is on for the
+ * workspace or the person is staff. The picker's first answer then decides, as the route is the judge.
+ */
+private suspend fun siteStartersOffered(context: NativePluginContext, orgId: String): Boolean {
+  if (context.slotWidgets(StarterPickerZone.SLOT).isEmpty()) return false
+  val staff = context.isStaff()
+  val org = if (staff) null else runCatching { context.firestore.get("orgs/$orgId")?.data }.getOrNull()
+  return releaseFlagOn("release_site_starters", org, orgId, staff)
+}
+
+/**
  * Create a site, as the console's Create site: a name, an address the route checks, the addresses it suggests when the one
- * asked for is taken, an optional logo, dark logo and favicon held until the site exists (AGL-4119), and the style the site
- * starts in (AGL-4049), which the person must pick: nothing is chosen for them, so Create site stays off until a card is.
- * The header and its button stay put while the styles scroll.
+ * asked for is taken, an optional logo, dark logo and favicon held until the site exists (AGL-4119), and what the site starts
+ * from (AGL-4049), which the person must pick: the style, or a starter where the marketplace's are offered to the workspace.
+ * Nothing is chosen for them, so Create site stays off until one is. The header and its button stay put while the rest scrolls.
  */
 @Composable
 private fun CreateSiteDialog(context: NativePluginContext, orgId: String, close: () -> Unit) {
@@ -293,6 +321,21 @@ private fun CreateSiteDialog(context: NativePluginContext, orgId: String, close:
   var brandErrors by remember { mutableStateOf(emptyMap<String, String>()) }
   // A site made with a file that did not make it: the sheet stays to say so, once, then opens it.
   var missed by remember { mutableStateOf<Pair<String, String>?>(null) }
+  // Whether the marketplace's starters are offered to this workspace, null until it is read; then the picker's own answer,
+  // false handing back to the styles, as the console's dialog does for a workspace with nothing to offer.
+  val offered by produceState<Boolean?>(null, orgId) { value = siteStartersOffered(context, orgId) }
+  var pickerShown by remember { mutableStateOf<Boolean?>(null) }
+  var starterMode by remember { mutableStateOf(SiteStarterMode.BASE) }
+  var starterSearch by remember { mutableStateOf("") }
+  var settledSearch by remember { mutableStateOf("") }
+  var pick by remember { mutableStateOf<SiteStarterSummary?>(null) }
+  val usingStarters = offered == true && pickerShown != false
+  val usingStyles = offered == false || pickerShown == false
+  LaunchedEffect(starterSearch) {
+    delay(300)
+    settledSearch = starterSearch
+  }
+  val uri = LocalUriHandler.current
   val list = rememberLazyListState()
   // A refusal is read where it is: the button stays in view however far the styles have scrolled.
   LaunchedEffect(runner.error) { if (runner.error != null) list.animateScrollToItem(0) }
@@ -327,12 +370,13 @@ private fun CreateSiteDialog(context: NativePluginContext, orgId: String, close:
     action = {
       Button(
         shape = controlShape(),
-        enabled = canCreateSite(name, subdomain, style) && !runner.busy,
+        enabled = (if (usingStarters) canCreateSiteFromStarter(name, subdomain, pick) else canCreateSite(name, subdomain, style)) && !runner.busy,
         modifier = Modifier.testTag("create-site-confirm"),
         onClick = {
-          val chosen = style ?: return@Button
+          val start = if (usingStarters) pick?.let { SiteStart.Starter(it.listingId) } else style?.let { SiteStart.Style(it) }
+          if (start == null) return@Button
           runner.run {
-            when (val result = createSite(context.api, orgId, name, subdomain, chosen)) {
+            when (val result = createSite(context.api, orgId, name, subdomain, start)) {
               is CreateSiteResult.Created -> {
                 // The logo, dark logo and favicon go in now the site has a library. A file that does not make it never
                 // costs the site: it is said once, here, before the site opens.
@@ -344,13 +388,20 @@ private fun CreateSiteDialog(context: NativePluginContext, orgId: String, close:
                 suggestions = result.suggestions
                 runner.error = result.message
               }
+              is CreateSiteResult.PickRefused -> {
+                // A price still asked keeps the pick, which offers to buy it; anything else clears it, with the reason.
+                pick = if (result.refused.keep) pick?.copy(owned = false) else null
+                runner.error = result.refused.message
+              }
             }
           }
         },
       ) { Text(if (runner.busy) "Creating…" else "Create site") }
     },
   ) {
-    OptionCardList("Style of site", options, style, { style = it }, state = list) {
+    Column(Modifier.fillMaxSize()) {
+      Box(Modifier.weight(1f)) {
+        OptionCardList("Style of site", if (usingStyles) options else emptyList(), style, { style = it }, state = list) {
       runner.error?.let { NoticeBanner(it, StatusTone.ERROR, Modifier.testTag("create-site-error")) }
       OutlinedTextField(
         name,
@@ -413,15 +464,84 @@ private fun CreateSiteDialog(context: NativePluginContext, orgId: String, close:
         }
         Text(SiteBrandFiles.HINT, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
       }
-      Column(Modifier.padding(top = space(1f)), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
-        Text("Choose a style", Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium)
-        val lede = MaterialTheme.typography.bodyMedium
-        val quiet = MaterialTheme.colorScheme.onSurfaceVariant
-        Text("Your site starts with a home page, a header and a footer in the style you choose. You can change everything later.", style = lede, color = quiet)
-        if (style == null) Text("Choose a style to create your site.", Modifier.testTag("site-style-required"), style = lede, color = quiet)
+      if (usingStarters) {
+        // The console's "Choose your starter": its words, the marketplace's starters through the zone a plugin fills, and
+        // whichever starters and AI starters it offers. Nothing is picked until a row is.
+        Column(Modifier.padding(top = space(1f)), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
+          Text(SiteStarterSearch.TITLE, Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium)
+          val lede = MaterialTheme.typography.bodyMedium
+          val quiet = MaterialTheme.colorScheme.onSurfaceVariant
+          Text(SiteStarterSearch.LEDE, style = lede, color = quiet)
+          starterStillNeeded(pick, starterMode)?.let { Text(it, Modifier.testTag("site-starter-required"), style = lede, color = quiet) }
+        }
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().testTag("starter-mode")) {
+          listOf(SiteStarterMode.BASE to "Starters", SiteStarterMode.AI to "AI starters").forEachIndexed { index, (mode, label) ->
+            SegmentedButton(
+              selected = mode == starterMode,
+              // Another kind of starter is another list: what was picked in this one is not carried across.
+              onClick = { starterMode = mode; pick = null; runner.error = null },
+              shape = SegmentedButtonDefaults.itemShape(index, 2),
+              icon = {},
+              modifier = Modifier.testTag("starter-mode-${mode.wire}"),
+            ) { Text(label, maxLines = 1) }
+          }
+        }
+        SearchField(starterSearch, { starterSearch = it }, "Search starters", Modifier.testTag("starter-search"))
+        CompositionLocalProvider(
+          LocalStarterPickerZone provides StarterPickerZone(
+            orgId = orgId,
+            mode = starterMode,
+            search = settledSearch,
+            selected = pick,
+            onPick = { pick = it; runner.error = null },
+            ready = { pickerShown = it },
+          ),
+        ) { SlotWidgets(context, StarterPickerZone.SLOT) }
+      } else if (usingStyles) {
+        Column(Modifier.padding(top = space(1f)), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
+          Text("Choose a style", Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium)
+          val lede = MaterialTheme.typography.bodyMedium
+          val quiet = MaterialTheme.colorScheme.onSurfaceVariant
+          Text("Your site starts with a home page, a header and a footer in the style you choose. You can change everything later.", style = lede, color = quiet)
+          if (style == null) Text("Choose a style to create your site.", Modifier.testTag("site-style-required"), style = lede, color = quiet)
+        }
+      }
+    }
+      }
+      // What the pick needs next, held at the foot of the sheet so it is beside whichever row was tapped, however long the list.
+      if (usingStarters) {
+        siteStarterPickNote(pick)?.let { note ->
+          HorizontalDivider()
+          NoticeBanner(
+            note.message,
+            if (note.webAction == null) StatusTone.SUCCESS else StatusTone.INFO,
+            Modifier.padding(space(2f)).testTag("starter-note"),
+          ) {
+            note.webAction?.let { label ->
+              Button(
+                shape = controlShape(),
+                modifier = Modifier.testTag("starter-web"),
+                onClick = {
+                  // The console's own Create site, on this pick: where it is bought, or where an AI starter's questions are asked.
+                  siteCreateWebUrl(context.api.origin, context.orgSlug, pick?.listingId.orEmpty())?.let { address ->
+                    close()
+                    uri.openUri(address)
+                  }
+                },
+              ) { Text(label) }
+            }
+          }
+        }
       }
     }
   }
+}
+
+/** Why Create site is off, in the console's words (`CreateHostDialog`), until a pick it can create from. */
+private fun starterStillNeeded(pick: SiteStarterSummary?, mode: SiteStarterMode): String? = when (siteStarterPickBlock(pick)) {
+  SiteStarterPickBlock.NONE -> if (mode == SiteStarterMode.BASE) "Choose a starter to create your site." else "Choose an AI starter to continue."
+  SiteStarterPickBlock.PURCHASE -> if (mode == SiteStarterMode.BASE) "Buy this starter to create your site from it." else "Buy this starter to continue with it."
+  null -> if (mode == SiteStarterMode.BASE) null else "Continue on the web to answer this starter's questions."
 }
 
 /** The picked site's own overview screen. */

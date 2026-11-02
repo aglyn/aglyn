@@ -42,6 +42,11 @@ public func registerMarketplaceNative(_ r: NativePluginRegistrar) {
   // A site's component and layout pages offer Publish to marketplace only where a plugin fills this slot (the console's
   // `hostArtifactPublish` zone); the publish itself is this plugin's spec screens, so the widget draws nothing of its own.
   r.widget("marketplace.artifact-publish", title: "Publish to marketplace", order: 10, slot: "hostArtifactPublish") { _ in EmptyView() }
+  // Create site lists the marketplace's starters through this slot (the console's `hostStarterPicker` zone), and never
+  // names the plugin that fills it.
+  r.widget("marketplace.starter-picker", title: "Choose your starter", order: 10, slot: StarterPickerZone.slot) {
+    StarterPickerWidget(context: $0)
+  }
   r.quickAction("marketplace.open", title: "Marketplace", icon: "storefront", order: 60, screen: marketplaceBrowseScreen)
   r.deepLink("marketplace.page", path: "/marketplace", screen: marketplaceBrowseScreen)
   r.deepLink("marketplace.listing-page", path: "/marketplace/:listingId", screen: marketplaceListingScreen)

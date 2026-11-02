@@ -65,8 +65,8 @@ final class MarketplacePublishTests: XCTestCase {
 
   func testEveryPublishAsksForTheAgreementInABoxAboveItsButton() throws {
     for id in [
-      "marketplace.publishTemplate", "marketplace.publishLayout", "marketplace.publishComponent", "marketplace.publishTheme",
-      "marketplace.publishDatasetSchema", "marketplace.publishEmailTemplate", "marketplace.publishEmailStarter", "marketplace.publishPlugin",
+      "marketplace.publishTemplate", "marketplace.publishStarter", "marketplace.publishLayout", "marketplace.publishComponent",
+      "marketplace.publishTheme", "marketplace.publishDatasetSchema", "marketplace.publishEmailTemplate", "marketplace.publishEmailStarter", "marketplace.publishPlugin",
     ] {
       let publish = try spec(id)
       let form = try XCTUnwrap(publish.blocks.first { $0.type == "form" })
@@ -143,6 +143,109 @@ final class MarketplacePublishTests: XCTestCase {
     XCTAssertTrue(try XCTUnwrap(form["fields"].array.compactMap(FieldSpec.init).first { $0.key == "name" }).required)
     let price = try XCTUnwrap(form["fields"].array.compactMap(FieldSpec.init).first { $0.key == "price" })
     XCTAssertTrue(try XCTUnwrap(price.help).hasPrefix("0 for free, or $"))
+  }
+
+  func testTheSiteStarterSitsBesideTheTemplateOnlyWhereTheServerOffersIt() throws {
+    let contribution = try spec("marketplace.publishStarter")
+    XCTAssertEqual(contribution.zones, ["siteTemplate"])
+    XCTAssertEqual(contribution.label, "Publish as a starter")
+    XCTAssertEqual(contribution.loads.first { $0.key == "facts" }?.optional, true)
+    // The route answers 403 while the release flag is off for the workspace, and the row is not offered.
+    XCTAssertFalse(ScreenValues.condition(contribution.showWhen, in: ["data": ["facts": .null]]))
+    XCTAssertTrue(ScreenValues.condition(contribution.showWhen, in: ["data": ["facts": ["captures": "Captures its one published page"]]]))
+    let hub = try spec("marketplace.publish")
+    let link = hub.blocks.flatMap { $0["items"].array }.first { $0["screen"] == "marketplace.publishStarter" }
+    XCTAssertEqual(link?["title"], "A site starter")
+    XCTAssertFalse(ScreenValues.condition(link?["when"]?.stringValue, in: ["data": ["starter": .null]]))
+  }
+
+  func testAStarterSendsTheThemeChosenAndWhatItIsListedUnder() async throws {
+    let publish = try spec("marketplace.publishStarter")
+    let form = try XCTUnwrap(publish.blocks.first { $0.type == "form" })
+    let submit = try XCTUnwrap(form["submit"].flatMap(ActionSpec.init))
+    let transport = RecordingTransport(responses: [(200, #"{"listingId":"l1","version":1}"#), (200, #"{"listingId":"l1","version":2}"#)])
+    let model = ScreenModel(spec: publish, context: [:], api: api(transport))
+    let builtin: JSONValue = ["kind": "builtin", "base": "material3", "brand": ["light": ["primary": "#123456"], "dark": [:]], "fonts": .null]
+    let filled: JSONValue = [
+      "site": ["id": "h1"], "data": ["facts": ["builtin": builtin]],
+      "form": ["name": "Bakery", "description": "A bakery", "category": "Bakery", "price": 0, "theme": "builtin", "style": "shop", "agreement": ["agreed"]],
+    ]
+    let first = await model.run(submit, in: withConstants(filled, publish))
+    XCTAssertEqual(first, .done(message: "Sent your starter for review. It is listed once it has been reviewed.", response: ["listingId": "l1", "version": 1]))
+    XCTAssertEqual(transport.requests[0].url?.path, "/api/marketplace/publish-starter")
+    let body = try XCTUnwrap(transport.requests[0].httpBody.flatMap(JSONValue.decode))
+    XCTAssertEqual(
+      body,
+      [
+        "hostId": "h1", "displayName": "Bakery", "description": "A bakery", "category": "Bakery", "priceUsd": 0,
+        "theme": builtin, "mode": "base", "facets": ["kind": "shop"],
+        "agreement": ["version": agreementVersion(publish), "accepted": true],
+      ])
+    // The site's full theme names only its shape, the door reads the rest; no closest style names none.
+    let full: JSONValue = [
+      "site": ["id": "h1"], "data": ["facts": ["builtin": builtin]],
+      "form": ["name": "Bakery", "theme": "full", "style": "", "agreement": ["agreed"]],
+    ]
+    let second = await model.run(submit, in: withConstants(full, publish))
+    XCTAssertEqual(second, .done(message: "Published v2 of your starter", response: ["listingId": "l1", "version": 2]))
+    let again = try XCTUnwrap(transport.requests[1].httpBody.flatMap(JSONValue.decode))
+    XCTAssertEqual(again["theme"], ["kind": "full"])
+    XCTAssertEqual(again["facets"], [:])
+    XCTAssertEqual(again["mode"], "base")
+    // Every problem a theme check names is said with the door's own words.
+    XCTAssertEqual(
+      ScreenModel.refusal(
+        for: submit,
+        error: ConsoleAPIError(
+          status: 422, message: "Too faint",
+          body: ["error": "Too faint", "errors": [["message": "Too faint"], ["message": "Also too thin"]]]),
+        in: [:]),
+      "Too faint\nAlso too thin")
+  }
+
+  func testAStarterWaitsForATheme() throws {
+    let publish = try spec("marketplace.publishStarter")
+    let form = try XCTUnwrap(publish.blocks.first { $0.type == "form" })
+    let fields = form["fields"].array.compactMap(FieldSpec.init)
+    let theme = try XCTUnwrap(fields.first { $0.key == "theme" })
+    // Neither shape is chosen for the publisher.
+    XCTAssertEqual(theme.initial, nil)
+    XCTAssertTrue(theme.unmet(.null, in: [:]))
+    XCTAssertFalse(theme.unmet("full", in: [:]))
+    // A site that wears its own theme keeps the built-in on screen, off, with the reason.
+    let own: JSONValue = ["data": ["facts": ["builtin": .null, "builtinDetail": "This site wears its own theme"]]]
+    let rows = theme.choiceRows(in: own)
+    XCTAssertEqual(rows.map(\.enabled), [false, true])
+    XCTAssertEqual(rows.first?.detail, "This site wears its own theme")
+    // The closest style is the console's list, optional.
+    let style = try XCTUnwrap(fields.first { $0.key == "style" })
+    XCTAssertEqual(style.options.count, 22)
+    XCTAssertFalse(style.unmet(.null, in: [:]))
+  }
+
+  func testASetupStepTurnsPublishOffAndSaysWhereItIsFixed() throws {
+    let publish = try spec("marketplace.publishStarter")
+    let submit = try XCTUnwrap(publish.blocks.first { $0.type == "form" }?["submit"].flatMap(ActionSpec.init))
+    func shownSteps(_ facts: JSONValue) -> (notices: [String], links: [String], off: Bool) {
+      let context: JSONValue = ["data": ["facts": facts]]
+      let blocks = publish.blocks.filter { ($0["id"]?.stringValue ?? "").hasPrefix("step-") && ScreenValues.condition($0.when, in: context) }
+      return (
+        blocks.filter { $0.type == "notice" }.map { ScreenValues.render($0["text"]?.stringValue ?? "", in: context) },
+        blocks.flatMap { $0["items"].array }.compactMap { $0["screen"]?.stringValue },
+        ScreenValues.condition(submit.disabledWhen, in: context)
+      )
+    }
+    let none = shownSteps(["steps": [:], "blocked": false])
+    XCTAssertEqual(none.notices, [])
+    XCTAssertFalse(none.off)
+    let profile = shownSteps(["steps": ["profile": "Set up your publisher profile first."], "blocked": true])
+    XCTAssertEqual(profile.notices, ["Set up your publisher profile first."])
+    XCTAssertEqual(profile.links, ["marketplace.sell"])
+    XCTAssertTrue(profile.off)
+    // What a price needs is said ahead of a price, and leaves a free publish on.
+    let payouts = shownSteps(["steps": ["payouts": "Set up payouts first to sell a starter with a price, or publish it free."], "blocked": false])
+    XCTAssertEqual(payouts.links, ["marketplace.sell"])
+    XCTAssertFalse(payouts.off)
   }
 
   func testEveryOtherKindPublishesWithWhatItIsAndTheListingTheRouteTakes() async throws {
@@ -227,7 +330,8 @@ final class MarketplacePublishTests: XCTestCase {
     XCTAssertEqual(try rows("Dataset schemas").map(\.name), ["Menu items", "Staff"])
     let links = try XCTUnwrap(hub.blocks.first { $0.type == "links" && $0.when == nil })
     XCTAssertEqual(
-      links["items"].array.compactMap { $0["screen"]?.stringValue }, ["marketplace.publishTemplate", "marketplace.publishTheme", "marketplace.publishPlugin"])
+      links["items"].array.compactMap { $0["screen"]?.stringValue },
+      ["marketplace.publishTemplate", "marketplace.publishStarter", "marketplace.publishTheme", "marketplace.publishPlugin"])
   }
 
   func testAPublishRefusedForTheAgreementSaysWhyInTheRoutesWords() async throws {

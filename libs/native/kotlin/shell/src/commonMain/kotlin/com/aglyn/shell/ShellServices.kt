@@ -302,6 +302,8 @@ internal class ShellPluginContext(
   override val siteRole get() = workspace.site?.role
   override val orgRole get() = workspace.org?.role
 
+  override suspend fun isStaff() = com.aglyn.core.TokenClaims.fromIdToken(runCatching { services.auth.idToken(false) }.getOrNull()).isStaff
+
   override fun slotWidgets(slot: String) = services.registry.widgets(services.app, slot)
 
   override fun selectSite(hostId: String) = services.workspace.selectSite(hostId)

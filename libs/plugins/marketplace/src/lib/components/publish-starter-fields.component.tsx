@@ -16,7 +16,6 @@
  */
 'use client'
 
-import { siteFontPairing } from '@aglyn/aglyn/app-utils/site-font-pairings'
 import type { SiteStarterBuiltinReading } from '@aglyn/aglyn/app-utils/site-starter-theme'
 import { SITE_STYLES } from '@aglyn/aglyn/app-utils/site-styles'
 import { PrerequisiteNotice } from '@aglyn/shared-ui-jsx/components/prerequisite-notice.component'
@@ -34,10 +33,13 @@ import {
   Typography,
 } from '@mui/material'
 import { useId, type ReactNode } from 'react'
-import type {
-  StarterPublishPages,
-  StarterPublishStep,
-  StarterThemeChoice,
+import {
+  starterBuiltinDetail,
+  starterCapturesSentence,
+  starterFontsNote,
+  type StarterPublishPages,
+  type StarterPublishStep,
+  type StarterThemeChoice,
 } from '../model/starter-publish'
 
 export interface PublishStarterFieldsProps {
@@ -55,15 +57,6 @@ export interface PublishStarterFieldsProps {
   styleKind: string
   onStyleKindChange: (kind: string) => void
   disabled?: boolean
-}
-
-/** The fonts a pairing sets, as a person names them. */
-function pairingLabel(id: string | null): string | null {
-  const pairing = siteFontPairing(id)
-  if (!pairing) return null
-  return pairing.heading.family === pairing.body.family
-    ? pairing.body.family
-    : `${pairing.heading.family} and ${pairing.body.family}`
 }
 
 /** One theme option: its name, and a line on what it carries. */
@@ -105,24 +98,14 @@ export function PublishStarterFields(props: PublishStarterFieldsProps) {
     disabled = false,
   } = props
   const themeLabelId = useId()
-  const fonts = pairingLabel(builtin?.theme.fonts ?? null)
-  const recolored = !!builtin && Object.values(builtin.theme.brand).some((colors) => colors && Object.keys(colors).length)
-
-  const builtinDetail = !hostReady
-    ? "Reading this site's theme…"
-    : builtin
-      ? `${builtin.baseName}, ${recolored ? 'with the brand colors this site set over it' : 'in its own colors'}` +
-        `${fonts ? `, set in ${fonts}` : ''}. A site created from it can switch to another built-in theme.`
-      : 'This site wears its own theme, not a built-in one, so a starter can carry it only as its full theme.'
+  const builtinDetail = starterBuiltinDetail(builtin, hostReady)
+  const fontsNote = starterFontsNote(builtin)
 
   return (
     <Stack spacing={2}>
       {pages ? (
         <Typography variant="body2" color="text.secondary" data-starter-publish="pages">
-          {pages.count === 1
-            ? 'Captures its one published page, '
-            : `Captures its ${pages.count} published pages, `}
-          {'the shared header and footer they sit in, and the theme you choose below.'}
+          {starterCapturesSentence(pages)}
         </Typography>
       ) : null}
 
@@ -162,12 +145,7 @@ export function PublishStarterFields(props: PublishStarterFieldsProps) {
         ) : null}
       </FormControl>
 
-      {choice === 'builtin' && builtin && !builtin.fontsCarried ? (
-        <Alert severity="info">
-          {`This site's fonts are not a pairing a built-in theme can name, so the starter uses ` +
-            `${builtin.baseName}'s own fonts. Choose the full theme to keep them.`}
-        </Alert>
-      ) : null}
+      {choice === 'builtin' && fontsNote ? <Alert severity="info">{fontsNote}</Alert> : null}
 
       <TextField
         select

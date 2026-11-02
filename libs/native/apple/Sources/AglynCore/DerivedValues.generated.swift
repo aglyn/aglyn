@@ -97,6 +97,15 @@ public enum SiteBrandFiles {
   public static let maxBytes = 15728640
 }
 
+/// Where Choose your starter asks, and how much a search may ask for.
+public enum SiteStarterSearch {
+  public static let path = "/api/marketplace/starters"
+  public static let title = "Choose your starter"
+  public static let lede = "Aglyn's styles come first, then starters from the marketplace. Nothing is chosen for you, and you can change everything later."
+  public static let wordMax = 200
+  public static let max = 50
+}
+
 /// Each release flag as the Remote Config template publishes it.
 public enum ReleaseFlagDefaults {
   public static let byKey: [String: ReleaseFlagValue] = [

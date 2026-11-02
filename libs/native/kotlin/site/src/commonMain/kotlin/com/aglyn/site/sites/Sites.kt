@@ -9,6 +9,9 @@ import com.aglyn.contracts.ListQueryRequest
 import com.aglyn.core.ApiMethod
 import com.aglyn.core.ConsoleApiClient
 import com.aglyn.core.ConsoleApiError
+import com.aglyn.core.SiteStarterMode
+import com.aglyn.core.SiteStarterPickRefused
+import com.aglyn.core.SiteStarterSummary
 import com.aglyn.core.SiteStyles
 import com.aglyn.core.FirestoreDoc
 import com.aglyn.core.FirestoreReader
@@ -17,6 +20,8 @@ import com.aglyn.core.field
 import com.aglyn.core.jsonBody
 import com.aglyn.core.listquery.planListQuery
 import com.aglyn.core.listquery.toFirestoreQuery
+import com.aglyn.core.readSiteStarterPickRefusal
+import com.aglyn.core.siteStarterPickBlock
 import com.aglyn.ui.Load
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -153,10 +158,23 @@ class SitesListModel(
   }
 }
 
-/** The create-site route's answer, or its refusal with the addresses it suggests instead. */
+/**
+ * The create-site route's answer, or its refusal with the addresses it suggests instead, or its refusal of the starter
+ * picked, which is about the pick and not the name.
+ */
 sealed interface CreateSiteResult {
   data class Created(val hostId: String, val subdomain: String) : CreateSiteResult
   data class Refused(val message: String, val suggestions: List<String>) : CreateSiteResult
+  data class PickRefused(val refused: SiteStarterPickRefused) : CreateSiteResult
+}
+
+/**
+ * What a site starts from: a style, or a starter from the marketplace. Nothing in Create site is chosen for anyone, so a
+ * create names one of the two.
+ */
+sealed interface SiteStart {
+  data class Style(val id: String) : SiteStart
+  data class Starter(val listingId: String) : SiteStart
 }
 
 /** The site-address rule the create route holds (`SUBDOMAIN_PATTERN`). */
@@ -183,6 +201,14 @@ fun canCreateSite(name: String, subdomain: String, style: String?): Boolean =
   name.isNotBlank() && SUBDOMAIN_PATTERN.matches(subdomain) && SiteStyles.all.any { it.id == style }
 
 /**
+ * Whether Create site can go ahead from a starter: a name, an address the route's pattern takes, and a starter the site can
+ * be created from here. A price not paid waits to be bought, and an AI starter goes on to its questions, which the app does
+ * not ask: the console's Create site does both.
+ */
+fun canCreateSiteFromStarter(name: String, subdomain: String, pick: SiteStarterSummary?, owned: Boolean? = null): Boolean =
+  name.isNotBlank() && SUBDOMAIN_PATTERN.matches(subdomain) && siteStarterPickBlock(pick, owned) == null && pick?.mode == SiteStarterMode.BASE
+
+/**
  * What Create site sends. `start: "starter"` is the console's own "Create the
  * starter site" answer: the site is born with the starter website in the same
  * request. Without it the server may create the site empty to offer the guided
@@ -193,14 +219,37 @@ fun canCreateSite(name: String, subdomain: String, style: String?): Boolean =
 fun createSiteBody(orgId: String, name: String, subdomain: String, style: String): JsonObject =
   jsonBody("displayName" to name.trim(), "subdomain" to subdomain.trim().lowercase(), "orgId" to orgId, "start" to "starter", "style" to style)
 
+/**
+ * What Create site sends for a starter from the marketplace, as the console's own "Choose your starter" does: the listing,
+ * with no style, since the starter brings its own look.
+ */
+fun createSiteBody(orgId: String, name: String, subdomain: String, starter: SiteStart.Starter): JsonObject =
+  jsonBody(
+    "displayName" to name.trim(), "subdomain" to subdomain.trim().lowercase(), "orgId" to orgId, "start" to "starter",
+    "starter" to mapOf("listingId" to starter.listingId),
+  )
+
 /** `POST /api/hosts/create`, the console's own Create site. */
-suspend fun createSite(api: ConsoleApiClient, orgId: String, name: String, subdomain: String, style: String): CreateSiteResult = try {
-  val answer = api.request("/api/hosts/create", ApiMethod.POST, createSiteBody(orgId, name, subdomain, style))
+suspend fun createSite(api: ConsoleApiClient, orgId: String, name: String, subdomain: String, start: SiteStart): CreateSiteResult = try {
+  val body = when (start) {
+    is SiteStart.Style -> createSiteBody(orgId, name, subdomain, start.id)
+    is SiteStart.Starter -> createSiteBody(orgId, name, subdomain, start)
+  }
+  val answer = api.request("/api/hosts/create", ApiMethod.POST, body)
   CreateSiteResult.Created(answer.field("hostId").orEmpty(), answer.field("subdomain") ?: subdomain)
 } catch (error: ConsoleApiError) {
   if (error.status == 0) throw error
-  val suggestions = ((error.body as? JsonObject)?.get("suggestions") as? JsonArray)
-    ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
-    .orEmpty()
-  CreateSiteResult.Refused(error.message, suggestions)
+  val refused = (start as? SiteStart.Starter)?.let { readSiteStarterPickRefusal(error.status, error.body, it.listingId) }
+  if (refused != null) {
+    CreateSiteResult.PickRefused(refused)
+  } else {
+    val suggestions = ((error.body as? JsonObject)?.get("suggestions") as? JsonArray)
+      ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
+      .orEmpty()
+    CreateSiteResult.Refused(error.message, suggestions)
+  }
 }
+
+/** `POST /api/hosts/create` in the style the person chose. */
+suspend fun createSite(api: ConsoleApiClient, orgId: String, name: String, subdomain: String, style: String): CreateSiteResult =
+  createSite(api, orgId, name, subdomain, SiteStart.Style(style))

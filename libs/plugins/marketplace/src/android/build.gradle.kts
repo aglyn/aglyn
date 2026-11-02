@@ -67,6 +67,13 @@ kotlin {
       implementation(libs.kotlinx.coroutines.test)
       implementation(libs.ktor.client.mock)
     }
+    // Create site's starters, driven through the real Sites screen (StarterPickerUiTest).
+    named("desktopTest") {
+      dependencies {
+        implementation(libs.compose.ui.test)
+        implementation(compose.desktop.currentOs)
+      }
+    }
   }
 }
 
