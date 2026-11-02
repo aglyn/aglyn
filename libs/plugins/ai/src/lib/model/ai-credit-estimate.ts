@@ -138,7 +138,7 @@ export const AI_MEASURED_IMPORT_CREDITS = {
 } as const satisfies Record<string, AiMeasuredCredits>
 
 /** When `AI_MEASURED_IMPORT_CREDITS` was read, from which import, over how many pages of each build. */
-export const AI_MEASURED_IMPORT_AT = { read: '2026-11-01', job: 'mxOkjt2ff7', arranged: 77, copied: 136 } as const
+export const AI_MEASURED_IMPORT_AT = { read: '2026-11-01', job: 'mxOkjt2ff7', arranged: 77, copied: 266 } as const
 
 /**
  * When the table above was read, and from when its jobs ran. Both tables

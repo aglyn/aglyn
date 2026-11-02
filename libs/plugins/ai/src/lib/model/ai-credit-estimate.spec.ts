@@ -52,7 +52,7 @@ describe('what a job is quoted from (AGL-3722)', () => {
   })
 
   it('holds what a whole import measured, as read from its ledger on 2026-11-01 (AGL-4083)', () => {
-    expect(AI_MEASURED_IMPORT_AT).toEqual({ read: '2026-11-01', job: 'mxOkjt2ff7', arranged: 77, copied: 136 })
+    expect(AI_MEASURED_IMPORT_AT).toEqual({ read: '2026-11-01', job: 'mxOkjt2ff7', arranged: 77, copied: 266 })
     expect(AI_MEASURED_IMPORT_CREDITS.arranged).toEqual({ median: 10, p90: 12 })
     expect(AI_MEASURED_IMPORT_CREDITS.copied).toEqual({ median: 0, p90: 1 })
   })
