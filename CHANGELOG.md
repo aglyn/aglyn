@@ -63,7 +63,7 @@ content on the marketing site and is written separately.
 - **marketplace:** Publish as a starter, its section and shot on the seeded emulator ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
 
 <details>
-<summary>Also in this release: 5 test, 3 chore</summary>
+<summary>Also in this release: 6 test, 3 chore</summary>
 
 - **ai:** a rebuilt form is among an import's outputs ([AGL-4083](https://linear.app/aglyn/issue/AGL-4083))
 - **ai:** the import specs read a form rebuilt on a page ([AGL-4083](https://linear.app/aglyn/issue/AGL-4083))
@@ -72,6 +72,7 @@ content on the marketing site and is written separately.
 - **release:** a new major version waits for the owner, semver stays
 - **aglyn:** the status list's documented copy moved with the payment method reader ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
 - **console:** the card spec stands in for the console's useHost ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **commerce:** the money door list names where the marketplace sale is decided ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
 - **tools:** raise the Linear id floor to AGL-4127, read off the workspace ([AGL-4127](https://linear.app/aglyn/issue/AGL-4127))
 
 </details>
