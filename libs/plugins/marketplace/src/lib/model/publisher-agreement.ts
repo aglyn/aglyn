@@ -134,8 +134,20 @@ import { LEGAL_ORIGIN, isPublishedLegalUrl } from '@aglyn/aglyn/app-utils/publis
  * merchant of record and determines, collects and remits transaction tax since
  * 2026-08-14. The Terms of Service moved TO them in this pass (new ToS §10.7),
  * not the other way around.
+ *
+ * ## 2026-11-02 — `2026-11-02.1`, site starters (AGL-4049)
+ *
+ * The opening names site starters among the Artifacts, and §1 is now "Site
+ * Starters": a site starter is an Artifact and everything in it is warranted
+ * under §3. That replaces §1's pre-release paragraph. Its "AS IS" wording stays
+ * in §10, and the right to change the Marketplace stays in Terms of Service
+ * §5.1. §2 to §14 keep their numbers, because the repo and the native screens
+ * cite them.
+ *
+ * The capture also carries §8.6's "license" spelling, which the page already
+ * served after the `2026-08-24.1` pin was taken.
  */
-export const PUBLISHER_AGREEMENT_VERSION = '2026-08-24.1'
+export const PUBLISHER_AGREEMENT_VERSION = '2026-11-02.1'
 
 export const PUBLISHER_AGREEMENT_TITLE = 'Marketplace Publisher Agreement'
 
@@ -175,10 +187,10 @@ export const PUBLISHER_AGREEMENT_TITLE = 'Marketplace Publisher Agreement'
  * snapshot of unpublished text is a false record.
  */
 export const PUBLISHER_AGREEMENT_SHA256 =
-  '2df6e940f037b4630e53c8f63bad8604ef4bf370374b89afcd4ea7f9fe8e8d63'
+  '3a345609a30e915be53dfeaf8e4a2c141e92a250e39cf741f8c8c0c9c764d23c'
 
 /** Byte length of the same snapshot — a cheap second check on the content. */
-export const PUBLISHER_AGREEMENT_BYTES = 13730
+export const PUBLISHER_AGREEMENT_BYTES = 13709
 
 /**
  * Canonical document, on the operator's legal origin beside the other terms.
@@ -319,6 +331,14 @@ export const PUBLISHER_AGREEMENT_CHANGES: readonly {
     version: '2026-08-24.1',
     changes: [
       '§13.3: venue moves to Travis County, Texas, and governing law now cites Terms of Service Section 18.6.',
+    ],
+  },
+  {
+    version: '2026-11-02.1',
+    changes: [
+      'Opening paragraph: site starters are among the Artifacts you can publish.',
+      '§1, new: a site starter is an Artifact. Its pages, shared layout, theme and, for an AI site starter, its answers are its content, and you warrant them under §3. §1 no longer describes the Marketplace as pre-release.',
+      '§8.6: a spelling correction, with no change in meaning.',
     ],
   },
 ]
