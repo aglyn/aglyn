@@ -3763,6 +3763,34 @@ AGL-3660), which fills every empty slot and takes the icon out of its frame:
   The replays are `ai-stock-photo-agl4092-1029-{pit,rut}.spec.ts`, from production's
   search cache for the searches the two sites sent and Pixabay re-asked read-only
   for those the fixes send in their place (`fixtures/ai-stock-photo-agl4092-1029-recordings.ts`).
+- **A clear world's picture is of that world, and its alt text says less (AGL-4092,
+  2026-11-01).** The live check's motocross team showed a kitesurfer in the section
+  about joining it, and its and a taco trailer's alts read "Tacos and a mexican", "A
+  tacos pastor", "A motocross and a race". Each is closed where it was made:
+  - *Only a thing's own name stands for the world.* A strict picture that names none of
+    the business's own world passes on its subject's two-word phrase only where the hit
+    says the phrase whole (a tag, its description, the opening of its page address,
+    never two tags run together further on: "kitesurfer-young-rider-kitesurfing") and
+    the phrase is a thing's name (`aiStockPhraseNamesAThing`): "espresso cup" is that
+    cup in any world; "young rider" says what someone is like, and a rider, a player
+    or a coach is in every world (`ANY_WORLD_PEOPLE`, `PEOPLE_NOUNS`). It still scores
+    as a phrase on a hit that names the world.
+  - *One thing, never two tags side by side.* `aiStockTagsAlt` says no second thing
+    ("Tacos and a beef" is tacos): over the 3,172 recorded photos the join wrote 709
+    different sentences, nearly all of them a guess ("A motorcycle and a bike", "A legal
+    and a right"). A person's held thing stays, and is left out where no one holds it
+    ("a woman with yoga").
+  - *An adjective is an adjective.* A demonym (`DEMONYMS`) is said only before its
+    thing, with its capital ("Mexican food", "a German shepherd"), and never of a
+    person; a city or a country the site's words do not name (`NAMED_PLACES`) is no
+    thing; a plural leading a tag that would take "a" is no one thing ("tacos pastor");
+    what takes no article takes none ("Tofu", "Salsa", "Yoga").
+  - *A motor sport alone is its name.* "Motocross", never "A motocross"; it stands for a
+    word that says too little beside it ("A bike", "A race"). After a place it is said
+    as a meet: "A motocross at dawn".
+  Where no tag makes a sentence the slot's own words stand, then its section's name, then
+  `illustrativePhoto`, as before. The replays are `ai-stock-photo-agl4092-1101-{rider,alt}.spec.ts`
+  (`fixtures/ai-stock-photo-agl4092-1101-recordings.ts`, Pixabay asked read-only).
 - **One refused photo is that photo's (AGL-3923, #1770).** The provider names a
   download by its bytes (`sniffPhotoContentType`, the upload check's own
   signatures), never by its label. A media-library refusal of one photo's own bytes

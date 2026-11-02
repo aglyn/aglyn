@@ -173,9 +173,8 @@ describe("a stock photo's alt text says what the photo shows (AGL-3805)", () => 
 
   it("describes the photo by its first tags when the slot's words do not, and by the library's own description where it writes one", () => {
     expect(aiStockPhotoAlt(CAKE, slot('Fresh conchas on a tray at the bakery counter'))).toBe('A cake in a bakery')
-    expect(aiStockPhotoAlt(BAKERY[3] as StockPhoto, slot('The family kneading pan dulce in the kitchen', 'about'))).toBe(
-      'A bithday cake and birthday candles',
-    )
+    // One thing, never a second tag beside it (AGL-4092).
+    expect(aiStockPhotoAlt(BAKERY[3] as StockPhoto, slot('The family kneading pan dulce in the kitchen', 'about'))).toBe('A bithday cake')
     const pexels = { ...CAKE, alt: 'Round cake dusted with powdered sugar on a white cloth' }
     expect(aiStockPhotoAlt(pexels, slot('Fresh conchas on a tray'))).toBe('Round cake dusted with powdered sugar on a white cloth')
     expect(aiStockPhotoAlt({ ...CAKE, tags: [] }, slot('Fresh conchas on a tray'))).toBe('Fresh conchas on a tray')

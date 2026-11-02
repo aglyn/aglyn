@@ -166,7 +166,7 @@ describe('a stock photo’s alt text reads as a plain sentence (AGL-3942)', () =
   it('writes the letters of a camera’s kind in capitals, with the article they are said with', () => {
     // Production: "A slr camera".
     expect(aiStockTagsAlt(tagsOf('581126'))).toBe('An SLR camera')
-    expect(aiStockTagsAlt(['dslr', 'tripod'])).toBe('A DSLR and a tripod')
+    expect(aiStockTagsAlt(['dslr', 'tripod'])).toBe('A DSLR')
   })
 
   it('never ends on an article or a preposition, nor says a layout word or an adverb as a thing, for any recorded hit', () => {
