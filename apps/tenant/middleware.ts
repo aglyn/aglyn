@@ -51,6 +51,8 @@ import { LEAVING_NOTICE_PATH } from '@aglyn/aglyn/app-utils/leaving-notice'
 // Deep import for the same reason: which page requests answer the site's 503
 // page as a 503, from a leaf with no imports of its own (AGL-4110).
 import {
+  SITE_NOTICE_DEADLINE_MS,
+  SITE_NOTICE_REQUEST_HEADER,
   SITE_UNAVAILABLE_RETRY_AFTER_SECONDS,
   siteUnavailableForRequest,
 } from '@aglyn/aglyn/app-utils/site-unavailable'
@@ -338,6 +340,49 @@ const lockdownVerdicts = new Map<
     maintenance: boolean
   }
 >()
+
+/**
+ * The site's notice page, read so it can go out as a 503 (AGL-4110).
+ *
+ * The same address, asked again by this middleware: the marker sends that
+ * request down the plain rewrite, so the page comes from the cached catch-all
+ * exactly as a 200 would. The cookie and the color-scheme hint are the two
+ * things the route is chosen by, so a member of the team reads the same route
+ * they would have been sent to.
+ *
+ * Only `null` means "no page to send", and the caller serves the plain rewrite
+ * then: the notice with a 200, which is a wrong status on the right page. A
+ * firewall challenge, a redirect or a render with a status of its own lands
+ * there too, so none of them can reach a visitor as a 503.
+ *
+ * The body is read as text because `fetch` has already decoded it. The answer's
+ * `content-encoding` still says `br`, so its headers must not be copied.
+ */
+async function siteNoticePage(
+  req: Request,
+): Promise<{ html: string; contentType: string | null } | null> {
+  const headers = new Headers({ [SITE_NOTICE_REQUEST_HEADER]: '1' })
+  for (const name of ['cookie', COLOR_SCHEME_HINT_HEADER]) {
+    const value = req.headers.get(name)
+    if (value) headers.set(name, value)
+  }
+  return boundedAwait(
+    (signal) =>
+      fetch(req.url, { headers, redirect: 'manual', signal })
+        .then(async (page) =>
+          page.status === 200
+            ? {
+                html: await page.text(),
+                contentType: page.headers.get('content-type'),
+              }
+            : null,
+        )
+        .catch(() => null),
+    SITE_NOTICE_DEADLINE_MS,
+    null,
+    'tenant-middleware.site-notice',
+  )
+}
 
 /**
  * Should this request be replaced by the 503 notice? (AGL-1511)
@@ -1388,17 +1433,19 @@ export const middleware: NextMiddleware = async (req, event) => {
    * page saying "Temporarily unavailable". A 503 with `Retry-After` says the
    * site is briefly down and to come back.
    *
-   * Set HERE, on the rewrite, because nothing else can: an App Router page has
-   * no status lever (`/api/locked` is a route handler for the same reason, but
-   * a route handler cannot render the site's own designed page), and this is
-   * the one layer that runs ahead of the cache on every request. The rewrite
-   * target, and therefore the cached body, is exactly what it was.
+   * Set HERE because nothing else can: an App Router page has no status lever
+   * (`/api/locked` is a route handler for the same reason, but a route handler
+   * cannot render the site's own designed page), and this is the one layer
+   * that runs ahead of the cache on every request.
    *
-   * Measured against `next start`: a rewrite's status replaces a 200 render's,
-   * served from the ISR cache or rendered fresh, and the cache entry keeps no
-   * status of its own, so the same entry answers 200 again the moment this
-   * stops asking for a 503. A render that sets its own status keeps it: a 404
-   * stays a 404 and a redirect stays a redirect.
+   * ⛔ NOT a status on the rewrite, though that reads like the fix and passes
+   * against `next start`. On Vercel, `NextResponse.rewrite(url, { status: 503 })`
+   * onto this dynamic ISR route drops the page and sends the platform's own
+   * "503: SERVICE_UNAVAILABLE" error, so every site in maintenance or preview
+   * told its visitors it was broken. Measured on Vercel with a minimal project:
+   * a prerendered target keeps its body and a dynamic ISR target loses it. A
+   * response with a body of its own is left alone, warm or cold, so the
+   * middleware reads the page and sends it ({@link siteNoticePage}).
    *
    * The cache is split the way it already was. The team's view of a site in
    * preview is the uncached route (`no-store` below) and never answers 503;
@@ -1410,17 +1457,18 @@ export const middleware: NextMiddleware = async (req, event) => {
   const unavailable = siteUnavailableForRequest(verdict, {
     entryPreview: previewing,
     teamPreview,
+    noticeRequest: req.headers.has(SITE_NOTICE_REQUEST_HEADER),
   })
-  const response = NextResponse.rewrite(
-    new URL(rewrite, req.url),
-    unavailable ? { status: 503 } : undefined,
-  )
-  if (unavailable) {
-    response.headers.set(
-      'Retry-After',
-      String(SITE_UNAVAILABLE_RETRY_AFTER_SECONDS),
-    )
-  }
+  const notice = unavailable ? await siteNoticePage(req) : null
+  const response = notice
+    ? new NextResponse(notice.html, {
+        status: 503,
+        headers: {
+          ...(notice.contentType ? { 'Content-Type': notice.contentType } : {}),
+          'Retry-After': String(SITE_UNAVAILABLE_RETRY_AFTER_SECONDS),
+        },
+      })
+    : NextResponse.rewrite(new URL(rewrite, req.url))
   if (uncached) {
     /**
      * Said out loud rather than inherited (AGL-3205).

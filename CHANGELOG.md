@@ -30,6 +30,7 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **tenant:** a site's notice goes out as a 503 with its page in the body ([AGL-4110](https://linear.app/aglyn/issue/AGL-4110))
 - **ai:** the measured import records its whole run of copied pages ([AGL-4083](https://linear.app/aglyn/issue/AGL-4083))
 - **ai:** an import never ends with pages left, and fits one document for its whole run ([AGL-4083](https://linear.app/aglyn/issue/AGL-4083))
 - **ai:** plan cards, rows and page widths are drawn as the source draws them ([AGL-4083](https://linear.app/aglyn/issue/AGL-4083), [AGL-4084](https://linear.app/aglyn/issue/AGL-4084))
