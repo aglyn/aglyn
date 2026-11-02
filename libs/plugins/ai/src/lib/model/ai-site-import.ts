@@ -293,8 +293,14 @@ export interface SiteImportLayoutItem {
   text?: SiteImportLineRef[]
   /** Its bullet points (a plan's features). */
   list?: SiteImportLineRef[]
-  /** Its own call to action: a "See … →" link or a button, last in the item. */
+  /** Its own call to action: a "See … →" link or a button, last in the item, or a button wherever it sits. */
   link?: SiteImportLineRef[]
+  /** Those of `link` the source draws as buttons, each as it draws it (AGL-4083). */
+  ctas?: Array<{ line: SiteImportLineRef; style: SiteImportButtonStyle }>
+  /** A tag on it, a short line in a filled pill: "Popular", "New", "Best value" (AGL-4083). */
+  badge?: SiteImportLineRef
+  /** What its price is for, beside the price: "/mo" (AGL-4083). */
+  period?: SiteImportLineRef
   image?: SiteImportLineRef
   /** The icon that leads it, by index into `SiteImportLayout.icons`. */
   icon?: number
@@ -311,6 +317,11 @@ export interface SiteImportLayoutGroup {
   columns: number
   /** Each item is drawn as a box (a border, a shadow or a fill of its own). */
   boxed: boolean
+  /**
+   * Each item is a row of its own, its parts side by side, one under another:
+   * a plan's name, words and button, or a label and its value (AGL-4083).
+   */
+  inline?: true
   items: SiteImportLayoutItem[]
 }
 
@@ -352,11 +363,33 @@ export interface SiteImportLayoutSection {
   /** A gradient or a photo behind it. */
   backdrop?: { kind: 'gradient' } | { kind: 'picture'; url: string }
   align: 'start' | 'center'
+  /**
+   * How wide the source lets the section's content run on a wide screen, in
+   * px (AGL-4083): the narrowest cap on it and the wrappers around its
+   * content. Absent where the source sets none.
+   */
+  width?: number
   /** Set on the section holding the page's first `<h1>`. */
   hero?: { picture: SiteImportHeroPicture | null }
   nodes: SiteImportLayoutNode[]
   /** Every line of the section, in order. */
   lines: SiteImportLineRef[]
+}
+
+/** The widths a page's column is drawn at: the Container element's Max Width choices. */
+export type SiteImportWidth = 'sm' | 'md' | 'lg' | 'xl'
+
+/**
+ * The Max Width a source's cap in px reads as (AGL-4083), `null` for a source
+ * that sets none. `sm` is 600 and `md` 900: a post's 760 column is `md`, as a
+ * column held to 600 would read narrower than its source.
+ */
+export function siteImportWidthOf(px: number | null | undefined): SiteImportWidth | null {
+  if (typeof px !== 'number' || !Number.isFinite(px) || px <= 0) return null
+  if (px >= 1400) return 'xl'
+  if (px >= 1100) return 'lg'
+  if (px >= 750) return 'md'
+  return 'sm'
 }
 
 /** An icon the page draws, once however often it repeats. */
@@ -554,12 +587,15 @@ export function siteImportFilterNodes(list: readonly SiteImportLayoutNode[], kee
 
 function trimItem(item: SiteImportLayoutItem, keep: (ref: SiteImportLineRef) => boolean): SiteImportLayoutItem {
   const out: SiteImportLayoutItem = { ...item, lines: item.lines.filter(keep) }
-  for (const key of ['title', 'figure', 'image'] as const) if (out[key] !== undefined && !keep(out[key] as number)) delete out[key]
+  for (const key of ['title', 'figure', 'image', 'badge', 'period'] as const) if (out[key] !== undefined && !keep(out[key] as number)) delete out[key]
   for (const key of ['text', 'list', 'link'] as const) {
     const list = out[key]?.filter(keep)
     if (list?.length) out[key] = list
     else delete out[key]
   }
+  const ctas = out.ctas?.filter((cta) => keep(cta.line))
+  if (ctas?.length) out.ctas = ctas
+  else delete out.ctas
   return out
 }
 

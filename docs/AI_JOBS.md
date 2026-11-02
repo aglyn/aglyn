@@ -2703,8 +2703,19 @@ whose passes each do one unit (`aiSiteImportNextWork`):
      with a `muiTabPanel` each, else the labels as a strip, the open one
      filled, over the panel the source drew; a panel sets its first row of
      columns side by side, as a section does (`AiLayoutTab.cols`, AGL-4114). A
-     page past `AI_SITE_IMPORT_DOC_MAX_NODES` keeps its last sections by name,
-     `cut`.
+     plan's card carries its `badge` beside its title and its `period` beside
+     its `figure`, and each button as the source draws it (`ctas`, wherever it
+     sits in the card). A group whose items are rows of their own (`inline`: a
+     plan's row, a label and its value) is one Stack with a `line` divider, each
+     row a Stack or a Grid, whatever the design answer said. Each section's
+     Container takes the source's own cap (`width`, the narrowest `max-width` on
+     it, around it and on its wrappers, read as a 1,920 screen sees it since a
+     container caps itself only past its cap), else `lg`, else `md` for a long
+     read. An answer never reaches past what a group can draw: `list` joins
+     nothing (a group of more than one line an item is drawn ruled), `stats` is
+     only for items that are figures and nothing else, and `cover` or `poster`
+     never repaints a section that keeps a lighter ground of its own. A page past
+     `AI_SITE_IMPORT_DOC_MAX_NODES` keeps its last sections by name, `cut`.
    - **copied** (a collection's page): the compile alone, NO model, nothing
      spent but a listing the source left empty;
    - **arranged** (every main page, whatever its length): the same compile

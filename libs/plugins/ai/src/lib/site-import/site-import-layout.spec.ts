@@ -306,6 +306,131 @@ describe('aglyn.com /pricing', () => {
   })
 })
 
+describe('aglyn.com /pricing as a live import fell short of it (AGL-4083)', () => {
+  const { layout, text } = read('livePricing')
+  const tabs = layout.sections.flatMap((section) => all(section.nodes, 'tabs')) as SiteImportLayoutTabs[]
+  const groups = all(tabs[0]?.tabs[1]?.panel ?? [], 'group')
+  const plans = groups[0] as SiteImportLayoutGroup
+  const higher = groups[1] as SiteImportLayoutGroup
+  const said = (ref: number | undefined) => (ref === undefined ? undefined : text(ref))
+
+  it('finds every plan’s button wherever it sits, as the source draws it', () => {
+    // A plain line sits under the button of every plan but Free's, and left the button in the plan's words.
+    expect(plans.items.map((item) => item.ctas?.map((cta) => [text(cta.line), cta.style]))).toEqual([
+      [['Get started', 'secondary']],
+      [['Choose', 'secondary']],
+      [['Start Pro', 'primary']],
+      [['Choose', 'secondary']],
+    ])
+    for (const item of plans.items) {
+      expect(item.link).toEqual(item.ctas?.map((cta) => cta.line))
+      expect(item.text?.some((ref) => item.link?.includes(ref))).toBe(false)
+    }
+  })
+
+  it('reads the tag on a plan as its tag, and what a price is for as its period', () => {
+    expect(plans.items.map((item) => [said(item.title), said(item.figure), said(item.period), said(item.badge)])).toEqual([
+      ['Free', '$0', undefined, undefined],
+      ['Starter', '$16', undefined, undefined],
+      ['Pro', '$39', '/mo', 'POPULAR'],
+      ['Business', '$99', '/mo', undefined],
+    ])
+    expect(plans.items[2]?.text?.map(text)).toEqual(['$468 billed yearly', 'For pros running a few sites.', 'Everything in Starter, plus:'])
+  })
+
+  it('keeps every line of an item in exactly one of its parts', () => {
+    for (const group of [plans, higher]) {
+      for (const item of group.items) {
+        const parts = [item.title, item.figure, item.period, item.badge, item.image, ...(item.text ?? []), ...(item.list ?? []), ...(item.link ?? [])].filter((ref) => ref !== undefined)
+        expect([...parts].sort((a, b) => (a as number) - (b as number))).toEqual([...item.lines].sort((a, b) => a - b))
+      }
+    }
+  })
+
+  it('reads the higher plans as rows, and leaves the plan cards as cards', () => {
+    expect(plans.inline).toBeUndefined()
+    expect(higher).toMatchObject({ group: 'pricing', columns: 1, inline: true })
+    expect(higher.items.map((item) => text(item.title as number))).toEqual(['Scale', 'Advanced', 'Agency', 'Enterprise'])
+    expect(higher.items.map((item) => item.ctas?.map((cta) => text(cta.line)))).toEqual([['CHOOSE'], ['CHOOSE'], ['CHOOSE'], ['CONTACT SALES']])
+  })
+
+  it('reads a plan’s labels and values as rows, six groups of them', () => {
+    const rows = all(tabs[1]?.tabs[0]?.panel ?? [], 'group')
+    expect(rows.map((group) => [group.group, group.inline, group.items.length])).toEqual([
+      ['cards', true, 12],
+      ['cards', true, 5],
+      ['cards', true, 16],
+      ['cards', true, 24],
+      ['cards', true, 9],
+      ['cards', true, 3],
+    ])
+    expect([said(rows[0]?.items[4]?.title), ...(rows[0]?.items[4]?.text ?? []).map(text)]).toEqual(['Custom domain & SSL', '—'])
+  })
+
+  it('never reads an icon beside its words as a row of parts: that is a card', () => {
+    expect(groupsOf('home').some((group) => group.inline)).toBe(false)
+    expect(groupsOf('contact').some((group) => group.inline)).toBe(false)
+  })
+})
+
+describe('how wide the source runs a section (AGL-4083)', () => {
+  it('reads aglyn.com’s column from the rule a wider screen applies, on every page', () => {
+    for (const name of ['home', 'product', 'pricing', 'livePricing', 'contact'] as const) {
+      expect(new Set(read(name).layout.sections.map((section) => section.width))).toEqual(new Set([1536]))
+    }
+  })
+
+  it('reads a post’s narrower article column as its own', () => {
+    expect(read('post').layout.sections.map((section) => section.width)).toEqual([760, 1536, 1536])
+  })
+
+  it('reads a framework’s container class where the sheets say nothing', () => {
+    expect(new Set(read('pottery').layout.sections.map((section) => section.width))).toEqual(new Set([1320]))
+  })
+
+  const widthOf = (html: string) => {
+    const page = extractSiteImportPage(`<html><head><style>${html.match(/<style>(.*)<\/style>/)?.[1] ?? ''}</style></head><body><main>${html.replace(/<style>.*<\/style>/, '')}</main></body></html>`, 'https://example.com/', () => true, { structure: true })
+    return siteImportLayout(page as Parameters<typeof siteImportLayout>[0])?.sections.map((section) => section.width)
+  }
+
+  it('takes the narrowest cap on a section and the wrappers inside it', () => {
+    const body = '<section><div class="wide"><div class="measure"><h2>One</h2><p>Words of the section.</p></div></div></section><section><h2>Two</h2><p>Words.</p></section>'
+    expect(widthOf(`<style>.wide{max-width:1200px}.measure{max-width:72rem}</style>${body}`)).toEqual([1152, undefined])
+  })
+
+  it('leaves a section with no cap unset, and is not read from a percentage or a screen unit', () => {
+    const body = '<section class="a"><h2>One</h2><p>Words of the section.</p></section><section class="b"><h2>Two</h2><p>Words.</p></section>'
+    expect(widthOf(`<style>.a{max-width:80%}.b{max-width:90vw}</style>${body}`)).toEqual([undefined, undefined])
+  })
+})
+
+describe('a tag and a button in markup of any site (AGL-4083)', () => {
+  const STYLE = '<style>.card{border:1px solid #ddd;display:block}.tag{background-color:#c4622d;border-radius:999px;padding:2px 8px}.plain{color:#333}.btn{padding:10px;background-color:#c4622d}</style>'
+  const card = (name: string, tag: string) => `<article class="card"><h3>${name}</h3>${tag}<p>A line of what ${name} is.</p><a class="btn" href="/${name}">Choose</a><p>A line under its button.</p></article>`
+  const groupOf = (cards: string) => {
+    const page = extractSiteImportPage(`<html><head>${STYLE}</head><body><main><section><h2>Plans</h2><div>${cards}</div></section><section><h2>More</h2><p>Words.</p></section></main></body></html>`, 'https://example.com/', () => true, { structure: true })
+    const layout = siteImportLayout(page as Parameters<typeof siteImportLayout>[0]) as SiteImportLayout
+    const main = page.blocks.filter((block) => block.region === 'main')
+    const text = (ref: number | undefined) => (ref === undefined ? undefined : (main[ref] as { text: string }).text)
+    return { group: layout.sections.flatMap((section) => all(section.nodes, 'group'))[0] as SiteImportLayoutGroup, text }
+  }
+
+  it('reads a word or two in a filled pill as a tag, however it is worded', () => {
+    const { group, text } = groupOf([card('One', '<p class="tag">New</p>'), card('Two', '<p class="tag">Best value</p>'), card('Three', '')].join(''))
+    expect(group.items.map((item) => text(item.badge))).toEqual(['New', 'Best value', undefined])
+  })
+
+  it('leaves a short line with no fill, or a long one in a pill, in the words', () => {
+    const { group, text } = groupOf([card('One', '<p class="plain">New</p>'), card('Two', '<p class="tag">Our most popular plan this year by far</p>'), card('Three', '')].join(''))
+    expect(group.items.map((item) => text(item.badge))).toEqual([undefined, undefined, undefined])
+  })
+
+  it('takes a button above a closing line as the card’s call to action', () => {
+    const { group, text } = groupOf([card('One', ''), card('Two', ''), card('Three', '')].join(''))
+    expect(group.items.map((item) => item.ctas?.map((cta) => [text(cta.line), cta.style]))).toEqual([[['Choose', 'primary']], [['Choose', 'primary']], [['Choose', 'primary']]])
+  })
+})
+
 describe('aglyn.com /contact', () => {
   it('keeps the form where it sat, beside its heading, and the email cards with their mailto: links', () => {
     const { layout, text } = read('contact')

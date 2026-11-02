@@ -45,6 +45,14 @@ import type { SiteImportElement, SiteImportStructure } from './site-import-html'
 /** The width a page is read at: a laptop's, where a desktop layout shows. */
 export const SITE_IMPORT_CSS_VIEWPORT = { width: 1280, height: 800 } as const
 
+/**
+ * The width a page's column is read at (AGL-4083). A container caps itself
+ * only on screens wider than its cap (`@media (min-width:1536px)` around a
+ * `max-width:1536px`), so on a laptop it runs the whole page: read there, it
+ * would look as if it had no cap at all.
+ */
+export const SITE_IMPORT_CSS_WIDE_WIDTH = 1920
+
 /** The properties the layout reader reads; every other declaration is dropped as the sheet is parsed. */
 const KEPT_PROPERTIES = new Set([
   'background',
@@ -225,15 +233,15 @@ function splitList(text: string): string[] {
 }
 
 /** A length in px at the read width; `em`/`rem` at 16. */
-function lengthPx(value: string): number | null {
+export function siteImportLengthPx(value: string): number | null {
   const match = /^(-?\d*\.?\d+)\s*(px|em|rem)?$/i.exec(value.trim())
   if (!match) return null
   const amount = Number(match[1])
   return match[2] && match[2].toLowerCase() !== 'px' ? amount * 16 : amount
 }
 
-/** Whether one media query holds for a light-mode screen of the read width. */
-function mediaQueryHolds(query: string): boolean {
+/** Whether one media query holds for a light-mode screen of this width. */
+function mediaQueryHolds(query: string, viewport: number): boolean {
   let text = query.trim().toLowerCase()
   let negate = false
   if (text.startsWith('not ')) {
@@ -251,10 +259,11 @@ function mediaQueryHolds(query: string): boolean {
     }
     const inner = term.replace(/^\(|\)$/g, '').trim()
     const feature = /^([\w-]+)\s*:\s*(.+)$/.exec(inner)
-    const { width, height } = SITE_IMPORT_CSS_VIEWPORT
+    const { height } = SITE_IMPORT_CSS_VIEWPORT
+    const width = viewport
     if (feature) {
       const [, name, value] = feature
-      const px = lengthPx(value)
+      const px = siteImportLengthPx(value)
       if (name === 'min-width') holds &&= px !== null && width >= px
       else if (name === 'max-width') holds &&= px !== null && width <= px
       else if (name === 'min-height') holds &&= px !== null && height >= px
@@ -273,11 +282,11 @@ function mediaQueryHolds(query: string): boolean {
       const size = range[3] === 'width' ? width : height
       const test = (a: number, op: string, b: number) => (op === '<' ? a < b : op === '<=' ? a <= b : op === '>' ? a > b : a >= b)
       if (range[1] && range[2]) {
-        const px = lengthPx(range[1])
+        const px = siteImportLengthPx(range[1])
         holds &&= px !== null && test(px, range[2], size)
       }
       if (range[4] && range[5]) {
-        const px = lengthPx(range[5])
+        const px = siteImportLengthPx(range[5])
         holds &&= px !== null && test(size, range[4], px)
       }
     }
@@ -285,9 +294,9 @@ function mediaQueryHolds(query: string): boolean {
   return negate ? !holds : holds
 }
 
-function mediaHolds(prelude: string): boolean {
+function mediaHolds(prelude: string, viewport: number): boolean {
   const list = splitList(prelude.replace(/^@media\s*/i, ''))
-  return !list.length || list.some(mediaQueryHolds)
+  return !list.length || list.some((query) => mediaQueryHolds(query, viewport))
 }
 
 function declarationsOf(body: string): CssRule['decls'] {
@@ -322,7 +331,7 @@ function keyOf(selector: ComplexSelector): string {
  * The page's sheets parsed for a wide screen. Malformed CSS is read as far as
  * it makes sense, as a browser would; nothing throws.
  */
-export function siteImportCssOf(sheets: readonly string[]): SiteImportCss {
+export function siteImportCssOf(sheets: readonly string[], viewport: number = SITE_IMPORT_CSS_VIEWPORT.width): SiteImportCss {
   const css: SiteImportCss = { rules: [], index: new Map(), fontFaces: [] }
   let order = 0
   const addRule = (prelude: string, body: string) => {
@@ -371,7 +380,7 @@ export function siteImportCssOf(sheets: readonly string[]): SiteImportCss {
       const prelude = text.slice(start, at).trim()
       const applies = groups.every(Boolean)
       if (/^@(?:media)\b/i.test(prelude)) {
-        groups.push(applies && mediaHolds(prelude))
+        groups.push(applies && mediaHolds(prelude, viewport))
         start = at = at + 1
         continue
       }
@@ -792,7 +801,7 @@ export function siteImportRadiusPx(style: SiteImportComputedStyle): number | nul
   if (!value) return null
   const first = value.trim().split(/[\s/]+/)[0] ?? ''
   if (first.endsWith('%')) return Number(first.slice(0, -1)) >= 50 ? 999 : Number(first.slice(0, -1))
-  return lengthPx(first)
+  return siteImportLengthPx(first)
 }
 
 /** A font size in px, or `null`. */
@@ -802,7 +811,7 @@ export function siteImportFontSizePx(style: SiteImportComputedStyle): number | n
   const clamp = /clamp\(([^,]+),([^,]+),([^)]+)\)/.exec(value)
   // A fluid size at the read width: its maximum, as a wide screen shows it.
   const text = clamp ? clamp[3] : value
-  return lengthPx(text.trim())
+  return siteImportLengthPx(text.trim())
 }
 
 /** The relative widths a grid template draws its columns at, or `null` for none. */

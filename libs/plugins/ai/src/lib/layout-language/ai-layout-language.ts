@@ -156,6 +156,12 @@ export interface AiLayoutItem {
   links?: AiLayoutLink[]
   /** The picture over it, from the site's library. */
   picture?: AiLayoutPicture
+  /** A tag on it, drawn beside its title: "Popular" (AGL-4083). */
+  badge?: string
+  /** What its figure is for, drawn beside it: "/mo" (AGL-4083). */
+  period?: string
+  /** Its title names a row and is no heading of the source's (AGL-4083). */
+  label?: true
 }
 
 /** A link of a page brought in (AGL-4107): its words and where it goes, `page:<id>`, `https:`, `mailto:` or `tel:`. */
@@ -218,6 +224,8 @@ export interface AiLayoutBlock {
   variant?: AiLayoutGroupStyle
   /** The columns the source lays a group's items out in on a wide screen. */
   columns?: number
+  /** Each item is a row of its own, its parts side by side, one under another (AGL-4083). */
+  inline?: true
 }
 
 /** How a group of a page brought in is drawn (AGL-4107): the compiler's group variants a source can show. */
@@ -235,7 +243,12 @@ export interface AiLayoutSection {
   blocks: AiLayoutBlock[]
   /** A page brought in (AGL-4107): the hero its first section opens as, around the source's picture. */
   hero?: AiLayoutImportHero
+  /** A page brought in (AGL-4083): its Container's Max Width, as wide as its source runs. */
+  width?: AiLayoutWidth
 }
+
+/** The Container element's Max Width choices a page brought in draws a section at (AGL-4083). */
+export type AiLayoutWidth = 'sm' | 'md' | 'lg' | 'xl'
 
 /** A page: its plan's sections, in order. */
 export interface AiLayoutPageDoc {

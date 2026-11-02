@@ -76,8 +76,9 @@ Reading uses no AI credits.
 
 **What is read.** For each page Aglyn reads its words and how your site lays them out: its
 sections and their background colors, its columns, its cards and the icons on them, its
-numbered steps, figures, questions and answers, quotes, logo strips, price cards, tables
-and tabs, its pictures where they sit, and which links your site shows as buttons. From
+numbered steps, figures, questions and answers, quotes, logo strips, plan cards with their
+badge, price and button, plan rows, tables and tabs, its pictures where they sit, and which
+links your site shows as buttons. From
 your home page it also reads your menu, with each dropdown and its entries, the buttons
 beside it, and your footer's columns, profiles and copyright line, plus your site's fonts
 and colors. Your new pages are built from this, with every word as you wrote it.
@@ -147,7 +148,7 @@ top. You can still start the first wave.
 
 Your words are never rewritten. Every page is laid out as your page is: its sections in
 their own backgrounds, its columns, its cards with their icons and links, its numbered
-steps, figures, questions and answers, quotes, logo strips, price cards, tables and tabs,
+steps, figures, questions and answers, quotes, logo strips, plan cards and plan rows, tables and tabs,
 and its pictures where your page shows them. Each heading, paragraph, list, link and button
 keeps the words your page has, and every link goes to the page it went to: to that page on
 your new site, once it is in. Each page also keeps your page's own title and description as
