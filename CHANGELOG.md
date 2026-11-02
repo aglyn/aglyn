@@ -9,6 +9,20 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.4.0 — 2026-11-02
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.3.0...v1.4.0)
+
+### Added
+
+- **marketplace:** pin the Publisher Agreement at 2026-11-02.1, site starters ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049), [AGL-4130](https://linear.app/aglyn/issue/AGL-4130))
+- **ai:** weekly insights read at a glance, one section a topic with figures and links ([AGL-4130](https://linear.app/aglyn/issue/AGL-4130))
+- **ai:** a job's page says what the job is for and what it left ([AGL-4130](https://linear.app/aglyn/issue/AGL-4130))
+
+### Fixed
+
+- **aglyn:** a character reference in author HTML stays one character ([AGL-4130](https://linear.app/aglyn/issue/AGL-4130))
+
 ## v1.3.0 — 2026-11-02
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.2.0...v1.3.0)
