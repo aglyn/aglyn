@@ -6467,7 +6467,7 @@
           "authorName": "Aglyn",
           "official": true,
           "priceUsd": 0,
-          "previewImageUrl": "https://app.aglyn.com/_static/starter/styles/trades.webp",
+          "previewImageUrl": "https://console.test/_static/starter/styles/trades.webp",
           "facets": {
             "kind": "trades",
             "base": "material3",
@@ -6484,7 +6484,7 @@
           "authorName": "Aglyn",
           "official": true,
           "priceUsd": 0,
-          "previewImageUrl": "https://app.aglyn.com/_static/starter/styles/trades.webp",
+          "previewImageUrl": "https://console.test/_static/starter/styles/trades.webp",
           "facets": {
             "kind": "trades",
             "base": "material3",
@@ -6503,7 +6503,7 @@
           "authorName": "Northwind",
           "official": false,
           "priceUsd": 12,
-          "previewImageUrl": "https://app.aglyn.com/_static/starter/styles/trades.webp",
+          "previewImageUrl": "https://console.test/_static/starter/styles/trades.webp",
           "facets": {
             "kind": "trades",
             "base": "material3",
@@ -6521,7 +6521,7 @@
           "authorName": "Northwind",
           "official": false,
           "priceUsd": 12,
-          "previewImageUrl": "https://app.aglyn.com/_static/starter/styles/trades.webp",
+          "previewImageUrl": "https://console.test/_static/starter/styles/trades.webp",
           "facets": {
             "kind": "trades",
             "base": "material3",
@@ -6541,7 +6541,7 @@
           "authorName": "Aglyn",
           "official": true,
           "priceUsd": 12.5,
-          "previewImageUrl": "https://app.aglyn.com/_static/starter/styles/trades.webp",
+          "previewImageUrl": "https://console.test/_static/starter/styles/trades.webp",
           "facets": {
             "kind": "trades",
             "base": "material3",
@@ -6559,7 +6559,7 @@
           "authorName": "Aglyn",
           "official": true,
           "priceUsd": 12.5,
-          "previewImageUrl": "https://app.aglyn.com/_static/starter/styles/trades.webp",
+          "previewImageUrl": "https://console.test/_static/starter/styles/trades.webp",
           "facets": {
             "kind": "trades",
             "base": "material3",
@@ -6579,7 +6579,7 @@
           "authorName": "Aglyn",
           "official": true,
           "priceUsd": "7",
-          "previewImageUrl": "https://app.aglyn.com/_static/starter/styles/trades.webp",
+          "previewImageUrl": "https://console.test/_static/starter/styles/trades.webp",
           "facets": {
             "kind": "trades",
             "base": "material3",
@@ -6596,7 +6596,7 @@
           "authorName": "Aglyn",
           "official": true,
           "priceUsd": 7,
-          "previewImageUrl": "https://app.aglyn.com/_static/starter/styles/trades.webp",
+          "previewImageUrl": "https://console.test/_static/starter/styles/trades.webp",
           "facets": {
             "kind": "trades",
             "base": "material3",
@@ -6652,7 +6652,7 @@
           "authorName": "Aglyn",
           "official": true,
           "priceUsd": 0,
-          "previewImageUrl": "https://app.aglyn.com/_static/starter/styles/trades.webp",
+          "previewImageUrl": "https://console.test/_static/starter/styles/trades.webp",
           "facets": {
             "pages": 2.9,
             "mode": "ai"
@@ -6670,7 +6670,7 @@
           "authorName": "Aglyn",
           "official": true,
           "priceUsd": 0,
-          "previewImageUrl": "https://app.aglyn.com/_static/starter/styles/trades.webp",
+          "previewImageUrl": "https://console.test/_static/starter/styles/trades.webp",
           "facets": {
             "kind": null,
             "base": null,
@@ -6735,7 +6735,7 @@
               "authorName": "Aglyn",
               "official": true,
               "priceUsd": 0,
-              "previewImageUrl": "https://app.aglyn.com/_static/starter/styles/trades.webp",
+              "previewImageUrl": "https://console.test/_static/starter/styles/trades.webp",
               "facets": {
                 "kind": "trades",
                 "base": "material3",
@@ -6752,7 +6752,7 @@
               "authorName": "Aglyn",
               "official": true,
               "priceUsd": 0,
-              "previewImageUrl": "https://app.aglyn.com/_static/starter/styles/trades.webp",
+              "previewImageUrl": "https://console.test/_static/starter/styles/trades.webp",
               "facets": {
                 "kind": "trades",
                 "base": "material3",
@@ -6855,7 +6855,7 @@
           "authorName": "Aglyn",
           "official": true,
           "priceUsd": 0,
-          "previewImageUrl": "https://app.aglyn.com/_static/starter/styles/trades.webp",
+          "previewImageUrl": "https://console.test/_static/starter/styles/trades.webp",
           "facets": {
             "kind": "trades",
             "base": "material3",
@@ -6876,7 +6876,7 @@
           "authorName": "Aglyn",
           "official": true,
           "priceUsd": 12,
-          "previewImageUrl": "https://app.aglyn.com/_static/starter/styles/trades.webp",
+          "previewImageUrl": "https://console.test/_static/starter/styles/trades.webp",
           "facets": {
             "kind": "trades",
             "base": "material3",
@@ -6897,7 +6897,7 @@
           "authorName": "Aglyn",
           "official": true,
           "priceUsd": 12,
-          "previewImageUrl": "https://app.aglyn.com/_static/starter/styles/trades.webp",
+          "previewImageUrl": "https://console.test/_static/starter/styles/trades.webp",
           "facets": {
             "kind": "trades",
             "base": "material3",
@@ -6919,7 +6919,7 @@
           "authorName": "Aglyn",
           "official": true,
           "priceUsd": 12,
-          "previewImageUrl": "https://app.aglyn.com/_static/starter/styles/trades.webp",
+          "previewImageUrl": "https://console.test/_static/starter/styles/trades.webp",
           "facets": {
             "kind": "trades",
             "base": "material3",
@@ -6941,7 +6941,7 @@
           "authorName": "Aglyn",
           "official": true,
           "priceUsd": 12,
-          "previewImageUrl": "https://app.aglyn.com/_static/starter/styles/trades.webp",
+          "previewImageUrl": "https://console.test/_static/starter/styles/trades.webp",
           "facets": {
             "kind": "trades",
             "base": "material3",
@@ -6963,7 +6963,7 @@
           "authorName": "Aglyn",
           "official": true,
           "priceUsd": 12,
-          "previewImageUrl": "https://app.aglyn.com/_static/starter/styles/trades.webp",
+          "previewImageUrl": "https://console.test/_static/starter/styles/trades.webp",
           "facets": {
             "kind": "trades",
             "base": "material3",

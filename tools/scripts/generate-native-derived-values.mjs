@@ -248,7 +248,7 @@ async function build() {
   const siteCreate = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/site-create-return.ts'))
   const starterRow = (over = {}) => ({
     listingId: 'fp-starter-trades-base', displayName: 'Home services & trades', description: 'A trades site', authorName: 'Aglyn', official: true,
-    priceUsd: 0, previewImageUrl: 'https://app.aglyn.com/_static/starter/styles/trades.webp',
+    priceUsd: 0, previewImageUrl: 'https://console.test/_static/starter/styles/trades.webp',
     facets: { kind: 'trades', base: 'material3', fonts: null, pages: 5, mode: 'base' }, category: 'Home services & trades', ...over,
   })
   const siteStarters = {
