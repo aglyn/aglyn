@@ -1733,6 +1733,11 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           sample: '<div style="padding:16px 0 8px;"><div style="font-family:Helvetica, Arial, sans-serif;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;">Traffic</div></div>',
         },
         {
+          name: 'summary.footnote',
+          description: 'The small print under the button, with a link to notification settings',
+          sample: `<div style="font-size:12px;"><a href="${SAMPLE_CONSOLE_ORIGIN}/manage/notifications/settings">Change what you are emailed about</a></div>`,
+        },
+        {
           name: 'summary.buttonLabel',
           description: 'The button’s words',
           sample: 'Open Test Org',
@@ -1758,11 +1763,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         { block: 'text', text: '{{summary.period}}', variant: 'caption' },
         { block: 'html', html: '{{summary.html}}' },
         { block: 'button', label: '{{summary.buttonLabel}}', href: '{{summary.url}}' },
-        {
-          block: 'text',
-          text: 'Change what you are emailed about: {{settingsUrl}}',
-          variant: 'caption',
-        },
+        { block: 'html', html: '{{summary.footnote}}' },
       ],
       footerReason:
         'You’re receiving this each Monday because you manage {{org.name}} and ' +
@@ -1801,6 +1802,11 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           sample: '<div style="padding:16px 0 8px;"><div style="font-family:Helvetica, Arial, sans-serif;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;">Traffic</div></div>',
         },
         {
+          name: 'summary.footnote',
+          description: 'The small print under the button, with a link to notification settings',
+          sample: `<div style="font-size:12px;"><a href="${SAMPLE_CONSOLE_ORIGIN}/manage/notifications/settings">Change what you are emailed about</a></div>`,
+        },
+        {
           name: 'summary.buttonLabel',
           description: 'The button’s words',
           sample: 'Open Test Site',
@@ -1826,11 +1832,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         { block: 'text', text: '{{summary.period}}', variant: 'caption' },
         { block: 'html', html: '{{summary.html}}' },
         { block: 'button', label: '{{summary.buttonLabel}}', href: '{{summary.url}}' },
-        {
-          block: 'text',
-          text: 'Change what you are emailed about: {{settingsUrl}}',
-          variant: 'caption',
-        },
+        { block: 'html', html: '{{summary.footnote}}' },
       ],
       footerReason:
         'You’re receiving this each Monday because you manage {{org.name}} and ' +

@@ -219,15 +219,30 @@ export interface PluginFigureSummaryStat {
   total?: { count: number; one: string; many: string }
 }
 
-/** One reader's part of a weekly summary: a titled block of tiles, ranked rows, or both. */
+/** One reader's part of a weekly summary: a titled block of tiles, ranked rows, a chart of days, or some of each. */
 export interface PluginFigureSummaryPart {
   /** The block's heading: "Traffic", "Top pages". */
   title: string
   stats?: readonly PluginFigureSummaryStat[]
-  /** A ranked list, most first: a page and its views, a form and its submissions. */
-  rows?: ReadonlyArray<{ label: string; value: string }>
+  /** A ranked list, most first: a page and its views, a form and its submissions, each with its change when the table has one. */
+  rows?: ReadonlyArray<{ label: string; value: string; change?: number | null }>
+  /** A chart of days, oldest first; `marked` picks out the day the chart is about. */
+  bars?: ReadonlyArray<{ label: string; value: number; display: string; marked: boolean }>
+  /** Where the figures can be seen in full. The weekly summary sets it from the table's own source. */
+  link?: { label: string; url: string } | null
   /** One plain sentence the figures need. */
   note?: string
+}
+
+/** The console page a table's figures come from, under the site or the workspace; `null` when the table names none. */
+export function pluginFigureSourceHref(
+  source: { path: string | null },
+  scope: PluginFigureScope,
+  where: { orgSlug: string; host: string | null },
+): string | null {
+  if (!source.path || !where.orgSlug) return null
+  if (scope === 'org') return `/${where.orgSlug}/${source.path}`
+  return where.host ? `/${where.orgSlug}/hosts/${where.host}/${source.path}` : null
 }
 
 /** A reader's part in the weekly summary. */

@@ -26,6 +26,7 @@ import {
 import {
   composeWeeklySummaryOverviewEmail,
   composeWeeklySummarySiteEmail,
+  figureBars,
   figureRanked,
   figureStat,
   WEEKLY_SUMMARY_DIGEST_KEY,
@@ -33,6 +34,7 @@ import {
   weeklySummaryPeriod,
   weeklySummaryFootnoteHtml,
   weeklySummaryPlainDates,
+  weeklySummaryRowLink,
   weeklySummarySectionsHtml,
   weeklySummaryTileRows,
   weeklySummaryTilesHtml,
@@ -104,10 +106,45 @@ describe('the helpers a reader summarizes its table with', () => {
 
   it('ranks the rows with anything to count', () => {
     expect(figureRanked(counts, 'name', 'views')).toEqual([
-      { label: '/', value: '1,020' },
-      { label: '/pricing', value: '340' },
+      { label: '/', value: '1,020', change: 12.5 },
+      { label: '/pricing', value: '340', change: 0 },
       { label: '/contact', value: '120' },
     ])
+  })
+
+  it('draws a table of days as a chart, oldest first, the busiest marked', () => {
+    const days = table(
+      [
+        { key: 'day', label: 'Day', kind: 'date' },
+        { key: 'views', label: 'Page views', kind: 'count' },
+      ],
+      [
+        { day: '2026-10-26', views: 161 },
+        { day: '2026-10-27', views: 78 },
+      ],
+    )
+    expect(figureBars(days, 'day', 'views')).toEqual([
+      { label: 'Mon, Oct 26', value: 161, display: '161', marked: true },
+      { label: 'Tue, Oct 27', value: 78, display: '78', marked: false },
+    ])
+  })
+
+  it('draws no chart of a week with nothing in it', () => {
+    const quiet = table(
+      [
+        { key: 'day', label: 'Day', kind: 'date' },
+        { key: 'views', label: 'Page views', kind: 'count' },
+      ],
+      [{ day: '2026-10-26', views: 0 }],
+    )
+    expect(figureBars(quiet, 'day', 'views')).toEqual([])
+  })
+
+  it('links a row that names a page to the page, and the home page as Home', () => {
+    expect(weeklySummaryRowLink('/pricing', 'https://acme.com')).toEqual({ label: '/pricing', url: 'https://acme.com/pricing' })
+    expect(weeklySummaryRowLink('/', 'https://acme.com')).toEqual({ label: 'Home', url: 'https://acme.com' })
+    expect(weeklySummaryRowLink('/pricing', null)).toEqual({ label: '/pricing', url: null })
+    expect(weeklySummaryRowLink('Contact', 'https://acme.com')).toEqual({ label: 'Contact', url: null })
   })
 
   it('says a change as a rise, a fall, or no change, and nothing without an earlier week', () => {
@@ -179,6 +216,30 @@ describe('the weekly summary emails', () => {
     aiInsightsUrl: null,
     settingsUrl: 'https://app.example.com/manage/notifications/settings',
   }
+
+  it('draws each topic as a section: its report link, pages linked with their change, and the week as a chart', () => {
+    const email = composeWeeklySummarySiteEmail({
+      ...common,
+      site: {
+        ...site('Shop', 1_204),
+        parts: [
+          {
+            title: 'Top pages',
+            link: { label: 'Analytics', url: 'https://app.example.com/acme/hosts/shop/analytics' },
+            rows: [{ label: '/pricing', value: '95 views', change: 86.3 }],
+          },
+          { title: 'Traffic by day', bars: [{ label: 'Mon, Oct 26', value: 161, display: '161', marked: true }] },
+        ],
+      },
+    })
+    expect(email?.html).toContain('href="https://shop.example.com/pricing"')
+    expect(email?.html).toContain('+86.3%')
+    expect(email?.html).toContain('href="https://app.example.com/acme/hosts/shop/analytics"')
+    expect(email?.html).toContain('Mon, Oct 26')
+    expect(email?.text).toContain('- /pricing: 95 views (+86.3%)')
+    expect(email?.text).toContain('- Mon, Oct 26: 161')
+    expect(email?.text).toContain('Analytics: https://app.example.com/acme/hosts/shop/analytics')
+  })
 
   it('sums each count across sites by its noun, in the order the readers gave them', () => {
     expect(weeklySummaryTotals([site('Shop', 1_204, 2), site('Blog', 96, 1)])).toEqual([
