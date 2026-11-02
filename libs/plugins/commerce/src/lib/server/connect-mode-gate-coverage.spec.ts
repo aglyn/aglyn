@@ -65,7 +65,9 @@ const DOORS = [
   'bookings/src/lib/server.ts',
   // A booking paid at the counter on the POS card reader (AGL-3654).
   'bookings/src/lib/server/in-person-payment.ts',
-  'marketplace/src/lib/server/checkout.ts',
+  // The marketplace's one sale decision: Stripe Checkout and the in-app pay
+  // door both ask it before any money moves (AGL-4049).
+  'marketplace/src/lib/server/sale.ts',
   // Not a charge, but the same claim one step earlier: publishing a PAID
   // listing tells a seller they are set up to sell (AGL-2471).
   'marketplace/src/lib/server/publish-preconditions.ts',
@@ -126,7 +128,7 @@ describe('AGL-2471 connect-mode gate coverage', () => {
   })
 
   it('the marketplace projection carries the field its gate reads', () => {
-    // `resolvePublisherProfile` is what `checkout.ts` and the publish
+    // `resolvePublisherProfile` is what `sale.ts` and the publish
     // preconditions actually see. A projection that dropped this field would
     // make every marketplace sale refuse for a reason no test in this file
     // would name — the AGL-2471 fix failing closed on everyone.
