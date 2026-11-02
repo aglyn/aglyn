@@ -588,3 +588,58 @@ describe('an import that stops with work left waits, and never says it is done (
     expect(aiSiteImportStopReview(importJob())).toBeNull()
   })
 })
+
+describe('a page with a form (AGL-4083)', () => {
+  const layout = {
+    v: 1,
+    sections: [{ name: 'Say hello', from: 'landmark', band: 'plain', background: null, align: 'start', nodes: [{ kind: 'line', line: 0 }, { kind: 'form', form: 0 }], lines: [0] }],
+    icons: [],
+    look: { fonts: { body: null, headings: null, google: [] }, background: null, text: null, buttonFill: null, buttonText: null, buttonRadius: null, link: null, header: null },
+  } as unknown as SiteImportLayout
+  const form = { fields: [{ type: 'email', name: 'email', label: 'Email', required: true as const }], submit: 'Send' }
+  const blocks = [{ kind: 'heading', level: 2, text: 'Say hello', region: 'main' }] as unknown as SiteImportBlock[]
+  /** The wave running, its header in, its page read and its photos in. */
+  const atPage = () => {
+    const state = harborState()
+    const [slot] = state.waves[0].slots
+    const started = aiSiteImportWaveStarted(state, 0, 'x', new Map([[slot, { at: 'x', title: 'Say hello', text: 'Say hello', sections: ['Say hello'], images: [], blocks, layout, forms: [form] }]]))
+    const pages = started.pages.map((page) => (page.slot === slot ? { ...page, photos: { brought: 0, reused: 0, skipped: 0, assets: [] } } : page))
+    const items = aiSiteImportLedger(state).map((row): AiJobItemLedger => (row.slot === 'frame' || (row.slot !== slot && state.waves[0].slots.includes(row.slot)) ? { ...row, status: 'succeeded' } : row))
+    return { slot, state: { ...started, pages }, items }
+  }
+  const write = jest.fn(async () => ({ ok: true, replayed: false, id: 'x', versionId: null, name: 'Say hello', hostSubdomain: 'demo' }))
+  const forms = { readInventory: (async () => ({ forms: [] })) as never, writeDraft: write as never }
+
+  beforeEach(() => write.mockClear())
+
+  it('rebuilds the form before the page is built, at no credits, and carries it to the page', async () => {
+    const { slot, state, items } = atPage()
+    expect(aiSiteImportNextWork(state, items)).toMatchObject({ kind: 'forms', page: { slot } })
+    const step = createAiJobImportStep(deps({ forms }))
+    const result = await run(step, importJob({ siteImport: state, items }))
+    expect(write).toHaveBeenCalledTimes(1)
+    expect(result.continue).toBe(true)
+    expect(result.estCostUsd).toBe(0)
+    const page = result.siteImport?.pages.find((entry) => entry.slot === slot) as AiSiteImportState['pages'][number]
+    expect(page.forms).toEqual([{ index: 0, formId: expect.stringMatching(/^.+-form-[0-9a-f]{12}$/) }])
+    expect(page.formNote).toContain('“Say hello”')
+    expect(result.items?.filter((row) => row.op === 'form')).toEqual([expect.objectContaining({ status: 'succeeded', creditsSpent: 0 })])
+    expect(result.outputs).toEqual([expect.objectContaining({ resource: 'form' })])
+    // The next pass is the page, which is told which form is whose.
+    const next = result.siteImport as AiSiteImportState
+    expect(aiSiteImportNextWork(next, result.items)).toMatchObject({ kind: 'page', page: { slot } })
+    const job = aiSiteImportPageJob(importJob({ siteImport: next, items: result.items }), next, page, result.items as AiJobItemLedger[])
+    expect((job.inputs?.[AI_LAYOUT_IMPORTED_SECTIONS_INPUT] as AiSiteImportDocument).forms).toEqual(page.forms)
+  })
+
+  it('asks a page with no form nothing, and spends no pass on it', () => {
+    const { slot, state, items } = atPage()
+    const pages = state.pages.map((page) => (page.slot === slot && page.read ? { ...page, read: { ...page.read, forms: [] } } : page))
+    expect(aiSiteImportNextWork({ ...state, pages }, items)).toMatchObject({ kind: 'page', page: { slot } })
+  })
+
+  it('needs no model’s time for it', () => {
+    const { state, items } = atPage()
+    expect(aiSiteImportRunMinimumMs(importJob({ siteImport: state, items }))).toBe(0)
+  })
+})

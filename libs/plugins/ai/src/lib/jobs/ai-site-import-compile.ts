@@ -676,12 +676,17 @@ function nodeBlocks(scope: MapScope, nodes: readonly SiteImportLayoutNode[], row
       case 'icon':
         // A lone icon is no word and no picture of the page.
         break
-      case 'form':
-        if (scope.formId && !scope.formPlaced) {
+      case 'form': {
+        // The form rebuilt for this one (AGL-4083); a read from before they were, the site's only form, once.
+        const own = scope.doc.forms?.find((entry) => entry.index === node.form)
+        if (scope.doc.forms) {
+          if (own?.formId) out.push({ kind: 'form', to: own.formId })
+        } else if (scope.formId && !scope.formPlaced) {
           scope.formPlaced = true
           out.push({ kind: 'form', to: scope.formId })
         }
         break
+      }
       case 'row': {
         const cells = node.cells.filter((cell) => cell.nodes.length)
         const byline = bylineOf(scope, cells)

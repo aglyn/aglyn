@@ -40,7 +40,8 @@
  *      own header and footer words as the footer's facts, and the site's
  *      menu order.
  *   5. EACH PAGE: its photos into the media library (no model, deduped by
- *      source key), then the page step's own passes, NEVER REWRITTEN
+ *      source key), its forms rebuilt as the site's own (no model, AGL-4083,
+ *      `ai-site-import-forms.ts`), then the page step's own passes, NEVER REWRITTEN
  *      (AGL-4084, `ai-site-import-document.ts`): a collection's page or a
  *      long page is copied as it is, every word in order, with no model; a
  *      main page is arranged, the model placing the source's numbered lines
@@ -77,6 +78,7 @@ import {
   AI_SITE_IMPORT_MAX_PAGES,
   AI_SITE_IMPORT_MIN_WORDS,
   AI_SITE_IMPORT_WAVE_PAGES,
+  aiSiteImportFormsIn,
   aiSiteImportFrameIsRead,
   aiSiteImportInventory,
   aiSiteImportItemOpen,
@@ -121,6 +123,7 @@ import { aiLayoutTelHref, type AiLayoutFrameSource, type AiLayoutFrameSourceGrou
 import { aiHexOklch } from '../model/ai-site-look'
 import { AI_LAYOUT_IMPORTED_SECTIONS_INPUT, type AiSiteImportDocument } from './ai-site-import-document'
 import { aiImportedPageListingOwed, aiSiteImportSectionNames } from './ai-site-import-compile'
+import { aiRebuildImportedForms, type AiSiteImportFormsDeps } from './ai-site-import-forms'
 import { aiRunSiteImportLook, type AiSiteImportLookDeps } from './ai-site-import-look'
 import { aiPublishImportedWave } from './ai-site-import-publish'
 import { aiUnitErrorRetryable, aiUnitFailure, aiUnitSpend } from './ai-build-unit-outcome'
@@ -225,6 +228,8 @@ export interface AiSiteImportOwnership {
 }
 
 export interface AiSiteImportStepDeps {
+  /** The form pass's reads and writes (AGL-4083); specs hand in fakes. */
+  forms?: AiSiteImportFormsDeps
   crawl?: typeof crawlSiteForImport
   crawlSeams?: SiteImportCrawlSeams
   runnerFor?: typeof aiJobStepRunnerFor
@@ -529,6 +534,7 @@ export function aiSiteImportDocumentFor(state: AiSiteImportState, page: AiSiteIm
     // link home says home, which the source's words may not.
     links: state.pages.filter((entry) => entry.slug !== '/' && !entry.refused).map((entry) => ({ path: entry.path.replace(/\/+$/, '') || '/', id: entry.draftId })),
     origins: [`https://${state.domain}`, `https://www.${state.domain.replace(/^www\./, '')}`],
+    ...(page.forms ? { forms: page.forms } : {}),
     // How the source lays it out (AGL-4106), which the site compiler builds it from (AGL-4107).
     ...(page.read?.layout ? { layout: page.read.layout } : {}),
   }
@@ -1065,6 +1071,18 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
       })
     }
 
+    // ── 4a'. A page's forms, as the site's own: no model, no credits (AGL-4083) ──
+    if (work.kind === 'forms') {
+      const rebuilt = await aiRebuildImportedForms(firestore, { job, hostId, state, page: work.page, org: (context.org ?? null) as never, now }, deps.forms)
+      const fresh = rebuilt.rows.filter((row) => !items.some((held) => held.slot === row.slot))
+      return unspent({
+        ...(fresh.length ? { items: [...items, ...fresh] } : {}),
+        outputs: rebuilt.outputs,
+        siteImport: aiSiteImportFormsIn(state, work.page.slot, rebuilt.forms, rebuilt.note),
+        continue: true,
+      })
+    }
+
     // ── 4b. The page ──
     if (work.kind === 'page') {
       const runner = runnerFor('page')
@@ -1121,7 +1139,7 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
           layoutLanguage: true,
         })
         item = written
-          ? { slot, status: 'succeeded', outputs: spent.outputs.map((output) => output.id) }
+          ? { slot, status: 'succeeded', outputs: spent.outputs.map((output) => output.id), ...(page.formNote ? { note: page.formNote } : {}) }
           : { slot, status: 'failed', failure: { ours: true, reason: 'step-failure', message: AI_SITE_IMPORT_COPY.pageNotWritten } }
       } else {
         item = { slot, status: 'succeeded', outputs: spent.outputs.map((output) => output.id) }

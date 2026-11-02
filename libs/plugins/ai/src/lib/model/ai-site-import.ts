@@ -675,6 +675,10 @@ export interface AiSiteImportPage {
     skipped: number
     assets: AiSiteImportPhoto[]
   } | null
+  /** Each form of the read, by its index, and the saved form that takes its place, `null` where none does (AGL-4083). */
+  forms?: Array<{ index: number; formId: string | null }> | null
+  /** What the page's row says of its forms. */
+  formNote?: string | null
 }
 
 /**
@@ -1321,6 +1325,8 @@ export type AiSiteImportWork =
   | { kind: 'read'; wave: AiSiteImportWave; pages: AiSiteImportPage[] }
   | { kind: 'frame'; wave: AiSiteImportWave }
   | { kind: 'images'; wave: AiSiteImportWave; page: AiSiteImportPage }
+  /** A page's forms, rebuilt as the site's own before the page places them (AGL-4083). */
+  | { kind: 'forms'; wave: AiSiteImportWave; page: AiSiteImportPage }
   | { kind: 'page'; wave: AiSiteImportWave; page: AiSiteImportPage }
   | { kind: 'close-wave'; wave: AiSiteImportWave }
   | { kind: 'done' }
@@ -1349,6 +1355,20 @@ export function aiSiteImportReviewWave(state: AiSiteImportState | null | undefin
   return state?.waves.find((wave) => wave.status === 'review') ?? null
 }
 
+/** Whether a page's read holds a form that asks something, where its layout placed one. */
+function pageHoldsForm(page: AiSiteImportPage): boolean {
+  const { read } = page
+  if (!read?.layout || !read.forms?.some((form) => form.fields.length)) return false
+  const holds = (nodes: readonly SiteImportLayoutNode[]): boolean =>
+    nodes.some((node) => {
+      if (node.kind === 'form') return (read.forms?.[node.form]?.fields.length ?? 0) > 0
+      if (node.kind === 'row') return node.cells.some((cell) => holds(cell.nodes))
+      if (node.kind === 'tabs') return node.tabs.some((tab) => holds(tab.panel))
+      return false
+    })
+  return read.layout.sections.some((section) => holds(section.nodes))
+}
+
 /** What the next pass of the step does. */
 export function aiSiteImportNextWork(
   state: AiSiteImportState | null | undefined,
@@ -1375,8 +1395,9 @@ export function aiSiteImportNextWork(
     return { kind: 'frame', wave: running }
   }
   const page = reached[0]
-  if (page) return page.photos ? { kind: 'page', wave: running, page } : { kind: 'images', wave: running, page }
-  return { kind: 'close-wave', wave: running }
+  if (!page) return { kind: 'close-wave', wave: running }
+  if (!page.photos) return { kind: 'images', wave: running, page }
+  return !page.forms && pageHoldsForm(page) ? { kind: 'forms', wave: running, page } : { kind: 'page', wave: running, page }
 }
 
 /*------------------------------------------
@@ -1490,6 +1511,16 @@ export function aiSiteImportPhotosIn(
   photos: NonNullable<AiSiteImportPage['photos']>,
 ): AiSiteImportState {
   return withPage(state, slot, { photos })
+}
+
+/** A page's forms are the site's own (AGL-4083). */
+export function aiSiteImportFormsIn(
+  state: AiSiteImportState,
+  slot: string,
+  forms: NonNullable<AiSiteImportPage['forms']>,
+  note: string | null,
+): AiSiteImportState {
+  return withPage(state, slot, { forms, ...(note ? { formNote: note } : {}) })
 }
 
 /**

@@ -624,6 +624,31 @@ describe('aglyn.com /contact', () => {
     const form = Object.values(tree.nodes).find((node) => node.componentId === 'form')
     expect(form?.props?.['formId']).toBe('form-contact')
   })
+
+  const placed = (forms: NonNullable<AiSiteImportDocument['forms']> | undefined, saved: Array<{ id: string; name: string }>) => {
+    const doc = { ...docOf('contact'), ...(forms ? { forms } : {}) }
+    const names = aiSiteImportSectionNames(doc)
+    const { tree: built } = aiCompileImportedPage({
+      doc,
+      sectionIds: names.map((_, index) => `sec-${index}`),
+      plan: { title: doc.title, sections: names.map((name) => ({ name, uses: [], items: 0 })) },
+      targets: { ...TARGETS, forms: saved } as never,
+    })
+    return Object.values(built.nodes).filter((node) => node.componentId === 'form').map((node) => node.props?.['formId'])
+  }
+
+  it('places the form rebuilt for this one, on a site of several (AGL-4083)', () => {
+    expect(placed([{ index: 0, formId: 'form-b' }], [{ id: 'form-a', name: 'A' }, { id: 'form-b', name: 'B' }])).toEqual(['form-b'])
+  })
+
+  it('places nothing for a form with no room, and never the site’s other form in its place (AGL-4083)', () => {
+    expect(placed([{ index: 0, formId: null }], [{ id: 'form-a', name: 'A' }])).toEqual([])
+  })
+
+  it('reads a page kept before its forms were rebuilt as it always did: the site’s one form, none of several', () => {
+    expect(placed(undefined, [{ id: 'form-a', name: 'A' }])).toEqual(['form-a'])
+    expect(placed(undefined, [{ id: 'form-a', name: 'A' }, { id: 'form-b', name: 'B' }])).toEqual([])
+  })
 })
 
 describe('a blog post', () => {

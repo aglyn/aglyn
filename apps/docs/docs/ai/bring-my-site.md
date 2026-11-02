@@ -77,8 +77,8 @@ Reading uses no AI credits.
 **What is read.** For each page Aglyn reads its words and how your site lays them out: its
 sections and their background colors, its columns, its cards and the icons on them, its
 numbered steps, figures, questions and answers, quotes, logo strips, plan cards with their
-badge, price and button, plan rows, tables and tabs, its pictures where they sit, and which
-links your site shows as buttons. From
+badge, price and button, plan rows, tables and tabs, its pictures where they sit, your forms
+with their fields and their button, and which links your site shows as buttons. From
 your home page it also reads your menu, with each dropdown and its entries, the buttons
 beside it, and your footer's columns, profiles and copyright line, plus your site's fonts
 and colors. Your new pages are built from this, with every word as you wrote it.
@@ -195,6 +195,7 @@ and shows:
 - how many of the page's photos came in, for example **3 of 5 photos**, with how many were
   already in your media library and how many could not be brought in;
 - a page that could not be brought in, with the reason;
+- a page whose form was rebuilt, with the form's name;
 - how many AI credits the wave used.
 
 If your site started in [preview](../building-sites/site-protection/make-your-site-private.md#keep-it-to-your-team-with-preview),
@@ -229,9 +230,14 @@ your new site's share image unless you already chose one.
 
 - **Sign-in pages.** A page that asks for a password is left out, and so is a page AglynBot
   is asked not to read by robots.txt.
-- **Code and forms.** Scripts, embedded frames and forms are never brought in. Where your
-  page had a form and your new site already has one saved form, that form is placed where
-  your page had its own.
+- **Code.** Scripts and embedded frames are never brought in.
+- **Forms that ask for a password or a card number.** These are left out. Every other form
+  on your page is rebuilt as a form of your new site, with the same fields, required marks
+  and button, where your page had it. What visitors send lands in your **Inbox**, a form that
+  asks for an email also asks for marketing consent, and rebuilding a form uses no AI credits.
+  A form your new site already has is placed instead of a second copy. If your plan has no
+  room for another form, the page comes in without it and its row says so. A form can't take
+  a file here, so a file upload field is left out and the page's row names it.
 - **Other websites.** Only pages on your own domain are read. A page that sends visitors to
   another website is left out.
 

@@ -2760,6 +2760,21 @@ whose passes each do one unit (`aiSiteImportNextWork`):
 - **A cancel settles every wave** (AGL-4107): `aiSiteImportCanceled`, in the
   cancel's own write and in a step's write a pending cancel ends, marks a
   running or waiting wave `stopped` and a wave in review `done`.
+- **A form on a page is rebuilt as the site's own** (AGL-4083). The reader keeps
+  each field's words, type, required mark, placeholder and choices and the
+  button's words (`SiteImportForm`); a form with a payment field is dropped and
+  a password page refused, as before. Before a page with a form is built, a pass
+  with no model (`aiRebuildImportedForms`) places a saved form with the same
+  fields, or the site's only form for the first form met, else builds the Form
+  of MUI's separate elements (`aiSiteImportFormTree`), runs it through
+  `aiFormDraft` (Inbox routing, the platform's consent field, the source's own
+  marketing box dropped), asks `aiFormDraftViolations` and writes it with
+  `writeAiDraft`, under the id `<job>-form-<signature>`, so a pass run twice
+  writes one form. It is named by the nearest heading above it, else "Contact
+  form". A ledger row `op: 'form'` at 0 credits records it, and the page's row
+  carries the note, including that a plan had no room. The map rides the page's
+  document (`forms`), and the compile places each `form` node as its own, the
+  single-form rule remaining for a read kept without one.
 - **An import never ends with work left** (AGL-4083). Its whole run can take
   hours, so nothing written for one build ends it: where a build would settle
   because it stopped (its attempts used up, the bound on its passes, a step's
