@@ -161,7 +161,7 @@ describe('no section repeats the name of its surface', () => {
 describe('a record beneath a surface is titled by the noun its surface declares', () => {
   it('titles a site’s AI jobs list and one job’s page apart', async () => {
     expect(await titleFor(['ai-jobs'], 'groomer')).toBe('AI jobs · groomer')
-    expect(await titleFor(['ai-jobs', 'job-1'], 'groomer')).toBe('Building your site · groomer')
+    expect(await titleFor(['ai-jobs', 'job-1'], 'groomer')).toBe('AI job · groomer')
   })
 
   it('CONTROL: a surface with no record noun keeps its own name on a record', async () => {

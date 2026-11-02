@@ -97,9 +97,9 @@ final class MarketplacePublishTests: XCTestCase {
         .map { ScreenValues.render(changes["secondary"]?.stringValue ?? "", in: $0) }
     }
     // Only the versions after the one last agreed to, each change under the version that made it.
-    XCTAssertEqual(changed(since: "2026-08-18.1"), ["Version 2026-08-24.1"])
-    XCTAssertEqual(changed(since: "2026-01-01.1").count, 5)
-    XCTAssertEqual(changed(since: "2026-08-24.1"), [])
+    XCTAssertEqual(changed(since: "2026-08-24.1"), Array(repeating: "Version 2026-11-02.1", count: 3))
+    XCTAssertEqual(changed(since: "2026-01-01.1").count, 8)
+    XCTAssertEqual(changed(since: "2026-11-02.1"), [])
 
     // It says every save asks, and when the organization last agreed; there is nothing to accept here.
     let everySave =
@@ -107,7 +107,7 @@ final class MarketplacePublishTests: XCTestCase {
     let (stale, staleBlocks) = shown(agreement, profile: ["handle": "s", "publisherAgreement": ["version": "2026-08-18.1"]])
     XCTAssertEqual(
       texts(staleBlocks, stale),
-      [everySave, "Your organization last agreed to version 2026-08-18.1. Your next save agrees to version 2026-08-24.1."])
+      [everySave, "Your organization last agreed to version 2026-08-18.1. Your next save agrees to version 2026-11-02.1."])
     let (never, neverBlocks) = shown(agreement, profile: ["handle": "s"])
     XCTAssertEqual(texts(neverBlocks, never), [everySave])
     XCTAssertFalse(agreement.blocks.contains { block in block["items"].array.contains { $0["url"] != nil } })
@@ -337,7 +337,7 @@ final class MarketplacePublishTests: XCTestCase {
   func testAPublishRefusedForTheAgreementSaysWhyInTheRoutesWords() async throws {
     let publish = try spec("marketplace.publishTemplate")
     let submit = try XCTUnwrap(publish.blocks.first { $0.type == "form" }?["submit"].flatMap(ActionSpec.init))
-    let refusal = #"{"error":"Tick 'I agree to the Marketplace Publisher Agreement' to save","agreement":{"required":"2026-08-24.1","state":"missing"}}"#
+    let refusal = #"{"error":"Tick 'I agree to the Marketplace Publisher Agreement' to save","agreement":{"required":"2026-11-02.1","state":"missing"}}"#
     let transport = RecordingTransport(responses: [(428, refusal)])
     let model = ScreenModel(spec: publish, context: [:], api: api(transport))
     let outcome = await model.run(submit, in: withConstants(["site": ["id": "h1"], "form": ["name": "Studio"]], publish))
@@ -399,7 +399,7 @@ final class MarketplacePublishTests: XCTestCase {
   func testAPluginRefusedByTheVerifierSaysWhatItFoundAndTheAgreementLikeEveryPublish() async throws {
     let publish = try spec("marketplace.publishPlugin")
     let submit = try XCTUnwrap(publish.blocks.first { $0.type == "form" }?["submit"].flatMap(ActionSpec.init))
-    let refusal = #"{"error":"Tick 'I agree to the Marketplace Publisher Agreement' to save","agreement":{"required":"2026-08-24.1","state":"missing"}}"#
+    let refusal = #"{"error":"Tick 'I agree to the Marketplace Publisher Agreement' to save","agreement":{"required":"2026-11-02.1","state":"missing"}}"#
     let problems = #"{"error":"Bundle rejected","problems":[{"level":"error","check":"network","message":"Calls an undeclared host"},{"level":"error","message":"Too large"}]}"#
     let transport = RecordingTransport(responses: [(428, refusal), (422, problems)])
     let model = ScreenModel(spec: publish, context: [:], api: api(transport))

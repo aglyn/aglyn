@@ -17,16 +17,38 @@
 
 import { FieldPath } from 'firebase-admin/firestore'
 import { INSIGHT_DIGESTS_FIELD, insightDigestSubscribed, notificationMuted } from '@aglyn/aglyn/app-utils/notifications'
+import { liveCustomDomain, TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
 import { hostRoleFor } from '@aglyn/aglyn/app-utils/organizations'
 import { checkEntitlement, resolveBrandingProfile, resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { isReleaseFlagOnForOrg, parseOrgReleaseFlagOverrides, type ReleaseFlagValue } from '@aglyn/aglyn/app-utils/release-flags'
 import type { AglynOrgMember } from '@aglyn/aglyn/foundation/definitions/organization.types'
-import { weeklySummaryPeriod } from '@aglyn/aglyn/app-utils/weekly-summary'
+import {
+  weeklySummaryFootnoteHtml,
+  weeklySummaryPeriod,
+  weeklySummaryPlainDates,
+  weeklySummarySectionsHtml,
+  weeklySummaryTilesHtml,
+  weeklySummaryWeekday,
+  type WeeklySummaryColors,
+  type WeeklySummarySection,
+  type WeeklySummarySectionBar,
+  type WeeklySummarySectionRow,
+} from '@aglyn/aglyn/app-utils/weekly-summary'
+import {
+  normalizePluginFigureTable,
+  pluginFigureCellText,
+  pluginFigureReader,
+  type PluginFigureColumn,
+  type PluginFigureSummaryStat,
+} from '@aglyn/aglyn/plugin-manager/plugin-figures'
 import {
   aiInsightDigestPeriod,
+  aiInsightSourceHref,
   AI_INSIGHTS_COLLECTION,
   aiInsightIsoWeek,
+  type AiInsight,
   type AiInsightRecord,
+  type AiInsightTable,
 } from '../model/ai-insight'
 import { isAiOnForSite } from '../model/ai-site-switch'
 import { cancelAiJob, createAiJob, getAiJob } from '../jobs/ai-jobs'
@@ -69,9 +91,12 @@ import { cancelAiJob, createAiJob, getAiJob } from '../jobs/ai-jobs'
  * because nobody asked about that week in particular. A job still running
  * past `AI_INSIGHT_DIGEST_DEADLINE_MS` is canceled and skipped the same way.
  *
- * The email says only what the answer says: the insights, each traced to the
- * figures it cites, and a link to the site's Analytics page. It is sent by the
- * platform to a person who asked for it, never to a contact.
+ * The email says only what the answer says, drawn to be run down rather than
+ * read: the week's headline figures as tiles, then one section a topic, however
+ * many insights cite it, each with its headline, the figures those insights
+ * cite and a link to where they live. Every reader draws the same way, from its
+ * table's own columns. It is sent by the platform to a person who asked for it,
+ * never to a contact.
  */
 
 type Firestore = FirebaseFirestore.Firestore
@@ -154,6 +179,8 @@ export interface AiInsightDigestDeps {
   }) => Promise<AiInsightDigestSendResult>
   /** The console's absolute origin for an email link, or `''` when none is configured. */
   consoleOrigin: string
+  /** The org's email theme, as the digest's drawing needs it. */
+  colors: (org: Record<string, unknown>) => WeeklySummaryColors
   /** The call's working time; `AI_INSIGHT_DIGEST_RUN_BUDGET_MS` unless a spec holds it. */
   budgetMs?: number
 }
@@ -214,7 +241,7 @@ export function aiInsightDigestEmailText(input: {
       ? `Here is what ${input.siteName}'s figures showed last week, ${input.periodLabel}.${drew}`
       : `Here is what ${input.siteName}'s figures showed this week.${drew}`,
     '',
-    ...input.insights.map((insight, index) => `${index + 1}. ${insight.text}`),
+    ...input.insights.map((insight, index) => `${index + 1}. ${aiInsightDigestLine(insight)}`),
     '',
     input.analyticsUrl
       ? `Each of these is traced to the figures it cites. See them in ${input.productName}: ${input.analyticsUrl}`
@@ -226,11 +253,163 @@ export function aiInsightDigestEmailText(input: {
   ].join('\n')
 }
 
+/** An insight in one line of plain text, its dates as a person says them. */
+function aiInsightDigestLine(insight: { text: string; headline?: string | null }): string {
+  const text = weeklySummaryPlainDates(insight.text)
+  return insight.headline ? `${insight.headline}: ${text}` : text
+}
+
+/** The most tiles the digest leads with: one row. */
+export const AI_INSIGHT_DIGEST_MAX_TILES = 3
+
+/** The most rows a section lists. */
+export const AI_INSIGHT_DIGEST_MAX_ROWS = 5
+
+/** The columns that hold a figure a row can show, as against a label or a change. */
+const FIGURE_KINDS: ReadonlyArray<PluginFigureColumn['kind']> = ['count', 'money', 'percent', 'duration']
+
+/**
+ * Each table the job read, as its reader's owner would headline it in the
+ * weekly summary. Only a figure compared with the week before earns a tile: a
+ * month's running count beside two weeks' does not read as the same kind of
+ * thing.
+ */
+function aiInsightDigestTiles(tables: readonly AiInsightTable[]): Array<{ ref: string; stats: readonly PluginFigureSummaryStat[] }> {
+  return tables
+    .flatMap((source) => {
+      const summary = pluginFigureReader(source.reader)?.reader.weeklySummary
+      const table = summary ? normalizePluginFigureTable(source) : null
+      const stats = (table ? (summary?.summarize(table)?.stats ?? []) : []).filter((stat) => typeof stat.change === 'number')
+      return stats.length ? [{ ref: source.ref, stats, order: summary?.order ?? 0 }] : []
+    })
+    .sort((a, b) => a.order - b.order)
+}
+
+/** The row numbers a set of insights cite in a table, each once, in the order they cite them. */
+function citedRows(insights: readonly AiInsight[], table: AiInsightTable): number[] {
+  const rows = insights.flatMap((insight) =>
+    insight.cites.filter((cite) => cite.table === table.ref).flatMap((cite) => cite.rows),
+  )
+  return [...new Set(rows)].filter((row) => Number.isInteger(row) && table.rows[row])
+}
+
+/** A row's label as a person reads it, and the page it names, when it names one. */
+function rowLabel(value: unknown, siteUrl: string | null): Pick<WeeklySummarySectionRow, 'label' | 'url'> {
+  const label = String(value ?? '')
+  const path = label.startsWith('/')
+  return { label: label === '/' ? 'Home' : label, url: path && siteUrl ? `${siteUrl}${label === '/' ? '' : label}` : null }
+}
+
+/**
+ * A section's figures, from the table's own columns, so a reader added
+ * tomorrow draws without a line here: a table of days is a chart of the week
+ * with the cited days marked, and any other is its cited rows, each with its
+ * change where the table has one, else with its second figure.
+ */
+function aiInsightDigestFigures(
+  table: AiInsightTable,
+  cited: readonly number[],
+  siteUrl: string | null,
+): Pick<WeeklySummarySection, 'rows' | 'bars'> {
+  const label = table.columns.find((column) => column.kind === 'text' || column.kind === 'date')
+  const figures = table.columns.filter((column) => FIGURE_KINDS.includes(column.kind))
+  const change = table.columns.find((column) => column.kind === 'change')
+  if (!label || !figures.length || !cited.length) return {}
+  // A `figure` row names what it counts. Any other row's count takes its column's word.
+  const counted = label.key !== 'figure'
+  const text = (column: PluginFigureColumn, row: AiInsightTable['rows'][number]) => {
+    const cell = pluginFigureCellText(table, column.key, row[column.key])
+    return counted && column.kind === 'count' ? `${cell} ${column.label.toLowerCase()}` : cell
+  }
+  if (label.kind === 'date') {
+    const [figure] = figures
+    const bars: WeeklySummarySectionBar[] = table.rows.map((row, index) => ({
+      label: weeklySummaryWeekday(String(row[label.key])),
+      value: Number(row[figure.key]) || 0,
+      display: pluginFigureCellText(table, figure.key, row[figure.key]),
+      marked: cited.includes(index),
+    }))
+    return { bars }
+  }
+  const shown = figures.slice(0, change ? 1 : 2)
+  return {
+    rows: cited.slice(0, AI_INSIGHT_DIGEST_MAX_ROWS).map((index) => {
+      const row = table.rows[index]
+      const moved = change ? row[change.key] : null
+      return {
+        ...rowLabel(row[label.key], siteUrl),
+        value: shown.map((column) => text(column, row)).join(' · '),
+        change: typeof moved === 'number' ? moved : null,
+      }
+    }),
+  }
+}
+
+/** The digest's topics: one a table, however many insights cite it, in the order they first come up. */
+function aiInsightDigestSections(
+  insights: readonly AiInsight[],
+  input: { tables: readonly AiInsightTable[]; siteUrl: string | null; sourceUrl: (table: AiInsightTable) => string | null },
+): WeeklySummarySection[] {
+  const groups = new Map<string, { table: AiInsightTable | null; insights: AiInsight[] }>()
+  for (const insight of insights) {
+    const ref = insight.cites[0]?.table ?? ''
+    const group = groups.get(ref) ?? { table: input.tables.find((table) => table.ref === ref) ?? null, insights: [] }
+    group.insights.push(insight)
+    groups.set(ref, group)
+  }
+  return [...groups.values()].map(({ table, insights: said }) => {
+    const url = table ? input.sourceUrl(table) : null
+    return {
+      title: table?.title ?? 'What changed',
+      link: table && url ? { label: table.source.label, url } : null,
+      points: said.map((insight) => ({
+        headline: insight.headline?.trim() || null,
+        text: weeklySummaryPlainDates(insight.text),
+      })),
+      ...(table ? aiInsightDigestFigures(table, citedRows(said, table), input.siteUrl) : {}),
+    }
+  })
+}
+
+/**
+ * The digest's drawn parts: the week's figures as tiles, one section a topic,
+ * and the small print. An insight that only says what the first tiles already
+ * show is left out, so the email never makes a person read the same figures
+ * twice.
+ */
+export function aiInsightDigestEmailHtml(input: {
+  insights: readonly AiInsight[]
+  tables: readonly AiInsightTable[]
+  colors: WeeklySummaryColors
+  /** The site's own address, which a row naming a page links to. */
+  siteUrl: string | null
+  /** Where a table's figures live in the console, absolute. */
+  sourceUrl: (table: AiInsightTable) => string | null
+  /** The sentence that says what the digest cost. */
+  why: string
+  settingsUrl: string | null
+}): Record<'digest.html' | 'digest.footnote', string> {
+  const tiles = aiInsightDigestTiles(input.tables)
+  const restated = (insight: AiInsight) =>
+    insight.cites.length > 0 && insight.cites.every((cite) => cite.table === tiles[0]?.ref)
+  const fresh = input.insights.filter((insight) => !restated(insight))
+  return {
+    'digest.html':
+      weeklySummaryTilesHtml(tiles.flatMap((part) => part.stats).slice(0, AI_INSIGHT_DIGEST_MAX_TILES), input.colors) +
+      weeklySummarySectionsHtml(aiInsightDigestSections(fresh.length ? fresh : input.insights, input), input.colors),
+    'digest.footnote': weeklySummaryFootnoteHtml(
+      input.why,
+      input.settingsUrl ? { label: 'Turn off weekly insights', url: input.settingsUrl } : null,
+      input.colors,
+    ),
+  }
+}
+
 /**
  * The same digest as {@link aiInsightDigestEmailText}, cut into the parts the
  * `ai-insights-digest` system email draws: the workspace and week above the
- * heading, the insights as a numbered list, a button to the site's
- * Analytics page, and why it came.
+ * heading, the figures and insights, a button to the site's Analytics page,
+ * what it cost, and where to turn it off.
  */
 export function aiInsightDigestEmailParts(
   input: Parameters<typeof aiInsightDigestEmailText>[0],
@@ -240,22 +419,19 @@ export function aiInsightDigestEmailParts(
 > {
   const workspace = input.workspaceName?.trim() || ''
   const credits = Math.max(0, Math.round(Number(input.creditsSpent) || 0))
-  const forWhom = workspace || 'this workspace'
+  const spent = credits
+    ? ` Writing these used ${credits.toLocaleString('en-US')} of ${workspace ? `${workspace}’s` : 'the workspace’s'} AI credits.`
+    : ''
   return {
     'digest.eyebrow': [workspace, input.periodLabel?.trim()].filter(Boolean).join(' · '),
     'digest.intro':
       `What ${input.siteName}'s figures showed ${input.periodLabel ? 'last week' : 'this week'}. ` +
       'Each one is traced to the figures it cites, so you can check it on the Analytics page.',
-    'digest.insights': input.insights.map((insight, index) => `${index + 1}. ${insight.text}`).join('\n\n'),
+    'digest.insights': input.insights
+      .map((insight, index) => `${index + 1}. ${aiInsightDigestLine(insight)}`)
+      .join('\n\n'),
     'digest.analyticsUrl': input.analyticsUrl ?? '',
-    'digest.why':
-      `You asked for weekly insights for ${forWhom}.` +
-      (credits
-        ? ` Writing these used ${credits.toLocaleString('en-US')} of ${workspace ? `${workspace}’s` : 'the workspace’s'} AI credits.`
-        : '') +
-      (input.settingsUrl
-        ? ` Turn them off in Notifications: ${input.settingsUrl}`
-        : ' Turn them off in your Notifications settings.'),
+    'digest.why': `Every number here is checked against ${input.siteName}'s own figures.${spent}`,
   }
 }
 
@@ -430,6 +606,8 @@ async function deliverOrgDigest(
           creditsSpent: job.creditsSpent,
           periodLabel: aiInsightDigestPeriod(job.inputs, new Date(Number(marker.createdAtMs) || now.getTime())).label,
         }
+        const parts = aiInsightDigestEmailParts(emailInput)
+        const domain = liveCustomDomain(host as never) ?? (subdomain ? `${subdomain}.${TENANT_APEX}` : '')
         const sent = await deps.send({
           to: address,
           subject: `Your weekly insights for ${site.name}`,
@@ -437,7 +615,21 @@ async function deliverOrgDigest(
           fromName: branding.fromName,
           siteName: site.name,
           org,
-          merge: aiInsightDigestEmailParts(emailInput),
+          merge: {
+            ...parts,
+            ...aiInsightDigestEmailHtml({
+              insights: record.insights,
+              tables: record.tables ?? [],
+              colors: deps.colors(org),
+              siteUrl: domain ? `https://${domain}` : null,
+              sourceUrl: (table) => {
+                const href = origin ? aiInsightSourceHref(table, { orgSlug, host: subdomain || null }) : null
+                return href ? `${origin}${href}` : null
+              },
+              why: parts['digest.why'],
+              settingsUrl: emailInput.settingsUrl,
+            }),
+          },
         })
         if (sent.rateLimited) {
           // Nothing is marked, so the next run delivers this site whole.
@@ -449,7 +641,7 @@ async function deliverOrgDigest(
       if (!notificationMuted(user?.get('notificationPrefs'), 'content.insightsDigest')) {
         await deps.notify(member.$id, {
           title: `Weekly insights · ${site.name}`,
-          body: record.insights[0].text,
+          body: aiInsightDigestLine(record.insights[0]),
           link: `/${hostId}/analytics`,
           orgId,
           hostId,

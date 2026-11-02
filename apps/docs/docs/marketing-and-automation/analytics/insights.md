@@ -100,7 +100,9 @@ Without turning anything on, every workspace owner and admin already gets the fr
 [Weekly summary](../../getting-started/console-tour.md#daily-digests) email each Monday with the
 week's figures. Weekly insights add the explanation.
 
-- They arrive as a notification and an email, and are listed under **AI jobs**.
+- They arrive as a notification and an email, and are listed under **AI jobs**. The email leads
+  with the week's headline figures, then one section a topic: what stood out, the figures behind
+  it, and links to the pages and reports they come from.
 - Each site's weekly insights are an AI job and use AI credits. When your workspace has used its
   AI credits for the month, that week's insights are skipped without a message.
 - Turn them off from the same dialog, or under **Weekly insights** on the

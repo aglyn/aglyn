@@ -133,7 +133,7 @@ describe('publisher agreement change record (AGL-3407)', () => {
     expect(publisherAgreementChangesSince(PUBLISHER_AGREEMENT_VERSION)).toEqual([])
     expect(
       publisherAgreementChangesSince('2026-08-18.1').map((entry) => entry.version),
-    ).toEqual(['2026-08-24.1'])
+    ).toEqual(['2026-08-24.1', '2026-11-02.1'])
     // Older than anything recorded: all of it is new to them.
     expect(publisherAgreementChangesSince('2026-08-14.1')).toEqual(
       PUBLISHER_AGREEMENT_CHANGES,
@@ -155,5 +155,25 @@ describe('publisher agreement change record (AGL-3407)', () => {
     expect(read('2026-08-18.1')).toContain('Williamson County, Texas')
     expect(read('2026-08-24.1')).toContain('Travis County, Texas')
     expect(read('2026-08-24.1')).toContain('Section 18.6 (governing law')
+  })
+
+  it('describes the 2026-11-02.1 edit the snapshots actually show', () => {
+    const read = (version: string) =>
+      readFileSync(
+        join(
+          __dirname,
+          'legal',
+          'publisher-agreement',
+          version,
+          'marketplace-publisher-agreement.txt',
+        ),
+        'utf-8',
+      )
+    expect(read('2026-08-24.1')).toContain('1. Pre-Release Program')
+    expect(read('2026-11-02.1')).toContain('1. Site Starters')
+    expect(read('2026-11-02.1')).toContain('templates, site starters, dataset schemas')
+    expect(read('2026-11-02.1')).toContain('you warrant it under Section 3')
+    expect(read('2026-11-02.1')).not.toContain('pre-release')
+    expect(read('2026-11-02.1')).not.toContain('licence')
   })
 })

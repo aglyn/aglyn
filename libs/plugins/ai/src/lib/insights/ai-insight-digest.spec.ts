@@ -43,9 +43,15 @@ jest.mock('../jobs/ai-jobs', () => ({
 
 import type { AglynOrgMember } from '@aglyn/aglyn/foundation/definitions/organization.types'
 import { INSIGHT_DIGESTS_FIELD } from '@aglyn/aglyn/app-utils/notifications'
+import { registerPluginFigureReader } from '@aglyn/aglyn/plugin-manager/plugin-figures'
+import type { AiInsight, AiInsightTable } from '../model/ai-insight'
 import {
   AI_INSIGHT_DIGEST_MARKERS,
+  AI_INSIGHT_DIGEST_MAX_ROWS,
+  AI_INSIGHT_DIGEST_MAX_TILES,
   AI_INSIGHT_DIGEST_QUEUE,
+  aiInsightDigestEmailHtml,
+  aiInsightDigestEmailParts,
   aiInsightDigestEmailText,
   runAiInsightDigestSweep,
   type AiInsightDigestDeps,
@@ -129,6 +135,17 @@ const members: AglynOrgMember[] = [
 const sent: Data[] = []
 const notified: Data[] = []
 
+const COLORS = {
+  text: '#111111',
+  muted: '#555555',
+  border: '#dddddd',
+  surface: '#f5f5f5',
+  accent: '#00aaff',
+  link: '#0066cc',
+  up: '#008800',
+  down: '#cc0000',
+}
+
 function deps(now: Date, patch: Partial<AiInsightDigestDeps> = {}): AiInsightDigestDeps {
   return {
     firestore,
@@ -145,6 +162,7 @@ function deps(now: Date, patch: Partial<AiInsightDigestDeps> = {}): AiInsightDig
       return { sent: true, rateLimited: false }
     },
     consoleOrigin: 'https://app.example.com',
+    colors: () => COLORS,
     ...patch,
   }
 }
@@ -205,6 +223,234 @@ describe('Monday', () => {
   })
 })
 
+describe('the email’s body (AGL-4130)', () => {
+  const figureReader = (id: string, stats: Array<{ label: string; change?: number }>) =>
+    registerPluginFigureReader(
+      {
+        id,
+        scope: 'site',
+        windows: [7],
+        title: id,
+        description: id,
+        read: async () => ({ ok: false, reason: 'not read here' }),
+        weeklySummary: {
+          order: id === 'digestspec.traffic' ? 1 : 2,
+          summarize: () => ({ title: id, stats: stats.map((stat) => ({ ...stat, value: '10' })) }),
+        },
+      } as never,
+      { pluginId: 'ai' },
+    )
+  const table = (patch: Partial<AiInsightTable>) =>
+    ({ days: 7, scope: 'site', source: { label: 'Analytics', path: 'analytics' }, period: null, omitted: 0, notes: [], ...patch }) as AiInsightTable
+  const TRAFFIC = table({
+    ref: 't1',
+    reader: 'digestspec.traffic',
+    title: 'Traffic',
+    columns: [{ key: 'figure', label: 'Figure', kind: 'text' }],
+    rows: [{ figure: 'Visitors' }],
+  })
+  const PAGES = table({
+    ref: 't2',
+    reader: 'digestspec.pages',
+    title: 'Top pages',
+    columns: [
+      { key: 'page', label: 'Page', kind: 'text' },
+      { key: 'views', label: 'Views', kind: 'count' },
+      { key: 'share', label: 'Share of views', kind: 'percent' },
+      { key: 'change', label: 'Change', kind: 'change' },
+    ],
+    rows: [
+      { page: '/', views: 181, share: 25.4, change: -1.1 },
+      { page: '/pricing', views: 95, share: 13.3, change: 86.3 },
+      { page: '/a', views: 9, share: 1, change: 2 },
+      { page: '/b', views: 8, share: 1, change: 3 },
+      { page: '/c', views: 7, share: 1, change: 4 },
+      { page: '/d', views: 6, share: 1, change: 5 },
+    ],
+  })
+  const DAYS = table({
+    ref: 't3',
+    reader: 'traffic.daily',
+    title: 'Traffic by day',
+    columns: [
+      { key: 'day', label: 'Day', kind: 'date' },
+      { key: 'views', label: 'Page views', kind: 'count' },
+    ],
+    rows: [
+      { day: '2026-10-26', views: 161 },
+      { day: '2026-10-27', views: 78 },
+    ],
+  })
+  const FORMS = table({
+    ref: 't4',
+    reader: 'digestspec.forms',
+    title: 'Forms',
+    source: { label: 'Forms', path: 'forms' },
+    columns: [
+      { key: 'form', label: 'Form', kind: 'text' },
+      { key: 'views', label: 'Views', kind: 'count' },
+      { key: 'submissions', label: 'Submissions', kind: 'count' },
+      { key: 'completion', label: 'Views that became a submission', kind: 'percent' },
+    ],
+    rows: [{ form: 'Contact', views: 14, submissions: 3, completion: 21.4 }],
+  })
+  const TABLES = [TRAFFIC, PAGES, DAYS, FORMS]
+  const said = (text: string, ref: string, rows: number[] = [0], headline?: string): AiInsight => ({
+    ...(headline ? { headline } : {}),
+    text,
+    cites: [{ table: ref, rows }],
+  })
+  beforeAll(() => {
+    figureReader('digestspec.traffic', [
+      { label: 'Visitors', change: 22.5 },
+      { label: 'Page views', change: -3.3 },
+    ])
+    figureReader('digestspec.pages', [
+      { label: 'Pages', change: 1 },
+      { label: 'Sessions', change: 1 },
+      { label: 'Exits', change: 1 },
+    ])
+    figureReader('digestspec.forms', [{ label: 'Submissions since Oct 1' }])
+  })
+  const email = (insights: AiInsight[], tables: readonly AiInsightTable[] = TABLES) =>
+    aiInsightDigestEmailHtml({
+      insights,
+      tables,
+      colors: COLORS,
+      siteUrl: 'https://acme.com',
+      sourceUrl: (source) => `https://app.example.com/${source.source.path}`,
+      why: 'Writing these used 17 credits.',
+      settingsUrl: 'https://app.example.com/manage/notifications',
+    })
+  const html = (insights: AiInsight[], tables?: readonly AiInsightTable[]) => email(insights, tables)['digest.html']
+
+  it('leads with the figures, as tiles, then the topics', () => {
+    const body = html([said('The home page led.', 't2')])
+    expect(body.indexOf('Visitors')).toBeLessThan(body.indexOf('Top pages'))
+    expect(body.indexOf('Top pages')).toBeLessThan(body.indexOf('The home page led.'))
+  })
+
+  it('holds its tiles to one row', () => {
+    expect(html([said('x', 't2')]).match(/background-color:#f5f5f5/g)).toHaveLength(AI_INSIGHT_DIGEST_MAX_TILES)
+  })
+
+  it('gives a tile only to a figure compared with the week before', () => {
+    expect(html([said('x', 't2')])).not.toContain('Submissions since Oct 1')
+  })
+
+  it('tells a topic once, however many insights cite it', () => {
+    const body = html([said('The home page led.', 't2', [0]), said('Pricing grew.', 't2', [1])])
+    expect(body.match(/Top pages/g)).toHaveLength(1)
+    expect(body).toContain('The home page led.')
+    expect(body).toContain('Pricing grew.')
+  })
+
+  it('lists each row once, in the order the insights cite them, and no more than it should', () => {
+    const body = html([said('One.', 't2', [1, 0]), said('Two.', 't2', [1, 2, 3, 4, 5])])
+    expect(body.match(/>\/pricing</g)).toHaveLength(1)
+    expect(body.indexOf('>/pricing<')).toBeLessThan(body.indexOf('>Home<'))
+    expect(body).toContain('>/c<')
+    expect(body).not.toContain('>/d<')
+    expect(AI_INSIGHT_DIGEST_MAX_ROWS).toBe(5)
+  })
+
+  it('leaves the column’s word off a row that names its own figure', () => {
+    const traffic = {
+      ref: 't1',
+      title: 'Traffic',
+      source: { label: 'Analytics', path: 'analytics' },
+      scope: 'site',
+      reader: 'digestspec.none',
+      columns: [
+        { key: 'figure', label: 'Figure', kind: 'text' },
+        { key: 'current', label: 'This window', kind: 'count' },
+        { key: 'change', label: 'Change', kind: 'change' },
+      ],
+      rows: [{ figure: 'Visitors', current: 642, change: 22.5 }],
+    } as unknown as AiInsightTable
+    const body = html([said('x', 't1', [0])], [traffic])
+    expect(body).toContain('642')
+    expect(body).not.toContain('this window')
+  })
+
+  it('links each page it lists to the page itself, the home page as Home', () => {
+    const body = html([said('x', 't2', [0, 1])])
+    expect(body).toContain('href="https://acme.com"')
+    expect(body).toContain('>Home<')
+    expect(body).toContain('href="https://acme.com/pricing"')
+  })
+
+  it('shows a row’s figure with its change', () => {
+    const body = html([said('x', 't2', [1])])
+    expect(body).toContain('95 views')
+    expect(body).toContain('▲ +86.3%')
+  })
+
+  it('shows two figures where the table has no change', () => {
+    expect(html([said('x', 't4')])).toContain('14 views · 3 submissions')
+  })
+
+  it('links a topic to where its figures live, by that page’s name', () => {
+    const body = html([said('x', 't4')])
+    expect(body).toContain('href="https://app.example.com/forms"')
+  })
+
+  it('draws a table of days as a chart of the whole week, the cited days marked', () => {
+    const body = html([said('Monday led.', 't3', [0])])
+    expect(body).toContain('Mon, Oct 26')
+    expect(body).toContain('Tue, Oct 27')
+    expect(body.match(/background-color:#00aaff/g)).toHaveLength(1)
+    expect(body.match(/background-color:#dddddd;border-radius:2px/g)).toHaveLength(1)
+  })
+
+  it('never says twice what the first tiles already show', () => {
+    const body = html([said('Visitors rose.', 't1'), said('The home page led.', 't2')])
+    expect(body).not.toContain('Visitors rose.')
+    expect(body).toContain('The home page led.')
+  })
+
+  it('keeps an insight about the tiles when it is all there is', () => {
+    expect(html([said('Visitors rose.', 't1')])).toContain('Visitors rose.')
+  })
+
+  it('leads a point with its headline', () => {
+    const body = html([said('It came from search.', 't2', [0], 'Home page up 12%')])
+    expect(body.indexOf('Home page up 12%')).toBeLessThan(body.indexOf('It came from search.'))
+  })
+
+  it('writes dates as a person says them', () => {
+    expect(html([said('Monday 2026-10-26 was busiest.', 't2')])).toContain('Monday, Oct 26 was busiest.')
+  })
+
+  it('still draws an answer with no tables', () => {
+    const body = html([said('Page views rose.', 't1')], [])
+    expect(body).toContain('Page views rose.')
+    expect(body).not.toContain('background-color:#f5f5f5')
+  })
+
+  it('leaves out a cited row the table does not have', () => {
+    expect(html([said('x', 't2', [99, 1])])).toContain('95 views')
+  })
+
+  it('says what it cost, and links the way out by name', () => {
+    const footnote = email([said('x', 't2')])['digest.footnote']
+    expect(footnote).toContain('Writing these used 17 credits.')
+    expect(footnote).toContain('<a href="https://app.example.com/manage/notifications"')
+    expect(footnote).toContain('Turn off weekly insights')
+    const parts = aiInsightDigestEmailParts({
+      siteName: 'Acme Roofing',
+      productName: 'Aglyn',
+      insights: [{ text: 'Page views rose 14.7%.' }],
+      analyticsUrl: null,
+      settingsUrl: 'https://app.example.com/manage/notifications',
+      workspaceName: 'Acme Co',
+      creditsSpent: 17,
+    })
+    expect(parts['digest.why']).toContain('17 of Acme Co’s AI credits')
+    expect(parts['digest.why']).not.toContain('https:')
+  })
+})
+
 describe('delivery', () => {
   beforeEach(async () => {
     await runAiInsightDigestSweep(deps(MONDAY), { cursor: null })
@@ -222,6 +468,8 @@ describe('delivery', () => {
     ])
     expect(sent[0].text).toContain('1. Page views rose 14.7% to 1,204.')
     expect(sent[0].text).toContain('https://app.example.com/acme/hosts/acme/analytics')
+    expect(sent[0].merge?.['digest.html']).toContain('Page views rose')
+    expect(sent[0].merge?.['digest.footnote']).toContain('https://app.example.com/manage/notifications')
     expect(notified).toEqual([expect.objectContaining({ uid: 'asker', link: '/host-1/analytics', title: 'Weekly insights · Acme Roofing' })])
     // Delivered, the marker names nobody, the week's workspace leaves the
     // queue, and nothing is sent twice.

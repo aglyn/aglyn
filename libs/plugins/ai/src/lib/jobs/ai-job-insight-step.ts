@@ -125,7 +125,7 @@ export const AI_INSIGHT_UNREADABLE_COPY = 'The AI did not answer with insights. 
 
 /** The digest's question: what a week's insights cover, in the order a person reads them. */
 export const AI_INSIGHT_DIGEST_QUESTION =
-  'What changed on this site last week, Monday to Sunday? Write the week’s insights: the change in traffic, the most viewed page, the form that turned the most views into submissions, a campaign that did better than the rest, and any day that stood out — only those the tables support.'
+  'What changed on this site last week, Monday to Sunday? Write the week’s insights: the change in traffic, the most viewed page, the form that turned the most views into submissions, a campaign that did better than the rest, and any day that stood out — only those the tables support. The email shows the week’s visitors and page views above your insights, so do not restate those totals: say what moved them and what stood out.'
 
 /** The rules both calls are sent: static, byte-identical for every workspace. */
 export const AI_INSIGHT_RULES = [
@@ -140,6 +140,10 @@ export const AI_INSIGHT_RULES = [
   '- Say a figure rose or fell only when a change you quote shows it.',
   '- Name nobody, and write no email address or phone number.',
   '- Plain sentences: no markdown, no headings, no lists.',
+  '- Each insight has a headline saying what happened in a few words, the way a person would say it: “Visitors up 22.5%”, “Contact form converts best”. Its text is one short sentence on why that matters or what sits behind it. The figures you cite are shown beside it, so do not list them again.',
+  '- Write for someone reading on a phone: say one thing, and only what they would want to know.',
+  '- Write a date the way a person says it: Monday, Oct 26, never 2026-10-26.',
+  '- Leave out a percent change that rests on a handful of views.',
   '- When the tables cannot answer part of the question, say so in gap in one sentence with no numbers; otherwise gap is null.',
   '- Whether the site is published, its address and which pages are published come only from the Site status table. Page views and visitors never show whether a site or a page is live: never say or suggest a site is not live, not launched or not published because of its traffic, and never call the pages a views table lists the published ones.',
   '- Write in the language of the question.',

@@ -18,6 +18,7 @@
 import { hasPersonalDetails } from '@aglyn/aglyn/plugin-manager/plugin-figures'
 import {
   AI_INSIGHT_GAP_MAX_CHARS,
+  AI_INSIGHT_HEADLINE_MAX_CHARS,
   AI_INSIGHT_MAX_CHARS,
   AI_INSIGHT_MAX_CITED_ROWS,
   AI_INSIGHT_MAX_CITES,
@@ -226,12 +227,26 @@ function directionBefore(text: string, at: number): 'rise' | 'fall' | null {
   return rise ? 'rise' : 'fall'
 }
 
+/**
+ * The headline a person may read. One that runs long is only dropped: the
+ * insight keeps its sentence, because length says nothing about whether it is
+ * true.
+ */
+function insightHeadline(insight: AiInsight): string {
+  const headline = typeof insight?.headline === 'string' ? insight.headline.trim() : ''
+  return headline.length <= AI_INSIGHT_HEADLINE_MAX_CHARS ? headline : ''
+}
+
 /** One insight's findings against the tables the job read; empty when it traces. */
 export function checkAiInsight(insight: AiInsight, tables: readonly AiInsightTable[]): string[] {
-  const text = typeof insight?.text === 'string' ? insight.text.trim() : ''
-  if (!text) return ['insight-empty']
+  const sentences = typeof insight?.text === 'string' ? insight.text.trim() : ''
+  if (!sentences) return ['insight-empty']
   const findings: string[] = []
-  if (text.length > AI_INSIGHT_MAX_CHARS) findings.push('insight-too-long')
+  if (sentences.length > AI_INSIGHT_MAX_CHARS) findings.push('insight-too-long')
+  // The headline is held to everything the sentence is: it is the part a
+  // person reads first, and often the only part.
+  const headline = insightHeadline(insight)
+  const text = headline ? `${headline}. ${sentences}` : sentences
   if (MARKUP.test(text)) findings.push('insight-markup')
   if (hasPersonalDetails(text)) findings.push('insight-personal-details')
 
@@ -323,7 +338,9 @@ export function checkAiInsightAnswer(
       left.push({ insight, findings: own })
       findings.push(...own)
     } else {
+      const headline = insightHeadline(insight)
       kept.push({
+        ...(headline ? { headline } : {}),
         text: insight.text.trim(),
         cites: insight.cites.slice(0, AI_INSIGHT_MAX_CITES).map((cite) => ({
           table: cite.table,

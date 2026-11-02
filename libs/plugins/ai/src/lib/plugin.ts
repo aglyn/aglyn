@@ -391,7 +391,7 @@ export function registerAiConsole(): void {
       {
         label: 'AI jobs',
         href: '/ai-jobs',
-        recordTitle: 'Building your site',
+        recordTitle: 'AI job',
         header: { title: 'AI jobs', docsTopic: 'aiJobsAndActivity', docsAnchor: '#the-ai-jobs-page' },
         unlisted: true,
         ownsSubtree: true,

@@ -90,6 +90,28 @@ export function weeklySummaryDay(day: string): string {
   return at.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
 }
 
+/** `2026-10-26` as "Mon, Oct 26". */
+export function weeklySummaryWeekday(day: string): string {
+  const at = new Date(`${day}T00:00:00Z`)
+  return at.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })
+}
+
+const ISO_DAY = /\b\d{4}-\d{2}-\d{2}\b/g
+
+/**
+ * A sentence's dates as a person says them: "Monday 2026-10-26" as "Monday,
+ * Oct 26". Tables hand the model their dates in ISO form, and it copies them.
+ */
+export function weeklySummaryPlainDates(text: string): string {
+  const said = (day: string) => {
+    const words = weeklySummaryDay(day)
+    return words === 'Invalid Date' ? day : words
+  }
+  return text
+    .replace(/\b((?:Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)day),? (\d{4}-\d{2}-\d{2})\b/g, (_, weekday: string, day: string) => `${weekday}, ${said(day)}`)
+    .replace(ISO_DAY, said)
+}
+
 // ── Helpers the readers word their parts with ──────────────────────────────
 
 /** A cell as a number, `0` for anything that is not one. */
@@ -248,34 +270,45 @@ export function weeklySummaryTileRows(count: number): number[] {
   return rows
 }
 
-/** Tiles, each a value, its label and its change, filling the width of their row. */
+/** The gap between tiles, across and down. */
+const TILE_GAP_PX = 8
+
+/** A cell that is only a gap: nothing in it may hold it open. */
+const TILE_GAP = 'font-size:0;line-height:0;padding:0;'
+
+/**
+ * Tiles, each a value, its label and its change, filling the width of their
+ * row. The tile is the table cell itself, so a row's tiles are one height
+ * whichever of them wraps, in every mail client; the gaps are cells of their own.
+ */
 function tilesHtml(stats: readonly PluginFigureSummaryStat[], colors: WeeklySummaryColors): string {
+  const sizes = weeklySummaryTileRows(stats.length)
   const rows: string[] = []
   let at = 0
-  for (const size of weeklySummaryTileRows(stats.length)) {
+  sizes.forEach((size) => {
     const cells = stats.slice(at, at + size)
     at += size
     // A tile alone takes half the row, not all of it, so it reads as a tile.
     const columns = Math.max(size, 2)
     const width = `${Math.floor(100 / columns)}%`
-    const tds = cells.map((stat, index) => {
-      // The gutter is split between neighbours, so the row's outer tiles sit
-      // flush with the column's edges.
-      const left = index === 0 ? 0 : 4
-      const right = index === cells.length - 1 ? 0 : 4
-      return (
-        `<td style="width:${width};padding:0 ${right}px 8px ${left}px;vertical-align:top;">` +
-        `<div style="background-color:${colors.surface};border:1px solid ${colors.border};border-radius:8px;padding:12px 14px;">` +
-        `<div style="font-family:${FONT};font-size:24px;line-height:1.2;font-weight:700;color:${colors.text};">${esc(stat.value)}</div>` +
-        `<div style="font-family:${FONT};font-size:13px;line-height:1.4;color:${colors.muted};">${esc(stat.label)}</div>` +
-        changeHtml(stat.change, colors) +
-        `</div></td>`
+    const tds: string[] = []
+    for (let index = 0; index < columns; index += 1) {
+      if (index > 0) tds.push(`<td style="width:${TILE_GAP_PX}px;${TILE_GAP}">&nbsp;</td>`)
+      const stat = cells[index]
+      tds.push(
+        stat
+          ? `<td style="width:${width};background-color:${colors.surface};border:1px solid ${colors.border};border-radius:8px;padding:12px 14px;vertical-align:top;">` +
+              `<div style="font-family:${FONT};font-size:24px;line-height:1.2;font-weight:700;color:${colors.text};">${esc(stat.value)}</div>` +
+              `<div style="font-family:${FONT};font-size:13px;line-height:1.4;color:${colors.muted};">${esc(stat.label)}</div>` +
+              changeHtml(stat.change, colors) +
+              `</td>`
+          : `<td style="width:${width};"></td>`,
       )
-    })
-    while (tds.length < columns) tds.push(`<td style="width:${width};padding:0 0 8px 4px;"></td>`)
+    }
     rows.push(`<tr>${tds.join('')}</tr>`)
-  }
-  return `<table role="presentation" style="width:100%;border-collapse:collapse;table-layout:fixed;">${rows.join('')}</table>`
+    rows.push(`<tr><td colspan="${columns * 2 - 1}" style="height:${TILE_GAP_PX}px;${TILE_GAP}">&nbsp;</td></tr>`)
+  })
+  return `<table role="presentation" style="width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed;">${rows.join('')}</table>`
 }
 
 /** A ranked list: the label left, its figure right, a hairline between. */
@@ -296,6 +329,143 @@ function sectionTitleHtml(title: string, colors: WeeklySummaryColors): string {
   return (
     `<div style="font-family:${FONT};font-size:12px;line-height:1.4;font-weight:700;letter-spacing:0.06em;` +
     `text-transform:uppercase;color:${colors.muted};padding:0 0 8px;">${esc(title)}</div>`
+  )
+}
+
+/** A figure in a sentence: a count, a sum or a percent, never the digits in a path or a date. */
+const FIGURE =
+  /(?<![\p{L}\p{N}_./-])(?<!(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) )[+\-−]?[$€£¥]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?%?(?![\p{L}\p{N}_/-])/gu
+
+/** A sentence with its figures in bold, so an eye running down the email lands on them. */
+function figuresHtml(text: string, colors: WeeklySummaryColors): string {
+  let html = ''
+  let at = 0
+  for (const match of text.matchAll(FIGURE)) {
+    html += `${unlinked(text.slice(at, match.index))}<strong style="font-weight:700;color:${colors.text};">${esc(match[0])}</strong>`
+    at = match.index + match[0].length
+  }
+  return html + unlinked(text.slice(at))
+}
+
+/** A figure a digest section lists: a page and its views. */
+export interface WeeklySummarySectionRow {
+  label: string
+  /** Where the label goes: the page itself. */
+  url?: string | null
+  value: string
+  change?: number | null
+}
+
+/** One day of a section's chart; `marked` when it is a day the section is about. */
+export interface WeeklySummarySectionBar {
+  label: string
+  value: number
+  /** The value as a person reads it. */
+  display: string
+  marked: boolean
+}
+
+/** One topic of an AI digest, told once: what stood out, and the figures behind it. */
+export interface WeeklySummarySection {
+  title: string
+  /** Where the figures can be seen in full. */
+  link?: { label: string; url: string } | null
+  /** What was said about it: a line to scan and, if it needs one, the sentence behind it. */
+  points: ReadonlyArray<{ headline: string | null; text: string | null }>
+  rows?: readonly WeeklySummarySectionRow[]
+  bars?: readonly WeeklySummarySectionBar[]
+}
+
+/** Tiles on their own, for an email that leads with its headline figures. */
+export function weeklySummaryTilesHtml(stats: readonly PluginFigureSummaryStat[], colors: WeeklySummaryColors): string {
+  return stats.length ? `<div style="padding:12px 0 8px;">${tilesHtml(stats, colors)}</div>` : ''
+}
+
+function sectionRowsHtml(rows: readonly WeeklySummarySectionRow[], colors: WeeklySummaryColors): string {
+  const cell = `font-family:${FONT};font-size:14px;line-height:1.4;padding:7px 0;`
+  // No column for a change no row has, so the figures reach the edge.
+  const changes = rows.some((row) => weeklySummaryChange(row.change))
+  const trs = rows.map((row, index) => {
+    const border = index > 0 ? `border-top:1px solid ${colors.border};` : ''
+    const label = row.url
+      ? `<a href="${esc(row.url)}" style="color:${colors.link};text-decoration:none;font-weight:600;">${unlinked(row.label)}</a>`
+      : unlinked(row.label)
+    return (
+      `<tr>` +
+      `<td style="${cell}${border}color:${colors.text};word-break:break-word;">${label}</td>` +
+      `<td style="${cell}${border}color:${colors.text};font-weight:600;padding-left:12px;text-align:right;white-space:nowrap;">${esc(row.value)}</td>` +
+      (changes
+        ? `<td style="${cell}${border}padding-left:12px;text-align:right;white-space:nowrap;">${changeHtml(row.change, colors)}</td>`
+        : '') +
+      `</tr>`
+    )
+  })
+  return `<table role="presentation" style="width:100%;border-collapse:collapse;margin-top:8px;">${trs.join('')}</table>`
+}
+
+/** Horizontal bars, drawn in table cells so every mail client keeps them. */
+function sectionBarsHtml(bars: readonly WeeklySummarySectionBar[], colors: WeeklySummaryColors): string {
+  const most = Math.max(...bars.map((bar) => bar.value), 1)
+  const trs = bars.map((bar) => {
+    const text = `font-family:${FONT};font-size:13px;line-height:1.3;color:${bar.marked ? colors.text : colors.muted};white-space:nowrap;`
+    const weight = bar.marked ? 'font-weight:700;' : ''
+    return (
+      `<tr>` +
+      `<td style="${text}${weight}padding:3px 10px 3px 0;width:1%;">${esc(bar.label)}</td>` +
+      `<td style="padding:3px 0;"><div style="background-color:${bar.marked ? colors.accent : colors.border};border-radius:2px;font-size:0;height:10px;line-height:0;width:${Math.max(1, Math.round((bar.value / most) * 100))}%;">&nbsp;</div></td>` +
+      `<td style="${text}${weight}padding:3px 0 3px 10px;text-align:right;width:1%;">${esc(bar.display)}</td>` +
+      `</tr>`
+    )
+  })
+  return `<table role="presentation" style="width:100%;border-collapse:collapse;margin-top:8px;">${trs.join('')}</table>`
+}
+
+function sectionHtml(section: WeeklySummarySection, colors: WeeklySummaryColors, first: boolean): string {
+  const link = section.link
+    ? `<td style="padding:0;text-align:right;vertical-align:baseline;white-space:nowrap;">` +
+      `<a href="${esc(section.link.url)}" style="font-family:${FONT};font-size:13px;line-height:1.4;font-weight:600;color:${colors.link};text-decoration:none;">${esc(section.link.label)}&nbsp;→</a>` +
+      `</td>`
+    : ''
+  const points = section.points.map(
+    (point) =>
+      `<div style="padding:6px 0 0;">` +
+      (point.headline
+        ? `<div style="font-family:${FONT};font-size:16px;line-height:1.35;font-weight:700;color:${colors.text};">${unlinked(point.headline)}</div>`
+        : '') +
+      (point.text
+        ? `<div style="font-family:${FONT};font-size:14px;line-height:1.5;color:${colors.muted};">${figuresHtml(point.text, colors)}</div>`
+        : '') +
+      `</div>`,
+  )
+  return (
+    `<div style="padding:${first ? '8px' : '18px'} 0 18px;${first ? '' : `border-top:1px solid ${colors.border};`}">` +
+    `<table role="presentation" style="width:100%;border-collapse:collapse;"><tr>` +
+    `<td style="font-family:${FONT};font-size:12px;line-height:1.4;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:${colors.muted};padding:0;">${esc(section.title)}</td>` +
+    link +
+    `</tr></table>` +
+    points.join('') +
+    (section.rows?.length ? sectionRowsHtml(section.rows, colors) : '') +
+    (section.bars?.length ? sectionBarsHtml(section.bars, colors) : '') +
+    `</div>`
+  )
+}
+
+/** An AI digest's topics, a hairline between them. */
+export function weeklySummarySectionsHtml(sections: readonly WeeklySummarySection[], colors: WeeklySummaryColors): string {
+  return sections.map((section, index) => sectionHtml(section, colors, index === 0)).join('')
+}
+
+/** The small print under the button, with its one link. */
+export function weeklySummaryFootnoteHtml(
+  text: string,
+  link: { label: string; url: string } | null,
+  colors: WeeklySummaryColors,
+): string {
+  return (
+    `<div style="font-family:${FONT};font-size:12px;line-height:1.5;color:${colors.muted};padding:12px 0 0;">` +
+    esc(text) +
+    (link ? ` <a href="${esc(link.url)}" style="color:${colors.link};text-decoration:underline;">${esc(link.label)}</a>` : '') +
+    `</div>`
   )
 }
 

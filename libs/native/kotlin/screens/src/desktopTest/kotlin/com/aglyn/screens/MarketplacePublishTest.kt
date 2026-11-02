@@ -117,15 +117,15 @@ class MarketplacePublishTest {
         .map { ScreenValues.render(changes.string("secondary").orEmpty(), it) }
     }
     // Only the versions after the one last agreed to, each change under the version that made it.
-    assertEquals(listOf("Version 2026-08-24.1"), changed("2026-08-18.1"))
-    assertEquals(5, changed("2026-01-01.1").size)
-    assertEquals(emptyList(), changed("2026-08-24.1"))
+    assertEquals(List(3) { "Version 2026-11-02.1" }, changed("2026-08-24.1"))
+    assertEquals(8, changed("2026-01-01.1").size)
+    assertEquals(emptyList(), changed("2026-11-02.1"))
 
     // It says every save asks, and when the organization last agreed; there is nothing to accept here.
     val everySave =
       "Every save in the marketplace — your profile, a listing, its price or visibility, a new version, a component, template or layout — asks you to tick “I agree to the Marketplace Publisher Agreement” first. We record who agreed, to which version, and when."
     val (stale, staleBlocks) = shown(agreement, """{"handle":"s","publisherAgreement":{"version":"2026-08-18.1"}}""")
-    assertEquals(listOf(everySave, "Your organization last agreed to version 2026-08-18.1. Your next save agrees to version 2026-08-24.1."), texts(staleBlocks, stale))
+    assertEquals(listOf(everySave, "Your organization last agreed to version 2026-08-18.1. Your next save agrees to version 2026-11-02.1."), texts(staleBlocks, stale))
     val (never, neverBlocks) = shown(agreement, """{"handle":"s"}""")
     assertEquals(listOf(everySave), texts(neverBlocks, never))
     assertFalse(agreement.blocks.any { block -> (block.raw.obj("items") as? JsonArray).orEmpty().any { it.str("url") != null } })
@@ -339,7 +339,7 @@ class MarketplacePublishTest {
   fun aPublishRefusedForTheAgreementSaysWhyInTheRoutesWords() = runTest {
     val publish = spec("marketplace.publishTemplate")
     val submit = ActionSpec.parse(publish.blocks.first { it.type == "form" }["submit"])!!
-    val refusal = """{"error":"Tick 'I agree to the Marketplace Publisher Agreement' to save","agreement":{"required":"2026-08-24.1","state":"missing"}}"""
+    val refusal = """{"error":"Tick 'I agree to the Marketplace Publisher Agreement' to save","agreement":{"required":"2026-11-02.1","state":"missing"}}"""
     val sent = mutableListOf<HttpRequestData>()
     val model = ScreenModel(publish, JsonObject(emptyMap()), client(428 to refusal, sent = sent))
     assertEquals(
@@ -407,7 +407,7 @@ class MarketplacePublishTest {
   fun aPluginRefusedByTheVerifierSaysWhatItFoundAndTheAgreementLikeEveryPublish() = runTest {
     val publish = spec("marketplace.publishPlugin")
     val submit = ActionSpec.parse(publish.blocks.first { it.type == "form" }["submit"])!!
-    val refusal = """{"error":"Tick 'I agree to the Marketplace Publisher Agreement' to save","agreement":{"required":"2026-08-24.1","state":"missing"}}"""
+    val refusal = """{"error":"Tick 'I agree to the Marketplace Publisher Agreement' to save","agreement":{"required":"2026-11-02.1","state":"missing"}}"""
     val problems = """{"error":"Bundle rejected","problems":[{"level":"error","check":"network","message":"Calls an undeclared host"},{"level":"error","message":"Too large"}]}"""
     val sent = mutableListOf<HttpRequestData>()
     val model = ScreenModel(publish, JsonObject(emptyMap()), client(428 to refusal, 422 to problems, sent = sent))
