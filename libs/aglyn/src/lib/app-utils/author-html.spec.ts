@@ -72,6 +72,26 @@ describe('sanitizeAuthorHtml (AGL-1901)', () => {
       )
     })
 
+    it('keeps a character reference in text as one character', () => {
+      expect(sanitizeAuthorHtml('<p>Tom &amp; Jerry&#39;s &lt;b&gt; a&nbsp;b</p>')).toBe(
+        "<p>Tom &amp; Jerry's &lt;b&gt; a&nbsp;b</p>",
+      )
+    })
+
+    it('returns its own output unchanged', () => {
+      const once = sanitizeAuthorHtml('<p>5 < 6 &amp; 7 > 2&nbsp;</p>')
+      expect(sanitizeAuthorHtml(once)).toBe(once)
+    })
+
+    it('never turns an escaped tag back into a tag', () => {
+      expect(sanitizeAuthorHtml('<p>&lt;script&gt;alert(1)&lt;/script&gt;</p>')).toBe(
+        '<p>&lt;script&gt;alert(1)&lt;/script&gt;</p>',
+      )
+      expect(sanitizeAuthorHtml('<p>&#60;img src=x onerror=alert(1)&#62;</p>')).toBe(
+        '<p>&lt;img src=x onerror=alert(1)&gt;</p>',
+      )
+    })
+
     it('unwraps a forbidden or unknown tag but keeps the words (KEEP_CONTENT)', () => {
       expect(sanitizeAuthorHtml('<form action="/steal"><p>words</p></form>')).toBe(
         '<p>words</p>',
