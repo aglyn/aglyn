@@ -50,6 +50,7 @@ import {
 } from '@aglyn/aglyn/app-utils/weekly-summary'
 import {
   normalizePluginFigureTable,
+  pluginFigureSourceHref,
   pluginFigureSummarySection,
   type PluginFigureSummaryPart,
   type ResolvedPluginFigureReader,
@@ -265,6 +266,7 @@ function weekDays(from: string): string[] {
 async function readParts(
   readers: readonly ResolvedPluginFigureReader[],
   base: { orgId: string; hostId: string | null; now: Date },
+  where: { origin: string; orgSlug: string; host: string | null },
 ): Promise<PluginFigureSummaryPart[]> {
   const ordered = readers
     .filter(({ reader }) => reader.weeklySummary)
@@ -285,7 +287,9 @@ async function readParts(
       const table = normalizePluginFigureTable(read.table)
       if (!table) continue
       const part = summary.summarize(table)
-      if (part && (part.stats?.length || part.rows?.length)) parts.push(part)
+      if (!part || !(part.stats?.length || part.rows?.length || part.bars?.length)) continue
+      const href = where.origin ? pluginFigureSourceHref(table.source, reader.scope, where) : null
+      parts.push(href ? { ...part, link: { label: table.source.label, url: `${where.origin}${href}` } } : part)
     } catch (error) {
       console.error('[weekly-summary] reader failed', { reader: reader.id, orgId: base.orgId, error })
     }
@@ -369,8 +373,12 @@ async function summarizeOrg(
     const readers = (await deps.readers({ orgId, hostId: host.id, org, host: data })).filter(
       ({ reader }) => pluginFigureSummarySection(reader) === 'site',
     )
-    const parts = await readParts(readers, { orgId, hostId: host.id, now: period.now })
     const subdomain = str(data['subdomain'])
+    const parts = await readParts(
+      readers,
+      { orgId, hostId: host.id, now: period.now },
+      { origin: deps.origin, orgSlug, host: subdomain || null },
+    )
     const domain = liveCustomDomain(data as never) ?? (subdomain ? `${subdomain}.${TENANT_APEX}` : '')
     sites.push({
       hostId: host.id,
@@ -390,6 +398,7 @@ async function summarizeOrg(
   const workspace = await readParts(
     orgReaders.filter(({ reader }) => pluginFigureSummarySection(reader) === 'workspace'),
     { orgId, hostId: null, now: period.now },
+    { origin: deps.origin, orgSlug, host: null },
   )
   report.sites = sites.filter(({ site }) => weeklySummaryHasNews(site)).length
   if (!report.sites && !workspace.length) return { ...report, skipped: 'nothing-to-report' }
@@ -456,6 +465,7 @@ async function summarizeOrg(
           'summary.title': email.title,
           'summary.period': email.period,
           'summary.html': email.html,
+          'summary.footnote': email.footnote,
           'summary.buttonLabel': email.buttonLabel,
           'summary.url': email.url,
           'org.name': workspaceName,

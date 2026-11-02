@@ -463,7 +463,8 @@ busiest sites:
 
 - **One email for each site** that had something to report. It names the site
   and links to its address, then shows visitors and page views with the change
-  on the week before, top pages and traffic sources, form submissions so far
+  on the week before, each day's page views as a chart, top pages linked to the
+  pages themselves with their change, traffic sources, form submissions so far
   this month, new leads and contacts, bookings, sales and top products,
   campaigns, funnels and automation runs.
 - **A workspace overview** that adds the sites up: the week's totals, a line

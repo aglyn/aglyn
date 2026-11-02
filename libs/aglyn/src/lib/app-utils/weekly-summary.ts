@@ -146,17 +146,46 @@ export function figureStat(
   }
 }
 
-/** The named rows with the most of `key`, as ranked rows; `[]` when none has any. */
+/** The named rows with the most of `key`, as ranked rows with their change; `[]` when none has any. */
 export function figureRanked(
   table: PluginFigureTable,
   nameKey: string,
   key: string,
   rows: readonly PluginFigureRow[] = table.rows,
-): Array<{ label: string; value: string }> {
+): Array<{ label: string; value: string; change?: number }> {
   return rows
     .filter((row) => typeof row[nameKey] === 'string' && figureCount(row[key]) > 0)
     .slice(0, WEEKLY_SUMMARY_TOP_ROWS)
-    .map((row) => ({ label: String(row[nameKey]), value: pluginFigureCellText(table, key, row[key] ?? 0) }))
+    .map((row) => {
+      const change = row['change']
+      return {
+        label: String(row[nameKey]),
+        value: pluginFigureCellText(table, key, row[key] ?? 0),
+        ...(typeof change === 'number' ? { change } : {}),
+      }
+    })
+}
+
+/** A table of days as a chart, oldest first, the busiest marked; `[]` for a week with nothing in it. */
+export function figureBars(
+  table: PluginFigureTable,
+  dayKey: string,
+  key: string,
+): NonNullable<PluginFigureSummaryPart['bars']> {
+  const most = Math.max(...table.rows.map((row) => figureCount(row[key])), 0)
+  if (!most) return []
+  return table.rows.map((row) => ({
+    label: weeklySummaryWeekday(String(row[dayKey])),
+    value: figureCount(row[key]),
+    display: pluginFigureCellText(table, key, row[key] ?? 0),
+    marked: figureCount(row[key]) === most,
+  }))
+}
+
+/** A row's label as a person reads it, and the page it names, when it names one. */
+export function weeklySummaryRowLink(label: string, siteUrl: string | null): { label: string; url: string | null } {
+  const page = label.startsWith('/')
+  return { label: label === '/' ? 'Home' : label, url: page && siteUrl ? `${siteUrl}${label === '/' ? '' : label}` : null }
 }
 
 /** "1 order", "18 orders". */
@@ -311,20 +340,6 @@ function tilesHtml(stats: readonly PluginFigureSummaryStat[], colors: WeeklySumm
   return `<table role="presentation" style="width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed;">${rows.join('')}</table>`
 }
 
-/** A ranked list: the label left, its figure right, a hairline between. */
-function rowsHtml(rows: ReadonlyArray<{ label: string; value: string }>, colors: WeeklySummaryColors): string {
-  const trs = rows.map(
-    (row, index) =>
-      `<tr>` +
-      `<td style="font-family:${FONT};font-size:14px;line-height:1.4;color:${colors.text};padding:8px 12px 8px 0;` +
-      `${index < rows.length - 1 ? `border-bottom:1px solid ${colors.border};` : ''}word-break:break-word;">${unlinked(row.label)}</td>` +
-      `<td style="font-family:${FONT};font-size:14px;line-height:1.4;font-weight:600;color:${colors.text};padding:8px 0;text-align:right;white-space:nowrap;` +
-      `${index < rows.length - 1 ? `border-bottom:1px solid ${colors.border};` : ''}">${esc(row.value)}</td>` +
-      `</tr>`,
-  )
-  return `<table role="presentation" style="width:100%;border-collapse:collapse;">${trs.join('')}</table>`
-}
-
 function sectionTitleHtml(title: string, colors: WeeklySummaryColors): string {
   return (
     `<div style="font-family:${FONT};font-size:12px;line-height:1.4;font-weight:700;letter-spacing:0.06em;` +
@@ -365,13 +380,14 @@ export interface WeeklySummarySectionBar {
   marked: boolean
 }
 
-/** One topic of an AI digest, told once: what stood out, and the figures behind it. */
+/** One topic of a weekly email, told once: what stood out, and the figures behind it. */
 export interface WeeklySummarySection {
   title: string
   /** Where the figures can be seen in full. */
   link?: { label: string; url: string } | null
   /** What was said about it: a line to scan and, if it needs one, the sentence behind it. */
   points: ReadonlyArray<{ headline: string | null; text: string | null }>
+  stats?: readonly PluginFigureSummaryStat[]
   rows?: readonly WeeklySummarySectionRow[]
   bars?: readonly WeeklySummarySectionBar[]
 }
@@ -444,15 +460,20 @@ function sectionHtml(section: WeeklySummarySection, colors: WeeklySummaryColors,
     link +
     `</tr></table>` +
     points.join('') +
+    (section.stats?.length ? `<div style="padding:8px 0 0;">${tilesHtml(section.stats, colors)}</div>` : '') +
     (section.rows?.length ? sectionRowsHtml(section.rows, colors) : '') +
     (section.bars?.length ? sectionBarsHtml(section.bars, colors) : '') +
     `</div>`
   )
 }
 
-/** An AI digest's topics, a hairline between them. */
-export function weeklySummarySectionsHtml(sections: readonly WeeklySummarySection[], colors: WeeklySummaryColors): string {
-  return sections.map((section, index) => sectionHtml(section, colors, index === 0)).join('')
+/** A weekly email's topics, a hairline between them; `following` when something already sits above the first. */
+export function weeklySummarySectionsHtml(
+  sections: readonly WeeklySummarySection[],
+  colors: WeeklySummaryColors,
+  following = false,
+): string {
+  return sections.map((section, index) => sectionHtml(section, colors, index === 0 && !following)).join('')
 }
 
 /** The small print under the button, with its one link. */
@@ -469,17 +490,16 @@ export function weeklySummaryFootnoteHtml(
   )
 }
 
-function partHtml(part: PluginFigureSummaryPart, colors: WeeklySummaryColors): string {
-  return (
-    `<div style="padding:16px 0 8px;">` +
-    sectionTitleHtml(part.title, colors) +
-    (part.note
-      ? `<div style="font-family:${FONT};font-size:13px;line-height:1.5;color:${colors.muted};padding:0 0 8px;">${esc(part.note)}</div>`
-      : '') +
-    (part.stats?.length ? tilesHtml(part.stats, colors) : '') +
-    (part.rows?.length ? rowsHtml(part.rows, colors) : '') +
-    `</div>`
-  )
+/** A reader's part as a section of the email, its page rows linked to the site. */
+function partSection(part: PluginFigureSummaryPart, siteUrl: string | null): WeeklySummarySection {
+  return {
+    title: part.title,
+    link: part.link ?? null,
+    points: part.note ? [{ headline: null, text: part.note }] : [],
+    ...(part.stats?.length ? { stats: part.stats } : {}),
+    ...(part.rows?.length ? { rows: part.rows.map((row) => ({ ...row, ...weeklySummaryRowLink(row.label, siteUrl) })) } : {}),
+    ...(part.bars?.length ? { bars: part.bars } : {}),
+  }
 }
 
 /** "aglyn.com · Aglyn LLC": which site, linked, and whose. */
@@ -511,7 +531,12 @@ function partText(part: PluginFigureSummaryPart): string[] {
     const said = weeklySummaryChange(stat.change)
     lines.push(`${stat.label}: ${stat.value}${said ? ` (${said.text})` : ''}`)
   }
-  for (const row of part.rows ?? []) lines.push(`- ${row.label}: ${row.value}`)
+  for (const row of part.rows ?? []) {
+    const said = weeklySummaryChange(row.change)
+    lines.push(`- ${row.label}: ${row.value}${said ? ` (${said.text})` : ''}`)
+  }
+  for (const bar of part.bars ?? []) lines.push(`- ${bar.label}: ${bar.display}`)
+  if (part.link) lines.push(`${part.link.label}: ${part.link.url}`)
   return lines
 }
 
@@ -524,6 +549,8 @@ export interface WeeklySummaryEmail {
   period: string
   /** The figures, drawn. */
   html: string
+  /** The small print under the button. */
+  footnote: string
   /** The whole email as plain text, closing line included. */
   text: string
   buttonLabel: string
@@ -539,6 +566,10 @@ interface CommonInput {
   /** Where AI weekly insights are turned on, when the plan includes them and this person has not; else `null`. */
   aiInsightsUrl: string | null
   settingsUrl: string
+}
+
+function footnote(input: CommonInput): string {
+  return weeklySummaryFootnoteHtml('', { label: 'Change what you are emailed about', url: input.settingsUrl }, input.colors)
 }
 
 function closing(input: CommonInput): string[] {
@@ -560,13 +591,16 @@ export function composeWeeklySummarySiteEmail(
   if (!weeklySummaryHasNews(input.site) && !workspace.length) return null
   const lead = headline([input.site])
   const subject = lead ? `${input.site.name} last week: ${lead}` : `${input.site.name} last week`
+  const siteUrl = input.site.address?.url ?? null
   const html =
     addressHtml(input.site, input.workspaceName, input.colors) +
-    input.site.parts.map((part) => partHtml(part, input.colors)).join('') +
-    (workspace.length
-      ? `<div style="border-top:1px solid ${input.colors.border};margin:16px 0 0;"></div>` +
-        workspace.map((part) => partHtml({ ...part, title: `${input.workspaceName} · ${part.title}` }, input.colors)).join('')
-      : '') +
+    weeklySummarySectionsHtml(
+      [
+        ...input.site.parts.map((part) => partSection(part, siteUrl)),
+        ...workspace.map((part) => partSection({ ...part, title: `${input.workspaceName} · ${part.title}` }, null)),
+      ],
+      input.colors,
+    ) +
     (input.aiInsightsUrl ? insightsHtml(input.aiInsightsUrl, input.colors) : '')
   const text = [
     `${input.site.name} last week, ${input.periodLabel}. A change in brackets is against the week before.`,
@@ -584,6 +618,7 @@ export function composeWeeklySummarySiteEmail(
     title: `${input.site.name} last week`,
     period: `${input.periodLabel}, compared with the week before`,
     html,
+    footnote: footnote(input),
     text,
     buttonLabel: `Open ${input.site.name}`,
     url: input.site.url ?? '',
@@ -637,7 +672,7 @@ export function composeWeeklySummaryOverviewEmail(
     ? `${figurePlural(quietCount, 'other site', 'other sites')} had nothing to report.`
     : ''
   const sitesHtml = active.length
-    ? `<div style="padding:16px 0 8px;">` +
+    ? `<div style="padding:18px 0 8px;${totalsPart ? `border-top:1px solid ${colors.border};` : ''}">` +
       sectionTitleHtml('Your sites', colors) +
       `<table role="presentation" style="width:100%;border-collapse:collapse;">` +
       active
@@ -666,9 +701,13 @@ export function composeWeeklySummaryOverviewEmail(
       `</div>`
     : ''
   const html =
-    (totalsPart ? partHtml(totalsPart, colors) : '') +
+    (totalsPart ? weeklySummarySectionsHtml([partSection(totalsPart, null)], colors) : '') +
     sitesHtml +
-    input.workspace.map((part) => partHtml(part, colors)).join('') +
+    weeklySummarySectionsHtml(
+      input.workspace.map((part) => partSection(part, null)),
+      colors,
+      Boolean(totalsPart || sitesHtml),
+    ) +
     (active.length > 1
       ? `<div style="font-family:${FONT};font-size:13px;line-height:1.5;color:${colors.muted};padding:8px 0 0;">Each site's own summary arrives beside this one.</div>`
       : '') +
@@ -699,6 +738,7 @@ export function composeWeeklySummaryOverviewEmail(
     title: `${input.workspaceName} last week`,
     period: `${input.periodLabel}, compared with the week before`,
     html,
+    footnote: footnote(input),
     text,
     buttonLabel: `Open ${input.workspaceName}`,
     url: input.url,
