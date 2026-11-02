@@ -2703,8 +2703,19 @@ whose passes each do one unit (`aiSiteImportNextWork`):
      with a `muiTabPanel` each, else the labels as a strip, the open one
      filled, over the panel the source drew; a panel sets its first row of
      columns side by side, as a section does (`AiLayoutTab.cols`, AGL-4114). A
-     page past `AI_SITE_IMPORT_DOC_MAX_NODES` keeps its last sections by name,
-     `cut`.
+     plan's card carries its `badge` beside its title and its `period` beside
+     its `figure`, and each button as the source draws it (`ctas`, wherever it
+     sits in the card). A group whose items are rows of their own (`inline`: a
+     plan's row, a label and its value) is one Stack with a `line` divider, each
+     row a Stack or a Grid, whatever the design answer said. Each section's
+     Container takes the source's own cap (`width`, the narrowest `max-width` on
+     it, around it and on its wrappers, read as a 1,920 screen sees it since a
+     container caps itself only past its cap), else `lg`, else `md` for a long
+     read. An answer never reaches past what a group can draw: `list` joins
+     nothing (a group of more than one line an item is drawn ruled), `stats` is
+     only for items that are figures and nothing else, and `cover` or `poster`
+     never repaints a section that keeps a lighter ground of its own. A page past
+     `AI_SITE_IMPORT_DOC_MAX_NODES` keeps its last sections by name, `cut`.
    - **copied** (a collection's page): the compile alone, NO model, nothing
      spent but a listing the source left empty;
    - **arranged** (every main page, whatever its length): the same compile
@@ -2749,11 +2760,48 @@ whose passes each do one unit (`aiSiteImportNextWork`):
 - **A cancel settles every wave** (AGL-4107): `aiSiteImportCanceled`, in the
   cancel's own write and in a step's write a pending cancel ends, marks a
   running or waiting wave `stopped` and a wave in review `done`.
+- **A form on a page is rebuilt as the site's own** (AGL-4083). The reader keeps
+  each field's words, type, required mark, placeholder and choices and the
+  button's words (`SiteImportForm`); a form with a payment field is dropped and
+  a password page refused, as before. Before a page with a form is built, a pass
+  with no model (`aiRebuildImportedForms`) places a saved form with the same
+  fields, or the site's only form for the first form met, else builds the Form
+  of MUI's separate elements (`aiSiteImportFormTree`), runs it through
+  `aiFormDraft` (Inbox routing, the platform's consent field, the source's own
+  marketing box dropped), asks `aiFormDraftViolations` and writes it with
+  `writeAiDraft`, under the id `<job>-form-<signature>`, so a pass run twice
+  writes one form. It is named by the nearest heading above it, else "Contact
+  form". A ledger row `op: 'form'` at 0 credits records it, and the page's row
+  carries the note, including that a plan had no room. The map rides the page's
+  document (`forms`), and the compile places each `form` node as its own, the
+  single-form rule remaining for a read kept without one.
+- **An import never ends with work left** (AGL-4083). Its whole run can take
+  hours, so nothing written for one build ends it: where a build would settle
+  because it stopped (its attempts used up, the bound on its passes, a step's
+  failure), an import registers a stop review (`registerAiJobStopReview`,
+  `aiSiteImportStopReview`) and waits `needs_review` on `wave`, saying how many
+  pages are not in yet and which wave brings them in, with its ledger as it
+  stood and its attempts and passes counted afresh. Start goes on from there.
+  With nothing left to do it settles as any build.
+- **One document holds the whole run** (AGL-4083). Every page rides the job's
+  document, under Firestore's 1 MiB. A settled page keeps only what its row
+  shows (`aiSiteImportPageSettled`), and a wave's reads are held to
+  `AI_SITE_IMPORT_JOB_MAX_BYTES` (`aiSiteImportReadsWithin`): pages past it are
+  read once the pages before them are in, which is why a wave builds the pages
+  in hand before it reads on. On 11/1 a 400-page import's 344 settled pages
+  still held their pictures and sections, its next wave's read could not be
+  written, and the pass failed until its attempts ran out.
+- **A pass that asks no model needs no model's time** (AGL-4083):
+  `aiSiteImportRunMinimumMs` holds a copied page whose listing is the source's
+  own, and a page with no pictures to fetch, to the machine's least, not to a
+  model's whole answer, which only the first seconds of a beat can give.
 - **Priced by how a page is built.** `AI_MEASURED_IMPORT_CREDITS`: an
   arranged page at `arranged` (its design answer), a copied page at `copied`, the
   header its layout, or nothing where it is drawn from the source's menu; each wave is quoted before it starts
-  (`aiSiteImportWaveCreditRange`), naming both. Both rows are provisional until
-  the live check measures them.
+  (`aiSiteImportWaveCreditRange`), naming both. Both rows are the 11/1 import's
+  ledger, read by the fidelity report (`AI_MEASURED_IMPORT_AT`): 77 arranged
+  pages at a median of 10 and a p90 of 12, and copied pages at 0, the 1 at the
+  p90 covering a listing the source left empty.
 - **Published only into a preview.** A wave's pages go live only on a site in
   preview, where the public sees the notice; `sitePublish` carries what went
   live. On a site not in preview every output stays a draft.
@@ -2828,9 +2876,11 @@ built page against what the reader read of its source.
   prints the recorded pages, the frames and the 10/29 control as tables, built
   over source. With `--host <id>` it reports a built site for a live check:
   Admin SDK `get()`s only (the host, the import job, each screen and version, the
-  layout and version), no model, nothing written, and it prints the look's
-  colors and fonts and the credits per arranged and copied page, which is where
-  `AI_MEASURED_IMPORT_CREDITS` is read from. A page's source is the job's own
+  layout and version), no model, nothing written. It prints the look the site
+  wears (`resolveSiteTheme`: the base with the saved override, its base's name
+  and the job that saved it), the median, p90 and mean credits per arranged and
+  copied page, which is where `AI_MEASURED_IMPORT_CREDITS` is read from, and each
+  page's ledger status and note. A page's source is the job's own
   read while it holds one; the job empties a read once its page is in, so
   otherwise the page is read again from the source site as a wave reads it (a
   source this platform serves needs `SITE_IMPORT_EDGE_TOKEN` for that, as a
@@ -3763,6 +3813,34 @@ AGL-3660), which fills every empty slot and takes the icon out of its frame:
   The replays are `ai-stock-photo-agl4092-1029-{pit,rut}.spec.ts`, from production's
   search cache for the searches the two sites sent and Pixabay re-asked read-only
   for those the fixes send in their place (`fixtures/ai-stock-photo-agl4092-1029-recordings.ts`).
+- **A clear world's picture is of that world, and its alt text says less (AGL-4092,
+  2026-11-01).** The live check's motocross team showed a kitesurfer in the section
+  about joining it, and its and a taco trailer's alts read "Tacos and a mexican", "A
+  tacos pastor", "A motocross and a race". Each is closed where it was made:
+  - *Only a thing's own name stands for the world.* A strict picture that names none of
+    the business's own world passes on its subject's two-word phrase only where the hit
+    says the phrase whole (a tag, its description, the opening of its page address,
+    never two tags run together further on: "kitesurfer-young-rider-kitesurfing") and
+    the phrase is a thing's name (`aiStockPhraseNamesAThing`): "espresso cup" is that
+    cup in any world; "young rider" says what someone is like, and a rider, a player
+    or a coach is in every world (`ANY_WORLD_PEOPLE`, `PEOPLE_NOUNS`). It still scores
+    as a phrase on a hit that names the world.
+  - *One thing, never two tags side by side.* `aiStockTagsAlt` says no second thing
+    ("Tacos and a beef" is tacos): over the 3,172 recorded photos the join wrote 709
+    different sentences, nearly all of them a guess ("A motorcycle and a bike", "A legal
+    and a right"). A person's held thing stays, and is left out where no one holds it
+    ("a woman with yoga").
+  - *An adjective is an adjective.* A demonym (`DEMONYMS`) is said only before its
+    thing, with its capital ("Mexican food", "a German shepherd"), and never of a
+    person; a city or a country the site's words do not name (`NAMED_PLACES`) is no
+    thing; a plural leading a tag that would take "a" is no one thing ("tacos pastor");
+    what takes no article takes none ("Tofu", "Salsa", "Yoga").
+  - *A motor sport alone is its name.* "Motocross", never "A motocross"; it stands for a
+    word that says too little beside it ("A bike", "A race"). After a place it is said
+    as a meet: "A motocross at dawn".
+  Where no tag makes a sentence the slot's own words stand, then its section's name, then
+  `illustrativePhoto`, as before. The replays are `ai-stock-photo-agl4092-1101-{rider,alt}.spec.ts`
+  (`fixtures/ai-stock-photo-agl4092-1101-recordings.ts`, Pixabay asked read-only).
 - **One refused photo is that photo's (AGL-3923, #1770).** The provider names a
   download by its bytes (`sniffPhotoContentType`, the upload check's own
   signatures), never by its label. A media-library refusal of one photo's own bytes

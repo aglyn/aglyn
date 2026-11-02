@@ -224,6 +224,17 @@ describe('the preview', () => {
   })
 })
 
+describe('a person with no address', () => {
+  it('names them by name, then number, with no empty brackets', () => {
+    mount({
+      current: { id: 'c-keep', doc: { email: '', name: 'Pat Lee' } },
+      other: { id: 'c-gone', doc: { email: '', phone: '+15125550100' } },
+    })
+    expect(screen.getByRole('radio', { name: 'Pat Lee' })).toBeTruthy()
+    expect(screen.getByRole('radio', { name: '+15125550100' })).toBeTruthy()
+  })
+})
+
 describe('merging', () => {
   it('posts the survivor and the merged record to the route, and reports who survived', async () => {
     const { onClose, onMerged } = mount({ other, keep: 'current' })

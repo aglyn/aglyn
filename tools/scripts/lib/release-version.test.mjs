@@ -47,6 +47,7 @@ import {
   parseVersion,
   predecessorVerdict,
   renderRelease,
+  startsNewMajor,
   summarizeCommits,
   tagForVersion,
   versionForTag,
@@ -284,6 +285,25 @@ describe('nextVersion — release series', () => {
 
   it('rejects a bump level it does not know', () => {
     assert.throws(() => nextVersion('1.0.0', 'huge'), /Unknown bump level/)
+  })
+})
+
+describe('startsNewMajor', () => {
+  it('catches the one bump release:prepare must not cut unasked', () => {
+    assert.equal(startsNewMajor('1.2.3', nextVersion('1.2.3', 'major')), true)
+    assert.equal(startsNewMajor('1.2.3', '2.0.0'), true)
+  })
+
+  it('stays out of the way of every bump below the major', () => {
+    for (const bump of ['none', 'patch', 'minor']) {
+      assert.equal(startsNewMajor('1.2.3', nextVersion('1.2.3', bump)), false)
+    }
+  })
+
+  it('does not count a prerelease series or leaving one', () => {
+    const beta = '1.0.0-beta.3'
+    assert.equal(startsNewMajor(beta, nextVersion(beta, 'major')), false)
+    assert.equal(startsNewMajor(beta, '1.0.0'), false)
   })
 })
 

@@ -45,6 +45,14 @@ Derived from the conventional-commit subjects the repo already enforces
 The strongest signal in the batch wins — one `feat` among ninety-two `chore`s
 is a minor.
 
+This is semantic versioning, so a breaking change is a major. What a breaking
+commit does not do is cut one. A new major happens only when the owner asks for
+it, so `release:prepare` refuses a batch that would start one and lists the
+breaking commits to take to the owner. If they ask for the major, it is cut with
+`--set`, the same way a prerelease is left. If they decide otherwise, the version
+they choose goes through `--set` too. A breaking change is never shipped under a
+smaller number just to get past the refusal, and a `--hotfix` does not skip it.
+
 That last row is deliberate: a promotion that reaches production **is** a
 release whether or not its commits were user-facing, and two different deployed
 artifacts must never carry the same number.
@@ -74,7 +82,8 @@ the promotion PR titled `Release v1.0.0`, the tag and the changelog entry, is
 the ordinary procedure below. After it, the version is a release, so the
 prerelease rules above no longer apply and the bump policy acts on the base:
 a batch with a `feat` makes `1.1.0`, one with only fixes or chores `1.0.1`,
-and a breaking change `2.0.0`. Platform GA does not end per-feature beta:
+and a breaking change `2.0.0`, once the owner has asked for it. Platform GA does
+not end per-feature beta:
 a released feature that is still changing carries a `beta` stage on its
 release flag, which the console and the docs label, and that never touches the
 version.

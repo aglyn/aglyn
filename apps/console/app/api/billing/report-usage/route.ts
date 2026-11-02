@@ -61,7 +61,11 @@ import {
   raiseOperatorAlert,
   readOrgBilling,
 } from '@aglyn/tenant-data-admin'
-import { CRON_CHUNK_SIZE, selectCronChunk } from '../../../../utils/cron-chunk'
+import {
+  CRON_CHUNK_SIZE,
+  listOncePerSweep,
+  selectCronChunk,
+} from '../../../../utils/cron-chunk'
 import {
   isMeteredPriceId,
   meteredPriceId,
@@ -626,11 +630,16 @@ async function handler(request: Request): Promise<Response> {
      * Neither read is capped. The sites read was `.limit(1000)`, which past
      * 1,000 sites would have dropped whole workspaces from billing with
      * nothing to say so — the AGL-1371 truncation one level up.
+     *
+     * Once per sweep, not per chunk (AGL-4121): see `listOncePerSweep`.
      *=========================================*/
-    const [orgs, hosts] = await Promise.all([
-      firestore.collection('orgs').select().get(),
-      firestore.collection('hosts').get(),
-    ])
+    const cursor = typeof body?.cursor === 'string' ? body.cursor : null
+    const [orgs, hosts] = await listOncePerSweep('report-usage', cursor, () =>
+      Promise.all([
+        firestore.collection('orgs').select().get(),
+        firestore.collection('hosts').get(),
+      ]),
+    )
 
     // Group hosts by org — the sole billing subject (AGL-238; the legacy
     // per-tenant rollups retired with the tenants collection).
@@ -671,7 +680,7 @@ async function handler(request: Request): Promise<Response> {
     // and the caller loops on the cursor.
     const chunk = selectCronChunk(
       Object.keys(byOrg),
-      typeof body?.cursor === 'string' ? body.cursor : null,
+      cursor,
       Number(body?.limit) || CRON_CHUNK_SIZE,
     )
     const orgResults: Record<string, any> = {}

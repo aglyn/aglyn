@@ -231,10 +231,11 @@ describe('a Wix-style small-business site', () => {
     expect(home.forms.kept).toEqual([
       {
         fields: [
-          { type: 'text', name: 'name' },
-          { type: 'email', name: 'email' },
-          { type: 'textarea', name: 'message' },
+          { type: 'text', name: 'name', label: 'Name' },
+          { type: 'email', name: 'email', label: 'Email' },
+          { type: 'textarea', name: 'message', label: 'Message' },
         ],
+        submit: 'Send',
       },
     ])
   })

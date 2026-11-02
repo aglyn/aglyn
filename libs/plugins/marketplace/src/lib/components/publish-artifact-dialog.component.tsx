@@ -26,9 +26,12 @@ import type {
   ConsolePublishableArtifact,
 } from '@aglyn/aglyn'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { PrerequisiteNotice } from '@aglyn/shared-ui-jsx/components/prerequisite-notice.component'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
+  Alert,
   Button,
   Dialog,
   DialogActions,
@@ -40,9 +43,20 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
+  useStarterPublishFacts,
+  type StarterPublishFactsState,
+} from '../hooks/use-starter-publish-facts'
+import {
+  starterPublishBody,
+  starterPublishSteps,
+  starterRefusalLink,
+  type StarterThemeChoice,
+} from '../model/starter-publish'
+import {
   PublisherAgreementCheckbox,
   usePublisherAgreementConsent,
 } from './publisher-agreement-checkbox.component'
+import { PublishStarterFields } from './publish-starter-fields.component'
 
 /** One kind's publish route, and the words a person reads about it. */
 interface PublishRequest {
@@ -53,6 +67,8 @@ interface PublishRequest {
   /** Noun used in copy: "layout", "component", … */
   noun: string
   categoryPlaceholder?: string
+  /** The category field's label, where the kind names it otherwise. */
+  categoryLabel?: string
 }
 
 /**
@@ -129,6 +145,15 @@ function publishRequestFor(
         payload: { hostId, screenId: artifactId },
         noun: 'email starter',
       }
+    // A whole site, as a site starter people create a new site from (AGL-4049).
+    case 'siteStarter':
+      return {
+        endpoint: 'marketplace/publish-starter',
+        payload: { hostId },
+        noun: 'starter',
+        categoryLabel: 'What kind of site is it?',
+        categoryPlaceholder: 'e.g. Bakery, Law firm, Wedding',
+      }
     default:
       return null
   }
@@ -149,10 +174,38 @@ function publishRequestFor(
  * with no widget on that zone leaves the offer out entirely, which is why
  * this may safely draw nothing for a kind it does not sell.
  */
-export function PublishArtifactDialog({
+export function PublishArtifactDialog(props: ConsoleArtifactPublishZoneProps) {
+  return props.artifact?.kind === 'siteStarter' ? (
+    <PublishStarterDialog {...props} />
+  ) : (
+    <PublishArtifactForm {...props} starterReads={null} />
+  )
+}
+
+PublishArtifactDialog.displayName = 'PublishArtifactDialog'
+
+/**
+ * The form for a site starter (AGL-4049), with what it reads before the
+ * click: the site's theme and pages, the org's publisher profile and plan.
+ * Its own component so no other kind ever issues those reads.
+ */
+function PublishStarterDialog(props: ConsoleArtifactPublishZoneProps) {
+  const reads = useStarterPublishFacts({
+    hostId: props.artifact?.hostId,
+    orgId: props.artifact?.orgId,
+  })
+  return <PublishArtifactForm {...props} starterReads={reads} />
+}
+
+/** The listing form every kind shares, with a starter's half when it has one. */
+function PublishArtifactForm({
   artifact,
   onClose,
-}: ConsoleArtifactPublishZoneProps) {
+  starterReads,
+}: ConsoleArtifactPublishZoneProps & {
+  /** A site starter's reads, or `null` for every other kind. */
+  starterReads: StarterPublishFactsState | null
+}) {
   // Memoized because it is a dependency of the publish callback: rebuilt
   // every render, it would rebuild that callback every render too.
   const target = useMemo(
@@ -171,18 +224,53 @@ export function PublishArtifactDialog({
   const agreement = usePublisherAgreementConsent()
   const { reset: resetAgreement } = agreement
 
+  /*
+   * A SITE STARTER'S OWN HALF (AGL-4049). Its theme shape is the
+   * publisher's choice and starts unchosen; what it captures and every setup
+   * step in its way are read before the click, so they are said with where
+   * each is fixed rather than refused after it. For any other kind the facts
+   * hook is handed no site and reads nothing.
+   */
+  const starter = !!starterReads && !!target
+  const [themeChoice, setThemeChoice] = useState<StarterThemeChoice | null>(null)
+  const [styleKind, setStyleKind] = useState('')
+  // What the door last refused, in its words, shown in the form to fix it.
+  const [refusal, setRefusal] = useState<{
+    status: number
+    error: string
+    more: string[]
+  } | null>(null)
+  const starterFacts = starterReads
+    ? { ...starterReads.facts, priceUsd: Number(price) || 0 }
+    : null
+  const steps = starter && starterFacts ? starterPublishSteps(starterFacts) : []
+  const starterBody =
+    starter && starterReads
+      ? starterPublishBody({
+          choice: themeChoice,
+          builtin: starterReads.builtin,
+          kind: styleKind || null,
+        })
+      : null
+  const agreementRefused = refusal && (refusal.status === 428 || refusal.status === 409)
+
   useEffect(() => {
     if (!artifact) return
     setName(artifact.displayName ?? '')
     setDescription(artifact.description ?? '')
     setCategory('')
     setPrice('')
+    setThemeChoice(null)
+    setStyleKind('')
+    setRefusal(null)
     resetAgreement()
   }, [artifact, resetAgreement])
 
   const handlePublish = useCallback(async () => {
     if (!target || !name.trim() || busy || !agreement.consent) return
+    if (starter && (!starterBody || steps.length)) return
     setBusy(true)
+    setRefusal(null)
     try {
       const response = await authorizedFetch(user, `/api/${target.endpoint}`, {
         method: 'POST',
@@ -194,9 +282,25 @@ export function PublishArtifactDialog({
           category: category.trim(),
           priceUsd: Number(price) || 0,
           agreement: agreement.consent,
+          ...starterBody,
         }),
       })
       const payload = await response.json().catch(() => ({}))
+      if (!response.ok && starter) {
+        // In the form, in the door's words, so the publisher can fix it
+        // there: another theme, a page, a setup step. Every problem a
+        // theme check names is listed, not only the first.
+        const error = typeof payload?.error === 'string' && payload.error ? payload.error : 'Publish failed'
+        const more = Array.isArray(payload?.errors)
+          ? payload.errors
+              .map((entry: { message?: unknown }) => entry?.message)
+              .filter((message: unknown): message is string => typeof message === 'string' && message !== error)
+          : []
+        setRefusal({ status: response.status, error, more })
+        // An agreement refused is asked for again, by a fresh tick.
+        if (response.status === 428 || response.status === 409) resetAgreement()
+        return
+      }
       if (!response.ok) {
         // 412 means a setup step is missing (publisher profile, payouts) —
         // actionable, so it reads as a warning rather than an error.
@@ -205,10 +309,14 @@ export function PublishArtifactDialog({
           allowDuplicate: true,
         })
       }
-      enqueueSnackbar(`Published v${payload.version} to the marketplace`, {
-        variant: 'success',
-        persist: false,
-      })
+      enqueueSnackbar(
+        starter
+          ? Number(payload.version) > 1
+            ? `Published v${payload.version} of your starter`
+            : 'Sent your starter for review. It is listed once it has been reviewed.'
+          : `Published v${payload.version} to the marketplace`,
+        { variant: 'success', persist: false },
+      )
       // Each publish is its own agreement: the next one ticks the box again.
       resetAgreement()
       onClose()
@@ -233,6 +341,9 @@ export function PublishArtifactDialog({
     onClose,
     agreement.consent,
     resetAgreement,
+    starter,
+    starterBody,
+    steps.length,
   ])
 
   if (artifact && !target) {
@@ -259,16 +370,22 @@ export function PublishArtifactDialog({
       <Dialog
         open={!!target}
         onClose={busy ? undefined : onClose}
-        maxWidth="xs"
+        maxWidth={starter ? 'sm' : 'xs'}
         fullWidth
       >
-        <DialogTitle>{`Publish ${target?.noun ?? 'artifact'}`}</DialogTitle>
+        <DialogTitle>
+          {starter ? 'Publish as a starter' : `Publish ${target?.noun ?? 'artifact'}`}
+        </DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 1 }}>
             <Typography variant="body2" color="text.secondary">
-              {`Publishes the current published version of this ` +
-                `${target?.noun ?? 'artifact'} so other organizations can ` +
-                'install it. Your site is unaffected.'}
+              {starter
+                ? 'Publishes this site as a site starter: a ready-made website ' +
+                  'people create a new site from. A new starter is reviewed ' +
+                  'before anyone else can see it. Your site is unaffected.'
+                : `Publishes the current published version of this ` +
+                  `${target?.noun ?? 'artifact'} so other organizations can ` +
+                  'install it. Your site is unaffected.'}
             </Typography>
             <TextField
               autoFocus
@@ -291,7 +408,7 @@ export function PublishArtifactDialog({
             />
             <TextField
               size="small"
-              label="Category"
+              label={target?.categoryLabel ?? 'Category'}
               placeholder={
                 target?.categoryPlaceholder ?? 'e.g. Marketing, Docs'
               }
@@ -324,11 +441,49 @@ export function PublishArtifactDialog({
               disabled={busy}
               fullWidth
             />
+            {starter && starterReads ? (
+              <PublishStarterFields
+                builtin={starterReads.builtin}
+                hostReady={starterReads.hostReady}
+                pages={starterReads.facts.pages}
+                steps={steps}
+                choice={themeChoice}
+                onChoiceChange={setThemeChoice}
+                styleKind={styleKind}
+                onStyleKindChange={setStyleKind}
+                disabled={busy}
+              />
+            ) : null}
+            {refusal && !agreementRefused ? (
+              refusal.status === 412 && starterFacts ? (
+                <PrerequisiteNotice
+                  severity="warning"
+                  href={starterRefusalLink(starterFacts).href ?? undefined}
+                  actionLabel={starterRefusalLink(starterFacts).actionLabel}
+                >
+                  {refusal.error}
+                </PrerequisiteNotice>
+              ) : (
+                <Alert severity="error" data-starter-publish="refusal">
+                  {refusal.error}
+                  {refusal.more.length ? (
+                    <Stack component="ul" spacing={0.5} sx={{ m: 0, mt: 1, pl: 2.5 }}>
+                      {refusal.more.map((message) => (
+                        <Typography key={message} component="li" variant="body2">
+                          {message}
+                        </Typography>
+                      ))}
+                    </Stack>
+                  ) : null}
+                </Alert>
+              )
+            ) : null}
             {/* Directly above Publish (AGL-4105), which waits for it. */}
             <PublisherAgreementCheckbox
               checked={agreement.agreed}
               onChange={agreement.setAgreed}
               disabled={busy}
+              error={agreementRefused ? refusal.error : null}
             />
           </Stack>
         </DialogContent>
@@ -336,26 +491,29 @@ export function PublishArtifactDialog({
           <Button size="small" onClick={onClose} disabled={busy}>
             {'Cancel'}
           </Button>
-          <Button
-            size="small"
-            variant="contained"
-            color="primary"
-            disabled={
-              busy ||
-              !name.trim() ||
-              isBelowMarketplacePriceFloor(price) ||
-              !agreement.agreed
-            }
-            onClick={() => void handlePublish()}
-          >
-            {busy ? 'Publishing…' : 'Publish'}
-          </Button>
+          <BlockedControl blocked={steps.length > 0} reason={steps[0]?.text ?? ''}>
+            <Button
+              size="small"
+              variant="contained"
+              color="primary"
+              disabled={
+                busy ||
+                !name.trim() ||
+                isBelowMarketplacePriceFloor(price) ||
+                !agreement.agreed ||
+                (starter && !starterBody)
+              }
+              onClick={() => void handlePublish()}
+            >
+              {busy ? 'Publishing…' : 'Publish'}
+            </Button>
+          </BlockedControl>
         </DialogActions>
       </Dialog>
     </>
   )
 }
 
-PublishArtifactDialog.displayName = 'PublishArtifactDialog'
+PublishArtifactForm.displayName = 'PublishArtifactForm'
 
 export default PublishArtifactDialog

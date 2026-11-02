@@ -24,6 +24,7 @@
 import {
   siteImportBackgroundOf,
   siteImportColorOf,
+  SITE_IMPORT_CSS_WIDE_WIDTH,
   siteImportCssOf,
   siteImportFontFamilies,
   siteImportGridColumns,
@@ -176,5 +177,17 @@ describe('aglyn.com, through its own stylesheet', () => {
     })
     expect(fills).toEqual(['#ffffff', '#f5f5f5', '#ffffff', '#f5f5f5', '#ffffff', '#f5f5f5', '#ffffff', '#f5f5f5', '#f5f5f5', '#f5f5f5', '#161c21'])
     expect(siteImportBackgroundOf(styles.of((sections[10] as { id: number }).id)).gradient).toHaveLength(3)
+  })
+})
+
+describe('a screen wider than the page is read at (AGL-4083)', () => {
+  const sheet = ['.box{width:100%}@media (min-width:1536px){.box{max-width:1536px}}']
+  const page = extractSiteImportPage('<html><head></head><body><div id="a" class="box">words</div></body></html>', PAGE, sameSite, { structure: true })
+  const structure = page.structure as NonNullable<typeof page.structure>
+  const at = (viewport?: number) => siteImportStylesOf(structure, siteImportCssOf(sheet, viewport)).of(structure.elements.find((entry) => entry.attrs.id === 'a')?.id as number)
+
+  it('applies a cap only a wider screen sees when it is asked for that screen, and not at the read width', () => {
+    expect(at().get('max-width')).toBeUndefined()
+    expect(at(SITE_IMPORT_CSS_WIDE_WIDTH).get('max-width')).toBe('1536px')
   })
 })

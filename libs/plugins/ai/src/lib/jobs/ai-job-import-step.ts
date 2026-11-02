@@ -40,7 +40,8 @@
  *      own header and footer words as the footer's facts, and the site's
  *      menu order.
  *   5. EACH PAGE: its photos into the media library (no model, deduped by
- *      source key), then the page step's own passes, NEVER REWRITTEN
+ *      source key), its forms rebuilt as the site's own (no model, AGL-4083,
+ *      `ai-site-import-forms.ts`), then the page step's own passes, NEVER REWRITTEN
  *      (AGL-4084, `ai-site-import-document.ts`): a collection's page or a
  *      long page is copied as it is, every word in order, with no model; a
  *      main page is arranged, the model placing the source's numbered lines
@@ -77,6 +78,7 @@ import {
   AI_SITE_IMPORT_MAX_PAGES,
   AI_SITE_IMPORT_MIN_WORDS,
   AI_SITE_IMPORT_WAVE_PAGES,
+  aiSiteImportFormsIn,
   aiSiteImportFrameIsRead,
   aiSiteImportInventory,
   aiSiteImportItemOpen,
@@ -120,7 +122,8 @@ import { AI_LAYOUT_SITE_BRAND_INPUT, AI_LAYOUT_SITE_FACTS_INPUT, AI_LAYOUT_SITE_
 import { aiLayoutTelHref, type AiLayoutFrameSource, type AiLayoutFrameSourceGround, type AiLayoutFrameSourceTo } from '../layout-language/ai-layout-frame-source'
 import { aiHexOklch } from '../model/ai-site-look'
 import { AI_LAYOUT_IMPORTED_SECTIONS_INPUT, type AiSiteImportDocument } from './ai-site-import-document'
-import { aiSiteImportSectionNames } from './ai-site-import-compile'
+import { aiImportedPageListingOwed, aiSiteImportSectionNames } from './ai-site-import-compile'
+import { aiRebuildImportedForms, type AiSiteImportFormsDeps } from './ai-site-import-forms'
 import { aiRunSiteImportLook, type AiSiteImportLookDeps } from './ai-site-import-look'
 import { aiPublishImportedWave } from './ai-site-import-publish'
 import { aiUnitErrorRetryable, aiUnitFailure, aiUnitSpend } from './ai-build-unit-outcome'
@@ -141,6 +144,7 @@ import {
   aiJobStepRunnerFor,
   registerAiJobStep,
   registerAiJobStepPasses,
+  registerAiJobStopReview,
 } from './ai-jobs'
 
 /** Waves (the read included) one workspace may start in a day. */
@@ -177,10 +181,22 @@ export const AI_SITE_IMPORT_PASS_MINIMUM_MS = {
  * its answer and its listing, every wave's start and the header and footer,
  * with room for re-asks.
  */
-export const AI_SITE_IMPORT_MAX_PASSES = AI_SITE_IMPORT_MAX_PAGES * 4 + 60
+export const AI_SITE_IMPORT_MAX_PASSES = AI_SITE_IMPORT_MAX_PAGES * 8 + 60
+
+/**
+ * The most the job's document may weigh with a wave's reads in it (AGL-4083),
+ * as JSON, which runs about a tenth over what Firestore stores, so this leaves
+ * room under its 1 MiB for what the pass writes beside them. Pages past it are
+ * read once the pages before them are in. On 11/1 a 400-page import's start of
+ * its 36th wave asked for about 1.1 MB, and the write failed until its attempts
+ * ran out.
+ */
+export const AI_SITE_IMPORT_JOB_MAX_BYTES = 980_000
 
 /** Customer-safe sentences. */
 export const AI_SITE_IMPORT_COPY = {
+  stopped: (pages: number, wave: string) =>
+    `Your import stopped before it finished, so ${pages.toLocaleString('en-US')} ${pages === 1 ? 'page is' : 'pages are'} not in yet. Everything brought in so far is safe. Start ${wave} to bring in the rest.`,
   noSite: 'Open the site to bring your website into.',
   badDomain: 'This website’s address cannot be brought in.',
   ownership: (domain: string) =>
@@ -212,6 +228,8 @@ export interface AiSiteImportOwnership {
 }
 
 export interface AiSiteImportStepDeps {
+  /** The form pass's reads and writes (AGL-4083); specs hand in fakes. */
+  forms?: AiSiteImportFormsDeps
   crawl?: typeof crawlSiteForImport
   crawlSeams?: SiteImportCrawlSeams
   runnerFor?: typeof aiJobStepRunnerFor
@@ -516,6 +534,7 @@ export function aiSiteImportDocumentFor(state: AiSiteImportState, page: AiSiteIm
     // link home says home, which the source's words may not.
     links: state.pages.filter((entry) => entry.slug !== '/' && !entry.refused).map((entry) => ({ path: entry.path.replace(/\/+$/, '') || '/', id: entry.draftId })),
     origins: [`https://${state.domain}`, `https://www.${state.domain.replace(/^www\./, '')}`],
+    ...(page.forms ? { forms: page.forms } : {}),
     // How the source lays it out (AGL-4106), which the site compiler builds it from (AGL-4107).
     ...(page.read?.layout ? { layout: page.read.layout } : {}),
   }
@@ -627,7 +646,19 @@ export function aiSiteImportHomeOf(crawled: Pick<SiteImportInventory, 'pages'>):
   }
 }
 
-/** The least time the import's next pass needs: a read's, a photo pass's, or the time of the step its unit is handed to. */
+/** Whether a page asks no model at all: copied as it is, its listing the source's own. */
+function aiSiteImportPageAsksNoModel(page: AiSiteImportPage): boolean {
+  if (page.build !== 'copied') return false
+  return !aiImportedPageListingOwed({ title: page.read?.meta?.title || page.title, description: page.read?.meta?.description ?? '' })
+}
+
+/**
+ * The least time the import's next pass needs: a read's, a photo pass's, or
+ * the time of the step its unit is handed to. A pass that fetches nothing and
+ * asks no model needs none of that (AGL-4083): held to a model's whole answer,
+ * a copied page could only start in the first seconds of a beat, and the 11/1
+ * import took 6 to 7 minutes for each ten pages that used no AI.
+ */
 export function aiSiteImportRunMinimumMs(job: AiJob, runnerFor: typeof aiJobStepRunnerFor = aiJobStepRunnerFor): number {
   const state = job.siteImport ?? null
   const items = job.items ?? []
@@ -639,10 +670,11 @@ export function aiSiteImportRunMinimumMs(job: AiJob, runnerFor: typeof aiJobStep
     case 'read':
       return AI_SITE_IMPORT_PASS_MINIMUM_MS.wave
     case 'images':
-      return AI_SITE_IMPORT_PASS_MINIMUM_MS.photos
+      return work.page.read?.images.length ? AI_SITE_IMPORT_PASS_MINIMUM_MS.photos : 0
     case 'frame':
       return runnerFor('layout') && state ? aiJobStepRunMinimumMs(aiSiteImportFrameJob(job, state, work.wave, items)) : 0
     case 'page':
+      if (aiSiteImportPageAsksNoModel(work.page)) return 0
       return runnerFor('page') && state ? aiJobStepRunMinimumMs(aiSiteImportPageJob(job, state, work.page, items)) : 0
     default:
       return 0
@@ -654,6 +686,54 @@ export function aiSiteImportRunMinimumMs(job: AiJob, runnerFor: typeof aiJobStep
  *-----------------------------------------*/
 
 const waveReview = (message: string): AiJobReview => ({ reason: 'wave', message, findings: [] })
+
+const jobBytes = (value: unknown) => Buffer.byteLength(JSON.stringify(value) ?? '')
+
+/**
+ * The reads a job's document can take (AGL-4083): the pages in order, as many
+ * as fit `AI_SITE_IMPORT_JOB_MAX_BYTES`, and every page the read left out. A
+ * page past that is read later, once the ones before it are in. With nothing
+ * else held, the first page goes whatever it weighs, or no page would ever go.
+ */
+export function aiSiteImportReadsWithin(
+  job: AiJob,
+  state: AiSiteImportState,
+  reads: ReadonlyMap<string, AiSiteImportPageRead | AiSiteImportLeftOutReason>,
+): Map<string, AiSiteImportPageRead | AiSiteImportLeftOutReason> {
+  let room = AI_SITE_IMPORT_JOB_MAX_BYTES - jobBytes({ ...job, siteImport: state })
+  let first = !state.pages.some((page) => page.read?.blocks?.length)
+  let full = false
+  const kept = new Map<string, AiSiteImportPageRead | AiSiteImportLeftOutReason>()
+  for (const [slot, read] of reads) {
+    if (typeof read === 'string') {
+      kept.set(slot, read)
+      continue
+    }
+    const weight = jobBytes(read)
+    full ||= weight > room && !first
+    if (full) continue
+    kept.set(slot, read)
+    room -= weight
+    first = false
+  }
+  return kept
+}
+
+/**
+ * What an import waits on when it stopped with work left (AGL-4083). Its run
+ * can take hours, so a read or a write that keeps failing, or the bound on its
+ * passes, ends a stretch of it and never the import: the person who started it
+ * is told, and the waves it did not reach stay theirs to start.
+ */
+export function aiSiteImportStopReview(job: AiJob): AiJobReview | null {
+  const state = job.siteImport ?? null
+  if (!state) return null
+  const items = job.items ?? []
+  const work = aiSiteImportNextWork(state, items)
+  if (work.kind === 'done' || work.kind === 'inventory') return null
+  const left = state.pages.filter((page) => !page.refused && aiSiteImportItemOpen(items, page.slot)).length
+  return { reason: 'wave', message: AI_SITE_IMPORT_COPY.stopped(left, work.wave.label), findings: [] }
+}
 
 /** The rows a wave's read left out, settled as not brought in, with the reason. */
 function withLeftOutRows(
@@ -908,7 +988,7 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
             : row,
         )
       }
-      const started = aiSiteImportWithBuilds(aiSiteImportWaveStarted(state, wave.index, nowIso, reads))
+      const started = aiSiteImportWithBuilds(aiSiteImportWaveStarted(state, wave.index, nowIso, aiSiteImportReadsWithin({ ...job, items: ledger }, state, reads)))
       const running = started.waves.find((entry) => entry.index === wave.index) as AiSiteImportWave
       return closing(started, ledger, running, unspent({ items: ledger }))
     }
@@ -930,7 +1010,7 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
       if (crawled.stoppedBy === 'robots-unreachable') return unspent({ review: waveReview(AI_SITE_IMPORT_COPY.robots(domain)) })
       const reads = siteImportWaveReads(work.pages, crawled, nowIso, { cutShort: crawled.stoppedBy === 'time' })
       const ledger = withLeftOutRows(items, reads)
-      return closing(aiSiteImportWithBuilds(aiSiteImportPagesRead(state, reads)), ledger, wave, unspent({ items: ledger }))
+      return closing(aiSiteImportWithBuilds(aiSiteImportPagesRead(state, aiSiteImportReadsWithin({ ...job, items: ledger }, state, reads))), ledger, wave, unspent({ items: ledger }))
     }
 
     // ── 3. The look, before anything of the first wave is built (AGL-4084): no model ──
@@ -991,6 +1071,18 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
       })
     }
 
+    // ── 4a'. A page's forms, as the site's own: no model, no credits (AGL-4083) ──
+    if (work.kind === 'forms') {
+      const rebuilt = await aiRebuildImportedForms(firestore, { job, hostId, state, page: work.page, org: (context.org ?? null) as never, now }, deps.forms)
+      const fresh = rebuilt.rows.filter((row) => !items.some((held) => held.slot === row.slot))
+      return unspent({
+        ...(fresh.length ? { items: [...items, ...fresh] } : {}),
+        outputs: rebuilt.outputs,
+        siteImport: aiSiteImportFormsIn(state, work.page.slot, rebuilt.forms, rebuilt.note),
+        continue: true,
+      })
+    }
+
     // ── 4b. The page ──
     if (work.kind === 'page') {
       const runner = runnerFor('page')
@@ -1047,7 +1139,7 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
           layoutLanguage: true,
         })
         item = written
-          ? { slot, status: 'succeeded', outputs: spent.outputs.map((output) => output.id) }
+          ? { slot, status: 'succeeded', outputs: spent.outputs.map((output) => output.id), ...(page.formNote ? { note: page.formNote } : {}) }
           : { slot, status: 'failed', failure: { ours: true, reason: 'step-failure', message: AI_SITE_IMPORT_COPY.pageNotWritten } }
       } else {
         item = { slot, status: 'succeeded', outputs: spent.outputs.map((output) => output.id) }
@@ -1215,5 +1307,6 @@ export function registerAiSiteImportJob(deps: AiSiteImportStepDeps = {}): void {
     minimumMsFor: (job) => aiSiteImportRunMinimumMs(job, runnerFor),
   })
   registerAiJobStepPasses('import', AI_SITE_IMPORT_MAX_PASSES)
+  registerAiJobStopReview('import', aiSiteImportStopReview)
   registerAiJobAdmission('import', createAiSiteImportAdmission())
 }

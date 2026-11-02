@@ -71,6 +71,7 @@ import {
 import type { AiLayoutTargets } from '../layout-language/ai-layout-links'
 import {
   AI_SITE_IMPORT_LABEL_MAX_CHARS,
+  siteImportWidthOf,
   type AiSiteImportPhoto,
   type SiteImportGroupKind,
   type SiteImportHeroPicture,
@@ -487,18 +488,20 @@ function iconAt(scope: MapScope, index: number | undefined): string | undefined 
   return index === undefined ? undefined : (aiSiteImportIconPath(scope.layout.icons[index]) ?? undefined)
 }
 
-/** The style of a link inside an item: a plan's own button is filled outlined, any other a quiet link. */
-function itemLinkStyle(kind: SiteImportGroupKind): AiLayoutStyle {
-  return kind === 'pricing' ? 'secondary' : 'quiet'
+/** The style of a link inside an item: as the source draws it, else a plan's own button outlined and any other a quiet link. */
+function itemLinkStyle(group: SiteImportLayoutGroup, item: SiteImportLayoutItem, ref: SiteImportLineRef): AiLayoutStyle {
+  return item.ctas?.find((cta) => cta.line === ref)?.style ?? (group.group === 'pricing' ? 'secondary' : 'quiet')
 }
 
-/** One item of a group, every line of it in exactly one of its parts. */
-function itemOf(scope: MapScope, group: SiteImportLayoutGroup, item: SiteImportLayoutItem): AiLayoutItem {
+/** One item of a group, drawn as `kind`, every line of it in exactly one of its parts. */
+function itemOf(scope: MapScope, group: SiteImportLayoutGroup, item: SiteImportLayoutItem, kind: SiteImportGroupKind = group.group): AiLayoutItem {
   const out: AiLayoutItem = { title: '', text: '' }
   const named = new Set<number>([
     ...(item.title !== undefined ? [item.title] : []),
     ...(item.figure !== undefined ? [item.figure] : []),
     ...(item.image !== undefined ? [item.image] : []),
+    ...(item.badge !== undefined ? [item.badge] : []),
+    ...(item.period !== undefined ? [item.period] : []),
     ...(item.text ?? []),
     ...(item.list ?? []),
     ...(item.link ?? []),
@@ -510,7 +513,7 @@ function itemOf(scope: MapScope, group: SiteImportLayoutGroup, item: SiteImportL
     const text = take(scope, ref)
     if (!text) return
     const to = block?.kind === 'link' ? linkTo(scope, block.href) : undefined
-    if (text.length <= AI_SITE_IMPORT_LABEL_CHARS) links.push({ text, ...(to ? { to } : {}), style: itemLinkStyle(group.group) })
+    if (text.length <= AI_SITE_IMPORT_LABEL_CHARS) links.push({ text, ...(to ? { to } : {}), style: itemLinkStyle(group, item, ref) })
     else paragraphs.push(text)
   }
   // The item's lines in the source's order: each where its part says.
@@ -520,13 +523,16 @@ function itemOf(scope: MapScope, group: SiteImportLayoutGroup, item: SiteImportL
     if (!block) continue
     if (ref === item.title) out.title = take(scope, ref)
     else if (ref === item.figure) out.figure = take(scope, ref)
+    else if (ref === item.period) out.period = take(scope, ref)
+    // A figure stands alone: its tag, if it has one, is among its words.
+    else if (ref === item.badge && kind !== 'stats') out.badge = take(scope, ref)
     else if (ref === item.image || (block.kind === 'image' && !named.has(ref))) {
       const picture = takePicture(scope, ref)
       if (picture && !out.picture) out.picture = picture
     } else if (item.list?.includes(ref)) {
       const line = take(scope, ref)
       if (line) out.list = [...(out.list ?? []), line]
-    } else if (item.link?.includes(ref) || (!named.has(ref) && block.kind === 'link')) addLink(ref)
+    } else if (item.link?.includes(ref) || (block.kind === 'link' && (!named.has(ref) || clean(block.text).length <= AI_SITE_IMPORT_LABEL_CHARS))) addLink(ref)
     else {
       const line = take(scope, ref)
       if (line) paragraphs.push(...aiSiteImportTextParts(line))
@@ -535,6 +541,8 @@ function itemOf(scope: MapScope, group: SiteImportLayoutGroup, item: SiteImportL
   if (paragraphs.length) out.text = paragraphs[0]
   if (paragraphs.length > 1) out.more = paragraphs.slice(1)
   if (links.length) out.links = links
+  // A row's name is a heading only where the source says so.
+  if (group.inline && item.title !== undefined && scope.doc.blocks[item.title]?.kind !== 'heading') out.label = true
   const icon = iconAt(scope, item.icon)
   if (icon) out.iconPath = icon
   const mark = iconAt(scope, item.listIcon)
@@ -561,12 +569,50 @@ function styleFor(asked: AiLayoutGroupStyle | undefined, group: SiteImportLayout
   return asked
 }
 
+/** The longest line that leads a figure: "1-click", "$0.83". */
+const FIGURE_MAX_CHARS = 14
+
+/**
+ * Whether a group can be drawn as figures (AGL-4083): each item a short line
+ * over its label and nothing else. A figure has no place for a link, a bullet,
+ * a picture or an icon, so an item with one, drawn as a figure, loses it.
+ */
+function holdsOnlyFigures(scope: MapScope, group: SiteImportLayoutGroup): boolean {
+  return group.items.every((item) => {
+    const lead = item.title ?? item.lines[0]
+    const block = lead === undefined ? undefined : scope.doc.blocks[lead]
+    return (
+      !!block &&
+      block.kind !== 'image' &&
+      clean(block.text).length <= FIGURE_MAX_CHARS &&
+      item.lines.length <= 3 &&
+      !item.link?.length &&
+      !item.list?.length &&
+      item.image === undefined &&
+      item.icon === undefined &&
+      !item.lines.some((ref) => scope.doc.blocks[ref]?.kind === 'link' || scope.doc.blocks[ref]?.kind === 'image')
+    )
+  })
+}
+
 /** A group of the source, in the layout language: every item of it, in the kind and style its answer chose or its source shows. */
 function groupBlocks(scope: MapScope, group: SiteImportLayoutGroup): AiLayoutBlock[] {
   const answer = scope.answer?.groups[scope.groupAt] ?? null
   scope.groupAt += 1
-  const kind: SiteImportGroupKind = answer?.kind && OPEN_KINDS.has(group.group) ? answer.kind : group.group
-  if (kind !== group.group) scope.settled.push({ at: scope.at, what: `a ${group.group} group drawn as ${kind}, as its design answer read it` })
+  // Rows the source sets are drawn as its rows: no answer's kind or style is one of them (AGL-4083).
+  if (group.inline) {
+    if (answer?.kind || answer?.style) scope.settled.push({ at: scope.at, what: `a ${group.group} group drawn as the source's rows` })
+    return [{ kind: 'cards', items: group.items.map((item) => itemOf(scope, group, item)), columns: 1, inline: true }]
+  }
+  const asked: SiteImportGroupKind = answer?.kind && OPEN_KINDS.has(group.group) ? answer.kind : group.group
+  // A list is one line an item (AGL-4083): one asked of items with more would
+  // join a label to its value, and 49 of a plan's rows lost theirs so on 11/1.
+  const joins = asked === 'list' && group.group !== 'list' && group.items.some((item) => item.lines.length > 1)
+  const unfigured = asked === 'stats' && group.group !== 'stats' && !holdsOnlyFigures(scope, group)
+  const kind: SiteImportGroupKind = joins ? 'cards' : unfigured ? group.group : asked
+  if (joins) scope.settled.push({ at: scope.at, what: `a ${group.group} group kept apart: its items hold more than one line each, so it is no list` })
+  else if (unfigured) scope.settled.push({ at: scope.at, what: `a ${group.group} group kept as it is: its items hold more than a figure can show` })
+  else if (kind !== group.group) scope.settled.push({ at: scope.at, what: `a ${group.group} group drawn as ${kind}, as its design answer read it` })
   const columns = Math.max(1, Math.min(AI_LAYOUT_MAX_COLS, group.columns || 1))
   if (kind === 'text') {
     // Lines that only share a shape: each where it stands.
@@ -602,7 +648,7 @@ function groupBlocks(scope: MapScope, group: SiteImportLayoutGroup): AiLayoutBlo
     })
     return items.length ? [{ kind: 'logos', items }] : []
   }
-  const items = group.items.map((item) => itemOf(scope, group, item))
+  const items = group.items.map((item) => itemOf(scope, group, item, kind))
   if (kind === 'quotes') {
     // The reader names a quote's words its title and who said it its text.
     const quotes = items.map((item) => ({ ...item, title: [item.text, ...(item.more ?? [])].filter(Boolean).join(' '), text: item.title, more: [] as string[] }))
@@ -610,7 +656,7 @@ function groupBlocks(scope: MapScope, group: SiteImportLayoutGroup): AiLayoutBlo
   }
   if (kind === 'faq') return [{ kind: 'faq', items, columns }]
   if (kind === 'stats') return [{ kind: 'stats', items, columns, ...(group.boxed ? { variant: 'cards' as const } : {}) }]
-  const style = styleFor(answer?.style, group, items)
+  const style = joins ? 'ruled' : styleFor(answer?.style, group, items)
   return [{ kind: kind === 'steps' ? 'steps' : 'cards', items, columns, variant: style }]
 }
 
@@ -630,12 +676,17 @@ function nodeBlocks(scope: MapScope, nodes: readonly SiteImportLayoutNode[], row
       case 'icon':
         // A lone icon is no word and no picture of the page.
         break
-      case 'form':
-        if (scope.formId && !scope.formPlaced) {
+      case 'form': {
+        // The form rebuilt for this one (AGL-4083); a read from before they were, the site's only form, once.
+        const own = scope.doc.forms?.find((entry) => entry.index === node.form)
+        if (scope.doc.forms) {
+          if (own?.formId) out.push({ kind: 'form', to: own.formId })
+        } else if (scope.formId && !scope.formPlaced) {
           scope.formPlaced = true
           out.push({ kind: 'form', to: scope.formId })
         }
         break
+      }
       case 'row': {
         const cells = node.cells.filter((cell) => cell.nodes.length)
         const byline = bylineOf(scope, cells)
@@ -730,12 +781,26 @@ function mergeLists(blocks: readonly AiLayoutBlock[]): AiLayoutBlock[] {
   return out
 }
 
-/** The hero a section's opening takes: the first section's, around its picture beside, behind or under its words. */
-function heroOf(section: SiteImportLayoutSection, index: number, answer: AiLayoutDesignSection | null): AiLayoutImportHero | undefined {
+/** The heroes that lay dimmed words over the picture, which draw their section dark. */
+const DIMMED_HEROES: ReadonlySet<AiLayoutImportHero> = new Set(['cover', 'poster'])
+
+/**
+ * The hero a section's opening takes: the first section's, around its picture
+ * beside, behind or under its words. Words dimmed over the picture draw the
+ * section dark, so a section that keeps a lighter ground of its own, with its
+ * picture anywhere but behind it, opens as its source does (AGL-4083): an
+ * answer never repaints a section's own band.
+ */
+function heroOf(section: SiteImportLayoutSection, index: number, answer: AiLayoutDesignSection | null, settled: AiLayoutSettlement[]): AiLayoutImportHero | undefined {
   if (index !== 0 || !section.hero?.picture) return undefined
   // An answer of "none" keeps the opening as the source lays it out.
   if (answer?.hero === 'none') return undefined
-  return answer?.hero ?? HERO_FOR[section.hero.picture]
+  const own = HERO_FOR[section.hero.picture]
+  if (answer?.hero && DIMMED_HEROES.has(answer.hero) && section.band !== 'dark' && section.hero.picture !== 'behind') {
+    settled.push({ at: 'sections[0]', what: `the ${answer.hero} hero set aside: the section keeps its own lighter ground` })
+    return own
+  }
+  return answer?.hero ?? own
 }
 
 export interface AiSiteImportDesigned {
@@ -788,7 +853,7 @@ export function aiSiteImportDesignedSections(
       if (!isLine(block)) continue
       blocks.push(...lineBlocks(scope, { kind: 'line', line: ref }))
     }
-    const hero = heroOf(section, index, given)
+    const hero = heroOf(section, index, given, scope.settled)
     // A band only where the source gave the section none of its own.
     const band = section.background === null && !section.backdrop && given?.band ? given.band : section.band
     // A long read is set at the start, as text is read, whatever its source centers.
@@ -796,6 +861,8 @@ export function aiSiteImportDesignedSections(
     return {
       band,
       align: given?.align ?? (reading ? 'start' : section.align),
+      // As wide as the source runs (AGL-4083); where it sets no cap, a page's width, a long read's measure.
+      width: siteImportWidthOf(section.width) ?? (reading ? 'md' : 'lg'),
       ...(row.cols && blocks.some((block) => block.col !== undefined) ? { cols: row.cols } : {}),
       blocks: mergeLists(blocks),
       ...(hero ? { hero } : {}),

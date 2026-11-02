@@ -69,20 +69,37 @@ Where **Start your site** is offered, **Choose your starter** has two tabs:
 
 ## A starter with a price {#a-starter-with-a-price}
 
-A card with a price says so when you pick it, with **Buy and continue**:
+A card with a price says so when you pick it, with **Buy and continue**. You pay right
+there, in **Create site**:
 
-1. Choose **Buy and continue**. The payment page opens.
-2. Pay. You come back to **Create site** with the same starter picked and **You own this
-   starter** beneath the cards.
+1. Choose **Buy and continue**. The price, the sales tax, the total and the card that
+   will be charged open under the cards. Nothing is charged yet.
+2. Choose **Pay**. Your workspace's card on file is charged, and **You own this starter**
+   appears beneath the cards. If your bank wants to confirm the payment, its own step
+   opens first.
 3. Choose **Create site**.
 
 An AI starter with a price works the same way, with **Continue** in place of **Create
 site**: its answers are shown only once it is yours.
 
+If your workspace has no card on file, the form to add one opens in the same place, and
+then one for a billing address if there is none: sales tax is calculated from it. Both
+stay on file for the workspace under **Organization → Billing**, where you can change
+them. If the card is declined, nothing is charged: the step says why, with a link to
+Billing to change the card.
+
+Paying charges your workspace's card, so it takes the **Manage billing** permission as
+well as **Create sites**. Without it you still see the price, the sales tax and the total,
+but there is no **Pay**, and the step says someone who manages billing can buy it. Once
+they have, anyone who can create sites can use the starter.
+
 The starter belongs to your workspace once it is paid for, so creating another site from
-it later asks for nothing more. If you come back without paying, the starter is still
-picked, and **Buy and continue** is there again. A starter you already own says **You own
-this starter** as soon as you pick it.
+it later asks for nothing more. **Cancel** charges nothing, and **Buy and continue** is
+there again. A starter you already own says **You own this starter** as soon as you pick
+it.
+
+The receipt is the invoice under **Organization → Billing → Invoices**. To ask for a
+refund, contact support, as for any marketplace purchase.
 
 ## What your site gets {#what-your-site-gets}
 
@@ -105,8 +122,31 @@ changes the starter, and later changes to the starter never change your site.
 
 ## Who can use them {#who-can-use-them}
 
-Choosing a starter, and buying one, takes the **Create sites** permission, the same one
-creating any site does. Without it, **Create site** tells you so before anything is asked.
+Choosing a starter takes the **Create sites** permission, the same one creating any site
+does. Without it, **Create site** tells you so before anything is asked. Paying for one
+also takes **Manage billing**, as [A starter with a price](#a-starter-with-a-price) says.
+
+## Publishing your own {#publishing-your-own}
+
+Any workspace whose plan includes selling on the marketplace can publish one of its sites
+as a starter, free or with a price: **Admin → Backup & template → Publish as a starter**.
+You choose whether it carries your site's built-in theme with its brand colors, or your
+site's full theme. A new starter is reviewed before anyone else can see it.
+[Publish as a starter](save-a-template.md#publish-as-a-starter) walks through it.
+
+## In the Aglyn app {#in-the-aglyn-app}
+
+**Create site** in the Aglyn app on iPhone, iPad, Mac and Android lists the same starters, and
+nothing is chosen for you there either. A free starter, or one your workspace owns, creates your
+site at once.
+
+The app doesn't take payment for a starter and doesn't ask an AI starter's questions. A starter
+with a price shows it with **Buy on the web**, and an AI starter shows **Continue on the web**. Either
+one opens **Create site** in the console on that starter, where you finish. You may be asked to sign
+in there first.
+
+You can also publish from the app: **Site settings → Backup & template → Publish as a starter**,
+or **A site starter** on its **Publish to the marketplace** page.
 
 ## Related {#related}
 
@@ -114,3 +154,4 @@ creating any site does. Without it, **Create site** tells you so before anything
 - [Your templates library](templates-library.md), for the starter templates every site
   can use to add pages
 - [Start a new site with AI](../../ai/start-with-ai.md)
+- [Publish as a starter](save-a-template.md#publish-as-a-starter)

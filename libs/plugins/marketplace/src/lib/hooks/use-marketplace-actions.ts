@@ -17,10 +17,9 @@
 'use client'
 
 import { lockdownRefusalText, parseLockdownRefusal } from '@aglyn/aglyn'
-import { readGaClientId } from '@aglyn/aglyn/app-utils/analytics-events'
 import { useLoading } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useCallback, useRef } from 'react'
+import { useCallback } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
@@ -32,6 +31,7 @@ import {
   marketplaceInstallEndpoint,
   marketplaceLandingMessage,
 } from '../model/marketplace-catalog'
+import { useMarketplacePay } from './use-marketplace-pay'
 
 
 /**
@@ -66,28 +66,22 @@ function baseMissingWarning(displayName: string): string {
 /**
  * Shared install/buy handlers for marketplace listings (AGL-95): used by the
  * browse grid and the listing detail page. Install copies the pinned
- * version snapshot server-side (/api/marketplace/install); buy opens a
- * Stripe checkout (/api/marketplace/checkout) when configured.
+ * version snapshot server-side (/api/marketplace/install); buy pays in the
+ * console (/api/marketplace/pay), in the `payPanel` the surface draws under
+ * its button.
+ *
+ * @param billingHref the workspace's Billing page, for a prerequisite the
+ *   buyer cannot meet themselves.
  */
-export function useMarketplaceActions(hostId: string, orgId?: string | null) {
+export function useMarketplaceActions(
+  hostId: string,
+  orgId?: string | null,
+  billingHref?: string | null,
+) {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
-
-  /**
-   * One purchase attempt per listing, minted lazily (AGL-1697).
-   *
-   * Per-listing rather than per-click: minting inside `buy` would defeat the
-   * whole point, because two clicks would mint two keys and the server would
-   * see two purchases. Held in a ref rather than state so a re-render cannot
-   * rotate a key mid-flight.
-   *
-   * It retires when the page does. That is the honest boundary for a redirect
-   * flow — the buyer leaves for Stripe and comes back to a fresh mount — and it
-   * means this key covers the double-click and the retry, while the server's
-   * already-purchased check covers the buyer who returns tomorrow.
-   */
-  const purchaseAttempts = useRef(new Map<string, string>())
+  const pay = useMarketplacePay({ orgId, hostId, billingHref })
 
   // `scope` is only meaningful for artifact types that HAVE an org-scoped
   // pin — see INSTALL_TARGETS. Passing it for a template would be ignored
@@ -367,94 +361,38 @@ export function useMarketplaceActions(hostId: string, orgId?: string | null) {
 
   const buy = useCallback(
     async (listing: any) => {
-      const dequeue = queueLoading()
-      try {
-        const listingId = String(listing.$id)
-        const attemptKey =
-          purchaseAttempts.current.get(listingId) ??
-          `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
-        purchaseAttempts.current.set(listingId, attemptKey)
-        const response = await authorizedFetch(
-          user,
-          '/api/marketplace/checkout',
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              // Stable across a retry of THIS attempt (AGL-1697), so a
-              // double-click or a re-submit after a timeout cannot open a
-              // second Stripe session on a live account.
-              'Idempotency-Key': attemptKey,
-            },
-            // The browser's GA client id rides along so the SERVER-side
-            // `purchase` the Stripe webhook sends can be attributed to the
-            // session — and therefore the campaign — that produced it
-            // (AGL-1638). The webhook has always read this off the session
-            // metadata; until now nothing captured it, so every marketplace
-            // sale landed on a synthetic, sessionless GA user and plugin
-            // revenue had no acquisition channel at all.
-            //
-            // Resolves to null within 500ms when gtag is absent (consent
-            // refused, ad blocker, analytics unconfigured), so it can never
-            // delay or block a purchase — same contract as the console's
-            // subscription checkout.
-            body: JSON.stringify({
-              listingId: listing.$id,
-              hostId,
-              // WHICH WORKSPACE IS BUYING (AGL-2331). A purchase licenses an
-              // organization, so the acting org is named rather than inferred:
-              // at org scope the surface acts through an arbitrary FIRST site,
-              // and letting the server derive the licence holder from that site
-              // would make which client workspace got the licence depend on the
-              // order sites happen to come back in.
-              //
-              // Advisory, not authority — the server resolves it through the
-              // caller's own membership and refuses an org they are not in. An
-              // older cached bundle that sends none still works: the server
-              // falls back to resolving the org from `hostId` the same way.
-              ...(orgId ? { orgId } : {}),
-              gaClientId: await readGaClientId(
-                process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
-              ),
-            }),
-          },
-        )
-        const payload = await response.json()
-        // The PAID install door refuses under a lock too (AGL-1545): both
-        // `checkout` and `marketplace-installs` gate it. A buyer must not
-        // read either lock as a payment failure — same reason the billing
-        // page carries this branch (AGL-1532).
-        const locked = parseLockdownRefusal(response.status, payload)
-        if (locked) {
-          return void enqueueSnackbar(lockdownRefusalText(locked), {
-            variant: 'warning',
-            persist: true,
-          })
-        }
-        if (response.status === 501) {
-          return void enqueueSnackbar(
-            'Purchases are not configured on this deployment',
-            { variant: 'info', persist: false },
-          )
-        }
-        if (!response.ok || !payload?.url) {
-          return void enqueueSnackbar(payload?.error ?? 'Checkout failed', {
-            variant: 'error',
-            allowDuplicate: true,
-          })
-        }
-        window.location.assign(payload.url)
-      } catch (error) {
-        console.error(error)
-        enqueueSnackbar('An error has occurred', {
-          variant: 'error',
-          allowDuplicate: true,
+      const name = String(listing.displayName ?? 'This listing')
+      const { outcome, error, locked } = await pay.buy({
+        listingId: String(listing.$id),
+        displayName: listing.displayName,
+      })
+      if (outcome === 'paid') {
+        return void enqueueSnackbar(`Bought "${name}". It is yours to install.`, {
+          variant: 'success',
+          persist: false,
         })
-      } finally {
-        dequeue()
+      }
+      if (outcome === 'owned') {
+        return void enqueueSnackbar(`This organization already owns "${name}".`, {
+          variant: 'info',
+          persist: false,
+        })
+      }
+      if (outcome === 'pending') {
+        return void enqueueSnackbar(
+          `Your payment for "${name}" is going through. It is yours as soon as it clears.`,
+          { variant: 'info', persist: false },
+        )
+      }
+      // A lockdown is a pause to read, and it must not vanish unread (AGL-1532).
+      if (error) {
+        enqueueSnackbar(
+          error,
+          locked ? { variant: 'warning', persist: true } : { variant: 'error', allowDuplicate: true },
+        )
       }
     },
-    [user, hostId, orgId, queueLoading, enqueueSnackbar],
+    [pay.buy, enqueueSnackbar],
   )
 
   /**
@@ -525,7 +463,7 @@ export function useMarketplaceActions(hostId: string, orgId?: string | null) {
     [user, hostId, queueLoading, enqueueSnackbar],
   )
 
-  return { install, installPlan, buy, uninstall }
+  return { install, installPlan, buy, uninstall, payPanel: pay.panel, buying: pay.busy }
 }
 
 export default useMarketplaceActions

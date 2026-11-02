@@ -45,6 +45,7 @@ import {
   SITE_PREVIEW_COOKIE,
   SITE_PREVIEW_EDIT_HINT_COOKIE,
 } from '@aglyn/aglyn/app-utils/site-preview'
+import { SITE_NOTICE_REQUEST_HEADER } from '@aglyn/aglyn/app-utils/site-unavailable'
 import { middleware } from '../middleware'
 
 /** The verdict each site answers with, keyed by the site's subdomain. */
@@ -72,11 +73,16 @@ afterAll(() => {
 })
 
 /** Drive the real middleware for a path on `{site}.localhost:4500`. */
-async function run(site: string, path: string, cookie?: string): Promise<Response> {
+async function run(
+  site: string,
+  path: string,
+  cookie?: string,
+  headers: Record<string, string> = {},
+): Promise<Response> {
   const host = `${site}.localhost:4500`
   const req = new NextRequest(
     new Request(`http://${host}${path}`, {
-      headers: { host, ...(cookie ? { cookie } : {}) },
+      headers: { host, ...(cookie ? { cookie } : {}), ...headers },
     }),
   )
   const response = (await middleware(req, {} as never)) as Response
@@ -90,6 +96,12 @@ function rewriteTarget(response: Response): string {
   const url = new URL(raw as string, 'http://localhost:4500')
   return `${url.pathname}${url.search}`
 }
+
+/**
+ * The public's 503 carries the page in its body, so the route that page comes
+ * from is the one the middleware's own read of it takes (AGL-4110).
+ */
+const NOTICE_READ = { [SITE_NOTICE_REQUEST_HEADER]: '1' }
 
 const PREVIEW_COOKIE = `${SITE_PREVIEW_COOKIE}=aglyn-site-preview-v1.payload.sig`
 const HINT_COOKIE = `${SITE_PREVIEW_EDIT_HINT_COOKIE}=aglyn-edit-hint-v1.payload.sig`
@@ -121,14 +133,19 @@ describe('a site in preview, asked for by its team (AGL-4086)', () => {
 
 describe('the public is answered from the cache (AGL-4086)', () => {
   it('a site in preview, no cookie: the catch-all, with no cache-control of its own', async () => {
-    const response = await run('preview-site', '/about')
+    const response = await run('preview-site', '/about', undefined, NOTICE_READ)
     expect(rewriteTarget(response)).toMatch(/^\/preview-site\/(light|dark)\/about$/)
     expect(response.headers.get('content-security-policy')).toBeTruthy()
     expect(response.headers.get('cache-control')).toBeNull()
   })
 
   it('an unrelated cookie is not a team cookie', async () => {
-    const response = await run('preview-site', '/about', 'aglyn_editor=1; theme=dark')
+    const response = await run(
+      'preview-site',
+      '/about',
+      'aglyn_editor=1; theme=dark',
+      NOTICE_READ,
+    )
     expect(rewriteTarget(response)).not.toContain('aglyn-preview')
   })
 

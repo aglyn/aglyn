@@ -45,8 +45,8 @@ settings. Everything you build lives under a site, and you can own several.
    **Choose your starter is rolling out**, and your workspace may not have it yet. Where
    it is on, **Start from a starter site** (or, without Aglyn AI, **Create site** itself)
    opens **Choose your starter** in place of the style cards: Aglyn's styles come first,
-   then starters from the marketplace. A card with a price says so, and you buy it before
-   the site is made. Nothing is chosen for you, **Create site** waits until you pick a
+   then starters from the marketplace. A card with a price says so, and you buy it right
+   there, before the site is made. Nothing is chosen for you, **Create site** waits until you pick a
    starter, and closing the window creates nothing. See
    [Site starters](../building-sites/site-templates/site-starters.md).
 

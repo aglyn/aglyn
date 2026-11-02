@@ -104,7 +104,7 @@ const DOCUMENTED_COPIES: Record<string, string> = {
     '(`past_due`, `active`) are inputs to the native replay cases, so the native ' +
     'apps are checked against the console predicate rather than a copy of it ' +
     '(AGL-3669).',
-  'apps/console/app/api/_lib/stripe-payment-method.ts':
+  'libs/tenant/data/admin/src/lib/server/stripe-payment-method.ts':
     'A deliberate SUPERSET — it adds `unpaid`. The question is "which of this ' +
     "customer's subscriptions is Stripe billing against, so whose payment " +
     'method is the live one", and an unpaid subscription still has the card ' +

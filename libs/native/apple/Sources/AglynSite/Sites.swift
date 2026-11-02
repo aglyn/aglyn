@@ -149,10 +149,19 @@ public final class SitesListModel {
   }
 }
 
-/// The create-site route's answer, or its refusal with the addresses it suggests instead.
+/// The create-site route's answer, or its refusal with the addresses it suggests instead, or its refusal of the starter
+/// picked, which is about the pick and not the name.
 public enum CreateSiteResult: Equatable, Sendable {
   case created(hostID: String, subdomain: String)
   case refused(message: String, suggestions: [String])
+  case pickRefused(SiteStarterPickRefused)
+}
+
+/// What a site starts from: a style, or a starter from the marketplace. Nothing in Create site is chosen for anyone, so a
+/// create names one of the two.
+public enum SiteStart: Equatable, Sendable {
+  case style(String)
+  case starter(listingID: String)
 }
 
 /// The site-address rule the create route holds (`SUBDOMAIN_PATTERN`).
@@ -179,31 +188,77 @@ public func cleanSubdomainInput(_ text: String) -> String {
   String(text.lowercased().filter { ($0.isLetter && $0.isASCII) || ($0.isNumber && $0.isASCII) || $0 == "-" }.prefix(30))
 }
 
+/// Whether Create site can go ahead: a name, an address the route's pattern takes, and a style the person picked.
+/// Nothing in Create site is chosen for anyone (AGL-4049), so until a style is picked the button stays off. The starter
+/// site has no "Pick for me": that card is the AI start's, and the route refuses it here.
+public func canCreateSite(name: String, subdomain: String, style: String?) -> Bool {
+  !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && isValidSubdomain(subdomain)
+    && SiteStyles.all.contains { $0.id == style }
+}
+
+/// Whether Create site can go ahead from a starter: a name, an address the route's pattern takes, and a starter the site
+/// can be created from here. A price not paid waits to be bought, and an AI starter goes on to its questions, which the
+/// app does not ask: the console's Create site does both.
+public func canCreateSite(name: String, subdomain: String, pick: SiteStarterSummary?, owned: Bool? = nil) -> Bool {
+  !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && isValidSubdomain(subdomain)
+    && siteStarterPickBlock(pick, owned: owned) == nil && pick?.mode == .base
+}
+
 /// What Create site sends. `start: "starter"` is the console's own "Create the
 /// starter site" answer: the site is born with the starter website in the same
 /// request. Without it the server may create the site empty to offer the guided
 /// AI start (`guidedStart` in its answer), and the app has no such start to land
-/// on, which would leave an empty site.
-public func createSiteBody(orgID: String, name: String, subdomain: String) -> [String: String] {
+/// on, which would leave an empty site. `style` is the one the person chose: the
+/// site starts in its look, and the route records it on the site.
+public func createSiteBody(orgID: String, name: String, subdomain: String, style: String) -> [String: String] {
   [
     "displayName": name.trimmingCharacters(in: .whitespacesAndNewlines),
     "subdomain": subdomain.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
     "orgId": orgID,
     "start": "starter",
+    "style": style,
+  ]
+}
+
+/// What Create site sends for a starter from the marketplace, as the console's own "Choose your starter" does: the
+/// listing, with no style, since the starter brings its own look.
+public func createSiteBody(orgID: String, name: String, subdomain: String, starter listingID: String) -> JSONValue {
+  [
+    "displayName": .string(name.trimmingCharacters(in: .whitespacesAndNewlines)),
+    "subdomain": .string(subdomain.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()),
+    "orgId": .string(orgID),
+    "start": "starter",
+    "starter": ["listingId": .string(listingID)],
   ]
 }
 
 /// `POST /api/hosts/create`, the console's own Create site.
-public func createSite(_ api: ConsoleAPIClient, orgID: String, name: String, subdomain: String) async throws
-  -> CreateSiteResult
+public func createSite(_ api: ConsoleAPIClient, orgID: String, name: String, subdomain: String, start: SiteStart)
+  async throws -> CreateSiteResult
 {
+  let body: JSONValue
+  var listing = ""
+  switch start {
+  case .style(let style): body = .from(createSiteBody(orgID: orgID, name: name, subdomain: subdomain, style: style))
+  case .starter(let listingID):
+    body = createSiteBody(orgID: orgID, name: name, subdomain: subdomain, starter: listingID)
+    listing = listingID
+  }
   do {
-    let answer = try await api.request(
-      "/api/hosts/create", method: .post,
-      body: .from(createSiteBody(orgID: orgID, name: name, subdomain: subdomain)))
+    let answer = try await api.request("/api/hosts/create", method: .post, body: body)
     return .created(hostID: answer.field("hostId") ?? "", subdomain: answer.field("subdomain") ?? subdomain)
   } catch let error as ConsoleAPIError where error.status != 0 {
+    if let refused = readSiteStarterPickRefusal(status: error.status, payload: error.body, listingID: listing) {
+      return .pickRefused(refused)
+    }
     let suggestions = error.body?["suggestions"]?.arrayValue?.compactMap(\.stringValue) ?? []
     return .refused(message: error.message, suggestions: suggestions)
   }
+}
+
+/// `POST /api/hosts/create` in the style the person chose.
+public func createSite(_ api: ConsoleAPIClient, orgID: String, name: String, subdomain: String, style: String)
+  async throws -> CreateSiteResult
+{
+  try await createSite(api, orgID: orgID, name: name, subdomain: subdomain, start: .style(style))
 }

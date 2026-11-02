@@ -38,6 +38,16 @@
 /** Where the console serves each style's picture: `<dir>/<id>.webp`. */
 export const SITE_STYLE_PREVIEW_DIR = '/_static/starter/styles'
 
+/**
+ * Where an app reads the same pictures. The console's bot protection answers
+ * `/_static` with a challenge a browser solves and URLSession and OkHttp
+ * cannot, so a picture fetched from there never loads in the native apps; the
+ * public media path has that challenge lifted for every caller. `next.config.js`
+ * rewrites this directory onto {@link SITE_STYLE_PREVIEW_DIR}, one file for one
+ * file, and `site-style-app-pictures.spec.ts` holds the two together.
+ */
+export const SITE_STYLE_APP_PREVIEW_DIR = '/api/media/cdn/site-styles'
+
 /** The width and height every style picture is drawn at. */
 export const SITE_STYLE_PREVIEW_SIZE = { width: 800, height: 800 } as const
 
@@ -95,6 +105,11 @@ export const SITE_STYLES: readonly SiteStyle[] = [
  * card, so a site created with the starter always names a real style.
  */
 export const SITE_STYLE_AUTO = 'auto'
+
+/** A style's picture as an app reads it: see {@link SITE_STYLE_APP_PREVIEW_DIR}. */
+export function siteStyleAppPreview(id: string): string {
+  return `${SITE_STYLE_APP_PREVIEW_DIR}/${id}.webp`
+}
 
 /** Whether a value names one of the {@link SITE_STYLES}. */
 export function isSiteStyleId(value: unknown): value is string {

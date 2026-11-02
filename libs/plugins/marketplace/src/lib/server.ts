@@ -32,6 +32,9 @@ import { registerMarketplaceLockdown } from './server/publisher-lockdown'
 import { publishPluginHandler } from './server/publish-plugin'
 import { verificationRequestHandler } from './server/verification-request'
 import { checkoutHandler } from './server/checkout'
+import { payHandler } from './server/pay'
+import { publisherStandingHandler } from './server/publisher-standing'
+import { starterPublishFactsHandler } from './server/starter-publish-facts'
 import { connectHandler } from './server/connect'
 import { installHandler } from './server/install'
 import { installPluginHandler } from './server/install-plugin'
@@ -137,6 +140,8 @@ export function registerMarketplaceConsoleApi(): void {
   // unread there rather than counted as zero.
   registerRevenueSource(marketplaceRevenueSource, { pluginId: BUNDLE_ID })
   registerPluginApiRoute('marketplace/checkout', checkoutHandler)
+  registerPluginApiRoute('marketplace/pay', payHandler)
+  registerPluginApiRoute('marketplace/publisher-standing', publisherStandingHandler)
   registerPluginApiRoute('marketplace/connect', connectHandler)
   registerPluginApiRoute('marketplace/install', installHandler)
   registerPluginApiRoute('marketplace/install-plugin', installPluginHandler)
@@ -204,6 +209,9 @@ export function registerMarketplaceConsoleApi(): void {
   registerPluginApiRoute('marketplace/publish-template', publishTemplateHandler)
   // A whole site as a site starter, picked in "Create site" (AGL-4049).
   registerPluginApiRoute('marketplace/publish-starter', publishStarterHandler)
+  // What that publish would capture and what stands in its way, for the native
+  // apps, which cannot work out a site's built-in theme for themselves.
+  registerPluginApiRoute('marketplace/starter-publish-facts', starterPublishFactsHandler)
   /*
    * And the search "Choose your starter" lists them from (AGL-4049):
    * summaries only, behind `hosts.create` and `release_site_starters`. `web:`

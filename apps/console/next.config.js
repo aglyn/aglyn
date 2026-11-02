@@ -199,14 +199,27 @@ module.exports = withAglyn({
   // sign-in from a mobile browser never completed. Proxying /__/* lets
   // the client use window.location.host as authDomain (see
   // resolveFirebaseAuthDomain) so the whole handshake stays same-site.
+  //
+  // The site style pictures as the native apps read them (AGL-4049): `/_static`
+  // answers URLSession and OkHttp with a bot challenge they cannot solve, and
+  // the public media path has that challenge lifted, so one directory of
+  // public files is reachable from there too. Anonymous public delivery, as
+  // everything under that path must stay.
   async rewrites() {
     const project = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
-    if (!project) return []
     return [
       {
-        source: '/__/:path*',
-        destination: `https://${project}.firebaseapp.com/__/:path*`,
+        source: '/api/media/cdn/site-styles/:file',
+        destination: '/_static/starter/styles/:file',
       },
+      ...(project
+        ? [
+            {
+              source: '/__/:path*',
+              destination: `https://${project}.firebaseapp.com/__/:path*`,
+            },
+          ]
+        : []),
     ]
   },
   // The brand face's files (AGL-3655). Their names carry the font's version,

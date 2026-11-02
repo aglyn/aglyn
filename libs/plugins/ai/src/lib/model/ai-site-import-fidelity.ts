@@ -27,11 +27,11 @@
  *
  * - **The words**: every line of the source exactly once, as written, and
  *   none of the page's own. A score of words is 1 or the page is wrong.
- * - **The structure**: its sections and their bands; its rows of columns
- *   side by side; its groups by kind, each item its own element with its
- *   parts (an FAQ's question on an accordion, a card's link on the card);
- *   its tables, tab strips, pictures, icons, buttons as the source draws
- *   them, headings and forms.
+ * - **The structure**: its sections, their bands and how wide they run; its
+ *   rows of columns side by side; its groups by kind, each item its own
+ *   element with its parts (an FAQ's question on an accordion, a card's link
+ *   on the card); its tables, tab strips, pictures, icons, buttons as the
+ *   source draws them, headings and forms.
  * - **The frame** (`siteImportFrameFidelity`): the header's top-level items
  *   in order, each menu's entries with their lines and icons, the buttons,
  *   the phone menu holding all of it, labels on one line; the footer's
@@ -47,6 +47,7 @@
  *=========================================*/
 
 import type { SiteImportBlock } from '../site-import/site-import-html'
+import { siteImportWidthOf } from './ai-site-import'
 import type {
   SiteImportBand,
   SiteImportButtonStyle,
@@ -58,6 +59,7 @@ import type {
   SiteImportLayoutSection,
   SiteImportLineRef,
   SiteImportNavTree,
+  SiteImportWidth,
 } from './ai-site-import'
 
 /** The lowest score of structure a page brought in ships at (AGL-4109); words are held at exactly 1. */
@@ -119,6 +121,8 @@ export interface SiteImportPageFidelity {
   sections: SiteImportFidelityCount
   /** Sections drawn in the source's band, in order. */
   bands: SiteImportFidelityCount & { read: SiteImportBand[]; drawn: SiteImportBand[] }
+  /** Sections drawn as wide as the source runs them, or wider (AGL-4083); one the source sets no cap on counts as kept. */
+  widths: SiteImportFidelityCount
   /** The source's rows of two or more columns, set side by side on the page. */
   rows: SiteImportFidelityCount
   /** The source's groups by kind. A group of lines that only share a shape (`text`) is drawn as its lines, and is not scored. */
@@ -392,6 +396,12 @@ class Placement {
         const bestGap = Math.abs(best.at - cursor)
         return gap < bestGap || (gap === bestGap && piece.at >= cursor && best.at < cursor) ? piece : best
       }, null)
+    // A line of marks a build joined to the line before it (a "—" beside its label) is in that line's piece,
+    // never the same mark further down the page, which would leave that one's line with nothing.
+    if (!wordsOf(text).length && previous !== null) {
+      const joined = pieces.find((piece) => this.claimedBy.get(piece) === previous && clean(piece.text) !== text && clean(piece.text).endsWith(text))
+      if (joined) return joined
+    }
     const exact = pieces.filter((piece) => piece.key === key && this.claimedBy.get(piece) === undefined)
     if (exact.length) return pick(exact)
     const padded = ` ${key} `
@@ -620,6 +630,7 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
 
   const pictures = picturesScore(source, built, placement)
   const headings = headingsScore(source, built, placement)
+  const widths = widthsScore(sections, built, roots)
   const forms = ratioBoth(
     sections.reduce((total, section) => total + layoutNodes(section.nodes).filter((node) => node.kind === 'form').length, 0),
     built.order.filter((id) => built.node(id)?.componentId === 'form').length,
@@ -629,6 +640,7 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
     words,
     sections: ratioBoth(sections.length, drawnSections.length),
     bands: { ...ratioKept(read.length, bandsKept), read, drawn },
+    widths,
     rows: ratioKept(rows.source, rows.built),
     groups: Object.fromEntries(
       Object.entries(groups).map(([kind, entry]) => [kind, { groups: ratioKept(entry.groups, entry.groupsKept), items: ratioKept(entry.items, entry.itemsKept) }]),
@@ -692,6 +704,23 @@ function wordsScore(source: SiteImportFidelitySource, built: Built): SiteImportF
   }
 }
 
+const WIDTH_RANK: Readonly<Record<SiteImportWidth, number>> = { sm: 0, md: 1, lg: 2, xl: 3 }
+
+/** The sections as wide as their source: each section's Container against the cap the source sets; a section nothing caps runs the whole page. */
+function widthsScore(sections: readonly SiteImportLayoutSection[], built: Built, roots: ReadonlyArray<string | null>): SiteImportFidelityCount {
+  const kept = sections.filter((section, index) => {
+    const wanted = siteImportWidthOf(section.width)
+    if (!wanted) return true
+    const root = roots[index]
+    if (!root) return false
+    const container = built.under(root).find((id) => built.node(id)?.componentId === 'muiContainer' && !built.node(id)?.props?.['disableGutters'])
+    if (!container) return true
+    const rank = WIDTH_RANK[built.node(container)?.props?.['maxWidth'] as SiteImportWidth]
+    return rank !== undefined && rank >= WIDTH_RANK[wanted]
+  })
+  return ratioKept(sections.length, kept.length)
+}
+
 /** The pictures: placed where the library's copies are known, else counted. */
 function picturesScore(source: SiteImportFidelitySource, built: Built, placement: Placement): SiteImportFidelityCount {
   const refs = source.layout.sections.flatMap((section) => section.lines).filter((ref) => source.blocks[ref]?.kind === 'image' && isLine(source.blocks[ref]))
@@ -716,6 +745,7 @@ function pageMeasures(report: Omit<SiteImportPageFidelity, 'score' | 'lowest'>):
   return [
     ['sections', report.sections],
     ['bands', report.bands],
+    ['widths', report.widths],
     ['rows', report.rows],
     ...Object.entries(report.groups).map(([kind, entry]): [string, SiteImportFidelityCount] => [`${kind} items`, entry.items]),
     ['tables', report.tables],

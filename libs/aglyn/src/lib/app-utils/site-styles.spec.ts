@@ -24,12 +24,14 @@
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import {
+  SITE_STYLE_APP_PREVIEW_DIR,
   SITE_STYLE_AUTO,
   SITE_STYLES,
   hostCreatedEventParams,
   hostStarterChoice,
   isSiteStyleId,
   readHostStarterChoice,
+  siteStyleAppPreview,
   siteStyleOf,
 } from './site-styles'
 
@@ -50,6 +52,14 @@ describe('SITE_STYLES', () => {
   it('has a picture the console serves for every style', () => {
     for (const style of SITE_STYLES) {
       expect(existsSync(join(ROOT, 'apps/console/public', style.preview))).toBe(true)
+    }
+  })
+
+  it('gives an app the same picture on the public media path, one file for one file', () => {
+    expect(SITE_STYLE_APP_PREVIEW_DIR.startsWith('/api/media/cdn/')).toBe(true)
+    for (const style of SITE_STYLES) {
+      const file = style.preview.split('/').pop()
+      expect(siteStyleAppPreview(style.id)).toBe(`${SITE_STYLE_APP_PREVIEW_DIR}/${file}`)
     }
   })
 

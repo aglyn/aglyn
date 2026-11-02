@@ -2,6 +2,7 @@ package com.aglyn.plugins.marketplace
 
 import com.aglyn.pluginhost.NativePluginRegistrar
 import com.aglyn.pluginhost.ScreenLayout
+import com.aglyn.pluginhost.StarterPickerZone
 import com.aglyn.screens.ScreenSpec
 import com.aglyn.screens.SpecScreens
 
@@ -39,6 +40,11 @@ fun registerMarketplaceNative(r: NativePluginRegistrar) {
   // A site's component and layout pages offer Publish to marketplace only where a plugin fills this slot (the console's
   // `hostArtifactPublish` zone); the publish itself is this plugin's spec screens, so the widget draws nothing of its own.
   r.widget("marketplace.artifact-publish", title = "Publish to marketplace", order = 10, slot = "hostArtifactPublish") { _ -> }
+  // Create site lists the marketplace's starters through this slot (the console's `hostStarterPicker` zone), and never names
+  // the plugin that fills it.
+  r.widget("marketplace.starter-picker", title = "Choose your starter", order = 10, slot = StarterPickerZone.SLOT) { context ->
+    StarterPickerWidget(context)
+  }
   r.quickAction("marketplace.open", title = "Marketplace", icon = "storefront", order = 60, screen = MARKETPLACE_BROWSE_SCREEN)
   r.deepLink("marketplace.page", path = "/marketplace", screen = MARKETPLACE_BROWSE_SCREEN)
   r.deepLink("marketplace.listing-page", path = "/marketplace/:listingId", screen = MARKETPLACE_LISTING_SCREEN)

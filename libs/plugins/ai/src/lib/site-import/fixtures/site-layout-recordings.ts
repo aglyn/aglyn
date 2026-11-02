@@ -21,10 +21,11 @@
  * read what they find.
  *
  * `site-layout/` holds five pages of aglyn.com as AglynBot read them on
- * 2026-10-28 and 2026-10-29 (home, product, pricing, contact, one blog post)
- * and one page in the markup a Squarespace site is built with, written for
- * these specs about a studio that does not exist, so the readers are never
- * tuned to one site's markup.
+ * 2026-10-28 and 2026-10-29 (home, product, pricing, contact, one blog post),
+ * its pricing page again as it read on 2026-11-01, which a live import fell
+ * short on (`livePricing`), and one page in the markup a Squarespace site is
+ * built with, written for these specs about a studio that does not exist, so
+ * the readers are never tuned to one site's markup.
  *
  * The aglyn.com recordings keep what the `aglyn-com/` ones dropped and the
  * layout is made of: class names, inline icons and the page's own stylesheet.
@@ -53,6 +54,7 @@ export const SITE_LAYOUT_PAGES = {
   home: { file: 'aglyn-home.html', url: `${SITE_LAYOUT_AGLYN_ORIGIN}/` },
   product: { file: 'aglyn-product.html', url: `${SITE_LAYOUT_AGLYN_ORIGIN}/product` },
   pricing: { file: 'aglyn-pricing.html', url: `${SITE_LAYOUT_AGLYN_ORIGIN}/pricing` },
+  livePricing: { file: 'aglyn-pricing-2026-11.html', url: `${SITE_LAYOUT_AGLYN_ORIGIN}/pricing` },
   contact: { file: 'aglyn-contact.html', url: `${SITE_LAYOUT_AGLYN_ORIGIN}/contact` },
   post: { file: 'aglyn-blog-post.html', url: `${SITE_LAYOUT_AGLYN_ORIGIN}/blog/multi-site-cost-sheet-2026` },
   pottery: { file: 'squarespace-pottery.html', url: `${SITE_LAYOUT_POTTERY_ORIGIN}/` },

@@ -51,6 +51,11 @@
  *    the add-on tokens a stored proposal may name), with `readUpgradeProposal` + `upgradeProposalSummary` answers for
  *    a set of stored proposals both platforms replay.
  *
+ * 6. Choose your starter (AGL-4049): the marketplace's starter search as the
+ *    console asks it and reads it (`starter-query.ts`), what a pick stands for
+ *    (`site-starter-pick.ts`) and the address that reopens Create site on one
+ *    (`site-create-return.ts`), as answers both platforms replay.
+ *
  * Values cross, never code: the native trees still read nothing but
  * generated files. `--check` fails when any output is stale.
  */
@@ -222,13 +227,92 @@ async function build() {
   // The styles a new site can start in (AGL-4049): Create site asks one before
   // it creates anything, on every door the native apps included.
   const styles = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/site-styles.ts'))
-  const siteStyles = styles.SITE_STYLES.map(({ id, name, blurb, preview, alt }) => ({ id, name, blurb, preview, alt }))
+  // Each picture on the path an app can read: `/_static` answers URLSession and OkHttp with a challenge.
+  const siteStyles = styles.SITE_STYLES.map(({ id, name, blurb, alt }) => ({ id, name, blurb, preview: styles.siteStyleAppPreview(id), alt }))
+  // The logo, dark logo and favicon Create site takes (AGL-4119): the fields, the approved hint, the upload ceiling,
+  // and what the console says of a file that did not make it, which the apps' tests are held to.
+  const brandFiles = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/site-brand-files.ts'))
+  const sizeHints = await jiti.import(join(ROOT, 'apps/console/constants/media-size-hints.ts'))
+  const uploadLimits = await jiti.import(join(ROOT, 'apps/console/utils/media-upload-limits.ts'))
+  const siteBrand = {
+    slots: brandFiles.SITE_BRAND_SLOTS.map(({ slot, label, noun }) => ({ slot, label, noun })),
+    hint: sizeHints.LOGO_SPACING_HINT,
+    maxBytes: uploadLimits.signedUploadMaxBytes('image/png'),
+    noticeCases: [[], ['logo'], ['favicon'], ['logoDark', 'logo'], ['logo', 'logoDark', 'favicon']].map((missed) => ({ missed, notice: brandFiles.siteBrandMissedNotice(missed) })),
+  }
+  // Choose your starter (AGL-4049): the search as the console asks and reads it, what a pick stands for, and the address
+  // that reopens Create site on one. The apps ask the same route, and their tests are held to these answers.
+  const starterQuery = await jiti.import(join(ROOT, 'libs/plugins/marketplace/src/lib/model/starter-query.ts'))
+  const starterListing = await jiti.import(join(ROOT, 'libs/plugins/marketplace/src/lib/model/site-starter-listing.ts'))
+  const starterPick = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/site-starter-pick.ts'))
+  const siteCreate = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/site-create-return.ts'))
+  const starterRow = (over = {}) => ({
+    listingId: 'fp-starter-trades-base', displayName: 'Home services & trades', description: 'A trades site', authorName: 'Aglyn', official: true,
+    priceUsd: 0, previewImageUrl: 'https://console.test/_static/starter/styles/trades.webp',
+    facets: { kind: 'trades', base: 'material3', fonts: null, pages: 5, mode: 'base' }, category: 'Home services & trades', ...over,
+  })
+  const siteStarters = {
+    path: starterQuery.STARTER_SEARCH_PATH,
+    title: starterPick.CHOOSE_STARTER_COPY.starters.title,
+    lede: starterPick.CHOOSE_STARTER_COPY.starters.lede,
+    wordMax: starterQuery.STARTER_SEARCH_WORD_MAX,
+    searchMax: starterListing.SITE_STARTER_SEARCH_MAX,
+    paramCases: [
+      { orgId: ' o1 ', mode: 'base' },
+      { orgId: 'o1', mode: 'ai', word: '  bakery  ', limit: 12 },
+      { orgId: 'o1', mode: 'base', word: 'a'.repeat(300), filter: { kind: 'trades', base: 'material3', fonts: 'inter' }, limit: 500 },
+      { orgId: 'o1', mode: 'base', word: '   ', filter: { kind: ' ' }, limit: 0 },
+      { orgId: 'o1', mode: 'base', include: 'fp-starter-trades-base' },
+      { orgId: 'o1', mode: 'base', include: 'not a listing id' },
+    ].map((input) => ({ input, params: [...starterQuery.starterQueryParams(input).entries()] })),
+    summaryCases: [
+      starterRow(),
+      starterRow({ priceUsd: 12, owned: false, official: false, authorName: 'Northwind' }),
+      starterRow({ priceUsd: 12.5, owned: true }),
+      starterRow({ priceUsd: '7' }),
+      starterRow({ priceUsd: -3, previewImageUrl: '', owned: 'yes', category: '  ' }),
+      starterRow({ facets: { pages: 2.9, mode: 'ai' }, answers: { brief: 'never read' }, screens: [] }),
+      { listingId: 'bare' },
+      { listingId: '   ' },
+      { displayName: 'no id' },
+      'not a row',
+      null,
+    ].map((value) => ({ value, summary: starterQuery.readStarterSummary(value) })),
+    answerCases: [
+      { rows: [starterRow(), starterRow(), 'junk', { listingId: 'two' }], labels: { base: { material3: 'Material' } } },
+      { rows: 'nope' },
+      'nope',
+      null,
+    ].map((json) => ({ json, rows: starterQuery.parseStarterSearchAnswer(json).rows.map((row) => row.listingId) })),
+    priceCases: [0, -1, 12, 12.5, 3.1, Number.NaN].map((usd) => ({ usd: Number.isNaN(usd) ? null : usd, label: starterQuery.starterPriceLabel(usd) })),
+    pagesCases: [0, -1, 1, 2, 3.9].map((pages) => ({ pages, label: starterQuery.starterPagesLabel(pages) })),
+    blockCases: [
+      { pick: null, owned: null },
+      { pick: starterRow(), owned: null },
+      { pick: starterRow({ priceUsd: 12 }), owned: null },
+      { pick: starterRow({ priceUsd: 12, owned: true }), owned: null },
+      { pick: starterRow({ priceUsd: 12, owned: false }), owned: null },
+      { pick: starterRow({ priceUsd: 12, owned: true }), owned: false },
+      { pick: starterRow({ priceUsd: 12, owned: false }), owned: true },
+    ].map(({ pick, owned }) => ({ pick, owned, block: starterPick.siteStarterPickBlock(pick, owned ?? undefined) })),
+    refusalCases: [
+      { status: 402, payload: { error: 'Buy it first', code: 'purchase_required', listingId: 'l1', priceUsd: 12 }, listingId: 'l1' },
+      { status: 404, payload: { error: 'That starter is gone', listingId: 'l1' }, listingId: 'l1' },
+      { status: 403, payload: { error: '  ', listingId: 'l1' }, listingId: 'l1' },
+      { status: 409, payload: { error: 'That subdomain is taken', suggestions: [] }, listingId: 'l1' },
+      { status: 402, payload: { error: 'Buy it first', listingId: 'l2' }, listingId: 'l1' },
+      { status: 402, payload: null, listingId: 'l1' },
+    ].map(({ status, payload, listingId }) => ({ status, payload, listingId, refused: starterPick.readSiteStarterPickRefusal(status, payload, listingId) })),
+    returnCases: ['fp-starter-trades-base', ' l1 ', 'not a listing id', ''].map((listingId) => ({
+      listingId, params: siteCreate.siteCreateReturnQuery(listingId) ? [...siteCreate.siteCreateReturnQuery(listingId).entries()] : null,
+    })),
+  }
   const proposalCases = PROPOSAL_CASE_ORGS.map((org) => {
     const standing = proposal.standingUpgradeProposal(org)
     const summary = standing ? proposal.upgradeProposalSummary(standing) : null
     return { org, plan: standing?.plan ?? null, summary, bundled: standing ? summary !== m.PLAN_LABELS[standing.plan] : false }
   })
-  const json = `${JSON.stringify({ '//': 'GENERATED by tools/scripts/generate-native-derived-values.mjs', plans, defaults, grantedFrom, addOnNotices, cases, goalEvents, releaseFlags, flagCases, marketplaceFee, bundleWords, proposalCases, siteStyles }, null, 2)}\n`
+  const json = `${JSON.stringify({ '//': 'GENERATED by tools/scripts/generate-native-derived-values.mjs', plans, defaults, grantedFrom, addOnNotices, cases, goalEvents, releaseFlags, flagCases, marketplaceFee, bundleWords, proposalCases, siteStyles, siteBrand, siteStarters }, null, 2)}\n`
   const swiftMap = (o, v = (x) => JSON.stringify(x)) => `[${Object.entries(o).map(([k, x]) => `"${k}": ${v(x)}`).join(', ')}]`
   const kotlinMap = (o, v = (x) => JSON.stringify(x)) => `mapOf(${Object.entries(o).map(([k, x]) => `"${k}" to ${v(x)}`).join(', ')})`
   const list = (a) => a.map((x) => `"${x}"`).join(', ')
@@ -290,6 +374,31 @@ ${siteStyles.map((style) => `    SiteStyle(id: ${JSON.stringify(style.id)}, name
   ]
 }
 
+/// One of the files Create site takes (\`site-brand-files.ts\`): the host field it fills, its label, how a sentence names it.
+public struct SiteBrandSlot: Equatable, Hashable, Sendable {
+  public let slot: String
+  public let label: String
+  public let noun: String
+}
+
+/// What Create site's logo fields say and take.
+public enum SiteBrandFiles {
+  public static let slots: [SiteBrandSlot] = [
+${siteBrand.slots.map((entry) => `    SiteBrandSlot(slot: ${JSON.stringify(entry.slot)}, label: ${JSON.stringify(entry.label)}, noun: ${JSON.stringify(entry.noun)}),`).join('\n')}
+  ]
+  public static let hint = ${JSON.stringify(siteBrand.hint)}
+  public static let maxBytes = ${siteBrand.maxBytes}
+}
+
+/// Where Choose your starter asks, and how much a search may ask for.
+public enum SiteStarterSearch {
+  public static let path = ${JSON.stringify(siteStarters.path)}
+  public static let title = ${JSON.stringify(siteStarters.title)}
+  public static let lede = ${JSON.stringify(siteStarters.lede)}
+  public static let wordMax = ${siteStarters.wordMax}
+  public static let max = ${siteStarters.searchMax}
+}
+
 /// Each release flag as the Remote Config template publishes it.
 public enum ReleaseFlagDefaults {
   public static let byKey: [String: ReleaseFlagValue] = [
@@ -347,6 +456,27 @@ object SiteStyles {
   val all: List<SiteStyle> = listOf(
 ${siteStyles.map((style) => `    SiteStyle(${[style.id, style.name, style.blurb, style.preview, style.alt].map((value) => JSON.stringify(value).replace(/\$/g, '\\$')).join(', ')}),`).join('\n')}
   )
+}
+
+/** One of the files Create site takes (\`site-brand-files.ts\`): the host field it fills, its label, how a sentence names it. */
+data class SiteBrandSlot(val slot: String, val label: String, val noun: String)
+
+/** What Create site's logo fields say and take. */
+object SiteBrandFiles {
+  val slots: List<SiteBrandSlot> = listOf(
+${siteBrand.slots.map((entry) => `    SiteBrandSlot(${JSON.stringify(entry.slot)}, ${JSON.stringify(entry.label)}, ${JSON.stringify(entry.noun)}),`).join('\n')}
+  )
+  const val HINT = ${JSON.stringify(siteBrand.hint)}
+  const val MAX_BYTES = ${siteBrand.maxBytes}
+}
+
+/** Where Choose your starter asks, and how much a search may ask for. */
+object SiteStarterSearch {
+  const val PATH = ${JSON.stringify(siteStarters.path)}
+  const val TITLE = ${JSON.stringify(siteStarters.title)}
+  const val LEDE = ${JSON.stringify(siteStarters.lede)}
+  const val WORD_MAX = ${siteStarters.wordMax}
+  const val MAX = ${siteStarters.searchMax}
 }
 
 /** Each release flag as the Remote Config template publishes it. */

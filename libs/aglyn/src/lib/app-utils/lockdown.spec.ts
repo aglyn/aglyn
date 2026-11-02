@@ -517,6 +517,11 @@ describe('lockdownFeaturesForPluginApiPath — the dispatcher map', () => {
       'checkout',
       'marketplace-installs',
     ])
+    // The same purchase, paid in the console (AGL-4049).
+    expect(lockdownFeaturesForPluginApiPath('marketplace/pay')).toEqual([
+      'checkout',
+      'marketplace-installs',
+    ])
   })
 
   it('publish, report and review paths map to NOTHING — the incident response must not gag its own inputs', () => {

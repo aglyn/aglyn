@@ -9,6 +9,75 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.3.0 — 2026-11-02
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.2.0...v1.3.0)
+
+### Added
+
+- **ai:** a form on a page brought in is rebuilt as the site's own form ([AGL-4083](https://linear.app/aglyn/issue/AGL-4083), [AGL-4084](https://linear.app/aglyn/issue/AGL-4084))
+- **native:** the pick's note holds the foot of the sheet, and the Apple drive ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **native:** publish a site starter, and pick one in Create site ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **marketplace:** the apps ask what a starter publish would capture ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **marketplace:** charging the saved card takes billing.manage ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **native:** Create site takes a logo, a dark logo and a favicon ([AGL-4119](https://linear.app/aglyn/issue/AGL-4119))
+- **marketplace:** the publish form asks the server whether a workspace sells as the platform ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **marketplace:** Buy pays in the console, the card form moves to a lib, Stripe stays lazy ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **native:** Create site asks a style before it creates anything ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **marketplace:** the pay door, an invoice on the card on file; the webhook records it as a session ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **marketplace:** the platform org at the staff waiver sells with no transfer and no payout account ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **marketplace:** Publish as a starter, its theme chosen and each setup step said first ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+
+### Fixed
+
+- **tenant:** a site's notice goes out as a 503 with its page in the body ([AGL-4110](https://linear.app/aglyn/issue/AGL-4110))
+- **ai:** the measured import records its whole run of copied pages ([AGL-4083](https://linear.app/aglyn/issue/AGL-4083))
+- **ai:** an import never ends with pages left, and fits one document for its whole run ([AGL-4083](https://linear.app/aglyn/issue/AGL-4083))
+- **ai:** plan cards, rows and page widths are drawn as the source draws them ([AGL-4083](https://linear.app/aglyn/issue/AGL-4083), [AGL-4084](https://linear.app/aglyn/issue/AGL-4084))
+- **marketplace:** the plan lock sentence keeps its console specs, and the style name is allowed ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **ai:** the fidelity report reads the look a site wears, and import credits are what was measured ([AGL-4083](https://linear.app/aglyn/issue/AGL-4083), [AGL-4109](https://linear.app/aglyn/issue/AGL-4109))
+- **ai:** a stock photo names its world, and alt text reads as a plain description ([AGL-4092](https://linear.app/aglyn/issue/AGL-4092))
+- **billing:** Stripe fields follow the color scheme actually on screen ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **crm:** a person with no address reads cleanly in the merge dialog ([AGL-4122](https://linear.app/aglyn/issue/AGL-4122))
+- **billing:** a usage sweep lists its orgs and sites once, not on every chunk ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
+- **native:** a new site opens on its Home, and Create site stays closed ([AGL-4129](https://linear.app/aglyn/issue/AGL-4129))
+- **native:** the full-screen panel runs under the system bars, a taller Mac sheet ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **marketplace:** on a listing, a starter's Buy asks for hosts.create, as the pay door does ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **marketplace:** the pay panel has its own surface, and a starter's Buy asks for hosts.create on the listing too ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **marketplace:** read the measurement id by dot, so Next inlines it ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **marketplace:** a partial address reads as a missing one at the quote, as test mode answers it ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **marketplace:** Publish as a starter holds its host listen itself, through the console's hook; specs follow the moved card form ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **native:** the domain sentence sits under the fields, a filled check on the picked card ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **console:** the site style pictures reach the native apps ([AGL-4127](https://linear.app/aglyn/issue/AGL-4127))
+
+### Changed
+
+- **marketplace:** resolveSale holds what a sale decides before Stripe ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+
+### Documentation
+
+- **ai:** the guide says what happens when an import stops before it finishes ([AGL-4083](https://linear.app/aglyn/issue/AGL-4083))
+- **marketplace:** site starters in the Aglyn app ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **marketplace:** the pay door's comments read as written ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **marketplace:** paying in the console, the receipt, and the platform org marker ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **marketplace:** name the Figma section Publish as a starter is drawn in ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **marketplace:** Publish as a starter, its section and shot on the seeded emulator ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+
+<details>
+<summary>Also in this release: 6 test, 3 chore</summary>
+
+- **ai:** a rebuilt form is among an import's outputs ([AGL-4083](https://linear.app/aglyn/issue/AGL-4083))
+- **ai:** the import specs read a form rebuilt on a page ([AGL-4083](https://linear.app/aglyn/issue/AGL-4083))
+- **native:** the starter cases name no real host ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **marketplace:** the starter specs typecheck ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **release:** a new major version waits for the owner, semver stays
+- **aglyn:** the status list's documented copy moved with the payment method reader ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **console:** the card spec stands in for the console's useHost ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **commerce:** the money door list names where the marketplace sale is decided ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **tools:** raise the Linear id floor to AGL-4127, read off the workspace ([AGL-4127](https://linear.app/aglyn/issue/AGL-4127))
+
+</details>
+
 ## v1.2.0 — 2026-11-01
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.1.0...v1.2.0)

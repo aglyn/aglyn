@@ -192,6 +192,13 @@ const HAND_ROLLED = new Map([
       'rather than trusted: this entry is void if the fixed transfer goes.',
   ],
   [
+    'libs/plugins/marketplace/src/lib/server/pay.ts',
+    'The same sale as the entry above, paid in the console on an Invoice ' +
+      '(AGL-4049): tax on top and the same FIXED `transfer_data[amount]`, ' +
+      'measured in test mode to leave the tax on the platform. Void under the ' +
+      'same condition.',
+  ],
+  [
     'libs/plugins/commerce/src/lib/server/checkout.ts',
     'The one-off arm calls the shared emitter. The SUBSCRIPTION arm cannot — ' +
       'a Stripe Subscription accepts no `transfer_data[amount]`, only ' +
@@ -232,6 +239,7 @@ export function readsOnly(code) {
  */
 const FIXED_TRANSFER_REQUIRED = new Set([
   'libs/plugins/marketplace/src/lib/server/checkout.ts',
+  'libs/plugins/marketplace/src/lib/server/pay.ts',
 ])
 
 /**
@@ -346,7 +354,9 @@ export function inspect(path, code) {
     hits(code, 'transfer_data[destination]').length > 0
   const enablesStripeTax = hits(code, 'automatic_tax[enabled]').length > 0
   const emitsFeeAmount = hits(code, 'application_fee_amount]').length > 0
-  const emitsFixedTransfer = hits(code, 'transfer_data][amount]').length > 0
+  const emitsFixedTransfer =
+    hits(code, 'transfer_data][amount]').length > 0 ||
+    hits(code, 'transfer_data[amount]').length > 0
   // Delegating to the shared emitter IS pinning the transfer — it is the
   // whole point of the emitter. `checkout.ts` reaches it for its one-off arm
   // while hand-rolling the subscription arm beside it, so a file can be both

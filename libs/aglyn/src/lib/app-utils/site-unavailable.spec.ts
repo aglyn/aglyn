@@ -57,6 +57,12 @@ describe('which page requests answer 503 (AGL-4110)', () => {
     expect(siteUnavailableForRequest({ preview: true }, ENTRY)).toBe(false)
   })
 
+  it('the middleware reading the page for its own 503 is left alone', () => {
+    const NOTICE = { ...PUBLIC, noticeRequest: true }
+    expect(siteUnavailableForRequest({ maintenance: true }, NOTICE)).toBe(false)
+    expect(siteUnavailableForRequest({ preview: true }, NOTICE)).toBe(false)
+  })
+
   it('a site in neither mode, or a verdict that says nothing, is untouched', () => {
     expect(siteUnavailableForRequest({}, PUBLIC)).toBe(false)
     expect(

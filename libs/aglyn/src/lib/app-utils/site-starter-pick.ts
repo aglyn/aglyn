@@ -16,6 +16,7 @@
  */
 
 import type { SiteStarterSummary } from '../plugin-manager/plugin-site-starters'
+import { PLATFORM_BRAND_NAME } from './platform-brand'
 
 /**
  * A starter picked in "Choose your starter" (AGL-4049), as Create site
@@ -23,6 +24,22 @@ import type { SiteStarterSummary } from '../plugin-manager/plugin-site-starters'
  * create's refusal of it asks for. Pure, so every surface that offers the
  * picker — the console, the native apps — decides the same way.
  */
+
+/** The heading's words, for the starters or for the styles drawn in their place. */
+export const CHOOSE_STARTER_COPY = {
+  starters: {
+    title: 'Choose your starter',
+    lede:
+      `${PLATFORM_BRAND_NAME}'s styles come first, then starters from the marketplace. ` +
+      'Nothing is chosen for you, and you can change everything later.',
+  },
+  styles: {
+    title: 'Choose a style',
+    lede:
+      'Your site starts with a home page, a header and a footer in the style you choose. ' +
+      'You can change everything later.',
+  },
+} as const
 
 /**
  * What stands between a pick and Create site: nothing picked (`none`), or a

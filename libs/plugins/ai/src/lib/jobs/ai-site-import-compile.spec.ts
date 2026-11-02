@@ -31,10 +31,11 @@
  */
 
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
-import { AI_LAYOUT_DESIGN_TOOL } from '../layout-language/ai-layout-language'
+import { AI_LAYOUT_DESIGN_TOOL, aiReadLayoutDesign } from '../layout-language/ai-layout-language'
 import type { AiLayoutRawTree } from '../layout-language/ai-layout-tree'
 import { AI_MODEL_CATALOG, aiCatalogEntry } from '../providers/catalog'
 import { resolveAiRoute } from '../providers/routing'
+import type { SiteImportLayoutGroup, SiteImportLayoutNode } from '../model/ai-site-import'
 import { SITE_LAYOUT_PAGES, siteLayoutRecording, siteLayoutSameSite, type SiteLayoutPageName } from '../site-import/fixtures/site-layout-recordings'
 import { extractSiteImportPage, type SiteImportBlock } from '../site-import/site-import-html'
 import { siteImportLayout, siteImportLayoutCounts } from '../site-import/site-import-layout'
@@ -44,6 +45,7 @@ import { aiSiteImportUnbuilt } from './ai-site-import-publish'
 import { aiImportedPageCheck, aiLayoutDesignPrompt } from './ai-job-page-language'
 import {
   aiCompileImportedPage,
+  aiSiteImportDesignedSections,
   aiImportedPageListing,
   aiImportedPageListingOwed,
   aiImportPageModel,
@@ -356,6 +358,259 @@ describe('aglyn.com /pricing', () => {
   })
 })
 
+describe('aglyn.com /pricing as a live import fell short of it (AGL-4083)', () => {
+  const { tree, doc, violations } = build('livePricing')
+  const text = (id: string) => String(tree.nodes[id]?.props?.['children'] ?? '')
+  const plans = () => role(tree, 'card').filter((id) => under(tree, id).some((at) => tree.nodes[at].componentId === 'muiButton') && under(tree, id).some((at) => /^(Free|Starter|Pro|Business)$/.test(text(at))))
+  const inCard = (card: string, kind: string) => under(tree, card).filter((id) => tree.nodes[id].componentId === kind)
+
+  it('builds with nothing the page check refuses', () => {
+    expect(violations).toEqual([])
+  })
+
+  it('draws a card a plan, with one button each, as the source draws it, going where it goes', () => {
+    expect(plans()).toHaveLength(4)
+    const buttons = plans().map((card) => {
+      const list = inCard(card, 'muiButton')
+      expect(list).toHaveLength(1)
+      const props = tree.nodes[list[0]].props ?? {}
+      return [text(list[0]), props['variant'], props['href']]
+    })
+    expect(buttons).toEqual([
+      ['Get started', 'outlined', 'https://app.aglyn.com/signup'],
+      ['Choose', 'outlined', 'https://app.aglyn.com/signup?plan=starter&interval=year'],
+      ['Start Pro', 'contained', 'https://app.aglyn.com/signup?plan=pro&interval=year'],
+      ['Choose', 'outlined', 'https://app.aglyn.com/signup?plan=business&interval=year'],
+    ])
+  })
+
+  it('sets the tag on the same line as the plan’s name', () => {
+    const [badge, ...more] = role(tree, 'badge')
+    expect(more).toEqual([])
+    expect(text(badge)).toBe('POPULAR')
+    const line = role(tree, 'titleRow').find((id) => under(tree, id).includes(badge)) as string
+    expect(tree.nodes[line].props).toMatchObject({ direction: 'row', justifyContent: 'space-between' })
+    expect(under(tree, line).filter((id) => text(id) === 'Pro')).toHaveLength(1)
+  })
+
+  it('sets a price large with what it is for beside it', () => {
+    const price = role(tree, 'price')
+    expect(price).toHaveLength(2)
+    for (const id of price) {
+      const [figure, period] = tree.nodes[id].nodes as string[]
+      expect(tree.nodes[id].props).toMatchObject({ direction: 'row', alignItems: 'baseline' })
+      expect(tree.nodes[figure].props?.['variant']).toBe('h3')
+      expect(text(period)).toBe('/mo')
+    }
+    expect(price.map((id) => text((tree.nodes[id].nodes as string[])[0]))).toEqual(['$39', '$99'])
+  })
+
+  it('draws the higher plans as rows, each a Grid whose last cell holds its button', () => {
+    const rows = role(tree, 'ruledRow').filter((id) => tree.nodes[id].componentId === 'muiGrid')
+    expect(rows).toHaveLength(4)
+    expect(rows.map((id) => tree.nodes[id].props?.['container'])).toEqual([true, true, true, true])
+    const last = rows.map((id) => {
+      const cell = (tree.nodes[id].nodes as string[]).at(-1) as string
+      const button = under(tree, cell).find((at) => tree.nodes[at].componentId === 'muiButton') as string
+      return [text(button), tree.nodes[button].props?.['href'] ?? tree.nodes[button].props?.['screenId']]
+    })
+    expect(last.slice(0, 3)).toEqual([
+      ['CHOOSE', 'https://app.aglyn.com/signup?plan=scale&interval=year'],
+      ['CHOOSE', 'https://app.aglyn.com/signup?plan=advanced&interval=year'],
+      ['CHOOSE', 'https://app.aglyn.com/signup?plan=agency&interval=year'],
+    ])
+    expect(last[3][0]).toBe('CONTACT SALES')
+  })
+
+  it('draws a label and its value at either end of one line, the group’s Stack ruling them', () => {
+    const rows = role(tree, 'ruledRow').filter((id) => tree.nodes[id].componentId === 'muiStack')
+    expect(rows).toHaveLength(69)
+    for (const id of rows) expect(tree.nodes[id].props).toMatchObject({ direction: 'row', justifyContent: 'space-between' })
+    const groups = role(tree, 'rows')
+    expect(groups).toHaveLength(7)
+    for (const id of groups) expect(tree.nodes[id].props?.['divider']).toBe('line')
+    const row = rows.find((id) => (tree.nodes[id].nodes as string[]).some((at) => text(at) === 'Custom domain & SSL')) as string
+    expect((tree.nodes[row].nodes as string[]).map(text)).toEqual(['Custom domain & SSL', '—'])
+  })
+
+  it('leaves a row’s label a line, as the source has it, not a heading of its own', () => {
+    const titles = Object.keys(tree.nodes).filter((id) => text(id) === 'Custom domain & SSL')
+    expect(titles.map((id) => tree.nodes[id].props?.['component'])).toContain('p')
+  })
+
+  it('holds what is above the plans’ rows to the words a heading measures, every section as wide as its source', () => {
+    for (const { node } of sectionsOf(tree)) {
+      const container = (node.nodes ?? []).find((id) => tree.nodes[id].componentId === 'muiContainer') as string
+      expect(tree.nodes[container].props?.['maxWidth']).toBe('xl')
+    }
+  })
+
+  it('places every line of the page exactly once', () => {
+    expect(doc.blocks.length).toBeGreaterThan(400)
+    const shown = Object.values(tree.nodes).flatMap((node) => (typeof node.props?.['children'] === 'string' ? [clean(node.props['children'] as string)] : []))
+    for (const line of ['POPULAR', '/mo', 'Start Pro', 'Everything in Starter, plus:']) expect(shown).toContain(line)
+  })
+})
+
+describe('what a design answer may change (AGL-4083)', () => {
+  const groupsIn = (name: SiteLayoutPageName) => (docOf(name).layout as NonNullable<AiSiteImportDocument['layout']>).sections.map((section) => {
+    let count = 0
+    const visit = (nodes: readonly SiteImportLayoutNode[]) => {
+      for (const node of nodes) {
+        if (node.kind === 'group') count += 1
+        if (node.kind === 'row') for (const cell of node.cells) visit(cell.nodes)
+        if (node.kind === 'tabs') for (const tab of node.tabs) visit(tab.panel)
+      }
+    }
+    visit(section.nodes)
+    return count
+  })
+  const all = (name: SiteLayoutPageName, group: { kind: string; style: string }) => ({ sections: groupsIn(name).map((count) => ({ hero: 'none', band: 'source', align: 'source', groups: Array.from({ length: count }, () => group) })) })
+  /** A page compiled under an answer the tool could give, as the page check reads it. */
+  const answered = (name: SiteLayoutPageName, group: { kind: string; style: string }) => {
+    const doc = docOf(name)
+    const names = aiSiteImportSectionNames(doc)
+    return aiCompileImportedPage({
+      doc,
+      sectionIds: names.map((_, index) => `sec-${index}`),
+      plan: { title: doc.title, sections: names.map((section) => ({ name: section, uses: [], items: 0 })) },
+      targets: TARGETS as never,
+      answer: aiReadLayoutDesign(all(name, group), names.length),
+    })
+  }
+  const listed = (name: SiteLayoutPageName) => answered(name, { kind: 'list', style: 'cards' })
+
+  it('never joins a card’s title to its words: a titled group asked to be a list stays apart, ruled', () => {
+    const { tree } = listed('home')
+    const words = Object.values(tree.nodes).map((node) => String(node.props?.['children'] ?? ''))
+    const group = (docOf('home').layout as NonNullable<AiSiteImportDocument['layout']>).sections.flatMap((section) => section.nodes).find((node) => node.kind === 'group' && node.group === 'cards' && (node.items[0]?.lines.length ?? 0) > 1) as SiteImportLayoutGroup
+    const item = group.items[0]
+    const blocks = docOf('home').blocks
+    const title = clean((blocks[item.title as number] as { text: string }).text)
+    expect(words).toContain(title)
+    expect(role(tree, 'ruled').length).toBeGreaterThan(0)
+  })
+
+  it('still reads a group of one line an item as a list', () => {
+    expect(role(listed('home').tree, 'list').length).toBeGreaterThan(0)
+  })
+
+  it('says it kept the group apart', () => {
+    expect(listed('home').settled.some((note) => /kept apart/.test(note.what))).toBe(true)
+  })
+
+  it('never draws a card as a figure when the figure has no place for its link, its bullets or its icon', () => {
+    const compiled = answered('home', { kind: 'stats', style: 'cards' })
+    expect(compiled.words).toBe(compiled.sourceWords)
+    expect(compiled.settled.some((note) => /more than a figure can show/.test(note.what))).toBe(true)
+    const shown = Object.values(compiled.tree.nodes).flatMap((node) => (typeof node.props?.['children'] === 'string' ? [clean(node.props['children'] as string)] : []))
+    const links = (docOf('home').layout as NonNullable<AiSiteImportDocument['layout']>).sections.flatMap((section) => section.nodes).flatMap((node) => (node.kind === 'group' ? node.items.flatMap((item) => item.link ?? []) : []))
+    expect(links.length).toBeGreaterThan(0)
+    for (const ref of links) expect(shown).toContain(clean((docOf('home').blocks[ref] as { text: string }).text))
+  })
+
+  it('still reads a group of figures as figures, whatever it was read as', () => {
+    const doc = docOf('product')
+    const figures = Object.values(answered('product', { kind: 'stats', style: 'cards' }).tree.nodes).filter((node) => node.props?.['variant'] === 'h2' && node.props?.['component'] === 'p')
+    // Its 4 figures, and its 3 numbered steps: nothing of either is lost as a figure.
+    expect(figures).toHaveLength(7)
+    expect(doc.layout?.sections.some((section) => section.nodes.some((node) => node.kind === 'group' && node.group === 'stats'))).toBe(true)
+  })
+
+  it('never repaints a section’s own lighter ground with a hero of dimmed words', () => {
+    const doc = docOf('home')
+    const names = aiSiteImportSectionNames(doc)
+    const heroOf = (hero: string) => aiSiteImportDesignedSections(doc, aiReadLayoutDesign({ sections: [{ hero, band: 'source', align: 'source', groups: [] }] }, names.length))
+    const source = heroOf('column')
+    expect(source.sections[0]?.hero).toBe('column')
+    for (const hero of ['cover', 'poster']) {
+      const designed = heroOf(hero)
+      expect(designed.sections[0]?.hero).toBe('column')
+      expect(designed.settled.some((note) => note.what.includes(`the ${hero} hero set aside`))).toBe(true)
+    }
+  })
+
+  it('still lays dimmed words over a picture its source draws dark behind them', () => {
+    const doc = docOf('pottery')
+    const names = aiSiteImportSectionNames(doc)
+    expect((doc.layout as NonNullable<AiSiteImportDocument['layout']>).sections[0]).toMatchObject({ band: 'dark', hero: { picture: 'behind' } })
+    expect(aiSiteImportDesignedSections(doc, aiReadLayoutDesign({ sections: [{ hero: 'poster', band: 'source', align: 'source', groups: [] }] }, names.length)).sections[0]?.hero).toBe('poster')
+  })
+
+  it('keeps a dark source’s ground under a hero of words on a card, and a guided start’s as it was', () => {
+    const { stored, violations } = build('pottery', { sections: [{ hero: 'panel', band: 'source', align: 'source', groups: [] }] })
+    expect(violations).toEqual([])
+    expect(stored['sec-0']?.props?.['colorScheme']).toBe('dark')
+  })
+
+  it('leaves a group of rows as its source sets them, whatever the answer reads it as', () => {
+    const shape = (tree: AiLayoutRawTree) => role(tree, 'ruledRow').map((id) => tree.nodes[id].componentId)
+    expect(shape(answered('livePricing', { kind: 'list', style: 'pictures' }).tree)).toEqual(shape(build('livePricing').tree))
+    expect(shape(answered('livePricing', { kind: 'stats', style: 'cards' }).tree)).toEqual(shape(build('livePricing').tree))
+  })
+})
+
+describe('a read kept before a plan’s button was its own (AGL-4083)', () => {
+  it('still draws a short link among an item’s words as a button, and keeps a long one as its words', () => {
+    const doc = docOf('livePricing')
+    const layout = doc.layout as NonNullable<AiSiteImportDocument['layout']>
+    const stripCtas = (nodes: readonly SiteImportLayoutNode[]): SiteImportLayoutNode[] =>
+      nodes.map((node) => {
+        if (node.kind === 'group') {
+          return { ...node, items: node.items.map(({ ctas: _ctas, link, text, ...item }) => ({ ...item, ...(link || text ? { text: [...(text ?? []), ...(link ?? [])] } : {}) })) }
+        }
+        if (node.kind === 'row') return { ...node, cells: node.cells.map((cell) => ({ nodes: stripCtas(cell.nodes) })) }
+        if (node.kind === 'tabs') return { ...node, tabs: node.tabs.map((tab) => ({ ...tab, panel: stripCtas(tab.panel) })) }
+        return node
+      })
+    const stored = { ...doc, layout: { ...layout, sections: layout.sections.map((section) => ({ ...section, nodes: stripCtas(section.nodes) })) } }
+    const names = aiSiteImportSectionNames(stored)
+    const compiled = aiCompileImportedPage({
+      doc: stored,
+      sectionIds: names.map((_, index) => `sec-${index}`),
+      plan: { title: doc.title, sections: names.map((name) => ({ name, uses: [], items: 0 })) },
+      targets: TARGETS as never,
+    })
+    const buttons = Object.values(compiled.tree.nodes).filter((node) => node.componentId === 'muiButton').map((node) => node.props?.['children'])
+    expect(buttons).toEqual(expect.arrayContaining(['Get started', 'Choose', 'Start Pro']))
+  })
+})
+
+describe('how wide a section is drawn (AGL-4083)', () => {
+  const widths = (tree: AiLayoutRawTree) =>
+    sectionsOf(tree).map(({ id }) => tree.nodes[under(tree, id).find((at) => tree.nodes[at].componentId === 'muiContainer' && !tree.nodes[at].props?.['disableGutters']) as string]?.props?.['maxWidth'])
+
+  it('draws every section as wide as its source runs it, in the Container’s own Max Width', () => {
+    for (const name of ['home', 'product', 'pricing', 'contact'] as const) expect(new Set(widths(build(name).tree))).toEqual(new Set(['xl']))
+    expect(widths(build('post').tree)).toEqual(['md', 'xl', 'xl'])
+    expect(new Set(widths(build('pottery').tree))).toEqual(new Set(['lg']))
+  })
+
+  it('widens a hero’s own Container with its section, and leaves its reading measure', () => {
+    const doc = docOf('home')
+    const sections = (doc.layout as NonNullable<AiSiteImportDocument['layout']>).sections
+    expect(sections[0]?.hero?.picture).toBeTruthy()
+    const { tree } = build('home', { sections: [{ hero: 'column', band: 'source', align: 'source', groups: [] }] })
+    expect(widths(tree)[0]).toBe('xl')
+    const measures = Object.values(tree.nodes).filter((node) => node.componentId === 'muiContainer' && node.props?.['disableGutters'])
+    for (const measure of measures) expect(measure.props?.['maxWidth']).not.toBe('xl')
+  })
+
+  it('holds a long read with no cap of its source’s to a reading measure, anything else to a page', () => {
+    const doc = docOf('pottery')
+    const layout = doc.layout as NonNullable<AiSiteImportDocument['layout']>
+    const designed = aiSiteImportDesignedSections({ ...doc, layout: { ...layout, sections: layout.sections.map(({ width: _width, ...section }) => section) } })
+    expect(new Set(designed.sections.map((section) => section.width))).toEqual(new Set(['lg']))
+    const long = { kind: 'line', line: 0 } as const
+    const reading = aiSiteImportDesignedSections({
+      ...doc,
+      blocks: Array.from({ length: 6 }, (_, at) => ({ kind: 'paragraph', text: `Paragraph ${at} of a long read.`, region: 'main' })) as never,
+      layout: { ...layout, sections: [{ name: 'Terms', from: 'heading', band: 'plain', background: null, align: 'start', nodes: Array.from({ length: 6 }, (_, at) => ({ ...long, line: at })), lines: [0, 1, 2, 3, 4, 5] }] },
+    })
+    expect(reading.sections[0]?.width).toBe('md')
+  })
+})
+
 describe('aglyn.com /contact', () => {
   it('writes to each address the source gives, a button that opens the mail app', () => {
     const { tree } = build('contact')
@@ -368,6 +623,31 @@ describe('aglyn.com /contact', () => {
     expect(violations).toEqual([])
     const form = Object.values(tree.nodes).find((node) => node.componentId === 'form')
     expect(form?.props?.['formId']).toBe('form-contact')
+  })
+
+  const placed = (forms: NonNullable<AiSiteImportDocument['forms']> | undefined, saved: Array<{ id: string; name: string }>) => {
+    const doc = { ...docOf('contact'), ...(forms ? { forms } : {}) }
+    const names = aiSiteImportSectionNames(doc)
+    const { tree: built } = aiCompileImportedPage({
+      doc,
+      sectionIds: names.map((_, index) => `sec-${index}`),
+      plan: { title: doc.title, sections: names.map((name) => ({ name, uses: [], items: 0 })) },
+      targets: { ...TARGETS, forms: saved } as never,
+    })
+    return Object.values(built.nodes).filter((node) => node.componentId === 'form').map((node) => node.props?.['formId'])
+  }
+
+  it('places the form rebuilt for this one, on a site of several (AGL-4083)', () => {
+    expect(placed([{ index: 0, formId: 'form-b' }], [{ id: 'form-a', name: 'A' }, { id: 'form-b', name: 'B' }])).toEqual(['form-b'])
+  })
+
+  it('places nothing for a form with no room, and never the site’s other form in its place (AGL-4083)', () => {
+    expect(placed([{ index: 0, formId: null }], [{ id: 'form-a', name: 'A' }])).toEqual([])
+  })
+
+  it('reads a page kept before its forms were rebuilt as it always did: the site’s one form, none of several', () => {
+    expect(placed(undefined, [{ id: 'form-a', name: 'A' }])).toEqual(['form-a'])
+    expect(placed(undefined, [{ id: 'form-a', name: 'A' }, { id: 'form-b', name: 'B' }])).toEqual([])
   })
 })
 

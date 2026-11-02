@@ -21,11 +21,47 @@ import {
   type ConsolePublishableArtifact,
 } from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
-import { Button, Stack, Typography } from '@mui/material'
+import { Alert, Button, Stack, Typography } from '@mui/material'
 import { useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
 import useCurrentOrg from '../hooks/use-current-org'
+import { useHost } from '../hooks/use-host'
+import { useReleaseFlag } from '../hooks/use-release-flags'
 import PluginWidgetSlot, { useSlotWidgets } from './plugin-widget-slot.component'
+
+/**
+ * "Publish as a starter", which starts from the site's own name and
+ * description. Its own component so the host listen it needs is taken only
+ * where the offer is on: the section reads that document from its layout.
+ */
+function PublishAsStarterButton(props: {
+  hostId: string
+  orgId: string | null
+  onPublish: (target: ConsolePublishableArtifact) => void
+}) {
+  const { hostId, orgId, onPublish } = props
+  const {
+    doc: { data: host },
+  } = useHost({ hostId })
+  return (
+    <Button
+      size="small"
+      variant="outlined"
+      color="primary"
+      onClick={() =>
+        onPublish({
+          kind: 'siteStarter',
+          hostId,
+          orgId,
+          displayName: host?.displayName ?? '',
+          description: host?.seo?.description ?? '',
+        })
+      }
+    >
+      {'Publish as a starter'}
+    </Button>
+  )
+}
 
 /**
  * Save-as-template (AGL-137): publishes this host's published screens +
@@ -37,12 +73,19 @@ import PluginWidgetSlot, { useSlotWidgets } from './plugin-widget-slot.component
  * floor and the publisher agreement box every publish carries (AGL-3407,
  * AGL-4105) are the marketplace's, not the console's. With nothing drawing that zone there
  * is nowhere to publish to, so the card is not shown at all.
+ *
+ * "Publish as a starter" (AGL-4049) hands the same zone the site as a
+ * `siteStarter`: a ready-made website people create a new site from in
+ * Create site. Site starters are released behind `release_site_starters`,
+ * a platform gate, so the offer is left out until the flag is on for the
+ * workspace, and staff see it before then with the staff marker.
  */
 export function SiteTemplateCard(props: { hostId: string }) {
   const { hostId } = props
   const { orgId } = useCurrentOrg()
   const [target, setTarget] = useState<ConsolePublishableArtifact | null>(null)
   const { widgets } = useSlotWidgets([CONSOLE_WIDGET_SLOTS.hostArtifactPublish])
+  const starters = useReleaseFlag('release_site_starters')
   if (!widgets.length) return null
 
   return (
@@ -60,17 +103,33 @@ export function SiteTemplateCard(props: { hostId: string }) {
             'as a template others can start from. Re-publishing bumps the ' +
             'version.'}
         </Typography>
-        <Button
-          size="small"
-          variant="contained"
-          color="primary"
-          sx={{ alignSelf: 'flex-start' }}
-          onClick={() =>
-            setTarget({ kind: 'site', hostId, orgId: orgId ?? null })
-          }
-        >
-          {'Publish as template'}
-        </Button>
+        {starters.visible ? (
+          <Typography variant="body2" color="text.secondary">
+            {'Or publish it as a site starter: a ready-made website people ' +
+              'pick when they create a new site, reviewed before it is listed.'}
+          </Typography>
+        ) : null}
+        {starters.ready && starters.staffPreview ? (
+          <Alert severity="warning" data-staff-only="release_site_starters">
+            {'Release-flagged: customers do not see Publish as a starter yet. ' +
+              'You see it because you are staff.'}
+          </Alert>
+        ) : null}
+        <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
+          <Button
+            size="small"
+            variant="contained"
+            color="primary"
+            onClick={() =>
+              setTarget({ kind: 'site', hostId, orgId: orgId ?? null })
+            }
+          >
+            {'Publish as template'}
+          </Button>
+          {starters.visible ? (
+            <PublishAsStarterButton hostId={hostId} orgId={orgId ?? null} onPublish={setTarget} />
+          ) : null}
+        </Stack>
       </Stack>
       <PluginWidgetSlot
         slot={CONSOLE_WIDGET_SLOTS.hostArtifactPublish}

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { selectCronChunk } from '../utils/cron-chunk'
+import { listOncePerSweep, selectCronChunk } from '../utils/cron-chunk'
 
 describe('selectCronChunk', () => {
   const ids = ['e', 'a', 'd', 'b', 'c']
@@ -89,5 +89,64 @@ describe('selectCronChunk', () => {
   it('de-duplicates, so one subject is never billed twice in a pass', () => {
     const chunk = selectCronChunk(['a', 'a', 'b'], null, 10)
     expect(chunk.items).toEqual(['a', 'b'])
+  })
+})
+
+describe('listOncePerSweep', () => {
+  const MINUTE = 60_000
+  const listing = (value: string) => jest.fn(async () => value)
+
+  it('reuses the listing for every later chunk of the sweep', async () => {
+    const list = listing('subjects')
+    await listOncePerSweep('reuse', null, list, 0)
+    await expect(
+      listOncePerSweep('reuse', 'org-10', list, MINUTE),
+    ).resolves.toBe('subjects')
+    await expect(
+      listOncePerSweep('reuse', 'org-20', list, 2 * MINUTE),
+    ).resolves.toBe('subjects')
+    expect(list).toHaveBeenCalledTimes(1)
+  })
+
+  it('never starts a sweep from the last sweep’s list', async () => {
+    // Inside the age limit on purpose: the cursor decides this, not the clock.
+    await listOncePerSweep('fresh', null, listing('old'), 0)
+    await expect(
+      listOncePerSweep('fresh', null, listing('new'), 1),
+    ).resolves.toBe('new')
+  })
+
+  it('lists for itself when nothing is held, as on a cold instance', async () => {
+    const list = listing('subjects')
+    await expect(
+      listOncePerSweep('cold', 'org-10', list, 0),
+    ).resolves.toBe('subjects')
+    expect(list).toHaveBeenCalledTimes(1)
+  })
+
+  it('stops reusing a listing past the age limit', async () => {
+    await listOncePerSweep('aged', null, listing('old'), 0)
+    await expect(
+      listOncePerSweep('aged', 'org-10', listing('new'), 10 * MINUTE),
+    ).resolves.toBe('new')
+  })
+
+  it('keeps sweeps apart', async () => {
+    await listOncePerSweep('one', null, listing('one'), 0)
+    await expect(
+      listOncePerSweep('two', 'org-10', listing('two'), 1),
+    ).resolves.toBe('two')
+  })
+
+  it('does not hold a failed listing for the chunks after it', async () => {
+    const failed = jest.fn(async () => {
+      throw new Error('deadline exceeded')
+    })
+    await expect(listOncePerSweep('failed', null, failed, 0)).rejects.toThrow(
+      'deadline exceeded',
+    )
+    await expect(
+      listOncePerSweep('failed', 'org-10', listing('recovered'), 1),
+    ).resolves.toBe('recovered')
   })
 })

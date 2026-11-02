@@ -31,7 +31,8 @@ import { compress } from '@aglyn/aglyn/app-utils/compress'
 import { decodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { SITE_IMPORT_REPLAY_HOME_ANSWER, siteImportReplayFrame, siteImportReplayPage, type SiteImportReplayPage } from '../site-import/fixtures/site-import-fidelity-replay'
 import { SITE_LAYOUT_PAGES, type SiteLayoutPageName } from '../site-import/fixtures/site-layout-recordings'
-import type { SiteImportGroupKind } from './ai-site-import'
+import { AI_LAYOUT_ALIGNS, AI_LAYOUT_DESIGN_BANDS, AI_LAYOUT_DESIGN_GROUP_KINDS, AI_LAYOUT_DESIGN_SOURCE, AI_LAYOUT_GROUP_STYLES, AI_LAYOUT_IMPORT_HEROES } from '../layout-language/ai-layout-language'
+import type { SiteImportGroupKind, SiteImportLayoutNode } from './ai-site-import'
 import {
   SITE_IMPORT_FIDELITY_THRESHOLD,
   siteImportFidelity,
@@ -80,6 +81,7 @@ const WHOLE: Record<
   home: { sections: 11, rows: 2, groups: { cards: 28, steps: 3, list: 12, faq: 11 }, tables: 0, tabs: 0, pictures: 2, icons: 34, lone: 1, buttons: 2, unlinked: 1, headings: 10, forms: 0, words: 1581 },
   product: { sections: 11, rows: 1, groups: { logos: 8, cards: 19, steps: 3, stats: 4, pricing: 3, faq: 7 }, tables: 0, tabs: 0, pictures: 3, icons: 31, lone: 1, buttons: 6, unlinked: 0, headings: 10, forms: 0, words: 1012 },
   pricing: { sections: 7, rows: 1, groups: { pricing: 11, cards: 69, faq: 11 }, tables: 3, tabs: 3, pictures: 0, icons: 24, lone: 0, buttons: 4, unlinked: 0, headings: 9, forms: 0, words: 2292 },
+  livePricing: { sections: 7, rows: 1, groups: { pricing: 11, cards: 69, faq: 11 }, tables: 3, tabs: 3, pictures: 0, icons: 24, lone: 0, buttons: 4, unlinked: 0, headings: 9, forms: 0, words: 2292 },
   contact: { sections: 3, rows: 1, groups: { cards: 4 }, tables: 0, tabs: 0, pictures: 0, icons: 4, lone: 0, buttons: 0, unlinked: 0, headings: 7, forms: 1, words: 120 },
   // The post's second row is a byline, drawn small over its words, not as columns across the page.
   post: { sections: 3, rows: 1, groups: { list: 5, logos: 4, cards: 3 }, tables: 1, tabs: 0, pictures: 5, icons: 0, lone: 0, buttons: 2, unlinked: 0, headings: 10, forms: 0, words: 585 },
@@ -104,6 +106,7 @@ describe.each(Object.keys(SITE_LAYOUT_PAGES) as SiteLayoutPageName[])('%s: score
     expect(report.lowest).toBeNull()
     expect(report.sections).toEqual({ source: whole.sections, built: whole.sections, ratio: 1 })
     expect(report.bands).toMatchObject({ source: whole.sections, built: whole.sections, ratio: 1 })
+    expect(report.widths).toEqual({ source: whole.sections, built: whole.sections, ratio: 1 })
     expect(report.rows).toEqual({ source: whole.rows, built: whole.rows, ratio: 1 })
     expect(Object.fromEntries(Object.entries(report.groups).map(([kind, entry]) => [kind, entry.items.built]))).toEqual(whole.groups)
     for (const entry of Object.values(report.groups)) {
@@ -147,6 +150,57 @@ describe('aglyn.com Home, the rows §2.5 of the plan holds it to', () => {
     expect(report.score).toBe(1)
     expect(report.words).toEqual(scored('home').words)
     expect(report.groups).toEqual(scored('home').groups)
+  })
+})
+
+/*------------------------------------------
+ * No design answer costs a page its structure
+ *-----------------------------------------*/
+
+/** Each section's groups, counted as the answer numbers them. */
+function groupsBySection(name: SiteLayoutPageName): number[] {
+  return page(name).source.layout.sections.map((section) => {
+    const count = (nodes: readonly SiteImportLayoutNode[]): number =>
+      nodes.reduce((total, node) => {
+        if (node.kind === 'group') return total + 1
+        if (node.kind === 'row') return total + node.cells.reduce((sum, cell) => sum + count(cell.nodes), 0)
+        if (node.kind === 'tabs') return total + node.tabs.reduce((sum, tab) => sum + count(tab.panel), 0)
+        return total
+      }, 0)
+    return count(section.nodes)
+  })
+}
+
+/** One answer the tool admits, the same to every section and every group of a page. */
+function answerOf(name: SiteLayoutPageName, group: { kind: string; style: string }, section: { hero?: string; band?: string; align?: string } = {}): Record<string, unknown> {
+  return { sections: groupsBySection(name).map((count) => ({ hero: 'none', band: 'source', align: 'source', ...section, groups: Array.from({ length: count }, () => group) })) }
+}
+
+/** Every answer the tool admits, by what it chooses: each kind by each style, and each hero, band and alignment over the source's groups. */
+function everyAnswer(name: SiteLayoutPageName): Array<[string, Record<string, unknown>]> {
+  const kinds = [AI_LAYOUT_DESIGN_SOURCE, ...AI_LAYOUT_DESIGN_GROUP_KINDS]
+  const keep = { kind: AI_LAYOUT_DESIGN_SOURCE, style: 'cards' }
+  return [
+    ...kinds.flatMap((kind) => AI_LAYOUT_GROUP_STYLES.map((style): [string, Record<string, unknown>] => [`${kind} / ${style}`, answerOf(name, { kind, style })])),
+    ...AI_LAYOUT_IMPORT_HEROES.map((hero): [string, Record<string, unknown>] => [`hero ${hero}`, answerOf(name, keep, { hero })]),
+    ...AI_LAYOUT_DESIGN_BANDS.map((band): [string, Record<string, unknown>] => [`band ${band}`, answerOf(name, keep, { band })]),
+    ...AI_LAYOUT_ALIGNS.map((align): [string, Record<string, unknown>] => [`align ${align}`, answerOf(name, keep, { align })]),
+  ]
+}
+
+describe.each(Object.keys(SITE_LAYOUT_PAGES) as SiteLayoutPageName[])('%s: no design answer the tool admits costs it its structure', (name) => {
+  it('stays whole under every kind, style, hero, band and alignment', () => {
+    const whole = scored(name)
+    const fell: string[] = []
+    for (const [label, answer] of everyAnswer(name)) {
+      const built = siteImportReplayPage(name, { answer, ...(name === 'contact' ? { forms: FORM } : {}) })
+      const report = siteImportFidelity(built.source, built.tree)
+      const groups = Object.entries(report.groups).filter(([, entry]) => entry.items.ratio < 1).map(([kind, entry]) => `${kind} ${entry.items.built}/${entry.items.source}`)
+      const short = [...(built.violations.length ? ['refused'] : []), ...(report.words.ratio < 1 ? [`words ${report.words.ratio}`] : []), ...groups, ...(report.score < 1 ? [`score ${report.score} (${report.lowest})`] : [])]
+      if (short.length) fell.push(`${label}: ${short.join(', ')}`)
+    }
+    expect(fell).toEqual([])
+    expect(whole.score).toBe(1)
   })
 })
 
@@ -222,6 +276,56 @@ describe('a measure sees what is lost', () => {
     expect(report.rows.built).toBe(0)
     expect(report.score).toBe(0)
     expect(report.lowest).toBe('rows')
+  })
+
+  it('widths: a section drawn narrower than its source runs it, and not one drawn wider', () => {
+    const { source, tree } = page('livePricing')
+    const containers = idsOf(tree.nodes as Nodes, (node) => node.componentId === 'muiContainer' && node.props?.['maxWidth'] === 'xl')
+    const narrower = siteImportFidelity(source, changed(tree, (nodes) => (((nodes[containers[0] as string] as Nodes[string]).props as Record<string, unknown>)['maxWidth'] = 'md')))
+    expect(narrower.widths).toEqual({ source: 7, built: 6, ratio: 6 / 7 })
+    expect(narrower.lowest).toBe('widths')
+    expect(narrower.score).toBe(6 / 7)
+
+    const post = page('post')
+    const column = idsOf(post.tree.nodes as Nodes, (node) => node.componentId === 'muiContainer' && node.props?.['maxWidth'] === 'md')[0] as string
+    const wider = siteImportFidelity(post.source, changed(post.tree, (nodes) => (((nodes[column] as Nodes[string]).props as Record<string, unknown>)['maxWidth'] = 'xl')))
+    expect(wider.widths.ratio).toBe(1)
+  })
+
+  it('widths: a section the source sets no cap on counts as kept', () => {
+    const { source, tree } = page('home')
+    const uncapped = { ...source, layout: { ...source.layout, sections: source.layout.sections.map(({ width: _width, ...section }) => section) } }
+    const report = siteImportFidelity(uncapped, changed(tree, (nodes) => {
+      for (const id of idsOf(nodes, (node) => node.componentId === 'muiContainer')) ((nodes[id] as Nodes[string]).props as Record<string, unknown>)['maxWidth'] = 'sm'
+    }))
+    expect(report.widths).toEqual({ source: 11, built: 11, ratio: 1 })
+  })
+
+  it('groups: a value of marks alone, joined to its label by a build, is still in its row', () => {
+    const { source, tree } = page('livePricing')
+    const report = siteImportFidelity(
+      source,
+      changed(tree, (nodes) => {
+        // The label's words and the value's mark in one line, as a build that read the rows as a list drew them.
+        for (const id of idsOf(nodes, (node) => node.componentId === 'muiStack' && node.props?.['justifyContent'] === 'space-between')) {
+          const row = nodes[id] as Nodes[string]
+          const [label, value] = row.nodes ?? []
+          const labelNode = nodes[label as string]
+          const valueNode = nodes[value as string]
+          if (!labelNode?.props || typeof valueNode?.props?.['children'] !== 'string' || /[\p{L}\p{N}]/u.test(valueNode.props['children'])) continue
+          labelNode.props['children'] = `${String(labelNode.props['children'])} ${valueNode.props['children']}`
+          row.nodes = [label as string]
+        }
+      }),
+    )
+    expect(report.groups.cards?.items).toEqual({ source: 69, built: 69, ratio: 1 })
+    expect(report.words.ratio).toBe(1)
+  })
+
+  it('groups: a mark is never taken from the row further down that holds its own', () => {
+    const { source, tree } = page('livePricing')
+    const report = siteImportFidelity(source, tree)
+    expect(report.groups.cards?.groups).toEqual({ source: 6, built: 6, ratio: 1 })
   })
 
   it('groups: an FAQ with no accordion is no FAQ, though every word stays', () => {

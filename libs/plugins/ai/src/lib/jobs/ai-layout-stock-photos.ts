@@ -91,7 +91,7 @@ import { aiStockBusinessNoun } from './ai-stock-business-nouns'
  *    never fills anything. A picture of a thing takes only a hit naming its
  *    OBJECT (the head noun, past "set", "gift", "kit": "bowl" in "nesting
  *    bowl set", "candle" in "candle gift set") AND either the site's domain
- *    or the subject's own two-word phrase ("bud vase"). A broad, hero or
+ *    or the thing's own two-word name ("bud vase"). A broad, hero or
  *    about search takes only a hit naming the domain. The accepted are
  *    ranked: the object in the hit's first tags (what the photo is OF) over
  *    a mention in its last, the subject's other words, the domain. Among
@@ -3276,11 +3276,11 @@ function hitWords(photo: Pick<StockPhoto, 'tags' | 'alt' | 'pageUrl'>) {
   // and "dirt bike" are phrases a world names; the page address is read whole.
   const lead = termsOf([...tags.slice(0, 3), slug])
   const all = termsOf([...tags, photo.alt ?? '', slug])
-  const phrases = [
-    ...tags.map((tag) => stemList(tag).join(' ')),
-    stemList(photo.alt ?? '').join(' '),
-    stemList(slug).join(' '),
-  ]
+  const said = [...tags.map((tag) => stemList(tag).join(' ')), stemList(photo.alt ?? '').join(' ')]
+  const phrases = [...said, stemList(slug).join(' ')]
+  // The opening of its page address and no further: past that it runs its tags
+  // together, and "kitesurfer-young-rider-kitesurfing" says no "young rider" (AGL-4092).
+  const whole = [...said, stemList(slug).slice(0, 2).join(' ')]
   const leadPhrases = [
     ...tags.slice(0, 3).map((tag) => stemList(tag).join(' ')),
     stemList(slug).join(' '),
@@ -3300,7 +3300,7 @@ function hitWords(photo: Pick<StockPhoto, 'tags' | 'alt' | 'pageUrl'>) {
       .filter((word) => word.length > 1)
       .map(aiStockStem),
   )
-  return { lead, all, phrases, leadPhrases, firstPhrase, rejected, words }
+  return { lead, all, phrases, whole, leadPhrases, firstPhrase, rejected, words }
 }
 
 /** Whether a phrase is among a hit's phrases, word for word. */
@@ -3322,6 +3322,26 @@ function leadsWithWorld(tags: readonly string[], world: ReadonlySet<string>, dom
       (term) => Boolean(term) && (world.has(term) || domain.has(term)),
     )
   })
+}
+
+/**
+ * People named by what they do in any world, which says nothing of which
+ * (AGL-4092): a rider rides a dirt bike, a horse or a kite, and a driver a race
+ * car or a bus.
+ */
+const ANY_WORLD_PEOPLE = words('rider racer driver player member competitor champion')
+
+/**
+ * Whether a subject's last two words, as stems, are a thing's own name, which
+ * says what a photo is OF in any world (AGL-3660): a potter's "bud vase",
+ * "espresso cup". Never what someone or something is like, and never a person
+ * (AGL-4092): a motocross team's "young rider" took a kitesurfer, and a
+ * person's world is whatever they do there, which the two words do not say.
+ */
+function aiStockPhraseNamesAThing(pair: string): boolean {
+  const [kind = '', head = ''] = pair.split(' ')
+  if (DESCRIBING.has(kind) || QUALITIES.has(kind)) return false
+  return !PEOPLE_NOUNS.has(head) && !ANY_WORLD_PEOPLE.has(head) && !ADULT_PEOPLE_STEMS.includes(head)
 }
 
 /**
@@ -3438,8 +3458,9 @@ export function aiStockSensitive(
  * How well a hit shows what a slot needs (AGL-3660), or 0 when it must not
  * fill it: a mockup or a blank never; a topic the site never named never
  * ({@link aiStockSensitive}); a picture of a thing only when the hit
- * names its object AND either the site's world or the subject's own
- * two-word phrase ("bud vase", "wick trimmer"); anything else only when it
+ * names its object AND either the site's world or, said whole, the thing's own
+ * two-word name ("bud vase", "wick trimmer", never "young rider",
+ * {@link aiStockPhraseNamesAThing}); anything else only when it
  * names the site's world (when the site names one). Among the accepted, the
  * object among the hit's first tags counts 4 (a mention among its last, 2),
  * the subject's two-word phrase 3, each of its other words 1, and the
@@ -3572,6 +3593,8 @@ export function aiStockRelevance(
     phrases.some((phrase) => Boolean(phrase) && among([hit.firstPhrase], phrase))
   const pair = subject.length >= 2 ? subject.slice(-2).join(' ') : ''
   const phrased = Boolean(pair) && among(hit.phrases, pair)
+  // Its own name, which stands for the business's world where the hit names none of it.
+  const itsOwnThing = phrased && among(hit.whole, pair) && aiStockPhraseNamesAThing(pair)
   let score = 0
   if (judgement.strict && object) {
     // An object with kin is named only by them: "melt" alone is resin art.
@@ -3583,7 +3606,7 @@ export function aiStockRelevance(
     // The business's own world, never any word of its type (AGL-4092): a cat
     // tagged "hungry" named "breakfast", and a European alley "street", of
     // "Taco food trailer: street and breakfast tacos".
-    if (own.length && !ownWorld && !phrased) return 0
+    if (own.length && !ownWorld && !itsOwnThing) return 0
     score += leading ? 4 : 2
     if (kinNamed) score += 3
     if (firstNamed(kin.length ? kin : [object])) score += 1
@@ -3800,7 +3823,27 @@ const DESCRIBING = words(
     // How a scene feels or looks, never a thing in it (AGL-3988): "mountain,
     // snow, winter, cold, couple, color, landscape" is a couple in the snow.
     'cold warm hot chilly freezing frozen icy color colors colour colours landscape landscapes ' +
-    'panorama panoramic vista scene scenes',
+    'panorama panoramic vista scene scenes ' +
+    // What a thing is like, which a tag gives alone (AGL-4092): "A legal and a right", "An extreme and a motorcross".
+    'legal central extreme electric free open deep fast slow evil ill pregnant basic raw loose abstract dirty ' +
+    'attractive alternative gigantic spicy crispy crunchy salty savory delicious hungry',
+)
+
+/**
+ * A people's or a country's adjective (AGL-4092), an adjective like any other:
+ * "Tacos and a mexican" read as a person. Never a thing alone; before a thing it
+ * says what kind, with its capital ("Mexican food", "a German shepherd"), and
+ * of a person it is left out, as {@link DESCRIBING}'s peoples are ("mexican man"
+ * is a man). "Polish" is not one: "nail polish".
+ */
+const DEMONYMS = words(
+  'mexican italian french greek spanish portuguese german austrian swiss dutch belgian swedish norwegian danish finnish ' +
+    'icelandic irish scottish welsh english british russian ukrainian czech slovak hungarian romanian bulgarian serbian ' +
+    'croatian bosnian albanian turkish persian iranian iraqi syrian lebanese israeli palestinian arabian arabic egyptian ' +
+    'moroccan tunisian algerian ethiopian kenyan nigerian ghanaian pakistani bangladeshi nepalese tibetan burmese ' +
+    'cambodian laotian malaysian indonesian filipino taiwanese mongolian australian canadian brazilian argentinian ' +
+    'argentine chilean colombian peruvian venezuelan ecuadorian bolivian guatemalan salvadoran honduran nicaraguan cuban ' +
+    'dominican jamaican haitian hawaiian texan californian eurasian siberian tuscan sicilian venetian parisian cajun creole',
 )
 
 /**
@@ -3842,8 +3885,29 @@ const MASS_NOUNS = words(
     'pottery glass paper music art hair makeup chalk paint ink dust stone marble concrete steel metal ' +
     'skincare equipment decor wildlife weather traffic wine beer chocolate rice sugar flour milk ' +
     'cheese honey oil ice fire light sunlight dough sourdough pastry dessert people foliage greenery faculty staff ' +
-    'clothing bedding frosting icing flooring',
+    'clothing bedding frosting icing flooring ' +
+    // Said with an article, these read as a slip (AGL-4092): "A tofu", "A salsa", "A yoga".
+    'tofu salsa guacamole beef pork meat bacon ham pasta butter cream yogurt yoghurt oatmeal popcorn seafood sushi ' +
+    'cinnamon basil lavender wheat sand mud dirt gravel moss smog leather plastic porcelain cargo cutlery tableware ' +
+    'apparel sportswear workwear signage infrastructure agriculture medicine homework math shampoo gastronomy ' +
+    'physiotherapy podiatry yoga pilates zumba karate judo golf chess poker ballet',
 )
+
+/**
+ * A motor sport's name (AGL-4092): alone, said with no article ("Motocross"),
+ * and never a thing anyone holds. Said after a place as it is, as a meet: "A
+ * motocross at dawn".
+ */
+const SPORT_NAMES = words('motocross supercross enduro motorsport bmx fmx')
+
+/** Words too general to say what a photo shows where a tag names its sport: "A bike", "A race" (AGL-4092). */
+const GENERAL_THINGS = words('bike race ride')
+
+/** Plurals a thing is named by: "a sports car", "a farmers market". Any other leading a tag is no one thing: "tacos pastor". */
+const NAMING_PLURALS = words('sports arts crafts goods sales news clothes farmers')
+
+/** Things {@link NAMED_PLACES} spells as a place: "a turkey" of "turkey, roast". */
+const THINGS_NAMED_AS_PLACES = words('turkey cologne')
 
 /** Nouns plural without an "-s": said without an article, "women in a classroom". */
 const PLURAL_NOUNS = words('men women people children feet teeth mice geese sheep fish')
@@ -3870,7 +3934,9 @@ const ABSTRACT_NOUNS = words(
     'moment moments memory memories fashion style ' +
     'photo photos picture pictures image images shot shots shoot shoots spot spots ' +
     'read write learn study lift move remove focus relax think sit smile laugh eat swim teach enjoy celebrate explore ' +
-    'hike can',
+    'hike can ' +
+    // What a photo feels like, or a doing, never what it shows (AGL-4092): "action, bike", "legal, right", "race, action, racer, adventure".
+    'action adventure speed right rights bake build speak',
 )
 
 /** Words ending as an idea does that are things: "a station", "a city", "a ship". */
@@ -3935,8 +4001,16 @@ const PARENTS = words('father mother dad mom mum parent parents grandfather gran
 /** A child a photo shows beside a parent (AGL-3988). */
 const CHILDREN = words('child children kid kids baby babies toddler toddlers girl girls boy boys son sons daughter daughters')
 
-/** How a family's word is said: "a dad" is a father (AGL-3988). */
-const SAID_AS: Readonly<Record<string, string>> = { dad: 'father', dads: 'fathers', mom: 'mother', moms: 'mothers', mum: 'mother', mums: 'mothers' }
+/** How a tag's word is said: "a dad" is a father (AGL-3988), and a library's "motorcross" is spelled right (AGL-4092). */
+const SAID_AS: Readonly<Record<string, string>> = {
+  dad: 'father',
+  dads: 'fathers',
+  mom: 'mother',
+  moms: 'mothers',
+  mum: 'mother',
+  mums: 'mothers',
+  motorcross: 'motocross',
+}
 
 /**
  * A body's parts, never a thing a photo is described by (AGL-3856): "A girl
@@ -4087,6 +4161,9 @@ function tagWords(tag: string): string[] {
     .filter(Boolean)
 }
 
+/** Whether a word is said as many, whatever a word ending as a plural does: "tacos", never "lens". */
+const saysMany = (word: string) => aiStockStem(word) !== word && !/^(?:lens|canvas|atlas|gas|bus)$/.test(word)
+
 /**
  * A tag as a phrase of an English description (AGL-3856): "a wedding dress",
  * "an attorney", "books", "chalk", "Columbus"; `null` for a tag that names no
@@ -4099,14 +4176,17 @@ function describedTag(tag: string, proper: ReadonlySet<string>): string | null {
     DESCRIBING.has(word) ||
     QUALITIES.has(word) ||
     /(?:ous|ful)$/.test(word) ||
-    (word.length > 4 && /[^e]ed$/.test(word))
+    (word.length > 4 && /(?:[^e]ed|ical)$/.test(word))
   const all = tagWords(tag)
+  const ofPerson = PEOPLE_NOUNS.has(all[all.length - 1] as string)
   // "Beautiful flowers" shows flowers; "roasted" shows nothing; "photo model"
   // is a model and "traveling couples" are couples: a word before the last
-  // that is a doing says what they do, never what they are.
+  // that is a doing says what they do, never what they are. A demonym is said
+  // only before a thing (AGL-4092).
   const list = all.filter(
     (word, index) =>
       !describing(word) &&
+      !(DEMONYMS.has(word) && (all.length === 1 || ofPerson)) &&
       !(all.length > 1 && /^(?:photo|picture|image)$/.test(word)) &&
       !(index < all.length - 1 && index > 0 && word.endsWith('ing') && !COUNTED_ING.has(word)),
   )
@@ -4117,7 +4197,9 @@ function describedTag(tag: string, proper: ReadonlySet<string>): string | null {
   if (/^(?:out|up|off|down|away|on|in)$/.test(list[list.length - 1] as string)) return null
   if (list.some((word) => BRANDS.has(word))) return null
   if (list.every((word) => proper.has(word)))
-    return list.map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`).join(' ')
+    return list.map(capitalized).join(' ')
+  // A city or a country the site's own words do not name is no thing (AGL-4092): "A portugal", "An iran".
+  if (NAMED_PLACES.includes(stemPhrase(list.join(' '))) && !THINGS_NAMED_AS_PLACES.has(list[0] as string)) return null
   // Two people named side by side are both shown: "bride groom" is a bride and groom (AGL-3942).
   if (list.length === 2 && list.every((word) => PEOPLE_NOUNS.has(word)) && list[0] !== list[1])
     return `${articleFor(list[0] as string)} ${list[0]} and ${list[1]}`
@@ -4127,28 +4209,32 @@ function describedTag(tag: string, proper: ReadonlySet<string>): string | null {
   const doing = last.endsWith('ing') && !COUNTED_ING.has(aiStockStem(last)) && !UNCOUNTED_ING.has(last)
   if (doing) return null
   const phrase = list.join(' ')
-  const plural =
-    PLURAL_NOUNS.has(last) || (aiStockStem(last) !== last && !/^(?:lens|canvas|atlas|gas|bus)$/.test(last))
+  const plural = PLURAL_NOUNS.has(last) || saysMany(last)
   if (plural || MASS_NOUNS.has(last) || (STOPWORDS.has(list[0] as string) && !SAID_PEOPLE.has(list[0] as string)))
     return spelled(phrase)
+  // A plural leading a tag is no one thing to say "a" of (AGL-4092): "A tacos pastor".
+  const lead = list[0] as string
+  if (list.length > 1 && saysMany(lead) && !NAMING_PLURALS.has(lead) && !lead.includes("'")) return null
   return `${articleFor(phrase)} ${spelled(phrase)}`
 }
 
 /** Letters said one by one, written in capitals: "an SLR camera", "a DSLR" (AGL-3942). */
-const INITIALISMS = words('slr dslr tv dj diy bbq suv atv uv vr')
+const INITIALISMS = words('slr dslr tv dj diy bbq suv atv uv vr bmx fmx mtb')
 
-/** A phrase as a description writes it, its initialisms in capitals. */
+const capitalized = (text: string) => `${text.charAt(0).toUpperCase()}${text.slice(1)}`
+
+/** A phrase as a description writes it, its initialisms and demonyms in capitals. */
 const spelled = (phrase: string) =>
   phrase
     .split(' ')
-    .map((word) => (INITIALISMS.has(word) ? word.toUpperCase() : word))
+    .map((word) => (INITIALISMS.has(word) ? word.toUpperCase() : DEMONYMS.has(word) ? capitalized(word) : word))
     .join(' ')
 
 /** "a" or "an" before a phrase, an initialism by how its first letter is said: "an SLR", "a DSLR". */
 const articleFor = (phrase: string) => {
   const first = phrase.split(' ')[0] ?? ''
   if (INITIALISMS.has(first)) return /^[aefhilmnorsx]/.test(first) ? 'an' : 'a'
-  return /^(?:[aeio]|u(?!ni|s[eu]))/.test(phrase) ? 'an' : 'a'
+  return /^(?:[aio]|e(?!u)|u(?!ni|s[eu]))/.test(phrase) ? 'an' : 'a'
 }
 
 /** Words a description never ends on: an article, a preposition, a conjunction. */
@@ -4187,9 +4273,15 @@ function nearSynonyms(a: string, b: string): boolean {
  * - of two words for one thing the first tag's stays ("book" over
  *   "bookwork", "camera" over "photo-camera"), unless the later phrase holds
  *   it whole ("wedding dress" over "wedding");
- * - a second thing comes only from the first two tags and where no place is
- *   said, what a person holds only from the first three, where it is set
- *   from the first ten;
+ * - one thing is said, never a second beside it: two tags side by side make
+ *   no sentence ("A motorcycle and a bike", "Tacos and a beef", AGL-4092); what
+ *   a person holds comes only from the first three and takes an article or is
+ *   many ("a woman with a book"), where it is set from the first ten;
+ * - an adjective is an adjective wherever it stands: a demonym is said only
+ *   before its thing ("Mexican food"), and a city or a country, or a plural
+ *   leading a tag ("tacos pastor"), is no thing at all;
+ * - a motor sport's name alone takes no article ("Motocross"), and stands for
+ *   a word that says too little beside it ("bike", "race") (AGL-4092);
  * - no word is said twice: never "an elderly couple and an elderly";
  * - the sky, the clouds and the light are no thing anyone holds, and the
  *   weather is said as where it is: "a couple in the fog at a wedding",
@@ -4238,8 +4330,8 @@ export function aiStockTagsAlt(tags: readonly string[], proper: ReadonlySet<stri
     const headStem = aiStockStem(head)
     const kind: AiStockAltPart['kind'] =
       PEOPLE_NOUNS.has(head) || PEOPLE_NOUNS.has(headStem) ? 'person' : PLACES[headStem] ? 'place' : 'thing'
-    // Past the first tags only where it is set is read.
-    if (!reading && kind !== 'place') continue
+    // Past the first tags only where it is set is read, and the sport a bike or a race is of.
+    if (!reading && kind !== 'place' && !SPORT_NAMES.has(headStem)) continue
     // A hand or a body is never what a photo is described by.
     if (kind === 'thing' && (BODY_PARTS.has(head) || BODY_PARTS.has(headStem))) continue
     if (parts.some((part) => stems.every((stem) => part.stems.includes(stem)))) continue
@@ -4265,6 +4357,9 @@ export function aiStockTagsAlt(tags: readonly string[], proper: ReadonlySet<stri
   let things = parts.filter((part) => part.kind === 'thing')
   // A kind of thing only where nothing names the thing: "a cat", never "a cat and an animal".
   if (things.some((part) => !KINDS_OF_THING.has(part.head))) things = things.filter((part) => !KINDS_OF_THING.has(part.head))
+  // "A bike" and "A race" say little where a tag names the sport (AGL-4092): "Motocross".
+  const sport = things.find((part) => SPORT_NAMES.has(part.head))
+  if (sport && GENERAL_THINGS.has(things[0]?.stems.join(' ') ?? '')) things = [sport, ...things.filter((part) => part !== sport)]
   // A person tagged after the things a photo is of is not who it shows:
   // "petri, camera, film, photography, photographer" is a camera, and "men,
   // silhouettes, camera, nature, photographer" men with a camera.
@@ -4305,11 +4400,11 @@ export function aiStockTagsAlt(tags: readonly string[], proper: ReadonlySet<stri
   if (person && fresh(person)) {
     phrase = portrait ? `a portrait of ${person.said}` : qualified(person)
     const held = family && child && child !== person ? child : things.find((part) => part.index <= 2)
-    if (!portrait && held && fresh(held)) phrase += ` ${CLOTHING.has(held.head) ? 'in' : 'with'} ${held.said}`
+    // Nothing no one holds, and nothing after it: never "a woman with yoga", nor "a rider with a motocross" (AGL-4092).
+    const holdable = held && !MASS_NOUNS.has(held.head) && !SPORT_NAMES.has(held.head)
+    if (!portrait && holdable && fresh(held)) phrase += ` ${CLOTHING.has(held.head) ? 'in' : 'with'} ${held.said}`
   } else if (things[0] && fresh(things[0])) {
     phrase = qualified(things[0])
-    const second = things[1]
-    if (second && second.index <= 1 && !place && fresh(second)) phrase += ` and ${second.said}`
   }
   /** A place as it is said alone: "a classroom", "the mountains", "sunset". */
   const placeOf = (part: AiStockAltPart) =>
@@ -4339,7 +4434,9 @@ export function aiStockTagsAlt(tags: readonly string[], proper: ReadonlySet<stri
   // Never a dangling article or preposition, whatever a tag left behind.
   phrase = phrase.replace(DANGLING_END, '').trim()
   if (!phrase || /^(?:a|an|the)$/i.test(phrase)) return null
-  const out = `${phrase.charAt(0).toUpperCase()}${phrase.slice(1)}`
+  const alone = phrase.replace(/^an?\s+/, '')
+  if (SPORT_NAMES.has(alone.toLowerCase())) phrase = alone
+  const out = capitalized(phrase)
   return out.length > AI_STOCK_ALT_MAX ? out.slice(0, AI_STOCK_ALT_MAX).replace(/[\s,]+\S*$/, '') : out
 }
 

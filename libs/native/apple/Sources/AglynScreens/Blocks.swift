@@ -718,7 +718,7 @@ struct FormBlock: View {
           }
           .buttonStyle(.aglynProminent)
           .controlSize(.regular)
-          .disabled(busy || missing)
+          .disabled(busy || missing || action.disabledWhen.map { ScreenValues.condition($0, in: scope) } == true)
           .accessibilityIdentifier("submit-\(block.id)")
         }
       }

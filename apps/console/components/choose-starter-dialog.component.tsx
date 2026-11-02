@@ -16,8 +16,8 @@
  */
 'use client'
 
-import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import type { SiteStarterMode } from '@aglyn/aglyn/app-utils/site-starter'
+import { CHOOSE_STARTER_COPY } from '@aglyn/aglyn/app-utils/site-starter-pick'
 import { SITE_STYLES } from '@aglyn/aglyn/app-utils/site-styles'
 import { ICON_VARIANT_CLOSE, ICON_VARIANT_SEARCH } from '@aglyn/shared-data-enums'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
@@ -134,6 +134,10 @@ export function ChooseStarterDialog(props: ChooseStarterDialogProps) {
       open
       fullScreen
       onClose={() => (busy ? null : onClose())}
+      // A paid starter is bought in this window, and the bank's own step draws
+      // over it from outside, in Stripe's frame: a trap on focus here would
+      // keep a person from typing the code their bank sent.
+      disableEnforceFocus
       aria-labelledby={TITLE_ID}
       data-create-area="choose-starter"
       slotProps={{ paper: { elevation: 0, sx: SURFACE_SX } }}
@@ -257,20 +261,6 @@ export function ChooseStarterDialog(props: ChooseStarterDialogProps) {
 }
 ChooseStarterDialog.displayName = 'ChooseStarterDialog'
 
-/** The heading's words, for the starters or for the styles drawn in their place. */
-export const CHOOSE_STARTER_COPY = {
-  starters: {
-    title: 'Choose your starter',
-    lede:
-      `${PLATFORM_BRAND_NAME}'s styles come first, then starters from the marketplace. ` +
-      'Nothing is chosen for you, and you can change everything later.',
-  },
-  styles: {
-    title: 'Choose a style',
-    lede:
-      'Your site starts with a home page, a header and a footer in the style you choose. ' +
-      'You can change everything later.',
-  },
-} as const
+export { CHOOSE_STARTER_COPY }
 
 export default ChooseStarterDialog
