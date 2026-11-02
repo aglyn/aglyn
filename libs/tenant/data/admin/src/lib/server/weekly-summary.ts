@@ -553,6 +553,24 @@ export async function runWeeklySummarySweep(
 
 /** The sweep's reach into the real platform: Firestore, the flags, the roster, the mail. */
 /** The sweep's reach into the real platform: Firestore, the flags, the roster, the mail. */
+/** An org's email theme as the summary's drawing needs it. */
+export function weeklySummaryEmailColors(org: Record<string, unknown>): WeeklySummaryColors {
+  const { palette } = systemEmailTheme(systemEmailBrand(org as never).options)
+  const colors = {} as WeeklySummaryColors
+  for (const key of Object.keys(COLOR_TOKENS) as Array<keyof WeeklySummaryColors>) {
+    // A brand palette that cannot resolve a token falls back to the
+    // platform's, which resolves every one of them.
+    colors[key] =
+      resolveEmailColor(COLOR_TOKENS[key], palette) ??
+      resolveEmailColor(COLOR_TOKENS[key], PLATFORM_EMAIL_PALETTE) ??
+      'inherit'
+  }
+  // Links take the color the renderer gives every other link in the
+  // email, not the raw primary, which is too light to read as text.
+  colors.link = emailAccent(palette).link
+  return colors
+}
+
 export async function weeklySummaryDeps(options: { runAt: Date; dryRun: boolean }): Promise<WeeklySummaryDeps> {
   const firestore = firebaseAdmin.app().firestore()
   const flags = await getServerReleaseFlagValues()
@@ -574,22 +592,7 @@ export async function weeklySummaryDeps(options: { runAt: Date; dryRun: boolean 
     orgMembers: (orgId) => listOrgMembers(orgId),
     reachable: (uids) => withoutMailWithheldAccounts(uids),
     readers: (context) => eligibleFigureReaders({ ...context, accept: (reader) => Boolean(reader.weeklySummary) }),
-    colors: (org) => {
-      const { palette } = systemEmailTheme(systemEmailBrand(org as never).options)
-      const colors = {} as WeeklySummaryColors
-      for (const key of Object.keys(COLOR_TOKENS) as Array<keyof WeeklySummaryColors>) {
-        // A brand palette that cannot resolve a token falls back to the
-        // platform's, which resolves every one of them.
-        colors[key] =
-          resolveEmailColor(COLOR_TOKENS[key], palette) ??
-          resolveEmailColor(COLOR_TOKENS[key], PLATFORM_EMAIL_PALETTE) ??
-          'inherit'
-      }
-      // Links take the color the renderer gives every other link in the
-      // email, not the raw primary, which is too light to read as text.
-      colors.link = emailAccent(palette).link
-      return colors
-    },
+    colors: weeklySummaryEmailColors,
     address: async (member, lookups) => {
       let address = str(member.email).toLowerCase()
       if (!address.includes('@') && lookups.left > 0) {

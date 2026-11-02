@@ -45,7 +45,10 @@ Each row opens the job's own page. The page needs the **Generate with AI** permi
 
 ## One job's page {#one-jobs-page}
 
-A job's page shows each step as it happens, with its own state (**Done**, **Waiting**,
+A job's page says what the job is for: the request, word for word, with the kind of job and when
+it started. The page's title is the start of that request, so one job can be told from another.
+
+Below it, the page shows each step as it happens, with its own state (**Done**, **Waiting**,
 **In progress**, **Paused**, **Not built** or **Couldn't be built**) and the credits each
 step used. From there you can:
 

@@ -136,6 +136,41 @@ describe('reading the numbers a sentence writes', () => {
   })
 })
 
+describe('an insight’s headline (AGL-4130)', () => {
+  const insight = { text: 'It came from the home page.', cites: [{ table: 't1', rows: [0] }] }
+
+  it('is kept with the sentence when its figures trace', () => {
+    const headline = 'Page views up 14.7%'
+    const { kept, findings } = checkAiInsightAnswer({ insights: [{ ...insight, headline }], gap: null }, [TRAFFIC])
+    expect(findings).toEqual([])
+    expect(kept).toEqual([expect.objectContaining({ headline, text: insight.text })])
+  })
+
+  it('is held to the same trace: a number it invents leaves the insight out', () => {
+    expect(checkAiInsight({ ...insight, headline: 'Page views up 99%' }, [TRAFFIC])).toEqual([
+      expect.stringContaining('insight-number-untraced'),
+    ])
+  })
+
+  it('is held to the same direction: a rise the change does not show leaves it out', () => {
+    expect(checkAiInsight({ ...insight, headline: 'Page views down 14.7%' }, [TRAFFIC])).toEqual([
+      expect.stringContaining('insight-direction'),
+    ])
+  })
+
+  it('that runs long is dropped, and the sentence stands', () => {
+    const headline = 'A headline far longer than anyone would read at a glance in their inbox'
+    const { kept, left } = checkAiInsightAnswer({ insights: [{ ...insight, headline }], gap: null }, [TRAFFIC])
+    expect(left).toEqual([])
+    expect(kept[0]).not.toHaveProperty('headline')
+    expect(kept[0].text).toBe(insight.text)
+  })
+
+  it('is not asked of an answer from before there were headlines', () => {
+    expect(checkAiInsight(insight, [TRAFFIC])).toEqual([])
+  })
+})
+
 describe('an insight that traces is kept', () => {
   it('quotes its figures as the table has them', () => {
     kept('Page views rose 14.7% to 1,204 in the last 14 days.')

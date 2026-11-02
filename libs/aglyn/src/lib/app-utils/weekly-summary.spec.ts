@@ -31,8 +31,13 @@ import {
   WEEKLY_SUMMARY_DIGEST_KEY,
   weeklySummaryChange,
   weeklySummaryPeriod,
+  weeklySummaryFootnoteHtml,
+  weeklySummaryPlainDates,
+  weeklySummarySectionsHtml,
   weeklySummaryTileRows,
+  weeklySummaryTilesHtml,
   weeklySummaryTotals,
+  weeklySummaryWeekday,
   type WeeklySummaryColors,
   type WeeklySummarySite,
 } from './weekly-summary'
@@ -253,5 +258,163 @@ describe('the weekly summary emails', () => {
 
   it('keeps its switch under the key the settings page writes', () => {
     expect(NOTIFICATION_DIGESTS[0]).toMatchObject({ pluginId: 'core', key: WEEKLY_SUMMARY_DIGEST_KEY })
+  })
+})
+
+describe('the AI digest’s drawing (AGL-4130)', () => {
+  const COLORS: WeeklySummaryColors = {
+    text: '#111111',
+    muted: '#555555',
+    border: '#dddddd',
+    surface: '#f5f5f5',
+    accent: '#00aaff',
+    link: '#0066cc',
+    up: '#008800',
+    down: '#cc0000',
+  }
+  const strong = (figure: string) => `<strong style="font-weight:700;color:#111111;">${figure}</strong>`
+
+  it('writes a date as a person says it', () => {
+    expect(weeklySummaryPlainDates('Monday 2026-10-26 was busiest.')).toBe('Monday, Oct 26 was busiest.')
+    expect(weeklySummaryPlainDates('From 2026-10-01 to 2026-11-01.')).toBe('From Oct 1 to Nov 1.')
+    expect(weeklySummaryPlainDates('Nothing here but 2026 and 10-26.')).toBe('Nothing here but 2026 and 10-26.')
+  })
+
+  it('leaves a thing that only looks like a date alone', () => {
+    expect(weeklySummaryPlainDates('Code 2026-13-45.')).toBe('Code 2026-13-45.')
+  })
+
+  const sentence = (text: string) => ({ headline: null, text })
+
+  it('writes a day as a chart labels it', () => {
+    expect(weeklySummaryWeekday('2026-10-26')).toBe('Mon, Oct 26')
+  })
+
+  it('draws a section’s title, its link, its headline, then its sentence', () => {
+    const html = weeklySummarySectionsHtml(
+      [
+        {
+          title: 'Top pages',
+          link: { label: 'Analytics', url: 'https://app.example.com/analytics' },
+          points: [{ headline: 'Home page led', text: 'One.' }],
+        },
+      ],
+      COLORS,
+    )
+    expect(html.indexOf('Top pages')).toBeLessThan(html.indexOf('href="https://app.example.com/analytics"'))
+    expect(html.indexOf('Home page led')).toBeLessThan(html.indexOf('One.'))
+  })
+
+  it('puts a hairline between sections, and none above the first', () => {
+    const section = { title: 'x', points: [sentence('y')] }
+    const html = weeklySummarySectionsHtml([section, section], COLORS)
+    expect(html.match(/border-top:1px solid #dddddd/g)).toHaveLength(1)
+  })
+
+  it('links a row to the page it names, and shows its figure and change', () => {
+    const html = weeklySummarySectionsHtml(
+      [
+        {
+          title: 'x',
+          points: [],
+          rows: [
+            { label: '/pricing', url: 'https://acme.com/pricing', value: '95 views', change: 86.3 },
+            { label: '/about', value: '12 views', change: -4 },
+          ],
+        },
+      ],
+      COLORS,
+    )
+    expect(html).toContain('<a href="https://acme.com/pricing"')
+    expect(html).toContain('95 views')
+    expect(html).toContain('▲ +86.3%')
+    expect(html).toContain('▼ −4%')
+    expect(html.match(/<a href/g)).toHaveLength(1)
+  })
+
+  it('leaves no column for a change no row has', () => {
+    const rows = [{ label: 'Contact', value: '14 views · 3 submissions' }]
+    const html = weeklySummarySectionsHtml([{ title: 'x', points: [], rows }], COLORS)
+    expect(html.match(/<td/g)?.length).toBe(3)
+  })
+
+  it('draws a chart with its marked days in the accent, scaled to the busiest', () => {
+    const html = weeklySummarySectionsHtml(
+      [
+        {
+          title: 'x',
+          points: [],
+          bars: [
+            { label: 'Mon, Oct 26', value: 160, display: '160', marked: true },
+            { label: 'Tue, Oct 27', value: 40, display: '40', marked: false },
+          ],
+        },
+      ],
+      COLORS,
+    )
+    expect(html).toContain('background-color:#00aaff;border-radius:2px;font-size:0;height:10px;line-height:0;width:100%;')
+    expect(html).toContain('background-color:#dddddd;border-radius:2px;font-size:0;height:10px;line-height:0;width:25%;')
+  })
+
+  it('draws an empty day as a sliver, and survives a week of nothing', () => {
+    const html = weeklySummarySectionsHtml(
+      [{ title: 'x', points: [], bars: [{ label: 'Mon', value: 0, display: '0', marked: false }] }],
+      COLORS,
+    )
+    expect(html).toContain('width:1%;">&nbsp;')
+  })
+
+  it('puts the figures in a sentence in bold, however they are written', () => {
+    const html = weeklySummarySectionsHtml(
+      [{ title: 'x', points: [sentence('Up 86.3% to 1,204 views, $12.50 an order, −3.3% on the week.')] }],
+      COLORS,
+    )
+    for (const figure of ['86.3%', '1,204', '$12.50', '−3.3%']) expect(html).toContain(strong(figure))
+  })
+
+  it('never bolds the digits in an address or a date', () => {
+    const html = weeklySummarySectionsHtml(
+      [{ title: 'x', points: [sentence('Oct 26 on /page-2/next and a1b.')] }],
+      COLORS,
+    )
+    expect(html).not.toContain('<strong')
+  })
+
+  it('escapes what it is given', () => {
+    const html = weeklySummarySectionsHtml(
+      [
+        {
+          title: '<i>',
+          link: { label: '<u>', url: 'https://x.test/"><script>' },
+          points: [{ headline: '<b>', text: 'a <script> b' }],
+          rows: [{ label: '<em>', url: 'https://x.test/"y', value: '<s>' }],
+        },
+      ],
+      COLORS,
+    )
+    expect(html).not.toMatch(/<script>|<b>|<i>|<u>|<em>|<s>|"y/)
+  })
+
+  it('links the way out by name in the small print', () => {
+    const html = weeklySummaryFootnoteHtml('Used 17 credits.', { label: 'Turn off', url: 'https://x.test/off' }, COLORS)
+    expect(html).toContain('Used 17 credits.')
+    expect(html).toContain('<a href="https://x.test/off"')
+    expect(weeklySummaryFootnoteHtml('Used 17 credits.', null, COLORS)).not.toContain('<a')
+  })
+
+  it('draws no tiles for no figures', () => {
+    expect(weeklySummaryTilesHtml([], COLORS)).toBe('')
+  })
+
+  it('makes a tile the cell itself, so a row’s tiles are one height', () => {
+    const html = weeklySummaryTilesHtml(
+      [
+        { label: 'Visitors', value: '642', change: 22.5 },
+        { label: 'Submissions since Oct 1', value: '9' },
+      ],
+      COLORS,
+    )
+    expect(html.match(/<td style="width:50%;background-color:#f5f5f5;/g)).toHaveLength(2)
+    expect(html).not.toContain('<div style="background-color')
   })
 })
