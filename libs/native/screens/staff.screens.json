@@ -10671,8 +10671,18 @@
             },
             {
               "name": "digest.why",
-              "description": "Why it came, what it cost and how to turn it off",
-              "sample": "You asked for weekly insights for Test Org. Writing these used 21 of Test Org’s AI credits. Turn them off in Notifications: https://app.aglyn.com/manage/notifications"
+              "description": "Why the figures can be trusted, and what it cost",
+              "sample": "Every number here is checked against Test Site's own figures. Writing these used 21 of Test Org’s AI credits."
+            },
+            {
+              "name": "digest.html",
+              "description": "The week’s figures as tiles, then one section a topic with its figures and links, in the email’s theme",
+              "sample": "<div style=\"padding:8px 0 18px;\"><div style=\"font-family:Helvetica, Arial, sans-serif;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;\">Top pages</div><div style=\"font-family:Helvetica, Arial, sans-serif;font-size:16px;font-weight:700;padding:6px 0 0;\">Visits from search rose 18%</div></div>"
+            },
+            {
+              "name": "digest.footnote",
+              "description": "What it cost and where to turn it off, as small print with its link",
+              "sample": "<div style=\"font-family:Helvetica, Arial, sans-serif;font-size:12px;\">Writing these used 21 of Test Org’s AI credits.</div>"
             },
             {
               "name": "brand.productName",

@@ -101,7 +101,7 @@ export const PLUGIN_SURFACE_SECTIONS: Readonly<
 
 /** The noun for one record's page beneath a surface that owns its subtree, by the surface's URL slug. */
 export const PLUGIN_SURFACE_RECORD_TITLES: Readonly<Record<string, string>> = {
-  'ai-jobs': 'Building your site',
+  'ai-jobs': 'AI job',
   domains: 'Domain',
   waivers: 'Waiver',
 }

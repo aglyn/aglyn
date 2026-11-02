@@ -53,7 +53,7 @@ export async function generateMetadata({
    * A RECORD beneath a surface that owns its subtree — a segment that names
    * no section — is titled by the noun the surface declares for its records
    * (AGL-3596), where it declares one: `/ai-jobs` is `AI jobs`, and one job's
-   * page is `Building your site`. Without a declaration the surface's own
+   * page is `AI job`. Without a declaration the surface's own
    * name stands, as it always has.
    */
   const recordNoun =

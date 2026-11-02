@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { weeklySummaryPlainDates } from '@aglyn/aglyn/app-utils/weekly-summary'
 import { lockdownRefusalText, parseLockdownRefusal } from '@aglyn/aglyn'
 import { INSIGHT_DIGESTS_FIELD, insightDigestSubscribed } from '@aglyn/aglyn/app-utils/notifications'
 import { AppLink } from '@aglyn/shared-ui-jsx'
@@ -321,7 +322,8 @@ export function AiInsightDialog(props: AiInsightDialogProps) {
                 <Stack component="ol" spacing={1.5} sx={{ pl: 2.5, m: 0 }}>
                   {answer.insights.map((insight, index) => (
                     <Box component="li" key={index}>
-                      <Typography variant="body2">{insight.text}</Typography>
+                      {insight.headline ? <Typography variant="subtitle2">{insight.headline}</Typography> : null}
+                      <Typography variant="body2">{weeklySummaryPlainDates(insight.text)}</Typography>
                       <Button
                         size="small"
                         onClick={() => setOpenCitations((current) => (current === index ? null : index))}

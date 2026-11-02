@@ -60,11 +60,14 @@ import {
   AI_SITE_LOOK_HINT,
   AI_SITE_PAGE_HINT,
   AI_SITE_PLAN_HINT,
+  AI_JOB_TITLE_MAX_CHARS,
   aiJobPageCopy,
+  aiJobPageTitle,
   aiSiteBuildCreditsLine,
   aiSiteBuildFraction,
   aiSiteBuildRows,
 } from '../model/ai-site-build-progress'
+import { AI_JOB_REQUEST_PREVIEW_CHARS } from './ai-job-request.component'
 import { AI_JOB_FIRST_STATE_TIMEOUT_MS, AiSiteBuildPage } from './ai-site-build-page.component'
 import { AI_JOB_PAUSED_NEXT_COPY } from '../model/ai-job-notice'
 
@@ -124,6 +127,83 @@ async function open(state: AiJobSummary) {
   })
   render(<AiSiteBuildPage hostId="host-1" segments={['job-1']} basePath="/acme/hosts/groomer/ai-jobs" entitled />)
 }
+
+describe('what a job is for (AGL-4130)', () => {
+  const insight = (patch: Partial<AiJobSummary> = {}) =>
+    job({
+      kind: 'insight',
+      status: 'done',
+      brief: 'Weekly insights for Aglyn Marketing Website',
+      plan: null,
+      running: false,
+      steps: [{ name: 'generate', status: 'done', startedAt: null, endedAt: null, creditsSpent: 17, error: null }],
+      outputs: [{ resource: 'insight', id: 'job-1', hostId: 'host-1', label: 'Weekly insights', note: '5 insights' }],
+      ...patch,
+    } as Partial<AiJobSummary>)
+
+  it('shows the request word for word, with its kind and when it started', async () => {
+    await open(insight())
+    expect(await screen.findByText('Weekly insights for Aglyn Marketing Website')).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'What this job is for' })).toBeTruthy()
+    expect(screen.getByText('Answer')).toBeTruthy()
+    expect(document.querySelector('time')?.getAttribute('datetime')).toBe('2026-10-06T00:00:00.000Z')
+  })
+
+  it('folds a long request, and opens it whole', async () => {
+    const brief = `${'a '.repeat(AI_JOB_REQUEST_PREVIEW_CHARS)}the end`
+    await open(job({ brief }))
+    await screen.findByText('Show all')
+    expect(screen.queryByText(/the end$/)).toBeNull()
+    fireEvent.click(screen.getByText('Show all'))
+    expect(screen.getByText(/the end$/)).toBeTruthy()
+  })
+
+  it('never calls a finished answer a plan, or a draft', async () => {
+    await open(insight())
+    expect(await screen.findByText('Weekly insights')).toBeTruthy()
+    expect(screen.getByText('5 insights')).toBeTruthy()
+    expect(screen.queryByText('Planning your pages')).toBeNull()
+    expect(screen.queryByText(/unpublished draft/)).toBeNull()
+    expect(screen.getByText('Nothing on your site changed.')).toBeTruthy()
+  })
+
+  it('opens the answer', async () => {
+    await open(insight())
+    expect(await screen.findByRole('button', { name: 'View answer' })).toBeTruthy()
+  })
+
+  it('offers no answer until there is one', async () => {
+    await open(insight({ status: 'running', running: true, outputs: [] } as Partial<AiJobSummary>))
+    expect(await screen.findByText('Working on your answer')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'View answer' })).toBeNull()
+  })
+
+  it('reads a job with no plan by its one step, whatever it was', () => {
+    const edit = (patch: Partial<AiJobSummary>) =>
+      job({ kind: 'edit', plan: null, steps: [{ name: 'generate', status: 'running', startedAt: null, endedAt: null, creditsSpent: 0, error: null }], ...patch } as Partial<AiJobSummary>)
+    expect(aiSiteBuildRows(edit({ status: 'running' })).map((row) => [row.label, row.state])).toEqual([['Working on your change', 'active']])
+    expect(aiSiteBuildRows(edit({ status: 'failed' })).map((row) => row.state)).toEqual(['failed'])
+    expect(aiSiteBuildRows(edit({ status: 'canceled' })).map((row) => row.state)).toEqual(['skipped'])
+    expect(aiSiteBuildRows(edit({ status: 'needs_input' })).map((row) => row.state)).toEqual(['paused'])
+    expect(aiSiteBuildRows(edit({ status: 'done', outputs: [] })).map((row) => [row.label, row.state])).toEqual([['Finished', 'done']])
+    expect(aiSiteBuildRows(edit({ status: 'done', outputs: [screenOutput('Home')] as never })).map((row) => [row.label, row.state])).toEqual([['Home', 'done']])
+  })
+
+  it('says what a finished job left, by what it actually left', () => {
+    const lede = (resource: string, kind = 'settings') =>
+      aiJobPageCopy({ kind, status: 'done', review: null, error: null, outputs: [{ resource }] } as never, 'Aglyn').lede
+    expect(lede('crm', 'crm')).toBe('Nothing on your site changed.')
+    expect(lede('settings')).toBe('Its changes are saved and already live.')
+    expect(lede('screen', 'page')).toMatch(/unpublished draft/)
+  })
+
+  it('names the job by what was asked', () => {
+    expect(aiJobPageTitle({ brief: 'Weekly insights for Acme' })).toBe('Weekly insights for Acme')
+    expect(aiJobPageTitle({ brief: '\n  First line\nsecond line' })).toBe('First line')
+    expect(aiJobPageTitle({ brief: 'x'.repeat(AI_JOB_TITLE_MAX_CHARS + 1) })).toBe(`${'x'.repeat(AI_JOB_TITLE_MAX_CHARS)}…`)
+    expect(aiJobPageTitle({ brief: '   ' })).toBeNull()
+  })
+})
 
 describe('the progress a site job shows (AGL-3594)', () => {
   it('lists planning and then each page, with where the build is', () => {

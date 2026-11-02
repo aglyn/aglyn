@@ -17,6 +17,7 @@
 
 import {
   AI_INSIGHT_GAP_MAX_CHARS,
+  AI_INSIGHT_HEADLINE_MAX_CHARS,
   AI_INSIGHT_MAX_CHARS,
   AI_INSIGHT_MAX_CITED_ROWS,
   AI_INSIGHT_MAX_CITES,
@@ -102,9 +103,13 @@ export function aiInsightAnswerTool(): AiTool {
           items: {
             type: 'object',
             properties: {
+              headline: {
+                type: 'string',
+                description: `What happened, in a few words, with no full stop; at most ${AI_INSIGHT_HEADLINE_MAX_CHARS} characters.`,
+              },
               text: {
                 type: 'string',
-                description: `One or two plain sentences; at most ${AI_INSIGHT_MAX_CHARS} characters.`,
+                description: `Why it matters, in one or two plain sentences that do not repeat the headline; at most ${AI_INSIGHT_MAX_CHARS} characters.`,
               },
               cites: {
                 type: 'array',
@@ -124,7 +129,7 @@ export function aiInsightAnswerTool(): AiTool {
                 },
               },
             },
-            required: ['text', 'cites'],
+            required: ['headline', 'text', 'cites'],
             additionalProperties: false,
           },
         },
@@ -182,6 +187,7 @@ export function parseAiInsightAnswer(input: unknown): AiInsightAnswer | null {
   const insights = input['insights']
     .filter(isRecord)
     .map((raw) => ({
+      ...(typeof raw['headline'] === 'string' ? { headline: raw['headline'] } : {}),
       text: typeof raw['text'] === 'string' ? raw['text'] : '',
       cites: (Array.isArray(raw['cites']) ? raw['cites'] : []).filter(isRecord).map((cite) => ({
         table: typeof cite['table'] === 'string' ? cite['table'] : '',

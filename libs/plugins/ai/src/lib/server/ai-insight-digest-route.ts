@@ -33,6 +33,7 @@ import {
 } from '@aglyn/tenant-data-admin/server/render-system-email'
 import { listOrgMembers, memberHasPermissionOnHost } from '@aglyn/tenant-data-admin/server/organizations'
 import { getServerReleaseFlagValues } from '@aglyn/tenant-data-admin/server/release-flags'
+import { weeklySummaryEmailColors } from '@aglyn/tenant-data-admin/server/weekly-summary'
 import { safeEqual } from '@aglyn/tenant-data-admin/server/safe-equal'
 import {
   AI_INSIGHTS_DIGEST_CRON_ID,
@@ -129,6 +130,7 @@ export async function POST(request: Request): Promise<Response> {
       // An email link must be absolute; with no console URL configured the
       // digest says where to look without one.
       consoleOrigin: (process.env.NEXT_PUBLIC_CONSOLE_URL ?? '').trim().replace(/\/+$/, ''),
+      colors: weeklySummaryEmailColors,
     }
     const report = await runAiInsightDigestSweep(deps, { cursor })
     return Response.json(report, { status: 200 })

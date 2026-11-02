@@ -54,6 +54,7 @@ import {
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import {
   aiJobPageCopy,
+  aiJobPageTitle,
   aiSiteBuildCreditsLine,
   aiSiteBuildFraction,
   aiSiteBuildPhase,
@@ -75,7 +76,9 @@ import { aiCreditRangeText, type AiCreditsPrompt } from '../model/ai-credit-esti
 import { useAiJobSite } from './ai-job-site'
 import { AiSiteStarterFallback } from './ai-site-starter-fallback.component'
 import { AiSiteImportJob } from './ai-site-import-job.component'
+import { AiInsightDialog } from './ai-insight-dialog.component'
 import { AiJobCancelButton } from './ai-job-cancel.component'
+import { AiJobRequest } from './ai-job-request.component'
 import { AI_JOB_CANCELING_COPY } from '../model/ai-job-cancel-copy'
 import {
   AI_SITE_REMOVED_COPY,
@@ -256,6 +259,7 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
   )
   // A Free Try again past what is left (AGL-3722): its prompt, until chosen.
   const [retryPrompt, setRetryPrompt] = useState<AiCreditsPrompt | null>(null)
+  const [answerOpen, setAnswerOpen] = useState(false)
   const tryAgain = useCallback(
     async (options: { creditsConfirmed?: boolean } = {}) => {
       if (!orgId || !job || typeof job !== 'object') return
@@ -294,9 +298,9 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
       ? (aiSiteBuildRows(ready).find((row) => row.state === 'active') ?? null)
       : null
   const elapsed = useElapsed(liveRow ? `${ready?.id}:${liveRow.id}` : null, liveRow?.startedAt)
-  // The shell's header names the job's page as the page does, and its trail
-  // walks back to the site's AI jobs.
-  const record = <PageHeaderRecord title={copy?.heading} />
+  // The shell's header names the job by what was asked, which the heading
+  // below it does not, and its trail walks back to the site's AI jobs.
+  const record = <PageHeaderRecord title={(ready ? aiJobPageTitle(ready) : null) ?? copy?.heading} />
 
   const createSiteHref = aiCreateSiteHref(orgSlug)
   if (site.status === 'error' && site.removed) {
@@ -354,7 +358,7 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
   }
   if (!ready || !copy) {
     return (
-      <Frame siteName={siteName} heading="Building your site">
+      <Frame siteName={siteName} heading="Loading this job">
         <Stack sx={{ alignItems: 'center', py: 4 }}>
           <CircularProgress aria-label="Loading the job" />
         </Stack>
@@ -410,6 +414,8 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
   const activeRow = phase === 'working' ? (rows.find((row) => row.state === 'active') ?? null) : null
   const credits = aiSiteBuildCreditsLine(ready)
   const links = phase === 'done' ? aiSiteBuildDoneLinks(ready, orgSlug) : { view: null, pages: null }
+  // An insight job's answer is opened, as it is from the AI jobs drawer.
+  const answer = ready.outputs.find((output) => output.resource === 'insight') ?? null
   const sitePublish = ready.kind === 'site' && phase === 'done' ? (ready.sitePublish ?? null) : null
   const liveUrl = sitePublish && sitePublish.published.length > 0 ? sitePublish.liveUrl : null
   // A job that changed one page (AGL-3616) leads with that page's new version,
@@ -443,6 +449,7 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
     <Frame siteName={siteName} {...(liveNotice ? {} : { heading: copy.heading, lede: copy.lede })}>
       {record}
       {liveNotice && <SiteLiveNotice liveUrl={liveUrl} pagesHref={links.pages} headingComponent="h1" />}
+      <AiJobRequest job={ready} />
       {notice && <Alert severity="warning">{notice}</Alert>}
       <Card variant="outlined" sx={{ borderRadius: 2 }}>
         {phase === 'working' &&
@@ -569,6 +576,27 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
           onBuildWhatFits={() => void tryAgain({ creditsConfirmed: true })}
         />
       )}
+      {phase === 'done' && answer ? (
+        <Box>
+          <Button variant="contained" size="large" onClick={() => setAnswerOpen(true)}>
+            {'View answer'}
+          </Button>
+          {answerOpen && orgId ? (
+            <AiInsightDialog
+              open
+              onClose={() => setAnswerOpen(false)}
+              orgId={orgId}
+              orgSlug={orgSlug}
+              hostId={hostId ?? null}
+              host={hostSubdomain}
+              surface="analytics"
+              user={user}
+              uid={user?.uid ?? null}
+              jobId={answer.id}
+            />
+          ) : null}
+        </Box>
+      ) : null}
       {review ? (
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
           {/* A view, so it opens beside this page; Publish is on it. */}

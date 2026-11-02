@@ -1676,15 +1676,26 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         { name: 'digest.intro', description: 'What the insights are, in one sentence', sample: 'What Test Site\'s figures showed last week. Each one is traced to the figures it cites, so you can check it on the Analytics page.' },
         { name: 'digest.insights', description: 'The insights, numbered', sample: '1. Visits from search rose 18% on last week.\n\n2. The pricing page was the most viewed page, with 312 views.' },
         { name: 'digest.analyticsUrl', description: 'The site’s Analytics page', sample: `${SAMPLE_CONSOLE_ORIGIN}/test-org/hosts/test-site/analytics` },
-        { name: 'digest.why', description: 'Why it came, what it cost and how to turn it off', sample: `You asked for weekly insights for Test Org. Writing these used 21 of Test Org’s AI credits. Turn them off in Notifications: ${SAMPLE_CONSOLE_ORIGIN}/manage/notifications` },
+        { name: 'digest.why', description: 'Why the figures can be trusted, and what it cost', sample: `Every number here is checked against Test Site's own figures. Writing these used 21 of Test Org’s AI credits.` },
+        {
+          name: 'digest.html',
+          description: 'The week’s figures as tiles, then one section a topic with its figures and links, in the email’s theme',
+          sample:
+            '<div style="padding:8px 0 18px;"><div style="font-family:Helvetica, Arial, sans-serif;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;">Top pages</div>' +
+            '<div style="font-family:Helvetica, Arial, sans-serif;font-size:16px;font-weight:700;padding:6px 0 0;">Visits from search rose 18%</div></div>',
+        },
+        {
+          name: 'digest.footnote',
+          description: 'What it cost and where to turn it off, as small print with its link',
+          sample: '<div style="font-family:Helvetica, Arial, sans-serif;font-size:12px;">Writing these used 21 of Test Org’s AI credits.</div>',
+        },
       ],
       defaultBody: [
         { block: 'text', text: '{{digest.eyebrow}}', variant: 'eyebrow' },
-        { block: 'text', text: 'Weekly insights for {{site.name}}', variant: 'heading' },
-        { block: 'text', text: '{{digest.intro}}', variant: 'body' },
-        { block: 'text', text: '{{digest.insights}}', variant: 'body' },
-        { block: 'button', label: 'Open {{site.name}} analytics', href: '{{digest.analyticsUrl}}' },
-        { block: 'text', text: '{{digest.why}}', variant: 'caption' },
+        { block: 'text', text: '{{site.name}} last week', variant: 'heading' },
+        { block: 'html', html: '{{digest.html}}' },
+        { block: 'button', label: 'Open analytics', href: '{{digest.analyticsUrl}}' },
+        { block: 'html', html: '{{digest.footnote}}' },
       ],
       footerReason:
         'You’re receiving this because you turned on weekly insights in ' +

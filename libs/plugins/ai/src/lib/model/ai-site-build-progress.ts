@@ -20,7 +20,7 @@ import { aiJobConfirmingOwnPlan, aiJobKindNoun } from './ai-job-activity'
 import { aiJobRefundCopy } from './ai-job-failure-copy'
 import { aiBuildItemRows, aiBuildOpNoun, aiBuildOutcomeLine, aiSitePartialCopy } from './ai-build-progress'
 import { AI_JOB_PAUSED_NEXT_COPY, aiJobPausedTitle } from './ai-job-notice'
-import type { AiJobSummary } from './ai-jobs.types'
+import type { AiJobOutputResource, AiJobSummary } from './ai-jobs.types'
 
 /**
  * What the "Building your site" page shows of a site job (AGL-3594): one row
@@ -188,6 +188,10 @@ function aiSiteBuildRowsOf(
     ]
   }
   const planStep = job.steps.find((step) => step.name === 'plan')
+  // A job with no plan is not building pages: an answer, a summary, one change.
+  if (job.steps.length > 0 && !planStep && !job.plan && job.kind !== 'site' && job.kind !== 'build') {
+    return aiJobStepRows(job, phase)
+  }
   const planDone = planStep?.status === 'done' || Boolean(job.plan)
   const stopped = phase === 'failed' || phase === 'stopped'
   const paused = job.status === 'needs_input'
@@ -304,6 +308,43 @@ function aiSiteBuildRowsOf(
   return rows
 }
 
+/**
+ * A job with no plan and no parts of its own to count: one row while it works,
+ * and what it made once it is done, by the name each output carries.
+ */
+function aiJobStepRows(
+  job: Pick<AiJobSummary, 'status' | 'steps' | 'outputs'> & Partial<Pick<AiJobSummary, 'kind'>>,
+  phase: AiSiteBuildPhase,
+): AiSiteBuildRow[] {
+  if (phase === 'done' && job.outputs.length > 0) {
+    return job.outputs.map((output, index) => ({
+      id: `output-${index}`,
+      label: output.label,
+      state: 'done',
+      detail: output.note ?? output.text ?? null,
+    }))
+  }
+  const noun = job.kind ? aiJobKindNoun(job.kind) : 'AI job'
+  const state: AiSiteBuildRowState =
+    phase === 'done'
+      ? 'done'
+      : phase === 'working'
+        ? 'active'
+        : phase === 'stopped'
+          ? 'paused'
+          : phase === 'canceled'
+            ? 'skipped'
+            : 'failed'
+  return [
+    {
+      id: 'work',
+      label: phase === 'done' ? 'Finished' : `Working on ${noun === 'AI job' ? 'this job' : `your ${noun}`}`,
+      state,
+      startedAt: job.steps[job.steps.length - 1]?.startedAt ?? null,
+    },
+  ]
+}
+
 /** The row the site's look is designed on (AGL-3660). */
 export const AI_SITE_LOOK_ROW_LABEL = 'Designing your look'
 
@@ -392,6 +433,36 @@ export function aiSiteBuildCreditsLine(
   return net > 0 ? `${subject} used ${net} credits.` : null
 }
 
+/** The most of a request a job's title carries. */
+export const AI_JOB_TITLE_MAX_CHARS = 60
+
+/**
+ * What a job's page is called: the first line of what was asked, so one job
+ * among many can be told from the rest. Its state is the heading on the page.
+ * `null` for a job with no request to name it by.
+ */
+export function aiJobPageTitle(job: Pick<AiJobSummary, 'brief'>): string | null {
+  const line = job.brief.split('\n').map((part) => part.trim()).find(Boolean)
+  if (!line) return null
+  return line.length > AI_JOB_TITLE_MAX_CHARS ? `${line.slice(0, AI_JOB_TITLE_MAX_CHARS).trimEnd()}…` : line
+}
+
+/** What a job leaves that is not a draft: saved straight onto the site. */
+const AI_JOB_LIVE_RESOURCES: readonly AiJobOutputResource[] = ['settings', 'media', 'tracking', 'privacy']
+
+/** What a job leaves that touches no site: words for a person to read. */
+const AI_JOB_ANSWER_RESOURCES: readonly AiJobOutputResource[] = ['insight', 'crm', 'text']
+
+/** The sentence under a finished job's heading, by what it actually left. */
+function aiJobDoneLede(job: Partial<Pick<AiJobSummary, 'outputs'>>): string {
+  const resources = (job.outputs ?? []).map((output) => output.resource)
+  const all = (kinds: readonly AiJobOutputResource[]) =>
+    resources.length > 0 && resources.every((resource) => kinds.includes(resource))
+  if (all(AI_JOB_ANSWER_RESOURCES)) return 'Nothing on your site changed.'
+  if (all(AI_JOB_LIVE_RESOURCES)) return 'Its changes are saved and already live.'
+  return 'Everything it built is an unpublished draft until you publish it.'
+}
+
 /** The heading and the sentence under it, for one job's page in its current phase. */
 export interface AiJobPageCopy {
   heading: string
@@ -467,7 +538,7 @@ export function aiJobPageCopy(
       lede:
         job.kind === 'site'
           ? 'Your new pages are drafts. Publish them when you’re happy.'
-          : 'Everything it built is an unpublished draft until you publish it.',
+          : aiJobDoneLede(job),
     }
   }
   if (phase === 'canceled') {

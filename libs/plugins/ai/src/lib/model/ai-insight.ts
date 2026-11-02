@@ -179,6 +179,9 @@ export const AI_INSIGHT_MAX_INSIGHTS = 5
 /** The longest one insight may run, in characters. */
 export const AI_INSIGHT_MAX_CHARS = 280
 
+/** How long an insight's headline may run. */
+export const AI_INSIGHT_HEADLINE_MAX_CHARS = 60
+
 /** The longest the sentence about what the figures could not answer may run. */
 export const AI_INSIGHT_GAP_MAX_CHARS = 200
 
@@ -213,6 +216,8 @@ export interface AiInsightCitation {
 }
 
 export interface AiInsight {
+  /** What happened, in a few words: what the eye lands on. Absent on an answer from before it was asked for. */
+  headline?: string
   /** One or two plain sentences. */
   text: string
   cites: AiInsightCitation[]
