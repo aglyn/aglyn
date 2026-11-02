@@ -29,8 +29,10 @@
  * The body still comes from the ISR-cached catch-all, exactly as before; only
  * the tenant middleware can set the status, because an App Router page has no
  * status lever and the middleware is the one layer that runs ahead of the
- * cache on every request. It asks {@link siteUnavailableForRequest} and
- * rewrites with the status, so a cached page body never decides it.
+ * cache on every request. It asks {@link siteUnavailableForRequest}, reads the
+ * page, and sends it as a 503, so a cached page body never decides the status.
+ * Why it reads the page rather than putting the status on its rewrite is the
+ * note beside that code: on Vercel that rewrite loses the page.
  *
  * DEPENDENCY-FREE ON PURPOSE, like `site-preview.ts`: the middleware runs on
  * the edge and deep-imports this leaf, so it imports nothing.
@@ -49,6 +51,22 @@
  * visits re-reading "not yet".
  */
 export const SITE_UNAVAILABLE_RETRY_AFTER_SECONDS = 3600
+
+/**
+ * Marks the middleware's own read of the notice page, which comes back through
+ * the middleware and must take the plain rewrite rather than read it again.
+ *
+ * Not a secret, and nothing is withheld behind it: a stranger who sends it gets
+ * the same notice with a 200.
+ */
+export const SITE_NOTICE_REQUEST_HEADER = 'x-aglyn-site-notice'
+
+/**
+ * How long a visitor waits on that read, in milliseconds, before being served
+ * the plain rewrite. Generous, as the verdict's deadline is: a cold render
+ * answers inside it, and the page still arrives if it does not.
+ */
+export const SITE_NOTICE_DEADLINE_MS = 8_000
 
 /**
  * Is the site in maintenance mode (AGL-131)?
@@ -80,6 +98,8 @@ export interface SiteUnavailableRouting {
    * route, which shows the team the site.
    */
   teamPreview: boolean
+  /** The middleware's own read of the notice page, not a visitor. */
+  noticeRequest?: boolean
 }
 
 /**
@@ -96,6 +116,8 @@ export interface SiteUnavailableRouting {
  *   503 set here would only argue with that redirect.
  * - **One page in preview: no.** The public gets the site's 404 there, and the
  *   render's own 404 decides that status.
+ * - **The middleware's own read of the page: no.** That is how the body of the
+ *   503 is fetched, and it would otherwise fetch itself.
  *
  * Nothing here is a permission. The body is the loader's decision, and a
  * request this answers `false` for is one whose body is already the site, or
@@ -105,7 +127,7 @@ export function siteUnavailableForRequest(
   verdict: SiteUnavailableVerdict | null | undefined,
   routing: SiteUnavailableRouting,
 ): boolean {
-  if (!verdict || routing.entryPreview) return false
+  if (!verdict || routing.entryPreview || routing.noticeRequest) return false
   if (verdict.maintenance === true) return true
   return verdict.preview === true && !routing.teamPreview
 }
