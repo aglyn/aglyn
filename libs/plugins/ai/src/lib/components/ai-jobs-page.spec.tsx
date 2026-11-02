@@ -99,7 +99,7 @@ describe('the route the plugin registers (AGL-3596)', () => {
     expect(item).toEqual(
       expect.objectContaining({
         label: 'AI jobs',
-        recordTitle: 'Building your site',
+        recordTitle: 'AI job',
         unlisted: true,
         ownsSubtree: true,
       }),

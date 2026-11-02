@@ -82,7 +82,8 @@ const PHASE_COLOR: Record<AiJobPhase, 'default' | 'primary' | 'success' | 'error
   canceled: 'default',
 }
 
-const WHEN = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' })
+/** When a job started, as its row and its page say it. */
+export const AI_JOB_WHEN = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' })
 
 /** What a job cost the person: what it spent, less what we refunded. */
 export function aiJobNetCredits(job: Pick<AiJobSummary, 'creditsSpent' | 'refundedCredits'>): number {
@@ -280,7 +281,7 @@ export function AiJobsListPage({ hostId, basePath }: ConsolePluginPageProps) {
                         <Typography variant="caption" color="text.secondary">
                           {credits > 0 ? `${credits.toLocaleString('en-US')} credits · ` : ''}
                           {Number.isNaN(created.getTime()) ? null : (
-                            <time dateTime={job.createdAt}>{WHEN.format(created)}</time>
+                            <time dateTime={job.createdAt}>{AI_JOB_WHEN.format(created)}</time>
                           )}
                         </Typography>
                       </Stack>
