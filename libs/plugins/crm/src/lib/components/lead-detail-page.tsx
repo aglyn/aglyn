@@ -88,6 +88,7 @@ export function LeadDetailPage(props: CrmDetailPageProps) {
     data: lead,
     status,
     fromCache,
+    listen,
   } = useFirestoreDoc<LeadDocument>(
     () => (scope ? doc(firestore, scope[0], scope[1], 'leads', id) : null),
     [firestore, scope, id],
@@ -192,6 +193,7 @@ export function LeadDetailPage(props: CrmDetailPageProps) {
           lead={lead}
           leadStatus={status}
           fromCache={fromCache}
+          listen={listen}
           basePath={basePath}
           roster={roster}
           onConvert={() => setConverting(true)}
@@ -232,6 +234,7 @@ export function LeadDetailPage(props: CrmDetailPageProps) {
           lead={lead}
           leadStatus={status}
           fromCache={fromCache}
+          listen={listen}
           options={campaigns.options}
           optionsReady={campaigns.ready}
           onFiled={({ added, removed }) => {

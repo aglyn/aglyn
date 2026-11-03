@@ -40,6 +40,7 @@ import {
   useFirestoreCollection,
   useUser,
   writeGuardedBySeed,
+  type ListenHandle,
 } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
@@ -193,6 +194,8 @@ export interface DealEditDrawerProps {
    */
   unreadable?: boolean
   fromCache?: boolean
+  /** The deal's listener, so a save waits on that read alone (AGL-4135). */
+  listen?: ListenHandle | null
   /** After a save, with the id of the deal written. */
   onSaved?: (dealId: string, mode: 'create' | 'edit') => void
 }
@@ -252,6 +255,7 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
     defaultPipeline,
     unreadable = false,
     fromCache = false,
+    listen,
     onSaved,
   } = props
   const mode: 'create' | 'edit' = deal ? 'edit' : 'create'
@@ -513,6 +517,7 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
               subject: 'deal',
               unreadable,
               fromCache: fromCache && dealEditNeedsConfirmedRead(edit),
+              listen,
             },
             async () => {
               let held = true
@@ -607,6 +612,7 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
     values,
     unreadable,
     fromCache,
+    listen,
     firestore,
     createTokens,
     createHostId,

@@ -37,7 +37,12 @@ import {
   armFirestoreStallWatch,
   noteFirestoreServerAnswer,
 } from './firebase/firestore-stall-recovery'
-import { sameDocument, trackListenConfirmation } from './helpers/listen-confirmation'
+import {
+  createListenHandle,
+  sameDocument,
+  trackListenConfirmation,
+  type ListenHandle,
+} from './helpers/listen-confirmation'
 
 const RETRY_DELAY_MS = 400
 const MAX_RETRIES = 5
@@ -73,6 +78,12 @@ export interface UseFirestoreDocResult<T> {
    * `UseFirestoreCollectionResult.serverDenied`.
    */
   serverDenied: boolean
+  /**
+   * This hook's listener, for a guarded save seeded from `data` to wait on
+   * alone (`writeGuardedBySeed`'s `listen`, AGL-4135). Stable for the life of
+   * the hook.
+   */
+  listen: ListenHandle
 }
 
 /** Where a document read stands: still loading, failed, answered with nothing, or answered. */
@@ -116,6 +127,7 @@ export function useFirestoreDoc<T = DocumentData>(
   // from the server yet must not read as server-confirmed.
   const [fromCache, setFromCache] = useState(true)
   const [serverDenied, setServerDenied] = useState(false)
+  const [listen] = useState(createListenHandle)
   const buildRefRef = useRef(buildRef)
   buildRefRef.current = buildRef
   const idField = options.idField
@@ -168,7 +180,7 @@ export function useFirestoreDoc<T = DocumentData>(
      */
     const disarmStall = armFirestoreStallWatch(ref.firestore)
     /** What a save waits on while this listener is unconfirmed (AGL-4120). */
-    const confirmation = trackListenConfirmation()
+    const confirmation = trackListenConfirmation(listen)
     /** The cached snapshot on screen, while one is (AGL-4120). */
     let shownFromCache: DocumentSnapshot<DocumentData> | null = null
 
@@ -295,7 +307,7 @@ export function useFirestoreDoc<T = DocumentData>(
     return () => {
       cancelled = true
       disarmStall()
-      confirmation.release()
+      confirmation.close()
       unsubscribeHeal()
       if (timer) clearTimeout(timer)
       cancelRefusedReopen?.()
@@ -304,7 +316,7 @@ export function useFirestoreDoc<T = DocumentData>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps)
 
-  return { data, status, error, hasPendingWrites, fromCache, serverDenied }
+  return { data, status, error, hasPendingWrites, fromCache, serverDenied, listen }
 }
 
 export default useFirestoreDoc

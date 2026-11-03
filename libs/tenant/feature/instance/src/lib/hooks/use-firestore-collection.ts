@@ -38,7 +38,11 @@ import {
   armFirestoreStallWatch,
   noteFirestoreServerAnswer,
 } from './firebase/firestore-stall-recovery'
-import { trackListenConfirmation } from './helpers/listen-confirmation'
+import {
+  createListenHandle,
+  trackListenConfirmation,
+  type ListenHandle,
+} from './helpers/listen-confirmation'
 
 const RETRY_DELAY_MS = 400
 const MAX_RETRIES = 5
@@ -100,6 +104,12 @@ export interface UseFirestoreCollectionResult<T> {
    * `status`.
    */
   serverDenied: boolean
+  /**
+   * This hook's listener, for a guarded save seeded from `data` to wait on
+   * alone (`writeGuardedBySeed`'s `listen`, AGL-4135). Stable for the life of
+   * the hook.
+   */
+  listen: ListenHandle
 }
 
 /**
@@ -128,6 +138,7 @@ export function useFirestoreCollection<T = DocumentData>(
   // from the server yet must not read as server-confirmed.
   const [fromCache, setFromCache] = useState(true)
   const [serverDenied, setServerDenied] = useState(false)
+  const [listen] = useState(createListenHandle)
   const buildQueryRef = useRef(buildQuery)
   buildQueryRef.current = buildQuery
   const idField = options.idField
@@ -194,7 +205,7 @@ export function useFirestoreCollection<T = DocumentData>(
      */
     const disarmStall = armFirestoreStallWatch(q.firestore)
     /** What a save waits on while this listener is unconfirmed (AGL-4120). */
-    const confirmation = trackListenConfirmation()
+    const confirmation = trackListenConfirmation(listen)
     /** Whether the rows on screen came from the cache (AGL-4120). */
     let shownFromCache = false
     // Disappearance tracking (AGL-1196); inert unless opted in.
@@ -435,7 +446,7 @@ export function useFirestoreCollection<T = DocumentData>(
     return () => {
       cancelled = true
       disarmStall()
-      confirmation.release()
+      confirmation.close()
       unsubscribeHeal()
       if (timer) clearTimeout(timer)
       cancelRefusedReopen?.()
@@ -444,7 +455,7 @@ export function useFirestoreCollection<T = DocumentData>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps)
 
-  return { data, status, error, fromCache, serverDenied }
+  return { data, status, error, fromCache, serverDenied, listen }
 }
 
 export default useFirestoreCollection

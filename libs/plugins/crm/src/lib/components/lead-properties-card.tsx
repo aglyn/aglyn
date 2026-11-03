@@ -29,6 +29,7 @@ import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-act
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   type FirestoreDocStatus,
+  type ListenHandle,
   useFirestore,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
@@ -159,6 +160,8 @@ export interface LeadPropertiesCardProps {
   leadStatus: FirestoreDocStatus
   /** The listener has not confirmed this document with the server yet. */
   fromCache: boolean
+  /** The lead's listener, so a save waits on that read alone (AGL-4135). */
+  listen?: ListenHandle | null
   basePath: string
   roster: OrgMemberOptions
   onConvert: () => void
@@ -224,6 +227,7 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
     lead,
     leadStatus,
     fromCache,
+    listen,
     basePath,
     roster,
     onConvert,
@@ -415,7 +419,7 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
     setSaving(true)
     let landed = false
     const verdict = await writeGuardedBySeed(
-      { subject: 'lead', fromCache, unreadable: leadStatus === 'error' },
+      { subject: 'lead', fromCache, unreadable: leadStatus === 'error', listen },
       async () => {
         landed = await write(update, 'Lead saved')
       },

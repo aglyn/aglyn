@@ -43,6 +43,10 @@ import {
   memoryCacheFallbackActive,
   MEMORY_CACHE_FALLBACK_KEY,
   MEMORY_CACHE_FALLBACK_TTL_MS,
+  firestoreClientId,
+  leaseCheckFrom,
+  LEASE_PROBE_TIMEOUT_MS,
+  LEASE_PROMPT_READ_MS,
   probePrimaryLease,
   readMemoryCacheFallback,
   readSharedCacheLock,
@@ -50,6 +54,7 @@ import {
   SHARED_CACHE_LOCK_KEY,
   SHARED_CACHE_LOCK_TTL_MS,
   STALE_PRIMARY_LEASE_MS,
+  WEDGE_LOCK_MS,
   wedgeEvidenceFrom,
   type WedgeEvidence,
 } from './firestore-multitab-wedge'
@@ -244,6 +249,89 @@ describe('wedgeEvidenceFrom (AGL-3428)', () => {
   })
 })
 
+describe('leaseCheckFrom: what the shared cache says about a quiet client (AGL-4135)', () => {
+  it('reads a store that did not answer promptly as a client waiting behind a transaction', () => {
+    expect(leaseCheckFrom({ state: 'locked' }, 'this-tab')).toEqual({ state: 'waiting' })
+  })
+
+  it("reads another tab's live lease as that tab serving this one", () => {
+    expect(
+      leaseCheckFrom({ state: 'leased', ownerId: 'slow-tab', ageMs: 4_999 }, 'this-tab'),
+    ).toEqual({ state: 'served', ownerId: 'slow-tab' })
+  })
+
+  it('leaves the cycle to a tab holding its own lease, and to a lapsed or vacant one', () => {
+    expect(
+      leaseCheckFrom({ state: 'leased', ownerId: 'this-tab', ageMs: 1_000 }, 'this-tab'),
+    ).toEqual({ state: 'silent' })
+    // The SDK's own 5 s: past it, the election the cycle forces is due.
+    expect(
+      leaseCheckFrom({ state: 'leased', ownerId: 'dead-tab', ageMs: 5_000 }, 'this-tab'),
+    ).toEqual({ state: 'silent' })
+    expect(leaseCheckFrom({ state: 'vacant' }, 'this-tab')).toEqual({ state: 'silent' })
+    expect(leaseCheckFrom({ state: 'unknown' }, 'this-tab')).toEqual({ state: 'silent' })
+  })
+
+  it('cannot attribute a live lease without this tab\'s id, so the stall is taken at its word', () => {
+    expect(
+      leaseCheckFrom({ state: 'leased', ownerId: 'slow-tab', ageMs: 1_000 }, undefined),
+    ).toEqual({ state: 'silent' })
+  })
+
+  it('asks for a prompt answer, well inside the wedge probe', () => {
+    expect(LEASE_PROMPT_READ_MS).toBeLessThan(4_000)
+  })
+})
+
+describe('WEDGE_LOCK_MS (AGL-4135)', () => {
+  /**
+   * A starved tab held the store for about 15 s and then let go, with a fresh
+   * lease (production, v1.5.0). Read at 4 s, that reloaded a healthy tab onto
+   * the memory cache and lost what had been typed.
+   */
+  it('outlasts a store a starved tab holds, so a living tab is not taken for a frozen one', () => {
+    expect(WEDGE_LOCK_MS).toBeGreaterThan(15_000)
+    expect(WEDGE_LOCK_MS).toBeGreaterThan(LEASE_PROBE_TIMEOUT_MS)
+  })
+
+  it('leaves a tab on the shared cache when a long-held store answers with a fresh lease', async () => {
+    const idb = fakeIndexedDb({
+      lease: { ownerId: 'this-tab', allowTabSynchronization: true, leaseTimestampMs: NOW - 1_000 },
+      locked: true,
+    })
+    const fallBack = jest.fn()
+    const escalate = createWedgeEscalation({
+      // The starved tab's transaction ends before the longer bound.
+      probe: () => {
+        const read = probePrimaryLease(idb.factory, DATABASE, { timeoutMs: 200, now: () => NOW })
+        setTimeout(() => idb.release(), 60)
+        return read
+      },
+      fallBack,
+      isFallbackActive: () => false,
+      isOnline: () => true,
+      isVisible: () => true,
+      wait: async () => undefined,
+    })
+
+    await expect(escalate()).resolves.toBe(false)
+    expect(fallBack).not.toHaveBeenCalled()
+  })
+})
+
+describe('firestoreClientId (AGL-4135)', () => {
+  it("reads the id the SDK writes this tab's clientMetadata row under", () => {
+    const firestore = { _firestoreClient: { clientId: 'AE346lHAlQVBVHA11pQn' } }
+    expect(firestoreClientId(firestore as never)).toBe('AE346lHAlQVBVHA11pQn')
+  })
+
+  it('answers undefined before the client starts, or when the SDK no longer has it', () => {
+    expect(firestoreClientId({} as never)).toBeUndefined()
+    expect(firestoreClientId({ _firestoreClient: {} } as never)).toBeUndefined()
+    expect(firestoreClientId({ _firestoreClient: { clientId: 7 } } as never)).toBeUndefined()
+  })
+})
+
 describe('a stalled tab behind a frozen primary recovers onto the memory cache (AGL-3428)', () => {
   beforeEach(() => {
     window.sessionStorage.clear()
@@ -268,13 +356,20 @@ describe('a stalled tab behind a frozen primary recovers onto the memory cache (
       fallBack?: jest.Mock
     } = {},
   ) => {
+    const cycled = jest.fn(network)
     const recovery = createStallRecovery({
-      disable: network,
-      enable: network,
+      disable: cycled,
+      enable: cycled,
       isOnline: () => true,
       isVisible: () => visible,
       stepTimeoutMs: 20,
-      afterCycle: createWedgeEscalation({
+      // What the console reads first (AGL-4135): the same probe, prompt.
+      checkLease: async () =>
+        leaseCheckFrom(
+          await probePrimaryLease(idb.factory, DATABASE, { timeoutMs: 20, now: () => NOW }),
+          'this-tab',
+        ),
+      escalate: createWedgeEscalation({
         probe: () => probePrimaryLease(idb.factory, DATABASE, { timeoutMs: 20, now: () => NOW }),
         fallBack,
         isOnline: () => true,
@@ -282,14 +377,66 @@ describe('a stalled tab behind a frozen primary recovers onto the memory cache (
         wait: async () => undefined,
       }),
     })
-    return { recovery, fallBack }
+    return { recovery, fallBack, cycled }
   }
 
-  it('falls back when the frozen tab holds the store, although the network cycle never finishes', async () => {
-    const { recovery, fallBack } = stalledTab(fakeIndexedDb({ locked: true }))
+  /**
+   * The cycle's calls would only queue behind the same lock (AGL-4135), so the
+   * wedge check runs without them, and sooner.
+   */
+  it('falls back when the frozen tab holds the store, without queueing a network cycle behind it', async () => {
+    const { recovery, fallBack, cycled } = stalledTab(fakeIndexedDb({ locked: true }))
 
     await expect(recovery.recover()).resolves.toBe('fell-back')
     expect(fallBack).toHaveBeenCalledWith({ reason: 'lease-locked' })
+    expect(cycled).not.toHaveBeenCalled()
+  })
+
+  /**
+   * A starved tab holds each transaction for seconds, and a healthy tab waits
+   * behind it. Cycled when its queue drained, that tab broadcast `Offline` and
+   * put every confirmed view back on the cache (production, AGL-4135).
+   */
+  it('never cycles a tab that is only waiting on another tab, and keeps it on the shared cache once the store answers', async () => {
+    const lease = { ownerId: 'this-tab', allowTabSynchronization: true, leaseTimestampMs: NOW - 1_000 }
+    // Held when the stall is noticed; free again by the wedge check.
+    const busy = fakeIndexedDb({ lease, locked: true })
+    const free = fakeIndexedDb({ lease })
+    const cycled = jest.fn(async () => undefined)
+    const fallBack = jest.fn()
+    const recovery = createStallRecovery({
+      disable: cycled,
+      enable: cycled,
+      isOnline: () => true,
+      isVisible: () => true,
+      checkLease: async () =>
+        leaseCheckFrom(await probePrimaryLease(busy.factory, DATABASE, { timeoutMs: 20 }), 'this-tab'),
+      escalate: createWedgeEscalation({
+        probe: () => probePrimaryLease(free.factory, DATABASE, { timeoutMs: 20, now: () => NOW }),
+        fallBack,
+        isFallbackActive: () => false,
+        isOnline: () => true,
+        isVisible: () => true,
+        wait: async () => undefined,
+      }),
+    })
+
+    await expect(recovery.recover()).resolves.toBe('waiting')
+    expect(cycled).not.toHaveBeenCalled()
+    expect(fallBack).not.toHaveBeenCalled()
+    busy.release()
+  })
+
+  it('never cycles a tab another tab is serving on a live lease (AGL-4135)', async () => {
+    const { recovery, fallBack, cycled } = stalledTab(
+      fakeIndexedDb({
+        lease: { ownerId: 'slow-tab', allowTabSynchronization: true, leaseTimestampMs: NOW - 2_000 },
+      }),
+    )
+
+    await expect(recovery.recover()).resolves.toBe('served')
+    expect(cycled).not.toHaveBeenCalled()
+    expect(fallBack).not.toHaveBeenCalled()
   })
 
   it('falls back when the lease belongs to a tab that stopped renewing it', async () => {
@@ -433,7 +580,7 @@ describe('a tab opened after another has seen the lock skips the wait (AGL-4090)
       isOnline: () => true,
       isVisible: () => true,
       stepTimeoutMs: 20,
-      afterCycle: createWedgeEscalation({
+      escalate: createWedgeEscalation({
         probe: () => probePrimaryLease(idb.factory, DATABASE, { timeoutMs: 20 }),
         fallBack: (evidence) =>
           fallBackToMemoryCache(evidence, { databaseName: DATABASE, reload }),

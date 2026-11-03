@@ -42,7 +42,13 @@ export interface UsePagedCollectionOptions
 }
 
 export interface UsePagedCollectionResult<T>
-  extends UseFirestoreCollectionResult<T> {
+  extends Omit<UseFirestoreCollectionResult<T>, 'listen'> {
+  /**
+   * The listener the rows came from, for a guarded save to wait on (AGL-4135).
+   * `null` for a window assembled from more than one listener, which names
+   * neither.
+   */
+  listen: UseFirestoreCollectionResult<T>['listen'] | null
   /** The current page's rows. `data` holds the probe row; this never does. */
   rows: T[]
   /** A further page exists. A FACT from the probe row, not a guess. */

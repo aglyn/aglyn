@@ -21,7 +21,11 @@ import {
   type Firestore,
 } from 'firebase/firestore'
 
-import { browserWedgeEscalationFor } from './firestore-multitab-wedge'
+import {
+  browserLeaseCheckFor,
+  browserWedgeEscalationFor,
+  type LeaseCheck,
+} from './firestore-multitab-wedge'
 
 /**
  * RECOVERING A FIRESTORE CLIENT THAT HAS STOPPED SYNCING (AGL-3373).
@@ -91,6 +95,8 @@ import { browserWedgeEscalationFor } from './firestore-multitab-wedge'
  *   a page stalls together, and one cycle serves them all. A concurrent
  *   request shares the cycle already running.
  * - **A client the server is answering is not stalled (AGL-4120).** See below.
+ * - **Nor is one waiting on the shared cache, or served by a live lease
+ *   holder (AGL-4135).** See below.
  * - **The network is always re-enabled**, including when disabling fails.
  * - **Each step is bounded by {@link NETWORK_STEP_TIMEOUT_MS}.** Both calls are
  *   queued on the client's AsyncQueue, and when another tab has locked the
@@ -118,13 +124,47 @@ import { browserWedgeEscalationFor } from './firestore-multitab-wedge'
  * client that is working through a page is left to finish. One that has really
  * gone silent stops stamping, and the next watch to fire gets its cycle.
  *
+ * ## A client that is waiting is not silent either (AGL-4135)
+ *
+ * A client can go 8 s without an answer while nothing is wrong with it. Every
+ * console tab shares one IndexedDB cache, and every SDK transaction locks every
+ * store. A tab that is starved (busy, slow, throttled in the background) keeps
+ * each transaction open until its event loop comes back between requests, for
+ * seconds at a time. A healthy tab's client waits behind that lock and cannot
+ * apply what the server sends, so it raises no confirmed snapshot. Measured in
+ * production (v1.5.0, two tabs): the tab holding the lease was blocked for
+ * about 12 s, and when its queue drained the cycle it had asked for ran, broadcast
+ * `Offline` and put every confirmed view in both tabs back on the cache, the
+ * record being saved included. The cycle cannot shorten another tab's
+ * transaction, because both of its calls queue behind it.
+ *
+ * And a client in a tab that does not hold the lease is served by the tab that
+ * does. Cycling it cannot reach the holder's stream. It only marks this tab
+ * `networkEnabled: false` and reruns an election the live holder wins
+ * (`networkEnabled: false` at 5.7 s in the AGL-4132 run).
+ *
+ * So before a cycle, the client reads the lease ({@link StallRecoveryDeps.checkLease}):
+ *
+ * - **the read waits** (`waiting`): a transaction holds the store. No cycle.
+ *   The wedge check below runs in its place, since a store that stays locked is
+ *   the AGL-3428 wedge whether or not a cycle ran first.
+ * - **another tab holds a live lease** (`served`): no cycle. The holder is
+ *   slow, and nothing this tab does makes it faster.
+ * - **anything else** (`silent`): this tab holds the lease and its stream has
+ *   gone quiet, or the lease has lapsed or is vacant and an election is due.
+ *   That is what the cycle is for, and it runs.
+ *
+ * The read takes up to a second (`LEASE_PROMPT_READ_MS`), so the client is
+ * asked again afterwards whether the server has answered meanwhile.
+ *
  * ## When the cycle is not enough (AGL-3428)
  *
  * A tab frozen partway through an IndexedDB transaction holds every store the
  * SDK uses, and the election the cycle forces cannot run. For a client on the
  * durable multi-tab cache the cycle is followed by the lease check in
  * `firestore-multitab-wedge.ts`, which moves the tab to a memory cache when
- * the lease shows the wedge.
+ * the lease shows the wedge. A client found `waiting` gets that check without
+ * the cycle.
  */
 
 /**
@@ -161,6 +201,10 @@ export type StallRecoveryOutcome =
   | 'cooling'
   /** The server answered this client moments ago: it is busy, not stalled. */
   | 'answering'
+  /** A transaction holds the shared cache, and this client is queued behind it (AGL-4135). */
+  | 'waiting'
+  /** Another tab holds a live lease and serves this client (AGL-4135). */
+  | 'served'
   /** The network was cycled. */
   | 'recovered'
   /** The cycle threw or timed out; the network was still re-enabled if at all possible. */
@@ -189,10 +233,17 @@ export interface StallRecoveryDeps {
   /** The bound on each of `disable` and `enable`. */
   stepTimeoutMs?: number
   /**
-   * Runs after every cycle; resolves `true` when it has moved the tab off
-   * the shared cache. Only a multi-tab client has one.
+   * Reads the shared cache's lease before a cycle (AGL-4135). Only a multi-tab
+   * client has one; without it, every stall that passes the other guards is
+   * cycled.
    */
-  afterCycle?: () => Promise<boolean>
+  checkLease?: () => Promise<LeaseCheck>
+  /**
+   * The wedge check. Runs after every cycle, and in place of one for a client
+   * found `waiting`. Resolves `true` when it has moved the tab off the shared
+   * cache. Only a multi-tab client has one.
+   */
+  escalate?: () => Promise<boolean>
 }
 
 export interface StallRecovery {
@@ -217,11 +268,14 @@ export function createStallRecovery(deps: StallRecoveryDeps): StallRecovery {
     answeringWindowMs = FIRESTORE_STALL_MS,
     cooldownMs = STALL_RECOVERY_COOLDOWN_MS,
     stepTimeoutMs = NETWORK_STEP_TIMEOUT_MS,
-    afterCycle,
+    checkLease,
+    escalate,
   } = deps
   let lastStartedAt: number | undefined
   /** Cycles in a row that the server has not answered since. */
   let quietCycles = 0
+  /** When a client found waiting last had the wedge check (AGL-4135). */
+  let lastWaitCheckedAt: number | undefined
   let running: Promise<StallRecoveryOutcome> | undefined
 
   /** Whether `step` settled successfully within `stepTimeoutMs`. */
@@ -242,18 +296,64 @@ export function createStallRecovery(deps: StallRecoveryDeps): StallRecovery {
       }
     })
 
+  /** Whether the escalation moved the tab off the shared cache. Best effort. */
+  const escalated = async (): Promise<boolean> => {
+    if (!escalate) return false
+    try {
+      return await escalate()
+    } catch {
+      return false
+    }
+  }
+
   const cycle = async (): Promise<StallRecoveryOutcome> => {
     let outcome: StallRecoveryOutcome = 'recovered'
     if (!(await bounded(disable))) outcome = 'failed'
     if (!(await bounded(enable))) outcome = 'failed'
-    if (afterCycle) {
+    // The escalation is best effort; the cycle's own outcome stands.
+    return (await escalated()) ? 'fell-back' : outcome
+  }
+
+  const answeredWithin = (at: number): boolean => {
+    const answeredAt = lastServerAnswerAt?.()
+    return answeredAt !== undefined && at - answeredAt < answeringWindowMs
+  }
+
+  /** Past the guards: reads the lease, then cycles only a client nothing explains. */
+  const attempt = async (): Promise<StallRecoveryOutcome> => {
+    let lease: LeaseCheck = { state: 'silent' }
+    if (checkLease) {
       try {
-        if (await afterCycle()) return 'fell-back'
+        lease = await checkLease()
       } catch {
-        // The escalation is best effort; the cycle's own outcome stands.
+        // Unread, the stall is taken at its word, as it always was.
       }
     }
-    return outcome
+    if (lease.state === 'served') return 'served'
+    if (lease.state === 'waiting') {
+      // As often as a cycle would have run it, and no more: every check is
+      // one more chance for a long wait to read as a wedge.
+      const checkedAt = now()
+      if (
+        lastWaitCheckedAt !== undefined &&
+        checkedAt - lastWaitCheckedAt < cooldownMs
+      ) {
+        return 'waiting'
+      }
+      lastWaitCheckedAt = checkedAt
+      return (await escalated()) ? 'fell-back' : 'waiting'
+    }
+    // The read took time, and a client that was waiting may have answered.
+    const at = now()
+    if (answeredWithin(at)) return 'answering'
+    if (lastStartedAt !== undefined) {
+      const answeredAt = lastServerAnswerAt?.()
+      const answeredSince =
+        answeredAt !== undefined && answeredAt >= lastStartedAt
+      quietCycles = answeredSince ? 0 : quietCycles + 1
+    }
+    lastStartedAt = at
+    return cycle()
   }
 
   return {
@@ -262,22 +362,15 @@ export function createStallRecovery(deps: StallRecoveryDeps): StallRecovery {
       if (!isOnline()) return Promise.resolve('offline')
       if (!isVisible()) return Promise.resolve('hidden')
       const at = now()
-      const answeredAt = lastServerAnswerAt?.()
-      if (answeredAt !== undefined && at - answeredAt < answeringWindowMs) {
-        return Promise.resolve('answering')
-      }
+      if (answeredWithin(at)) return Promise.resolve('answering')
       if (lastStartedAt !== undefined) {
         const cooldown = Math.min(
           cooldownMs * 2 ** quietCycles,
           STALL_RECOVERY_MAX_COOLDOWN_MS,
         )
         if (at - lastStartedAt < cooldown) return Promise.resolve('cooling')
-        const answeredSince =
-          answeredAt !== undefined && answeredAt >= lastStartedAt
-        quietCycles = answeredSince ? 0 : quietCycles + 1
       }
-      lastStartedAt = at
-      running = cycle().finally(() => {
+      running = attempt().finally(() => {
         running = undefined
       })
       return running
@@ -320,7 +413,8 @@ export function recoverStalledFirestore(
       disable: () => disableNetwork(firestore),
       enable: () => enableNetwork(firestore),
       lastServerAnswerAt: () => serverAnswers.get(firestore),
-      afterCycle: browserWedgeEscalationFor(firestore),
+      checkLease: browserLeaseCheckFor(firestore),
+      escalate: browserWedgeEscalationFor(firestore),
     })
     recoveries.set(firestore, recovery)
   }
