@@ -9,6 +9,28 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.5.0 — 2026-11-03
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.4.0...v1.5.0)
+
+### Added
+
+- **weekly-summary:** the free email takes the insights layout, links and all ([AGL-4131](https://linear.app/aglyn/issue/AGL-4131))
+
+### Fixed
+
+- **health:** the billing door stops reading pending Stripe events as failures ([AGL-4133](https://linear.app/aglyn/issue/AGL-4133))
+- **crm:** the Edit deal drawer shows its links and writes only what changed ([AGL-4132](https://linear.app/aglyn/issue/AGL-4132))
+- **console:** a typed workspace name survives a missed claim ([AGL-4117](https://linear.app/aglyn/issue/AGL-4117))
+
+<details>
+<summary>Also in this release: 1 test, 1 chore</summary>
+
+- **console:** the Google door's create names its name as derived ([AGL-4117](https://linear.app/aglyn/issue/AGL-4117))
+- **linear:** raise the id ceiling to AGL-4131 ([AGL-4131](https://linear.app/aglyn/issue/AGL-4131))
+
+</details>
+
 ## v1.4.0 — 2026-11-02
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.3.0...v1.4.0)
