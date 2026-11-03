@@ -4,12 +4,12 @@ Weglot translation for a merchant's published Aglyn site, with the merchant's
 own Weglot account and public project key (AGL-3700). Aglyn holds no Weglot
 account and no Aglyn server calls Weglot.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
 ```bash
-npm install @aglyn/plugins-weglot@beta
+npm install @aglyn/plugins-weglot
 ```
 
 A plugin is loaded through Aglyn's plugin manager (`@aglyn/aglyn`); it is not a standalone library.

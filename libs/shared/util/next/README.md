@@ -2,11 +2,11 @@
 
 React hooks and helpers for carrying a `?continue=` return URL through a Next.js App Router sign-in flow without creating an open redirect. It is used by Aglyn's console sign-in pages and is usable in any App Router app.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/shared-util-next@beta
+    npm install @aglyn/shared-util-next
 
 Peer dependencies: `next` (`16.3.3`) and `react` (`^19.2.8`).
 

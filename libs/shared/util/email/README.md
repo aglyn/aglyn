@@ -1,10 +1,10 @@
 # @aglyn/shared-util-email
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/shared-util-email@beta
+    npm install @aglyn/shared-util-email
 
 One place that sends outbound **application** email, through a mail provider
 the deployment chooses: [Resend](https://resend.com) by default, or the

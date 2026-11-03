@@ -2,15 +2,15 @@
 
 Stacked snackbar notifications for Material UI: a provider that queues and displays snackbars, and a hook to enqueue and close them from anywhere below it. The API follows notistack's (`SnackbarProvider`, `useSnackbar`, `enqueueSnackbar`). The Aglyn console, Besigner and the plugins' console pages use it for their toasts.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/shared-ui-snackstack@beta
+    npm install @aglyn/shared-ui-snackstack
 
 Peer dependencies: `react`, `react-dom` and `@mui/material`, plus three Aglyn packages that are declared as peers rather than dependencies, so install them alongside:
 
-    npm install @aglyn/shared-ui-theme@beta @aglyn/shared-util-tools@beta @aglyn/shared-util-vendor@beta
+    npm install @aglyn/shared-ui-theme @aglyn/shared-util-tools @aglyn/shared-util-vendor
 
 ## What's in it
 

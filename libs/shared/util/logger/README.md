@@ -4,11 +4,11 @@ A small leveled logger: named instances, a log level per instance, and a
 replaceable handler. The larger Aglyn packages log through it, and it works on
 its own. Its shape follows `@firebase/logger`; it depends on nothing.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/shared-util-logger@beta
+    npm install @aglyn/shared-util-logger
 
 ## Usage
 

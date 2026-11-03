@@ -2,11 +2,11 @@
 
 Helpers for writing JSON API routes in Next.js: one response envelope for both the Pages Router (`NextApiResponse`) and the App Router (Web `Response`), plus small middleware and cookie utilities. Published mainly as a building block for Aglyn's own apps; usable in any Next.js project that wants the same envelope.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/shared-util-rest-api@beta
+    npm install @aglyn/shared-util-rest-api
 
 Peer dependency: `next` (`16.3.3`).
 

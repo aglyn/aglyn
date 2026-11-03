@@ -6,12 +6,12 @@ core's media delivery contract (`core.media-delivery` in
 access decision and never names a provider; this plugin holds the copies
 and serves them.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
 ```bash
-npm install @aglyn/plugins-video-delivery@beta
+npm install @aglyn/plugins-video-delivery
 ```
 
 A plugin is loaded through Aglyn's plugin manager (`@aglyn/aglyn`) by the console and the tenant runtime; it is not a standalone library.

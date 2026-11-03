@@ -2,11 +2,11 @@
 
 Thin re-exports of the third-party utilities the Aglyn packages use, under stable names, so that each library is depended on in one place. It is an internal building block of `@aglyn/aglyn`, `@aglyn/besigner`, `@aglyn/plugins-mui` and the shared UI packages. There is little reason to install it on its own; install the underlying library instead.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/shared-util-vendor@beta
+    npm install @aglyn/shared-util-vendor
 
 Peer dependency: `react` (`^19.2.8`), used by the `use-debounce` module. The `mobx-computed-fn` module re-exports from `mobx-utils`, which itself needs `mobx` installed.
 

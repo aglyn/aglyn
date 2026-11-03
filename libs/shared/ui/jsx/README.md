@@ -2,11 +2,11 @@
 
 Aglyn's general-purpose React and Material UI component library: layout and card primitives, links, menus, an icon component for Material Design Icon paths, shadow-DOM hosts, an error boundary, loading and confirmation contexts, and a set of hooks. The renderer, Besigner, the tenant runtime and every feature plugin build their UI on it. Nothing in it knows about Aglyn's data model, so it can be used in any React and MUI app.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/shared-ui-jsx@beta
+    npm install @aglyn/shared-ui-jsx
 
 Peer dependencies: `react`, `react-dom`, `next`, `@mui/material`, `@mui/system`, `@mui/utils`, `@mui/styles` and `@mui/x-data-grid`. `next` is needed by the link and router-event modules, and `@mui/x-data-grid` by the data table.
 

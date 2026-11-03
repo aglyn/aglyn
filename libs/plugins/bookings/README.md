@@ -2,11 +2,11 @@
 
 The Bookings plugin for Aglyn: bookable services, open time slots, and free or paid appointments taken on a published site and managed in the console. Install it if you are running or building on the Aglyn platform and want its booking feature.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/plugins-bookings@beta
+    npm install @aglyn/plugins-bookings
 
 Peer dependencies:
 

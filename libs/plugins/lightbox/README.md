@@ -4,12 +4,12 @@ The Lightbox element for Aglyn sites (AGL-3717): a container whose children are
 any elements — text, a form, a video, pictures — hidden until an interaction
 opens it, so a site owner composes a lightbox of their own.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
 ```bash
-npm install @aglyn/plugins-lightbox@beta
+npm install @aglyn/plugins-lightbox
 ```
 
 A plugin is loaded through Aglyn's plugin manager (`@aglyn/aglyn`); it is not a standalone library.

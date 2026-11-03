@@ -2,11 +2,11 @@
 
 A Material UI component mapper for [data-driven-forms](https://github.com/data-driven-forms/react-forms), plus the extra field types Aglyn's editors need: color and icon pickers, CSS dimension, border and gradient editors, a breakpoint span row, a data table, and theme-scale and preset choosers. Besigner's property panels and the plugins' console forms are rendered with it. Install it if you use data-driven-forms with a current MUI version.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/shared-ui-jsx-forms@beta
+    npm install @aglyn/shared-ui-jsx-forms
 
 Peer dependencies: `react`, `next`, `@mui/material`, `@mui/icons-material` and `@mui/x-date-pickers`. `next` is required because the field components are loaded with `next/dynamic`. `@data-driven-forms/react-form-renderer` is a regular dependency and is re-exported, so you do not import it separately.
 

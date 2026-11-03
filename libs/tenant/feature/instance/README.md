@@ -8,11 +8,11 @@ the console halves of the `@aglyn/plugins-*` packages read and write site data
 through it. Install it directly only if you are building a client against an
 Aglyn deployment's Firestore.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/tenant-feature-instance@beta
+    npm install @aglyn/tenant-feature-instance
 
 Peer dependencies:
 

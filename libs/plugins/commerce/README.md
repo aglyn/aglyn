@@ -2,11 +2,11 @@
 
 The Commerce plugin for Aglyn: products, carts, checkout, orders and point of sale, plus the visitor accounts and member blocks that ship in the same bundle. Install it if you are running or building on the Aglyn platform and want a storefront.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/plugins-commerce@beta
+    npm install @aglyn/plugins-commerce
 
 Peer dependencies:
 

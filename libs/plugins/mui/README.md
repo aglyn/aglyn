@@ -2,11 +2,11 @@
 
 The component palette for Aglyn sites, built on Material UI. It is the base element library every Aglyn site is drawn with: layout, text, navigation, media, content collections and more, each registered with the core component registry together with its schema and presets. Install it if you render Aglyn documents or run the Besigner; it is a first-party plugin, loaded through Aglyn's plugin manager.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/plugins-mui@beta
+    npm install @aglyn/plugins-mui
 
 Peer dependencies: `react`, `@mui/material`, `@mui/utils`.
 

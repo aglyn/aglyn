@@ -2,11 +2,11 @@
 
 The Marketplace plugin for Aglyn: browsing, installing, updating and publishing marketplace listings from the console, and the server routes behind those actions. Install it if you run the Aglyn console and want the marketplace in it; it is a first-party plugin, not a standalone library.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/plugins-marketplace@beta
+    npm install @aglyn/plugins-marketplace
 
 Peer dependencies: `react`, `@mui/material`, `firebase`, `next`, and `firebase-admin` for the server entry.
 

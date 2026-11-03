@@ -2,11 +2,11 @@
 
 The AI plugin for Aglyn: the in-console assistant, the Besigner copy assistant, generative building and automation jobs, and the usage metering and access controls around them. It is provider-generic: every feature talks to a provider contract, and vendor specifics live only under `src/lib/providers`. Install it if you run the Aglyn console and want AI features in it; it is a first-party plugin, not a standalone library.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/plugins-ai@beta
+    npm install @aglyn/plugins-ai
 
 Peer dependencies: `react`, `next`, `@mui/material`, `@mui/x-data-grid`, `firebase`, and `firebase-admin` for the server entries.
 

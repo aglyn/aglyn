@@ -8,7 +8,7 @@ dry-run plan and undo.
 
 ## Install
 
-    npm install @aglyn/aglyn-transfer-ui@beta
+    npm install @aglyn/aglyn-transfer-ui
 
 Peer dependencies:
 

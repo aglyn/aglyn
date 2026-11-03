@@ -6,11 +6,11 @@ the framework-independent utilities the rest of the `@aglyn` packages are built
 on. Install it if you are building on Aglyn's model: a renderer, an editor, a
 plugin, or a tool that reads and writes Aglyn documents.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/aglyn@beta
+    npm install @aglyn/aglyn
 
 Peer dependencies:
 

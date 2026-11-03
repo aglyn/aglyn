@@ -2,11 +2,11 @@
 
 Ready-made field schemas and validator lists for [data-driven-forms](https://github.com/data-driven-forms/react-forms): email, password, name, phone, message and postal address fields. Install it if you render forms with `@data-driven-forms/react-form-renderer` and want these common fields predefined. Inside Aglyn the console builds its sign-in and account forms from it.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/shared-data-forms@beta
+    npm install @aglyn/shared-data-forms
 
 No peer dependencies. `@data-driven-forms/react-form-renderer` is a regular dependency; the schemas use its `componentTypes` and `validatorTypes`.
 
