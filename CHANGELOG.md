@@ -9,6 +9,23 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.6.0 — 2026-11-03
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.5.1...v1.6.0)
+
+### Added
+
+- **setup:** an Assist address shows everywhere, and agents read the site's one email ([AGL-4136](https://linear.app/aglyn/issue/AGL-4136))
+- **setup:** a site's business details live in one place, on Setup → Business profile ([AGL-4136](https://linear.app/aglyn/issue/AGL-4136))
+
+### Fixed
+
+- **console:** workspace plugin settings wait on the org's read alone ([AGL-4135](https://linear.app/aglyn/issue/AGL-4135))
+- **console:** the console's guarded saves wait on their own read ([AGL-4135](https://linear.app/aglyn/issue/AGL-4135))
+- **crm:** the rest of the CRM's guarded saves wait on their own read ([AGL-4135](https://linear.app/aglyn/issue/AGL-4135))
+- **plugins:** each plugin's guarded save waits on its own read ([AGL-4135](https://linear.app/aglyn/issue/AGL-4135))
+- **firestore:** useDocData hands its listener to the save it seeds ([AGL-4135](https://linear.app/aglyn/issue/AGL-4135))
+
 ## v1.5.1 — 2026-11-03
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.5.0...v1.5.1)
