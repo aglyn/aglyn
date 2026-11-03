@@ -2115,6 +2115,56 @@ export const WEBHOOK_FAILURE_WINDOW_MINUTES = 60
 export const MAX_FAILED_DELIVERIES_PER_WINDOW = 0
 
 /**
+ * How long a new event can sit on Stripe's undelivered list before it can
+ * count at all (AGL-4133).
+ *
+ * `delivery_success=false` returns events "still pending" as well as events
+ * that failed, so every event starts its life on that list. This is the time
+ * a first attempt gets to land, because a probe memoized for minutes must not
+ * hold that instant as a red.
+ */
+export const WEBHOOK_EVENT_IN_FLIGHT_MS = 2 * 60_000
+
+/**
+ * How long a clean claim outranks Stripe's undelivered list (AGL-4133).
+ *
+ * The list lags the deliveries. On 2026-11-03 one new subscription produced
+ * seven events, all seven answered 200 on the first attempt inside five
+ * seconds, and Stripe went on listing one of them with `pending_webhooks: 1`
+ * for about eight minutes before it cleared with no second POST. That read
+ * `deliveries-failing` on a window with no failure in it.
+ *
+ * A claim says the handler STARTED, though, and a function killed mid-dispatch
+ * leaves one behind, so it cannot vouch forever. Eight minutes is a lag; half
+ * an hour is a delivery Stripe never got an answer to, and past this the list
+ * is believed again.
+ */
+export const WEBHOOK_CLAIM_VOUCHES_FOR_MS = 30 * 60_000
+
+/**
+ * How many events on Stripe's `delivery_success=false` list really went
+ * undelivered (AGL-4133).
+ *
+ * `claimed` is the events our handler took and did not fail on. Every real
+ * failure stays out of it by construction: a rejected delivery returns 400
+ * before it claims, an early throw deletes its claim, and a half-applied
+ * dispatch holds its claim with `failedAfterEffects` set. An event with no
+ * `created` counts, because an unreadable fact must not read as calm.
+ */
+export function countUndeliveredEvents(
+  listed: ReadonlyArray<{ id?: string; created?: number }>,
+  claimed: ReadonlySet<string>,
+  nowMs: number,
+): number {
+  return listed.filter((event) => {
+    const ageMs = nowMs - (event.created ?? 0) * 1000
+    if (ageMs < WEBHOOK_EVENT_IN_FLIGHT_MS) return false
+    const vouched = ageMs < WEBHOOK_CLAIM_VOUCHES_FOR_MS && claimed.has(String(event.id))
+    return !vouched
+  }).length
+}
+
+/**
  * Inert deliveries tolerated in the window (AGL-1954).
  *
  * Zero — and unlike `processed`, the count this check reports but refuses to

@@ -45,7 +45,9 @@
  * 2. `GET /v1/events?delivery_success=false` — what did Stripe attempt and
  *    fail to deliver inside the window? This is the count that goes red on
  *    the AGL-1551 and AGL-1560 shapes, and it reads zero on a night with no
- *    activity, so quiet is never mistaken for broken.
+ *    activity, so quiet is never mistaken for broken. That list also holds
+ *    events still pending, and it lags, so `countUndeliveredEvents` reads it
+ *    against our own claims (AGL-4133).
  *
  * A third number, the count of events our handler actually claimed, is read
  * from `stripeEvents` and REPORTED but never gated on — see the lib for why
@@ -80,6 +82,7 @@ import { getFirestore, Timestamp } from 'firebase-admin/firestore'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
   billingWebhookHealth,
+  countUndeliveredEvents,
   deploymentCommitRef,
   deploymentEnvironmentLabel,
   healthBody,
@@ -278,6 +281,42 @@ async function retriedInWindow(cutoffMs: number): Promise<number | null> {
   }
 }
 
+/**
+ * Which of Stripe's listed events our handler took and did not fail on
+ * (AGL-4133).
+ *
+ * Reads only when Stripe lists something, and at most the probe's one page of
+ * 100, so a healthy hour costs nothing here. `failedAfterEffects` is the held
+ * claim of a half-applied dispatch: the document exists, and it is exactly the
+ * delivery this alarm is for.
+ *
+ * An empty set on a Firestore hiccup leaves Stripe's word standing, which is
+ * the safe way round on the one alarm watching money.
+ */
+async function cleanlyClaimed(
+  listed: ReadonlyArray<{ id?: string }>,
+): Promise<ReadonlySet<string>> {
+  const ids = listed.flatMap((event) => (event.id ? [event.id] : []))
+  if (ids.length === 0) return new Set()
+  try {
+    void firebaseAdmin
+    const db = getFirestore(getApp())
+    const claimCollection = deploymentLivemode(process.env)
+      ? LIVE_EVENT_COLLECTION
+      : TEST_EVENT_COLLECTION
+    const claims = await db.getAll(
+      ...ids.map((id) => db.collection(claimCollection).doc(id)),
+    )
+    return new Set(
+      claims
+        .filter((claim) => claim.exists && claim.get('failedAfterEffects') !== true)
+        .map((claim) => claim.id),
+    )
+  } catch {
+    return new Set()
+  }
+}
+
 const billingProbe = memoizeWithTtl<BillingWebhookCheck>(
   PROBE_TTL_MS,
   async () => {
@@ -331,10 +370,15 @@ const billingProbe = memoizeWithTtl<BillingWebhookCheck>(
       }>
       const match = atOurUrl.find((entry) => !isConnectWebhookEndpoint(entry))
       const connect = atOurUrl.find((entry) => isConnectWebhookEndpoint(entry))
-      const [processed, inert, retried] = await Promise.all([
+      const listed = (failures.data.data ?? []) as ReadonlyArray<{
+        id?: string
+        created?: number
+      }>
+      const [processed, inert, retried, claimed] = await Promise.all([
         processedInWindow(cutoffMs),
         inertInWindow(cutoffMs),
         retriedInWindow(cutoffMs),
+        cleanlyClaimed(listed),
       ])
       const facts: BillingWebhookFacts = {
         endpointStatus: !match
@@ -342,7 +386,7 @@ const billingProbe = memoizeWithTtl<BillingWebhookCheck>(
           : match.status === 'enabled'
             ? 'enabled'
             : 'disabled',
-        undelivered: (failures.data.data ?? []).length,
+        undelivered: countUndeliveredEvents(listed, claimed, Date.now()),
         emitted: (emitted.data.data ?? []).length,
         processed,
         inert,
