@@ -130,8 +130,9 @@ export interface VideoProps extends LightboxAppearanceProps {
    * `media:{scope}/{mediaId}`, what "Browse media" stores (AGL-1215) — or any
    * URL. `resolveMediaSrc` decides, exactly as it does for an image.
    *
-   * A hosted player's link — a Wistia link, or any host a plugin declares in
-   * `video-embed-providers.ts` — is read differently (AGL-2826): the element
+   * A hosted player's link — a Wistia, YouTube or Vimeo link (AGL-4140), or
+   * any host a plugin declares in `video-embed-providers.ts` — is read
+   * differently (AGL-2826): the element
    * keeps only the media id and plays the host's own player, which loads when
    * a visitor presses play and never before, unless {@link loadPlayer} loads
    * it with the page. See core's `video-embed-provider.ts`.
@@ -285,7 +286,7 @@ export interface VideoProps extends LightboxAppearanceProps {
 
 /**
  * Video element (AGL-162, AGL-2741): plays a media-library upload, any URL or
- * a Wistia video (AGL-2826), poster first.
+ * a Wistia (AGL-2826), YouTube or Vimeo (AGL-4140) video, poster first.
  *
  * The default is now to download NOTHING until a visitor asks. A poster is an
  * image — a few tens of kilobytes through the DAM's WebP variants, edge-cached
@@ -944,9 +945,9 @@ export const schema: Aglyn.ComponentSchema<VideoProps> = {
       name: 'src',
       description:
         'Pick the film from your media library with "Browse media", or ' +
-        'paste the URL of a video hosted somewhere else. A Wistia media ' +
-        "link plays in Wistia's player, which loads when a visitor presses " +
-        'play. Load the player with the page can load it sooner.',
+        'paste the URL of a video hosted somewhere else. A Wistia, YouTube ' +
+        "or Vimeo link plays in that host's own player, which loads when a " +
+        'visitor presses play. Load the player with the page can load it sooner.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       label: 'Video source',
     },
@@ -956,7 +957,8 @@ export const schema: Aglyn.ComponentSchema<VideoProps> = {
         'The still shown before anyone presses play. Videos from your media ' +
         'library already have one; pick a different image here to override ' +
         'it. A poster is what keeps the video off the wire until it is asked for. ' +
-        'A Wistia video needs one: it is the button a visitor presses.',
+        'A Wistia, YouTube or Vimeo video needs one: it is the button a ' +
+        'visitor presses.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       label: 'Poster image',
     },
@@ -999,9 +1001,9 @@ export const schema: Aglyn.ComponentSchema<VideoProps> = {
       description:
         'Show the poster as a play button and open the film full size in a ' +
         'dialog. Needs a poster image; without one the player stays in the ' +
-        "page. A Wistia video's poster waits for a press either way, and the " +
-        'video plays in place of the poster when this is off. A Wistia player ' +
-        'that loads with the page stays in the page.',
+        'page. A Wistia, YouTube or Vimeo poster waits for a press either way, ' +
+        'and the video plays in place of the poster when this is off. A ' +
+        'player that loads with the page stays in the page.',
       component: Aglyn.FieldComponentType.SWITCH,
       label: 'Open in a lightbox',
     },
@@ -1009,8 +1011,9 @@ export const schema: Aglyn.ComponentSchema<VideoProps> = {
     {
       name: 'loadPlayer',
       description:
-        "For a Wistia video: show Wistia's player as soon as the page loads, " +
-        'instead of a poster to press, to visitors whose privacy choices ' +
+        "For a Wistia, YouTube or Vimeo video: show the host's player as " +
+        'soon as the page loads, instead of a poster to press, to visitors ' +
+        'whose privacy choices ' +
         'allow analytics. Everyone else still gets the poster. Use it on a ' +
         'page built to show this one video, so search engines can find the ' +
         'player. The player stays in the page even with the lightbox on.',

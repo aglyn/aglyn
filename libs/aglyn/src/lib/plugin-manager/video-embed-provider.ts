@@ -100,6 +100,11 @@ export type VideoEmbedPlayerOptions = Partial<
  * One query parameter of a player address, in the order the declaration
  * lists them. Either `value`, sent on every address, or an `option` whose
  * state picks `on` or `off`; a state with no value leaves the parameter out.
+ *
+ * A value may name the media id as `{id}` (AGL-4140), for a player that
+ * repeats it in its query, such as one that loops a single film only as a
+ * playlist of itself. The id has passed both patterns by then, so it
+ * carries nothing a query could be widened with.
  */
 export type VideoEmbedPlayerParam =
   | { param: string; value: string }
@@ -109,6 +114,29 @@ export type VideoEmbedPlayerParam =
       on?: string
       off?: string
     }
+
+/**
+ * A link shape {@link VideoEmbedProviderDeclaration.mediaIdPaths} cannot
+ * describe (AGL-4140): one that names its media id in the QUERY rather than
+ * the path (`/watch?v={id}`), or one only some of the host's domains use (a
+ * short-link domain whose whole path is the id, a shape that would misread a
+ * page on the host's main domain).
+ */
+export interface VideoEmbedMediaIdLink {
+  /**
+   * A regular expression over the link's PATH, anchored at both ends. Without
+   * {@link param}, its first capture group is the media id.
+   */
+  path: string
+  /** The query parameter that holds the media id, for a path that names none. */
+  param?: string
+  /**
+   * The declared domains this shape is read on, each matched as
+   * {@link VideoEmbedProviderDeclaration.domains} are; every declared domain
+   * when absent.
+   */
+  domains?: readonly string[]
+}
 
 export interface VideoEmbedProviderDeclaration {
   /** Stable id, unique across plugins. */
@@ -126,6 +154,8 @@ export interface VideoEmbedProviderDeclaration {
    * against {@link domains}.
    */
   mediaIdPaths: readonly string[]
+  /** The link shapes the paths cannot describe, tried after them. */
+  mediaIdLinks?: readonly VideoEmbedMediaIdLink[]
   /** A regular expression, anchored at both ends, a media id must match. */
   mediaIdPattern: string
   /** The one origin the host's player is framed from. */
@@ -168,8 +198,15 @@ export function videoEmbedProviders(): readonly ResolvedVideoEmbedProvider[] {
   return FIRST_PARTY_VIDEO_EMBED_PROVIDERS
 }
 
+interface CompiledLink {
+  path: RegExp
+  param?: string
+  domains?: readonly string[]
+}
+
 interface CompiledProvider {
   paths: RegExp[]
+  links: CompiledLink[]
   mediaId: RegExp
 }
 
@@ -180,11 +217,24 @@ function compile(provider: VideoEmbedProviderDeclaration): CompiledProvider {
   if (!answer) {
     answer = {
       paths: provider.mediaIdPaths.map((source) => new RegExp(source)),
+      links: (provider.mediaIdLinks ?? []).map((link) => ({
+        path: new RegExp(link.path),
+        param: link.param,
+        domains: link.domains,
+      })),
       mediaId: new RegExp(provider.mediaIdPattern),
     }
     compiled.set(provider, answer)
   }
   return answer
+}
+
+/** The media id a link shape reads from this URL, unchecked. */
+function linkMediaId(link: CompiledLink, url: URL): string | undefined {
+  if (link.domains && !onDomain(url.hostname, link.domains)) return undefined
+  const match = link.path.exec(url.pathname)
+  if (!match) return undefined
+  return link.param ? (url.searchParams.get(link.param) ?? undefined) : match[1]
 }
 
 function onDomain(hostname: string, domains: readonly string[]): boolean {
@@ -212,9 +262,12 @@ export function videoEmbedOf(
   if (url.protocol !== 'https:' && url.protocol !== 'http:') return undefined
   for (const provider of providers) {
     if (!onDomain(url.hostname, provider.domains)) continue
-    const { paths, mediaId } = compile(provider)
-    for (const pattern of paths) {
-      const id = pattern.exec(url.pathname)?.[1]
+    const { paths, links, mediaId } = compile(provider)
+    const candidates = [
+      ...paths.map((pattern) => pattern.exec(url.pathname)?.[1]),
+      ...links.map((link) => linkMediaId(link, url)),
+    ]
+    for (const id of candidates) {
       if (id && mediaId.test(id) && SAFE_MEDIA_ID.test(id)) {
         return {
           provider,
@@ -248,9 +301,11 @@ export function videoEmbedPlayerSrc(
   const embed = videoEmbedOf(value, providers)
   if (!embed) return undefined
   const params = new URLSearchParams()
+  const withId = (value: string) =>
+    value.split(ID_PLACEHOLDER).join(embed.mediaId)
   for (const entry of embed.provider.playerQuery ?? []) {
     if ('value' in entry) {
-      params.set(entry.param, entry.value)
+      params.set(entry.param, withId(entry.value))
       continue
     }
     const on =
@@ -258,7 +313,7 @@ export function videoEmbedPlayerSrc(
         ? options.autoPlay !== false
         : Boolean(options[entry.option])
     const sent = on ? entry.on : entry.off
-    if (sent !== undefined) params.set(entry.param, sent)
+    if (sent !== undefined) params.set(entry.param, withId(sent))
   }
   const query = params.toString()
   return query ? `${embed.embedUrl}?${query}` : embed.embedUrl

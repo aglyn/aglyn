@@ -603,9 +603,12 @@ function tenantEmailsContent(entries) {
  *    exactly one `{id}` and no query or fragment, so every frame is on the
  *    declared origin.
  *  - PATTERNS THAT COMPILE, anchored at both ends, each path pattern with a
- *    capture group for the id.
+ *    capture group for the id. A `mediaIdLinks` shape (AGL-4140) takes the
+ *    id from a query parameter it names, or else from its capture group,
+ *    and the domains it is limited to are among the declaration's own.
  *  - A QUERY core can build: each parameter is a constant `value`, or an
- *    `option` core knows with an `on` or `off` spelling.
+ *    `option` core knows with an `on` or `off` spelling; either may name the
+ *    media id as `{id}`, which core fills in after the id passed its checks.
  */
 const VIDEO_EMBED_OPTIONS = ['autoPlay', 'doNotTrack', 'muted', 'loop']
 const PLAIN_DOMAIN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/
@@ -641,7 +644,7 @@ async function pluginVideoEmbedProviders() {
       throw new Error(`${where} declares no host — drop the entry, or declare one`)
     }
     for (const declaration of answer) {
-      const { id, label, domains: declaredDomains, mediaIdPaths, mediaIdPattern, playerOrigin, playerPath, playerQuery = [] } =
+      const { id, label, domains: declaredDomains, mediaIdPaths, mediaIdLinks = [], mediaIdPattern, playerOrigin, playerPath, playerQuery = [] } =
         declaration ?? {}
       const what = `${where} "${id ?? ''}"`
       if (typeof id !== 'string' || !/^[a-z][a-z0-9-]*$/.test(id)) throw new Error(`${where}: a host needs an "id" of lowercase letters, digits and dashes`)
@@ -663,6 +666,24 @@ async function pluginVideoEmbedProviders() {
         const pattern = anchoredPattern(source, `${what} mediaIdPaths "${source}"`)
         if (new RegExp(`${pattern.source}|`).exec('').length < 2) {
           throw new Error(`${what} mediaIdPaths "${source}" has no capture group for the media id`)
+        }
+      }
+      if (!Array.isArray(mediaIdLinks)) throw new Error(`${what}: "mediaIdLinks" is a list`)
+      for (const link of mediaIdLinks) {
+        const shape = `${what} mediaIdLinks "${link?.path ?? ''}"`
+        const pattern = anchoredPattern(link?.path, shape)
+        if (link.param !== undefined) {
+          if (typeof link.param !== 'string' || !/^[A-Za-z0-9_.-]+$/.test(link.param)) {
+            throw new Error(`${shape}: "param" is a query parameter name`)
+          }
+        } else if (new RegExp(`${pattern.source}|`).exec('').length < 2) {
+          throw new Error(`${shape} names no "param" and has no capture group for the media id`)
+        }
+        if (link.domains !== undefined) {
+          if (!Array.isArray(link.domains) || !link.domains.length) throw new Error(`${shape}: "domains" is a non-empty list`)
+          for (const domain of link.domains) {
+            if (!declaredDomains.includes(domain)) throw new Error(`${shape}: "${domain}" is not one of the declaration's domains`)
+          }
         }
       }
       anchoredPattern(mediaIdPattern, `${what} mediaIdPattern`)
