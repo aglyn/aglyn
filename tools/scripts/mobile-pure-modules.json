@@ -658,6 +658,10 @@
       "why": "The pipeline board's columns, for the apps' board (AGL-3669)."
     },
     {
+      "path": "libs/plugins/crm/src/lib/model/deal-contact-roles.ts",
+      "why": "The contact roles a deal and a company hold: what an add, a role, a Primary or a removal makes of the list, and what a save writes. The native deal and company screens replay it (AGL-4142)."
+    },
+    {
       "path": "libs/plugins/crm/src/lib/model/lead-filters.ts",
       "why": "The Leads list declaration the apps' leads list plans (AGL-3669)."
     },

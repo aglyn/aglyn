@@ -31445,6 +31445,1490 @@
           []
         ]
       ]
+    },
+    "crmActivityPicksFrom": {
+      "module": "libs/plugins/crm/src/lib/model/crm-activity-link.ts",
+      "args": [
+        [
+          {
+            "contactId": "c1"
+          }
+        ],
+        [
+          {
+            "companyId": "co1"
+          }
+        ],
+        [
+          {
+            "dealId": "d1"
+          },
+          "c-primary"
+        ],
+        [
+          {
+            "dealId": "d1",
+            "companyId": "co1"
+          },
+          null
+        ],
+        [
+          {
+            "contactId": "c1",
+            "dealId": "d1",
+            "companyId": "co1"
+          },
+          "c-primary"
+        ],
+        [
+          {},
+          null
+        ],
+        [
+          {
+            "contactId": " c1 ",
+            "dealId": ""
+          },
+          "  "
+        ]
+      ]
+    },
+    "crmActivityLinkFromPicks": {
+      "module": "libs/plugins/crm/src/lib/model/crm-activity-link.ts",
+      "args": [
+        [
+          {
+            "contactId": "c1",
+            "related": {
+              "kind": "deal",
+              "id": "d1"
+            }
+          }
+        ],
+        [
+          {
+            "contactId": null,
+            "related": {
+              "kind": "company",
+              "id": "co1"
+            }
+          }
+        ],
+        [
+          {
+            "contactId": "c1",
+            "related": null
+          }
+        ],
+        [
+          {
+            "contactId": null,
+            "related": null
+          },
+          "l1"
+        ]
+      ]
+    },
+    "crmRelatedToOptions": {
+      "module": "libs/plugins/crm/src/lib/model/crm-activity-link.ts",
+      "args": [
+        [
+          {
+            "linkedDeals": [
+              {
+                "$id": "d-won",
+                "title": "Renewal",
+                "status": "won"
+              },
+              {
+                "$id": "d2",
+                "title": "website refresh",
+                "status": "open"
+              },
+              {
+                "$id": "d1",
+                "title": "Audit",
+                "status": "open"
+              },
+              {
+                "$id": "d2",
+                "title": "website refresh",
+                "status": "open"
+              }
+            ],
+            "deals": [
+              {
+                "$id": "d1",
+                "title": "Audit"
+              },
+              {
+                "$id": "d9",
+                "title": "Zebra"
+              },
+              {
+                "$id": "d-won",
+                "title": "Renewal"
+              },
+              {
+                "$id": "d3",
+                "title": "apple pilot"
+              }
+            ],
+            "companies": [
+              {
+                "$id": "co2",
+                "name": "Globex"
+              },
+              {
+                "$id": "co1",
+                "name": "acme builders"
+              },
+              {
+                "$id": "co3",
+                "name": "Beta Labs"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "linkedDeals": [
+              {
+                "$id": "d1",
+                "status": "open"
+              }
+            ],
+            "deals": [
+              {
+                "$id": "d2",
+                "title": ""
+              }
+            ],
+            "companies": [
+              {
+                "$id": "co1"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "linkedDeals": [],
+            "deals": [],
+            "companies": []
+          }
+        ]
+      ]
+    },
+    "dealContactRoleAddProblem": {
+      "module": "libs/plugins/crm/src/lib/model/deal-contact-roles.ts",
+      "args": [
+        [
+          [],
+          "",
+          "deal"
+        ],
+        [
+          [
+            {
+              "contactId": "c1",
+              "primary": true
+            }
+          ],
+          "c1",
+          "deal"
+        ],
+        [
+          [
+            {
+              "contactId": "c1",
+              "primary": true
+            }
+          ],
+          "c1",
+          "company"
+        ],
+        [
+          [
+            {
+              "contactId": "c1",
+              "primary": true
+            }
+          ],
+          "c2",
+          "deal"
+        ],
+        [
+          [
+            {
+              "contactId": "c0",
+              "primary": true
+            },
+            {
+              "contactId": "c1",
+              "primary": false
+            },
+            {
+              "contactId": "c2",
+              "primary": false
+            },
+            {
+              "contactId": "c3",
+              "primary": false
+            },
+            {
+              "contactId": "c4",
+              "primary": false
+            },
+            {
+              "contactId": "c5",
+              "primary": false
+            },
+            {
+              "contactId": "c6",
+              "primary": false
+            },
+            {
+              "contactId": "c7",
+              "primary": false
+            },
+            {
+              "contactId": "c8",
+              "primary": false
+            },
+            {
+              "contactId": "c9",
+              "primary": false
+            },
+            {
+              "contactId": "c10",
+              "primary": false
+            },
+            {
+              "contactId": "c11",
+              "primary": false
+            },
+            {
+              "contactId": "c12",
+              "primary": false
+            },
+            {
+              "contactId": "c13",
+              "primary": false
+            },
+            {
+              "contactId": "c14",
+              "primary": false
+            },
+            {
+              "contactId": "c15",
+              "primary": false
+            },
+            {
+              "contactId": "c16",
+              "primary": false
+            },
+            {
+              "contactId": "c17",
+              "primary": false
+            },
+            {
+              "contactId": "c18",
+              "primary": false
+            },
+            {
+              "contactId": "c19",
+              "primary": false
+            },
+            {
+              "contactId": "c20",
+              "primary": false
+            },
+            {
+              "contactId": "c21",
+              "primary": false
+            },
+            {
+              "contactId": "c22",
+              "primary": false
+            },
+            {
+              "contactId": "c23",
+              "primary": false
+            },
+            {
+              "contactId": "c24",
+              "primary": false
+            },
+            {
+              "contactId": "c25",
+              "primary": false
+            },
+            {
+              "contactId": "c26",
+              "primary": false
+            },
+            {
+              "contactId": "c27",
+              "primary": false
+            },
+            {
+              "contactId": "c28",
+              "primary": false
+            },
+            {
+              "contactId": "c29",
+              "primary": false
+            },
+            {
+              "contactId": "c30",
+              "primary": false
+            },
+            {
+              "contactId": "c31",
+              "primary": false
+            },
+            {
+              "contactId": "c32",
+              "primary": false
+            },
+            {
+              "contactId": "c33",
+              "primary": false
+            },
+            {
+              "contactId": "c34",
+              "primary": false
+            },
+            {
+              "contactId": "c35",
+              "primary": false
+            },
+            {
+              "contactId": "c36",
+              "primary": false
+            },
+            {
+              "contactId": "c37",
+              "primary": false
+            },
+            {
+              "contactId": "c38",
+              "primary": false
+            },
+            {
+              "contactId": "c39",
+              "primary": false
+            },
+            {
+              "contactId": "c40",
+              "primary": false
+            },
+            {
+              "contactId": "c41",
+              "primary": false
+            },
+            {
+              "contactId": "c42",
+              "primary": false
+            },
+            {
+              "contactId": "c43",
+              "primary": false
+            },
+            {
+              "contactId": "c44",
+              "primary": false
+            },
+            {
+              "contactId": "c45",
+              "primary": false
+            },
+            {
+              "contactId": "c46",
+              "primary": false
+            },
+            {
+              "contactId": "c47",
+              "primary": false
+            },
+            {
+              "contactId": "c48",
+              "primary": false
+            },
+            {
+              "contactId": "c49",
+              "primary": false
+            }
+          ],
+          "c99",
+          "deal"
+        ],
+        [
+          [
+            {
+              "contactId": "c0",
+              "primary": true
+            },
+            {
+              "contactId": "c1",
+              "primary": false
+            },
+            {
+              "contactId": "c2",
+              "primary": false
+            },
+            {
+              "contactId": "c3",
+              "primary": false
+            },
+            {
+              "contactId": "c4",
+              "primary": false
+            },
+            {
+              "contactId": "c5",
+              "primary": false
+            },
+            {
+              "contactId": "c6",
+              "primary": false
+            },
+            {
+              "contactId": "c7",
+              "primary": false
+            },
+            {
+              "contactId": "c8",
+              "primary": false
+            },
+            {
+              "contactId": "c9",
+              "primary": false
+            },
+            {
+              "contactId": "c10",
+              "primary": false
+            },
+            {
+              "contactId": "c11",
+              "primary": false
+            },
+            {
+              "contactId": "c12",
+              "primary": false
+            },
+            {
+              "contactId": "c13",
+              "primary": false
+            },
+            {
+              "contactId": "c14",
+              "primary": false
+            },
+            {
+              "contactId": "c15",
+              "primary": false
+            },
+            {
+              "contactId": "c16",
+              "primary": false
+            },
+            {
+              "contactId": "c17",
+              "primary": false
+            },
+            {
+              "contactId": "c18",
+              "primary": false
+            },
+            {
+              "contactId": "c19",
+              "primary": false
+            },
+            {
+              "contactId": "c20",
+              "primary": false
+            },
+            {
+              "contactId": "c21",
+              "primary": false
+            },
+            {
+              "contactId": "c22",
+              "primary": false
+            },
+            {
+              "contactId": "c23",
+              "primary": false
+            },
+            {
+              "contactId": "c24",
+              "primary": false
+            },
+            {
+              "contactId": "c25",
+              "primary": false
+            },
+            {
+              "contactId": "c26",
+              "primary": false
+            },
+            {
+              "contactId": "c27",
+              "primary": false
+            },
+            {
+              "contactId": "c28",
+              "primary": false
+            },
+            {
+              "contactId": "c29",
+              "primary": false
+            },
+            {
+              "contactId": "c30",
+              "primary": false
+            },
+            {
+              "contactId": "c31",
+              "primary": false
+            },
+            {
+              "contactId": "c32",
+              "primary": false
+            },
+            {
+              "contactId": "c33",
+              "primary": false
+            },
+            {
+              "contactId": "c34",
+              "primary": false
+            },
+            {
+              "contactId": "c35",
+              "primary": false
+            },
+            {
+              "contactId": "c36",
+              "primary": false
+            },
+            {
+              "contactId": "c37",
+              "primary": false
+            },
+            {
+              "contactId": "c38",
+              "primary": false
+            },
+            {
+              "contactId": "c39",
+              "primary": false
+            },
+            {
+              "contactId": "c40",
+              "primary": false
+            },
+            {
+              "contactId": "c41",
+              "primary": false
+            },
+            {
+              "contactId": "c42",
+              "primary": false
+            },
+            {
+              "contactId": "c43",
+              "primary": false
+            },
+            {
+              "contactId": "c44",
+              "primary": false
+            },
+            {
+              "contactId": "c45",
+              "primary": false
+            },
+            {
+              "contactId": "c46",
+              "primary": false
+            },
+            {
+              "contactId": "c47",
+              "primary": false
+            },
+            {
+              "contactId": "c48",
+              "primary": false
+            },
+            {
+              "contactId": "c49",
+              "primary": false
+            }
+          ],
+          "c99",
+          "company"
+        ]
+      ]
+    },
+    "dealContactRolesAdded": {
+      "module": "libs/plugins/crm/src/lib/model/deal-contact-roles.ts",
+      "args": [
+        [
+          [
+            {
+              "contactId": "c1",
+              "primary": true
+            }
+          ],
+          {
+            "contactId": "c2",
+            "role": "Evaluator",
+            "primary": false
+          }
+        ],
+        [
+          [
+            {
+              "contactId": "c1",
+              "role": "Evaluator",
+              "primary": true
+            }
+          ],
+          {
+            "contactId": "c2",
+            "primary": true
+          }
+        ],
+        [
+          [],
+          {
+            "contactId": "c1",
+            "role": "",
+            "primary": true
+          }
+        ]
+      ]
+    },
+    "dealContactRolesWithRole": {
+      "module": "libs/plugins/crm/src/lib/model/deal-contact-roles.ts",
+      "args": [
+        [
+          [
+            {
+              "contactId": "c1",
+              "primary": true
+            },
+            {
+              "contactId": "c2",
+              "role": "Other",
+              "primary": false
+            }
+          ],
+          "c1",
+          "Influencer"
+        ],
+        [
+          [
+            {
+              "contactId": "c1",
+              "primary": true
+            },
+            {
+              "contactId": "c2",
+              "role": "Other",
+              "primary": false
+            }
+          ],
+          "c2",
+          ""
+        ],
+        [
+          [
+            {
+              "contactId": "c1",
+              "primary": true
+            }
+          ],
+          "c9",
+          "Other"
+        ]
+      ]
+    },
+    "dealContactRolesSave": {
+      "module": "libs/plugins/crm/src/lib/model/deal-contact-roles.ts",
+      "args": [
+        [
+          {
+            "contactId": "c1",
+            "contactRoles": [
+              {
+                "contactId": "c1",
+                "primary": true
+              }
+            ]
+          },
+          [
+            {
+              "contactId": "c1",
+              "primary": false
+            },
+            {
+              "contactId": "c2",
+              "role": "evaluator",
+              "primary": true
+            }
+          ],
+          {
+            "values": [
+              {
+                "id": "decision-maker",
+                "label": "Decision Maker",
+                "active": true
+              },
+              {
+                "id": "evaluator",
+                "label": "Evaluator",
+                "active": true
+              },
+              {
+                "id": "influencer",
+                "label": "Influencer",
+                "active": true
+              },
+              {
+                "id": "other",
+                "label": "Other",
+                "active": true
+              }
+            ],
+            "defaultValueId": null
+          }
+        ],
+        [
+          {
+            "contactId": "c1",
+            "contactRoles": [
+              {
+                "contactId": "c1",
+                "role": "Influencer",
+                "primary": true
+              }
+            ]
+          },
+          [
+            {
+              "contactId": "c1",
+              "role": "Influencer",
+              "primary": true
+            },
+            {
+              "contactId": "c2",
+              "role": "Other",
+              "primary": false
+            }
+          ],
+          {
+            "values": [
+              {
+                "id": "decision-maker",
+                "label": "Decision Maker",
+                "active": true
+              },
+              {
+                "id": "evaluator",
+                "label": "Evaluator",
+                "active": true
+              },
+              {
+                "id": "influencer",
+                "label": "Influencer",
+                "active": false
+              },
+              {
+                "id": "other",
+                "label": "Other",
+                "active": true
+              }
+            ],
+            "defaultValueId": null
+          }
+        ],
+        [
+          {
+            "contactId": "c1"
+          },
+          [
+            {
+              "contactId": "c1",
+              "role": "Champion",
+              "primary": true
+            }
+          ],
+          {
+            "values": [
+              {
+                "id": "decision-maker",
+                "label": "Decision Maker",
+                "active": true
+              },
+              {
+                "id": "evaluator",
+                "label": "Evaluator",
+                "active": true
+              },
+              {
+                "id": "influencer",
+                "label": "Influencer",
+                "active": true
+              },
+              {
+                "id": "other",
+                "label": "Other",
+                "active": true
+              }
+            ],
+            "defaultValueId": null
+          }
+        ],
+        [
+          {
+            "contactId": "c1",
+            "contactRoles": [
+              {
+                "contactId": "c1",
+                "primary": true
+              }
+            ]
+          },
+          [],
+          {
+            "values": [
+              {
+                "id": "decision-maker",
+                "label": "Decision Maker",
+                "active": true
+              },
+              {
+                "id": "evaluator",
+                "label": "Evaluator",
+                "active": true
+              },
+              {
+                "id": "influencer",
+                "label": "Influencer",
+                "active": true
+              },
+              {
+                "id": "other",
+                "label": "Other",
+                "active": true
+              }
+            ],
+            "defaultValueId": null
+          }
+        ],
+        [
+          {},
+          [
+            {
+              "contactId": "c1",
+              "role": "Other",
+              "primary": true
+            }
+          ],
+          {
+            "values": [],
+            "defaultValueId": null
+          }
+        ],
+        [
+          {
+            "contactRoles": [
+              {
+                "contactId": "c1",
+                "role": "Old Role",
+                "primary": true
+              }
+            ]
+          },
+          [
+            {
+              "contactId": "c1",
+              "role": "Old Role",
+              "primary": true
+            }
+          ],
+          {
+            "values": [
+              {
+                "id": "decision-maker",
+                "label": "Decision Maker",
+                "active": true
+              },
+              {
+                "id": "evaluator",
+                "label": "Evaluator",
+                "active": true
+              },
+              {
+                "id": "influencer",
+                "label": "Influencer",
+                "active": true
+              },
+              {
+                "id": "other",
+                "label": "Other",
+                "active": true
+              }
+            ],
+            "defaultValueId": null
+          }
+        ]
+      ]
+    },
+    "companyContactRolesSave": {
+      "module": "libs/plugins/crm/src/lib/model/deal-contact-roles.ts",
+      "args": [
+        [
+          {},
+          [
+            {
+              "contactId": "c1",
+              "role": "decision  maker",
+              "primary": true
+            },
+            {
+              "contactId": "c2",
+              "primary": false
+            }
+          ],
+          {
+            "values": [
+              {
+                "id": "decision-maker",
+                "label": "Decision Maker",
+                "active": true
+              },
+              {
+                "id": "evaluator",
+                "label": "Evaluator",
+                "active": true
+              },
+              {
+                "id": "influencer",
+                "label": "Influencer",
+                "active": true
+              },
+              {
+                "id": "other",
+                "label": "Other",
+                "active": true
+              }
+            ],
+            "defaultValueId": null
+          }
+        ],
+        [
+          {
+            "contactRoles": [
+              {
+                "contactId": "c1",
+                "role": "Influencer",
+                "primary": true
+              }
+            ]
+          },
+          [
+            {
+              "contactId": "c1",
+              "role": "Influencer",
+              "primary": true
+            },
+            {
+              "contactId": "c2",
+              "role": "Other",
+              "primary": false
+            }
+          ],
+          {
+            "values": [
+              {
+                "id": "decision-maker",
+                "label": "Decision Maker",
+                "active": true
+              },
+              {
+                "id": "evaluator",
+                "label": "Evaluator",
+                "active": true
+              },
+              {
+                "id": "influencer",
+                "label": "Influencer",
+                "active": false
+              },
+              {
+                "id": "other",
+                "label": "Other",
+                "active": true
+              }
+            ],
+            "defaultValueId": null
+          }
+        ],
+        [
+          {
+            "contactRoles": [
+              {
+                "contactId": "c1",
+                "primary": true
+              }
+            ]
+          },
+          [
+            {
+              "contactId": "c1",
+              "role": "Champion",
+              "primary": true
+            }
+          ],
+          {
+            "values": [
+              {
+                "id": "decision-maker",
+                "label": "Decision Maker",
+                "active": true
+              },
+              {
+                "id": "evaluator",
+                "label": "Evaluator",
+                "active": true
+              },
+              {
+                "id": "influencer",
+                "label": "Influencer",
+                "active": true
+              },
+              {
+                "id": "other",
+                "label": "Other",
+                "active": true
+              }
+            ],
+            "defaultValueId": null
+          }
+        ],
+        [
+          {
+            "contactRoles": [
+              {
+                "contactId": "c1",
+                "primary": true
+              },
+              {
+                "contactId": "c2",
+                "role": "Other",
+                "primary": false
+              }
+            ]
+          },
+          [
+            {
+              "contactId": "c2",
+              "role": "Other",
+              "primary": false
+            }
+          ],
+          {
+            "values": [
+              {
+                "id": "decision-maker",
+                "label": "Decision Maker",
+                "active": true
+              },
+              {
+                "id": "evaluator",
+                "label": "Evaluator",
+                "active": true
+              },
+              {
+                "id": "influencer",
+                "label": "Influencer",
+                "active": true
+              },
+              {
+                "id": "other",
+                "label": "Other",
+                "active": true
+              }
+            ],
+            "defaultValueId": null
+          }
+        ],
+        [
+          {},
+          [
+            {
+              "contactId": "c1",
+              "role": "Other",
+              "primary": true
+            }
+          ],
+          {
+            "values": [],
+            "defaultValueId": null
+          }
+        ]
+      ]
+    },
+    "companyContactRolesOf": {
+      "module": "libs/plugins/crm/src/lib/model/deal-contact-roles.ts",
+      "args": [
+        [
+          {}
+        ],
+        [
+          {
+            "contactRoles": [
+              {
+                "contactId": "c1",
+                "role": "Other",
+                "primary": false
+              },
+              {
+                "contactId": "c2",
+                "primary": true
+              },
+              {
+                "contactId": "c1",
+                "primary": true
+              },
+              {
+                "primary": true
+              },
+              {
+                "contactId": "a/b"
+              },
+              {
+                "contactId": "c3",
+                "primary": true,
+                "role": "  Evaluator  "
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    "dealContactRolesOf": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "args": [
+        [
+          {}
+        ],
+        [
+          {
+            "contactId": "c1"
+          }
+        ],
+        [
+          {
+            "contactId": "c2",
+            "contactRoles": [
+              {
+                "contactId": "c1",
+                "role": "Other",
+                "primary": true
+              },
+              {
+                "contactId": "c2",
+                "primary": false
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "contactId": "c9",
+            "contactRoles": [
+              {
+                "contactId": "c1",
+                "primary": true
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "contactRoles": [
+              {
+                "contactId": "c1",
+                "primary": true
+              },
+              {
+                "contactId": "c1",
+                "role": "Other",
+                "primary": false
+              },
+              {
+                "contactId": " "
+              },
+              {
+                "contactId": "c2",
+                "primary": true
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    "dealContactRolesWithPrimary": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "args": [
+        [
+          [
+            {
+              "contactId": "c1",
+              "primary": true
+            },
+            {
+              "contactId": "c2",
+              "role": "Other",
+              "primary": false
+            }
+          ],
+          "c2"
+        ],
+        [
+          [
+            {
+              "contactId": "c1",
+              "primary": true
+            }
+          ],
+          null
+        ],
+        [
+          [
+            {
+              "contactId": "c1",
+              "primary": true
+            }
+          ],
+          "c3"
+        ],
+        [
+          [],
+          "  "
+        ]
+      ]
+    },
+    "dealContactRolesWithout": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "args": [
+        [
+          [
+            {
+              "contactId": "c1",
+              "primary": true
+            },
+            {
+              "contactId": "c2",
+              "role": "Other",
+              "primary": false
+            }
+          ],
+          "c1"
+        ],
+        [
+          [
+            {
+              "contactId": "c1",
+              "primary": true
+            }
+          ],
+          "c9"
+        ]
+      ]
+    },
+    "crmDealContactRoleListFields": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "args": [
+        [
+          {}
+        ],
+        [
+          {
+            "visibleTo": [
+              "org"
+            ],
+            "contactId": "c1",
+            "contactRoles": [
+              {
+                "contactId": "c1",
+                "role": "Decision Maker",
+                "primary": true
+              },
+              {
+                "contactId": "c2",
+                "role": "Decision  maker",
+                "primary": false
+              },
+              {
+                "contactId": "c3",
+                "role": "Other",
+                "primary": false
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:h1",
+              "host:h2",
+              "host:h1"
+            ],
+            "contactRoles": [
+              {
+                "contactId": "c1",
+                "primary": true
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    "consentGroupDisclosure": {
+      "module": "libs/aglyn/src/lib/app-utils/consent-groups.ts",
+      "args": [
+        [
+          {
+            "hostId": "h2",
+            "groupId": "brands",
+            "name": "North Brands",
+            "hostIds": [
+              "h2",
+              "h1"
+            ],
+            "declared": true
+          }
+        ],
+        [
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false
+          }
+        ],
+        [
+          {
+            "hostId": "h1",
+            "groupId": "g1",
+            "name": "",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true
+          }
+        ],
+        [
+          {
+            "hostId": "h3",
+            "groupId": "g2",
+            "name": "Say \"hi\" \\ there\nnow",
+            "hostIds": [
+              "h3",
+              "h1",
+              "h2"
+            ],
+            "declared": true
+          }
+        ],
+        [
+          {
+            "hostId": "b",
+            "groupId": "g3",
+            "name": "Café Ünïcode 🎉",
+            "hostIds": [
+              "b",
+              "a"
+            ],
+            "declared": true
+          }
+        ]
+      ]
+    },
+    "consentGroupDisclosureKey": {
+      "module": "libs/aglyn/src/lib/app-utils/consent-groups.ts",
+      "args": [
+        [
+          {
+            "hostId": "h2",
+            "groupId": "brands",
+            "name": "North Brands",
+            "hostIds": [
+              "h2",
+              "h1"
+            ],
+            "declared": true
+          }
+        ],
+        [
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false
+          }
+        ],
+        [
+          {
+            "hostId": "h1",
+            "groupId": "g1",
+            "name": "",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true
+          }
+        ],
+        [
+          {
+            "hostId": "h3",
+            "groupId": "g2",
+            "name": "Say \"hi\" \\ there\nnow",
+            "hostIds": [
+              "h3",
+              "h1",
+              "h2"
+            ],
+            "declared": true
+          }
+        ],
+        [
+          {
+            "hostId": "b",
+            "groupId": "g3",
+            "name": "Café Ünïcode 🎉",
+            "hostIds": [
+              "b",
+              "a"
+            ],
+            "declared": true
+          }
+        ]
+      ]
     }
   }
 }

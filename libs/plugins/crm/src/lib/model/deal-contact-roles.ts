@@ -24,7 +24,7 @@ import {
   dealContactRolesOf,
   judgeDealContactRoles,
   readDealContactRoles,
-} from '@aglyn/aglyn'
+} from '@aglyn/aglyn/app-utils/crm'
 
 /*
  * THE DEAL PAGE'S CONTACT ROLES CARD (AGL-3521), as pure functions: what
