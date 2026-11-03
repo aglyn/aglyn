@@ -177,6 +177,20 @@ describe('attachProjectDomain', () => {
     expect(body.redirect).not.toMatch(/^https?:\/\//)
   })
 
+  it('sends a 308 for a permanent redirect, on a create and on a PATCH (AGL-4134)', async () => {
+    fetchMock
+      .mockResolvedValueOnce(respond(200))
+      .mockResolvedValueOnce(respond(409, { error: { code: 'domain_already_in_use' } }))
+      .mockResolvedValueOnce(respond(200))
+    const { attachProjectDomain } = await load()
+    const options = { redirectTo: 'acme.com', permanent: true }
+    await attachProjectDomain('www.acme.com', options)
+    await attachProjectDomain('www.acme.com', options)
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).redirectStatusCode).toBe(308)
+    expect(fetchMock.mock.calls[2][1].method).toBe('PATCH')
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body).redirectStatusCode).toBe(308)
+  })
+
   it('refuses a redirect target it cannot reduce, without calling Vercel', async () => {
     const { attachProjectDomain } = await load()
     expect(await attachProjectDomain('www.acme.com', { redirectTo: 'nonsense' })).toEqual({
