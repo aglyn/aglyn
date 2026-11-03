@@ -5311,7 +5311,8 @@ sees a record, and every insight a person reads is traced to the numbers it cite
   platform keeps (`src/lib/insights/ai-figure-readers.ts`): `traffic.summary`, `traffic.pages`,
   `traffic.sources`, `traffic.daily`, `traffic.changes` and `forms.performance`. `traffic.changes`
   (AGL-4131) lists what a visitor would see change, by day, from the site's `activity` log: an
-  allowlist in `aiSiteChangeKind` of published pages, shared layouts, components, published entries,
+  allowlist in `aiSiteChangeKind` of pages published or updated (the log words a first publish and an
+  update alike), shared layouts, components, published entries,
   added products and redirects and site settings, never a contact, a run or who did it, one row a
   target a day and at most 20. AGL-3603 adds the workflows
   plugin's `automations.runs` (`libs/plugins/workflows/src/lib/server/automation-run-figures.ts`:

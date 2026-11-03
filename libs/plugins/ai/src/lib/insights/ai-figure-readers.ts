@@ -182,7 +182,9 @@ const ranked = (totals: Map<string, number>): Array<[string, number]> =>
  */
 export function aiSiteChangeKind(action: unknown, targetType: unknown): string | null {
   const said = typeof action === 'string' ? action.trim() : ''
-  if (targetType === 'screen') return /^Published\b/.test(said) ? 'Page published' : null
+  // A page's every publish logs the same words, so a first one cannot be told
+  // from an update and the kind says either.
+  if (targetType === 'screen') return /^Published\b/.test(said) ? 'Page published or updated' : null
   if (targetType === 'layout') return /^(?:Published|Saved)\b/.test(said) ? 'Shared layout changed' : null
   if (targetType === 'component') return /^(?:Published|Saved)\b/.test(said) ? 'Component changed' : null
   if (targetType === 'content') {
@@ -429,7 +431,7 @@ export function trafficFigureReaders(firestore: AiFigureFirestore): PluginFigure
         id: 'traffic.changes',
         label: 'What changed on the site',
         description:
-          'What changed on the site over the window and on which day, newest first: pages published, posts published, products and redirects added, shared layouts, components and settings changed. For finding what may have moved the traffic.',
+          'What changed on the site over the window and on which day, newest first: pages published or updated, posts published, products and redirects added, shared layouts, components and settings changed. For finding what may have moved the traffic.',
         windows: AI_SITE_CHANGES_WINDOWS,
       },
       async (db, request) => {

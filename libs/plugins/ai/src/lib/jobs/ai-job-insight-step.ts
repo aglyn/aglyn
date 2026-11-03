@@ -153,6 +153,7 @@ export const AI_INSIGHT_RULES = [
   '- Write a date the way a person says it: Monday, Oct 26, never 2026-10-26.',
   '- Leave out a percent change that rests on a handful of views.',
   '- why says what most likely drove a move, in one short sentence, and must cite the row it rests on: a dated change, a source or a campaign. Write the reason alone: a label already calls it likely. Two things happening together does not prove one caused the other. When nothing in those tables explains a move, set why to null and say so in text.',
+  '- A source or campaign whose change shows it held steady cannot explain a move: steady traffic does not make a page rise or fall.',
   '- next is one concrete step the owner can take in the console or on their site, for this insight. Name only something that exists, and never promise a result. null when none fits.',
   '- overview is for a weekly digest: what the week meant in two or three sentences of your own, not a list of figures. On a question, overview is null, and why and next are null unless the question asks why or what to do.',
   '- When the tables cannot answer part of the question, say so in gap in one sentence with no numbers; otherwise gap is null.',

@@ -120,7 +120,7 @@ describe('what changed on the site (AGL-4131)', () => {
   it('lists what a visitor would see change, one row a target a day', async () => {
     const table = await tableOf(docs, 'traffic.changes')
     expect(table.rows).toEqual([
-      { day: '2026-09-16', what: 'Pricing', kind: 'Page published' },
+      { day: '2026-09-16', what: 'Pricing', kind: 'Page published or updated' },
       { day: '2026-09-14', what: 'Blue mug', kind: 'Product added' },
       { day: '2026-09-11', what: 'Site settings changed', kind: 'Site settings changed' },
     ])
@@ -161,7 +161,7 @@ describe('what changed on the site (AGL-4131)', () => {
       'traffic.changes',
     )
     expect(table.rows).toHaveLength(AI_SITE_CHANGES_MAX_ROWS)
-    expect(table.rows.at(-1)).toEqual({ day: '2026-09-11', what: 'Pricing', kind: 'Page published' })
+    expect(table.rows.at(-1)).toEqual({ day: '2026-09-11', what: 'Pricing', kind: 'Page published or updated' })
     expect(table.omitted).toBe(1)
   })
 

@@ -981,8 +981,8 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // requests open with one prefix and the answer call reads the read call's.
       // Both up 367 at AGL-4131: the analyst's rules, and an overview, a reason
       // and a next step on the answer tool.
-      'insight-read': { prefixTokens: 1_788, minimum: 512, caches: true, toolsStable: true },
-      'insight-answer': { prefixTokens: 1_788, minimum: 512, caches: true, toolsStable: true },
+      'insight-read': { prefixTokens: 1_820, minimum: 512, caches: true, toolsStable: true },
+      'insight-answer': { prefixTokens: 1_820, minimum: 512, caches: true, toolsStable: true },
       // A product's copy, a catalog, and categories with discounts (AGL-2916):
       // the whole doctrine, each generation's rules and its tool, which clear
       // the balanced tier's minimum, so a bulk job reads the prefix once a

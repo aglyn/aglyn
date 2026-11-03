@@ -298,7 +298,7 @@ describe('what the note says beside an insight (AGL-4131)', () => {
       { key: 'what', label: 'What changed', kind: 'text' },
       { key: 'kind', label: 'Kind', kind: 'text' },
     ],
-    rows: [{ day: '2026-09-10', what: 'Pricing', kind: 'Page published' }],
+    rows: [{ day: '2026-09-10', what: 'Pricing', kind: 'Page published or updated' }],
   }
   const tables = [TRAFFIC, CHANGES]
   const insight = (patch: Record<string, unknown> = {}) => ({
