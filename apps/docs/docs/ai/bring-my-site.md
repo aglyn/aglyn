@@ -132,14 +132,26 @@ top. You can still start the first wave.
 - **Your header and footer** come in with the first wave, as your current site shows them:
   your logo, your name, or both; your menu, each dropdown as a **Dropdown Menu** or a
   **Mega Menu** with its entries, their icons and the line under each; and your buttons,
-  such as **Sign in** or **Start free**, going where they go now. Every label stays on one
-  line, and on a screen too narrow for the whole menu it becomes a menu button that opens
-  every menu and button. Your footer keeps its columns and headings, its profiles, its
-  address, phone and email, and its copyright line as written. When your menu can be read,
-  the header and footer use no AI credits. See
+  such as **Sign in** or **Start free**, going where they go now. A large dropdown keeps
+  its columns in the same order, side by side and as wide as yours, with each column's
+  heading and words, its featured picture, its light or dark box, and the colored tile
+  behind each icon. Every label stays on one line, and on a screen too narrow for the whole
+  menu it becomes a menu button that opens every menu and button.
+- **Your menus open the way they do now.** A menu that opens when you point at it opens
+  the same way on a computer, and clicking its name opens that page, as it does on your
+  current site. A menu name with no page of its own opens its menu on a click. A menu that
+  only opens on a click stays that way. In the menu on a phone, tap a menu's name to open
+  or close it; every entry and every word of its panel is there. Each menu's panel starts
+  hidden until it is shown: select it in the **Besigner** to work on it, and change how it
+  opens in the **Interactions** tab of its name.
+- **Your footer** keeps its columns and headings, its profiles, its address, phone and
+  email, and its copyright line as written. It opens with your logo when yours does, and a
+  box your footer sets apart, such as a call to developers, stays a box with its heading,
+  words and link. When your menu can be read, the header and footer use no AI credits. See
   [Menus & navigation](../building-sites/menus-and-navigation/overview.md) to change them
   later. Your home page's title and description become your new site's search listing,
-  unless you already changed it.
+  unless you already changed it, and your site's icon becomes your new site's icon, unless
+  you already gave it one.
 - **Each later wave** brings in up to 10 pages of one collection, for example
   **Blog, 1 of 3**.
 - **Never past your plan.** Your main pages are kept first. If your site has more pages

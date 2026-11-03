@@ -2666,6 +2666,50 @@ whose passes each do one unit (`aiSiteImportNextWork`):
    name (`alt`) and measured by its shape (`aspect`), and never narrower than
    itself. `businessName` is the person's name for the site unless the
    source's differs from it only by case or punctuation.
+
+   **Menus as the source builds them (AGL-4139).** The reader
+   (`site-import-nav.ts`) reads each menu's panel: its `columns`
+   (`SiteImportNavColumn`: the children of the element that lays them side
+   by side, in DOM order, never re-split; each with its heading, its other
+   `lines`, its `band` against the panel's ground, its `image` outside any
+   link, its own `width`), each entry's `at` (its column) and `tile` (the
+   filled box around its icon, its radius and the icon's color), and `panel`
+   (`width`, the cap read at 1,920 px; `hover`, true where the panel is
+   hidden until shown and its name is no `<button>`/`<summary>`). The
+   footer's `logo` (its first picture, before any of its words, is the
+   header brand's by address or alt) and `panels` (a filled box of a few
+   words and links of no column, which `text` and `links` then leave out).
+   The look pass brings each column's picture into the library
+   (`aiSiteImportMenuPictures`, at most 4, onto `look.pictures`) and, where
+   the site has no `seo.favicon`, the head's largest touch icon or raster
+   icon (`aiSiteImportFaviconOf`), re-fanning `hostMemberships`. The frame
+   job carries columns (pictures only from the library), `hover`,
+   `measure` (`xl` from a 1,400 px cap) and each tile as theme ROLES
+   (`aiSiteImportTileRoles`: a light fill `action.hover`, a grey one
+   `action.selected`, a strong one the brand or second color with its
+   `contrastText` ink; an icon `text.secondary` when neutral, `primary.main`
+   within 40° of the button fill's hue, else `secondary.main`), and
+   `siteBrand.footer` when the footer opens with the logo. The frame draws:
+   a hover menu whose name opens a page of its own as that link plus a
+   panel that starts hidden (`aglyn-hidden`, the Besigner's "Start hidden",
+   which the palette validator keeps on code-built nodes only), shown on
+   hover and hidden 250 ms after the pointer leaves
+   (`AiLayoutHoverMenus`, every other hover panel hidden at once); a mega
+   panel in one region under the whole bar (`menuPanels`, in the Toolbar)
+   at the source's measure, a dropdown's under its name; a hover menu with
+   no page of its own as the Dropdown or Mega Menu element with "On hover
+   → Open menu" naming its own id (a click still opens it); a click-only
+   menu as before. Columns are Stacks in a wrapping row, each `flex` its
+   own width or a share; a filled column a flat Card (`action.hover`, the
+   brand's, or inside a `colorScheme: 'dark'` Stack); a tile a flat Card
+   around the icon. Every repeated element carries at most one `sx` key, so
+   rule 16's duplicated-inline-style never fires however many menus a
+   header has, and no width is a fixed `width` (rule 12). In the Drawer a
+   hover menu is an Accordion that opens on a tap, holding every column's
+   heading and lines as captions and every entry. The layout store renames
+   every node an interaction names (`menuNodeId`, `drawerNodeId`, a
+   `[data-aglyn="leaf:…"]` selector) to its stored id
+   (`aiLayoutStoredInteractions`).
 5. **Each page**: its photos first (no model), through `pluginMediaIngest()
    .ingest` with `importedFrom` and the key `import:<sha256 of the address>`,
    asked of `findImportedPhoto` before anything is fetched, so a photo is stored
@@ -2859,7 +2903,14 @@ built page against what the reader read of its source.
   entries, the entries' lines and icons; the buttons in the source's style with
   destinations; the phone menu holding every name, entry and button, with the
   button that opens it; the row's labels on one line; the footer's columns,
-  links, profiles and facts as written.
+  links, profiles and facts as written. And (AGL-4139) `menuColumns`, each
+  panel column its own part of the panel's row in order with its heading,
+  lines and entries; `panels`, each filled column and footer box drawn in a
+  filled box; `tiles`; `pictures`; `hover`, each menu the source opens on
+  hover opening on hover (a name whose hover shows its panel, or a menu
+  element's `openMenu`); `logo`, the footer opening with the logo. A menu
+  drawn as its name and the panel its hover shows is found through that
+  interaction; the phone menu is asked every word of each panel too.
 - **The bar.** `SITE_IMPORT_FIDELITY_THRESHOLD`, 0.9 on structure, with words at
   exactly 1. Today's recorded pages and frames score 1.00; the same pages built
   as 10/29 built them score 0.
