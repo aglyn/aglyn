@@ -57,7 +57,7 @@ display name, a blog post's headline, a collection's name — joined to the site
 | Neither | `Acme Widgets` |
 
 Your brand still travels with every share regardless: `og:site_name` is published on
-every page, from your site **Title**, then your **Entity** name, then the site's own
+every page, from your site **Title**, then your **Business name**, then the site's own
 name — so a site that has filled in any one of the three is named on every card.
 
 ### Variables, so a title is not a copy of your site name
@@ -101,7 +101,9 @@ and **Description**, the **Separator** used to join a page's name to the site ti
 when that page has no search title of its own (default `–`), the **Title pattern**
 that decides how those pieces are put together, the **Favicon**, an
 **App icon**, a **Social image**, and an **Entity** block (Organization or Person,
-with a name and logo) that feeds the site's structured data.
+with a description and logo) that feeds the site's structured data. Your business name,
+phone, email and address come from [Business details](../../getting-started/create-a-site.md#business-details)
+on **Setup → Business profile**.
 
 The **App icon** is the square mark someone installs to a phone or desktop home
 screen, and it is a third picture rather than a reuse of the other two on purpose: a
@@ -443,11 +445,11 @@ against them.
 | --- | --- |
 | `og:title`, `og:description` | The page's search title and description |
 | `og:url` | The page's canonical address, always absolute |
-| `og:site_name` | Setup → SEO **Title**, then the **Entity** name, then the site's name |
+| `og:site_name` | Setup → SEO **Title**, then the **Business name** from Setup → Business profile, then the site's name |
 | `og:locale` | The page's language — its own, then the site's default |
 | `og:image` + `width`, `height`, `alt` | The winning card image, below |
 | `twitter:card`, `title`, `description`, `image` | The same values as the card above |
-| `twitter:site` | The X profile in Setup → Details → **Social links** |
+| `twitter:site` | The X profile in Setup → Business profile → **Social links** |
 
 **And per kind of page:**
 
@@ -494,9 +496,9 @@ context about your content.
 - a top-level **`Organization`** (or `Person`, or a local business type such as
   `Plumber`) describing who publishes the site —
   the entity an assistant reads when someone asks who you are or how to reach you.
-  It is filled in from **Setup → SEO → Entity**, and it falls back to your site name
-  and description, so a site that has never touched that form still publishes a
-  named, described entity;
+  It is filled in from **Setup → Business profile → Business details** and **Setup → SEO →
+  Entity**, and it falls back to your site name and description, so a site that has
+  never touched either still publishes a named, described entity;
 - a **`WebSite`** naming the site and its address, with the language it is
   published in (`inLanguage`).
 
@@ -511,23 +513,29 @@ context about your content.
 | Any page more than one level deep | `BreadcrumbList` naming the trail to it |
 | A page with a FAQ section — a Section whose accessible label names it (`FAQ`, `Frequently asked questions`) — holding two or more question-and-answer pairs, as two-line items or accordions | `FAQPage` listing each question with its answer, the block AI search quotes and FAQ rich results read |
 
-Your **social links**, from Setup → Details → **Business details**, are published as
+Your **social links**, from Setup → Business profile → **Business details**, are published as
 the entity's `sameAs` — the property that tells a search engine your site, your
 LinkedIn page and your X account are all the same organization. You do not have to
 retype them anywhere; the list the site already renders is the list it publishes.
 
-Two fields are worth adding by hand, because nothing can guess them:
+The rest of **Business details** is published on the entity too, because nothing can
+guess it:
 
-- **Contact email / phone**, published as `contactPoint`;
-- **Address**, published as a `PostalAddress`. Partial is fine — a city and a country
-  are still a real answer.
+- **Business name**, published as its `name`;
+- **Slogan**, published as `slogan` (an Organization or a local business only; a
+  Person has none);
+- **Email** and **Phone**, published as `contactPoint`;
+- the postal address, published as a `PostalAddress`. Partial is fine — a city and a
+  country are still a real answer.
 
 ### The Entity card {#entity-card}
 
 The **Entity** card in Setup → SEO says who publishes your site — a company or a person —
-and is published as the top-level `Organization` or `Person` every page carries. Fill in
-the type and name at least; everything left blank falls back to your site's own name and
-description.
+and is published as the top-level `Organization` or `Person` every page carries. Its name,
+phone, email and address are the ones you enter in
+[Business details](../../getting-started/create-a-site.md#business-details), so they are
+typed once for your pages, emails and search listings alike. Everything left blank falls
+back to your site's own name and description.
 
 #### Type {#entity-type}
 
@@ -535,12 +543,6 @@ Choose **Organization** for a business, charity or any other group, and **Person
 a site published by one individual. The two publish different structured data, so pick
 the one that is true rather than the one that sounds bigger. A
 [business type](#local-businesses) only applies to an Organization.
-
-#### Name {#entity-name}
-
-The publisher's legal or trading name, as it should read in search results and AI
-answers — "Acme Widgets Ltd", not your site's tagline. It is also the second source of
-`og:site_name` when the site has no SEO **Title**.
 
 #### Description {#entity-description}
 
@@ -554,13 +556,12 @@ Fill this in only when the publisher's main address is somewhere else, such as a
 product site whose company lives at its own domain. Leave it blank and the entity
 points at this site.
 
-#### Contact email and phone {#entity-contact}
+#### Contact is for {#entity-contact}
 
-A **Contact email** and **Contact phone** are published as the entity's
+The **Email** and **Phone** from Business details are published as the entity's
 `contactPoint`, and the email in `/llms.txt`, so an assistant asked how to reach you has
-a real answer. Write the phone in international form (`+1-512-555-0100`), and use
-**Contact is for** to say what the contact handles — customer support (the default),
-sales, press.
+a real answer. Use **Contact is for** to say what that contact handles — customer support
+(the default), sales, press.
 
 ### Entity logo {#entity-logo}
 
@@ -569,14 +570,6 @@ the logo of whoever publishes the site — pick it from your media library, or p
 external image URL. When the entity **Type** is Person the card becomes **Entity photo**,
 for the publisher's own picture. It is separate from your site logo, which is what
 visitors see on the site itself.
-
-### The Address card {#address-card}
-
-The **Address** card holds the publisher's postal address — **Street**, **City**,
-**State or region**, **Postal code** and **Country** — published as a `PostalAddress` on
-the entity. Every field is optional and a partial address is fine; a business that
-travels to its customers can give just a region and a country, and list where it works
-under **Areas served**.
 
 ### Local businesses
 
@@ -587,7 +580,9 @@ that type instead of `Organization`, and four more fields appear:
 
 - **Areas served** — one city or area per line, published as `areaServed`. This is
   how a business with no storefront says where it works; it does not need a street
-  address, and a region and a country on the Address card are enough.
+  address, and a region and a country in Business details are enough. Your pages can
+  name them with the **Main area** and **Areas served**
+  [site details variables](../bindings/overview.md#site-details).
 - **Hours** — switch on each day you are open, then pick the **From** and **To**
   times. For a split day, such as a lunch break, select **Add hours** on that day; to
   stay open all day, pick 12:00 AM to 11:59 PM. Each day's hours are published as an
@@ -596,7 +591,7 @@ that type instead of `Organization`, and four more fields appear:
 - **Payment accepted** — free text such as `Cash, credit card, Zelle`, published as
   `paymentAccepted`.
 
-Your **Contact phone** is published on the business itself as well as on its
+Your **Phone** is published on the business itself as well as on its
 `contactPoint`, which is where a local search result reads it from. A business type
 has no effect while the entity **Type** is Person.
 

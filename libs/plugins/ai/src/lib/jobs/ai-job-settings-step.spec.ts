@@ -204,6 +204,9 @@ describe('the changes a settings change makes (AGL-3748)', () => {
       'seo.description': 'Classes.',
       'seo.entity.name': 'Juniper Clay Studio',
       'seo.entity.description': 'A pottery studio.',
+      // The site's one email and the copy Setup → Business profile keeps in step
+      // (AGL-4136); the one-line address can only be the one-block copy.
+      'seo.entity.email': 'a@b.co',
       'business.supportEmail': 'a@b.co',
       'business.address': '1 Main St',
       timeZone: 'America/Chicago',
@@ -213,6 +216,12 @@ describe('the changes a settings change makes (AGL-3748)', () => {
       'seo.imageHeight': 630,
       'seo.imageAlt': 'Studio',
     })
+  })
+
+  it('says the email changed once, though it writes it to both places (AGL-4136)', () => {
+    const { changes } = aiSettingsChanges({}, { supportEmail: 'hello@b.co' }, {})
+    expect(changes.map((change) => change.path)).toEqual(['seo.entity.email', 'business.supportEmail'])
+    expect(new Set(changes.map((change) => change.said)).size).toBe(1)
   })
 
   it('keeps a social image alt someone wrote, as the card does', () => {

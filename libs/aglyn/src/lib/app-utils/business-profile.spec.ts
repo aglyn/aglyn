@@ -20,6 +20,7 @@ import {
   mergeBusinessProfilePrefill,
   resolveBusinessProfile,
   sanitizeBusinessProfileValues,
+  structuredAddressLine,
   type BusinessProfileDoc,
 } from './business-profile'
 
@@ -95,6 +96,74 @@ describe('resolveBusinessProfile (AGL-3661)', () => {
       site: { whatYouDo: 'Mine', sources: { whatYouDo: 'owner' } },
     })
     expect(profile.whatYouDo).toEqual({ value: 'Mine', origin: 'owner' })
+  })
+})
+
+/**
+ * The area served has one home, SEO → Local business (AGL-4136): it wins
+ * over whatever the profile holds, even what the owner typed there before
+ * the field left the profile card, and the workspace default comes last.
+ */
+describe('the area served reads SEO → Local business first (AGL-4136)', () => {
+  const withAreas = { seo: { entity: { areaServed: ['San Antonio, TX', 'Boerne'] } } }
+  const typed: BusinessProfileDoc = { serviceArea: 'North Austin', sources: { serviceArea: 'owner' } }
+  const workspace: BusinessProfileDoc = { serviceArea: 'Texas' }
+
+  it('takes the site settings over an area the owner typed on the profile', () => {
+    expect(resolveBusinessProfile({ host: withAreas, site: typed, workspace }).serviceArea).toEqual({
+      value: 'San Antonio, TX, Boerne',
+      origin: 'site',
+    })
+  })
+
+  it('falls back to the profile’s own area, whoever wrote it', () => {
+    expect(resolveBusinessProfile({ host: {}, site: typed, workspace }).serviceArea).toEqual({
+      value: 'North Austin',
+      origin: 'owner',
+    })
+    expect(
+      resolveBusinessProfile({
+        host: {},
+        site: { serviceArea: 'Hill Country', sources: { serviceArea: 'start' } },
+        workspace,
+      }).serviceArea,
+    ).toEqual({ value: 'Hill Country', origin: 'start' })
+  })
+
+  it('takes the workspace default last', () => {
+    expect(resolveBusinessProfile({ host: {}, site: null, workspace }).serviceArea).toEqual({
+      value: 'Texas',
+      origin: 'workspace',
+    })
+  })
+
+  it('leaves every other field’s order as it was', () => {
+    const profile = resolveBusinessProfile({
+      host: { seo: { entity: { description: 'From settings' } } },
+      site: { whatYouDo: 'Mine', sources: { whatYouDo: 'owner' } },
+    })
+    expect(profile.whatYouDo).toEqual({ value: 'Mine', origin: 'owner' })
+  })
+})
+
+describe('structuredAddressLine (AGL-4136)', () => {
+  it('joins the parts that are set, in order, with commas', () => {
+    expect(
+      structuredAddressLine({
+        streetAddress: ' 1 Main St ',
+        addressLocality: 'Austin',
+        addressRegion: 'TX',
+        postalCode: '78701',
+        addressCountry: 'US',
+      }),
+    ).toBe('1 Main St, Austin, TX, 78701, US')
+    expect(structuredAddressLine({ addressLocality: 'Austin', addressCountry: 'US' })).toBe('Austin, US')
+  })
+
+  it('is empty for no address, or one of blank parts', () => {
+    expect(structuredAddressLine(undefined)).toBe('')
+    expect(structuredAddressLine(null)).toBe('')
+    expect(structuredAddressLine({ streetAddress: '   ' })).toBe('')
   })
 })
 

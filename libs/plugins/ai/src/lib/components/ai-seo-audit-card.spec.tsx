@@ -195,6 +195,32 @@ it('stages the structured data and guidance in the form, and writes nothing', as
   expect(mockFetch).toHaveBeenCalledTimes(1)
 })
 
+it('says the name, email and phone went to Business details on Setup → Business profile (AGL-4136)', async () => {
+  const job = audit()
+  const site = job.outputs[1] as { proposal: { site: { values: Record<string, string> } } }
+  site.proposal.site.values = {
+    'seo.entity.name': 'Acme Lamps',
+    'seo.entity.telephone': '+1 512 555 0100',
+    'seo.agent.whenToUse': 'Questions about brass desk lamps.',
+  }
+  mockFetch.mockResolvedValueOnce(json({ jobs: [job] }))
+  render(<AiSeoAuditCard {...props} />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Put in the form' }))
+  // One proposal: the settings route each field to the card that owns it.
+  expect(proposeDraft).toHaveBeenCalledWith(site.proposal.site.values, 'job-9:site')
+  expect(screen.getByText(/In the SEO forms below as unsaved changes/)).toBeTruthy()
+  const link = screen.getByRole('link', { name: 'Setup → Business profile' })
+  expect(link.getAttribute('href')).toBe('/acme/hosts/shop/setup/business')
+})
+
+it('names only the SEO forms when nothing went to Business details', async () => {
+  mockFetch.mockResolvedValueOnce(json({ jobs: [audit()] }))
+  render(<AiSeoAuditCard {...props} />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Put in the form' }))
+  expect(screen.getByText(/In the SEO forms below as unsaved changes/)).toBeTruthy()
+  expect(screen.queryByRole('link', { name: 'Setup → Business profile' })).toBeNull()
+})
+
 it('applies all as drafts through the apply door, and links to each draft and listing', async () => {
   mockFetch.mockResolvedValueOnce(json({ jobs: [audit()] }))
   render(<AiSeoAuditCard {...props} />)

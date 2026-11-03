@@ -723,6 +723,8 @@ export interface HostSeoEntity {
   logo?: string
   /** What the publisher IS, in a sentence (AGL-2716). */
   description?: string
+  /** A short line about the business, schema.org `slogan` (AGL-4136). */
+  slogan?: string
   /** The publisher's canonical address, when it is not this site. */
   url?: string
   /** Profiles that identify the same entity. */

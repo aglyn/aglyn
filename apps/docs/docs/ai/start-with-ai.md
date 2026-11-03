@@ -362,25 +362,25 @@ them.
 ## Your business, for search engines and AI assistants {#business-details}
 
 When the site is published, your answers also fill the site's
-[structured data](../building-sites/seo/overview.md#entity-card) in **Setup** → **SEO**, so search
-engines and AI assistants can tell who runs the site and how to reach you:
+[Business details](../getting-started/create-a-site.md#business-details) in **Setup** →
+**Business profile** and its [structured data](../building-sites/seo/overview.md#entity-card) in
+**Setup** → **SEO**, so your pages, search engines and AI assistants can tell who runs the
+site and how to reach you:
 
-- **Entity**: the business's name and description, its phone and email (with **Contact is
-  for** set to *customer support*), its address, and what kind of business it is, from the
-  style you picked (a plumber, a restaurant, a salon), with the areas it serves, its
-  opening hours, its price range and its social profiles where you gave them. A personal
-  site is published as a person.
+- **Business details**: the business's phone, email and address, and its social profiles
+  where you gave them.
+- **Entity**: the business's description (with **Contact is for** set to *customer
+  support*), and what kind of business it is, from the style you picked (a plumber, a
+  restaurant, a salon), with the areas it serves, its opening hours and its price range.
+  A personal site is published as a person.
 - **Entity logo**: your site logo, when the site already has one.
 - **AI agents**: when an assistant should use the site, and how to reach a person there.
   These open the site's guide for AI assistants, so an assistant asked about your business
   finds what it does, where it works and how to reach you.
 
-The email and the street address also fill **Setup** → **Details** →
-[**Business details**](../building-sites/bindings/overview.md#site-details), as the site's
-support email and postal address.
-
-Only empty fields are filled, so nothing you already entered there is replaced. Change any
-of it in **Setup** → **SEO** at any time.
+Only empty fields are filled, so nothing you already entered there is replaced. Change the
+business details in **Setup** → **Business profile**, and the rest in **Setup** → **SEO**, at any
+time.
 
 ## A store from the start {#a-store-from-the-start}
 

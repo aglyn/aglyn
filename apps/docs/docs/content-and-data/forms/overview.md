@@ -160,8 +160,8 @@ If a site does cross it:
 - Nothing is stored, so there is no spam in your inbox to clean up afterwards.
 - The visitor is told plainly that the form isn't accepting messages and that their
   message was **not** sent — never a fake success that leaves a real customer waiting
-  for a reply. If your site publishes a **support email**, the notice offers it, so
-  there is still a way to reach you.
+  for a reply. If your site has an **Email** in its Business details, the notice offers
+  it, so there is still a way to reach you.
 - Your site's **Inbox** shows *"Form submissions are paused"* above the tabs, with how
   many submissions were refused and the date it lifts, and site managers get a
   notification.

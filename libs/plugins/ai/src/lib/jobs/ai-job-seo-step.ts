@@ -183,6 +183,8 @@ export interface SeoHostDocument {
     }
     agent?: { whenToUse?: string; howToUse?: string }
   }
+  /** The one-block copy of the site's email, read when the entity has none (AGL-4136). */
+  business?: { supportEmail?: string }
 }
 
 /** The screen document fields this step reads. */
@@ -554,7 +556,10 @@ export function aiSeoBlankSiteFields(host: SeoHostDocument): Set<AiSeoSiteFormFi
   if (entity.type === undefined || entity.type === null || entity.type === '') blank.add('seo.entity.type')
   if (!str(entity.name)) blank.add('seo.entity.name')
   if (!str(entity.description)) blank.add('seo.entity.description')
-  if (!str(entity.email)) blank.add('seo.entity.email')
+  // The site's one email is the entity's, else the older one-block copy
+  // (AGL-4136); Setup → Business profile shows the copy in its Email field, so a
+  // site with only the copy has an email, and a proposal would replace it.
+  if (!str(entity.email) && !str(host.business?.supportEmail)) blank.add('seo.entity.email')
   if (!str(entity.telephone)) blank.add('seo.entity.telephone')
   if (!str(entity.contactType)) blank.add('seo.entity.contactType')
   if (!str(agent.whenToUse)) blank.add('seo.agent.whenToUse')

@@ -231,6 +231,45 @@ describe('siteEntityJsonLd', () => {
   })
 })
 
+describe('siteEntityJsonLd — the slogan (AGL-4136)', () => {
+  const slogan = 'Built right, the first time'
+
+  it('publishes an Organization’s slogan as `slogan`, beside its description', () => {
+    const node = siteEntityJsonLd(
+      { seo: { entity: { type: HostEntityType.ORGANIZATION, name: 'Acme Builders', slogan: `  ${slogan}  ` } } },
+      { origin: ORIGIN },
+    )
+    expect(node?.['slogan']).toBe(slogan)
+  })
+
+  it('publishes it on a local business too, which is an Organization', () => {
+    const node = siteEntityJsonLd(
+      { seo: { entity: { name: 'Acme Builders', businessType: 'Plumber', slogan } } },
+      { origin: ORIGIN },
+    )
+    expect(node).toMatchObject({ '@type': 'Plumber', slogan })
+  })
+
+  it('never publishes one for a Person, which schema.org gives none', () => {
+    const node = siteEntityJsonLd(
+      { seo: { entity: { type: '2', name: 'Ada Lovelace', slogan } } },
+      { origin: ORIGIN },
+    )
+    expect(node).toMatchObject({ '@type': 'Person' })
+    expect(node).not.toHaveProperty('slogan')
+  })
+
+  it('omits an empty slogan rather than publishing ""', () => {
+    const node = siteEntityJsonLd({ seo: { entity: { name: 'Acme', slogan: '   ' } } }, { origin: ORIGIN })
+    expect(node).not.toHaveProperty('slogan')
+  })
+
+  it('holds a slogan to the field’s length', () => {
+    const node = siteEntityJsonLd({ seo: { entity: { name: 'Acme', slogan: 'x'.repeat(500) } } }, { origin: ORIGIN })
+    expect(String(node?.['slogan'])).toHaveLength(120)
+  })
+})
+
 describe('siteEntityJsonLd — a local business (AGL-3383)', () => {
   /** Every business-only field, set, on an entity whose TYPE is not a business. */
   const businessFields = {

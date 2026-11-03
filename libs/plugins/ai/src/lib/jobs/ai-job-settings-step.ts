@@ -56,8 +56,9 @@ import { registerAiJobStep } from './ai-jobs'
  * name and to the same limit: `displayName` (Admin → General, 30), `seo.title`
  * (60), `seo.description` (155), `seo.separator` (3), `seo.titlePattern`
  * (120, its own variables only), `seo.entity.name`, `seo.entity.description`
- * (300), `seo.entity.telephone`, `business.supportEmail` and
- * `business.address` (the Business details card), `locales`/`defaultLocale`
+ * (300), `seo.entity.telephone`, `seo.entity.email` with its
+ * `business.supportEmail` copy, and `business.address` (Setup → Business profile's
+ * Business details card, AGL-4136), `locales`/`defaultLocale`
  * (the Languages card), `timeZone` (one of the zones the console offers),
  * `consent.mode` (the consent banner card), and `seo.favicon`, `logoUrl` and
  * `seo.image` (with its size and alt) written as the media pickers write
@@ -490,7 +491,18 @@ export function aiSettingsChanges(
   if (request.businessName) set('seo.entity.name', request.businessName, `The business name is now “${request.businessName}”.`)
   if (request.businessDescription) set('seo.entity.description', request.businessDescription, 'The business description is set.')
   if (request.telephone) set('seo.entity.telephone', request.telephone, `The phone number is now ${request.telephone}.`)
-  if (request.supportEmail) set('business.supportEmail', request.supportEmail, `The contact email is now ${request.supportEmail}.`)
+  if (request.supportEmail) {
+    // The site's one email (AGL-4136): the canonical `seo.entity.email`, and
+    // the `business.supportEmail` copy Setup → Business profile keeps in step for the
+    // native apps, so every reader shows the new address at once.
+    const said = `The contact email is now ${request.supportEmail}.`
+    set('seo.entity.email', request.supportEmail, said)
+    set('business.supportEmail', request.supportEmail, said)
+  }
+  // The address arrives as ONE line, which cannot be split into the street,
+  // city, region, postal code and country Setup → Business profile stores (AGL-4136).
+  // So it is written to the one-block `business.address`, the copy every
+  // reader falls back to when the site has no structured address.
   if (request.address) set('business.address', request.address, 'The address is set.')
   if (request.timeZone) set('timeZone', request.timeZone, `The site’s time zone is now ${request.timeZone}.`)
   if (request.consentMode) {

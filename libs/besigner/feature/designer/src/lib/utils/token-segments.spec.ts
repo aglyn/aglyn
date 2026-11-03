@@ -347,9 +347,13 @@ describe('resolveTokenLabel (AGL-586)', () => {
       group: 'host',
       known: true,
     })
-    expect(resolveTokenLabel('{{ host.supportEmail }}', {}).label).toBe(
-      'Support email',
-    )
+    // Named as Setup → Business profile names the field it reads (AGL-4136).
+    expect(resolveTokenLabel('{{ host.supportEmail }}', {}).label).toBe('Email')
+    expect(resolveTokenLabel('{{host.phoneLink}}', {})).toEqual({
+      label: 'Phone link',
+      group: 'host',
+      known: true,
+    })
     expect(resolveTokenLabel('{{host.nonsense}}', {})).toEqual({
       label: 'host.nonsense',
       group: 'host',

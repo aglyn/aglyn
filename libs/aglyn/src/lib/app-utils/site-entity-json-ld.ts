@@ -25,6 +25,7 @@ import {
   hostSeoEntityImageJsonLd,
   siteProfileUrls,
 } from './content-authors'
+import { SITE_SLOGAN_MAX_LENGTH } from './business-details'
 import {
   type LocalBusinessType,
   PAYMENT_ACCEPTED_MAX_LENGTH,
@@ -209,6 +210,13 @@ export function siteEntityJsonLd(
   const address = Object.entries(addressFields).filter(([, value]) => value)
   const schemaType = siteEntitySchemaType(entity)
   const picture = hostSeoEntityImageJsonLd(entity, context)
+  /*
+    The business's slogan from Setup → Business profile (AGL-4136). `slogan` is an
+    Organization property, which every LocalBusiness type inherits; a Person
+    has none, so a site published by a person never carries it.
+  */
+  const slogan =
+    schemaType === 'Person' ? '' : text(entity?.slogan, SITE_SLOGAN_MAX_LENGTH)
   const business =
     schemaType !== 'Person' && schemaType !== 'Organization'
       ? localBusinessJsonLd(entity, telephone, picture.logo)
@@ -220,6 +228,7 @@ export function siteEntityJsonLd(
     ...(origin ? { '@id': `${origin}/${SITE_ENTITY_FRAGMENT}` } : {}),
     name,
     ...(description ? { description } : {}),
+    ...(slogan ? { slogan } : {}),
     ...(url ? { url } : {}),
     // `logo` for an Organization, `image` for a Person — the one field whose
     // KEY the branch changes. Shared with the nested publisher so the two
