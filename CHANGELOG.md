@@ -9,6 +9,47 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.8.0 — 2026-11-03
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.7.0...v1.8.0)
+
+### Added
+
+- **ai:** a video on an imported page is a video on the new page ([AGL-4140](https://linear.app/aglyn/issue/AGL-4140))
+- **mui:** the Video element plays YouTube and Vimeo links, poster first ([AGL-4140](https://linear.app/aglyn/issue/AGL-4140))
+
+### Fixed
+
+- **ai:** a film the import plays from the old site's address is approved for the site ([AGL-4140](https://linear.app/aglyn/issue/AGL-4140))
+- **ai:** an imported mega menu keeps the source's columns, tiles and featured card, and opens on hover ([AGL-4139](https://linear.app/aglyn/issue/AGL-4139))
+- **ai:** an imported site's eyebrows wear the source's own color, with no dash before them ([AGL-4138](https://linear.app/aglyn/issue/AGL-4138))
+- **ai:** an imported page draws its pictures, eyebrows, statement, cards and steps as the source does ([AGL-4138](https://linear.app/aglyn/issue/AGL-4138))
+- **uptime:** a health door that times out alone is asked once more ([AGL-4137](https://linear.app/aglyn/issue/AGL-4137))
+- **beacon:** a bridge injected before the page moved on the client is dropped ([AGL-4068](https://linear.app/aglyn/issue/AGL-4068))
+- **console:** the first-site door names its workspace name as derived ([AGL-4117](https://linear.app/aglyn/issue/AGL-4117))
+
+### Changed
+
+- **ai:** the frame's color ranking is aiSiteImportFrameColorRole, apart from the page compile's ([AGL-4139](https://linear.app/aglyn/issue/AGL-4139))
+
+### Documentation
+
+- **ai:** how an imported site's menus, footer and icon come in ([AGL-4139](https://linear.app/aglyn/issue/AGL-4139))
+- **ai:** Bring my site draws pictures, labels, statements, cards and steps as your page does ([AGL-4138](https://linear.app/aglyn/issue/AGL-4138))
+- the members-only page names member accounts apart from gated content ([AGL-4141](https://linear.app/aglyn/issue/AGL-4141))
+
+<details>
+<summary>Also in this release: 3 test, 3 chore</summary>
+
+- **tenant:** declare the import reader's video markers and the import step's icon reader ([AGL-4140](https://linear.app/aglyn/issue/AGL-4140))
+- **ai:** pin the import's films, its play button and its unchanged design text ([AGL-4140](https://linear.app/aglyn/issue/AGL-4140))
+- **ai:** name the frame's color roles apart from member roles, and regenerate the Assist docs index ([AGL-4139](https://linear.app/aglyn/issue/AGL-4139))
+- **docs:** regenerate Assist's docs index for the Bring my site guide ([AGL-4138](https://linear.app/aglyn/issue/AGL-4138))
+- **ai:** an import's pictures are scored on their framing, over a blog listing that crops its own ([AGL-4138](https://linear.app/aglyn/issue/AGL-4138))
+- **linear:** raise the id ceiling to AGL-4140 ([AGL-4140](https://linear.app/aglyn/issue/AGL-4140))
+
+</details>
+
 ## v1.7.0 — 2026-11-03
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.6.0...v1.7.0)
