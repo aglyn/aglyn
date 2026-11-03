@@ -65,3 +65,54 @@ export async function fetchOnceMore(
     return attempt()
   }
 }
+
+/**
+ * A RUN WHERE EVERY ANSWER WAS SLOW IS THE RUNNER, NOT THE SITE (AGL-4137).
+ *
+ * On 2026-11-03 at 16:53Z every one of the 23 rows took 12.6 s or more,
+ * cached front doors included. A cache HIT is answered at Vercel's edge
+ * without reaching our code, so a 12.7 s HIT was a wait on the runner's own
+ * network. Five rows crossed the 15 s budget and were posted as a failing
+ * user journey while Google's uptime checks passed from every region. In the
+ * 40 red runs before it, the fastest answer was never slower than 0.7 s.
+ *
+ * So when even the fastest answer in a run took `RUNNER_STALL_MS` or more,
+ * or nothing answered at all, each row that got no response is probed once
+ * more and graded on that try. A hung render still reads DOWN. On 2026-10-05
+ * the cached pages and health routes answered at once while every uncached
+ * render hung, so that run was not stalled and nothing in it is retried. And
+ * a site that is really down fails the second try too.
+ */
+export const RUNNER_STALL_MS = 5_000
+
+/**
+ * `results` are the probe's rows; a row with `noResponse` got nothing back.
+ * `reprobe(index)` probes the plan row at that index again. Returns the
+ * graded rows and, when the runner stalled, `stall: { fastestMs, retried }`
+ * (`fastestMs` is null when nothing answered).
+ */
+export async function retryAfterRunnerStall(
+  results,
+  reprobe,
+  { stallMs = RUNNER_STALL_MS } = {},
+) {
+  const answered = results.filter((r) => !r.noResponse)
+  if (answered.length === results.length) return { results, stall: null }
+  const fastestMs = answered.length ? Math.min(...answered.map((r) => r.ms)) : null
+  if (fastestMs !== null && fastestMs < stallMs) return { results, stall: null }
+
+  const graded = await Promise.all(
+    results.map(async (first, index) => {
+      if (!first.noResponse) return first
+      const again = await reprobe(index)
+      return {
+        ...again,
+        detail: `${again.detail} · tried again: the runner stalled (first try ${first.ms}ms, ${first.detail})`,
+      }
+    }),
+  )
+  return {
+    results: graded,
+    stall: { fastestMs, retried: results.length - answered.length },
+  }
+}
