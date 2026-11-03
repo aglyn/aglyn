@@ -71,6 +71,7 @@ export function ReturnSettingsCard(props: ReturnSettingsCardProps) {
     data: store,
     status: storeStatus,
     fromCache: storeFromCache,
+    listen: storeListen,
   } = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId, 'settings', 'store'),
     [firestore, hostId],
@@ -112,6 +113,7 @@ export function ReturnSettingsCard(props: ReturnSettingsCardProps) {
         subject: 'return settings',
         unreadable: storeStatus === 'error',
         fromCache: storeFromCache,
+        listen: storeListen,
       },
       async () => {
         await writeSiteWideChange({
@@ -140,7 +142,7 @@ export function ReturnSettingsCard(props: ReturnSettingsCardProps) {
     }
     setDraft(null)
     enqueueSnackbar('Return settings saved', { variant: 'success', persist: false })
-  }, [daysValid, storeStatus, storeFromCache, firestore, user, hostId, current, days, enqueueSnackbar])
+  }, [daysValid, storeStatus, storeFromCache, storeListen, firestore, user, hostId, current, days, enqueueSnackbar])
 
   return (
     <CardDisplay

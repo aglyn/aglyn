@@ -281,7 +281,7 @@ export function BusinessProfileCard(props: BusinessProfileCardProps) {
         : doc(firestore, 'orgs', orgId, BUSINESS_PROFILE_SUBCOLLECTION, BUSINESS_PROFILE_WORKSPACE_DOC),
     [firestore, hostId, orgId],
   )
-  const { data: stored, status, fromCache } = useFirestoreDoc<BusinessProfileDoc>(
+  const { data: stored, status, fromCache, listen } = useFirestoreDoc<BusinessProfileDoc>(
     () => profileRef,
     [firestore, hostId, orgId],
   )
@@ -307,7 +307,7 @@ export function BusinessProfileCard(props: BusinessProfileCardProps) {
       const dequeueLoading = queueLoading()
       try {
         const verdict = await writeGuardedBySeed(
-          { subject: 'business profile', unreadable: status === 'error', fromCache },
+          { subject: 'business profile', unreadable: status === 'error', fromCache, listen },
           async () => {
             const next = businessProfileOwnerWrite(stored ?? null, fromForm(values, level))
             await setDoc(
@@ -331,7 +331,7 @@ export function BusinessProfileCard(props: BusinessProfileCardProps) {
         dequeueLoading()
       }
     },
-    [enqueueSnackbar, fromCache, level, profileRef, queueLoading, status, stored, user?.uid],
+    [enqueueSnackbar, fromCache, level, listen, profileRef, queueLoading, status, stored, user?.uid],
   )
 
   return (

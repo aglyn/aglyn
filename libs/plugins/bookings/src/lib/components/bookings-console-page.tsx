@@ -196,6 +196,7 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
      * charged.
      */
     fromCache: servicesFromCache,
+    listen: servicesListen,
   } = useFirestoreCollection<any>(
     () =>
       query(collection(firestore, 'hosts', hostId, 'services'), limit(100)),
@@ -300,6 +301,7 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
             subject: 'service',
             unreadable: servicesStatus === 'error',
             fromCache: servicesFromCache,
+            listen: servicesListen,
           },
           async () => {
             await setDoc(
@@ -341,6 +343,7 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
     enqueueSnackbar,
     servicesStatus,
     servicesFromCache,
+    servicesListen,
   ])
 
   /**

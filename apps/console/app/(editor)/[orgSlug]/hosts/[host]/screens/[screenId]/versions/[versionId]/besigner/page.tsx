@@ -905,6 +905,7 @@ function BesignerPage(props) {
         subject: 'SEO settings',
         unreadable: screenResult?.status === 'error',
         fromCache: screenResult?.fromCache,
+        listen: screenResult?.listen,
       },
       async () => {
         // An emptied map is removed rather than stored blank — an empty `seo`

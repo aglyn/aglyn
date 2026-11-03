@@ -202,6 +202,7 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
      * one, along with reverting its variant weights and goal.
      */
     fromCache: experimentsFromCache,
+    listen: experimentsListen,
     plan: experimentPlan,
   } = useListQuery<ExperimentDraft>({
     collection: collection(firestore, 'hosts', hostId, 'experiments'),
@@ -401,6 +402,7 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
           subject: 'experiment',
           unreadable: Boolean(editor.$id) && experimentsStatus === 'error',
           fromCache: Boolean(editor.$id) && experimentsFromCache,
+          listen: experimentsListen,
         },
         async () => {
           await writeSiteWideChange({

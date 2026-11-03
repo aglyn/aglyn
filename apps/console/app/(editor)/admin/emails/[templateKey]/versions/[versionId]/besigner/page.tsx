@@ -186,6 +186,7 @@ function SystemEmailBesignerPage() {
      * that every account on Aglyn receives.
      */
     fromCache: templateFromCache,
+    listen: templateListen,
   } = useFirestoreDoc<SystemEmailTemplateState>(
     () =>
       editable ? doc(firestore, SYSTEM_EMAIL_COLLECTION, templateKey) : null,
@@ -353,6 +354,7 @@ function SystemEmailBesignerPage() {
           subject: 'email',
           unreadable: templateStatus === 'error',
           fromCache: templateFromCache,
+          listen: templateListen,
         },
         async () => {
           await setDoc(
@@ -397,6 +399,7 @@ function SystemEmailBesignerPage() {
     preheaderInput,
     template,
     templateFromCache,
+    templateListen,
     templateStatus,
     user,
     enqueueSnackbar,

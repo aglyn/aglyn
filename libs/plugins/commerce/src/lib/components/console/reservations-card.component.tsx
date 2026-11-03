@@ -172,6 +172,7 @@ export function ReservationsCard(props: ReservationsCardProps) {
      * that is already spoken for.
      */
     fromCache: resourcesFromCache,
+    listen: resourcesListen,
   } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'resources'), limit(50)),
     [firestore, hostId],
@@ -330,6 +331,7 @@ export function ReservationsCard(props: ReservationsCardProps) {
         subject: 'resource',
         unreadable: Boolean(id) && resourcesStatus === 'error',
         fromCache: Boolean(id) && resourcesFromCache,
+        listen: resourcesListen,
       },
       async () => {
         await setDoc(
@@ -365,6 +367,7 @@ export function ReservationsCard(props: ReservationsCardProps) {
     enqueueSnackbar,
     resourcesStatus,
     resourcesFromCache,
+    resourcesListen,
   ])
 
   const handleStatus = useCallback(

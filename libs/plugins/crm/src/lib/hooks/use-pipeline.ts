@@ -25,6 +25,7 @@ import {
   useFirestore,
   useFirestoreCollection,
   useUser,
+  type ListenHandle,
 } from '@aglyn/tenant-feature-instance'
 import {
   collection,
@@ -72,6 +73,8 @@ export interface UsePipelineResult {
   pipeline: PipelineDoc | null
   status: 'loading' | 'success' | 'error'
   fromCache: boolean
+  /** The rows' listener, so a save waits on that read alone (AGL-4135). */
+  listen: ListenHandle
   /** A seed write is in flight because the org had no pipeline. */
   seeding: boolean
   /**
@@ -140,7 +143,7 @@ export function usePipeline(
     createTokens,
   } = useCrmScope({ hostId, org: org as Record<string, unknown> | null })
 
-  const { data, status, fromCache } = useFirestoreCollection<PipelineDoc>(
+  const { data, status, fromCache, listen } = useFirestoreCollection<PipelineDoc>(
     () =>
       orgId && crmScopeListable(visibleToTokens)
         ? query(
@@ -218,12 +221,13 @@ export function usePipeline(
       pipeline: defaultPipelineOf(pipelines),
       status,
       fromCache,
+      listen,
       seeding,
       visibleToTokens,
       pipelineById: (id) =>
         id ? (pipelines.find((entry) => entry.$id === id) ?? null) : null,
     }
-  }, [data, status, fromCache, seeding, visibleToTokens])
+  }, [data, status, fromCache, listen, seeding, visibleToTokens])
 }
 
 export default usePipeline

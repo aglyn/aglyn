@@ -28,8 +28,11 @@ export type LeadStatusPicklistResult = Omit<CrmPicklistResult, 'definition'>
  * the label the org gave its meaning. One shared document listen.
  */
 export function useLeadStatusPicklist(orgId: string | null | undefined): LeadStatusPicklistResult {
-  const { picklist, stored, ready, fromCache } = useCrmPicklist(CRM_LEAD_STATUS_PICKLIST, orgId)
-  return useMemo(() => ({ picklist, stored, ready, fromCache }), [picklist, stored, ready, fromCache])
+  const { picklist, stored, ready, fromCache, listen } = useCrmPicklist(CRM_LEAD_STATUS_PICKLIST, orgId)
+  return useMemo(
+    () => ({ picklist, stored, ready, fromCache, listen }),
+    [picklist, stored, ready, fromCache, listen],
+  )
 }
 
 export default useLeadStatusPicklist

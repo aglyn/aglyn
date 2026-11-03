@@ -108,6 +108,7 @@ export function BasicInfoCard() {
      * the retry budget does.
      */
     fromCache: profileFromCache,
+    listen: profileListen,
   } = useFirestoreDoc(() => userRef, [firestore, user.uid])
   /** The read failed — as opposed to succeeding and finding nothing. */
   const profileUnreadable = profileStatus === 'error'
@@ -151,6 +152,7 @@ export function BasicInfoCard() {
             subject: 'profile',
             unreadable: profileUnreadable,
             fromCache: profileFromCache,
+            listen: profileListen,
           },
           async () => {
             // Normalize before storing, not after reading (AGL-1133).
@@ -234,6 +236,7 @@ export function BasicInfoCard() {
       enqueueSnackbar,
       profileUnreadable,
       profileFromCache,
+      profileListen,
       queueLoading,
       userRef,
       user,

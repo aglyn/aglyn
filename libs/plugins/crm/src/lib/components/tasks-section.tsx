@@ -237,7 +237,7 @@ export function TasksSection(props: ConsolePluginPageProps) {
     search: gridFilter.searchWords,
     sort: taskSort.sort,
   })
-  const { tasks, status, fromCache, scope, orgId, readTokens } = list
+  const { tasks, status, fromCache, listen, scope, orgId, readTokens } = list
   const directory = useOrgMemberDirectory(orgId)
   const picklists = useCrmTaskPicklists(orgId)
   /*
@@ -710,7 +710,7 @@ export function TasksSection(props: ConsolePluginPageProps) {
         scope={scope}
         readTokens={readTokens}
         task={drawer.task}
-        seed={{ fromCache, unreadable: status === 'error' }}
+        seed={{ fromCache, unreadable: status === 'error', listen }}
       />
     </>
   )
