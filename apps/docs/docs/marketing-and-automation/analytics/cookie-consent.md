@@ -76,7 +76,7 @@ page filed under a campaign is counted the same way.
 - **Remembering the campaign that last touched a visitor.** Reading it on the page
   they are on needs no grant; keeping it across visits does. See
   [The campaign a visitor came from](#campaign-touch).
-- **A Wistia player loaded with the page** — see
+- **A Wistia, YouTube or Vimeo player loaded with the page** — see
   [Videos that load with the page](#videos-that-load-with-the-page).
 - **Advertising storage** (`ad_storage`, `ad_user_data`, `ad_personalization`),
   on sites that have turned the advertising question on. **Where it starts
@@ -139,12 +139,14 @@ visitor is new to it, so a visitor who declined is never counted there — see
 ## Videos that load with the page {#videos-that-load-with-the-page}
 
 A Video element with **Load the player with the page** on is consent-gated like
-the list above: it puts Wistia's player in place of its poster only for a
-visitor whose recorded state grants analytics, and everyone else gets the
-poster. The player keeps its own storage inside its frame (`wistia` and
-`wistia-video-progress-{media id}`) as soon as it loads, before anyone presses
-play. A press loads the player for any visitor, with Wistia's do-not-track
-option unless analytics is granted, and the player keeps the same storage then.
+the list above: it puts the video host's player (Wistia, YouTube or Vimeo) in
+place of its poster only for a visitor whose recorded state grants analytics,
+and everyone else gets the poster. The player keeps its own storage inside its
+frame as soon as it loads, before anyone presses play; Wistia's is `wistia` and
+`wistia-video-progress-{media id}`. A press loads the player for any visitor:
+Wistia's with its do-not-track option unless analytics is granted, YouTube's
+always in its privacy-enhanced player, and Vimeo's always with its do-not-track
+option on. The player keeps its storage then too.
 
 ## Your Privacy Choices — the persistent control {#privacy-choices--the-persistent-control}
 

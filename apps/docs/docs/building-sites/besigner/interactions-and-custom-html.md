@@ -194,8 +194,8 @@ Pick the Video as the target.
 - With **Open in a lightbox** on, the lightbox opens and the film plays.
 - With it off, the film plays in place of the poster.
 
-Nothing is loaded from the video's host until the action runs, and a Wistia
-video follows the same consent rules as a press on its poster. To be sure the
+Nothing is loaded from the video's host until the action runs, and a Wistia,
+YouTube or Vimeo video follows the same consent rules as a press on its poster. To be sure the
 film is in view as it starts, put **Scroll to element**, picking the same
 Video, before it.
 

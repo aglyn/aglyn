@@ -59,6 +59,30 @@ const OTHER: ResolvedVideoEmbedProvider = {
   playerOrigin: 'https://embed.example.net',
   playerPath: '/other/{id}',
 }
+/**
+ * A host whose links need the shapes paths cannot describe (AGL-4140): an
+ * id in the query on its main domain, and a short-link domain whose whole
+ * path is the id. Its player repeats the id in its query.
+ */
+const LINKED: ResolvedVideoEmbedProvider = {
+  pluginId: 'example-plugin',
+  id: 'linked-player',
+  label: 'Linked Player',
+  domains: ['tube.example', 'tu.example'],
+  mediaIdPaths: ['^\\/clip\\/([^/]+)\\/?$'],
+  mediaIdLinks: [
+    { path: '^\\/watch\\/?$', param: 'v', domains: ['tube.example'] },
+    { path: '^\\/([^/]+)\\/?$', domains: ['tu.example'] },
+  ],
+  mediaIdPattern: '^[A-Za-z0-9_-]{8}$',
+  playerOrigin: 'https://frames.example.net',
+  playerPath: '/embed/{id}',
+  playerQuery: [
+    { param: 'loop', option: 'loop', on: '1' },
+    { param: 'list', option: 'loop', on: '{id}' },
+    { param: 'ref', value: 'site-{id}' },
+  ],
+}
 const HOSTS = [PLAYER, OTHER]
 
 describe('videoEmbedOf reads a declared host’s link (AGL-3080)', () => {
@@ -108,6 +132,45 @@ describe('videoEmbedOf reads a declared host’s link (AGL-3080)', () => {
 
   it('answers nothing when nothing is declared', () => {
     expect(videoEmbedOf('https://player.example.net/watch/abc123', [])).toBeUndefined()
+  })
+})
+
+describe('a link shape the paths cannot describe (AGL-4140)', () => {
+  const ID = 'Ab_9-xYz'
+  const embed = (link: string) => videoEmbedOf(link, [LINKED])?.mediaId
+
+  it.each([
+    `https://tube.example/watch?v=${ID}`,
+    `https://www.tube.example/watch/?t=4&v=${ID}#x`,
+    `https://tu.example/${ID}`,
+    `https://tu.example/${ID}/?t=4`,
+    `https://tube.example/clip/${ID}`,
+  ])('finds the id in %s', (link) => {
+    expect(embed(link)).toBe(ID)
+  })
+
+  it.each([
+    ['a query shape with no id in the query', 'https://tube.example/watch?list=x'],
+    ['the id in another parameter', `https://tube.example/watch?w=${ID}`],
+    ['a query id the pattern refuses', 'https://tube.example/watch?v=short'],
+    ['a query id that would widen the path', 'https://tube.example/watch?v=Ab%2F9-xYz'],
+    // The root shape is the short-link domain's alone: on the main domain
+    // the same path is a page, not a film.
+    ['the short-link shape on the main domain', `https://tube.example/${ID}`],
+    ['the query shape on the short-link domain', `https://tu.example/watch?v=${ID}`],
+  ])('refuses %s', (_why, link) => {
+    expect(embed(link)).toBeUndefined()
+  })
+
+  it('rebuilds the address from the id alone, the id repeated where the query names it', () => {
+    const link = `https://tube.example/watch?v=${ID}&evil=1`
+    expect(videoEmbedUrl(link, [LINKED])).toBe(`https://frames.example.net/embed/${ID}`)
+    expect(videoEmbedPlayerSrc(link, {}, [LINKED])).toBe(
+      `https://frames.example.net/embed/${ID}?ref=site-${ID}`,
+    )
+    expect(videoEmbedPlayerSrc(link, { loop: true }, [LINKED])).toBe(
+      `https://frames.example.net/embed/${ID}?loop=1&list=${ID}&ref=site-${ID}`,
+    )
   })
 })
 

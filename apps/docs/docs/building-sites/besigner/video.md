@@ -1,7 +1,7 @@
 ---
 sidebar_position: 6.5
 title: Video
-description: The Video element — the poster frame that decides what a visitor downloads, captions, the lightbox, and the fields a video search result reads.
+description: The Video element — the poster frame that decides what a visitor downloads, Wistia, YouTube and Vimeo links, captions, the lightbox, and the fields a video search result reads.
 ---
 
 # Video
@@ -19,7 +19,7 @@ in — you only need **Poster image** to override the frame the library picked.
 :::note Video uploads are paused
 New video files cannot be uploaded to the media library for now. The **Video** element
 can still use any video that is already in your library, or
-[a video hosted on Wistia](#video-wistia).
+[a video hosted on Wistia, YouTube or Vimeo](#video-wistia).
 :::
 
 :::tip
@@ -60,32 +60,50 @@ The lightbox's backdrop, size, corners, close button and transition are set with
 [How a lightbox looks and closes](lightbox.md#lightbox-settings). Left alone, the film's
 lightbox is wide and black, as it always was.
 
-## A video hosted on Wistia {#video-wistia}
+## A video hosted on Wistia, YouTube or Vimeo {#video-wistia}
 
-Paste a Wistia media link into **Video source**: the address of the video's page in
-your Wistia account, or its embed link. Then pick a **Poster image** from your media
-library. The poster becomes a play button, and Wistia's player loads only when a
-visitor presses it, so someone who never presses play never contacts Wistia, unless
-you turn on **Load the player with the page** (below). The player opens in the
-lightbox when **Open in a lightbox** is on, and in place of the poster when it is off.
-Without a poster the element asks for one instead of loading the player.
+Paste the video's link into **Video source**. Each host's usual links work:
 
-Wistia's player brings its own controls. In the lightbox, `Esc` closes it until you
+- **Wistia**: the address of the video's page in your Wistia account, or its embed link.
+- **YouTube**: the video's page, a Short, a live video, its embed link, or the
+  `youtu.be` link from **Share**.
+- **Vimeo**: the video's page, the same video in a channel, group or showcase, or its
+  embed link. An unlisted Vimeo video does not play this way: its link carries a private
+  part the player needs, so make the video public on Vimeo first.
+
+A link to a channel, a playlist or a search names no single video, so the element treats
+it as an ordinary link and plays nothing.
+
+Then pick a **Poster image** from your media library. The poster becomes a play button,
+and the host's player loads only when a visitor presses it, so someone who never presses
+play never contacts the host, unless you turn on **Load the player with the page**
+(below). The player opens in the lightbox when **Open in a lightbox** is on, and in place
+of the poster when it is off. Without a poster the element asks for one instead of
+loading the player.
+
+Each host's player brings its own controls. In the lightbox, `Esc` closes it until you
 move into the player; from inside the player, `Shift`+`Tab` reaches the close button.
-Wistia records a viewing only for a visitor whose analytics consent your site has on
-record, and plays with its tracking off for everyone else. Type the running time into
-**Duration (seconds)**, because a Wistia link does not carry it.
+Type the running time into **Duration (seconds)**, because a hosted video's link does not
+carry it.
+
+How each host's player treats your visitors:
+
+- **Wistia** records a viewing only for a visitor whose analytics consent your site has on
+  record, and plays with its tracking off for everyone else.
+- **YouTube** always plays in its privacy-enhanced player (`youtube-nocookie.com`), for
+  every visitor.
+- **Vimeo** always plays with its do-not-track option on, for every visitor.
 
 Turn on **Load the player with the page** for a page whose main content is this one
 video, such as the entry page of a video collection. Search engines list a video only
 from a page like that, and they only find a player that is on the page when it loads.
-With the switch on, Wistia's player replaces the poster as soon as the page loads,
+With the switch on, the host's player replaces the poster as soon as the page loads,
 without starting the video, for each visitor whose analytics consent your site has on
-record. Everyone else still gets the poster to press, with Wistia's tracking off. The
-player stays in the page even when **Open in a lightbox** is on. Keep the switch off on
-your home page, and on any page where the video is secondary.
+record. Everyone else still gets the poster to press. The player stays in the page even
+when **Open in a lightbox** is on. Keep the switch off on your home page, and on any page
+where the video is secondary.
 
-Wistia's player keeps data in the visitor's browser from the moment it loads, which is
+A host's player keeps data in the visitor's browser from the moment it loads, which is
 why the switch waits for consent. In the geo-conditional
 [consent mode](../../marketing-and-automation/analytics/cookie-consent.md), a visitor
 outside the EU, the UK and the other prior-consent regions has that consent on record
