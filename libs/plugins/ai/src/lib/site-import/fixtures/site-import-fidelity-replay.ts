@@ -79,6 +79,7 @@ export function siteImportReplayDocument(name: SiteLayoutPageName): AiSiteImport
     links: plannedLinks(blocks, origin),
     origins: [origin, origin.replace('://', '://www.')],
     ...(read.layout ? { layout: read.layout } : {}),
+    ...(read.videos?.length ? { videos: read.videos } : {}),
   }
 }
 

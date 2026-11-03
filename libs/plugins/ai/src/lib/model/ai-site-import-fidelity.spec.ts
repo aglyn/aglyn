@@ -75,17 +75,24 @@ const WHOLE: Record<
     unlinked: number
     headings: number
     forms: number
+    /** Films drawn as the Video element (AGL-4140). */
+    videos: number
     words: number
   }
 > = {
-  home: { sections: 11, rows: 2, groups: { cards: 28, steps: 3, list: 12, faq: 11 }, tables: 0, tabs: 0, pictures: 2, icons: 34, lone: 1, buttons: 2, unlinked: 1, headings: 10, forms: 0, words: 1581 },
-  product: { sections: 11, rows: 1, groups: { logos: 8, cards: 19, steps: 3, stats: 4, pricing: 3, faq: 7 }, tables: 0, tabs: 0, pictures: 3, icons: 31, lone: 1, buttons: 6, unlinked: 0, headings: 10, forms: 0, words: 1012 },
-  pricing: { sections: 7, rows: 1, groups: { pricing: 11, cards: 69, faq: 11 }, tables: 3, tabs: 3, pictures: 0, icons: 24, lone: 0, buttons: 4, unlinked: 0, headings: 9, forms: 0, words: 2292 },
-  livePricing: { sections: 7, rows: 1, groups: { pricing: 11, cards: 69, faq: 11 }, tables: 3, tabs: 3, pictures: 0, icons: 24, lone: 0, buttons: 4, unlinked: 0, headings: 9, forms: 0, words: 2292 },
-  contact: { sections: 3, rows: 1, groups: { cards: 4 }, tables: 0, tabs: 0, pictures: 0, icons: 4, lone: 0, buttons: 0, unlinked: 0, headings: 7, forms: 1, words: 120 },
+  // Home's and /product's film are the Video element (AGL-4140): its play mark is its own, no lone icon,
+  // and Home's "Watch the 40-second film" is a button that plays it.
+  home: { sections: 11, rows: 2, groups: { cards: 28, steps: 3, list: 12, faq: 11 }, tables: 0, tabs: 0, pictures: 2, icons: 34, lone: 0, buttons: 3, unlinked: 0, headings: 10, forms: 0, videos: 1, words: 1581 },
+  product: { sections: 11, rows: 1, groups: { logos: 8, cards: 19, steps: 3, stats: 4, pricing: 3, faq: 7 }, tables: 0, tabs: 0, pictures: 3, icons: 31, lone: 0, buttons: 6, unlinked: 0, headings: 10, forms: 0, videos: 1, words: 1012 },
+  pricing: { sections: 7, rows: 1, groups: { pricing: 11, cards: 69, faq: 11 }, tables: 3, tabs: 3, pictures: 0, icons: 24, lone: 0, buttons: 4, unlinked: 0, headings: 9, forms: 0, videos: 0, words: 2292 },
+  livePricing: { sections: 7, rows: 1, groups: { pricing: 11, cards: 69, faq: 11 }, tables: 3, tabs: 3, pictures: 0, icons: 24, lone: 0, buttons: 4, unlinked: 0, headings: 9, forms: 0, videos: 0, words: 2292 },
+  contact: { sections: 3, rows: 1, groups: { cards: 4 }, tables: 0, tabs: 0, pictures: 0, icons: 4, lone: 0, buttons: 0, unlinked: 0, headings: 7, forms: 1, videos: 0, words: 120 },
   // The post's second row is a byline, drawn small over its words, not as columns across the page.
-  post: { sections: 3, rows: 1, groups: { list: 5, logos: 4, cards: 3 }, tables: 1, tabs: 0, pictures: 5, icons: 0, lone: 0, buttons: 2, unlinked: 0, headings: 10, forms: 0, words: 585 },
-  pottery: { sections: 8, rows: 1, groups: { cards: 3, quotes: 3, faq: 3, logos: 4 }, tables: 1, tabs: 0, pictures: 9, icons: 0, lone: 0, buttons: 2, unlinked: 0, headings: 7, forms: 0, words: 279 },
+  post: { sections: 3, rows: 1, groups: { list: 5, logos: 4, cards: 3 }, tables: 1, tabs: 0, pictures: 5, icons: 0, lone: 0, buttons: 2, unlinked: 0, headings: 10, forms: 0, videos: 0, words: 585 },
+  pottery: { sections: 8, rows: 1, groups: { cards: 3, quotes: 3, faq: 3, logos: 4 }, tables: 1, tabs: 0, pictures: 9, icons: 0, lone: 0, buttons: 2, unlinked: 0, headings: 7, forms: 0, videos: 0, words: 279 },
+  // Five films (AGL-4140): the one playing behind the opening is drawn as its poster, a picture; the YouTube
+  // frame, the lite-youtube facade, the card's Vimeo film and the head's og:video are each the Video element.
+  bakery: { sections: 5, rows: 0, groups: { cards: 3 }, tables: 0, tabs: 0, pictures: 7, icons: 0, lone: 0, buttons: 2, unlinked: 0, headings: 8, forms: 0, videos: 4, words: 137 },
 }
 
 describe.each(Object.keys(SITE_LAYOUT_PAGES) as SiteLayoutPageName[])('%s: scored against its source', (name) => {
@@ -120,6 +127,7 @@ describe.each(Object.keys(SITE_LAYOUT_PAGES) as SiteLayoutPageName[])('%s: score
     expect(report.buttons).toEqual({ source: whole.buttons, built: whole.buttons, ratio: 1, unlinked: whole.unlinked })
     expect(report.headings).toEqual({ source: whole.headings, built: whole.headings, ratio: 1 })
     expect(report.forms).toEqual({ source: whole.forms, built: whole.forms, ratio: 1 })
+    expect(report.videos).toEqual({ source: whole.videos, built: whole.videos, ratio: 1 })
   })
 
   it('reads the page as Firestore stores it just as it reads the compiled one', () => {
@@ -406,7 +414,33 @@ describe('a measure sees what is lost', () => {
         for (const id of buttons) ((nodes[id] as Nodes[string]).props as Record<string, unknown>)['variant'] = 'text'
       }),
     )
-    expect(restyled.buttons).toMatchObject({ source: 2, built: 0, ratio: 0 })
+    // The film's own button is one of them (AGL-4140).
+    expect(restyled.buttons).toMatchObject({ source: 3, built: 0, ratio: 0 })
+    const silent = siteImportFidelity(
+      source,
+      changed(tree, (nodes) => {
+        for (const id of buttons) delete (nodes[id] as Nodes[string]).interactions
+      }),
+    )
+    // The button that plays the film is kept only while it plays it.
+    expect(silent.buttons).toMatchObject({ source: 3, built: 2 })
+  })
+
+  it('videos: the film drawn as its picture is no film', () => {
+    const { source, tree } = home()
+    const report = siteImportFidelity(
+      source,
+      changed(tree, (nodes) => {
+        for (const id of idsOf(nodes, (node) => node.componentId === 'video')) {
+          const node = nodes[id] as Nodes[string]
+          nodes[id] = { ...node, componentId: 'image', props: { src: node.props?.['poster'], decorative: true } }
+        }
+      }),
+    )
+    expect(report.videos).toEqual({ source: 1, built: 0, ratio: 0 })
+    // Its poster is still placed; the score is the film it lost.
+    expect(report.pictures).toEqual({ source: 2, built: 2, ratio: 1 })
+    expect(report.lowest).toBe('videos')
   })
 
   it('headings: a heading drawn as a line', () => {
@@ -429,7 +463,13 @@ describe('a measure sees what is lost', () => {
 
   it('names the lowest measure, the score is its ratio', () => {
     const { source, tree } = home()
-    const report = siteImportFidelity(source, changed(tree, (nodes) => drop(nodes, idsOf(nodes, (node) => node.componentId === 'image')[0] as string)))
+    // The hero's picture taken off: its film's poster (AGL-4140).
+    const report = siteImportFidelity(
+      source,
+      changed(tree, (nodes) => {
+        for (const id of idsOf(nodes, (node) => node.componentId === 'video')) delete ((nodes[id] as Nodes[string]).props as Record<string, unknown>)['poster']
+      }),
+    )
     expect(report.score).toBe(0.5)
     expect(report.lowest).toBe('pictures')
   })
@@ -437,9 +477,28 @@ describe('a measure sees what is lost', () => {
 
 describe('what the score leaves out, by name', () => {
   it('a lone icon and a button that goes nowhere are reported and do not score', () => {
-    expect(scored('home').icons.lone).toBe(1)
-    expect(scored('home').buttons.unlinked).toBe(1)
-    expect(scored('home').score).toBe(1)
+    // Home as its read stood before its film was read (AGL-4140): the poster a picture, a play mark beside it, the
+    // film's button its words. A play mark is no word and no picture, and a button its script ran goes nowhere here.
+    const { source, tree } = page('home')
+    const asPicture = (nodes: readonly SiteImportLayoutNode[]): SiteImportLayoutNode[] =>
+      nodes.flatMap((node): SiteImportLayoutNode[] =>
+        node.kind === 'video' ? [...(node.poster !== undefined ? [{ kind: 'picture' as const, line: node.poster, button: true as const }] : []), { kind: 'icon' as const, icon: 0 }] : [node],
+      )
+    const before = { ...source, layout: { ...source.layout, sections: source.layout.sections.map((section) => ({ ...section, nodes: asPicture(section.nodes) })) } }
+    const flat = changed(tree, (nodes) => {
+      for (const id of idsOf(nodes, (node) => node.componentId === 'video')) {
+        const node = nodes[id] as Nodes[string]
+        nodes[id] = { ...node, componentId: 'image', props: { src: node.props?.['poster'], decorative: true } }
+      }
+      for (const id of idsOf(nodes, (node) => node.componentId === 'muiButton' && (node.interactions?.length ?? 0) > 0)) {
+        nodes[id] = { componentId: 'muiTypography', props: { children: (nodes[id] as Nodes[string]).props?.['children'], variant: 'body1' } }
+      }
+    })
+    const report = siteImportFidelity(before, flat)
+    expect(report.icons.lone).toBe(1)
+    expect(report.buttons.unlinked).toBe(1)
+    expect(report.videos).toEqual({ source: 0, built: 0, ratio: 1 })
+    expect(report.score).toBe(1)
   })
 
   it('a byline is not a row: the post reads 2 rows and scores 1', () => {

@@ -46,6 +46,9 @@
  *   button or a link too); every inline icon, once, by index; every link or
  *   button the source draws as a button, filled (`primary`), outlined
  *   (`secondary`) or plain (`quiet`).
+ * - **Videos (AGL-4140).** Every video where it sits, its poster the picture
+ *   inside it; a film that plays on its own behind a section's words is that
+ *   section's backdrop.
  * - **The look.** The fonts (Google Fonts' named), the page's background and
  *   text, the buttons' fill and corners, the links' color, the header's
  *   background: what the look pass draws the site's theme from.
@@ -70,6 +73,7 @@ import {
   type SiteImportLayoutSection,
   type SiteImportLayoutTable,
   type SiteImportLayoutTabs,
+  type SiteImportLayoutVideo,
   type SiteImportLineRef,
   type SiteImportLookFacts,
 } from '../model/ai-site-import'
@@ -96,14 +100,14 @@ import {
 import { extractSiteImportPage, type SiteImportBlock, type SiteImportElement, type SiteImportExtract, type SiteImportStructure } from './site-import-html'
 import { siteImportLabel } from './site-import-page'
 
-/** A page as the layout reader takes it: its blocks and how it is built. */
-export type SiteImportLayoutSource = Pick<SiteImportExtract, 'blocks'> & { structure: SiteImportStructure }
+/** A page as the layout reader takes it: its blocks, its videos and how it is built. */
+export type SiteImportLayoutSource = Pick<SiteImportExtract, 'blocks' | 'videos'> & { structure: SiteImportStructure }
 
 /** One thing in the page's order: a line (by its main-region index) or an icon. */
 interface Leaf {
   order: number
-  kind: 'line' | 'icon' | 'form'
-  /** The line's index among the main-region blocks; the icon's or the form's index. */
+  kind: 'line' | 'icon' | 'form' | 'video'
+  /** The line's index among the main-region blocks; the icon's, the form's or the video's index. */
   ref: number
   element: number
 }
@@ -161,7 +165,7 @@ export function siteImportLayout(page: SiteImportLayoutSource, stylesheets: read
   const sheets = [...structure.styles, ...stylesheets]
   const css = siteImportCssOf(sheets)
   const styles = siteImportStylesOf(structure, css)
-  const reader = new LayoutReader(structure, blocks, styles, () => siteImportStylesOf(structure, siteImportCssOf(sheets, SITE_IMPORT_CSS_WIDE_WIDTH)))
+  const reader = new LayoutReader(structure, blocks, styles, () => siteImportStylesOf(structure, siteImportCssOf(sheets, SITE_IMPORT_CSS_WIDE_WIDTH)), page.videos ?? [])
   const sections = reader.sections()
   if (!sections.length) return null
   return {
@@ -190,6 +194,7 @@ class LayoutReader {
     private readonly blocks: readonly SiteImportBlock[],
     private readonly styles: SiteImportStyles,
     private readonly wideStylesOf: () => SiteImportStyles,
+    private readonly videos: NonNullable<SiteImportExtract['videos']> = [],
   ) {
     this.elements = structure.elements
     this.mainIndex = []
@@ -206,6 +211,7 @@ class LayoutReader {
       if (element.region !== 'main' || element.nav) continue
       if (element.icon !== undefined) this.own[element.id]?.push({ order: element.order ?? 0, kind: 'icon', ref: element.icon, element: element.id })
       if (element.form !== undefined) this.own[element.id]?.push({ order: element.order ?? 0, kind: 'form', ref: element.form, element: element.id })
+      if (element.video !== undefined) this.own[element.id]?.push({ order: element.order ?? 0, kind: 'video', ref: element.video, element: element.id })
     }
     const body = structure.body >= 0 ? structure.body : -2
     this.bodySize = siteImportFontSizePx(styles.of(body)) ?? 16
@@ -383,11 +389,17 @@ class LayoutReader {
   private section(cut: Cut, container: number, index: number): SiteImportLayoutSection | null {
     const { element, range, from } = cut
     const scope = element ?? container
-    const nodes = scope >= 0 ? this.read(scope, range) : this.readLeaves(range)
-    const lines = this.linesOf(nodes)
-    if (!lines.length && !nodes.some((node) => node.kind === 'icon' || node.kind === 'form')) return null
-    const name = this.nameOf(cut.anchor, lines, index)
-    const band = cut.anchor !== null ? this.bandOf(cut.anchor, false) : this.bandOf(container, true)
+    let nodes = scope >= 0 ? this.read(scope, range) : this.readLeaves(range)
+    const name = this.nameOf(cut.anchor, this.linesOf(nodes), index)
+    let band = cut.anchor !== null ? this.bandOf(cut.anchor, false) : this.bandOf(container, true)
+    // A film playing on its own behind the words is the section's backdrop (AGL-4140), its poster the first paint.
+    const behind = band.backdrop ? undefined : this.videoBehind(nodes)
+    if (behind) {
+      nodes = withoutVideo(nodes, behind.video)
+      band = { band: 'dark', background: band.background, backdrop: { kind: 'video', video: behind.video, ...(behind.poster !== undefined ? { poster: behind.poster } : {}) } }
+    }
+    const lines = behind?.poster !== undefined ? [behind.poster, ...this.linesOf(nodes)] : this.linesOf(nodes)
+    if (!lines.length && !behind && !nodes.some((node) => node.kind === 'icon' || node.kind === 'form' || node.kind === 'video')) return null
     const width = this.widthOf(cut.anchor ?? container)
     return {
       name,
@@ -405,7 +417,8 @@ class LayoutReader {
   /** Lines with no container to read them through: one after another. */
   private readLeaves(range: [number, number]): SiteImportLayoutNode[] {
     const leaves = this.elements.filter((element) => element.parent < 0).flatMap((element) => this.leaves(element.id))
-    return leaves.filter((leaf) => this.inRange(leaf, range)).map((leaf) => this.leafNode(leaf))
+    // A video's poster is its own, never a picture beside it.
+    return leaves.filter((leaf) => this.inRange(leaf, range) && (leaf.kind === 'video' || this.videoHolding(leaf.element) === null)).map((leaf) => this.leafNode(leaf))
   }
 
   private nameOf(element: number | null, lines: SiteImportLineRef[], index: number): string {
@@ -519,6 +532,8 @@ class LayoutReader {
   private read(element: number, range: readonly [number, number]): SiteImportLayoutNode[] {
     const node = this.elements[element]
     if (!node) return []
+    // A video is one node, whatever its marker holds: its poster (AGL-4140).
+    if (node.video !== undefined) return [this.videoNode(element, range)]
     if (node.tag === 'table') {
       const table = this.table(element, range)
       if (table) return [table]
@@ -558,6 +573,7 @@ class LayoutReader {
   private leafNode(leaf: Leaf): SiteImportLayoutNode {
     if (leaf.kind === 'icon') return { kind: 'icon', icon: leaf.ref }
     if (leaf.kind === 'form') return { kind: 'form', form: leaf.ref }
+    if (leaf.kind === 'video') return this.videoNode(leaf.element, [-1, Number.POSITIVE_INFINITY])
     const block = this.block(leaf)
     if (block?.kind === 'image') {
       const wrap = this.wrapperOf(leaf.element, ['a', 'button'], 4)
@@ -584,6 +600,46 @@ class LayoutReader {
   private anchorHref(element: number): string | null {
     const anchor = this.structure.anchors.find((entry) => entry.element === element)
     return anchor?.href ?? null
+  }
+
+  /*---------------- videos (AGL-4140) ----------------*/
+
+  /** A video where it sits: its poster, the picture inside its marker, and whether the box it plays in casts a shadow. */
+  private videoNode(element: number, range: readonly [number, number]): SiteImportLayoutVideo {
+    const node = this.elements[element] as SiteImportElement
+    const poster = this.leaves(element).find((leaf) => leaf.kind === 'line' && this.inRange(leaf, range) && this.block(leaf)?.kind === 'image')
+    let shadow = false
+    // The box around it, as far up as a wrapper holds nothing else.
+    for (let at = element, depth = 0; at >= 0 && depth < 3 && !shadow; at = this.elements[at]?.parent ?? -1, depth += 1) {
+      if (this.leaves(at).some((leaf) => leaf.kind === 'line' && leaf.element !== poster?.element)) break
+      shadow = siteImportHasShadow(this.style(at))
+    }
+    return { kind: 'video', video: node.video as number, ...(poster ? { poster: poster.ref } : {}), ...(shadow ? { shadow: true as const } : {}) }
+  }
+
+  /** The video marker an element sits in, or is, within a few levels; `null` for none. */
+  private videoHolding(element: number): number | null {
+    for (let at = element, depth = 0; at >= 0 && depth < 4; at = this.elements[at]?.parent ?? -1, depth += 1) {
+      if (this.elements[at]?.video !== undefined) return at
+    }
+    return null
+  }
+
+  /**
+   * The film a section plays on its own behind its words (AGL-4140): one that
+   * starts by itself, its place laid over the section (absolute or fixed, at
+   * most three levels up), as a picture behind the words is.
+   */
+  private videoBehind(nodes: readonly SiteImportLayoutNode[]): SiteImportLayoutVideo | null {
+    for (const node of siteImportVideoNodes(nodes)) {
+      if (!this.videos[node.video]?.autoplay) continue
+      const element = this.elements.find((entry) => entry.video === node.video)
+      for (let at = element?.id ?? -1, depth = 0; at >= 0 && depth < 4; at = this.elements[at]?.parent ?? -1, depth += 1) {
+        const position = this.style(at).get('position')
+        if (position === 'absolute' || position === 'fixed') return node
+      }
+    }
+    return null
   }
 
   /** How the source draws a line as a button, when it does. */
@@ -651,7 +707,9 @@ class LayoutReader {
     const substantial = parts.filter((part) => {
       if (!isElementPart(part)) return false
       return this.leaves(part.element).some((leaf) => {
-        if (!this.inRange(leaf, range) || leaf.kind !== 'line') return false
+        if (!this.inRange(leaf, range)) return false
+        if (leaf.kind === 'video') return true
+        if (leaf.kind !== 'line') return false
         const block = this.block(leaf)
         return block?.kind === 'image' || block?.kind === 'heading' || ((block?.kind === 'paragraph' || block?.kind === 'list-item' || block?.kind === 'quote') && !this.buttonStyle(leaf))
       })
@@ -929,7 +987,10 @@ class LayoutReader {
     }
     if (item.icon !== undefined && item.icon === item.listIcon && !lines.length) delete item.icon
     const rest = lines.filter((leaf) => !listed.has(leaf.ref))
-    const image = rest.find((leaf) => this.block(leaf)?.kind === 'image')
+    // A film the item holds (AGL-4140): its poster is the item's picture.
+    const film = leaves.find((leaf) => leaf.kind === 'video')
+    if (film) item.video = film.ref
+    const image = (film ? rest.find((leaf) => this.block(leaf)?.kind === 'image' && this.videoHolding(leaf.element) === film.element) : undefined) ?? rest.find((leaf) => this.block(leaf)?.kind === 'image')
     if (image) item.image = image.ref
     const words = rest.filter((leaf) => leaf !== image)
     // Its own calls to action: every link it draws as a button, wherever it
@@ -1245,7 +1306,7 @@ class LayoutReader {
     const hero = sections.find((section) => section.lines.some((ref) => mainBlocks[ref]?.kind === 'heading' && (mainBlocks[ref] as { level: number }).level === 1))
     if (!hero) return
     let picture: SiteImportHeroPicture | null = null
-    if (hero.backdrop?.kind === 'picture') picture = 'behind'
+    if (hero.backdrop?.kind === 'picture' || hero.backdrop?.kind === 'video') picture = 'behind'
     else {
       const h1 = hero.lines.find((ref) => mainBlocks[ref]?.kind === 'heading' && (mainBlocks[ref] as { level: number }).level === 1) as number
       const image = hero.lines.find((ref) => mainBlocks[ref]?.kind === 'image')
@@ -1287,6 +1348,31 @@ function dropLine(item: SiteImportLayoutItem, key: 'text' | 'list' | 'link', ref
   const list = item[key]?.filter((entry) => entry !== ref)
   if (list?.length) item[key] = list
   else delete item[key]
+}
+
+/** Every video node of a section, rows and tab panels opened (AGL-4140). */
+function siteImportVideoNodes(nodes: readonly SiteImportLayoutNode[]): SiteImportLayoutVideo[] {
+  return nodes.flatMap((node): SiteImportLayoutVideo[] => {
+    if (node.kind === 'video') return [node]
+    if (node.kind === 'row') return node.cells.flatMap((cell) => siteImportVideoNodes(cell.nodes))
+    if (node.kind === 'tabs') return node.tabs.flatMap((tab) => siteImportVideoNodes(tab.panel))
+    return []
+  })
+}
+
+/** A section's nodes with one video taken out, as its backdrop takes it; a cell or a row left empty goes. */
+function withoutVideo(nodes: readonly SiteImportLayoutNode[], video: number): SiteImportLayoutNode[] {
+  return nodes.flatMap((node): SiteImportLayoutNode[] => {
+    if (node.kind === 'video') return node.video === video ? [] : [node]
+    if (node.kind === 'row') {
+      const cells = node.cells.map((cell) => ({ nodes: withoutVideo(cell.nodes, video) }))
+      const kept = cells.filter((cell) => cell.nodes.length)
+      if (!kept.length) return []
+      return kept.length === 1 ? (kept[0] as { nodes: SiteImportLayoutNode[] }).nodes : [{ ...node, cells }]
+    }
+    if (node.kind === 'tabs') return [{ ...node, tabs: node.tabs.map((tab) => ({ ...tab, panel: withoutVideo(tab.panel, video) })) }]
+    return [node]
+  })
 }
 
 /** Rows of cells of lines, as objects: a Firestore document holds no array inside an array. */
@@ -1494,6 +1580,8 @@ export interface SiteImportLayoutCounts {
   /** Lines the source draws as buttons. */
   buttons: number
   forms: number
+  /** Videos placed (AGL-4140): where they sit, in an item, or behind a section. */
+  videos: number
   /** Lines placed, each once. */
   lines: number
 }
@@ -1512,6 +1600,7 @@ export function siteImportLayoutCounts(layout: SiteImportLayout, blocks: readonl
     icons: 0,
     buttons: 0,
     forms: 0,
+    videos: 0,
     lines: 0,
   }
   const main = blocks.filter((block) => block.region === 'main')
@@ -1531,6 +1620,11 @@ export function siteImportLayoutCounts(layout: SiteImportLayout, blocks: readonl
         case 'form':
           counts.forms += 1
           break
+        case 'video':
+          // Its poster is a picture of the page, as it was before the film was read.
+          counts.videos += 1
+          if (node.poster !== undefined) counts.pictures += 1
+          break
         case 'row':
           if (node.cells.length >= 2) counts.rows += 1
           for (const cell of node.cells) visit(cell.nodes)
@@ -1542,6 +1636,7 @@ export function siteImportLayoutCounts(layout: SiteImportLayout, blocks: readonl
             if (item.icon !== undefined) counts.icons += 1
             if (item.listIcon !== undefined) counts.icons += item.list?.length ?? 0
             if (item.image !== undefined || (main.length && item.lines.some(isPicture))) counts.pictures += 1
+            if (item.video !== undefined) counts.videos += 1
           }
           break
         case 'table':
@@ -1558,6 +1653,10 @@ export function siteImportLayoutCounts(layout: SiteImportLayout, blocks: readonl
   }
   for (const section of layout.sections) {
     visit(section.nodes)
+    if (section.backdrop?.kind === 'video') {
+      counts.videos += 1
+      if (section.backdrop.poster !== undefined) counts.pictures += 1
+    }
     counts.lines += section.lines.length
   }
   return counts

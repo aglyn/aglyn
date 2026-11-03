@@ -43,7 +43,7 @@ import {
   type AiSiteImportPhoto,
   type SiteImportLayout,
 } from '../model/ai-site-import'
-import type { SiteImportBlock } from '../site-import/site-import-html'
+import type { SiteImportBlock, SiteImportVideo } from '../site-import/site-import-html'
 import { siteImportLabel } from '../site-import/site-import-page'
 import { AI_TEXT_LIMITS } from '../runtime/ai-palette'
 
@@ -72,6 +72,8 @@ export interface AiSiteImportDocument {
   layout?: SiteImportLayout | null
   /** Each form of the read, by its index, and the saved form that takes its place (AGL-4083); absent on a page that asked for none. */
   forms?: Array<{ index: number; formId: string | null }> | null
+  /** The page's videos (AGL-4140), which its layout places by index; absent on a page that shows none. */
+  videos?: SiteImportVideo[]
 }
 
 /** The most characters a text element holds (the palette's ceiling for body copy). */
@@ -223,6 +225,38 @@ export function aiSiteImportDocumentOf(inputs: Readonly<Record<string, unknown>>
     }),
     origins: strings(value['origins']),
     ...(isLayout(value['layout']) ? { layout: value['layout'] } : {}),
+    ...(Array.isArray(value['videos']) ? { videos: (value['videos'] as unknown[]).map(videoOf) } : {}),
+  }
+}
+
+/**
+ * A video as the read keeps it (AGL-4140), read defensively: every address
+ * held to http(s), every fact to its kind. One that is no object keeps its
+ * place in the list, so the layout's indexes still name the right one.
+ */
+function videoOf(entry: unknown): SiteImportVideo {
+  const video = entry && typeof entry === 'object' ? (entry as Record<string, unknown>) : {}
+  const address = (value: unknown): string | undefined => (typeof value === 'string' && /^https?:\/\//i.test(value.trim()) ? value.trim().slice(0, 2048) : undefined)
+  const words = (value: unknown, max: number): string | undefined => (typeof value === 'string' && value.trim() ? value.replace(/\s+/g, ' ').trim().slice(0, max) : undefined)
+  const src = address(video['src'])
+  const embed = address(video['embed'])
+  const poster = address(video['poster'])
+  const description = words(video['description'], 2_000)
+  const uploadDate = typeof video['uploadDate'] === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(video['uploadDate']) ? video['uploadDate'] : undefined
+  const seconds = Number(video['durationSeconds'])
+  const flag = (key: 'autoplay' | 'muted' | 'loop' | 'controls') => (video[key] === true ? { [key]: true as const } : {})
+  return {
+    ...(src ? { src } : {}),
+    ...(embed ? { embed } : {}),
+    ...(poster ? { poster } : {}),
+    title: words(video['title'], 200) ?? '',
+    ...(description ? { description } : {}),
+    ...(uploadDate ? { uploadDate } : {}),
+    ...(Number.isFinite(seconds) && seconds > 0 ? { durationSeconds: Math.round(seconds) } : {}),
+    ...flag('autoplay'),
+    ...flag('muted'),
+    ...flag('loop'),
+    ...flag('controls'),
   }
 }
 

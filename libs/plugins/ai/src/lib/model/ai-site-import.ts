@@ -50,7 +50,8 @@
  *=========================================*/
 
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
-import type { SiteImportBlock, SiteImportForm } from '../site-import/site-import-html'
+import { videoEmbedOf } from '@aglyn/aglyn/plugin-manager/video-embed-provider'
+import type { SiteImportBlock, SiteImportForm, SiteImportVideo } from '../site-import/site-import-html'
 import { aiCreditRangeOrdered, aiCreditRangeText, AI_MEASURED_IMPORT_CREDITS, type AiCreditRange } from './ai-credit-estimate'
 import type { AiJobItemLedger } from './ai-jobs.types'
 
@@ -270,6 +271,19 @@ export interface SiteImportLayoutForm {
 }
 
 /**
+ * Where one of the page's videos sat (AGL-4140), by index into
+ * `AiSiteImportPageRead.videos`. Its poster, when the source shows one, is an
+ * image line: the film's first paint, copied into the library as any picture.
+ */
+export interface SiteImportLayoutVideo {
+  kind: 'video'
+  video: number
+  poster?: SiteImportLineRef
+  /** The box the source plays it in casts a shadow. */
+  shadow?: true
+}
+
+/**
  * A row of columns side by side; `cols` are relative widths in twelfths
  * (`[4, 8]`, `[1, 1, 1]`). Every list of lists is a list of objects: the
  * layout rides a Firestore document, which holds no array inside an array.
@@ -308,6 +322,8 @@ export interface SiteImportLayoutItem {
   listIcon?: number
   /** Where the item goes as a whole: its title link's address. */
   to?: string
+  /** The video it holds (AGL-4140), by index into the read's videos; its poster is its `image`. */
+  video?: number
 }
 
 export interface SiteImportLayoutGroup {
@@ -344,6 +360,7 @@ export type SiteImportLayoutNode =
   | SiteImportLayoutPicture
   | SiteImportLayoutIcon
   | SiteImportLayoutForm
+  | SiteImportLayoutVideo
   | SiteImportLayoutRow
   | SiteImportLayoutGroup
   | SiteImportLayoutTable
@@ -360,8 +377,8 @@ export interface SiteImportLayoutSection {
   band: SiteImportBand
   /** Its background color as `#rrggbb`, when it has one. */
   background: string | null
-  /** A gradient or a photo behind it. */
-  backdrop?: { kind: 'gradient' } | { kind: 'picture'; url: string }
+  /** A gradient, a photo, or a film playing on its own behind it (AGL-4140), its poster an image line. */
+  backdrop?: { kind: 'gradient' } | { kind: 'picture'; url: string } | { kind: 'video'; video: number; poster?: SiteImportLineRef }
   align: 'start' | 'center'
   /**
    * How wide the source lets the section's content run on a wide screen, in
@@ -506,6 +523,9 @@ export function siteImportLayoutLines(nodes: readonly SiteImportLayoutNode[]): S
         case 'picture':
           out.push(node.line)
           break
+        case 'video':
+          if (node.poster !== undefined) out.push(node.poster)
+          break
         case 'row':
           for (const cell of node.cells) visit(cell.nodes)
           break
@@ -542,7 +562,12 @@ export function siteImportLayoutChars(layout: SiteImportLayout | null | undefine
 export function siteImportLayoutWithin(layout: SiteImportLayout, count: number): SiteImportLayout {
   const keep = (ref: SiteImportLineRef) => ref >= 0 && ref < count
   const sections = layout.sections
-    .map((section) => ({ ...section, nodes: siteImportFilterNodes(section.nodes, keep), lines: section.lines.filter(keep) }))
+    .map((section) => {
+      const { backdrop } = section
+      // A film behind the words keeps its place; a poster past the cut goes (AGL-4140).
+      const behind = backdrop?.kind === 'video' && backdrop.poster !== undefined && !keep(backdrop.poster) ? { backdrop: { kind: 'video' as const, video: backdrop.video } } : {}
+      return { ...section, ...behind, nodes: siteImportFilterNodes(section.nodes, keep), lines: section.lines.filter(keep) }
+    })
     .filter((section) => section.lines.length)
   return { ...layout, sections }
 }
@@ -558,6 +583,12 @@ export function siteImportFilterNodes(list: readonly SiteImportLayoutNode[], kee
         case 'icon':
         case 'form':
           return [node]
+        case 'video': {
+          // The film stays where it sat; a poster past the cut goes.
+          if (node.poster === undefined || keep(node.poster)) return [node]
+          const { poster: _poster, ...rest } = node
+          return [rest]
+        }
         case 'row': {
           const cells = node.cells.map((cell) => ({ nodes: nodes(cell.nodes) }))
           return cells.some((cell) => cell.nodes.length) ? [{ ...node, cells }] : []
@@ -565,7 +596,7 @@ export function siteImportFilterNodes(list: readonly SiteImportLayoutNode[], kee
         case 'group': {
           const items = node.items
             .map((item) => trimItem(item, keep))
-            .filter((item) => item.lines.length || item.icon !== undefined)
+            .filter((item) => item.lines.length || item.icon !== undefined || item.video !== undefined)
           return items.length ? [{ ...node, items }] : []
         }
         case 'table': {
@@ -597,6 +628,47 @@ function trimItem(item: SiteImportLayoutItem, keep: (ref: SiteImportLineRef) => 
   if (ctas?.length) out.ctas = ctas
   else delete out.ctas
   return out
+}
+
+/*------------------------------------------
+ * A page's videos (AGL-4140)
+ *-----------------------------------------*/
+
+/** The words that name a control as one that plays a film: a facade's label, a "Watch the film" button. */
+export const SITE_IMPORT_PLAY_WORDS = /\b(?:play|watch|video|film)\b/i
+
+/**
+ * Where a video of a page brought in plays from on the new page, or `null`
+ * where the Video element cannot play it: a link to a video host whose
+ * player the element frames (`hosted`), else the file the old site serves at
+ * an https address, which the new page plays from that address. A video on
+ * any other host is shown as its poster, linking to it.
+ */
+export function siteImportFilmSource(video: Pick<SiteImportVideo, 'src' | 'embed'> | null | undefined): { src: string; hosted: boolean } | null {
+  if (!video) return null
+  const embed = video.embed?.trim()
+  if (embed && videoEmbedOf(embed)) return { src: embed, hosted: true }
+  const file = video.src?.trim()
+  return file && /^https:\/\//i.test(file) ? { src: file, hosted: false } : null
+}
+
+/**
+ * What a page's row says of its videos (AGL-4140), or `null`: a film the old
+ * site serves itself plays from there, and the owner may move it; a film the
+ * source showed no poster for is left out, since its poster is the button a
+ * visitor presses, and the owner may add it with one.
+ */
+export function aiSiteImportVideoNote(videos: readonly SiteImportVideo[] | null | undefined): string | null {
+  const films = (videos ?? []).map((video) => ({ video, source: siteImportFilmSource(video) }))
+  const files = films.filter((film) => film.source && !film.source.hosted && film.video.poster).length
+  const posterless = films.filter((film) => film.source && !film.video.poster).length
+  const notes = [
+    files === 1 ? "A video on this page plays from your old site's address; pick it from your media library to move it." : '',
+    files > 1 ? "Videos on this page play from your old site's address; pick each from your media library to move it." : '',
+    posterless === 1 ? 'A video on this page had no poster picture, so it was left out: add it with the Video element and pick a poster for it.' : '',
+    posterless > 1 ? 'Videos on this page had no poster picture, so they were left out: add each with the Video element and pick a poster for it.' : '',
+  ].filter(Boolean)
+  return notes.length ? notes.join(' ') : null
 }
 
 /** A layout with its icons' drawings dropped, for a page that must be lighter. */
@@ -640,6 +712,13 @@ export interface AiSiteImportPageRead {
    * read made before they were kept.
    */
   meta?: { title: string; description: string }
+  /**
+   * The videos the page shows (AGL-4140), which its layout places by index:
+   * where each plays from, its poster's address and what a search engine
+   * reads of it. Untrusted data. Absent on a page that shows none, or a read
+   * made before they were kept; emptied with `blocks` once the page is in.
+   */
+  videos?: SiteImportVideo[]
 }
 
 /** How a page is built from its old page, as the step chose: its words copied as they are, or arranged by Aglyn AI. */
@@ -1533,7 +1612,7 @@ export function aiSiteImportPageSettled(state: AiSiteImportState, slot: string):
   if (!page?.read) return state
   const { meta: _meta, ...read } = page.read
   return withPage(state, slot, {
-    read: { ...read, text: '', sections: [], images: [], blocks: [], forms: [], layout: null },
+    read: { ...read, text: '', sections: [], images: [], blocks: [], forms: [], layout: null, ...(read.videos ? { videos: [] } : {}) },
     ...(page.photos ? { photos: { ...page.photos, assets: [] } } : {}),
   })
 }
@@ -1572,7 +1651,7 @@ export function aiSiteImportWire(state: AiSiteImportState | null | undefined): A
   return {
     ...state,
     pages: state.pages.map((page) =>
-      page.read ? { ...page, read: { ...page.read, text: '', images: [], blocks: [], forms: [], layout: null } } : page,
+      page.read ? { ...page, read: { ...page.read, text: '', images: [], blocks: [], forms: [], layout: null, ...(page.read.videos ? { videos: [] } : {}) } } : page,
     ),
   }
 }

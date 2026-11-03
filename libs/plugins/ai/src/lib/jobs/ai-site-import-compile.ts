@@ -35,6 +35,9 @@
  *      the palette's own elements and the theme's tokens: the Card, the
  *      Accordion, the Table, the Tabs, the hero around the source's picture.
  *      Every word is the source's, as written.
+ *   A video is the Video element where the source's film sat (AGL-4140),
+ *   poster first, playing from where the old page played it, and a button
+ *   whose words say it plays the film scrolls to it and presses play.
  *   3. A main page's DESIGN is the one question a model answers
  *      (`submit_design`, `aiSiteImportDesignText`): which hero the opening
  *      becomes, how each group is drawn, a band where the source gave none,
@@ -67,10 +70,13 @@ import {
   type AiLayoutSection,
   type AiLayoutSettlement,
   type AiLayoutStyle,
+  type AiLayoutVideo,
 } from '../layout-language/ai-layout-language'
 import type { AiLayoutTargets } from '../layout-language/ai-layout-links'
 import {
   AI_SITE_IMPORT_LABEL_MAX_CHARS,
+  SITE_IMPORT_PLAY_WORDS,
+  siteImportFilmSource,
   siteImportWidthOf,
   type AiSiteImportPhoto,
   type SiteImportGroupKind,
@@ -82,6 +88,7 @@ import {
   type SiteImportLayoutLine,
   type SiteImportLayoutNode,
   type SiteImportLayoutSection,
+  type SiteImportLayoutVideo,
   type SiteImportLineRef,
 } from '../model/ai-site-import'
 import { aiModelAtLeastStepTier } from '../providers/routing'
@@ -396,6 +403,10 @@ interface MapScope {
   groupAt: number
   settled: AiLayoutSettlement[]
   at: string
+  /** The page's films the Video element plays, by their index (AGL-4140). */
+  films: ReadonlyMap<number, AiLayoutVideo>
+  /** The film a play button of this section plays: the section's own first, else the page's. */
+  film: number | null
 }
 
 /** Where a link of the source goes on the new site, in the compiler's words; `undefined` where it can go nowhere a page may send a visitor. */
@@ -478,6 +489,10 @@ function lineBlocks(scope: MapScope, node: SiteImportLayoutLine): AiLayoutBlock[
     case 'quote':
       return [{ kind: 'quotes', style: 'quiet', items: [{ title: '', text }] }]
     default:
+      // A button whose words say it plays a film plays the section's film, else the page's (AGL-4140).
+      if (node.button && scope.film !== null && SITE_IMPORT_PLAY_WORDS.test(text) && text.length <= AI_SITE_IMPORT_LABEL_CHARS) {
+        return [{ kind: 'button', text, style: node.button, to: `video:${scope.film}` }]
+      }
       if (node.role === 'eyebrow') return [{ kind: 'eyebrow', text }]
       return textBlocks(node.role === 'lede' ? 'lede' : node.role === 'note' ? 'note' : 'text', text)
   }
@@ -547,6 +562,12 @@ function itemOf(scope: MapScope, group: SiteImportLayoutGroup, item: SiteImportL
   if (icon) out.iconPath = icon
   const mark = iconAt(scope, item.listIcon)
   if (mark && out.list?.length) out.listIconPath = mark
+  // A film the item holds plays from its poster (AGL-4140), and the item is no link around it.
+  const film = item.video !== undefined ? scope.films.get(item.video) : undefined
+  if (film && out.picture) {
+    out.picture = { ...out.picture, video: film }
+    return out
+  }
   const to = linkTo(scope, item.to)
   if (to) out.to = to
   return out
@@ -676,6 +697,9 @@ function nodeBlocks(scope: MapScope, nodes: readonly SiteImportLayoutNode[], row
       case 'icon':
         // A lone icon is no word and no picture of the page.
         break
+      case 'video':
+        out.push(...videoBlocks(scope, node))
+        break
       case 'form': {
         // The form rebuilt for this one (AGL-4083); a read from before they were, the site's only form, once.
         const own = scope.doc.forms?.find((entry) => entry.index === node.form)
@@ -737,6 +761,83 @@ function nodeBlocks(scope: MapScope, nodes: readonly SiteImportLayoutNode[], row
     }
   }
   return out
+}
+
+/**
+ * A video of the source, where it sat (AGL-4140): the Video element, its
+ * poster the library's copy of the source's, where the Video element can play
+ * the film. One on a host it cannot play is its poster, linking to where the
+ * film plays; with no poster either, nothing of it can be shown.
+ */
+function videoBlocks(scope: MapScope, node: Pick<SiteImportLayoutVideo, 'video' | 'poster' | 'shadow'>): AiLayoutBlock[] {
+  const film = scope.films.get(node.video)
+  if (film) {
+    // A film is pressed to play from its poster: with none, the Video element has nothing to show, and it is left out.
+    const picture = filmPlaces(scope, node.video, node.poster) ? takePicture(scope, node.poster) : null
+    if (!picture) {
+      scope.settled.push({ at: scope.at, what: 'a video left out: it has no poster picture' })
+      return []
+    }
+    const video: AiLayoutVideo = { ...film, ...(node.shadow ? { shadow: true } : {}) }
+    return [{ kind: 'video', video, picture }]
+  }
+  const source = scope.doc.videos?.[node.video]
+  const where = source?.embed ?? source?.src
+  const picture = takePicture(scope, node.poster, where)
+  let host = ''
+  try {
+    host = where ? new URL(where).hostname.replace(/^www\./, '') : ''
+  } catch {
+    host = ''
+  }
+  if (picture) scope.settled.push({ at: scope.at, what: `a video${host ? ` on ${host}` : ''} shown as its picture${picture.to ? ', linking to it' : ''}` })
+  return picture ? [{ kind: 'image', picture }] : []
+}
+
+/** The page's films the Video element plays, by index (AGL-4140): each read's video that plays from a host it knows, or from the old site's https address. */
+function filmsOf(doc: AiSiteImportDocument): Map<number, AiLayoutVideo> {
+  const films = new Map<number, AiLayoutVideo>()
+  ;(doc.videos ?? []).forEach((video, index) => {
+    const source = siteImportFilmSource(video)
+    if (!source) return
+    const title = clean(video.title).slice(0, 200)
+    const description = clean(video.description).slice(0, 2_000)
+    films.set(index, {
+      index,
+      src: source.src,
+      ...(title ? { title } : {}),
+      ...(description ? { description } : {}),
+      ...(video.uploadDate ? { uploadDate: video.uploadDate } : {}),
+      ...(video.durationSeconds ? { durationSeconds: video.durationSeconds } : {}),
+    })
+  })
+  return films
+}
+
+/** Whether a film is drawn as the Video element: one it plays, its poster a picture the library holds. */
+function filmPlaces(scope: Pick<MapScope, 'films' | 'doc' | 'photos'>, video: number, poster: SiteImportLineRef | undefined): boolean {
+  const block = poster === undefined ? undefined : scope.doc.blocks[poster]
+  return scope.films.has(video) && block?.kind === 'image' && scope.photos.has(block.url)
+}
+
+/** The first film of a list of nodes drawn as the Video element, rows, tabs and items opened. */
+function firstFilm(scope: Pick<MapScope, 'films' | 'doc' | 'photos'>, nodes: readonly SiteImportLayoutNode[]): number | null {
+  for (const node of nodes) {
+    const found =
+      node.kind === 'video'
+        ? filmPlaces(scope, node.video, node.poster)
+          ? node.video
+          : null
+        : node.kind === 'row'
+          ? firstFilm(scope, node.cells.flatMap((cell) => cell.nodes))
+          : node.kind === 'tabs'
+            ? firstFilm(scope, node.tabs.flatMap((tab) => tab.panel))
+            : node.kind === 'group'
+              ? (node.items.find((item) => item.video !== undefined && filmPlaces(scope, item.video, item.image))?.video ?? null)
+              : null
+    if (found !== null) return found
+  }
+  return null
 }
 
 /** The most words beside a lone picture that make a row a byline: a name, a date, a role. */
@@ -838,14 +939,24 @@ export function aiSiteImportDesignedSections(
     groupAt: 0,
     settled: [],
     at: '',
+    films: filmsOf(doc),
+    film: null,
   }
+  const backdropOf = (section: SiteImportLayoutSection) => (section.backdrop?.kind === 'video' ? section.backdrop : null)
+  const pageFilm = layout.sections.reduce<number | null>((found, section) => found ?? firstFilm(scope, section.nodes), null)
   const sections = layout.sections.map((section, index): AiLayoutSection => {
     const given = answer?.sections[index] ?? null
     scope.answer = given
     scope.groupAt = 0
     scope.at = `sections[${index}]`
+    const behind = backdropOf(section)
+    scope.film = firstFilm(scope, section.nodes) ?? pageFilm
     const row = { cols: null as number[] | null, allowed: true }
-    const blocks = nodeBlocks(scope, section.nodes, row)
+    // A film playing on its own behind the section's words is drawn as its poster there (AGL-4140): the
+    // opening's hero lays it behind them. A film that starts on its own is one rule 16 refuses.
+    const poster = behind ? takePicture(scope, behind.poster) : null
+    if (behind) scope.settled.push({ at: scope.at, what: 'a film playing behind the words drawn as its poster' })
+    const blocks = [...(poster ? [{ kind: 'image' as const, picture: poster }] : []), ...nodeBlocks(scope, section.nodes, row)]
     // Every line the layout placed nowhere, at the section's end, as its kind says.
     for (const ref of section.lines) {
       if (scope.used.has(ref)) continue
@@ -889,7 +1000,7 @@ export interface AiSiteImportCompileInput {
   answer?: AiLayoutDesignAnswer | null
 }
 
-export interface AiSiteImportCompiled extends Pick<AiLayoutCompiledPage, 'tree' | 'sectionRoots'> {
+export interface AiSiteImportCompiled extends Pick<AiLayoutCompiledPage, 'tree' | 'sectionRoots' | 'videoIds'> {
   sections: AiLayoutSection[]
   /** The lines on the page, by index of its blocks, in source order. */
   placed: number[]
@@ -946,6 +1057,8 @@ export function aiCompileImportedPage(input: AiSiteImportCompileInput): AiSiteIm
   return {
     tree: compiled.tree,
     sectionRoots: compiled.sectionRoots,
+    // Its films' Video elements keep their ids when stored, as its sections do: a button that plays one names it (AGL-4140).
+    ...(compiled.videoIds?.length ? { videoIds: compiled.videoIds } : {}),
     sections,
     placed,
     lines: lineRefs.length,
@@ -1008,6 +1121,8 @@ function describeNodes(doc: Pick<AiSiteImportDocument, 'blocks'>, nodes: readonl
         parts.push(lineKind(doc.blocks[node.line], node))
         break
       case 'picture':
+      // A film reads as the picture it opens on (AGL-4140): the design answer is asked nothing new of it.
+      case 'video':
         parts.push('picture')
         break
       case 'form':

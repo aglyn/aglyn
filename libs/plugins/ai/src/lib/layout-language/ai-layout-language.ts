@@ -181,14 +181,36 @@ export interface AiLayoutPicture {
   to?: string
   /** A byline's portrait beside a few words, drawn small. */
   small?: boolean
+  /** The film this picture is the poster of (AGL-4140): the Video element plays it from here. */
+  video?: AiLayoutVideo
+}
+
+/**
+ * A film of a page brought in (AGL-4140), as its source plays it: where it
+ * plays from — a video host's link the Video element plays in that host's
+ * player, or the file the old site serves, which plays from its address —
+ * and what a search engine reads of it, as the source wrote them.
+ */
+export interface AiLayoutVideo {
+  /** Which of the page's videos it is: what a button that plays it names (`video:<index>`). */
+  index: number
+  src: string
+  title?: string
+  description?: string
+  /** `YYYY-MM-DD`. */
+  uploadDate?: string
+  durationSeconds?: number
+  /** The box the source plays it in casts a shadow. */
+  shadow?: boolean
 }
 
 /**
  * The block kinds only a page brought in draws (AGL-4107), never in a tool
- * schema: a TABLE of rows of cells, TABS whose panels hold blocks, and a
- * strip of LOGOS — pictures, or short words as chips.
+ * schema: a TABLE of rows of cells, TABS whose panels hold blocks, a strip
+ * of LOGOS — pictures, or short words as chips — and a VIDEO, the source's
+ * film poster first (AGL-4140).
  */
-export const AI_LAYOUT_IMPORT_BLOCK_KINDS = ['table', 'tabs', 'logos'] as const
+export const AI_LAYOUT_IMPORT_BLOCK_KINDS = ['table', 'tabs', 'logos', 'video'] as const
 export type AiLayoutImportBlockKind = (typeof AI_LAYOUT_IMPORT_BLOCK_KINDS)[number]
 
 /** A tab of a page brought in: its label and the blocks its panel shows. */
@@ -226,6 +248,8 @@ export interface AiLayoutBlock {
   columns?: number
   /** Each item is a row of its own, its parts side by side, one under another (AGL-4083). */
   inline?: true
+  /** A video block's film (AGL-4140); its `picture` is the poster. */
+  video?: AiLayoutVideo
 }
 
 /** How a group of a page brought in is drawn (AGL-4107): the compiler's group variants a source can show. */

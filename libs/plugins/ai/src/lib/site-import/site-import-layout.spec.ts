@@ -109,7 +109,11 @@ describe.each(Object.keys(SITE_LAYOUT_PAGES) as SiteLayoutPageName[])('%s: every
     const placed = layout.sections.flatMap((section) => section.lines)
     const expected = main.flatMap((block, index) => (isLine(block) ? [index] : []))
     expect([...placed].sort((a, b) => a - b)).toEqual(expected)
-    for (const section of layout.sections) expect(siteImportLayoutLines(section.nodes)).toEqual(section.lines)
+    // A film playing behind a section's words places its poster there first (AGL-4140).
+    for (const section of layout.sections) {
+      const behind = section.backdrop?.kind === 'video' && section.backdrop.poster !== undefined ? [section.backdrop.poster] : []
+      expect([...behind, ...siteImportLayoutLines(section.nodes)]).toEqual(section.lines)
+    }
   })
 
   it('reads the same blocks with its structure kept as without', () => {
@@ -177,10 +181,13 @@ describe('aglyn.com home', () => {
       ['Build my website free', 'primary'],
       ['Watch the 40-second film', 'secondary'],
     ])
-    const [picture] = all(hero?.nodes ?? [], 'picture')
-    // The poster inside the film's play button is still a picture.
-    expect(picture).toMatchObject({ button: true })
-    expect(main[picture?.line ?? -1]?.kind).toBe('image')
+    // The film's play button over its poster is the film (AGL-4140): one video, its poster the picture
+    // inside it, in the box the source shadows, and no picture of its own beside it.
+    expect(all(hero?.nodes ?? [], 'picture')).toEqual([])
+    const [film] = all(hero?.nodes ?? [], 'video')
+    expect(film).toMatchObject({ kind: 'video', video: 0, shadow: true })
+    expect(main[film?.poster ?? -1]).toMatchObject({ kind: 'image', url: 'https://aglyn.com/api/media/cdn/org:FixtureOrg:FixtureHst/v2sbemHaD1' })
+    expect(hero?.lines).toContain(film?.poster)
   })
 
   it('reads "Explore the platform" as 13 cards in 3 columns, each with its icon, its title and its link', () => {

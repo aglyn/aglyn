@@ -92,6 +92,7 @@ import {
   aiSiteImportReadVerdict,
   aiSiteImportReadVerdictMessage,
   aiSiteImportReadVerdictReason,
+  aiSiteImportVideoNote,
   aiSiteImportWaveClosed,
   aiSiteImportWaveMessage,
   aiSiteImportWaveStarted,
@@ -537,6 +538,8 @@ export function aiSiteImportDocumentFor(state: AiSiteImportState, page: AiSiteIm
     ...(page.forms ? { forms: page.forms } : {}),
     // How the source lays it out (AGL-4106), which the site compiler builds it from (AGL-4107).
     ...(page.read?.layout ? { layout: page.read.layout } : {}),
+    // Its videos (AGL-4140), which its layout places by index.
+    ...(page.read?.videos?.length ? { videos: page.read.videos } : {}),
   }
 }
 
@@ -1138,8 +1141,10 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
           draftId: page.draftId,
           layoutLanguage: true,
         })
+        // What its row says of its forms, and of where its videos play from (AGL-4140).
+        const note = [page.formNote, aiSiteImportVideoNote(page.read?.videos)].filter(Boolean).join(' ')
         item = written
-          ? { slot, status: 'succeeded', outputs: spent.outputs.map((output) => output.id), ...(page.formNote ? { note: page.formNote } : {}) }
+          ? { slot, status: 'succeeded', outputs: spent.outputs.map((output) => output.id), ...(note ? { note } : {}) }
           : { slot, status: 'failed', failure: { ours: true, reason: 'step-failure', message: AI_SITE_IMPORT_COPY.pageNotWritten } }
       } else {
         item = { slot, status: 'succeeded', outputs: spent.outputs.map((output) => output.id) }

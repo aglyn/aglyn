@@ -125,6 +125,50 @@ export function aiPageScrollInteraction(sectionRootId: string, sectionName: stri
   }
 }
 
+/** The id of the interaction a button playing a film of its page carries (AGL-4140). */
+export const AI_PAGE_PLAY_VIDEO_INTERACTION_ID = 'ai-play-video'
+
+/** How far above the film a button's scroll stops, so a sticky header does not cover it. */
+const AI_PAGE_PLAY_VIDEO_OFFSET_PX = 24
+
+/**
+ * The interaction a button carries that plays a film of its page (AGL-4140),
+ * as a page brought in draws the source's own "Watch the film": a click,
+ * every time, scrolling to the Video element and pressing its play, in the
+ * shape the interactions editor stores. Both steps name the element by the
+ * selector the renderer stamps.
+ */
+export function aiPagePlayVideoInteraction(videoNodeId: string): NodeInteraction {
+  const selector = nodeInteractionSelector(videoNodeId)
+  return {
+    id: AI_PAGE_PLAY_VIDEO_INTERACTION_ID,
+    name: 'Scroll to the video and play it',
+    enabled: true,
+    trigger: { event: 'elementClick', everyTime: true },
+    steps: [
+      { type: 'scrollTo', selector, offsetPx: AI_PAGE_PLAY_VIDEO_OFFSET_PX },
+      { type: 'playVideo', selector },
+    ],
+  }
+}
+
+/**
+ * The nodes a stored node plays when it is clicked (AGL-4140): every enabled
+ * click interaction's Play a video steps, by the ids their selectors name.
+ */
+export function aiStoredPlayTargets(node: unknown): string[] {
+  const interactions = isRecord(node) && Array.isArray(node['interactions']) ? node['interactions'] : []
+  return interactions.flatMap((interaction: unknown) => {
+    if (!isRecord(interaction) || interaction['enabled'] === false) return []
+    const trigger = isRecord(interaction['trigger']) ? interaction['trigger'] : {}
+    if (trigger['event'] !== 'elementClick' || !Array.isArray(interaction['steps'])) return []
+    return interaction['steps'].flatMap((step: unknown) => {
+      const target = isRecord(step) && step['type'] === 'playVideo' ? nodeIdFromInteractionSelector(step['selector']) : undefined
+      return target ? [target] : []
+    })
+  })
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

@@ -47,7 +47,7 @@
  *=========================================*/
 
 import type { SiteImportBlock } from '../site-import/site-import-html'
-import { siteImportWidthOf } from './ai-site-import'
+import { SITE_IMPORT_PLAY_WORDS, siteImportWidthOf } from './ai-site-import'
 import type {
   SiteImportBand,
   SiteImportButtonStyle,
@@ -150,6 +150,14 @@ export interface SiteImportPageFidelity {
   headings: SiteImportFidelityCount
   /** The source's forms, where the site has a form a page places. */
   forms: SiteImportFidelityCount
+  /**
+   * The source's videos (AGL-4140): each drawn as the Video element, playing
+   * from an address. One on a host the element has no player for is drawn as
+   * its poster, linking to it, and is not kept. A film that plays on its own
+   * behind a section's words is drawn as its poster there and is not counted
+   * here: its poster is among the pictures.
+   */
+  videos: SiteImportFidelityCount
 }
 
 /** A page's source as the import read it: its layout over its main-region blocks, and its photos as the library holds them. */
@@ -352,7 +360,8 @@ class Placement {
       const root = sectionRoots[index] ?? built.tree.rootId
       const scope = new Set(built.under(root))
       const pieces = built.pieces.filter((piece) => scope.has(piece.node))
-      const images = built.under(root).filter((id) => built.node(id)?.componentId === 'image')
+      // A film's poster is placed as its Video element's (AGL-4140).
+      const images = built.under(root).filter((id) => built.node(id)?.componentId === 'image' || built.node(id)?.componentId === 'video')
       let cursor = -1
       let previous: SiteImportLineRef | null = null
       for (const ref of section.lines) {
@@ -360,7 +369,7 @@ class Placement {
         if (!isLine(block)) continue
         if (block.kind === 'image') {
           const src = photoOf.get(block.url)
-          const found = src ? images.find((id) => !this.imageClaimed.has(id) && built.node(id)?.props?.['src'] === src) : undefined
+          const found = src ? images.find((id) => !this.imageClaimed.has(id) && built.node(id)?.props?.[built.node(id)?.componentId === 'video' ? 'poster' : 'src'] === src) : undefined
           if (found) {
             this.imageClaimed.add(found)
             this.of.set(ref, found)
@@ -539,6 +548,9 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
   const tabs = { source: 0, built: 0 }
   const buttons = { source: 0, built: 0, unlinked: 0 }
   const icons = { source: 0, built: 0, lone: 0 }
+  // The films drawn as the Video element, playing from an address (AGL-4140).
+  const drawnFilms = built.order.filter((id) => built.node(id)?.componentId === 'video' && !!clean(built.node(id)?.props?.['src'])).length
+  const films = drawnFilms > 0
 
   sections.forEach((section, index) => {
     const root = roots[index] ?? null
@@ -550,6 +562,14 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
         case 'line': {
           if (!node.button) break
           const block = source.blocks[node.line]
+          // A button whose words say it plays a film plays the page's film where one is drawn (AGL-4140).
+          if (block?.kind === 'paragraph' && films && SITE_IMPORT_PLAY_WORDS.test(block.text)) {
+            buttons.source += 1
+            const id = placement.of.get(node.line)
+            const drawnAs = id ? built.node(id) : undefined
+            if (drawnAs?.componentId === 'muiButton' && drawnAs.props?.['variant'] === BUTTON_VARIANT[node.button] && hasDestination(drawnAs)) buttons.built += 1
+            break
+          }
           // A button that goes nowhere a page can send a visitor (a film's play button its script runs) is kept as its words.
           if (block?.kind !== 'link' || !/^(?:https?:|mailto:|tel:)/i.test(block.href)) {
             buttons.unlinked += 1
@@ -635,6 +655,14 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
     sections.reduce((total, section) => total + layoutNodes(section.nodes).filter((node) => node.kind === 'form').length, 0),
     built.order.filter((id) => built.node(id)?.componentId === 'form').length,
   )
+  // A film playing behind a section's words is drawn as its poster there, and is the pictures' to count.
+  const videos = ratioKept(
+    sections.reduce(
+      (total, section) => total + layoutNodes(section.nodes).reduce((count, node) => count + (node.kind === 'video' ? 1 : node.kind === 'group' ? node.items.filter((item) => item.video !== undefined).length : 0), 0),
+      0,
+    ),
+    drawnFilms,
+  )
 
   const report: Omit<SiteImportPageFidelity, 'score' | 'lowest'> = {
     words,
@@ -652,6 +680,7 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
     buttons: { ...ratioKept(buttons.source, buttons.built), unlinked: buttons.unlinked },
     headings,
     forms,
+    videos,
   }
   return { ...lowestOf(pageMeasures(report)), ...report }
 }
@@ -664,8 +693,8 @@ function itemKept(built: Built, kind: SiteImportGroupKind, item: SiteImportLayou
   if (kind === 'faq' && !built.has(element, (node) => node.componentId === 'muiAccordion')) return false
   // An item the source made a link as a whole still goes there.
   if (item.to && !built.has(element, hasDestination)) return false
-  // A picture of the item's own, where the library's copy is not known to the score.
-  if (item.image !== undefined && !built.has(element, (node) => node.componentId === 'image')) return false
+  // A picture of the item's own, where the library's copy is not known to the score; a film's poster is its Video element's (AGL-4140).
+  if (item.image !== undefined && !built.has(element, (node) => node.componentId === 'image' || node.componentId === 'video')) return false
   return true
 }
 
@@ -724,7 +753,8 @@ function widthsScore(sections: readonly SiteImportLayoutSection[], built: Built,
 /** The pictures: placed where the library's copies are known, else counted. */
 function picturesScore(source: SiteImportFidelitySource, built: Built, placement: Placement): SiteImportFidelityCount {
   const refs = source.layout.sections.flatMap((section) => section.lines).filter((ref) => source.blocks[ref]?.kind === 'image' && isLine(source.blocks[ref]))
-  const drawn = built.order.filter((id) => built.node(id)?.componentId === 'image').length
+  // A film's poster is a picture drawn, on its Video element (AGL-4140).
+  const drawn = built.order.filter((id) => built.node(id)?.componentId === 'image' || (built.node(id)?.componentId === 'video' && !!clean(built.node(id)?.props?.['poster']))).length
   if (!source.photos?.length) return ratioBoth(refs.length, drawn)
   return ratioKept(refs.length, refs.filter((ref) => placement.of.has(ref)).length)
 }
@@ -755,6 +785,7 @@ function pageMeasures(report: Omit<SiteImportPageFidelity, 'score' | 'lowest'>):
     ['buttons', report.buttons],
     ['headings', report.headings],
     ['forms', report.forms],
+    ['videos', report.videos],
   ]
 }
 
