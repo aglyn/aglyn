@@ -78,6 +78,7 @@ import {
   pruneSharedClientStateFor,
 } from './firestore-cache'
 import { keepAppCheckRecaptchaContainer } from './app-check-recaptcha-container'
+import type { ListenHandle } from '../helpers/listen-confirmation'
 import {
   confirmSharedCacheLock,
   markMultiTabFirestore,
@@ -145,6 +146,12 @@ export interface ObservableStatus<T> {
    * the note on `attempt = 0` in `use-firestore-collection`.
    */
   serverDenied: boolean
+  /**
+   * This hook's listener, for a guarded save seeded from `data` to wait on
+   * alone (`writeGuardedBySeed`'s `listen`, AGL-4135). Stable for the life of
+   * the hook.
+   */
+  listen: ListenHandle
 }
 
 /** Replaces reactfire's `ReactFireOptions<T>` — drops the `suspense` field, which was never read. */
