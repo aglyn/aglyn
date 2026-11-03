@@ -50,7 +50,7 @@ import { siteImportLookOf } from '../site-import/site-import-layout'
 import { siteImportFooterColumns, siteImportNavTree, type SiteImportFrameSource } from '../site-import/site-import-nav'
 import { SITE_LAYOUT_PAGES, siteLayoutRecording, siteLayoutSameSite, type SiteLayoutPageName } from '../site-import/fixtures/site-layout-recordings'
 import {
-  aiSiteImportColorRole,
+  aiSiteImportFrameColorRole,
   aiSiteImportFaviconOf,
   aiSiteImportFrameJob,
   aiSiteImportFrameLinkTo,
@@ -425,13 +425,13 @@ describe('the frame job carries the menus as the source builds them (AGL-4139)',
 
   it('ranks a color by role: a light fill is the wash, a grey one the stronger step, a quiet ink the quiet text, the brand’s hue the brand', () => {
     const look = { buttonFill: '#00b0ff' }
-    expect(aiSiteImportColorRole('#e6f5ff', 'fill', look)).toBe('action.hover')
-    expect(aiSiteImportColorRole('#6b7280', 'fill', look)).toBe('action.selected')
-    expect(aiSiteImportColorRole('#0077ad', 'fill', look)).toBe('primary.main')
-    expect(aiSiteImportColorRole('#404c5c', 'ink', look)).toBe('text.secondary')
-    expect(aiSiteImportColorRole('#0077ad', 'ink', look)).toBe('primary.main')
-    expect(aiSiteImportColorRole('#e040fb', 'ink', look)).toBe('secondary.main')
-    expect(aiSiteImportColorRole(null, 'ink', look)).toBe('primary.main')
+    expect(aiSiteImportFrameColorRole('#e6f5ff', 'fill', look)).toBe('action.hover')
+    expect(aiSiteImportFrameColorRole('#6b7280', 'fill', look)).toBe('action.selected')
+    expect(aiSiteImportFrameColorRole('#0077ad', 'fill', look)).toBe('primary.main')
+    expect(aiSiteImportFrameColorRole('#404c5c', 'ink', look)).toBe('text.secondary')
+    expect(aiSiteImportFrameColorRole('#0077ad', 'ink', look)).toBe('primary.main')
+    expect(aiSiteImportFrameColorRole('#e040fb', 'ink', look)).toBe('secondary.main')
+    expect(aiSiteImportFrameColorRole(null, 'ink', look)).toBe('primary.main')
   })
 
   it('carries the footer’s developer card as a box, its link resolved like every other', () => {

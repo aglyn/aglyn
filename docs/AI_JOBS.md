@@ -2685,7 +2685,9 @@ whose passes each do one unit (`aiSiteImportNextWork`):
    icon (`aiSiteImportFaviconOf`), re-fanning `hostMemberships`. The frame
    job carries columns (pictures only from the library), `hover`,
    `measure` (`xl` from a 1,400 px cap) and each tile as theme ROLES
-   (`aiSiteImportTileRoles`: a light fill `action.hover`, a grey one
+   (`aiSiteImportTileRoles` over `aiSiteImportFrameColorRole`, the frame's
+   own ranking, apart from the page compile's `aiSiteImportColorRole`: a
+   light fill `action.hover`, a grey one
    `action.selected`, a strong one the brand or second color with its
    `contrastText` ink; an icon `text.secondary` when neutral, `primary.main`
    within 40° of the button fill's hue, else `secondary.main`), and

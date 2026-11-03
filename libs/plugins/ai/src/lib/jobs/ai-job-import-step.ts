@@ -502,10 +502,10 @@ export function aiSiteImportFrameSource(state: AiSiteImportState, wave: Pick<AiS
 
 /** A tile's fill and its icon as theme roles (AGL-4139): on a filled tile of the brand's or the second color, the icon in that color's own ink. */
 export function aiSiteImportTileRoles(tile: NonNullable<SiteImportNavEntry['tile']>, look: Pick<SiteImportLookFacts, 'buttonFill'> | null | undefined): { fill: AiLayoutFrameSourceRole; color: AiLayoutFrameSourceRole } {
-  const fill = aiSiteImportColorRole(tile.fill, 'fill', look)
+  const fill = aiSiteImportFrameColorRole(tile.fill, 'fill', look)
   if (fill === 'primary.main') return { fill, color: 'primary.contrastText' }
   if (fill === 'secondary.main') return { fill, color: 'secondary.contrastText' }
-  return { fill, color: aiSiteImportColorRole(tile.color, 'ink', look) }
+  return { fill, color: aiSiteImportFrameColorRole(tile.color, 'ink', look) }
 }
 
 /** How far apart two hues are, in degrees. */
@@ -521,7 +521,7 @@ const hueApart = (a: number, b: number) => {
  * near the source's buttons' is the brand's, any other the theme's second
  * color. Never the value itself.
  */
-export function aiSiteImportColorRole(hex: string | null, kind: 'fill' | 'ink', look: Pick<SiteImportLookFacts, 'buttonFill'> | null | undefined): AiLayoutFrameSourceRole {
+export function aiSiteImportFrameColorRole(hex: string | null, kind: 'fill' | 'ink', look: Pick<SiteImportLookFacts, 'buttonFill'> | null | undefined): AiLayoutFrameSourceRole {
   const own = hex && /^#[0-9a-f]{6}$/i.test(hex) ? aiHexOklch(hex) : null
   if (!own) return kind === 'fill' ? 'action.hover' : 'primary.main'
   if (kind === 'fill' && own.L >= 0.9) return 'action.hover'
