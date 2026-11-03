@@ -44,6 +44,20 @@ name: Auto-merge green PRs
 #   run is what saves the Swift build every native PR restores. It passes main's
 #   head from before the sweep's merges as `base`, so a sweep that merged no
 #   Swift change takes no macOS runner.
+#
+# WHY IT DISPATCHES THE PRODUCTION WORKFLOWS AFTER A HOTFIX (AGL-4051)
+#   The same rule holds on `production`. A hotfix promotion merged here starts
+#   none of the workflows a person's merge starts there, so v1.0.0, v1.3.0 and
+#   v1.5.1 shipped with no npm publish, no self-host images, no deploy ledger
+#   and no drift checks until someone ran them by hand. After a hotfix merge
+#   the sweep dispatches every workflow in `PRODUCTION_DISPATCH` on
+#   `production`. Every workflow a push to `production` starts is in that list
+#   or in `PRODUCTION_NOT_DISPATCHED`, and `check:hotfix-dispatches` fails a
+#   new one that is in neither.
+#
+#   A dispatch ignores a workflow's `paths:` filter, so a drift check runs on
+#   every hotfix rather than only when its files changed. It compares live
+#   state with `production` either way, so it is a check that should be green.
 
 on:
   # Each PR check workflow finishing is the moment a PR can turn green.
@@ -81,6 +95,22 @@ jobs:
       REPO: ${{ github.repository }}
       # Kept equal to `production`'s branch protection (and so `main`'s).
       REQUIRED: '["ci","guards","*.emulator.spec.ts","Firestore + RTDB rules matrix","native kotlin","native swift"]'
+      # Started on `production` after a hotfix merge, since that merge starts
+      # no `push` workflow. `publish-packages.yml` gets `publish=true`, and
+      # `native-tests.yml` gets production's head from before the merge.
+      PRODUCTION_DISPATCH: >-
+        auth-domains-drift.yml backup-copies.yml functions-drift.yml
+        index-drift.yml native-tests.yml promotion-deploys.yml
+        publish-packages.yml rules-drift.yml selfhost-images.yml
+        upload-cors-drift.yml
+      # Left out on purpose. `nx-ci.yml`, `emulator-guards.yml` and
+      # `tools-guards.yml` are the required checks the promotion PR already
+      # passed on this same merge result, and `nx-ci.yml` cannot be
+      # dispatched. A push runs only the detector self-test in
+      # `retired-colour-census.yml`, and its daily schedule runs the census.
+      PRODUCTION_NOT_DISPATCHED: >-
+        emulator-guards.yml nx-ci.yml retired-colour-census.yml
+        tools-guards.yml
     steps:
       - name: Production PRs never auto-merge (except a hotfix, merged below)
         run: |
@@ -97,7 +127,9 @@ jobs:
         run: |
           set -euo pipefail
           merged=0
+          production_merged=0
           main_before=$(gh api "repos/$REPO/commits/main" --jq .sha || true)
+          production_before=$(gh api "repos/$REPO/commits/production" --jq .sha || true)
           hotfixes=$(gh pr list --repo "$REPO" --base production --state open --label hotfix --json number --jq '.[].number')
           for n in $(gh pr list --repo "$REPO" --base main --state open --limit 100 --json number --jq '.[].number') $hotfixes; do
             pr=$(gh pr view "$n" --repo "$REPO" \
@@ -132,6 +164,7 @@ jobs:
               # --match-head-commit: a push after the checks were read is not merged.
               if gh pr merge "$n" --repo "$REPO" --merge --match-head-commit "$sha"; then
                 merged=1
+                if [ "$(jq -r .baseRefName <<<"$pr")" = production ]; then production_merged=1; fi
                 # The merged branch is closed on GitHub too. The repository's
                 # "delete head branches" setting normally does it; this covers a
                 # merge it skips. Never main, production or a release branch,
@@ -150,4 +183,25 @@ jobs:
           if [ "$merged" = 1 ]; then
             gh workflow run main-gate.yml --repo "$REPO" --ref main
             gh workflow run native-tests.yml --repo "$REPO" --ref main -f base="$main_before"
+          fi
+          if [ "$production_merged" = 1 ]; then
+            # Every dispatch is tried, and the step fails afterwards if any of
+            # them was refused, so one bad dispatch does not cost the others.
+            failed=""
+            for workflow in $PRODUCTION_DISPATCH; do
+              case "$workflow" in
+                publish-packages.yml) args=(-f publish=true) ;;
+                native-tests.yml) args=(-f base="$production_before") ;;
+                *) args=() ;;
+              esac
+              if gh workflow run "$workflow" --repo "$REPO" --ref production ${args[@]+"${args[@]}"}; then
+                echo "dispatched $workflow on production"
+              else
+                failed="$failed $workflow"
+              fi
+            done
+            if [ -n "$failed" ]; then
+              echo "::error::The hotfix merged, but these production workflows could not be dispatched:$failed. Run them by hand with gh workflow run <file> --ref production."
+              exit 1
+            fi
           fi

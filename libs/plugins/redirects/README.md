@@ -2,11 +2,11 @@
 
 The Redirects plugin for Aglyn: URL redirect rules for a site, the console page that manages them, and the server hook that answers a request with a redirect before the site resolves a route. Install it if you run the Aglyn console and tenant runtime and want redirect rules; it is a first-party plugin, not a standalone library.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/plugins-redirects@beta
+    npm install @aglyn/plugins-redirects
 
 Peer dependencies: `react`, `@mui/material`, `firebase`, and `firebase-admin` for the server entry.
 

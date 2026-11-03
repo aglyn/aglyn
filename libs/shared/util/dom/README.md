@@ -2,11 +2,11 @@
 
 DOM measurement helpers and type guards: bounding and clipping rects, scroll parents, offset parents, the owning window of a node (including across iframes), and event coordinates. It is mainly an internal building block of the Besigner visual editor (`@aglyn/besigner-ui`) and of `@aglyn/shared-ui-next`, and is usable on its own.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/shared-util-dom@beta
+    npm install @aglyn/shared-util-dom
 
 No peer dependencies. `mobx` and `rxjs` are regular dependencies, used only by the page-title controller.
 

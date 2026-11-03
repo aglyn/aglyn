@@ -2,11 +2,11 @@
 
 The Inbox plugin for Aglyn: a console surface for reading a site's form submissions, replying to the people who sent them, and seeing the site's members and leads. Install it if you are running or building on the Aglyn platform and want its inbox.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/plugins-inbox@beta
+    npm install @aglyn/plugins-inbox
 
 Peer dependencies:
 

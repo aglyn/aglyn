@@ -2,11 +2,11 @@
 
 The Email plugin for Aglyn: email designs built in Besigner from email-safe blocks, plus the topics, audience lists, sending domains and suppressions that mail rides on. Install it if you are running or building on the Aglyn platform and want designed email.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/plugins-email@beta
+    npm install @aglyn/plugins-email
 
 Peer dependencies:
 

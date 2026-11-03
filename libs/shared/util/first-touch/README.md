@@ -1,10 +1,10 @@
 # @aglyn/shared-util-first-touch
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/shared-util-first-touch@beta
+    npm install @aglyn/shared-util-first-touch
 
 Where a visitor first arrived from, kept on their device until an account is
 created and the platform writes it down. No analytics vendor, no identifier,

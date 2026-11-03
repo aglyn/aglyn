@@ -3,12 +3,12 @@
 The Automation plugin: the console's **Automation** section —
 Workflows, Actions and Webhooks — and the engine that runs what is built there.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
 ```bash
-npm install @aglyn/plugins-workflows@beta
+npm install @aglyn/plugins-workflows
 ```
 
 A plugin is loaded through Aglyn's plugin manager (`@aglyn/aglyn`) by the console and the tenant runtime; it is not a standalone library.

@@ -2,11 +2,11 @@
 
 The Logic plugin for Aglyn: the console surface for a site's variables and no-code functions, and the audit that finds references pointing at something that no longer exists. Install it if you run the Aglyn console and want that section; it is a first-party plugin, not a standalone library.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/plugins-logic@beta
+    npm install @aglyn/plugins-logic
 
 Peer dependencies: `react`, `@mui/material`, `firebase`.
 

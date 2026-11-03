@@ -2,11 +2,11 @@
 
 The Events Calendar plugin for Aglyn: events managed in the console and listed on a published site. Install it if you are running or building on the Aglyn platform and want its events feature.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/plugins-events-calendar@beta
+    npm install @aglyn/plugins-events-calendar
 
 Peer dependencies:
 

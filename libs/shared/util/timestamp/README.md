@@ -1,10 +1,10 @@
 # @aglyn/shared-util-timestamp
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/shared-util-timestamp@beta
+    npm install @aglyn/shared-util-timestamp
 
 A point in time at nanosecond resolution, the JSON shape it serializes to, and
 calendar math in a named time zone. None of the three imports the Firestore

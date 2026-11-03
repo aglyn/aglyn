@@ -2,11 +2,11 @@
 
 React components and hooks that depend on Next.js: a two-column tab hub whose active tab lives in the URL, a route-based section rail, a `next/image` wrapper with a shimmer placeholder, and a page title provider. The Aglyn console and the console pages that plugins ship are built with it. It assumes the App Router (`next/navigation`).
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/shared-ui-next@beta
+    npm install @aglyn/shared-ui-next
 
 Peer dependencies: `react`, `next`, `@mui/material` and `@mui/lab` (the tab components use `TabContext`, `TabList` and `TabPanel` from `@mui/lab`).
 

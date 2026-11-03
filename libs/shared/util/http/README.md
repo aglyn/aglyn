@@ -2,11 +2,11 @@
 
 Small HTTP helpers for Fetch API and Next.js request handlers: CORS, request headers, an ID-token cookie, same-origin redirect checks, URL scheme allowlists, and an authenticated `fetch`. It is mainly a dependency of the larger Aglyn packages (`@aglyn/aglyn`, the plugins, the tenant runtime) and is usable on its own.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/shared-util-http@beta
+    npm install @aglyn/shared-util-http
 
 Peer dependency: `next` (`16.3.3`), optional. You need it when you use the helpers that take Next.js objects (`NextRequest`, `NextResponse`, `NextApiRequest`), such as the cookie helpers. The subpath modules below use only web standards.
 

@@ -2,11 +2,11 @@
 
 The Data plugin for Aglyn: datasets, their records, and CSV or JSON import and export, managed in the Aglyn console. Install it if you are running or building on the Aglyn platform and want datasets.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/plugins-data@beta
+    npm install @aglyn/plugins-data
 
 Peer dependencies:
 

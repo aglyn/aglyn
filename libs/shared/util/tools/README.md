@@ -2,11 +2,11 @@
 
 General-purpose TypeScript helpers: type guards, array and object utilities, deep get/set, cloning, JSON and base64 serialization, plus a few larger standalone modules (a linear-time regex engine, an AES-GCM secret box, WCAG contrast math, HTML escaping, a PDF writer). It is a dependency of most Aglyn packages and is usable on its own.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/shared-util-tools@beta
+    npm install @aglyn/shared-util-tools
 
 No peer dependencies.
 

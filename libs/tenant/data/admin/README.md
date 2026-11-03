@@ -7,11 +7,11 @@ of `@aglyn/tenant-runtime`, of Aglyn's server apps, and of the server half of
 the `@aglyn/plugins-*` packages. Install it directly only if you are writing
 server code against an Aglyn deployment's Firestore.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/tenant-data-admin@beta
+    npm install @aglyn/tenant-data-admin
 
 Peer dependencies:
 
