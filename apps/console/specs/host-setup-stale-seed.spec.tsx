@@ -279,7 +279,6 @@ jest.mock('../components/social-image-card.component', () => nullCard)
 // only contributes its own Firestore and media-resolver surface to the mock
 // budget.
 jest.mock('../components/entity-logo-card.component', () => nullCard)
-jest.mock('../components/business-details-card.component', () => nullCard)
 jest.mock('../components/logo-card.component', () => nullCard)
 jest.mock('../components/error-screens-card.component', () => nullCard)
 jest.mock('../components/languages-card.component', () => nullCard)

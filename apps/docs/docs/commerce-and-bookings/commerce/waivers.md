@@ -118,9 +118,9 @@ that covers (this waiver and its signed copy), what they need (a device with a w
 browser, and a way to open a PDF), that they can sign on paper instead, and that after
 signing they can ask you for a paper copy at no charge, change the email for their copy,
 or withdraw their agreement for anything not yet sent, by contacting you. It names your
-business and how to reach you: the site's [**Contact email** and **Contact
-phone**](../../building-sites/seo/overview.md#entity-contact), or else the **Support
-email** under **Setup → Details → Business details**. The signing page shows the same
+business and how to reach you: the **Email** and **Phone** in
+[Business details](../../getting-started/create-a-site.md#business-details) on
+**Setup → Business profile**. The signing page shows the same
 contact under the waiver's title, and the signed copy email repeats it. Add one so
 signers know how to reach you.
 

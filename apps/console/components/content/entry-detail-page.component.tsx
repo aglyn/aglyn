@@ -411,6 +411,7 @@ export function EntryDetailPage() {
      */
     status: storedStatus,
     fromCache: storedFromCache,
+    listen: storedListen,
   } = useFirestoreDoc<any>(
     () =>
       isNewEntry || !entryId || !selected?.$id
@@ -656,6 +657,7 @@ export function EntryDetailPage() {
         subject: 'entry',
         unreadable: !isNewEntry && storedStatus === 'error',
         fromCache: !isNewEntry && storedFromCache,
+        listen: storedListen,
       },
       async () => {
         await setDoc(
@@ -785,6 +787,7 @@ export function EntryDetailPage() {
     isNewEntry,
     storedStatus,
     storedFromCache,
+    storedListen,
     enqueueSnackbar,
     logActivity,
     router,

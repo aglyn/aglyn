@@ -106,7 +106,6 @@ describe('the SEO section is a stack of cards (AGL-3258)', () => {
     for (const id of [
       'hostSeo',
       'hostSeoEntity',
-      'hostSeoAddress',
       'hostSeoLocalBusiness',
       'hostSeoAgent',
       'hostSeoVerification',
@@ -155,10 +154,32 @@ describe('the SEO section is a stack of cards (AGL-3258)', () => {
     const page = read(SEO_PAGE)
     const entityForm = page.indexOf('schemaId="hostSeoEntity"')
     const logo = page.indexOf('<EntityLogoCard')
-    const address = page.indexOf('schemaId="hostSeoAddress"')
+    const localBusiness = page.indexOf('schemaId="hostSeoLocalBusiness"')
     expect(entityForm).toBeGreaterThan(-1)
     expect(logo).toBeGreaterThan(entityForm)
-    expect(address).toBeGreaterThan(logo)
+    expect(localBusiness).toBeGreaterThan(logo)
+  })
+
+  it('has no Address card: the address is entered on Setup → Business profile (AGL-4136)', () => {
+    expect(read(SCOPE)).not.toContain("id: 'hostSeoAddress'")
+    expect(read(SEO_PAGE)).not.toContain('hostSeoAddress')
+  })
+
+  it('asks for no name, email or phone on the Entity card (AGL-4136)', () => {
+    // The one place they are entered is Business details. A second editor on
+    // this card is how a site came to publish one phone in its structured
+    // data and another in its footer.
+    const scope = read(SCOPE)
+    const start = scope.indexOf('const seoEntitySchema')
+    const entity = scope.slice(start, scope.indexOf('\nconst ', start + 1))
+    const names = [...entity.matchAll(/^\s*name: '([^']+)',$/gm)].map((m) => m[1])
+    // THE CONTROL: the parse still sees the card's own fields.
+    expect(names).toEqual(
+      expect.arrayContaining(['seo.entity.type', 'seo.entity.description', 'seo.entity.contactType']),
+    )
+    for (const moved of ['seo.entity.name', 'seo.entity.email', 'seo.entity.telephone']) {
+      expect([moved, names.includes(moved)]).toEqual([moved, false])
+    }
   })
 
   it('declares every field the AI SEO tool proposes', () => {

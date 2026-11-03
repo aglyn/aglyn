@@ -72,6 +72,7 @@ import {
   useHostResourceApi,
   useOrgPlan,
   writeGuardedBySeed,
+  type ListenHandle,
 } from '@aglyn/tenant-feature-instance'
 import { HelpTip } from '@aglyn/shared-ui-jsx'
 import { docsHelp } from '../constants/docs-links'
@@ -98,6 +99,8 @@ export interface InteractionBuilderDialogProps {
    * forgets is a guard that is off while looking present.
    */
   existingFromCache: boolean
+  /** That listener, so a save waits on that read alone (AGL-4135). */
+  existingListen?: ListenHandle | null
   /**
    * Where the save goes, when it is not the `actions` collection.
    *
@@ -470,7 +473,7 @@ EventParamsEditor.displayName = 'EventParamsEditor'
  * class steps against the live canvas DOM.
  */
 export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
-  const { hostId, state, existing, existingFromCache, onSave, onClose } = props
+  const { hostId, state, existing, existingFromCache, existingListen, onSave, onClose } = props
   const firestore = useFirestore()
   // Action creation is server-owned since AGL-2266 (the cap); every other
   // action write on this surface stays client-direct.
@@ -866,6 +869,7 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
         {
           subject: 'interaction',
           fromCache: Boolean(existing) && existingFromCache,
+          listen: existingListen,
         },
         async () => {
           await setDoc(
@@ -908,6 +912,7 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
     onClose,
     existing,
     existingFromCache,
+    existingListen,
   ])
 
   return (

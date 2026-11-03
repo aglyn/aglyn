@@ -809,6 +809,7 @@ export function DealsSection(props: ConsolePluginPageProps) {
         pipelines={pipelineState.pipelines}
         fromCache={pipelineState.fromCache}
         unreadable={pipelineState.status === 'error'}
+        listen={pipelineState.listen}
         visibleToTokens={scope.visibleTo}
         createTokens={scope.level === 'site' ? scope.createTokens : ORG_PIPELINE_TOKENS}
       />

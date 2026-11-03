@@ -77,6 +77,9 @@ export function buildSiteEmailChrome(input: SiteEmailChromeInput): EmailChrome {
   const name = resolveHostToken('businessName', host) ?? ''
   const logo = inboxLogo(resolveHostToken('logo', host))
   const url = resolveHostToken('url', host)
+  // The site's one email and its one address (AGL-4136): what Setup →
+  // Business saves, else the one-block copies a site saved before that —
+  // the tokens decide, so the footer says what the pages say.
   const supportEmail = resolveHostToken('supportEmail', host)
   const address = resolveHostToken('address', host)
 

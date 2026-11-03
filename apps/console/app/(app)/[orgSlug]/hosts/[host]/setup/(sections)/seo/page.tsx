@@ -39,7 +39,7 @@ import {
  * whether it may read the site at all (AGL-2501).
  *
  * A STACK OF CARDS (AGL-3258), which is what every other settings section in
- * the console is. Entity, its Address and the AI-agent guidance were
+ * the console is. Entity, its address and the AI-agent guidance were
  * `SUB_FORM` groups inside the SEO card under headings of their own, and the
  * four media controls were drawn inside that same card by a bespoke form
  * template — so this section looked like nothing else in the product. Each is
@@ -50,6 +50,12 @@ import {
  * Order is the point, as it was when they were sections (AGL-2486). Entity is
  * followed immediately by the logo that belongs to it; putting the favicon
  * between them is what made the entity read as separated in the first place.
+ *
+ * NO ADDRESS CARD, and no name, email or phone on Entity (AGL-4136): a site's
+ * business details are entered once, on Setup → Business profile, and the structured
+ * data publishes them from there. A proposal for the name, email or phone
+ * still lands, in that card's draft, which survives the move between
+ * sections.
  *
  * The indexing switch is its own card rather than a field on a schema: a
  * toggle that writes on change does not belong inside a form that writes on
@@ -113,7 +119,6 @@ export default function HostSetupSeoSection() {
       <SocialImageCard hostId={hostId} />
       <HostSettingsForm schemaId="hostSeoEntity" />
       <EntityLogoCard hostId={hostId} />
-      <HostSettingsForm schemaId="hostSeoAddress" />
       <HostSettingsForm schemaId="hostSeoLocalBusiness" />
       <HostSettingsForm schemaId="hostSeoAgent" />
       {/* Beside the indexing switch: both are about what a search engine

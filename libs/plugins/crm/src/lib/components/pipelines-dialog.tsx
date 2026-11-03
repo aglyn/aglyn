@@ -35,6 +35,7 @@ import {
   useFirestore,
   useUser,
   writeGuardedBySeed,
+  type ListenHandle,
 } from '@aglyn/tenant-feature-instance'
 import {
   Button,
@@ -85,6 +86,8 @@ export interface PipelinesDialogProps {
   /** The listener's verdict on the rows, for the stale-seed guard. */
   fromCache: boolean
   unreadable: boolean
+  /** The rows' listener, so a save waits on that read alone (AGL-4135). */
+  listen?: ListenHandle | null
   /** The scope tokens the open-deal count is filtered by — the viewer's own. */
   visibleToTokens: readonly string[]
   /** What a pipeline created here is stamped with. */
@@ -129,6 +132,7 @@ export function PipelinesDialog(props: PipelinesDialogProps) {
     pipelines,
     fromCache,
     unreadable,
+    listen,
     visibleToTokens,
     createTokens,
   } = props
@@ -158,7 +162,7 @@ export function PipelinesDialog(props: PipelinesDialogProps) {
       setBusy(key)
       try {
         const verdict = await writeGuardedBySeed(
-          { subject: 'pipeline', unreadable, fromCache },
+          { subject: 'pipeline', unreadable, fromCache, listen },
           write,
         )
         if (!verdict.ok) {
@@ -175,7 +179,7 @@ export function PipelinesDialog(props: PipelinesDialogProps) {
         setBusy(null)
       }
     },
-    [unreadable, fromCache, enqueueSnackbar],
+    [unreadable, fromCache, listen, enqueueSnackbar],
   )
 
   const newProblem = newName.trim() ? pipelineNameProblem(newName, pipelines) : null
@@ -490,6 +494,7 @@ export function PipelinesDialog(props: PipelinesDialogProps) {
         pipeline={stagesPipeline}
         fromCache={fromCache}
         unreadable={unreadable}
+        listen={listen}
         visibleToTokens={visibleToTokens}
       />
     </>

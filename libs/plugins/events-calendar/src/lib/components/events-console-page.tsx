@@ -32,6 +32,7 @@ import {
   useFirestore,
   useFirestoreCollection,
   writeGuardedBySeed,
+  type ListenHandle,
 } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
@@ -121,10 +122,12 @@ function useHostEvents(hostId: string): {
   events: EventRecord[]
   truncated: boolean
   fromCache: boolean
+  /** The listener, so a save waits on that read alone (AGL-4135). */
+  listen: ListenHandle
   unreadable: boolean
 } {
   const firestore = useFirestore()
-  const { data, status, fromCache } = useFirestoreCollection<EventRecord>(
+  const { data, status, fromCache, listen } = useFirestoreCollection<EventRecord>(
     () =>
       hostId
         ? query(
@@ -162,7 +165,7 @@ function useHostEvents(hostId: string): {
   )
 
   const { rows, truncated } = ceilingedWindow<EventRecord>(data, EVENT_CEILING)
-  return { events: rows, truncated, fromCache, unreadable: status === 'error' }
+  return { events: rows, truncated, fromCache, listen, unreadable: status === 'error' }
 }
 
 /** datetime-local ↔ epoch-ms without timezone surprises. */
@@ -207,6 +210,7 @@ export function EventsConsolePage(props: ConsolePluginPageProps) {
      * rewritten on every save whether or not anyone touched the schedule.
      */
     fromCache: eventsFromCache,
+    listen: eventsListen,
     truncated: eventsTruncated,
     unreadable: eventsUnreadable,
   } = useHostEvents(hostId)
@@ -293,6 +297,7 @@ export function EventsConsolePage(props: ConsolePluginPageProps) {
           subject: 'event',
           unreadable: Boolean(draft.id) && eventsUnreadable,
           fromCache: Boolean(draft.id) && eventsFromCache,
+          listen: eventsListen,
         },
         async () => {
           // The stored form is the shared rule's (`model/event-write.ts`),
@@ -349,6 +354,7 @@ export function EventsConsolePage(props: ConsolePluginPageProps) {
     hostId,
     enqueueSnackbar,
     eventsFromCache,
+    eventsListen,
     eventsUnreadable,
   ])
 

@@ -150,7 +150,7 @@ These four are where a new site's work happens:
 | **Dashboard** | The site at a glance — analytics and recent-signup summaries, and the ten most recent activity entries. |
 | **Pages** | The page hierarchy — create, reorder (drag-and-drop), and open pages. This is where you build; start at [Publish your first page](publish-your-first-screen.md). |
 | **Media** | The media library — folders, images, video, and files. |
-| **Setup** | Basic details, SEO, tracking, theme, and emails. Each tab is deep-linkable — the `?tab=` in the URL follows you, so you can bookmark or share the exact one. |
+| **Setup** | Basic details, your business details and profile, SEO, tracking, theme, and emails. Each section has its own address, so you can bookmark or share the exact one. |
 
 Alongside them, and always present: **Layouts** and **Components** (the shared frames and
 reusable pieces pages are assembled from — see

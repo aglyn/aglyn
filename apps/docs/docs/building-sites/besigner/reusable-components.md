@@ -506,8 +506,8 @@ Every email your site sends to its customers goes out with your site's header an
 - **Header:** your site's logo (or its name when you haven't set a logo), linking to your
   site. An SVG logo is shown as your site's name instead, because Gmail and Outlook can't
   display SVG images in email.
-- **Footer:** why the reader is getting the email, your support email address, and your
-  business name and postal address.
+- **Footer:** why the reader is getting the email, your email address, and your
+  business name and postal address, from **Business details** on **Setup → Business profile**.
 
 These come from your site's settings, and they're added to emails you design too. If your
 design has its own **Header** or **Footer** (from the element drawer, or a block started

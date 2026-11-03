@@ -16,15 +16,18 @@
  */
 'use client'
 
-import BusinessDetailsCard from '../../../../../../../../components/business-details-card.component'
 import BuiltInPageLayoutCard from '../../../../../../../../components/built-in-page-layout-card.component'
 import LanguagesCard from '../../../../../../../../components/languages-card.component'
 import LogoCard from '../../../../../../../../components/logo-card.component'
 import { useHostSettingsScope } from '../../../host-settings-scope'
 
 /**
- * What the site presents to a visitor: its mark, the details its tokens read
- * from, the layout behind its built-in pages, and its languages.
+ * What the site presents to a visitor: its mark, the layout behind its
+ * built-in pages, and its languages.
+ *
+ * The business's contact details are not here any more: they are entered
+ * once, on Setup → Business profile (AGL-4136), which every `host.*` variable and
+ * every other reader takes them from.
  *
  * The site's own NAME and ADDRESS are not here. Those describe the site as an
  * object rather than as an experience, so the Basic details form lives in the
@@ -58,12 +61,6 @@ export default function HostSetupDetailsSection() {
       {/* Site brand mark (AGL-594): shown by the tenant's navigation loader. */}
       <div>
         <LogoCard hostId={hostId} />
-      </div>
-      {/* Contact details `host.*` tokens read from (AGL-1022) — without these
-          the tokens resolve empty forever and teach people the feature does
-          not work. */}
-      <div style={{ marginTop: 24 }}>
-        <BusinessDetailsCard hostId={hostId} />
       </div>
       {/* The chrome around the pages the platform composes — search results,
           and a collection entry with no template of its own (AGL-2513). It

@@ -77,7 +77,9 @@ One message can ask for any mix of:
 - **a page template** for blog posts, products or authors;
 - **an automation**: when a form is sent, do something;
 - **a site function** that works out a value, such as a price or a quote, and **site
-  variables**, such as a phone number kept in one place;
+  variables**, such as a launch date kept in one place. Your business's name, phone,
+  email, address and social links never need one: pages use them from
+  [Business details](../getting-started/create-a-site.md#business-details);
 - **products** to sell, with a description, tags and options;
 - **a booking service** visitors can book online, with its length, hours and price;
 - **events** on the site's calendar, each with its date and time, place, description and a
@@ -100,7 +102,10 @@ One message can ask for any mix of:
   pattern, favicon, logo or social image (from images already in your media library), its
   language, time zone, business name, description, phone, contact email or address, or the
   cookie banner's mode. For example, *rename my site to Juniper Clay Studio* or *make the
-  site Spanish*.
+  site Spanish*. An address you give on one line becomes the **Street** in
+  [Business details](../getting-started/create-a-site.md#business-details), and the
+  city, region, postal code and country there are cleared, so every page, email and
+  search listing shows the new address.
 - **tracking tags**: connect or remove Google Analytics, Google Tag Manager, or the Meta,
   Google Ads, LinkedIn, TikTok or Pinterest tag by the ID you give, such as *connect Google
   Analytics G-4R7KX2PQ9Z*. See

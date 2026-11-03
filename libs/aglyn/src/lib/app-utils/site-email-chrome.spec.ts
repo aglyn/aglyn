@@ -43,6 +43,28 @@ describe('buildSiteEmailChrome (AGL-3370)', () => {
     })
   })
 
+  it('signs with the business details from Setup → Business profile over the older copies (AGL-4136)', () => {
+    const chrome = buildSiteEmailChrome({
+      host: {
+        displayName: 'northwind',
+        seo: {
+          entity: {
+            name: 'Northwind Coffee',
+            email: 'hello@northwind.test',
+            address: { streetAddress: '12 Bean St', addressLocality: 'Portland', addressRegion: 'OR' },
+          },
+        },
+        business: { supportEmail: 'old@northwind.test', address: '1 Old Rd\nAustin' },
+      },
+      now: NOW,
+    })
+    expect(chrome.footer?.support).toEqual({
+      label: 'hello@northwind.test',
+      href: 'mailto:hello@northwind.test',
+    })
+    expect(chrome.footer?.legal).toBe('© 2026 Northwind Coffee · 12 Bean St, Portland, OR')
+  })
+
   it('never names the platform', () => {
     const chrome = buildSiteEmailChrome({
       host: { displayName: 'Northwind Coffee', subdomain: 'northwind' },

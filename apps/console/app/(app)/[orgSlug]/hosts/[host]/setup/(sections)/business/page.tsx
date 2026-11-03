@@ -18,24 +18,33 @@
 'use client'
 
 import { Stack } from '@mui/material'
-import BusinessFactsCard from '../../../../../../../../components/business-facts-card.component'
 import BusinessProfileCard from '../../../../../../../../components/business-profile-card.component'
 import { useHostSubdomain } from '../../../../../../../../components/host-id-provider'
 import PluginWidgetSlot from '../../../../../../../../components/plugin-widget-slot.component'
 import useCurrentOrg from '../../../../../../../../hooks/use-current-org'
 import { useOrgSlug } from '../../../../../../../../hooks/use-org-scope'
-import { useHostSettingsScope } from '../../../host-settings-scope'
+import {
+  HostSettingsForm,
+  useHostSettingsScope,
+} from '../../../host-settings-scope'
 
 /**
- * Business profile — what the business is, for everything that writes about
- * it (AGL-3661).
+ * Business — what the business is and how to reach it (AGL-3661, AGL-4136).
  *
- * Three cards, in the order an owner checks them: the profile they write
- * (services, audience, area, tone), the facts read from the site's settings
- * (name and every way to reach the business, which have a home already and
- * are linked to it rather than copied), and the `hostBusinessProfile` zone,
- * where a plugin shows what it keeps about the business — the preferences
- * Aglyn AI learned from the owner's edits, which they can read and clear.
+ * Three cards, in the order an owner fills them in:
+ *
+ * - BUSINESS DETAILS, the one place a site's name, slogan, phone, email,
+ *   postal address and social links are entered (AGL-4136). Every other
+ *   screen stopped asking for them, and every reader — the pages' `host.*`
+ *   variables, the email footer, the documents, the structured data — takes
+ *   them from here. A host settings form, saved by the same guarded save as
+ *   the SEO cards, so the AI SEO audit's proposals for the name, email and
+ *   phone land in it as unsaved edits.
+ * - the BUSINESS PROFILE the owner writes for Aglyn AI: services, audience
+ *   and tone. The area served is not on it; that is SEO → Local business.
+ * - the `hostBusinessProfile` zone, where a plugin shows what it keeps about
+ *   the business — the preferences Aglyn AI learned from the owner's edits,
+ *   which they can read and clear.
  */
 export default function HostSetupBusinessSection() {
   const { hostId } = useHostSettingsScope()
@@ -44,8 +53,8 @@ export default function HostSetupBusinessSection() {
   const host = useHostSubdomain()
   return (
     <Stack spacing={3}>
+      <HostSettingsForm schemaId="hostBusinessDetails" />
       {orgId ? <BusinessProfileCard orgId={orgId} hostId={hostId} /> : null}
-      <BusinessFactsCard hostId={hostId} orgSlug={orgSlug} host={host ?? null} />
       <PluginWidgetSlot
         slot="hostBusinessProfile"
         hostId={hostId}

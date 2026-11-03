@@ -29,7 +29,11 @@ import {
   scheduleRefusedReopen,
   subscribeFirestoreSessionHeal,
 } from '../firestore-denial-reporter'
-import { sameDocument, trackListenConfirmation } from './listen-confirmation'
+import {
+  createListenHandle,
+  sameDocument,
+  trackListenConfirmation,
+} from './listen-confirmation'
 import { CONFIRMABLE_LISTEN_OPTIONS } from './listen-options'
 import useModifyDocCallback, {
   type UseModifyDocCallback,
@@ -68,6 +72,7 @@ export function useDocData<T>(
   // Un-confirmed until a snapshot says otherwise (AGL-1066).
   const [fromCache, setFromCache] = useState(true)
   const [serverDenied, setServerDenied] = useState(false)
+  const [listen] = useState(createListenHandle)
   const resolveFirstValueRef = useRef<(() => void) | undefined>(undefined)
   const firstValuePromiseRef = useRef<Promise<void> | undefined>(undefined)
   if (!firstValuePromiseRef.current) {
@@ -108,7 +113,7 @@ export function useDocData<T>(
      */
     let terminal = false
     /** What a save waits on while this listener is unconfirmed (AGL-4120). */
-    const confirmation = trackListenConfirmation()
+    const confirmation = trackListenConfirmation(listen)
     /** The cached snapshot on screen, while one is (AGL-4120). */
     let shownFromCache: DocumentSnapshot<DocumentData> | null = null
 
@@ -239,7 +244,7 @@ export function useDocData<T>(
 
     return () => {
       cancelled = true
-      confirmation.release()
+      confirmation.close()
       unsubscribeHeal()
       if (timer) clearTimeout(timer)
       cancelRefusedReopen?.()
@@ -258,6 +263,7 @@ export function useDocData<T>(
     hasPendingWrites,
     fromCache,
     serverDenied,
+    listen,
   }
 }
 export type UseDocData<T> = typeof useDocData<T>

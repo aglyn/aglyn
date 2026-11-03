@@ -27,6 +27,7 @@ import {
 import {
   useFirestore,
   useFirestoreCollection,
+  type ListenHandle,
 } from '@aglyn/tenant-feature-instance'
 import {
   collection,
@@ -55,6 +56,8 @@ export interface ContactFieldDefinitionsResult {
   ready: boolean
   /** The rows have been seen by the server — `writeGuardedBySeed`'s input. */
   fromCache: boolean
+  /** The rows' listener, so a save waits on that read alone (AGL-4135). */
+  listen: ListenHandle
 }
 
 const EMPTY: ContactFieldDefinitionDoc[] = []
@@ -90,7 +93,7 @@ export function useContactFieldDefinitions(
   object: CrmFieldObject = 'contact',
 ): ContactFieldDefinitionsResult {
   const firestore = useFirestore()
-  const { data, status, fromCache } =
+  const { data, status, fromCache, listen } =
     useFirestoreCollection<ContactFieldDefinitionDoc>(
       () =>
         orgId
@@ -123,6 +126,7 @@ export function useContactFieldDefinitions(
     active,
     ready: Boolean(orgId) && status !== 'loading',
     fromCache,
+    listen,
   }
 }
 
