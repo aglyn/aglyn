@@ -80,7 +80,7 @@ import {
   buildPlan,
   markPendingDeployments,
 } from './lib/uptime-targets.mjs'
-import { fetchOnceMore } from './lib/transport-retry.mjs'
+import { fetchOnceMore, retryAfterRunnerStall } from './lib/transport-retry.mjs'
 
 const TIMEOUT_MS = 15_000
 
@@ -201,7 +201,7 @@ async function probe(name, base, path = '/api/health') {
   } catch (error) {
     const aborted = error?.name === 'TimeoutError' || error?.name === 'AbortError'
     return {
-      name, url, ms: Date.now() - startedAt, ok: false,
+      name, url, ms: Date.now() - startedAt, ok: false, noResponse: true,
       detail: aborted ? `no response in ${TIMEOUT_MS}ms` : `unreachable (${error?.cause?.code ?? error?.name ?? 'error'})`,
     }
   }
@@ -276,6 +276,7 @@ async function probePage(name, base, path) {
       ms: Date.now() - startedAt,
       kind: 'page',
       ok: false,
+      noResponse: true,
       detail: aborted
         ? `no response in ${TIMEOUT_MS}ms`
         : `unreachable (${error?.cause?.code ?? error?.name ?? 'error'})`,
@@ -332,6 +333,7 @@ async function probeRender(name, base, path, expectStatus) {
       ms: Date.now() - startedAt,
       kind: 'render',
       ok: false,
+      noResponse: true,
       // A hung render is the failure these rows exist for; say it as one.
       detail: aborted
         ? `no complete page in ${TIMEOUT_MS}ms — a render that hangs`
@@ -363,14 +365,18 @@ if (!plan.length) {
   process.exit(2)
 }
 
-const results = await Promise.all(
-  plan.map(([name, base, path, kind, expectStatus]) =>
-    kind === 'render'
-      ? probeRender(name, base, path, expectStatus)
-      : kind === 'page'
-        ? probePage(name, base, path)
-        : probe(name, base, path),
-  ),
+const probeRow = ([name, base, path, kind, expectStatus]) =>
+  kind === 'render'
+    ? probeRender(name, base, path, expectStatus)
+    : kind === 'page'
+      ? probePage(name, base, path)
+      : probe(name, base, path)
+
+// When every answer was slow, the runner stalled and the rows with no answer
+// get one more try (AGL-4137). See `lib/transport-retry.mjs` for the rule.
+const { results, stall } = await retryAfterRunnerStall(
+  await Promise.all(plan.map(probeRow)),
+  (index) => probeRow(plan[index]),
 )
 
 // A subsystem path that 404s while its target's root is UP is a fact about the
@@ -380,6 +386,11 @@ const results = await Promise.all(
 markPendingDeployments(results)
 
 console.log(`uptime probe · ${new Date().toISOString()}`)
+if (stall) {
+  console.log(
+    `  the runner stalled: ${stall.fastestMs === null ? 'nothing answered' : `the fastest answer took ${stall.fastestMs}ms`}, so ${stall.retried} row(s) with no response were tried again`,
+  )
+}
 for (const r of results) {
   const build = r.commit ? ` build=${r.commit}` : ''
   const region = r.region ? ` region=${r.region}` : ''
