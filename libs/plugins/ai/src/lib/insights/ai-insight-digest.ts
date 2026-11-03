@@ -28,6 +28,7 @@ import {
   weeklySummaryPlainDates,
   weeklySummarySectionsHtml,
   weeklySummaryTilesHtml,
+  weeklySummaryRowLink,
   weeklySummaryWeekday,
   type WeeklySummaryColors,
   type WeeklySummarySection,
@@ -293,13 +294,6 @@ function citedRows(insights: readonly AiInsight[], table: AiInsightTable): numbe
   return [...new Set(rows)].filter((row) => Number.isInteger(row) && table.rows[row])
 }
 
-/** A row's label as a person reads it, and the page it names, when it names one. */
-function rowLabel(value: unknown, siteUrl: string | null): Pick<WeeklySummarySectionRow, 'label' | 'url'> {
-  const label = String(value ?? '')
-  const path = label.startsWith('/')
-  return { label: label === '/' ? 'Home' : label, url: path && siteUrl ? `${siteUrl}${label === '/' ? '' : label}` : null }
-}
-
 /**
  * A section's figures, from the table's own columns, so a reader added
  * tomorrow draws without a line here: a table of days is a chart of the week
@@ -337,7 +331,7 @@ function aiInsightDigestFigures(
       const row = table.rows[index]
       const moved = change ? row[change.key] : null
       return {
-        ...rowLabel(row[label.key], siteUrl),
+        ...weeklySummaryRowLink(String(row[label.key] ?? ''), siteUrl),
         value: shown.map((column) => text(column, row)).join(' · '),
         change: typeof moved === 'number' ? moved : null,
       }

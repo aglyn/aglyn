@@ -33,6 +33,7 @@ import {
   FORMS_WEEKLY_SUMMARY,
   SOURCES_WEEKLY_SUMMARY,
   TOP_PAGES_WEEKLY_SUMMARY,
+  TRAFFIC_DAILY_WEEKLY_SUMMARY,
   TRAFFIC_WEEKLY_SUMMARY,
 } from './ai-figure-summaries'
 
@@ -341,6 +342,7 @@ export function trafficFigureReaders(firestore: AiFigureFirestore): PluginFigure
         label: 'Traffic by day',
         description: 'Page views and visitors on each day of the window, oldest first, for spotting a day that stood out.',
         windows: AI_TRAFFIC_DAILY_WINDOWS,
+        weeklySummary: TRAFFIC_DAILY_WEEKLY_SUMMARY,
       },
       async (db, request) => {
         const ids = [...dayIds(request.now, request.days).current].reverse()

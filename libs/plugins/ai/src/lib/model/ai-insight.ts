@@ -18,6 +18,7 @@
 import {
   pluginFigureCellText,
   pluginFigureIsoWeek,
+  pluginFigureSourceHref,
   type PluginFigureTable,
 } from '@aglyn/aglyn/plugin-manager/plugin-figures'
 import { weeklySummaryPeriod } from '@aglyn/aglyn/app-utils/weekly-summary'
@@ -328,10 +329,7 @@ export function aiInsightSourceHref(
   table: Pick<AiInsightTable, 'source' | 'scope'>,
   where: { orgSlug: string; host: string | null },
 ): string | null {
-  const path = table.source.path
-  if (!path || !where.orgSlug) return null
-  if (table.scope === 'org') return `/${where.orgSlug}/${path}`
-  return where.host ? `/${where.orgSlug}/hosts/${where.host}/${path}` : null
+  return pluginFigureSourceHref(table.source, table.scope === 'org' ? 'org' : 'site', where)
 }
 
 /** How a cell reads to a person, by its column's kind; `null` is "—". */

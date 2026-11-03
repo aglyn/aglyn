@@ -338,6 +338,9 @@ export async function createSignUpWorkspace(
         body: JSON.stringify({
           name: name.trim(),
           ...(slug ? { slug } : {}),
+          // Tells the server this name is not one the person chose, so a typed
+          // name still held on the account wins over it (AGL-4117).
+          ...(derived ? { derived: true } : {}),
           ...firstTouchField(),
         }),
       })

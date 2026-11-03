@@ -65,11 +65,12 @@ import {
   updateDoc,
   where,
 } from 'firebase/firestore'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
 import { useCrmActivityLogger } from '../hooks/use-crm-activity-logger'
 import { useCrmCampaigns } from '../hooks/use-crm-campaigns'
 import { useCrmPicklist } from '../hooks/use-crm-picklist'
+import { useCrmRecordNames } from '../hooks/use-crm-record-names'
 import { useCrmRecordsQuota } from '../hooks/use-crm-records-quota'
 import {
   type CrmOrgDoc,
@@ -93,7 +94,7 @@ import {
   CRM_CLIENT_SEARCH_FIELDS,
   CRM_CLIENT_SORT_FIELDS,
   CRM_DEAL_CONTACT_ROLE_LIST_FIELDS,
-  crmClientListFields,
+  crmClientListFieldChanges,
 } from '../model/crm-list-query'
 import {
   DEAL_CURRENCIES,
@@ -107,12 +108,14 @@ import {
   DEAL_NOTES_MAX,
   DEAL_TITLE_MAX,
   dealDocumentFromForm,
+  dealEditFromForm,
+  dealEditNeedsConfirmedRead,
   dealFormFromDoc,
   dealFormProblem,
   type DealFormValues,
-  dealPatchFromForm,
   emptyDealForm,
   judgeDealFormPicklists,
+  rebaseDealForm,
 } from '../model/deal-form-model'
 import { useCrmSharingFollowUp } from '../hooks/use-crm-sharing'
 
@@ -144,6 +147,29 @@ interface CompanyChoice {
   name: string
 }
 
+/**
+ * How long a save holds the drawer on the server's acknowledgement (AGL-4132).
+ * A durable console tab writes through whichever tab holds the lease, and a
+ * hidden or overloaded one can take a minute to answer (AGL-3806); 25 s was
+ * measured here. Stopping the wait does not stop the write: it is in the
+ * IndexedDB queue, the page behind the drawer already shows it, and the lease
+ * holder sends it.
+ */
+const SAVE_HOLD_MS = 4_000
+
+/** What a save says when its write fails after the hold let the drawer close. */
+const SAVE_FAILED_LATE_MESSAGE =
+  'Your last change to this deal could not be saved. Open it and try again.'
+
+/** Settles with `write`, or resolves when the hold runs out. */
+function withinSaveHold(write: Promise<void>): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const hold = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, SAVE_HOLD_MS)
+  })
+  return Promise.race([write, hold]).finally(() => clearTimeout(timer))
+}
+
 export interface DealEditDrawerProps {
   open: boolean
   onClose: () => void
@@ -161,7 +187,10 @@ export interface DealEditDrawerProps {
   pipelines: PipelineDoc[]
   /** Where a new deal lands when nobody picks a pipeline. */
   defaultPipeline: PipelineDoc | null
-  /** The listener's verdict on the row being edited, for the stale-seed guard. */
+  /**
+   * The listener's verdict on the row being edited. An unconfirmed row holds
+   * back only an edit that is worked out from it (`dealEditNeedsConfirmedRead`).
+   */
   unreadable?: boolean
   fromCache?: boolean
   /** After a save, with the id of the deal written. */
@@ -186,6 +215,11 @@ export interface DealEditDrawerProps {
  * is read-only with a caption saying so. The pipeline picker on a new
  * deal lists every ACTIVE pipeline (`pipelines`) and opens on the one the
  * caller was looking at.
+ *
+ * An edit writes only what the reader changed (AGL-4132), so one field
+ * changed in a drawer opened on an unconfirmed read saves at once and cannot
+ * touch anything else on the deal. The form follows the stored deal in the
+ * fields they have not touched, and keeps what they typed in those they have.
  *
  * ## The pickers
  *
@@ -254,12 +288,31 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
   const storedCustom = useMemo(() => deal?.custom ?? {}, [deal?.custom])
   const [custom, setCustom] = useState<CrmCustomDraft>({})
 
-  // Re-seeded on every open: an existing deal's stored values, or a blank
-  // form aimed at the default pipeline with whatever the opener preselected.
+  /*
+   * What the form was built from: what a save compares against, and what
+   * tells a field the reader changed from one they left alone. Held in a ref
+   * because nothing renders from it.
+   */
+  const seed = useRef<{ dealId: string | null; values: DealFormValues } | null>(null)
+
+  // Seeded on every open: an existing deal's stored values, or a blank form
+  // aimed at the default pipeline with whatever the opener preselected. After
+  // that a new snapshot only moves the fields the reader has not touched.
   useEffect(() => {
-    if (!open) return
-    setValues(deal ? dealFormFromDoc(deal) : emptyDealForm(defaultPipeline, defaults))
-    setCustom({})
+    if (!open) {
+      seed.current = null
+      return
+    }
+    const dealId = deal?.$id ?? null
+    const stored = deal ? dealFormFromDoc(deal) : emptyDealForm(defaultPipeline, defaults)
+    const previous = seed.current
+    seed.current = { dealId, values: stored }
+    if (previous?.dealId === dealId) {
+      setValues((current) => rebaseDealForm(current, previous.values, stored))
+    } else {
+      setValues(stored)
+      setCustom({})
+    }
   }, [open, deal, defaultPipeline, defaults])
 
   const update = useCallback(
@@ -328,14 +381,35 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
       ),
     [contactQuery, contactRows, consentGroup, org],
   )
-  const contactValue: ContactChoice | null = values.contactId
-    ? {
-        id: values.contactId,
-        name: values.contactName,
-        email:
-          contactChoices.find((choice) => choice.id === values.contactId)?.email ?? '',
-      }
-    : null
+  /*
+   * THE LINKS' NAMES. The deal carries a copy beside each id, but a server
+   * door that moves the Primary drops it (`dealContactRolesUpdate`), so a link
+   * can arrive with no name to show. It is never shown blank: a picker that
+   * looks empty while it holds a link is how the link gets erased unseen.
+   */
+  const linkedName = useCrmRecordNames({
+    orgId: open ? orgId : null,
+    groupId: consentGroup?.groupId ?? null,
+    org: (org ?? null) as Record<string, unknown> | null,
+    records: [
+      ...(values.contactId && !values.contactName
+        ? [{ kind: 'contact' as const, id: values.contactId }]
+        : []),
+      ...(values.companyId && !values.companyName
+        ? [{ kind: 'company' as const, id: values.companyId }]
+        : []),
+    ],
+  })
+  const contactName =
+    values.contactName || linkedName('contact', values.contactId) || 'Linked contact'
+  const companyName =
+    values.companyName || linkedName('company', values.companyId) || 'Linked company'
+  // One object between renders: a new object is a new value to the picker,
+  // and a new value puts its label over whatever the reader is typing.
+  const contactValue = useMemo<ContactChoice | null>(
+    () => (values.contactId ? { id: values.contactId, name: contactName, email: '' } : null),
+    [values.contactId, contactName],
+  )
 
   /*
    * THE COMPANY SEARCH: a prefix on `nameLower` with the scope, which the
@@ -376,9 +450,10 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
       clearTimeout(timer)
     }
   }, [firestore, open, orgId, visibleTo, companyQuery])
-  const companyValue: CompanyChoice | null = values.companyId
-    ? { id: values.companyId, name: values.companyName }
-    : null
+  const companyValue = useMemo<CompanyChoice | null>(
+    () => (values.companyId ? { id: values.companyId, name: companyName } : null),
+    [values.companyId, companyName],
+  )
 
   const customMissing = crmCustomDraftMissingRequired(fields.active, storedCustom, custom, mode)
   const problem =
@@ -421,39 +496,64 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
     try {
       const nowMs = Date.now()
       if (deal) {
-        const verdict = await writeGuardedBySeed(
-          { subject: 'deal', unreadable, fromCache },
-          async () => {
-            const { set, clear } = dealPatchFromForm(saved, nowMs, {
-              amountDerived,
-              stage: currentStage,
-              current: deal,
-            })
-            await updateDoc(
-              doc(firestore, 'orgs', orgId, CRM_COLLECTIONS.deals, deal.$id),
-              {
-                ...set,
-                ...Object.fromEntries(clear.map((key) => [key, deleteField()])),
-                // The custom keys that changed, merged into the stored map.
-                ...crmCustomDraftWrites(storedCustom, custom),
-                // The title is what the Deals table searches (AGL-3321), and
-                // the Type and Lead source what it filters by (AGL-3516),
-                // from the listener's row with the edit over it.
-                ...crmClientListFields(
-                  'deals',
-                  deal as unknown as Record<string, unknown>,
-                  { ...set, ...Object.fromEntries(clear.map((key) => [key, null])) },
-                  DEAL_CLIENT_LIST_FIELDS,
-                ),
-              },
-            )
-          },
-        )
-        if (!verdict.ok) {
-          enqueueSnackbar(verdict.message, { variant: 'warning', persist: false })
-          return
+        const edit = dealEditFromForm(saved, seed.current?.values ?? dealFormFromDoc(deal), nowMs, {
+          amountDerived,
+          stage: currentStage,
+          current: deal,
+        })
+        // The custom keys that changed, merged into the stored map.
+        const customWrites = crmCustomDraftWrites(storedCustom, custom)
+        if (
+          Object.keys(edit.set).length ||
+          edit.clear.length ||
+          Object.keys(customWrites).length
+        ) {
+          const verdict = await writeGuardedBySeed(
+            {
+              subject: 'deal',
+              unreadable,
+              fromCache: fromCache && dealEditNeedsConfirmedRead(edit),
+            },
+            async () => {
+              let held = true
+              const written = updateDoc(
+                doc(firestore, 'orgs', orgId, CRM_COLLECTIONS.deals, deal.$id),
+                {
+                  ...edit.set,
+                  ...Object.fromEntries(edit.clear.map((key) => [key, deleteField()])),
+                  ...customWrites,
+                  // The title is what the Deals table searches (AGL-3321), and
+                  // the Type and Lead source what it filters by (AGL-3516),
+                  // from the listener's row with the edit over it.
+                  ...crmClientListFieldChanges(
+                    'deals',
+                    deal as unknown as Record<string, unknown>,
+                    { ...edit.set, ...Object.fromEntries(edit.clear.map((key) => [key, null])) },
+                    DEAL_CLIENT_LIST_FIELDS,
+                  ),
+                  updatedAt: new Date(nowMs),
+                },
+              ).then(
+                // Once the write has landed: sharing rules read the deal as stored.
+                () => followUpSharing('deals', [deal.$id]),
+                (error) => {
+                  if (held) throw error
+                  console.error(error)
+                  enqueueSnackbar(SAVE_FAILED_LATE_MESSAGE, {
+                    variant: 'error',
+                    allowDuplicate: true,
+                  })
+                },
+              )
+              await withinSaveHold(written)
+              held = false
+            },
+          )
+          if (!verdict.ok) {
+            enqueueSnackbar(verdict.message, { variant: 'warning', persist: false })
+            return
+          }
         }
-        followUpSharing('deals', [deal.$id])
         enqueueSnackbar('Deal saved', { variant: 'success', persist: false })
         onSaved?.(deal.$id, 'edit')
       } else {
@@ -519,6 +619,7 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
     typeList.picklist,
     leadSourceList.picklist,
     currentStage,
+    amountDerived,
   ])
 
   return (
@@ -752,10 +853,12 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
           <Autocomplete<ContactChoice, false, false, false>
             options={contactChoices}
             value={contactValue}
-            inputValue={contactQuery}
-            onInputChange={(_event, next, reason) => {
-              if (reason !== 'reset') setContactQuery(next)
-            }}
+            // The input is the picker's own, which is how a linked contact
+            // shows. The query is only what was typed, so the name it shows
+            // is not searched for.
+            onInputChange={(_event, next, reason) =>
+              setContactQuery(reason === 'input' ? next : '')
+            }
             onChange={(_event, picked) =>
               update({
                 contactId: picked?.id ?? '',
@@ -792,10 +895,9 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
           <Autocomplete<CompanyChoice, false, false, false>
             options={companyChoices}
             value={companyValue}
-            inputValue={companyQuery}
-            onInputChange={(_event, next, reason) => {
-              if (reason !== 'reset') setCompanyQuery(next)
-            }}
+            onInputChange={(_event, next, reason) =>
+              setCompanyQuery(reason === 'input' ? next : '')
+            }
             onChange={(_event, picked) =>
               update({
                 companyId: picked?.id ?? '',
