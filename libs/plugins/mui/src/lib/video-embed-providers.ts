@@ -21,7 +21,8 @@ import type { VideoEmbedProviderDeclaration } from '@aglyn/aglyn/plugin-manager/
  * The video hosts whose own player the Video element plays a link in
  * (AGL-3080). Named under `videoEmbedProviders` in `plugins.config.json`: the
  * manifest generator calls this, validates the answer and compiles it into
- * core's `first-party-plugins.generated.ts`, where the published page, its
+ * core's `video-embed-providers.generated.ts` (its own file since AGL-4140,
+ * so a page with no video downloads none of it), where the published page, its
  * `VideoObject`, the entry page and the tenant's `frame-src` read it without
  * loading this plugin. Regenerate after changing it; `--check` refuses a
  * stale copy.

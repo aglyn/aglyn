@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { FIRST_PARTY_VIDEO_EMBED_PROVIDERS } from './first-party-plugins.generated'
+import { FIRST_PARTY_VIDEO_EMBED_PROVIDERS } from './video-embed-providers.generated'
 import {
   type ResolvedVideoEmbedProvider,
   videoEmbedOf,
