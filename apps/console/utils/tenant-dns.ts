@@ -103,6 +103,27 @@ export function isApexDomain(domain: string): boolean {
   return labels.length === 2
 }
 
+/**
+ * The other spelling of a domain a visitor might type: `www.x` for a bare `x`,
+ * and `x` for `www.x` (AGL-4134). Null for a deeper subdomain, because `shop.x`
+ * has no such partner, and neither does `www.shop.x`.
+ */
+export function wwwPartnerOf(domain: string): string | null {
+  const name = domain.trim().toLowerCase().replace(/\.$/, '')
+  if (isApexDomain(name)) return `www.${name}`
+  const bare = name.replace(/^www\./, '')
+  return bare !== name && isApexDomain(bare) ? bare : null
+}
+
+/**
+ * Shown under the records for a name with a `wwwPartnerOf`. The intro's "any
+ * one of these verifies" is true of the connect, and on its own it would leave
+ * the other address pointing nowhere.
+ */
+export const DNS_BOTH_RECORDS_NOTE =
+  'Add a record for your bare domain and one for www so both addresses work. ' +
+  'The one you connect here is your main address, and the other redirects to it.'
+
 /** One DNS record the customer may create, as their registrar labels it. */
 export interface DnsInstruction {
   /** Record type. `ALIAS` covers ANAME and CNAME flattening. */

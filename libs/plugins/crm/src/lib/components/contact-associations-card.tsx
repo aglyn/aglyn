@@ -37,6 +37,7 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
   writeGuardedBySeed,
+  type ListenHandle,
 } from '@aglyn/tenant-feature-instance'
 import { Button, Chip, Divider, Stack, Typography } from '@mui/material'
 import { doc, getDoc } from 'firebase/firestore'
@@ -60,7 +61,12 @@ export interface ContactAssociationsCardProps {
   row: Record<string, unknown>
   consentGroup: ConsentGroup
   /** The listener's verdict on the row, for the stale-seed guard. */
-  seed: { status: 'loading' | 'success' | 'error'; fromCache: boolean }
+  seed: {
+    status: 'loading' | 'success' | 'error'
+    fromCache: boolean
+    /** The row's listener, so a save waits on that read alone (AGL-4135). */
+    listen?: ListenHandle | null
+  }
   /** The hub's own path, for the link to this person's lead. */
   basePath: string
   /**
@@ -177,6 +183,7 @@ export function ContactAssociationsCard(props: ContactAssociationsCardProps) {
           subject: 'contact',
           unreadable: seed.status === 'error',
           fromCache: seed.fromCache,
+          listen: seed.listen,
         },
         // An empty selection is sent as an empty list rather than left out,
         // so "filed under no campaign" has one shape here and in the pass
@@ -203,7 +210,15 @@ export function ContactAssociationsCard(props: ContactAssociationsCardProps) {
     } finally {
       setSaving(false)
     }
-  }, [campaigns, contactUpdate, enqueueSnackbar, record.$id, seed.fromCache, seed.status])
+  }, [
+    campaigns,
+    contactUpdate,
+    enqueueSnackbar,
+    record.$id,
+    seed.fromCache,
+    seed.listen,
+    seed.status,
+  ])
 
   const sources = Object.keys(record.sources ?? {}) as ContactSource[]
   const consentDetail = [

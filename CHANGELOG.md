@@ -9,6 +9,17 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.5.1 — 2026-11-03
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.5.0...v1.5.1)
+
+### Fixed
+
+- **domains:** a connected domain's www or bare partner redirects to it for good ([AGL-4134](https://linear.app/aglyn/issue/AGL-4134))
+- **crm:** the stages and add-to-list dialogs keep what is entered through a snapshot ([AGL-4132](https://linear.app/aglyn/issue/AGL-4132))
+- **crm:** a record's save waits on its own read, not every listener on the page ([AGL-4135](https://linear.app/aglyn/issue/AGL-4135))
+- **firestore:** a tab waiting on another tab's cache is not cycled or reloaded ([AGL-4135](https://linear.app/aglyn/issue/AGL-4135))
+
 ## v1.5.0 — 2026-11-03
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.4.0...v1.5.0)

@@ -63,6 +63,11 @@ export async function upsertSubdomainRedirect(options: {
  * Registers the twin as a redirect to the primary. Best-effort for the same
  * reason the subdomain redirect is: the primary serves either way, and a twin
  * that did not land is recorded as `cnameTwinPending` for the completer.
+ *
+ * Permanent, unlike the subdomain's (AGL-4134). That one has to stay revocable
+ * because disconnecting a domain hands the subdomain back. A twin is the same
+ * domain at a second spelling, and a temporary redirect tells search engines
+ * to keep both.
  */
 export async function upsertCustomDomainTwin(options: {
   twin: string
@@ -70,7 +75,7 @@ export async function upsertCustomDomainTwin(options: {
 }): Promise<boolean> {
   const result = await attachProjectDomain(
     options.twin,
-    { redirectTo: options.target },
+    { redirectTo: options.target, permanent: true },
     'tenant',
   )
   return result.outcome === 'attached' || result.outcome === 'already-exists'

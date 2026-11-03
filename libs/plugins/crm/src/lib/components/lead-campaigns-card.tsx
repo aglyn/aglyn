@@ -29,6 +29,7 @@ import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   type FirestoreDocStatus,
+  type ListenHandle,
   useFirestore,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
@@ -78,6 +79,8 @@ export interface LeadCampaignsCardProps {
   leadStatus: FirestoreDocStatus
   /** The listener has not confirmed this document with the server yet. */
   fromCache: boolean
+  /** The lead's listener, so a save waits on that read alone (AGL-4135). */
+  listen?: ListenHandle | null
   /** The site's campaigns, read once by the page for this card and the header. */
   options: readonly ContainerPickerOption[]
   /** The campaign read has answered — false while it settles. */
@@ -110,7 +113,17 @@ export interface LeadCampaignsCardProps {
  * person's page assumes the opposite.
  */
 export function LeadCampaignsCard(props: LeadCampaignsCardProps) {
-  const { hostId, leadId, lead, leadStatus, fromCache, options, optionsReady, onFiled } = props
+  const {
+    hostId,
+    leadId,
+    lead,
+    leadStatus,
+    fromCache,
+    listen,
+    options,
+    optionsReady,
+    onFiled,
+  } = props
   // The lead's collection is the org's now (AGL-3275); the site still names
   // the surface, and the scope hook resolves the org from it.
   const { orgId } = useCrmScope({ hostId })
@@ -147,7 +160,7 @@ export function LeadCampaignsCard(props: LeadCampaignsCardProps) {
     let verdict: Awaited<ReturnType<typeof writeGuardedBySeed>>
     try {
       verdict = await writeGuardedBySeed(
-        { subject: 'lead', fromCache, unreadable: leadStatus === 'error' },
+        { subject: 'lead', fromCache, unreadable: leadStatus === 'error', listen },
         async () => {
           await updateDoc(doc(firestore, 'orgs', orgId, 'leads', leadId), {
             campaignIds: next,

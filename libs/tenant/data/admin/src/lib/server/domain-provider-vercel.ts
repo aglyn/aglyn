@@ -47,6 +47,9 @@ import {
 /** Mirrors the app-level canonical redirect: revocable, method-preserving. */
 const REDIRECT_STATUS_CODE = 307
 
+/** For a `permanent` redirect: search engines keep both names on a 307. */
+const PERMANENT_REDIRECT_STATUS_CODE = 308
+
 interface VercelSettings {
   token: string
   projectId: string
@@ -101,8 +104,11 @@ async function attach(
     console.error('[domain-provider:vercel] refusing a non-hostname redirect', options.redirectTo)
     return { outcome: 'failed', domain, detail: 'invalid-redirect' }
   }
+  const redirectStatusCode = options.permanent
+    ? PERMANENT_REDIRECT_STATUS_CODE
+    : REDIRECT_STATUS_CODE
   const body = redirect
-    ? { name: domain, redirect, redirectStatusCode: REDIRECT_STATUS_CODE }
+    ? { name: domain, redirect, redirectStatusCode }
     : { name: domain }
 
   try {
@@ -121,7 +127,9 @@ async function attach(
     if (code === 'domain_already_in_use' || response.status === 409) {
       // An entry that already exists still has to CARRY the redirect, or the
       // twin quietly serves the console instead of forwarding to the primary.
-      if (redirect) return patchRedirect(settings, domain, redirect)
+      if (redirect) {
+        return patchRedirect(settings, domain, redirect, redirectStatusCode)
+      }
       return { outcome: 'already-exists', domain }
     }
     console.error('[domain-provider:vercel] attach failed', domain, code)
@@ -137,6 +145,7 @@ async function patchRedirect(
   settings: VercelSettings,
   domain: string,
   redirect: string,
+  redirectStatusCode: number,
 ): Promise<DomainResult> {
   try {
     const response = await fetch(
@@ -144,10 +153,7 @@ async function patchRedirect(
       {
         method: 'PATCH',
         headers: { ...authHeaders(settings), 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          redirect,
-          redirectStatusCode: REDIRECT_STATUS_CODE,
-        }),
+        body: JSON.stringify({ redirect, redirectStatusCode }),
         signal: domainDeadline(),
       },
     )

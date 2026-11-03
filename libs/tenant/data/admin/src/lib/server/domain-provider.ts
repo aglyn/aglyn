@@ -99,6 +99,11 @@ export interface DomainAttachOptions {
    * supposed to forward.
    */
   redirectTo?: string
+  /**
+   * The redirect is for good, not revocable: the same site at a second
+   * spelling, which search engines must fold into one (AGL-4134).
+   */
+  permanent?: boolean
 }
 
 export type ProjectDomainState =

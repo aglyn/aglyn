@@ -26,6 +26,7 @@ import {
   lockdownRefusal,
   validatePlatformDomain,
 } from '@aglyn/tenant-data-admin'
+import { wwwPartnerOf } from '../../../../utils/tenant-dns'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
@@ -136,14 +137,24 @@ async function handler(request: Request): Promise<Response> {
     // `connectHostCustomDomain` (AGL-3961), so a plugin that bought the name
     // connects it through exactly this claim. Authorization stays here: the
     // admin role, lockdown and the plan were checked above.
-    const connected = await connectHostCustomDomain({
-      hostId,
-      domain,
-      actor: {
-        uid: decoded.uid,
-        email: decoded.email ? String(decoded.email) : null,
-      },
-    })
+    const connect = (twin: string | null) =>
+      connectHostCustomDomain({
+        hostId,
+        domain,
+        twin,
+        actor: {
+          uid: decoded.uid,
+          email: decoded.email ? String(decoded.email) : null,
+        },
+      })
+    // Both spellings of a domain reach the site (AGL-4134). The other one is a
+    // bonus the owner never typed, so another site holding it must not cost
+    // them the name they did type: that connects alone, as it always could.
+    const twin = wwwPartnerOf(domain)
+    let connected = await connect(twin)
+    if (twin && connected.ok === 'refused' && connected.code === 'taken') {
+      connected = await connect(null)
+    }
     if (connected.ok === 'refused') {
       return Response.json(
         connected.state

@@ -213,6 +213,29 @@ describe('it never asserts a status it does not have', () => {
   })
 })
 
+describe('the card asks for both records where a name has a partner (AGL-4134)', () => {
+  const note = () => screen.queryByText(/so both addresses work/i)
+
+  it('shows the note until a name is typed, and for a bare or www name', async () => {
+    mockHost = { $id: 'host-1' }
+    render(<CustomDomainCard hostId="host-1" />)
+    const field = await screen.findByLabelText('Domain')
+    expect(note()).toBeTruthy()
+    fireEvent.change(field, { target: { value: 'example.com' } })
+    expect(note()).toBeTruthy()
+    fireEvent.change(field, { target: { value: 'www.example.com' } })
+    expect(note()).toBeTruthy()
+  })
+
+  it('leaves it off a deeper subdomain, which has no partner', async () => {
+    mockHost = { $id: 'host-1' }
+    render(<CustomDomainCard hostId="host-1" />)
+    const field = await screen.findByLabelText('Domain')
+    fireEvent.change(field, { target: { value: 'shop.example.com' } })
+    expect(note()).toBeNull()
+  })
+})
+
 /**
  * A refusal the customer has to ACT on, versus one they should retry
  * (AGL-1430).

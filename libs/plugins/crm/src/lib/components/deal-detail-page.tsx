@@ -71,7 +71,7 @@ export function DealDetailPage(props: CrmDetailPageProps) {
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const scope = useCrmScope({ hostId, org })
-  const { data: deal, status, fromCache } = useDeal(scope.orgId, id)
+  const { data: deal, status, fromCache, listen } = useDeal(scope.orgId, id)
   // The feed the act is logged in, decided by the level it was performed
   // at (AGL-2738): this site's under a site, the organization's at the org
   // hub, where a client-direct append to the deal's own site would face a
@@ -262,6 +262,7 @@ export function DealDetailPage(props: CrmDetailPageProps) {
               routes={routes}
               fromCache={fromCache}
               unreadable={status === 'error'}
+              listen={listen}
             />
             {scope.orgId ? (
               <DealProductsCard
@@ -271,6 +272,7 @@ export function DealDetailPage(props: CrmDetailPageProps) {
                 org={org}
                 fromCache={fromCache}
                 unreadable={status === 'error'}
+                listen={listen}
               />
             ) : null}
             <RecordFilesCard
@@ -304,6 +306,7 @@ export function DealDetailPage(props: CrmDetailPageProps) {
         defaultPipeline={pipeline ?? pipelineState.pipeline}
         unreadable={status === 'error'}
         fromCache={fromCache}
+        listen={listen}
       />
     </CrmCreateSiteDefault>
   )

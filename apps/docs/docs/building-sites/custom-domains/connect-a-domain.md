@@ -136,10 +136,10 @@ CNAME flattening at the apex works, but leave the record **DNS only** (gray clou
 verification succeeds — a proxied record resolves to the proxy's addresses, not Aglyn's.
 :::
 
-:::tip Want both `www` and the apex?
-Aglyn serves **one connected domain per site**. Connect the one you want as your
-canonical address, then have your registrar redirect the other to it — most registrars
-offer domain forwarding for exactly this.
+:::tip Add both `www` and the apex
+Add a record for each, so both addresses reach your site. Connect the one you want as
+your main address, and Aglyn permanently redirects the other to it, so visitors and search
+engines see one site. This needs no forwarding at your registrar.
 :::
 
 ## One domain per site
