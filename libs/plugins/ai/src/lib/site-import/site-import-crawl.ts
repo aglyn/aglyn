@@ -79,6 +79,7 @@ import {
   type SiteImportBlock,
   type SiteImportBrandMark,
   type SiteImportForm,
+  type SiteImportVideo,
   type SiteImportIcon,
   type SiteImportImage,
   type SiteImportNavLink,
@@ -203,6 +204,8 @@ export interface SiteImportPage {
   /** Same-site page addresses this page links to. */
   links: string[]
   forms: { kept: SiteImportForm[]; removed: number }
+  /** Its videos (AGL-4140), each once; absent on a page with none. */
+  videos?: SiteImportVideo[]
   bytes: number
   /** How the source lays the page out (AGL-4106), on a read asked for it (`layout`): a wave's. */
   layout?: SiteImportLayout | null
@@ -626,7 +629,7 @@ export async function crawlSiteForImport(
       if (extract.structure) {
         const linked = await Promise.all(extract.structure.stylesheets.filter((url) => !/fonts\.googleapis\.com/i.test(url)).slice(0, AI_THEME_REFERENCE_STYLESHEETS).map(stylesheet))
         const css = linked.filter((text): text is string => typeof text === 'string')
-        const source = { blocks: extract.blocks, organization: extract.organization, structure: extract.structure }
+        const source = { blocks: extract.blocks, organization: extract.organization, structure: extract.structure, ...(extract.videos ? { videos: extract.videos } : {}) }
         try {
           built = {
             ...(readLayout ? { layout: siteImportLayout(source, css) } : {}),
@@ -656,6 +659,7 @@ export async function crawlSiteForImport(
         navLinks: extract.navLinks,
         links: [...new Set(links.map(canon))],
         forms: extract.forms,
+        ...(extract.videos ? { videos: extract.videos } : {}),
         bytes: page.bytes,
       })
       return null

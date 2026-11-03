@@ -182,6 +182,8 @@ export function siteImportPageRead(page: SiteImportPage, at: string): AiSiteImpo
     words: siteImportPageWords({ title: '', blocks: main }),
     forms: page.forms.kept,
     ...(layout ? { layout } : {}),
+    // Its videos (AGL-4140), which its layout places by index.
+    ...(page.videos?.length ? { videos: page.videos } : {}),
     // The source's own title and description, for the page's listing (AGL-4107).
     meta: { title: siteImportMetaText(page.title, SITE_IMPORT_META_TITLE_MAX_CHARS), description: siteImportMetaText(page.description, SITE_IMPORT_META_DESCRIPTION_MAX_CHARS) },
   }

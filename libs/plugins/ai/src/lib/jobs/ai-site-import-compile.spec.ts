@@ -97,6 +97,8 @@ function docOf(name: SiteLayoutPageName, build: AiSiteImportDocument['build'] = 
     links: plannedLinks(blocks, origin),
     origins: [origin, origin.replace('://', '://www.')],
     ...(read.layout ? { layout: read.layout } : {}),
+    // Its films (AGL-4140), which its layout places by index.
+    ...(read.videos?.length ? { videos: read.videos } : {}),
   }
 }
 
@@ -232,7 +234,11 @@ describe.each(Object.keys(SITE_LAYOUT_PAGES) as SiteLayoutPageName[])('%s: built
     const layout = doc.layout as NonNullable<AiSiteImportDocument['layout']>
     const read = siteImportLayoutCounts(layout, doc.blocks)
     const nodes = Object.values(tree.nodes)
-    expect(nodes.filter((node) => node.componentId === 'image')).toHaveLength(read.pictures)
+    // A film's poster is a picture of the page, on its Video element (AGL-4140).
+    const films = nodes.filter((node) => node.componentId === 'video')
+    expect(nodes.filter((node) => node.componentId === 'image').length + films.filter((node) => node.props?.['poster']).length).toBe(read.pictures)
+    const behind = layout.sections.filter((section) => section.backdrop?.kind === 'video').length
+    expect(films).toHaveLength(read.videos - behind)
     expect(nodes.filter((node) => node.componentId === 'dataTable')).toHaveLength(read.tables)
     // A lone icon is no word and no picture; every item's and every bullet's icon is drawn.
     const lone = layout.sections.reduce((total, section) => total + JSON.stringify(section.nodes).split('"kind":"icon"').length - 1, 0)
@@ -244,9 +250,10 @@ describe('aglyn.com Home', () => {
   const { tree } = build('home')
   const sections = sectionsOf(tree)
 
-  it('opens on a hero around its own picture: the words over the film’s poster', () => {
+  it('opens on a hero around its own picture: the words over the film, poster first (AGL-4140)', () => {
     const hero = under(tree, sections[0].id)
-    expect(ofKind(tree, hero, 'image')).toHaveLength(1)
+    expect(ofKind(tree, hero, 'image')).toHaveLength(0)
+    expect(ofKind(tree, hero, 'video')).toHaveLength(1)
     const title = hero.map((id) => tree.nodes[id]).find((node) => node.props?.['component'] === 'h1')
     expect(title?.props?.['children']).toBe('Build your website. Describe it, edit it, publish free.')
     expect(title?.props?.['variant']).toBe('displayXl')
@@ -318,7 +325,9 @@ describe('aglyn.com /product', () => {
 
   it('carries its pictures where the source shows them: the hero, the film and the console', () => {
     expect(ofKind(tree, under(tree, sections[0].id), 'image')).toHaveLength(1)
-    expect(Object.values(tree.nodes).filter((node) => node.componentId === 'image')).toHaveLength(3)
+    // The film is the Video element, its poster the picture the source showed (AGL-4140).
+    expect(Object.values(tree.nodes).filter((node) => node.componentId === 'image')).toHaveLength(2)
+    expect(Object.values(tree.nodes).filter((node) => node.componentId === 'video' && node.props?.['poster'])).toHaveLength(1)
   })
 })
 
@@ -860,14 +869,16 @@ describe('the page’s listing', () => {
 
 describe('pictures at the shape their source shows them (AGL-4138)', () => {
   /** The image a frame holds, and the frame. */
-  const framed = (tree: { nodes: Record<string, Node> }, ids: readonly string[]) =>
-    ofKind(tree, ids, 'image').map((id) => ({ image: tree.nodes[id] as Node, frame: Object.values(tree.nodes).find((node) => node.nodes?.includes(id)) as Node }))
+  const framed = (tree: { nodes: Record<string, Node> }, ids: readonly string[], kind = 'image') =>
+    ofKind(tree, ids, kind).map((id) => ({ image: tree.nodes[id] as Node, frame: Object.values(tree.nodes).find((node) => node.nodes?.includes(id)) as Node }))
 
   it('opens Home on its poster at the picture’s own shape, in the source’s rounded, shadowed box, never 16 / 7', () => {
     const { tree } = build('home')
-    const [hero] = framed(tree, under(tree, sectionsOf(tree)[0].id))
+    // Home's opening picture is its film's poster (AGL-4140): the Video element fills the frame as the picture did.
+    const [hero] = framed(tree, under(tree, sectionsOf(tree)[0].id), 'video')
     expect(hero?.frame.sx).toMatchObject({ aspectRatio: '1600 / 900', borderRadius: 3, boxShadow: 3 })
-    expect(hero?.image.props).toMatchObject({ objectFit: 'cover', width: '100%', height: '100%' })
+    expect(hero?.image.props).toMatchObject({ width: '100%', height: '100%' })
+    expect(hero?.image.sx).toMatchObject({ objectFit: 'cover' })
     expect(JSON.stringify(tree.nodes)).not.toContain('16 / 7')
   })
 
@@ -1005,5 +1016,149 @@ describe('the design answer’s text is the same on every recorded page (AGL-413
 
   it.each(Object.keys(BEFORE) as SiteLayoutPageName[])('%s', (name) => {
     expect(createHash('sha256').update(aiSiteImportDesignText(docOf(name))).digest('hex')).toBe(BEFORE[name])
+  })
+})
+
+
+/*------------------------------------------
+ * Videos (AGL-4140)
+ *-----------------------------------------*/
+
+describe('a video on a page brought in is a video on the new page (AGL-4140)', () => {
+  type Stored = Node & { interactions?: Array<{ steps: Array<{ type: string; selector?: string; offsetPx?: number }>; trigger: { event: string } }> }
+  const films = (nodes: Record<string, Node>) => Object.entries(nodes).filter(([, node]) => node.componentId === 'video') as Array<[string, Stored]>
+
+  it('draws Home’s film as the Video element where the source’s film sits, poster first, with what a search engine reads of it', () => {
+    const { stored, violations } = build('home')
+    expect(violations).toEqual([])
+    const [[id, film] = ['', {} as Stored]] = films(stored)
+    expect(films(stored)).toHaveLength(1)
+    expect(film.props).toMatchObject({
+      src: 'https://fast.wistia.net/embed/iframe/s9ndk38ync',
+      poster: 'media:host-import/m0',
+      title: 'Build a website in one sentence with Aglyn',
+      description: 'Describe your business in one sentence and Aglyn plans the pages. Confirm, edit anything on the page, add what you sell and publish to your own domain.',
+      uploadDate: '2026-10-06',
+      durationSeconds: '40',
+      controls: true,
+    })
+    // It plays when a visitor presses its poster: nothing starts on its own.
+    expect(film.props?.['autoPlay']).toBeUndefined()
+    // In the opening, where the source's film is, and named after its section so a button can name it.
+    expect(under({ nodes: stored }, 'sec-0')).toContain(id)
+    expect(id).toBe('sec-0-video-1')
+  })
+
+  it('draws "Watch the 40-second film" as an outlined button beside the filled one, which scrolls to the film and presses play', () => {
+    const { stored } = build('home')
+    const [[film]] = films(stored)
+    const opening = under({ nodes: stored }, 'sec-0').map((at) => stored[at] as Stored)
+    const buttons = opening.filter((node) => node?.componentId === 'muiButton' && (node.props?.['children'] === 'Build my website free' || node.props?.['children'] === 'Watch the 40-second film'))
+    expect(buttons.map((node) => [node.props?.['children'], node.props?.['variant']])).toEqual([
+      ['Build my website free', 'contained'],
+      ['Watch the 40-second film', 'outlined'],
+    ])
+    // One row of actions holds both.
+    const row = Object.values(stored).find((node) => node.componentId === 'muiStack' && node.props?.['direction'] === 'row' && (node.nodes ?? []).length === 2 && (node.nodes ?? []).every((child) => stored[child]?.componentId === 'muiButton'))
+    expect(row).toBeDefined()
+    const [play] = buttons[1]?.interactions ?? []
+    expect(play?.trigger.event).toBe('elementClick')
+    expect(play?.steps).toEqual([
+      { type: 'scrollTo', selector: `[data-aglyn="leaf:${film}"]`, offsetPx: 24 },
+      { type: 'playVideo', selector: `[data-aglyn="leaf:${film}"]` },
+    ])
+  })
+
+  it('draws /product’s film in its Film section, rounded and shadowed as the source draws it', () => {
+    const { stored, violations } = build('product')
+    expect(violations).toEqual([])
+    const placed = films(stored)
+    expect(placed).toHaveLength(1)
+    const [[id, film]] = placed
+    expect(under({ nodes: stored }, 'sec-1')).toContain(id)
+    expect(film.props).toMatchObject({ src: 'https://fast.wistia.net/embed/iframe/nvci4gme40', title: 'One website instead of six subscriptions', durationSeconds: '44' })
+    expect(film.sx).toMatchObject({ boxShadow: 3 })
+  })
+
+  it('asks the design answer nothing new: Home’s and /product’s design text are as they were', () => {
+    // A film reads as the picture it opens on, so the prompt's user turn is unchanged and no eval is owed.
+    expect(aiSiteImportDesignText(docOf('home')).split('\n')).toEqual([
+      "Section 1 \"Introduction\": plain band, centered; opens the page, its picture below its words. Groups: 0. Shows: eyebrow, heading, lede, filled button, text, note, picture, link.",
+      "Section 2 \"Who it's for\": soft band, aligned to the start. Groups: 1. Shows: eyebrow, heading, lede, group 1: 3 cards in 3 columns, boxed, each icon + title + text + link.",
+      "Section 3 \"What Aglyn is\": plain band, aligned to the start. Groups: 0. Shows: eyebrow, lede.",
+      "Section 4 \"Explore the platform\": soft band, centered. Groups: 1. Shows: eyebrow, heading, lede, group 1: 13 cards in 3 columns, boxed, each icon + title + text.",
+      "Section 5 \"How it works\": plain band, aligned to the start. Groups: 1. Shows: eyebrow, heading, group 1: 3 steps in 3 columns, boxed, each figure + title + text.",
+      "Section 6 \"For agencies and multi-brand teams\": soft band, aligned to the start. Groups: 1. Shows: a row of 2 columns (column 1: eyebrow, heading, lede, group 1: 3 cards in 1 column, each icon + title + text; column 2: picture).",
+      "Section 7 \"What a portfolio gets\": plain band, aligned to the start. Groups: 1. Shows: eyebrow, heading, lede, group 1: 6 cards in 3 columns, boxed, each title + text.",
+      "Section 8 \"What's included\": soft band, aligned to the start. Groups: 1. Shows: a row of 2 columns (column 1: eyebrow, heading, lede; column 2: group 1: 12 list in 2 columns, each icon + text).",
+      "Section 9 \"Start building\": soft band, aligned to the start. Groups: 1. Shows: eyebrow, heading, lede, group 1: 3 cards in 3 columns, boxed, each icon + title + text + link.",
+      "Section 10 \"Frequently asked questions\": soft band, aligned to the start. Groups: 1. Shows: eyebrow, heading, lede, group 1: 11 faq in 2 columns, each title + text.",
+      "Section 11 \"Get started\": dark band with a gradient, centered. Groups: 0. Shows: heading, lede, filled button.",
+    ])
+    expect(aiSiteImportDesignText(docOf('product')).split('\n')).toEqual([
+      "Section 1 \"Introduction\": plain band, centered; opens the page, its picture below its words. Groups: 0. Shows: eyebrow, heading, lede, filled button, outlined button, note, picture.",
+      "Section 2 \"Film\": soft band, centered. Groups: 0. Shows: eyebrow, heading, lede, picture, link.",
+      "Section 3 \"Site types\": plain band, aligned to the start. Groups: 1. Shows: eyebrow, group 1: 8 logos in 4 columns, boxed, each text.",
+      "Section 4 \"The Aglyn difference\": plain band, centered. Groups: 1. Shows: eyebrow, heading, group 1: 3 cards in 3 columns, boxed, each icon + title + text.",
+      "Section 5 \"One console\": soft band, aligned to the start. Groups: 1. Shows: a row of 2 columns (column 1: eyebrow, heading, lede, group 1: 3 cards in 1 column, each icon + title + text, filled button; column 2: picture).",
+      "Section 6 \"Explore the platform\": soft band, centered. Groups: 1. Shows: eyebrow, heading, lede, group 1: 13 cards in 3 columns, boxed, each icon + title + text.",
+      "Section 7 \"How it works\": plain band, aligned to the start. Groups: 1. Shows: eyebrow, heading, group 1: 3 steps in 3 columns, boxed, each figure + title + text.",
+      "Section 8 \"Get started\": soft band, centered. Groups: 1. Shows: note, heading, lede, filled button, outlined button, group 1: 4 stats in 4 columns, each figure + text.",
+      "Section 9 \"Pricing\": plain band, centered. Groups: 1. Shows: eyebrow, heading, group 1: 3 pricing in 3 columns, boxed, each figure + title + text + checked list + link, 2 texts.",
+      "Section 10 \"Frequently asked questions\": soft band, aligned to the start. Groups: 1. Shows: eyebrow, heading, lede, group 1: 7 faq in 2 columns, each title + text.",
+      "Section 11 \"Get started (2)\": dark band with a gradient, centered. Groups: 0. Shows: heading, lede, filled button.",
+    ])
+  })
+
+  it('draws the bakery’s films: a frame, a facade, a card’s and the head’s as the Video element, the opening’s behind its words as its poster', () => {
+    const { stored, violations, doc } = build('bakery')
+    expect(violations).toEqual([])
+    const placed = films(stored).map(([, film]) => film.props)
+    expect(placed.map((props) => props?.['src'])).toEqual(
+      expect.arrayContaining([
+        'https://www.youtube.com/embed/Hc8Qx2Lr9Vb?feature=oembed',
+        'https://www.youtube-nocookie.com/embed/Mb4Kp7Zt2Qa',
+        'https://vimeo.com/824100377',
+        // A film the old site serves itself plays from its address there.
+        'https://www.hearth-bakery.example/wp-content/uploads/2026/09/bakery-tour.mp4',
+      ]),
+    )
+    expect(placed).toHaveLength(4)
+    expect(placed.every((props) => typeof props?.['poster'] === 'string' && !props?.['autoPlay'])).toBe(true)
+    // The film playing behind the opening is its poster there, under the words: no film starts on its own.
+    const opening = under({ nodes: stored }, 'sec-0')
+    expect(ofKind({ nodes: stored }, opening, 'video')).toEqual([])
+    const posters = ofKind({ nodes: stored }, opening, 'image').map((id) => stored[id]?.props?.['src'])
+    const behind = doc.photos.find((photo) => photo.from?.endsWith('ovens-poster.jpg'))?.src
+    expect(posters).toEqual([behind])
+    // The card's film is in its card.
+    const flour = under({ nodes: stored }, 'sec-3')
+    expect(ofKind({ nodes: stored }, flour, 'video')).toHaveLength(1)
+  })
+
+  it('draws a film on a host the Video element has no player for as its poster, linking to it, and says so', () => {
+    const doc = docOf('bakery')
+    const elsewhere = { ...doc, videos: (doc.videos ?? []).map((video, index) => (index === 1 ? { ...video, embed: 'https://videos.example.net/watch/123' } : video)) }
+    const designed = aiSiteImportDesignedSections(elsewhere)
+    const blocks = designed.sections[1]?.blocks ?? []
+    expect(blocks.some((block) => block.kind === 'video')).toBe(false)
+    expect(blocks.find((block) => block.kind === 'image')?.picture).toMatchObject({ to: 'https://videos.example.net/watch/123' })
+    expect(designed.settled.map((entry) => entry.what)).toContain('a video on videos.example.net shown as its picture, linking to it')
+  })
+
+  it('leaves out a film whose poster the library does not hold, and says so', () => {
+    const doc = docOf('bakery')
+    const poster = (doc.videos ?? [])[1]?.poster
+    const without = { ...doc, photos: doc.photos.filter((photo) => photo.from !== poster) }
+    const designed = aiSiteImportDesignedSections(without)
+    expect((designed.sections[1]?.blocks ?? []).some((block) => block.kind === 'video')).toBe(false)
+    expect(designed.settled.map((entry) => entry.what)).toContain('a video left out: it has no poster picture')
+  })
+
+  it('keeps a button that says it plays a film as its words where no film is drawn', () => {
+    const doc = docOf('home')
+    const designed = aiSiteImportDesignedSections({ ...doc, videos: [] })
+    const blocks = designed.sections[0]?.blocks ?? []
+    expect(blocks.find((block) => block.text === 'Watch the 40-second film')?.kind).toBe('text')
   })
 })
