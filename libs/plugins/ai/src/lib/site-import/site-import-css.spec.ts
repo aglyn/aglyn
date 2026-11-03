@@ -22,8 +22,12 @@
  */
 
 import {
+  siteImportAspectRatio,
   siteImportBackgroundOf,
+  siteImportBorderSides,
+  siteImportColorDistance,
   siteImportColorOf,
+  siteImportOpaque,
   SITE_IMPORT_CSS_WIDE_WIDTH,
   siteImportCssOf,
   siteImportFontFamilies,
@@ -145,6 +149,37 @@ describe('values', () => {
     expect(siteImportHasBorder(new Map([['border', '0']]))).toBe(false)
     expect(siteImportHasBorder(new Map([['border', '0px solid']]))).toBe(false)
     expect(siteImportHasBorder(new Map([['border', 'none']]))).toBe(false)
+  })
+
+  it('reads the sides a border is drawn on, each with its width and color (AGL-4138)', () => {
+    const step = siteImportBorderSides(new Map([['border-top', '3px solid'], ['border-color', '#00b0ff']]))
+    expect(Object.keys(step)).toEqual(['top'])
+    expect(step.top?.width).toBe(3)
+    expect(step.top?.color && siteImportHex(step.top.color)).toBe('#00b0ff')
+    expect(Object.keys(siteImportBorderSides(new Map([['border', '1px solid'], ['border-color', 'rgba(0, 0, 0, 0.12)']])))).toEqual(['top', 'right', 'bottom', 'left'])
+    expect(Object.keys(siteImportBorderSides(new Map([['border', '1px solid'], ['border-top', 'none']])))).toEqual(['right', 'bottom', 'left'])
+    expect(Object.keys(siteImportBorderSides(new Map([['border-style', 'solid'], ['border-width', '0 0 1px 0']])))).toEqual(['bottom'])
+    expect(siteImportBorderSides(new Map([['border', '0px solid']]))).toEqual({})
+  })
+
+  it('reads a box’s aspect ratio, and a color as it shows over its ground (AGL-4138)', () => {
+    expect(siteImportAspectRatio('16 / 9')).toBeCloseTo(16 / 9, 6)
+    expect(siteImportAspectRatio('16/9')).toBeCloseTo(16 / 9, 6)
+    expect(siteImportAspectRatio('1.5')).toBe(1.5)
+    expect(siteImportAspectRatio('auto 4 / 3')).toBeCloseTo(4 / 3, 6)
+    expect(siteImportAspectRatio('auto')).toBeNull()
+    expect(siteImportAspectRatio(undefined)).toBeNull()
+    expect(siteImportHex(siteImportOpaque(siteImportColorOf('rgba(0, 0, 0, 0.6)') as never))).toBe('#666666')
+    expect(siteImportColorDistance(siteImportColorOf('#e040fb') as never, siteImportColorOf('#e040fb') as never)).toBe(0)
+    expect(siteImportColorDistance(siteImportColorOf('#000000') as never, siteImportColorOf('#ffffff') as never)).toBeCloseTo(1, 2)
+  })
+
+  it('resolves a picture’s aspect-ratio and height through the cascade, a wider screen’s rule over a phone’s (AGL-4138)', () => {
+    const style = styled('<div id="frame" class="frame"><img id="img" class="pic" src="/a.jpg" alt=""></div>', [
+      '.frame{aspect-ratio:4 / 3} @media (min-width:900px){.frame{aspect-ratio:16 / 9}} .pic{height:220px} @media (min-width:1200px){.pic{height:320px}}',
+    ])
+    expect(style('frame').get('aspect-ratio')).toBe('16 / 9')
+    expect(style('img').get('height')).toBe('320px')
   })
 
   it('reads a grid template as relative widths, in twelfths', () => {

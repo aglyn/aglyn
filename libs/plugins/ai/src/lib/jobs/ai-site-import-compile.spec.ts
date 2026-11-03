@@ -251,15 +251,16 @@ describe('aglyn.com Home', () => {
     expect(title?.props?.['variant']).toBe('displayXl')
   })
 
-  it('draws "Explore the platform" as 13 of the theme’s cards in 3 columns, each with its icon, each a link to its page', () => {
+  it('draws "Explore the platform" as 13 of the theme’s cards in 3 columns, two on a tablet, each with its icon and its arrow, each a link to its page', () => {
     const explore = under(tree, sections[3].id)
     const cards = ofKind(tree, explore, 'muiCard')
     expect(cards).toHaveLength(13)
-    for (const card of cards) expect(ofKind(tree, under(tree, card), 'icon')).toHaveLength(1)
+    // Its icon in its tile, and the "↗" at the end of the same row (AGL-4138).
+    for (const card of cards) expect(ofKind(tree, under(tree, card), 'icon')).toHaveLength(2)
     const linked = ofKind(tree, explore, 'muiLinkBox')
     expect(linked).toHaveLength(13)
     expect(linked.map((id) => tree.nodes[id].props?.['screenId'])).toContain('p-product-besigner')
-    const cells = explore.filter((id) => tree.nodes[id].componentId === 'muiGrid' && tree.nodes[id].props?.['size'] === 'xs:12 md:4')
+    const cells = explore.filter((id) => tree.nodes[id].componentId === 'muiGrid' && tree.nodes[id].props?.['size'] === 'xs:12 sm:6 md:4')
     expect(cells).toHaveLength(13)
   })
 
@@ -708,13 +709,16 @@ describe('the design answer: choices only, over the structure it is shown', () =
     ],
   }
 
-  it('draws the hero it chose, beside the source’s picture, and the group style it chose, every word still once', () => {
+  it('sets aside a hero that would move the source’s picture, and draws the group style it chose, every word still once', () => {
     const { doc, stored, violations } = build('home', answer)
     expect(violations).toEqual([])
     expect(tally(shownWords(stored))).toEqual(tally(sourceLines(doc)))
     const nodes = Object.values(stored)
-    // A split hero: the words and the picture side by side.
-    expect(nodes.some((node) => node.componentId === 'muiGrid' && node.props?.['size'] === 'xs:12 md:6')).toBe(true)
+    // Home's picture sits under its centered words (AGL-4138): the split it asked for would set it beside them.
+    expect(nodes.some((node) => node.componentId === 'muiGrid' && node.props?.['size'] === 'xs:12 md:6')).toBe(false)
+    const designed = aiSiteImportDesignedSections(doc, aiReadLayoutDesign(answer, doc.layout?.sections.length ?? 0))
+    expect(designed.sections[0]?.hero).toBe('column')
+    expect(designed.settled.map((entry) => entry.what)).toContain('the split hero set aside: the source lays its picture below its words')
   })
 
   it('keeps a band the source drew whatever the answer says, and a style the group cannot be drawn in falls back to the source’s', () => {

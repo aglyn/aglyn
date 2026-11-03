@@ -238,7 +238,7 @@ describe('aglyn.com home', () => {
     for (const block of main) if (block.kind !== 'image' && /→\s*$/.test(block.text)) expect(block.kind).toBe('link')
   })
 
-  it('reads the look: Roboto Flex, the buttons’ #00b0ff with 4 px corners, the links’ #0077ad, the grey page', () => {
+  it('reads the look: Roboto Flex, the buttons’ #00b0ff with 4 px corners, the links’ #0077ad, the grey page, the eyebrows’ magenta', () => {
     expect(read('home').layout.look).toEqual({
       fonts: { body: 'Roboto Flex', headings: 'Roboto Flex', google: [] },
       background: '#f5f5f5',
@@ -248,8 +248,103 @@ describe('aglyn.com home', () => {
       buttonRadius: 4,
       link: '#0077ad',
       header: '#f5f5f5',
+      // Five of its nine eyebrows are magenta, a color none of its words, buttons or links are (AGL-4138).
+      eyebrow: '#e040fb',
     })
     expect(siteImportLookOfHtml(siteLayoutRecording('home'), SITE_LAYOUT_PAGES.home.url)).toEqual(read('home').layout.look)
+  })
+})
+
+/*------------------------------------------
+ * How the source draws what it holds (AGL-4138)
+ *-----------------------------------------*/
+
+describe('aglyn.com home, drawn as the source draws it (AGL-4138)', () => {
+  const section = (label: string) => sectionNamed('home', label)
+  const lines = (label: string) => all(section(label).nodes, 'line')
+
+  it('reads the hero’s picture at its own shape, in the source’s rounded, shadowed box', () => {
+    const [poster] = all(section('Introduction').nodes, 'picture')
+    // The poster has no width or height of its own and no box crops it: nothing of it is cut.
+    expect(poster?.fit).toEqual({ objectFit: 'cover', radius: 12, shadow: true })
+    const [screenshot] = all(section('For agencies and multi-brand teams').nodes, 'picture')
+    expect(screenshot?.fit).toEqual({ ratio: 1.5862, objectFit: 'cover' })
+  })
+
+  it('reads the hero’s eyebrow in its pill, in the muted words’ grey, and the sections’ eyebrows in their own colors', () => {
+    const [chip] = lines('Introduction')
+    expect(chip).toMatchObject({ role: 'eyebrow', chip: true, color: '#626262' })
+    expect(lines("Who it's for")[0]).toMatchObject({ role: 'eyebrow', color: '#e040fb' })
+    expect(lines("Who it's for")[0]?.chip).toBeUndefined()
+    expect(lines('What Aglyn is')[0]).toMatchObject({ role: 'eyebrow', color: '#0077ad' })
+  })
+
+  it('reads the large bold paragraph of "What Aglyn is" as a statement, not a lede', () => {
+    const { text } = read('home')
+    const statement = lines('What Aglyn is').find((line) => line.role === 'statement')
+    expect(text(statement?.line as number)).toMatch(/^Most website builders hand you a blank page/)
+  })
+
+  it('reads the platform’s cards start-aligned under a centered heading, two to a row on a tablet, each icon in its tile with an arrow', () => {
+    const [cards] = all(section('Explore the platform').nodes, 'group')
+    expect(section('Explore the platform').align).toBe('center')
+    expect(cards).toMatchObject({ group: 'cards', columns: 3, columnsSm: 2, boxed: true, align: 'start' })
+    for (const item of cards?.items ?? []) {
+      expect(item.tile).toEqual({ fill: '#f1f3f5', radius: 8, color: '#1f2020' })
+      expect(item.mark).toBe(22)
+    }
+    // The "Who it's for" cards set their words as their section does: no alignment of their own.
+    expect(all(section("Who it's for").nodes, 'group')[0]?.align).toBeUndefined()
+  })
+
+  it('reads the three steps under a 3 px rule in the brand’s blue, not as boxes, their numbers grey', () => {
+    const [steps] = all(section('How it works').nodes, 'group')
+    expect(steps).toMatchObject({ group: 'steps', boxed: false, rule: { side: 'top', width: 3, color: '#00b0ff' } })
+    expect(steps?.items.every((item) => item.figureMuted === true)).toBe(true)
+  })
+})
+
+describe('pictures, pills, tiles and rules in markup of any site (AGL-4138)', () => {
+  const ORIGIN = 'https://www.example.com'
+  const layoutOf = (body: string, css = '') => {
+    const page = extractSiteImportPage(`<html><head><style>${css}</style></head><body><main>${body}</main></body></html>`, `${ORIGIN}/`, (url) => url.origin === ORIGIN, { structure: true })
+    return siteImportLayout(page as Parameters<typeof siteImportLayout>[0]) as SiteImportLayout
+  }
+  const cards = (inner: string) =>
+    `<section><h2>Our work</h2><div class="grid">${[1, 2, 3].map((n) => `<div class="card">${inner.replace(/\$n/g, String(n))}</div>`).join('')}</div></section>`
+
+  it('reads a picture the source crops to a box or a height as cropped, and one it draws whole as its own shape', () => {
+    const boxed = layoutOf('<section><h2>One</h2><div class="frame"><img src="/a.jpg" alt="A"></div><p>Words under it, enough of them.</p></section>', '.frame{aspect-ratio:16 / 9} .frame img{width:100%;height:100%;object-fit:cover}')
+    expect(all(boxed.sections[0]?.nodes ?? [], 'picture')[0]?.fit).toEqual({ box: 1.7778, objectFit: 'cover' })
+    const tall = layoutOf('<section><h2>Two</h2><img class="crop" src="/b.jpg" alt="B" width="1200" height="630"></section>', '.crop{height:320px;object-fit:cover}')
+    expect(all(tall.sections[0]?.nodes ?? [], 'picture')[0]?.fit).toEqual({ ratio: 1.9048, height: 320, objectFit: 'cover' })
+    const whole = layoutOf('<section><h2>Three</h2><img src="/c.jpg" alt="C" width="800" height="600"></section>')
+    expect(all(whole.sections[0]?.nodes ?? [], 'picture')[0]?.fit).toEqual({ ratio: 1.3333 })
+  })
+
+  it('reads a tile only where the icon’s square is small and filled apart from the card', () => {
+    const icon = '<span class="tile"><svg viewBox="0 0 24 24"><path d="M3 3h18v18H3z"/></svg></span><h3>Item $n</h3><p>What item $n does for you.</p>'
+    const tiled = layoutOf(cards(icon), '.grid{display:grid;grid-template-columns:repeat(3,1fr)} .card{border:1px solid #ddd} .tile{display:flex;width:40px;background:#eef0f2;border-radius:8px;color:#404c5c}')
+    expect(all(tiled.sections[0]?.nodes ?? [], 'group')[0]?.items[0]?.tile).toEqual({ fill: '#eef0f2', radius: 8, color: '#404c5c' })
+    const wide = layoutOf(cards(icon), '.grid{display:grid;grid-template-columns:repeat(3,1fr)} .card{border:1px solid #ddd} .tile{display:flex;width:200px;background:#eef0f2}')
+    expect(all(wide.sections[0]?.nodes ?? [], 'group')[0]?.items[0]?.tile).toBeUndefined()
+  })
+
+  it('reads a border on one side as a rule and on every side as a box, the group’s design text unchanged', () => {
+    const step = '<p>0$n</p><h3>Step $n</h3><p>What happens in step $n, said plainly.</p>'
+    const ruled = layoutOf(cards(step), '.grid{display:grid;grid-template-columns:repeat(3,1fr)} .card{border-left:2px solid #c4622d;padding-left:12px}')
+    expect(all(ruled.sections[0]?.nodes ?? [], 'group')[0]).toMatchObject({ group: 'steps', boxed: false, rule: { side: 'left', width: 2, color: '#c4622d' } })
+    const boxed = layoutOf(cards(step), '.grid{display:grid;grid-template-columns:repeat(3,1fr)} .card{border:1px solid #ddd}')
+    const box = all(boxed.sections[0]?.nodes ?? [], 'group')[0]
+    expect(box).toMatchObject({ group: 'steps', boxed: true })
+    expect(box?.rule).toBeUndefined()
+  })
+
+  it('reads a statement only where a long paragraph is set large and bold', () => {
+    const roles = (css: string) => all(layoutOf('<section><h2>Why</h2><p class="big">We make the thing you need, the way you need it, and we stay with you after.</p></section>', css).sections[0]?.nodes ?? [], 'line').map((line) => line.role ?? null)
+    expect(roles('.big{font-size:34px;font-weight:700}')).toEqual([null, 'statement'])
+    expect(roles('.big{font-size:34px;font-weight:400}')).toEqual([null, 'lede'])
+    expect(roles('.big{font-size:18px;font-weight:700}')).toEqual([null, 'lede'])
   })
 })
 
