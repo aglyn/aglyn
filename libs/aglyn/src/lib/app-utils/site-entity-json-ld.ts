@@ -25,6 +25,8 @@ import {
   hostSeoEntityImageJsonLd,
   siteProfileUrls,
 } from './content-authors'
+import { SITE_SLOGAN_MAX_LENGTH } from './business-details'
+import { siteContactEmail } from './host-tokens'
 import {
   type LocalBusinessType,
   PAYMENT_ACCEPTED_MAX_LENGTH,
@@ -185,8 +187,17 @@ export function siteEntityJsonLd(
     present — `schema.org` requires neither, and a consumer that finds a
     ContactPoint with no channel has been told less than it would learn from
     its absence.
+
+    The email is the site's one email (AGL-4136): what Setup → Business
+    profile saves to the entity, else the older one-block copy, so a site
+    whose email lives only there still says how to reach it.
   */
-  const email = text(entity?.email, 320)
+  // `SiteEntityHost` names only the social links under `business`; the host
+  // document handed here is the whole document, older email copy included.
+  const email = text(
+    siteContactEmail(host as Parameters<typeof siteContactEmail>[0]) ?? '',
+    320,
+  )
   const telephone = text(entity?.telephone, 64)
   const contactType = text(entity?.contactType, 120) || 'customer support'
   const contactPoint =
@@ -209,6 +220,13 @@ export function siteEntityJsonLd(
   const address = Object.entries(addressFields).filter(([, value]) => value)
   const schemaType = siteEntitySchemaType(entity)
   const picture = hostSeoEntityImageJsonLd(entity, context)
+  /*
+    The business's slogan from Setup → Business profile (AGL-4136). `slogan` is an
+    Organization property, which every LocalBusiness type inherits; a Person
+    has none, so a site published by a person never carries it.
+  */
+  const slogan =
+    schemaType === 'Person' ? '' : text(entity?.slogan, SITE_SLOGAN_MAX_LENGTH)
   const business =
     schemaType !== 'Person' && schemaType !== 'Organization'
       ? localBusinessJsonLd(entity, telephone, picture.logo)
@@ -220,6 +238,7 @@ export function siteEntityJsonLd(
     ...(origin ? { '@id': `${origin}/${SITE_ENTITY_FRAGMENT}` } : {}),
     name,
     ...(description ? { description } : {}),
+    ...(slogan ? { slogan } : {}),
     ...(url ? { url } : {}),
     // `logo` for an Organization, `image` for a Person — the one field whose
     // KEY the branch changes. Shared with the nested publisher so the two

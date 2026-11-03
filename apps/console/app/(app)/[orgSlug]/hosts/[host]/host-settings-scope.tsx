@@ -22,6 +22,12 @@ import {
   themeOverridePatch,
 } from '@aglyn/aglyn/app-utils/site-theme'
 import { overrideWriteValue } from '@aglyn/aglyn/app-utils/artifact-overrides'
+import {
+  BUSINESS_DETAILS_CLEARABLE_PATHS,
+  SITE_SLOGAN_MAX_LENGTH,
+  businessDetailsSeed,
+  businessDetailsWrite,
+} from '@aglyn/aglyn/app-utils/business-details'
 import * as Aglyn from '@aglyn/aglyn'
 import type { HostTheme } from '@aglyn/shared-data-types'
 import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
@@ -65,6 +71,13 @@ import {
   type ReactNode,
 } from 'react'
 import CardDisplayFormTemplate from '../../../../../components/card-display-form-template'
+import {
+  BusinessDetailsNote,
+  FIELD_MAP_HOST_TOKEN_PREVIEW,
+  FIELD_MAP_SOCIAL_LINKS,
+  HOST_TOKEN_PREVIEW_FIELD,
+  SOCIAL_LINKS_FIELD,
+} from '../../../../../components/business-details-fields.component'
 import {
   useHostId,
   useHostSubdomain,
@@ -110,8 +123,9 @@ const buildBasicSchema = (inheritedTimeZone: string): FormSchema => ({
         anchor: '#display-name',
         excerpt:
           'What this site is called inside the console — the site switcher, ' +
-          'breadcrumbs and notifications. Visitors never see it; the title ' +
-          'in their browser tab is the SEO title.',
+          'breadcrumbs and notifications. Visitors can see it too: the ' +
+          'loading screen shows it when the site has no logo, and it stands ' +
+          'in for the business name until one is set on Setup → Business profile.',
       }),
       FormFieldGridProps: {
         size: {
@@ -691,6 +705,15 @@ const seoEntitySchema: FormSchema = {
   id: 'hostSeoEntity',
   title: 'Entity',
   CardDisplayProps: {
+    /*
+      The name, phone, email and address left this card for Setup →
+      Business (AGL-4136), where a site's business details are entered once
+      and every reader takes them from. The structured data still publishes
+      them, from there.
+    */
+    subheader:
+      'Your business name, phone, email and address are published here ' +
+      'from Setup → Business profile.',
     help: docsHelp('seo', {
       anchor: '#entity-card',
       excerpt:
@@ -717,18 +740,6 @@ const seoEntitySchema: FormSchema = {
         },
         { value: `${Aglyn.HostEntityType.PERSON}`, label: 'Person' },
       ],
-    },
-    {
-      component: FieldComponentType.TEXT_FIELD,
-      name: 'seo.entity.name',
-      label: 'Name',
-      help: docsHelp('seo', {
-        anchor: '#entity-name',
-        excerpt:
-          'The publisher’s legal or trading name, as it should appear ' +
-          'in search results. Not the site title — that is the SEO ' +
-          'field above.',
-      }),
     },
     /*
       Same as the favicon above (AGL-2486). This was a URL box whose own
@@ -778,107 +789,23 @@ const seoEntitySchema: FormSchema = {
     },
     {
       /*
-        CONTACT AND ADDRESS (AGL-2716). These are what turn "a name" into
-        "a business a reader can verify" — an assistant asked how to reach
-        you answers from `contactPoint`, and `address` is what a local
-        search result is built from. Both were unauthorable until now, so
-        every site published an Organization with neither.
-
-        Flat fields rather than one nested `contactPoint` object, matching
-        how the document stores them: a nested object in a settings
-        document is a shape a partial write can blank, and the serializer
-        assembles the object anyway.
+        What the published `contactPoint` is for (AGL-2716). The email and
+        phone it carries are entered on Setup → Business profile (AGL-4136), the
+        one place a site's contact details are typed; this card only says
+        what that contact answers.
       */
-      component: FieldComponentType.TEXT_FIELD,
-      name: 'seo.entity.email',
-      label: 'Contact email',
-      type: 'email',
-      helperText:
-        'Published in your structured data and in /llms.txt, so an AI ' +
-        'assistant can tell someone how to reach you',
-      help: docsHelp('seo', {
-        anchor: '#entity-contact',
-        excerpt:
-          'A published contact address for the organization. Appears in ' +
-          'the site’s `contactPoint` structured data.',
-      }),
-      FormFieldGridProps: { size: { xs: 12, sm: 6 } },
-    },
-    {
-      component: FieldComponentType.TEXT_FIELD,
-      name: 'seo.entity.telephone',
-      label: 'Contact phone',
-      type: 'tel',
-      helperText: 'In international form, e.g. +1-512-555-0100',
-      FormFieldGridProps: { size: { xs: 12, sm: 6 } },
-    },
-    {
       component: FieldComponentType.TEXT_FIELD,
       name: 'seo.entity.contactType',
       label: 'Contact is for',
       helperText:
-        'What that contact answers — e.g. customer support, sales, ' +
+        'What your email and phone answer — e.g. customer support, sales, ' +
         'press. Defaults to customer support',
-      FormFieldGridProps: { size: { xs: 12, sm: 6 } },
-    },
-  ],
-}
-
-/**
- * ADDRESS — the publisher's postal address (AGL-3258).
- *
- * A card rather than a sub-form nested two deep inside Entity, where its
- * heading rendered at the same size as its parent's and read as a peer of it
- * anyway. Every field is optional and a partial address is legitimate, so
- * this card can sit empty without the one above it being wrong.
- *
- * ⚠️ Still `seo.entity.address.*`. The card is a place to edit the fields,
- * not a new shape for them — the structured data this feeds is one
- * `PostalAddress` under the entity either way, and Firestore deep-merges a
- * map, so saving this card writes the address without touching the rest of
- * the entity.
- */
-const seoAddressSchema: FormSchema = {
-  id: 'hostSeoAddress',
-  title: 'Address',
-  CardDisplayProps: {
-    help: docsHelp('seo', {
-      anchor: '#address-card',
-      excerpt:
-        'Your postal address, published as `PostalAddress` structured ' +
-        'data. Partial is fine — every field is optional.',
-    }),
-  },
-  fields: [
-    {
-      component: FieldComponentType.TEXT_FIELD,
-      name: 'seo.entity.address.streetAddress',
-      label: 'Street',
-      FormFieldGridProps: { size: { xs: 12 } },
-    },
-    {
-      component: FieldComponentType.TEXT_FIELD,
-      name: 'seo.entity.address.addressLocality',
-      label: 'City',
-      FormFieldGridProps: { size: { xs: 12, sm: 6 } },
-    },
-    {
-      component: FieldComponentType.TEXT_FIELD,
-      name: 'seo.entity.address.addressRegion',
-      label: 'State or region',
-      FormFieldGridProps: { size: { xs: 12, sm: 6 } },
-    },
-    {
-      component: FieldComponentType.TEXT_FIELD,
-      name: 'seo.entity.address.postalCode',
-      label: 'Postal code',
-      FormFieldGridProps: { size: { xs: 12, sm: 6 } },
-    },
-    {
-      component: FieldComponentType.TEXT_FIELD,
-      name: 'seo.entity.address.addressCountry',
-      label: 'Country',
-      helperText: 'A country name, or its two-letter code',
+      help: docsHelp('seo', {
+        anchor: '#entity-contact',
+        excerpt:
+          'What the contact published in your structured data answers. ' +
+          'The email and phone themselves are on Setup → Business profile.',
+      }),
       FormFieldGridProps: { size: { xs: 12, sm: 6 } },
     },
   ],
@@ -892,7 +819,7 @@ const seoAddressSchema: FormSchema = {
  * Business type is the switch: until one is picked the card is that one
  * Select, and the rest appear under it through the form's own `condition`.
  *
- * Still `seo.entity.*`, like Address above it — the structured data is one
+ * Still `seo.entity.*`, like Entity above it — the structured data is one
  * node either way, and Firestore deep-merges the map, so saving here leaves
  * Entity's fields alone. A hidden field keeps its stored value; clearing the
  * business type stops it publishing without deleting what was typed.
@@ -1135,15 +1062,197 @@ const verificationFields = (fields: any) => {
 
 
 /**
+ * BUSINESS DETAILS — where a site's business facts are entered (AGL-4136).
+ *
+ * The business name, slogan, phone, email, postal address and social links
+ * are typed here and nowhere else. Before this card the same facts had up to
+ * three editors each — SEO → Entity, SEO → Address, and a Business details
+ * card on Basic details with its own one-block address and support email —
+ * and each reader picked one, so a site could publish one phone in its
+ * structured data and another in its footer.
+ *
+ * The storage did not move (`business-details.ts` has the table): each fact
+ * keeps the path it already had, the canonical one is what this card edits,
+ * and the save mirrors the email and the formatted address into the older
+ * `business` copies the native apps still read. A form like every other
+ * card here, so the AI SEO audit's proposals for the name, email and phone
+ * still route themselves to the card that owns them (`fieldOwner`).
+ *
+ * The business type, hours and areas served stay on SEO → Local business,
+ * which the card's subheader says and links to.
+ */
+const ADDRESS_PART_NAMES = [
+  'streetAddress',
+  'addressLocality',
+  'addressRegion',
+  'postalCode',
+  'addressCountry',
+] as const
+
+/** The form's values as `resolveProps` reads them: the seeded host document plus edits. */
+const formValues = (formOptions: any): any => formOptions?.getState?.()?.values ?? {}
+
+const businessDetailsSchema: FormSchema = {
+  id: 'hostBusinessDetails',
+  title: 'Business details',
+  CardDisplayProps: {
+    subheader: <BusinessDetailsNote />,
+    help: docsHelp('gettingStarted', {
+      anchor: '#business-details',
+      excerpt:
+        'Your business name, slogan, phone, email, address and social ' +
+        'links, entered once. Pages, emails, documents and search listings ' +
+        'all read them from here.',
+    }),
+  },
+  fields: [
+    {
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'seo.entity.name',
+      label: 'Business name',
+      type: 'text',
+      helperText:
+        'As customers know it. Leave it empty to use the site’s name',
+      // Empty means "the site's name" (`displayName`), so the box says
+      // which name that is rather than leaving the reader to guess.
+      resolveProps: (_props: unknown, _field: unknown, formOptions: any) => {
+        const siteName = String(formValues(formOptions)?.displayName ?? '').trim()
+        return siteName
+          ? {
+              placeholder: siteName,
+              helperText: `As customers know it. Leave it empty to use the site’s name, ${siteName}`,
+            }
+          : {}
+      },
+      validate: [
+        {
+          type: FieldValidatorType.MAX_LENGTH,
+          threshold: 200,
+          message: 'Please enter a shorter business name',
+        },
+      ],
+    },
+    {
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'seo.entity.slogan',
+      label: 'Slogan',
+      type: 'text',
+      helperText:
+        'A short line about your business, shown wherever a page uses it',
+      validate: [
+        {
+          type: FieldValidatorType.MAX_LENGTH,
+          threshold: SITE_SLOGAN_MAX_LENGTH,
+          message: `Please keep the slogan to ${SITE_SLOGAN_MAX_LENGTH} characters`,
+        },
+      ],
+    },
+    {
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'seo.entity.telephone',
+      label: 'Phone',
+      type: 'tel',
+      helperText:
+        'As customers should dial it, e.g. +1 512-555-0100. A Call button ' +
+        'links it with the Phone link variable',
+      validate: [
+        {
+          type: FieldValidatorType.MAX_LENGTH,
+          threshold: 64,
+          message: 'Please enter a shorter phone number',
+        },
+      ],
+      FormFieldGridProps: { size: { xs: 12, sm: 6 } },
+    },
+    {
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'seo.entity.email',
+      label: 'Email',
+      type: 'email',
+      helperText: 'Where customers write to you',
+      validate: [
+        {
+          type: FieldValidatorType.PATTERN,
+          pattern: '^\\s*[^\\s@]+@[^\\s@]+\\.[^\\s@]+\\s*$',
+          message: 'Please enter an email address, like you@example.com',
+        },
+      ],
+      FormFieldGridProps: { size: { xs: 12, sm: 6 } },
+    },
+    {
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'seo.entity.address.streetAddress',
+      label: 'Street',
+      // A site whose address so far lives only in the older one-block copy
+      // shows it where the new one goes: the parts are empty, and an empty
+      // Street over an address the site still prints would read as lost.
+      // The save leaves that block alone until the parts are filled in.
+      resolveProps: (_props: unknown, _field: unknown, formOptions: any) => {
+        const values = formValues(formOptions)
+        const parts = values?.seo?.entity?.address ?? {}
+        const block = String(values?.business?.address ?? '').trim()
+        const hasParts = ADDRESS_PART_NAMES.some((name) =>
+          String(parts?.[name] ?? '').trim(),
+        )
+        return block && !hasParts
+          ? {
+              helperText: `Your site shows “${block.replace(/\s*\n\s*/g, ', ')}” now. Enter the address here to replace it`,
+            }
+          : {}
+      },
+      FormFieldGridProps: { size: { xs: 12 } },
+    },
+    {
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'seo.entity.address.addressLocality',
+      label: 'City',
+      FormFieldGridProps: { size: { xs: 12, sm: 6 } },
+    },
+    {
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'seo.entity.address.addressRegion',
+      label: 'State or region',
+      FormFieldGridProps: { size: { xs: 12, sm: 6 } },
+    },
+    {
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'seo.entity.address.postalCode',
+      label: 'Postal code',
+      FormFieldGridProps: { size: { xs: 12, sm: 6 } },
+    },
+    {
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'seo.entity.address.addressCountry',
+      label: 'Country',
+      helperText: 'A country name, or its two-letter code',
+      FormFieldGridProps: { size: { xs: 12, sm: 6 } },
+    },
+    {
+      component: SOCIAL_LINKS_FIELD,
+      name: 'business.socialLinks',
+      label: 'Social links',
+    },
+    {
+      // A reference, not a value: it never registers with the form, so it
+      // submits nothing.
+      component: HOST_TOKEN_PREVIEW_FIELD,
+      name: 'businessDetailsTokens',
+      label: 'What your pages can use',
+    },
+  ],
+}
+
+
+/**
  * Every form this hub renders through `HostSettingsForm`, in one list so the
  * field-owner map below and the mapper check in
  * `specs/host-settings-component-mapper.spec.ts` walk the same schemas.
  */
 export const HOST_SETTINGS_SCHEMAS: readonly FormSchema[] = [
   buildBasicSchema(''),
+  businessDetailsSchema,
   seoSchema,
   seoEntitySchema,
-  seoAddressSchema,
   seoLocalBusinessSchema,
   seoAgentSchema,
   seoVerificationSchema,
@@ -1152,7 +1261,8 @@ export const HOST_SETTINGS_SCHEMAS: readonly FormSchema[] = [
 
 /**
  * The field types those forms may name: the simple set plus the weekly hours
- * picker the Local business card's Hours field uses.
+ * picker the Local business card's Hours field uses, and the Business details
+ * card's social links editor and variable list (AGL-4136).
  *
  * A type a schema names and this map lacks is not a missing field; the
  * renderer refuses the WHOLE card with "invalid form schema", which is how
@@ -1161,6 +1271,8 @@ export const HOST_SETTINGS_SCHEMAS: readonly FormSchema[] = [
 export const hostSettingsComponentMapper = {
   ...simpleComponentMapper,
   [FieldComponentType.WEEKLY_HOURS]: FIELD_MAP_WEEKLY_HOURS,
+  [SOCIAL_LINKS_FIELD]: FIELD_MAP_SOCIAL_LINKS,
+  [HOST_TOKEN_PREVIEW_FIELD]: FIELD_MAP_HOST_TOKEN_PREVIEW,
 }
 
 /**
@@ -1169,7 +1281,9 @@ export const hostSettingsComponentMapper = {
  * A plugin zone proposes values by FIELD NAME — `seo.entity.name`,
  * `seo.agent.whenToUse` — and those fields used to live in one form, so a
  * proposal could name its target form and be right by construction. They are
- * four cards now, and the SEO zone's own proposal spans three of them.
+ * several cards now, and the SEO zone's own proposal spans three of them: the
+ * name, email and phone it proposes belong to Business details on Setup →
+ * Business (AGL-4136), whose draft survives the move between sections.
  *
  * Derived from the schemas rather than written down, so a field moved between
  * cards routes itself and a field added to one is proposable the day it
@@ -1407,6 +1521,7 @@ export function HostSettingsScopeProvider({
        * it reverts everything the author did not touch.
        */
       fromCache: hostFromCache,
+      listen: hostListen,
     },
     setDoc,
   } = useHost({ hostId })
@@ -1458,6 +1573,7 @@ export function HostSettingsScopeProvider({
           subject: 'theme overrides',
           unreadable: status === 'error',
           fromCache: hostFromCache,
+          listen: hostListen,
         },
         async () => {
           await setDoc(
@@ -1467,7 +1583,7 @@ export function HostSettingsScopeProvider({
         },
       )
     },
-    [setDoc, status, hostFromCache],
+    [setDoc, status, hostFromCache, hostListen],
   )
 
   const handleThemeSave = useCallback(
@@ -1499,6 +1615,7 @@ export function HostSettingsScopeProvider({
             subject: 'theme',
             unreadable: status === 'error',
             fromCache: hostFromCache,
+            listen: hostListen,
           },
           async () => {
             // Every theme is edited through its override (AGL-3404): the
@@ -1546,6 +1663,7 @@ export function HostSettingsScopeProvider({
       data,
       status,
       hostFromCache,
+      hostListen,
     ],
   )
 
@@ -1761,6 +1879,7 @@ export function HostSettingsScopeProvider({
           subject: 'site settings',
           unreadable: status === 'error',
           fromCache: hostFromCache,
+          listen: hostListen,
         },
         async () => {
           await runBasicSave(fields, dequeueLoading, clearable)
@@ -1775,7 +1894,7 @@ export function HostSettingsScopeProvider({
       }
       return true
     },
-    [queueLoading, runBasicSave, status, hostFromCache, enqueueSnackbar],
+    [queueLoading, runBasicSave, status, hostFromCache, hostListen, enqueueSnackbar],
   )
 
   /**
@@ -1896,6 +2015,18 @@ export function HostSettingsScopeProvider({
     [inheritedTimeZone],
   )
 
+  /*
+    Memoized on the document, because it is a NEW object whenever the email
+    is filled in from the one-block copy, and a form handed new initial
+    values on every render re-initializes and drops whatever is being typed.
+  */
+  const businessDetailsInitialValues = useMemo(
+    () => businessDetailsSeed(seedFor(businessDetailsSchema.id)),
+    // `seedFor` reads `data` and nothing else.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data],
+  )
+
   const forms = [
     {
       schema: basicSchema,
@@ -1906,38 +2037,50 @@ export function HostSettingsScopeProvider({
       onSubmit: (fields: any) =>
         saveAndClearDraft(basicSchema.id, fields, CLEARABLE_HOST_PATHS),
     },
+    /*
+      Business details (AGL-4136). Seeded with the site's ONE email in the
+      Email field, so a site whose email so far lived only in the one-block
+      copy shows it there. The save writes the canonical paths and mirrors
+      the email and the formatted address into the `business` copies, and it
+      is the only form entitled to read their absence as "cleared": an email
+      cleared here has to leave its copy too, or the fallback would bring it
+      straight back.
+    */
+    {
+      schema: businessDetailsSchema,
+      initialValues: businessDetailsInitialValues,
+      onSubmit: (fields: any) =>
+        saveAndClearDraft(
+          businessDetailsSchema.id,
+          businessDetailsWrite(fields, data),
+          BUSINESS_DETAILS_CLEARABLE_PATHS,
+        ),
+    },
     {
       schema: seoSchema,
       initialValues: seedFor(seoSchema.id),
       // The only form carrying `seo.titlePattern`, so the only one entitled
       // to read its absence as "cleared" (AGL-3197). Handing the list to the
-      // Entity or Address card would wipe the pattern every time somebody
-      // saved an address.
+      // Entity or Business details card would wipe the pattern every time
+      // somebody saved an address.
       onSubmit: (fields: any) =>
         saveAndClearDraft(seoSchema.id, fields, CLEARABLE_SEO_PATHS),
     },
     /*
-      The three cards the SEO section's sub-forms became (AGL-3258). Each
-      submits only its own fields and the write is `merge: true`, and
-      Firestore deep-merges a map — so saving Address writes
-      `seo.entity.address` without touching the rest of `seo.entity`, and the
-      base card above writes the titles without touching either.
+      The cards the SEO section's sub-forms became (AGL-3258). Each submits
+      only its own fields and the write is `merge: true`, and Firestore
+      deep-merges a map — so saving Local business writes its fields without
+      touching the rest of `seo.entity`, and the base card above writes the
+      titles without touching either.
 
-      None of them takes a clearable list: every field on all three is
-      optional and already stores `''` when emptied, and a path handed to a
-      form that does not submit it reads as cleared on every save.
+      None of them takes a clearable list: a path handed to a form that does
+      not submit it reads as cleared on every save.
     */
     {
       schema: seoEntitySchema,
       initialValues: seedFor(seoEntitySchema.id),
       onSubmit: (fields: any) =>
         saveAndClearDraft(seoEntitySchema.id, fields),
-    },
-    {
-      schema: seoAddressSchema,
-      initialValues: seedFor(seoAddressSchema.id),
-      onSubmit: (fields: any) =>
-        saveAndClearDraft(seoAddressSchema.id, fields),
     },
     {
       schema: seoLocalBusinessSchema,

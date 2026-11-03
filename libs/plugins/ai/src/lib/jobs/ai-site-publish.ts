@@ -708,7 +708,7 @@ export async function aiPublishGuidedSite(
   )
   if (language) Object.assign(hostUpdates, language)
   // Who publishes the site, from the start's answers (AGL-3979): its Setup ->
-  // SEO -> Entity and AI agents fields and its Business details, each only
+  // Business details, SEO -> Entity and AI agents fields, each only
   // where empty, so every page's structured data and the site's /llms.txt
   // name its business type, phone, email, address, hours, areas, profiles and
   // logo. Every page carries the entity, so the announce asks for the whole

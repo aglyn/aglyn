@@ -167,7 +167,7 @@ export interface AiSiteEntityValues {
     postalCode: string
     addressCountry: string
   }
-  /** The street address as one line, as Setup → Details → Business details holds it; `''` without a street. */
+  /** The street address as one line, as the one-block `business.address` holds it; `''` without a street. */
   postalAddress: string
   businessType: string
   areaServed: string[]
@@ -314,9 +314,9 @@ export const AI_SITE_CONTACT_TYPE = 'customer support'
  * - the Entity logo is the site's own logo, where it has one and the Entity
  *   names none (a Person's Entity picture is their photo, never a logo);
  * - **Contact is for** says what the phone or email this start wrote answers;
- * - Setup → Details → Business details gets the email as the support email
- *   (which `{{host.supportEmail}}` and a form that cannot take a message name)
- *   and the street address as its one block of text.
+ * - the one-block `business` copies get the email and the street address,
+ *   the copies Setup → Business profile keeps in step with the entity (AGL-4136) and
+ *   the native apps still read.
  */
 export function aiSiteEntityUpdates(
   seo: unknown,

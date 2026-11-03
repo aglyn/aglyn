@@ -57,6 +57,7 @@ import {
   useScopeTokens,
   useUser,
   writeGuardedBySeed,
+  type ListenHandle,
 } from '@aglyn/tenant-feature-instance'
 import { DATASET_AUTHORABLE_FIELD_TYPES, DATASET_FIELD_TYPES, DATASET_FIELD_TYPE_LABELS, type DatasetFieldDefinition, type DatasetFieldType, type DatasetModel, effectiveDatasetModel } from '../model/dataset-models'
 import { datasetDisplayName, defaultDatasetFieldId, validateDatasetFieldId } from '../model/datasets'
@@ -95,6 +96,8 @@ export interface DatasetSchemaDialogProps {
   seedFromCache: boolean
   /** That listener FAILED (`status === 'error'`). */
   seedUnreadable?: boolean
+  /** That listener, so a save waits on that read alone (AGL-4135). */
+  seedListen?: ListenHandle | null
   onClose: () => void
 }
 
@@ -116,6 +119,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
     recordCount,
     seedFromCache,
     seedUnreadable,
+    seedListen,
     onClose,
   } = props
   // Org-shared data root (AGL-237/239). Null until the async org lookup
@@ -437,6 +441,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
         subject: 'collection schema',
         unreadable: seedUnreadable,
         fromCache: seedFromCache,
+        listen: seedListen,
       },
       async () =>
         void (await updateDoc(
@@ -484,6 +489,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
     orgId,
     seedFromCache,
     seedUnreadable,
+    seedListen,
     enqueueSnackbar,
     onClose,
   ])

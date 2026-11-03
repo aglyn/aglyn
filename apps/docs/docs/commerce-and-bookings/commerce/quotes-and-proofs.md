@@ -168,9 +168,9 @@ One email in your site's look, from your site's name, with:
 - the quote attached as a PDF, the same one as [Download PDF](#pdf), with the pay
   link on it.
 
-The button opens the quote's [pay link](#pay-link). Replies go to your site's contact
-email, the one your business listing shows or else your support email, and to your
-own email when your site has neither. The email ends with a line saying so.
+The button opens the quote's [pay link](#pay-link). Replies go to the **Email** in your
+site's [Business details](../../getting-started/create-a-site.md#business-details), and to
+your own email when your site has none. The email ends with a line saying so.
 
 The email is the **Quote** email under **Emails**, where you can change its wording
 and colors like your other site emails. It can use these tokens:

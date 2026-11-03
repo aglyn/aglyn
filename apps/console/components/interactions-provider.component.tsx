@@ -96,7 +96,7 @@ export const InteractionsProvider = observer(function InteractionsProvider(
   const { enqueueSnackbar } = useSnackbar()
   const [builder, setBuilder] = useState<InteractionBuilderState | null>(null)
 
-  const { data: actionDocs, fromCache: actionsFromCache } =
+  const { data: actionDocs, fromCache: actionsFromCache, listen: actionsListen } =
     useFirestoreCollection<any>(
       () =>
         disabled
@@ -447,6 +447,7 @@ export const InteractionsProvider = observer(function InteractionsProvider(
           // (AGL-1066) — the dialog cannot ask, so the owner of the listen
           // has to tell it.
           existingFromCache={savesToNode ? false : actionsFromCache}
+          existingListen={savesToNode ? null : actionsListen}
           {...(savesToNode ? { onSave: saveToNode } : {})}
           onClose={() => setBuilder(null)}
         />

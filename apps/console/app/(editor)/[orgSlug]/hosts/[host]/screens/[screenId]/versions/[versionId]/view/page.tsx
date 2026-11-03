@@ -303,6 +303,7 @@ function ScreenDetails() {
      * title.
      */
     fromCache: screenFromCache,
+    listen: screenListen,
   } = useFirestoreDoc<any>(
     () => screenRef,
     [firestore, hostId, screenId],
@@ -547,6 +548,7 @@ function ScreenDetails() {
         subject: 'page details',
         unreadable: status === 'error',
         fromCache: screenFromCache,
+        listen: screenListen,
       },
       async () => {
         await updateDoc(screenRef, {
@@ -600,6 +602,7 @@ function ScreenDetails() {
     screenId,
     status,
     screenFromCache,
+    screenListen,
     user,
     hostId,
     publishedPath,
@@ -1090,6 +1093,7 @@ function ScreenDetails() {
           subject: 'campaigns',
           unreadable: status === 'error',
           fromCache: screenFromCache,
+          listen: screenListen,
         },
         async () => {
           await updateDoc(screenRef, {
@@ -1122,6 +1126,7 @@ function ScreenDetails() {
       screenRef,
       status,
       screenFromCache,
+      screenListen,
       enqueueSnackbar,
       logActivity,
       screenId,
@@ -1301,6 +1306,7 @@ function ScreenDetails() {
         subject: 'SEO settings',
         unreadable: status === 'error',
         fromCache: screenFromCache,
+        listen: screenListen,
       },
       async () => {
         await updateDoc(
@@ -1353,6 +1359,7 @@ function ScreenDetails() {
     screenId,
     status,
     screenFromCache,
+    screenListen,
     user,
     hostId,
     publishedPath,

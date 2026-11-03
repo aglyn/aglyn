@@ -879,7 +879,6 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
     '#functions-card': 'The Functions card',
     '#insert-a-variable': 'Insert a variable',
     '#no-code-functions': 'No-code functions',
-    '#site-details': 'Site details',
     '#typed-variables': 'Typed variables',
     '#where-used--safety': 'Where-used & safety',
   },

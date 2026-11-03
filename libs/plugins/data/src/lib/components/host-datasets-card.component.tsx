@@ -270,6 +270,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
      * than recomputed there.
      */
     fromCache: datasetsFromCache,
+    listen: datasetsListen,
   } = useFirestoreCollection<any>(
     () =>
       // `scopeReady` already implies a non-null `dataScope`; testing it
@@ -1730,6 +1731,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
         recordCount={recordCount}
         seedFromCache={datasetsFromCache}
         seedUnreadable={datasetsStatus === 'error'}
+        seedListen={datasetsListen}
         onClose={() => setSchemaOpen(false)}
       />
     </CardDisplay>

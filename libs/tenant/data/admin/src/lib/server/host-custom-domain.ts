@@ -57,9 +57,11 @@ import {
  * ## The twin
  *
  * `twin` is the `www.`/apex partner of the domain, served as a REDIRECT to it
- * (AGL-1311 memo §5.2). It is opt-in, because only a caller that writes the
- * twin's DNS can promise it resolves: a bought domain, or a provider applying
- * a Domain Connect template. The manual card connects one name, as before.
+ * (AGL-1311 memo §5.2). It is opt-in, and every connect path now opts in: a
+ * bought domain, a provider applying a Domain Connect template, and the manual
+ * card (AGL-4134). The card cannot promise the twin's DNS resolves, but a twin
+ * nobody points at simply never receives a visitor, while a twin left off a
+ * domain with both records makes one of its two addresses a dead end.
  *
  * The twin is claimed in the SAME transaction as the primary and is checked
  * against every other site's primary AND twin, both ways round. Without that,

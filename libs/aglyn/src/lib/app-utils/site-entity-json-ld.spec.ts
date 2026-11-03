@@ -169,6 +169,29 @@ describe('siteEntityJsonLd', () => {
     })
   })
 
+  it('publishes the site’s one email: the entity’s, else the older copy (AGL-4136)', () => {
+    const fallback = siteEntityJsonLd({
+      displayName: 'Acme',
+      seo: { entity: { telephone: '+1 512 555 0100' } },
+      business: { supportEmail: ' help@acme.test ' },
+    } as never)
+    expect(fallback).toMatchObject({
+      contactPoint: { '@type': 'ContactPoint', email: 'help@acme.test', telephone: '+1 512 555 0100' },
+    })
+    // An email alone in the older copy is still a channel to contact.
+    expect(
+      siteEntityJsonLd({ displayName: 'Acme', business: { supportEmail: 'help@acme.test' } } as never),
+    ).toMatchObject({ contactPoint: { email: 'help@acme.test' } })
+    // The entity's own email wins.
+    expect(
+      siteEntityJsonLd({
+        displayName: 'Acme',
+        seo: { entity: { email: 'hello@acme.test' } },
+        business: { supportEmail: 'help@acme.test' },
+      } as never),
+    ).toMatchObject({ contactPoint: { email: 'hello@acme.test' } })
+  })
+
   it('emits a partial address rather than empty strings', () => {
     expect(
       siteEntityJsonLd({
@@ -228,6 +251,45 @@ describe('siteEntityJsonLd', () => {
         },
       }),
     ).toMatchObject({ description: 'A fastener manufacturer.' })
+  })
+})
+
+describe('siteEntityJsonLd — the slogan (AGL-4136)', () => {
+  const slogan = 'Built right, the first time'
+
+  it('publishes an Organization’s slogan as `slogan`, beside its description', () => {
+    const node = siteEntityJsonLd(
+      { seo: { entity: { type: HostEntityType.ORGANIZATION, name: 'Acme Builders', slogan: `  ${slogan}  ` } } },
+      { origin: ORIGIN },
+    )
+    expect(node?.['slogan']).toBe(slogan)
+  })
+
+  it('publishes it on a local business too, which is an Organization', () => {
+    const node = siteEntityJsonLd(
+      { seo: { entity: { name: 'Acme Builders', businessType: 'Plumber', slogan } } },
+      { origin: ORIGIN },
+    )
+    expect(node).toMatchObject({ '@type': 'Plumber', slogan })
+  })
+
+  it('never publishes one for a Person, which schema.org gives none', () => {
+    const node = siteEntityJsonLd(
+      { seo: { entity: { type: '2', name: 'Ada Lovelace', slogan } } },
+      { origin: ORIGIN },
+    )
+    expect(node).toMatchObject({ '@type': 'Person' })
+    expect(node).not.toHaveProperty('slogan')
+  })
+
+  it('omits an empty slogan rather than publishing ""', () => {
+    const node = siteEntityJsonLd({ seo: { entity: { name: 'Acme', slogan: '   ' } } }, { origin: ORIGIN })
+    expect(node).not.toHaveProperty('slogan')
+  })
+
+  it('holds a slogan to the field’s length', () => {
+    const node = siteEntityJsonLd({ seo: { entity: { name: 'Acme', slogan: 'x'.repeat(500) } } }, { origin: ORIGIN })
+    expect(String(node?.['slogan'])).toHaveLength(120)
   })
 })
 

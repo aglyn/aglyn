@@ -33,6 +33,7 @@ import {
   useFirestore,
   useUser,
   writeGuardedBySeed,
+  type ListenHandle,
 } from '@aglyn/tenant-feature-instance'
 import {
   Autocomplete,
@@ -93,7 +94,7 @@ export interface TaskEditDrawerProps {
    * every field on this form is written back on save, and a form seeded from
    * a stale cache writes the stale values over newer ones.
    */
-  seed?: { fromCache: boolean; unreadable: boolean }
+  seed?: { fromCache: boolean; unreadable: boolean; listen?: ListenHandle | null }
   onSaved?: (taskId: string) => void
 }
 
@@ -325,6 +326,7 @@ function TaskForm(props: TaskEditDrawerProps) {
             subject: 'task',
             fromCache: seed?.fromCache ?? false,
             unreadable: seed?.unreadable ?? false,
+            listen: seed?.listen,
           },
           write,
         )

@@ -56,8 +56,10 @@ import { registerAiJobStep } from './ai-jobs'
  * name and to the same limit: `displayName` (Admin → General, 30), `seo.title`
  * (60), `seo.description` (155), `seo.separator` (3), `seo.titlePattern`
  * (120, its own variables only), `seo.entity.name`, `seo.entity.description`
- * (300), `seo.entity.telephone`, `business.supportEmail` and
- * `business.address` (the Business details card), `locales`/`defaultLocale`
+ * (300), `seo.entity.telephone`, `seo.entity.email` with its
+ * `business.supportEmail` copy, and the address as `seo.entity.address`'s
+ * street with its `business.address` copy (Setup → Business profile's
+ * Business details card, AGL-4136), `locales`/`defaultLocale`
  * (the Languages card), `timeZone` (one of the zones the console offers),
  * `consent.mode` (the consent banner card), and `seo.favicon`, `logoUrl` and
  * `seo.image` (with its size and alt) written as the media pickers write
@@ -442,7 +444,25 @@ interface AiSettingsChange {
   path: string
   value: unknown
   said: string
+  /** The field is deleted rather than set; `value` is then ignored. */
+  remove?: true
 }
+
+/**
+ * The structured address parts a one-line address leaves empty (AGL-4136):
+ * the line is the street, and a city or postal code still stored from an
+ * older address would contradict it.
+ */
+const ADDRESS_PARTS_A_LINE_REPLACES = [
+  'addressLocality',
+  'addressRegion',
+  'postalCode',
+  'addressCountry',
+] as const
+
+/** Whether a stored value is there to delete. */
+const isStored = (value: unknown): boolean =>
+  value !== undefined && value !== null && !(typeof value === 'string' && value.trim() === '')
 
 const getPath = (data: Record<string, unknown>, path: string): unknown =>
   path.split('.').reduce<unknown>((at, key) => (at && typeof at === 'object' ? (at as Record<string, unknown>)[key] : undefined), data)
@@ -490,8 +510,29 @@ export function aiSettingsChanges(
   if (request.businessName) set('seo.entity.name', request.businessName, `The business name is now “${request.businessName}”.`)
   if (request.businessDescription) set('seo.entity.description', request.businessDescription, 'The business description is set.')
   if (request.telephone) set('seo.entity.telephone', request.telephone, `The phone number is now ${request.telephone}.`)
-  if (request.supportEmail) set('business.supportEmail', request.supportEmail, `The contact email is now ${request.supportEmail}.`)
-  if (request.address) set('business.address', request.address, 'The address is set.')
+  if (request.supportEmail) {
+    // The site's one email (AGL-4136): the canonical `seo.entity.email`, and
+    // the `business.supportEmail` copy Setup → Business profile keeps in step for the
+    // native apps, so every reader shows the new address at once.
+    const said = `The contact email is now ${request.supportEmail}.`
+    set('seo.entity.email', request.supportEmail, said)
+    set('business.supportEmail', request.supportEmail, said)
+  }
+  if (request.address) {
+    // The address arrives as ONE line, which cannot be split into the parts
+    // Setup → Business profile stores (AGL-4136). So the whole line is the
+    // street, the other parts are deleted where the site has them, so an
+    // older city or postal code cannot contradict it, and the one-block
+    // `business.address` copy says the same. Every reader then shows the
+    // new address, whichever path it reads.
+    const said = 'The address is set.'
+    set('seo.entity.address.streetAddress', request.address, said)
+    for (const part of ADDRESS_PARTS_A_LINE_REPLACES) {
+      const path = `seo.entity.address.${part}`
+      if (isStored(getPath(host, path))) changes.push({ path, value: null, said, remove: true })
+    }
+    set('business.address', request.address, said)
+  }
   if (request.timeZone) set('timeZone', request.timeZone, `The site’s time zone is now ${request.timeZone}.`)
   if (request.consentMode) {
     set('consent.mode', request.consentMode, request.consentMode === 'strict' ? 'The cookie banner now asks every visitor.' : 'The cookie banner now asks where the law requires.')
@@ -543,11 +584,13 @@ export async function writeAiSiteSettings(
     if (!holdsSiteKey(host, input.uid, 'site.edit')) return { ok: false, error: AI_SETTINGS_ROLE_COPY }
     const data = (host.data() ?? {}) as Record<string, unknown>
     const { changes, problems } = aiSettingsChanges(data, input.request, input.media)
-    const changed = changes.filter((change) => !sameValue(getPath(data, change.path), change.value))
+    const changed = changes.filter((change) =>
+      change.remove ? isStored(getPath(data, change.path)) : !sameValue(getPath(data, change.path), change.value),
+    )
     const done = [...new Set(changes.map((change) => change.said))]
     if (!changed.length) return { ok: true, done, notDone: problems, changed: [], outboxId: null }
     const updates: Record<string, unknown> = { updatedAt: input.now }
-    for (const change of changed) updates[change.path] = change.value
+    for (const change of changed) updates[change.path] = change.remove ? FieldValue.delete() : change.value
     tx.update(hostRef, updates)
     // The announce, written down in the save's own transaction: a setting
     // has no address, so it asks for the whole site, as the console's does.

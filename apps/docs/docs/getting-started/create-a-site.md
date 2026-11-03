@@ -117,7 +117,8 @@ in them, open the layout under **Layouts**: each logo is an ordinary **Image** e
 - **Data** — the datasets this site can see. Variables and functions are under
   **Logic**, and workflows and actions under **Automation**.
 - **Media** — images, video, and files, organized in folders.
-- **Setup** — theme, SEO, tracking, and emails under tabbed settings.
+- **Setup** — your business details, theme, SEO, tracking, and emails, each in its own
+  section.
   The **Site logo** card (Details tab) sets your brand mark: it's shown on the
   live site's page-navigation loading overlay — a themed, blurred scrim with a
   progress bar. Without a logo, the loader shows your site name instead. Add a
@@ -128,14 +129,14 @@ in them, open the layout under **Layouts**: each logo is an ordinary **Image** e
 
 ## Your site's details {#site-details}
 
-A site's **Setup** page opens on its details: what the site is called, where it is
-served from, and how it presents itself. The cards below are the ones to fill in first.
+A site's details are what it is called, where it is served from, who the business
+behind it is, and how it presents itself. The cards below are the ones to fill in first.
 
 ### Basic details {#basic-details}
 
-The **Basic details** card names your site, sets its Aglyn address and picks the time
-zone its dates are read in — fill in a display name and a subdomain, then press
-**Update**.
+The **Basic details** card, under **Site Admin → General**, names your site, sets its
+Aglyn address and picks the time zone its dates are read in — fill in a display name
+and a subdomain, then press **Update**.
 
 - **Display name** — what the site is called in the console. See [below](#display-name).
 - **Subdomain** — the site's address on Aglyn. See [below](#subdomain).
@@ -145,8 +146,10 @@ zone its dates are read in — fill in a display name and a subdomain, then pres
 ### Display name {#display-name}
 
 The **Display name** is what the site is called inside the console — the site switcher,
-breadcrumbs, the Sites list and notifications — up to 30 characters. Visitors never see
-it: the title in their browser tab is your site's SEO **Title**, set under
+breadcrumbs, the Sites list and notifications — up to 30 characters. Visitors can see it
+too: the loading screen between pages shows it when the site has no logo, and it stands
+in for your business name until you set one in [Business details](#business-details).
+The title in a visitor's browser tab is your site's SEO **Title**, set under
 **Setup → SEO**.
 
 ### Subdomain {#subdomain}
@@ -155,6 +158,30 @@ The **Subdomain** is your site's free address, up to 15 characters, and it works
 the moment the site exists. On aglyn.com it is the `name` in `name.aglyn.app`. It keeps
 working after you [connect your own domain](../building-sites/custom-domains/connect-a-domain.md).
 Changing it changes that address, so links to the old one stop working.
+
+### Business details {#business-details}
+
+**Setup → Business profile** opens on the **Business details** card, the one place your
+business's details are entered. Your pages, your site's emails, quotes, invoices and
+waivers, and your search listings all read them from here, so you type each one once.
+
+- **Business name** — the name customers know you by. Leave it empty to use the
+  site's display name.
+- **Slogan** — a short line about your business, up to 120 characters, shown wherever a
+  page uses it.
+- **Phone** — as customers should dial it, such as +1 512-555-0100.
+- **Email** — where customers write to you.
+- **Street**, **City**, **State or region**, **Postal code** and **Country** — your
+  postal address. Fill in what applies; every part is optional. A site that has an older
+  address saved as one block of text shows it under **Street** until you enter the parts.
+- **Social links** — a label and an address for each profile, up to 8.
+
+Press **Update** to save. Choose **Show what your pages can use** to see the
+[site details variables](../building-sites/bindings/overview.md#site-details) these fill
+in, with what each one says on your site.
+
+Your business type, opening hours and the areas you serve are under
+**Setup → SEO → Local business**.
 
 ### Site logo {#site-logo}
 

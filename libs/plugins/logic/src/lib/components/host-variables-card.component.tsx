@@ -224,6 +224,7 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
      * a live binding back at a value or a workflow the author replaced.
      */
     fromCache: variablesFromCache,
+    listen: variablesListen,
   } = useFirestoreCollection<any>(
     /*
      * ORDERED AND CEILINGED, deliberately not paged by the query (AGL-2501).
@@ -436,6 +437,7 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
             subject: 'variable',
             unreadable: variablesStatus === 'error',
             fromCache: variablesFromCache,
+            listen: variablesListen,
           },
           async () => {
             await writeSiteWideChange({
@@ -491,6 +493,7 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
     enqueueSnackbar,
     variablesStatus,
     variablesFromCache,
+    variablesListen,
   ])
 
   const handleShowUsage = useCallback(

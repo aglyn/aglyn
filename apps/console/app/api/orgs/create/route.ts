@@ -47,6 +47,10 @@ import { SELF_SERVE_PLANS } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import type { OrgPlan } from '@aglyn/aglyn'
 import { readFirstTouchCookie } from '@aglyn/shared-util-first-touch'
 import { recordSignUpAcquisition } from '@aglyn/tenant-data-admin/server/account-acquisition'
+import {
+  readHeldSignUpWorkspaceName,
+  settleHeldSignUpWorkspace,
+} from '@aglyn/tenant-data-admin/server/signup-held-workspace'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
@@ -247,9 +251,30 @@ async function handler(request: Request): Promise<Response> {
       })
     }
 
+    /*
+     * THE NAME THE PERSON TYPED BEATS ONE WE DERIVED (AGL-4117).
+     *
+     * The browser's claim of the held name can fail with nothing to show for
+     * it (two tabs, a refused transaction), and it then falls back to the
+     * person's display name while the typed name sits unclaimed on the account.
+     * `derived` is only ever sent for a name nobody chose, so the workspace
+     * dialog's own create never reaches this. An explicit slug is the client's
+     * retry after a 409 and is kept, so a taken address cannot refuse twice.
+     */
+    const heldName =
+      body?.derived === true && !isImpersonationSession(decoded)
+        ? await readHeldSignUpWorkspaceName(decoded.uid)
+        : null
+    const heldSlug = heldName ? generateOrgSlug(heldName) : ''
+    const useHeldName = Boolean(
+      heldName && (body?.slug || isValidOrgSlug(heldSlug)),
+    )
+    const orgName = useHeldName ? (heldName as string).slice(0, 80) : name
+    const orgSlug = useHeldName && !body?.slug ? heldSlug : slug
+
     const orgId = await createOrganization({
-      name,
-      slug,
+      name: orgName,
+      slug: orgSlug,
       ownerUid: decoded.uid,
       // The free-workspace ceiling (AGL-2265) — three per account by default,
       // moved from the staff console without a deploy. Staff provisioning on
@@ -270,12 +295,20 @@ async function handler(request: Request): Promise<Response> {
       ...(clientComp ? { planComp: { ...clientComp, grantedBy: decoded.uid } } : {}),
     })
 
+    if (useHeldName) {
+      // The one production trace a missed claim leaves (AGL-4117).
+      console.warn('[orgs/create] held sign-up name honored after a missed claim', {
+        orgId,
+      })
+      await settleHeldSignUpWorkspace(decoded.uid)
+    }
+
     // The welcome email and the staff notice, shared with the site door that
     // also creates workspaces (AGL-3491). Never throws.
     await announceNewWorkspace({
       orgId,
-      name,
-      slug,
+      name: orgName,
+      slug: orgSlug,
       owner: {
         uid: decoded.uid,
         email: decoded.email ?? null,
@@ -288,7 +321,7 @@ async function handler(request: Request): Promise<Response> {
       via: 'workspace-page',
     })
 
-    return Response.json({ orgId, slug }, { status: 200 })
+    return Response.json({ orgId, slug: orgSlug }, { status: 200 })
   } catch (error) {
     // A refused credential is a 401, not a fault of ours (AGL-1993). Null
     // for anything else, so a real failure keeps the answer below.

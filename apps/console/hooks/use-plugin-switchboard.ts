@@ -306,7 +306,7 @@ export function useSitePluginSwitchboard(
   // eslint-disable-next-line aglyn/no-unguarded-loading-hook
   const { org } = useCurrentOrg()
   const {
-    doc: { data: host, status: hostStatus, fromCache: hostFromCache },
+    doc: { data: host, status: hostStatus, fromCache: hostFromCache, listen: hostListen },
     setDoc,
   } = useHost({ hostId })
   const [state, setState] = useState<SiteState>({ disabled: [], optedIn: [] })
@@ -362,6 +362,7 @@ export function useSitePluginSwitchboard(
             subject: 'site plugin list',
             unreadable: hostStatus === 'error',
             fromCache: hostFromCache,
+            listen: hostListen,
           },
           async () => {
             // Both lists in ONE write: they are two halves of a single
@@ -389,7 +390,7 @@ export function useSitePluginSwitchboard(
         setBusy(false)
       }
     },
-    [enqueueSnackbar, hostFromCache, hostStatus, setDoc, state],
+    [enqueueSnackbar, hostFromCache, hostListen, hostStatus, setDoc, state],
   )
 
   /**

@@ -9,6 +9,56 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.6.0 — 2026-11-03
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.5.1...v1.6.0)
+
+### Added
+
+- **setup:** an Assist address shows everywhere, and agents read the site's one email ([AGL-4136](https://linear.app/aglyn/issue/AGL-4136))
+- **setup:** a site's business details live in one place, on Setup → Business profile ([AGL-4136](https://linear.app/aglyn/issue/AGL-4136))
+
+### Fixed
+
+- **console:** workspace plugin settings wait on the org's read alone ([AGL-4135](https://linear.app/aglyn/issue/AGL-4135))
+- **console:** the console's guarded saves wait on their own read ([AGL-4135](https://linear.app/aglyn/issue/AGL-4135))
+- **crm:** the rest of the CRM's guarded saves wait on their own read ([AGL-4135](https://linear.app/aglyn/issue/AGL-4135))
+- **plugins:** each plugin's guarded save waits on its own read ([AGL-4135](https://linear.app/aglyn/issue/AGL-4135))
+- **firestore:** useDocData hands its listener to the save it seeds ([AGL-4135](https://linear.app/aglyn/issue/AGL-4135))
+
+## v1.5.1 — 2026-11-03
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.5.0...v1.5.1)
+
+### Fixed
+
+- **domains:** a connected domain's www or bare partner redirects to it for good ([AGL-4134](https://linear.app/aglyn/issue/AGL-4134))
+- **crm:** the stages and add-to-list dialogs keep what is entered through a snapshot ([AGL-4132](https://linear.app/aglyn/issue/AGL-4132))
+- **crm:** a record's save waits on its own read, not every listener on the page ([AGL-4135](https://linear.app/aglyn/issue/AGL-4135))
+- **firestore:** a tab waiting on another tab's cache is not cycled or reloaded ([AGL-4135](https://linear.app/aglyn/issue/AGL-4135))
+
+## v1.5.0 — 2026-11-03
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.4.0...v1.5.0)
+
+### Added
+
+- **weekly-summary:** the free email takes the insights layout, links and all ([AGL-4131](https://linear.app/aglyn/issue/AGL-4131))
+
+### Fixed
+
+- **health:** the billing door stops reading pending Stripe events as failures ([AGL-4133](https://linear.app/aglyn/issue/AGL-4133))
+- **crm:** the Edit deal drawer shows its links and writes only what changed ([AGL-4132](https://linear.app/aglyn/issue/AGL-4132))
+- **console:** a typed workspace name survives a missed claim ([AGL-4117](https://linear.app/aglyn/issue/AGL-4117))
+
+<details>
+<summary>Also in this release: 1 test, 1 chore</summary>
+
+- **console:** the Google door's create names its name as derived ([AGL-4117](https://linear.app/aglyn/issue/AGL-4117))
+- **linear:** raise the id ceiling to AGL-4131 ([AGL-4131](https://linear.app/aglyn/issue/AGL-4131))
+
+</details>
+
 ## v1.4.0 — 2026-11-02
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.3.0...v1.4.0)

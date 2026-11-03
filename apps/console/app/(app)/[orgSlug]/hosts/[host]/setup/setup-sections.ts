@@ -50,8 +50,11 @@ const SECTIONS: ReadonlyArray<{
    */
   { id: 'details', label: 'Basic details', route: Route.HOST_SETUP_DETAILS },
   /*
-   * What the business is, for everything that writes about it (AGL-3661):
-   * beside Basic details, whose contact card it reads rather than copies.
+   * What the business is and how to reach it (AGL-3661, AGL-4136): the one
+   * place its name, phone, email, address and social links are entered,
+   * beside the profile Aglyn AI writes from. The label is the native apps'
+   * too (`native-nav.ts`, held by `native-nav-manifest.spec`), so it changes
+   * with theirs.
    */
   { id: 'business', label: 'Business profile', route: Route.HOST_SETUP_BUSINESS },
   { id: 'seo', label: 'SEO', route: Route.HOST_SETUP_SEO, schemaId: 'hostSeo' },

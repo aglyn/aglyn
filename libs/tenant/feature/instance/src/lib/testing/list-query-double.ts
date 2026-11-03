@@ -153,6 +153,7 @@ export function useListQueryDouble<T = Row>(
     error: undefined,
     fromCache: false,
     serverDenied: false,
+    listen: null,
     plan,
   } as unknown as UseListQueryResult<T>
 }

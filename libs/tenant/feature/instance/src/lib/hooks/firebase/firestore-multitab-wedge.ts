@@ -17,6 +17,8 @@
 
 import { type Firestore } from 'firebase/firestore'
 
+import { PRIMARY_LEASE_MAX_AGE_MS } from './firestore-tab-handoff'
+
 /**
  * A MULTI-TAB CACHE THAT ANOTHER TAB HAS LOCKED, AND THE WAY OUT (AGL-3428).
  *
@@ -50,7 +52,8 @@ import { type Firestore } from 'firebase/firestore'
  * the tab reads the `owner` row itself:
  *
  * - **the read cannot complete in time** — the store is locked by another
- *   tab's open transaction; or
+ *   tab's open transaction. "In time" is {@link WEDGE_LOCK_MS}, longer than a
+ *   starved but living tab holds it (AGL-4135); or
  * - **the lease is older than {@link STALE_PRIMARY_LEASE_MS}** — no tab,
  *   including this one, is completing an election.
  *
@@ -156,6 +159,21 @@ export const STALE_PRIMARY_LEASE_MS = 15_000
  * every tab opened for the next five minutes started on the memory cache.
  */
 export const LEASE_PROBE_TIMEOUT_MS = 4_000
+
+/**
+ * How long the wedge check's lease read may wait before the store counts as
+ * locked (AGL-4135). Five times {@link LEASE_PROBE_TIMEOUT_MS}, because a store
+ * held by a tab that is slow is not a store held by a tab that is frozen.
+ *
+ * A starved tab (busy, slow, throttled) keeps each IndexedDB transaction open
+ * until its event loop comes back between requests, and the SDK's lease
+ * renewal makes several requests. Measured in production (v1.5.0, a tab busy
+ * in 3 s slices): the store held every read for about 15 s, then answered with
+ * a fresh lease. At 4 s that read as the wedge, and the healthy tab was reloaded
+ * onto the memory cache, losing what had been typed into it. A frozen tab never
+ * lets go, so the wedge still reads as locked, only later.
+ */
+export const WEDGE_LOCK_MS = 20_000
 
 /**
  * The probe's clock. A browser coalesces the ticks a frozen thread missed, so
@@ -318,6 +336,72 @@ export async function probePrimaryLease(
       }
     }
   })
+}
+
+/**
+ * How long the lease read may take before a quiet client counts as WAITING on
+ * the store (AGL-4135). Shorter than {@link LEASE_PROBE_TIMEOUT_MS}, which
+ * decides a wedge: this asks only whether something holds the store now. The
+ * SDK's own transactions take milliseconds, so a read that waits a second has
+ * waited on one, from another tab or from this client's own backlog.
+ */
+export const LEASE_PROMPT_READ_MS = 1_000
+
+/** What the shared cache says about a client that has gone quiet (AGL-4135). */
+export type LeaseCheck =
+  /**
+   * The store did not answer promptly. A transaction holds it, and every call
+   * this client makes is queued behind that transaction.
+   */
+  | { state: 'waiting' }
+  /** Another tab holds a live lease and serves this client through it. */
+  | { state: 'served'; ownerId: string }
+  /**
+   * Nothing here explains the quiet. This tab holds the lease, or the lease has
+   * lapsed or is vacant, or the lease could not be read or attributed.
+   */
+  | { state: 'silent' }
+
+/**
+ * Reads a prompt lease probe for a quiet client whose own id is `selfId`.
+ * Pure. A lease is live while younger than the SDK's 5 s
+ * (`MAX_PRIMARY_ELIGIBLE_AGE_MS`). Without `selfId` a live lease cannot be told
+ * apart from this tab's own, so it reads as `silent`, which is what every stall
+ * was read as before.
+ */
+export function leaseCheckFrom(
+  probe: PrimaryLeaseProbe,
+  selfId: string | undefined,
+): LeaseCheck {
+  if (probe.state === 'locked') return { state: 'waiting' }
+  if (
+    probe.state === 'leased' &&
+    selfId !== undefined &&
+    probe.ownerId !== selfId &&
+    probe.ageMs < PRIMARY_LEASE_MAX_AGE_MS
+  ) {
+    return { state: 'served', ownerId: probe.ownerId }
+  }
+  return { state: 'silent' }
+}
+
+/**
+ * This tab's id in the multi-tab protocol: the id its `clientMetadata` row is
+ * written under, and any lease it holds. Read from the SDK's client
+ * (`Firestore._firestoreClient.clientId`, which is internal and set once the
+ * client has started). `undefined` when it is not there. Read in production
+ * (4.17.2) against the `clientMetadata` row the same tab wrote.
+ */
+export function firestoreClientId(firestore: Firestore): string | undefined {
+  try {
+    const client = (firestore as unknown as {
+      _firestoreClient?: { clientId?: unknown }
+    })._firestoreClient
+    const id = client?.clientId
+    return typeof id === 'string' && id.length > 0 ? id : undefined
+  } catch {
+    return undefined
+  }
 }
 
 /**
@@ -617,7 +701,32 @@ export function browserWedgeEscalationFor(
   const databaseName = multiTabDatabases.get(firestore)
   if (databaseName === undefined) return undefined
   return createWedgeEscalation({
-    probe: () => probePrimaryLease(browserIndexedDb(), databaseName),
+    probe: () =>
+      probePrimaryLease(browserIndexedDb(), databaseName, {
+        timeoutMs: WEDGE_LOCK_MS,
+      }),
     fallBack: (evidence) => fallBackToMemoryCache(evidence, { databaseName }),
   })
+}
+
+/**
+ * The lease check `createStallRecovery` runs before a network cycle, or
+ * `undefined` when `firestore` does not run the durable multi-tab cache: a
+ * client with a cache of its own has no other tab to wait on. Never rejects.
+ */
+export function browserLeaseCheckFor(
+  firestore: Firestore,
+): (() => Promise<LeaseCheck>) | undefined {
+  const databaseName = multiTabDatabases.get(firestore)
+  if (databaseName === undefined) return undefined
+  return async () => {
+    try {
+      const probe = await probePrimaryLease(browserIndexedDb(), databaseName, {
+        timeoutMs: LEASE_PROMPT_READ_MS,
+      })
+      return leaseCheckFrom(probe, firestoreClientId(firestore))
+    } catch {
+      return { state: 'silent' }
+    }
+  }
 }

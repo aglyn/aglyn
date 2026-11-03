@@ -19,6 +19,7 @@ import { CRM_COLLECTIONS, type CrmTask } from '@aglyn/aglyn'
 import {
   useFirestore,
   useFirestoreCollection,
+  type ListenHandle,
 } from '@aglyn/tenant-feature-instance'
 import {
   collection,
@@ -66,6 +67,8 @@ export interface CrmTaskListResult {
   status: 'loading' | 'success' | 'error'
   /** The rows are unconfirmed by the server — what a guarded write reads. */
   fromCache: boolean
+  /** The rows' listener, so a save waits on that read alone (AGL-4135). */
+  listen: ListenHandle | null
   /** The window filled up; there are tasks this view is not showing. */
   truncated: boolean
   scope: readonly [string, string] | null
@@ -147,6 +150,7 @@ export function useCrmTaskList(options: {
     tasks,
     status: paged.status,
     fromCache: paged.fromCache,
+    listen: paged.listen,
     truncated: paged.hasMore,
     scope,
     orgId,
@@ -201,7 +205,7 @@ export function useCrmRecordTasks(options: {
         ? 'dealId'
         : null
   const id = field ? record[field] : undefined
-  const { data, status, fromCache } = useFirestoreCollection<CrmTaskRow>(
+  const { data, status, fromCache, listen } = useFirestoreCollection<CrmTaskRow>(
     () => {
       if (!scope || !field || !id) return null
       return query(
@@ -220,6 +224,7 @@ export function useCrmRecordTasks(options: {
     tasks,
     status,
     fromCache,
+    listen,
     truncated: (data?.length ?? 0) >= CRM_RECORD_TASK_LIMIT,
     scope,
     orgId,

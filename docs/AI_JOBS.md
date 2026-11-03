@@ -449,7 +449,10 @@ that forbids an invented name, contact detail, price or review.
   profile's `founded` (AGL-4092), printed as `Founded: 2019`, so a build reads the
   year instead of planning "[year founded]"; `assist-edit-applied` records
   preferences with `rememberAiSitePreferences`. The owner edits the profile on
-  Setup → Business profile and clears preferences there.
+  Setup → Business profile and clears preferences there. The name and contact details it
+  reads are the site's Business details on that page, entered once
+  (`business-details.ts`, AGL-4136), and its area served is SEO → Local business's
+  Areas served first.
 
 ## Verifying a prompt change
 

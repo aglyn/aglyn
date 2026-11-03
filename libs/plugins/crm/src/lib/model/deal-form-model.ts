@@ -356,6 +356,103 @@ export function dealPatchFromForm(
   }
 }
 
+/** The document fields each form field writes. A blank list writes nothing on an edit. */
+const DEAL_FORM_FIELD_WRITES: Readonly<Record<keyof DealFormValues, readonly string[]>> = {
+  title: ['title', 'titleLower'],
+  pipelineId: [],
+  stageId: [],
+  amount: ['amountCents'],
+  currency: ['currency'],
+  expectedClose: ['expectedCloseAtMs'],
+  ownerUid: ['ownerUid'],
+  contactId: ['contactId', 'contactName', 'contactRoles'],
+  contactName: ['contactName'],
+  companyId: ['companyId', 'companyName'],
+  companyName: ['companyName'],
+  notes: ['notes'],
+  type: ['type'],
+  leadSource: ['leadSource'],
+  nextStep: ['nextStep'],
+  probability: ['probability'],
+  forecastCategory: ['forecastCategory'],
+  campaignId: ['campaignId'],
+}
+
+const DEAL_FORM_FIELDS = Object.keys(DEAL_FORM_FIELD_WRITES) as (keyof DealFormValues)[]
+
+/** What {@link dealEditFromForm} found the reader changed. */
+export interface DealEdit {
+  set: Record<string, unknown>
+  clear: string[]
+}
+
+/**
+ * The stored deal moved while the form was open (AGL-4132): the fields the
+ * reader has not touched follow it, and the ones they have stay as typed.
+ *
+ * A listener hands over a new object for every snapshot, a confirmation of
+ * unchanged data included, so a form rebuilt from each one loses whatever was
+ * typed the moment the server answers.
+ */
+export function rebaseDealForm(
+  current: DealFormValues,
+  seed: DealFormValues,
+  stored: DealFormValues,
+): DealFormValues {
+  return Object.fromEntries(
+    DEAL_FORM_FIELDS.map((field) => [
+      field,
+      current[field] === seed[field] ? stored[field] : current[field],
+    ]),
+  ) as unknown as DealFormValues
+}
+
+/**
+ * The write a save makes on an existing deal: {@link dealPatchFromForm},
+ * narrowed to the fields the reader changed from `seed`, with no `updatedAt`
+ * so a caller can tell an edit from nothing at all (AGL-4132).
+ *
+ * The narrowing is what protects the deal. A patch of every field sent from a
+ * read the server has not confirmed writes that read back over the document,
+ * and one that held no `contactId` deletes the link. This one cannot touch a
+ * field the reader left alone, however old the read behind the form.
+ */
+export function dealEditFromForm(
+  values: DealFormValues,
+  seed: DealFormValues,
+  nowMs: number,
+  options: Parameters<typeof dealPatchFromForm>[2] = {},
+): DealEdit {
+  const { set, clear } = dealPatchFromForm(values, nowMs, options)
+  const changed = new Set(
+    DEAL_FORM_FIELDS
+      .filter((field) => values[field] !== seed[field])
+      .flatMap((field) => DEAL_FORM_FIELD_WRITES[field]),
+  )
+  return {
+    set: Object.fromEntries(Object.entries(set).filter(([key]) => changed.has(key))),
+    clear: clear.filter((key) => changed.has(key)),
+  }
+}
+
+/** The fields an edit works out from the stored deal rather than takes as typed. */
+const DEAL_EDIT_FIELDS_FROM_THE_READ = ['contactRoles', 'amountCents', 'currency'] as const
+
+/**
+ * Whether an edit can only be trusted on a read the server has confirmed
+ * (AGL-4132).
+ *
+ * The contact roles are the stored list with the Primary moved, so writing
+ * them from an old read takes out a role added since. The amount and the
+ * currency are the form's only while the deal has no line items, which the
+ * read is what says. Everything else in an edit is a value the reader typed.
+ */
+export function dealEditNeedsConfirmedRead(edit: DealEdit): boolean {
+  return DEAL_EDIT_FIELDS_FROM_THE_READ.some(
+    (field) => field in edit.set || edit.clear.includes(field),
+  )
+}
+
 /** A contact as the picker offers it. */
 export interface ContactChoice {
   id: string

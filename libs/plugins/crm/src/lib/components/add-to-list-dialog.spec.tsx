@@ -96,17 +96,18 @@ beforeEach(() => {
   })
 })
 
+const dialog = (emails: string[], extra: Record<string, unknown> = {}) => (
+  <AddToListDialog
+    open
+    onClose={jest.fn()}
+    hostId="host-1"
+    scope={['orgs', 'org-1']}
+    emails={emails}
+    {...extra}
+  />
+)
 const mount = (emails: string[], extra: Record<string, unknown> = {}) =>
-  render(
-    <AddToListDialog
-      open
-      onClose={jest.fn()}
-      hostId="host-1"
-      scope={['orgs', 'org-1']}
-      emails={emails}
-      {...extra}
-    />,
-  )
+  render(dialog(emails, extra))
 
 const pickAudience = (name: string) => {
   fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Audience' }))
@@ -214,6 +215,71 @@ describe('adding', () => {
     fireEvent.click(add)
     await waitFor(() => expect(calls).toHaveLength(2))
     expect(calls[1][1]).toMatchObject({ attestConsent: true })
+  })
+})
+
+/*
+ * Both openers hand over a new array on every render: the record page's
+ * button on each snapshot of the contact, a metadata-only one included, and
+ * the bulk bar on each of the list. The check, the attestation and what the
+ * add answered belong to the addresses, not to the array they came in.
+ */
+describe('the same addresses in a new array', () => {
+  const noOptIn = (emails: string[]) => ({
+    verdicts: emails.map((email) => ({
+      input: email,
+      email,
+      refusal: null,
+      requiresAttestation: true,
+      summary: 'No opt-in on record',
+    })),
+    optedIn: 0,
+    needAttestation: emails.length,
+    refused: 0,
+  })
+
+  it('keeps the check and the attestation', async () => {
+    previewAnswer = noOptIn
+    const view = mount(['a@example.com'])
+    pickAudience('Newsletter')
+    fireEvent.click(screen.getByRole('button', { name: 'Check' }))
+    await screen.findByRole('button', { name: 'Add 1' })
+    fireEvent.click(screen.getByRole('checkbox'))
+
+    view.rerender(dialog(['a@example.com']))
+    expect(screen.getByRole('checkbox')).toHaveProperty('checked', true)
+    expect(screen.getByRole('button', { name: 'Add 1' })).toHaveProperty('disabled', false)
+  })
+
+  it('keeps the names of whoever was not added', async () => {
+    addAnswer = (emails) => ({
+      added: 0,
+      results: emails.map((email) => ({
+        input: email,
+        email,
+        enrolled: false,
+        error: 'This address is on your suppression list.',
+      })),
+    })
+    const view = mount(['a@example.com'])
+    pickAudience('Newsletter')
+    fireEvent.click(screen.getByRole('button', { name: 'Check' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Add 1' }))
+    await screen.findByText(/a@example\.com — not added/)
+
+    view.rerender(dialog(['a@example.com']))
+    expect(screen.getByText(/a@example\.com — not added/)).toBeTruthy()
+  })
+
+  it('still drops the check when the addresses themselves change', async () => {
+    const view = mount(['a@example.com'])
+    pickAudience('Newsletter')
+    fireEvent.click(screen.getByRole('button', { name: 'Check' }))
+    await screen.findByText('1 already opted in')
+
+    view.rerender(dialog(['a@example.com', 'b@example.com']))
+    expect(screen.queryByText('1 already opted in')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Check' })).toBeTruthy()
   })
 })
 

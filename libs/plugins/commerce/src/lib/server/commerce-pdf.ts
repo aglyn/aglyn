@@ -87,9 +87,11 @@ type HostDocument = Record<string, unknown>
 const trimmed = (value: unknown): string => (typeof value === 'string' ? value.trim() : '')
 
 /**
- * The business's contact as the document prints it: its postal address (a
- * block of text, a line per line), the email visitors write to, its phone,
- * and its web address without the scheme.
+ * The business's contact as the document prints it: its postal address (the
+ * one line Setup → Business profile saves, or an older one-block address a line per
+ * line), the email visitors write to, its phone, and its web address without
+ * the scheme. The address and email are the host tokens' (AGL-4136), so the
+ * document says what the site's pages and emails say.
  */
 export function commercePdfContactLines(host: HostDocument | null | undefined): string[] {
   const source = (host ?? {}) as HostTokenSource & {

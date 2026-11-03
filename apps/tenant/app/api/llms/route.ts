@@ -20,6 +20,7 @@ import {
   buildLlmsTxt,
   hostPublicOrigin,
   isSiteKeptFromSearch,
+  siteContactEmail,
 } from '@aglyn/aglyn/server'
 import { visitorContentRefusal } from '@aglyn/tenant-data-admin'
 import getHost from '../../../utils/get-host'
@@ -89,7 +90,10 @@ export async function GET(request: Request): Promise<Response> {
     collections: facts.collections,
     pageGroups: facts.pageGroups,
     hasSearch: facts.hasSearch,
-    contactEmail: host.seo?.entity?.email,
+    // The site's one email (AGL-4136): what Setup → Business profile saves,
+    // else the older copy, so a site whose email lives only there still
+    // tells an agent how to reach it.
+    contactEmail: siteContactEmail(host) ?? undefined,
   })
 
   return new Response(body, {

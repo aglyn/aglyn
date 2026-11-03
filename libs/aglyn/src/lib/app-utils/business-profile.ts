@@ -74,9 +74,12 @@ export const BUSINESS_PROFILE_FIELD_ORDER: readonly string[] = BUSINESS_PROFILE_
  * The site's name, its one-line description, its contact details, its hours,
  * the areas it serves and its social profiles all have a home on the host
  * document already: `seo.entity` (the publisher entity the JSON-LD is built
- * from, edited in Setup → SEO) and `business` (the contact card the `host.*`
- * tokens and the footer read, edited in Setup → Basic details). Copying them
- * here would make two places to keep in step, and the copy would drift.
+ * from) and `business` (its social links, and the one-block copies of the
+ * email and address older readers and the native apps still read). The name,
+ * phone, email, address and social links are entered in one place, Setup →
+ * Business (AGL-4136); the hours, business type and areas served in Setup →
+ * SEO → Local business. Copying them here would make two places to keep in
+ * step, and the copy would drift.
  *
  * So the profile document holds only what has no home yet — the services, the
  * audience, the tone of voice, the year it was founded — plus a line about the
@@ -145,10 +148,19 @@ export interface ResolvedBusinessProfile {
 }
 
 
-/** The postal address as one line: the SEO entity's parts, else the contact card's block. */
-function addressLine(host: BusinessProfileHost | null | undefined): string {
-  const parts = host?.seo?.entity?.address
-  const line = [
+/**
+ * The structured postal address (`seo.entity.address`) as one line, its
+ * parts joined by commas, or `''` when it has none (AGL-4136).
+ *
+ * The ONE formatter for a site's address. Setup → Business profile saves the parts
+ * and mirrors this line into `business.address`, and the `{{host.address}}`
+ * token, the email footer and the document PDFs print it, so the address a
+ * visitor reads is the same wherever it appears.
+ */
+export function structuredAddressLine(
+  parts: HostSeoEntity['address'] | null | undefined,
+): string {
+  return [
     parts?.streetAddress,
     parts?.addressLocality,
     parts?.addressRegion,
@@ -158,7 +170,11 @@ function addressLine(host: BusinessProfileHost | null | undefined): string {
     .map((part) => text(part, 200))
     .filter(Boolean)
     .join(', ')
-  return line || text(host?.business?.address, 400)
+}
+
+/** The postal address as one line: the SEO entity's parts, else the one-block `business.address`. */
+function addressLine(host: BusinessProfileHost | null | undefined): string {
+  return structuredAddressLine(host?.seo?.entity?.address) || text(host?.business?.address, 400)
 }
 
 /**
@@ -169,6 +185,10 @@ function addressLine(host: BusinessProfileHost | null | undefined): string {
  *    display name), which the owner typed too, elsewhere;
  * 3. what the guided start or a generator stored on the site's profile;
  * 4. the workspace defaults.
+ *
+ * The area served is the one exception to that order: the site's settings
+ * (SEO → Local business) come first, then anything the profile holds, then
+ * the workspace default (AGL-4136).
  *
  * Contact details, the logo and the profiles come from the site's settings
  * only: nothing but the owner's own entry may say how to reach the business.
@@ -187,9 +207,18 @@ export function resolveBusinessProfile(input: {
 
   const resolve = <T>(field: BusinessProfileField): ResolvedBusinessField<T> | null => {
     const stored = businessProfileSourceOf(site, field)
-    if (stored === 'owner') return { value: fieldValue(site, field) as T, origin: 'owner' }
     const own = fromSite[field]
-    if (own !== undefined && !isEmpty(own)) return { value: own as T, origin: 'site' }
+    const fromSettings = own !== undefined && !isEmpty(own)
+    /*
+      The area served has ONE home now, SEO → Local business (AGL-4136), so
+      the site's settings win over anything the profile holds, even what the
+      owner typed there before the field left the profile card: that value
+      is a fallback for a site whose settings name no area, never a second
+      answer beside them.
+    */
+    if (field === 'serviceArea' && fromSettings) return { value: own as T, origin: 'site' }
+    if (stored === 'owner') return { value: fieldValue(site, field) as T, origin: 'owner' }
+    if (fromSettings) return { value: own as T, origin: 'site' }
     if (stored) return { value: fieldValue(site, field) as T, origin: stored }
     if (businessProfileSourceOf(workspace, field)) {
       return { value: fieldValue(workspace, field) as T, origin: 'workspace' }

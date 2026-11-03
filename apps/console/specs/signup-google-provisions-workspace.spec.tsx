@@ -333,7 +333,7 @@ describe('AGL-1942 · a Google sign-up gets a ready workspace', () => {
 
     // Red before the fix: the Google door only provisioned when a marketing
     // plan CTA had been clicked, so an ordinary visitor got the picker.
-    expect(orgCreateBodies()).toEqual([{ name: 'Ada Lovelace' }])
+    expect(orgCreateBodies()).toEqual([{ name: 'Ada Lovelace', derived: true }])
     expect(mockNavigate).toHaveBeenCalledWith('/ada-lovelace')
   })
 
@@ -345,7 +345,7 @@ describe('AGL-1942 · a Google sign-up gets a ready workspace', () => {
 
     // The same derivation `ensureOrgForUser` uses server-side, so the two
     // cannot disagree about what a personal workspace is called.
-    expect(orgCreateBodies()).toEqual([{ name: 'ada' }])
+    expect(orgCreateBodies()).toEqual([{ name: 'ada', derived: true }])
     expect(mockNavigate).toHaveBeenCalledWith('/ada')
   })
 
@@ -359,7 +359,7 @@ describe('AGL-1942 · a Google sign-up gets a ready workspace', () => {
 
     // Red before the fix: the mobile door recorded the legal acceptance and
     // nothing else — it never provisioned, even WITH a plan intent.
-    expect(orgCreateBodies()).toEqual([{ name: 'Ada Lovelace' }])
+    expect(orgCreateBodies()).toEqual([{ name: 'Ada Lovelace', derived: true }])
     expect(mockNavigate).toHaveBeenCalledWith('/ada-lovelace')
   })
 
@@ -506,7 +506,7 @@ describe('AGL-3578 · a landing sign-up holds the auth layout', () => {
       await redirectOnCredential?.(googleUser())
       await settle()
     })
-    expect(orgCreateBodies()).toEqual([{ name: 'Ada Lovelace' }])
+    expect(orgCreateBodies()).toEqual([{ name: 'Ada Lovelace', derived: true }])
     expect(isSignUpLandingHeld()).toBe(true)
     act(() => redirectOnSettled?.())
     expect(isSignUpLandingHeld()).toBe(false)
@@ -527,7 +527,7 @@ describe('AGL-3578 · a landing sign-up holds the auth layout', () => {
       finish(googleUser())
       await settle()
     })
-    expect(orgCreateBodies()).toEqual([{ name: 'Ada Lovelace' }])
+    expect(orgCreateBodies()).toEqual([{ name: 'Ada Lovelace', derived: true }])
     expect(isSignUpLandingHeld()).toBe(false)
   })
 })

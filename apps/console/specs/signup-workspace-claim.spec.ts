@@ -344,6 +344,18 @@ describe('AGL-2590 · creating the workspace', () => {
     const retry = JSON.parse(mockAuthorizedFetch.mock.calls[1][2].body)
     expect(retry.name).toBe('Acme Inc')
     expect(retry.slug).toMatch(/^acme-inc-[0-9a-z]{4}$/)
+    expect(retry.derived).toBe(true)
+  })
+
+  it('never calls a chosen name derived (AGL-4117)', async () => {
+    mockAuthorizedFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ orgId: 'o-1', slug: 'acme-inc' }),
+    })
+    await createSignUpWorkspace({} as any, 'Acme Inc')
+    const sent = JSON.parse(mockAuthorizedFetch.mock.calls[0][2].body)
+    expect(sent).not.toHaveProperty('derived')
   })
 
   it('does not retry a derived name for any refusal other than a taken address', async () => {

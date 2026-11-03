@@ -203,7 +203,6 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#functions-card': 'The Functions card on a site\'s Logic page lists every function the site has, each with its parameters and the value it returns — press Add function to build one, or Edit to change it.',
     '#insert-a-variable': 'You never have to hand-type token syntax. Every text-capable attribute field in the Besigner (Text, Link URL, Image URL, …) has a small {x} insert button at its end.',
     '#no-code-functions': 'Build functions in the in-editor function builder with a safe evaluator — no arbitrary code execution.',
-    '#site-details': '{{host.*}} tokens name the site itself instead of hard-coding it, so copy stays right when the site is renamed, and a template installed on another site fills in that site\'s details.',
     '#typed-variables': 'Create typed site variables and reference them as {{name}} in any prop.',
     '#where-used--safety': 'Before you rename or delete a variable or function, run the where-used scan to see every page and prop that references it, so changes are safe.',
   },
