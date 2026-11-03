@@ -24,9 +24,11 @@ content on the marketing site and is written separately.
 - **uptime:** a run where every answer was slow retries its silent rows ([AGL-4137](https://linear.app/aglyn/issue/AGL-4137))
 
 <details>
-<summary>Also in this release: 1 chore</summary>
+<summary>Also in this release: 3 chores</summary>
 
 - **linear:** raise the id ceiling to AGL-4137 ([AGL-4137](https://linear.app/aglyn/issue/AGL-4137))
+- **release:** a hotfix promotion the sweep merges still publishes to npm
+- **libs:** package READMEs install the current release, not the beta
 
 </details>
 
