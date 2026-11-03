@@ -57,7 +57,7 @@ const MAX_LINKS = 8
 export function BusinessDetailsCard(props: { hostId: string }) {
   const { hostId } = props
   const {
-    doc: { data, status: hostStatus, fromCache: hostFromCache },
+    doc: { data, status: hostStatus, fromCache: hostFromCache, listen: hostListen },
     setDoc,
   } = useHost({ hostId })
   const { enqueueSnackbar } = useSnackbar()
@@ -120,6 +120,7 @@ export function BusinessDetailsCard(props: { hostId: string }) {
           subject: 'business details',
           unreadable: hostStatus === 'error',
           fromCache: hostFromCache,
+          listen: hostListen,
         },
         async () => {
           await setDoc(

@@ -229,6 +229,9 @@ function SchemaForm({
           subject: siteScoped ? 'site plugin settings' : 'plugin settings',
           unreadable:
             orgStatus === 'error' || (siteScoped && hostStatus === 'error'),
+          // Two reads, so no one listener is the seed and there is no
+          // `listen` to pass: this save waits on every listener unconfirmed
+          // at the click (AGL-4135).
           fromCache: orgFromCache || (siteScoped && hostFromCache),
         },
         async () => {

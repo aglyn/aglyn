@@ -172,6 +172,7 @@ function HostEmailBesignerPage() {
      * carries BOTH and `merge: true` protects neither.
      */
     fromCache: templateFromCache,
+    listen: templateListen,
   } = useFirestoreDoc<HostEmailTemplateState>(
     () =>
       editable && hostId
@@ -426,6 +427,7 @@ function HostEmailBesignerPage() {
           subject: 'email',
           unreadable: templateStatus === 'error',
           fromCache: templateFromCache,
+          listen: templateListen,
         },
         async () => {
           await setDoc(
@@ -475,6 +477,7 @@ function HostEmailBesignerPage() {
     preheaderInput,
     template,
     templateFromCache,
+    templateListen,
     templateStatus,
     user,
     enqueueSnackbar,
