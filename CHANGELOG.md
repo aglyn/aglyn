@@ -9,6 +9,14 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.5.1 — 2026-11-03
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.5.0...v1.5.1)
+
+### Fixed
+
+- **domains:** a connected domain's www or bare partner redirects to it for good ([AGL-4134](https://linear.app/aglyn/issue/AGL-4134))
+
 ## v1.5.0 — 2026-11-03
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.4.0...v1.5.0)
