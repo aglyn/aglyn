@@ -769,7 +769,9 @@ function groupBlocks(scope: MapScope, group: SiteImportLayoutGroup): AiLayoutBlo
         }
       }
       if (picture && !words.length) return [{ title: '', text: '', picture }]
-      return words.length ? [{ title: words.join(' '), text: '', ...(picture ? { picture } : {}) }] : picture ? [{ title: '', text: '', picture }] : []
+      // A strip of linked tags keeps its links (AGL-4138): a blog's categories go to their pages.
+      const to = picture ? undefined : linkTo(scope, item.to)
+      return words.length ? [{ title: words.join(' '), text: '', ...(picture ? { picture } : {}), ...(to ? { to } : {}) }] : picture ? [{ title: '', text: '', picture }] : []
     })
     return items.length ? [{ kind: 'logos', items }] : []
   }

@@ -4216,7 +4216,12 @@ function logos(scope: SectionScope, block: AiLayoutBlock): string | null {
       ]
     }
     const words = aiLayoutAsWritten([item.title, item.text].filter((part) => part.trim()).join(' '))
-    return words ? [chip(scope, words, 'chip')] : []
+    if (!words) return []
+    // A tag the source links goes where it went (AGL-4138), the whole chip pressable.
+    const destination = item.to ? aiLayoutImportedDestination(item.to, scope.page.plan.sections.length) : null
+    const drawn = chip(scope, words, 'chip')
+    if (!destination || destination.kind === 'section') return [drawn]
+    return [tree.add('muiLinkBox', { ...destinationProps(destination), ariaLabel: words.slice(0, AI_TEXT_LIMITS.label), ...(destination.kind === 'href' ? { newTab: true } : {}) }, null, [drawn], 'chipLink')]
   })
   if (!ids.length) return null
   return tree.add(
