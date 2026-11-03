@@ -330,6 +330,36 @@ describe('what the note says beside an insight (AGL-4131)', () => {
     expect(check.findings).toContain('insight-why-no-cause')
   })
 
+  it('drops a reason that rests only on a source that held steady, and keeps one that moved', () => {
+    const SOURCES: AiInsightTable = {
+      ...TRAFFIC,
+      ref: 't8',
+      reader: 'traffic.sources',
+      title: 'Traffic sources',
+      columns: [
+        { key: 'source', label: 'Source', kind: 'text' },
+        { key: 'views', label: 'Views', kind: 'count' },
+        { key: 'change', label: 'Change', kind: 'percent' },
+      ],
+      rows: [
+        { source: 'spring-sale', views: 96, change: 0 },
+        { source: 'newsletter', views: 13, change: 160 },
+      ],
+    }
+    const reasonOn = (row: number) =>
+      checkAiInsightAnswer(
+        {
+          insights: [insight({ why: 'Likely the campaign.', cites: [{ table: 't1', rows: [0] }, { table: 't8', rows: [row] }] })],
+          gap: null,
+        },
+        [TRAFFIC, SOURCES],
+      )
+    const steady = reasonOn(0)
+    expect(steady.kept[0].why).toBeUndefined()
+    expect(steady.findings).toContain('insight-why-no-cause')
+    expect(reasonOn(1).kept[0].why).toBe('Likely the campaign.')
+  })
+
   it('holds a reason to the rows it cites: a figure they do not have drops the reason alone', () => {
     const result = kept({ why: 'Likely 500 people found the Pricing page.', next: 'Keep going.' })
     expect(result.why).toBeUndefined()

@@ -55,7 +55,8 @@ import {
  *
  * A digest's overview, and an insight's reason and next step (AGL-4131), are
  * held to the same rows and dropped alone when they fail: the insight stands.
- * A reason must also cite a row of a table that can hold a cause.
+ * A reason must also cite a row of a table that can hold a cause, and a row
+ * whose change shows it held steady is not one.
  */
 
 /** Why an insight was left out, as a finding code. */
@@ -367,13 +368,21 @@ function checkedLine(
   return refused.length ? { line: '', findings: refused } : { line, findings: [] }
 }
 
-/** Whether an insight cites a row of a table a reason can rest on. */
+/**
+ * Whether an insight cites a row a reason can rest on: a row of a table that
+ * can hold a cause, and one that moved. A source or campaign whose change is 0
+ * sent the same traffic as the week before, so it cannot explain a move; a
+ * dated change has no change column and always can.
+ */
 function citesACause(cites: readonly AiInsightCitation[], tables: readonly AiInsightTable[]): boolean {
-  return cites.some(
-    (cite) =>
-      cite.rows.length > 0 &&
-      AI_INSIGHT_CAUSE_READERS.includes(tables.find((table) => table.ref === cite.table)?.reader ?? ''),
-  )
+  return cites.some((cite) => {
+    const table = tables.find((candidate) => candidate.ref === cite.table)
+    if (!table || !AI_INSIGHT_CAUSE_READERS.includes(table.reader)) return false
+    return cite.rows.some((index) => {
+      const row = table.rows[index]
+      return Boolean(row) && row.change !== 0
+    })
+  })
 }
 
 /** A next step that promises what it would do is left out: nothing here can know. */
