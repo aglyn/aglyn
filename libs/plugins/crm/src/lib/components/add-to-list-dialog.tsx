@@ -173,13 +173,17 @@ export function AddToListDialog(props: AddToListDialogProps) {
   /*
    * A preview belongs to the list and the addresses it was run for. Change
    * either and the count on screen — and the attestation offered under it —
-   * would be about a different set, so both go.
+   * would be about a different set, so both go. Keyed on the addresses
+   * themselves: both openers hand over a new array on every render, the
+   * record page's on each snapshot of the contact, a metadata-only one
+   * included, and that unticked the attestation under the reader.
    */
+  const addressesKey = addresses.join('\n')
   useEffect(() => {
     setPreview(null)
     setAttested(false)
     setResults(null)
-  }, [listId, addresses])
+  }, [listId, addressesKey])
 
   const post = useCallback(
     async (route: string, body: Record<string, unknown>) => {
