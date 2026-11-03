@@ -131,6 +131,20 @@ function clamp(value: unknown, max: number): string {
  * the Facebook/Instagram webview. In WebKit's format the code was evaluated
  * inline, so every frame is the document rather than a script we served.
  *
+ * The document is every URL it has BEEN at, not only where it is now.
+ * Measured 2026-10-31 on app.aglyn.com/signin, the same bridge:
+ *
+ *     sendDataToNative@https://app.aglyn.com/:1:1325
+ *     sendPageHideMessage@https://app.aglyn.com/:1:4139
+ *     @https://app.aglyn.com/:1:6257
+ *
+ * The webview evaluated its script into the document at `/`, and the page
+ * then moved to `/signin` on the client. A frame keeps the URL its script was
+ * evaluated under; `location` does not. So the beacon passes both the URL the
+ * document was served at ({@link documentLoadUrl}) and the one it is at now.
+ * Any other page of ours is not this document, and a frame there keeps the
+ * report.
+ *
  * **Every frame is under a FOREIGN scheme.** Measured 2026-09-10 (AGL-2786) on
  * aglyn.com, the same bridge in the Android webview:
  *
@@ -171,19 +185,44 @@ function clamp(value: unknown, max: number): string {
  */
 export function isInjectedThirdPartyFrame(
   stack: string,
-  documentUrl: string,
+  documentUrls: string | readonly string[],
 ): boolean {
   const urls = stackFrameUrls(stack)
   // No frames parsed is not evidence of anything — keep the report. A stack
   // with neither a URL nor an anonymous-script frame is exactly that: an
   // empty frame list must never read as "every frame is injected".
   if (!urls.length && !anonymousScriptFrameCount(stack)) return false
+  // An empty URL is not a document. `scrubUrl` answers '' for a frame it
+  // cannot parse, and that must not match a lookup that found nothing.
+  const documentAt = (
+    typeof documentUrls === 'string' ? [documentUrls] : documentUrls
+  ).filter(Boolean)
   // Anonymous frames need no test of their own — they are injected by
   // definition — so `every` over the URLs is `every` over the whole stack.
   // One URL of ours, even as the origin of an `eval`, keeps the report.
   return urls.every(
-    (url) => isForeignScriptUrl(url) || scrubUrl(url) === documentUrl,
+    (url) => isForeignScriptUrl(url) || documentAt.includes(scrubUrl(url)),
   )
+}
+
+/**
+ * The URL this document was served at, before any move on the client.
+ *
+ * The navigation timing entry keeps it: `history.pushState` changes
+ * `location` and leaves the entry alone. Where an engine has no entry, the
+ * page's URL now is the fallback, which is why the beacon reads this once,
+ * at install: it is installed as its module loads, before the app's own
+ * router has moved the page anywhere.
+ */
+export function documentLoadUrl(): string {
+  try {
+    const [entry] = performance.getEntriesByType('navigation')
+    const served = scrubUrl(entry?.name)
+    if (served) return served
+  } catch {
+    // An engine without navigation timing.
+  }
+  return scrubUrl(window.location.href)
 }
 
 /** A frame line, in V8's `at …` format or WebKit/Firefox's `fn@location`. */
@@ -719,6 +758,10 @@ export function installErrorBeacon(options?: ErrorBeaconOptions): void {
   // Watched from now, because React's recovery erases the translator's marks
   // before a mismatch is reported (`watchPageTranslation`, AGL-3738).
   const translation = watchPageTranslation(document, servedLang)
+  // Where the document was served, read now for the same reason: a script a
+  // webview evaluated at load keeps this URL after the page moves on
+  // (`isInjectedThirdPartyFrame`).
+  const servedUrl = documentLoadUrl()
   if (reporting) raiseStackTraceLimit(BEACON_STACK_TRACE_LIMIT)
   // Classified once, here, and only the family is kept: the user-agent
   // string itself never reaches the queue (AGL-3732).
@@ -786,7 +829,9 @@ export function installErrorBeacon(options?: ErrorBeaconOptions): void {
       // response, so it is dropped on the same test as `Script error.`.
       // Judged on the WHOLE stack, before the clamp: a frame of ours past the
       // clamp still makes the error ours.
-      if (fullStack && isInjectedThirdPartyFrame(fullStack, pageUrl)) return
+      if (fullStack && isInjectedThirdPartyFrame(fullStack, [pageUrl, servedUrl])) {
+        return
+      }
       const stack = fullStack ? clamp(fullStack, MAX_STACK) : undefined
       // MARKED, not dropped: a translator causes a hydration mismatch and so
       // does a real render divergence, and a recovered fault is still a
@@ -839,7 +884,9 @@ export function installErrorBeacon(options?: ErrorBeaconOptions): void {
       // The same injected-code drop as an uncaught error: a rejection raised
       // by a devtools snippet or an automation driver's `evaluate` is no more
       // ours for having been a promise.
-      if (fullStack && isInjectedThirdPartyFrame(fullStack, pageUrl)) return
+      if (fullStack && isInjectedThirdPartyFrame(fullStack, [pageUrl, servedUrl])) {
+        return
+      }
       enqueue({
         kind: recoveredErrorKind(event.reason) ?? 'unhandledrejection',
         message,

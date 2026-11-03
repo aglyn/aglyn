@@ -101,7 +101,7 @@ export function stackFrameUrls(stack: string): string[] {
  *
  * The document is NOT foreign here. The beacon also drops a stack whose
  * frames are the document (see `isInjectedThirdPartyFrame`), but only for an
- * uncaught error, in the browser, against the page's own URL. Anything
+ * uncaught error, in the browser, against the document's own URLs. Anything
  * reading a stack without that context must not guess.
  */
 export function isForeignScriptStack(stack: string): boolean {
