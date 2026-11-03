@@ -19,11 +19,14 @@ import { crmPicklistFromLabels, DEFAULT_DEAL_STAGES, effectiveCrmPicklist } from
 import {
   contactChoicesFor,
   dealDocumentFromForm,
+  dealEditFromForm,
+  dealEditNeedsConfirmedRead,
   dealFormFromDoc,
   dealFormProblem,
   dealPatchFromForm,
   emptyDealForm,
   judgeDealFormPicklists,
+  rebaseDealForm,
 } from './deal-form-model'
 
 const pipeline = { $id: 'default', stages: [...DEFAULT_DEAL_STAGES] }
@@ -297,6 +300,91 @@ describe("the deal form's contact keeps the Primary contact role (AGL-3521)", ()
     expect(dealPatchFromForm({ ...form, contactId: 'c1' }, nowMs, { current }).set).not.toHaveProperty(
       'contactRoles',
     )
+  })
+})
+
+describe('an edit writes what the reader changed (AGL-4132)', () => {
+  const stage = pipeline.stages[0]
+  const seed = {
+    ...emptyDealForm(pipeline),
+    title: 'Roaster',
+    amount: '50.00',
+    contactId: 'c1',
+    contactName: 'Ada',
+    companyId: 'co1',
+    companyName: 'Engines',
+    forecastCategory: 'pipeline' as const,
+  }
+  const current = { contactId: 'c1', contactRoles: [{ contactId: 'c1', primary: true }] }
+  const editOf = (values: typeof seed, options = {}) =>
+    dealEditFromForm(values, seed, context.nowMs, { stage, current, ...options })
+
+  it('is empty when nothing changed', () => {
+    expect(editOf(seed)).toEqual({ set: {}, clear: [] })
+  })
+
+  it('names the changed field and nothing beside it', () => {
+    expect(editOf({ ...seed, nextStep: 'Call Ada' })).toEqual({
+      set: { nextStep: 'Call Ada' },
+      clear: [],
+    })
+  })
+
+  it('clears a field the reader emptied, and only that one', () => {
+    expect(editOf({ ...seed, amount: '' })).toEqual({ set: {}, clear: ['amountCents'] })
+  })
+
+  it('takes the title with its sort key, and the contact with its name and roles', () => {
+    expect(editOf({ ...seed, title: 'Espresso' }).set).toEqual({
+      title: 'Espresso',
+      titleLower: 'espresso',
+    })
+    expect(editOf({ ...seed, contactId: 'c2', contactName: 'Grace' }).set).toEqual({
+      contactId: 'c2',
+      contactName: 'Grace',
+      contactRoles: [
+        { contactId: 'c2', primary: true },
+        { contactId: 'c1', primary: false },
+      ],
+    })
+  })
+
+  it('keeps a derived amount out, whatever changed around it', () => {
+    expect(editOf({ ...seed, amount: '75.00', notes: 'Hi' }, { amountDerived: true })).toEqual({
+      set: { notes: 'Hi' },
+      clear: [],
+    })
+  })
+
+  it('never writes the stage or the pipeline, which the form holds but does not edit', () => {
+    expect(editOf({ ...seed, stageId: 'closed-won', pipelineId: 'other' })).toEqual({
+      set: {},
+      clear: [],
+    })
+  })
+
+  it('asks for a confirmed read only for what it works out from the stored deal', () => {
+    const needs = (values: typeof seed) => dealEditNeedsConfirmedRead(editOf(values))
+    expect(needs({ ...seed, nextStep: 'Call Ada' })).toBe(false)
+    expect(needs({ ...seed, title: 'Espresso', notes: 'Hi', companyId: 'co2' })).toBe(false)
+    expect(needs({ ...seed, contactId: 'c2', contactName: 'Grace' })).toBe(true)
+    expect(needs({ ...seed, contactId: '', contactName: '' })).toBe(true)
+    expect(needs({ ...seed, amount: '75.00' })).toBe(true)
+    expect(needs({ ...seed, amount: '' })).toBe(true)
+    expect(needs({ ...seed, currency: 'eur' })).toBe(true)
+  })
+
+  it('moves untouched fields with the stored deal and keeps the touched ones', () => {
+    const stored = { ...seed, notes: 'From another tab', nextStep: 'From another tab' }
+    expect(rebaseDealForm({ ...seed, nextStep: 'Typed here' }, seed, stored)).toEqual({
+      ...stored,
+      nextStep: 'Typed here',
+    })
+  })
+
+  it('changes nothing when a snapshot brought the same values', () => {
+    const typed = { ...seed, nextStep: 'Typed here' }
+    expect(rebaseDealForm(typed, seed, { ...seed })).toEqual(typed)
   })
 })
 
