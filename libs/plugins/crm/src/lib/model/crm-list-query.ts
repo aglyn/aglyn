@@ -202,6 +202,28 @@ export function crmClientListFields(
   return Object.fromEntries(fields.filter((field) => field in computed).map((field) => [field, computed[field]]))
 }
 
+/**
+ * {@link crmClientListFields}, less the fields the patch does not move
+ * (AGL-4132). For an edit that writes only what the reader changed, which may
+ * stand on a read the server has not confirmed: every field left out is one
+ * that read does not get to restamp.
+ */
+export function crmClientListFieldChanges(
+  collection: CrmListCollection,
+  record: Readonly<Record<string, unknown>>,
+  patch: Readonly<Record<string, unknown>>,
+  fields: readonly string[],
+  context: CrmListFieldsContext = {},
+): Record<string, unknown> {
+  const before = crmClientListFields(collection, record, {}, fields, context)
+  const after = crmClientListFields(collection, record, patch, fields, context)
+  return Object.fromEntries(
+    Object.entries(after).filter(
+      ([field, value]) => JSON.stringify(value) !== JSON.stringify(before[field]),
+    ),
+  )
+}
+
 /** A web-SDK `FieldValue` — `deleteField()`, the one a client edit of these fields sends. */
 const isSentinel = (value: unknown): boolean =>
   typeof value === 'object' &&
