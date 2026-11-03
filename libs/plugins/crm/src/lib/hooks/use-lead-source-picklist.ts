@@ -28,8 +28,11 @@ export type LeadSourcePicklistResult = Omit<CrmPicklistResult, 'definition'>
  * card, the leads list's filter and the import drawer.
  */
 export function useLeadSourcePicklist(orgId: string | null | undefined): LeadSourcePicklistResult {
-  const { picklist, stored, ready, fromCache } = useCrmPicklist(CRM_LEAD_SOURCE_PICKLIST, orgId)
-  return useMemo(() => ({ picklist, stored, ready, fromCache }), [picklist, stored, ready, fromCache])
+  const { picklist, stored, ready, fromCache, listen } = useCrmPicklist(CRM_LEAD_SOURCE_PICKLIST, orgId)
+  return useMemo(
+    () => ({ picklist, stored, ready, fromCache, listen }),
+    [picklist, stored, ready, fromCache, listen],
+  )
 }
 
 export default useLeadSourcePicklist

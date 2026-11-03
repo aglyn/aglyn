@@ -521,7 +521,7 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
   // The Tasks tab has no custom fields (AGL-3517): no read, no New field.
   const tasksTab = tab === 'task'
   const object: CrmFieldObject = tab === 'task' ? 'contact' : tab
-  const { definitions, ready, fromCache } = useContactFieldDefinitions(
+  const { definitions, ready, fromCache, listen } = useContactFieldDefinitions(
     tasksTab ? null : orgId,
     object,
   )
@@ -610,7 +610,7 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
       const now = new Date()
       if (editing) {
         const verdict = await writeGuardedBySeed(
-          { subject: 'field', fromCache },
+          { subject: 'field', fromCache, listen },
           async () => {
             await updateDoc(fieldRef(editing.$id), {
               label: draft.label,
@@ -666,7 +666,7 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
       setDrawerOpen(false)
       setEditing(null)
     },
-    [scope, editing, fromCache, fieldRef, enqueueSnackbar, definitions, firestore, createHostId, object],
+    [scope, editing, fromCache, listen, fieldRef, enqueueSnackbar, definitions, firestore, createHostId, object],
   )
 
   /**
@@ -692,7 +692,7 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
       setBusyId(definition.$id)
       try {
         const verdict = await writeGuardedBySeed(
-          { subject: 'field order', fromCache },
+          { subject: 'field order', fromCache, listen },
           async () => {
             const batch = writeBatch(firestore)
             const now = new Date()
@@ -713,7 +713,7 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
         setBusyId('')
       }
     },
-    [scope, busyId, definitions, fromCache, firestore, fieldRef, enqueueSnackbar],
+    [scope, busyId, definitions, fromCache, listen, firestore, fieldRef, enqueueSnackbar],
   )
 
   /**
