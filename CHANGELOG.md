@@ -20,6 +20,7 @@ content on the marketing site and is written separately.
 ### Fixed
 
 - **ai:** the weekly note calls a page publish an update too, and a steady source never explains a move ([AGL-4131](https://linear.app/aglyn/issue/AGL-4131))
+- **ai:** a weekly note's reason never rests on a source that held steady ([AGL-4131](https://linear.app/aglyn/issue/AGL-4131))
 - **uptime:** a run where every answer was slow retries its silent rows ([AGL-4137](https://linear.app/aglyn/issue/AGL-4137))
 
 <details>
