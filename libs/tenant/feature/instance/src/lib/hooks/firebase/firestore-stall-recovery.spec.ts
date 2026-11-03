@@ -47,6 +47,7 @@ import {
   STALL_RECOVERY_COOLDOWN_MS,
   STALL_RECOVERY_MAX_COOLDOWN_MS,
 } from './firestore-stall-recovery'
+import type { LeaseCheck } from './firestore-multitab-wedge'
 
 describe('createStallRecovery (AGL-3373)', () => {
   const setup = (
@@ -207,16 +208,115 @@ describe('createStallRecovery (AGL-3373)', () => {
   })
 
   it('runs the escalation after the cycle and reports a fallback (AGL-3428)', async () => {
-    const afterCycle = jest.fn(async () => true)
-    const { calls, recovery } = setup({ afterCycle })
+    const escalate = jest.fn(async () => true)
+    const { calls, recovery } = setup({ escalate })
     await expect(recovery.recover()).resolves.toBe('fell-back')
     expect(calls).toEqual(['disable', 'enable'])
-    expect(afterCycle).toHaveBeenCalledTimes(1)
+    expect(escalate).toHaveBeenCalledTimes(1)
   })
 
   it('keeps the cycle outcome when the escalation finds nothing', async () => {
-    const { recovery } = setup({ afterCycle: async () => false })
+    const { recovery } = setup({ escalate: async () => false })
     await expect(recovery.recover()).resolves.toBe('recovered')
+  })
+
+  /**
+   * The cycle broadcast `Offline` and put every confirmed view back on the
+   * cache, in a tab that was only queued behind another tab's IndexedDB
+   * transaction (production, two tabs, AGL-4135). It cannot shorten that
+   * transaction: both of its calls queue behind it.
+   */
+  describe('reads the shared cache before it cycles (AGL-4135)', () => {
+    const lease = (check: LeaseCheck) => jest.fn(async () => check)
+
+    it('does not cycle a client queued behind a transaction, and checks for the wedge instead', async () => {
+      const escalate = jest.fn(async () => false)
+      const { calls, recovery } = setup({ checkLease: lease({ state: 'waiting' }), escalate })
+      await expect(recovery.recover()).resolves.toBe('waiting')
+      expect(calls).toEqual([])
+      expect(escalate).toHaveBeenCalledTimes(1)
+    })
+
+    it('still falls back from a store that stays locked, as after a cycle (AGL-3428)', async () => {
+      const { calls, recovery } = setup({
+        checkLease: lease({ state: 'waiting' }),
+        escalate: async () => true,
+      })
+      await expect(recovery.recover()).resolves.toBe('fell-back')
+      expect(calls).toEqual([])
+    })
+
+    it('checks a long wait for the wedge once per cooldown, not at every watch', async () => {
+      const escalate = jest.fn(async () => false)
+      const { recovery, advance } = setup({ checkLease: lease({ state: 'waiting' }), escalate })
+      await recovery.recover()
+      advance(FIRESTORE_STALL_MS)
+      await expect(recovery.recover()).resolves.toBe('waiting')
+      expect(escalate).toHaveBeenCalledTimes(1)
+      advance(STALL_RECOVERY_COOLDOWN_MS)
+      await recovery.recover()
+      expect(escalate).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not cycle a client another tab serves on a live lease', async () => {
+      const escalate = jest.fn(async () => true)
+      const { calls, recovery } = setup({
+        checkLease: lease({ state: 'served', ownerId: 'slow-tab' }),
+        escalate,
+      })
+      await expect(recovery.recover()).resolves.toBe('served')
+      expect(calls).toEqual([])
+      expect(escalate).not.toHaveBeenCalled()
+    })
+
+    it('cycles a client nothing explains: its own lease, or one lapsed or vacant', async () => {
+      const { calls, recovery } = setup({ checkLease: lease({ state: 'silent' }) })
+      await expect(recovery.recover()).resolves.toBe('recovered')
+      expect(calls).toEqual(['disable', 'enable'])
+    })
+
+    it('leaves a cycle free to run as soon as a client stops waiting and goes quiet', async () => {
+      const check = { current: { state: 'waiting' } as LeaseCheck }
+      const { calls, recovery } = setup({ checkLease: async () => check.current })
+      await expect(recovery.recover()).resolves.toBe('waiting')
+      check.current = { state: 'silent' }
+      await expect(recovery.recover()).resolves.toBe('recovered')
+      expect(calls).toEqual(['disable', 'enable'])
+    })
+
+    it('takes the stall at its word when the lease cannot be read', async () => {
+      const { calls, recovery } = setup({
+        checkLease: async () => {
+          throw new Error('IndexedDB unavailable')
+        },
+      })
+      await expect(recovery.recover()).resolves.toBe('recovered')
+      expect(calls).toEqual(['disable', 'enable'])
+    })
+
+    it('does not cycle a client that answered while the lease was being read', async () => {
+      const answered: { at?: number } = {}
+      let clock = 1_000_000
+      const { calls, recovery } = setup({
+        now: () => clock,
+        lastServerAnswerAt: () => answered.at,
+        checkLease: async () => {
+          // The queue drained behind the read, and a confirmation landed.
+          clock += 500
+          answered.at = clock
+          return { state: 'silent' }
+        },
+      })
+      await expect(recovery.recover()).resolves.toBe('answering')
+      expect(calls).toEqual([])
+    })
+
+    it('shares one read between the watches that fire together', async () => {
+      const checkLease = lease({ state: 'served', ownerId: 'slow-tab' })
+      const { recovery } = setup({ checkLease })
+      await Promise.all([recovery.recover(), recovery.recover(), recovery.recover()])
+      expect(checkLease).toHaveBeenCalledTimes(1)
+    })
   })
 })
 
