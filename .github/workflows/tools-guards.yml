@@ -553,6 +553,14 @@ jobs:
 
       - run: npm run check:node-version
 
+      # AGL-4051. A hotfix promotion that auto-merge-green.yml merges starts
+      # no `push` workflow on production, so the sweep dispatches them. This
+      # fails a workflow that runs on a push to production and is in neither
+      # of the sweep's two lists, before it can ship without being started.
+      - run: npm run test:hotfix-dispatches
+
+      - run: npm run check:hotfix-dispatches
+
       # AGL-2090. `tools/gate.sh` provisions the pinned gate worktree, and the
       # checks it makes before running anything are the difference between a
       # verdict and an infrastructure crash wearing a verdict's exit code: a
