@@ -169,6 +169,29 @@ describe('siteEntityJsonLd', () => {
     })
   })
 
+  it('publishes the site’s one email: the entity’s, else the older copy (AGL-4136)', () => {
+    const fallback = siteEntityJsonLd({
+      displayName: 'Acme',
+      seo: { entity: { telephone: '+1 512 555 0100' } },
+      business: { supportEmail: ' help@acme.test ' },
+    } as never)
+    expect(fallback).toMatchObject({
+      contactPoint: { '@type': 'ContactPoint', email: 'help@acme.test', telephone: '+1 512 555 0100' },
+    })
+    // An email alone in the older copy is still a channel to contact.
+    expect(
+      siteEntityJsonLd({ displayName: 'Acme', business: { supportEmail: 'help@acme.test' } } as never),
+    ).toMatchObject({ contactPoint: { email: 'help@acme.test' } })
+    // The entity's own email wins.
+    expect(
+      siteEntityJsonLd({
+        displayName: 'Acme',
+        seo: { entity: { email: 'hello@acme.test' } },
+        business: { supportEmail: 'help@acme.test' },
+      } as never),
+    ).toMatchObject({ contactPoint: { email: 'hello@acme.test' } })
+  })
+
   it('emits a partial address rather than empty strings', () => {
     expect(
       siteEntityJsonLd({

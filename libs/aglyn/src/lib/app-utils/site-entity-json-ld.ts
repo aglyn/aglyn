@@ -26,6 +26,7 @@ import {
   siteProfileUrls,
 } from './content-authors'
 import { SITE_SLOGAN_MAX_LENGTH } from './business-details'
+import { siteContactEmail } from './host-tokens'
 import {
   type LocalBusinessType,
   PAYMENT_ACCEPTED_MAX_LENGTH,
@@ -186,8 +187,17 @@ export function siteEntityJsonLd(
     present — `schema.org` requires neither, and a consumer that finds a
     ContactPoint with no channel has been told less than it would learn from
     its absence.
+
+    The email is the site's one email (AGL-4136): what Setup → Business
+    profile saves to the entity, else the older one-block copy, so a site
+    whose email lives only there still says how to reach it.
   */
-  const email = text(entity?.email, 320)
+  // `SiteEntityHost` names only the social links under `business`; the host
+  // document handed here is the whole document, older email copy included.
+  const email = text(
+    siteContactEmail(host as Parameters<typeof siteContactEmail>[0]) ?? '',
+    320,
+  )
   const telephone = text(entity?.telephone, 64)
   const contactType = text(entity?.contactType, 120) || 'customer support'
   const contactPoint =

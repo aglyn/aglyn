@@ -598,7 +598,10 @@ export function aiSeoLlmsPreview(
     pages,
     collections,
     hasSearch: true,
-    contactEmail: values['seo.entity.email'] ?? (str(host.seo?.entity?.email) || undefined),
+    // As the site's own /llms.txt names it (AGL-4136): the entity's email,
+    // else the older one-block copy.
+    contactEmail:
+      values['seo.entity.email'] ?? (str(host.seo?.entity?.email) || str(host.business?.supportEmail) || undefined),
   })
 }
 
