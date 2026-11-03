@@ -326,6 +326,198 @@ final class CrmTests: XCTestCase {
   }
 }
 
+private func role(_ value: Any) -> CrmContactRole {
+  let o = value as! [String: Any]
+  return CrmContactRole(contactID: o["contactId"] as! String, role: o["role"] as? String, primary: o["primary"] as? Bool == true)
+}
+
+private func roles(_ value: Any) -> [CrmContactRole] { (value as? [Any] ?? []).map(role) }
+
+private func picklistValues(_ value: Any) -> [(label: String, active: Bool)] {
+  ((value as? [String: Any])?["values"] as? [[String: Any]] ?? []).map { ($0["label"] as! String, $0["active"] as? Bool == true) }
+}
+
+private func picksJSON(_ picks: CrmActivityPicks) -> [String: Any] {
+  [
+    "contactId": picks.contactID as Any? ?? NSNull(),
+    "related": picks.related.map { ["kind": $0.kind.rawValue, "id": $0.id] as Any } ?? NSNull(),
+  ]
+}
+
+private func picks(_ value: Any) -> CrmActivityPicks {
+  let o = value as! [String: Any]
+  let related = o["related"] as? [String: Any]
+  return CrmActivityPicks(
+    contactID: o["contactId"] as? String,
+    related: related.map { CrmRelated(kind: CrmRelated.Kind(rawValue: $0["kind"] as! String)!, id: $0["id"] as! String) })
+}
+
+private func docs(_ value: Any?) -> [FirestoreDocument] {
+  (value as? [[String: Any]] ?? []).map { FirestoreDocument(id: $0["$id"] as! String, data: $0) }
+}
+
+/// Name, Related To and the company stamp (AGL-4142), as the console's log dialog opens and writes them.
+final class CrmActivityLinkTests: XCTestCase {
+  func testTheFieldsOpenAsTheConsolesDo() throws {
+    for (index, item) in try functionCases("crmActivityPicksFrom").enumerated() {
+      let got = crmActivityPicksFrom(item.args[0] as! [String: Any], primaryContactID: item.args.count > 1 ? item.args[1] as? String : nil)
+      XCTAssertEqual(got, picks(item.result), "case \(index)")
+    }
+  }
+
+  func testThePicksWriteTheConsolesLinks() throws {
+    for (index, item) in try functionCases("crmActivityLinkFromPicks").enumerated() {
+      let got = crmActivityLinkFromPicks(picks(item.args[0]), leadID: item.args.count > 1 ? item.args[1] as? String : nil)
+      XCTAssertEqual(got, item.result as? [String: String], "case \(index)")
+    }
+  }
+
+  func testRelatedToListsWhatTheConsoleLists() throws {
+    for (index, item) in try functionCases("crmRelatedToOptions").enumerated() {
+      let input = item.args[0] as! [String: Any]
+      let got = crmRelatedToOptions(linkedDeals: docs(input["linkedDeals"]), deals: docs(input["deals"]), companies: docs(input["companies"]))
+      let want = (item.result as! [[String: Any]]).map {
+        CrmPickOption(key: "\($0["kind"] as! String):\($0["id"] as! String)", label: $0["label"] as! String, group: $0["group"] as! String)
+      }
+      XCTAssertEqual(got, want, "case \(index)")
+    }
+  }
+
+  /// A deal's contact roles lead Name; anybody else stays one pick away.
+  func testNameLeadsWithTheDealsRoles() {
+    let contacts = [FieldOption("c2", "Pat Lee"), FieldOption("c1", "Jordan Lee"), FieldOption("c3", "acme buyer")]
+    let pinned = crmNameOptions(pinned: [CrmPickOption(key: "c1", label: "Jordan Lee", group: "")], contacts: contacts)
+    XCTAssertEqual(pinned.map(\.key), ["c1", "c3", "c2"])
+    XCTAssertEqual(pinned.map(\.group), ["On this deal", "All contacts", "All contacts"])
+    XCTAssertEqual(crmNameOptions(pinned: [], contacts: contacts).map(\.group), ["", "", ""])
+    XCTAssertEqual(CrmRelated(key: "deal:d1"), CrmRelated(kind: .deal, id: "d1"))
+    XCTAssertNil(CrmRelated(key: "lead:l1"))
+  }
+}
+
+/// The Contact roles card's rules (AGL-4142), replayed against the console's answers.
+final class CrmContactRoleTests: XCTestCase {
+  func testRolesReadAsTheConsoleReadsThem() throws {
+    for (index, item) in try functionCases("dealContactRolesOf").enumerated() {
+      XCTAssertEqual(dealContactRolesOf(item.args[0] as! [String: Any]), roles(item.result), "case \(index)")
+    }
+    for (index, item) in try functionCases("companyContactRolesOf").enumerated() {
+      XCTAssertEqual(companyContactRolesOf(item.args[0] as! [String: Any]), roles(item.result), "case \(index)")
+    }
+  }
+
+  func testEachEditMakesTheConsolesList() throws {
+    for (index, item) in try functionCases("dealContactRolesWithPrimary").enumerated() {
+      XCTAssertEqual(contactRolesWithPrimary(roles(item.args[0]), item.args[1] as? String), roles(item.result), "case \(index)")
+    }
+    for (index, item) in try functionCases("dealContactRolesWithout").enumerated() {
+      XCTAssertEqual(contactRolesWithout(roles(item.args[0]), item.args[1] as! String), roles(item.result), "case \(index)")
+    }
+    for (index, item) in try functionCases("dealContactRolesWithRole").enumerated() {
+      XCTAssertEqual(
+        contactRolesWithRole(roles(item.args[0]), item.args[1] as! String, item.args[2] as! String), roles(item.result), "case \(index)")
+    }
+    for (index, item) in try functionCases("dealContactRolesAdded").enumerated() {
+      let added = item.args[1] as! [String: Any]
+      XCTAssertEqual(
+        contactRolesAdded(roles(item.args[0]), contactID: added["contactId"] as! String, role: added["role"] as? String, primary: added["primary"] as? Bool == true),
+        roles(item.result), "case \(index)")
+    }
+    for (index, item) in try functionCases("dealContactRoleAddProblem").enumerated() {
+      XCTAssertEqual(
+        contactRoleAddProblem(roles(item.args[0]), item.args[1] as! String, noun: item.args[2] as! String), item.result as? String, "case \(index)")
+    }
+  }
+
+  func testASaveWritesWhatTheConsoleWrites() throws {
+    for (index, item) in try functionCases("dealContactRolesSave").enumerated() {
+      let want = item.result as! [String: Any]
+      switch dealContactRolesSave(item.args[0] as! [String: Any], roles(item.args[1]), picklistValues(item.args[2])) {
+      case .failure(let refusal):
+        XCTAssertEqual(refusal.message, want["error"] as? String, "case \(index)")
+      case .success(let write):
+        XCTAssertEqual(want["ok"] as? Bool, true, "case \(index)")
+        XCTAssertEqual(write.contactRoles, roles(want["contactRoles"]!), "case \(index)")
+        XCTAssertEqual(write.contactID, want["contactId"] as? String, "case \(index)")
+        XCTAssertEqual(write.primaryChanged, want["primaryChanged"] as? Bool, "case \(index)")
+      }
+    }
+    for (index, item) in try functionCases("companyContactRolesSave").enumerated() {
+      let want = item.result as! [String: Any]
+      switch companyContactRolesSave(item.args[0] as! [String: Any], roles(item.args[1]), picklistValues(item.args[2])) {
+      case .failure(let refusal):
+        XCTAssertEqual(refusal.message, want["error"] as? String, "case \(index)")
+      case .success(let judged):
+        XCTAssertEqual(judged, roles(want["contactRoles"]!), "case \(index)")
+        let list = contactRoleListFields(judged, visibleTo: nil)
+        XCTAssertEqual(list.ids, want["contactRoleContactIds"] as? [String], "case \(index)")
+        XCTAssertEqual(list.keys, want["contactRoleKeys"] as? [String], "case \(index)")
+      }
+    }
+  }
+
+  func testTheListFieldsAreTheConsoles() throws {
+    for (index, item) in try functionCases("crmDealContactRoleListFields").enumerated() {
+      let deal = item.args[0] as! [String: Any]
+      let want = item.result as! [String: Any]
+      let got = contactRoleListFields(dealContactRolesOf(deal), visibleTo: deal["visibleTo"])
+      XCTAssertEqual(got.ids, want["contactRoleContactIds"] as? [String], "case \(index)")
+      XCTAssertEqual(got.scoped, want["scopedContactRoleContactIds"] as? [String], "case \(index)")
+      XCTAssertEqual(got.keys, want["contactRoleKeys"] as? [String], "case \(index)")
+    }
+  }
+
+  /// The org's stored list judges a pick; with none stored, its standard values do, all of them active.
+  func testThePicklistOffersItsValuesWithWhetherTheyAreActive() {
+    let stored = Picklists(stored: [crmContactRolePicklist: [("Evaluator", true), ("Champion", false)]])
+    XCTAssertEqual(stored.values(crmContactRolePicklist).map(\.label), ["Evaluator", "Champion"])
+    XCTAssertEqual(stored.labels(crmContactRolePicklist), ["Evaluator"])
+    XCTAssertTrue(Picklists().values(crmContactRolePicklist).allSatisfy(\.active))
+    XCTAssertTrue(Picklists().labels(crmContactRolePicklist).contains("Decision Maker"))
+  }
+}
+
+/// New contact's marketing opt-in (AGL-4142): the console's sentence, its key, and what the create sends.
+final class CrmContactConsentTests: XCTestCase {
+  func testTheSentenceAndItsKeyAreTheConsoles() throws {
+    for (index, item) in try functionCases("consentGroupDisclosure").enumerated() {
+      XCTAssertEqual(consentGroupDisclosure(group(item.args[0])), item.result as? String, "case \(index)")
+    }
+    for (index, item) in try functionCases("consentGroupDisclosureKey").enumerated() {
+      XCTAssertEqual(consentGroupDisclosureKey(group(item.args[0])), item.result as? String, "case \(index)")
+    }
+  }
+
+  func testTheBoxSaysWhyItIsOffAndWhatNoSiteMeans() {
+    let declared = ConsentGroup(hostID: "h1", groupID: "brands", name: "North Brands", hostIDs: ["h1", "h2"], declared: true)
+    XCTAssertEqual(contactConsentHelp(hasEmail: false, group: declared), "Add an email first: there is nowhere to send marketing without one.")
+    XCTAssertEqual(
+      contactConsentHelp(hasEmail: true, group: declared),
+      "You'll receive marketing email from North Brands, which covers 2 sites. Tick it only if they agreed. Adding a contact is never itself consent.")
+    XCTAssertEqual(
+      contactConsentHelp(hasEmail: true, group: nil),
+      "With no source site, this records it on every site. Tick it only if they agreed. Adding a contact is never itself consent.")
+    XCTAssertEqual(contactConsentHelp(hasEmail: true, group: .solo("h1")), "Tick it only if they agreed. Adding a contact is never itself consent.")
+  }
+
+  /// The box counts only beside an address, and its key rides only a ticked box for a group with a sentence.
+  func testTheCreateSendsTheBoxAndTheSentencesKey() {
+    let declared = ConsentGroup(hostID: "h1", groupID: "brands", name: "North Brands", hostIDs: ["h1", "h2"], declared: true)
+    let ticked = contactConsentFields(["email": "pat@example.com", contactConsentKey: "true"], group: declared)
+    XCTAssertEqual(ticked["marketingConsent"] as? Bool, true)
+    XCTAssertEqual(ticked["disclosedConsentGroup"] as? String, consentGroupDisclosureKey(declared))
+    let solo = contactConsentFields(["email": "pat@example.com", contactConsentKey: "true"], group: .solo("h1"))
+    XCTAssertEqual(solo["marketingConsent"] as? Bool, true)
+    XCTAssertNil(solo["disclosedConsentGroup"])
+    let unticked = contactConsentFields(["email": "pat@example.com", contactConsentKey: "false"], group: declared)
+    XCTAssertEqual(unticked["marketingConsent"] as? Bool, false)
+    XCTAssertNil(unticked["disclosedConsentGroup"])
+    let noEmail = contactConsentFields(["email": " ", contactConsentKey: "true"], group: declared)
+    XCTAssertEqual(noEmail["marketingConsent"] as? Bool, false)
+    XCTAssertNil(noEmail["disclosedConsentGroup"])
+  }
+}
+
 /// The Contacts list asked to open one person by address (`contactsListSeed`, `?email=`).
 final class CrmContactByEmailTests: XCTestCase {
   func testTheAddressNarrowsTheListToThatOnePerson() {
