@@ -94,6 +94,7 @@ export function ShippingSettingsCard(props: ShippingSettingsCardProps) {
      * is a checkout offering no shipping option at all.
      */
     fromCache: storeFromCache,
+    listen: storeListen,
   } = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId, 'settings', 'store'),
     [firestore, hostId],
@@ -186,6 +187,7 @@ export function ShippingSettingsCard(props: ShippingSettingsCardProps) {
         subject: 'shipping settings',
         unreadable: storeStatus === 'error',
         fromCache: storeFromCache,
+        listen: storeListen,
       },
       async () => {
         await setDoc(
@@ -208,7 +210,7 @@ export function ShippingSettingsCard(props: ShippingSettingsCardProps) {
       variant: 'success',
       persist: false,
     })
-  }, [current, firestore, hostId, enqueueSnackbar, storeStatus, storeFromCache])
+  }, [current, firestore, hostId, enqueueSnackbar, storeStatus, storeFromCache, storeListen])
 
   /**
    * Recomputed from `current` on every render, so the block answers for what

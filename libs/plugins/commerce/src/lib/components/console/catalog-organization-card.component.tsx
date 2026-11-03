@@ -769,6 +769,7 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
      * cache-dependent is WHICH rows it runs on.)
      */
     fromCache: categoriesFromCache,
+    listen: categoriesListen,
   } = useFirestoreCollection<any>(
     /*
      * ORDERED AND CEILINGED, deliberately not paged by the query (AGL-2501).
@@ -809,6 +810,7 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
      * snapshot and the storefront blocks pointing at the collection go empty.
      */
     fromCache: collectionsFromCache,
+    listen: collectionsListen,
   } = useFirestoreCollection<any>(
     /*
      * ORDERED AND CEILINGED, deliberately not paged (AGL-2501).
@@ -971,6 +973,7 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
         subject: 'category',
         unreadable: Boolean(categoryDraft.id) && categoriesStatus === 'error',
         fromCache: Boolean(categoryDraft.id) && categoriesFromCache,
+        listen: categoriesListen,
       },
       async () => {
         /**
@@ -1020,6 +1023,7 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
     enqueueSnackbar,
     categoriesStatus,
     categoriesFromCache,
+    categoriesListen,
   ])
 
   const handleCategoryDelete = useCallback(
@@ -1056,6 +1060,7 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
           subject: 'categories',
           unreadable: categoriesStatus === 'error',
           fromCache: categoriesFromCache,
+          listen: categoriesListen,
         },
         async () => {
           // Reparent children to root, then remove.
@@ -1115,6 +1120,7 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
       enqueueSnackbar,
       categoriesStatus,
       categoriesFromCache,
+      categoriesListen,
     ],
   )
 
@@ -1250,6 +1256,7 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
           subject: 'collection',
           unreadable: Boolean(draftId) && collectionsStatus === 'error',
           fromCache: Boolean(draftId) && collectionsFromCache,
+          listen: collectionsListen,
         },
         async () => {
           const response = await authorizedFetch(
@@ -1304,6 +1311,7 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
     enqueueSnackbar,
     collectionsStatus,
     collectionsFromCache,
+    collectionsListen,
   ])
 
   const handleCollectionDelete = useCallback(

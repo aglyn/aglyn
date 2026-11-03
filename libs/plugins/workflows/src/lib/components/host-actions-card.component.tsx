@@ -252,6 +252,7 @@ export function HostActionsCard(props: {
      * card twin, and it was the one that never got the guard.
      */
     fromCache: actionsFromCache,
+    listen: actionsListen,
   } = useFirestoreCollection<any>(
     /*
      * ORDERED AND CEILINGED, deliberately not paged by the query (AGL-2501) —
@@ -661,6 +662,7 @@ export function HostActionsCard(props: {
           subject: 'action',
           unreadable: Boolean(draft.id) && actionsStatus === 'error',
           fromCache: Boolean(draft.id) && actionsFromCache,
+          listen: actionsListen,
         },
         async () => {
           await setDoc(
@@ -703,6 +705,7 @@ export function HostActionsCard(props: {
     hostId,
     enqueueSnackbar,
     actionsFromCache,
+    actionsListen,
     actionsStatus,
   ])
 

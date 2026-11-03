@@ -77,7 +77,7 @@ export function LocalDeliverySettingsCard(props: LocalDeliverySettingsCardProps)
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
-  const { data: store, status: storeStatus, fromCache } = useFirestoreDoc<any>(
+  const { data: store, status: storeStatus, fromCache, listen } = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId, 'settings', 'store'),
     [firestore, hostId],
   )
@@ -147,7 +147,7 @@ export function LocalDeliverySettingsCard(props: LocalDeliverySettingsCardProps)
   const handleSave = useCallback(async () => {
     const value = CommerceModel.normalizeLocalDeliverySettings(current)
     const verdict = await writeGuardedBySeed(
-      { subject: 'local delivery settings', unreadable: storeStatus === 'error', fromCache },
+      { subject: 'local delivery settings', unreadable: storeStatus === 'error', fromCache, listen },
       async () => {
         // `mergeFields` replaces `localDelivery` whole and leaves every other
         // map on the settings document alone.
@@ -161,7 +161,7 @@ export function LocalDeliverySettingsCard(props: LocalDeliverySettingsCardProps)
     }
     setDraft(null)
     enqueueSnackbar('Local delivery saved', { variant: 'success', persist: false })
-  }, [current, enqueueSnackbar, firestore, fromCache, hostId, storeStatus])
+  }, [current, enqueueSnackbar, firestore, fromCache, listen, hostId, storeStatus])
 
   const dollars = (cents: number | undefined) => (cents ? String(cents / 100) : '')
   const cents = (raw: string) => (raw.trim() === '' ? 0 : Math.max(0, Math.round(Number(raw) * 100) || 0))

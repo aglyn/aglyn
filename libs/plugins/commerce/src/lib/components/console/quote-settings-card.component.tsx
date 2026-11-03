@@ -45,6 +45,7 @@ export function QuoteSettingsCard(props: QuoteSettingsCardProps) {
     // The switch is seeded from this document; a seed the server never
     // confirmed must not be written back over the saved setting (AGL-1358).
     fromCache,
+    listen,
   } = useFirestoreDoc<any>(() => doc(firestore, 'hosts', hostId, 'settings', 'store'), [firestore, hostId])
   const saved = CommerceModel.quoteRequiresProofApprovalByDefault(store?.quotes)
   const [draft, setDraft] = useState<boolean | null>(null)
@@ -55,7 +56,7 @@ export function QuoteSettingsCard(props: QuoteSettingsCardProps) {
     setBusy(true)
     try {
       const verdict = await writeGuardedBySeed(
-        { subject: 'quote settings', unreadable: status === 'error', fromCache },
+        { subject: 'quote settings', unreadable: status === 'error', fromCache, listen },
         async () => {
           await setDoc(
             doc(firestore, 'hosts', hostId, 'settings', 'store'),
@@ -72,7 +73,7 @@ export function QuoteSettingsCard(props: QuoteSettingsCardProps) {
     } finally {
       setBusy(false)
     }
-  }, [current, firestore, hostId, status, fromCache, enqueueSnackbar])
+  }, [current, firestore, hostId, status, fromCache, listen, enqueueSnackbar])
 
   return (
     <CardDisplay

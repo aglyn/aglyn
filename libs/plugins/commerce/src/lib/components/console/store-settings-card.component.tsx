@@ -76,6 +76,7 @@ export function StoreSettingsCard(props: StoreSettingsCardProps) {
      * product and collection URLs start returning 404.
      */
     fromCache: storeFromCache,
+    listen: storeListen,
   } = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId, 'settings', 'store'),
     [firestore, hostId],
@@ -120,6 +121,7 @@ export function StoreSettingsCard(props: StoreSettingsCardProps) {
         subject: 'store settings',
         unreadable: storeStatus === 'error',
         fromCache: storeFromCache,
+        listen: storeListen,
       },
       async () => {
         // The product and collection templates, the currency and the
@@ -167,6 +169,7 @@ export function StoreSettingsCard(props: StoreSettingsCardProps) {
     enqueueSnackbar,
     storeStatus,
     storeFromCache,
+    storeListen,
   ])
 
   return (

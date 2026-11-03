@@ -100,6 +100,7 @@ export function PopupCard(props: PopupCardProps) {
      * body, link, schedule and enabled flag on a live site.
      */
     fromCache: hostFromCache,
+    listen: hostListen,
   } = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId),
     [firestore, hostId],
@@ -166,6 +167,7 @@ export function PopupCard(props: PopupCardProps) {
           subject: 'popup',
           unreadable: hostStatus === 'error',
           fromCache: hostFromCache,
+          listen: hostListen,
         },
         async () => {
           await writeSiteWideChange({

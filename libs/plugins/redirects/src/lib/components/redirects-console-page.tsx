@@ -137,6 +137,7 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
      * `priority` reorders which rule fires when several match.
      */
     fromCache: redirectsFromCache,
+    listen: redirectsListen,
   } = useFirestoreCollection<any>(
     /*
      * ORDERED AND CEILINGED, with a probe (AGL-2501).
@@ -492,6 +493,7 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
             subject: 'redirect',
             unreadable: redirectsStatus === 'error',
             fromCache: redirectsFromCache,
+            listen: redirectsListen,
           },
           async () => {
             await setDoc(
@@ -547,6 +549,7 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
     enqueueSnackbar,
     redirectsStatus,
     redirectsFromCache,
+    redirectsListen,
     announceRuleChange,
   ])
 

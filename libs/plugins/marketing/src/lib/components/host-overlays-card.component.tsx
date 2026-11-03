@@ -171,6 +171,7 @@ export function HostOverlaysCard(props: HostOverlaysCardProps) {
      * engagement numbers back to whenever the snapshot was taken.
      */
     fromCache: overlaysFromCache,
+    listen: overlaysListen,
   } = useFirestoreCollection<any>(
     () =>
       query(
@@ -312,6 +313,7 @@ export function HostOverlaysCard(props: HostOverlaysCardProps) {
           subject: 'overlay',
           unreadable: Boolean(editor.$id) && overlaysStatus === 'error',
           fromCache: Boolean(editor.$id) && overlaysFromCache,
+          listen: overlaysListen,
         },
         async () => {
           await writeSiteWideChange({

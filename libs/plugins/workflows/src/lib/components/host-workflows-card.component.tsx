@@ -229,6 +229,7 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
      * step of the pipeline with it.
      */
     fromCache: workflowsFromCache,
+    listen: workflowsListen,
   } = useFirestoreCollection<any>(
     /*
      * ORDERED AND CEILINGED, deliberately not paged by the query (AGL-2501) —
@@ -564,6 +565,7 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
             subject: 'workflow',
             unreadable: workflowsStatus === 'error',
             fromCache: workflowsFromCache,
+            listen: workflowsListen,
           },
           async () => {
             await setDoc(
@@ -608,6 +610,7 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
     enqueueSnackbar,
     workflowsStatus,
     workflowsFromCache,
+    workflowsListen,
   ])
 
   const handleShowUsage = useCallback(
