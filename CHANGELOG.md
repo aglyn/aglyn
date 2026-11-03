@@ -28,6 +28,10 @@ content on the marketing site and is written separately.
 - **beacon:** a bridge injected before the page moved on the client is dropped ([AGL-4068](https://linear.app/aglyn/issue/AGL-4068))
 - **console:** the first-site door names its workspace name as derived ([AGL-4117](https://linear.app/aglyn/issue/AGL-4117))
 
+### Performance
+
+- **core:** the video hosts' declarations are a file of their own, off every published page ([AGL-4140](https://linear.app/aglyn/issue/AGL-4140))
+
 ### Changed
 
 - **ai:** the frame's color ranking is aiSiteImportFrameColorRole, apart from the page compile's ([AGL-4139](https://linear.app/aglyn/issue/AGL-4139))
