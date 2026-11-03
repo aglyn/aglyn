@@ -183,6 +183,9 @@ export interface SiteImportElementAttrs {
   /** `aria-controls` / `aria-labelledby`: what a tab shows, and what names a panel. */
   controls?: string
   labelledby?: string
+  /** A picture's or a film's own size, as its `width` and `height` attributes give it in px (AGL-4138). */
+  width?: number
+  height?: number
 }
 
 /** One element of the page, in a flat table: its parent and children by index. */
@@ -914,8 +917,8 @@ const IMPLIED_END: Record<string, { ends: ReadonlySet<string>; walls: ReadonlySe
 }
 const P_WALLS = new Set(['button', 'table', 'td', 'th', 'caption', 'object', 'template', 'html', 'marquee', 'applet'])
 
-/** The attributes the layout reader reads. */
-function elementAttrs(attributes: Record<string, string>): SiteImportElementAttrs {
+/** The attributes the layout reader reads; a picture's and a film's own size as numbers (AGL-4138). */
+function elementAttrs(attributes: Record<string, string>, tag = ''): SiteImportElementAttrs {
   const attrs: SiteImportElementAttrs = {}
   const text = (value: string | undefined, max: number) => {
     const clean = String(value ?? '').replace(/\s+/g, ' ').trim()
@@ -935,6 +938,15 @@ function elementAttrs(attributes: Record<string, string>): SiteImportElementAttr
   put('controls', text(attributes['aria-controls'], 120))
   put('labelledby', text(attributes['aria-labelledby'], 120))
   if ('hidden' in attributes || (attributes['aria-hidden'] ?? '').toLowerCase() === 'true') attrs.hidden = true
+  if (tag === 'img' || tag === 'video') {
+    const size = (value: string | undefined) => (/^\s*\d{1,5}(?:px)?\s*$/.test(value ?? '') ? Number.parseInt(value as string, 10) : 0)
+    const width = size(attributes['width'])
+    const height = size(attributes['height'])
+    if (width > 0 && height > 0) {
+      attrs.width = width
+      attrs.height = height
+    }
+  }
   return attrs
 }
 
@@ -1112,7 +1124,7 @@ export function extractSiteImportPage(
     if (elements.length >= SITE_IMPORT_PAGE_LIMITS.elements) return -1
     const id = elements.length
     const parent = top()
-    elements.push({ id, tag, parent, children: [], region: region(), nav: inNav(), attrs: elementAttrs(attributes), blocks: [] })
+    elements.push({ id, tag, parent, children: [], region: region(), nav: inNav(), attrs: elementAttrs(attributes, tag), blocks: [] })
     elements[parent]?.children.push(id)
     if (!isVoid && !selfClosing) open.push(id)
     if (tag === 'body' && bodyElement < 0) bodyElement = id

@@ -146,6 +146,13 @@ export interface AiSiteStyle {
    * the pairing's alone.
    */
   sourceFonts?: { body: AiSiteSourceFont; heading: AiSiteSourceFont | null } | null
+  /**
+   * A site brought in's third color (AGL-4138), `#rrggbb`: the color its
+   * source draws its eyebrows in, where that is a color of its own. The theme's
+   * tertiary is drawn at the nearest shade of it that reads on the page.
+   * Absent, the tertiary sits sixty degrees round from the accent.
+   */
+  tertiary?: string
 }
 
 /** A family a site brought in is set in (AGL-4108), with the weights the catalog says it has. */
@@ -205,6 +212,9 @@ export type AiSiteLookPins = Partial<
     | 'headerAlign'
     | 'density'
     | 'motion'
+    // A site brought in's eyebrows and its third color, as its source draws them (AGL-4138).
+    | 'eyebrow'
+    | 'tertiary'
   >
 >
 
@@ -661,9 +671,12 @@ export function aiSiteColors(style: AiSiteStyle): { light: HostThemeSchemeColors
         }
         return { main, h: buttonHue }
       })()
-  const tertiaryHue = (style.accent + 60) % 360
-  const tertiaryL = untilContrast(0.52, 0.12, tertiaryHue, white, 4.6, 0)
-  const tertiary = aiOklchHex(tertiaryL, 0.12, tertiaryHue)
+  // A site brought in's own third color (AGL-4138), at the nearest shade of it that reads on white; else the accent's neighbor.
+  const third = style.tertiary && /^#[0-9a-f]{6}$/i.test(style.tertiary) ? aiHexOklch(style.tertiary) : null
+  const tertiaryHue = third ? Math.round(third.h) % 360 : (style.accent + 60) % 360
+  const tertiaryChroma = third ? Math.min(0.2, Math.max(0.07, third.C)) : 0.12
+  const tertiaryL = untilContrast(third ? Math.min(third.L, 0.6) : 0.52, tertiaryChroma, tertiaryHue, white, 4.6, 0)
+  const tertiary = aiOklchHex(tertiaryL, tertiaryChroma, tertiaryHue)
   const textChroma = neutral ? 0.006 : 0.02
 
   const light: HostThemeSchemeColors = {
@@ -681,8 +694,8 @@ export function aiSiteColors(style: AiSiteStyle): { light: HostThemeSchemeColors
     },
     tertiary: {
       main: tertiary,
-      light: aiOklchHex(Math.min(0.9, tertiaryL + 0.14), 0.12, tertiaryHue),
-      dark: aiOklchHex(Math.max(0.15, tertiaryL - 0.1), 0.12, tertiaryHue),
+      light: aiOklchHex(Math.min(0.9, tertiaryL + 0.14), tertiaryChroma, tertiaryHue),
+      dark: aiOklchHex(Math.max(0.15, tertiaryL - 0.1), tertiaryChroma, tertiaryHue),
       contrastText: labelOn(tertiary, tertiaryHue),
     },
     surface: { main: aiOklchHex(0.955, 0.012 * groundChroma, h), contrastText: aiOklchHex(0.22, textChroma, h) },

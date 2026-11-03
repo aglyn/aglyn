@@ -59,6 +59,7 @@ import type {
   SiteImportLayoutSection,
   SiteImportLineRef,
   SiteImportNavTree,
+  SiteImportPictureFit,
   SiteImportWidth,
 } from './ai-site-import'
 
@@ -132,6 +133,14 @@ export interface SiteImportPageFidelity {
   /** The source's pictures placed on the page. */
   pictures: SiteImportFidelityCount
   /**
+   * The source's pictures framed as the source frames them (AGL-4138): each
+   * in a box of the shape the source shows it at — the box or the height it
+   * crops it to, else its own — within 5%, or in no box at all where the
+   * source crops nothing. A round portrait, and a picture the source lays
+   * behind its words, are framed by design and not scored.
+   */
+  framing: SiteImportFidelityCount
+  /**
    * The source's icons drawn: each group item's own, each bullet's mark. An
    * icon standing alone in the source (a video's play mark) is no word and no
    * picture of the page, and the build leaves it out (AGL-4107): it is
@@ -157,8 +166,8 @@ export interface SiteImportFidelitySource {
   layout: SiteImportLayout
   /** The page's main-region blocks, which the layout's lines are indexes of. */
   blocks: readonly SiteImportBlock[]
-  /** The source's pictures as the site's library holds them (`from` → `src`); without them a picture is counted, not placed. */
-  photos?: ReadonlyArray<{ from?: string; src: string }>
+  /** The source's pictures as the site's library holds them (`from` → `src`, and their size); without them a picture is counted, not placed. */
+  photos?: ReadonlyArray<{ from?: string; src: string; width?: number; height?: number }>
 }
 
 /*------------------------------------------
@@ -575,7 +584,8 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
           const units = unitsOn(built, placement, node.items.map((item) => item.lines), root)
           // Each item's own icon and its bullets' marks, in the element that is the item.
           node.items.forEach((item, at) => {
-            const wanted = (item.icon !== undefined ? 1 : 0) + (item.listIcon !== undefined ? (item.list?.length ?? 0) : 0)
+            // Its corner arrow too (AGL-4138): a card's "↗" is an icon of its own.
+            const wanted = (item.icon !== undefined ? 1 : 0) + (item.mark !== undefined ? 1 : 0) + (item.listIcon !== undefined ? (item.list?.length ?? 0) : 0)
             if (!wanted) return
             icons.source += wanted
             const element = units[at]?.element
@@ -629,6 +639,7 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
   })
 
   const pictures = picturesScore(source, built, placement)
+  const framing = framingScore(source, built, placement)
   const headings = headingsScore(source, built, placement)
   const widths = widthsScore(sections, built, roots)
   const forms = ratioBoth(
@@ -648,6 +659,7 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
     tables: ratioKept(tables.source, tables.built),
     tabs: ratioKept(tabs.source, tabs.built),
     pictures,
+    framing,
     icons: { ...ratioKept(icons.source, icons.built), lone: icons.lone },
     buttons: { ...ratioKept(buttons.source, buttons.built), unlinked: buttons.unlinked },
     headings,
@@ -729,6 +741,96 @@ function picturesScore(source: SiteImportFidelitySource, built: Built, placement
   return ratioKept(refs.length, refs.filter((ref) => placement.of.has(ref)).length)
 }
 
+/** How near two shapes must be to be one (AGL-4138): 5%. */
+const SAME_SHAPE = 0.05
+
+/** A box's shape as the compiler writes it, width over height: "1600 / 900", "1.7778", 1.5. */
+function shapeOf(value: unknown): number | null {
+  if (typeof value === 'number') return value > 0 ? value : null
+  if (typeof value !== 'string') return null
+  const match = /^\s*(\d*\.?\d+)\s*(?:\/\s*(\d*\.?\d+))?\s*$/.exec(value)
+  if (!match) return null
+  const width = Number(match[1])
+  const height = match[2] === undefined ? 1 : Number(match[2])
+  return width > 0 && height > 0 ? width / height : null
+}
+
+/** A height in px as the compiler writes one: "320px", 320. */
+function heightOf(value: unknown): number | null {
+  if (typeof value === 'number') return value > 1 ? value : null
+  const match = typeof value === 'string' ? /^\s*(\d*\.?\d+)px\s*$/.exec(value) : null
+  return match ? Number(match[1]) : null
+}
+
+/**
+ * The box a built picture is shown in: its own `aspectRatio` or height, else
+ * the frame holding it alone that sets one; `whole` where nothing frames it, or
+ * it is fitted inside its box (`contain`), which cuts nothing.
+ */
+function builtFrame(built: Built, id: string): { ratios: number[]; height: number | null } | 'whole' {
+  const image = built.node(id)
+  if (!image) return 'whole'
+  if (image.props?.['objectFit'] === 'contain') return 'whole'
+  const read = (node: SiteImportFidelityNode | undefined): { ratios: number[]; height: number | null } | null => {
+    const sx = node?.sx ?? {}
+    const height = heightOf(node?.componentId === 'image' ? (node.props?.['height'] ?? sx['height']) : sx['height'])
+    if (height !== null) return { ratios: [], height }
+    const ratio = sx['aspectRatio']
+    const ratios = (ratio && typeof ratio === 'object' ? Object.values(ratio) : [ratio]).map(shapeOf).filter((value): value is number => value !== null)
+    return ratios.length ? { ratios, height: null } : null
+  }
+  const own = read(image)
+  if (own) return own
+  const frame = built.parent.get(id)
+  const holder = frame ? built.node(frame) : undefined
+  if (holder && built.children(frame as string).length === 1 && holder.componentId === 'muiBox') return read(holder) ?? 'whole'
+  return 'whole'
+}
+
+/**
+ * The pictures framed as their source frames them (AGL-4138): each placed
+ * picture's box against the shape the source shows it at — the box or the
+ * height it crops it to, else its own, by the library's copy's size or its
+ * `width` and `height` — within 5%; a picture the source shows whole may be
+ * shown in no box. A round portrait and the picture a section lays behind
+ * its words are not scored, nor a picture whose own shape is not known.
+ */
+function framingScore(source: SiteImportFidelitySource, built: Built, placement: Placement): SiteImportFidelityCount {
+  const sizes = new Map<string, number>()
+  for (const photo of source.photos ?? []) if (photo.from && photo.width && photo.height) sizes.set(photo.from, photo.width / photo.height)
+  let measured = 0
+  let kept = 0
+  const score = (ref: SiteImportLineRef, fit: SiteImportPictureFit | undefined) => {
+    const block = source.blocks[ref]
+    const id = placement.of.get(ref)
+    if (block?.kind !== 'image' || !id || (fit?.radius ?? 0) >= 999) return
+    const frame = builtFrame(built, id)
+    const own = sizes.get(block.url) ?? fit?.ratio ?? null
+    if (fit?.height) {
+      measured += 1
+      if (frame !== 'whole' && frame.height !== null && Math.abs(frame.height / fit.height - 1) <= SAME_SHAPE) kept += 1
+      return
+    }
+    const wanted = fit?.box ?? own
+    if (wanted === null || wanted === undefined) return
+    measured += 1
+    if (frame === 'whole') {
+      if (!fit?.box) kept += 1
+      return
+    }
+    if (frame.height === null && frame.ratios.every((ratio) => Math.abs(ratio / wanted - 1) <= SAME_SHAPE)) kept += 1
+  }
+  for (const section of source.layout.sections) {
+    // A picture the section lays behind its words fills the band, as it is meant to.
+    const behind = section.hero?.picture === 'behind' ? section.lines.find((ref) => source.blocks[ref]?.kind === 'image') : undefined
+    for (const node of layoutNodes(section.nodes)) {
+      if (node.kind === 'picture' && node.line !== behind) score(node.line, node.fit)
+      if (node.kind === 'group') for (const item of node.items) if (item.image !== undefined && item.image !== behind) score(item.image, item.imageFit)
+    }
+  }
+  return ratioKept(measured, kept)
+}
+
 /** The headings: each of the source's drawn as a heading (an `h1`–`h6`, or the question of an accordion). */
 function headingsScore(source: SiteImportFidelitySource, built: Built, placement: Placement): SiteImportFidelityCount {
   const refs = source.layout.sections.flatMap((section: SiteImportLayoutSection) => section.lines).filter((ref) => source.blocks[ref]?.kind === 'heading')
@@ -751,6 +853,7 @@ function pageMeasures(report: Omit<SiteImportPageFidelity, 'score' | 'lowest'>):
     ['tables', report.tables],
     ['tabs', report.tabs],
     ['pictures', report.pictures],
+    ['framing', report.framing],
     ['icons', report.icons],
     ['buttons', report.buttons],
     ['headings', report.headings],
