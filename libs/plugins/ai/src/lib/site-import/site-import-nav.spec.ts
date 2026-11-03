@@ -59,6 +59,9 @@ describe('aglyn.com’s header menu', () => {
       href: 'https://aglyn.com/product/besigner',
       iconPath: expect.stringMatching(/^M3 11H11V3H3/),
       viewBox: '0 0 24 24',
+      // Its column and its tile (AGL-4139).
+      at: 0,
+      tile: { fill: '#e6f5ff', radius: 8, color: '#0077ad' },
     })
     expect(product?.items[13]).toMatchObject({ label: 'See all products →', href: 'https://aglyn.com/product' })
   })
@@ -112,11 +115,116 @@ describe('aglyn.com’s footer', () => {
   it('reads its seven profiles, its other links, its © line word for word, and its facts', () => {
     const read = footer()
     expect(read.social.map((entry) => entry.network)).toEqual(['x', 'linkedin', 'github', 'facebook', 'youtube', 'instagram', 'tiktok'])
-    expect(read.links.map((link) => link.label)).toEqual(['Aglyn for developers →', 'Privacy', 'Terms', 'Legal', 'Status'])
+    // The developer card's link is its box's (AGL-4139), not one of these.
+    expect(read.links.map((link) => link.label)).toEqual(['Privacy', 'Terms', 'Legal', 'Status'])
     expect(read.copyright).toBe('© 2026 Aglyn LLC. All rights reserved. Aglyn™ and Besigner™ are trademarks of Aglyn LLC.')
     expect(read.text[0]).toBe('The visual builder with a real platform underneath. Design, ship, and run every site from one place.')
     // The footer prints no address; the site's structured data does.
     expect([read.address, read.phone, read.email]).toEqual(['5900 Balcones Drive STE 100, Austin, TX 78731, US', '+1-512-555-0142', 'support@example.com'])
+  })
+})
+
+describe('aglyn.com’s mega menus as it builds them (AGL-4139)', () => {
+  const nav = () => {
+    const tree = siteImportNavTree(page('home'))
+    if (!tree) throw new Error('no menu')
+    return tree
+  }
+
+  it('reads Product’s three columns in the source’s order: six entries, seven, then the featured card', () => {
+    const product = nav().items[0]
+    expect(product?.columns?.map((column) => [column.heading, column.band, column.width ?? null])).toEqual([
+      [null, 'plain', null],
+      [null, 'plain', null],
+      ['FEATURED', 'soft', 300],
+    ])
+    const at = (index: number) => product?.items.filter((entry) => entry.at === index).map((entry) => entry.label)
+    expect(at(0)).toEqual(['Besigner', 'Console', 'Commerce', 'POS', 'Forms & Inbox', 'CRM'])
+    // Aglyn AI opens the second column, as the source sets it, not the end of the first.
+    expect(at(1)?.[0]).toBe('Aglyn AI')
+    expect(at(1)).toHaveLength(7)
+    expect(at(2)).toEqual(['See all products →'])
+  })
+
+  it('reads the featured card’s picture, title and line, the picture outside any link', () => {
+    const featured = nav().items[0]?.columns?.[2]
+    expect(featured?.image?.url).toMatch(/^https:\/\/aglyn\.com\/api\/media\/cdn\/.+\/CRxi1PaHY1\?/)
+    expect(featured?.lines).toEqual(['Besigner', 'Design on a live canvas with real components and instant publish.'])
+  })
+
+  it('reads each entry’s tinted tile: its fill, its corners and its icon’s own color', () => {
+    const product = nav().items[0]
+    const tiled = product?.items.filter((entry) => entry.tile) ?? []
+    expect(tiled).toHaveLength(13)
+    expect(product?.items[0]?.tile).toEqual({ fill: '#e6f5ff', radius: 8, color: '#0077ad' })
+    expect(product?.items[1]?.tile).toEqual({ fill: '#eef0f2', radius: 8, color: '#404c5c' })
+    expect(product?.items[4]?.tile).toEqual({ fill: '#fbe6fe', radius: 8, color: '#e040fb' })
+    // A link with no icon has no tile.
+    expect(product?.items[13]?.tile).toBeUndefined()
+  })
+
+  it('reads Solutions’ dark developer column with its heading, its words and its three links', () => {
+    const solutions = nav().items[1]
+    expect(solutions?.columns?.map((column) => [column.heading, column.band, column.width ?? null])).toEqual([
+      ['BY TEAM', 'plain', 328],
+      ['BY USE CASE', 'plain', 328],
+      ['FOR DEVELOPERS', 'dark', 280],
+    ])
+    expect(solutions?.columns?.[2]?.lines).toEqual([
+      'Open source & self-hostable',
+      'Aglyn is Apache-2.0. Fork it, self-host it with Docker, and extend it with plugins and APIs.',
+    ])
+    expect(solutions?.items.filter((entry) => entry.at === 2).map((entry) => entry.label)).toEqual(['Developers home', 'Star on GitHub →', 'See all solutions →'])
+    // The plain links of the middle column have no tile.
+    expect(solutions?.items.filter((entry) => entry.at === 1).some((entry) => entry.tile)).toBe(false)
+  })
+
+  it('reads both panels as opening on hover: hidden until shown, under names that are links, capped at 1,536 pixels', () => {
+    expect(nav().items.slice(0, 2).map((group) => group.panel)).toEqual([
+      { width: 1536, hover: true },
+      { width: 1536, hover: true },
+    ])
+    expect(nav().items.slice(2).every((group) => !group.panel && !group.columns)).toBe(true)
+  })
+
+  it('reads the footer’s logo and its developer card as a filled box, which its words and links then leave out', () => {
+    const footer = siteImportFooterColumns(page('home'))
+    expect(footer?.logo).toBe(true)
+    expect(footer?.panels).toEqual([
+      {
+        heading: 'ARE YOU A DEVELOPER?',
+        lines: ['Open source. Self-hostable. Yours to run.'],
+        band: 'soft',
+        links: [{ label: 'Aglyn for developers →', href: 'https://aglyn.com/developers' }],
+        iconPath: expect.stringMatching(/^M14\.6,16\.6/),
+      },
+    ])
+    expect(footer?.text).toEqual(['The visual builder with a real platform underneath. Design, ship, and run every site from one place.'])
+  })
+})
+
+describe('how a menu opens (AGL-4139)', () => {
+  /** A one-menu header: its name a link or a button, its panel hidden by the page's own sheet or not. */
+  const header = (name: string, hidden: boolean) => `<!doctype html><html><head><style>${hidden ? '.panel{display:none}' : ''}</style></head><body>
+    <header><nav><div class="item">${name}<div class="panel"><a href="/a">Alpha</a><a href="/b">Beta</a></div></div><a href="/about">About</a></nav></header>
+    <main><h1>Fixture</h1><p>Words.</p></main></body></html>`
+  const read = (html: string) => {
+    const extract = extractSiteImportPage(html, 'https://shop.example/', (url) => url.hostname === 'shop.example', { structure: true })
+    return siteImportNavTree(extract as SiteImportFrameSource)?.items[0]
+  }
+
+  it('on hover, where the source hides its panel under a name that is a link', () => {
+    expect(read(header('<a href="/shop">Shop</a>', true))?.panel).toEqual({ width: null, hover: true })
+  })
+
+  it('on a click, where the name is a button: a disclosure the source opens on a click', () => {
+    const group = read(header('<button type="button" aria-expanded="false">Shop</button>', true))
+    expect(group?.label).toBe('Shop')
+    expect(group?.panel?.hover).toBe(false)
+  })
+
+  it('not on hover where nothing hides its panel', () => {
+    expect(read(header('<a href="/shop">Shop</a>', false))?.panel?.hover).toBe(false)
   })
 })
 
@@ -131,6 +239,15 @@ describe('a Squarespace header and footer', () => {
     ])
     expect(nav?.ctas).toEqual([{ label: 'Book a class', href: 'https://www.tidewater-pottery.example/book', style: 'secondary' }])
     expect(nav?.phoneMenu).toBe(true)
+  })
+
+  it('reads its folder as one column of plain links, no tiles, opening as the source’s sheets say nothing to hide it (AGL-4139)', () => {
+    const folder = siteImportNavTree(page('pottery'))?.items[0]
+    expect(folder?.columns).toEqual([{ heading: null, lines: [], band: 'plain' }])
+    expect(folder?.items.every((entry) => entry.at === 0 && !entry.tile)).toBe(true)
+    expect(folder?.panel).toEqual({ width: null, hover: false })
+    const footer = siteImportFooterColumns(page('pottery'))
+    expect([footer?.logo, footer?.panels]).toEqual([undefined, undefined])
   })
 
   it('reads the footer’s column, its address, phone and email as written, its icon profiles by their names', () => {

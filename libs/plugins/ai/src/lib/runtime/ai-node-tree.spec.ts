@@ -1297,6 +1297,34 @@ describe('validateAiNodeTree a logo for one color scheme (AGL-4119)', () => {
   })
 })
 
+describe('validateAiNodeTree an element that starts hidden (AGL-4139)', () => {
+  const panel = (className: string) =>
+    tree({
+      componentId: 'div',
+      children: [
+        {
+          componentId: 'section',
+          props: { element: 'section' },
+          children: [{ componentId: 'muiBox', props: { className }, children: [{ componentId: 'muiTypography', props: { children: 'A menu panel' } }] }],
+        },
+      ],
+    })
+  const classOf = (result: AiNodeTreeResult) =>
+    result.ok ? Object.values(result.nodes).find((node) => node.componentId === 'muiBox')?.props?.['className'] : 'refused'
+
+  it('keeps the Besigner’s "Start hidden" class on what code builds, and says nothing of it', () => {
+    const result = validateAiNodeTree(panel('aglyn-hidden'), 'screen', { codeBuilt: true })
+    expect(classOf(result)).toBe('aglyn-hidden')
+    expect(result.ok && result.repairs.some((line) => line.includes('className'))).toBe(false)
+  })
+
+  it('drops it from what a model writes, and any other class from what code builds', () => {
+    expect(classOf(validateAiNodeTree(panel('aglyn-hidden'), 'screen'))).toBeUndefined()
+    expect(classOf(validateAiNodeTree(panel('aglyn-hidden hero'), 'screen', { codeBuilt: true }))).toBeUndefined()
+    expect(classOf(validateAiNodeTree(panel('hero'), 'screen', { codeBuilt: true }))).toBeUndefined()
+  })
+})
+
 describe('validateAiNodeTree binding tokens (AGL-2909)', () => {
   const bound = (image: Record<string, unknown>) =>
     tree({

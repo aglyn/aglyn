@@ -469,13 +469,23 @@ describe('the header and footer, scored against the source’s', () => {
       entries: { source: 30, built: 30, ratio: 1 },
       details: { source: 38, built: 38, ratio: 1 },
       ctas: { source: 2, built: 2, ratio: 1 },
-      drawer: { source: 37, built: 37, ratio: 1 },
+      // Every word of both panels too (AGL-4139): their columns' headings and lines.
+      drawer: { source: 45, built: 45, ratio: 1 },
       phone: { source: 1, built: 1, ratio: 1 },
       nowrap: { source: 1, built: 1, ratio: 1 },
+      // The menus as the source builds them (AGL-4139): six columns in order, the featured card, the dark column and the
+      // footer's developer card filled, nineteen tiles, the featured picture, both opening on hover, the footer's logo.
+      menuColumns: { source: 6, built: 6, ratio: 1 },
+      panels: { source: 3, built: 3, ratio: 1 },
+      tiles: { source: 19, built: 19, ratio: 1 },
+      pictures: { source: 1, built: 1, ratio: 1 },
+      hover: { source: 2, built: 2, ratio: 1 },
+      logo: { source: 1, built: 1, ratio: 1 },
       columns: { source: 6, built: 6, ratio: 1 },
-      links: { source: 54, built: 54, ratio: 1 },
+      // The developer card's link, line and heading are its box's now, not the footer's own links and words.
+      links: { source: 53, built: 53, ratio: 1 },
       social: { source: 7, built: 7, ratio: 1 },
-      facts: { source: 7, built: 7, ratio: 1 },
+      facts: { source: 5, built: 5, ratio: 1 },
     })
   })
 
@@ -491,6 +501,11 @@ describe('the header and footer, scored against the source’s', () => {
       details: { source: 0, built: 0, ratio: 1 },
       ctas: { source: 1, built: 1, ratio: 1 },
       drawer: { source: 8, built: 8, ratio: 1 },
+      // A folder of plain links the source's sheets do not hide: no columns, tiles or hover to keep (AGL-4139).
+      menuColumns: { source: 0, built: 0, ratio: 1 },
+      tiles: { source: 0, built: 0, ratio: 1 },
+      hover: { source: 0, built: 0, ratio: 1 },
+      logo: { source: 0, built: 0, ratio: 1 },
       columns: { source: 1, built: 1, ratio: 1 },
       links: { source: 3, built: 3, ratio: 1 },
       social: { source: 2, built: 2, ratio: 1 },
@@ -568,6 +583,30 @@ describe('the header and footer, scored against the source’s', () => {
     // One profile is also a link in the source's columns, which the footer still shows.
     expect(report.social).toEqual({ source: 7, built: 1, ratio: 1 / 7 })
     expect(report.lowest).toBe('social')
+  })
+
+  it('sees menus that open only on a click, tiles drawn bare, a featured card that lost its picture and its box (AGL-4139)', () => {
+    const clickOnly = siteImportFrameFidelity(aglyn, changed(aglyn.tree, (nodes) => {
+      for (const id of Object.keys(nodes)) delete (nodes[id] as Nodes[string] & { interactions?: unknown }).interactions
+    }))
+    // A name whose hover shows nothing is no menu at all, and a Mega Menu with no hover opens only on a click.
+    expect(clickOnly.hover).toEqual({ source: 2, built: 0, ratio: 0 })
+    const bare = siteImportFrameFidelity(aglyn, changed(aglyn.tree, (nodes) => {
+      for (const id of idsOf(nodes, (node) => node.componentId === 'icon')) {
+        const tile = (nodes[id] as Nodes[string]).parentId as string
+        if ((nodes[tile] as Nodes[string]).componentId === 'muiCard') {
+          ;(nodes[tile] as Nodes[string]).componentId = 'muiStack'
+          delete (nodes[tile] as Nodes[string]).sx
+        }
+      }
+    }))
+    expect(bare.tiles.built).toBe(0)
+    const plain = siteImportFrameFidelity(aglyn, changed(aglyn.tree, (nodes) => {
+      for (const id of idsOf(nodes, (node) => node.componentId === 'image' && String(node.props?.['src']).includes('/mp'))) drop(nodes, id)
+    }))
+    expect(plain.pictures).toEqual({ source: 1, built: 0, ratio: 0 })
+    // Today's frame for the same source, with neither the hover nor the columns, scores below the bar.
+    expect(siteImportFrameFidelity(aglyn, headerOf1029()).hover.built).toBe(0)
   })
 
   it('a source with no menu read and no footer read asks nothing of the frame', () => {
