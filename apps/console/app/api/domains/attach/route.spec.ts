@@ -562,6 +562,63 @@ describe('a successful POST is not a serving domain (AGL-1913)', () => {
     })
   })
 
+  it('claims the other spelling of a typed domain as a permanent redirect (AGL-4134)', async () => {
+    seedHost('mine')
+
+    const response = await POST(post({ hostId: 'mine', domain: 'example.com' }))
+
+    expect(response.status).toBe(200)
+    expect(docs.get('hosts/mine')).toMatchObject({
+      cname: 'example.com',
+      cnameTwin: 'www.example.com',
+    })
+    expect(JSON.parse(String(redirectCalls('www.example.com')[0][1].body))).toEqual({
+      name: 'www.example.com',
+      redirect: 'example.com',
+      redirectStatusCode: 308,
+    })
+  })
+
+  it('redirects the bare domain when the owner typed www (AGL-4134)', async () => {
+    seedHost('mine')
+
+    const response = await POST(post({ hostId: 'mine', domain: 'www.example.com' }))
+
+    expect(response.status).toBe(200)
+    expect(docs.get('hosts/mine')?.['cnameTwin']).toBe('example.com')
+  })
+
+  it('claims no twin for a deeper subdomain (AGL-4134)', async () => {
+    seedHost('mine')
+
+    const response = await POST(post({ hostId: 'mine', domain: 'shop.example.com' }))
+
+    expect(response.status).toBe(200)
+    expect(docs.get('hosts/mine')?.['cnameTwin']).toBeUndefined()
+  })
+
+  it('connects the typed name alone when another site holds its partner (AGL-4134)', async () => {
+    seedHost('mine')
+    seedHost('theirs', { cname: 'www.example.com' })
+
+    const response = await POST(post({ hostId: 'mine', domain: 'example.com' }))
+
+    expect(response.status).toBe(200)
+    expect(docs.get('hosts/mine')?.['cname']).toBe('example.com')
+    expect(docs.get('hosts/mine')?.['cnameTwin']).toBeUndefined()
+    expect(redirectCalls('www.example.com')).toHaveLength(0)
+  })
+
+  it('still refuses a typed name another site holds (AGL-4134)', async () => {
+    seedHost('mine')
+    seedHost('theirs', { cname: 'example.com' })
+
+    const response = await POST(post({ hostId: 'mine', domain: 'example.com' }))
+
+    expect(response.status).toBe(409)
+    expect(docs.get('hosts/mine')?.['cname']).toBeUndefined()
+  })
+
   it('falls through to the old behaviour when the status probe cannot answer', async () => {
     // A status API outage must not block an attach that otherwise succeeded.
     seedHost('mine')

@@ -16,6 +16,7 @@
  */
 
 import {
+  wwwPartnerOf,
   CNAME_TARGET,
   dnsInstructionsIntro,
   dnsInstructionsFor,
@@ -283,4 +284,23 @@ describe('the DNS wizard follows the operator, not us (AGL-2037)', () => {
         .HOST_APEX_ADDRESSES,
     ).toEqual(['198.51.100.7'])
   })
+})
+
+describe('wwwPartnerOf (AGL-4134)', () => {
+  it.each([
+    ['example.com', 'www.example.com'],
+    ['www.example.com', 'example.com'],
+    ['example.co.uk', 'www.example.co.uk'],
+    ['www.example.co.uk', 'example.co.uk'],
+    ['  EXAMPLE.com.  ', 'www.example.com'],
+  ])('pairs %s with %s', (domain, partner) => {
+    expect(wwwPartnerOf(domain)).toBe(partner)
+  })
+
+  it.each(['shop.example.com', 'www.shop.example.com', 'com', ''])(
+    'gives %j no partner',
+    (domain) => {
+      expect(wwwPartnerOf(domain)).toBeNull()
+    },
+  )
 })

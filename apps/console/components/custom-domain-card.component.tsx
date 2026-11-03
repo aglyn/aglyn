@@ -49,8 +49,10 @@ import {
 import {
   CNAME_TARGET,
   dnsInstructionsIntro,
+  DNS_BOTH_RECORDS_NOTE,
   dnsInstructionsFor,
   formatDnsInstruction,
+  wwwPartnerOf,
 } from '../utils/tenant-dns'
 
 export interface CustomDomainCardProps {
@@ -524,6 +526,11 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
                 </Typography>
               </Stack>
             ))}
+            {(!domain.trim() || wwwPartnerOf(domain)) && (
+              <Typography variant="body2" color="text.secondary">
+                {DNS_BOTH_RECORDS_NOTE}
+              </Typography>
+            )}
             <Stack direction="row" spacing={1}>
               <TextField
                 size="small"
