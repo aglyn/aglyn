@@ -283,6 +283,7 @@ class CrmApi(private val api: ConsoleApiClient, private val writer: FirestoreWri
         "hostId" to scope.hostId,
         "byUid" to scope.uid,
         "createdAt" to now,
+        "updatedAt" to now,
       ).apply {
         putAll(links)
         company?.let { put("companyId", it) }
@@ -313,6 +314,37 @@ class CrmApi(private val api: ConsoleApiClient, private val writer: FirestoreWri
     }
     crmActivityCompanyId(null, read("deals", "dealId"), null, null, null)?.let { return it }
     return crmActivityCompanyId(null, null, read("contacts", "contactId"), scope.groupId, scope.org)
+  }
+
+  /**
+   * A deal's contact roles, as the console's card writes them (`dealContactRolesSave`): the whole list, its Primary as
+   * `contactId` with the name copied beside it, and the ids and keys a merge, an erasure and a rename find the deal by.
+   */
+  suspend fun saveDealContactRoles(id: String, deal: Map<String, Any?>, next: List<CrmContactRole>, values: List<Pair<String, Boolean>>, primaryName: (String) -> String?) {
+    val write = dealContactRolesSave(deal, next, values).getOrThrow()
+    val list = contactRoleListFields(write.contactRoles, deal["visibleTo"])
+    writer.merge(
+      path(CrmKind.DEAL, id),
+      buildMap {
+        put("contactRoles", write.contactRoles.map { it.stored })
+        put("contactId", write.contactId ?: com.aglyn.core.FirestoreDelete)
+        if (write.primaryChanged) put("contactName", write.contactId?.let(primaryName)?.ifEmpty { null } ?: com.aglyn.core.FirestoreDelete)
+        put("contactRoleContactIds", list.ids)
+        put("scopedContactRoleContactIds", list.scoped)
+        put("contactRoleKeys", list.keys)
+        put("updatedAt", firestoreNow())
+      },
+    )
+  }
+
+  /** A company's contact roles (`companyContactRolesSave`): the whole list, and the ids and keys a merge, an erasure and a rename find the company by. */
+  suspend fun saveCompanyContactRoles(id: String, company: Map<String, Any?>, next: List<CrmContactRole>, values: List<Pair<String, Boolean>>) {
+    val roles = companyContactRolesSave(company, next, values).getOrThrow()
+    val list = contactRoleListFields(roles, null)
+    writer.merge(
+      path(CrmKind.COMPANY, id),
+      mapOf("contactRoles" to roles.map { it.stored }, "contactRoleContactIds" to list.ids, "contactRoleKeys" to list.keys, "updatedAt" to firestoreNow()),
+    )
   }
 
   suspend fun editActivity(id: String, body: String) {

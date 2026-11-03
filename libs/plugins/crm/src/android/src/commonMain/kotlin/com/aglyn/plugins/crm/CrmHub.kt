@@ -95,7 +95,12 @@ class CrmReference(
   val pipelines: List<Pipeline>,
   val companies: List<FieldOption>,
   val contacts: List<FieldOption>,
+  /** The most recently updated deals, which **Related To** offers below the open deals of the people on an entry. */
+  val deals: List<com.aglyn.core.FirestoreDoc> = emptyList(),
 ) {
+  /** A contact's name as the windows hold it; null for one outside them. */
+  fun contactLabel(id: String): String? = contacts.firstOrNull { it.value == id }?.label
+
   fun fields(kind: CrmKind): List<CrmField> = standardFields(kind, picklists, members, companies, contacts) + customFields(kind, customFields)
   /** A teammate's name; one the roster does not hold (yet) reads `Member 4f2a9c`, as the console's `labelFor` does, never a raw uid. */
   fun memberLabel(uid: String?): String? = uid?.takeIf { it.isNotEmpty() }?.let { id -> members.firstOrNull { it.uid == id }?.label ?: "Member ${id.takeLast(6)}" }
@@ -135,6 +140,7 @@ fun rememberCrmReference(context: NativePluginContext, scope: CrmScope, api: Crm
   val pipelineDocs = live(scope.orgId) { reader.observe(scopedQuery(scope, "pipelines", limit = 20)) }
   val companyDocs = live(scope.orgId) { reader.observe(scopedQuery(scope, "companies", orderBy = listOf(FirestoreOrder("nameLower")), limit = 200)) }
   val contactDocs = live(scope.orgId) { reader.observe(scopedQuery(scope, "contacts", orderBy = listOf(FirestoreOrder("updatedAt", true)), limit = 200)) }
+  val dealDocs = live(scope.orgId) { reader.observe(scopedQuery(scope, "deals", orderBy = listOf(FirestoreOrder("updatedAt", true)), limit = 200)) }
   fun <T> ready(value: Live<List<com.aglyn.core.FirestoreDoc>>, map: (List<com.aglyn.core.FirestoreDoc>) -> T, empty: T) = (value as? Live.Ready)?.value?.let(map) ?: empty
   return CrmReference(
     members = members,
@@ -143,6 +149,7 @@ fun rememberCrmReference(context: NativePluginContext, scope: CrmScope, api: Crm
     pipelines = ready(pipelineDocs, { docs -> docs.map(::pipelineOf) }, emptyList()),
     companies = ready(companyDocs, { docs -> docs.map { FieldOption(it.id, it.string("name") ?: it.id) } }, emptyList()),
     contacts = ready(contactDocs, { docs -> docs.map { FieldOption(it.id, crmContactLabel(contactView(it.data, crmContactPrimaryHolder(it.data, null)))) } }, emptyList()),
+    deals = ready(dealDocs, { it }, emptyList()),
   )
 }
 
