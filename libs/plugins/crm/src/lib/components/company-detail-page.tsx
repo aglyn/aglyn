@@ -64,6 +64,7 @@ export function CompanyDetailPage(props: CrmDetailPageProps) {
     data: company,
     status,
     fromCache,
+    listen,
   } = useFirestoreDoc<CrmCompany>(
     () =>
       scope
@@ -113,7 +114,7 @@ export function CompanyDetailPage(props: CrmDetailPageProps) {
       <Stack spacing={2}>
         <CompanyPropertiesCard
           company={{ ...company, $id: id }}
-          seed={{ fromCache, unreadable: status === 'error' }}
+          seed={{ fromCache, unreadable: status === 'error', listen }}
           hostId={hostId}
           org={org}
           crmScope={crmScope}
@@ -145,6 +146,7 @@ export function CompanyDetailPage(props: CrmDetailPageProps) {
           routes={routes}
           fromCache={fromCache}
           unreadable={status === 'error'}
+          listen={listen}
         />
         <CompanyDealsCard
           hostId={hostId}

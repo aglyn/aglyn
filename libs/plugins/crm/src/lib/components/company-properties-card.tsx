@@ -25,6 +25,7 @@ import {
 import { mdiDeleteOutline, mdiPencilOutline } from '@aglyn/shared-data-mdi'
 import { AppLink, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import type { ListenHandle } from '@aglyn/tenant-feature-instance'
 import { Button, Link, Stack, Typography } from '@mui/material'
 import { type ReactNode, useCallback, useState } from 'react'
 import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
@@ -54,7 +55,12 @@ export const COMPANY_PAGE_HELP = pluginDocsHelp('companies', { anchor: '#a-compa
 export interface CompanyPropertiesCardProps {
   company: Partial<CrmCompany> & { $id: string }
   /** Whether the document the card holds is server-confirmed. */
-  seed: { fromCache: boolean; unreadable: boolean }
+  seed: {
+    fromCache: boolean
+    unreadable: boolean
+    /** The company's listener, so a save waits on that read alone (AGL-4135). */
+    listen?: ListenHandle | null
+  }
   /** The site the record is read under, or `null` at the organization level. */
   hostId: string | null
   org?: Partial<AglynOrgBilling>

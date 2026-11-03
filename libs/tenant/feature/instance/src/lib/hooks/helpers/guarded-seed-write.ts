@@ -75,7 +75,13 @@
  * ones the doc above says must carry the guard anyway.
  */
 
-import { whenListensConfirmed } from './listen-confirmation'
+import {
+  whenListenConfirmed,
+  whenListensConfirmed,
+  type ListenHandle,
+} from './listen-confirmation'
+
+export type { ListenHandle } from './listen-confirmation'
 
 export type StaleSeedReason =
   | 'unreadable'
@@ -119,6 +125,14 @@ export interface GuardedSeedWriteOptions {
   unreadable?: boolean
   /** The seeding snapshot came from cache (`metadata.fromCache`). */
   fromCache?: boolean
+  /**
+   * The listener the seed came from: `listen` on the hook that gave
+   * `fromCache` (AGL-4135). With it, an unconfirmed seed waits on that read
+   * alone. Without it, the save waits on every listener unconfirmed at the
+   * click, so an unrelated one that is slow, refused or torn down can hold it
+   * back or refuse it.
+   */
+  listen?: ListenHandle | null
   /**
    * Also consult `session-health`. On by default; the only reason to turn it
    * off is a surface that deliberately writes during a known-degraded
@@ -237,7 +251,8 @@ export function checkSeedFreshness(
  * A seed that is only UNCONFIRMED is waited for before it is refused
  * (AGL-4120): the save stays in its busy state while the server answers, which
  * is normally a moment. The other reasons are facts about the read or the
- * session that waiting does not change, and they refuse at once.
+ * session that waiting does not change, and they refuse at once. A save that
+ * names its seed's listener (`listen`) waits on that read alone (AGL-4135).
  */
 export async function writeGuardedBySeed(
   options: GuardedSeedWriteOptions,
@@ -249,7 +264,9 @@ export async function writeGuardedBySeed(
     return verdict
   }
   if (verdict.reason !== 'unconfirmed') return verdict
-  const settlement = await whenListensConfirmed()
+  const settlement = options.listen
+    ? await whenListenConfirmed(options.listen)
+    : await whenListensConfirmed()
   if (settlement === 'refreshed') {
     return {
       ok: false,

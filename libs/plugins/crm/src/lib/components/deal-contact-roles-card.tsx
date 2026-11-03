@@ -24,7 +24,11 @@ import {
   pluginDocsHelp,
 } from '@aglyn/aglyn'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useFirestore, writeGuardedBySeed } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestore,
+  writeGuardedBySeed,
+  type ListenHandle,
+} from '@aglyn/tenant-feature-instance'
 import { deleteField, doc, updateDoc } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
 import { useCrmPicklist } from '../hooks/use-crm-picklist'
@@ -45,6 +49,8 @@ export interface DealContactRolesCardProps {
   /** The listener's verdict on the deal, for the stale-seed guard. */
   fromCache: boolean
   unreadable: boolean
+  /** The deal's listener, so a save waits on that read alone (AGL-4135). */
+  listen?: ListenHandle | null
 }
 
 /**
@@ -60,7 +66,7 @@ export interface DealContactRolesCardProps {
  * above the list.
  */
 export function DealContactRolesCard(props: DealContactRolesCardProps) {
-  const { deal, hostId, org, routes, fromCache, unreadable } = props
+  const { deal, hostId, org, routes, fromCache, unreadable, listen } = props
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const scope = useCrmScope({ hostId, org })
@@ -95,7 +101,7 @@ export function DealContactRolesCard(props: DealContactRolesCardProps) {
       setBusy(true)
       try {
         const written = await writeGuardedBySeed(
-          { subject: 'deal', unreadable, fromCache },
+          { subject: 'deal', unreadable, fromCache, listen },
           async () => {
             await updateDoc(doc(firestore, 'orgs', scope.orgId as string, CRM_COLLECTIONS.deals, deal.$id), {
               ...patch,
@@ -123,7 +129,7 @@ export function DealContactRolesCard(props: DealContactRolesCardProps) {
         setBusy(false)
       }
     },
-    [scope.orgId, deal, roleList.picklist, nameOf, unreadable, fromCache, firestore, enqueueSnackbar],
+    [scope.orgId, deal, roleList.picklist, nameOf, unreadable, fromCache, listen, firestore, enqueueSnackbar],
   )
 
   return (

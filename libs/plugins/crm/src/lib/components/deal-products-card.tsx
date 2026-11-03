@@ -35,7 +35,11 @@ import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { PrerequisiteNotice } from '@aglyn/shared-ui-jsx/components/prerequisite-notice.component'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useFirestore, writeGuardedBySeed } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestore,
+  writeGuardedBySeed,
+  type ListenHandle,
+} from '@aglyn/tenant-feature-instance'
 import {
   Autocomplete,
   Button,
@@ -91,6 +95,8 @@ export interface DealProductsCardProps {
   /** The listener's verdict on the deal, for the stale-seed guard. */
   fromCache: boolean
   unreadable: boolean
+  /** The deal's listener, so a save waits on that read alone (AGL-4135). */
+  listen?: ListenHandle | null
 }
 
 /**
@@ -122,7 +128,7 @@ export interface DealProductsCardProps {
  * a quantity is edited in place and written on blur.
  */
 export function DealProductsCard(props: DealProductsCardProps) {
-  const { deal, orgId, hostId, org, fromCache, unreadable } = props
+  const { deal, orgId, hostId, org, fromCache, unreadable, listen } = props
   const firestore = useFirestore()
   // The catalog searched: the mounted site's, or the deal's own.
   const catalogHostId = hostId ?? deal.hostId ?? null
@@ -152,7 +158,7 @@ export function DealProductsCard(props: DealProductsCardProps) {
       setBusy(true)
       try {
         const verdict = await writeGuardedBySeed(
-          { subject: 'deal', unreadable, fromCache },
+          { subject: 'deal', unreadable, fromCache, listen },
           async () => {
             await updateDoc(doc(firestore, 'orgs', orgId, CRM_COLLECTIONS.deals, deal.$id), {
               lineItems: read.items,
@@ -178,7 +184,7 @@ export function DealProductsCard(props: DealProductsCardProps) {
         setBusy(false)
       }
     },
-    [currency, enqueueSnackbar, unreadable, fromCache, firestore, orgId, deal.$id],
+    [currency, enqueueSnackbar, unreadable, fromCache, listen, firestore, orgId, deal.$id],
   )
 
   const handleRemove = useCallback(

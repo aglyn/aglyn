@@ -140,6 +140,7 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
     data: row,
     status,
     fromCache,
+    listen,
   } = useFirestoreDoc<Record<string, any>>(
     () => (scope ? doc(firestore, scope[0], scope[1], 'contacts', id) : null),
     [firestore, scope, id],
@@ -546,7 +547,7 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
             record={record}
             orgId={orgId}
             consentGroup={consentGroup}
-            seed={{ status, fromCache }}
+            seed={{ status, fromCache, listen }}
             members={members}
             suiteLocked={!suiteIncluded}
           />
@@ -555,7 +556,7 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
             record={record}
             row={row}
             consentGroup={consentGroup}
-            seed={{ status, fromCache }}
+            seed={{ status, fromCache, listen }}
             basePath={basePath}
             bookingsHref={bookingsHref}
           />
