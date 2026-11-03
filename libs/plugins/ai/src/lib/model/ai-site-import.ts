@@ -238,13 +238,40 @@ export type SiteImportGroupKind = 'cards' | 'steps' | 'stats' | 'faq' | 'quotes'
 
 export const SITE_IMPORT_GROUP_KINDS: readonly SiteImportGroupKind[] = ['cards', 'steps', 'stats', 'faq', 'quotes', 'logos', 'pricing', 'list', 'text']
 
-/** One line in place. `role` only where the source's own styling says it (an uppercase eyebrow, a large lede, a small note). */
+/**
+ * One line in place. `role` only where the source's own styling says it (an
+ * uppercase eyebrow, a large lede, a large bold statement, a small note).
+ */
 export interface SiteImportLayoutLine {
   kind: 'line'
   line: SiteImportLineRef
-  role?: 'eyebrow' | 'lede' | 'note'
+  role?: 'eyebrow' | 'lede' | 'statement' | 'note'
   /** The source draws this line (a link, or a `<button>`'s words) as a button. Its destination is the link block's `href`. */
   button?: SiteImportButtonStyle
+  /** An eyebrow the source sets in a pill of its own: a fill or a border, its corners rounded (AGL-4138). */
+  chip?: true
+  /** An eyebrow's color as the source shows it, `#rrggbb` over the ground it sits on (AGL-4138). */
+  color?: string
+}
+
+/**
+ * How the source frames a picture (AGL-4138): the shape its own `width` and
+ * `height` give it, the box it crops it to, its fit in that box, its corners
+ * and its shadow. A source that draws a picture at `width: 100%; height:
+ * auto` crops nothing, and a page brought in shows it whole.
+ */
+export interface SiteImportPictureFit {
+  /** The picture's own shape, width over height, from its `width` and `height` attributes. */
+  ratio?: number
+  /** A shape the source crops it to, width over height: an `aspect-ratio` on it or its box. */
+  box?: number
+  /** A height in px the source crops it to, at whatever width its column gives it. */
+  height?: number
+  objectFit?: 'cover' | 'contain'
+  /** Its corners' radius in px, on it or its box; 999 for a round one. */
+  radius?: number
+  /** It, or its box, is set on a shadow. */
+  shadow?: true
 }
 
 /** A picture in place: an image block. */
@@ -255,6 +282,27 @@ export interface SiteImportLayoutPicture {
   href?: string
   /** It sits in a `<button>` (a video's poster, a lightbox): the picture is kept, the button is not a destination. */
   button?: true
+  /** How the source frames it (AGL-4138). */
+  fit?: SiteImportPictureFit
+}
+
+/**
+ * A filled square an icon sits in (AGL-4138): its fill and corners, and the
+ * icon's own color in it, as the source draws them, `#rrggbb`.
+ */
+export interface SiteImportIconTile {
+  fill: string
+  radius: number
+  color: string | null
+}
+
+/** A line the source draws along one side of each item of a group, in place of a box (AGL-4138): a step's rule. */
+export interface SiteImportRule {
+  side: 'top' | 'right' | 'bottom' | 'left'
+  /** Its width in px. */
+  width: number
+  /** Its color, `#rrggbb`; `null` where the source draws it in the words' own. */
+  color: string | null
 }
 
 /** An icon standing on its own, by index into `SiteImportLayout.icons`. */
@@ -302,8 +350,16 @@ export interface SiteImportLayoutItem {
   /** What its price is for, beside the price: "/mo" (AGL-4083). */
   period?: SiteImportLineRef
   image?: SiteImportLineRef
+  /** How the source frames its picture (AGL-4138). */
+  imageFit?: SiteImportPictureFit
   /** The icon that leads it, by index into `SiteImportLayout.icons`. */
   icon?: number
+  /** The filled square its lead icon sits in (AGL-4138). */
+  tile?: SiteImportIconTile
+  /** A second icon at the end of its first row, as an arrow that it is a link (AGL-4138), by index into `SiteImportLayout.icons`. */
+  mark?: number
+  /** Its figure is drawn in the muted words' color, not the brand's (AGL-4138). */
+  figureMuted?: true
   /** The icon each of its bullet points carries (a check mark), when they share one. */
   listIcon?: number
   /** Where the item goes as a whole: its title link's address. */
@@ -315,8 +371,14 @@ export interface SiteImportLayoutGroup {
   group: SiteImportGroupKind
   /** Columns the source lays the items out in on a wide screen. */
   columns: number
-  /** Each item is drawn as a box (a border, a shadow or a fill of its own). */
+  /** Columns on a tablet, where the source sets fewer there than on a wide screen (AGL-4138). */
+  columnsSm?: number
+  /** Each item is drawn as a box: a shadow, a fill of its own, or a border on two sides or more. */
   boxed: boolean
+  /** Each item is drawn with a line along one side and no box (AGL-4138). */
+  rule?: SiteImportRule
+  /** How the items' words are set, where it is not the section's alignment (AGL-4138). */
+  align?: 'start' | 'center'
   /**
    * Each item is a row of its own, its parts side by side, one under another:
    * a plan's name, words and button, or a label and its value (AGL-4083).
@@ -425,6 +487,12 @@ export interface SiteImportLookFacts {
   link: string | null
   /** Its header bar's background. */
   header: string | null
+  /**
+   * The color most of its eyebrows are drawn in, where that is a color of its
+   * own: none of its text's, its buttons' or white (AGL-4138). The look pass
+   * pins it as the theme's third color. Absent on a read made before.
+   */
+  eyebrow?: string | null
 }
 
 /** A page's layout, as the source lays it out (AGL-4106). */
@@ -447,6 +515,31 @@ export interface SiteImportNavEntry {
   viewBox?: string
   /** The heading of the menu's column it sits in ("By team"). */
   column?: string
+  /** The column of its panel it sits in, by index into its group's `columns` (AGL-4139). */
+  at?: number
+  /** The filled box its icon sits in, as the source draws it (AGL-4139): its fill, corners and the icon's own color. */
+  tile?: { fill: string; radius: number; color: string | null }
+}
+
+/**
+ * One column of a menu's panel as the source sets it (AGL-4139): its heading,
+ * its other lines of words, the fill it sits on, the picture it shows, and
+ * its own width. A footer's filled box is read the same way, with its links.
+ */
+export interface SiteImportNavColumn {
+  heading: string | null
+  /** Its words outside its links, after its heading, as written. */
+  lines: string[]
+  /** The fill it sits on against its panel's: none, a light one, the brand's, or a dark one. */
+  band: SiteImportBand
+  /** The picture it shows outside its links (a featured card's), with `src` once the look pass brings it into the library. */
+  image?: { url: string; alt: string }
+  /** Its own width in CSS pixels, where the source sets one. */
+  width?: number
+  /** A footer box's links, as written (AGL-4139). */
+  links?: SiteImportFooterLink[]
+  /** The icon beside its heading, one path on a 24-unit square. */
+  iconPath?: string
 }
 
 /** A top-level item of the source's menu: a link, or a menu of entries under a name. */
@@ -456,6 +549,13 @@ export interface SiteImportNavGroup {
   href: string | null
   /** Empty for a plain link. */
   items: SiteImportNavEntry[]
+  /** Its panel's columns side by side, in the source's order (AGL-4139); absent on a read made before. */
+  columns?: SiteImportNavColumn[]
+  /**
+   * Its panel (AGL-4139): how wide the source caps it, and whether it opens
+   * on hover — hidden until shown, under a name that is not a button.
+   */
+  panel?: { width: number | null; hover: boolean }
 }
 
 /** A button in the source's header outside its menu ("Sign in", "Start free"). */
@@ -494,6 +594,10 @@ export interface SiteImportFooter {
   email: string | null
   /** Its © line, word for word. */
   copyright: string | null
+  /** It opens with the site's logo (AGL-4139). */
+  logo?: boolean
+  /** Its filled boxes, each with its heading, words and links (AGL-4139), which `text` and `links` then leave out. */
+  panels?: SiteImportNavColumn[]
 }
 
 /** Every line a layout's nodes place, in order. */
@@ -588,6 +692,8 @@ export function siteImportFilterNodes(list: readonly SiteImportLayoutNode[], kee
 function trimItem(item: SiteImportLayoutItem, keep: (ref: SiteImportLineRef) => boolean): SiteImportLayoutItem {
   const out: SiteImportLayoutItem = { ...item, lines: item.lines.filter(keep) }
   for (const key of ['title', 'figure', 'image', 'badge', 'period'] as const) if (out[key] !== undefined && !keep(out[key] as number)) delete out[key]
+  if (out.image === undefined) delete out.imageFit
+  if (out.figure === undefined) delete out.figureMuted
   for (const key of ['text', 'list', 'link'] as const) {
     const list = out[key]?.filter(keep)
     if (list?.length) out[key] = list
@@ -755,6 +861,8 @@ export interface AiSiteImportHome {
   title: string
   description: string
   ogImage: string | null
+  /** The site's icon its head names (AGL-4139): its largest touch icon, else its largest picture icon. Absent on a read made before. */
+  favicon?: string | null
   siteName: string
   brand: {
     kind: 'logo-only' | 'logo-and-name' | 'name-only'
@@ -802,6 +910,8 @@ export interface AiSiteImportLook {
   colors: string[]
   /** The source's logo, as the library holds it, for the header's brand. */
   logo: AiSiteImportPhoto | null
+  /** The pictures the home page's menus show (AGL-4139), as the library holds them, each by the address it came `from`. */
+  pictures?: AiSiteImportPhoto[]
   /** Whether the site's listing was taken from the home page's own words. */
   seo: boolean
   /** The look's seed, which every page of the import is drawn with. */

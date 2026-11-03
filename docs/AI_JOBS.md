@@ -2666,6 +2666,52 @@ whose passes each do one unit (`aiSiteImportNextWork`):
    name (`alt`) and measured by its shape (`aspect`), and never narrower than
    itself. `businessName` is the person's name for the site unless the
    source's differs from it only by case or punctuation.
+
+   **Menus as the source builds them (AGL-4139).** The reader
+   (`site-import-nav.ts`) reads each menu's panel: its `columns`
+   (`SiteImportNavColumn`: the children of the element that lays them side
+   by side, in DOM order, never re-split; each with its heading, its other
+   `lines`, its `band` against the panel's ground, its `image` outside any
+   link, its own `width`), each entry's `at` (its column) and `tile` (the
+   filled box around its icon, its radius and the icon's color), and `panel`
+   (`width`, the cap read at 1,920 px; `hover`, true where the panel is
+   hidden until shown and its name is no `<button>`/`<summary>`). The
+   footer's `logo` (its first picture, before any of its words, is the
+   header brand's by address or alt) and `panels` (a filled box of a few
+   words and links of no column, which `text` and `links` then leave out).
+   The look pass brings each column's picture into the library
+   (`aiSiteImportMenuPictures`, at most 4, onto `look.pictures`) and, where
+   the site has no `seo.favicon`, the head's largest touch icon or raster
+   icon (`aiSiteImportFaviconOf`), re-fanning `hostMemberships`. The frame
+   job carries columns (pictures only from the library), `hover`,
+   `measure` (`xl` from a 1,400 px cap) and each tile as theme ROLES
+   (`aiSiteImportTileRoles` over `aiSiteImportFrameColorRole`, the frame's
+   own ranking, apart from the page compile's `aiSiteImportColorRole`: a
+   light fill `action.hover`, a grey one
+   `action.selected`, a strong one the brand or second color with its
+   `contrastText` ink; an icon `text.secondary` when neutral, `primary.main`
+   within 40° of the button fill's hue, else `secondary.main`), and
+   `siteBrand.footer` when the footer opens with the logo. The frame draws:
+   a hover menu whose name opens a page of its own as that link plus a
+   panel that starts hidden (`aglyn-hidden`, the Besigner's "Start hidden",
+   which the palette validator keeps on code-built nodes only), shown on
+   hover and hidden 250 ms after the pointer leaves
+   (`AiLayoutHoverMenus`, every other hover panel hidden at once); a mega
+   panel in one region under the whole bar (`menuPanels`, in the Toolbar)
+   at the source's measure, a dropdown's under its name; a hover menu with
+   no page of its own as the Dropdown or Mega Menu element with "On hover
+   → Open menu" naming its own id (a click still opens it); a click-only
+   menu as before. Columns are Stacks in a wrapping row, each `flex` its
+   own width or a share; a filled column a flat Card (`action.hover`, the
+   brand's, or inside a `colorScheme: 'dark'` Stack); a tile a flat Card
+   around the icon. Every repeated element carries at most one `sx` key, so
+   rule 16's duplicated-inline-style never fires however many menus a
+   header has, and no width is a fixed `width` (rule 12). In the Drawer a
+   hover menu is an Accordion that opens on a tap, holding every column's
+   heading and lines as captions and every entry. The layout store renames
+   every node an interaction names (`menuNodeId`, `drawerNodeId`, a
+   `[data-aglyn="leaf:…"]` selector) to its stored id
+   (`aiLayoutStoredInteractions`).
 5. **Each page**: its photos first (no model), through `pluginMediaIngest()
    .ingest` with `importedFrom` and the key `import:<sha256 of the address>`,
    asked of `findImportedPhoto` before anything is fetched, so a photo is stored
@@ -2717,8 +2763,39 @@ whose passes each do one unit (`aiSiteImportNextWork`):
      read. An answer never reaches past what a group can draw: `list` joins
      nothing (a group of more than one line an item is drawn ruled), `stats` is
      only for items that are figures and nothing else, and `cover` or `poster`
-     never repaints a section that keeps a lighter ground of its own. A page past
+     never repaints a section that keeps a lighter ground of its own. Nor does
+     it move the source's picture (AGL-4138, `HEROES_AT`): a picture `below` or
+     `above` the words opens only as `column` or `editorial`, `beside` as
+     `split`, `bleed` or `panel`, `behind` as `cover`, `poster` or `panel`; any
+     other hero is set aside with a settled note. A page past
      `AI_SITE_IMPORT_DOC_MAX_NODES` keeps its last sections by name, `cut`.
+   - **How the source draws it** (AGL-4138). The reader keeps what a page's
+     look is made of beyond its structure, and the compiler draws it only on a
+     `verbatim` page, every color as a theme role (`aiSiteImportColorRole`: the
+     brand's colors `primary`, any other color the theme's `tertiary`, a grey
+     the words' ink or `text.secondary`, a light fill `action.hover`, a grey
+     rule `divider`): a picture's FIT (`SiteImportPictureFit`: its own `width`
+     and `height`, a box's `aspect-ratio` or a height it crops to, its
+     `object-fit`, radius and shadow), so the hero frames, a card's picture and
+     a lone picture are drawn at the picture's own shape (`AiLayoutPictureFit`,
+     the library copy's size first) or the source's crop, a crop to a height as
+     the Image's own `height`, and 16 / 9 only where nothing says a shape; an
+     eyebrow's `chip` (an outlined Paper rounded to a pill) and `color`; a
+     large bold paragraph as a `statement` (a `lede` in the `h4` Text Style,
+     whose text has no headline ceiling); a card's icon `tile` (a Paper filled
+     with the role) and corner arrow (`mark`, at the end of the icon's row); a
+     group's own `align` where it differs from its section's, its tablet
+     `columnsSm` (`xs:12 sm:6 md:4`); a border on one side as a `rule`
+     (`borderTop: 3, borderColor: 'primary.main'`, at most three items a page
+     in a color, rule 16) instead of `boxed`, which now needs a shadow, a fill
+     or borders on two sides; a step's grey number (`figureMuted`). The look
+     pass pins the eyebrows' own color (`SiteImportLookFacts.eyebrow`) as
+     `AiSiteStyle.tertiary`, drawn at its nearest shade that reads, and the
+     eyebrows as `caps`, so no seed's `rule` draws a dash before them. None of
+     it reaches the answer: `aiSiteImportDesignText` still prints a ruled group
+     "boxed" and a statement "lede", pinned by digest for every recording, and
+     a guided start's compile is pinned by a digest taken before
+     (`ai-layout-compiler-agl4138-guided.spec.ts`).
    - **copied** (a collection's page): the compile alone, NO model, nothing
      spent but a listing the source left empty;
    - **arranged** (every main page, whatever its length): the same compile
@@ -2851,15 +2928,28 @@ built page against what the reader read of its source.
   more columns set side by side; groups by kind, each item its own element with
   its parts (an FAQ's question on an accordion, a card that is a link still
   going there, an item's picture); tables, each with every cell in one Table
-  element; tab strips; pictures placed, by the library's copy; icons, each item's
-  and each bullet's; buttons in the source's style with a destination; headings;
-  forms. `score` is the lowest of them and `lowest` names it.
+  element; tab strips; pictures placed, by the library's copy; pictures framed
+  (AGL-4138), each placed picture's box (its own `aspectRatio` or `height`, or
+  the frame holding it alone) within 5% of the shape the source shows it at —
+  the box or height the source crops it to (`SiteImportPictureFit.box` and
+  `.height`), else its own, by the library copy's size or its `width` and
+  `height` — or in no box where the source crops nothing; icons, each item's,
+  each card's corner arrow (`mark`) and each bullet's; buttons in the source's
+  style with a destination; headings; forms. `score` is the lowest of them and
+  `lowest` names it.
 - **The frame.** The row's items by name in order, over the larger of the two
   counts, so a row of page titles scores low; the menus under their names, their
   entries, the entries' lines and icons; the buttons in the source's style with
   destinations; the phone menu holding every name, entry and button, with the
   button that opens it; the row's labels on one line; the footer's columns,
-  links, profiles and facts as written.
+  links, profiles and facts as written. And (AGL-4139) `menuColumns`, each
+  panel column its own part of the panel's row in order with its heading,
+  lines and entries; `panels`, each filled column and footer box drawn in a
+  filled box; `tiles`; `pictures`; `hover`, each menu the source opens on
+  hover opening on hover (a name whose hover shows its panel, or a menu
+  element's `openMenu`); `logo`, the footer opening with the logo. A menu
+  drawn as its name and the panel its hover shows is found through that
+  interaction; the phone menu is asked every word of each panel too.
 - **The bar.** `SITE_IMPORT_FIDELITY_THRESHOLD`, 0.9 on structure, with words at
   exactly 1. Today's recorded pages and frames score 1.00; the same pages built
   as 10/29 built them score 0.
@@ -2867,7 +2957,9 @@ built page against what the reader read of its source.
   video's play mark), which the build leaves out; a button that goes nowhere a
   page can send a visitor (a film's play button), kept as its words; a byline
   (a portrait beside a few words), drawn small over its words and not as a row;
-  a `text` group, lines that only share a shape.
+  a `text` group, lines that only share a shape. Framing scores neither a round
+  portrait nor the picture a hero lays behind its words, which fill their boxes
+  by design, nor a picture whose own shape is not known.
 - **The spec.** `model/ai-site-import-fidelity.spec.ts` replays the recordings in
   `site-import/fixtures/site-layout/` through the reader and the import's compile
   and page check, offline (`site-import/fixtures/site-import-fidelity-replay.ts`;

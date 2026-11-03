@@ -49,7 +49,14 @@ import { extractSiteImportPage } from '../site-import/site-import-html'
 import { siteImportLookOf } from '../site-import/site-import-layout'
 import { siteImportFooterColumns, siteImportNavTree, type SiteImportFrameSource } from '../site-import/site-import-nav'
 import { SITE_LAYOUT_PAGES, siteLayoutRecording, siteLayoutSameSite, type SiteLayoutPageName } from '../site-import/fixtures/site-layout-recordings'
-import { aiSiteImportFrameJob, aiSiteImportFrameLinkTo, aiSiteImportFrameSource, aiSiteImportHomeOf } from './ai-job-import-step'
+import {
+  aiSiteImportFrameColorRole,
+  aiSiteImportFaviconOf,
+  aiSiteImportFrameJob,
+  aiSiteImportFrameLinkTo,
+  aiSiteImportFrameSource,
+  aiSiteImportHomeOf,
+} from './ai-job-import-step'
 import {
   AI_LAYOUT_SITE_FRAME_INPUT,
   aiLayoutFrameCheck,
@@ -167,7 +174,17 @@ function drawnFrame(state = aglynState()) {
   const drawer = of('muiDrawer')[0]
   const header = of('muiAppBar')[0]
   const footer = all.find((node) => node.componentId === 'section' && node.props?.['element'] === 'footer')
-  return { built, frameJob, source, nodes, all, of, children, within, drawer, header, footer }
+  // The panel a menu's hover shows (AGL-4139): the element its name's Show an element step names.
+  const panelOf = (name: Node | undefined): Node | undefined => {
+    const step = ((name?.interactions ?? []) as Array<{ trigger: { event: string }; steps: Array<Record<string, unknown>> }>)
+      .filter((interaction) => interaction.trigger.event === 'elementHoverEnter')
+      .flatMap((interaction) => interaction.steps)
+      .find((entry) => entry['type'] === 'showElement')
+    const id = /^\[data-aglyn="leaf:(.+)"\]$/.exec(String(step?.['selector'] ?? ''))?.[1]
+    return id ? nodes[id] : undefined
+  }
+  const named = (text: string) => of('muiScreenLink').find((node) => label(node) === text && !within(drawer).includes(node))
+  return { built, frameJob, source, nodes, all, of, children, within, drawer, header, footer, panelOf, named }
 }
 
 const label = (node: Node) => String(node.props?.['children'] ?? node.props?.['label'] ?? '')
@@ -180,20 +197,22 @@ describe('aglyn.com’s header, as its home page builds it, with no model (AGL-4
   })
 
   it('is the source’s five items in order, Product and Solutions as menus, not the wave’s page titles', () => {
-    const { header, within, children } = drawnFrame()
+    const { header, within, children, panelOf } = drawnFrame()
     const nav = within(header).find((node) => node.props?.['component'] === 'nav' && node.props?.['ariaLabel'] === 'Main') as Node
-    expect(children(nav).map((node) => [node.componentId, label(node)])).toEqual([
-      ['muiMegaMenu', 'Product'],
-      ['muiMegaMenu', 'Solutions'],
-      ['muiScreenLink', 'Pricing'],
-      ['muiScreenLink', 'Docs'],
-      ['muiScreenLink', 'Blog'],
+    // Each menu's name is the link to its page, as the source's is, and opens its panel on hover (AGL-4139).
+    expect(children(nav).map((node) => [node.componentId, label(node), !!panelOf(node)])).toEqual([
+      ['muiScreenLink', 'Product', true],
+      ['muiScreenLink', 'Solutions', true],
+      ['muiScreenLink', 'Pricing', false],
+      ['muiScreenLink', 'Docs', false],
+      ['muiScreenLink', 'Blog', false],
     ])
+    expect(children(nav).slice(0, 2).map((node) => node.props?.['screenId'] ?? node.props?.['href'])).toEqual(['draft1', '/solutions'])
   })
 
   it('opens Product’s mega menu on its 14 entries, each one link with its icon and the line under it', () => {
-    const { of, within } = drawnFrame()
-    const product = of('muiMegaMenu').find((node) => node.props?.['label'] === 'Product')
+    const { within, panelOf, named } = drawnFrame()
+    const product = panelOf(named('Product'))
     const entries = within(product).filter((node) => node.componentId === 'muiLinkBox')
     expect(entries).toHaveLength(13)
     const icons = within(product).filter((node) => node.componentId === 'icon')
@@ -206,8 +225,8 @@ describe('aglyn.com’s header, as its home page builds it, with no model (AGL-4
   })
 
   it('sets Solutions’ 16 entries in the source’s three headed columns, side by side from a tablet up', () => {
-    const { of, within } = drawnFrame()
-    const solutions = of('muiMegaMenu').find((node) => node.props?.['label'] === 'Solutions')
+    const { within, children, panelOf, named } = drawnFrame()
+    const solutions = panelOf(named('Solutions'))
     const headings = within(solutions).filter((node) => node.componentId === 'muiTypography' && node.props?.['variant'] === 'overline').map(label)
     expect(headings).toEqual(['BY TEAM', 'BY USE CASE', 'FOR DEVELOPERS'])
     // By team, each with its icon and the line under it; by use case and for developers, each a link.
@@ -216,7 +235,9 @@ describe('aglyn.com’s header, as its home page builds it, with no model (AGL-4
     const links = within(solutions).filter((node) => node.componentId === 'muiScreenLink').map(label)
     expect(links).toHaveLength(10)
     expect(links.slice(-1)).toEqual(['See all solutions →'])
-    expect(within(solutions).filter((node) => node.componentId === 'muiGrid' && node.props?.['size'] === 'xs:12 sm:4')).toHaveLength(3)
+    // Side by side in the source's order, each its own width (AGL-4139).
+    const row = within(solutions).find((node) => node.props?.['direction'] === 'row' && node.props?.['flexWrap'] === 'wrap')
+    expect(children(row).map((node) => node.sx?.['flex'])).toEqual(['0 0 328px', '0 0 328px', '0 0 280px'])
   })
 
   it('opens a menu on the page its own name goes to, where none of its entries does', () => {
@@ -224,9 +245,13 @@ describe('aglyn.com’s header, as its home page builds it, with no model (AGL-4
     const home = state.home as NonNullable<AiSiteImportState['home']>
     const nav = home.nav as NonNullable<typeof home.nav>
     const trimmed = { ...nav, items: nav.items.map((item) => (item.label === 'Solutions' ? { ...item, items: item.items.filter((entry) => !/\/solutions$/.test(entry.href)) } : item)) }
-    const { of, within } = drawnFrame({ ...state, home: { ...home, nav: trimmed } })
-    const solutions = of('muiMegaMenu').find((node) => node.props?.['label'] === 'Solutions')
-    expect(within(solutions).filter((node) => node.componentId === 'muiScreenLink').map((node) => [label(node), node.props?.['href']])[0]).toEqual(['Solutions', '/solutions'])
+    const { within, drawer, children, named } = drawnFrame({ ...state, home: { ...home, nav: trimmed } })
+    // Its name is that link on a computer (AGL-4139); in the phone menu, whose group opens on a tap, its first entry.
+    expect(named('Solutions')?.props?.['href']).toBe('/solutions')
+    const group = within(drawer).filter((node) => node.componentId === 'muiAccordion')[1]
+    const first = within(group).find((node) => node.componentId === 'muiScreenLink')
+    expect([label(first as Node), first?.props?.['href']]).toEqual(['Solutions', '/solutions'])
+    expect(children(group)[0]?.componentId).toBe('muiAccordionSummary')
   })
 
   it('links the pages of the header’s wave by id, a page still to come by its new address, and leaves for anywhere else as the source does', () => {
@@ -255,8 +280,9 @@ describe('aglyn.com’s header, as its home page builds it, with no model (AGL-4
     // Every item of the row inherits its one line, and none gives way to the next.
     for (const menu of [...of('muiMegaMenu'), ...of('muiNavMenu')]) expect(menu.sx).toMatchObject({ flexShrink: 0 })
     for (const item of within(nav)) expect(item.sx?.['whiteSpace'] === undefined || item.sx['whiteSpace'] === 'normal' || item.sx['whiteSpace'] === 'nowrap').toBe(true)
-    const panels = within(nav).filter((node) => node.sx?.['whiteSpace'] === 'normal')
-    expect(panels).toHaveLength(2)
+    // The panels sit under the whole bar, out of the row, so their words wrap as the source's do (AGL-4139).
+    expect(within(nav).filter((node) => node.props?.['className'] === 'aglyn-hidden')).toHaveLength(0)
+    expect(of('muiBox').filter((node) => node.props?.['className'] === 'aglyn-hidden')).toHaveLength(2)
     const ctas = within(header).find((node) => node.componentId === 'muiStack' && children(node).some((child) => child.componentId === 'muiButton'))
     expect(ctas?.sx).toMatchObject({ whiteSpace: 'nowrap', flexShrink: 0, ml: 'auto' })
     const logo = of('image')[0]
@@ -276,14 +302,21 @@ describe('aglyn.com’s header, as its home page builds it, with no model (AGL-4
     expect(of('muiDrawerToggle')[0].sx).toMatchObject({ display: { xs: 'inline-flex', lg: 'none' } })
     const menu = children(drawer)[0]
     const parts = children(menu)
-    const groups = parts.filter((node) => (node.nodes ?? []).length && children(node)[0]?.props?.['variant'] !== undefined)
     expect(parts.map((node) => children(node).map(label)[0])).toEqual(['Product', 'Solutions', 'Pricing', 'Sign in'])
-    const product = children(parts[0])
-    // Its heading the menu's name; "See all products →" its link to /product.
+    // Each menu a group that opens on a tap (AGL-4139): its name the header, "See all products →" its link to /product.
+    expect(parts.slice(0, 2).map((node) => node.componentId)).toEqual(['muiAccordion', 'muiAccordion'])
+    const product = within(parts[0])
     expect(product.filter((node) => node.componentId === 'muiScreenLink').map(label)).toHaveLength(14)
-    expect(product[0].componentId).toBe('muiTypography')
-    const solutions = children(parts[1])
-    expect(solutions.filter((node) => node.componentId === 'muiTypography').map(label)).toEqual(['Solutions', 'BY TEAM', 'BY USE CASE', 'FOR DEVELOPERS'])
+    expect(product[0].componentId).toBe('muiAccordionSummary')
+    const solutions = within(parts[1])
+    // Every word of its panel: its columns' headings and the dark column's words.
+    expect(solutions.filter((node) => node.componentId === 'muiTypography').map(label)).toEqual([
+      'BY TEAM',
+      'BY USE CASE',
+      'FOR DEVELOPERS',
+      'Open source & self-hostable',
+      'Aglyn is Apache-2.0. Fork it, self-host it with Docker, and extend it with plugins and APIs.',
+    ])
     expect(solutions.filter((node) => node.componentId === 'muiScreenLink')).toHaveLength(16)
     expect(children(parts[2]).map(label)).toEqual(['Pricing', 'Docs', 'Blog'])
     expect(children(parts[3]).map((node) => [label(node), node.props?.['fullWidth'], node.props?.['href']])).toEqual([
@@ -292,7 +325,6 @@ describe('aglyn.com’s header, as its home page builds it, with no model (AGL-4
     ])
     // Every link followed from it closes it.
     expect(within(drawer).filter((node) => node.componentId === 'muiScreenLink').every((node) => (node.interactions ?? []).length === 1)).toBe(true)
-    expect(groups.length).toBeGreaterThan(0)
   })
 
   it('sits on the page’s own ground, as the source’s grey bar does', () => {
@@ -335,7 +367,8 @@ describe('the frame job for an import whose menu was read (AGL-4108)', () => {
     const state = aglynState()
     const frameJob = aiSiteImportFrameJob(job(), state, state.waves[0], aiSiteImportLedger(state))
     expect(frameJob.inputs?.[AI_LAYOUT_SITE_FRAME_INPUT]).toBeTruthy()
-    expect(aiLayoutSiteBrandOf(frameJob.inputs)).toEqual({ logo: { src: 'media:host-import/m1' }, name: false, alt: 'Aglyn', aspect: 3.292 })
+    // The footer opens with the logo, as the source's does (AGL-4139).
+    expect(aiLayoutSiteBrandOf(frameJob.inputs)).toEqual({ logo: { src: 'media:host-import/m1' }, name: false, alt: 'Aglyn', aspect: 3.292, footer: true })
   })
 
   it('quotes the header and footer at nothing, since no model is asked', () => {
@@ -361,6 +394,67 @@ describe('the frame job for an import whose menu was read (AGL-4108)', () => {
     expect(to('mailto:support@example.com')).toBe('mailto:support@example.com')
     expect(to('tel:+1 (512) 555-0142')).toBe('tel:+15125550142')
     expect(to('javascript:alert(1)')).toBeNull()
+  })
+})
+
+describe('the frame job carries the menus as the source builds them (AGL-4139)', () => {
+  it('carries each panel’s columns, and its picture only from the library, never the source’s address', () => {
+    const state = aglynState()
+    const product = aiSiteImportFrameSource(state, state.waves[0])?.nav[0]
+    expect(product?.columns?.map((column) => [column.heading, column.band, column.width ?? null])).toEqual([
+      [null, 'plain', null],
+      [null, 'plain', null],
+      ['FEATURED', 'soft', 300],
+    ])
+    expect(product?.columns?.[2]?.image).toBeUndefined()
+    const from = state.home?.nav?.items[0]?.columns?.[2]?.image?.url as string
+    const held = aiSiteImportFrameSource({ ...state, look: { ...(state.look as NonNullable<AiSiteImportState['look']>), pictures: [{ mediaId: 'mp0', src: 'media:host-import/mp0', from, width: 1200, height: 750 }] } }, state.waves[0])
+    expect(held?.nav[0]?.columns?.[2]?.image).toEqual({ src: 'media:host-import/mp0', alt: '', ratio: 1.6 })
+    expect([product?.hover, product?.measure]).toEqual([true, 'xl'])
+  })
+
+  it('carries each tile and icon as a theme role, and no color by value', () => {
+    const state = aglynState()
+    const source = aiSiteImportFrameSource(state, state.waves[0])
+    const tiles = (source?.nav ?? []).flatMap((group) => group.items.flatMap((entry) => (entry.tile ? [entry.tile] : [])))
+    expect(tiles).toHaveLength(19)
+    expect(JSON.stringify(tiles)).not.toMatch(/#/)
+    expect(new Set(tiles.map((tile) => tile.fill))).toEqual(new Set(['action.hover']))
+    expect(new Set(tiles.map((tile) => tile.color))).toEqual(new Set(['primary.main', 'text.secondary', 'secondary.main']))
+  })
+
+  it('ranks a color by role: a light fill is the wash, a grey one the stronger step, a quiet ink the quiet text, the brand’s hue the brand', () => {
+    const look = { buttonFill: '#00b0ff' }
+    expect(aiSiteImportFrameColorRole('#e6f5ff', 'fill', look)).toBe('action.hover')
+    expect(aiSiteImportFrameColorRole('#6b7280', 'fill', look)).toBe('action.selected')
+    expect(aiSiteImportFrameColorRole('#0077ad', 'fill', look)).toBe('primary.main')
+    expect(aiSiteImportFrameColorRole('#404c5c', 'ink', look)).toBe('text.secondary')
+    expect(aiSiteImportFrameColorRole('#0077ad', 'ink', look)).toBe('primary.main')
+    expect(aiSiteImportFrameColorRole('#e040fb', 'ink', look)).toBe('secondary.main')
+    expect(aiSiteImportFrameColorRole(null, 'ink', look)).toBe('primary.main')
+  })
+
+  it('carries the footer’s developer card as a box, its link resolved like every other', () => {
+    const state = aglynState()
+    expect(aiSiteImportFrameSource(state, state.waves[0])?.footer?.panels).toEqual([
+      {
+        heading: 'ARE YOU A DEVELOPER?',
+        lines: ['Open source. Self-hostable. Yours to run.'],
+        band: 'soft',
+        links: [{ label: 'Aglyn for developers →', to: 'https://aglyn.com/developers' }],
+        iconPath: expect.stringMatching(/^M14\.6/),
+      },
+    ])
+  })
+
+  it('takes the site’s icon from its largest touch icon, else a picture icon, never an .ico or a drawing', () => {
+    const icon = (url: string, rel: 'icon' | 'apple-touch-icon', size: number | null, type: string | null = null) => ({ url, rel, size, type })
+    expect(
+      aiSiteImportFaviconOf([icon('https://a.example/favicon.ico', 'icon', 32), icon('https://a.example/t-120.png', 'apple-touch-icon', 120), icon('https://a.example/t-180.png', 'apple-touch-icon', 180)]),
+    ).toBe('https://a.example/t-180.png')
+    expect(aiSiteImportFaviconOf([icon('https://a.example/favicon.ico', 'icon', 48), icon('https://a.example/mark.svg', 'icon', null, 'image/svg+xml'), icon('https://a.example/32.png', 'icon', 32)])).toBe('https://a.example/32.png')
+    expect(aiSiteImportFaviconOf([icon('https://a.example/favicon.ico', 'icon', 48)])).toBeNull()
+    expect(aiSiteImportFaviconOf([])).toBeNull()
   })
 })
 

@@ -35,6 +35,7 @@ import {
   nodeMapBytes,
 } from '@aglyn/aglyn/app-utils/measure-node-map'
 import { parseMediaRef } from '@aglyn/aglyn/app-utils/media-ref'
+import { ELEMENT_HIDDEN_CLASS } from '@aglyn/aglyn/app-utils/element-hidden-style'
 import { SX_SCHEME_DARK_KEY } from '@aglyn/aglyn/app-utils/scheme-sx'
 import {
   COMPONENT_PROP_NAME_PATTERN,
@@ -1102,8 +1103,17 @@ function validate(
   const boundByNodeId = new Map<string, Record<string, string>>()
   // A code-built Icon's drawing, from the library by the id it names (AGL-3660).
   const iconByNodeId = new Map<string, { iconId?: string; iconPath: string }>()
+  // A code-built element that starts hidden until an interaction shows it
+  // (AGL-4139): the Besigner's own setting, that one class and no other.
+  const startsHidden = new Set<string>()
   const forSanitizer: Record<string, unknown> = {}
-  for (const [id, node] of Object.entries(nodes)) {
+  for (const [id, raw] of Object.entries(nodes)) {
+    let node = raw
+    if (codeBuilt && isRecord(node) && isRecord(node.props) && node.props['className'] === ELEMENT_HIDDEN_CLASS) {
+      const { className: _hidden, ...props } = node.props
+      startsHidden.add(id)
+      node = { ...node, props }
+    }
     if (!isRecord(node) || !isRecord(node.props)) {
       forSanitizer[id] = node
       continue
@@ -1248,6 +1258,7 @@ function validate(
         const kept = boundByNodeId.get(id) ?? {}
         for (const key of Object.keys(raw.props)) {
           if (iconByNodeId.has(id) && (key === 'iconId' || key === 'iconPath')) continue
+          if (startsHidden.has(id) && key === 'className') continue
           if (
             key !== 'sx' &&
             lifted[key] === undefined &&
@@ -1361,7 +1372,7 @@ function validate(
       pluginId: entry.pluginId,
       parentId,
       nodes: children,
-      props: { ...propsResult.props, ...reference.kept, ...boundProps, ...iconByNodeId.get(id) },
+      props: { ...propsResult.props, ...reference.kept, ...boundProps, ...iconByNodeId.get(id), ...(startsHidden.has(id) ? { className: ELEMENT_HIDDEN_CLASS } : {}) },
       ...(sx ? { sx } : {}),
       ...(hiddenByNodeId.has(id) ? { hidden: true } : {}),
     }

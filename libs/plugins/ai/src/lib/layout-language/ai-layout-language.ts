@@ -162,6 +162,43 @@ export interface AiLayoutItem {
   period?: string
   /** Its title names a row and is no heading of the source's (AGL-4083). */
   label?: true
+  /** The filled square its icon sits in, and the icon's color in it, as theme roles (AGL-4138). */
+  tile?: { fill: AiLayoutColorRole; color: AiLayoutColorRole | null }
+  /** A second icon at the end of its first row, an arrow that it is a link, as a path on the 24-unit square (AGL-4138). */
+  markPath?: string
+  /** Its figure is set in the muted words' color (AGL-4138). */
+  figureMuted?: true
+}
+
+/**
+ * A theme color a page brought in draws a source's own color as (AGL-4138):
+ * never a value, always one of the theme's roles.
+ */
+export type AiLayoutColorRole =
+  | 'primary.main'
+  | 'primary.contrastText'
+  | 'tertiary.main'
+  | 'tertiary.contrastText'
+  | 'text.primary'
+  | 'text.secondary'
+  | 'action.hover'
+  | 'divider'
+
+/**
+ * How the source frames a picture of a page brought in (AGL-4138): the shape
+ * a frame draws it at, as `aspect-ratio` writes it ("1600 / 900") — its own,
+ * or one the source crops it to — or a height in px it is cropped to; its
+ * fit; whether the source rounds it or sets it on a shadow.
+ */
+export interface AiLayoutPictureFit {
+  ratio?: string
+  height?: number
+  /** The source crops it: `ratio` or `height` is a box of the source's, not the picture's own shape. */
+  cropped?: true
+  objectFit?: 'cover' | 'contain'
+  /** Rounded by the source, 10 px or more. */
+  rounded?: true
+  shadow?: true
 }
 
 /** A link of a page brought in (AGL-4107): its words and where it goes, `page:<id>`, `https:`, `mailto:` or `tel:`. */
@@ -181,6 +218,8 @@ export interface AiLayoutPicture {
   to?: string
   /** A byline's portrait beside a few words, drawn small. */
   small?: boolean
+  /** How the source frames it (AGL-4138). */
+  fit?: AiLayoutPictureFit
 }
 
 /**
@@ -226,6 +265,18 @@ export interface AiLayoutBlock {
   columns?: number
   /** Each item is a row of its own, its parts side by side, one under another (AGL-4083). */
   inline?: true
+  // ── A page brought in (AGL-4138): how the source draws it, never in a tool
+  // schema, and read only on a verbatim page ──
+  /** An eyebrow set in a pill of its own. */
+  chip?: true
+  /** An eyebrow's color, as a theme role. */
+  color?: AiLayoutColorRole
+  /** A group's columns on a tablet, where they are fewer than on a wide screen. */
+  columnsSm?: number
+  /** How a group's items set their words, where it is not their section's alignment. */
+  itemsAlign?: AiLayoutAlign
+  /** The line a group's items are drawn with along one side, in place of a box. */
+  rule?: { side: 'top' | 'right' | 'bottom' | 'left'; width: 1 | 2 | 3; color: AiLayoutColorRole | null }
 }
 
 /** How a group of a page brought in is drawn (AGL-4107): the compiler's group variants a source can show. */

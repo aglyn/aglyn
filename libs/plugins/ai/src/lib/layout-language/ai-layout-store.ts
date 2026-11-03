@@ -22,6 +22,10 @@ import {
 } from '../runtime/ai-node-tree'
 import type { AiSurface } from '../runtime/ai-palette'
 import type { AiLayoutRawTree } from './ai-layout-tree'
+import {
+  nodeIdFromInteractionSelector,
+  nodeInteractionSelector,
+} from '@aglyn/aglyn/app-utils/node-interactions'
 
 /**
  * A compiled tree as a document stores it (AGL-3660): read by the same
@@ -76,6 +80,11 @@ export function aiLayoutStoredTree(
     const source = validated.sourceIds[minted]
     return source && keep.has(source) ? source : minted
   }
+  const storedIds: Record<string, string> = {}
+  for (const minted of Object.keys(validated.nodes)) {
+    const source = validated.sourceIds[minted]
+    if (source) storedIds[source] = storedId(minted)
+  }
   const nodes: Record<string, StoredNode> = {}
   for (const [minted, raw] of Object.entries(
     validated.nodes as unknown as Record<string, StoredNode>,
@@ -88,14 +97,9 @@ export function aiLayoutStoredTree(
       parentId: raw.parentId === null ? null : storedId(raw.parentId),
       ...(Array.isArray(raw.nodes) ? { nodes: raw.nodes.map(storedId) } : {}),
       ...(source?.interactions?.length
-        ? { interactions: source.interactions }
+        ? { interactions: aiLayoutStoredInteractions(source.interactions, storedIds) }
         : {}),
     }
-  }
-  const storedIds: Record<string, string> = {}
-  for (const minted of Object.keys(validated.nodes)) {
-    const source = validated.sourceIds[minted]
-    if (source) storedIds[source] = storedId(minted)
   }
   return {
     ok: true,
@@ -104,4 +108,40 @@ export function aiLayoutStoredTree(
     repairs: validated.repairs,
     storedIds,
   }
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === 'object' && !Array.isArray(value)
+
+/**
+ * The interactions code wrote, with every element a step names renamed to
+ * the id it is stored under (AGL-4139): a menu its hover opens, the panel it
+ * shows, a section it scrolls to. The validator mints fresh ids, so a step
+ * naming a compiled id would act on nothing; one naming an id the tree does
+ * not hold is left as it is.
+ */
+export function aiLayoutStoredInteractions(
+  interactions: readonly unknown[],
+  storedIds: Readonly<Record<string, string>>,
+): unknown[] {
+  const rename = (step: Record<string, unknown>): Record<string, unknown> => {
+    const out = { ...step }
+    for (const key of ['menuNodeId', 'drawerNodeId'] as const) {
+      const id = out[key]
+      if (typeof id === 'string' && storedIds[id]) out[key] = storedIds[id]
+    }
+    const named = nodeIdFromInteractionSelector(out['selector'])
+    if (named && storedIds[named]) out['selector'] = nodeInteractionSelector(storedIds[named])
+    return out
+  }
+  return interactions.map((interaction) =>
+    isRecord(interaction) && Array.isArray(interaction['steps'])
+      ? {
+          ...interaction,
+          steps: interaction['steps'].map((step: unknown) =>
+            isRecord(step) ? rename(step) : step,
+          ),
+        }
+      : interaction,
+  )
 }

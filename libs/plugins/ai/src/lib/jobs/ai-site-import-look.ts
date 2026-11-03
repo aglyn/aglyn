@@ -29,8 +29,10 @@
  *   density, motion) pin the look. What the reader found of the source's
  *   look (AGL-4106) pins it closer (AGL-4108): its buttons' fill is the
  *   brand and its links' color the accent, its page's ground is the site's,
- *   and its own font family is the site's wherever the theme font catalog
- *   has it, else a pairing of its type mood. The look is drawn and saved
+ *   its eyebrows' own color the theme's third and its eyebrows spaced
+ *   capitals with no line before them (AGL-4138), and its own font family
+ *   is the site's wherever the theme font catalog has it, else a pairing of
+ *   its type mood. The look is drawn and saved
  *   exactly as a guided start's (`aiSiteStyleFor`, `aiSaveSiteTheme`): a
  *   built-in base plus the brand colors and fonts, every color held to the
  *   theme's reading checks. A site whose owner already chose a theme keeps
@@ -50,6 +52,7 @@
 
 import type { PluginMediaIngest } from '@aglyn/aglyn/plugin-manager/plugin-media-ingest'
 import { themeFontFacts, type ThemeFontFacts } from '@aglyn/aglyn/plugin-manager/plugin-theme-font-catalog'
+import { syncHostProjectionForMembers } from '@aglyn/tenant-data-admin/server/host-memberships'
 import { aiSiteListingSeeded } from '../model/ai-site-entity'
 import type { AiSiteImportHome, AiSiteImportLook, AiSiteImportPhoto, SiteImportLookFacts } from '../model/ai-site-import'
 import { aiSiteKindFor } from '../model/ai-site-kinds'
@@ -210,6 +213,11 @@ export function aiSiteImportStyle(
     pins.buttons ??= radius >= 24 ? 'pill' : radius <= 2 ? 'square' : 'rounded'
     pins.corners ??= radius <= 2 ? 'sharp' : radius <= 10 ? 'soft' : radius <= 20 ? 'round' : 'pill'
   }
+  // Its eyebrows as it sets them (AGL-4138): spaced capitals with no line before them — the
+  // reader takes an eyebrow only in capitals, and no mark a page draws before one is a word of
+  // it — and their own color, where it is one, as the theme's third.
+  if (facts) pins.eyebrow = 'caps'
+  if (colorful(facts?.eyebrow)) pins.tertiary = (facts?.eyebrow as string).toLowerCase()
   if (!pins.brand) return null
   const style = aiSiteStyleFor({ kind, answer: {}, seed: input.seed, brand: pins.brand, avoid: input.avoid ?? [], pins })
   const page = facts?.background && /^#[0-9a-f]{6}$/i.test(facts.background) ? facts.background.toLowerCase() : null
@@ -291,7 +299,33 @@ export interface AiSiteImportLookDeps {
   /** The site's document, as the listing reads it. */
   readHost?: (firestore: FirebaseFirestore.Firestore, hostId: string) => Promise<Record<string, unknown> | null>
   writeHost?: (firestore: FirebaseFirestore.Firestore, hostId: string, updates: Record<string, unknown>) => Promise<void>
+  /** Re-fans the rows every site list reads a site's icon from (AGL-3972), after the look sets one. */
+  syncMemberships?: (orgId: string, hostId: string) => Promise<void>
 }
+
+/** The most pictures the home page's menus bring into the library (AGL-4139). */
+export const AI_SITE_IMPORT_MENU_PICTURES = 4
+
+/** The pictures the home page's menus show (AGL-4139), each once, the first few: a featured card's. */
+export function aiSiteImportMenuPictures(home: Pick<AiSiteImportHome, 'nav'>): Array<{ url: string; alt: string }> {
+  const seen = new Set<string>()
+  const out: Array<{ url: string; alt: string }> = []
+  for (const group of home.nav?.items ?? []) {
+    for (const column of group.columns ?? []) {
+      if (!column.image || seen.has(column.image.url) || out.length >= AI_SITE_IMPORT_MENU_PICTURES) continue
+      seen.add(column.image.url)
+      out.push({ url: column.image.url, alt: column.image.alt })
+    }
+  }
+  return out
+}
+
+/** Whether the site still has no icon of its own (AGL-4139): an owner's is never written over. */
+function faviconOpen(seo: unknown): boolean {
+  const favicon = (seo as { favicon?: unknown } | null | undefined)?.favicon
+  return favicon === undefined || favicon === null || (typeof favicon === 'string' && !favicon.trim())
+}
+
 
 export interface AiSiteImportLookInput {
   firestore: FirebaseFirestore.Firestore
@@ -406,11 +440,30 @@ export async function aiRunSiteImportLook(input: AiSiteImportLookInput, deps: Ai
         { ingest, ...(deps.fetch ? { fetch: deps.fetch } : {}), ...(deps.rasterize ? { rasterize: deps.rasterize } : {}) },
       )
     : null
+  // The pictures its menus show, in the library like its pages' photos (AGL-4139), for the header's panels.
+  const menuImages = aiSiteImportMenuPictures(home)
+  const pictures = menuImages.length
+    ? (
+        await bringInSiteImportPhotos(
+          { hostId, uid: input.uid, domain: input.domain, images: menuImages, deadlineAt: Date.now() + LOOK_READ_MS, ...(input.signal ? { signal: input.signal } : {}) },
+          { ingest, ...(deps.fetch ? { fetch: deps.fetch } : {}) },
+        )
+      ).assets
+    : []
   // The site's listing in its own words, only over the one it was created with.
   let seo = false
   const host = await (deps.readHost ?? readHostDoc)(firestore, hostId)
   if (host) {
     const updates: Record<string, unknown> = aiSiteImportListingUpdates(host['seo'], host['displayName'], home)
+    // The site's icon from the one its head names, where the site has none (AGL-4139).
+    if (home.favicon && faviconOpen(host['seo'])) {
+      const icon = await bringInSiteImportPhotos(
+        { hostId, uid: input.uid, domain: input.domain, images: [{ url: home.favicon, alt: '' }], deadlineAt: Date.now() + LOOK_READ_MS, ...(input.signal ? { signal: input.signal } : {}) },
+        { ingest, ...(deps.fetch ? { fetch: deps.fetch } : {}) },
+      )
+      const photo = icon.assets[0]
+      if (photo) updates['seo.favicon'] = photo.src
+    }
     if (home.ogImage && shareOpen(host['seo'])) {
       const share = await bringInSiteImportPhotos(
         { hostId, uid: input.uid, domain: input.domain, images: [{ url: home.ogImage, alt: '' }], deadlineAt: Date.now() + LOOK_READ_MS, ...(input.signal ? { signal: input.signal } : {}) },
@@ -426,6 +479,12 @@ export async function aiRunSiteImportLook(input: AiSiteImportLookInput, deps: Ai
     if (Object.keys(updates).length) {
       await (deps.writeHost ?? writeHostDoc)(firestore, hostId, updates)
       seo = true
+      // Every site list reads the icon the members' rows carry (AGL-3972).
+      if (updates['seo.favicon']) {
+        await (deps.syncMemberships ?? syncHostProjectionForMembers)(input.orgId, hostId).catch((error: unknown) => {
+          console.warn('[site-import] the site lists were not told of the new icon', { hostId, error })
+        })
+      }
     }
   }
   const drawn = style
@@ -435,8 +494,8 @@ export async function aiRunSiteImportLook(input: AiSiteImportLookInput, deps: Ai
         ...(typeof style.motion === 'string' ? { motion: style.motion } : {}),
       }
     : null
-  const colors = [...new Set([...(facts ? [facts.buttonFill, facts.link].filter(colorful).map((hex) => hex.toLowerCase()) : []), ...(site?.colors ?? [])])]
-  return { at: input.at, theme, colors, logo, seo, seed: style ? style.seed : seed, style: drawn }
+  const colors = [...new Set([...(facts ? [facts.buttonFill, facts.link, facts.eyebrow].filter(colorful).map((hex) => hex.toLowerCase()) : []), ...(site?.colors ?? [])])]
+  return { at: input.at, theme, colors, logo, ...(pictures.length ? { pictures } : {}), seo, seed: style ? style.seed : seed, style: drawn }
 }
 
 /**
