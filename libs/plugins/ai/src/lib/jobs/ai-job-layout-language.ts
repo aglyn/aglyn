@@ -156,7 +156,14 @@ export function aiLayoutSiteBrandOf(inputs: Readonly<Record<string, unknown>> | 
   // The logo's own words and shape, as the source names and draws it (AGL-4108).
   const alt = typeof value['alt'] === 'string' ? value['alt'].replace(/\s+/g, ' ').trim().slice(0, 120) : ''
   const aspect = typeof value['aspect'] === 'number' && Number.isFinite(value['aspect']) && value['aspect'] > 0 ? Math.min(value['aspect'], 8) : null
-  return { ...(src ? { logo: { src } } : {}), name: src ? value['name'] === true : true, ...(src && alt ? { alt } : {}), ...(src && aspect ? { aspect } : {}) }
+  return {
+    ...(src ? { logo: { src } } : {}),
+    name: src ? value['name'] === true : true,
+    ...(src && alt ? { alt } : {}),
+    ...(src && aspect ? { aspect } : {}),
+    // The footer opens with the logo too, where the source's does (AGL-4139).
+    ...(src && value['footer'] === true ? { footer: true } : {}),
+  }
 }
 
 /**

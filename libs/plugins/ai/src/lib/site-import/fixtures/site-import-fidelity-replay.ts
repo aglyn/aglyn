@@ -161,6 +161,7 @@ function crawledHome(name: SiteImportReplayHome): SiteImportInventory['pages'][n
 function replayState(name: SiteImportReplayHome): AiSiteImportState {
   const origin = new URL(SITE_LAYOUT_PAGES[name].url).origin
   const paths = name === 'home' ? ['/', '/product', '/pricing'] : ['/', '/classes', '/gallery']
+  const home = aiSiteImportHomeOf({ pages: [crawledHome(name)] })
   const pages: AiSiteImportPage[] = paths.map((path, index) => {
     const slug = path === '/' ? '/' : (path.split('/').filter(Boolean).pop() as string)
     return { slot: `p${index}`, url: `${origin}${path}`, path, title: slug, group: 'main', wave: 1, draftId: `draft${index}`, slug, words: 300, images: 0 }
@@ -180,16 +181,24 @@ function replayState(name: SiteImportReplayHome): AiSiteImportState {
     leftOut: [],
     leftOutCount: {},
     frame: { draftId: 'frameDraft' },
-    home: aiSiteImportHomeOf({ pages: [crawledHome(name)] }),
+    home,
     look: {
       at: NOW.toISOString(),
       theme: 'applied',
       colors: [],
       logo: name === 'home' ? { mediaId: 'm1', src: 'media:host-import/m1', width: 632, height: 192 } : null,
+      // The menus' pictures, in the library as the look pass brings them in (AGL-4139).
+      pictures: siteImportMenuPictures(home).map((from, index) => ({ mediaId: `mp${index}`, src: `media:host-import/mp${index}`, from, width: 1200, height: 750 })),
       seo: true,
       seed: 7,
     },
   }
+}
+
+/** The pictures a home page's menus show, each once: what the look pass brings in. */
+function siteImportMenuPictures(home: AiSiteImportState['home']): string[] {
+  const urls = (home?.nav?.items ?? []).flatMap((group) => (group.columns ?? []).flatMap((column) => (column.image ? [column.image.url] : [])))
+  return [...new Set(urls)]
 }
 
 /** A recorded home page's header and footer as the frame step draws them: the source's menu and footer, the stored nodes, the check's word. */

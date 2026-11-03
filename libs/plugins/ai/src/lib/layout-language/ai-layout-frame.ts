@@ -526,7 +526,8 @@ export function aiCompileLayoutFrame(
     'muiToolbar',
     { disableGutters: true },
     { minHeight: { xs: 64, md: 76 } },
-    [row],
+    // A source's menus shown on hover open under the whole bar (AGL-4139).
+    [row, drawn?.panels ?? null],
     'toolbar',
   )
   // A source's header bar on the ground it sits on (AGL-4108): the page's own, where it is the page's.
@@ -585,7 +586,7 @@ export function aiCompileLayoutFrame(
     null,
     'slot',
   )
-  const footer = source?.footer ? sourceFooter(page, source, name) : compileFooter(page, frame.footer, plan, name)
+  const footer = source?.footer ? sourceFooter(page, source, plan, name) : compileFooter(page, frame.footer, plan, name)
   // No heading with nothing under it, no column of only a heading, columns
   // top-aligned (AGL-3735): a list under a heading can compile to nothing.
   if (aiLayoutRepairFrameHollows(tree.nodes as unknown as Record<string, unknown>)) {
@@ -775,20 +776,7 @@ function compileFooter(
     'footerBottom',
   )
   // The site's own logo, where the header draws it from the site (AGL-4119).
-  const footerLogo = plan.brand?.footer && plan.brand.logo?.src
-    ? tree.add(
-        'muiBox',
-        null,
-        null,
-        logoPictures(tree, {
-          src: plan.brand.logo.src,
-          srcDark: plan.brand.logoDark?.src ?? null,
-          props: { alt: (plan.brand.alt ?? '').trim() || name.slice(0, 40), objectFit: 'contain', width: 'auto', height: AI_LAYOUT_LOGO_HEIGHT },
-          role: 'footerLogo',
-        }),
-        'footerLogoBox',
-      )
-    : null
+  const footerLogo = footerLogoOf(tree, plan, name)
   const stack = tree.add(
     'muiStack',
     { spacing: '6' },
@@ -822,10 +810,12 @@ function compileFooter(
  * A source's footer (AGL-4108): its columns, words, profiles and © line, as
  * the source has them, on the quiet band a footer sits on.
  */
-function sourceFooter(page: PageScope, source: AiLayoutFrameSource, name: string): string {
+function sourceFooter(page: PageScope, source: AiLayoutFrameSource, plan: Pick<AiLayoutFramePlan, 'brand'>, name: string): string {
   const tree = page.tree
   const drawn = aiLayoutSourceFooter(tree, source.footer as NonNullable<AiLayoutFrameSource['footer']>, { name })
-  const stack = tree.add('muiStack', { spacing: '6' }, drawn.sx, [drawn.top, drawn.bottom], 'footerStack')
+  // It opens with the logo, where the source's does (AGL-4139).
+  const logo = footerLogoOf(tree, plan, name)
+  const stack = tree.add('muiStack', { spacing: '6' }, drawn.sx, [logo, drawn.top, drawn.bottom], 'footerStack')
   const container = tree.add('muiContainer', { maxWidth: 'lg' }, { py: { xs: 6, md: 8 } }, [stack], 'footerInner')
   return tree.add(
     'section',
@@ -833,6 +823,24 @@ function sourceFooter(page: PageScope, source: AiLayoutFrameSource, name: string
     { bgcolor: 'background.paper', borderTop: 1, borderColor: 'divider' },
     [container],
     'footer',
+  )
+}
+
+/** The footer's logo, where the brand says the footer opens with it (AGL-4119); `null` otherwise. */
+function footerLogoOf(tree: AiLayoutTreeBuilder, plan: Pick<AiLayoutFramePlan, 'brand'>, name: string): string | null {
+  const brand = plan.brand
+  if (!brand?.footer || !brand.logo?.src) return null
+  return tree.add(
+    'muiBox',
+    null,
+    null,
+    logoPictures(tree, {
+      src: brand.logo.src,
+      srcDark: brand.logoDark?.src ?? null,
+      props: { alt: (brand.alt ?? '').trim() || name.slice(0, 40), objectFit: 'contain', width: 'auto', height: AI_LAYOUT_LOGO_HEIGHT },
+      role: 'footerLogo',
+    }),
+    'footerLogoBox',
   )
 }
 

@@ -103,6 +103,9 @@ import {
   type AiSiteImportPageRead,
   type AiSiteImportState,
   type AiSiteImportWave,
+  type SiteImportLookFacts,
+  type SiteImportNavColumn,
+  type SiteImportNavEntry,
 } from '../model/ai-site-import'
 import { aiModelForStep } from '../providers/routing'
 import { SITE_IMPORT_RELEASE_FLAG } from '../site-import/site-import-flag'
@@ -120,7 +123,13 @@ import {
 } from '../site-import/site-import-page'
 import { aiSiteKindFor } from '../model/ai-site-kinds'
 import { AI_LAYOUT_SITE_BRAND_INPUT, AI_LAYOUT_SITE_FACTS_INPUT, AI_LAYOUT_SITE_FRAME_INPUT } from './ai-job-layout-language'
-import { aiLayoutTelHref, type AiLayoutFrameSource, type AiLayoutFrameSourceGround, type AiLayoutFrameSourceTo } from '../layout-language/ai-layout-frame-source'
+import {
+  aiLayoutTelHref,
+  type AiLayoutFrameSource,
+  type AiLayoutFrameSourceGround,
+  type AiLayoutFrameSourceRole,
+  type AiLayoutFrameSourceTo,
+} from '../layout-language/ai-layout-frame-source'
 import { aiHexOklch } from '../model/ai-site-look'
 import { AI_LAYOUT_IMPORTED_SECTIONS_INPUT, type AiSiteImportDocument } from './ai-site-import-document'
 import { aiImportedPageListingOwed, aiSiteImportSectionNames } from './ai-site-import-compile'
@@ -426,6 +435,19 @@ export function aiSiteImportFrameSource(state: AiSiteImportState, wave: Pick<AiS
   }
   const present = <T,>(value: T | null): value is T => value !== null
   const footer = home.footer ?? null
+  const look = home.look ?? null
+  // A column's picture as the library holds it, never the source's address (AGL-4139).
+  const pictures = state.look?.pictures ?? []
+  const column = (read: SiteImportNavColumn) => {
+    const held = read.image ? pictures.find((photo) => photo.from === read.image?.url) : undefined
+    return {
+      heading: read.heading,
+      lines: read.lines,
+      band: read.band,
+      ...(held ? { image: { src: held.src, alt: read.image?.alt ?? '', ...(held.width && held.height ? { ratio: held.width / held.height } : {}) } } : {}),
+      ...(read.width ? { width: read.width } : {}),
+    }
+  }
   return {
     nav: nav.items
       .map((group) => ({
@@ -441,9 +463,15 @@ export function aiSiteImportFrameSource(state: AiSiteImportState, wave: Pick<AiS
               // The icon element draws on a 24-unit square: an icon drawn on another is left out.
               ...(entry.iconPath && (entry.viewBox ?? '0 0 24 24') === '0 0 24 24' ? { iconPath: entry.iconPath } : {}),
               ...(entry.column ? { column: entry.column } : {}),
+              ...(entry.at !== undefined ? { at: entry.at } : {}),
+              // Its tile and icon in the theme's roles, never the source's values (AGL-4139).
+              ...(entry.tile ? { tile: aiSiteImportTileRoles(entry.tile, look) } : {}),
             }
           })
           .filter(present),
+        ...(group.columns?.length ? { columns: group.columns.map(column) } : {}),
+        ...(group.panel?.hover ? { hover: true } : {}),
+        ...(group.panel?.width ? { measure: group.panel.width >= 1400 ? ('xl' as const) : ('lg' as const) } : {}),
       }))
       .filter((group) => group.items.length || group.to),
     ctas: nav.ctas.map((cta) => {
@@ -464,9 +492,43 @@ export function aiSiteImportFrameSource(state: AiSiteImportState, wave: Pick<AiS
           email: footer.email,
           // The © line as the source writes it; where it writes none, the source's own name.
           copyright: footer.copyright ?? (home.siteName ? `© ${home.siteName}` : null),
+          // Its filled boxes, their links resolved like every other (AGL-4139).
+          ...(footer.panels?.length
+            ? { panels: footer.panels.map((box) => ({ ...column(box), links: (box.links ?? []).map((entry) => link(entry.label, entry.href)).filter(present), ...(box.iconPath ? { iconPath: box.iconPath } : {}) })) }
+            : {}),
         }
       : null,
   }
+}
+
+/** A tile's fill and its icon as theme roles (AGL-4139): on a filled tile of the brand's or the second color, the icon in that color's own ink. */
+export function aiSiteImportTileRoles(tile: NonNullable<SiteImportNavEntry['tile']>, look: Pick<SiteImportLookFacts, 'buttonFill'> | null | undefined): { fill: AiLayoutFrameSourceRole; color: AiLayoutFrameSourceRole } {
+  const fill = aiSiteImportFrameColorRole(tile.fill, 'fill', look)
+  if (fill === 'primary.main') return { fill, color: 'primary.contrastText' }
+  if (fill === 'secondary.main') return { fill, color: 'secondary.contrastText' }
+  return { fill, color: aiSiteImportFrameColorRole(tile.color, 'ink', look) }
+}
+
+/** How far apart two hues are, in degrees. */
+const hueApart = (a: number, b: number) => {
+  const apart = Math.abs(a - b) % 360
+  return apart > 180 ? 360 - apart : apart
+}
+
+/**
+ * A source's tile fill or icon color as a theme role (AGL-4139), the way
+ * the header's ground is ranked: a light fill is the theme's light wash and
+ * a grey one its stronger step; a quiet icon is the quiet text's; a color
+ * near the source's buttons' is the brand's, any other the theme's second
+ * color. Never the value itself.
+ */
+export function aiSiteImportFrameColorRole(hex: string | null, kind: 'fill' | 'ink', look: Pick<SiteImportLookFacts, 'buttonFill'> | null | undefined): AiLayoutFrameSourceRole {
+  const own = hex && /^#[0-9a-f]{6}$/i.test(hex) ? aiHexOklch(hex) : null
+  if (!own) return kind === 'fill' ? 'action.hover' : 'primary.main'
+  if (kind === 'fill' && own.L >= 0.9) return 'action.hover'
+  if (own.C < 0.04) return kind === 'fill' ? 'action.selected' : 'text.secondary'
+  const brand = look?.buttonFill && /^#[0-9a-f]{6}$/i.test(look.buttonFill) ? aiHexOklch(look.buttonFill) : null
+  return !brand || hueApart(own.h, brand.h) <= 40 ? 'primary.main' : 'secondary.main'
 }
 
 /** The header and footer's job: a layout of the site's brand, linking the wave's pages, in the layout language. */
@@ -490,6 +552,8 @@ export function aiSiteImportFrameJob(job: AiJob, state: AiSiteImportState, wave:
   const brand = home
     ? {
         ...(withLogo ? { logo: { src: (logo as NonNullable<typeof logo>).src }, ...(alt ? { alt } : {}), ...(aspect ? { aspect } : {}) } : {}),
+        // The footer opens with the logo too, where the source's does (AGL-4139).
+        ...(withLogo && home.footer?.logo === true ? { footer: true } : {}),
         name: !logo || home.brand.kind !== 'logo-only',
       }
     : null
@@ -646,7 +710,28 @@ export function aiSiteImportHomeOf(crawled: Pick<SiteImportInventory, 'pages'>):
     ...(page.nav ? { nav: page.nav } : {}),
     ...(page.footer ? { footer: page.footer } : {}),
     ...(page.look ? { look: page.look } : {}),
+    // The site's icon its head names, for a site with none of its own (AGL-4139).
+    ...(aiSiteImportFaviconOf(page.icons ?? []) ? { favicon: aiSiteImportFaviconOf(page.icons ?? []) } : {}),
   }
+}
+
+/**
+ * The icon a site's head names that a site's own icon can be made from
+ * (AGL-4139): its largest touch icon, else its largest icon in a picture
+ * format the library takes, never an `.ico` or a drawing. `null` for none.
+ */
+export function aiSiteImportFaviconOf(icons: ReadonlyArray<{ url: string; rel: string; size: number | null; type: string | null }>): string | null {
+  const raster = (icon: (typeof icons)[number]) => {
+    const type = (icon.type ?? '').toLowerCase()
+    if (type) return /^image\/(?:png|jpe?g|webp|gif)$/.test(type)
+    try {
+      return /\.(?:png|jpe?g|webp|gif)$/i.test(new URL(icon.url).pathname)
+    } catch {
+      return false
+    }
+  }
+  const largest = (rel: string) => icons.filter((icon) => icon.rel === rel && /^https:\/\//i.test(icon.url) && (rel === 'apple-touch-icon' || raster(icon))).sort((a, b) => (b.size ?? 0) - (a.size ?? 0))[0]
+  return (largest('apple-touch-icon') ?? largest('icon'))?.url ?? null
 }
 
 /** Whether a page asks no model at all: copied as it is, its listing the source's own. */

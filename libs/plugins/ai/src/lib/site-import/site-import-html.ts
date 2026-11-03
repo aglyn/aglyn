@@ -241,6 +241,8 @@ export interface SiteImportElement {
   icon?: number
   /** The form that sat here, by index into the page's kept forms. */
   form?: number
+  /** The picture an `<img>` shows (AGL-4139): its address and alt, where a menu's featured card or a footer's logo is one. */
+  picture?: { url: string; alt: string }
   /** The video that sat here (AGL-4140), by index into the page's videos; its poster is the picture inside it. */
   video?: number
   /**
@@ -1764,6 +1766,7 @@ export function extractSiteImportPage(
       if (url && images.length < SITE_IMPORT_PAGE_LIMITS.images) {
         const key = url.toString()
         const alt = clip(collapse(attributes['alt'] ?? ''), 300)
+        if (keep && element >= 0) (elements[element] as SiteImportElement).picture = { url: key, alt }
         if (anchor && !anchor.image) anchor.image = { url: key, alt }
         if (!imageSeen.has(key)) {
           imageSeen.add(key)
