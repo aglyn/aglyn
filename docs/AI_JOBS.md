@@ -2583,7 +2583,19 @@ whose passes each do one unit (`aiSiteImportNextWork`):
    (`site-import/site-import-layout.ts`, no model): its sections and bands,
    rows, groups by kind, tables, tabs, pictures, icons and buttons over the
    read's blocks by index (`AiSiteImportPageRead.layout`), through the page's
-   own stylesheets (`site-import-css.ts`); every crawl reads the home page's
+   own stylesheets (`site-import-css.ts`), and its VIDEOS (AGL-4140,
+   `readVideos`, at most 10 a page, `AiSiteImportPageRead.videos`): a
+   `<video>`, an `<iframe>` of a host a `videoEmbedProviders` declaration
+   names, a facade (a `lite-youtube`/`lite-vimeo`, a `data-*-id` element, a
+   button or link over a picture whose words say it plays a film or that links
+   a host's page) and the structured data's `VideoObject`s and `og:video`,
+   each once, a data film matched to a found one by address, to a facade by
+   its thumbnail's path, else to the first facade with no film. Each leaves an
+   `<aglyn-video>` marker at its place with its poster inside it as an image
+   block, so the layout's `video` node (`poster`, `fit`, `shadow`), an item's
+   `video` and a section's `backdrop: { kind: 'video' }` (a film playing by
+   itself behind the words) place it; only attributes and JSON are read,
+   never a script; every crawl reads the home page's
    menu, footer and look (`site-import-nav.ts`). `aiSiteImportInventory` groups the pages
    (the MAIN pages: home, the home menu's, every top-level page and any page of
    no collection; then each COLLECTION, an address prefix with at least three
@@ -2736,7 +2748,27 @@ whose passes each do one unit (`aiSiteImportNextWork`):
      a lone portrait beside a few words — is the portrait, small), each group a
      `cards`/`steps`/`stats`/`faq`/`quotes`/`list` block whose items carry every
      part (`iconPath`, `picture`, `figure`, `more`, `list`, `listIconPath`,
-     `links`, `to`), and the import-only kinds `table`, `tabs` and `logos`.
+     `links`, `to`), and the import-only kinds `table`, `tabs`, `logos` and
+     `video` (AGL-4140: `AiLayoutVideo`, where the Video element can play the
+     film by `siteImportFilmSource` — a declared host's link, else the old
+     site's own https file, which plays from its address — and its poster is in
+     the library; a film on another host is its poster linking to it, one with
+     no poster is left out, a backdrop film is its poster behind the words, and
+     the page's row says which, `aiSiteImportVideoNote`). A `<button>` line whose
+     words say it plays a film (`SITE_IMPORT_PLAY_WORDS`) is a button to
+     `video:<n>`, its section's film else the page's first. The compiler's
+     `video()` draws the Video element (poster, title, description,
+     `uploadDate`, `durationSeconds`, `controls`; never `autoPlay`, which rule
+     16 refuses), filling a hero's frame where the opening's picture is a film
+     (`cover`, `poster` and `panel` set aside for `column`: a pressed film never
+     sits behind its words), its id `<section>-video-<n>` kept when stored, and
+     a `video:<n>` button gets `aiPagePlayVideoInteraction` (Scroll to element,
+     24 px clear, then Play a video) once the film is placed, else keeps its
+     words. Rule 9 reads a Video element's host link, and on an `ownWords` page
+     its film, as no hot-linked picture; rule 10 reads a button that plays a
+     film of its page as going there. `aiSiteImportDesignText` prints a film as
+     the `picture` it always printed, so the design answer is asked nothing
+     new (pinned for Home and /product).
      Every line is taken once; a line the layout placed nowhere goes at its
      section's end. `aiCompileLayoutPage` draws it with `verbatim: true`: words
      as written (never fitted, guarded, gapped or cut; a heading past the
@@ -2935,7 +2967,11 @@ built page against what the reader read of its source.
   `.height`), else its own, by the library copy's size or its `width` and
   `height` — or in no box where the source crops nothing; icons, each item's,
   each card's corner arrow (`mark`) and each bullet's; buttons in the source's
-  style with a destination; headings; forms. `score` is the lowest of them and
+  style with a destination, a `<button>` whose words play a film counted where
+  a film is drawn (AGL-4140); headings; forms; `videos`, each of the source's
+  films drawn as a Video element playing from an address (a film behind a
+  section's words is its poster there, counted among the pictures; a film's
+  poster is placed on its Video element). `score` is the lowest of them and
   `lowest` names it.
 - **The frame.** The row's items by name in order, over the larger of the two
   counts, so a row of page titles scores low; the menus under their names, their
@@ -2953,9 +2989,10 @@ built page against what the reader read of its source.
 - **The bar.** `SITE_IMPORT_FIDELITY_THRESHOLD`, 0.9 on structure, with words at
   exactly 1. Today's recorded pages and frames score 1.00; the same pages built
   as 10/29 built them score 0.
-- **Reported, not scored, by name.** An icon standing alone in the source (a
-  video's play mark), which the build leaves out; a button that goes nowhere a
-  page can send a visitor (a film's play button), kept as its words; a byline
+- **Reported, not scored, by name.** An icon standing alone in the source,
+  which the build leaves out (a film's play mark is its facade's own, read
+  with the film, AGL-4140); a button that goes nowhere a page can send a visitor
+  (one its script runs, or a film's where no film is drawn), kept as its words; a byline
   (a portrait beside a few words), drawn small over its words and not as a row;
   a `text` group, lines that only share a shape. Framing scores neither a round
   portrait nor the picture a hero lays behind its words, which fill their boxes

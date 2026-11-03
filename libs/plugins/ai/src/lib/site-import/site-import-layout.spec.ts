@@ -615,3 +615,32 @@ describe('a layout as a wave keeps it', () => {
     expect(cut.sections.length).toBeLessThan(layout.sections.length)
   })
 })
+
+describe('a bakery’s films, where the source shows them (AGL-4140)', () => {
+  it('reads the film playing behind its opening as the opening’s backdrop, its poster the first paint', () => {
+    const { layout, main } = read('bakery')
+    const [opening] = layout.sections
+    expect(opening?.backdrop).toEqual({ kind: 'video', video: 0, poster: 0 })
+    expect(opening?.band).toBe('dark')
+    expect(opening?.hero).toEqual({ picture: 'behind' })
+    expect(main[0]).toMatchObject({ kind: 'image', url: 'https://www.hearth-bakery.example/wp-content/uploads/2026/09/ovens-poster.jpg' })
+    // The film is behind the words, never one of them.
+    expect(all(opening?.nodes ?? [], 'video')).toEqual([])
+    expect(opening?.lines[0]).toBe(0)
+  })
+
+  it('places each other film where it sits: a frame and a facade in their sections, a card’s in its card, the head’s at the end', () => {
+    const { layout } = read('bakery')
+    expect(all(sectionNamed('bakery', 'How we bake').nodes, 'video')).toEqual([expect.objectContaining({ kind: 'video', video: 1, poster: expect.any(Number) })])
+    expect(all(sectionNamed('bakery', 'A morning with us').nodes, 'video')).toMatchObject([{ video: 2 }])
+    const [cards] = all(sectionNamed('bakery', 'Our flour').nodes, 'group')
+    expect(cards).toMatchObject({ group: 'cards', columns: 3 })
+    expect(cards?.items.map((item) => item.video)).toEqual([3, undefined, undefined])
+    // A card's film is its picture: its poster.
+    expect(cards?.items[0]?.image).toBe(cards?.items[0]?.lines[0])
+    expect(all(sectionNamed('bakery', 'Visit').nodes, 'video')).toMatchObject([{ video: 4 }])
+    const counts = siteImportLayoutCounts(layout, read('bakery').main)
+    expect(counts.videos).toBe(5)
+    expect(counts.pictures).toBe(7)
+  })
+})

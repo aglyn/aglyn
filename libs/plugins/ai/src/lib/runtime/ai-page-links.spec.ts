@@ -31,7 +31,9 @@ import { collectNodeInteractions } from '@aglyn/aglyn/app-utils/node-interaction
 import {
   aiPageLinkSection,
   aiPageLinkTarget,
+  aiPagePlayVideoInteraction,
   aiPageScrollInteraction,
+  aiStoredPlayTargets,
   aiStoredScrollTargets,
   isAiFragmentHref,
 } from './ai-page-links'
@@ -123,5 +125,36 @@ describe('the interaction a link to a section carries', () => {
     expect(aiStoredScrollTargets(other({ steps: [{ type: 'toggleElement', selector: '[data-aglyn="leaf:x"]' }] }))).toEqual([])
     expect(aiStoredScrollTargets(other({ steps: [{ type: 'scrollTo', selector: '#consultation-form' }] }))).toEqual([])
     expect([aiStoredScrollTargets({}), aiStoredScrollTargets(null), aiStoredScrollTargets({ interactions: 'x' })]).toEqual([[], [], []])
+  })
+})
+
+
+describe('a button that plays a film of its page (AGL-4140)', () => {
+  const interaction = aiPagePlayVideoInteraction('sec-0-video-1')
+
+  it('scrolls to the film, clear of a sticky header, and presses its play, on every click', () => {
+    expect(interaction).toEqual({
+      id: 'ai-play-video',
+      name: 'Scroll to the video and play it',
+      enabled: true,
+      trigger: { event: 'elementClick', everyTime: true },
+      steps: [
+        { type: 'scrollTo', selector: '[data-aglyn="leaf:sec-0-video-1"]', offsetPx: 24 },
+        { type: 'playVideo', selector: '[data-aglyn="leaf:sec-0-video-1"]' },
+      ],
+    })
+  })
+
+  it('is collected from its node as the runtime runs it, and is an action the platform keeps', () => {
+    const [collected] = collectNodeInteractions([{ $id: 'watch', interactions: [interaction] }, { $id: 'sec-0-video-1' }])
+    expect(validateStoredInteraction(collected.action)).toBeNull()
+  })
+
+  it('is read back from a stored node by the film it plays, and nothing else is', () => {
+    expect(aiStoredPlayTargets({ interactions: [interaction] })).toEqual(['sec-0-video-1'])
+    expect(aiStoredScrollTargets({ interactions: [interaction] })).toEqual(['sec-0-video-1'])
+    expect(aiStoredPlayTargets({ interactions: [{ ...interaction, enabled: false }] })).toEqual([])
+    expect(aiStoredPlayTargets({ interactions: [aiPageScrollInteraction('ai-job12345678-section-5', 'Visit')] })).toEqual([])
+    expect([aiStoredPlayTargets({}), aiStoredPlayTargets(null)]).toEqual([[], []])
   })
 })

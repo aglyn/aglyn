@@ -62,6 +62,8 @@ import {
   type AiSiteImportPageRead,
   type AiSiteImportReadInput,
   type AiSiteImportState,
+  aiSiteImportVideoNote,
+  siteImportFilmSource,
 } from './ai-site-import'
 import { aglynSitemapUrls } from '../site-import/fixtures/aglyn-com-recordings'
 
@@ -577,5 +579,29 @@ describe('Start every remaining wave', () => {
     // Off by default: the same close waits for the person.
     const reviewed = aiSiteImportWaveClosed(aiSiteImportWaveStarted(inventory(), 0, 'a', new Map()), 0, 'b')
     expect(reviewed.waves[0].status).toBe('review')
+  })
+})
+
+
+describe('where a page’s films play from, and what its row says of them (AGL-4140)', () => {
+  it('plays a host’s link in that host’s player, the old site’s own https file from its address, and nothing else', () => {
+    expect(siteImportFilmSource({ embed: 'https://fast.wistia.net/embed/iframe/e4a27b971d' })).toEqual({ src: 'https://fast.wistia.net/embed/iframe/e4a27b971d', hosted: true })
+    expect(siteImportFilmSource({ embed: 'https://youtu.be/dQw4w9WgXcQ', src: 'https://www.bakery.example/a.mp4' })).toEqual({ src: 'https://youtu.be/dQw4w9WgXcQ', hosted: true })
+    expect(siteImportFilmSource({ src: 'https://www.bakery.example/a.mp4' })).toEqual({ src: 'https://www.bakery.example/a.mp4', hosted: false })
+    // A host no player is declared for, a file at an http address, nothing at all.
+    expect(siteImportFilmSource({ embed: 'https://videos.example.net/watch/1' })).toBeNull()
+    expect(siteImportFilmSource({ src: 'http://www.bakery.example/a.mp4' })).toBeNull()
+    expect(siteImportFilmSource(null)).toBeNull()
+  })
+
+  it('says a film the old site serves plays from there, and a film with no poster was left out', () => {
+    const file = { src: 'https://www.bakery.example/a.mp4', poster: 'https://www.bakery.example/a.jpg', title: 'A' }
+    const hosted = { embed: 'https://fast.wistia.net/embed/iframe/e4a27b971d', poster: 'https://www.bakery.example/b.jpg', title: 'B' }
+    expect(aiSiteImportVideoNote([file])).toBe("A video on this page plays from your old site's address; pick it from your media library to move it.")
+    expect(aiSiteImportVideoNote([file, file])).toBe("Videos on this page play from your old site's address; pick each from your media library to move it.")
+    expect(aiSiteImportVideoNote([{ ...hosted, poster: undefined }])).toBe('A video on this page had no poster picture, so it was left out: add it with the Video element and pick a poster for it.')
+    // A film on its host with its poster, or one no player plays, needs no word.
+    expect(aiSiteImportVideoNote([hosted, { embed: 'https://videos.example.net/watch/1', title: 'C' }])).toBeNull()
+    expect(aiSiteImportVideoNote(undefined)).toBeNull()
   })
 })
