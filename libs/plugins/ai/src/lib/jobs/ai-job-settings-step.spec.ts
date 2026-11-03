@@ -37,7 +37,9 @@ jest.mock('./ai-jobs', () => ({
   aiJobStepRunnerFor: () => null,
 }))
 
+import { resolveHostToken } from '@aglyn/aglyn/app-utils/host-tokens'
 import { pluginAiCapabilityArgsProblems } from '@aglyn/aglyn/plugin-manager/plugin-ai-capabilities'
+import { FieldValue } from 'firebase-admin/firestore'
 import type { AiJob } from '../model/ai-jobs.types'
 import { AI_OWNED_CAPABILITIES, aiBuildOpLines } from './ai-build-capabilities'
 import { aiJobAdmissionFor } from './ai-job-admission'
@@ -204,7 +206,11 @@ describe('the changes a settings change makes (AGL-3748)', () => {
       'seo.description': 'Classes.',
       'seo.entity.name': 'Juniper Clay Studio',
       'seo.entity.description': 'A pottery studio.',
+      // The site's one email and the copy Setup → Business profile keeps in
+      // step, and the one-line address as the street and its copy (AGL-4136).
+      'seo.entity.email': 'a@b.co',
       'business.supportEmail': 'a@b.co',
+      'seo.entity.address.streetAddress': '1 Main St',
       'business.address': '1 Main St',
       timeZone: 'America/Chicago',
       'consent.mode': 'geo',
@@ -213,6 +219,29 @@ describe('the changes a settings change makes (AGL-3748)', () => {
       'seo.imageHeight': 630,
       'seo.imageAlt': 'Studio',
     })
+  })
+
+  it('says the email changed once, though it writes it to both places (AGL-4136)', () => {
+    const { changes } = aiSettingsChanges({}, { supportEmail: 'hello@b.co' }, {})
+    expect(changes.map((change) => change.path)).toEqual(['seo.entity.email', 'business.supportEmail'])
+    expect(new Set(changes.map((change) => change.said)).size).toBe(1)
+  })
+
+  it('writes a one-line address as the street, deletes the parts it would contradict, and copies it (AGL-4136)', () => {
+    const host = {
+      seo: { entity: { address: { streetAddress: '9 Old Rd', addressLocality: 'Austin', postalCode: '78701', addressRegion: ' ' } } },
+      business: { address: '9 Old Rd, Austin' },
+    }
+    const { changes } = aiSettingsChanges(host, { address: '12 Bean St, Portland, OR 97201' }, {})
+    expect(changes.map(({ path, value, remove }) => (remove ? { path, remove } : { path, value }))).toEqual([
+      { path: 'seo.entity.address.streetAddress', value: '12 Bean St, Portland, OR 97201' },
+      // Only the parts the site has: an empty region and an absent country are left alone.
+      { path: 'seo.entity.address.addressLocality', remove: true },
+      { path: 'seo.entity.address.postalCode', remove: true },
+      { path: 'business.address', value: '12 Bean St, Portland, OR 97201' },
+    ])
+    // One sentence for the whole change.
+    expect(new Set(changes.map((change) => change.said))).toEqual(new Set(['The address is set.']))
   })
 
   it('keeps a social image alt someone wrote, as the card does', () => {
@@ -256,6 +285,48 @@ describe('the settings write (AGL-3748)', () => {
     )
     expect(again.state.updates).toEqual([])
     expect(again.state.outbox).toEqual([])
+  })
+
+  it('deletes the stored parts a one-line address replaces, and shows the line wherever the address is read (AGL-4136)', async () => {
+    const host = {
+      memberRoles: { 'uid-1': 'author' },
+      seo: { entity: { address: { streetAddress: '9 Old Rd', addressLocality: 'Austin', addressCountry: 'US' } } },
+      business: { address: '9 Old Rd, Austin' },
+    }
+    const { firestore, state } = transactionalFirestore(host)
+    const line = '12 Bean St, Portland, OR 97201'
+    const written = await writeAiSiteSettings(firestore, { hostId: 'host-1', uid: 'uid-1', request: { address: line }, media: {}, now: NOW })
+    expect(written).toEqual(
+      expect.objectContaining({
+        ok: true,
+        done: ['The address is set.'],
+        changed: [
+          'seo.entity.address.streetAddress',
+          'seo.entity.address.addressLocality',
+          'seo.entity.address.addressCountry',
+          'business.address',
+        ],
+      }),
+    )
+    expect(state.updates).toEqual([
+      {
+        updatedAt: NOW,
+        'seo.entity.address.streetAddress': line,
+        'seo.entity.address.addressLocality': FieldValue.delete(),
+        'seo.entity.address.addressCountry': FieldValue.delete(),
+        'business.address': line,
+      },
+    ])
+    // What the site reads afterwards: the line, from the structured address and its copy alike.
+    const after = { seo: { entity: { address: { streetAddress: line } } }, business: { address: line } }
+    expect(resolveHostToken('address', after)).toBe(line)
+
+    // The same address again changes nothing and deletes nothing.
+    const again = transactionalFirestore({ memberRoles: { 'uid-1': 'author' }, ...after })
+    expect(await writeAiSiteSettings(again.firestore, { hostId: 'host-1', uid: 'uid-1', request: { address: line }, media: {}, now: NOW })).toEqual(
+      expect.objectContaining({ ok: true, changed: [], outboxId: null }),
+    )
+    expect(again.state.updates).toEqual([])
   })
 
   it('refuses a member who lost the write role by the time it writes', async () => {

@@ -16,15 +16,14 @@
  */
 
 /**
- * Three console cards must not write from a seed the server never confirmed
+ * Console cards must not write from a seed the server never confirmed
  * (AGL-1358).
  *
- * - business details — `mergeFields: ['business']` is what makes this
- *   dangerous rather than merely lossy. It replaces the whole `business` map
- *   atomically, deliberately, so that removing a social link is possible at
- *   all; every key in it comes from a form seeded by the listener. Against a
- *   cached read, correcting the support email restores that snapshot's
- *   address and links.
+ * The business details card that was here is gone (AGL-4136): a site's
+ * business details are a host settings form on Setup → Business profile now, saved
+ * through the settings hub's guarded save, which `host-setup-stale-seed`
+ * and `setup-business-details.spec` hold.
+ *
  * - languages — both fields go out on every save and both come off the seed,
  *   and the empty case does not rewrite them, it `deleteField()`s them. A
  *   cache that has never seen a locale list de-configures multilingual
@@ -36,9 +35,9 @@
  *   a rename against a cached read restores that snapshot's identity for the
  *   component — the one it wears in every besigner drawer and its listing.
  *
- * None of the three has a create path to exempt: two write a FIXED document
- * path, where an all-blank form is the worst input rather than a harmless
- * one, and the third only ever opens on a stored row.
+ * Neither has a create path to exempt: one writes a FIXED document path,
+ * where an all-blank form is the worst input rather than a harmless one, and
+ * the other only ever opens on a stored row.
  *
  * Both directions asserted at each. The positive controls matter most: these
  * stand in front of the ordinary save.
@@ -48,7 +47,6 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { setSeedConfirmWaitMs } from '@aglyn/tenant-feature-instance/hooks/helpers/listen-confirmation'
 import { updateDoc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
-import BusinessDetailsCard from '../components/business-details-card.component'
 import HostComponentsCard from '../components/host-components-card.component'
 import LanguagesCard from '../components/languages-card.component'
 
@@ -298,60 +296,6 @@ beforeEach(() => {
 // This spec pins the refusal, not the wait before it (AGL-4120).
 beforeAll(() => setSeedConfirmWaitMs(0))
 afterAll(() => setSeedConfirmWaitMs())
-
-describe('BusinessDetailsCard (AGL-1358)', () => {
-  const editAndSave = () => {
-    fireEvent.change(screen.getByLabelText('Support email'), {
-      target: { value: 'support@acme.test' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-  }
-
-  it('REFUSES to replace the business map from an unconfirmed read', async () => {
-    mockListener.fromCache = true
-    render(<BusinessDetailsCard hostId="host-1" />)
-
-    editAndSave()
-
-    // Settled, so this cannot pass merely by asserting too early.
-    await waitFor(() => expect(mockEnqueueSnackbar).toHaveBeenCalled())
-    expect(mockSetDoc).not.toHaveBeenCalled()
-    const [message] = mockEnqueueSnackbar.mock.calls[0]
-    expect(message).toEqual(expect.stringContaining('business details'))
-    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
-    // The form keeps what was typed, so the refusal is not a silent no-op.
-    expect(
-      (screen.getByLabelText('Support email') as HTMLInputElement).value,
-    ).toEqual('support@acme.test')
-  })
-
-  it('SAVES normally once the server has confirmed the seed', async () => {
-    render(<BusinessDetailsCard hostId="host-1" />)
-
-    editAndSave()
-
-    await waitFor(() => expect(mockSetDoc).toHaveBeenCalledTimes(1))
-    const [payload, options] = withoutSiteWideEntry(mockSetDoc.mock.calls[0])
-    expect(payload.business.supportEmail).toBe('support@acme.test')
-    // The rest of the map rides along, replaced atomically — which is why the
-    // guard is the only thing standing in front of it.
-    expect(payload.business.address).toBe('1 Market St')
-    expect(options).toEqual({ mergeFields: ['business'] })
-  })
-
-  it('REFUSES when the host read failed, and says so differently', async () => {
-    mockListener.status = 'error'
-    render(<BusinessDetailsCard hostId="host-1" />)
-
-    editAndSave()
-
-    await waitFor(() => expect(mockEnqueueSnackbar).toHaveBeenCalled())
-    expect(mockSetDoc).not.toHaveBeenCalled()
-    expect(mockEnqueueSnackbar.mock.calls[0][0]).toEqual(
-      expect.stringMatching(/could not be loaded/i),
-    )
-  })
-})
 
 describe('LanguagesCard (AGL-1358)', () => {
   const editAndSave = () => {

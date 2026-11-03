@@ -156,6 +156,15 @@ describe('GET /llms.txt', () => {
     expect(body).toContain('Ask us about widget torque.')
   })
 
+  it('names the site’s email, from the older copy where the entity has none (AGL-4136)', async () => {
+    const body = await (await llmsGet(request('/api/llms'))).text()
+    expect(body).toContain('hi@demo.example.com')
+    ;(mockHost.record as any).seo.entity = { name: 'Demo LLC' }
+    ;(mockHost.record as any).business = { supportEmail: 'help@demo.example.com' }
+    const fallback = await (await llmsGet(request('/api/llms'))).text()
+    expect(fallback).toContain('help@demo.example.com')
+  })
+
   it('404s a search-discouraged site rather than serving an empty guide', async () => {
     // An empty file is a file that EXISTS and says the site has nothing, which
     // an agent may cache as a fact about the site rather than its settings.
@@ -188,6 +197,13 @@ describe('GET /openapi.json', () => {
       { url: 'https://demo.example.com', description: 'Demo Site' },
     ])
     expect(document.info.contact.email).toBe('hi@demo.example.com')
+  })
+
+  it('names the site’s email, from the older copy where the entity has none (AGL-4136)', async () => {
+    ;(mockHost.record as any).seo.entity = { name: 'Demo LLC' }
+    ;(mockHost.record as any).business = { supportEmail: 'help@demo.example.com' }
+    const document = JSON.parse(await (await openapiGet(request('/api/openapi'))).text())
+    expect(document.info.contact.email).toBe('help@demo.example.com')
   })
 
   it('describes the collections this site really has', async () => {

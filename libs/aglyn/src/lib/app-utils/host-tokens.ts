@@ -15,7 +15,10 @@
  * limitations under the License.
  */
 
+import { structuredAddressLine } from './business-profile'
+import { siteProfileUrls, type HostSeoEntity } from './content-authors'
 import { hostPublicOrigin } from './host-naming'
+import { normalizeAreaServed } from './local-business'
 
 /**
  * Host variables — publisher templates that fill themselves in (AGL-1022).
@@ -86,13 +89,35 @@ export interface HostTokenSource {
   logoDarkUrl?: string
   subdomain?: string
   cname?: string
-  /** Contact details a publisher template can reference (AGL-1022). */
+  /**
+   * The one-block copies of the email and address, and the social links
+   * (AGL-1022). Setup → Business profile writes the email and address to `seo.entity`
+   * and mirrors them here (AGL-4136), so these are what a token reads when
+   * the entity has none: a site saved before that, or by the native apps.
+   */
   business?: {
     supportEmail?: string
     address?: string
     socialLinks?: Array<{ label?: string; url?: string }>
   }
-  seo?: { entity?: { name?: string; logo?: string } }
+  /**
+   * The business's facts as Setup → Business profile and SEO → Local business store
+   * them (AGL-4136): the name, slogan, phone, email, structured address, the
+   * profiles it claims and the areas it serves.
+   */
+  seo?: {
+    entity?: Pick<
+      HostSeoEntity,
+      | 'name'
+      | 'logo'
+      | 'slogan'
+      | 'email'
+      | 'telephone'
+      | 'address'
+      | 'sameAs'
+      | 'areaServed'
+    >
+  }
 }
 
 export interface HostTokenDefinition {
@@ -146,6 +171,85 @@ function logo(host: HostTokenSource): string | undefined {
 }
 
 /**
+ * A phone number as a `tel:` link (AGL-4136): everything but its digits and
+ * a leading `+` removed, so `+1 (512) 555-0100` dials `tel:+15125550100`.
+ * Nothing when the number holds no digit, so a Call button never links to a
+ * bare `tel:`.
+ */
+export function telephoneHref(phone: unknown): string | undefined {
+  const text = trimmed(phone)
+  if (!text) return undefined
+  const digits = text.replace(/\D+/g, '')
+  if (!digits) return undefined
+  return `tel:${text.startsWith('+') ? '+' : ''}${digits}`
+}
+
+/**
+ * The social networks a page can link by name (AGL-4136), each with the
+ * hostnames its profile addresses are served from. A hostname matches itself
+ * and any subdomain of itself, so `www.` and `m.` addresses are the same
+ * profile. X keeps `twitter.com`, because a link saved before the rename is
+ * still the same account.
+ */
+const SOCIAL_NETWORK_HOSTS = {
+  facebook: ['facebook.com', 'fb.com'],
+  instagram: ['instagram.com'],
+  x: ['x.com', 'twitter.com'],
+  linkedin: ['linkedin.com'],
+  youtube: ['youtube.com', 'youtu.be'],
+  tiktok: ['tiktok.com'],
+} as const
+
+export type HostSocialNetwork = keyof typeof SOCIAL_NETWORK_HOSTS
+
+/**
+ * The site's profile on one network: the first of the profiles it claims
+ * (`siteProfileUrls`, the entity's `sameAs` and then Setup → Business profile's
+ * social links, https only) served from that network's hostname. Matched by
+ * HOSTNAME rather than by the link's label, because the label is free text
+ * and the address is what a visitor is sent to.
+ */
+export function siteSocialProfileUrl(
+  host: HostTokenSource | null | undefined,
+  network: HostSocialNetwork,
+): string | undefined {
+  const hosts: readonly string[] = SOCIAL_NETWORK_HOSTS[network]
+  for (const value of siteProfileUrls(host)) {
+    let hostname: string
+    try {
+      hostname = new URL(value).hostname.toLowerCase()
+    } catch {
+      continue
+    }
+    if (hosts.some((name) => hostname === name || hostname.endsWith(`.${name}`))) {
+      return value
+    }
+  }
+  return undefined
+}
+
+/** The areas served, as SEO → Local business stores and the structured data publishes them. */
+function areasServed(host: HostTokenSource): string[] {
+  return normalizeAreaServed(host.seo?.entity?.areaServed)
+}
+
+/** One social network's profile link as a token: a URL, dropped where the site has none. */
+function socialToken(
+  network: HostSocialNetwork,
+  key: string,
+  name: string,
+): HostTokenDefinition {
+  return {
+    key,
+    type: 'url',
+    label: `${name} link`,
+    description: `The address of the site’s ${name} profile, from Setup → Business profile.`,
+    resolve: (host) => siteSocialProfileUrl(host, network),
+    whenEmpty: 'omit-block',
+  }
+}
+
+/**
  * The closed registry.
  *
  * Ordered as an author would look for them. Every entry is reachable from a
@@ -157,8 +261,17 @@ export const HOST_TOKENS: Record<string, HostTokenDefinition> = {
     key: 'businessName',
     type: 'text',
     label: 'Business name',
-    description: 'The site’s business or brand name.',
+    description:
+      'The business name from Setup → Business profile, or the site’s name when none is set.',
     resolve: businessName,
+    whenEmpty: 'blank',
+  },
+  slogan: {
+    key: 'slogan',
+    type: 'text',
+    label: 'Slogan',
+    description: 'A short line about the business, from Setup → Business profile.',
+    resolve: (host) => trimmed(host.seo?.entity?.slogan),
     whenEmpty: 'blank',
   },
   logo: {
@@ -190,21 +303,71 @@ export const HOST_TOKENS: Record<string, HostTokenDefinition> = {
     resolve: siteUrl,
     whenEmpty: 'blank',
   },
+  phone: {
+    key: 'phone',
+    type: 'text',
+    label: 'Phone',
+    description: 'The business’s phone number, as entered on Setup → Business profile.',
+    resolve: (host) => trimmed(host.seo?.entity?.telephone),
+    whenEmpty: 'omit-block',
+  },
+  phoneLink: {
+    key: 'phoneLink',
+    type: 'url',
+    label: 'Phone link',
+    description:
+      'The phone number as a tel: link, for a Call button’s link. Dropped when the site has no phone.',
+    resolve: (host) => telephoneHref(host.seo?.entity?.telephone),
+    whenEmpty: 'omit-block',
+  },
+  /*
+    The key keeps its old name, because pages and emails already say
+    `{{host.supportEmail}}`. What it reads is the site's one email (AGL-4136):
+    the one Setup → Business profile saves to the entity, else the one-block copy a
+    site saved before that.
+  */
   supportEmail: {
     key: 'supportEmail',
     type: 'email',
-    label: 'Support email',
-    description: 'Where visitors should write for help.',
-    resolve: (host) => trimmed(host.business?.supportEmail),
+    label: 'Email',
+    description: 'The email address visitors write to, from Setup → Business profile.',
+    resolve: (host) => siteContactEmail(host) ?? undefined,
     whenEmpty: 'omit-block',
   },
   address: {
     key: 'address',
     type: 'address',
     label: 'Postal address',
-    description: 'The business’s postal address, as one block of text.',
-    resolve: (host) => trimmed(host.business?.address),
+    description:
+      'The business’s postal address from Setup → Business profile, as one block of text.',
+    // The structured address, formatted the one way it is formatted
+    // everywhere (AGL-4136), else the one-block copy as it was typed —
+    // line breaks kept, because a document prints it a line per line.
+    resolve: (host) =>
+      trimmed(structuredAddressLine(host.seo?.entity?.address)) ??
+      trimmed(host.business?.address),
     whenEmpty: 'omit-block',
+  },
+  mainArea: {
+    key: 'mainArea',
+    type: 'text',
+    label: 'Main area',
+    description:
+      'The first area served, by its place name: San Antonio, for “San Antonio, TX”. From SEO → Local business.',
+    // The text before the first comma, so the token reads in a sentence —
+    // "across San Antonio and surrounding areas" — and a page that already
+    // says the place name can switch to it without a visible change.
+    resolve: (host) => trimmed(areasServed(host)[0]?.split(',')[0]),
+    whenEmpty: 'blank',
+  },
+  areasServed: {
+    key: 'areasServed',
+    type: 'text',
+    label: 'Areas served',
+    description:
+      'Every area served, in order, separated by commas. From SEO → Local business.',
+    resolve: (host) => trimmed(areasServed(host).join(', ')),
+    whenEmpty: 'blank',
   },
   socialLinks: {
     key: 'socialLinks',
@@ -212,7 +375,7 @@ export const HOST_TOKENS: Record<string, HostTokenDefinition> = {
     label: 'Social links',
     description: 'The site’s social profiles, as a list of labeled links.',
     // Rendered as text here so a token in copy degrades to something readable;
-    // a renderer wanting real links reads `host.business.socialLinks` itself.
+    // a link to one profile is that network's own token below (AGL-4136).
     resolve: (host) => {
       const links = host.business?.socialLinks ?? []
       const labels = links
@@ -222,6 +385,17 @@ export const HOST_TOKENS: Record<string, HostTokenDefinition> = {
     },
     whenEmpty: 'omit-block',
   },
+  /*
+    One link per common network (AGL-4136), so a page's social icons link
+    the site's own profiles from Setup → Business profile instead of a hand-made
+    variable per network.
+  */
+  facebookUrl: socialToken('facebook', 'facebookUrl', 'Facebook'),
+  instagramUrl: socialToken('instagram', 'instagramUrl', 'Instagram'),
+  xUrl: socialToken('x', 'xUrl', 'X'),
+  linkedinUrl: socialToken('linkedin', 'linkedinUrl', 'LinkedIn'),
+  youtubeUrl: socialToken('youtube', 'youtubeUrl', 'YouTube'),
+  tiktokUrl: socialToken('tiktok', 'tiktokUrl', 'TikTok'),
 }
 
 /**
@@ -427,12 +601,14 @@ export function hostTokenMerge(
 }
 
 /**
- * The email address a visitor writes to the business at: the one its
- * business listing shows (`seo.entity.email`), else its support email. Null
- * when the site has neither. One answer for every place that names it: the
- * waiver consent, the quote and invoice PDFs, and the Reply-To of the quote
- * email (AGL-4097). Trimmed, not validated; a caller putting it in a header
- * checks it is an address.
+ * The email address a visitor writes to the business at: the one Setup →
+ * Business saves (`seo.entity.email`), else the one-block copy a site saved
+ * before that (`business.supportEmail`). Null when the site has neither. One
+ * answer for every place that names it: the `{{host.supportEmail}}` token
+ * and so the email footer, the waiver consent, the quote and invoice PDFs,
+ * the Reply-To of the quote email (AGL-4097), and the address a refused form
+ * or sign-up offers instead (AGL-4136). Trimmed, not validated; a caller
+ * putting it in a header checks it is an address.
  */
 export function siteContactEmail(
   host:

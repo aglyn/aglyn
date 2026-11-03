@@ -120,13 +120,32 @@ details.
 
 | Token | Fills in |
 | --- | --- |
-| `{{host.businessName}}` | **Setup → SEO → Entity → Name**, or the site name when that is empty |
-| `{{host.logo}}` | The site's logo, from **Setup → Details → Site logo** |
+| `{{host.businessName}}` | **Business name**, from **Setup → Business profile → Business details**, or the site name when that is empty |
+| `{{host.slogan}}` | **Slogan**, from the same card |
+| `{{host.logo}}` | The site's logo, from **Setup → Basic details → Site logo** |
 | `{{host.logoDark}}` | The site's dark mode logo from the same card, or its logo when it has no dark one |
 | `{{host.url}}` | The site's address — its custom domain when one is connected |
-| `{{host.supportEmail}}` | **Support email**, from **Setup → Details → Business details** |
-| `{{host.address}}` | **Postal address**, from the same card |
+| `{{host.phone}}` | **Phone**, from **Setup → Business profile → Business details**, as you typed it |
+| `{{host.phoneLink}}` | The same phone as a link that dials it, such as `tel:+15125550100`, for a Call button |
+| `{{host.supportEmail}}` | **Email**, from the same card |
+| `{{host.address}}` | The postal address from the same card, on one line |
+| `{{host.mainArea}}` | The first of **Areas served**, from **Setup → SEO → Local business**, by its place name: *San Antonio* for "San Antonio, TX" |
+| `{{host.areasServed}}` | Every one of **Areas served**, in order, separated by commas |
 | `{{host.socialLinks}}` | The labels of the card's **Social links** |
+| `{{host.facebookUrl}}` | The address of the site's Facebook profile, from its **Social links** |
+| `{{host.instagramUrl}}` | Its Instagram profile |
+| `{{host.xUrl}}` | Its X profile, on x.com or twitter.com |
+| `{{host.linkedinUrl}}` | Its LinkedIn profile |
+| `{{host.youtubeUrl}}` | Its YouTube channel |
+| `{{host.tiktokUrl}}` | Its TikTok profile |
+
+Each social link variable finds its profile by the link's address, not its label, so a
+link labeled anything at all still counts.
+
+The links work in a button's or a link's **External URL**: pick **Phone link** from the
+variable picker there and the button dials your number, or **Instagram link** and it
+opens your profile. Change the number or the profile in **Business details** and every
+page that uses it follows, with no variable of your own to keep up to date.
 
 A detail the site hasn't set renders as nothing, never as the token. The canvas and
 **Preview** fill these in from the site you are editing, exactly as the published page

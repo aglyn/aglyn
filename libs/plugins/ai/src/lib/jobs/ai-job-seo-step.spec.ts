@@ -72,6 +72,8 @@ import {
   AI_SEO_NO_PAGE_COPY,
   AI_SEO_NO_SITE_COPY,
   AI_SEO_SITE_MAX_TOKENS,
+  aiSeoBlankSiteFields,
+  aiSeoLlmsPreview,
   runAiJobSeoStep,
 } from './ai-job-seo-step'
 
@@ -571,6 +573,23 @@ describe('the site audit', () => {
       'Keywords for /nowhere were not used: no checked page is published at that address.',
       '1 published page is kept out of search and was not checked: Hidden. Set its Visibility to Public to list it.',
     ])
+  })
+})
+
+describe('which site fields a proposal may fill (AGL-4136)', () => {
+  it('counts the older one-block email as the site’s email, so a proposal never replaces it', () => {
+    expect(aiSeoBlankSiteFields({ business: { supportEmail: 'help@acme.test' } }).has('seo.entity.email')).toBe(false)
+    expect(aiSeoBlankSiteFields({ seo: { entity: { email: 'hello@acme.test' } } }).has('seo.entity.email')).toBe(false)
+  })
+
+  it('previews /llms.txt with the older copy, as the site’s own file now names it', () => {
+    const preview = aiSeoLlmsPreview({ subdomain: 'acme', business: { supportEmail: 'help@acme.test' } }, {}, [], [])
+    expect(preview).toContain('help@acme.test')
+  })
+
+  it('offers the email only where the site has none at all', () => {
+    expect(aiSeoBlankSiteFields({}).has('seo.entity.email')).toBe(true)
+    expect(aiSeoBlankSiteFields({ business: { supportEmail: '  ' } }).has('seo.entity.email')).toBe(true)
   })
 })
 

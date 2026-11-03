@@ -115,3 +115,44 @@ describe('the year founded on the business profile card', () => {
     expect(businessProfileOwnerWrite(stored, fromForm(toForm(stored))).sources.founded).toBe('start')
   })
 })
+
+/**
+ * The area served has one home for a site, SEO → Local business (AGL-4136):
+ * a site's card neither shows nor saves it. The workspace's defaults keep
+ * it, as the default every site falls back to last.
+ */
+describe('the area served on the business profile card', () => {
+  type Field = { name: string }
+  const names = (level: 'site' | 'workspace') =>
+    (profileSchema(level, null, null, true).fields as Field[]).map((field) => field.name)
+  const stored: BusinessProfileDoc = {
+    serviceArea: 'North Austin',
+    audience: 'Owners',
+    sources: { serviceArea: 'owner', audience: 'owner' },
+  }
+
+  it('is not a field of a site’s card', () => {
+    // THE CONTROL: the card still has its other fields.
+    expect(names('site')).toEqual(expect.arrayContaining(['whatYouDo', 'services', 'audience', 'tone']))
+    expect(names('site')).not.toContain('serviceArea')
+  })
+
+  it('stays a field of the workspace defaults', () => {
+    expect(names('workspace')).toContain('serviceArea')
+  })
+
+  it('is left as it was by a site card’s save', () => {
+    expect('serviceArea' in toForm(stored, 'site')).toBe(false)
+    const values = fromForm({ ...toForm(stored, 'site'), audience: 'Busy owners' }, 'site')
+    expect('serviceArea' in values).toBe(false)
+    const next = businessProfileOwnerWrite(stored, values)
+    expect(next.serviceArea).toBe('North Austin')
+    expect(next.audience).toBe('Busy owners')
+  })
+
+  it('is saved, and can be cleared, on the workspace defaults', () => {
+    const next = businessProfileOwnerWrite(stored, fromForm({ ...toForm(stored, 'workspace'), serviceArea: '' }, 'workspace'))
+    expect(next.serviceArea).toBe('')
+    expect(next.sources.serviceArea).toBe('owner')
+  })
+})

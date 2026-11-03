@@ -13,15 +13,16 @@ entered. Aglyn AI writes
 for **this** business instead of guessing, and it never makes up a way to reach
 you.
 
-![Setup → Business profile, with the source of each value under its field](/img/ai/business-profile.png)
+![The Business profile card on Setup → Business profile, with the source of each value under its field](/img/ai/business-profile.png)
 
 ## Where to edit it {#where-to-edit-it}
 
 Open the site, go to **Setup → Business profile**. The page has three cards:
 
+- **Business details**: your business name, slogan, phone, email, address and social
+  links, entered once for your pages, emails and search listings alike. See
+  [Business details](../getting-started/create-a-site.md#business-details).
 - **Business profile**: see [the Business profile card](#the-business-profile-card).
-- **From your site settings**: the facts Aglyn AI reads from your other
-  settings, each with a link to the card that edits it.
 - **What Aglyn AI learned**: the preferences it took from edits you applied.
 
 ## The Business profile card {#the-business-profile-card}
@@ -30,13 +31,16 @@ The **Business profile** card holds what Aglyn AI writes for:
 
 - **What the business does**, in a sentence or two;
 - **Services**, one per line, up to 12;
-- **Who it is for** and **Area served**;
+- **Who it is for**;
 - **Tone of voice**: Friendly and warm, Professional and clear, Playful and upbeat,
   Premium and refined, or Plain and direct, and **Notes on tone** for anything else;
 - **Year founded**, as four digits, such as 2015. An About page or a "Since" line uses it
   instead of leaving a gap where the year would go.
 
 Aglyn AI reads it on every job for the site and never replaces what you write here.
+
+The area you serve is not on this card: Aglyn AI reads it from **Areas served** on
+**Setup → SEO → Local business**, the one place it is entered.
 
 ## Where the values come from {#where-the-values-come-from}
 
@@ -58,13 +62,14 @@ never overwrites one you wrote, and a field you cleared stays clear.
 **Settings → Profile** has a **Business profile defaults** card. A site uses
 those values wherever its own profile is empty, so a workspace that runs many
 sites for one business writes them once. Only managers can change them. The
-year founded is set on each site's own card.
+year founded is set on each site's own card. The default **Area served** is used
+only by a site whose **Areas served** on Setup → SEO → Local business is empty.
 
 ## Contact details are never invented {#contact-details-are-never-invented}
 
-The name, business type, email, phone, address, opening hours and social
-profiles come only from **Setup → Basic details** and **Setup → SEO**, exactly
-as entered. A detail you have not entered reads **Not entered**, and Aglyn AI
+The name, email, phone, address and social profiles come only from **Business
+details** on **Setup → Business profile**, and the business type and opening hours from
+**Setup → SEO → Local business**, exactly as entered. A detail you have not entered reads **Not entered**, and Aglyn AI
 writes the sentence without it instead of making one up or leaving a gap for
 you to fill. The same goes for prices, reviews and testimonials.
 

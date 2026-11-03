@@ -59,7 +59,9 @@ import { readEventFrames } from './assist-jobs-drawer.component'
  * keywords are the ones the check was last run with (`check.keywords`).
  *
  * Nothing it shows is saved. "Put in the form" stages the site-wide proposal
- * in the SEO form below as unsaved edits, and the form's Update is the write.
+ * in the SEO forms below as unsaved edits — the name, email and phone in
+ * Setup → Business profile's Business details, where they are entered (AGL-4136) —
+ * and each form's Update is the write.
  * "Apply all" does that too, and asks the apply door to open a new
  * unpublished version for each page's content fixes and to stage each page's
  * listing for its SEO card — the live site serves none of it until a person
@@ -92,6 +94,18 @@ export const AI_SEO_SITE_FIELD_LABELS: Record<AiSeoSiteFormField, string> = {
 }
 
 const ENTITY_TYPE_WORDS: Record<string, string> = { '1': 'An organization', '2': 'A person' }
+
+/**
+ * The proposed fields that live on Setup → Business profile's Business details card
+ * rather than on this section (AGL-4136). The settings route each to the card
+ * that owns it, so they are staged there, and the note under "Put in the
+ * form" has to say where they went.
+ */
+export const AI_SEO_BUSINESS_DETAILS_FIELDS: readonly AiSeoSiteFormField[] = [
+  'seo.entity.name',
+  'seo.entity.email',
+  'seo.entity.telephone',
+]
 
 /** One page's proposed fix, in a sentence a table cell can hold. */
 function fixSummary(fix: AiSeoPageFix | undefined): string {
@@ -246,6 +260,9 @@ export function AiSeoAuditCard(props: ConsoleHostSeoZoneProps) {
   const view = useMemo(() => (job ? aiSeoAuditView(job.outputs) : null), [job])
   const siteValues = view?.site?.values ?? {}
   const siteFields = Object.keys(siteValues) as AiSeoSiteFormField[]
+  // Where "Put in the form" staged each proposed field (AGL-4136).
+  const stagedOnBusiness = siteFields.some((field) => AI_SEO_BUSINESS_DETAILS_FIELDS.includes(field))
+  const stagedHere = siteFields.some((field) => !AI_SEO_BUSINESS_DETAILS_FIELDS.includes(field))
 
   const stageSite = useCallback(() => {
     if (!job || !siteFields.length) return
@@ -385,7 +402,23 @@ export function AiSeoAuditCard(props: ConsoleHostSeoZoneProps) {
                     {'Put in the form'}
                   </Button>
                   {siteStaged === job.id ? (
-                    <Alert severity="success">{'In the SEO form below as unsaved changes. Review them, then press Update.'}</Alert>
+                    <Alert severity="success">
+                      {stagedHere
+                        ? 'In the SEO forms below as unsaved changes. Review them, then press Update.'
+                        : null}
+                      {stagedOnBusiness ? (
+                        <>
+                          {stagedHere ? ' ' : ''}
+                          {'The name, email and phone are in Business details on '}
+                          {host ? (
+                            <AppLink href={`/${orgSlug}/hosts/${host}/setup/business`}>{'Setup → Business profile'}</AppLink>
+                          ) : (
+                            'Setup → Business profile'
+                          )}
+                          {' as unsaved changes. Review them there, then press Update.'}
+                        </>
+                      ) : null}
+                    </Alert>
                   ) : null}
                 </Stack>
               ) : null}

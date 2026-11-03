@@ -203,9 +203,9 @@ export const membershipRegisterHandler: PluginApiHandler = async (req, res) => {
       // Opaque to the VISITOR, who is a stranger to this site and not our
       // customer (AGL-1666's rules, restated in the message's own docblock).
       // The one genuinely useful thing to hand them is a door that still
-      // opens, so the site's OWN published support address rides along when
-      // it has one — read through the host-token registry, whose description
-      // of this field is literally "where visitors should write for help".
+      // opens, so the site's OWN published email rides along when it has
+      // one — read through the host-token registry, which answers the email
+      // Setup → Business profile saves, else the older one-block copy (AGL-4136).
       // Nothing else off the host document may leave the console.
       const contact = HOST_TOKENS['supportEmail']?.resolve(
         hostSnapshot.data() as any,

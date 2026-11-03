@@ -109,10 +109,10 @@ const secondsUntilNextMonth = (now = new Date()): number => {
  * OWN published support address, so a lost lead has somewhere else to go.
  *
  * Read through the host-token registry rather than reaching into the
- * document, because that registry is what defines this field as the address
- * a site publishes to visitors — its description is literally "where
- * visitors should write for help". Anything else on the host document is
- * account data and must not leave the console.
+ * document, because that registry is what defines the address a site
+ * publishes to visitors: the email Setup → Business profile saves, else the one-block
+ * copy a site saved before that (AGL-4136). Anything else on the host
+ * document is account data and must not leave the console.
  *
  * Free: the host snapshot is already loaded for the existence check.
  */

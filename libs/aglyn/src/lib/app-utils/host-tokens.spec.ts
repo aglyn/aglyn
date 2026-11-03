@@ -26,6 +26,8 @@ import {
   resolveHostTokens,
   resolveNodesHostTokens,
   shouldOmitBlock,
+  siteSocialProfileUrl,
+  telephoneHref,
   validateHostTokens,
   type HostTokenSource,
 } from './host-tokens'
@@ -439,5 +441,230 @@ describe('resolveNodesHostTokens — screens resolve like emails', () => {
     // with strictNullChecks off, which `noImplicitAny` then rejects.
     const input: Record<string, unknown> = { a: { $id: 'a' }, b: null }
     expect(() => resolveNodesHostTokens(input, site())).not.toThrow()
+  })
+})
+
+/**
+ * A site's business details have one home, Setup → Business profile (AGL-4136), and
+ * the tokens read it: the canonical path first, the older one-block copy
+ * where a site saved before that has nothing else.
+ */
+describe('the business details tokens (AGL-4136)', () => {
+  const entity = (over: NonNullable<NonNullable<HostTokenSource['seo']>['entity']>) =>
+    site({ seo: { entity: over } })
+
+  describe('phone and phoneLink', () => {
+    it('gives the phone as entered', () => {
+      expect(resolveHostToken('phone', entity({ telephone: ' +1 (512) 555-0100 ' }))).toBe(
+        '+1 (512) 555-0100',
+      )
+    })
+
+    it('links it as tel: with everything but digits and a leading + removed', () => {
+      expect(resolveHostToken('phoneLink', entity({ telephone: '+1 (512) 555-0100' }))).toBe(
+        'tel:+15125550100',
+      )
+      expect(resolveHostToken('phoneLink', entity({ telephone: '(512) 555.0100' }))).toBe(
+        'tel:5125550100',
+      )
+      // A plus anywhere but the front is punctuation, not a country prefix.
+      expect(telephoneHref('512-555-0100 +')).toBe('tel:5125550100')
+      expect(telephoneHref('  +44 20 7946 0958')).toBe('tel:+442079460958')
+    })
+
+    it('is nothing at all without a phone, so a Call button never links to a bare tel:', () => {
+      expect(resolveHostToken('phoneLink', site())).toBeUndefined()
+      expect(resolveHostToken('phoneLink', entity({ telephone: '   ' }))).toBeUndefined()
+      expect(telephoneHref('call us')).toBeUndefined()
+      expect(resolveHostToken('phone', site())).toBeUndefined()
+      expect(resolveHostTokens('{{host.phoneLink}}', site())).toBe('')
+    })
+
+    it('is a URL, so it may go where a link goes', () => {
+      expect(HOST_TOKENS['phoneLink'].type).toBe('url')
+      expect(validateHostTokens('{{host.phoneLink}}', { allow: ['url'] })).toEqual([])
+    })
+  })
+
+  describe('the email', () => {
+    it('is the one Setup → Business profile saves, over the older copy', () => {
+      const host = site({ seo: { entity: { email: 'hello@northwind.example' } } })
+      expect(resolveHostToken('supportEmail', host)).toBe('hello@northwind.example')
+    })
+
+    it('falls back to the one-block copy a site saved before', () => {
+      expect(resolveHostToken('supportEmail', site())).toBe('help@northwind.example')
+    })
+
+    it('is nothing when the site has neither', () => {
+      expect(resolveHostToken('supportEmail', site({ business: {} }))).toBeUndefined()
+    })
+  })
+
+  describe('the address', () => {
+    const parts = {
+      streetAddress: '12 Bean St',
+      addressLocality: 'Portland',
+      addressRegion: 'OR',
+      postalCode: '97201',
+      addressCountry: 'US',
+    }
+
+    it('is the structured address on one line, over the older block', () => {
+      expect(resolveHostToken('address', entity({ address: parts }))).toBe(
+        '12 Bean St, Portland, OR, 97201, US',
+      )
+    })
+
+    it('formats a partial address without gaps', () => {
+      expect(
+        resolveHostToken('address', entity({ address: { addressLocality: 'Portland', addressCountry: 'US' } })),
+      ).toBe('Portland, US')
+    })
+
+    it('falls back to the block as typed, line breaks kept', () => {
+      const host = site({ business: { address: '12 Bean Street\nPortland, OR ' } })
+      expect(resolveHostToken('address', host)).toBe('12 Bean Street\nPortland, OR')
+    })
+
+    it('reads empty parts as no structured address at all', () => {
+      expect(resolveHostToken('address', entity({ address: { streetAddress: '  ' } }))).toBe(
+        '12 Bean Street, Portland',
+      )
+    })
+  })
+
+  describe('the slogan', () => {
+    it('is the slogan as saved, trimmed', () => {
+      expect(resolveHostToken('slogan', entity({ slogan: '  Roasted this morning  ' }))).toBe(
+        'Roasted this morning',
+      )
+    })
+
+    it('renders as nothing where there is none', () => {
+      expect(resolveHostTokens('{{host.slogan}}', site())).toBe('')
+      expect(HOST_TOKENS['slogan'].whenEmpty).toBe('blank')
+    })
+  })
+
+  describe('the areas served', () => {
+    it('are nothing for an empty list', () => {
+      for (const areaServed of [undefined, [], ['', '  '], '']) {
+        const host = entity({ areaServed })
+        expect([areaServed, resolveHostToken('mainArea', host)]).toEqual([areaServed, undefined])
+        expect([areaServed, resolveHostToken('areasServed', host)]).toEqual([areaServed, undefined])
+      }
+      expect(HOST_TOKENS['mainArea'].whenEmpty).toBe('blank')
+      expect(HOST_TOKENS['areasServed'].whenEmpty).toBe('blank')
+    })
+
+    it('name one area by its place, and list it whole', () => {
+      const host = entity({ areaServed: ['  San Antonio, TX  '] })
+      expect(resolveHostToken('mainArea', host)).toBe('San Antonio')
+      expect(resolveHostToken('areasServed', host)).toBe('San Antonio, TX')
+    })
+
+    it('keep an area with no comma as it is', () => {
+      expect(resolveHostToken('mainArea', entity({ areaServed: ['Greater London'] }))).toBe(
+        'Greater London',
+      )
+    })
+
+    it('list several in order, blanks dropped, and name only the first', () => {
+      const host = entity({ areaServed: ['San Antonio, TX', '', 'New Braunfels, TX', ' Boerne '] })
+      expect(resolveHostToken('mainArea', host)).toBe('San Antonio')
+      expect(resolveHostToken('areasServed', host)).toBe(
+        'San Antonio, TX, New Braunfels, TX, Boerne',
+      )
+      expect(
+        resolveHostTokens('for homes across {{host.mainArea}} and surrounding areas', host),
+      ).toBe('for homes across San Antonio and surrounding areas')
+    })
+
+    it('read the one-per-line text form too', () => {
+      const host = entity({ areaServed: 'Austin\n\nRound Rock' })
+      expect(resolveHostToken('mainArea', host)).toBe('Austin')
+      expect(resolveHostToken('areasServed', host)).toBe('Austin, Round Rock')
+    })
+  })
+
+  describe('a link per social network', () => {
+    it('matches a profile by its hostname, not its label', () => {
+      const host = site({
+        business: {
+          socialLinks: [
+            { label: 'Follow us', url: 'https://www.instagram.com/northwind' },
+            { label: 'Instagram', url: 'https://linkedin.com/company/northwind' },
+          ],
+        },
+      })
+      expect(resolveHostToken('instagramUrl', host)).toBe('https://www.instagram.com/northwind')
+      expect(resolveHostToken('linkedinUrl', host)).toBe('https://linkedin.com/company/northwind')
+    })
+
+    it('takes X on either of its hostnames', () => {
+      expect(resolveHostToken('xUrl', site())).toBe('https://x.com/northwind')
+      const renamed = site({ business: { socialLinks: [{ url: 'https://twitter.com/northwind' }] } })
+      expect(resolveHostToken('xUrl', renamed)).toBe('https://twitter.com/northwind')
+    })
+
+    it('takes a subdomain of the network, and refuses a lookalike', () => {
+      const host = site({
+        business: {
+          socialLinks: [
+            { url: 'https://notfacebook.com/northwind' },
+            { url: 'https://m.facebook.com/northwind' },
+            { url: 'https://youtu.be/abc' },
+            { url: 'https://www.tiktok.com/@northwind' },
+          ],
+        },
+      })
+      expect(resolveHostToken('facebookUrl', host)).toBe('https://m.facebook.com/northwind')
+      expect(resolveHostToken('youtubeUrl', host)).toBe('https://youtu.be/abc')
+      expect(resolveHostToken('tiktokUrl', host)).toBe('https://www.tiktok.com/@northwind')
+    })
+
+    it('reads the entity’s sameAs first, as the structured data does', () => {
+      const host = site({ seo: { entity: { sameAs: ['https://instagram.com/northwind.roasters'] } } })
+      expect(siteSocialProfileUrl(host, 'instagram')).toBe('https://instagram.com/northwind.roasters')
+    })
+
+    it('never links an http address, and is nothing where the site has no profile there', () => {
+      const host = site({ business: { socialLinks: [{ url: 'http://facebook.com/northwind' }] } })
+      expect(resolveHostToken('facebookUrl', host)).toBeUndefined()
+      expect(resolveHostToken('youtubeUrl', site())).toBeUndefined()
+      expect(HOST_TOKENS['facebookUrl'].type).toBe('url')
+    })
+  })
+
+  describe('in a link or a button’s href', () => {
+    const tree = () => ({
+      call: {
+        $id: 'call',
+        componentId: 'button',
+        props: { children: 'Call {{host.phone}}', href: '{{host.phoneLink}}' },
+        nodes: [] as string[],
+      },
+      follow: {
+        $id: 'follow',
+        componentId: 'link',
+        props: { children: 'Instagram', href: '{{host.instagramUrl}}' },
+        nodes: [] as string[],
+      },
+    })
+
+    it('resolves to an address a link can follow', () => {
+      const host = site({ seo: { entity: { telephone: '+1 (512) 555-0100' } } })
+      const resolved = resolveNodesHostTokens(tree(), host) as any
+      expect(resolved.call.props.href).toBe('tel:+15125550100')
+      expect(resolved.call.props.children).toBe('Call +1 (512) 555-0100')
+      expect(resolved.follow.props.href).toBe('https://instagram.com/northwind')
+    })
+
+    it('leaves no address, never the literal token, where the site has none', () => {
+      const resolved = resolveNodesHostTokens(tree(), site({ business: {} })) as any
+      expect(resolved.call.props.href).toBe('')
+      expect(resolved.follow.props.href).toBe('')
+    })
   })
 })

@@ -20,6 +20,7 @@ import {
   hostPublicOrigin,
   isSiteKeptFromSearch,
   platformVersion,
+  siteContactEmail,
 } from '@aglyn/aglyn/server'
 import { visitorContentRefusal } from '@aglyn/tenant-data-admin'
 import getHost from '../../../utils/get-host'
@@ -81,7 +82,8 @@ export async function GET(request: Request): Promise<Response> {
     // distinguishable. Not a version of the site's content — a spec version
     // that moved every time an author saved a page would be noise.
     version: platformVersion(),
-    contactEmail: host.seo?.entity?.email,
+    // The site's one email, entity first, then the older copy (AGL-4136).
+    contactEmail: siteContactEmail(host) ?? undefined,
   })
 
   return new Response(JSON.stringify(document, null, 2), {

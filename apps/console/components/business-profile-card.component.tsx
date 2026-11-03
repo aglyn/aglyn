@@ -65,20 +65,35 @@ export interface BusinessProfileCardProps {
 /** The form's own values: services are one per line in a text box. */
 export type FormValues = Partial<Record<Exclude<BusinessProfileField, 'services'>, string>> & { services?: string }
 
-export const toForm = (stored: BusinessProfileDoc | null | undefined): FormValues => ({
+/**
+ * The area served has one home for a SITE, SEO → Local business (AGL-4136),
+ * so a site's card neither shows nor saves it: a save leaves whatever the
+ * profile already holds as it was, the fallback for a site whose settings
+ * name no area. The workspace's defaults keep it, as the default every site
+ * falls back to last.
+ */
+const savesServiceArea = (level: 'site' | 'workspace') => level === 'workspace'
+
+export const toForm = (
+  stored: BusinessProfileDoc | null | undefined,
+  level: 'site' | 'workspace' = 'workspace',
+): FormValues => ({
   whatYouDo: stored?.whatYouDo ?? '',
   services: (stored?.services ?? []).join('\n'),
-  serviceArea: stored?.serviceArea ?? '',
+  ...(savesServiceArea(level) ? { serviceArea: stored?.serviceArea ?? '' } : {}),
   audience: stored?.audience ?? '',
   tone: stored?.tone ?? '',
   toneNotes: stored?.toneNotes ?? '',
   founded: stored?.founded ?? '',
 })
 
-export const fromForm = (values: FormValues): BusinessProfileValues => ({
+export const fromForm = (
+  values: FormValues,
+  level: 'site' | 'workspace' = 'workspace',
+): BusinessProfileValues => ({
   whatYouDo: values.whatYouDo ?? '',
   services: String(values.services ?? '').split('\n'),
-  serviceArea: values.serviceArea ?? '',
+  ...(savesServiceArea(level) ? { serviceArea: values.serviceArea ?? '' } : {}),
   audience: values.audience ?? '',
   tone: (BUSINESS_TONES as readonly string[]).includes(values.tone ?? '')
     ? (values.tone as BusinessProfileValues['tone'])
@@ -138,13 +153,13 @@ export function profileSchema(
     CardDisplayProps: {
       subheader:
         level === 'site'
-          ? `What this business does and how it speaks. ${aiAddonName()} reads it on every job for this site, and never replaces what you write here.`
+          ? `What this business does and how it speaks. ${aiAddonName()} reads it on every job for this site, and never replaces what you write here. The area you serve is in SEO → Local business.`
           : 'What every site in this workspace starts from. A site’s own profile wins wherever it says something.',
       help:
         level === 'site'
           ? docsHelp('businessProfile', {
               anchor: '#the-business-profile-card',
-              excerpt: `The services, area, audience and tone ${aiAddonName()} writes for. Contact details come only from your site settings.`,
+              excerpt: `The services, audience and tone ${aiAddonName()} writes for. Contact details come only from Business details.`,
             })
           : docsHelp('businessProfile', {
               anchor: '#workspace-defaults',
@@ -183,16 +198,22 @@ export function profileSchema(
         validate: [max('audience', 'Please enter a shorter description')],
         FormFieldGridProps: half,
       },
-      {
-        component: FieldComponentType.TEXT_FIELD,
-        name: 'serviceArea',
-        label: 'Area served',
-        placeholder: 'North Austin, Round Rock and Cedar Park',
-        isReadOnly: !canEdit,
-        helperText: line('serviceArea', 'Cities, regions or “online”'),
-        validate: [max('serviceArea', 'Please enter a shorter area')],
-        FormFieldGridProps: half,
-      },
+      // The workspace's default area only: a site's area is SEO → Local
+      // business's Areas served (AGL-4136), its one home.
+      ...(savesServiceArea(level)
+        ? [
+            {
+              component: FieldComponentType.TEXT_FIELD,
+              name: 'serviceArea',
+              label: 'Area served',
+              placeholder: 'North Austin, Round Rock and Cedar Park',
+              isReadOnly: !canEdit,
+              helperText: line('serviceArea', 'Cities, regions or “online”'),
+              validate: [max('serviceArea', 'Please enter a shorter area')],
+              FormFieldGridProps: half,
+            },
+          ]
+        : []),
       {
         component: FieldComponentType.SELECT,
         name: 'tone',
@@ -205,18 +226,8 @@ export function profileSchema(
         ],
         FormFieldGridProps: half,
       },
-      {
-        component: FieldComponentType.TEXT_FIELD,
-        name: 'toneNotes',
-        label: 'Notes on tone',
-        placeholder: 'Say “pups”, never “pets”. No exclamation marks.',
-        isReadOnly: !canEdit,
-        helperText: line('toneNotes', 'Words to use or avoid, in your own words'),
-        validate: [max('toneNotes', 'Please enter shorter notes')],
-        // Beside the year founded on a site's card; the whole row on the workspace's.
-        ...(level === 'site' ? { FormFieldGridProps: half } : {}),
-      },
-      // The year the business started (AGL-4092): a fact of this business, so the site's card only.
+      // The year the business started (AGL-4092): a fact of this business, so
+      // the site's card only, beside the tone.
       ...(level === 'site'
         ? [
             {
@@ -231,14 +242,24 @@ export function profileSchema(
             },
           ]
         : []),
+      {
+        component: FieldComponentType.TEXT_FIELD,
+        name: 'toneNotes',
+        label: 'Notes on tone',
+        placeholder: 'Say “pups”, never “pets”. No exclamation marks.',
+        isReadOnly: !canEdit,
+        helperText: line('toneNotes', 'Words to use or avoid, in your own words'),
+        validate: [max('toneNotes', 'Please enter shorter notes')],
+      },
     ],
   }
 }
 
 /**
  * A site's business profile, or the workspace's defaults (AGL-3661): the
- * services, audience, area and tone that have no other home, and that every
- * AI job for the site reads.
+ * services, audience and tone that have no other home, and that every AI job
+ * for the site reads. The workspace's defaults carry an area served too; a
+ * site's is SEO → Local business (AGL-4136).
  *
  * The save is the OWNER's write: `businessProfileOwnerWrite` makes every
  * field they changed theirs and leaves a field they did not touch with the
@@ -279,7 +300,7 @@ export function BusinessProfileCard(props: BusinessProfileCardProps) {
     [host, hostId, stored, workspace],
   )
   const schema = useMemo(() => profileSchema(level, stored, resolved, canEdit), [canEdit, level, resolved, stored])
-  const initialValues = useMemo(() => toForm(stored), [stored])
+  const initialValues = useMemo(() => toForm(stored, level), [level, stored])
 
   const handleSave = useCallback(
     async (values: FormValues) => {
@@ -288,7 +309,7 @@ export function BusinessProfileCard(props: BusinessProfileCardProps) {
         const verdict = await writeGuardedBySeed(
           { subject: 'business profile', unreadable: status === 'error', fromCache, listen },
           async () => {
-            const next = businessProfileOwnerWrite(stored ?? null, fromForm(values))
+            const next = businessProfileOwnerWrite(stored ?? null, fromForm(values, level))
             await setDoc(
               profileRef,
               { ...next, updatedAt: serverTimestamp(), updatedBy: user?.uid ?? null },
@@ -310,7 +331,7 @@ export function BusinessProfileCard(props: BusinessProfileCardProps) {
         dequeueLoading()
       }
     },
-    [enqueueSnackbar, fromCache, listen, profileRef, queueLoading, status, stored, user?.uid],
+    [enqueueSnackbar, fromCache, level, listen, profileRef, queueLoading, status, stored, user?.uid],
   )
 
   return (

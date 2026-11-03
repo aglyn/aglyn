@@ -45,13 +45,30 @@ const ROOT = '_@_'
 /**
  * The aglyn.com site document, reduced to what a token reads. It sets no
  * postal address, which is the missing field.
+ *
+ * Its business details are the ones Setup → Business profile enters (AGL-4136): a
+ * slogan, a phone, the areas it serves, and a social link per network a page
+ * links by name.
  */
 const mockSite = {
   displayName: 'aglyn-marketing',
   subdomain: 'aglyn-marketing',
   cname: 'aglyn.com',
-  seo: { entity: { name: 'Aglyn' } },
-  business: { supportEmail: 'hello@aglyn.com' },
+  seo: {
+    entity: {
+      name: 'Aglyn',
+      slogan: 'Sites that run themselves',
+      telephone: '+1 (512) 555-0100',
+      areaServed: ['San Antonio, TX', 'Boerne, TX'],
+    },
+  },
+  business: {
+    supportEmail: 'hello@aglyn.com',
+    socialLinks: [
+      { label: 'Follow us', url: 'https://www.instagram.com/aglyn' },
+      { label: 'X', url: 'https://twitter.com/aglyn' },
+    ],
+  },
 }
 
 /** A shared card component whose own nodes name the host. */
@@ -79,7 +96,17 @@ function mockDraft() {
     [ROOT]: {
       $id: ROOT,
       componentId: 'div',
-      nodes: ['statement', 'logo', 'contact', 'visit', 'cardPlacement'],
+      nodes: [
+        'statement',
+        'logo',
+        'contact',
+        'visit',
+        'cardPlacement',
+        'call',
+        'follow',
+        'tagline',
+        'cardCall',
+      ],
     },
     // The Statement section on the home screen, as stored.
     statement: {
@@ -122,6 +149,41 @@ function mockDraft() {
       componentId: 'reusableInstance',
       parentId: ROOT,
       props: { refId: 'card' },
+      nodes: [],
+    },
+    // A Call button and a profile link, linked from Setup → Business profile through
+    // their href the way a site's own buttons are (AGL-4136).
+    call: {
+      $id: 'call',
+      componentId: 'div',
+      parentId: ROOT,
+      props: { children: 'Call {{host.phone}}', href: '{{host.phoneLink}}' },
+      nodes: [],
+    },
+    follow: {
+      $id: 'follow',
+      componentId: 'div',
+      parentId: ROOT,
+      props: { href: '{{host.instagramUrl}}', title: '{{host.xUrl}}' },
+      nodes: [],
+    },
+    tagline: {
+      $id: 'tagline',
+      componentId: 'div',
+      parentId: ROOT,
+      props: {
+        children:
+          '{{host.slogan}}, across {{host.mainArea}} and surrounding areas ({{host.areasServed}})',
+      },
+      nodes: [],
+    },
+    // The card again, its link property set to the phone: a property-fed
+    // href that only a later stage turns into an address.
+    cardCall: {
+      $id: 'cardCall',
+      componentId: 'reusableInstance',
+      parentId: ROOT,
+      props: { refId: 'card', propValues: { link: '{{host.phoneLink}}' } },
       nodes: [],
     },
   }
@@ -268,6 +330,10 @@ const tokenBearingIds = () => [
   'visit',
   // The card's line, grafted in the placement's place.
   'cmp__cardPlacement__cardLine',
+  'call',
+  'follow',
+  'tagline',
+  'cmp__cardCall__cardLine',
 ]
 
 /** A node's props as Preview put them in the store it renders. */
@@ -307,6 +373,24 @@ describe('host variables — the published page, Preview and the canvas agree (A
     expect(page['cmp__cardPlacement__cardLine']?.props).toMatchObject({
       children: 'Built with Aglyn',
       href: 'https://aglyn.com',
+    })
+    // The business details from Setup → Business profile, a link's href included
+    // (AGL-4136): a Call button dials, a profile link opens the profile
+    // matched by its address, and a property set to the phone link does too.
+    expect(page['call']?.props).toMatchObject({
+      children: 'Call +1 (512) 555-0100',
+      href: 'tel:+15125550100',
+    })
+    expect(page['follow']?.props).toMatchObject({
+      href: 'https://www.instagram.com/aglyn',
+      title: 'https://twitter.com/aglyn',
+    })
+    expect(page['tagline']?.props).toMatchObject({
+      children:
+        'Sites that run themselves, across San Antonio and surrounding areas (San Antonio, TX, Boerne, TX)',
+    })
+    expect(page['cmp__cardCall__cardLine']?.props).toMatchObject({
+      href: 'tel:+15125550100',
     })
     expect(JSON.stringify(page)).not.toContain('{{host.')
     // And the draft really held them.
