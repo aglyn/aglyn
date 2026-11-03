@@ -761,18 +761,104 @@ export function siteImportFilmSource(video: Pick<SiteImportVideo, 'src' | 'embed
 }
 
 /**
- * What a page's row says of its videos (AGL-4140), or `null`: a film the old
- * site serves itself plays from there, and the owner may move it; a film the
- * source showed no poster for is left out, since its poster is the button a
- * visitor presses, and the owner may add it with one.
+ * The films a page brought in plays from the old site's own address
+ * (AGL-4140): the https file of each video its layout places where it sits or
+ * in an item, which the Video element plays because its poster is in the
+ * library. A film on a host's player, one behind a section's words (drawn as
+ * its poster), and one with no poster the library holds play nothing from
+ * the old site. The rule the compile places a film by (`filmPlaces`).
  */
-export function aiSiteImportVideoNote(videos: readonly SiteImportVideo[] | null | undefined): string | null {
-  const films = (videos ?? []).map((video) => ({ video, source: siteImportFilmSource(video) }))
-  const files = films.filter((film) => film.source && !film.source.hosted && film.video.poster).length
-  const posterless = films.filter((film) => film.source && !film.video.poster).length
+export function aiSiteImportOwnFilms(
+  read: Pick<AiSiteImportPageRead, 'videos' | 'layout' | 'blocks'> | null | undefined,
+  photos: ReadonlyArray<{ from?: string }>,
+): string[] {
+  const videos = read?.videos ?? []
+  if (!videos.length || !read?.layout) return []
+  const held = new Set(photos.flatMap((photo) => (photo.from ? [photo.from] : [])))
+  const out: string[] = []
+  const place = (video: number, poster: SiteImportLineRef | undefined) => {
+    const source = siteImportFilmSource(videos[video])
+    const block = poster === undefined ? undefined : read.blocks?.[poster]
+    if (source && !source.hosted && block?.kind === 'image' && held.has(block.url) && !out.includes(source.src)) out.push(source.src)
+  }
+  const visit = (nodes: readonly SiteImportLayoutNode[]) => {
+    for (const node of nodes) {
+      if (node.kind === 'video') place(node.video, node.poster)
+      else if (node.kind === 'row') for (const cell of node.cells) visit(cell.nodes)
+      else if (node.kind === 'tabs') for (const tab of node.tabs) visit(tab.panel)
+      else if (node.kind === 'group') for (const item of node.items) if (item.video !== undefined) place(item.video, item.image)
+    }
+  }
+  for (const section of read.layout.sections) visit(section.nodes)
+  return out
+}
+
+/**
+ * The most hosts a site approves of one kind: `APPROVED_IMAGE_HOSTS_MAX` in
+ * `security-origins.js`, the tenant policy's own ceiling, which a spec holds
+ * this to.
+ */
+export const SITE_IMPORT_APPROVED_HOSTS_MAX = 50
+
+/**
+ * A host as the Security tab keeps one and the tenant's policy reads it
+ * (`normalizeApprovedImageHost` in `security-origins.js`, which a spec holds
+ * this to): lowercase, a hostname with at least one dot and a letter-only
+ * last label, an optional leading `*.`, and no scheme, path, port or
+ * separator; `null` for anything else.
+ */
+export function siteImportApprovedHost(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const host = value.trim().toLowerCase()
+  if (!host || host.length > 253) return null
+  if (/[\s;,/\\?#@:]/.test(host)) return null
+  const bare = host.startsWith('*.') ? host.slice(2) : host
+  if (!bare || bare === '*') return null
+  return /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(bare) ? host : null
+}
+
+/**
+ * A site's approved media hosts with the old site's film hosts added
+ * (AGL-4140): every entry the owner has kept as it is and where it is, each
+ * new host once, after them, within `SITE_IMPORT_APPROVED_HOSTS_MAX`; `null`
+ * when nothing is added.
+ */
+export function siteImportApprovedHostsWith(current: unknown, addresses: readonly string[]): string[] | null {
+  const owner = Array.isArray(current) ? current.filter((entry): entry is string => typeof entry === 'string') : []
+  const have = new Set(owner.map((entry) => entry.trim().toLowerCase()))
+  const out = [...owner]
+  const hostnameOf = (address: string): string | null => {
+    try {
+      return new URL(address).hostname
+    } catch {
+      return null
+    }
+  }
+  for (const address of addresses) {
+    const host = siteImportApprovedHost(hostnameOf(address))
+    if (!host || have.has(host) || out.length >= SITE_IMPORT_APPROVED_HOSTS_MAX) continue
+    have.add(host)
+    out.push(host)
+  }
+  return out.length > owner.length ? out : null
+}
+
+/**
+ * What a page's row says of its videos (AGL-4140), or `null`: a film the old
+ * site serves itself plays from there, the owner may move it, and its address
+ * was approved for the site to play (`approved`, once the host write is in);
+ * a film the source showed no poster for is left out, since its poster is the
+ * button a visitor presses, and the owner may add it with one.
+ */
+export function aiSiteImportVideoNote(
+  videos: readonly SiteImportVideo[] | null | undefined,
+  own: { films: number; approved: boolean } = { films: 0, approved: false },
+): string | null {
+  const posterless = (videos ?? []).filter((video) => siteImportFilmSource(video) && !video.poster).length
+  const approved = own.approved ? ' Its address was added to Approved media hosts in Admin → Security, so it plays on your new site.' : ''
   const notes = [
-    files === 1 ? "A video on this page plays from your old site's address; pick it from your media library to move it." : '',
-    files > 1 ? "Videos on this page play from your old site's address; pick each from your media library to move it." : '',
+    own.films === 1 ? `A video on this page plays from your old site's address; pick it from your media library to move it.${approved}` : '',
+    own.films > 1 ? `Videos on this page play from your old site's address; pick each from your media library to move it.${approved ? ' Their addresses were added to Approved media hosts in Admin → Security, so they play on your new site.' : ''}` : '',
     posterless === 1 ? 'A video on this page had no poster picture, so it was left out: add it with the Video element and pick a poster for it.' : '',
     posterless > 1 ? 'Videos on this page had no poster picture, so they were left out: add each with the Video element and pick a poster for it.' : '',
   ].filter(Boolean)

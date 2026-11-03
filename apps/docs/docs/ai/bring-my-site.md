@@ -259,7 +259,11 @@ where your page shows it, and plays from where it plays now:
 - **A video on Wistia, YouTube or Vimeo** plays in that host's player, which loads only when a
   visitor presses play.
 - **A video your old site serves itself** plays from your old site's address. Its page's row
-  says so. To move it, pick the video from your media library on its Video element.
+  says so. To move it, pick the video from your media library on its Video element. So it can
+  play on your new site, the address it plays from is added to
+  [Approved media hosts](../content-and-data/media/overview.md#approved-media-hosts) in
+  **Admin → Security**. Every host on that list can see the IP address of each visitor whose
+  browser plays the video from it.
 
 Its poster picture, the still a visitor presses, is copied into your media library like any
 photo, and its title, description, date and running time come with it when your page gives

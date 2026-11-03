@@ -92,8 +92,10 @@ import {
   aiSiteImportReadVerdict,
   aiSiteImportReadVerdictMessage,
   aiSiteImportReadVerdictReason,
+  aiSiteImportOwnFilms,
   aiSiteImportVideoNote,
   aiSiteImportWaveClosed,
+  siteImportApprovedHostsWith,
   aiSiteImportWaveMessage,
   aiSiteImportWaveStarted,
   type AiSiteImportBuild,
@@ -260,6 +262,27 @@ export interface AiSiteImportStepDeps {
   publishWave?: typeof aiPublishImportedWave
   /** The words a page that came in shows, read off its draft (AGL-4084). */
   draftWords?: (firestore: FirebaseFirestore.Firestore, hostId: string, draftId: string) => Promise<number | null>
+  /** The site's approved media hosts, with the hosts of the films a page plays from the old site added (AGL-4140). */
+  approveFilmHosts?: (firestore: FirebaseFirestore.Firestore, hostId: string, films: readonly string[]) => Promise<void>
+}
+
+/**
+ * The hosts of the films a page plays from the old site, added to the site's
+ * Approved media hosts (AGL-4140): the tenant's `media-src` admits only those,
+ * so without it the poster shows and the browser refuses the film on a press.
+ * In a transaction over the host document, so an owner's edit in between is
+ * kept: the owner's entries stay as they are and where they are, each new
+ * host is added once, after them, within the list's ceiling, and a list that
+ * gains nothing is not written.
+ */
+async function approveFilmHosts(firestore: FirebaseFirestore.Firestore, hostId: string, films: readonly string[]): Promise<void> {
+  const ref = firestore.collection('hosts').doc(hostId)
+  await firestore.runTransaction(async (transaction) => {
+    const host = await transaction.get(ref)
+    if (!host.exists) return
+    const next = siteImportApprovedHostsWith(host.get('approvedMediaHosts'), films)
+    if (next) transaction.update(ref, { approvedMediaHosts: next })
+  })
 }
 
 async function readOwnership(orgId: string, domain: string): Promise<AiSiteImportOwnership | null> {
@@ -902,6 +925,7 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
   const runLook = deps.look ?? aiRunSiteImportLook
   const publishWave = deps.publishWave ?? aiPublishImportedWave
   const draftWordsOf = deps.draftWords ?? readDraftWords
+  const approveFilms = deps.approveFilmHosts ?? approveFilmHosts
 
   return async (context: AiJobStepContext): Promise<AiJobStepOutcome> => {
     const { job, firestore, now, signal } = context
@@ -1226,8 +1250,19 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
           draftId: page.draftId,
           layoutLanguage: true,
         })
+        // A film the page plays from the old site's address may play there: its host is approved for the site (AGL-4140).
+        const films = written ? aiSiteImportOwnFilms(page.read, page.photos?.assets ?? []) : []
+        let approved = false
+        if (films.length) {
+          try {
+            await approveFilms(firestore, hostId as string, films)
+            approved = true
+          } catch (error) {
+            console.error('ai site import: the films’ hosts were not approved', { orgId: job.orgId, jobId: job.$id, slot, error })
+          }
+        }
         // What its row says of its forms, and of where its videos play from (AGL-4140).
-        const note = [page.formNote, aiSiteImportVideoNote(page.read?.videos)].filter(Boolean).join(' ')
+        const note = [page.formNote, aiSiteImportVideoNote(page.read?.videos, { films: films.length, approved })].filter(Boolean).join(' ')
         item = written
           ? { slot, status: 'succeeded', outputs: spent.outputs.map((output) => output.id), ...(note ? { note } : {}) }
           : { slot, status: 'failed', failure: { ours: true, reason: 'step-failure', message: AI_SITE_IMPORT_COPY.pageNotWritten } }

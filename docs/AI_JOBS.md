@@ -2754,7 +2754,15 @@ whose passes each do one unit (`aiSiteImportNextWork`):
      site's own https file, which plays from its address — and its poster is in
      the library; a film on another host is its poster linking to it, one with
      no poster is left out, a backdrop film is its poster behind the words, and
-     the page's row says which, `aiSiteImportVideoNote`). A `<button>` line whose
+     the page's row says which, `aiSiteImportVideoNote`). The tenant's
+     `media-src` admits a film from another host only through the site's
+     `approvedMediaHosts`, so once a page is in, the import step adds the host
+     of each film it plays from the old site (`aiSiteImportOwnFilms`, the
+     compile's own placement rule) to that list in a transaction
+     (`siteImportApprovedHostsWith`: the owner's entries kept as they are, each
+     host once, `siteImportApprovedHost` held to `security-origins.js`'s
+     `normalizeApprovedImageHost` and its ceiling by a spec), and the row says
+     the address was approved only once the write is in. A `<button>` line whose
      words say it plays a film (`SITE_IMPORT_PLAY_WORDS`) is a button to
      `video:<n>`, its section's film else the page's first. The compiler's
      `video()` draws the Video element (poster, title, description,
