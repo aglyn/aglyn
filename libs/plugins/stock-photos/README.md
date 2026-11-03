@@ -4,12 +4,12 @@ Stock photo libraries behind core's stock photo contract (`core.stock-photos`
 in `@aglyn/aglyn/plugin-manager/stock-photo-provider`). Core and the AI plugin
 ask the contract for a library and never name one; Pixabay is the first.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
 ```bash
-npm install @aglyn/plugins-stock-photos@beta
+npm install @aglyn/plugins-stock-photos
 ```
 
 A plugin is loaded through Aglyn's plugin manager (`@aglyn/aglyn`) by the console; it is not a standalone library.

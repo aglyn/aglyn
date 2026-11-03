@@ -63,7 +63,7 @@ import { AI_JOB_COMPONENT_STEP_BUDGET } from './ai-job-component-step'
 import { AI_CRM_FACTS_READS_MS, AI_JOB_CRM_STEP_BUDGET } from './ai-job-crm-step'
 import { AI_JOB_EMAIL_STEP_BUDGETS } from './ai-job-email-step'
 import { AI_JOB_FORM_STEP_BUDGET } from './ai-job-form-step'
-import { AI_INSIGHT_READS_MS, AI_JOB_INSIGHT_STEP_BUDGET } from './ai-job-insight-budget'
+import { AI_INSIGHT_DIGEST_MAX_TOKENS, AI_INSIGHT_READS_MS, AI_JOB_INSIGHT_STEP_BUDGET } from './ai-job-insight-budget'
 import { AI_JOB_LAYOUT_STEP_BUDGET } from './ai-job-layout-step'
 import { AI_JOB_PAGE_SECTION_MAX_TOKENS, AI_JOB_PAGE_SECTION_TOKENS, AI_JOB_PAGE_STEP_BUDGET } from './ai-job-page-budget'
 import { AI_JOB_PAGE_LANGUAGE_BUDGET } from './ai-job-page-language'
@@ -198,8 +198,8 @@ const STEP_TIMES: readonly StepTime[] = [
     kind: 'insight',
     routing: 'job.insight',
     budget: AI_JOB_INSIGHT_STEP_BUDGET,
-    ceiling: routed('job.insight'),
-    cap: routed('job.insight'),
+    ceiling: Math.max(routed('job.insight'), AI_INSIGHT_DIGEST_MAX_TOKENS),
+    cap: Math.max(routed('job.insight'), AI_INSIGHT_DIGEST_MAX_TOKENS),
     shape: shape({ lookups: 1, ownReadsMs: AI_INSIGHT_READS_MS }),
   },
   {

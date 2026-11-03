@@ -2,11 +2,11 @@
 
 The Forms plugin for Aglyn: the `form` and `formField` elements that draw a form on a site, and the console section that holds a workspace's form catalog. Install it if you render Aglyn documents that place forms, or run the Aglyn console; it is a first-party plugin, not a standalone library.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/plugins-forms@beta
+    npm install @aglyn/plugins-forms
 
 Peer dependencies: `react`, `next`, `@mui/material`, `@mui/x-data-grid`, `firebase`.
 

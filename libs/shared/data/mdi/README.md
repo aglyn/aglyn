@@ -2,11 +2,11 @@
 
 Material Design Icons as data. Every icon is a plain object carrying its id, display name, SVG path, aliases and tags, plus a lazily loaded catalog for icon pickers and search. Aglyn uses it wherever an icon is chosen by id and stored as data; it is usable in any project that wants MDI paths without a component library.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/shared-data-mdi@beta
+    npm install @aglyn/shared-data-mdi
 
 No peer dependencies, and no React.
 

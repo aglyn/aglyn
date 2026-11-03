@@ -17,12 +17,16 @@
 
 import { hasPersonalDetails } from '@aglyn/aglyn/plugin-manager/plugin-figures'
 import {
+  AI_INSIGHT_CAUSE_READERS,
   AI_INSIGHT_GAP_MAX_CHARS,
   AI_INSIGHT_HEADLINE_MAX_CHARS,
   AI_INSIGHT_MAX_CHARS,
   AI_INSIGHT_MAX_CITED_ROWS,
   AI_INSIGHT_MAX_CITES,
   AI_INSIGHT_MAX_INSIGHTS,
+  AI_INSIGHT_NEXT_MAX_CHARS,
+  AI_INSIGHT_OVERVIEW_MAX_CHARS,
+  AI_INSIGHT_WHY_MAX_CHARS,
   type AiInsight,
   type AiInsightAnswer,
   type AiInsightCitation,
@@ -48,6 +52,11 @@ import {
  * whose number cannot be found is exactly the sentence a person must not act
  * on, and rewriting it would be the model's guess again. The rest of the
  * answer stands. What is left out is counted, so the console can say so.
+ *
+ * A digest's overview, and an insight's reason and next step (AGL-4131), are
+ * held to the same rows and dropped alone when they fail: the insight stands.
+ * A reason must also cite a row of a table that can hold a cause, and a row
+ * whose change shows it held steady is not one.
  */
 
 /** Why an insight was left out, as a finding code. */
@@ -69,6 +78,8 @@ export interface AiInsightVerdict {
 }
 
 export interface AiInsightCheck {
+  /** A digest's read of the week, when it is one a person may read. */
+  overview: string | null
   /** The insights a person may read, in the order written. */
   kept: AiInsight[]
   /** The insights left out, each with why. */
@@ -237,26 +248,19 @@ function insightHeadline(insight: AiInsight): string {
   return headline.length <= AI_INSIGHT_HEADLINE_MAX_CHARS ? headline : ''
 }
 
-/** One insight's findings against the tables the job read; empty when it traces. */
-export function checkAiInsight(insight: AiInsight, tables: readonly AiInsightTable[]): string[] {
-  const sentences = typeof insight?.text === 'string' ? insight.text.trim() : ''
-  if (!sentences) return ['insight-empty']
-  const findings: string[] = []
-  if (sentences.length > AI_INSIGHT_MAX_CHARS) findings.push('insight-too-long')
-  // The headline is held to everything the sentence is: it is the part a
-  // person reads first, and often the only part.
-  const headline = insightHeadline(insight)
-  const text = headline ? `${headline}. ${sentences}` : sentences
-  if (MARKUP.test(text)) findings.push('insight-markup')
-  if (hasPersonalDetails(text)) findings.push('insight-personal-details')
+interface CitedFigures {
+  cells: CitedCell[]
+  labels: string[]
+  cited: AiInsightTable[]
+  findings: string[]
+}
 
-  const cites = Array.isArray(insight.cites) ? insight.cites.slice(0, AI_INSIGHT_MAX_CITES) : []
-  if (!cites.length || cites.every((cite) => !Array.isArray(cite?.rows) || !cite.rows.length)) {
-    return [...findings, 'insight-no-citation']
-  }
+/** The cells and labels a list of citations opens, and any citation that opens nothing. */
+function citedFigures(cites: readonly AiInsightCitation[], tables: readonly AiInsightTable[]): CitedFigures {
   const cells: CitedCell[] = []
   const labels: string[] = []
   const cited: AiInsightTable[] = []
+  const findings: string[] = []
   for (const cite of cites) {
     const table = tables.find((entry) => entry.ref === cite?.table)
     if (!table) {
@@ -285,8 +289,13 @@ export function checkAiInsight(insight: AiInsight, tables: readonly AiInsightTab
       }
     }
   }
-  if (findings.some((finding) => finding.startsWith('insight-unknown-'))) return findings
+  return { cells, labels, cited, findings }
+}
 
+/** What a piece of writing says that the rows it cites do not: a figure they do not hold, or a direction they deny. */
+function numberFindings(text: string, cites: readonly AiInsightCitation[], figures: CitedFigures): string[] {
+  const { cells, labels, cited } = figures
+  const findings: string[] = []
   const framing = framingNumbers(cited, cites)
   for (const written of aiInsightNumbers(text)) {
     const matched = cells.filter((cell) =>
@@ -309,6 +318,75 @@ export function checkAiInsight(insight: AiInsight, tables: readonly AiInsightTab
   }
   return findings
 }
+
+const insightCites = (insight: AiInsight): AiInsightCitation[] =>
+  Array.isArray(insight.cites) ? insight.cites.slice(0, AI_INSIGHT_MAX_CITES) : []
+
+/** One insight's findings against the tables the job read; empty when it traces. */
+export function checkAiInsight(insight: AiInsight, tables: readonly AiInsightTable[]): string[] {
+  const sentences = typeof insight?.text === 'string' ? insight.text.trim() : ''
+  if (!sentences) return ['insight-empty']
+  const findings: string[] = []
+  if (sentences.length > AI_INSIGHT_MAX_CHARS) findings.push('insight-too-long')
+  // The headline is held to everything the sentence is: it is the part a
+  // person reads first, and often the only part.
+  const headline = insightHeadline(insight)
+  const text = headline ? `${headline}. ${sentences}` : sentences
+  if (MARKUP.test(text)) findings.push('insight-markup')
+  if (hasPersonalDetails(text)) findings.push('insight-personal-details')
+
+  const cites = insightCites(insight)
+  if (!cites.length || cites.every((cite) => !Array.isArray(cite?.rows) || !cite.rows.length)) {
+    return [...findings, 'insight-no-citation']
+  }
+  const figures = citedFigures(cites, tables)
+  findings.push(...figures.findings)
+  if (findings.some((finding) => finding.startsWith('insight-unknown-'))) return findings
+  return [...findings, ...numberFindings(text, cites, figures)]
+}
+
+/**
+ * A line beside the insights, held to everything an insight is, or `''` with
+ * why. It is only dropped: a reason or a next step that cannot be kept says
+ * nothing about whether the figures are true (AGL-4131).
+ */
+function checkedLine(
+  value: unknown,
+  name: string,
+  maxChars: number,
+  cites: readonly AiInsightCitation[],
+  tables: readonly AiInsightTable[],
+): { line: string; findings: string[] } {
+  const line = typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : ''
+  if (!line) return { line: '', findings: [] }
+  const refused = [
+    ...(line.length > maxChars ? [`insight-${name}-too-long`] : []),
+    ...(MARKUP.test(line) ? [`insight-${name}-markup`] : []),
+    ...(hasPersonalDetails(line) ? [`insight-${name}-personal-details`] : []),
+    ...numberFindings(line, cites, citedFigures(cites, tables)),
+  ]
+  return refused.length ? { line: '', findings: refused } : { line, findings: [] }
+}
+
+/**
+ * Whether an insight cites a row a reason can rest on: a row of a table that
+ * can hold a cause, and one that moved. A source or campaign whose change is 0
+ * sent the same traffic as the week before, so it cannot explain a move; a
+ * dated change has no change column and always can.
+ */
+function citesACause(cites: readonly AiInsightCitation[], tables: readonly AiInsightTable[]): boolean {
+  return cites.some((cite) => {
+    const table = tables.find((candidate) => candidate.ref === cite.table)
+    if (!table || !AI_INSIGHT_CAUSE_READERS.includes(table.reader)) return false
+    return cite.rows.some((index) => {
+      const row = table.rows[index]
+      return Boolean(row) && row.change !== 0
+    })
+  })
+}
+
+/** A next step that promises what it would do is left out: nothing here can know. */
+const PROMISE = /\b(?:guarantee[sd]?|sure to|will (?:increase|boost|double|grow|raise|improve|bring|get you|rank))\b/i
 
 /** The gap sentence a person may read: short, without figures and naming nobody; `null` otherwise. */
 export function aiInsightGap(gap: unknown): string | null {
@@ -339,17 +417,37 @@ export function checkAiInsightAnswer(
       findings.push(...own)
     } else {
       const headline = insightHeadline(insight)
+      const cites = insightCites(insight).map((cite) => ({
+        table: cite.table,
+        rows: cite.rows.slice(0, AI_INSIGHT_MAX_CITED_ROWS),
+      }))
+      const why = checkedLine(insight.why, 'why', AI_INSIGHT_WHY_MAX_CHARS, cites, tables)
+      const reasoned = why.line && citesACause(cites, tables)
+      if (why.line && !reasoned) findings.push('insight-why-no-cause')
+      const next = checkedLine(insight.next, 'next', AI_INSIGHT_NEXT_MAX_CHARS, cites, tables)
+      const promised = PROMISE.test(next.line)
+      if (promised) findings.push('insight-next-promise')
+      findings.push(...why.findings, ...next.findings)
       kept.push({
         ...(headline ? { headline } : {}),
         text: insight.text.trim(),
-        cites: insight.cites.slice(0, AI_INSIGHT_MAX_CITES).map((cite) => ({
-          table: cite.table,
-          rows: cite.rows.slice(0, AI_INSIGHT_MAX_CITED_ROWS),
-        })),
+        ...(reasoned ? { why: why.line } : {}),
+        ...(next.line && !promised ? { next: next.line } : {}),
+        cites,
       })
     }
   })
   const gap = aiInsightGap(answer?.gap)
   if (answer?.gap && !gap) findings.push('insight-gap-unreadable')
-  return { kept, left, gap, findings }
+  // Held to the rows the kept insights cite: it has no citations of its own,
+  // and a figure in it should be one a reader can open just below it.
+  const overview = checkedLine(
+    answer?.overview,
+    'overview',
+    AI_INSIGHT_OVERVIEW_MAX_CHARS,
+    kept.flatMap((insight) => insight.cites),
+    tables,
+  )
+  findings.push(...overview.findings)
+  return { overview: overview.line || null, kept, left, gap, findings }
 }

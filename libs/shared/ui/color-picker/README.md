@@ -2,11 +2,11 @@
 
 A React color picker: a thin wrapper over `react-color`'s `SketchPicker` that keeps the picked color in local state and re-seeds it when the `color` prop changes. It is mainly a building block of the color field in `@aglyn/shared-ui-jsx-forms`.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/shared-ui-color-picker@beta
+    npm install @aglyn/shared-ui-color-picker
 
 Peer dependencies: `react` and `@mui/material`. `react-color` is a regular dependency and is installed with the package.
 

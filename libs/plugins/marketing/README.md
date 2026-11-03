@@ -2,11 +2,11 @@
 
 The Marketing plugin for Aglyn: announcement bars and popups (overlays), A/B experiments, and email campaigns, with the console section that manages them, the runtime that shows them on a published site, and the server routes behind both. Install it if you run the Aglyn console and tenant runtime and want these features; it is a first-party plugin, not a standalone library.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/plugins-marketing@beta
+    npm install @aglyn/plugins-marketing
 
 Peer dependencies: `react`, `next`, `@mui/material`, `@mui/x-data-grid`, `firebase`, and `firebase-admin` for the server entry.
 

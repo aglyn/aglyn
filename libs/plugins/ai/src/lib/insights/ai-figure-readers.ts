@@ -72,6 +72,18 @@ export const AI_TRAFFIC_TOP_PAGES = 10
 export const AI_TRAFFIC_TOP_REFERRERS = 8
 export const AI_TRAFFIC_TOP_CAMPAIGNS = 5
 
+/** The windows a table of a site's changes covers: past a month, a change explains nothing about this week. */
+export const AI_SITE_CHANGES_WINDOWS: readonly number[] = [7, 14, 30]
+
+/** Changes a changes table lists; the rest are counted in `omitted`. */
+export const AI_SITE_CHANGES_MAX_ROWS = PLUGIN_FIGURE_MAX_ROWS
+
+/** Kinds that arrive by the dozen and explain least: they give way first when a week has too many changes to list. */
+const AI_SITE_CHANGES_BULK: readonly string[] = ['Redirect added', 'Product added']
+
+/** Activity entries one read reaches: a site being rebuilt logs hundreds a day, most of them saves. */
+export const AI_SITE_CHANGES_READ_LIMIT = 500
+
 /** Forms a forms table reads. */
 export const AI_FORMS_READ_LIMIT = 100
 
@@ -161,6 +173,28 @@ function sumMaps(days: readonly TrafficDay[], pick: (day: TrafficDay) => Record<
 
 const ranked = (totals: Map<string, number>): Array<[string, number]> =>
   [...totals.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+
+/**
+ * What an activity entry changed for a visitor, or `null`: the site's log
+ * carries contacts, automation runs and draft saves too, and those are never
+ * read into a table. Listed rather than excluded, so an entry added tomorrow
+ * stays out until someone says what it is.
+ */
+export function aiSiteChangeKind(action: unknown, targetType: unknown): string | null {
+  const said = typeof action === 'string' ? action.trim() : ''
+  // A page's every publish logs the same words, so a first one cannot be told
+  // from an update and the kind says either.
+  if (targetType === 'screen') return /^Published\b/.test(said) ? 'Page published or updated' : null
+  if (targetType === 'layout') return /^(?:Published|Saved)\b/.test(said) ? 'Shared layout changed' : null
+  if (targetType === 'component') return /^(?:Published|Saved)\b/.test(said) ? 'Component changed' : null
+  if (targetType === 'content') {
+    if (/^Published entry\b/.test(said)) return 'Entry published'
+    if (/^Created product\b/.test(said)) return 'Product added'
+    if (/^Created redirect\b/.test(said)) return 'Redirect added'
+    return null
+  }
+  return targetType === 'host' && /^Updated host settings\b/.test(said) ? 'Site settings changed' : null
+}
 
 function siteReader(
   base: Omit<PluginFigureReader, 'read' | 'scope' | 'plugin'>,
@@ -258,12 +292,15 @@ export function trafficFigureReaders(firestore: AiFigureFirestore): PluginFigure
         ])
         const now = ranked(sumMaps(current, (day) => day.paths))
         const before = sumMaps(previous, (day) => day.paths)
+        const rankBefore = new Map(ranked(before).map(([path], index) => [path, index + 1]))
         const all = now.reduce((sum, [, count]) => sum + count, 0)
-        const rows: PluginFigureRow[] = now.slice(0, AI_TRAFFIC_TOP_PAGES).map(([path, views]) => ({
+        const rows: PluginFigureRow[] = now.slice(0, AI_TRAFFIC_TOP_PAGES).map(([path, views], index) => ({
           page: path,
           views,
           share: share(views, all),
           change: pluginFigureChange(views, before.get(path) ?? null),
+          rank: index + 1,
+          rankBefore: rankBefore.get(path) ?? null,
         }))
         return {
           ok: true,
@@ -276,6 +313,8 @@ export function trafficFigureReaders(firestore: AiFigureFirestore): PluginFigure
               { key: 'views', label: 'Views', kind: 'count' },
               { key: 'share', label: 'Share of views', kind: 'percent' },
               { key: 'change', label: 'Change', kind: 'change' },
+              { key: 'rank', label: 'Rank', kind: 'number' },
+              { key: 'rankBefore', label: 'Rank the window before', kind: 'number' },
             ],
             rows,
             omitted: Math.max(0, now.length - rows.length),
@@ -296,21 +335,40 @@ export function trafficFigureReaders(firestore: AiFigureFirestore): PluginFigure
         weeklySummary: SOURCES_WEEKLY_SUMMARY,
       },
       async (db, request) => {
-        const days = await readTrafficDays(db, request.hostId, dayIds(request.now, request.days).current)
+        const ids = dayIds(request.now, request.days)
+        const [days, earlier] = await Promise.all([
+          readTrafficDays(db, request.hostId, ids.current),
+          readTrafficDays(db, request.hostId, ids.previous),
+        ])
         const all = days.reduce((sum, day) => sum + day.total, 0)
         // The collector stores a referring host with its dots as `_`, because a
         // Firestore field path cannot hold one; a host is read back as written.
+        const hostName = (host: string) => host.replace(/_/g, '.')
         const referrers = ranked(sumMaps(days, (day) => day.referrers)).map(
-          ([host, views]): [string, number] => [host.replace(/_/g, '.'), views],
+          ([host, views]): [string, number] => [hostName(host), views],
         )
         const sources = ranked(sumMaps(days, (day) => day.utm['source'] ?? {}))
         const campaigns = ranked(sumMaps(days, (day) => day.utm['campaign'] ?? {}))
-        const rowsOf = (entries: Array<[string, number]>, limit: number, type: string) =>
-          entries.slice(0, limit).map(([name, views]) => ({ source: name, type, views, share: share(views, all) }))
+        const rowsOf = (
+          entries: Array<[string, number]>,
+          limit: number,
+          type: string,
+          before: ReadonlyMap<string, number>,
+        ) =>
+          entries.slice(0, limit).map(([name, views]) => ({
+            source: name,
+            type,
+            views,
+            share: share(views, all),
+            change: pluginFigureChange(views, before.get(name) ?? null),
+          }))
+        const referrersBefore = new Map(
+          [...sumMaps(earlier, (day) => day.referrers)].map(([host, views]) => [hostName(host), views]),
+        )
         const rows = [
-          ...rowsOf(referrers, AI_TRAFFIC_TOP_REFERRERS, 'Referring site'),
-          ...rowsOf(sources, AI_TRAFFIC_TOP_CAMPAIGNS, 'Campaign source'),
-          ...rowsOf(campaigns, AI_TRAFFIC_TOP_CAMPAIGNS, 'Campaign'),
+          ...rowsOf(referrers, AI_TRAFFIC_TOP_REFERRERS, 'Referring site', referrersBefore),
+          ...rowsOf(sources, AI_TRAFFIC_TOP_CAMPAIGNS, 'Campaign source', sumMaps(earlier, (day) => day.utm['source'] ?? {})),
+          ...rowsOf(campaigns, AI_TRAFFIC_TOP_CAMPAIGNS, 'Campaign', sumMaps(earlier, (day) => day.utm['campaign'] ?? {})),
         ]
         return {
           ok: true,
@@ -323,6 +381,7 @@ export function trafficFigureReaders(firestore: AiFigureFirestore): PluginFigure
               { key: 'type', label: 'Kind', kind: 'text' },
               { key: 'views', label: 'Views', kind: 'count' },
               { key: 'share', label: 'Share of all views', kind: 'percent' },
+              { key: 'change', label: 'Change', kind: 'change' },
             ],
             rows,
             omitted:
@@ -361,6 +420,70 @@ export function trafficFigureReaders(firestore: AiFigureFirestore): PluginFigure
             rows: days.map((day, index) => ({ day: ids[index], views: day.total, visitors: day.visitors })),
             omitted: 0,
             notes: [visitorsNote],
+          },
+        }
+      },
+      firestore,
+      null,
+    ),
+    siteReader(
+      {
+        id: 'traffic.changes',
+        label: 'What changed on the site',
+        description:
+          'What changed on the site over the window and on which day, newest first: pages published or updated, posts published, products and redirects added, shared layouts, components and settings changed. For finding what may have moved the traffic.',
+        windows: AI_SITE_CHANGES_WINDOWS,
+      },
+      async (db, request) => {
+        const { current } = pluginFigureWindows(request.now, request.days)
+        const snapshot = await db
+          .collection('hosts')
+          .doc(request.hostId)
+          .collection('activity')
+          .where('createdAt', '>=', new Date(current.startMs))
+          .where('createdAt', '<', new Date(current.endMs))
+          .orderBy('createdAt', 'desc')
+          .limit(AI_SITE_CHANGES_READ_LIMIT)
+          .get()
+        // Only the kind, the day and the target's name are read off an entry:
+        // who did it is never read at all.
+        const changes = new Map<string, { day: string; what: string; kind: string }>()
+        for (const entry of snapshot.docs) {
+          const target = (entry.get('target') ?? {}) as { type?: unknown; id?: unknown; name?: unknown }
+          const kind = aiSiteChangeKind(entry.get('action'), target.type)
+          const at = entry.get('createdAt') as { toDate?: () => Date } | undefined
+          if (!kind || !at?.toDate) continue
+          const day = pluginFigureDay(at.toDate())
+          const name = str(target.name)
+          // An entry with no name says only its kind, so a day's are one row.
+          const key = `${day}:${name ? str(target.id) || name : kind}`
+          if (!changes.has(key)) changes.set(key, { day, what: name || kind, kind })
+        }
+        const listed = [...changes.values()]
+        const rows = [
+          ...listed.filter((row) => !AI_SITE_CHANGES_BULK.includes(row.kind)),
+          ...listed.filter((row) => AI_SITE_CHANGES_BULK.includes(row.kind)),
+        ]
+          .slice(0, AI_SITE_CHANGES_MAX_ROWS)
+          .sort((a, b) => b.day.localeCompare(a.day))
+        const notes = [
+          ...(snapshot.size === AI_SITE_CHANGES_READ_LIMIT ? ['Only the latest activity was read, so earlier changes in this window may be missing.'] : []),
+          ...(rows.length ? [] : ['Nothing visitors would see was changed on the site in this window.']),
+        ]
+        return {
+          ok: true,
+          table: {
+            title: 'What changed on the site',
+            source: { label: 'Activity', path: 'admin/activity' },
+            period: periodOf(request),
+            columns: [
+              { key: 'day', label: 'Day', kind: 'date' },
+              { key: 'what', label: 'What changed', kind: 'text' },
+              { key: 'kind', label: 'Kind', kind: 'text' },
+            ],
+            rows,
+            omitted: Math.max(0, changes.size - rows.length),
+            notes,
           },
         }
       },

@@ -5,12 +5,12 @@ tracking for the orders the commerce plugin sells (AGL-3612). Shippo
 (Platform Accounts) is the primary provider and EasyPost (Child Users) the
 secondary; each is reached with `fetch` alone.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
 ```bash
-npm install @aglyn/plugins-shipping@beta
+npm install @aglyn/plugins-shipping
 ```
 
 A plugin is loaded through Aglyn's plugin manager (`@aglyn/aglyn`) by the console and the tenant runtime; it is not a standalone library.

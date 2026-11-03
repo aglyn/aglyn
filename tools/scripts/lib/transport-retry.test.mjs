@@ -17,9 +17,11 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
+  RUNNER_STALL_MS,
   TRANSPORT_RETRY_DELAY_MS,
   fetchOnceMore,
   isTimeout,
+  retryAfterRunnerStall,
 } from './transport-retry.mjs'
 
 const transport = (code) =>
@@ -88,4 +90,75 @@ test('any response is graded as given: a 503 is not retried', async () => {
 
 test('the pause is short next to the fifteen-minute schedule', () => {
   assert.ok(TRANSPORT_RETRY_DELAY_MS > 0 && TRANSPORT_RETRY_DELAY_MS <= 5_000)
+})
+
+const up = (name, ms) => ({ name, ms, ok: true, detail: 'healthy' })
+const hung = (name, ms = 15_001) => ({
+  name,
+  ms,
+  ok: false,
+  noResponse: true,
+  detail: 'no response in 15000ms',
+})
+
+function reprober(answers) {
+  const asked = []
+  const reprobe = async (index) => {
+    asked.push(index)
+    return answers[index]
+  }
+  return { reprobe, asked }
+}
+
+test('THE 2026-11-03 16:53Z RED: every answer took 12.6 s, so the rows with none are tried again and the second try decides', async () => {
+  const first = [
+    hung('console', 18_859),
+    up('console/crons', 12_706),
+    hung('console/auth-doors'),
+    up('front-door/marketing', 12_687),
+  ]
+  const { reprobe, asked } = reprober([up('console', 465), null, up('console/auth-doors', 3_573), null])
+  const { results, stall } = await retryAfterRunnerStall(first, reprobe)
+  assert.deepEqual(asked, [0, 2])
+  assert.deepEqual(stall, { fastestMs: 12_687, retried: 2 })
+  assert.ok(results.every((r) => r.ok))
+  // The rows that answered the first time are kept as they were.
+  assert.equal(results[1], first[1])
+  assert.equal(results[3], first[3])
+  // The log still says what the first try saw.
+  assert.match(results[0].detail, /tried again: the runner stalled \(first try 18859ms, no response in 15000ms\)/)
+})
+
+test('THE 2026-10-05 HANG: cached pages answered at once, so a hung render is not retried and stays DOWN', async () => {
+  const first = [up('front-door/site', 310), up('tenant', 420), hung('render/site/dynamic')]
+  const { reprobe, asked } = reprober([])
+  const { results, stall } = await retryAfterRunnerStall(first, reprobe)
+  assert.equal(stall, null)
+  assert.deepEqual(asked, [])
+  assert.equal(results, first)
+  assert.equal(results[2].ok, false)
+})
+
+test('a site that is really down fails the second try too, and the row stays DOWN', async () => {
+  const first = [hung('console'), hung('tenant')]
+  const { reprobe, asked } = reprober([hung('console'), hung('tenant')])
+  const { results, stall } = await retryAfterRunnerStall(first, reprobe)
+  assert.deepEqual(asked, [0, 1])
+  assert.deepEqual(stall, { fastestMs: null, retried: 2 })
+  assert.ok(results.every((r) => !r.ok))
+})
+
+test('a run where every row answered is never retried, however slow', async () => {
+  const first = [up('console', 12_000), { name: 'tenant', ms: 13_000, ok: false, status: 503, detail: 'HTTP 503' }]
+  const { reprobe, asked } = reprober([])
+  const { results, stall } = await retryAfterRunnerStall(first, reprobe)
+  assert.equal(stall, null)
+  assert.deepEqual(asked, [])
+  assert.equal(results, first)
+})
+
+test('the stall line sits well above every fastest answer the red runs before AGL-4137 saw', () => {
+  // The slowest "fastest answer" across the 40 red runs from 2026-10-17 to 2026-11-02 was 664ms.
+  assert.ok(RUNNER_STALL_MS >= 5 * 664)
+  assert.ok(RUNNER_STALL_MS < 15_000)
 })

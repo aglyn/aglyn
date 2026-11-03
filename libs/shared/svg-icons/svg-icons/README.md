@@ -2,11 +2,11 @@
 
 React components for the flexbox and grid alignment icons used in the Besigner style panel: one icon for each value of `align-content`, `align-items`, `align-self`, `justify-content`, `justify-items`, and for flex direction and wrapping. Install it if you are building a layout control and want these glyphs; otherwise it arrives as a dependency of `@aglyn/besigner-ui`.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/shared-svg-icons@beta
+    npm install @aglyn/shared-svg-icons
 
 Peer dependency: `react`. The bundle imports `react/jsx-runtime` and leaves React external.
 

@@ -2,11 +2,11 @@
 
 TypeScript types and interfaces shared across the Aglyn packages: lifecycle and CRUD contracts, a normalized-data shape, semantic-version string types, the serializable host theme document, and a `DoD` namespace of document-database modeling types. It is mainly a dependency of the larger `@aglyn/*` packages.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/shared-data-types@beta
+    npm install @aglyn/shared-data-types
 
 No peer dependencies.
 

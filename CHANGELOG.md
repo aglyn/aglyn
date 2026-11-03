@@ -9,6 +9,29 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.7.0 — 2026-11-03
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.6.0...v1.7.0)
+
+### Added
+
+- **ai:** weekly insights become an analyst note: what it meant, why and what next ([AGL-4131](https://linear.app/aglyn/issue/AGL-4131))
+
+### Fixed
+
+- **ai:** the weekly note calls a page publish an update too, and a steady source never explains a move ([AGL-4131](https://linear.app/aglyn/issue/AGL-4131))
+- **ai:** a weekly note's reason never rests on a source that held steady ([AGL-4131](https://linear.app/aglyn/issue/AGL-4131))
+- **uptime:** a run where every answer was slow retries its silent rows ([AGL-4137](https://linear.app/aglyn/issue/AGL-4137))
+
+<details>
+<summary>Also in this release: 3 chores</summary>
+
+- **linear:** raise the id ceiling to AGL-4137 ([AGL-4137](https://linear.app/aglyn/issue/AGL-4137))
+- **release:** a hotfix promotion the sweep merges still publishes to npm
+- **libs:** package READMEs install the current release, not the beta
+
+</details>
+
 ## v1.6.0 — 2026-11-03
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.5.1...v1.6.0)

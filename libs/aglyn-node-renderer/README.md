@@ -4,11 +4,11 @@ Renders a stored Aglyn node tree as React. It is the one renderer the Besigner
 canvas, the console preview and a published site all mount. Install it if you
 want to display Aglyn node trees in your own React app.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/aglyn-node-renderer@beta
+    npm install @aglyn/aglyn-node-renderer
 
 Peer dependencies:
 

@@ -2,11 +2,11 @@
 
 Error classes shared across the Aglyn packages: an HTTP response error, an upstream-vendor error, and a factory for namespaced, templated errors with stable codes. A small dependency of other Aglyn packages, usable on its own.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/shared-util-errors@beta
+    npm install @aglyn/shared-util-errors
 
 No peer dependencies.
 
