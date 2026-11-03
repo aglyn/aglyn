@@ -18,11 +18,14 @@
 import {
   HEALTH_NO_STORE,
   HEALTH_PROBE_TTL_MS,
+  WEBHOOK_CLAIM_VOUCHES_FOR_MS,
+  WEBHOOK_EVENT_IN_FLIGHT_MS,
   MAX_BACKUP_AGE_DAYS,
   MAX_EXPORT_AGE_DAYS,
   backupsHealth,
   beaconHealth,
   billingWebhookHealth,
+  countUndeliveredEvents,
   exportsHealth,
   healthBody,
   healthHeaders,
@@ -947,6 +950,47 @@ describe('beaconHealth tolerates ONE miss and not two (AGL-2713)', () => {
     expect(check.ok).toBe(true)
     expect(check.code).toBeUndefined()
     expect(check.attempts).toBe(1)
+  })
+})
+
+describe('countUndeliveredEvents (AGL-4133)', () => {
+  const NOW_MS = 1_793_667_600_000
+  const emitted = (minutesAgo: number, id = 'evt_listed') => ({
+    id,
+    created: (NOW_MS - minutesAgo * 60_000) / 1000,
+  })
+
+  it('counts nothing when Stripe lists nothing', () => {
+    expect(countUndeliveredEvents([], new Set(), NOW_MS)).toBe(0)
+  })
+
+  it('does not count an event still in flight, claimed or not', () => {
+    const justEmitted = (WEBHOOK_EVENT_IN_FLIGHT_MS - 1000) / 60_000
+    expect(countUndeliveredEvents([emitted(justEmitted)], new Set(), NOW_MS)).toBe(0)
+  })
+
+  it('takes a clean claim over a list that lags the delivery', () => {
+    // The 2026-11-03 reading: answered 200 first time, still listed 7 minutes on.
+    expect(countUndeliveredEvents([emitted(7)], new Set(['evt_listed']), NOW_MS)).toBe(0)
+  })
+
+  it('counts an event with no clean claim once it is past in flight', () => {
+    const justPast = WEBHOOK_EVENT_IN_FLIGHT_MS / 60_000
+    expect(countUndeliveredEvents([emitted(justPast)], new Set(), NOW_MS)).toBe(1)
+  })
+
+  it('counts only the unclaimed event in a mixed list', () => {
+    const listed = [emitted(7, 'evt_landed'), emitted(7, 'evt_rejected')]
+    expect(countUndeliveredEvents(listed, new Set(['evt_landed']), NOW_MS)).toBe(1)
+  })
+
+  it('stops believing a claim once the event is too old to be a lag', () => {
+    const tooOld = WEBHOOK_CLAIM_VOUCHES_FOR_MS / 60_000
+    expect(countUndeliveredEvents([emitted(tooOld)], new Set(['evt_listed']), NOW_MS)).toBe(1)
+  })
+
+  it('counts an event with no timestamp, because unreadable is not calm', () => {
+    expect(countUndeliveredEvents([{ id: 'evt_listed' }], new Set(['evt_listed']), NOW_MS)).toBe(1)
   })
 })
 
