@@ -5309,7 +5309,12 @@ sees a record, and every insight a person reads is traced to the numbers it cite
   and the data plugin's `datasets.summary` and `datasets.breakdown` (`server/dataset-figures.ts`,
   from its console-only server declarations). This plugin registers the readers for records the
   platform keeps (`src/lib/insights/ai-figure-readers.ts`): `traffic.summary`, `traffic.pages`,
-  `traffic.sources`, `traffic.daily` and `forms.performance`. AGL-3603 adds the workflows
+  `traffic.sources`, `traffic.daily`, `traffic.changes` and `forms.performance`. `traffic.changes`
+  (AGL-4131) lists what a visitor would see change, by day, from the site's `activity` log: an
+  allowlist in `aiSiteChangeKind` of pages published or updated (the log words a first publish and an
+  update alike), shared layouts, components, published entries,
+  added products and redirects and site settings, never a contact, a run or who did it, one row a
+  target a day and at most 20. AGL-3603 adds the workflows
   plugin's `automations.runs` (`libs/plugins/workflows/src/lib/server/automation-run-figures.ts`:
   exact succeeded/failed totals as COUNT aggregates over the `activity` composite on `result` +
   `createdAt`, and a per-automation split from at most 500 runs of each result projected to
@@ -5324,8 +5329,7 @@ sees a record, and every insight a person reads is traced to the numbers it cite
   file already carries. The surfaces widen with them: `analytics` (also a site's dashboard)
   offers `automations` and `crm` too, `crm-reports` offers `crm`, and three surfaces join —
   `automations` (a site's Automation page), `bookings` (its Bookings page) and `workspace` (the
-  workspace's sites page and CRM Reports; no site needed; `crm` and `datasets`). The digest's
-  readers are unchanged. The "Ask AI about these numbers" tile
+  workspace's sites page and CRM Reports; no site needed; `crm` and `datasets`). The "Ask AI about these numbers" tile
   (`src/lib/components/ai-insight-card.component.tsx`) opens the same insight dialog from the
   `hostDashboard` slot — which the dashboard and the Analytics page both draw — and from
   `orgDashboard`, gated by `aiGenerative` and `ai.generate`. A reader answers one compact
@@ -5346,7 +5350,11 @@ sees a record, and every insight a person reads is traced to the numbers it cite
   (`src/lib/runtime/ai-insight-check.ts`) keeps each insight whose every number is in a row it
   cites, as the table has it or rounded to the decimals written, and leaves out the rest: a
   computed total, a rise the change does not show, an unknown table or row, a person named. An
-  answer that is not a call, or keeps nothing, is asked for once more with the reasons. The system
+  answer that is not a call, or keeps nothing, is asked for once more with the reasons. A digest's
+  `overview` and an insight's `why` and `next` (AGL-4131) are held to the same rows and dropped
+  alone when they fail, and a `why` must also cite a row of a table in `AI_INSIGHT_CAUSE_READERS`.
+  A digest thinks (`AI_INSIGHT_DIGEST_THINKING`, adaptive at low) on `AI_INSIGHT_DIGEST_MAX_TOKENS`;
+  a question keeps the routing row's. The system
   block is the insight rules and the acceptable-use block, under the balanced tier's cacheable
   minimum, so the ledger records it as not caching.
 - **The answer is kept apart.** The step writes `orgs/{orgId}/aiInsights/{jobId}` under the job's
@@ -5371,7 +5379,10 @@ sees a record, and every insight a person reads is traced to the numbers it cite
   (`users/{uid}.insightDigests.{orgId}`, turned off again in Notifications). Monday's first run
   checks `aiGenerative`, `release_ai_generative`, the workspace's AI pause and each site's AI
   switch again, then makes one `digest` job per site for up to five of the busiest sites the
-  subscribers reach, created by the first of them who holds `ai.generate` there. The jobs run on
+  subscribers reach, created by the first of them who holds `ai.generate` there. A site under
+  `AI_INSIGHT_DIGEST_MIN_VIEWS` page views in the week gets no job and draws no credits; the marker
+  says `quiet`, not skipped, and is written even when every site is quiet, so the afternoon run reads
+  nothing again. The jobs run on
   the beat and are metered like any job. Every run delivers what is written — a
   `content.insightsDigest` notification and a platform email to each subscriber who reaches the
   site, stamped per person until the site settles — and skips, without a message, a job that
@@ -5379,7 +5390,7 @@ sees a record, and every insight a person reads is traced to the numbers it cite
 
 | step | tier served | lookup rounds | ceiling asked: fast / balanced / deep | least time on the served tier |
 | --- | --- | --- | --- | --- |
-| `insight` | balanced | 1 | 1,500 / 1,500 / 1,000 | 3 × 3 s + 2 × 25,000 ms + 3 s + 8 s = 70,000 ms |
+| `insight` | balanced | 1 | 4,000 / 4,000 / 2,666 | 3 × 3 s + 2 × 66,667 ms + 3 s + 8 s = 153,334 ms |
 
 The lookup round is the read call, spent from the same allowance as the answer; the 8 s is
 `AI_INSIGHT_READS_MS`, the declared assumption for the readers between the two calls.

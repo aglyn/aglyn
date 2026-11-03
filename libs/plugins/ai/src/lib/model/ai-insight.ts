@@ -135,19 +135,28 @@ export function aiInsightSurfaceNeedsSite(surface: AiInsightSurface): boolean {
 
 /**
  * The readers a weekly digest reads, in the order the digest names them:
- * the traffic change, the top page, the days that stood out, the forms, the
- * campaigns, and what the site sold and took. Code reads these; no model
- * picks them.
+ * the traffic change, the top page, the days that stood out, where visits
+ * came from, what changed on the site, the forms, the campaigns, and what the
+ * site sold and took. Code reads these; no model picks them.
  */
 export const AI_INSIGHT_DIGEST_READERS: readonly string[] = [
   'traffic.summary',
   'traffic.pages',
   'traffic.daily',
+  'traffic.sources',
+  'traffic.changes',
   'forms.performance',
   'marketing.campaigns',
   'commerce.sales',
   'bookings.services',
 ]
+
+/**
+ * The tables a reason can rest on (AGL-4131): a dated change, where visits
+ * came from, a campaign. A `why` with no row from one of these is an opinion
+ * about the figures, so it is dropped and the insight stands.
+ */
+export const AI_INSIGHT_CAUSE_READERS: readonly string[] = ['traffic.changes', 'traffic.sources', 'marketing.campaigns']
 
 /** The window a weekly digest reads. */
 export const AI_INSIGHT_DIGEST_DAYS = 7
@@ -186,6 +195,15 @@ export const AI_INSIGHT_HEADLINE_MAX_CHARS = 60
 /** The longest the sentence about what the figures could not answer may run. */
 export const AI_INSIGHT_GAP_MAX_CHARS = 200
 
+/** The longest a digest's read of the whole week may run: two or three sentences. */
+export const AI_INSIGHT_OVERVIEW_MAX_CHARS = 420
+
+/** The longest an insight's likely reason may run. */
+export const AI_INSIGHT_WHY_MAX_CHARS = 200
+
+/** The longest an insight's next step may run. */
+export const AI_INSIGHT_NEXT_MAX_CHARS = 160
+
 /** The most tables one citation list names. */
 export const AI_INSIGHT_MAX_CITES = 3
 
@@ -221,11 +239,17 @@ export interface AiInsight {
   headline?: string
   /** One or two plain sentences. */
   text: string
+  /** What most likely drove it, resting on a row of a cause table. Absent when the tables explain nothing. */
+  why?: string
+  /** One concrete step the owner can take. Absent when none fits. */
+  next?: string
   cites: AiInsightCitation[]
 }
 
 /** What the model answers with. */
 export interface AiInsightAnswer {
+  /** A digest's read of the whole week, held to the rows the kept insights cite; absent or `null` otherwise. */
+  overview?: string | null
   insights: AiInsight[]
   /** What the figures could not answer, in one sentence without numbers; `null` when nothing. */
   gap: string | null
@@ -246,6 +270,8 @@ export interface AiInsightRecord {
   question: string
   /** The window the answer was asked about, in days. */
   days: number
+  /** A digest's read of the whole week. Absent on an answer from before it was asked for. */
+  overview?: string | null
   /** The insights that trace to the rows they cite; every other one was left out. */
   insights: AiInsight[]
   gap: string | null

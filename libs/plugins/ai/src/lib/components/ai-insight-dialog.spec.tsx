@@ -123,6 +123,22 @@ describe('an answer', () => {
       '/acme/hosts/acme-roofing/analytics',
     )
   })
+
+  it('shows a digest’s read of the week, and each insight’s reason and next step', async () => {
+    mockFetch.mockResolvedValueOnce(
+      json({
+        answer: {
+          ...answer,
+          overview: 'A busier week, mostly from search.',
+          insights: [{ ...answer.insights[0], why: 'Likely the new page.', next: 'Link to it from the home page.' }],
+        },
+      }),
+    )
+    render(<AiInsightDialog {...props({ jobId: 'job-1' })} />)
+    expect(await screen.findByText('A busier week, mostly from search.')).toBeTruthy()
+    expect(screen.getByText('Likely why: Likely the new page.')).toBeTruthy()
+    expect(screen.getByText('Try this: Link to it from the home page.')).toBeTruthy()
+  })
 })
 
 describe('asking', () => {

@@ -311,7 +311,9 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
     // Readers chosen, then their tables phrased (AGL-2915): short sentences
     // over figures code computed, each held to the rows it cites, so no
     // extended thinking. The read call before the answer asks for at most
-    // `AI_INSIGHT_READ_MAX_TOKENS` of the same allowance.
+    // `AI_INSIGHT_READ_MAX_TOKENS` of the same allowance. A weekly digest is the
+    // exception (AGL-4131): it reasons about why a week moved, so it thinks on
+    // a ceiling of its own (`AI_INSIGHT_DIGEST_THINKING` in the insight budget).
     thinking: 'off',
     effort: null,
     maxTokens: 1500,

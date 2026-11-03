@@ -39,14 +39,29 @@ export const AI_INSIGHT_READ_MAX_TOKENS = 400
 export const AI_INSIGHT_READS_MS = 8_000
 
 /**
+ * How a weekly digest thinks (AGL-4131). A question is phrased over figures
+ * and the routing row keeps it from thinking; a digest connects a week's
+ * tables and says what drove them, which is the reasoning the owner pays for.
+ */
+export const AI_INSIGHT_DIGEST_THINKING = { thinking: 'adaptive', effort: 'low' } as const
+
+/**
+ * A digest's ceiling: five insights at their bounds, each with its reason and
+ * next step and citing three tables of ten rows, the overview and the gap
+ * sentence, written as JSON: about 5,400 characters, 1,800 tokens at three
+ * characters a token, with as much again to think in.
+ */
+export const AI_INSIGHT_DIGEST_MAX_TOKENS = 4_000
+
+/**
  * The step's time: the read call and the answer with its one re-ask, sharing
- * one allowance of twice the routing table's ceiling, on the tier `job.insight`
- * is served from, after the readers read. A digest makes no read call and
- * fits the same time.
+ * one allowance of twice the ceiling, on the tier `job.insight` is served
+ * from, after the readers read. A digest makes no read call, and its larger
+ * ceiling is what sizes the time.
  */
 export const AI_JOB_INSIGHT_STEP_BUDGET = aiJobStepBudget({
   tier: AI_STEP_TIERS['job.insight'],
-  maxTokens: AI_ROUTING_TABLE['job.insight'].maxTokens,
+  maxTokens: Math.max(AI_ROUTING_TABLE['job.insight'].maxTokens, AI_INSIGHT_DIGEST_MAX_TOKENS),
   attempts: 2,
   lookups: 1,
   ownReadsMs: AI_INSIGHT_READS_MS,

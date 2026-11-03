@@ -18,6 +18,9 @@
 import {
   AI_INSIGHT_GAP_MAX_CHARS,
   AI_INSIGHT_HEADLINE_MAX_CHARS,
+  AI_INSIGHT_NEXT_MAX_CHARS,
+  AI_INSIGHT_OVERVIEW_MAX_CHARS,
+  AI_INSIGHT_WHY_MAX_CHARS,
   AI_INSIGHT_MAX_CHARS,
   AI_INSIGHT_MAX_CITED_ROWS,
   AI_INSIGHT_MAX_CITES,
@@ -97,6 +100,10 @@ export function aiInsightAnswerTool(): AiTool {
     inputSchema: {
       type: 'object',
       properties: {
+        overview: {
+          anyOf: [{ type: 'string' }, { type: 'null' }],
+          description: `A weekly digest only: what the week meant, in two or three sentences of your own; at most ${AI_INSIGHT_OVERVIEW_MAX_CHARS} characters. null on a question.`,
+        },
         insights: {
           type: 'array',
           description: `Most useful first; at most ${AI_INSIGHT_MAX_INSIGHTS}.`,
@@ -110,6 +117,14 @@ export function aiInsightAnswerTool(): AiTool {
               text: {
                 type: 'string',
                 description: `Why it matters, in one or two plain sentences that do not repeat the headline; at most ${AI_INSIGHT_MAX_CHARS} characters.`,
+              },
+              why: {
+                anyOf: [{ type: 'string' }, { type: 'null' }],
+                description: `What most likely drove it, resting on a row you cite from the changes, sources or campaigns table; at most ${AI_INSIGHT_WHY_MAX_CHARS} characters. null when nothing there explains it.`,
+              },
+              next: {
+                anyOf: [{ type: 'string' }, { type: 'null' }],
+                description: `One concrete step the owner can take; at most ${AI_INSIGHT_NEXT_MAX_CHARS} characters. null when none fits.`,
               },
               cites: {
                 type: 'array',
@@ -129,7 +144,7 @@ export function aiInsightAnswerTool(): AiTool {
                 },
               },
             },
-            required: ['headline', 'text', 'cites'],
+            required: ['headline', 'text', 'why', 'next', 'cites'],
             additionalProperties: false,
           },
         },
@@ -138,7 +153,7 @@ export function aiInsightAnswerTool(): AiTool {
           description: `What the tables cannot answer, in one sentence without numbers; at most ${AI_INSIGHT_GAP_MAX_CHARS} characters. null when nothing.`,
         },
       },
-      required: ['insights', 'gap'],
+      required: ['overview', 'insights', 'gap'],
       additionalProperties: false,
     },
   }
@@ -189,11 +204,14 @@ export function parseAiInsightAnswer(input: unknown): AiInsightAnswer | null {
     .map((raw) => ({
       ...(typeof raw['headline'] === 'string' ? { headline: raw['headline'] } : {}),
       text: typeof raw['text'] === 'string' ? raw['text'] : '',
+      ...(typeof raw['why'] === 'string' ? { why: raw['why'] } : {}),
+      ...(typeof raw['next'] === 'string' ? { next: raw['next'] } : {}),
       cites: (Array.isArray(raw['cites']) ? raw['cites'] : []).filter(isRecord).map((cite) => ({
         table: typeof cite['table'] === 'string' ? cite['table'] : '',
         rows: (Array.isArray(cite['rows']) ? cite['rows'] : []) as number[],
       })),
     }))
   const gap = typeof input['gap'] === 'string' ? input['gap'] : null
-  return { insights, gap }
+  const overview = typeof input['overview'] === 'string' ? input['overview'] : null
+  return { overview, insights, gap }
 }

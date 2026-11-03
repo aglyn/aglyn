@@ -35,7 +35,9 @@ import {
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import type { AiJob } from '../model/ai-jobs.types'
 import { AI_INSIGHTS_COLLECTION, type AiInsightRecord } from '../model/ai-insight'
+import { AI_ROUTING_TABLE } from '../providers/routing'
 import { AI_INSIGHT_ANSWER_TOOL_NAME, AI_INSIGHT_READ_TOOL_NAME } from '../tools/ai-insight-tool'
+import { AI_INSIGHT_DIGEST_THINKING } from './ai-job-insight-budget'
 import {
   AI_INSIGHT_NO_READERS_COPY,
   AI_JOB_INSIGHT_SYSTEM,
@@ -408,6 +410,38 @@ describe('the weekly digest', () => {
     expect(record).toMatchObject({ surface: 'digest', week: '2026-W38', days: 7, question: 'Weekly insights for Acme' })
     // A digest reports the week's figures; the site's status is not one of them.
     expect(record.tables.map((table) => table.reader)).not.toContain('site.status')
+  })
+
+  it('thinks, on its own ceiling, and keeps its overview (AGL-4131)', async () => {
+    mockRunAiRequest.mockResolvedValueOnce(
+      called(AI_INSIGHT_ANSWER_TOOL_NAME, {
+        overview: 'A stronger week, with page views up 14.7%.',
+        insights: [{ text: 'Page views rose 14.7%.', cites: [{ table: 't1', rows: [0] }] }],
+        gap: null,
+      }),
+    )
+    const { writes } = await run({ inputs: { surface: 'digest', week: '2026-W38' }, brief: 'Weekly insights for Acme' })
+    const request = mockRunAiRequest.mock.calls[0][0]
+    expect(request).toMatchObject(AI_INSIGHT_DIGEST_THINKING)
+    expect(request.maxTokens).toBeGreaterThan(AI_ROUTING_TABLE['job.insight'].maxTokens)
+    expect((writes[0].value as unknown as AiInsightRecord).overview).toBe('A stronger week, with page views up 14.7%.')
+  })
+
+  it('leaves a question as it was: no thinking, the row’s ceiling, and no overview', async () => {
+    mockRunAiRequest
+      .mockResolvedValueOnce(called(AI_INSIGHT_READ_TOOL_NAME, { reads: [{ reader: 'traffic.summary', days: 14, params: [] }] }))
+      .mockResolvedValueOnce(
+        called(AI_INSIGHT_ANSWER_TOOL_NAME, {
+          overview: 'A stronger week.',
+          insights: [{ text: 'Page views rose 14.7%.', cites: [{ table: 't1', rows: [0] }] }],
+          gap: null,
+        }),
+      )
+    const { writes } = await run()
+    const request = mockRunAiRequest.mock.calls[1][0]
+    expect(request.thinking).toBe(AI_ROUTING_TABLE['job.insight'].thinking)
+    expect(request.maxTokens).toBeLessThanOrEqual(AI_ROUTING_TABLE['job.insight'].maxTokens)
+    expect((writes[0].value as unknown as AiInsightRecord).overview).toBeNull()
   })
 
   it('reads a digest over the Monday-to-Sunday week it was made for, whenever it runs (AGL-3867)', async () => {

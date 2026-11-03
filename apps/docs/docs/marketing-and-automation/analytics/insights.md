@@ -90,21 +90,31 @@ records by one field, such as the average order total by state.
 ## Weekly insights
 
 In the **Ask about your numbers** dialog, turn on **Send me weekly insights for this workspace
-every Monday**. Each Monday, Aglyn AI writes a few insights for up to five of your busiest sites
-you can reach: the change in traffic, the most viewed page, the form that turned the most views
-into submissions, a campaign that did better than the rest, and any day that stood out — only
-those the figures support. They cover the week before, Monday to Sunday, the same week as the
-free Weekly summary, so both emails quote the same figures.
+every Monday**. Each Monday, Aglyn AI reads the week for up to five of your busiest sites you can
+reach, and writes you a short note: what the week meant, why the numbers most likely moved, and
+one thing to try next. They cover the week before, Monday to Sunday, the same week as the free
+Weekly summary.
 
 Without turning anything on, every workspace owner and admin already gets the free
 [Weekly summary](../../getting-started/console-tour.md#daily-digests) email each Monday with the
-week's figures. Weekly insights add the explanation.
+week's figures. Weekly insights don't repeat them. They say what the figures mean.
 
-- They arrive as a notification and an email, and are listed under **AI jobs**. The email leads
-  with the week's headline figures, then one section a topic: what stood out, the figures behind
-  it, and links to the pages and reports they come from.
-- Each site's weekly insights are an AI job and use AI credits. When your workspace has used its
-  AI credits for the month, that week's insights are skipped without a message.
+To explain a move, Aglyn AI compares your figures with what changed on the site that week: pages
+and shared layouts published, posts published, products and redirects added, components and
+settings changed. It also looks at where visits came from, how each page's rank moved, and your
+campaigns.
+
+- They arrive as a notification and an email, and are listed under **AI jobs**. The email opens
+  with **The week in short**, then takes each insight in turn: what happened, **Likely why**,
+  **Try this** with a link to the report, and the rows behind it.
+- Every number is still checked against your own figures. A reason is Aglyn AI's reading of them,
+  so it must point to a real change, source or campaign, and it isn't proof. When nothing explains
+  a move, the note says so rather than guessing.
+- Search rankings aren't included: Aglyn doesn't read your position in Google. A page's rank here
+  is its place among your own pages by views.
+- Each site's weekly insights are an AI job and use AI credits. A site with under 50 page views in
+  the week gets no note and uses no credits. When your workspace has used its AI credits for the
+  month, that week's insights are skipped without a message.
 - Turn them off from the same dialog, or under **Weekly insights** on the
   [Notifications](../../getting-started/console-tour.md#daily-digests) page. Muting
   **Forms & bookings** there silences the notification but not the email.
@@ -113,7 +123,8 @@ week's figures. Weekly insights add the explanation.
 ## Privacy
 
 - Only totals, counts, rates and labels are sent to the AI provider: page paths, referring
-  sites and campaign tags; the names of forms, services, products and A/B tests; the subjects of
+  sites and campaign tags; the names of forms, services, products and A/B tests; the names of
+  pages, posts and products changed on the site, with the day; the subjects of
   campaign emails, with conversions counted by kind and revenue by currency; and for a dataset, its field names and types and, in a breakdown, the values
   that at least three records share. Email addresses and phone numbers are removed from every
   label before anything is sent.
