@@ -515,6 +515,31 @@ export interface SiteImportNavEntry {
   viewBox?: string
   /** The heading of the menu's column it sits in ("By team"). */
   column?: string
+  /** The column of its panel it sits in, by index into its group's `columns` (AGL-4139). */
+  at?: number
+  /** The filled box its icon sits in, as the source draws it (AGL-4139): its fill, corners and the icon's own color. */
+  tile?: { fill: string; radius: number; color: string | null }
+}
+
+/**
+ * One column of a menu's panel as the source sets it (AGL-4139): its heading,
+ * its other lines of words, the fill it sits on, the picture it shows, and
+ * its own width. A footer's filled box is read the same way, with its links.
+ */
+export interface SiteImportNavColumn {
+  heading: string | null
+  /** Its words outside its links, after its heading, as written. */
+  lines: string[]
+  /** The fill it sits on against its panel's: none, a light one, the brand's, or a dark one. */
+  band: SiteImportBand
+  /** The picture it shows outside its links (a featured card's), with `src` once the look pass brings it into the library. */
+  image?: { url: string; alt: string }
+  /** Its own width in CSS pixels, where the source sets one. */
+  width?: number
+  /** A footer box's links, as written (AGL-4139). */
+  links?: SiteImportFooterLink[]
+  /** The icon beside its heading, one path on a 24-unit square. */
+  iconPath?: string
 }
 
 /** A top-level item of the source's menu: a link, or a menu of entries under a name. */
@@ -524,6 +549,13 @@ export interface SiteImportNavGroup {
   href: string | null
   /** Empty for a plain link. */
   items: SiteImportNavEntry[]
+  /** Its panel's columns side by side, in the source's order (AGL-4139); absent on a read made before. */
+  columns?: SiteImportNavColumn[]
+  /**
+   * Its panel (AGL-4139): how wide the source caps it, and whether it opens
+   * on hover — hidden until shown, under a name that is not a button.
+   */
+  panel?: { width: number | null; hover: boolean }
 }
 
 /** A button in the source's header outside its menu ("Sign in", "Start free"). */
@@ -562,6 +594,10 @@ export interface SiteImportFooter {
   email: string | null
   /** Its © line, word for word. */
   copyright: string | null
+  /** It opens with the site's logo (AGL-4139). */
+  logo?: boolean
+  /** Its filled boxes, each with its heading, words and links (AGL-4139), which `text` and `links` then leave out. */
+  panels?: SiteImportNavColumn[]
 }
 
 /** Every line a layout's nodes place, in order. */
@@ -825,6 +861,8 @@ export interface AiSiteImportHome {
   title: string
   description: string
   ogImage: string | null
+  /** The site's icon its head names (AGL-4139): its largest touch icon, else its largest picture icon. Absent on a read made before. */
+  favicon?: string | null
   siteName: string
   brand: {
     kind: 'logo-only' | 'logo-and-name' | 'name-only'
@@ -872,6 +910,8 @@ export interface AiSiteImportLook {
   colors: string[]
   /** The source's logo, as the library holds it, for the header's brand. */
   logo: AiSiteImportPhoto | null
+  /** The pictures the home page's menus show (AGL-4139), as the library holds them, each by the address it came `from`. */
+  pictures?: AiSiteImportPhoto[]
   /** Whether the site's listing was taken from the home page's own words. */
   seo: boolean
   /** The look's seed, which every page of the import is drawn with. */

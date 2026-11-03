@@ -69,7 +69,7 @@ import {
   createAiJobImportStep,
   type AiSiteImportStepDeps,
 } from './ai-job-import-step'
-import { AI_LAYOUT_SITE_BRAND_INPUT, AI_LAYOUT_SITE_FACTS_INPUT, aiJobLayoutLanguageInstructions, aiLayoutFrameCheck, aiLayoutFramePrompt, aiLayoutSiteBrandOf } from './ai-job-layout-language'
+import { AI_LAYOUT_SITE_BRAND_INPUT, AI_LAYOUT_SITE_FACTS_INPUT, AI_LAYOUT_SITE_FRAME_INPUT, aiJobLayoutLanguageInstructions, aiLayoutFrameCheck, aiLayoutFramePrompt, aiLayoutSiteBrandOf } from './ai-job-layout-language'
 import { AI_LAYOUT_IMPORTED_SECTIONS_INPUT, type AiSiteImportDocument } from './ai-site-import-document'
 import { aiSiteImportListingUpdates, aiSiteImportLogo } from './ai-site-import-look'
 import { aiPublishImportedWave } from './ai-site-import-publish'
@@ -90,11 +90,13 @@ let fetchSpy: jest.SpyInstance
 let asked: string[] = []
 
 /** aglyn.com as recorded: its home page with its own styles, its header logo as an SVG, the rest of its pages small. */
-function serveAglyn(options: { challenged?: boolean } = {}) {
+function serveAglyn(options: { challenged?: boolean; pictures?: boolean } = {}) {
   asked = []
   fetchSpy = jest.spyOn(global, 'fetch').mockImplementation(async (input) => {
     const url = String(input)
     asked.push(url)
+    // The Product menu's featured screenshot and the site's touch icon, as pictures (AGL-4139).
+    if (options.pictures && url.startsWith(LOGO_PREFIX) && /CRxi1PaHY1|icon=flat-180/.test(url)) return new Response(new Uint8Array(4_096).fill(9), { status: 200, headers: { 'content-type': 'image/png' } })
     if (url.startsWith(LOGO_PREFIX)) return new Response(LOGO_SVG, { status: 200, headers: { 'content-type': 'image/svg+xml' } })
     const answer = aglynAnswer(url, options)
     const path = new URL(url).pathname
@@ -279,14 +281,22 @@ describe('aglyn.com, read whole: what the home page says of the site, and how ea
 })
 
 describe('the first wave: the look before the frame, the brand as the source, the facts in the footer (AGL-4084)', () => {
-  async function throughLook(theme: 'applied' | 'kept' = 'applied') {
-    serveAglyn()
+  async function throughLook(theme: 'applied' | 'kept' = 'applied', options: { pictures?: boolean; seo?: Record<string, unknown> } = {}) {
+    serveAglyn({ pictures: options.pictures })
     const h = harness({}, theme)
+    const synced: string[] = []
+    h.deps.lookDeps = {
+      ...h.deps.lookDeps,
+      ...(options.seo ? { readHost: async () => ({ displayName: SITE_NAME, seo: options.seo }) } : {}),
+      syncMemberships: async (orgId, hostId) => {
+        synced.push(`${orgId}/${hostId}`)
+      },
+    }
     const step = createAiJobImportStep(h.deps)
     let { job } = await pass(step, importJob())
     ;({ job } = await pass(step, job)) // start wave 1
     const look = await pass(step, job) // the look
-    return { h, step, job: look.job, outcome: look.outcome }
+    return { h, step, job: look.job, outcome: look.outcome, synced }
   }
 
   it('runs the look before the frame, with no model, and saves the source’s blue while the theme is untouched', async () => {
@@ -313,7 +323,8 @@ describe('the first wave: the look before the frame, the brand as the source, th
     await pass(step, job) // the frame
     const frame = h.frames[0]
     // Named as the source names its logo, never by the host's name (AGL-4108).
-    expect(aiLayoutSiteBrandOf(frame.inputs)).toEqual({ logo: { src: job.siteImport?.look?.logo?.src }, name: false, alt: 'Aglyn' })
+    // And the footer opens with it, as the source's does (AGL-4139).
+    expect(aiLayoutSiteBrandOf(frame.inputs)).toEqual({ logo: { src: job.siteImport?.look?.logo?.src }, name: false, alt: 'Aglyn', footer: true })
     // The header and footer the frame compiles: an image links home, and no name is printed beside it.
     const check = aiLayoutFrameCheck({
       siteName: SITE_NAME,
@@ -332,6 +343,34 @@ describe('the first wave: the look before the frame, the brand as the source, th
     const logo = nodes.find((node) => node.componentId === 'image')
     expect(logo?.props).toMatchObject({ src: job.siteImport?.look?.logo?.src, alt: 'Aglyn', screenId: 'home-id' })
     expect(nodes.some((node) => node.props?.['children'] === SITE_NAME)).toBe(false)
+  })
+
+  it('brings the menu’s featured picture and the site’s icon into the library, by the import’s key, with no model (AGL-4139)', async () => {
+    const { h, step, job, outcome, synced } = await throughLook('applied', { pictures: true })
+    expect(outcome.usage.outputTokens).toBe(0)
+    const pictures = job.siteImport?.look?.pictures ?? []
+    expect(pictures.map((photo) => photo.from)).toEqual([expect.stringMatching(/\/CRxi1PaHY1\?/)])
+    // The logo, then the picture, then the icon, each once, each under the import's own key.
+    expect(h.lib.stored.map((entry) => [entry.contentType, entry.key.startsWith('import:')])).toEqual([
+      ['image/png', true],
+      ['image/png', true],
+      ['image/png', true],
+    ])
+    expect(pictures[0]?.src).toBe('media:host-import/m2')
+    // The site's icon, from its largest touch icon, with every site list told of it.
+    expect(asked.some((url) => url.includes('icon=flat-180'))).toBe(true)
+    expect(h.hostWrites[0]['seo.favicon']).toBe('media:host-import/m3')
+    expect(synced).toEqual(['org-test/host-import'])
+    // The frame draws the picture from the library.
+    await pass(step, job)
+    const source = h.frames[0]?.inputs?.[AI_LAYOUT_SITE_FRAME_INPUT] as { nav: Array<{ columns?: Array<{ image?: { src: string } }> }> }
+    expect(source.nav[0]?.columns?.find((column) => column.image)?.image?.src).toBe(pictures[0]?.src)
+  })
+
+  it('keeps an icon the owner gave the site (AGL-4139)', async () => {
+    const { h, synced } = await throughLook('applied', { pictures: true, seo: { ...defaultSiteSeo(SITE_NAME), favicon: 'media:host-import/owner-icon' } })
+    expect(h.hostWrites.some((updates) => 'seo.favicon' in updates)).toBe(false)
+    expect(synced).toEqual([])
   })
 
   it('tells the frame the site’s own header and footer words and its description, never the job’s brief', async () => {

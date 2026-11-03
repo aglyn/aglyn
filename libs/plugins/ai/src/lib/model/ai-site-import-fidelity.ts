@@ -901,6 +901,18 @@ export interface SiteImportFrameFidelity {
   phone: SiteImportFidelityCount
   /** The row's labels held to one line. */
   nowrap: SiteImportFidelityCount
+  /** Each column of a menu's panel drawn as its own part of the panel's row, in the source's order, with its heading, words and entries (AGL-4139). */
+  menuColumns: SiteImportFidelityCount
+  /** The source's filled columns and footer boxes, each drawn in a filled box (AGL-4139). */
+  panels: SiteImportFidelityCount
+  /** The entries whose icon sits in a filled tile, drawn so (AGL-4139). */
+  tiles: SiteImportFidelityCount
+  /** The pictures a menu's columns show, placed in them (AGL-4139). */
+  pictures: SiteImportFidelityCount
+  /** The menus the source opens on hover, opening on hover (AGL-4139). */
+  hover: SiteImportFidelityCount
+  /** The footer opens with the logo, where the source's does (AGL-4139). */
+  logo: SiteImportFidelityCount
   /** The footer's columns under their headings. */
   columns: SiteImportFidelityCount
   /** The footer's links, its columns' and its own. */
@@ -909,6 +921,30 @@ export interface SiteImportFrameFidelity {
   social: SiteImportFidelityCount
   /** Its words, address, phone, email and © line, word for word. */
   facts: SiteImportFidelityCount
+}
+
+/**
+ * A menu of the header's row as it is built (AGL-4139): the Dropdown or Mega
+ * Menu element under its name, or its name as a link and the panel its hover
+ * shows; what it holds, and whether it opens on hover.
+ */
+function siteImportBuiltMenu(built: Built, row: string, name: string): { inside: string[]; hover: boolean } | null {
+  const named = (id: string) => clean(labelOf(built.node(id))) === clean(name)
+  const hoverSteps = (id: string): Array<Record<string, unknown>> =>
+    (built.node(id)?.interactions ?? []).flatMap((interaction) => {
+      const record = interaction as { enabled?: boolean; trigger?: { event?: string }; steps?: unknown[] }
+      return record.enabled !== false && record.trigger?.event === 'elementHoverEnter' ? ((record.steps ?? []) as Array<Record<string, unknown>>) : []
+    })
+  const element = built.under(row).find((id) => (built.node(id)?.componentId === 'muiMegaMenu' || built.node(id)?.componentId === 'muiNavMenu') && named(id))
+  if (element) return { inside: built.under(element), hover: hoverSteps(element).some((step) => step['type'] === 'openMenu') }
+  const link = built.under(row).find((id) => LINK_COMPONENTS.has(built.node(id)?.componentId ?? '') && named(id))
+  if (!link) return null
+  // The panel its hover shows: on the name itself, or on the item that holds the name and its panel.
+  const item = built.children(row).find((id) => built.holds(id, link)) ?? link
+  const shown = [...hoverSteps(link), ...hoverSteps(item)].filter((step) => step['type'] === 'showElement')
+  const panelId = shown.map((step) => /^\[data-aglyn="leaf:(.+)"\]$/.exec(String(step['selector'] ?? ''))?.[1]).find((id): id is string => !!id && !!built.node(id))
+  if (!panelId) return null
+  return { inside: [...new Set([...built.under(item), ...built.under(panelId)])], hover: true }
 }
 
 /** A node's label as a menu, a link or a button carries it. */
@@ -939,8 +975,9 @@ export function siteImportFrameFidelity(source: { nav: SiteImportNavTree | null 
   const nav = source.nav ?? null
   const groups = nav?.items ?? []
 
-  // The row: its items by name, in order.
-  const rowItems = row ? built.children(row).map((id) => labelOf(built.node(id))) : []
+  // The row: its items by name, in order; a menu drawn as its name and its panel by its name's.
+  const itemLabel = (id: string) => labelOf(built.node(id)) || labelOf(built.node(built.children(id).find((child) => LINK_COMPONENTS.has(built.node(child)?.componentId ?? '')) ?? ''))
+  const rowItems = row ? built.children(row).map(itemLabel) : []
   const wanted = groups.map((item) => clean(item.label))
   const left = [...rowItems]
   let matched = 0
@@ -957,20 +994,60 @@ export function siteImportFrameFidelity(source: { nav: SiteImportNavTree | null 
   const menus = { source: 0, built: 0 }
   const entries = { source: 0, built: 0 }
   const details = { source: 0, built: 0 }
+  const menuColumns = { source: 0, built: 0 }
+  const panels = { source: 0, built: 0 }
+  const tiles = { source: 0, built: 0 }
+  const pictures = { source: 0, built: 0 }
+  const hover = { source: 0, built: 0 }
+  const filled = (id: string) => {
+    const node = built.node(id)
+    return !!node && (node.componentId === 'muiCard' || node.props?.['colorScheme'] === 'dark' || node.sx?.['bgcolor'] !== undefined)
+  }
+  const label = (id: string) => labelOf(built.node(id)) || shownTexts(built.node(id))[0] || ''
   for (const group of groups) {
     if (!group.items.length) continue
     menus.source += 1
     entries.source += group.items.length
-    const menu = row
-      ? built.under(row).find((id) => (built.node(id)?.componentId === 'muiMegaMenu' || built.node(id)?.componentId === 'muiNavMenu') && clean(built.node(id)?.props?.['label']) === clean(group.label))
-      : undefined
+    if (group.panel?.hover) hover.source += 1
+    const drawnMenu = row ? siteImportBuiltMenu(built, row, group.label) : null
     for (const entry of group.items) {
       if (entry.text) details.source += 1
       if (entry.iconPath) details.source += 1
+      if (entry.tile) tiles.source += 1
     }
-    if (!menu) continue
+    const columns = group.columns ?? []
+    const panelled = columns.length >= 2 || columns.some((column) => column.band !== 'plain' || !!column.image || column.lines.length > 0)
+    if (panelled) {
+      menuColumns.source += columns.length
+      panels.source += columns.filter((column) => column.band !== 'plain').length
+      pictures.source += columns.filter((column) => !!column.image).length
+    }
+    if (!drawnMenu) continue
     menus.built += 1
-    const inside = built.under(menu)
+    if (group.panel?.hover && drawnMenu.hover) hover.built += 1
+    const inside = drawnMenu.inside
+    if (panelled) {
+      // The panel's row: the part of it whose children hold the source's columns, each in its place.
+      const wanted = columns.map((column, index) => ({ column, labels: group.items.filter((entry) => Math.min(entry.at ?? 0, columns.length - 1) === index).map((entry) => clean(entry.label)) }))
+      const placed = (cell: string, want: (typeof wanted)[number]) => {
+        const texts = new Set(built.under(cell).map(label))
+        return want.labels.every((name) => texts.has(name)) && (!want.column.heading || texts.has(clean(want.column.heading))) && want.column.lines.every((line) => texts.has(clean(line)))
+      }
+      let best: string[] = []
+      for (const id of inside) {
+        const cells = built.children(id)
+        if (cells.length < columns.length) continue
+        const kept = wanted.filter((want, index) => !!cells[index] && placed(cells[index] as string, want)).length
+        if (kept > best.filter(Boolean).length) best = wanted.map((want, index) => (cells[index] && placed(cells[index] as string, want) ? (cells[index] as string) : ''))
+      }
+      menuColumns.built += best.filter(Boolean).length
+      columns.forEach((column, index) => {
+        const cell = best[index]
+        if (!cell) return
+        if (column.band !== 'plain' && built.under(cell).some(filled)) panels.built += 1
+        if (column.image && built.has(cell, (node) => node.componentId === 'image')) pictures.built += 1
+      })
+    }
     const links = inside.filter((id) => LINK_COMPONENTS.has(built.node(id)?.componentId ?? ''))
     const texts = new Set(inside.flatMap((id) => shownTexts(built.node(id))))
     for (const entry of group.items) {
@@ -979,6 +1056,10 @@ export function siteImportFrameFidelity(source: { nav: SiteImportNavTree | null 
       entries.built += 1
       if (entry.text && texts.has(clean(entry.text))) details.built += 1
       if (entry.iconPath && built.has(link, (node) => node.componentId === 'icon')) details.built += 1
+      // A tile: the icon held in a filled box of its own.
+      const icon = built.under(link).find((id) => built.node(id)?.componentId === 'icon')
+      const box = icon ? built.parent.get(icon) : undefined
+      if (entry.tile && box && box !== link && filled(box)) tiles.built += 1
     }
   }
 
@@ -994,7 +1075,12 @@ export function siteImportFrameFidelity(source: { nav: SiteImportNavTree | null 
   // The phone menu: every name, entry, link and button of the row.
   const drawerTexts = new Set(drawer ? built.under(drawer).flatMap((id) => shownTexts(built.node(id))) : [])
   const drawerWanted = [
-    ...groups.flatMap((group) => [clean(group.label), ...group.items.map((entry) => clean(entry.label))]),
+    ...groups.flatMap((group) => [
+      clean(group.label),
+      ...group.items.map((entry) => clean(entry.label)),
+      // Every word of a menu's panel too (AGL-4139): its columns' headings and lines.
+      ...(group.columns ?? []).flatMap((column) => [...(column.heading ? [clean(column.heading)] : []), ...column.lines.map(clean)]),
+    ]),
     ...(nav?.ctas ?? []).map((cta) => clean(cta.label)),
   ].filter(Boolean)
   const toggle = inHeader.some(is('muiDrawerToggle'))
@@ -1021,6 +1107,16 @@ export function siteImportFrameFidelity(source: { nav: SiteImportNavTree | null 
   const hrefs = new Set(footLinks.map((id) => clean(built.node(id)?.props?.['href'])))
   const socialKept = (foot?.social ?? []).filter((profile) => profiles.some(([network, href]) => network === profile.network || href === profile.href) || hrefs.has(clean(profile.href))).length
   const facts = [...(foot?.text ?? []), foot?.address, foot?.phone, foot?.email, foot?.copyright].map(clean).filter(Boolean)
+  // Its filled boxes, each a filled box holding its heading, words and links (AGL-4139).
+  for (const box of foot?.panels ?? []) {
+    panels.source += 1
+    const want = [box.heading, ...box.lines, ...(box.links ?? []).map((entry) => entry.label)].filter((text): text is string => !!text).map(clean)
+    if (footIds.some((id) => filled(id) && want.every((text) => built.under(id).some((at) => label(at) === text)))) panels.built += 1
+  }
+  // It opens with the logo: a picture before any of its words.
+  const firstWords = footIds.find((id) => shownTexts(built.node(id)).length > 0)
+  const firstPicture = footIds.find((id) => built.node(id)?.componentId === 'image')
+  const logo = ratioKept(foot?.logo ? 1 : 0, foot?.logo && firstPicture && (!firstWords || footIds.indexOf(firstPicture) < footIds.indexOf(firstWords)) ? 1 : 0)
 
   const report: Omit<SiteImportFrameFidelity, 'score' | 'lowest'> = {
     // Over the larger of the two: a row of the site's page titles in place of the source's menus scores low.
@@ -1033,6 +1129,12 @@ export function siteImportFrameFidelity(source: { nav: SiteImportNavTree | null 
     drawer: ratioKept(drawerWanted.length, drawerWanted.filter((label) => drawerTexts.has(label)).length),
     phone: ratioKept(hasRow ? 1 : 0, hasRow && toggle && !!drawer ? 1 : 0),
     nowrap: ratioKept(row ? 1 : 0, row && built.node(row)?.sx?.['whiteSpace'] === 'nowrap' ? 1 : 0),
+    menuColumns: ratioKept(menuColumns.source, menuColumns.built),
+    panels: ratioKept(panels.source, panels.built),
+    tiles: ratioKept(tiles.source, tiles.built),
+    pictures: ratioKept(pictures.source, pictures.built),
+    hover: ratioKept(hover.source, hover.built),
+    logo,
     columns: ratioKept(foot?.columns.length ?? 0, (foot?.columns ?? []).filter((column) => footTexts.has(clean(column.heading))).length),
     links: ratioKept(linksWanted.length, linksKept),
     social: ratioKept(foot?.social.length ?? 0, socialKept),
@@ -1047,6 +1149,12 @@ export function siteImportFrameFidelity(source: { nav: SiteImportNavTree | null 
     ['drawer', report.drawer],
     ['phone', report.phone],
     ['nowrap', report.nowrap],
+    ['menuColumns', report.menuColumns],
+    ['panels', report.panels],
+    ['tiles', report.tiles],
+    ['pictures', report.pictures],
+    ['hover', report.hover],
+    ['logo', report.logo],
     ['columns', report.columns],
     ['links', report.links],
     ['social', report.social],
