@@ -63,19 +63,26 @@ import {
   type SiteImportButtonStyle,
   type SiteImportGroupKind,
   type SiteImportHeroPicture,
+  type SiteImportIconTile,
   type SiteImportLayout,
   type SiteImportLayoutGroup,
   type SiteImportLayoutItem,
+  type SiteImportLayoutLine,
   type SiteImportLayoutNode,
   type SiteImportLayoutSection,
   type SiteImportLayoutTable,
   type SiteImportLayoutTabs,
   type SiteImportLineRef,
   type SiteImportLookFacts,
+  type SiteImportPictureFit,
+  type SiteImportRule,
 } from '../model/ai-site-import'
 import {
   SITE_IMPORT_CSS_WIDE_WIDTH,
+  siteImportAspectRatio,
   siteImportBackgroundOf,
+  siteImportBorderSides,
+  siteImportColorDistance,
   siteImportColorOf,
   siteImportCssOf,
   siteImportFontFamilies,
@@ -86,11 +93,13 @@ import {
   siteImportHex,
   siteImportLengthPx,
   siteImportLuminance,
+  siteImportOpaque,
   siteImportRadiusPx,
   siteImportSaturation,
   siteImportStylesOf,
   siteImportTwelfths,
   type SiteImportComputedStyle,
+  type SiteImportRgba,
   type SiteImportStyles,
 } from './site-import-css'
 import { extractSiteImportPage, type SiteImportBlock, type SiteImportElement, type SiteImportExtract, type SiteImportStructure } from './site-import-html'
@@ -149,6 +158,14 @@ const WIDTH_CLASSES: ReadonlyArray<readonly [RegExp, number]> = [
 ]
 const STEP_NUMBER = /^(?:step\s*)?(?:0?\d{1,2}|[ivx]{1,4})[.):]?$/i
 const FIGURE = /^[^\s]{0,3}[\d][\d.,:/x×+%kmb$€£-]*\s?[^\s]{0,12}$|^\d+-[a-z]+$/i
+/** The width a page is read at for its tablet columns (AGL-4138): between a framework's `sm` and `md`. */
+const TABLET_WIDTH = 768
+/** A paragraph set this much larger than the body, and bold, is a statement (AGL-4138), not a lede. */
+const STATEMENT_SCALE = 1.75
+const STATEMENT_MIN_PX = 28
+const STATEMENT_MIN_WEIGHT = 600
+/** The widest square an icon's tile is (AGL-4138); wider, it is a card of its own. */
+const TILE_MAX_PX = 64
 
 /**
  * The page's layout from its structure and its linked stylesheets' text,
@@ -161,14 +178,20 @@ export function siteImportLayout(page: SiteImportLayoutSource, stylesheets: read
   const sheets = [...structure.styles, ...stylesheets]
   const css = siteImportCssOf(sheets)
   const styles = siteImportStylesOf(structure, css)
-  const reader = new LayoutReader(structure, blocks, styles, () => siteImportStylesOf(structure, siteImportCssOf(sheets, SITE_IMPORT_CSS_WIDE_WIDTH)))
+  const reader = new LayoutReader(
+    structure,
+    blocks,
+    styles,
+    () => siteImportStylesOf(structure, siteImportCssOf(sheets, SITE_IMPORT_CSS_WIDE_WIDTH)),
+    () => siteImportStylesOf(structure, siteImportCssOf(sheets, TABLET_WIDTH)),
+  )
   const sections = reader.sections()
   if (!sections.length) return null
   return {
     v: 1,
     sections,
     icons: structure.icons.map((icon) => ({ ...icon })),
-    look: siteImportLookFacts(structure, styles, css.fontFaces),
+    look: siteImportLookFacts(structure, styles, css.fontFaces, blocks),
   }
 }
 
@@ -184,12 +207,14 @@ class LayoutReader {
   private readonly usedPanels = new Set<number>()
   private bodySize = 16
   private wideStyles: SiteImportStyles | null = null
+  private tabletStyles: SiteImportStyles | null = null
 
   constructor(
     private readonly structure: SiteImportStructure,
     private readonly blocks: readonly SiteImportBlock[],
     private readonly styles: SiteImportStyles,
     private readonly wideStylesOf: () => SiteImportStyles,
+    private readonly tabletStylesOf: () => SiteImportStyles = () => styles,
   ) {
     this.elements = structure.elements
     this.mainIndex = []
@@ -389,13 +414,15 @@ class LayoutReader {
     const name = this.nameOf(cut.anchor, lines, index)
     const band = cut.anchor !== null ? this.bandOf(cut.anchor, false) : this.bandOf(container, true)
     const width = this.widthOf(cut.anchor ?? container)
+    const align = this.alignOf(scope, lines)
+    keepOwnAlign(nodes, align)
     return {
       name,
       from,
       band: band.band,
       background: band.background,
       ...(band.backdrop ? { backdrop: band.backdrop } : {}),
-      align: this.alignOf(scope, lines),
+      align,
       ...(width !== null ? { width } : {}),
       nodes,
       lines,
@@ -562,11 +589,96 @@ class LayoutReader {
     if (block?.kind === 'image') {
       const wrap = this.wrapperOf(leaf.element, ['a', 'button'], 4)
       const href = wrap !== null && this.elements[wrap]?.tag === 'a' ? this.anchorHref(wrap) : null
-      return { kind: 'picture', line: leaf.ref, ...(href ? { href } : {}), ...(wrap !== null && this.elements[wrap]?.tag === 'button' ? { button: true as const } : {}) }
+      const fit = this.pictureFit(leaf)
+      return {
+        kind: 'picture',
+        line: leaf.ref,
+        ...(href ? { href } : {}),
+        ...(wrap !== null && this.elements[wrap]?.tag === 'button' ? { button: true as const } : {}),
+        ...(fit ? { fit } : {}),
+      }
     }
     const button = this.buttonStyle(leaf)
     const role = button ? undefined : this.roleOf(leaf)
-    return { kind: 'line', line: leaf.ref, ...(role ? { role } : {}), ...(button ? { button } : {}) }
+    const line: SiteImportLayoutLine = { kind: 'line', line: leaf.ref, ...(role ? { role } : {}), ...(button ? { button } : {}) }
+    if (role === 'eyebrow') {
+      // An eyebrow's own pill and color (AGL-4138): the hero's chip, a section's magenta label.
+      if (this.inPill(leaf)) line.chip = true
+      const ink = this.inkOf(leaf.element)
+      if (ink) line.color = ink
+    }
+    return line
+  }
+
+  /*---------------- pictures, inks and tiles (AGL-4138) ----------------*/
+
+  /**
+   * How the source frames a picture: its own shape from its `width` and
+   * `height`; the box around it that sets an `aspect-ratio`, or a height it
+   * fills or is held to, which crops it; its fit; its corners and shadow, on
+   * it or on a box within two levels that holds no other line.
+   */
+  private pictureFit(leaf: Leaf): SiteImportPictureFit | undefined {
+    const element = leaf.element
+    const node = this.elements[element]
+    if (!node) return undefined
+    const own = this.style(element)
+    const fit: SiteImportPictureFit = {}
+    if (node.attrs.width && node.attrs.height) fit.ratio = Math.round((node.attrs.width / node.attrs.height) * 10_000) / 10_000
+    const objectFit = own.get('object-fit')
+    if (objectFit === 'cover' || objectFit === 'contain') fit.objectFit = objectFit
+    // The picture fills its box where it is set to the box's whole height.
+    const fills = /^100%$/.test(own.get('height')?.trim() ?? '')
+    for (let at = element, depth = 0; at >= 0 && depth <= 2; at = this.elements[at]?.parent ?? -1, depth += 1) {
+      if (depth > 0 && this.leaves(at).some((other) => other.kind === 'line' && other.order !== leaf.order)) break
+      const style = this.style(at)
+      const box = siteImportAspectRatio(style.get('aspect-ratio'))
+      if (box !== null && fit.box === undefined && fit.height === undefined) fit.box = Math.round(box * 10_000) / 10_000
+      const height = siteImportLengthPx(style.get('height') ?? '')
+      if (height !== null && height > 0 && fit.box === undefined && fit.height === undefined && (depth === 0 || fills)) fit.height = height
+      const radius = siteImportRadiusPx(style)
+      if (radius !== null && radius > 0 && fit.radius === undefined) fit.radius = Math.min(radius, 999)
+      if (siteImportHasShadow(style)) fit.shadow = true
+    }
+    return Object.keys(fit).length ? fit : undefined
+  }
+
+  /** An element's words' color as it shows over the ground under it, `#rrggbb`; `null` where it sets none. */
+  private inkOf(element: number): string | null {
+    const color = siteImportColorOf(this.style(element).get('color'))
+    if (!color || color.a < 0.05) return null
+    return siteImportHex(siteImportOpaque(color, siteImportColorOf(this.backgroundUnder(element) ?? undefined)))
+  }
+
+  /** Whether a line sits in a pill of its own: its element, or the wrapper holding only it, filled or bordered and rounded to a pill. */
+  private inPill(leaf: Leaf): boolean {
+    for (let at = leaf.element, depth = 0; at >= 0 && depth < 2; at = this.elements[at]?.parent ?? -1, depth += 1) {
+      if (this.leaves(at).length !== 1) return false
+      const style = this.style(at)
+      const fill = siteImportBackgroundOf(style).color
+      const filled = !!fill && fill.a >= 0.5 && siteImportHex(fill) !== this.backgroundUnder(at)
+      if ((filled || siteImportHasBorder(style)) && (siteImportRadiusPx(style) ?? 0) >= BADGE_MIN_RADIUS) return true
+    }
+    return false
+  }
+
+  /**
+   * The filled square an icon sits in: the nearest element above it, within
+   * two levels and inside its item, holding nothing but the icon, no wider
+   * than a tile, whose fill is not the ground under it.
+   */
+  private tileOf(icon: Leaf, item: number): SiteImportIconTile | undefined {
+    for (let at = this.elements[icon.element]?.parent ?? -1, depth = 0; at >= 0 && depth < 2 && at !== item; at = this.elements[at]?.parent ?? -1, depth += 1) {
+      if (this.leaves(at).some((leaf) => leaf.kind === 'line')) return undefined
+      const style = this.style(at)
+      const fill = siteImportBackgroundOf(style).color
+      if (!fill || fill.a < 0.5 || siteImportHex(fill) === this.backgroundUnder(at)) continue
+      const width = siteImportLengthPx(style.get('width') ?? '')
+      if (width === null || width > TILE_MAX_PX) continue
+      const radius = siteImportRadiusPx(style)
+      return { fill: siteImportHex(fill), radius: radius === null ? 0 : Math.min(radius, 999), color: this.inkOf(icon.element) }
+    }
+    return undefined
   }
 
   /** The nearest element of these tags at or above `element`, within `depth` levels. */
@@ -607,25 +719,22 @@ class LayoutReader {
     return page ? siteImportHex(page) : '#ffffff'
   }
 
-  /** An eyebrow, a lede or a note, where the source's styling says so. */
-  private roleOf(leaf: Leaf): 'eyebrow' | 'lede' | 'note' | undefined {
+  /** An eyebrow, a lede, a statement or a note, where the source's styling says so. */
+  private roleOf(leaf: Leaf): SiteImportLayoutLine['role'] {
     const block = this.block(leaf)
     if (block?.kind !== 'paragraph') return undefined
     const style = this.style(leaf.element)
     if (this.looksLikeEyebrow(leaf, block.text)) return 'eyebrow'
     const size = siteImportFontSizePx(style)
+    // A paragraph set as large as a heading, and bold, is a statement (AGL-4138): "Most website builders hand you a blank page…".
+    if (size !== null && (size >= this.bodySize * STATEMENT_SCALE || size >= STATEMENT_MIN_PX) && siteImportFontWeight(style) >= STATEMENT_MIN_WEIGHT && block.text.length > 40) return 'statement'
     if (size !== null && size >= this.bodySize * 1.12 && block.text.length > 40) return 'lede'
     if (size !== null && size <= this.bodySize * 0.875 && block.text.length <= 160) return 'note'
     return undefined
   }
 
   private looksLikeEyebrow(leaf: Leaf, text: string): boolean {
-    const words = text.match(/[\p{L}\p{N}]+/gu) ?? []
-    if (text.length > 60 || words.length > 10) return false
-    const style = this.style(leaf.element)
-    const letters = text.replace(/[^\p{L}]/gu, '')
-    const caps = letters.length >= 3 && letters === letters.toUpperCase() && letters !== letters.toLowerCase()
-    return caps || style.get('text-transform') === 'uppercase'
+    return siteImportIsEyebrowText(text, this.style(leaf.element))
   }
 
   /*---------------- rows ----------------*/
@@ -666,7 +775,10 @@ class LayoutReader {
     const groups = cells.map((cell) => (cell.length === 1 && cell[0]?.kind === 'group' ? (cell[0] as SiteImportLayoutGroup) : null))
     if (cells.length >= 2 && groups.every((group) => group && !group.inline && group.group === groups[0]?.group && group.columns === 1)) {
       const first = groups[0] as SiteImportLayoutGroup
-      return { kind: 'group', group: first.group, columns: cells.length, boxed: groups.every((group) => group?.boxed), items: groups.flatMap((group) => group?.items ?? []) }
+      const boxed = groups.every((group) => group?.boxed)
+      // Framed in every cell but not boxed in all of them: the rule they draw (AGL-4138).
+      const rule = !boxed && groups.every((group) => group?.boxed || group?.rule) ? groups.find((group) => group?.rule)?.rule : undefined
+      return { kind: 'group', group: first.group, columns: cells.length, boxed, ...(rule ? { rule } : {}), items: groups.flatMap((group) => group?.items ?? []) }
     }
     return { kind: 'row', cols: siteImportTwelfths(weights), cells: cells.map((nodes) => ({ nodes })) }
   }
@@ -742,7 +854,7 @@ class LayoutReader {
       let end = index + 1
       while (end < parts.length && keys[end] !== null && (keys[end] === key || (loose[end] === kind && !!kind && kind.includes(',')))) end += 1
       const count = end - index
-      const boxed = count === 2 && row && parts.slice(index, end).every((part) => isElementPart(part) && this.boxed(part.element))
+      const boxed = count === 2 && row && parts.slice(index, end).every((part) => isElementPart(part) && this.framed(part.element))
       // One element alone (a single list item) is not a group; a heading leaf is never an item.
       const items = parts.slice(index, end) as Array<{ element: number }>
       const headings = items.every((part) => /^h[1-6]$/.test(this.elements[part.element]?.tag ?? ''))
@@ -777,18 +889,40 @@ class LayoutReader {
     return !!block && block.kind !== 'image' && block.kind !== 'heading' && block.text.length <= 40
   }
 
-  private boxed(element: number): boolean {
+  /**
+   * How an item is drawn apart from the page (AGL-4138), it and the wrappers
+   * inside it that hold all it holds: a BOX is a shadow, a fill of its own or
+   * a border on two sides or more; a RULE a border on one side only, a step's
+   * line over its number. Either one makes it framed.
+   */
+  private frameOf(element: number): { box: boolean; rule: SiteImportRule | null } {
+    let rule: SiteImportRule | null = null
     let at = element
     for (let depth = 0; depth < 3 && at >= 0; depth += 1) {
       const style = this.style(at)
-      if (siteImportHasBorder(style) || siteImportHasShadow(style)) return true
+      if (siteImportHasShadow(style)) return { box: true, rule: null }
       const fill = siteImportBackgroundOf(style).color
-      if (fill && fill.a >= 0.5 && siteImportHex(fill) !== this.backgroundUnder(at)) return true
+      if (fill && fill.a >= 0.5 && siteImportHex(fill) !== this.backgroundUnder(at)) return { box: true, rule: null }
+      const sides = siteImportBorderSides(style)
+      const drawn = (Object.keys(sides) as Array<keyof typeof sides>).filter((side) => sides[side])
+      if (drawn.length >= 2) return { box: true, rule: null }
+      const side = drawn[0]
+      if (side && !rule) {
+        const border = sides[side] as { width: number; color: SiteImportRgba | null }
+        const under = siteImportColorOf(this.backgroundUnder(at) ?? undefined)
+        rule = { side, width: Math.max(1, Math.round(border.width)), color: border.color && border.color.a >= 0.05 ? siteImportHex(siteImportOpaque(border.color, under)) : null }
+      }
       const children = (this.elements[at]?.children ?? []).filter((child) => this.leaves(child).length)
       if (children.length !== 1) break
       at = children[0] as number
     }
-    return false
+    return { box: false, rule }
+  }
+
+  /** Whether an item is drawn apart from the page at all: a box or a rule (a border on any side, a shadow, a fill of its own). */
+  private framed(element: number): boolean {
+    const frame = this.frameOf(element)
+    return frame.box || !!frame.rule
   }
 
   private group(container: number, parts: Array<{ element: number; first: number }>, range: readonly [number, number]): SiteImportLayoutGroup {
@@ -796,7 +930,11 @@ class LayoutReader {
     const chips = parts.length >= 4 && this.isRow(container) && parts.every((part) => this.isChip(part.element, range))
     const kind = chips ? 'logos' : this.groupKind(parts.map((part) => part.element), items, range)
     const columns = this.columnsOf(container, parts)
-    const boxed = parts.length > 0 && parts.filter((part) => this.boxed(part.element)).length >= Math.ceil(parts.length / 2)
+    const frames = parts.map((part) => this.frameOf(part.element))
+    const half = Math.ceil(parts.length / 2)
+    const boxed = parts.length > 0 && frames.filter((frame) => frame.box).length >= half
+    // Framed, most of them, but not boxed: the rule the first of them draws (AGL-4138).
+    const ruled = !boxed && frames.filter((frame) => frame.box || frame.rule).length >= half ? (frames.find((frame) => frame.rule)?.rule ?? null) : null
     // A step's number and a stat's figure lead their item.
     if (kind === 'steps' || kind === 'stats') {
       for (const item of items) {
@@ -815,6 +953,12 @@ class LayoutReader {
           if (item.text && !item.text.length) delete item.text
         }
       }
+      // A step's number the source sets in its muted words' grey, not its brand (AGL-4138).
+      items.forEach((item, at) => {
+        const leaf = item.figure === undefined ? undefined : this.leaves(parts[at]?.element ?? -1).find((entry) => entry.kind === 'line' && entry.ref === item.figure)
+        const ink = leaf ? this.inkOf(leaf.element) : null
+        if (ink && siteImportIsMutedInk(ink)) item.figureMuted = true
+      })
     }
     if (kind === 'faq') {
       for (const item of items) {
@@ -843,7 +987,55 @@ class LayoutReader {
     }
     if (kind === 'cards' || kind === 'pricing') items.forEach((item, at) => this.takeBadge(item, parts[at]?.element as number, range))
     const inline = columns === 1 && (kind === 'cards' || kind === 'pricing') && parts.every((part) => this.isWordRow(part.element, range))
-    return { kind: 'group', group: kind, columns, boxed, ...(inline ? { inline: true as const } : {}), items }
+    const columnsSm = this.columnsSmOf(container, parts, columns)
+    const align = this.itemsAlignOf(parts[0]?.element ?? -1, items[0], range)
+    return {
+      kind: 'group',
+      group: kind,
+      columns,
+      ...(columnsSm !== null ? { columnsSm } : {}),
+      boxed,
+      ...(ruled ? { rule: ruled } : {}),
+      ...(align ? { align } : {}),
+      ...(inline ? { inline: true as const } : {}),
+      items,
+    }
+  }
+
+  /**
+   * How an item's words are set (AGL-4138): centered where its name's
+   * element centers its text or its own column centers what it holds, else
+   * at the start. `keepOwnAlign` drops it where the section reads the same.
+   */
+  private itemsAlignOf(element: number, item: SiteImportLayoutItem | undefined, range: readonly [number, number]): 'start' | 'center' | null {
+    const ref = item?.title ?? item?.text?.[0]
+    if (element < 0 || ref === undefined) return null
+    const leaf = this.leaves(element).find((entry) => entry.kind === 'line' && entry.ref === ref)
+    if (!leaf) return null
+    if (this.style(leaf.element).get('text-align') === 'center') return 'center'
+    const column = this.style(this.unwrap(element, range))
+    if (/\bflex\b/.test(column.get('display') ?? '') && /column/.test(column.get('flex-direction') ?? '') && column.get('align-items') === 'center') return 'center'
+    return 'start'
+  }
+
+  /**
+   * The columns a group's items sit in on a tablet (AGL-4138), where it is
+   * fewer than on a wide screen and more than one: a framework's `sm` size on
+   * its cells, else the grid the container lays out at a tablet's width.
+   */
+  private columnsSmOf(container: number, parts: Array<{ element: number }>, columns: number): number | null {
+    if (columns <= 2) return null
+    const classes = this.elements[parts[0]?.element ?? -1]?.attrs.class ?? ''
+    const sized = /\bMuiGrid-grid-sm-(\d+)\b/.exec(classes) ?? /\bcol-sm-(\d{1,2})\b/.exec(classes)
+    let count: number | null = null
+    if (sized) count = Math.round(12 / Math.max(1, Number(sized[1])))
+    else {
+      this.tabletStyles ??= this.tabletStylesOf()
+      const style = this.tabletStyles.of(container)
+      const template = /\bgrid\b/.test(style.get('display') ?? '') ? siteImportGridColumns(style.get('grid-template-columns')) : null
+      if (template) count = template.length
+    }
+    return count !== null && count >= 2 && count < columns ? count : null
   }
 
   /** The line of an item that says what its price is for, beside the price: taken out of its words. */
@@ -930,7 +1122,11 @@ class LayoutReader {
     if (item.icon !== undefined && item.icon === item.listIcon && !lines.length) delete item.icon
     const rest = lines.filter((leaf) => !listed.has(leaf.ref))
     const image = rest.find((leaf) => this.block(leaf)?.kind === 'image')
-    if (image) item.image = image.ref
+    if (image) {
+      item.image = image.ref
+      const fit = this.pictureFit(image)
+      if (fit) item.imageFit = fit
+    }
     const words = rest.filter((leaf) => leaf !== image)
     // Its own calls to action: every link it draws as a button, wherever it
     // sits (a plan's button sits above its features), and the links and
@@ -975,7 +1171,35 @@ class LayoutReader {
       const href = wrap !== null ? this.anchorHref(wrap) : null
       if (href) item.to = href
     }
+    // The square its lead icon sits in, and the arrow at the end of its first row (AGL-4138).
+    if (leadIcon) {
+      const tile = this.tileOf(leadIcon, element)
+      if (tile) item.tile = tile
+    }
+    const mark = this.markOf(leaves, leadIcon, listed, element, item.to)
+    if (mark !== undefined) item.mark = mark
     return item
+  }
+
+  /**
+   * A second icon of an item that says where it goes (AGL-4138): an icon
+   * alone in a link to the item's own address (a card's "↗"), or one in the
+   * row its lead icon sits in. Never a bullet's mark.
+   */
+  private markOf(leaves: readonly Leaf[], lead: Leaf | undefined, listed: ReadonlySet<number>, item: number, to: string | undefined): number | undefined {
+    const bullets = new Set<number>()
+    for (const leaf of leaves) if (leaf.kind === 'line' && listed.has(leaf.ref)) bullets.add(this.elements[leaf.element]?.parent ?? -1)
+    const same = (a: string | null | undefined, b: string | null | undefined) => !!a && !!b && a.replace(/\/+$/, '') === b.replace(/\/+$/, '')
+    for (const leaf of leaves) {
+      if (leaf.kind !== 'icon' || leaf === lead) continue
+      const parent = this.elements[leaf.element]?.parent ?? -1
+      if (bullets.has(parent) || bullets.has(this.elements[parent]?.parent ?? -1)) continue
+      const link = this.wrapperOf(leaf.element, ['a'], 3)
+      if (link !== null && link !== item && this.refsIn(link, [-1, Number.POSITIVE_INFINITY]).length === 0 && same(this.anchorHref(link), to)) return leaf.ref
+      const row = lead ? this.commonAncestor([lead.element, leaf.element]) : null
+      if (row !== null && row !== item && this.contains(item, row) && this.isRow(row) && !this.leaves(row).some((entry) => entry.kind === 'line')) return leaf.ref
+    }
+    return undefined
   }
 
   /**
@@ -1015,7 +1239,7 @@ class LayoutReader {
     if (share((item) => item.lines.length >= 2 && item.lines.length <= 3 && first(item).length <= 14 && FIGURE.test(first(item))) >= 0.6) return 'stats'
     const visual = share((item) => item.icon !== undefined || item.image !== undefined)
     const titled = share((item) => item.title !== undefined && (item.text?.length ?? 0) > 0)
-    const boxed = elements.filter((element) => this.boxed(element)).length >= Math.ceil(elements.length / 2)
+    const boxed = elements.filter((element) => this.framed(element)).length >= Math.ceil(elements.length / 2)
     if ((visual >= 0.6 && titled >= 0.6) || (boxed && share((item) => item.lines.length >= 2) >= 0.6)) return 'cards'
     if (share((item) => item.lines.length === 1) >= 0.8) return 'list'
     if (titled >= 0.6) return 'cards'
@@ -1282,6 +1506,41 @@ class LayoutReader {
   }
 }
 
+/** Drops a group's own alignment where its section reads the same (AGL-4138): only an item set apart from its section says how. */
+function keepOwnAlign(nodes: readonly SiteImportLayoutNode[], align: 'start' | 'center'): void {
+  for (const node of nodes) {
+    if (node.kind === 'group' && node.align === align) delete node.align
+    else if (node.kind === 'row') for (const cell of node.cells) keepOwnAlign(cell.nodes, align)
+    else if (node.kind === 'tabs') for (const tab of node.tabs) keepOwnAlign(tab.panel, align)
+  }
+}
+
+/** Whether a short line reads as an eyebrow: ten words at most, in capitals or set in them. */
+export function siteImportIsEyebrowText(text: string, style: SiteImportComputedStyle): boolean {
+  const words = text.match(/[\p{L}\p{N}]+/gu) ?? []
+  if (text.length > 60 || words.length > 10) return false
+  const letters = text.replace(/[^\p{L}]/gu, '')
+  const caps = letters.length >= 3 && letters === letters.toUpperCase() && letters !== letters.toLowerCase()
+  return caps || style.get('text-transform') === 'uppercase'
+}
+
+/** A font weight as a number: `700`, `bold` 700, `normal` 400. */
+export function siteImportFontWeight(style: SiteImportComputedStyle): number {
+  const value = style.get('font-weight')?.trim() ?? ''
+  if (/^\d{3}$/.test(value)) return Number(value)
+  if (/^(?:bold|bolder)$/.test(value)) return 700
+  if (value === 'lighter') return 300
+  return 400
+}
+
+/** Whether a color is a muted words' grey (AGL-4138): no hue to speak of, lighter than the words' ink and darker than a rule. */
+export function siteImportIsMutedInk(hex: string): boolean {
+  const color = siteImportColorOf(hex)
+  if (!color) return false
+  const light = siteImportLuminance(color)
+  return siteImportSaturation(color) < 0.15 && light >= 0.06 && light <= 0.6
+}
+
 /** Takes a line out of one of an item's lists; a list left empty goes, never left undefined (Firestore holds no undefined). */
 function dropLine(item: SiteImportLayoutItem, key: 'text' | 'list' | 'link', ref: SiteImportLineRef): void {
   const list = item[key]?.filter((entry) => entry !== ref)
@@ -1377,11 +1636,11 @@ export function siteImportGoogleFamilies(urls: readonly string[]): string[] {
   return families
 }
 
-/** The look facts of a page read with its structure, through its linked stylesheets' text. */
-export function siteImportLookOf(page: Pick<SiteImportLayoutSource, 'structure'>, stylesheets: readonly string[] = []): SiteImportLookFacts | null {
+/** The look facts of a page read with its structure, through its linked stylesheets' text; its blocks, where given, for its eyebrows' color. */
+export function siteImportLookOf(page: Pick<SiteImportLayoutSource, 'structure'> & { blocks?: readonly SiteImportBlock[] }, stylesheets: readonly string[] = []): SiteImportLookFacts | null {
   if (!page.structure) return null
   const css = siteImportCssOf([...page.structure.styles, ...stylesheets])
-  return siteImportLookFacts(page.structure, siteImportStylesOf(page.structure, css), css.fontFaces)
+  return siteImportLookFacts(page.structure, siteImportStylesOf(page.structure, css), css.fontFaces, page.blocks ?? [])
 }
 
 /**
@@ -1396,15 +1655,54 @@ export function siteImportLookOfHtml(html: string, pageUrl: string, stylesheets:
     return null
   }
   const extract = extractSiteImportPage(html, pageUrl, (url) => url.origin === origin, { structure: true })
-  return extract.structure ? siteImportLookOf({ structure: extract.structure }, stylesheets) : null
+  return extract.structure ? siteImportLookOf({ structure: extract.structure, blocks: extract.blocks }, stylesheets) : null
+}
+
+/** How far two colors may sit apart and still be one (AGL-4138), in OKLab. */
+const SAME_COLOR = 0.1
+
+/**
+ * The color most of a page's eyebrows are drawn in (AGL-4138), where it is a
+ * color of its own: not the words' ink, the buttons' fill, the links' color
+ * or white, and no grey. `null` where its eyebrows are none, or drawn in one
+ * of those.
+ */
+function eyebrowColorOf(structure: SiteImportStructure, styles: SiteImportStyles, blocks: readonly SiteImportBlock[], not: ReadonlyArray<string | null>): string | null {
+  const counts = new Map<string, number>()
+  const inControl = (element: number) => {
+    for (let at = element, depth = 0; at >= 0 && depth <= 3; at = structure.elements[at]?.parent ?? -1, depth += 1) {
+      if (/^(?:a|button)$/.test(structure.elements[at]?.tag ?? '')) return true
+    }
+    return false
+  }
+  structure.blockElement.forEach((element, index) => {
+    const block = blocks[index]
+    // A button's or a link's words set in capitals are no eyebrow.
+    if (block?.kind !== 'paragraph' || block.region !== 'main' || inControl(element)) return
+    const style = styles.of(element)
+    if (!siteImportIsEyebrowText(block.text, style)) return
+    const color = siteImportColorOf(style.get('color'))
+    if (!color || color.a < 0.5) return
+    const hex = siteImportHex(siteImportOpaque(color))
+    counts.set(hex, (counts.get(hex) ?? 0) + 1)
+  })
+  const top = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0]
+  const own = top ? siteImportColorOf(top) : null
+  // A grey is the words' own muted color, never a color of the site's.
+  if (!top || !own || siteImportSaturation(own) < 0.25) return null
+  const others = [...not, '#ffffff'].flatMap((hex) => {
+    const color = siteImportColorOf(hex ?? undefined)
+    return color ? [siteImportOpaque(color)] : []
+  })
+  return others.some((other) => siteImportColorDistance(own, other) < SAME_COLOR) ? null : top
 }
 
 /**
  * What the source's look is made of (AGL-4106): its fonts, its page's
  * background and text, its filled buttons' fill, text and corners, its links'
- * color and its header's background.
+ * color, its header's background, and its eyebrows' own color (AGL-4138).
  */
-export function siteImportLookFacts(structure: SiteImportStructure, styles: SiteImportStyles, fontFaces: readonly string[] = []): SiteImportLookFacts {
+export function siteImportLookFacts(structure: SiteImportStructure, styles: SiteImportStyles, fontFaces: readonly string[] = [], blocks: readonly SiteImportBlock[] = []): SiteImportLookFacts {
   const { elements } = structure
   const body = structure.body >= 0 ? structure.body : -2
   const bodyStyle = styles.of(body)
@@ -1474,6 +1772,8 @@ export function siteImportLookFacts(structure: SiteImportStructure, styles: Site
     buttonRadius: radii.length ? (radii.sort((a, b) => a - b)[Math.floor(radii.length / 2)] as number) : null,
     link,
     header: headerFill,
+    // Its eyebrows' own color: none of its words', its buttons' or its links', which the theme draws already.
+    eyebrow: blocks.length ? eyebrowColorOf(structure, styles, blocks, [text, topFill?.[0] ?? null, link]) : null,
   }
 }
 
@@ -1540,6 +1840,7 @@ export function siteImportLayoutCounts(layout: SiteImportLayout, blocks: readonl
           counts.items[node.group] = (counts.items[node.group] ?? 0) + node.items.length
           for (const item of node.items) {
             if (item.icon !== undefined) counts.icons += 1
+            if (item.mark !== undefined) counts.icons += 1
             if (item.listIcon !== undefined) counts.icons += item.list?.length ?? 0
             if (item.image !== undefined || (main.length && item.lines.some(isPicture))) counts.pictures += 1
           }

@@ -125,8 +125,9 @@ top. You can still start the first wave.
 - **The first wave** brings in your main pages: home, then the pages in your menu,
   then your other top-level pages. Before any page, it gives your new site your current
   site's look, on one of Aglyn's built-in themes: your buttons' color as its main color and
-  your links' color beside it, your pages' background color, the rounding of your buttons,
-  and your own font when Google Fonts has it, or a font in the same style when it does not.
+  your links' color beside it, the color of the small labels above your headings as its
+  third color, your pages' background color, the rounding of your buttons, and your own
+  font when Google Fonts has it, or a font in the same style when it does not.
   Colors are kept readable, so a color too light for white words is used a shade deeper. If
   you already chose a theme for the new site, it is kept.
 - **Your header and footer** come in with the first wave, as your current site shows them:
@@ -161,7 +162,21 @@ top. You can still start the first wave.
 Your words are never rewritten. Every page is laid out as your page is: its sections in
 their own backgrounds, its columns, its cards with their icons and links, its numbered
 steps, figures, questions and answers, quotes, logo strips, plan cards and plan rows, tables and tabs,
-and its pictures where your page shows them. Each heading, paragraph, list, link and button
+and its pictures where your page shows them. It is drawn as your page draws it too:
+
+- **Pictures at their own shape, never cut.** A picture keeps the shape it has. Only a
+  picture your page itself crops, to a set height or a set shape, is cropped the same way.
+  A picture your page rounds or sets on a shadow keeps that.
+- **Labels in your site's colors.** The small label above a heading keeps its color, in
+  capitals with no line before it, and keeps its rounded outline where your page draws one.
+- **Large statements stay large.** A paragraph your page sets as large and bold as a heading
+  is set in the **Heading 4** Text Style, and stays a paragraph.
+- **Cards as your page draws them.** Each icon keeps its tinted square and each card its
+  corner arrow, the words keep their alignment, and a row of three on a wide screen is two to
+  a row on a tablet when your page does that. Steps your page sets under a line, not in boxes,
+  keep the line.
+
+Each heading, paragraph, list, link and button
 keeps the words your page has, and every link goes to the page it went to: to that page on
 your new site, once it is in. Each page also keeps your page's own title and description as
 its search listing.
@@ -171,8 +186,9 @@ Each page is built one of two ways, and the wave's row for the page says which:
 - **Copied as it is**: a page of a collection, such as a blog post or a policy. It is laid
   out as your page is, in your new site's look, with no AI.
 - **Arranged by Aglyn AI**: your main pages. They are laid out as your pages are, and
-  Aglyn AI chooses only their finish: how the first section opens around its picture, how
-  each group of cards is drawn, and a background where your page has none.
+  Aglyn AI chooses only their finish: how the first section opens around its picture, with
+  the picture kept where your page has it (under, beside or behind the words), how each
+  group of cards is drawn, and a background where your page has none.
 
 To start a wave, choose its **Start** button, for example **Start Main pages**. Each wave
 shows its cost before you start it, and how many of its pages are arranged and how many are

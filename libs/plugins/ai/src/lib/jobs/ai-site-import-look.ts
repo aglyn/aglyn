@@ -29,8 +29,10 @@
  *   density, motion) pin the look. What the reader found of the source's
  *   look (AGL-4106) pins it closer (AGL-4108): its buttons' fill is the
  *   brand and its links' color the accent, its page's ground is the site's,
- *   and its own font family is the site's wherever the theme font catalog
- *   has it, else a pairing of its type mood. The look is drawn and saved
+ *   its eyebrows' own color the theme's third and its eyebrows spaced
+ *   capitals with no line before them (AGL-4138), and its own font family
+ *   is the site's wherever the theme font catalog has it, else a pairing of
+ *   its type mood. The look is drawn and saved
  *   exactly as a guided start's (`aiSiteStyleFor`, `aiSaveSiteTheme`): a
  *   built-in base plus the brand colors and fonts, every color held to the
  *   theme's reading checks. A site whose owner already chose a theme keeps
@@ -211,6 +213,11 @@ export function aiSiteImportStyle(
     pins.buttons ??= radius >= 24 ? 'pill' : radius <= 2 ? 'square' : 'rounded'
     pins.corners ??= radius <= 2 ? 'sharp' : radius <= 10 ? 'soft' : radius <= 20 ? 'round' : 'pill'
   }
+  // Its eyebrows as it sets them (AGL-4138): spaced capitals with no line before them — the
+  // reader takes an eyebrow only in capitals, and no mark a page draws before one is a word of
+  // it — and their own color, where it is one, as the theme's third.
+  if (facts) pins.eyebrow = 'caps'
+  if (colorful(facts?.eyebrow)) pins.tertiary = (facts?.eyebrow as string).toLowerCase()
   if (!pins.brand) return null
   const style = aiSiteStyleFor({ kind, answer: {}, seed: input.seed, brand: pins.brand, avoid: input.avoid ?? [], pins })
   const page = facts?.background && /^#[0-9a-f]{6}$/i.test(facts.background) ? facts.background.toLowerCase() : null
@@ -487,7 +494,7 @@ export async function aiRunSiteImportLook(input: AiSiteImportLookInput, deps: Ai
         ...(typeof style.motion === 'string' ? { motion: style.motion } : {}),
       }
     : null
-  const colors = [...new Set([...(facts ? [facts.buttonFill, facts.link].filter(colorful).map((hex) => hex.toLowerCase()) : []), ...(site?.colors ?? [])])]
+  const colors = [...new Set([...(facts ? [facts.buttonFill, facts.link, facts.eyebrow].filter(colorful).map((hex) => hex.toLowerCase()) : []), ...(site?.colors ?? [])])]
   return { at: input.at, theme, colors, logo, ...(pictures.length ? { pictures } : {}), seo, seed: style ? style.seed : seed, style: drawn }
 }
 

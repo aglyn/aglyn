@@ -69,6 +69,8 @@ const WHOLE: Record<
     tables: number
     tabs: number
     pictures: number
+    /** Pictures framed as the source frames them (AGL-4138): a portrait and a picture behind a hero's words are not scored. */
+    framing: number
     icons: number
     lone: number
     buttons: number
@@ -78,14 +80,16 @@ const WHOLE: Record<
     words: number
   }
 > = {
-  home: { sections: 11, rows: 2, groups: { cards: 28, steps: 3, list: 12, faq: 11 }, tables: 0, tabs: 0, pictures: 2, icons: 34, lone: 1, buttons: 2, unlinked: 1, headings: 10, forms: 0, words: 1581 },
-  product: { sections: 11, rows: 1, groups: { logos: 8, cards: 19, steps: 3, stats: 4, pricing: 3, faq: 7 }, tables: 0, tabs: 0, pictures: 3, icons: 31, lone: 1, buttons: 6, unlinked: 0, headings: 10, forms: 0, words: 1012 },
-  pricing: { sections: 7, rows: 1, groups: { pricing: 11, cards: 69, faq: 11 }, tables: 3, tabs: 3, pictures: 0, icons: 24, lone: 0, buttons: 4, unlinked: 0, headings: 9, forms: 0, words: 2292 },
-  livePricing: { sections: 7, rows: 1, groups: { pricing: 11, cards: 69, faq: 11 }, tables: 3, tabs: 3, pictures: 0, icons: 24, lone: 0, buttons: 4, unlinked: 0, headings: 9, forms: 0, words: 2292 },
-  contact: { sections: 3, rows: 1, groups: { cards: 4 }, tables: 0, tabs: 0, pictures: 0, icons: 4, lone: 0, buttons: 0, unlinked: 0, headings: 7, forms: 1, words: 120 },
+  home: { sections: 11, rows: 2, groups: { cards: 28, steps: 3, list: 12, faq: 11 }, tables: 0, tabs: 0, pictures: 2, framing: 2, icons: 47, lone: 1, buttons: 2, unlinked: 1, headings: 10, forms: 0, words: 1581 },
+  product: { sections: 11, rows: 1, groups: { logos: 8, cards: 19, steps: 3, stats: 4, pricing: 3, faq: 7 }, tables: 0, tabs: 0, pictures: 3, framing: 3, icons: 44, lone: 1, buttons: 6, unlinked: 0, headings: 10, forms: 0, words: 1012 },
+  pricing: { sections: 7, rows: 1, groups: { pricing: 11, cards: 69, faq: 11 }, tables: 3, tabs: 3, pictures: 0, framing: 0, icons: 24, lone: 0, buttons: 4, unlinked: 0, headings: 9, forms: 0, words: 2292 },
+  livePricing: { sections: 7, rows: 1, groups: { pricing: 11, cards: 69, faq: 11 }, tables: 3, tabs: 3, pictures: 0, framing: 0, icons: 24, lone: 0, buttons: 4, unlinked: 0, headings: 9, forms: 0, words: 2292 },
+  contact: { sections: 3, rows: 1, groups: { cards: 4 }, tables: 0, tabs: 0, pictures: 0, framing: 0, icons: 4, lone: 0, buttons: 0, unlinked: 0, headings: 7, forms: 1, words: 120 },
   // The post's second row is a byline, drawn small over its words, not as columns across the page.
-  post: { sections: 3, rows: 1, groups: { list: 5, logos: 4, cards: 3 }, tables: 1, tabs: 0, pictures: 5, icons: 0, lone: 0, buttons: 2, unlinked: 0, headings: 10, forms: 0, words: 585 },
-  pottery: { sections: 8, rows: 1, groups: { cards: 3, quotes: 3, faq: 3, logos: 4 }, tables: 1, tabs: 0, pictures: 9, icons: 0, lone: 0, buttons: 2, unlinked: 0, headings: 7, forms: 0, words: 279 },
+  post: { sections: 3, rows: 1, groups: { list: 5, logos: 4, cards: 3 }, tables: 1, tabs: 0, pictures: 5, framing: 4, icons: 0, lone: 0, buttons: 2, unlinked: 0, headings: 10, forms: 0, words: 585 },
+  // The blog listing (AGL-4138): its cards crop their pictures to a height of their own, kept; its category tags keep their links.
+  blog: { sections: 2, rows: 1, groups: { logos: 6, cards: 5 }, tables: 0, tabs: 0, pictures: 6, framing: 6, icons: 0, lone: 0, buttons: 2, unlinked: 1, headings: 9, forms: 0, words: 322 },
+  pottery: { sections: 8, rows: 1, groups: { cards: 3, quotes: 3, faq: 3, logos: 4 }, tables: 1, tabs: 0, pictures: 9, framing: 8, icons: 0, lone: 0, buttons: 2, unlinked: 0, headings: 7, forms: 0, words: 279 },
 }
 
 describe.each(Object.keys(SITE_LAYOUT_PAGES) as SiteLayoutPageName[])('%s: scored against its source', (name) => {
@@ -116,6 +120,7 @@ describe.each(Object.keys(SITE_LAYOUT_PAGES) as SiteLayoutPageName[])('%s: score
     expect(report.tables).toEqual({ source: whole.tables, built: whole.tables, ratio: 1 })
     expect(report.tabs).toEqual({ source: whole.tabs, built: whole.tabs, ratio: 1 })
     expect(report.pictures).toEqual({ source: whole.pictures, built: whole.pictures, ratio: 1 })
+    expect(report.framing).toEqual({ source: whole.framing, built: whole.framing, ratio: 1 })
     expect(report.icons).toEqual({ source: whole.icons, built: whole.icons, ratio: 1, lone: whole.lone })
     expect(report.buttons).toEqual({ source: whole.buttons, built: whole.buttons, ratio: 1, unlinked: whole.unlinked })
     expect(report.headings).toEqual({ source: whole.headings, built: whole.headings, ratio: 1 })
@@ -387,7 +392,33 @@ describe('a measure sees what is lost', () => {
       }),
     )
     expect(report.pictures).toEqual({ source: 2, built: 1, ratio: 0.5 })
-    expect(report.icons).toMatchObject({ source: 34, built: 0, ratio: 0 })
+    expect(report.icons).toMatchObject({ source: 47, built: 0, ratio: 0 })
+  })
+
+  it('framing: a picture cut to a shape not its own, as the 11/1 hero and every card picture were (AGL-4138)', () => {
+    const { source, tree } = home()
+    const frames = idsOf(tree.nodes as Nodes, (node) => node.componentId === 'muiBox' && node.sx?.['aspectRatio'] !== undefined && (node.nodes ?? []).some((id) => tree.nodes[id]?.componentId === 'image'))
+    expect(frames).toHaveLength(1)
+    // The hero's poster in the 16 / 7 box the column hero drew it in before.
+    const cut = siteImportFidelity(source, changed(tree, (nodes) => ((nodes[frames[0] as string] as Nodes[string]).sx = { ...(nodes[frames[0] as string] as Nodes[string]).sx, aspectRatio: { xs: '4 / 3', md: '16 / 7' } })))
+    expect(cut.framing).toEqual({ source: 2, built: 1, ratio: 0.5 })
+    expect(cut.score).toBe(0.5)
+    expect(cut.lowest).toBe('framing')
+    // The blog's cards forced to 16 / 9, their source's height dropped.
+    const blog = page('blog')
+    const cards = idsOf(blog.tree.nodes as Nodes, (node) => node.componentId === 'image' && node.props?.['height'] === '220px')
+    expect(cards).toHaveLength(5)
+    const sixteenNine = siteImportFidelity(
+      blog.source,
+      changed(blog.tree, (nodes) => {
+        for (const id of cards) {
+          const node = nodes[id] as Nodes[string]
+          delete (node.props as Record<string, unknown>)['height']
+          node.sx = { aspectRatio: '16 / 9' }
+        }
+      }),
+    )
+    expect(sixteenNine.framing).toEqual({ source: 6, built: 1, ratio: 1 / 6 })
   })
 
   it('pictures: counted over what is drawn when the library’s copies are not known', () => {

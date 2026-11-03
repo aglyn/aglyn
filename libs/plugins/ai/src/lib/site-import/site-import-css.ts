@@ -87,6 +87,9 @@ const KEPT_PROPERTIES = new Set([
   'flex-basis',
   'width',
   'max-width',
+  // The shape a picture is framed at (AGL-4138): a box's own, or a height it is cropped to.
+  'aspect-ratio',
+  'height',
   'font-family',
   'font-size',
   'font-weight',
@@ -787,6 +790,87 @@ export function siteImportHasBorder(style: SiteImportComputedStyle): boolean {
   const kind = style.get('border-style')
   if (kind && /\b(?:solid|dashed|dotted|double)\b/.test(kind) && (!width || !/^0(?:px)?$/.test(width.trim()))) return true
   return false
+}
+
+/** A side of an element's box. */
+export type SiteImportSide = 'top' | 'right' | 'bottom' | 'left'
+
+const SIDES: readonly SiteImportSide[] = ['top', 'right', 'bottom', 'left']
+
+/** One side's border, where it draws one: its width in px and its color as written. */
+export interface SiteImportBorderSide {
+  width: number
+  color: SiteImportRgba | null
+}
+
+/**
+ * The sides an element draws a border on (AGL-4138), each with its width and
+ * color: a box is bordered on every side, a rule on one. The shorthand draws
+ * all four; a side's own declaration, or `border-width` and `border-style`
+ * by side, draw only theirs.
+ */
+export function siteImportBorderSides(style: SiteImportComputedStyle): Partial<Record<SiteImportSide, SiteImportBorderSide>> {
+  const out: Partial<Record<SiteImportSide, SiteImportBorderSide>> = {}
+  const shared = siteImportColorOf(style.get('border-color'))
+  const drawn = (value: string | undefined): SiteImportBorderSide | null => {
+    if (!value || /\bnone\b|\bhidden\b/.test(value) || /^0(?:px)?$/.test(value.trim())) return null
+    const color = siteImportColorOf(value) ?? shared
+    if (color && color.a < 0.05) return null
+    if (!/\d/.test(value) && !/\b(?:solid|dashed|dotted|double)\b/.test(value)) return null
+    const width = /(-?[\d.]+)(?:px)?(?:\s|$)/.exec(value.replace(/#[0-9a-f]+|rgba?\([^)]*\)|hsla?\([^)]*\)/gi, ' '))
+    const px = width ? Number(width[1]) : /\bthick\b/.test(value) ? 5 : /\bthin\b/.test(value) ? 1 : 3
+    return px > 0 ? { width: px, color } : null
+  }
+  const all = drawn(style.get('border'))
+  for (const side of SIDES) {
+    const own = style.get(`border-${side}`)
+    const found = own !== undefined ? drawn(own) : all
+    if (found) out[side] = found
+  }
+  // `border-width` and `border-style` by side, where no shorthand drew a side.
+  const kind = style.get('border-style')
+  if (!Object.keys(out).length && kind && /\b(?:solid|dashed|dotted|double)\b/.test(kind)) {
+    const widths = (style.get('border-width') ?? '3px').trim().split(/\s+/)
+    const by = [widths[0], widths[1] ?? widths[0], widths[2] ?? widths[0], widths[3] ?? widths[1] ?? widths[0]]
+    SIDES.forEach((side, at) => {
+      const px = siteImportLengthPx(by[at] ?? '')
+      if (px !== null && px > 0) out[side] = { width: px, color: shared }
+    })
+  }
+  return out
+}
+
+/** A picture box's `aspect-ratio`, width over height: `16 / 9`, `1.5`, `auto 4 / 3`; `null` where it sets none. */
+export function siteImportAspectRatio(value: string | undefined): number | null {
+  const match = /(\d*\.?\d+)\s*(?:\/\s*(\d*\.?\d+))?/.exec((value ?? '').replace(/\bauto\b/g, ' '))
+  if (!match) return null
+  const width = Number(match[1])
+  const height = match[2] === undefined ? 1 : Number(match[2])
+  return width > 0 && height > 0 ? width / height : null
+}
+
+/** A color as it shows over the ground it sits on, its strength blended in: `rgba(0,0,0,.6)` over white is `#666666`. */
+export function siteImportOpaque(color: SiteImportRgba, under: SiteImportRgba | null = null): SiteImportRgba {
+  const ground = under ?? { r: 255, g: 255, b: 255, a: 1 }
+  const a = Math.max(0, Math.min(1, color.a))
+  return { r: color.r * a + ground.r * (1 - a), g: color.g * a + ground.g * (1 - a), b: color.b * a + ground.b * (1 - a), a: 1 }
+}
+
+/** How far apart two colors look, in OKLab (0 the same, about 1 black from white). */
+export function siteImportColorDistance(a: SiteImportRgba, b: SiteImportRgba): number {
+  const lab = (color: SiteImportRgba) => {
+    const linear = (channel: number) => {
+      const c = channel / 255
+      return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+    }
+    const [r, g, bl] = [linear(color.r), linear(color.g), linear(color.b)]
+    const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * bl)
+    const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * bl)
+    const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * bl)
+    return [0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s, 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s, 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s]
+  }
+  const [x, y] = [lab(a), lab(b)]
+  return Math.hypot((x[0] as number) - (y[0] as number), (x[1] as number) - (y[1] as number), (x[2] as number) - (y[2] as number))
 }
 
 /** Whether an element draws a shadow. */
