@@ -265,6 +265,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
   const {
     status: componentsStatus,
     fromCache: componentsFromCache,
+    listen: componentsListen,
     hasMore,
   } = componentList
   /*
@@ -379,6 +380,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
         subject: 'component',
         unreadable: componentsStatus === 'error',
         fromCache: componentsFromCache,
+        listen: componentsListen,
       },
       async () => {
         await updateDoc(
@@ -416,6 +418,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
     enqueueSnackbar,
     componentsStatus,
     componentsFromCache,
+    componentsListen,
   ])
 
   /**

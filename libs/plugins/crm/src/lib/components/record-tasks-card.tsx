@@ -86,7 +86,7 @@ export function RecordTasksCard(props: RecordTasksCardProps) {
       contactId ? { contactId } : companyId ? { companyId } : { dealId },
     [contactId, companyId, dealId],
   )
-  const { tasks, status, fromCache, scope, orgId, readTokens } = useCrmRecordTasks({
+  const { tasks, status, fromCache, listen, scope, orgId, readTokens } = useCrmRecordTasks({
     hostId,
     org,
     record,
@@ -280,7 +280,7 @@ export function RecordTasksCard(props: RecordTasksCardProps) {
         readTokens={readTokens}
         task={drawer.task}
         prefill={record}
-        seed={{ fromCache, unreadable: status === 'error' }}
+        seed={{ fromCache, unreadable: status === 'error', listen }}
       />
     </>
   )

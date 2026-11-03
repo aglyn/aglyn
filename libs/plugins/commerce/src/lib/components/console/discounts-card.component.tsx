@@ -75,6 +75,7 @@ export function DiscountsCard(props: DiscountsCardProps) {
      * and hands out redemptions that were already spent.
      */
     fromCache: discountsFromCache,
+    listen: discountsListen,
     rows: discounts,
     hasMore,
     page,
@@ -146,6 +147,7 @@ export function DiscountsCard(props: DiscountsCardProps) {
         subject: 'discount',
         unreadable: Boolean(id) && discountsStatus === 'error',
         fromCache: Boolean(id) && discountsFromCache,
+        listen: discountsListen,
       },
       async () => {
         await setDoc(
@@ -181,6 +183,7 @@ export function DiscountsCard(props: DiscountsCardProps) {
     hostId,
     enqueueSnackbar,
     discountsFromCache,
+    discountsListen,
     discountsStatus,
   ])
 

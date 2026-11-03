@@ -86,6 +86,7 @@ export function AnnouncementBarCard(props: AnnouncementBarCardProps) {
      * on every page of a published site.
      */
     fromCache: hostFromCache,
+    listen: hostListen,
   } = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId),
     [firestore, hostId],
@@ -142,6 +143,7 @@ export function AnnouncementBarCard(props: AnnouncementBarCardProps) {
           subject: 'announcement bar',
           unreadable: hostStatus === 'error',
           fromCache: hostFromCache,
+          listen: hostListen,
         },
         async () => {
           await writeSiteWideChange({

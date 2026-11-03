@@ -300,6 +300,7 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
      * arguments are positional against the list it just reverted.
      */
     fromCache: functionsFromCache,
+    listen: functionsListen,
   } = useFirestoreCollection<any>(
     /*
      * ORDERED AND CEILINGED, deliberately not paged by the query (AGL-2501) —
@@ -550,6 +551,7 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
             subject: 'function',
             unreadable: functionsStatus === 'error',
             fromCache: functionsFromCache,
+            listen: functionsListen,
           },
           async () => {
             await writeSiteWideChange({
@@ -600,6 +602,7 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
     enqueueSnackbar,
     functionsStatus,
     functionsFromCache,
+    functionsListen,
   ])
 
   const handleShowUsage = useCallback(

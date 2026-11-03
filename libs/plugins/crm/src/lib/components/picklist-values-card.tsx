@@ -148,7 +148,7 @@ export function PicklistValuesCard(props: PicklistValuesCardProps) {
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
-  const { definition, picklist, stored, ready, fromCache } = useCrmPicklist(picklistId, orgId)
+  const { definition, picklist, stored, ready, fromCache, listen } = useCrmPicklist(picklistId, orgId)
   const [busy, setBusy] = useState(false)
   const [nameDialog, setNameDialog] = useState<NameDialog>(null)
   const [draftName, setDraftName] = useState('')
@@ -179,7 +179,7 @@ export function PicklistValuesCard(props: PicklistValuesCardProps) {
       if (!orgId || busy) return false
       setBusy(true)
       try {
-        const verdict = await writeGuardedBySeed({ subject: `${field} list`, fromCache }, () =>
+        const verdict = await writeGuardedBySeed({ subject: `${field} list`, fromCache, listen }, () =>
           setDoc(
             doc(firestore, 'orgs', orgId, CRM_COLLECTIONS.picklists, picklistId),
             {
@@ -213,7 +213,7 @@ export function PicklistValuesCard(props: PicklistValuesCardProps) {
         setBusy(false)
       }
     },
-    [orgId, busy, field, fromCache, firestore, picklistId, stored, createHostId, enqueueSnackbar, failed],
+    [orgId, busy, field, fromCache, listen, firestore, picklistId, stored, createHostId, enqueueSnackbar, failed],
   )
 
   /** A rename or a delete — the moves that change records too. */

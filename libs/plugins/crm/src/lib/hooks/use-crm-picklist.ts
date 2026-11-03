@@ -25,7 +25,11 @@ import {
   effectiveCrmPicklist,
   normalizeCrmPicklist,
 } from '@aglyn/aglyn'
-import { useFirestore, useFirestoreDoc } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestore,
+  useFirestoreDoc,
+  type ListenHandle,
+} from '@aglyn/tenant-feature-instance'
 import { doc } from 'firebase/firestore'
 import { useMemo } from 'react'
 
@@ -40,6 +44,8 @@ export interface CrmPicklistResult {
   ready: boolean
   /** The document has not been confirmed by the server — `writeGuardedBySeed`'s input. */
   fromCache: boolean
+  /** The document's listener, so a save waits on that read alone (AGL-4135). */
+  listen: ListenHandle
 }
 
 /**
@@ -57,7 +63,7 @@ export function useCrmPicklist(
   orgId: string | null | undefined,
 ): CrmPicklistResult {
   const firestore = useFirestore()
-  const { data, status, fromCache } = useFirestoreDoc<Record<string, unknown>>(
+  const { data, status, fromCache, listen } = useFirestoreDoc<Record<string, unknown>>(
     () => (orgId ? doc(firestore, 'orgs', orgId, CRM_COLLECTIONS.picklists, id) : null),
     [firestore, orgId, id],
   )
@@ -68,8 +74,9 @@ export function useCrmPicklist(
       stored: normalizeCrmPicklist(data) !== null,
       ready: Boolean(orgId) && status !== 'loading',
       fromCache,
+      listen,
     }),
-    [id, data, orgId, status, fromCache],
+    [id, data, orgId, status, fromCache, listen],
   )
 }
 

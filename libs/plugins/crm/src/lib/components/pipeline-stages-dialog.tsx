@@ -30,7 +30,11 @@ import {
 } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useFirestore, writeGuardedBySeed } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestore,
+  writeGuardedBySeed,
+  type ListenHandle,
+} from '@aglyn/tenant-feature-instance'
 import {
   Button,
   Chip,
@@ -77,6 +81,8 @@ export interface PipelineStagesDialogProps {
   /** The listener's verdict on the pipeline row the draft is seeded from. */
   fromCache: boolean
   unreadable: boolean
+  /** That row's listener, so a save waits on that read alone (AGL-4135). */
+  listen?: ListenHandle | null
   /** The scope tokens the deal count is filtered by — the viewer's own. */
   /** The reader's tokens, or `null` at the organization level — no clause (AGL-2630). */
   visibleToTokens: readonly string[] | null
@@ -115,7 +121,7 @@ export interface PipelineStagesDialogProps {
  * move into the stage from now on; a deal already in it keeps its own.
  */
 export function PipelineStagesDialog(props: PipelineStagesDialogProps) {
-  const { open, onClose, orgId, pipeline, fromCache, unreadable, visibleToTokens } =
+  const { open, onClose, orgId, pipeline, fromCache, unreadable, listen, visibleToTokens } =
     props
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
@@ -195,7 +201,7 @@ export function PipelineStagesDialog(props: PipelineStagesDialogProps) {
     setBusy(true)
     try {
       const verdict = await writeGuardedBySeed(
-        { subject: 'pipeline', unreadable, fromCache },
+        { subject: 'pipeline', unreadable, fromCache, listen },
         async () => {
           await updateDoc(
             doc(firestore, 'orgs', orgId, CRM_COLLECTIONS.pipelines, pipeline.$id),
@@ -218,7 +224,7 @@ export function PipelineStagesDialog(props: PipelineStagesDialogProps) {
     } finally {
       setBusy(false)
     }
-  }, [firestore, orgId, pipeline, problem, stages, unreadable, fromCache, enqueueSnackbar, onClose])
+  }, [firestore, orgId, pipeline, problem, stages, unreadable, fromCache, listen, enqueueSnackbar, onClose])
 
   const openCount = stages.filter((stage) => stage.kind === 'open').length
 

@@ -1407,6 +1407,7 @@ export function HostSettingsScopeProvider({
        * it reverts everything the author did not touch.
        */
       fromCache: hostFromCache,
+      listen: hostListen,
     },
     setDoc,
   } = useHost({ hostId })
@@ -1458,6 +1459,7 @@ export function HostSettingsScopeProvider({
           subject: 'theme overrides',
           unreadable: status === 'error',
           fromCache: hostFromCache,
+          listen: hostListen,
         },
         async () => {
           await setDoc(
@@ -1467,7 +1469,7 @@ export function HostSettingsScopeProvider({
         },
       )
     },
-    [setDoc, status, hostFromCache],
+    [setDoc, status, hostFromCache, hostListen],
   )
 
   const handleThemeSave = useCallback(
@@ -1499,6 +1501,7 @@ export function HostSettingsScopeProvider({
             subject: 'theme',
             unreadable: status === 'error',
             fromCache: hostFromCache,
+            listen: hostListen,
           },
           async () => {
             // Every theme is edited through its override (AGL-3404): the
@@ -1546,6 +1549,7 @@ export function HostSettingsScopeProvider({
       data,
       status,
       hostFromCache,
+      hostListen,
     ],
   )
 
@@ -1761,6 +1765,7 @@ export function HostSettingsScopeProvider({
           subject: 'site settings',
           unreadable: status === 'error',
           fromCache: hostFromCache,
+          listen: hostListen,
         },
         async () => {
           await runBasicSave(fields, dequeueLoading, clearable)
@@ -1775,7 +1780,7 @@ export function HostSettingsScopeProvider({
       }
       return true
     },
-    [queueLoading, runBasicSave, status, hostFromCache, enqueueSnackbar],
+    [queueLoading, runBasicSave, status, hostFromCache, hostListen, enqueueSnackbar],
   )
 
   /**

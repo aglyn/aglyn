@@ -207,6 +207,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
      * variant and every location.
      */
     fromCache: productsFromCache,
+    listen: productsListen,
   } = useListQuery<any>({
     /*
      * PAGED BY THE QUERY, and every filter ON it (AGL-3321).
@@ -609,6 +610,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
         subject: 'stock',
         unreadable: productsStatus === 'error',
         fromCache: productsFromCache,
+        listen: productsListen,
       },
       async () => {
         await writeSiteWideChange({
@@ -645,6 +647,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
     hostId,
     enqueueSnackbar,
     productsFromCache,
+    productsListen,
     productsStatus,
   ])
 
@@ -1239,6 +1242,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
         // the dialog has no listener of its own to ask.
         seedFromCache={productsFromCache}
         seedUnreadable={productsStatus === 'error'}
+        seedListen={productsListen}
         open={creating || editing !== null}
         onClose={() => {
           setEditing(null)

@@ -68,6 +68,7 @@ export function TaxSettingsCard(props: TaxSettingsCardProps) {
      * the store under-collects with nothing anywhere reporting it.
      */
     fromCache: storeFromCache,
+    listen: storeListen,
   } = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId, 'settings', 'store'),
     [firestore, hostId],
@@ -144,6 +145,7 @@ export function TaxSettingsCard(props: TaxSettingsCardProps) {
         subject: 'tax settings',
         unreadable: storeStatus === 'error',
         fromCache: storeFromCache,
+        listen: storeListen,
       },
       async () => {
         await setDoc(
@@ -162,7 +164,7 @@ export function TaxSettingsCard(props: TaxSettingsCardProps) {
     }
     setDraft(null)
     enqueueSnackbar('Tax settings saved', { variant: 'success', persist: false })
-  }, [current, firestore, hostId, enqueueSnackbar, storeStatus, storeFromCache])
+  }, [current, firestore, hostId, enqueueSnackbar, storeStatus, storeFromCache, storeListen])
 
   return (
     <CardDisplay

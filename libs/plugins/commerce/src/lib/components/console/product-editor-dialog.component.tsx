@@ -52,6 +52,7 @@ import {
   useHostResourceApi,
   writeGuardedBySeed,
   useUser,
+  type ListenHandle,
 } from '@aglyn/tenant-feature-instance'
 import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
 import { type PickedMedia, useMediaPicker } from '@aglyn/aglyn'
@@ -121,6 +122,8 @@ export interface ProductEditorDialogProps {
   seedFromCache: boolean
   /** That listener FAILED (`status === 'error'`). */
   seedUnreadable?: boolean
+  /** That listener, so a save waits on that read alone (AGL-4135). */
+  seedListen?: ListenHandle | null
   open: boolean
   onClose: () => void
 }
@@ -1206,7 +1209,7 @@ const ProductSeoFields = memo(function ProductSeoFields(props: {
  * charging correctly without reading the variants array.
  */
 export function ProductEditorDialog(props: ProductEditorDialogProps) {
-  const { hostId, product, seedFromCache, seedUnreadable, open, onClose } =
+  const { hostId, product, seedFromCache, seedUnreadable, seedListen, open, onClose } =
     props
 
   /**
@@ -1674,6 +1677,7 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
           subject: 'product',
           unreadable: Boolean(product) && seedUnreadable,
           fromCache: Boolean(product) && seedFromCache,
+          listen: seedListen,
         },
         async () => {
           // The smart collections this product's rules answer, from the
@@ -1777,6 +1781,7 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
     product,
     seedFromCache,
     seedUnreadable,
+    seedListen,
     firestore,
     hostId,
     createHostResource,

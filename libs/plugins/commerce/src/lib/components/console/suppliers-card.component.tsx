@@ -75,6 +75,7 @@ export function SuppliersCard(props: SuppliersCardProps) {
      * meant to retire, and nothing anywhere reports it.
      */
     fromCache: suppliersFromCache,
+    listen: suppliersListen,
     rows: suppliers,
     hasMore,
     page,
@@ -140,6 +141,7 @@ export function SuppliersCard(props: SuppliersCardProps) {
         subject: 'supplier',
         unreadable: Boolean(id) && suppliersStatus === 'error',
         fromCache: Boolean(id) && suppliersFromCache,
+        listen: suppliersListen,
       },
       async () => {
         await setDoc(
@@ -174,6 +176,7 @@ export function SuppliersCard(props: SuppliersCardProps) {
     hostId,
     enqueueSnackbar,
     suppliersFromCache,
+    suppliersListen,
     suppliersStatus,
   ])
 

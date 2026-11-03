@@ -67,6 +67,7 @@ export function LanguagesCard(props: { hostId: string }) {
      * on a site whose published screens are already translated.
      */
     fromCache: hostFromCache,
+    listen: hostListen,
   } = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId),
     [firestore, hostId],
@@ -126,6 +127,7 @@ export function LanguagesCard(props: { hostId: string }) {
           subject: 'language settings',
           unreadable: hostStatus === 'error',
           fromCache: hostFromCache,
+          listen: hostListen,
         },
         async () => {
           await updateHostDocument(firestore, { user, hostId }, {
@@ -171,6 +173,7 @@ export function LanguagesCard(props: { hostId: string }) {
     enqueueSnackbar,
     hostStatus,
     hostFromCache,
+    hostListen,
   ])
 
   return (
