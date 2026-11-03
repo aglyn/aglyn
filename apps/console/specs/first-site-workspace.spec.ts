@@ -75,7 +75,8 @@ describe('createFirstSiteWorkspace', () => {
     ).resolves.toEqual({ slug: 'royal-styles' })
     expect(mockFetch).toHaveBeenCalledTimes(1)
     expect(mockFetch.mock.calls[0][1]).toBe('/api/orgs/create')
-    expect(bodyOf(0)).toEqual({ name: 'Royal Styles' })
+    // Derived from the account, so a held typed name wins on the server (AGL-4117).
+    expect(bodyOf(0)).toEqual({ name: 'Royal Styles', derived: true })
     expect(mockTrack).toHaveBeenCalledTimes(1)
     expect(mockTrack).toHaveBeenCalledWith('org_created', {})
   })
@@ -88,6 +89,7 @@ describe('createFirstSiteWorkspace', () => {
       createFirstSiteWorkspace({ uid: 'u-1' } as never, { displayName: 'Royal Styles' }),
     ).resolves.toEqual({ slug: 'royal-styles-a1b2' })
     expect(bodyOf(1).slug).toMatch(/^royal-styles-[0-9a-z]{4}$/)
+    expect(bodyOf(1).derived).toBe(true)
     expect(mockTrack).toHaveBeenCalledTimes(1)
   })
 
