@@ -99,6 +99,7 @@ function SchemaForm({
     data: orgStored,
     status: orgStatus,
     fromCache: orgFromCache,
+    listen: orgListen,
   } = useFirestoreDoc<Record<string, unknown>>(
     () =>
       orgId
@@ -229,10 +230,11 @@ function SchemaForm({
           subject: siteScoped ? 'site plugin settings' : 'plugin settings',
           unreadable:
             orgStatus === 'error' || (siteScoped && hostStatus === 'error'),
-          // Two reads, so no one listener is the seed and there is no
-          // `listen` to pass: this save waits on every listener unconfirmed
-          // at the click (AGL-4135).
           fromCache: orgFromCache || (siteScoped && hostFromCache),
+          // A site's seed is two reads, the org's settings and its own, so no
+          // one listener is the seed: that save waits on every listener
+          // unconfirmed at the click. The org's seed is its one read (AGL-4135).
+          listen: siteScoped ? null : orgListen,
         },
         async () => {
           if (!siteScoped) {
