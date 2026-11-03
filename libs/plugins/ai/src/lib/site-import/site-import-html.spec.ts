@@ -433,3 +433,135 @@ describe('what the layout reader needs kept', () => {
     ])
   })
 })
+
+/*------------------------------------------
+ * Videos (AGL-4140)
+ *-----------------------------------------*/
+
+describe('a page’s videos, each once, where it sits (AGL-4140)', () => {
+  const read = (html: string) => extractSiteImportPage(html, PAGE, sameSite, { structure: true })
+  /** The element a video's marker is, and the block its poster is. */
+  const placeOf = (page: ReturnType<typeof read>, index: number) => {
+    const structure = page.structure as NonNullable<typeof page.structure>
+    const marker = structure.elements.find((element) => element.video === index)
+    const poster = structure.blockElement.findIndex((element) => structure.elements[element]?.parent === marker?.id)
+    return { marker, poster: poster >= 0 ? page.blocks[poster] : undefined }
+  }
+
+  it('reads aglyn.com’s film: the play button over its poster, the structured data its facts', () => {
+    const home = extractSiteImportPage(siteLayoutRecording('home'), SITE_LAYOUT_PAGES.home.url, siteLayoutSameSite('home'), { structure: true })
+    expect(home.videos).toEqual([
+      {
+        embed: 'https://fast.wistia.net/embed/iframe/s9ndk38ync',
+        poster: 'https://aglyn.com/api/media/cdn/org:FixtureOrg:FixtureHst/v2sbemHaD1',
+        title: 'Build a website in one sentence with Aglyn',
+        description: 'Describe your business in one sentence and Aglyn plans the pages. Confirm, edit anything on the page, add what you sell and publish to your own domain.',
+        uploadDate: '2026-10-06',
+        durationSeconds: 40,
+      },
+    ])
+    const { marker, poster } = placeOf(home, 0)
+    expect(marker?.tag).toBe('aglyn-video')
+    // The poster is the film's, inside its marker, and no picture of its own beside it.
+    expect(poster).toMatchObject({ kind: 'image', url: 'https://aglyn.com/api/media/cdn/org:FixtureOrg:FixtureHst/v2sbemHaD1' })
+    expect(home.blocks.filter((block) => block.kind === 'image' && block.url === poster?.['url' as never])).toHaveLength(1)
+    // Its "Watch the 40-second film" button is still its words.
+    expect(home.blocks.some((block) => block.kind === 'paragraph' && block.text === 'Watch the 40-second film')).toBe(true)
+  })
+
+  it('reads the bakery’s five films of five kinds, each once, with what the page says of each', () => {
+    const page = extractSiteImportPage(siteLayoutRecording('bakery'), SITE_LAYOUT_PAGES.bakery.url, siteLayoutSameSite('bakery'), { structure: true })
+    const uploads = 'https://www.hearth-bakery.example/wp-content/uploads/2026/09'
+    expect(page.videos).toEqual([
+      // A <video> playing by itself behind the opening.
+      { src: `${uploads}/ovens-loop.mp4`, poster: `${uploads}/ovens-poster.jpg`, title: '', autoplay: true, muted: true, loop: true },
+      // A YouTube frame, named and dated by the structured data, its thumbnail its poster; the frame's "YouTube video player" names no film.
+      {
+        embed: 'https://www.youtube.com/embed/Hc8Qx2Lr9Vb?feature=oembed',
+        title: 'Shaping a country loaf',
+        width: 640,
+        height: 360,
+        description: 'Our head baker folds, shapes and scores a country loaf, start to finish.',
+        uploadDate: '2026-09-14',
+        durationSeconds: 125,
+        poster: `${uploads}/loaf-poster.jpg`,
+      },
+      // A lite-youtube facade, its poster its background, its play label its name.
+      { embed: 'https://www.youtube-nocookie.com/embed/Mb4Kp7Zt2Qa', poster: `${uploads}/morning-poster.jpg`, title: 'A morning at the bakery' },
+      // A card's picture linking a Vimeo page.
+      { embed: 'https://vimeo.com/824100377', poster: `${uploads}/mill.jpg`, title: 'Our stone mill' },
+      // The head's og:video, its share card its poster.
+      { src: `${uploads}/bakery-tour.mp4`, poster: `${uploads}/tour-poster.jpg`, title: 'Hearth & Crumb Bakery' },
+    ])
+    for (const index of [0, 1, 2, 3, 4]) expect(placeOf(page, index).poster).toMatchObject({ kind: 'image' })
+    // The page's script names a player; nothing in it is read.
+    expect(JSON.stringify(page.videos)).not.toContain('evil.example')
+  })
+
+  it('reads no film out of a script, a template or a style, nor a VideoObject that is not structured data', () => {
+    const page = read(
+      '<html><head><script>window.data = {"@type":"VideoObject","embedUrl":"https://fast.wistia.net/embed/iframe/e4a27b971d"}; document.write(\'<iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ"></iframe>\')</script></head>' +
+        '<body><main><template><video src="/a.mp4"></video></template><h1>Hello</h1><p>No film here.</p></main></body></html>',
+    )
+    expect(page.videos).toBeUndefined()
+    expect(page.blocks.map((block) => (block.kind === 'image' ? block.url : block.text))).toEqual(['Hello', 'No film here.'])
+  })
+
+  it('leaves a play button with no film found for it as it was: a picture in a button', () => {
+    const page = read('<main><h1>Our story</h1><button aria-label="Play video"><img src="/poster.jpg" alt="Our story"></button></main>')
+    expect(page.videos).toBeUndefined()
+    expect(page.blocks.filter((block) => block.kind === 'image')).toHaveLength(1)
+  })
+
+  it('leaves out a frame of anything but a video host, and a link to a film’s page on the site itself', () => {
+    const page = read(
+      '<main><h1>Visit</h1><iframe src="https://maps.example.net/embed?q=bakery"></iframe>' +
+        '<a href="/videos/our-story" aria-label="Watch the film"><img src="/poster.jpg" alt="Our story"></a></main>',
+    )
+    expect(page.videos).toBeUndefined()
+    expect(page.blocks.find((block) => block.kind === 'image')).toMatchObject({ url: 'https://example.com/poster.jpg' })
+  })
+
+  it('reads a link to a film on a host the Video element has no player for as a film there, its picture its poster', () => {
+    const page = read('<main><h1>Film</h1><a href="https://videos.example.net/watch/123" aria-label="Watch our film"><img src="/poster.jpg" alt="A still"></a></main>')
+    expect(page.videos).toEqual([{ embed: 'https://videos.example.net/watch/123', poster: 'https://example.com/poster.jpg', title: 'Watch our film' }])
+  })
+
+  it('matches the structured data to the facade whose picture is its thumbnail, else to the first with no film', () => {
+    const data = JSON.stringify({
+      '@context': 'https://schema.org',
+      '@graph': [
+        { '@type': 'VideoObject', name: 'Second', thumbnailUrl: 'https://example.com/two.jpg?w=1280', embedUrl: 'https://fast.wistia.net/embed/iframe/bbbbbbbbbb' },
+        { '@type': 'VideoObject', name: 'First', thumbnailUrl: 'https://example.com/elsewhere.jpg', contentUrl: 'https://example.com/one.mp4', duration: 'PT1M30S' },
+      ],
+    })
+    const page = read(
+      `<html><head><script type="application/ld+json">${data}</script></head><body><main><h1>Films</h1>` +
+        '<button aria-label="Play video"><img src="/one.jpg" alt=""></button><button aria-label="Play video"><img src="/two.jpg" alt=""></button></main></body></html>',
+    )
+    // In the page's order: the thumbnail names the second button's film; the other takes the first.
+    expect(page.videos).toEqual([
+      { src: 'https://example.com/one.mp4', poster: 'https://example.com/one.jpg', title: 'First', durationSeconds: 90 },
+      { embed: 'https://fast.wistia.net/embed/iframe/bbbbbbbbbb', poster: 'https://example.com/two.jpg', title: 'Second' },
+    ])
+  })
+
+  it('places a film only the data names after the words of the page’s opening', () => {
+    const data = JSON.stringify({ '@type': 'VideoObject', name: 'Our story', thumbnailUrl: 'https://example.com/story.jpg', embedUrl: 'https://fast.wistia.net/embed/iframe/cccccccccc' })
+    const page = read(
+      `<html><head><script type="application/ld+json">${data}</script></head><body><main><section><div class="words"><h1>Our story</h1><p>Since 2009.</p></div>` +
+        '<p>After the words.</p></section></main></body></html>',
+    )
+    expect(page.videos).toEqual([{ embed: 'https://fast.wistia.net/embed/iframe/cccccccccc', poster: 'https://example.com/story.jpg', title: 'Our story' }])
+    const structure = page.structure as NonNullable<typeof page.structure>
+    const marker = structure.elements.find((element) => element.video === 0) as NonNullable<(typeof structure.elements)[number]>
+    expect(structure.elements[marker.parent]?.tag).toBe('section')
+    const words = page.blocks.map((block) => (block.kind === 'image' ? `[${block.url}]` : block.text))
+    expect(words).toEqual(['Our story', 'Since 2009.', '[https://example.com/story.jpg]', 'After the words.'])
+  })
+
+  it('reads at most ten films a page', () => {
+    const frames = Array.from({ length: 12 }, (_, at) => `<iframe src="https://fast.wistia.net/embed/iframe/${String(at).padStart(10, 'a')}"></iframe>`).join('')
+    expect(read(`<main><h1>Films</h1>${frames}</main>`).videos).toHaveLength(SITE_IMPORT_PAGE_LIMITS.videos)
+  })
+})

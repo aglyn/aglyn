@@ -25,7 +25,7 @@ import {
 } from '../runtime/ai-icon-library'
 import { AI_INSTANCE_REF_PROP } from '../runtime/ai-node-tree'
 import { AI_TEXT_LIMITS } from '../runtime/ai-palette'
-import { aiPageScrollInteraction } from '../runtime/ai-page-links'
+import { aiPagePlayVideoInteraction, aiPageScrollInteraction } from '../runtime/ai-page-links'
 import {
   aiLayoutFitText,
   aiLayoutQuoteGap,
@@ -38,6 +38,7 @@ import {
   type AiLayoutBand,
   type AiLayoutBlock,
   type AiLayoutGroupStyle,
+  type AiLayoutImportHero,
   type AiLayoutWidth,
   type AiLayoutItem,
   type AiLayoutLink,
@@ -46,6 +47,7 @@ import {
   type AiLayoutSection,
   type AiLayoutSettlement,
   type AiLayoutTab,
+  type AiLayoutVideo,
 } from './ai-layout-language'
 import {
   AI_LAYOUT_HALF_HEROES,
@@ -209,6 +211,8 @@ export interface AiLayoutCompiledPage {
   itemIds: string[][]
   /** Plan sections whose only items were quotes, which a published page leaves out (AGL-3676). */
   quotesOnly: number[]
+  /** The films a page brought in places (AGL-4140), by the ids their Video elements are stored under. */
+  videoIds?: string[]
 }
 
 /** The most pictures a page carries; each beyond it is one more empty slot to fill. */
@@ -266,6 +270,10 @@ export interface PageScope {
   bare?: number
   /** Sections the design set beside a photo because they were the third without one (AGL-4065). */
   rhythm?: number
+  /** A page brought in (AGL-4140): each film's Video element, by the film's index. */
+  videos?: Record<number, string>
+  /** The buttons that play a film, written once every film is placed. */
+  plays?: Array<{ id: string; film: number; label: string }>
 }
 
 /** Everything one section's compile shares. */
@@ -373,6 +381,13 @@ export function aiCompileLayoutPage(
     const section = sections[index] ?? { blocks: [] }
     return compileSection(page, section, index)
   })
+  // A button that plays a film of the page scrolls to it and presses play (AGL-4140), now every film is placed;
+  // one whose film was not placed keeps its words.
+  for (const play of page.plays ?? []) {
+    const target = page.videos?.[play.film]
+    if (target) tree.nodes[play.id].interactions = [aiPagePlayVideoInteraction(target)]
+    else tree.nodes[play.id] = { componentId: 'muiTypography', props: { children: play.label, variant: 'body1' } }
+  }
   const rootId = tree.add(
     'div',
     null,
@@ -388,6 +403,7 @@ export function aiCompileLayoutPage(
     settled: page.settled,
     itemIds: page.itemIds,
     quotesOnly: page.quotesOnly,
+    ...(page.videos ? { videoIds: Object.values(page.videos) } : {}),
   }
 }
 
@@ -1148,6 +1164,8 @@ function compileBlock(
       return tabs(scope, block, room)
     case 'logos':
       return logos(scope, block)
+    case 'video':
+      return block.video ? video(scope, block.video, block.picture) : null
     default:
       return null
   }
@@ -1277,15 +1295,19 @@ function compileButton(
     : aiLayoutContactLabel(block.text, scope.page.targets.contact) ||
       aiLayoutFitText(block.text, 'label', scope.page.options.language)
   if (!asked) return null
-  const destination = verbatim
-    ? aiLayoutImportedDestination(block.to, scope.page.plan.sections.length)
-    : aiLayoutResolveLink(
-        block.to,
-        asked,
-        scope.link,
-        scope.page.targets,
-      )
-  if (!destination) {
+  // A button of a page brought in that plays one of its films (AGL-4140): its interaction is written once the film is placed.
+  const film = verbatim ? aiLayoutImportedFilm(block.to) : null
+  const destination = film !== null
+    ? null
+    : verbatim
+      ? aiLayoutImportedDestination(block.to, scope.page.plan.sections.length)
+      : aiLayoutResolveLink(
+          block.to,
+          asked,
+          scope.link,
+          scope.page.targets,
+        )
+  if (!destination && film === null) {
     // A page brought in keeps the words of a link that goes nowhere here (AGL-4107).
     if (verbatim) return words(scope, block, 'text', 'body1', {}, muted(scope))
     scope.page.settled.push({
@@ -1296,9 +1318,9 @@ function compileButton(
   }
   // A link of a page brought in longer than a button's label holds is its
   // words, as a link (AGL-4107): every word kept, and it still goes there.
-  if (verbatim && asked.length > AI_TEXT_LIMITS.button) return linkedWords(scope, asked, destination)
+  if (verbatim && asked.length > AI_TEXT_LIMITS.button) return destination ? linkedWords(scope, asked, destination) : words(scope, block, 'text', 'body1', {}, muted(scope))
   // A button to a page merged into the blog names the blog (AGL-3676).
-  const label = verbatim ? asked : aiLayoutRenamedLabel(asked, destination)
+  const label = verbatim || !destination ? asked : aiLayoutRenamedLabel(asked, destination)
   if (label !== asked) scope.page.settled.push({ at: scope.at, what: `the button "${asked}" named for the blog: "${label}"` })
   const style = block.style ?? 'primary'
   // Over a photo, a quiet or outlined button takes the words' own color, as on a brand band.
@@ -1315,7 +1337,7 @@ function compileButton(
       children: label,
       ...look,
       size: scope.index === 0 || block.style === 'large' ? 'large' : 'medium',
-      ...destinationProps(destination),
+      ...(destination ? destinationProps(destination) : {}),
     },
     // Sized to its words, never stretched across the column a Stack would
     // stretch it over (AGL-3660), and aligned with its section.
@@ -1323,8 +1345,15 @@ function compileButton(
     null,
     'button',
   )
-  linkTo(scope, id, destination)
+  if (destination) linkTo(scope, id, destination)
+  if (film !== null) (scope.page.plays ??= []).push({ id, film, label })
   return id
+}
+
+/** The film a button of a page brought in plays (AGL-4140), `video:<n>`, by its index; `null` for any other destination. */
+export function aiLayoutImportedFilm(to: string | undefined): number | null {
+  const match = /^video:(\d{1,3})$/.exec((to ?? '').trim())
+  return match ? Number(match[1]) : null
 }
 
 /**
@@ -2284,6 +2313,8 @@ interface DesignedPicture {
   alt: string
   given: boolean
   src?: string
+  /** The film it is the poster of, on a page brought in (AGL-4140): the Video element fills the frame. */
+  video?: AiLayoutVideo
   /** How the source frames its own picture, on a page brought in (AGL-4138). */
   fit?: AiLayoutPictureFit
 }
@@ -2322,9 +2353,12 @@ function designPicture(
   const tree = scope.page.tree
   // The picture fills its frame by its own size props, so the frame alone
   // carries a style: a page of many pictures repeats no inline style (rule 16).
-  // A source's own picture keeps the fit the source gives it (AGL-4138).
+  // A source's own picture keeps the fit the source gives it (AGL-4138); a film's poster is its Video
+  // element, filling the frame as the picture would (AGL-4140).
   const fit = scope.page.options.verbatim === true && picture.given ? picture.fit?.objectFit : undefined
-  const image = designImage(scope, picture, { width: '100%', height: '100%', ...(fit ? { objectFit: fit } : {}) }, Object.keys(imageSx).length ? imageSx : null)
+  const image = picture.video
+    ? video(scope, picture.video, picture.src ? { src: picture.src, alt: picture.alt } : undefined, 'heroVideo', { ...imageSx, ...(fit ? { objectFit: fit } : {}) })
+    : designImage(scope, picture, { width: '100%', height: '100%', ...(fit ? { objectFit: fit } : {}) }, Object.keys(imageSx).length ? imageSx : null)
   return tree.add('muiBox', null, { position: 'relative', overflow: 'hidden', bgcolor: 'action.hover', ...frameSx }, [image], role)
 }
 
@@ -3681,11 +3715,53 @@ function sourcePicture(scope: SectionScope, picture: AiLayoutPicture, role = 'im
 export const AI_LAYOUT_PORTRAIT_SIZE = '4rem'
 
 /**
+ * A film of a page brought in (AGL-4140): the Video element where the
+ * source's film sat, its poster first, playing from where the old page
+ * played it — a video host's player once a visitor presses play, or the old
+ * site's own file — with what a search engine reads of it. It plays when a
+ * visitor asks: a film that starts on its own loads its file before anyone
+ * plays it, which rule 16 refuses. In a frame (`frame`, a hero's) it fills
+ * it, as a picture there does; elsewhere it is at its own shape, rounded as
+ * the theme rounds a frame, one style key as every repeated element has. Its
+ * id follows its section's, so a button that plays it can name it before the
+ * page is stored.
+ */
+function video(scope: SectionScope, film: AiLayoutVideo, poster: AiLayoutPicture | undefined, role = 'video', frame?: Record<string, unknown>): string {
+  const { page } = scope
+  // Its poster is the picture its place shows first: the page's pictures after it load as they are reached.
+  if (poster?.src) page.images += 1
+  const section = page.options.sectionIds?.[scope.index]
+  const fixed = section && !page.videos?.[film.index] ? `${section}-video-${film.index + 1}` : undefined
+  const id = page.tree.add(
+    'video',
+    {
+      src: film.src,
+      ...(poster?.src ? { poster: poster.src } : {}),
+      ...(film.title ? { title: film.title } : {}),
+      ...(film.description ? { description: film.description } : {}),
+      ...(film.uploadDate ? { uploadDate: film.uploadDate } : {}),
+      ...(film.durationSeconds ? { durationSeconds: String(film.durationSeconds) } : {}),
+      controls: true,
+      ...(frame ? { width: '100%', height: '100%' } : {}),
+    },
+    // Rounded and shadowed as the source frames its poster (AGL-4138).
+    frame ? { objectFit: 'cover', ...frame } : { borderRadius: poster?.fit?.rounded ? 3 : 2, ...(film.shadow || poster?.fit?.shadow ? { boxShadow: 3 } : {}) },
+    null,
+    role,
+    fixed,
+  )
+  page.videos = { ...page.videos, [film.index]: id }
+  return id
+}
+
+/**
  * An item's picture, over its words: the card's own top. Framed as the source
  * frames it (AGL-4138) — at the height or the box it crops it to, else at the
  * picture's own shape — and at 16 / 9 only where nothing says its shape.
  */
 function itemPicture(scope: SectionScope, picture: AiLayoutPicture): string {
+  // A film's poster plays it (AGL-4140).
+  if (picture.video) return video(scope, picture.video, picture.src ? picture : undefined, 'itemVideo')
   const { page } = scope
   page.images += 1
   const fit = picture.fit
@@ -4242,21 +4318,37 @@ function logos(scope: SectionScope, block: AiLayoutBlock): string | null {
 function importedHero(scope: SectionScope, raw: AiLayoutSection, blocks: readonly AiLayoutBlock[]): string | null {
   const { page } = scope
   if (!page.design || !raw.hero) return null
-  const pictures = blocks.filter((block) => block.kind === 'image' && block.picture)
+  // Its one picture, or its one film, poster first (AGL-4140).
+  const pictures = blocks.filter((block) => (block.kind === 'image' && block.picture) || (block.kind === 'video' && block.video))
   if (pictures.length !== 1) return null
-  const flow = blocks.filter((block) => block.kind !== 'image')
+  const flow = blocks.filter((block) => block.kind !== 'image' && block.kind !== 'video')
   if (!flow.length || !flow.every((block) => WORD_KINDS.has(block.kind))) return null
   if (!flow.some((block) => speaksHeading(scope, block))) {
     flow.unshift({ kind: 'heading', text: page.plan.title })
     page.settled.push({ at: scope.at, what: "no heading; the page's title written as its h1" })
   }
+  const film = pictures[0].kind === 'video' ? pictures[0].video : undefined
+  // A film a visitor presses plays where it sits, never behind the words, which would cover it.
+  let asked = raw.hero
+  if (film && FILM_BEHIND_HEROES.has(asked)) {
+    page.settled.push({ at: scope.at, what: `the ${asked} hero set aside: the opening's film is pressed to play, so it sits under its words` })
+    asked = 'column'
+  }
   const lead = flow.findIndex((block) => speaksHeading(scope, block))
   const { style: _style, ...title } = flow[lead]
-  flow[lead] = AI_LAYOUT_HALF_HEROES.has(raw.hero) ? title : { ...title, style: 'large' }
-  const picture = pictures[0].picture as AiLayoutPicture
-  const opening = hero(scope, flow, { alt: picture.alt, given: true, src: picture.src, ...(picture.fit ? { fit: picture.fit } : {}) }, raw.hero)
+  flow[lead] = AI_LAYOUT_HALF_HEROES.has(asked) ? title : { ...title, style: 'large' }
+  const picture = pictures[0].picture
+  const opening = hero(
+    scope,
+    flow,
+    { alt: picture?.alt ?? '', given: true, ...(picture?.src ? { src: picture.src } : {}), ...(picture?.fit ? { fit: picture.fit } : {}), ...(film ? { video: film } : {}) },
+    asked,
+  )
   return opening && raw.width ? widened(page.tree, opening, raw.width) : opening
 }
+
+/** The heroes that lay their picture behind the words (AGL-4140): no place for a film a visitor presses. */
+const FILM_BEHIND_HEROES: ReadonlySet<AiLayoutImportHero> = new Set(['cover', 'poster', 'panel'])
 
 /** A hero of a page brought in, its columns as wide as its source runs (AGL-4083): each Container that sets the section's width, not a reading measure inside it. */
 function widened(tree: AiLayoutTreeBuilder, id: string, maxWidth: AiLayoutWidth): string {

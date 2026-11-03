@@ -643,3 +643,78 @@ describe('a page with a form (AGL-4083)', () => {
     expect(aiSiteImportRunMinimumMs(importJob({ siteImport: state, items }))).toBe(0)
   })
 })
+
+describe('a film a page plays from the old site may play on the new one (AGL-4140)', () => {
+  const POSTER = `${HARBOR_ORIGIN}/tour-poster.jpg`
+  const FILM = 'https://video.builder-cdn.example/harbor/tour.mp4'
+  /** A wave whose pages are read and their photos in, the header and footer built: the next pass is the first page. */
+  const ready = (video: Record<string, unknown>, assets: Array<{ mediaId: string; src: string; from: string }> = [{ mediaId: 'm1', src: 'media:host-1/m1', from: POSTER }]) => {
+    const state = harborState()
+    const slots = state.waves[0].slots
+    const read: AiSiteImportPageRead = {
+      at: 'x',
+      title: 'T',
+      text: 'words',
+      sections: ['Hero'],
+      images: [{ url: POSTER, alt: '' }],
+      blocks: [
+        { kind: 'heading', level: 1, text: 'Hello', region: 'main' },
+        { kind: 'image', url: POSTER, alt: '', region: 'main' },
+      ],
+      layout: {
+        v: 1,
+        sections: [{ name: 'Hero', from: 'heading', band: 'plain', background: null, align: 'start', nodes: [{ kind: 'line', line: 0 }, { kind: 'video', video: 0, poster: 1 }], lines: [0, 1] }],
+        icons: [],
+        look: { fonts: { body: null, headings: null, google: [] }, background: null, text: null, buttonFill: null, buttonText: null, buttonRadius: null, link: null, header: null } as never,
+      },
+      videos: [{ title: 'Tour', poster: POSTER, ...video } as never],
+      meta: { title: 'T', description: 'D' },
+    }
+    const started = aiSiteImportWaveStarted(state, 0, 'x', new Map(slots.map((slot) => [slot, read])))
+    const siteImport: AiSiteImportState = {
+      ...started,
+      look: { at: 'x', theme: 'applied', colors: [], logo: null, seo: true, seed: 1 } as never,
+      pages: started.pages.map((page) => ({ ...page, build: 'copied' as const, photos: { brought: 1, reused: 0, skipped: 0, assets } })),
+    }
+    const items = aiSiteImportLedger(siteImport).map((row): AiJobItemLedger => (row.slot === 'frame' ? { ...row, status: 'succeeded' } : row))
+    return { job: importJob({ siteImport, items }), slot: siteImport.waves[0].slots[0] as string }
+  }
+  const step = (approveFilmHosts: AiSiteImportStepDeps['approveFilmHosts']) =>
+    createAiJobImportStep(
+      deps({
+        runnerFor: (() => async () => outcome({ outputs: [{ resource: 'screen', id: 'draft-out' } as never] })) as never,
+        draftWords: async () => 1,
+        approveFilmHosts,
+      }),
+    )
+
+  it('approves the film’s host for the site once its page is in, and its row says so', async () => {
+    const calls: Array<readonly string[]> = []
+    const { job, slot } = ready({ src: FILM })
+    const result = await run(step(async (_firestore, hostId, films) => void calls.push([hostId, ...films])), job)
+    expect(calls).toEqual([['host-1', FILM]])
+    expect(result.item).toMatchObject({ slot, status: 'succeeded' })
+    expect(result.item?.note).toBe(
+      "A video on this page plays from your old site's address; pick it from your media library to move it. Its address was added to Approved media hosts in Admin → Security, so it plays on your new site.",
+    )
+  })
+
+  it('approves nothing for a film a host’s player plays, or one its page leaves out for want of a poster', async () => {
+    const calls: unknown[] = []
+    const approve: AiSiteImportStepDeps['approveFilmHosts'] = async (...args) => void calls.push(args)
+    const hosted = ready({ embed: 'https://fast.wistia.net/embed/iframe/e4a27b971d' })
+    const result = await run(step(approve), hosted.job)
+    expect(result.item).toMatchObject({ slot: hosted.slot, status: 'succeeded' })
+    expect(result.item?.note).toBeUndefined()
+    const posterless = ready({ src: FILM }, [])
+    await run(step(approve), posterless.job)
+    expect(calls).toEqual([])
+  })
+
+  it('keeps the row’s first words, and claims no address it could not approve', async () => {
+    const { job, slot } = ready({ src: FILM })
+    const result = await run(step(async () => Promise.reject(new Error('unavailable'))), job)
+    expect(result.item).toMatchObject({ slot, status: 'succeeded' })
+    expect(result.item?.note).toBe("A video on this page plays from your old site's address; pick it from your media library to move it.")
+  })
+})

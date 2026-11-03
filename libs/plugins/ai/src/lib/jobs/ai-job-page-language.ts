@@ -1149,7 +1149,8 @@ export function aiImportedPageCheck(
       answer: design,
       ...(input.language ? { language: input.language } : {}),
     })
-    const stored = aiLayoutStoredTree(compiled.tree, 'screen', context, input.sectionIds)
+    // A film's Video element keeps its id, as a section's root does: the button that plays it names it (AGL-4140).
+    const stored = aiLayoutStoredTree(compiled.tree, 'screen', context, [...input.sectionIds, ...(compiled.videoIds ?? [])])
     if (stored.ok === false) {
       console.error('ai imported page: a compiled page did not store', { error: stored.error })
       return {

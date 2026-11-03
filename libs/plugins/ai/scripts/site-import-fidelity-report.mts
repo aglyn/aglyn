@@ -152,7 +152,7 @@ const holds = (report: Dict, threshold: number) => report.score >= threshold && 
 /** The pages side by side: each measure, built over source. */
 function pagesTable(rows: readonly PageRow[], threshold: number): string {
   return table(
-    ['page', 'score', 'holds', 'words', 'extra', 'sections', 'bands', 'widths', 'rows', 'tables', 'tabs', 'pictures', 'framing', 'icons', 'buttons', 'headings', 'forms', 'lowest'],
+    ['page', 'score', 'holds', 'words', 'extra', 'sections', 'bands', 'widths', 'rows', 'tables', 'tabs', 'pictures', 'framing', 'icons', 'buttons', 'headings', 'forms', 'videos', 'lowest'],
     rows.map(({ name, report }) => [
       name,
       score(report.score),
@@ -172,6 +172,8 @@ function pagesTable(rows: readonly PageRow[], threshold: number): string {
       count(report.buttons),
       count(report.headings),
       count(report.forms),
+      // A report of a page scored before the videos measure (AGL-4140) has none.
+      report.videos ? count(report.videos) : '-',
       report.lowest ?? '-',
     ]),
   )
@@ -230,7 +232,7 @@ function shortOf(rows: readonly PageRow[], frames: ReadonlyArray<{ name: string;
       const said = [...words.examples.missing.map((word: string) => `-${word}`), ...words.examples.extra.map((word: string) => `+${word}`)].join(' ')
       short.push(`words: ${words.missing} missing, ${words.extra} extra${said ? ` (${said})` : ''}`)
     }
-    for (const key of ['sections', 'bands', 'widths', 'rows', 'tables', 'tabs', 'pictures', 'framing', 'icons', 'buttons', 'headings', 'forms']) {
+    for (const key of ['sections', 'bands', 'widths', 'rows', 'tables', 'tabs', 'pictures', 'framing', 'icons', 'buttons', 'headings', 'forms', 'videos']) {
       if (report[key] && report[key].ratio < 1) short.push(`${key} ${count(report[key])}`)
     }
     for (const [kind, entry] of Object.entries(report.groups as Dict)) if (entry.items.ratio < 1) short.push(`${kind} ${count(entry.items)}`)
@@ -291,6 +293,7 @@ async function recordedReport(load: (file: string) => Promise<Dict>, args: Args)
     ['post', 'a blog post'],
     ['blog', '/blog'],
     ['pottery', 'a studio, not ours'],
+    ['bakery', 'a bakery’s films, not ours'],
   ] as const
   const forms = (key: string) => (key === 'contact' ? { forms: [{ id: 'form-contact', name: 'Contact' }] } : {})
   const scored = (built: Dict): Dict => fidelity.siteImportFidelity(built.source, built.tree)

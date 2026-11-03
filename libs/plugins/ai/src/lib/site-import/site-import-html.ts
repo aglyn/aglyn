@@ -43,7 +43,15 @@
  * source stands in for an `<img>` with no address; and the head's share card,
  * icons, site name and Organization structured data come along for the
  * header, the footer and the site's own facts.
+ *
+ * A video is kept where it sits (AGL-4140): a `<video>`, a video host's
+ * `<iframe>`, a facade that stands in for one (a play button over a still),
+ * and the page's `VideoObject` structured data and `og:video`, each once,
+ * with its poster as the picture inside it. Its attributes and its data are
+ * read; nothing of it is run.
  *=========================================*/
+
+import { videoEmbedOf } from '@aglyn/aglyn/plugin-manager/video-embed-provider'
 
 /** One run of a page's content, in the order the page draws it. */
 export type SiteImportBlock =
@@ -136,6 +144,32 @@ export interface SiteImportForm {
   leftOut?: string[]
 }
 
+/**
+ * A video a page shows (AGL-4140), as the page wrote it: a film it serves
+ * itself (`src`), or one a video host plays (`embed`), the still shown before
+ * it plays, and what a search engine reads of it. Untrusted data.
+ */
+export interface SiteImportVideo {
+  /** A file the page plays itself: an absolute http(s) address. */
+  src?: string
+  /** A video host's page or player: an absolute https address. */
+  embed?: string
+  /** The still shown before it plays, an absolute address; inside its marker as a picture. */
+  poster?: string
+  /** Its name: the structured data's, else its own title or label, else its poster's description. */
+  title: string
+  description?: string
+  /** The day it was first published, `YYYY-MM-DD`. */
+  uploadDate?: string
+  durationSeconds?: number
+  autoplay?: true
+  muted?: true
+  loop?: true
+  controls?: true
+  width?: number
+  height?: number
+}
+
 export interface SiteImportExtract {
   title: string
   description: string
@@ -154,6 +188,8 @@ export interface SiteImportExtract {
   /** Same-site page addresses, fragment-free, in first-seen order. */
   links: string[]
   forms: { kept: SiteImportForm[]; removed: number }
+  /** Its videos (AGL-4140), each once, in the order they were found; absent on a page with none. */
+  videos?: SiteImportVideo[]
   /** True when the page has a password field; nothing else is extracted. */
   loginForm: boolean
   /**
@@ -207,6 +243,8 @@ export interface SiteImportElement {
   form?: number
   /** The picture an `<img>` shows (AGL-4139): its address and alt, where a menu's featured card or a footer's logo is one. */
   picture?: { url: string; alt: string }
+  /** The video that sat here (AGL-4140), by index into the page's videos; its poster is the picture inside it. */
+  video?: number
   /**
    * Its place in the page's order of content: a block's index, or the index
    * of the block that follows an icon, less a half. Set on elements that
@@ -294,6 +332,8 @@ export const SITE_IMPORT_PAGE_LIMITS = {
   anchors: 800,
   styleChars: 1_500_000,
   stylesheets: 4,
+  /** A page's videos (AGL-4140). */
+  videos: 10,
 } as const
 
 /** Elements removed with everything inside them. */
@@ -756,6 +796,428 @@ function readOrganization(html: string): SiteImportOrganization | null {
 }
 
 /*------------------------------------------
+ * The page's videos (AGL-4140)
+ *-----------------------------------------*/
+
+/** What a video is never read inside: a script's text, a style, a template, a fallback for no script. */
+const VIDEO_SHIELDED = /<(script|style|template|noscript|textarea)\b(?:[^>"']|"[^"]*"|'[^']*')*>[\s\S]*?<\/\1\s*>/gi
+
+/** What marks a shielded stretch's place, and a video's, while the videos are read: characters no page writes. */
+const SHIELD = '\u0002'
+const PLACE = '\u0003'
+
+/** A shielded stretch's place while the videos are read. */
+const SHIELD_MARK = new RegExp(`${SHIELD}(\\d+)${SHIELD}`, 'g')
+
+/** The words that name a facade's control as one that plays a film. */
+const PLAY_WORDS = /\b(?:play|watch|video|film)\b/i
+
+/** A facade's label read as the film's name: "Play video: Our story" is "Our story". */
+const PLAY_PREFIX = /^\s*(?:play|watch)(?:\s+(?:the\s+)?(?:video|film))?\s*(?:[:\-–—]\s*|$)/i
+
+/** A frame's title that names only its player ("Video player", "YouTube video player"), never the film. */
+const PLAYER_TITLE = /^(?:[\p{L}]+\s+)?(?:video\s+)?player$/iu
+
+/** A film's file, by its address. */
+const VIDEO_FILE = /\.(?:mp4|m4v|webm|mov|ogv)(?:$|[?#])/i
+
+/** The structured data's scripts. */
+const LD_JSON = /<script\b[^>]*\btype\s*=\s*["']?application\/ld\+json["']?[^>]*>([\s\S]*?)<\/script\s*>/gi
+
+/** A video host's id, by the attribute that names it: the player the Video element frames for it. */
+const VIDEO_ID_PLAYERS: ReadonlyArray<{ host: RegExp; id: RegExp; player: (id: string) => string }> = [
+  { host: /youtube/i, id: /^[\w-]{11}$/, player: (id) => `https://www.youtube-nocookie.com/embed/${id}` },
+  { host: /vimeo/i, id: /^\d{6,12}$/, player: (id) => `https://player.vimeo.com/video/${id}` },
+  { host: /wistia/i, id: /^[a-z0-9]{10}$/, player: (id) => `https://fast.wistia.net/embed/iframe/${id}` },
+]
+
+/** A run of seconds an ISO 8601 duration names (`PT1M30S` is 90), or `undefined`. */
+function isoSeconds(value: unknown): number | undefined {
+  const match = /^P(?:(\d+(?:\.\d+)?)D)?(?:T(?:(\d+(?:\.\d+)?)H)?(?:(\d+(?:\.\d+)?)M)?(?:(\d+(?:\.\d+)?)S)?)?$/i.exec(String(value ?? '').trim())
+  if (!match || !match.slice(1).some((part) => part !== undefined)) return undefined
+  const [days, hours, minutes, seconds] = match.slice(1).map((part) => Number(part ?? 0))
+  const total = (days ?? 0) * 86_400 + (hours ?? 0) * 3_600 + (minutes ?? 0) * 60 + (seconds ?? 0)
+  return total > 0 ? Math.round(total) : undefined
+}
+
+/** The day a date or a date-time names, `YYYY-MM-DD`, or `undefined`. */
+function isoDay(value: unknown): string | undefined {
+  return /^(\d{4}-\d{2}-\d{2})/.exec(String(value ?? '').trim())?.[1]
+}
+
+/** An attribute's whole number of pixels, or `undefined`. */
+function pixels(value: string | undefined): number | undefined {
+  const number = Number(String(value ?? '').trim())
+  return Number.isInteger(number) && number > 0 && number <= 10_000 ? number : undefined
+}
+
+/** A `<video>`'s or a frame's own facts: how it plays, and its size. */
+function videoAttributes(attributes: Record<string, string>): Partial<SiteImportVideo> {
+  const width = pixels(attributes['width'])
+  const height = pixels(attributes['height'])
+  return {
+    ...('autoplay' in attributes ? { autoplay: true as const } : {}),
+    ...('muted' in attributes ? { muted: true as const } : {}),
+    ...('loop' in attributes ? { loop: true as const } : {}),
+    ...('controls' in attributes ? { controls: true as const } : {}),
+    ...(width ? { width } : {}),
+    ...(height ? { height } : {}),
+  }
+}
+
+/** A film's name as its element gives it: a frame's title that names only its player is none. */
+function videoName(value: string | undefined): string {
+  const name = clip(collapse(decodeHtmlEntities(String(value ?? '').replace(PLAY_PREFIX, ''))), 200)
+  return PLAYER_TITLE.test(name) ? '' : name
+}
+
+/** Whether two addresses name one film: the same address, or the same host's same media id. */
+function sameFilm(a: string | undefined, b: string | undefined): boolean {
+  if (!a || !b) return false
+  if (a === b) return true
+  const left = videoEmbedOf(a)
+  const right = videoEmbedOf(b)
+  return !!left && !!right && left.provider.id === right.provider.id && left.mediaId === right.mediaId
+}
+
+/** An address's path, its query and fragment left off: how a poster is matched to the structured data's thumbnail. */
+function pathOf(url: string | undefined): string | null {
+  try {
+    return url ? new URL(url).pathname : null
+  } catch {
+    return null
+  }
+}
+
+/** The page's `VideoObject`s, read before scripts go; malformed data says nothing and nothing in it is run. */
+function readVideoObjects(html: string, pageUrl: string): SiteImportVideo[] {
+  const nodes: Record<string, unknown>[] = []
+  const visit = (value: unknown, depth: number) => {
+    if (depth > 5 || nodes.length >= SITE_IMPORT_PAGE_LIMITS.videos || !value || typeof value !== 'object') return
+    if (Array.isArray(value)) {
+      for (const entry of value) visit(entry, depth + 1)
+      return
+    }
+    const node = value as Record<string, unknown>
+    if (([] as unknown[]).concat(node['@type'] ?? []).some((type) => /^(?:schema:)?VideoObject$/i.test(String(type)))) nodes.push(node)
+    for (const key of ['@graph', 'video', 'mainEntity', 'hasPart', 'associatedMedia', 'subjectOf']) if (node[key]) visit(node[key], depth + 1)
+  }
+  for (const match of html.matchAll(LD_JSON)) {
+    try {
+      visit(JSON.parse(match[1]), 0)
+    } catch {
+      // Structured data that does not parse says nothing.
+    }
+  }
+  const text = (value: unknown, max: number): string => (typeof value === 'string' ? clip(collapse(decodeHtmlEntities(value)), max) : '')
+  const address = (value: unknown): string | undefined => {
+    const raw = ([] as unknown[]).concat(value ?? [])[0]
+    const written = typeof raw === 'string' ? raw : raw && typeof raw === 'object' ? (raw as Record<string, unknown>)['url'] : undefined
+    return typeof written === 'string' ? resolveSiteUrl(written, pageUrl)?.toString() : undefined
+  }
+  return nodes.map((node) => {
+    const embed = address(node['embedUrl'])
+    const content = address(node['contentUrl'])
+    const poster = address(node['thumbnailUrl'])
+    const description = text(node['description'], 2_000)
+    const uploadDate = isoDay(node['uploadDate'])
+    const durationSeconds = isoSeconds(node['duration'])
+    return {
+      ...(content ? { src: content } : {}),
+      ...(embed && embed.startsWith('https:') ? { embed } : {}),
+      ...(poster ? { poster } : {}),
+      title: text(node['name'], 200),
+      ...(description ? { description } : {}),
+      ...(uploadDate ? { uploadDate } : {}),
+      ...(durationSeconds ? { durationSeconds } : {}),
+    }
+  })
+}
+
+/** Where the element opening at `start` ends: past its own end tag, others of its kind inside it counted; the document's end for one left open. */
+function elementEnd(html: string, tag: string, start: number): number {
+  const pattern = new RegExp(`<(/?)${tag}\\b(?:[^>"']|"[^"]*"|'[^']*')*>`, 'gi')
+  pattern.lastIndex = start
+  let depth = 0
+  for (let match = pattern.exec(html); match; match = pattern.exec(html)) {
+    if (match[1]) {
+      depth -= 1
+      if (depth <= 0) return match.index + match[0].length
+    } else if (!/\/\s*>$/.test(match[0])) depth += 1
+  }
+  return html.length
+}
+
+/**
+ * Where a film the page names only in its head or its data is placed: after
+ * the words of its opening, at the end of the element that holds its `h1`;
+ * at the start of its main content when it has no `h1`.
+ */
+function openingWordsEnd(html: string): number {
+  const h1 = /<h1\b/i.exec(html)
+  if (!h1) {
+    const main = /<main\b(?:[^>"']|"[^"]*"|'[^']*')*>/i.exec(html) ?? /<body\b(?:[^>"']|"[^"]*"|'[^']*')*>/i.exec(html)
+    return main ? main.index + main[0].length : html.length
+  }
+  const open: Array<{ tag: string; start: number }> = []
+  for (const match of html.slice(0, h1.index).matchAll(TAG)) {
+    const tag = match[2].toLowerCase()
+    if (VOID_TAGS.has(tag) || /\/\s*$/.test(match[3] ?? '')) continue
+    if (match[1] === '/') {
+      const at = open.map((entry) => entry.tag).lastIndexOf(tag)
+      if (at >= 0) open.length = at
+      continue
+    }
+    open.push({ tag, start: match.index })
+  }
+  const parent = open[open.length - 1]
+  if (!parent || /^(?:html|body|main)$/.test(parent.tag)) return elementEnd(html, 'h1', h1.index)
+  return elementEnd(html, parent.tag, parent.start)
+}
+
+/**
+ * The marker a video leaves at its place, with the styles of the element it
+ * stands for, and its poster inside it as a picture the walk reads: the
+ * page's own `<img>` where the page drew one, framed as the page frames it.
+ */
+function videoMarker(index: number, poster: { url: string; alt: string; tag?: string; size?: string } | undefined, own: string): string {
+  const quote = (value: string) => value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
+  const picture = poster ? (poster.tag ?? `<img src="${quote(poster.url)}" alt="${quote(poster.alt)}"${poster.size ?? ''}>`) : ''
+  return ` <aglyn-video data-video="${index}"${own}>${picture}</aglyn-video> `
+}
+
+/** The attributes of an element that style it, as a marker or a box keeps them: its classes, its inline style, its id. */
+function styling(attributes: Record<string, string>): string {
+  const quote = (value: string) => value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
+  return ['class', 'style', 'id'].flatMap((name) => (attributes[name] !== undefined ? [` ${name}="${quote(attributes[name] as string)}"`] : [])).join('')
+}
+
+/** A video's place while the page is read, written once every video's poster is known. */
+const VIDEO_PLACE = new RegExp(`${PLACE}(\\d+)${PLACE}`, 'g')
+
+/** A facade the page draws in a film's place, before it is known to be one. */
+interface Facade {
+  start: number
+  end: number
+  /** What stands in its place once it is one: its box, holding the film's place and whatever else it says. */
+  place: (token: string) => string
+  /** The styles its marker keeps, where the marker is its box. */
+  own: string
+  video: SiteImportVideo
+  poster: { url: string; alt: string; tag?: string } | null
+  /** Its address came from the structured data, or it has one of its own. */
+  addressed: boolean
+  /** Only a `<button>` (or a link that goes nowhere) takes a film the structured data names. */
+  open: boolean
+}
+
+/**
+ * Every video the page shows (AGL-4140), each once, at most
+ * `SITE_IMPORT_PAGE_LIMITS.videos`, and the page with a marker at each one's
+ * place, its poster inside it as a picture. Read in this order:
+ *
+ *  1. a `<video>`, from its `src` or its first `<source>`;
+ *  2. an `<iframe>` of a video host whose player the Video element frames;
+ *  3. a facade: a `lite-youtube` or `lite-vimeo` element, an element naming a
+ *     host's video id (`data-youtube-id`, `data-wistia-id`, `data-video-id`
+ *     with the host named beside it), and a `<button>` or `<a>` around a
+ *     picture whose label or words say it plays a film, or that links a video
+ *     host's page. Its picture is the film's poster, and words that only name
+ *     its control are the film's name;
+ *  4. the structured data's `VideoObject`s, each matched to a video already
+ *     found that plays the same film, else to a facade whose picture is its
+ *     thumbnail, else to the first facade with no film of its own, else one
+ *     of its own; a thumbnail is the poster of a film that showed none;
+ *  5. the head's `og:video`, unless it is a film already found.
+ *
+ * A film only the data or the head names is placed after the words of the
+ * page's opening, or, where the page's own films are placed already, at the
+ * end of its main content. A facade with no film found for it is left as it
+ * was: a picture in a button. Scripts, styles and templates are never read
+ * for one.
+ */
+function readVideos(html: string, pageUrl: string, isSameSite: (url: URL) => boolean): { html: string; videos: SiteImportVideo[] } {
+  const videos: SiteImportVideo[] = []
+  /** Each video's poster as its place draws it, and the styles of the element it stands for. */
+  const places = new Map<number, { poster: { url: string; alt: string; tag?: string } | null; own: string; size: string }>()
+  const room = () => videos.length < SITE_IMPORT_PAGE_LIMITS.videos
+  const placed = (video: SiteImportVideo, own: string, poster: { url: string; alt: string; tag?: string } | null = null): string => {
+    videos.push(video)
+    // A poster drawn from the data takes the player's own size, the shape the page gave the film.
+    places.set(videos.length - 1, { poster, own, size: `${video.width ? ` width="${video.width}"` : ''}${video.height ? ` height="${video.height}"` : ''}` })
+    return `${PLACE}${videos.length - 1}${PLACE}`
+  }
+  const shielded: string[] = []
+  let out = html.replace(VIDEO_SHIELDED, (whole: string) => {
+    shielded.push(whole)
+    return `${SHIELD}${shielded.length - 1}${SHIELD}`
+  })
+  const imageOf = (inner: string, style?: string): { url: string; alt: string; tag?: string } | null => {
+    const img = /<img\b((?:[^>"']|"[^"]*"|'[^']*')*)>/i.exec(inner)
+    const attributes = img ? parseAttributes(img[1]) : {}
+    const drawn = /background(?:-image)?\s*:[^;]*url\(\s*(['"]?)([^'")]+)\1\s*\)/i.exec(style ?? '')?.[2]
+    const own = resolveSiteUrl(attributes['src'] || attributes['data-src'] || firstSrcset(attributes['srcset'] || attributes['data-srcset']), pageUrl)
+    const url = own ?? resolveSiteUrl(drawn, pageUrl)
+    return url ? { url: url.toString(), alt: clip(collapse(attributes['alt'] ?? ''), 300), ...(own && img ? { tag: img[0] } : {}) } : null
+  }
+
+  // 1. The page's own players.
+  out = out.replace(/<video\b((?:[^>"']|"[^"]*"|'[^']*')*)>([\s\S]*?)<\/video\s*>/gi, (whole: string, attributeSource: string, inner: string) => {
+    if (!room()) return whole
+    const attributes = parseAttributes(attributeSource)
+    const sources = [...inner.matchAll(/<source\b((?:[^>"']|"[^"]*"|'[^']*')*)>/gi)].map((match) => parseAttributes(match[1]))
+    const src = resolveSiteUrl(attributes['src'] || attributes['data-src'] || sources.map((source) => source['src'] || source['data-src']).find(Boolean), pageUrl)?.toString()
+    if (!src) return whole
+    const poster = resolveSiteUrl(attributes['poster'] || attributes['data-poster'], pageUrl)?.toString()
+    return placed({ src, ...(poster ? { poster } : {}), title: videoName(attributes['title'] || attributes['aria-label']), ...videoAttributes(attributes) }, styling(attributes))
+  })
+
+  // 2. A video host's player in a frame.
+  out = out.replace(/<iframe\b((?:[^>"']|"[^"]*"|'[^']*')*)>(?:[\s\S]*?<\/iframe\s*>)?/gi, (whole: string, attributeSource: string) => {
+    if (!room()) return whole
+    const attributes = parseAttributes(attributeSource)
+    const url = resolveSiteUrl(attributes['src'] || attributes['data-src'], pageUrl)
+    if (!url || url.protocol !== 'https:' || !videoEmbedOf(url.toString())) return whole
+    const { width, height } = videoAttributes(attributes)
+    return placed({ embed: url.toString(), title: videoName(attributes['title'] || attributes['aria-label']), ...(width ? { width } : {}), ...(height ? { height } : {}) }, styling(attributes))
+  })
+
+  // 3. Facades, outermost first, none inside another.
+  const facades: Facade[] = []
+  for (const match of out.matchAll(/<([a-z][\w-]*)\b((?:[^>"']|"[^"]*"|'[^']*')*)>/gi)) {
+    const start = match.index as number
+    const tag = match[1].toLowerCase()
+    if (!/^(?:button|a|lite-youtube|lite-vimeo)$/.test(tag) && !/\bdata-(?:youtube|vimeo|wistia|video)-id\b/i.test(match[2])) continue
+    if (facades.some((facade) => start >= facade.start && start < facade.end)) continue
+    const attributes = parseAttributes(match[2])
+    const named = Object.entries(attributes).find(([name]) => /^data-(?:youtube|vimeo|wistia|video)-id$/.test(name))
+    if (!/^(?:button|a|lite-youtube|lite-vimeo)$/.test(tag) && !named) continue
+    const end = elementEnd(out, tag, start)
+    const inner = out.slice(start + match[0].length, end).replace(new RegExp(`<\\/${tag}\\s*>$`, 'i'), '')
+    const words = collapse(decodeHtmlEntities(inner.replace(/<[^>]*>/g, ' ').replace(SHIELD_MARK, ' ')))
+    const label = attributes['aria-label'] || attributes['playlabel'] || attributes['title'] || ''
+    const poster = imageOf(inner, tag.startsWith('lite-') || named ? attributes['style'] : undefined)
+    let address: string | undefined
+    let file: string | undefined
+    // A host's id, on a lite element or named by a data attribute with the host beside it.
+    const id = tag.startsWith('lite-') ? attributes['videoid'] : named?.[1]
+    if (id) {
+      const hint = tag.startsWith('lite-') ? tag : `${named?.[0] ?? ''} ${attributes['class'] ?? ''} ${attributes['data-provider'] ?? ''} ${attributes['data-type'] ?? ''} ${attributes['data-platform'] ?? ''}`
+      const player = VIDEO_ID_PLAYERS.find((entry) => entry.host.test(hint) && entry.id.test(id.trim()))
+      if (player) address = player.player(id.trim())
+    }
+    let open = false
+    if (!address && (tag === 'button' || tag === 'a')) {
+      if (!poster) continue
+      const href = tag === 'a' ? resolveSiteUrl(attributes['href'], pageUrl) : null
+      const given = ['data-src', 'data-video', 'data-video-url', 'data-video-src', 'data-embed', 'data-url'].map((name) => attributes[name]).find(Boolean)
+      const own = resolveSiteUrl(given, pageUrl)
+      const plays = PLAY_WORDS.test(label) || PLAY_WORDS.test(words)
+      if (own && videoEmbedOf(own.toString())) address = own.toString()
+      else if (own && VIDEO_FILE.test(own.pathname)) file = own.toString()
+      else if (href && videoEmbedOf(href.toString())) address = href.toString()
+      else if (href && plays && href.protocol === 'https:' && !isSameSite(href)) address = href.toString()
+      else if (!plays || (href && (attributes['href'] ?? '').trim() && !/^(?:#|javascript:)/i.test((attributes['href'] ?? '').trim()))) continue
+      else open = true
+    }
+    if (!address && !file && !open) continue
+    // The facade's box stays, for the layout it sets (a card, a frame), and
+    // so does what else it says; its picture is the film's poster. A link or
+    // a button is no destination once the film plays in its place, so its box
+    // is a plain one, keeping only what styles it.
+    const box = tag === 'a' || tag === 'button' ? 'div' : tag
+    const rest = poster ? inner.replace(/<img\b(?:[^>"']|"[^"]*"|'[^']*')*>/i, ' ') : inner
+    // Words that only name the control ("Play video", "Play: A morning with us") are the film's name, not words beside it.
+    const said = collapse(decodeHtmlEntities(rest.replace(/<[^>]*>/g, ' ').replace(SHIELD_MARK, ' ')))
+    const keeps = !!videoName(said) && videoName(said) !== videoName(label) && !PLAY_PREFIX.test(said)
+    facades.push({
+      start,
+      end,
+      // With nothing else to say, the marker is its box, so its poster sits as deep as the page set it.
+      place: (token) => (keeps ? `<${box}${styling(attributes)}>${token}${rest}</${box}>` : token),
+      own: keeps ? '' : styling(attributes),
+      poster,
+      addressed: !!address || !!file,
+      open,
+      video: {
+        ...(file ? { src: file } : {}),
+        ...(address ? { embed: address } : {}),
+        ...(poster ? { poster: poster.url } : {}),
+        title: videoName(label) || (keeps ? '' : videoName(words)) || videoName(poster?.alt),
+      },
+    })
+  }
+
+  // 4. The structured data's films, each once.
+  const standalone: SiteImportVideo[] = []
+  for (const object of readVideoObjects(html, pageUrl)) {
+    const merge = (video: SiteImportVideo) => {
+      if (object.title) video.title = object.title
+      if (object.description) video.description = object.description
+      if (object.uploadDate) video.uploadDate = object.uploadDate
+      if (object.durationSeconds) video.durationSeconds = object.durationSeconds
+      if (!video.embed && !video.src) {
+        if (object.embed) video.embed = object.embed
+        if (object.src) video.src = object.src
+      }
+      if (!video.poster && object.poster) video.poster = object.poster
+    }
+    const same = (video: SiteImportVideo) => sameFilm(video.embed, object.embed) || sameFilm(video.src, object.src)
+    const found = videos.find(same) ?? facades.find((facade) => same(facade.video))?.video
+    if (found) {
+      merge(found)
+      continue
+    }
+    if (!object.embed && !object.src) continue
+    const thumbnail = pathOf(object.poster)
+    const facade =
+      facades.find((entry) => entry.open && !entry.addressed && !!thumbnail && pathOf(entry.poster?.url) === thumbnail) ??
+      facades.find((entry) => entry.open && !entry.addressed)
+    if (facade) {
+      merge(facade.video)
+      facade.addressed = true
+      continue
+    }
+    standalone.push({ ...object })
+  }
+
+  // The facades with a film, in their places, in the page's order.
+  const kept = facades.filter((facade) => facade.addressed).slice(0, Math.max(0, SITE_IMPORT_PAGE_LIMITS.videos - videos.length))
+  const tokens = kept.map((facade) => placed(facade.video, facade.own, facade.poster))
+  for (let index = kept.length - 1; index >= 0; index -= 1) {
+    const facade = kept[index] as Facade
+    out = `${out.slice(0, facade.start)}${facade.place(tokens[index] as string)}${out.slice(facade.end)}`
+  }
+
+  // 5. The head's film, unless it is one already found.
+  const meta = (key: string) => collapse(metaTags(html).find((entry) => (entry['property'] ?? entry['name'] ?? '').toLowerCase() === key)?.['content'] ?? '')
+  const ogVideo = resolveSiteUrl(meta('og:video:secure_url') || meta('og:video:url') || meta('og:video'), pageUrl)?.toString()
+  if (ogVideo && ![...videos, ...standalone].some((video) => sameFilm(video.embed, ogVideo) || sameFilm(video.src, ogVideo))) {
+    const file = meta('og:video:type').toLowerCase().startsWith('video/') || VIDEO_FILE.test(ogVideo)
+    const poster = resolveSiteUrl(meta('og:image:secure_url') || meta('og:image') || meta('og:image:url'), pageUrl)?.toString()
+    if (file || ogVideo.startsWith('https:')) {
+      standalone.push({ ...(file ? { src: ogVideo } : { embed: ogVideo }), ...(poster ? { poster } : {}), title: clip(meta('og:video:title') || meta('og:title'), 200) })
+    }
+  }
+  const alone = standalone.slice(0, Math.max(0, SITE_IMPORT_PAGE_LIMITS.videos - videos.length))
+  if (alone.length) {
+    const main = /<\/main\s*>/i.exec(out)
+    const at = videos.length && main ? main.index : openingWordsEnd(out)
+    const markers = alone.map((video) => placed(video, ''))
+    out = `${out.slice(0, at)}${markers.join('')}${out.slice(at)}`
+  }
+  // Every place written, its poster the one each film ended with.
+  out = out.replace(VIDEO_PLACE, (_whole: string, index: string) => {
+    const at = Number(index)
+    const video = videos[at]
+    const place = places.get(at)
+    const poster = place?.poster ?? (video?.poster ? { url: video.poster, alt: '', size: place?.size ?? '' } : null)
+    return videoMarker(at, poster ?? undefined, place?.own ?? '')
+  })
+  return { html: out.replace(SHIELD_MARK, (_whole: string, index: string) => shielded[Number(index)] ?? ''), videos }
+}
+
+/*------------------------------------------
  * How the page is built (AGL-4106)
  *-----------------------------------------*/
 
@@ -991,6 +1453,11 @@ export function extractSiteImportPage(
   const icons = readIcons(source, pageUrl)
   const keep = options.structure === true
   const sheets = keep ? readStyleSheets(source, pageUrl) : { styles: [], stylesheets: [] }
+  // A video is a marker at its place (AGL-4140), read before scripts and
+  // players go: its structured data is a script's body.
+  const film = readVideos(source, pageUrl, isSameSite)
+  source = film.html
+  const videos = film.videos
   // An inline icon is a marker at its place (AGL-4106); its drawing is never words.
   const svgIcons: SiteImportSvgIcon[] = []
   source = readSvgIcons(source, svgIcons)
@@ -1267,6 +1734,19 @@ export function extractSiteImportPage(
       return
     }
 
+    if (tag === 'aglyn-video') {
+      // A video at its place (AGL-4140): never words; its poster is the picture inside it.
+      flush()
+      boundary(true)
+      const index = Number(attributes['data-video'])
+      if (!closing && keep && element >= 0 && Number.isInteger(index) && videos[index]) {
+        const own = elements[element] as SiteImportElement
+        own.video = index
+        own.order = blocks.length - 0.5
+      }
+      return
+    }
+
     if (tag === 'aglyn-form') {
       const index = Number(attributes['data-form'])
       if (keep && element >= 0 && Number.isInteger(index)) {
@@ -1381,6 +1861,7 @@ export function extractSiteImportPage(
     navLinks,
     links,
     forms: { kept: forms.kept, removed: forms.removed },
+    ...(videos.length ? { videos } : {}),
     loginForm: false,
     ...(keep
       ? {

@@ -77,8 +77,9 @@ Reading uses no AI credits.
 **What is read.** For each page Aglyn reads its words and how your site lays them out: its
 sections and their background colors, its columns, its cards and the icons on them, its
 numbered steps, figures, questions and answers, quotes, logo strips, plan cards with their
-badge, price and button, plan rows, tables and tabs, its pictures where they sit, your forms
-with their fields and their button, and which links your site shows as buttons. From
+badge, price and button, plan rows, tables and tabs, its pictures where they sit, its
+videos (a film on your page, with its poster, title and description), your forms with their
+fields and their button, and which links your site shows as buttons. From
 your home page it also reads your menu, with each dropdown and its entries, the buttons
 beside it, and your footer's columns, profiles and copyright line, plus your site's fonts
 and colors. Your new pages are built from this, with every word as you wrote it.
@@ -224,6 +225,8 @@ and shows:
   already in your media library and how many could not be brought in;
 - a page that could not be brought in, with the reason;
 - a page whose form was rebuilt, with the form's name;
+- a page with a video your old site serves itself, which plays from your old site's address,
+  and a page with a video that was left out because it had no poster picture;
 - how many AI credits the wave used.
 
 If your site started in [preview](../building-sites/site-protection/make-your-site-private.md#keep-it-to-your-team-with-preview),
@@ -244,11 +247,31 @@ the next wave's **Start** button. Nothing starts the next wave except you, unles
 preview, or as drafts. Under **Every wave**, a wave that was running reads **stopped**, and a
 wave that had not started reads **not started**.
 
-## Photos {#photos}
+## Photos and videos {#photos}
 
 A page's photos are copied into your new site's media library and placed on that page:
 on a page copied as it is, each one where your page shows it. The same photo is stored only
 once, however many pages show it.
+
+A video on your page is placed with the [Video](../building-sites/besigner/video.md) element,
+where your page shows it, and plays from where it plays now:
+
+- **A video on Wistia, YouTube or Vimeo** plays in that host's player, which loads only when a
+  visitor presses play.
+- **A video your old site serves itself** plays from your old site's address. Its page's row
+  says so. To move it, pick the video from your media library on its Video element. So it can
+  play on your new site, the address it plays from is added to
+  [Approved media hosts](../content-and-data/media/overview.md#approved-media-hosts) in
+  **Admin → Security**. Every host on that list can see the IP address of each visitor whose
+  browser plays the video from it.
+
+Its poster picture, the still a visitor presses, is copied into your media library like any
+photo, and its title, description, date and running time come with it when your page gives
+them. A button on your page that plays the video, such as **Watch the film**, plays it on the
+new page too. A video on another host is shown as its poster picture, linking to where it
+plays. A video your page shows without a poster picture is left out, and its page's row says
+so: add it with the Video element and pick a poster for it. A video that plays by itself
+behind a section's words is shown as its poster picture there.
 
 Your logo is copied once, for your header. If it is a drawing (an SVG file), it is saved as
 a picture. Your home page's share image, the one shown when your site is linked, becomes
@@ -258,7 +281,8 @@ your new site's share image unless you already chose one.
 
 - **Sign-in pages.** A page that asks for a password is left out, and so is a page AglynBot
   is asked not to read by robots.txt.
-- **Code.** Scripts and embedded frames are never brought in.
+- **Code.** Scripts are never brought in. An embedded video is placed as a video, and any
+  other embedded frame is left out.
 - **Forms that ask for a password or a card number.** These are left out. Every other form
   on your page is rebuilt as a form of your new site, with the same fields, required marks
   and button, where your page had it. What visitors send lands in your **Inbox**, a form that

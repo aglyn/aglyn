@@ -67,6 +67,7 @@ import {
   detectInvisibleLinks,
   detectLayoutRegions,
   detectLinksWithoutDestination,
+  aiSettleLinksWithoutDestination,
   detectLiteralStyles,
   detectMissedDuplicate,
   detectMissingNavAndSeo,
@@ -2823,5 +2824,49 @@ describe('validateAiBuildPlan', () => {
       'plan-repeated-items',
       'plan-form-not-placed',
     ])
+  })
+})
+
+
+describe('a film is no hot-linked picture, and a button that plays it goes somewhere (AGL-4140)', () => {
+  const film = (props: Record<string, unknown>): Nested => ({ componentId: 'video', props: { poster: IMAGE, controls: true, ...props } })
+  const play = (target: string): Nested => ({
+    componentId: 'muiButton',
+    props: { children: 'Watch the film', variant: 'outlined' },
+    interactions: [
+      {
+        id: 'ai-play-video',
+        name: 'Scroll to the video and play it',
+        enabled: true,
+        trigger: { event: 'elementClick', everyTime: true },
+        steps: [
+          { type: 'scrollTo', selector: `[data-aglyn="leaf:${target}"]`, offsetPx: 24 },
+          { type: 'playVideo', selector: `[data-aglyn="leaf:${target}"]` },
+        ],
+      },
+    ],
+  } as Nested)
+
+  it('passes a Video element playing a host’s link, which it frames from the host and never fetches as a file', () => {
+    expect(detectImageSources(tree(page(film({ src: 'https://fast.wistia.net/embed/iframe/e4a27b971d' }), film({ src: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' }))))).toEqual([])
+  })
+
+  it('passes a film where the old page played it on a page brought in, and refuses it on any other', () => {
+    const own = tree(page(film({ src: 'https://www.bakery.example/wp-content/uploads/tour.mp4' })))
+    expect(detectImageSources(own, { ownWords: true })).toEqual([])
+    expect(codes(detectImageSources(own))).toEqual(['hotlinked-image'])
+  })
+
+  it('still refuses a film’s poster, or any picture, from another website', () => {
+    expect(codes(detectImageSources(tree(page(film({ src: 'https://fast.wistia.net/embed/iframe/e4a27b971d', poster: 'https://cdn.example.com/still.jpg' }))), { ownWords: true }))).toEqual(['hotlinked-image'])
+  })
+
+  it('reads a button that presses play on a film of its page as going there, and one whose film is not on the page as going nowhere', () => {
+    // n1 the section, n2 the film, n3 the button.
+    const placed = tree(page(section(film({ src: 'https://fast.wistia.net/embed/iframe/e4a27b971d' }), play('n2'))))
+    expect(detectLinksWithoutDestination(placed, 'page', {}, () => undefined, (id) => placed.nodes[id])).toEqual([])
+    expect(aiSettleLinksWithoutDestination(placed, 'page')).toBe(placed)
+    const missing = tree(page(section(play('n9'))))
+    expect(codes(detectLinksWithoutDestination(missing, 'page', {}, () => undefined, (id) => missing.nodes[id]))).toEqual(['link-without-destination'])
   })
 })

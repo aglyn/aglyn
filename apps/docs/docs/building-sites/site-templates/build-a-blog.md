@@ -108,7 +108,7 @@ Each entry carries, besides the title, excerpt, cover image, and markdown body:
 - **SEO title / SEO description** — search & social overrides; they fall back to the
   title and excerpt when blank.
 - **Featured video** — a film for the entry's page: one from your media library, a video
-  link, or a Wistia link. It plays where the cover image would sit. **Video length
+  link, or a Wistia, YouTube or Vimeo link. It plays where the cover image would sit. **Video length
   (seconds)** beside it is how long the film runs, which search results can show; it
   fills in when you choose a library film. See [Build a video collection](#video-collection).
 
@@ -559,7 +559,7 @@ on the empty listing above. Prefer linking with the pills.
 | `{{entry.slug}}` | Entry slug |
 | `{{entry.url}}` | Entry route, e.g. `/blog/my-post` |
 | `{{entry.coverImage}}` | Cover image URL |
-| `{{entry.coverVideo}}` | Featured video, as picked: a media library film, a video link or a Wistia link |
+| `{{entry.coverVideo}}` | Featured video, as picked: a media library film, a video link or a Wistia, YouTube or Vimeo link |
 | `{{entry.coverVideoDuration}}` | Featured video's length in seconds, e.g. `754`; blank when the entry has none — for a Video element's **Duration (seconds)** |
 | `{{entry.category}}` | Entry category |
 | `{{entry.tags}}` | Comma-joined tags, e.g. `nextjs, seo` |
@@ -661,14 +661,14 @@ film where a post's cover image would sit. Search engines list a video from a pa
 is about that video, and an entry page is exactly that.
 
 **Give each entry its film.** In the entry editor, **Featured video** takes a film from
-your media library, a video link, or a Wistia link. Picking a library film that has a
+your media library, a video link, or a Wistia, YouTube or Vimeo link. Picking a library film that has a
 captured frame also fills an empty **Cover image** with that frame; a cover you already
 chose is kept.
 
 **Say how long it runs.** **Video length (seconds)**, under the featured video, is the
 film's running time, which a video search result can show beside it. Choosing a film
-from your media library fills it in from the file. For a video link or a Wistia link,
-type it yourself: `754` for a film that runs 12 minutes 34 seconds. Leave it blank if you
+from your media library fills it in from the file. For a video link or a Wistia, YouTube
+or Vimeo link, type it yourself: `754` for a film that runs 12 minutes 34 seconds. Leave it blank if you
 don't know it; the page is still listed without one.
 
 **Place the player on the entry template.** Add a **Video** element where the cover would
@@ -695,7 +695,7 @@ about any one of them.
 
 **No entry template?** The built-in entry page plays the featured video with no setup,
 in the cover's place, with the cover as its poster and the entry's video length as its
-duration. A Wistia film needs a cover image to
+duration. A Wistia, YouTube or Vimeo film needs a cover image to
 show as its poster; without one, the page shows the article without the player.
 
 ## Tips
