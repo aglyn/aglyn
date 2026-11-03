@@ -219,6 +219,9 @@ export interface SiteImportElementAttrs {
   /** `aria-controls` / `aria-labelledby`: what a tab shows, and what names a panel. */
   controls?: string
   labelledby?: string
+  /** A picture's or a film's own size, as its `width` and `height` attributes give it in px (AGL-4138). */
+  width?: number
+  height?: number
 }
 
 /** One element of the page, in a flat table: its parent and children by index. */
@@ -797,8 +800,12 @@ function readOrganization(html: string): SiteImportOrganization | null {
 /** What a video is never read inside: a script's text, a style, a template, a fallback for no script. */
 const VIDEO_SHIELDED = /<(script|style|template|noscript|textarea)\b(?:[^>"']|"[^"]*"|'[^']*')*>[\s\S]*?<\/\1\s*>/gi
 
+/** What marks a shielded stretch's place, and a video's, while the videos are read: characters no page writes. */
+const SHIELD = '\u0002'
+const PLACE = '\u0003'
+
 /** A shielded stretch's place while the videos are read. */
-const SHIELD_MARK = /\u0002(\d+)\u0002/g
+const SHIELD_MARK = new RegExp(`${SHIELD}(\\d+)${SHIELD}`, 'g')
 
 /** The words that name a facade's control as one that plays a film. */
 const PLAY_WORDS = /\b(?:play|watch|video|film)\b/i
@@ -966,10 +973,15 @@ function openingWordsEnd(html: string): number {
   return elementEnd(html, parent.tag, parent.start)
 }
 
-/** The marker a video leaves at its place, its poster inside it as a picture the walk reads, and the styles of the element it stands for. */
-function videoMarker(index: number, poster: { url: string; alt: string } | undefined, own: string): string {
+/**
+ * The marker a video leaves at its place, with the styles of the element it
+ * stands for, and its poster inside it as a picture the walk reads: the
+ * page's own `<img>` where the page drew one, framed as the page frames it.
+ */
+function videoMarker(index: number, poster: { url: string; alt: string; tag?: string; size?: string } | undefined, own: string): string {
   const quote = (value: string) => value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
-  return ` <aglyn-video data-video="${index}"${own}>${poster ? `<img src="${quote(poster.url)}" alt="${quote(poster.alt)}">` : ''}</aglyn-video> `
+  const picture = poster ? (poster.tag ?? `<img src="${quote(poster.url)}" alt="${quote(poster.alt)}"${poster.size ?? ''}>`) : ''
+  return ` <aglyn-video data-video="${index}"${own}>${picture}</aglyn-video> `
 }
 
 /** The attributes of an element that style it, as a marker or a box keeps them: its classes, its inline style, its id. */
@@ -979,7 +991,7 @@ function styling(attributes: Record<string, string>): string {
 }
 
 /** A video's place while the page is read, written once every video's poster is known. */
-const VIDEO_PLACE = /\u0003(\d+)\u0003/g
+const VIDEO_PLACE = new RegExp(`${PLACE}(\\d+)${PLACE}`, 'g')
 
 /** A facade the page draws in a film's place, before it is known to be one. */
 interface Facade {
@@ -987,8 +999,10 @@ interface Facade {
   end: number
   /** What stands in its place once it is one: its box, holding the film's place and whatever else it says. */
   place: (token: string) => string
+  /** The styles its marker keeps, where the marker is its box. */
+  own: string
   video: SiteImportVideo
-  poster: { url: string; alt: string } | null
+  poster: { url: string; alt: string; tag?: string } | null
   /** Its address came from the structured data, or it has one of its own. */
   addressed: boolean
   /** Only a `<button>` (or a link that goes nowhere) takes a film the structured data names. */
@@ -1023,24 +1037,26 @@ interface Facade {
 function readVideos(html: string, pageUrl: string, isSameSite: (url: URL) => boolean): { html: string; videos: SiteImportVideo[] } {
   const videos: SiteImportVideo[] = []
   /** Each video's poster as its place draws it, and the styles of the element it stands for. */
-  const places = new Map<number, { poster: { url: string; alt: string } | null; own: string }>()
+  const places = new Map<number, { poster: { url: string; alt: string; tag?: string } | null; own: string; size: string }>()
   const room = () => videos.length < SITE_IMPORT_PAGE_LIMITS.videos
-  const placed = (video: SiteImportVideo, own: string, poster: { url: string; alt: string } | null = null): string => {
+  const placed = (video: SiteImportVideo, own: string, poster: { url: string; alt: string; tag?: string } | null = null): string => {
     videos.push(video)
-    places.set(videos.length - 1, { poster, own })
-    return `\u0003${videos.length - 1}\u0003`
+    // A poster drawn from the data takes the player's own size, the shape the page gave the film.
+    places.set(videos.length - 1, { poster, own, size: `${video.width ? ` width="${video.width}"` : ''}${video.height ? ` height="${video.height}"` : ''}` })
+    return `${PLACE}${videos.length - 1}${PLACE}`
   }
   const shielded: string[] = []
   let out = html.replace(VIDEO_SHIELDED, (whole: string) => {
     shielded.push(whole)
-    return `\u0002${shielded.length - 1}\u0002`
+    return `${SHIELD}${shielded.length - 1}${SHIELD}`
   })
-  const imageOf = (inner: string, style?: string): { url: string; alt: string } | null => {
+  const imageOf = (inner: string, style?: string): { url: string; alt: string; tag?: string } | null => {
     const img = /<img\b((?:[^>"']|"[^"]*"|'[^']*')*)>/i.exec(inner)
     const attributes = img ? parseAttributes(img[1]) : {}
     const drawn = /background(?:-image)?\s*:[^;]*url\(\s*(['"]?)([^'")]+)\1\s*\)/i.exec(style ?? '')?.[2]
-    const url = resolveSiteUrl(attributes['src'] || attributes['data-src'] || firstSrcset(attributes['srcset'] || attributes['data-srcset']) || drawn, pageUrl)
-    return url ? { url: url.toString(), alt: clip(collapse(attributes['alt'] ?? ''), 300) } : null
+    const own = resolveSiteUrl(attributes['src'] || attributes['data-src'] || firstSrcset(attributes['srcset'] || attributes['data-srcset']), pageUrl)
+    const url = own ?? resolveSiteUrl(drawn, pageUrl)
+    return url ? { url: url.toString(), alt: clip(collapse(attributes['alt'] ?? ''), 300), ...(own && img ? { tag: img[0] } : {}) } : null
   }
 
   // 1. The page's own players.
@@ -1115,7 +1131,9 @@ function readVideos(html: string, pageUrl: string, isSameSite: (url: URL) => boo
     facades.push({
       start,
       end,
-      place: (token) => `<${box}${styling(attributes)}>${token}${keeps ? rest : ''}</${box}>`,
+      // With nothing else to say, the marker is its box, so its poster sits as deep as the page set it.
+      place: (token) => (keeps ? `<${box}${styling(attributes)}>${token}${rest}</${box}>` : token),
+      own: keeps ? '' : styling(attributes),
       poster,
       addressed: !!address || !!file,
       open,
@@ -1163,7 +1181,7 @@ function readVideos(html: string, pageUrl: string, isSameSite: (url: URL) => boo
 
   // The facades with a film, in their places, in the page's order.
   const kept = facades.filter((facade) => facade.addressed).slice(0, Math.max(0, SITE_IMPORT_PAGE_LIMITS.videos - videos.length))
-  const tokens = kept.map((facade) => placed(facade.video, '', facade.poster))
+  const tokens = kept.map((facade) => placed(facade.video, facade.own, facade.poster))
   for (let index = kept.length - 1; index >= 0; index -= 1) {
     const facade = kept[index] as Facade
     out = `${out.slice(0, facade.start)}${facade.place(tokens[index] as string)}${out.slice(facade.end)}`
@@ -1191,7 +1209,7 @@ function readVideos(html: string, pageUrl: string, isSameSite: (url: URL) => boo
     const at = Number(index)
     const video = videos[at]
     const place = places.get(at)
-    const poster = place?.poster ?? (video?.poster ? { url: video.poster, alt: '' } : null)
+    const poster = place?.poster ?? (video?.poster ? { url: video.poster, alt: '', size: place?.size ?? '' } : null)
     return videoMarker(at, poster ?? undefined, place?.own ?? '')
   })
   return { html: out.replace(SHIELD_MARK, (_whole: string, index: string) => shielded[Number(index)] ?? ''), videos }
@@ -1361,8 +1379,8 @@ const IMPLIED_END: Record<string, { ends: ReadonlySet<string>; walls: ReadonlySe
 }
 const P_WALLS = new Set(['button', 'table', 'td', 'th', 'caption', 'object', 'template', 'html', 'marquee', 'applet'])
 
-/** The attributes the layout reader reads. */
-function elementAttrs(attributes: Record<string, string>): SiteImportElementAttrs {
+/** The attributes the layout reader reads; a picture's and a film's own size as numbers (AGL-4138). */
+function elementAttrs(attributes: Record<string, string>, tag = ''): SiteImportElementAttrs {
   const attrs: SiteImportElementAttrs = {}
   const text = (value: string | undefined, max: number) => {
     const clean = String(value ?? '').replace(/\s+/g, ' ').trim()
@@ -1382,6 +1400,15 @@ function elementAttrs(attributes: Record<string, string>): SiteImportElementAttr
   put('controls', text(attributes['aria-controls'], 120))
   put('labelledby', text(attributes['aria-labelledby'], 120))
   if ('hidden' in attributes || (attributes['aria-hidden'] ?? '').toLowerCase() === 'true') attrs.hidden = true
+  if (tag === 'img' || tag === 'video') {
+    const size = (value: string | undefined) => (/^\s*\d{1,5}(?:px)?\s*$/.test(value ?? '') ? Number.parseInt(value as string, 10) : 0)
+    const width = size(attributes['width'])
+    const height = size(attributes['height'])
+    if (width > 0 && height > 0) {
+      attrs.width = width
+      attrs.height = height
+    }
+  }
   return attrs
 }
 
@@ -1564,7 +1591,7 @@ export function extractSiteImportPage(
     if (elements.length >= SITE_IMPORT_PAGE_LIMITS.elements) return -1
     const id = elements.length
     const parent = top()
-    elements.push({ id, tag, parent, children: [], region: region(), nav: inNav(), attrs: elementAttrs(attributes), blocks: [] })
+    elements.push({ id, tag, parent, children: [], region: region(), nav: inNav(), attrs: elementAttrs(attributes, tag), blocks: [] })
     elements[parent]?.children.push(id)
     if (!isVoid && !selfClosing) open.push(id)
     if (tag === 'body' && bodyElement < 0) bodyElement = id

@@ -202,6 +202,40 @@ describe('aglyn.com’s look (AGL-4108)', () => {
   })
 })
 
+describe('aglyn.com’s eyebrows, third color and motion (AGL-4138)', () => {
+  it('sets its eyebrows as spaced capitals with no line before them, and pins their magenta as the theme’s third', async () => {
+    const { saved, look } = await runLook('home')
+    const style = saved[0]
+    // A seed's draw once set them after a short dash, which the source never draws.
+    expect(style.eyebrow).toBe('caps')
+    expect(style.tertiary).toBe('#e040fb')
+    expect(look.colors.slice(0, 3)).toEqual(['#00b0ff', '#0077ad', '#e040fb'])
+    const theme = aiSiteTheme(style, DEFAULT_SITE_THEME)
+    // No short line drawn before an overline: the theme's Typography carries no variant of its own.
+    expect((theme.components as Record<string, unknown> | undefined)?.['MuiTypography']).toBeUndefined()
+    const tertiary = theme.colorSchemes?.light?.tertiary?.main as string
+    // The magenta at the nearest shade of it that reads on white, its hue kept.
+    expect(Math.abs(aiHexOklch(tertiary).h - aiHexOklch('#e040fb').h)).toBeLessThanOrEqual(2)
+    expect(contrastRatio(tertiary, '#ffffff')).toBeGreaterThanOrEqual(4.5)
+    expect(contrastRatio(tertiary, '#f5f5f5')).toBeGreaterThanOrEqual(4)
+  })
+
+  it('moves as the source does: a page that animates nothing pins the still motion, whatever the seed would draw', async () => {
+    const { saved, look } = await runLook('home')
+    expect(saved[0].motion).toBe('still')
+    expect(look.style?.motion).toBe('still')
+  })
+
+  it('pins no third color for a source whose eyebrows are its words’ own, and keeps the accent’s neighbor', async () => {
+    const { saved } = await runLook('pottery')
+    expect(lookOf('pottery')?.eyebrow).toBeNull()
+    expect(saved[0].tertiary).toBeUndefined()
+    expect(saved[0].eyebrow).toBe('caps')
+    const unpinned = aiSiteTheme({ ...saved[0], tertiary: undefined }, DEFAULT_SITE_THEME)
+    expect(aiSiteTheme(saved[0], DEFAULT_SITE_THEME).colorSchemes?.light?.tertiary).toEqual(unpinned.colorSchemes?.light?.tertiary)
+  })
+})
+
 describe('a Squarespace page’s look (AGL-4108)', () => {
   it('sets its body in Work Sans and its headings in Fraunces, the families it loads from Google Fonts', async () => {
     const fonts = await aiSiteImportSourceFonts(lookOf('pottery'), async () => undefined)

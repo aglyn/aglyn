@@ -30,6 +30,7 @@
  * here are recorded, in the shape the tool answers.
  */
 
+import { createHash } from 'node:crypto'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import { AI_LAYOUT_DESIGN_TOOL, aiReadLayoutDesign } from '../layout-language/ai-layout-language'
 import type { AiLayoutRawTree } from '../layout-language/ai-layout-tree'
@@ -96,6 +97,8 @@ function docOf(name: SiteLayoutPageName, build: AiSiteImportDocument['build'] = 
     links: plannedLinks(blocks, origin),
     origins: [origin, origin.replace('://', '://www.')],
     ...(read.layout ? { layout: read.layout } : {}),
+    // Its films (AGL-4140), which its layout places by index.
+    ...(read.videos?.length ? { videos: read.videos } : {}),
   }
 }
 
@@ -231,7 +234,11 @@ describe.each(Object.keys(SITE_LAYOUT_PAGES) as SiteLayoutPageName[])('%s: built
     const layout = doc.layout as NonNullable<AiSiteImportDocument['layout']>
     const read = siteImportLayoutCounts(layout, doc.blocks)
     const nodes = Object.values(tree.nodes)
-    expect(nodes.filter((node) => node.componentId === 'image')).toHaveLength(read.pictures)
+    // A film's poster is a picture of the page, on its Video element (AGL-4140).
+    const films = nodes.filter((node) => node.componentId === 'video')
+    expect(nodes.filter((node) => node.componentId === 'image').length + films.filter((node) => node.props?.['poster']).length).toBe(read.pictures)
+    const behind = layout.sections.filter((section) => section.backdrop?.kind === 'video').length
+    expect(films).toHaveLength(read.videos - behind)
     expect(nodes.filter((node) => node.componentId === 'dataTable')).toHaveLength(read.tables)
     // A lone icon is no word and no picture; every item's and every bullet's icon is drawn.
     const lone = layout.sections.reduce((total, section) => total + JSON.stringify(section.nodes).split('"kind":"icon"').length - 1, 0)
@@ -243,23 +250,25 @@ describe('aglyn.com Home', () => {
   const { tree } = build('home')
   const sections = sectionsOf(tree)
 
-  it('opens on a hero around its own picture: the words over the film’s poster', () => {
+  it('opens on a hero around its own picture: the words over the film, poster first (AGL-4140)', () => {
     const hero = under(tree, sections[0].id)
-    expect(ofKind(tree, hero, 'image')).toHaveLength(1)
+    expect(ofKind(tree, hero, 'image')).toHaveLength(0)
+    expect(ofKind(tree, hero, 'video')).toHaveLength(1)
     const title = hero.map((id) => tree.nodes[id]).find((node) => node.props?.['component'] === 'h1')
     expect(title?.props?.['children']).toBe('Build your website. Describe it, edit it, publish free.')
     expect(title?.props?.['variant']).toBe('displayXl')
   })
 
-  it('draws "Explore the platform" as 13 of the theme’s cards in 3 columns, each with its icon, each a link to its page', () => {
+  it('draws "Explore the platform" as 13 of the theme’s cards in 3 columns, two on a tablet, each with its icon and its arrow, each a link to its page', () => {
     const explore = under(tree, sections[3].id)
     const cards = ofKind(tree, explore, 'muiCard')
     expect(cards).toHaveLength(13)
-    for (const card of cards) expect(ofKind(tree, under(tree, card), 'icon')).toHaveLength(1)
+    // Its icon in its tile, and the "↗" at the end of the same row (AGL-4138).
+    for (const card of cards) expect(ofKind(tree, under(tree, card), 'icon')).toHaveLength(2)
     const linked = ofKind(tree, explore, 'muiLinkBox')
     expect(linked).toHaveLength(13)
     expect(linked.map((id) => tree.nodes[id].props?.['screenId'])).toContain('p-product-besigner')
-    const cells = explore.filter((id) => tree.nodes[id].componentId === 'muiGrid' && tree.nodes[id].props?.['size'] === 'xs:12 md:4')
+    const cells = explore.filter((id) => tree.nodes[id].componentId === 'muiGrid' && tree.nodes[id].props?.['size'] === 'xs:12 sm:6 md:4')
     expect(cells).toHaveLength(13)
   })
 
@@ -316,7 +325,9 @@ describe('aglyn.com /product', () => {
 
   it('carries its pictures where the source shows them: the hero, the film and the console', () => {
     expect(ofKind(tree, under(tree, sections[0].id), 'image')).toHaveLength(1)
-    expect(Object.values(tree.nodes).filter((node) => node.componentId === 'image')).toHaveLength(3)
+    // The film is the Video element, its poster the picture the source showed (AGL-4140).
+    expect(Object.values(tree.nodes).filter((node) => node.componentId === 'image')).toHaveLength(2)
+    expect(Object.values(tree.nodes).filter((node) => node.componentId === 'video' && node.props?.['poster'])).toHaveLength(1)
   })
 })
 
@@ -708,13 +719,16 @@ describe('the design answer: choices only, over the structure it is shown', () =
     ],
   }
 
-  it('draws the hero it chose, beside the source’s picture, and the group style it chose, every word still once', () => {
+  it('sets aside a hero that would move the source’s picture, and draws the group style it chose, every word still once', () => {
     const { doc, stored, violations } = build('home', answer)
     expect(violations).toEqual([])
     expect(tally(shownWords(stored))).toEqual(tally(sourceLines(doc)))
     const nodes = Object.values(stored)
-    // A split hero: the words and the picture side by side.
-    expect(nodes.some((node) => node.componentId === 'muiGrid' && node.props?.['size'] === 'xs:12 md:6')).toBe(true)
+    // Home's picture sits under its centered words (AGL-4138): the split it asked for would set it beside them.
+    expect(nodes.some((node) => node.componentId === 'muiGrid' && node.props?.['size'] === 'xs:12 md:6')).toBe(false)
+    const designed = aiSiteImportDesignedSections(doc, aiReadLayoutDesign(answer, doc.layout?.sections.length ?? 0))
+    expect(designed.sections[0]?.hero).toBe('column')
+    expect(designed.settled.map((entry) => entry.what)).toContain('the split hero set aside: the source lays its picture below its words')
   })
 
   it('keeps a band the source drew whatever the answer says, and a style the group cannot be drawn in falls back to the source’s', () => {
@@ -846,5 +860,161 @@ describe('the page’s listing', () => {
     const listing = aiImportedPageListing({ seoTitle: 'Contact Aglyn | Support, Sales and Press', seoDescription: '' }, { title: 'Another title', description: 'A description the source never gave.' })
     expect(listing).toEqual({ title: 'Contact Aglyn | Support, Sales and Press', description: 'A description the source never gave.' })
     expect(aiImportedPageListingOwed({ title: 'Contact Aglyn | Support, Sales and Press', description: '' })).toBe(true)
+  })
+})
+
+/*------------------------------------------
+ * The page drawn as its source draws it (AGL-4138)
+ *-----------------------------------------*/
+
+describe('pictures at the shape their source shows them (AGL-4138)', () => {
+  /** The image a frame holds, and the frame. */
+  const framed = (tree: { nodes: Record<string, Node> }, ids: readonly string[], kind = 'image') =>
+    ofKind(tree, ids, kind).map((id) => ({ image: tree.nodes[id] as Node, frame: Object.values(tree.nodes).find((node) => node.nodes?.includes(id)) as Node }))
+
+  it('opens Home on its poster at the picture’s own shape, in the source’s rounded, shadowed box, never 16 / 7', () => {
+    const { tree } = build('home')
+    // Home's opening picture is its film's poster (AGL-4140): the Video element fills the frame as the picture did.
+    const [hero] = framed(tree, under(tree, sectionsOf(tree)[0].id), 'video')
+    expect(hero?.frame.sx).toMatchObject({ aspectRatio: '1600 / 900', borderRadius: 3, boxShadow: 3 })
+    expect(hero?.image.props).toMatchObject({ width: '100%', height: '100%' })
+    expect(hero?.image.sx).toMatchObject({ objectFit: 'cover' })
+    expect(JSON.stringify(tree.nodes)).not.toContain('16 / 7')
+  })
+
+  it('frames a card’s picture at its own shape, and at 16 / 9 only where nothing says its shape', () => {
+    const { tree } = build('post')
+    const related = framed(tree, under(tree, sectionsOf(tree)[1].id))
+    expect(related.map(({ image }) => image.sx?.['aspectRatio'])).toEqual(['1600 / 900', '1600 / 900', '1600 / 900'])
+    // A cover the library holds at 1200 × 630 is framed at 1200 / 630.
+    const doc = docOf('post')
+    const wide = { ...doc, photos: doc.photos.map((photo) => ({ ...photo, width: 1200, height: 630 })) }
+    const designed = aiSiteImportDesignedSections(wide)
+    const items = designed.sections[1]?.blocks.flatMap((block) => block.items ?? []) ?? []
+    expect(items.map((item) => item.picture?.fit?.ratio)).toEqual(['1200 / 630', '1200 / 630', '1200 / 630'])
+    const unsized = aiSiteImportDesignedSections({ ...doc, photos: doc.photos.map(({ width: _width, height: _height, ...photo }) => photo) })
+    expect(unsized.sections[1]?.blocks.flatMap((block) => block.items ?? []).map((item) => item.picture?.fit?.ratio)).toEqual([undefined, undefined, undefined])
+  })
+
+  it('crops the blog listing’s pictures to the heights its source crops them to, as the Image’s own height', () => {
+    const { tree, violations } = build('blog')
+    expect(violations).toEqual([])
+    const heights = ofKind(tree, Object.keys(tree.nodes), 'image').map((id) => [tree.nodes[id]?.props?.['height'], tree.nodes[id]?.props?.['objectFit']])
+    expect(heights).toEqual([['320px', 'cover'], ['220px', 'cover'], ['220px', 'cover'], ['220px', 'cover'], ['220px', 'cover'], ['220px', 'cover']])
+  })
+
+  it('keeps its category tags’ links', () => {
+    const { tree } = build('blog')
+    const tags = role(tree, 'chipLink').map((id) => tree.nodes[id]?.props?.['href'] ?? tree.nodes[id]?.props?.['screenId'])
+    expect(tags).toHaveLength(6)
+    expect(tags.every(Boolean)).toBe(true)
+  })
+})
+
+describe('Home’s hero as its source draws it, whatever the answer says (AGL-4138)', () => {
+  const asked = (hero: string) => ({ sections: [{ hero, band: 'source', align: 'start', groups: [] }] })
+  const designedWith = (doc: AiSiteImportDocument, hero: string) => aiSiteImportDesignedSections(doc, aiReadLayoutDesign(asked(hero), doc.layout?.sections.length ?? 0))
+
+  it('opens as a centered column with its picture under its words for any answer that would move it; editorial keeps it there', () => {
+    const doc = docOf('home')
+    for (const hero of ['split', 'bleed', 'cover', 'poster', 'panel']) expect(designedWith(doc, hero).sections[0]?.hero).toBe('column')
+    expect(designedWith(doc, 'editorial').sections[0]?.hero).toBe('editorial')
+    expect(designedWith(doc, 'editorial').settled).toEqual([])
+    const { stored } = build('home', asked('split'))
+    const measure = Object.values(stored).find((node) => node.componentId === 'muiBox' && JSON.stringify(node.sx) === JSON.stringify({ maxWidth: { xs: '100%', md: '72%' }, mx: 'auto' }))
+    expect(measure).toBeDefined()
+  })
+
+  it('keeps a hero beside its picture, or behind it, among the heroes that keep it there', () => {
+    const home = docOf('home')
+    const layout = home.layout as NonNullable<AiSiteImportDocument['layout']>
+    const beside = { ...home, layout: { ...layout, sections: layout.sections.map((section, index) => (index === 0 ? { ...section, hero: { picture: 'beside' as const } } : section)) } }
+    expect(designedWith(beside, 'split').sections[0]?.hero).toBe('split')
+    expect(designedWith(beside, 'bleed').sections[0]?.hero).toBe('bleed')
+    expect(designedWith(beside, 'column').sections[0]?.hero).toBe('split')
+    expect(designedWith(beside, 'column').settled.map((entry) => entry.what)).toEqual(['the column hero set aside: the source lays its picture beside its words'])
+    const pottery = docOf('pottery')
+    expect(designedWith(pottery, 'poster').sections[0]?.hero).toBe('poster')
+    expect(designedWith(pottery, 'split').sections[0]?.hero).toBe('cover')
+  })
+
+  it('sets its eyebrow in an outlined pill in the muted words’ grey, and the two lines under it as the source does', () => {
+    const { tree } = build('home')
+    const hero = under(tree, sectionsOf(tree)[0].id)
+    const pill = ofKind(tree, hero, 'muiPaper').map((id) => tree.nodes[id] as Node)
+    expect(pill).toHaveLength(1)
+    expect(pill[0]?.props).toMatchObject({ variant: 'outlined' })
+    expect(pill[0]?.sx).toMatchObject({ borderRadius: 999, alignSelf: 'center' })
+    const words = tree.nodes[pill[0]?.nodes?.[0] as string]
+    expect(words?.props).toMatchObject({ children: 'BUILD A WEBSITE · FREE TO START · NO CODE', variant: 'overline' })
+    expect(words?.sx).toMatchObject({ color: 'text.secondary' })
+  })
+})
+
+describe('Home’s sections as their source draws them (AGL-4138)', () => {
+  const { tree } = build('home')
+  const sections = sectionsOf(tree)
+  const eyebrowOf = (index: number) => under(tree, sections[index].id).map((id) => tree.nodes[id] as Node).find((node) => node.props?.['variant'] === 'overline')
+
+  it('draws its magenta eyebrows in the theme’s third color, and the one in its links’ blue in the brand’s', () => {
+    for (const index of [1, 3, 4, 5, 8]) expect(eyebrowOf(index)?.sx).toEqual({ color: 'tertiary.main' })
+    for (const index of [2, 6, 7, 9]) expect(eyebrowOf(index)?.sx).toEqual({ color: 'primary.main' })
+  })
+
+  it('draws "What Aglyn is" as one large statement in the Text Style of a fourth-level heading, every word, and no heading of the outline', () => {
+    const statement = under(tree, sections[2].id).map((id) => tree.nodes[id] as Node).find((node) => node.sx?.['typography'] === 'h4')
+    expect(statement?.props).toMatchObject({ variant: 'lede', component: 'p' })
+    expect(String(statement?.props?.['children'])).toMatch(/^Most website builders hand you a blank page.*easy to run\.$/)
+  })
+
+  it('sets the platform’s cards at the start under its centered heading, each icon in its tile and its arrow at the row’s end', () => {
+    const explore = under(tree, sections[3].id)
+    const heading = explore.map((id) => tree.nodes[id] as Node).find((node) => node.props?.['component'] === 'h2')
+    expect(heading?.props?.['align']).toBe('center')
+    const cards = ofKind(tree, explore, 'muiCard')
+    for (const card of cards) {
+      const inside = under(tree, card).map((id) => tree.nodes[id] as Node)
+      expect(inside.filter((node) => node.componentId === 'muiTypography').every((node) => node.props?.['align'] === undefined)).toBe(true)
+      const tile = inside.find((node) => node.componentId === 'muiPaper')
+      expect(tile?.sx).toEqual({ bgcolor: 'action.hover' })
+      const row = inside.find((node) => node.componentId === 'muiStack' && node.props?.['direction'] === 'row')
+      expect(row?.props?.['justifyContent']).toBe('space-between')
+      expect(tree.nodes[row?.nodes?.[1] as string]).toMatchObject({ componentId: 'icon', props: { size: '20' }, sx: { color: 'text.secondary' } })
+    }
+  })
+
+  it('draws its three steps under the source’s 3 px rule in the brand’s color, no card, their numbers grey', () => {
+    const steps = under(tree, sections[4].id)
+    expect(ofKind(tree, steps, 'muiCard')).toEqual([])
+    const ruled = role(tree, 'ruled').filter((id) => steps.includes(id)).map((id) => tree.nodes[id]?.sx)
+    expect(ruled).toEqual([
+      { borderTop: 3, borderColor: 'primary.main' },
+      { borderTop: 3, borderColor: 'primary.main' },
+      { borderTop: 3, borderColor: 'primary.main' },
+    ])
+    expect(role(tree, 'number').filter((id) => steps.includes(id)).map((id) => tree.nodes[id]?.sx)).toEqual([{ color: 'text.secondary' }, { color: 'text.secondary' }, { color: 'text.secondary' }])
+  })
+
+  it('reads the design answer’s text as it read before: a rule is "boxed", a statement a "lede"', () => {
+    const text = aiSiteImportDesignText(docOf('home'))
+    expect(text).toContain('Section 3 "What Aglyn is": plain band, aligned to the start. Groups: 0. Shows: eyebrow, lede.')
+    expect(text).toContain('group 1: 3 steps in 3 columns, boxed, each figure + title + text')
+  })
+})
+
+describe('the design answer’s text is the same on every recorded page (AGL-4138)', () => {
+  /** Digests of each page's design text, taken before the import read how its source frames what it shows. */
+  const BEFORE: Partial<Record<SiteLayoutPageName, string>> = {
+    home: 'aefeaebbe0d75a10d68835b3cda0c3341502d2b8b61c6dcc3cd496d263cb5dae',
+    product: '3f291a72d118038d53b868496e63430800f05956433674658cd1fdebb4ca451b',
+    pricing: '2215e9716b5ae4872ebaa9d87d5c8b4cb940ad9dd5cf8f95bfdfa80beaebb5c3',
+    livePricing: 'cc5e62018ad66a9afe15b3d9b52529b081769fbbfb9694d7b71e4f2fa493d603',
+    contact: '50f18902c98c9d7da19d782bf2a0e31d849d5ba3bcf21dffb9f56a09b9bd5d6d',
+    post: '0a12998087f6eecfc6df313f309fe704923b2c74ac3972032f6041938a3c9c17',
+    pottery: '82071847c6f3017142ac35f03c0961df58ad1d9d8e199889b1e221896dca6235',
+  }
+
+  it.each(Object.keys(BEFORE) as SiteLayoutPageName[])('%s', (name) => {
+    expect(createHash('sha256').update(aiSiteImportDesignText(docOf(name))).digest('hex')).toBe(BEFORE[name])
   })
 })
