@@ -21,7 +21,7 @@ import {
   TRANSPORT_RETRY_DELAY_MS,
   fetchOnceMore,
   isTimeout,
-  retryAfterRunnerStall,
+  retrySilentRows,
 } from './transport-retry.mjs'
 
 const transport = (code) =>
@@ -118,9 +118,10 @@ test('THE 2026-11-03 16:53Z RED: every answer took 12.6 s, so the rows with none
     up('front-door/marketing', 12_687),
   ]
   const { reprobe, asked } = reprober([up('console', 465), null, up('console/auth-doors', 3_573), null])
-  const { results, stall } = await retryAfterRunnerStall(first, reprobe)
+  const { results, stall, retried } = await retrySilentRows(first, reprobe)
   assert.deepEqual(asked, [0, 2])
-  assert.deepEqual(stall, { fastestMs: 12_687, retried: 2 })
+  assert.deepEqual(stall, { fastestMs: 12_687 })
+  assert.equal(retried, 2)
   assert.ok(results.every((r) => r.ok))
   // The rows that answered the first time are kept as they were.
   assert.equal(results[1], first[1])
@@ -129,30 +130,58 @@ test('THE 2026-11-03 16:53Z RED: every answer took 12.6 s, so the rows with none
   assert.match(results[0].detail, /tried again: the runner stalled \(first try 18859ms, no response in 15000ms\)/)
 })
 
-test('THE 2026-10-05 HANG: cached pages answered at once, so a hung render is not retried and stays DOWN', async () => {
-  const first = [up('front-door/site', 310), up('tenant', 420), hung('render/site/dynamic')]
+test('THE 2026-10-05 HANG: cached pages answered at once, so a hung render or page is not retried and stays DOWN', async () => {
+  const first = [
+    up('front-door/site', 310),
+    up('tenant', 420),
+    { ...hung('render/site/dynamic'), kind: 'render' },
+    { ...hung('front-door/marketing'), kind: 'page' },
+  ]
   const { reprobe, asked } = reprober([])
-  const { results, stall } = await retryAfterRunnerStall(first, reprobe)
+  const { results, stall, retried } = await retrySilentRows(first, reprobe)
   assert.equal(stall, null)
+  assert.equal(retried, 0)
   assert.deepEqual(asked, [])
-  assert.equal(results, first)
+  assert.deepEqual(results, first)
   assert.equal(results[2].ok, false)
+  assert.equal(results[3].ok, false)
+})
+
+test('THE 2026-11-02 16:37Z RED: one health door timed out while the rest answered fast, so it is asked once more', async () => {
+  const first = [up('console', 761), hung('console/auth-doors', 15_000), up('front-door/site', 781)]
+  const { reprobe, asked } = reprober([null, up('console/auth-doors', 834), null])
+  const { results, stall, retried } = await retrySilentRows(first, reprobe)
+  assert.deepEqual(asked, [1])
+  assert.equal(stall, null)
+  assert.equal(retried, 1)
+  assert.ok(results.every((r) => r.ok))
+  assert.match(results[1].detail, /tried again: a health door is asked once more \(first try 15000ms, no response in 15000ms\)/)
+})
+
+test('a health door that is really shut fails the second ask too, and stays DOWN', async () => {
+  const first = [up('console', 761), hung('console/backups')]
+  const { reprobe, asked } = reprober([null, hung('console/backups')])
+  const { results } = await retrySilentRows(first, reprobe)
+  assert.deepEqual(asked, [1])
+  assert.equal(results[1].ok, false)
 })
 
 test('a site that is really down fails the second try too, and the row stays DOWN', async () => {
   const first = [hung('console'), hung('tenant')]
   const { reprobe, asked } = reprober([hung('console'), hung('tenant')])
-  const { results, stall } = await retryAfterRunnerStall(first, reprobe)
+  const { results, stall, retried } = await retrySilentRows(first, reprobe)
   assert.deepEqual(asked, [0, 1])
-  assert.deepEqual(stall, { fastestMs: null, retried: 2 })
+  assert.deepEqual(stall, { fastestMs: null })
+  assert.equal(retried, 2)
   assert.ok(results.every((r) => !r.ok))
 })
 
 test('a run where every row answered is never retried, however slow', async () => {
   const first = [up('console', 12_000), { name: 'tenant', ms: 13_000, ok: false, status: 503, detail: 'HTTP 503' }]
   const { reprobe, asked } = reprober([])
-  const { results, stall } = await retryAfterRunnerStall(first, reprobe)
+  const { results, stall, retried } = await retrySilentRows(first, reprobe)
   assert.equal(stall, null)
+  assert.equal(retried, 0)
   assert.deepEqual(asked, [])
   assert.equal(results, first)
 })

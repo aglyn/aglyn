@@ -80,7 +80,7 @@ import {
   buildPlan,
   markPendingDeployments,
 } from './lib/uptime-targets.mjs'
-import { fetchOnceMore, retryAfterRunnerStall } from './lib/transport-retry.mjs'
+import { fetchOnceMore, retrySilentRows } from './lib/transport-retry.mjs'
 
 const TIMEOUT_MS = 15_000
 
@@ -372,9 +372,9 @@ const probeRow = ([name, base, path, kind, expectStatus]) =>
       ? probePage(name, base, path)
       : probe(name, base, path)
 
-// When every answer was slow, the runner stalled and the rows with no answer
-// get one more try (AGL-4137). See `lib/transport-retry.mjs` for the rule.
-const { results, stall } = await retryAfterRunnerStall(
+// A health door with no answer gets one more try, and so does every row with
+// none when the runner stalled (AGL-4137). See `lib/transport-retry.mjs`.
+const { results, stall, retried } = await retrySilentRows(
   await Promise.all(plan.map(probeRow)),
   (index) => probeRow(plan[index]),
 )
@@ -388,7 +388,7 @@ markPendingDeployments(results)
 console.log(`uptime probe · ${new Date().toISOString()}`)
 if (stall) {
   console.log(
-    `  the runner stalled: ${stall.fastestMs === null ? 'nothing answered' : `the fastest answer took ${stall.fastestMs}ms`}, so ${stall.retried} row(s) with no response were tried again`,
+    `  the runner stalled: ${stall.fastestMs === null ? 'nothing answered' : `the fastest answer took ${stall.fastestMs}ms`}, so ${retried} row(s) with no response were tried again`,
   )
 }
 for (const r of results) {
