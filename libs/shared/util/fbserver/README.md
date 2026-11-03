@@ -2,11 +2,11 @@
 
 Server-side Firebase Admin bootstrap: one module that initializes the `firebase-admin` default app from environment variables and exposes Firestore and Auth accessors. It is mainly an internal building block of Aglyn's server-side data layer (`@aglyn/tenant-data-admin`); install it directly only if you want the same bootstrap in your own Node process.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/shared-util-fbserver@beta
+    npm install @aglyn/shared-util-fbserver
 
 Peer dependency: `firebase-admin` (`^14.3.0`).
 

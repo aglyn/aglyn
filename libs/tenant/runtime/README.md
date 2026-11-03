@@ -6,11 +6,11 @@ stored screen into the node tree a page renders. Install it if you are running
 Aglyn's tenant server, or writing plugin server code that needs to emit host
 events or compose a screen.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/tenant-runtime@beta
+    npm install @aglyn/tenant-runtime
 
 Peer dependencies:
 

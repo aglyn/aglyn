@@ -6,11 +6,11 @@ toolbars, drag and drop, and working drafts. Install it if you want to mount
 the Aglyn editor in your own app. If you want to build a different UI over the
 same editing logic, take `@aglyn/besigner` instead.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/besigner-ui@beta
+    npm install @aglyn/besigner-ui
 
 Peer dependencies, all required today:
 

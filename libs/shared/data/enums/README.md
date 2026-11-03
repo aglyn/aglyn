@@ -2,11 +2,11 @@
 
 Constants, enums and small pure helpers shared across the Aglyn packages: HTTP codes, CSS value parsing, palette-token CSS variables, MUI `sx` alias expansion, icon constants and environment flags. It is mainly a dependency of the larger `@aglyn/*` packages, and the helpers are usable on their own.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/shared-data-enums@beta
+    npm install @aglyn/shared-data-enums
 
 Optional peer dependency: `firebase`. The `firebase-auth` module imports error codes and types from `firebase/auth`, and the root entry re-exports that module, so install `firebase` if you import either of them. Every other module is importable by its subpath without it, which is how `@aglyn/aglyn` uses this package: the core installs and runs with no Firebase SDK.
 

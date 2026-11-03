@@ -6,11 +6,11 @@ style clipboards, and node moves. Install it if you are building your own
 editor UI over Aglyn's node model. If you want the editor as it ships, take
 `@aglyn/besigner-ui`, which is built on this package.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/besigner@beta
+    npm install @aglyn/besigner
 
 Peer dependencies:
 

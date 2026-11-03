@@ -7,12 +7,12 @@ person is, a lead is judged and merged as the contact it would be, and when
 the lead converts its enrollment follows it to the contact through the
 core's lead-conversion seam.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
 ```bash
-npm install @aglyn/plugins-outreach@beta
+npm install @aglyn/plugins-outreach
 ```
 
 A plugin is loaded through Aglyn's plugin manager (`@aglyn/aglyn`) by the console and the tenant runtime; it is not a standalone library.

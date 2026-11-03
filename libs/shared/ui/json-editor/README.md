@@ -2,11 +2,11 @@
 
 A full-screen Material UI dialog for editing a JSON document by hand, backed by the Monaco editor. Besigner uses it for its "Raw JSON" view of a node tree. It is mainly a building block of `@aglyn/besigner-ui`, and works in any Next.js app that can serve Monaco's assets.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/shared-ui-json-editor@beta
+    npm install @aglyn/shared-ui-json-editor
 
 Peer dependencies: `react`, `next` and `@mui/material`. `next` is required because the editor is loaded with `next/dynamic` and rendered on the client only.
 

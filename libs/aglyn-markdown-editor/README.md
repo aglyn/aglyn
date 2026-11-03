@@ -7,11 +7,11 @@ uses for a Markdown component's `content` attribute. Install it on its own if
 you need to edit or preview Aglyn's markdown-lite dialect in a React and MUI
 app; most consumers get it as a dependency of `@aglyn/besigner-ui`.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/aglyn-markdown-editor@beta
+    npm install @aglyn/aglyn-markdown-editor
 
 Peer dependencies:
 

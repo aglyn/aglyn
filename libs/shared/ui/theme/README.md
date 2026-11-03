@@ -2,11 +2,11 @@
 
 The Material UI theming layer the Aglyn packages share: a responsive theme factory, the console and site default themes, a provider that renders a site's stored theme document as a MUI theme with light and dark schemes, Emotion cache helpers, and WCAG contrast utilities. It is mainly a dependency of the renderer, Besigner and the other `@aglyn/shared-ui-*` packages; the utilities are usable in any MUI app.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/shared-ui-theme@beta
+    npm install @aglyn/shared-ui-theme
 
 Peer dependencies: `react`, `@mui/material`, `@mui/system`, `@mui/utils`, `@mui/types` and `@mui/styles`. `@emotion/react` and `@emotion/cache` are regular dependencies.
 

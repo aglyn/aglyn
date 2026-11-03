@@ -2,12 +2,12 @@
 
 The bulk-send reporting math, owned by none of the plugins that send in bulk.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
 ```bash
-npm install @aglyn/shared-ui-email-campaigns@beta
+npm install @aglyn/shared-ui-email-campaigns
 ```
 
 ## Why it is not in a plugin

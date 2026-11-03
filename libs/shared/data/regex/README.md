@@ -2,11 +2,11 @@
 
 A small set of regular expressions for form validation: an email pattern and the character-class checks used for password rules. It is mainly a dependency of `@aglyn/shared-data-forms`, and has no dependencies of its own beyond the compiler helpers.
 
-> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+> Published to npm from the Aglyn monorepo. Versions follow [semantic versioning](https://semver.org).
 
 ## Install
 
-    npm install @aglyn/shared-data-regex@beta
+    npm install @aglyn/shared-data-regex
 
 No peer dependencies.
 
