@@ -180,12 +180,12 @@ export const AI_LAYOUT_FRAME_SOURCE_LIMITS = { groups: 12, entries: 40, ctas: 4,
 const SCREEN_ID = /^[A-Za-z0-9_-]{1,64}$/
 const STYLES: readonly AiLayoutFrameSourceStyle[] = ['primary', 'secondary', 'quiet']
 const GROUNDS: readonly AiLayoutFrameSourceGround[] = ['page', 'paper', 'brand', 'dark']
-const ROLES: readonly AiLayoutFrameSourceRole[] = ['action.hover', 'action.selected', 'primary.main', 'secondary.main', 'text.secondary', 'primary.contrastText', 'secondary.contrastText']
+const COLOR_TOKENS: readonly AiLayoutFrameSourceRole[] = ['action.hover', 'action.selected', 'primary.main', 'secondary.main', 'text.secondary', 'primary.contrastText', 'secondary.contrastText']
 const BANDS: readonly AiLayoutFrameSourceBand[] = ['plain', 'soft', 'brand', 'dark']
 /** The most columns a panel, lines a column and boxes a footer keep (AGL-4139). */
 const PANEL_LIMITS = { columns: 6, lines: 6, panels: 4 } as const
 
-const roleOf = (value: unknown): AiLayoutFrameSourceRole | null => (ROLES.includes(value as AiLayoutFrameSourceRole) ? (value as AiLayoutFrameSourceRole) : null)
+const roleOf = (value: unknown): AiLayoutFrameSourceRole | null => (COLOR_TOKENS.includes(value as AiLayoutFrameSourceRole) ? (value as AiLayoutFrameSourceRole) : null)
 
 /** A column of a panel, or a box of a footer, read defensively (AGL-4139). */
 function columnOf(raw: unknown): AiLayoutFrameSourceColumn | null {
