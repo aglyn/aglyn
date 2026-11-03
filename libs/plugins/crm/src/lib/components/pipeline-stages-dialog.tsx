@@ -120,17 +120,41 @@ export function PipelineStagesDialog(props: PipelineStagesDialogProps) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const [stages, setStages] = useState<CrmDealStage[]>([])
+  /** The draft was changed since this opening seeded it. */
+  const [edited, setEdited] = useState(false)
   const [newName, setNewName] = useState('')
   const [busy, setBusy] = useState(false)
   const [counting, setCounting] = useState<string | null>(null)
 
-  // Re-seeded on every open, so the draft starts from the stored stages
-  // rather than from whatever the last session left unsaved.
+  const edit = useCallback((change: (current: CrmDealStage[]) => CrmDealStage[]) => {
+    setStages(change)
+    setEdited(true)
+  }, [])
+
+  /*
+   * Seeded when the dialog OPENS, so the draft starts from the stored
+   * stages rather than from whatever the last session left unsaved. Keyed
+   * on the pipeline's id and not the row: the Pipelines dialog looks it up
+   * from a live listen, so it is a new object on every snapshot, a
+   * metadata-only one included, and re-seeding on each took a stage name
+   * away from whoever was typing it.
+   */
+  const pipelineId = pipeline?.$id
   useEffect(() => {
     if (!open) return
     setStages(sortedStages(pipeline))
+    setEdited(false)
     setNewName('')
-  }, [open, pipeline])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, pipelineId])
+  // The draft follows the stored stages until it is edited, so a dialog
+  // opened on a cached read catches up when the server answers. Keyed on
+  // the stored value, which a metadata-only snapshot does not change.
+  const storedStages = JSON.stringify(pipeline?.stages ?? [])
+  useEffect(() => {
+    if (open && !edited) setStages(sortedStages(pipeline))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, edited, storedStages])
 
   const handleRemove = useCallback(
     async (stageId: string) => {
@@ -150,7 +174,7 @@ export function PipelineStagesDialog(props: PipelineStagesDialogProps) {
           enqueueSnackbar(refusal, { variant: 'warning', persist: false })
           return
         }
-        setStages((current) => removeStage(current, stageId))
+        edit((current) => removeStage(current, stageId))
       } catch (error) {
         console.error(error)
         enqueueSnackbar('The deals in this stage could not be counted, so it stays.', {
@@ -161,7 +185,7 @@ export function PipelineStagesDialog(props: PipelineStagesDialogProps) {
         setCounting(null)
       }
     },
-    [firestore, orgId, pipeline, visibleToTokens, stages, enqueueSnackbar],
+    [firestore, orgId, pipeline, visibleToTokens, stages, enqueueSnackbar, edit],
   )
 
   const problem = stagesProblem(stages)
@@ -225,7 +249,7 @@ export function PipelineStagesDialog(props: PipelineStagesDialogProps) {
                   label="Stage"
                   value={stage.name}
                   onChange={(event) =>
-                    setStages((current) =>
+                    edit((current) =>
                       renameStage(current, stage.id, event.target.value),
                     )
                   }
@@ -239,7 +263,7 @@ export function PipelineStagesDialog(props: PipelineStagesDialogProps) {
                   value={stage.probability}
                   disabled={!isOpen}
                   onChange={(event) =>
-                    setStages((current) =>
+                    edit((current) =>
                       setStageProbability(current, stage.id, event.target.value),
                     )
                   }
@@ -256,7 +280,7 @@ export function PipelineStagesDialog(props: PipelineStagesDialogProps) {
                   value={dealStageForecastCategory(stage)}
                   disabled={!isOpen}
                   onChange={(event) =>
-                    setStages((current) =>
+                    edit((current) =>
                       setStageForecastCategory(current, stage.id, event.target.value),
                     )
                   }
@@ -277,7 +301,7 @@ export function PipelineStagesDialog(props: PipelineStagesDialogProps) {
                           aria-label={`Move ${stage.name} up`}
                           disabled={first}
                           onClick={() =>
-                            setStages((current) => moveStage(current, stage.id, 'up'))
+                            edit((current) => moveStage(current, stage.id, 'up'))
                           }
                         >
                           <MdiIcon path={mdiArrowUp.path} size={0.8} />
@@ -291,7 +315,7 @@ export function PipelineStagesDialog(props: PipelineStagesDialogProps) {
                           aria-label={`Move ${stage.name} down`}
                           disabled={lastOpen}
                           onClick={() =>
-                            setStages((current) => moveStage(current, stage.id, 'down'))
+                            edit((current) => moveStage(current, stage.id, 'down'))
                           }
                         >
                           <MdiIcon path={mdiArrowDown.path} size={0.8} />
@@ -332,7 +356,7 @@ export function PipelineStagesDialog(props: PipelineStagesDialogProps) {
               onKeyDown={(event) => {
                 if (event.key !== 'Enter' || !newName.trim()) return
                 event.preventDefault()
-                setStages((current) => addStage(current, newName))
+                edit((current) => addStage(current, newName))
                 setNewName('')
               }}
               sx={{ flex: 1 }}
@@ -341,7 +365,7 @@ export function PipelineStagesDialog(props: PipelineStagesDialogProps) {
             <Button
               disabled={!newName.trim()}
               onClick={() => {
-                setStages((current) => addStage(current, newName))
+                edit((current) => addStage(current, newName))
                 setNewName('')
               }}
             >

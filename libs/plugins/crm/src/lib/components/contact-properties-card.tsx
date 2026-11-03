@@ -37,7 +37,11 @@ import {
 import { mdiPhoneOutline } from '@aglyn/shared-data-mdi'
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useUser, writeGuardedBySeed } from '@aglyn/tenant-feature-instance'
+import {
+  useUser,
+  writeGuardedBySeed,
+  type ListenHandle,
+} from '@aglyn/tenant-feature-instance'
 import {
   Button,
   Checkbox,
@@ -104,7 +108,12 @@ export interface ContactPropertiesCardProps {
    * The listener's verdict on the row the drafts were seeded from, for the
    * guard that refuses a save over an unconfirmed read.
    */
-  seed: { status: 'loading' | 'success' | 'error'; fromCache: boolean }
+  seed: {
+    status: 'loading' | 'success' | 'error'
+    fromCache: boolean
+    /** The row's listener, so a save waits on that read alone (AGL-4135). */
+    listen?: ListenHandle | null
+  }
   /** The team, for the owner picker and the owner's name. */
   members: OrgMembers
   /**
@@ -439,6 +448,7 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
           subject: 'contact',
           unreadable: seed.status === 'error',
           fromCache: seed.fromCache,
+          listen: seed.listen,
         },
         () => contactUpdate.updateOne(record.$id, set),
       )
@@ -521,6 +531,7 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
     reportsTo,
     salutation,
     seed.fromCache,
+    seed.listen,
     seed.status,
     suiteLocked,
     tags,

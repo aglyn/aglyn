@@ -41,6 +41,7 @@ import {
   useFirestore,
   useUser,
   writeGuardedBySeed,
+  type ListenHandle,
 } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
@@ -131,7 +132,12 @@ export interface CompanyEditDrawerProps {
    * its own `fromCache` and `status`; the drawer refuses to save on a seed
    * the server never confirmed, and says so.
    */
-  seed?: { fromCache: boolean; unreadable: boolean }
+  seed?: {
+    fromCache: boolean
+    unreadable: boolean
+    /** The company's listener, so a save waits on that read alone (AGL-4135). */
+    listen?: ListenHandle | null
+  }
   /**
    * The team, for the owner picker.
    *
@@ -339,6 +345,7 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
             subject: 'company',
             unreadable: seed?.unreadable ?? false,
             fromCache: seed?.fromCache ?? false,
+            listen: seed?.listen,
           },
           async () => {
             const cleared = Object.fromEntries(

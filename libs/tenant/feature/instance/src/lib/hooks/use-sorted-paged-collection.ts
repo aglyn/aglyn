@@ -277,6 +277,8 @@ export function useSortedPagedCollection<T = DocumentData>(
     fromCache: keyedRead.fromCache || (scanOpen && scanRead.fromCache),
     serverDenied:
       keyedRead.serverDenied || (scanOpen && scanRead.serverDenied),
+    // Two listeners, so no one of them is the seed (AGL-4135).
+    listen: null,
   }
 }
 

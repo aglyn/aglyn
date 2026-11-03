@@ -23,7 +23,11 @@ import {
   pluginDocsHelp,
 } from '@aglyn/aglyn'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useFirestore, writeGuardedBySeed } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestore,
+  writeGuardedBySeed,
+  type ListenHandle,
+} from '@aglyn/tenant-feature-instance'
 import { doc, updateDoc } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
 import { useCrmPicklist } from '../hooks/use-crm-picklist'
@@ -43,6 +47,8 @@ export interface CompanyContactRolesCardProps {
   /** The listener's verdict on the company, for the stale-seed guard. */
   fromCache: boolean
   unreadable: boolean
+  /** The company's listener, so a save waits on that read alone (AGL-4135). */
+  listen?: ListenHandle | null
 }
 
 /**
@@ -52,7 +58,7 @@ export interface CompanyContactRolesCardProps {
  * one deal can differ. The same list of roles serves both.
  */
 export function CompanyContactRolesCard(props: CompanyContactRolesCardProps) {
-  const { companyId, company, hostId, org, routes, fromCache, unreadable } = props
+  const { companyId, company, hostId, org, routes, fromCache, unreadable, listen } = props
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const scope = useCrmScope({ hostId, org })
@@ -79,7 +85,7 @@ export function CompanyContactRolesCard(props: CompanyContactRolesCardProps) {
       setBusy(true)
       try {
         const written = await writeGuardedBySeed(
-          { subject: 'company', unreadable, fromCache },
+          { subject: 'company', unreadable, fromCache, listen },
           async () => {
             await updateDoc(
               doc(firestore, 'orgs', scope.orgId as string, CRM_COLLECTIONS.companies, companyId),
@@ -106,7 +112,17 @@ export function CompanyContactRolesCard(props: CompanyContactRolesCardProps) {
         setBusy(false)
       }
     },
-    [scope.orgId, company, roleList.picklist, unreadable, fromCache, firestore, companyId, enqueueSnackbar],
+    [
+      scope.orgId,
+      company,
+      roleList.picklist,
+      unreadable,
+      fromCache,
+      listen,
+      firestore,
+      companyId,
+      enqueueSnackbar,
+    ],
   )
 
   return (

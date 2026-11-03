@@ -215,4 +215,57 @@ describe.each([
     expect(write).toHaveBeenCalledTimes(1)
     view.unmount()
   })
+
+  /**
+   * A neighbour torn down while the save waited used to refuse it, though the
+   * save's own read was confirmed a moment later (AGL-4135).
+   */
+  it('lets a save that names this listener wait on it alone', async () => {
+    const view = render()
+    const neighbour = render()
+    act(() => listeners[0].onNext(snapshot(true)))
+    act(() => listeners[1].onNext(snapshot(true)))
+    const write = jest.fn(async () => undefined)
+    const saved = writeGuardedBySeed(
+      {
+        subject: 'record',
+        fromCache: view.result.current.fromCache,
+        listen: view.result.current.listen,
+        checkSession: false,
+      },
+      write,
+    )
+    neighbour.unmount()
+    await Promise.resolve()
+    expect(write).not.toHaveBeenCalled()
+
+    act(() => listeners[0].onNext(snapshot(false)))
+
+    await expect(saved).resolves.toEqual({ ok: true })
+    expect(write).toHaveBeenCalledTimes(1)
+    view.unmount()
+  })
+
+  it("follows the hook's listener when its deps change during the wait (AGL-4135)", async () => {
+    const view = render()
+    const handle = view.result.current.listen
+    act(() => listeners[0].onNext(snapshot(true)))
+    const write = jest.fn(async () => undefined)
+    const saved = writeGuardedBySeed(
+      { subject: 'record', fromCache: true, listen: handle, checkSession: false },
+      write,
+    )
+    firestore = {}
+    view.rerender()
+    expect(view.result.current.listen).toBe(handle)
+    // The listener it replaced answers late; that is not this read.
+    act(() => listeners[0].onNext(snapshot(false)))
+    await Promise.resolve()
+    expect(write).not.toHaveBeenCalled()
+
+    act(() => listeners[1].onNext(snapshot(false)))
+
+    await expect(saved).resolves.toEqual({ ok: true })
+    view.unmount()
+  })
 })
