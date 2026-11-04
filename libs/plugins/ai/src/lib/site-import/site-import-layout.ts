@@ -656,6 +656,8 @@ class LayoutReader {
       const radius = siteImportRadiusPx(style)
       if (radius !== null && radius > 0 && fit.radius === undefined) fit.radius = Math.min(radius, 999)
       if (siteImportHasShadow(style)) fit.shadow = true
+      const cap = siteImportLengthPx(style.get('max-width') ?? '')
+      if (cap !== null && cap > 0 && fit.measure === undefined) fit.measure = cap
     }
     return Object.keys(fit).length ? fit : undefined
   }
@@ -945,6 +947,8 @@ class LayoutReader {
     const leaves = this.leaves(element).filter((leaf) => this.inRange(leaf, range))
     const lines = leaves.filter((leaf) => leaf.kind === 'line')
     if (lines.length !== 1) return false
+    // A short line with a mark of its own and no pill around it is a checklist's line, not a tag (AGL-4138).
+    if (leaves.some((leaf) => leaf.kind === 'icon') && !this.framed(element)) return false
     const block = this.block(lines[0] as Leaf)
     return !!block && block.kind !== 'image' && block.kind !== 'heading' && block.text.length <= 40
   }

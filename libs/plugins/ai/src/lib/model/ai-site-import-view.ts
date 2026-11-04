@@ -262,7 +262,8 @@ export function aiSiteImportWaveRows(
       photos: aiSiteImportPhotosText(page.photos),
       outputId: row?.outputs[0] ?? null,
       oldPage: page.url,
-      words: page.brought ? `${page.brought.words.toLocaleString('en-US')} of ${page.words.toLocaleString('en-US')} words` : null,
+      // Beside the old page's own words, its main region's as the wave read them: its menu and footer are the site's (AGL-4084).
+      words: page.brought ? `${page.brought.words.toLocaleString('en-US')} of ${(page.read?.words ?? page.words).toLocaleString('en-US')} words` : null,
       build: page.build ? BUILD_COPY[page.build] : null,
     })
   }

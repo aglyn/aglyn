@@ -376,8 +376,19 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
   if (phase === 'review' && state) {
     const wave = aiSiteImportReviewWave(state) as AiSiteImportWave
     const spent = aiSiteImportWaveSpent(job, wave)
+    // A site in preview has the wave's pages live for its team (AGL-4084); any other has them as drafts.
+    const live = new Set((job.sitePublish?.published ?? []).map((page) => page.id))
+    const inPreview = wave.slots.some((slot) => live.has(state.pages.find((page) => page.slot === slot)?.draftId ?? ''))
     return (
-      <Frame siteName={siteName} heading={`${wave.label} is in`} lede="Open each page to review it. They are drafts: nothing is published until you publish it.">
+      <Frame
+        siteName={siteName}
+        heading={inPreview ? `${wave.label} is in your site’s preview` : `${wave.label} is in`}
+        lede={
+          inPreview
+            ? 'Its pages are on your site, where only you and your team can see them. Open each page to review it.'
+            : 'Open each page to review it. They are drafts: nothing is published until you publish it.'
+        }
+      >
         {notice && <Alert severity="warning">{notice}</Alert>}
         <Card variant="outlined" sx={{ borderRadius: 2 }}>
           <WaveRows job={job} wave={wave} orgSlug={orgSlug} />
@@ -388,7 +399,7 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
         {pagesHref ? (
           <Box>
             <Button variant="outlined" component={AppLink} href={pagesHref}>
-              {'Open your draft pages'}
+              {inPreview ? 'Open your pages' : 'Open your draft pages'}
             </Button>
           </Box>
         ) : null}

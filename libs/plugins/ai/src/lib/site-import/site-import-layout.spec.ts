@@ -273,8 +273,8 @@ describe('aglyn.com home, drawn as the source draws it (AGL-4138)', () => {
   it('reads the hero’s picture at its own shape, in the source’s rounded, shadowed box', () => {
     // The hero's picture is its film's poster (AGL-4140), framed as the source frames it.
     const [film] = all(section('Introduction').nodes, 'video')
-    // The poster has no width or height of its own and no box crops it: nothing of it is cut.
-    expect(film?.fit).toEqual({ objectFit: 'cover', radius: 12, shadow: true })
+    // The poster has no width or height of its own and no box crops it: nothing of it is cut. Its card is 920 px at most.
+    expect(film?.fit).toEqual({ objectFit: 'cover', radius: 12, shadow: true, measure: 920 })
     const [screenshot] = all(section('For agencies and multi-brand teams').nodes, 'picture')
     expect(screenshot?.fit).toEqual({ ratio: 1.5862, objectFit: 'cover' })
   })
@@ -354,6 +354,22 @@ describe('pictures, pills, tiles and rules in markup of any site (AGL-4138)', ()
     expect(roles('.big{font-size:34px;font-weight:700}')).toEqual([null, 'statement'])
     expect(roles('.big{font-size:34px;font-weight:400}')).toEqual([null, 'lede'])
     expect(roles('.big{font-size:18px;font-weight:700}')).toEqual([null, 'lede'])
+  })
+
+  it('reads the width the source holds a picture’s card to', () => {
+    const card = layoutOf('<section><h2>Film</h2><div class="card"><img src="/f.jpg" alt="F"></div><p>Words under it, enough of them.</p></section>', '.card{max-width:920px;border-radius:12px} .card img{width:100%;height:auto}')
+    expect(all(card.sections[0]?.nodes ?? [], 'picture')[0]?.fit).toEqual({ radius: 12, measure: 920 })
+  })
+
+  it('reads short lines that each carry a mark of their own as a checklist, and the same lines in pills as tags', () => {
+    const lines = ['Custom domains', 'Remove branding', 'Roles and permissions', 'One billing hub', 'Activity feed', 'Marketplace templates']
+    const checklist = (css: string) =>
+      layoutOf(`<section><h2>Included</h2><div class="row">${lines.map((line) => `<div class="tick"><svg viewBox="0 0 24 24"><path d="M9 16l-4-4 1-1 3 3 8-8 1 1z"/></svg><span>${line}</span></div>`).join('')}</div></section>`, css)
+    const plain = all(checklist('.row{display:flex;flex-wrap:wrap} .tick{display:flex;width:50%}').sections[0]?.nodes ?? [], 'group')[0]
+    expect(plain?.group).toBe('list')
+    expect(plain?.items.every((item) => item.icon !== undefined || item.listIcon !== undefined)).toBe(true)
+    const pills = all(checklist('.row{display:flex;flex-wrap:wrap} .tick{display:flex;border:1px solid #ddd;border-radius:999px;padding:4px 12px}').sections[0]?.nodes ?? [], 'group')[0]
+    expect(pills?.group).toBe('logos')
   })
 })
 

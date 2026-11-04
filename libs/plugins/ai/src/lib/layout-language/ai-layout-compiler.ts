@@ -2317,6 +2317,8 @@ interface DesignedPicture {
   video?: AiLayoutVideo
   /** How the source frames its own picture, on a page brought in (AGL-4138). */
   fit?: AiLayoutPictureFit
+  /** The words the source sets under its picture, on a page brought in (AGL-4140): a column hero draws them there. */
+  after?: readonly AiLayoutBlock[]
 }
 
 /**
@@ -2334,6 +2336,8 @@ function ownFrame(scope: SectionScope, picture: DesignedPicture, fallback: Recor
     ...(fit.height ? { height: fit.height } : { aspectRatio: fit.ratio }),
     borderRadius: fit.rounded ? 3 : 2,
     ...(fit.shadow ? { boxShadow: 3 } : {}),
+    // As narrow as the source holds it, centered in its column (AGL-4140): a film's card.
+    ...(fit.measure ? { width: '100%', maxWidth: fit.measure, mx: 'auto' } : {}),
   }
 }
 
@@ -2670,7 +2674,9 @@ function columnHero(scope: SectionScope, flow: readonly AiLayoutBlock[], picture
       borderRadius: 2,
     }),
   )
-  const stack = tree.add('muiStack', { spacing: '8', useFlexGap: true }, null, [measure, photo], 'content')
+  // What the source sets under its picture stays under it, centered as the words above are.
+  const under = picture.after?.length ? [tree.add('muiBox', null, { maxWidth: { xs: '100%', md: '72%' }, mx: 'auto' }, [compileFlow(scope, picture.after, 'full') as string], 'measure')] : []
+  const stack = tree.add('muiStack', { spacing: '8', useFlexGap: true }, null, [measure, photo, ...under], 'content')
   const container = tree.add('muiContainer', { maxWidth: 'lg' }, { pt: { xs: 8, md: 12 }, pb: { xs: 6, md: 10 } }, [stack], 'container')
   return designedRoot(scope, [container], bandSx(band), band === 'dark')
 }
@@ -4321,18 +4327,23 @@ function importedHero(scope: SectionScope, raw: AiLayoutSection, blocks: readonl
   // Its one picture, or its one film, poster first (AGL-4140).
   const pictures = blocks.filter((block) => (block.kind === 'image' && block.picture) || (block.kind === 'video' && block.video))
   if (pictures.length !== 1) return null
-  const flow = blocks.filter((block) => block.kind !== 'image' && block.kind !== 'video')
-  if (!flow.length || !flow.every((block) => WORD_KINDS.has(block.kind))) return null
-  if (!flow.some((block) => speaksHeading(scope, block))) {
-    flow.unshift({ kind: 'heading', text: page.plan.title })
-    page.settled.push({ at: scope.at, what: "no heading; the page's title written as its h1" })
-  }
+  const words = blocks.filter((block) => block.kind !== 'image' && block.kind !== 'video')
+  if (!words.length || !words.every((block) => WORD_KINDS.has(block.kind))) return null
   const film = pictures[0].kind === 'video' ? pictures[0].video : undefined
   // A film a visitor presses plays where it sits, never behind the words, which would cover it.
   let asked = raw.hero
   if (film && FILM_BEHIND_HEROES.has(asked)) {
     page.settled.push({ at: scope.at, what: `the ${asked} hero set aside: the opening's film is pressed to play, so it sits under its words` })
     asked = 'column'
+  }
+  // The words the source sets under its picture, as a film's "Watch the film →" (AGL-4140): a
+  // column hero draws them there, any other with its words, and the heading is never one of them.
+  const after = asked === 'column' ? blocks.slice(blocks.indexOf(pictures[0]) + 1).filter((block) => block.kind !== 'image' && block.kind !== 'video') : []
+  const under = after.length < words.length && !after.some((block) => speaksHeading(scope, block)) ? after : []
+  const flow = words.slice(0, words.length - under.length)
+  if (!flow.some((block) => speaksHeading(scope, block))) {
+    flow.unshift({ kind: 'heading', text: page.plan.title })
+    page.settled.push({ at: scope.at, what: "no heading; the page's title written as its h1" })
   }
   const lead = flow.findIndex((block) => speaksHeading(scope, block))
   const { style: _style, ...title } = flow[lead]
@@ -4341,7 +4352,14 @@ function importedHero(scope: SectionScope, raw: AiLayoutSection, blocks: readonl
   const opening = hero(
     scope,
     flow,
-    { alt: picture?.alt ?? '', given: true, ...(picture?.src ? { src: picture.src } : {}), ...(picture?.fit ? { fit: picture.fit } : {}), ...(film ? { video: film } : {}) },
+    {
+      alt: picture?.alt ?? '',
+      given: true,
+      ...(picture?.src ? { src: picture.src } : {}),
+      ...(picture?.fit ? { fit: picture.fit } : {}),
+      ...(film ? { video: film } : {}),
+      ...(under.length ? { after: under } : {}),
+    },
     asked,
   )
   return opening && raw.width ? widened(page.tree, opening, raw.width) : opening

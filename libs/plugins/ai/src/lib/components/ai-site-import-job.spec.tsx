@@ -165,6 +165,18 @@ describe('an import job’s page', () => {
     expect(screen.getByRole('button', { name: 'Start Blog' })).toBeTruthy()
   })
 
+  it('says a wave is in the site’s preview, not drafts, where its pages went live there (AGL-4084)', () => {
+    let state = harbor()
+    state = aiSiteImportWaveClosed(aiSiteImportWaveStarted(state, 0, 'x', new Map()), 0, 'y')
+    const items = aiSiteImportLedger(state).map((row): AiJobItemLedger => (row.slot === 'p0' ? { ...row, status: 'succeeded', creditsSpent: 27, outputs: ['out-p0'] } : row))
+    const home = state.pages.find((page) => page.slot === 'p0')
+    const sitePublish = { liveUrl: 'https://harbor.aglyn.app/', published: [{ id: home?.draftId ?? '', label: 'Home', path: '/' }], drafts: [] }
+    view(summary({ siteImport: state, items, sitePublish, review: { reason: 'wave', message: 'Main pages is in your site’s preview.', findings: [] } }))
+    expect(screen.getByRole('heading', { level: 1, name: 'Main pages is in your site’s preview' })).toBeTruthy()
+    expect(screen.getByText('Its pages are on your site, where only you and your team can see them. Open each page to review it.')).toBeTruthy()
+    expect(screen.queryByText(/They are drafts/)).toBeNull()
+  })
+
   it('holds a wave for a new proof: the wave starts only once the site is verified again', async () => {
     const state = harbor()
     const onResume = jest.fn()
