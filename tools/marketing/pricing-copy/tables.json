@@ -736,7 +736,7 @@
         }
       },
       {
-        "label": "Workflow and action runs, per 1,000 over the included bands",
+        "label": "Workflow runs, per 1,000 over the included band",
         "rate": "extraRunsUsdPer1k",
         "values": {
           "starter": "—",
@@ -748,31 +748,30 @@
     "note": "The Free plan has no paid add-ons. Annual billing does not change these rates."
   },
   "metered": {
-    "heading": "Metered infrastructure — passed through at cost + 30%, after card fees",
+    "heading": "What usage past your plan costs.",
     "markupPct": 30,
     "columns": [
       "Metered item",
-      "Our cost",
-      "You pay (+30% after card fees)"
+      "You pay"
     ],
     "rows": [
       {
-        "label": "Media & file storage",
-        "unit": "/ GB-mo",
-        "ourCost": "$0.026 / GB-mo",
-        "youPay": "$0.0349 / GB-mo"
-      },
-      {
         "label": "Page views (bandwidth + reads)",
-        "unit": "/ 1k views",
-        "ourCost": "$0.615385 / 1k views",
-        "youPay": "$0.83 / 1k views"
+        "unit": "/ 1,000",
+        "ourCost": "$0.615385 / 1,000",
+        "youPay": "$0.83 / 1,000"
       },
       {
         "label": "Form submissions",
-        "unit": "/ 1k",
-        "ourCost": "$0.061538 / 1k",
-        "youPay": "$0.083 / 1k"
+        "unit": "/ 1,000",
+        "ourCost": "$0.061538 / 1,000",
+        "youPay": "$0.083 / 1,000"
+      },
+      {
+        "label": "Site media & file storage",
+        "unit": "/ GB-mo",
+        "ourCost": "$0.026 / GB-mo",
+        "youPay": "$0.0349 / GB-mo"
       }
     ],
     "note": "Applies only to plans with `meteredInfraPassThrough`. Dataset storage over the included amount is a separate retail rate ($0.36 / GB-mo), not this pass-through.",
@@ -849,11 +848,10 @@
       {
         "label": "AI credits",
         "priceUsd": 10,
-        "unit": "block",
         "scope": "organization",
         "maxQuantity": 30,
         "creditsPerBlock": 5000,
-        "blurb": "Blocks of 5,000 AI credits a month, per workspace, on any paid plan — up to 30 blocks. They add to the credits your plan includes; past both, credits bill at your plan’s rate. Custom by agreement."
+        "blurb": "5,000 AI credits a month for $10, per workspace, on any paid plan. Add as many blocks as you need, up to 30, on top of the credits your plan includes; past those, credits bill at your plan’s rate in the usage table. Custom by agreement."
       },
       {
         "label": "Site Care",

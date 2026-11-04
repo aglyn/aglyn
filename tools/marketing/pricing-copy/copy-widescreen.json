@@ -5,7 +5,7 @@
   "frameName": "Pricing — Widescreen",
   "frameSize": {
     "width": 1920,
-    "height": 7843
+    "height": 9027
   },
   "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-pricing-copy.mjs (AGL-1278). `kind` and `notes` are left null for a human pass — the frame does not name its own section types. THE CODE WINS OVER THE FRAME: this file is a record of the design, not of the truth. Prices here have been caught drifting from libs/aglyn/src/lib/app-utils/plan-entitlements.ts twice; that file is the source of truth for every number.",
   "sections": [
@@ -47,14 +47,14 @@
         },
         {
           "figmaNodeId": "572:1223",
-          "name": "Start free with one website. Starter adds your own domain and a store. Pro is the full platform — Besigner, CRM, commerce, forms, media, workflows, the API and a band of Aglyn AI credits — and grows with add-ons.",
+          "name": "Every paid plan includes the Besigner, CRM, commerce, forms, media, workflows and a band of Aglyn AI credits, and Pro includes the full platform. Start free with one website; upgrade for your own domain and a store.",
           "widthPx": 680,
           "records": [
             {
               "figmaNodeId": "572:1223",
               "name": null,
               "cells": [
-                "Start free with one website. Starter adds your own domain and a store. Pro is the full platform — Besigner, CRM, commerce, forms, media, workflows, the API and a band of Aglyn AI credits — and grows with add-ons."
+                "Every paid plan includes the Besigner, CRM, commerce, forms, media, workflows and a band of Aglyn AI credits, and Pro includes the full platform. Start free with one website; upgrade for your own domain and a store."
               ]
             }
           ]
@@ -957,7 +957,7 @@
       "name": "Usage pricing",
       "order": 3,
       "widthPx": 1920,
-      "heightPx": 1414,
+      "heightPx": 2125,
       "groups": [
         {
           "figmaNodeId": "572:2415",
@@ -1069,6 +1069,101 @@
                 "$3",
                 "Custom"
               ]
+            },
+            {
+              "figmaNodeId": "2608:681",
+              "name": "row",
+              "cells": [
+                "Workflow runs, per 1,000 over the included band",
+                "—",
+                "$0.02",
+                "Custom"
+              ]
+            }
+          ]
+        },
+        {
+          "figmaNodeId": "2608:726",
+          "name": "The Free plan has no paid add-ons. Annual billing does not change these rates.",
+          "widthPx": 1488,
+          "records": [
+            {
+              "figmaNodeId": "2608:726",
+              "name": null,
+              "cells": [
+                "The Free plan has no paid add-ons. Annual billing does not change these rates."
+              ]
+            }
+          ]
+        },
+        {
+          "figmaNodeId": "572:2572",
+          "name": "pass-through",
+          "widthPx": 1488,
+          "records": [
+            {
+              "figmaNodeId": "572:2573",
+              "name": "h",
+              "cells": [
+                "METERED USAGE",
+                "What usage past your plan costs.",
+                "On Starter and Pro, page views, form submissions, and site storage past the amount your plan includes are metered at our infrastructure cost plus a 30% margin, after card fees. Video, audio, file downloads and other media served from our servers count 1.6× toward bandwidth, because serving them costs more than serving pages. You are not cut off when you go past a band — the overage is itemized on your invoice."
+              ]
+            },
+            {
+              "figmaNodeId": "572:2577",
+              "name": "r",
+              "cells": [
+                "Metered item",
+                "You pay"
+              ]
+            },
+            {
+              "figmaNodeId": "572:2591",
+              "name": "r",
+              "cells": [
+                "Page views (bandwidth + reads)",
+                "$0.83 / 1,000"
+              ]
+            },
+            {
+              "figmaNodeId": "572:2598",
+              "name": "r",
+              "cells": [
+                "Form submissions",
+                "$0.083 / 1,000"
+              ]
+            },
+            {
+              "figmaNodeId": "572:2584",
+              "name": "r",
+              "cells": [
+                "Site media & file storage",
+                "$0.0349 / GB-mo"
+              ]
+            },
+            {
+              "figmaNodeId": "572:2605",
+              "name": null,
+              "cells": [
+                "Free plans are capped rather than billed, and Custom usage is set by your agreement. Dataset storage, API requests, CRM records and workflow runs are separate add-ons, priced in the table above. The CRM is included from Starter, and Free does not include it."
+              ]
+            }
+          ]
+        },
+        {
+          "figmaNodeId": "2608:728",
+          "name": "Optional add-ons header",
+          "widthPx": 1488,
+          "records": [
+            {
+              "figmaNodeId": "2608:728",
+              "name": "Optional add-ons header",
+              "cells": [
+                "OPTIONAL ADD-ONS",
+                "Four things you buy only if you need them.",
+                "Flat monthly prices per workspace, the same on every paid plan. Annual is billed at twelve times the monthly rate."
+              ]
             }
           ]
         },
@@ -1104,7 +1199,7 @@
               "figmaNodeId": "572:2571",
               "name": null,
               "cells": [
-                "Pro includes one register per site. This adds one beyond that, for the site you assign it to."
+                "Pro already includes 1 register per site. This adds one beyond that."
               ]
             },
             {
@@ -1112,14 +1207,14 @@
               "name": "h",
               "cells": [
                 "AI credits",
-                "$10 / mo a block"
+                "$10 / mo"
               ]
             },
             {
               "figmaNodeId": "2146:632",
               "name": null,
               "cells": [
-                "Blocks of 5,000 AI credits a month, per workspace, on any paid plan — up to 30 blocks. They add to the credits your plan includes; past both, credits bill at your plan’s rate. Custom by agreement."
+                "5,000 AI credits a month for $10, per workspace, on any paid plan. Add as many blocks as you need, up to 30, on top of the credits your plan includes; past those, credits bill at your plan’s rate in the usage table. Custom by agreement."
               ]
             },
             {
@@ -1141,7 +1236,7 @@
               "figmaNodeId": "2542:3017",
               "name": null,
               "cells": [
-                "Extra work past the hour is $79 per started hour, once you’ve said yes."
+                "Extra work past the hour is $79 per started hour, once you've said yes."
               ]
             },
             {
@@ -1168,60 +1263,129 @@
           ]
         },
         {
-          "figmaNodeId": "572:2572",
-          "name": "pass-through",
+          "figmaNodeId": "2608:732",
+          "name": "Managed: your plan plus Site Care, one price. Managed Starter is $74 a month, or $65 a month billed yearly. Extra work past the hour is $79 per started hour, once you've said yes. Bigger jobs are quoted flat up front: landing pages from $249, redesigns from $749, logo or brand kit from $349.",
           "widthPx": 1488,
           "records": [
             {
-              "figmaNodeId": "572:2573",
-              "name": "h",
-              "cells": [
-                "Metered infrastructure — passed through at cost + 30%, after card fees",
-                "Usage of storage, bandwidth, and form submissions is metered monthly at our actual provider cost (Firebase + Vercel) plus a flat 30% after card fees — no hidden markup, itemized on every invoice.",
-                "Video, audio, file downloads and other media served from our servers count 1.6× toward bandwidth, because serving them costs more than serving pages."
-              ]
-            },
-            {
-              "figmaNodeId": "572:2577",
-              "name": "r",
-              "cells": [
-                "Metered item",
-                "Our cost",
-                "You pay (+30% after card fees)"
-              ]
-            },
-            {
-              "figmaNodeId": "572:2584",
-              "name": "r",
-              "cells": [
-                "Media & file storage",
-                "$0.026 / GB-mo",
-                "$0.0349 / GB-mo"
-              ]
-            },
-            {
-              "figmaNodeId": "572:2591",
-              "name": "r",
-              "cells": [
-                "Page views (bandwidth + reads)",
-                "$0.615385 / 1k views",
-                "$0.83 / 1k views"
-              ]
-            },
-            {
-              "figmaNodeId": "572:2598",
-              "name": "r",
-              "cells": [
-                "Form submissions",
-                "$0.061538 / 1k",
-                "$0.083 / 1k"
-              ]
-            },
-            {
-              "figmaNodeId": "572:2605",
+              "figmaNodeId": "2608:732",
               "name": null,
               "cells": [
-                "Online payments run on Stripe; Aglyn’s transaction fee (see the comparison table) applies on top of Stripe’s processing fees. Dataset storage over your included amount is billed separately at $0.36 / GB-mo."
+                "Managed: your plan plus Site Care, one price. Managed Starter is $74 a month, or $65 a month billed yearly. Extra work past the hour is $79 per started hour, once you've said yes. Bigger jobs are quoted flat up front: landing pages from $249, redesigns from $749, logo or brand kit from $349."
+              ]
+            }
+          ]
+        },
+        {
+          "figmaNodeId": "2608:691",
+          "name": "Transaction fees",
+          "widthPx": 1488,
+          "records": [
+            {
+              "figmaNodeId": "2608:692",
+              "name": "h",
+              "cells": [
+                "TRANSACTION FEES",
+                "What Aglyn takes on a sale.",
+                "This is on top of Stripe's processing fee (2.9% + 30¢ on most online card sales), which we pass through to you at cost — it shows up in your Aglyn fee rather than as a separate Stripe charge. Services, including appointment bookings and reservations, are charged at the digital rate. The Aglyn percentage steps down as you move up the plans. If you sell physical goods, moving from Starter to Pro pays for itself on the fee alone once sales pass about $2,200 a month, on yearly billing. Selling through the Aglyn marketplace is separate from the rates above and does not step down with your plan: Aglyn keeps 20% of a marketplace listing sale on every paid plan, and 30% on Free."
+              ]
+            },
+            {
+              "figmaNodeId": "2608:697",
+              "name": "r",
+              "cells": [
+                "Plan",
+                "Digital goods",
+                "Physical goods"
+              ]
+            },
+            {
+              "figmaNodeId": "2608:704",
+              "name": "r",
+              "cells": [
+                "Hobby",
+                "0%",
+                "0%"
+              ]
+            },
+            {
+              "figmaNodeId": "2608:711",
+              "name": "r",
+              "cells": [
+                "Starter",
+                "5%",
+                "2%"
+              ]
+            },
+            {
+              "figmaNodeId": "2608:718",
+              "name": "r",
+              "cells": [
+                "Pro",
+                "3%",
+                "0.5%"
+              ]
+            },
+            {
+              "figmaNodeId": "2608:734",
+              "name": "r",
+              "cells": [
+                "Custom",
+                "0%",
+                "0%"
+              ]
+            }
+          ]
+        }
+      ],
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "2601:914",
+      "name": "Calculator",
+      "order": 4,
+      "widthPx": 1920,
+      "heightPx": 417,
+      "groups": [
+        {
+          "figmaNodeId": "2601:915",
+          "name": "MORE THAN ONE SITE?",
+          "widthPx": 162,
+          "records": [
+            {
+              "figmaNodeId": "2601:915",
+              "name": null,
+              "cells": [
+                "MORE THAN ONE SITE?"
+              ]
+            }
+          ]
+        },
+        {
+          "figmaNodeId": "2601:916",
+          "name": "Price your whole brief, line by line.",
+          "widthPx": 933,
+          "records": [
+            {
+              "figmaNodeId": "2601:916",
+              "name": null,
+              "cells": [
+                "Price your whole brief, line by line."
+              ]
+            }
+          ]
+        },
+        {
+          "figmaNodeId": "2601:917",
+          "name": "Sites, seats, traffic, storage, contacts, campaign email, datasets, API calls, AI and a store: the calculator names the plan that holds your brief, itemizes the month, and prices the same brief at other platforms’ list prices.",
+          "widthPx": 620,
+          "records": [
+            {
+              "figmaNodeId": "2601:917",
+              "name": null,
+              "cells": [
+                "Sites, seats, traffic, storage, contacts, campaign email, datasets, API calls, AI and a store: the calculator names the plan that holds your brief, itemizes the month, and prices the same brief at other platforms’ list prices."
               ]
             }
           ]
@@ -1233,9 +1397,9 @@
       "kind": null,
       "figmaNodeId": "572:2606",
       "name": "FAQ",
-      "order": 4,
+      "order": 5,
       "widthPx": 1920,
-      "heightPx": 1099,
+      "heightPx": 1155,
       "groups": [
         {
           "figmaNodeId": "572:2607",
@@ -1269,7 +1433,7 @@
               "name": "qa",
               "cells": [
                 "What happens if I exceed a plan limit?",
-                "On paid plans you’re not cut off. Add extra sites, seats, and datasets at the rates in the usage table — they’re added to your subscription and itemized on your invoice — and AI credits past your included band are billed per 1,000 at your plan’s rate, unless you set a stop or a monthly ceiling in Billing. Free-plan limits are hard caps: when Free’s AI credits are used, generation stops until next month."
+                "Storage, API calls and, on Pro, workflow runs keep working: usage past your allowance is metered at the rates in the usage table and itemized on your invoice. AI credits past your included band are metered the same way, per 1,000, unless you set a stop or a monthly ceiling in Billing — and on Free they stop at the band. Sites, seats, and datasets stop at your limit until you buy an add-on or upgrade."
               ]
             },
             {
@@ -1277,7 +1441,7 @@
               "name": "qa",
               "cells": [
                 "What does Aglyn AI cost?",
-                "Every paid plan includes a monthly band of AI credits, and every Aglyn AI action draws on it, generation included. For more, add AI credits to any paid plan, per workspace: blocks of 5,000 credits for $10 a month, up to 30 blocks, on top of the plan’s own; Custom by agreement. Credits past the band are billed per 1,000 at the rate in the usage table. If you’d rather it stopped, turn on Stop AI assist at the included band in Billing, or set a monthly dollar ceiling on overage. Free includes 300 credits a month and stops there — nothing is billed."
+                "Every paid plan includes a monthly band of AI credits, and every Aglyn AI action draws on it, generation included. For more, add AI credits to any paid plan, per workspace: 5,000 credits for $10 a month, as many blocks as you need up to 30, on top of the plan’s own; Custom by agreement. Credits past the band are billed per 1,000 at the rate in the usage table. If you’d rather it stopped, turn on Stop AI assist at the included band in Billing, or set a monthly dollar ceiling on overage. Free includes 300 credits a month and stops there — nothing is billed."
               ]
             },
             {
@@ -1285,7 +1449,7 @@
               "name": "qa",
               "cells": [
                 "How do transaction fees work?",
-                "Payments run on Stripe. Aglyn adds a transaction fee on top of Stripe’s processing, depending on plan and what you sell: physical goods on the lower rate, digital products and services (bookings included) on the higher one. Starter is 5% digital and 2% physical, Pro 3% and 0.5%, and Custom 0%."
+                "Payments run on Stripe. Aglyn adds a transaction fee on top of Stripe’s processing — 0–5% depending on plan and what you sell: physical goods on the lower rate, digital products and services (bookings included) on the higher one. It steps down as you move up — 3% digital and 0.5% physical on Pro, 0% on Custom."
               ]
             },
             {
@@ -1301,7 +1465,7 @@
               "name": "qa",
               "cells": [
                 "Can I change or cancel anytime?",
-                "Upgrade, downgrade, or cancel whenever you like from the billing page. Upgrades and downgrades are prorated as a charge or credit on your next invoice, and a canceled plan stays active until the end of the billing period you’ve already paid for."
+                "Upgrade, downgrade, or cancel whenever you like from the billing page. Upgrades and downgrades are prorated as a charge or credit on your next invoice, and a canceled plan stays active until the end of the billing period you've already paid for."
               ]
             },
             {
@@ -1317,7 +1481,7 @@
               "name": "qa",
               "cells": [
                 "Do you offer SSO or an SLA?",
-                "SAML / OIDC single sign-on is available on the Custom plan today — you set it up yourself in the console after proving your domain. Custom also includes dedicated support with a named manager and a 24–48 hour first response. We do not offer a contractual uptime SLA."
+                "SAML / OIDC single sign-on is available on Custom plans today — you set it up yourself in the console after proving your domain. Custom plans also include dedicated support with a named manager and a 24–48 hour first response. We do not offer a contractual uptime SLA."
               ]
             },
             {
@@ -1337,19 +1501,20 @@
               ]
             },
             {
-              "figmaNodeId": "2345:9783",
-              "name": "qa",
-              "cells": [
-                "How does Aglyn compare to alternatives?",
-                "Our comparison pages set Aglyn beside Webflow, Wix, Squarespace, WordPress, Shopify and Duda, dated, and say where each of them is the better answer."
-              ]
-            },
-            {
               "figmaNodeId": "2345:9786",
               "name": "qa",
               "cells": [
                 "What is Aglyn?",
                 "Aglyn is a website builder with the store, forms, CRM, email, analytics and Aglyn AI built in. It is open source and free to start."
+              ]
+            },
+            {
+              "figmaNodeId": "2345:9783",
+              "name": "qa",
+              "cells": [
+                "How does Aglyn compare to alternatives?",
+                "We keep a side-by-side breakdown for each one — pricing, the limits behind the pricing, and what the other platform does better. Every competitor figure is dated and taken from that vendor's own pricing or help pages.",
+                "Aglyn vs Webflow, Wix, Squarespace, WordPress, Shopify and Duda"
               ]
             }
           ]
@@ -1361,7 +1526,7 @@
       "kind": null,
       "figmaNodeId": "572:2627",
       "name": "CTA",
-      "order": 5,
+      "order": 6,
       "widthPx": 1920,
       "heightPx": 452,
       "groups": [
