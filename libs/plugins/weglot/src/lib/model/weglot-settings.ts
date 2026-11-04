@@ -16,7 +16,11 @@
  */
 
 import type { PluginConfigSchema } from '@aglyn/aglyn/plugin-manager/plugin-config'
-import { WEGLOT_PLUGIN_ID } from '../constants'
+import {
+  ENTERPRISE_PLAN_LABEL,
+  planLabelGrantingFeature,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { WEGLOT_ENTITLEMENT, WEGLOT_PLUGIN_ID } from '../constants'
 
 /**
  * A site's Weglot settings (AGL-3700), and the one parse every reader shares.
@@ -72,7 +76,10 @@ export const WEGLOT_SETTINGS_NOTICE =
   'Weglot translates your pages in the visitor’s browser, using your own ' +
   'Weglot account and its plan. Translated pages are for visitors: search ' +
   'engines index your site in its original language, and the translations ' +
-  'may not rank in other languages. Translating a site needs the Business ' +
+  'may not rank in other languages. Translating a site needs the ' +
+  // The cheapest plan with `multilingual`, from the entitlement table, so it
+  // never names a retired plan (AGL-4158).
+  `${planLabelGrantingFeature(WEGLOT_ENTITLEMENT) ?? ENTERPRISE_PLAN_LABEL} ` +
   'plan or above; on other plans nothing is added to your pages. Saving on a ' +
   'site’s own plugin page updates its published pages at once.'
 

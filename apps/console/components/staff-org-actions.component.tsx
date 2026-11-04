@@ -25,6 +25,7 @@ import {
   normalizeOrgOverrideReason,
   ORG_OVERRIDE_NOTE_MAX,
   ORG_OVERRIDE_REASON_CODES,
+  isRetiredPlan,
   ORG_OVERRIDE_REASON_LABELS,
   orgOverrideReasonNeedsNote,
   orgOverrideReasonSummary,
@@ -104,7 +105,10 @@ export { FLAG_FIELDS, QUOTA_FIELDS, RELEASE_FLAG_FIELDS }
  * never go missing here (this list was stuck at Business — Scale, Advanced and
  * Agency shipped without it, and `enterprise` would have been the fourth).
  * Enterprise is included on purpose: it is the ONE plan with no self-serve
- * path, so a staff override is the only way an org gets onto it.
+ * path, so a staff override is the only way an org gets onto it. The plans
+ * pricing v4 retired (`RETIRED_PLANS`, AGL-4126) are never offered
+ * (AGL-4158); an org still stored on one sees it as its current value only,
+ * through {@link retiredPlanOption}.
  */
 export const PLAN_OPTIONS: Array<{ value: string; label: string }> = [
   // ⚠️ NOT a dark launch, and the old label said it was (AGL-1152). Clearing
@@ -114,11 +118,28 @@ export const PLAN_OPTIONS: Array<{ value: string; label: string }> = [
   // So the option that read as "comp this org" actually DOWNGRADES it, which
   // is the worst possible direction for a label to be wrong in.
   { value: '', label: 'No plan (reads as Free)' },
-  ...(Object.keys(PLAN_LABELS) as OrgPlan[]).map((plan) => ({
-    value: plan,
-    label: PLAN_LABELS[plan],
-  })),
+  ...(Object.keys(PLAN_LABELS) as OrgPlan[])
+    .filter((plan) => !isRetiredPlan(plan))
+    .map((plan) => ({
+      value: plan,
+      label: PLAN_LABELS[plan],
+    })),
 ]
+
+/**
+ * The one option a select keeps for a retired plan (AGL-4158): the value an
+ * org is still stored or comped on, so the select shows what is there rather
+ * than a blank, labeled as retired so staff never pick it as a choice.
+ */
+export function retiredPlanOption(
+  plan: string | null | undefined,
+): { value: OrgPlan; label: string } | null {
+  if (!plan || !isRetiredPlan(plan)) return null
+  return {
+    value: plan as OrgPlan,
+    label: `${PLAN_LABELS[plan as OrgPlan]} (retired, current)`,
+  }
+}
 
 
 export { overrideCount }
@@ -131,7 +152,7 @@ export { overrideCount }
 export const COMP_PLAN_OPTIONS: Array<{ value: OrgPlan; label: string }> = (
   Object.keys(PLAN_LABELS) as OrgPlan[]
 )
-  .filter((plan) => plan !== 'free')
+  .filter((plan) => plan !== 'free' && !isRetiredPlan(plan))
   .map((plan) => ({ value: plan, label: PLAN_LABELS[plan] }))
 
 /**
@@ -1131,11 +1152,13 @@ const StaffOrgActions = ({
                 )
               }
             >
-              {PLAN_OPTIONS.map((option) => (
-                <MenuItem key={option.value} value={option.value}>
-                  {option.label}
-                </MenuItem>
-              ))}
+              {[retiredPlanOption(editor?.plan), ...PLAN_OPTIONS]
+                .filter((option) => option !== null)
+                .map((option) => (
+                  <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                  </MenuItem>
+                ))}
             </TextField>
           ) : planState ? (
             <TextField
@@ -1170,11 +1193,13 @@ const StaffOrgActions = ({
               {planState.comp && editor?.removeComp ? (
                 <MenuItem value="">{'Removed on save'}</MenuItem>
               ) : null}
-              {COMP_PLAN_OPTIONS.map((option) => (
-                <MenuItem key={option.value} value={option.value}>
-                  {option.label}
-                </MenuItem>
-              ))}
+              {[retiredPlanOption(editor?.compPlan), ...COMP_PLAN_OPTIONS]
+                .filter((option) => option !== null)
+                .map((option) => (
+                  <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                  </MenuItem>
+                ))}
             </TextField>
           ) : null}
           {/*

@@ -148,7 +148,8 @@ describe('what a published page may run', () => {
 describe('the settings card', () => {
   it('says plainly that translations are for visitors, not search', () => {
     expect(WEGLOT_CONFIG_SCHEMA.notice).toMatch(/may not rank in other languages/)
-    expect(WEGLOT_CONFIG_SCHEMA.notice).toMatch(/Business/)
+    // Names the cheapest plan with multilingual sites, never a retired one (AGL-4158).
+    expect(WEGLOT_CONFIG_SCHEMA.notice).toMatch(/needs the Pro plan or above/)
     expect(WEGLOT_CONFIG_SCHEMA.affectsPublishedPages).toBe(true)
     // Its `?` links its own docs heading, not the generic settings section.
     expect(WEGLOT_CONFIG_SCHEMA.help).toEqual({ topic: 'weglot', anchor: '#settings' })

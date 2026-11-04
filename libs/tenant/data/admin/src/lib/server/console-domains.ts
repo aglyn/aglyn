@@ -79,6 +79,10 @@
 import { randomBytes } from 'crypto'
 import { checkEntitlement } from '@aglyn/aglyn/server'
 import type { AglynOrgBilling } from '@aglyn/aglyn/server'
+import {
+  ENTERPRISE_PLAN_LABEL,
+  planLabelGrantingFeature,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
 import firebaseAdmin from './firebase-admin'
 import {
   challengeValue,
@@ -232,6 +236,15 @@ function claimView(
  * only place the gate can live. A gate that is bypassable is not a gate, and
  * this one was, on any plan, straight from the client SDK, until that landed.
  */
+/**
+ * The 403 body for an org whose plan has no `whiteLabel` (AGL-4158): white
+ * label is the Custom plan's since pricing v4 (AGL-4126), and the name is read
+ * from `PLAN_ENTITLEMENTS` so it can never name a retired plan again.
+ */
+export const CONSOLE_DOMAIN_PLAN_REQUIRED_COPY = `A custom console domain is part of the ${
+  planLabelGrantingFeature('whiteLabel') ?? ENTERPRISE_PLAN_LABEL
+} plan`
+
 async function orgIsEntitled(orgId: string): Promise<boolean> {
   const snapshot = await firestore().collection('orgs').doc(orgId).get()
   if (!snapshot.exists) return false
@@ -325,7 +338,7 @@ export async function registerConsoleDomain(options: {
   if (!(await orgIsEntitled(orgId))) {
     return {
       claim: null,
-      error: 'A custom console domain requires the Agency plan',
+      error: CONSOLE_DOMAIN_PLAN_REQUIRED_COPY,
       status: 403,
     }
   }
@@ -370,7 +383,7 @@ export async function verifyConsoleDomain(options: {
   if (!(await orgIsEntitled(orgId))) {
     return {
       claim: null,
-      error: 'A custom console domain requires the Agency plan',
+      error: CONSOLE_DOMAIN_PLAN_REQUIRED_COPY,
       status: 403,
     }
   }
@@ -488,7 +501,7 @@ export async function activateConsoleDomain(options: {
   if (!(await orgIsEntitled(orgId))) {
     return {
       claim: null,
-      error: 'A custom console domain requires the Agency plan',
+      error: CONSOLE_DOMAIN_PLAN_REQUIRED_COPY,
       status: 403,
       attachment: null,
     }

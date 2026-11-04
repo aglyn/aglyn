@@ -842,7 +842,7 @@ const fees = {
  */
 const tiers = {
   heading: 'Need more than Pro?',
-  lede: 'Custom plans for portfolios, white-label and single sign-on.',
+  lede: 'White-label, single sign-on and contracts, quoted per agreement.',
   enterprise: {
     plan: 'enterprise',
     label: PAGE_PLAN_LABELS.enterprise,
@@ -851,14 +851,12 @@ const tiers = {
     tagline: 'Sized and priced per agreement',
     annualLabel: 'Quoted per agreement',
     blurb:
-      'For portfolios and organizations that need white-label, single sign-on or a contract — quoted for you.',
+      'For portfolios and organizations that need white-label, single sign-on or a contract.',
     specs: [
-      // Not "Unlimited scale": since AGL-2654 a Custom agreement falls back to
-      // finite bands on every axis it does not name, so every limit is one
-      // the agreement sizes.
-      'Every limit sized by agreement',
       `${pct(PLAN_ENTITLEMENTS.enterprise.transactionFeeDigitalPct)} transaction fees`,
-      'white-label',
+      // White-label covers the console and the workspace's email, which is
+      // how the live card words it.
+      'white-label console & email',
       'SSO',
       // Was `'SLA & dedicated support'` (AGL-2194 P4). Dedicated support is
       // real — a named manager and a 24–48h first response, which the FAQ
@@ -873,6 +871,10 @@ const tiers = {
       'dedicated support',
       'custom contracts',
       'volume pricing',
+      // Not "Unlimited scale": since AGL-2654 a Custom agreement falls back to
+      // finite bands on every axis it does not name, so every limit is one
+      // the agreement sizes. Last on the live card, after the contract terms.
+      'limits set by agreement',
     ],
     cta: 'CONTACT SALES',
     // Deliberately no signup href and no cadence: Custom is quoted, not

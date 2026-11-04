@@ -215,7 +215,7 @@ describe('the privacy write (AGL-4033)', () => {
     const { firestore, state } = transactionalFirestore({ memberRoles: { 'uid-1': 'admin' } }, { pricing: { displayName: 'Pricing' } })
     const written = await write(firestore, request({ pages: [{ page: 'pricing', visibility: 'members' }] }), false)
     expect(written).toEqual(expect.objectContaining({ ok: true, done: [], changedAny: false, outboxId: null }))
-    expect(written.ok && written.notDone[0]).toContain('need the Business plan or above')
+    expect(written.ok && written.notDone[0]).toContain('need the Pro plan or above')
     expect(state.updates).toEqual([])
   })
 

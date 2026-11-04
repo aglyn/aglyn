@@ -26,8 +26,9 @@
  * Three claims, and the second two are the ones worth having:
  *
  *  1. each plan is refused at its own rung — Free 1, Starter 5, Pro unlimited
- *     since pricing v4 (25 before it), the retired Business 100,
- *     `FORMS_PER_HOST_CEILING` above (AGL-3597) — and the route
+ *     since pricing v4 (25 before it) and Custom with it (AGL-4158), the
+ *     retired Business 100 and `FORMS_PER_HOST_CEILING` on the retired plans
+ *     above it (AGL-3597) — and the route
  *     reads the resolved entitlement, so a per-org override still lands. Free
  *     is refused on the count, never on a feature: the saved form is not
  *     behind `reusableComponents`;
@@ -218,7 +219,8 @@ describe('each plan is refused at its own rung', () => {
       scale: FORMS_PER_HOST_CEILING,
       advanced: FORMS_PER_HOST_CEILING,
       agency: FORMS_PER_HOST_CEILING,
-      enterprise: FORMS_PER_HOST_CEILING,
+      // Custom is never below Pro (AGL-4158).
+      enterprise: UNLIMITED,
     })
 
     for (const plan of plans) {
@@ -247,10 +249,18 @@ describe('each plan is refused at its own rung', () => {
     }
   })
 
-  it('caps Enterprise too, because an unbounded catalog is a storage vector', async () => {
-    expect(PLAN_ENTITLEMENTS.enterprise.formsPerHost).toBe(FORMS_PER_HOST_CEILING)
+  it('gives Custom what Pro has, and a contract can still bound it (AGL-4158)', async () => {
+    expect(PLAN_ENTITLEMENTS.enterprise.formsPerHost).toBe(UNLIMITED)
     state.org = { plan: 'enterprise', subscription: { status: 'active' } }
     state.forms = savedForms(FORMS_PER_HOST_CEILING)
+    expect((await createForm()).status).toBe(200)
+
+    jest.clearAllMocks()
+    state.org = {
+      plan: 'enterprise',
+      subscription: { status: 'active' },
+      entitlements: { formsPerHost: FORMS_PER_HOST_CEILING },
+    }
     expect((await createForm()).status).toBe(403)
     expect(mockCreate).not.toHaveBeenCalled()
   })

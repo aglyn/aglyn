@@ -521,7 +521,8 @@ describe('plan entitlements', () => {
     // the same way.
     expect(resolved.emailSendsPerMonth).toBe(ENTERPRISE_EMAIL_SENDS_PER_MONTH)
     expect(ENTERPRISE_EMAIL_SENDS_PER_MONTH).toBe(agency.emailSendsPerMonth * 2)
-    expect(resolved.formsPerHost).toBe(FORMS_PER_HOST_CEILING)
+    // Custom is never below Pro on the saved-form catalog (AGL-4158).
+    expect(resolved.formsPerHost).toBe(UNLIMITED)
     expect(resolved.transactionFeePhysicalPct).toBe(0)
     expect(resolved.transactionFeeDigitalPct).toBe(0)
     expect(resolved.marketplaceFeePct).toBe(20)
@@ -2788,7 +2789,8 @@ describe('the saved-form ladder (AGL-3597)', () => {
     scale: FORMS_PER_HOST_CEILING,
     advanced: FORMS_PER_HOST_CEILING,
     agency: FORMS_PER_HOST_CEILING,
-    enterprise: FORMS_PER_HOST_CEILING,
+    // Custom is never below Pro (AGL-4158).
+    enterprise: UNLIMITED,
   }
 
   it('gives each plan its rung', () => {
@@ -2801,7 +2803,7 @@ describe('the saved-form ladder (AGL-3597)', () => {
 
   it('tops out at the number the Decision Log publishes', () => {
     /*
-     * Pinned to its value, not merely to itself. The top four plans read
+     * Pinned to its value, not merely to itself. The retired top plans read
      * `FORMS_PER_HOST_CEILING`, so they all move together when the constant
      * moves and none of them would notice — and this number is a published
      * packaging fact. Changing it is a decision that owes a Decision Log
@@ -2815,7 +2817,7 @@ describe('the saved-form ladder (AGL-3597)', () => {
     // on their own: Pro's unlimited catalog sits above Business's 100, which
     // no workspace can step to any more, so the two chains are read apart.
     for (const order of [
-      [...SELF_SERVE_PLANS],
+      [...SELF_SERVE_PLANS, 'enterprise'],
       ['business', 'scale', 'advanced', 'agency', 'enterprise'],
     ] as OrgPlan[][]) {
       const values = order.map((plan) => PLAN_ENTITLEMENTS[plan].formsPerHost)
@@ -2845,11 +2847,13 @@ describe('the saved-form ladder (AGL-3597)', () => {
     expect(differing.length).toBeGreaterThan(FORM_PLANS.length / 2)
   })
 
-  it('caps even the most expensive plan', () => {
-    // An unbounded catalog is a storage vector on any tier. A contract that
-    // needs more takes the per-org override below.
-    expect(PLAN_ENTITLEMENTS.enterprise.formsPerHost).toBe(FORMS_PER_HOST_CEILING)
-    expect(isUnlimitedQuota(PLAN_ENTITLEMENTS.enterprise.formsPerHost)).toBe(false)
+  it('never puts Custom below Pro (AGL-4158)', () => {
+    // Pro's catalog is UNLIMITED since pricing v4, so Custom's is too. A
+    // contract that wants a bound takes the per-org override below.
+    expect(PLAN_ENTITLEMENTS.enterprise.formsPerHost).toBe(UNLIMITED)
+    expect(PLAN_ENTITLEMENTS.enterprise.formsPerHost).toBeGreaterThanOrEqual(
+      PLAN_ENTITLEMENTS.pro.formsPerHost,
+    )
   })
 
   it('refuses the create only once the rung is spent, on every plan, in BOTH directions', () => {
@@ -2904,8 +2908,9 @@ describe('the saved-form ladder (AGL-3597)', () => {
      * `JSON.stringify(Infinity)` is `null` and `Number(null)` is `0`, so an
      * uncapped quota needs the `unlimited` flag to survive a route boundary
      * or it renders as "no forms at all". A finite allowance needs none of
-     * that apparatus. Pro's is UNLIMITED since pricing v4 (AGL-4126), the one
-     * plan that does, and it is named so a second one cannot appear unseen.
+     * that apparatus. Pro's is UNLIMITED since pricing v4 (AGL-4126) and
+     * Custom's with it (AGL-4158), the plans that do, named so a third one
+     * cannot appear unseen.
      */
     const roundTrip = (value: number) => JSON.parse(JSON.stringify({ value })).value
     const unlimited: OrgPlan[] = []
@@ -2920,7 +2925,7 @@ describe('the saved-form ladder (AGL-3597)', () => {
       }
       expect(roundTrip(allowance)).toBe(allowance)
     }
-    expect(unlimited).toEqual(['pro'])
+    expect(unlimited).toEqual(['pro', 'enterprise'])
     expect(roundTrip(UNLIMITED)).toBeNull()
   })
 
