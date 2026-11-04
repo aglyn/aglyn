@@ -88,50 +88,50 @@ export const PRICE_FIELD_MAP = Object.freeze([
   { field: 'extraCollaboratorMonthlyUsd', key: (p) => `aglyn_${p}_extra_member_yearly`, mult: 12 },
   { field: 'extraDatasetMonthlyUsd', key: (p) => `aglyn_${p}_extra_dataset`, mult: 1 },
   { field: 'extraDatasetMonthlyUsd', key: (p) => `aglyn_${p}_extra_dataset_yearly`, mult: 12 },
-  // The Aglyn AI add-on is no longer priced per plan (AGL-3965): its tiers
-  // are `AI_TIERS`, checked by `compareAiTiersToStripe` below, and the
-  // per-plan `aglyn_{plan}_ai_addon[_yearly]` prices sold before it are
-  // checked there as legacy prices of the tier with their band.
+  // The Aglyn AI add-on is no longer priced per plan: since AGL-4144 it is
+  // one credit block, `ai-credit-blocks.ts`, checked by
+  // `compareAiCreditBlockToStripe` below.
 ])
 
-/** The Aglyn AI tiers (AGL-3965), smallest first, as `AI_TIERS` keys them. */
-export const AI_TIER_IDS = Object.freeze(['spark', 'boost', 'plus', 'max', 'ultra', 'studio'])
-
 /**
- * Which tier each plan's pre-AGL-3965 AI add-on price is: the tier with the
- * same price and band (`LEGACY_AI_ADDON_TIER_BY_PLAN`).
+ * Read the Aglyn AI credit block's price out of `ai-credit-blocks.ts`
+ * (AGL-4144), by text for the reason `parsePlanRecord` gives. Null when the
+ * constant is missing or not a number literal.
+ *
+ * @param source - the .ts file contents
+ * @returns { monthlyUsd } or null
  */
-export const LEGACY_AI_ADDON_TIER_BY_PLAN = Object.freeze({
-  starter: 'spark',
-  pro: 'boost',
-  business: 'plus',
-  scale: 'max',
-  advanced: 'ultra',
-  agency: 'studio',
-})
+export function parseAiCreditBlock(source) {
+  const match = String(source ?? '').match(
+    /export const AI_CREDIT_BLOCK_MONTHLY_USD\s*=\s*([\d._]+)/,
+  )
+  if (!match) return null
+  const monthlyUsd = Number(match[1].replace(/_/g, ''))
+  return Number.isFinite(monthlyUsd) ? { monthlyUsd } : null
+}
 
 /**
- * Compare the Aglyn AI tiers in code against Stripe live (AGL-3965).
+ * Compare the Aglyn AI credit block in code against Stripe live (AGL-4144).
  *
- * - `aglyn_ai_{tier}` = `monthlyUsd`, `aglyn_ai_{tier}_yearly` = `yearlyUsd`,
- *   compared exactly with the active flag. A tier price Stripe does not carry
- *   yet is `unminted`: reported on every run, never fatal, because minting it
- *   is a step only a human takes (`setup-stripe.mjs`).
- * - A legacy `aglyn_{plan}_ai_addon[_yearly]` price still active must charge
- *   what its tier charges — that equality is what lets the migration move an
- *   item to the tier without moving anyone's bill. Absent (archived after
- *   the migration) is the expected end state.
+ * `aglyn_ai_credits` = the block's monthly price and `aglyn_ai_credits_yearly`
+ * = ×12, compared exactly with the active flag. A block price Stripe does not
+ * carry yet is `unminted`: reported on every run, never fatal, because
+ * minting it is a step only a human takes (`setup-stripe.mjs`). The six
+ * retired tier prices are not read: nothing sells them.
  *
- * @param tiers - parsed `AI_TIERS` (tier → { monthlyUsd, yearlyUsd, credits })
+ * @param block - `parseAiCreditBlock` output
  * @param stripe - `indexStripePrices` output
  */
-export function compareAiTiersToStripe(tiers, stripe) {
-  const verdicts = []
-  if (!AI_TIER_IDS.every((id) => tiers?.[id])) {
-    return [{ status: 'unreadable', key: 'ai-tiers', detail: 'AI_TIERS could not be parsed' }]
+export function compareAiCreditBlockToStripe(block, stripe) {
+  if (!block || !Number.isFinite(block.monthlyUsd)) {
+    return [{ status: 'unreadable', key: 'ai-credits', detail: 'AI_CREDIT_BLOCK_MONTHLY_USD could not be parsed' }]
   }
-  const compare = (lookupKey, expected) => {
-    const live = stripe[lookupKey]
+  const verdicts = []
+  for (const [lookupKey, expected] of [
+    ['aglyn_ai_credits', block.monthlyUsd],
+    ['aglyn_ai_credits_yearly', block.monthlyUsd * 12],
+  ]) {
+    const live = stripe?.[lookupKey]
     if (!live) {
       verdicts.push({
         status: 'unminted',
@@ -150,37 +150,6 @@ export function compareAiTiersToStripe(tiers, stripe) {
       verdicts.push({ status: 'in-sync', key: lookupKey, detail: `$${cents(expected)}` })
     }
   }
-  for (const id of AI_TIER_IDS) {
-    compare(`aglyn_ai_${id}`, tiers[id].monthlyUsd)
-    compare(`aglyn_ai_${id}_yearly`, tiers[id].yearlyUsd)
-    if (cents(tiers[id].yearlyUsd) !== cents(tiers[id].monthlyUsd * 12)) {
-      verdicts.push({
-        status: 'differs',
-        key: `ai-tier:${id}:yearly`,
-        detail: `yearly $${tiers[id].yearlyUsd} is not monthly $${tiers[id].monthlyUsd} × 12`,
-      })
-    }
-  }
-  for (const [plan, id] of Object.entries(LEGACY_AI_ADDON_TIER_BY_PLAN)) {
-    for (const [suffix, expected] of [
-      ['', tiers[id].monthlyUsd],
-      ['_yearly', tiers[id].yearlyUsd],
-    ]) {
-      const lookupKey = `aglyn_${plan}_ai_addon${suffix}`
-      const live = stripe[lookupKey]
-      if (!live || !live.active) {
-        verdicts.push({ status: 'in-sync', key: lookupKey, detail: 'retired (no active legacy price)' })
-      } else if (live.amount !== cents(expected)) {
-        verdicts.push({
-          status: 'differs',
-          key: lookupKey,
-          detail: `legacy price at $${live.amount} but its tier (${id}) charges $${cents(expected)} — the migration would move a bill`,
-        })
-      } else {
-        verdicts.push({ status: 'in-sync', key: lookupKey, detail: `$${cents(expected)}, legacy price read as ${id}` })
-      }
-    }
-  }
   return verdicts
 }
 
@@ -197,8 +166,7 @@ export function compareAiTiersToStripe(tiers, stripe) {
  *
  * @param source - the .ts file contents
  * @param constName - e.g. `PLAN_PRICING`
- * @param keys - the record's keys; the plans by default, `AI_TIER_IDS` for
- *   `AI_TIERS`
+ * @param keys - the record's keys; the plans by default
  * @returns plan → { field: number | null | boolean }
  */
 export function parsePlanRecord(source, constName, keys = ALL_PLANS) {

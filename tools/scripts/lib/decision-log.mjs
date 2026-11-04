@@ -47,7 +47,7 @@
 // VALUES. Comments, formatting and helper functions move freely; a number or
 // a boolean that a customer is charged or granted does not.
 
-import { AI_TIER_IDS, parsePlanRecord, parseUnitRates } from './pricing-drift.mjs'
+import { parsePlanRecord, parseUnitRates } from './pricing-drift.mjs'
 
 /** Where the repo-side Decision Log lives. */
 export const DECISION_LOG_PATH = 'docs/DECISION_LOG.md'
@@ -96,11 +96,6 @@ export const WATCHED = Object.freeze([
       'SITE_CARE_PROJECT_BRAND_KIT_FROM_USD',
       'SITE_CARE_PROJECT_SPLIT_ABOVE_USD',
     ]),
-    // The Aglyn AI tiers (AGL-3965): a record keyed by tier rather than by
-    // plan. Optional only until the base ref carries it, like the scalars.
-    optionalKeyedRecords: Object.freeze([
-      Object.freeze({ name: 'AI_TIERS', keys: AI_TIER_IDS }),
-    ]),
   }),
   Object.freeze({
     path: 'apps/console/utils/usage-metering.ts',
@@ -129,6 +124,23 @@ export const WATCHED = Object.freeze([
       'PLUGIN_PLAN_FEATURES_DECLARED',
     ]),
     optional: true,
+  }),
+  /*
+   * The Aglyn AI credit block (AGL-4144): its credits, price and ceiling are
+   * what a customer is charged and granted. Optional until the base ref
+   * carries the file.
+   */
+  Object.freeze({
+    path: 'libs/aglyn/src/lib/app-utils/ai-credit-blocks.ts',
+    optional: true,
+    records: Object.freeze([]),
+    rateTables: Object.freeze([]),
+    scalars: Object.freeze([]),
+    optionalScalars: Object.freeze([
+      'AI_CREDITS_PER_BLOCK',
+      'AI_CREDIT_BLOCK_MONTHLY_USD',
+      'AI_CREDIT_BLOCKS_MAX',
+    ]),
   }),
 ])
 

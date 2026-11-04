@@ -18,14 +18,14 @@
 'use client'
 
 import { parseLockdownRefusal, type LockdownRefusalNotice } from '@aglyn/aglyn'
-import type { AiTierId, OrgPlan } from '@aglyn/aglyn'
+import type { OrgPlan } from '@aglyn/aglyn'
+import { AI_CREDITS_PER_BLOCK } from '@aglyn/aglyn/app-utils/ai-credit-blocks'
 import {
   ADDON_KINDS,
   addonMaxForPlan,
   addonUnitUsd,
   bundleAddonLabel,
   bundleAddonsParam,
-  bundleAiTier,
   bundleListPriceCents,
   describeBundleAddon,
   fitBundleAddonsToPlan,
@@ -53,7 +53,6 @@ import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import LockdownNotice from '../lockdown-notice.component'
-import { AiTierSelect } from './ai-tier-select.component'
 import { taxExplanation } from '../../utils/tax-explanation'
 
 /** What `/api/billing/checkout` `action: 'preview'` answers with. */
@@ -120,19 +119,6 @@ export interface BillingPlanQuoteProps {
    */
   onIntervalChange?: (interval: 'month' | 'year') => void
   /**
-   * The Aglyn AI tier the link named (AGL-3965), or the one the owner picked
-   * since: the AI switch is worded and priced as that tier, and the quote
-   * prices it, so the total shown is the tier the purchase sends. Absent,
-   * the plan's default tier.
-   */
-  aiTier?: AiTierId | null
-  /**
-   * Present when the tier can be changed here (AGL-4025): with Aglyn AI on,
-   * its tier picker renders beside the switch, as the cadence toggle and the
-   * add-on switches let the owner change the rest of what a link chose.
-   */
-  onAiTierChange?: (tier: AiTierId) => void
-  /**
    * A promotion code the link carried (AGL-3955), tried on the first quote.
    * One that Stripe refuses is left off with a one-line notice, never an
    * error: the owner is mid-purchase on a phone.
@@ -148,17 +134,22 @@ export interface BillingPlanQuoteProps {
 
 const ADDON_ROW_KINDS = TOGGLE_ADDON_KIND_LIST as readonly string[]
 
-/** "$49/mo", "$588/yr", "$15/mo each". */
+/**
+ * "$49/mo", "$588/yr", "$15/mo each"; for Aglyn AI credits, the block's
+ * terms: "5,000 credits a block · $10/mo each" (AGL-4144).
+ */
 function addonPrice(
   kind: AddonKind,
   plan: OrgPlan,
   interval: 'month' | 'year',
-  aiTier?: AiTierId | null,
 ): string {
-  const unit = addonUnitUsd(kind, plan, aiTier)
+  const unit = addonUnitUsd(kind, plan)
   if (unit == null) return ''
   const each = ADDON_ROW_KINDS.includes(kind) ? '' : ' each'
-  return interval === 'year' ? `$${unit * 12}/yr${each}` : `$${unit}/mo${each}`
+  const price = interval === 'year' ? `$${unit * 12}/yr${each}` : `$${unit}/mo${each}`
+  return kind === 'aiAddon'
+    ? `${AI_CREDITS_PER_BLOCK.toLocaleString()} credits a block · ${price}`
+    : price
 }
 
 function money(cents: number, currency: string): string {
@@ -220,8 +211,6 @@ export default function BillingPlanQuoteComponent({
   onAddonsChange,
   offered,
   onIntervalChange,
-  aiTier,
-  onAiTierChange,
   initialCoupon,
   linkNotice,
   footer,
@@ -230,9 +219,8 @@ export default function BillingPlanQuoteComponent({
   const knownPlan = plan ? (plan as OrgPlan) : null
   const quotedAddons = knownPlan ? fitBundleAddonsToPlan(addons, knownPlan).addons : {}
   // A stable key for the effect below: the add-ons as the link writes them,
-  // the AI tier included.
-  const quotedAiTier = (quotedAddons.aiAddon ?? 0) > 0 ? (aiTier ?? null) : null
-  const addonsKey = bundleAddonsParam(quotedAddons, quotedAiTier)
+  // the AI credit blocks included.
+  const addonsKey = bundleAddonsParam(quotedAddons)
   // The link's code is tried once, on the first quote, and then belongs to
   // the box like any typed code.
   const linkCoupon = useRef<string | null>(initialCoupon?.trim() || null)
@@ -278,7 +266,6 @@ export default function BillingPlanQuoteComponent({
             // Quoted on the same invoice as the plan, so the total shown is
             // the total charged (AGL-3955).
             ...(addonsKey ? { addons: quotedAddons } : {}),
-            ...(quotedAiTier ? { aiTier: quotedAiTier } : {}),
           }),
         })
         const payload = await response.json().catch(() => ({}))
@@ -380,8 +367,8 @@ export default function BillingPlanQuoteComponent({
 
   /*
    * The add-ons the link named (AGL-3955, AGL-4026), and only those: an
-   * org-wide add-on as a switch (Aglyn AI with its tier beside it), a counted
-   * one as a count. A row stays once shown, so switching an add-on off or
+   * org-wide add-on as a switch, a counted one as a count (Aglyn AI credits
+   * in blocks, AGL-4144). A row stays once shown, so switching an add-on off or
    * counting it down to zero can be undone. Each change re-quotes, and the
    * purchase sends exactly what is on.
    */
@@ -400,10 +387,7 @@ export default function BillingPlanQuoteComponent({
   }
   const switchRow = (kind: AddonKind, plan: OrgPlan) => {
     const quantity = quotedAddons[kind] ?? 0
-    // With Aglyn AI on and its tier open to change (AGL-4025), the
-    // picker beside the switch names the tier and its price.
-    const tierPicked = kind === 'aiAddon' && quantity > 0 && !!onAiTierChange
-    const toggle = (
+    return (
       <FormControlLabel
         key={kind}
         disabled={busy || !canManage}
@@ -415,38 +399,14 @@ export default function BillingPlanQuoteComponent({
           />
         }
         label={
-          tierPicked ? (
-            <Typography variant="body2">{bundleAddonLabel(kind)}</Typography>
-          ) : (
-            <Typography variant="body2">
-              {describeBundleAddon(kind, Math.max(1, quantity), undefined, aiTier)}
-              <Typography component="span" variant="body2" color="text.secondary">
-                {` · ${addonPrice(kind, plan, interval, aiTier)}`}
-              </Typography>
+          <Typography variant="body2">
+            {describeBundleAddon(kind, Math.max(1, quantity))}
+            <Typography component="span" variant="body2" color="text.secondary">
+              {` · ${addonPrice(kind, plan, interval)}`}
             </Typography>
-          )
+          </Typography>
         }
       />
-    )
-    return tierPicked && onAiTierChange ? (
-      <Stack
-        key={kind}
-        direction="row"
-        useFlexGap
-        spacing={1.5}
-        sx={{ alignItems: 'center', flexWrap: 'wrap', py: 0.5 }}
-      >
-        {toggle}
-        <AiTierSelect
-          plan={plan}
-          value={bundleAiTier(quotedAddons, plan, aiTier)}
-          interval={interval}
-          onChange={onAiTierChange}
-          disabled={busy || !canManage}
-        />
-      </Stack>
-    ) : (
-      toggle
     )
   }
   // A count is typed digit by digit, so it is never disabled while a quote
@@ -456,7 +416,7 @@ export default function BillingPlanQuoteComponent({
       key={kind}
       size="small"
       type="number"
-      label={bundleAddonLabel(kind)}
+      label={kind === 'aiAddon' ? `${bundleAddonLabel(kind)}s` : bundleAddonLabel(kind)}
       helperText={addonPrice(kind, plan, interval)}
       value={quotedAddons[kind] ?? 0}
       disabled={!canManage}
@@ -464,7 +424,7 @@ export default function BillingPlanQuoteComponent({
         setQuantity(kind, Math.max(0, Math.floor(Number(event.target.value) || 0)))
       }
       slotProps={{ htmlInput: { min: 0, max: addonMaxForPlan(kind, plan), step: 1 } }}
-      sx={{ width: (theme) => theme.spacing(18) }}
+      sx={{ width: (theme) => theme.spacing(kind === 'aiAddon' ? 26 : 18) }}
     />
   )
   const addonRows =
@@ -525,7 +485,6 @@ export default function BillingPlanQuoteComponent({
                     plan: knownPlan,
                     interval,
                     addons: quotedAddons,
-                    aiTier: quotedAiTier,
                   }),
                   'usd',
                 ) + (interval === 'year' ? '/yr' : '/mo')}

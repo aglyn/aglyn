@@ -175,6 +175,9 @@ describe.each(ENTRIES)('$widgetId on a plan without the add-on', ({ zone, widget
     const dialog = screen.getByRole('dialog')
     expect(within(dialog).getByText(aiUpsellOffer(false))).toBeTruthy()
     expect(aiUpsellOffer(false)).toMatch(/Ask a workspace owner or admin/)
+    // Credits by the block (AGL-4144): the offer names credits, never a tier.
+    expect(aiUpsellOffer(true)).toMatch(/It comes with \S+ AI credits, which you can add in Billing\./)
+    expect(`${aiUpsellOffer(true)} ${aiUpsellOffer(false)}`).not.toMatch(/tier/i)
     // The only link is the title's help `?`, to the docs (AGL-3660): no way to buy.
     const links = within(dialog).queryAllByRole('link')
     expect(links.every((link) => link.getAttribute('href')?.includes('/ai/create-with-ai'))).toBe(true)

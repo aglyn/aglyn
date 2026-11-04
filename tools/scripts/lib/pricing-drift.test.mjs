@@ -27,8 +27,8 @@ import {
   parseUnitRates,
   indexStripePrices,
   comparePlansToStripe,
-  compareAiTiersToStripe,
-  AI_TIER_IDS,
+  compareAiCreditBlockToStripe,
+  parseAiCreditBlock,
   compareFeeLadder,
   compareUnitRateTables,
   publishedMeteredRates,
@@ -146,48 +146,15 @@ test('comparePlansToStripe', async (t) => {
   })
 })
 
-test('compareAiTiersToStripe (AGL-3965)', async (t) => {
-  const TIERS_TS = `
-export const AI_TIERS: Readonly<Record<AiTierId, AiTier>> = {
-  spark: {
-    label: 'Spark',
-    monthlyUsd: 9,
-    yearlyUsd: 108,
-    credits: 4_000,
-  },
-  boost: {
-    label: 'Boost',
-    monthlyUsd: 19,
-    yearlyUsd: 228,
-    credits: 9_000,
-  },
-  plus: {
-    label: 'Plus',
-    monthlyUsd: 39,
-    yearlyUsd: 468,
-    credits: 19_000,
-  },
-  max: {
-    label: 'Max',
-    monthlyUsd: 69,
-    yearlyUsd: 828,
-    credits: 34_000,
-  },
-  ultra: {
-    label: 'Ultra',
-    monthlyUsd: 99,
-    yearlyUsd: 1188,
-    credits: 49_000,
-  },
-  studio: {
-    label: 'Studio',
-    monthlyUsd: 299,
-    yearlyUsd: 3588,
-    credits: 149_000,
-  },
-}
+test('compareAiCreditBlockToStripe (AGL-4144)', async (t) => {
+  const BLOCK_TS = `
+export const AI_CREDITS_PER_BLOCK = 5_000
+
+export const AI_CREDIT_BLOCK_MONTHLY_USD = 10
+
+export const AI_CREDIT_BLOCK_YEARLY_USD = AI_CREDIT_BLOCK_MONTHLY_USD * 12
 `
-  const tiers = parsePlanRecord(TIERS_TS, 'AI_TIERS', AI_TIER_IDS)
+  const block = parseAiCreditBlock(BLOCK_TS)
   const price = (lookup_key, usd, interval = 'month', active = true) => ({
     lookup_key,
     unit_amount: Math.round(usd * 100),
@@ -195,54 +162,48 @@ export const AI_TIERS: Readonly<Record<AiTierId, AiTier>> = {
     recurring: { interval },
   })
 
-  await t.test('parses all six tiers', () => {
-    assert.deepEqual(Object.keys(tiers), [...AI_TIER_IDS])
-    assert.equal(tiers.studio.credits, 149000)
+  await t.test('parses the block price', () => {
+    assert.deepEqual(block, { monthlyUsd: 10 })
   })
 
-  await t.test('an unminted tier price is reported, never fatal', () => {
-    const v = compareAiTiersToStripe(tiers, indexStripePrices({ data: [] }))
-    assert.equal(v.filter((x) => x.status === 'unminted').length, 12)
-    assert.equal(v.some((x) => x.status === 'differs' || x.status === 'unreadable'), false)
+  await t.test('an unminted block price is reported, never fatal', () => {
+    const v = compareAiCreditBlockToStripe(block, indexStripePrices({ data: [] }))
+    assert.deepEqual(v.map((x) => [x.key, x.status]), [
+      ['aglyn_ai_credits', 'unminted'],
+      ['aglyn_ai_credits_yearly', 'unminted'],
+    ])
   })
 
-  await t.test('a minted tier is compared exactly, yearly = monthly x 12', () => {
-    const v = compareAiTiersToStripe(
-      tiers,
-      indexStripePrices({ data: [price('aglyn_ai_boost', 19), price('aglyn_ai_boost_yearly', 228, 'year')] }),
+  await t.test('$10 monthly and $120 yearly are in sync', () => {
+    const v = compareAiCreditBlockToStripe(
+      block,
+      indexStripePrices({ data: [price('aglyn_ai_credits', 10), price('aglyn_ai_credits_yearly', 120, 'year')] }),
     )
-    assert.equal(v.find((x) => x.key === 'aglyn_ai_boost').status, 'in-sync')
-    assert.equal(v.find((x) => x.key === 'aglyn_ai_boost_yearly').status, 'in-sync')
+    assert.ok(v.every((x) => x.status === 'in-sync'))
   })
 
-  await t.test('CATCHES a tier price at the wrong amount, and an inactive one', () => {
-    const v = compareAiTiersToStripe(
-      tiers,
+  await t.test('a moved amount or an inactive price differs', () => {
+    const v = compareAiCreditBlockToStripe(
+      block,
       indexStripePrices({
-        data: [price('aglyn_ai_spark', 10), price('aglyn_ai_plus', 39, 'month', false)],
+        data: [price('aglyn_ai_credits', 12), price('aglyn_ai_credits_yearly', 120, 'year', false)],
       }),
     )
-    assert.match(v.find((x) => x.key === 'aglyn_ai_spark').detail, /code \$9 vs Stripe \$10/)
-    assert.equal(v.find((x) => x.key === 'aglyn_ai_plus').status, 'differs')
-    assert.equal(overallExitCode(v), 1)
+    assert.match(v.find((x) => x.key === 'aglyn_ai_credits').detail, /code \$10 vs Stripe \$12/)
+    assert.match(v.find((x) => x.key === 'aglyn_ai_credits_yearly').detail, /INACTIVE/)
   })
 
-  await t.test('a legacy per-plan price must charge what its tier charges', () => {
-    const same = compareAiTiersToStripe(
-      tiers,
-      indexStripePrices({ data: [price('aglyn_pro_ai_addon', 19), price('aglyn_agency_ai_addon_yearly', 3588, 'year')] }),
+  await t.test('a retired tier price is not read at all', () => {
+    const v = compareAiCreditBlockToStripe(
+      block,
+      indexStripePrices({ data: [price('aglyn_ai_boost', 19), price('aglyn_pro_ai_addon', 19)] }),
     )
-    assert.equal(same.find((x) => x.key === 'aglyn_pro_ai_addon').status, 'in-sync')
-    assert.equal(same.find((x) => x.key === 'aglyn_agency_ai_addon_yearly').status, 'in-sync')
-    const moved = compareAiTiersToStripe(
-      tiers,
-      indexStripePrices({ data: [price('aglyn_pro_ai_addon', 21)] }),
-    )
-    assert.equal(moved.find((x) => x.key === 'aglyn_pro_ai_addon').status, 'differs')
+    assert.equal(v.some((x) => /boost|_ai_addon/.test(x.key)), false)
   })
 
-  await t.test('an unparseable table is unreadable, not a clean run', () => {
-    assert.equal(compareAiTiersToStripe({}, {})[0].status, 'unreadable')
+  await t.test('an unparseable block is unreadable, not a clean run', () => {
+    assert.equal(parseAiCreditBlock('export const AI_CREDIT_BLOCK_MONTHLY_USD = TEN'), null)
+    assert.equal(compareAiCreditBlockToStripe(null, {})[0].status, 'unreadable')
   })
 })
 

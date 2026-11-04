@@ -139,13 +139,11 @@ const METERED = {
   STRIPE_PRICE_METERED: 'price_metered_usage',
   STRIPE_PRICE_METERED_YEARLY: 'price_metered_usage_yearly',
 }
-// Aglyn AI is sold per tier (AGL-3965); with no tier named, Pro's purchase
-// means Boost, the tier with Pro's old add-on price and band.
+// Aglyn AI credits are sold by the block (AGL-4144): one flat price per
+// interval, the item's quantity the number of blocks.
 const AI_ADDON = {
-  STRIPE_PRICE_AI_BOOST: 'price_ai_boost',
-  STRIPE_PRICE_AI_BOOST_YEARLY: 'price_ai_boost_yearly',
-  STRIPE_PRICE_AI_STUDIO: 'price_ai_studio',
-  STRIPE_PRICE_AI_STUDIO_YEARLY: 'price_ai_studio_yearly',
+  STRIPE_PRICE_AI_CREDITS: 'price_ai_credits',
+  STRIPE_PRICE_AI_CREDITS_YEARLY: 'price_ai_credits_yearly',
 }
 const SITE_CARE = {
   STRIPE_PRICE_SITE_CARE: 'price_site_care',
@@ -269,7 +267,7 @@ describe('a bundle checkout sells every add-on in one subscription (AGL-3955)', 
   it('attaches each add-on at its quantity, the others ahead of AI and Site Care', async () => {
     const handler = loadCheckout(EVERYTHING)
     const response = await post(handler, {
-      addons: { hosts: 2, eventCalendar: true, aiAddon: 1, siteCare: true },
+      addons: { hosts: 2, eventCalendar: true, aiAddon: 3, siteCare: true },
     })
     expect(response.status).toBe(200)
     const body = subscribeBody()
@@ -279,7 +277,8 @@ describe('a bundle checkout sells every add-on in one subscription (AGL-3955)', 
     expect(body?.get('items[2][quantity]')).toBe('2')
     expect(body?.get('items[3][price]')).toBe('price_event_calendar')
     expect(body?.get('items[3][quantity]')).toBe('1')
-    expect(body?.get('items[4][price]')).toBe('price_ai_boost')
+    expect(body?.get('items[4][price]')).toBe('price_ai_credits')
+    expect(body?.get('items[4][quantity]')).toBe('3')
     expect(body?.get('items[5][price]')).toBe('price_site_care')
   })
 
@@ -293,24 +292,38 @@ describe('a bundle checkout sells every add-on in one subscription (AGL-3955)', 
     expect(body?.get('items[3][price]')).toBe('price_site_care_yearly')
   })
 
-  it('sells the Aglyn AI tier an `ai:<tier>` entry names (AGL-3965)', async () => {
+  it('sells the number of credit blocks an `ai:<blocks>` entry names (AGL-4144)', async () => {
     const handler = loadCheckout(EVERYTHING)
-    await post(handler, { addons: 'siteCare,ai:studio', interval: 'year' })
+    await post(handler, { addons: 'siteCare,ai:3', interval: 'year' })
     const body = subscribeBody()
-    // Studio on Pro: the tier is chosen on its own, not the plan's Boost.
-    expect(body?.get('items[2][price]')).toBe('price_ai_studio_yearly')
+    // Three blocks on the yearly block price, matching the plan's interval.
+    expect(body?.get('items[2][price]')).toBe('price_ai_credits_yearly')
+    expect(body?.get('items[2][quantity]')).toBe('3')
     expect(body?.get('items[3][price]')).toBe('price_site_care_yearly')
   })
 
-  it('lets `aiTier`, the explicit statement, win over an `ai:<tier>` entry (AGL-3965)', async () => {
-    await post(loadCheckout(EVERYTHING), { addons: 'ai:studio', aiTier: 'boost' })
-    expect(subscribeBody()?.get('items[2][price]')).toBe('price_ai_boost')
+  it('refuses a retired tier named as `aiTier`, before anything reaches Stripe (AGL-4144)', async () => {
+    const refused = await post(loadCheckout(EVERYTHING), { addons: 'ai', aiTier: 'boost' })
+    expect(refused.status).toBe(400)
+    expect((await refused.json()).code).toBe('ai_tier_retired')
+    expect(stripeCalls).toHaveLength(0)
   })
 
-  it('refuses an `ai:<tier>` entry no tier answers to, with the other unknown add-ons', async () => {
-    const refused = await post(loadCheckout(EVERYTHING), { addons: 'ai:pro' })
+  it('refuses a retired tier written as an `ai:<tier>` entry, with the other unknown add-ons', async () => {
+    for (const token of ['ai:boost', 'ai:studio', 'ai:pro']) {
+      const refused = await post(loadCheckout(EVERYTHING), { addons: token })
+      expect(`${token}: ${refused.status}`).toBe(`${token}: 400`)
+      expect((await refused.json()).code).toBe('unknown_addon')
+    }
+    expect(subscribeBody()).toBeNull()
+  })
+
+  it('refuses more than 30 blocks', async () => {
+    const refused = await post(loadCheckout(EVERYTHING), { addons: { aiAddon: 31 } })
     expect(refused.status).toBe(400)
-    expect((await refused.json()).code).toBe('unknown_addon')
+    const body = await refused.json()
+    expect(body.code).toBe('addon_over_max')
+    expect(body.error).toContain('at most 30')
     expect(subscribeBody()).toBeNull()
   })
 
@@ -319,18 +332,25 @@ describe('a bundle checkout sells every add-on in one subscription (AGL-3955)', 
     await post(handler, { addons: { hosts: 1 }, aiAddon: true, siteCare: true })
     const body = subscribeBody()
     expect(body?.get('items[2][price]')).toBe('price_pro_extra_host')
-    expect(body?.get('items[3][price]')).toBe('price_ai_boost')
+    // `aiAddon: true` is one block.
+    expect(body?.get('items[3][price]')).toBe('price_ai_credits')
+    expect(body?.get('items[3][quantity]')).toBe('1')
     expect(body?.get('items[4][price]')).toBe('price_site_care')
   })
 
   it('quotes the whole bundle on the same preview invoice', async () => {
     const handler = loadCheckout(EVERYTHING)
-    const response = await post(handler, { action: 'preview', addons: { hosts: 3, siteCare: 1 } })
+    const response = await post(handler, {
+      action: 'preview',
+      addons: { hosts: 3, aiAddon: 2, siteCare: 1 },
+    })
     expect(response.status).toBe(200)
     const query = previewQuery()
     expect(query?.get('subscription_details[items][2][price]')).toBe('price_pro_extra_host')
     expect(query?.get('subscription_details[items][2][quantity]')).toBe('3')
-    expect(query?.get('subscription_details[items][3][price]')).toBe('price_site_care')
+    expect(query?.get('subscription_details[items][3][price]')).toBe('price_ai_credits')
+    expect(query?.get('subscription_details[items][3][quantity]')).toBe('2')
+    expect(query?.get('subscription_details[items][4][price]')).toBe('price_site_care')
     expect(subscribeBody()).toBeNull()
   })
 

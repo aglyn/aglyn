@@ -88,8 +88,9 @@ export interface ProposeOrgUpgradeOptions {
   interval?: unknown
   coupon?: unknown
   /**
-   * The Aglyn AI tier chosen with the AI add-on (AGL-4025); an `ai:<tier>`
-   * entry in `addons` names one too, and this wins when both do.
+   * A retired Aglyn AI tier (AGL-4025). Credits are sold by the block since
+   * AGL-4144 (`ai:<blocks>` in `addons`), so a proposal naming a tier is
+   * refused rather than stored with a price nobody sells.
    */
   aiTier?: unknown
   /** The staff member proposing. */
@@ -152,6 +153,11 @@ export function buildUpgradeProposal(
     )
   }
   const plan: OrgPlan = options.plan
+  if (options.aiTier != null) {
+    throw new UpgradeProposalError(
+      'AI tiers were replaced by AI credit blocks. Propose a number of blocks instead.',
+    )
+  }
   const note = normalizeUpgradeProposalNote(options.note)
   return {
     plan,

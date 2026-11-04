@@ -40,8 +40,8 @@
  * refuses only past that band.
  */
 
+import { AI_CREDITS_PER_BLOCK } from './ai-credit-blocks'
 import {
-  AI_TIERS,
   apiRequestEnforcementShape,
   checkApiRequestQuota,
   checkCrmEmailQuota,
@@ -58,6 +58,7 @@ import {
   describeOrgPlan,
   hasAiAddon,
   isBillingSubscription,
+  resolveAiCreditBlocks,
   isEnterpriseOrg,
   isUncappedPlanComp,
   orgListPriceMonthlyUsd,
@@ -216,16 +217,17 @@ describe('a comp applies on a dead subscription (AGL-3034)', () => {
       {
         plan: 'pro',
         billingStatus: 'canceled',
-        seatAddons: { hosts: 4, aiAddon: 1, eventCalendar: 1 },
+        seatAddons: { hosts: 4, aiAddon: 3, eventCalendar: 1 },
       },
       comp('pro'),
     )
     expect(hasAiAddon(org)).toBe(false)
+    expect(resolveAiCreditBlocks(org)).toBe(0)
     const resolved = resolveOrgEntitlements(org)
     expect(resolved.hostLimit).toBe(PLAN_ENTITLEMENTS.pro.hostLimit)
     expect(resolved.assistCreditsPerMonth).toBe(PLAN_ENTITLEMENTS.pro.assistCreditsPerMonth)
     expect(resolved.assistCreditsPerMonth).not.toBe(
-      PLAN_ENTITLEMENTS.pro.assistCreditsPerMonth + AI_TIERS.boost.credits,
+      PLAN_ENTITLEMENTS.pro.assistCreditsPerMonth + 3 * AI_CREDITS_PER_BLOCK,
     )
   })
 })

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { AiTierId, OrgPlan } from '../foundation/definitions/org-billing.types'
+import type { OrgPlan } from '../foundation/definitions/org-billing.types'
 import {
   bundleAddonsParam,
   hasBundleAddons,
@@ -23,7 +23,8 @@ import {
   parseBundleAddons,
   type BundleAddons,
 } from './bundle-intent'
-import { isAiTierId, isCustomPricedPlan } from './plan-entitlements'
+import { AI_CREDIT_BLOCKS_MAX } from './ai-credit-blocks'
+import { isCustomPricedPlan } from './plan-entitlements'
 
 /**
  * The marketing → console onboarding deep link (AGL-1117).
@@ -68,7 +69,9 @@ export interface OnboardingPlanIntent {
   contactSales: boolean
   /**
    * The Aglyn AI add-on, asked for alongside the plan (AGL-2897):
-   * `?plan=pro&interval=month&ai=1`.
+   * `?plan=pro&interval=month&ai=1`. Since AGL-4144 it is credits by the
+   * block: `ai=1` (or `yes`, `true`) asks for one block, `ai=3` for three,
+   * written into `addons.aiAddon`; a retired tier name asks for nothing.
    *
    * Present only when the link said so, and only ever `true` — the add-on
    * rides the plan checkout as a second subscription item, so a flag that
@@ -77,13 +80,6 @@ export interface OnboardingPlanIntent {
    * the add-on is quoted with the deal, not bought through a checkout.
    */
   ai?: true
-  /**
-   * The Aglyn AI tier the link named (AGL-3965): `?ai=boost`, or an
-   * `ai:boost` token in `addons=` (AGL-3955). Present only with `ai`; absent,
-   * `ai=1` means the tier with the plan's old price and band
-   * (`defaultAiTierForPlan`), which is what checkout sells.
-   */
-  aiTier?: AiTierId
   /**
    * Every add-on the `addons=` param preselects (AGL-3955), parsed by the
    * shared `parseBundleAddons`. Absent when it named none. `ai=1` stays the
@@ -167,10 +163,12 @@ export function parseOnboardingPlanIntent(
   const parsedAddons = parseBundleAddons(rawParam('addons'))
   const addons: BundleAddons = { ...parsedAddons.addons }
   const coupon = normalizeBundleCoupon(rawParam('coupon'))
-  // `?ai=<tier>` names the tier outright; otherwise an `ai:<tier>` token in
-  // `addons=` does (AGL-3965).
-  const aiTier = isAiTierId(ai) ? ai : (parsedAddons.aiTier ?? null)
-  const aiStated = ai === '1' || ai === 'true' || ai === 'yes' || aiTier !== null
+  // `?ai=<blocks>` asks for that many credit blocks (AGL-4144), held to the
+  // ceiling; `1`, `true` and `yes` ask for one. Anything else, a retired
+  // tier name included, is not an affirmative.
+  const aiBlocks = /^\d+$/.test(ai) ? Math.min(AI_CREDIT_BLOCKS_MAX, Number(ai)) : 0
+  const aiStated = ai === 'true' || ai === 'yes' || aiBlocks > 0
+  if (aiBlocks > 1) addons.aiAddon = Math.max(addons.aiAddon ?? 0, aiBlocks)
   return {
     plan: plan as OrgPlan,
     // Anything unrecognized falls to monthly, never to yearly: guessing the
@@ -183,16 +181,21 @@ export function parseOnboardingPlanIntent(
     intervalStated: known,
     contactSales: false,
     ...(aiStated || addons.aiAddon ? { ai: true } : {}),
-    ...(aiTier ? { aiTier } : {}),
     ...(hasBundleAddons(addons) ? { addons } : {}),
     ...(coupon ? { coupon } : {}),
     ...(parsedAddons.dropped.length ? { droppedAddons: parsedAddons.dropped } : {}),
   }
 }
 
-/** The whole add-on set an intent asks for: `addons=` and the `ai` flag together. */
+/**
+ * The whole add-on set an intent asks for: `addons=` and the `ai` flag
+ * together. The flag means at least one credit block; a count in `addons`
+ * says how many.
+ */
 export function intentAddons(intent: Pick<OnboardingPlanIntent, 'ai' | 'addons'> | null | undefined): BundleAddons {
-  return { ...(intent?.addons ?? {}), ...(intent?.ai ? { aiAddon: 1 } : {}) }
+  const addons: BundleAddons = { ...(intent?.addons ?? {}) }
+  if (intent?.ai) addons.aiAddon = Math.max(1, addons.aiAddon ?? 0)
+  return addons
 }
 
 /**
@@ -205,11 +208,11 @@ export function intentAddons(intent: Pick<OnboardingPlanIntent, 'ai' | 'addons'>
  * a statement the next reader could not tell from the real thing.
  */
 export function onboardingPlanQuery(intent: OnboardingPlanIntent): string {
-  // `ai=1` stays the spelling when Aglyn AI is the only add-on, so the
-  // published pricing CTAs and every hop between them read unchanged. Any
-  // other add-on writes the whole set as `addons=` (AGL-3955), Aglyn AI with it.
-  const addons: BundleAddons = { ...(intent.addons ?? {}) }
-  if (intent.ai) addons.aiAddon = 1
+  // `ai=1` stays the spelling when one credit block is the only add-on, so
+  // the published pricing CTAs and every hop between them read unchanged;
+  // `ai=3` for three (AGL-4144). Any other add-on writes the whole set as
+  // `addons=` (AGL-3955), Aglyn AI with it.
+  const addons = intentAddons(intent)
   const others = Object.keys(addons).some(
     (kind) => kind !== 'aiAddon' && (addons[kind as keyof BundleAddons] ?? 0) > 0,
   )
@@ -220,9 +223,9 @@ export function onboardingPlanQuery(intent: OnboardingPlanIntent): string {
     (others
       ? // Fixed tokens, letters, digits, `:` and `,` only, so the link stays
         // readable when it is read aloud or typed off a QR's caption.
-        `&addons=${bundleAddonsParam(addons, intent.aiTier)}`
+        `&addons=${bundleAddonsParam(addons)}`
       : addons.aiAddon
-        ? `&ai=${intent.aiTier ?? '1'}`
+        ? `&ai=${addons.aiAddon}`
         : '') +
     (coupon ? `&coupon=${encodeURIComponent(coupon)}` : '')
   )
@@ -256,7 +259,7 @@ export function onboardingSignupHref(
   signupUrl: string,
   plan: OrgPlan,
   interval: OnboardingInterval | null,
-  options: { ai?: boolean; aiTier?: AiTierId } = {},
+  options: { ai?: boolean; aiBlocks?: number } = {},
 ): string {
   const contactSales = isCustomPricedPlan(plan)
   // A custom-priced plan is quoted, not bought, so `parseOnboardingPlanIntent`
@@ -274,8 +277,10 @@ export function onboardingSignupHref(
     // The add-on CTA (AGL-2897). Dropped for a custom-priced plan for the
     // same reason the interval is: the parser refuses it there, so writing
     // it would publish a claim no reader honors.
-    ...((options.ai || options.aiTier) && !contactSales ? { ai: true } : {}),
-    ...(options.aiTier && !contactSales ? { aiTier: options.aiTier } : {}),
+    ...((options.ai || (options.aiBlocks ?? 0) > 0) && !contactSales ? { ai: true } : {}),
+    ...((options.aiBlocks ?? 0) > 1 && !contactSales
+      ? { addons: { aiAddon: Math.min(AI_CREDIT_BLOCKS_MAX, Math.floor(options.aiBlocks ?? 0)) } }
+      : {}),
   })}`
 }
 

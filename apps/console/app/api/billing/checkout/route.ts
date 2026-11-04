@@ -22,16 +22,9 @@ import {
   PLATFORM_BRAND_NAME,
   planSellsSiteCare,
   pluginRequestFromWeb,
-  type AiTierId,
   type AttemptClaim,
   type OrgPlan,
 } from '@aglyn/aglyn/server'
-// The Aglyn AI tiers (AGL-3965) by their own module, not the server barrel
-// route specs stub with a partial object.
-import {
-  defaultAiTierForPlan,
-  isAiTierId,
-} from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   emailUnverifiedResponse,
   featureLockdownRefusal,
@@ -275,8 +268,6 @@ function promotionCodeFullUseMetadata(
   interval: 'month' | 'year',
   addons: BundleAddons,
   promo: Awaited<ReturnType<typeof resolvePromotionCode>>,
-  /** The Aglyn AI tier the checkout sells (AGL-3965), when it sells one. */
-  aiTier: AiTierId | null = null,
 ): Record<string, string> {
   if (!promo.id) return {}
   try {
@@ -285,7 +276,6 @@ function promotionCodeFullUseMetadata(
         plan,
         subscription: { status: 'active', interval },
         seatAddons: { ...addons },
-        ...((addons.aiAddon ?? 0) > 0 && aiTier ? { aiTier } : {}),
       } as never,
       {
         percentOff: promo.percentOff ?? undefined,
@@ -317,19 +307,18 @@ function promotionCodeFullUseMetadata(
  * The add-ons a checkout asks for (AGL-3955): the `addons` map or link form
  * the bundle sends, read by the same parser the link and the proposal use,
  * plus the two flags the Billing page sent before it (`aiAddon`, AGL-2897;
- * `siteCare`, AGL-3954). An `ai:<tier>` entry names the Aglyn AI tier
- * (AGL-3965), as `aiTier` does.
+ * `siteCare`, AGL-3954). Aglyn AI is a number of credit blocks (AGL-4144):
+ * `ai:3` in the bundle, or `aiAddon: true` for at least one.
  */
 function requestedAddons(body: any): {
   addons: BundleAddons
   dropped: string[]
-  aiTier: AiTierId | null
 } {
   const parsed = parseBundleAddons(body?.addons)
   const addons: BundleAddons = { ...parsed.addons }
-  if (body?.aiAddon === true) addons.aiAddon = 1
+  if (body?.aiAddon === true) addons.aiAddon = Math.max(1, addons.aiAddon ?? 0)
   if (body?.siteCare === true) addons.siteCare = 1
-  return { addons, dropped: parsed.dropped, aiTier: parsed.aiTier ?? null }
+  return { addons, dropped: parsed.dropped }
 }
 
 /**
@@ -405,25 +394,34 @@ async function handler(request: Request): Promise<Response> {
   // cannot be priced: a checkout that quietly sold the plan without the
   // add-on the visitor clicked would bill less and deliver less than shown.
   //
-  // Since AGL-3965 the add-on is a TIER chosen on its own: `aiTier` names it
-  // (`?ai=boost`), as does an `ai:<tier>` entry in the bundle's `addons`
-  // (AGL-3955; `aiTier` wins when both are sent), and `aiAddon: true` alone
-  // means the tier with the plan's old price and band
-  // (`defaultAiTierForPlan`), so a link published before tiers still sells
-  // what it quoted. An unknown tier is refused, not guessed.
-  if (body?.aiTier != null && !isAiTierId(body.aiTier)) {
-    return Response.json({ error: 'Unknown AI tier' }, { status: 400 })
-  }
-  const aiAddonWanted =
-    (requested.addons.aiAddon ?? 0) > 0 || isAiTierId(body?.aiTier)
-  const aiTier: AiTierId | null = aiAddonWanted
-    ? (isAiTierId(body?.aiTier)
-        ? body.aiTier
-        : (requested.aiTier ?? defaultAiTierForPlan(plan)))
-    : null
-  if (aiAddonWanted && addonUnitUsd('aiAddon', plan as OrgPlan, aiTier) === null) {
+  // Since AGL-4144 the add-on is credits BY THE BLOCK: a quantity from 1 to
+  // 30, `ai:3` in the bundle's `addons`, `aiAddon: true` alone for one. The
+  // retired tiers are refused rather than read as some number of blocks: a
+  // request naming one was quoted a tier's price and credits, not a block's.
+  if (body?.aiTier != null) {
     return Response.json(
-      { error: `This plan does not include the ${PLATFORM_BRAND_NAME} AI add-on.` },
+      {
+        error: 'AI tiers were replaced by AI credit blocks. Choose a number of blocks instead.',
+        code: 'ai_tier_retired',
+      },
+      { status: 400 },
+    )
+  }
+  const aiBlocks = Math.floor(Number(requested.addons.aiAddon ?? 0))
+  const aiAddonWanted = aiBlocks > 0
+  if (aiAddonWanted && addonUnitUsd('aiAddon', plan as OrgPlan) === null) {
+    return Response.json(
+      { error: `This plan does not include ${PLATFORM_BRAND_NAME} AI credits.` },
+      { status: 400 },
+    )
+  }
+  const aiBlocksMax = addonMaxForPlan('aiAddon', plan as OrgPlan)
+  if (aiBlocks > aiBlocksMax) {
+    return Response.json(
+      {
+        error: `This plan sells at most ${aiBlocksMax} ${PLATFORM_BRAND_NAME} AI credit blocks.`,
+        code: 'addon_over_max',
+      },
       { status: 400 },
     )
   }
@@ -474,14 +472,13 @@ async function handler(request: Request): Promise<Response> {
     otherAddonLines.push({ kind, quantity, priceId: addonPrice, envVar })
   }
   const aiAddonPriceId = aiAddonWanted
-    ? addonPriceId('aiAddon', plan as OrgPlan, interval, aiTier)
+    ? addonPriceId('aiAddon', plan as OrgPlan, interval)
     : null
   if (aiAddonWanted && !aiAddonPriceId) {
     return Response.json({
       error:
-        'Billing is not configured: STRIPE_PRICE_AI_' +
-        `${String(aiTier).toUpperCase()}${interval === 'year' ? '_YEARLY' : ''} ` +
-        `is unset, so the ${PLATFORM_BRAND_NAME} AI add-on cannot be sold yet.`,
+        `Billing is not configured: ${addonPriceEnvName('aiAddon', plan as OrgPlan, interval)} ` +
+        `is unset, so ${PLATFORM_BRAND_NAME} AI credits cannot be sold yet.`,
     }, { status: 501 })
   }
   // Site Care bought WITH the plan (AGL-3954), the way the AI add-on is: one
@@ -670,7 +667,7 @@ async function handler(request: Request): Promise<Response> {
       let nextPreviewItem = meteredPreview ? 2 : 1
       for (const line of [
         ...otherAddonLines,
-        ...(aiAddonPriceId ? [{ priceId: aiAddonPriceId, quantity: 1 }] : []),
+        ...(aiAddonPriceId ? [{ priceId: aiAddonPriceId, quantity: aiBlocks }] : []),
         ...(siteCarePriceId ? [{ priceId: siteCarePriceId, quantity: 1 }] : []),
       ]) {
         const at = nextPreviewItem++
@@ -890,7 +887,7 @@ async function handler(request: Request): Promise<Response> {
     if (aiAddonPriceId) {
       aiAddonItemIndex = nextItem++
       subParams.set(`items[${aiAddonItemIndex}][price]`, aiAddonPriceId)
-      subParams.set(`items[${aiAddonItemIndex}][quantity]`, '1')
+      subParams.set(`items[${aiAddonItemIndex}][quantity]`, String(aiBlocks))
     }
     // Site Care (AGL-3954) takes the slot after it, for the same reason: the
     // positions the price-fault reader names are the positions used here.
@@ -916,11 +913,10 @@ async function handler(request: Request): Promise<Response> {
         interval,
         {
           ...Object.fromEntries(otherAddonLines.map((line) => [line.kind, line.quantity])),
-          ...(aiAddonWanted ? { aiAddon: 1 } : {}),
+          ...(aiAddonWanted ? { aiAddon: aiBlocks } : {}),
           ...(siteCareWanted ? { siteCare: 1 } : {}),
         },
         promo,
-        aiTier,
       ),
     )) {
       subParams.set(key, value)
@@ -951,7 +947,6 @@ async function handler(request: Request): Promise<Response> {
         interval,
         aiAddonItemIndex,
         siteCareItemIndex,
-        aiTier,
         otherAddonItems,
       )
       if (missing) return Response.json({ error: missing }, { status: 501 })

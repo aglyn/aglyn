@@ -5754,7 +5754,6 @@
     ],
     "toggles": [
       "eventCalendar",
-      "aiAddon",
       "siteCare"
     ],
     "tokens": {
@@ -5787,6 +5786,8 @@
       "aiaddon": "aiAddon",
       "ai": "aiAddon",
       "aglynai": "aiAddon",
+      "aicredits": "aiAddon",
+      "aiblocks": "aiAddon",
       "sitecare": "siteCare",
       "site-care": "siteCare",
       "site_care": "siteCare",
@@ -5799,17 +5800,10 @@
       "hosts": "Extra site",
       "posRegisters": "POS register",
       "eventCalendar": "Event Calendar",
-      "aiAddon": "Aglyn AI",
+      "aiAddon": "Aglyn AI credit block",
       "siteCare": "Site Care"
     },
-    "aiTierNames": {
-      "spark": "Aglyn AI Spark",
-      "boost": "Aglyn AI Boost",
-      "plus": "Aglyn AI Plus",
-      "max": "Aglyn AI Max",
-      "ultra": "Aglyn AI Ultra",
-      "studio": "Aglyn AI Studio"
-    },
+    "aiTierNames": {},
     "planLabels": {
       "free": "Free",
       "starter": "Starter",
@@ -5838,7 +5832,7 @@
         "hosts": 100,
         "posRegisters": 0,
         "eventCalendar": 1,
-        "aiAddon": 1,
+        "aiAddon": 30,
         "siteCare": 1
       },
       "pro": {
@@ -5848,7 +5842,7 @@
         "hosts": 100,
         "posRegisters": 50,
         "eventCalendar": 1,
-        "aiAddon": 1,
+        "aiAddon": 30,
         "siteCare": 1
       },
       "business": {
@@ -5858,7 +5852,7 @@
         "hosts": 100,
         "posRegisters": 50,
         "eventCalendar": 1,
-        "aiAddon": 1,
+        "aiAddon": 30,
         "siteCare": 1
       },
       "scale": {
@@ -5868,7 +5862,7 @@
         "hosts": 100,
         "posRegisters": 50,
         "eventCalendar": 1,
-        "aiAddon": 1,
+        "aiAddon": 30,
         "siteCare": 1
       },
       "advanced": {
@@ -5878,7 +5872,7 @@
         "hosts": 100,
         "posRegisters": 50,
         "eventCalendar": 1,
-        "aiAddon": 1,
+        "aiAddon": 30,
         "siteCare": 1
       },
       "agency": {
@@ -5888,7 +5882,7 @@
         "hosts": 100,
         "posRegisters": 50,
         "eventCalendar": 1,
-        "aiAddon": 1,
+        "aiAddon": 30,
         "siteCare": 1
       },
       "enterprise": {
@@ -6001,7 +5995,7 @@
         }
       },
       "plan": "pro",
-      "summary": "Pro with 2 × Extra manager seat, Extra site and Aglyn AI Boost, billed yearly",
+      "summary": "Pro with 2 × Extra manager seat, Extra site and Aglyn AI credit block, billed yearly",
       "bundled": true
     },
     {
@@ -6014,8 +6008,47 @@
         }
       },
       "plan": "pro",
-      "summary": "Pro with Aglyn AI",
+      "summary": "Pro with Aglyn AI credit block",
       "bundled": true
+    },
+    {
+      "org": {
+        "upgradeProposal": {
+          "plan": "starter",
+          "addons": {
+            "aiAddon": 3
+          }
+        }
+      },
+      "plan": "starter",
+      "summary": "Starter with 3 × Aglyn AI credit block",
+      "bundled": true
+    },
+    {
+      "org": {
+        "upgradeProposal": {
+          "plan": "pro",
+          "addons": {
+            "aiAddon": 40
+          }
+        }
+      },
+      "plan": "pro",
+      "summary": "Pro with 30 × Aglyn AI credit block",
+      "bundled": true
+    },
+    {
+      "org": {
+        "upgradeProposal": {
+          "plan": "pro",
+          "addons": {
+            "aiAddon": "boost"
+          }
+        }
+      },
+      "plan": "pro",
+      "summary": "Pro",
+      "bundled": false
     },
     {
       "org": {
