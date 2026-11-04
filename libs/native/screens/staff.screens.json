@@ -489,7 +489,7 @@
           },
           {
             "value": "enterprise",
-            "label": "Enterprise"
+            "label": "Custom"
           }
         ],
         "scopeNote": "Contribution margin: net revenue less infrastructure COGS only. Support, customer acquisition (CAC) and overhead are not in this figure."
@@ -8318,7 +8318,7 @@
           },
           {
             "value": "enterprise",
-            "label": "Enterprise"
+            "label": "Custom"
           }
         ],
         "scopeNote": "Contribution margin: net revenue less infrastructure COGS only. Support, customer acquisition (CAC) and overhead are not in this figure."
@@ -22745,7 +22745,7 @@
                 },
                 {
                   "value": "enterprise",
-                  "label": "Enterprise"
+                  "label": "Custom"
                 }
               ],
               "help": "Where a live subscription decides the plan this is edited as it always was. Without one a plan has to be a staff comp, below."
@@ -22793,7 +22793,7 @@
                 },
                 {
                   "value": "enterprise",
-                  "label": "Enterprise"
+                  "label": "Custom"
                 }
               ]
             },
