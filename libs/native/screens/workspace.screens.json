@@ -464,7 +464,7 @@
           "type": "notice",
           "tone": "info",
           "when": "data.ent && !data.ent.features.whiteLabel",
-          "text": "White-labeling the platform is included on the Agency plan — see Billing to upgrade. Enterprise plans can enable it per organization."
+          "text": "White-labeling the platform is included on the Custom plan — talk to us to add it to your organization."
         },
         {
           "type": "notice",
@@ -750,7 +750,7 @@
           "type": "notice",
           "tone": "info",
           "when": "data.ent && !data.ent.features.apiAccess",
-          "text": "The REST API and API keys are included on the Business plan — see Billing to upgrade."
+          "text": "The REST API and API keys are included on the Pro plan — see Billing to upgrade."
         },
         {
           "type": "notice",
@@ -828,7 +828,7 @@
           "type": "notice",
           "tone": "info",
           "when": "data.ent && !data.ent.features.ssoEnabled",
-          "text": "Single sign-on is part of Enterprise. Once your organization is on an Enterprise plan, you set SSO up yourself here — verify your domain, paste your identity provider’s details, and turn it on. There is no provisioning step on our side and nothing to wait for."
+          "text": "Single sign-on is part of the Custom plan. Once your organization is on the Custom plan, you set SSO up yourself here — verify your domain, paste your identity provider’s details, and turn it on. There is no provisioning step on our side and nothing to wait for."
         },
         {
           "type": "fields",
