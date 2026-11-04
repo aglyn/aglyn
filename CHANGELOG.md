@@ -9,6 +9,46 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.10.0 — 2026-11-04
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/4cbc8c1f0...v1.10.0)
+
+### Added
+
+- **ai:** Also improve my wording rewrites as a copywriter would, every fact still held ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** a reworded page is quoted on the AI page row, and named in its wave's quote ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** a main page's lines are reworded under Also improve my wording, every fact held ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** rule 14 judges a reworded line again, and fidelity shares its fact tokens ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** the fidelity report scores and prints each page's finish and words ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** fidelity scores a page as Keep my site or Improve it, and improved words ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** keep pins a source's grounds, button case and own fill; improve pins colors ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** the reader keeps a source's dark ground, button case and hero measure ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** the read and the job page ask how the new site should look, before each wave ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** an import keeps Keep my site or Improve it and stamps each wave with it ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** Bring my site's compile reads Keep my site or Improve it ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** the site compiler draws a page brought in kept as it is or improved ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** the types Bring my site's Keep my site or Improve it choice rides on ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+
+### Fixed
+
+- **ai:** an improved page keeps its questions and plans; a reworded line takes no other's words ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** Keep my site's lanes agree: the hero measure, held boxes and a fill no label reads ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+
+### Documentation
+
+- **ai:** the Bring my site guide says which words Also improve my wording keeps ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** the Bring my site guide says Keep my site or improve it ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+
+<details>
+<summary>Also in this release: 4 test</summary>
+
+- **ai:** the wording eval runs in node, where the provider batch has fetch ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** the wording eval, by the real model, on the eight recorded main pages ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** the start and job page specs read what the wording switch adds on the page row ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** the slate page's markup moves to an html fixture, as the site-layout pages are ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+
+</details>
+
 ## v1.9.1 — 2026-11-04
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.9.0...v1.9.1)
