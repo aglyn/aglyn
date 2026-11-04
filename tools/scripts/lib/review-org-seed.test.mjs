@@ -29,6 +29,7 @@ import {
   chargebackOrder,
   trafficDays,
 } from './docs-fixture-builders.mjs'
+import { cedarOakDealLineItems, quoteTotals } from './review-org-quotes.mjs'
 import {
   ABOUT_SCREEN_ID,
   BRAND_BLOG_ID,
@@ -272,6 +273,76 @@ describe('buildReviewOrgPlan', () => {
     assert.ok(byPath.get(`hosts/${TARGET.hostId}/settings/store`).pdpScreenId)
     const home = plan.docs.filter((doc) => doc.path.includes('/screenAnalytics/'))
     assert.ok(home.every((doc) => [BRAND_HOME_SCREEN_ID, ABOUT_SCREEN_ID].includes(doc.data.screenId)))
+  })
+})
+
+describe('quotes and invoices', () => {
+  const orders = plan.docs.filter((doc) => /\/orders\/seed-review-(quote|invoice)-/.test(doc.path))
+  const order = (id) => byPath.get(`hosts/${TARGET.hostId}/orders/${REVIEW_ID_PREFIX}${id}`)
+
+  it('seeds a quote in every stage, one paid, and an invoice unpaid and paid', () => {
+    const states = orders
+      .filter((doc) => doc.path.split('/').length === 4)
+      .map((doc) => [doc.data.number, doc.data.channel, doc.data.status, doc.data.quote?.stage ?? null])
+      .sort((left, right) => left[0] - right[0])
+    assert.deepEqual(states, [
+      [1057, 'quote', 'paid', 'approved'],
+      [1058, 'quote', 'pending', 'changes_requested'],
+      [1059, 'quote', 'pending', 'approved'],
+      [1060, 'quote', 'pending', 'sent'],
+      [1061, 'quote', 'pending', 'draft'],
+      [1062, 'draft', 'pending', null],
+      [1063, 'draft', 'paid', null],
+    ])
+    // Above every number the native store and the docs bakery use.
+    const others = plan.docs
+      .filter((doc) => doc.path.split('/')[2] === 'orders' && !orders.includes(doc) && doc.path.split('/').length === 4)
+      .map((doc) => doc.data.number)
+    for (const { data } of orders) assert.ok(!others.includes(data.number), String(data.number))
+  })
+
+  it('keeps an unpaid quote out of every order list, and lists a paid one', () => {
+    for (const { path, data } of orders) {
+      if (path.split('/').length !== 4) continue
+      const unpaidQuote = data.channel === 'quote' && data.status === 'pending'
+      for (const field of ['createdAtMs', 'searchTokens', 'productIds', 'customerEmail', 'customerEmailLower']) {
+        assert.equal(field in data, !unpaidQuote, `${path}.${field}`)
+      }
+    }
+    assert.equal(order('quote-cedar-oak-open-house').createdAtMs, order('quote-cedar-oak-open-house').quote.paidAtMs)
+  })
+
+  it('names the CRM contact each quote is for, and adds every total up the model’s way', () => {
+    const contacts = ids(`orgs/${TARGET.orgId}/contacts/`)
+    for (const { path, data } of orders) {
+      if (path.split('/').length !== 4) continue
+      if (data.quote) assert.ok(contacts.has(data.quote.customer.record?.id), path)
+      const shippingCents = data.quote?.shipping?.amountCents ?? 0
+      const totals = quoteTotals({ lines: data.lineItems, discount: data.quote?.discount, shippingCents })
+      assert.deepEqual({ ...data.totals, feeCents: 0 }, totals, path)
+      for (const time of [data.createdAtMs, data.quote?.createdAtMs, ...(data.timeline ?? []).map((entry) => entry.atMs)]) {
+        if (time !== undefined) assert.ok(time < NOW, `${path}: a time after the run`)
+      }
+    }
+    assert.equal(order('quote-cedar-oak-holiday').quote.customer.record.id, `${REVIEW_ID_PREFIX}f9da277142ba505a88c5f7f5ca934a268543adae3cd7412a2b147664e5c290cd`)
+  })
+
+  it('keeps revision 1 of the revised quote beside it', () => {
+    const quote = order('quote-cedar-oak-holiday')
+    const first = byPath.get(`hosts/${TARGET.hostId}/orders/${REVIEW_ID_PREFIX}quote-cedar-oak-holiday/revisions/1`)
+    assert.equal(quote.quote.revision, 2)
+    assert.equal(quote.quote.linkVersion, 2)
+    assert.deepEqual(quote.quote.sends.map((send) => send.revision), [1, 2])
+    assert.equal(first.revision, 1)
+    assert.equal(first.responses[0].action, 'changes')
+    assert.ok(first.totals.totalCents < quote.totals.totalCents)
+  })
+
+  it('gives the Cedar & Oak deal its quote’s products, at the amount it already carries', () => {
+    const deal = byPath.get(`orgs/${TARGET.orgId}/deals/${REVIEW_ID_PREFIX}deal-tailspin`)
+    assert.deepEqual(deal.lineItems, cedarOakDealLineItems())
+    assert.equal(deal.amountCents, 215_000)
+    assert.equal(deal.lineItems.reduce((sum, line) => sum + line.quantity * line.unitAmountCents, 0), 215_000)
   })
 })
 

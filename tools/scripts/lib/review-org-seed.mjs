@@ -75,6 +75,7 @@ import { messageSearchFields } from './message-search.mjs'
 import { displayNameSearchFields, nameSearchKey } from './name-search-tokens.mjs'
 import { withCrmListFields } from './org-record-list-fields.mjs'
 import { datasetFilterFields, effectiveModel } from './record-filter-keys.mjs'
+import { cedarOakDealLineItems, quoteAndInvoiceFixtures } from './review-org-quotes.mjs'
 import { productListFields } from './seed-demo.mjs'
 
 /** The one workspace this seeds: the reviewer account's. */
@@ -462,7 +463,7 @@ const SCREEN_ANALYTICS_SCREENS = { home: BRAND_HOME_SCREEN_ID, about: ABOUT_SCRE
 /* ------------------------------------------------------------------------ */
 
 /** Collections whose document ids are keys (a day, a singleton), not fixture names. */
-const KEYED_COLLECTIONS = new Set(['analytics', 'businessProfile', 'settings', 'pluginSettings', 'reports'])
+const KEYED_COLLECTIONS = new Set(['analytics', 'businessProfile', 'settings', 'pluginSettings', 'reports', 'revisions'])
 
 /** `seed-review-` + the fixture id, without doubling a `seed-` the fixture already carried. */
 export const reviewId = (id) => `${REVIEW_ID_PREFIX}${String(id).replace(/^seed-/, '')}`
@@ -740,6 +741,9 @@ function withListFields(path, data, byPath) {
     case 'products':
       return { ...data, ...productListFields(data) }
     case 'orders':
+      // An unpaid quote carries no list fields: that is what keeps it out of
+      // every order list and order search until it is paid (`isUnpaidQuote`).
+      if (data.channel === 'quote' && data.status === 'pending') return data
       return { ...data, ...orderListFieldsOf(data, id) }
     case 'formSubmissions':
       return isPlain(data.fields) ? { ...data, ...messageSearchFields(data.fields) } : data
@@ -1040,6 +1044,20 @@ function ownDocuments({ target, nowMs, idMap, siblings }) {
       chargebackOrder({ number: 1039, nowMs, productId: sourdough, productName: 'Sourdough loaf', unitAmountCents: 900 }),
     )
   }
+  // ── Quotes and invoices ─────────────────────────────────────────────────
+  // One of each state, for the CRM's own people; the Cedar & Oak deal's
+  // products are its holiday quote's lines, at the amount it already carries.
+  for (const doc of quoteAndInvoiceFixtures({
+    hostId,
+    nowMs,
+    ownerUid,
+    ownerName: target.ownerName,
+    contactId: (key) => idMap.contacts?.[key],
+  })) {
+    push(doc.path, doc.data)
+  }
+  const cedarOakDeal = idMap.deals?.['deal-tailspin']
+  if (cedarOakDeal) push(`orgs/${orgId}/deals/${cedarOakDeal}`, { lineItems: cedarOakDealLineItems(), amountCents: 215_000 })
   for (const row of aiMemoryFixtures({ nowMs, idFor: reviewId })) push(`hosts/${hostId}/aiMemory/${row.id}`, row.data)
   const profile = businessProfileFixtures({
     at,
