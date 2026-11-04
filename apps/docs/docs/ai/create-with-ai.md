@@ -65,9 +65,9 @@ your theme and reuses what the site already has, following
 ## On every plan {#without-the-add-on}
 
 On every paid plan, **Create with AI** runs on the AI credits your plan includes each
-month; nothing else needs to be bought. An
-[Aglyn AI tier](./ai-credits.md#the-aglyn-ai-add-on) adds more credits on top when you need
-them, and an owner or admin chooses it in **Billing**.
+month; nothing else needs to be bought.
+[Blocks of AI credits](./ai-credits.md#the-aglyn-ai-add-on) add more on top when you need
+them, and an owner or admin adds them in **Billing**.
 
 A Free workspace's buttons work from the [300 AI credits](./ai-credits.md#free-plan) it
 gets each month.

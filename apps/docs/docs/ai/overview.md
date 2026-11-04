@@ -81,21 +81,21 @@ Each job also reads the site's [business profile](business-profile.md) — what 
 business does, who it is for, how it sounds and how to reach it — and the edits you
 kept from earlier jobs.
 
-## Plans and Aglyn AI tiers {#the-add-on}
+## Plans and AI credits {#the-add-on}
 
 Aglyn AI comes with **every plan**. Each plan includes AI credits every month, and they
 pay for everything above: the assistant's answers and building for you, on every site in
 the workspace, for every member who has the permission to generate.
 
-- An **Aglyn AI tier** adds more credits on top of your plan's, bought once for the
-  workspace, not per seat and not per site. There are six, from Spark to Studio, and any
-  paid plan can have any of them.
-- Enterprise workspaces carry their AI in their agreement.
-- **Free workspaces** have no tiers. A Free workspace gets a small monthly allowance of
+- The **AI credits** add-on adds more credits on top of your plan's, in blocks of 5,000
+  a month, bought for the workspace, not per seat and not per site. Any paid plan can add
+  up to 30 blocks.
+- Custom workspaces carry their AI in their agreement.
+- **Free workspaces** cannot add blocks. A Free workspace gets a small monthly allowance of
   credits instead, enough to try generating, and it stops at that allowance rather than
   billing you.
 
-What each tier costs, and the credits it adds, are on
+What a block costs is on
 [aglyn.com/pricing](https://aglyn.com/pricing) and in **Billing** before you confirm —
 see [AI credits](./ai-credits.md#the-aglyn-ai-add-on) and
 [Add-ons](../workspace-and-billing/billing-and-plans/add-ons.md#aglyn-ai).
@@ -110,7 +110,7 @@ What a request costs is not fixed: a rewrite of one headline is small, a site sc
 is large, and a job tells you its estimate before you confirm it. The shape of the
 limits is the part worth knowing:
 
-- **An included band each month**, from your plan plus your tier, reset monthly.
+- **An included band each month**, from your plan plus any blocks you add, reset monthly.
 - **Past the band**, a paid workspace keeps working and the extra credits bill on the
   monthly invoice at your plan's rate. A switch under **Billing → Usage** stops AI at
   the included band instead; it is off unless you choose it.
@@ -162,7 +162,7 @@ With AI off for a site:
 - an AI job already queued for the site stops with the same sentence, and spends no
   credits. A job that stopped does not restart when AI is switched back on.
 
-Switching AI off for a site does **not** stop the workspace's AI tier, credits,
+Switching AI off for a site does **not** stop the workspace's credits, its blocks of AI credits,
 allotments or overage billing. AI keeps working on the workspace's other sites and on
 workspace pages such as **Billing**, and an agency batch still builds the sites in it
 that have AI on.

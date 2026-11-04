@@ -1,12 +1,14 @@
 ---
 sidebar_position: 3
 title: Add-ons
-description: Buy extra seats, sites, datasets, POS registers, the Event Calendar, Aglyn AI and Site Care from the Billing page — prorated, self-serve, no support ticket.
+description: Buy extra seats, sites, datasets, POS registers, the Event Calendar, AI credits and Site Care from the Billing page — prorated, self-serve, no support ticket.
 ---
 
 # Add-ons
 
-Add-ons let you buy **more of a specific thing** without jumping a whole plan tier.
+Add-ons let you buy **more of a specific thing** without changing plan. On **Pro** they
+are how the plan grows: there is no larger self-serve plan above it, and no ceiling on
+how many seats, collaborators or datasets a Pro workspace can add.
 They bill as extra line items on your existing subscription, prorate onto your current
 billing period, and take effect immediately.
 
@@ -29,26 +31,26 @@ just be a second copy to keep in step.
 
 | Add-on | What it does | How it is priced |
 |---|---|---|
-| Manager seats | Workspace manager seats beyond the included count | Per seat, per month — cheaper on higher plans |
-| Collaborator seats | Per-site collaborator (teammate) seats beyond the included count | Per seat, per month — cheaper on higher plans |
-| Extra datasets | Additional shared datasets across the workspace | Per dataset, per month — cheaper on higher plans |
-| Extra sites | Publish more sites than your plan includes | Per site, per month — cheaper on higher plans |
+| Manager seats | Workspace manager seats beyond the included count | Per seat, per month — cheaper on Pro |
+| Collaborator seats | Per-site collaborator (teammate) seats beyond the included count | Per seat, per month — cheaper on Pro |
+| Extra datasets | Additional shared datasets across the workspace | Per dataset, per month |
+| Extra sites | Publish more sites than your plan includes | Per site, per month — the same on every paid plan |
 | POS registers | One extra point-of-sale register, assigned to one site | Flat per register, per month — the same on every plan |
 | Event Calendar | The event manager + calendar elements, workspace-wide | Flat per month — the same on every plan |
-| Aglyn AI | Generative building — pages, emails, campaigns, products and more — plus a monthly band of AI credits added to your plan's, workspace-wide | Flat per month, priced by plan — higher on higher plans, and so is the band it adds |
+| AI credits | Blocks of 5,000 AI credits a month added to your plan's own, workspace-wide, up to 30 blocks | Per block, per month — the same on every paid plan |
 | Site Care | Our team makes your small site changes for you, about an hour of work a month, workspace-wide | Flat per month — the same on every paid plan |
 
 - **Prices are per unit per month.** On annual billing, add-ons bill yearly alongside
   your plan (12× the monthly price) — a subscription has one billing interval.
-- **POS registers** also require a plan with POS (Pro and above), and each one is
+- **POS registers** also require a plan with POS (Pro or Custom), and each one is
   assigned to a specific site — see [Assigning register seats](#assigning-register-seats).
 - **Collaborator seats** work the same way as POS registers: bought once for the
   workspace, then assigned to a site — see
   [Assigning collaborator seats](#assigning-collaborator-seats).
 - **Event Calendar** is a single workspace-wide toggle, not a per-site charge — see
   [Events calendar](../../content-and-data/events/overview.md).
-- **Aglyn AI** is a single workspace-wide toggle too, bought once for the workspace
-  rather than per seat or per site — see [Aglyn AI](#aglyn-ai).
+- **AI credits** are bought in blocks for the whole workspace, rather than per seat or
+  per site — see [Aglyn AI and AI credits](#aglyn-ai).
 - **Site Care** is a workspace-wide toggle as well, on any paid plan — see
   [Site Care](#site-care).
 
@@ -58,8 +60,8 @@ Unlike every other add-on, a POS register seat is bought **once for your workspa
 and then **assigned to one site**. Buying a seat does not raise the register limit
 everywhere — it adds one register's worth of capacity that you place where you need it.
 
-Your plan already gives every site a register allowance on its own (Pro 1, Business 2,
-Advanced 5). A seat is added on top of that, for the one site you assign it to.
+Your plan already gives every site a register allowance on its own (1 on Pro). A seat
+is added on top of that, for the one site you assign it to.
 
 To assign one, go to **Billing → POS register seats**, directly under Plan add-ons.
 The card shows how many seats you've **purchased**, how many are **assigned**, and how
@@ -87,9 +89,8 @@ collaborator limit on every site — it adds one site's worth of capacity that y
 where you need it.
 
 Your plan already gives every site a collaborator allowance on its own. A purchased
-seat is added on top of that, for the one site you assign it to, up to your plan's
-per-site maximum. Past that maximum, more seats can't raise the limit and the only
-path is a plan upgrade.
+seat is added on top of that, for the one site you assign it to. On Starter that stops
+at the plan's per-site maximum, and past it the path is Pro; Pro has no maximum.
 
 To assign one, go to **Billing → Site collaborator seats**, directly under Plan
 add-ons. The card shows how many seats you've **purchased**, how many are
@@ -113,39 +114,36 @@ If every purchased seat is already assigned and a site needs another collaborato
 either move a seat off a site that isn't using it, or buy another seat under Plan
 add-ons.
 
-## Aglyn AI {#aglyn-ai}
+## Aglyn AI and AI credits {#aglyn-ai}
 
 Every plan's included **AI credits** pay for all of **Aglyn AI**: the assistant's
 answers and building for you — pages, components, emails, campaigns, products and more.
-An **Aglyn AI tier** adds more credits on top, every month. Choose it in the **Aglyn AI**
-row of the **Plan add-ons** card under **Billing → Plan**: the **Aglyn AI tier** field
-lists every tier with the credits it adds and its price, and marks the one you have as
-**Current**. Pick one and choose **Apply**, or pick **No tier** and choose **Remove**; the
-change is shown with what it costs before you confirm it. What each AI door does is under
-[Aglyn AI](../../ai/overview.md).
+The **AI credits** add-on adds more on top, every month, in **blocks of 5,000 credits**.
+Choose how many blocks in the **AI credits** row of the **Plan add-ons** card under
+**Billing → Plan**, the same way you add seats; the change is shown with what it costs
+before you confirm it. What each AI door does is under [Aglyn AI](../../ai/overview.md).
 
-- **Six tiers, chosen on their own.** Spark, Boost, Plus, Max, Ultra and Studio, from
-  4,000 to 149,000 extra credits a month (see [AI credits](../../ai/ai-credits.md#the-aglyn-ai-add-on)).
-  Any paid plan can have any tier, at the same price, and changing your plan keeps your
-  tier. Prices are on [aglyn.com/pricing](https://aglyn.com/pricing) and in **Billing**
-  before you confirm; on annual billing a tier bills yearly with the plan, like every
-  add-on. Enterprise workspaces carry more AI in their agreement instead.
+- **One add-on, sold by the block.** Each block adds 5,000 credits a month, up to 30
+  blocks (see [AI credits](../../ai/ai-credits.md#the-aglyn-ai-add-on)). Any paid plan
+  can add blocks, at the same price per block, and changing your plan keeps them. The
+  price is on [aglyn.com/pricing](https://aglyn.com/pricing) and in **Billing** before
+  you confirm; on annual billing blocks bill yearly with the plan, like every add-on.
+  Custom workspaces carry more AI in their agreement instead.
 - **Everything it builds is a draft.** Aglyn AI cannot publish a page, change a live
   one or send an email. It writes drafts and unpublished versions, which a person
   reviews and publishes through the buttons that already exist — see
   [the draft rule](../../ai/overview.md#drafts-only).
 
-- **One pool, one meter.** A tier adds its credits to the credits your plan already
+- **One pool, one meter.** Blocks add their credits to the credits your plan already
   includes. There is no second meter: the AI credits meter on **Billing → Usage** shows
-  your plan's credits and your tier's as one figure, and the same overage rate, stop
+  your plan's credits and your blocks' as one figure, and the same overage rate, stop
   switch and monthly ceiling apply to the whole pool — see
   [AI credits and overage](overview.md#assist-overage).
-- **Moving up** to a bigger tier is charged now, prorated for the rest of the period,
-  like a plan upgrade. **Moving down** or **removing** the tier takes effect at the end of
-  the period you already paid for, like a plan downgrade. Then the pool shrinks back to
-  your plan's own credits plus the new tier's; what the assistant already built stays
-  exactly as it is.
-- **Free workspaces** have no tiers. They generate against the
+- **Adding blocks** is charged now, prorated for the rest of the period, like a plan
+  upgrade. **Removing blocks** takes effect at the end of the period you already paid
+  for, like a plan downgrade. Then the pool shrinks back to your plan's own credits plus
+  the blocks you kept; what the assistant already built stays exactly as it is.
+- **Free workspaces** cannot add blocks. They generate against the
   [monthly taste](overview.md#free-ai-credits) instead, which stops at its band and
   never bills.
 
@@ -166,7 +164,7 @@ out never touches another. See [AI allotments](overview.md#ai-allotments).
 **Can I keep it off for one site?** Yes, but it is a site setting rather than a billing
 one. A site admin switches AI off for that site under **Admin → Plugins → AI**, which
 removes the assistant and every **Create with AI** door from it while the rest of the
-workspace carries on. It does not pause your tier or its charge — see
+workspace carries on. It does not pause your blocks or their charge — see
 [Switch AI off for one site](../../ai/overview.md#switch-ai-off-for-one-site).
 
 **Who can see what it cost?** Anyone with the **View billing** permission. Beneath the
@@ -176,7 +174,7 @@ dollar figure per person — the share is of the workspace's own credits. See
 [who is generating what](overview.md#who-is-generating-what).
 
 **What happens when the pool runs out?** Whatever your plan already does when its own
-credits run out, because a tier widens one pool rather than adding a second. On a
+credits run out, because blocks widen one pool rather than adding a second. On a
 plan that sells credits past it the assistant keeps going and the extra is metered,
 unless you turn on the stop switch or set a monthly ceiling. See
 [AI credits and overage](overview.md#assist-overage).
@@ -250,7 +248,7 @@ needs or a flat quote, and start once you say yes.
   confirm; on annual billing it bills yearly with the plan, like every add-on.
 - **Free workspaces** cannot add it: there is no subscription for it to bill on.
   Choose a paid plan first, and the switch on **Billing → Add-ons** turns on.
-  Enterprise workspaces arrange it in their agreement instead.
+  Custom workspaces arrange it in their agreement instead.
 - **Turning it off** takes effect at the end of the period you already paid for, like
   every add-on removal. Every change we already made stays on your site.
 
@@ -296,9 +294,9 @@ paid. Removing one works like a plan downgrade: nothing today, and it ends at yo
 period end.
 See [when each change takes effect](./downgrading-and-canceling.md#when-changes-take-effect).
 :::
-- **Hard caps**: seat and dataset add-ons stop at your plan's maximum (for example,
-  Starter tops out at 5 workspace managers). Past the cap, the answer is a plan
-  upgrade — the Billing page tells you when you're there.
+- **Hard caps on Starter only**: Starter's seat and dataset add-ons stop at the plan's
+  maximum (5 workspace managers, for example), and past it the answer is Pro, which has
+  no maximum — the Billing page tells you when you're there.
 
 ## Plan switches and cancellation
 

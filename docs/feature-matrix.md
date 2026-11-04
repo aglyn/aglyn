@@ -14,6 +14,10 @@ record and must never be edited to say something the code does not.
 > Packaging saying so — there was nothing to reconcile the live table against.
 > A reader who wanted to know what Free includes had to read TypeScript.
 
+Columns are the plans on sale: the self-serve ladder and the quoted
+Enterprise plan (code id `enterprise`). A plan retired from sale keeps
+its row in the code and is not shown.
+
 **Change control.** A feature moving between plans is a packaging change and
 takes a Pricing Decision Log entry, exactly as a price move does. Regenerating
 this file is the last step, not the decision.

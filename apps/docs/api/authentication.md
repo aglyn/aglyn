@@ -49,7 +49,7 @@ A missing, malformed, revoked, or expired key returns `401`:
 ```
 
 If the organization's plan doesn't include API access, requests return `403`
-`plan_required` — the API is included on [Business and above](overview.md). A key
+`plan_required` — the API is included on [Pro and Custom](overview.md). A key
 whose organization has been downgraded stops working without being revoked.
 
 ## Scopes

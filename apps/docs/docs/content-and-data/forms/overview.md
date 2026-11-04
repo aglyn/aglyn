@@ -78,10 +78,8 @@ Each plan includes a number of saved forms per site:
 | --- | --- |
 | Free | 1 |
 | Starter | 5 |
-| Pro | 25 |
-| Business | 100 |
-| Scale, Advanced, Agency | 500 |
-| Enterprise | 500 by default; more by agreement |
+| Pro | Unlimited |
+| Custom | Set by your agreement |
 
 The Forms page shows how many a site has used. The limit applies when you create or
 duplicate a form: at the limit, the next one is refused with a link to upgrade. A site
@@ -90,22 +88,18 @@ plan, keeps every one of them, and they keep collecting submissions.
 
 ### Monthly allowance per plan
 
-Each tier includes a monthly form-submission allowance, counted per site:
+Each plan includes a monthly form-submission allowance, counted per site:
 
 | Plan | Submissions / month |
 | --- | --- |
 | Free | 20 |
 | Starter | 200 |
 | Pro | 1,000 |
-| Business | 8,000 |
-| Scale | 25,000 |
-| Advanced | 40,000 |
-| Agency | 25,000 |
-| Enterprise | 50,000 by default; more by agreement |
+| Custom | Set by your agreement |
 
 On **Free**, that allowance is a hard wall: at the cap, further submissions are
 **declined** — the visitor sees the form's error message rather than a fake success.
-On every paid tier it is a band, not a wall: submissions past the included count keep
+On Starter and Pro it is a band, not a wall: submissions past the included count keep
 working and bill as
 [metered overage](../../workspace-and-billing/billing-and-plans/overview.md#usage-meters),
 the same way storage and API requests do, because a dropped submission is a lost lead.
@@ -113,8 +107,8 @@ Either way the count resets with the calendar month (UTC), and the
 [billing page's usage meters](../../workspace-and-billing/billing-and-plans/overview.md#usage-meters)
 warn you at 80% before you get there.
 
-The allowance is **per site**. On Enterprise the figure is a default your agreement
-raises; Enterprise is not metered, so at that line further submissions are declined
+The allowance is **per site**. On Custom the figure is set by your agreement; Custom
+is not metered, so at that line further submissions are declined
 until the month turns or the agreement is updated. None of this is a promise that the
 endpoint will take any number of requests from anyone —
 every site, on every plan, sits under the

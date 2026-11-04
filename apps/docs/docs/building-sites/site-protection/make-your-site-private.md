@@ -29,7 +29,7 @@ switch that puts every page behind one password. Instead, pick the setting that 
 | **No one yet.** Not visitors, not search engines, not someone with the link | [Maintenance mode](#hide-the-whole-site-until-launch) | **Admin → Error pages** | Every plan |
 | **Anyone with the link, but keep it off Google** | [Discourage search engines](#keep-it-out-of-search-only) | **Setup → SEO → Search engines** | Every plan |
 | **Only people you give a password to** | [Password protected](#share-it-behind-a-password), page by page | The page's **Page Access** card | Every plan |
-| **Only people signed in to your site** | [Members only](#only-signed-in-members), page by page | The page's **Page Access** card | Business and above |
+| **Only people signed in to your site** | [Members only](#only-signed-in-members), page by page | The page's **Page Access** card | Pro and up |
 
 Hiding a page from search doesn't stop people opening it. Only preview, maintenance mode,
 a page password, and members-only actually keep visitors out.
@@ -166,7 +166,7 @@ including the guess limit, are in [Password-protect a page](password-a-screen.md
 
 ## Only signed-in members {#only-signed-in-members}
 
-On **Business** and above, set a page's **Visibility** to **Members only** in the same
+On **Pro** and up, set a page's **Visibility** to **Members only** in the same
 **Page Access** card. Visitors must sign in to your site to view it, and stay signed in as
 they move between members-only pages. You'll need the site's sign-in and sign-up pages
 turned on first. See [Members-only areas](../../workspace-and-billing/teams-and-roles/members-only.md).
@@ -190,7 +190,7 @@ switch yourself, and it uses no AI credits.
 - **Maintenance mode** can only be turned on or off by a **site admin**, as in the Admin
   area. If you're an editor or author, Assist makes the rest of your request and says it
   left maintenance mode alone.
-- **Members only** is set only on the **Business** plan and above. On other plans, Assist
+- **Members only** is set only on the **Pro** plan and up. On other plans, Assist
   says why it left the page as it was.
 - **Passwords** are never set by Assist, so a password never goes into the chat. Set it
   in the page's **Page Access** card, as in

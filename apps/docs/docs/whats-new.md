@@ -12,6 +12,20 @@ for the how-to.
 
 ## November 2026 — Aglyn 1.0 (newest)
 
+- **Four plans: Free, Starter, Pro and Custom.** [Billing & plans](workspace-and-billing/billing-and-plans/overview.md#tiers--entitlements)
+  — Pro is now the full platform: everything that was on Business, including the API
+  and webhooks, A/B testing, multilingual sites, scheduled publishing, recurring billing,
+  members-only content and gift cards, with unlimited pages, products, forms, workflows
+  and dataset records. It grows past its included amounts through
+  [add-ons](workspace-and-billing/billing-and-plans/add-ons.md) and metered usage, with
+  no ceiling on seats, collaborators or datasets. Pro's fee on physical sales is now
+  0.5%. Business, Scale, Advanced and Agency are no longer sold, and the plan once
+  labeled Enterprise is now **Custom**, which carries white-label and
+  [single sign-on](enterprise/sso.md). Prices are on
+  [aglyn.com/pricing](https://aglyn.com/pricing).
+- **AI credits by the block.** [AI credits](ai/ai-credits.md#the-aglyn-ai-add-on) —
+  the six Aglyn AI tiers are replaced by one add-on: blocks of 5,000 credits a month, up
+  to 30, on any paid plan.
 - **Your logo from the start.** [Create site](getting-started/create-a-site.md#logo-and-favicon)
   takes a logo, a logo for dark backgrounds and a favicon. A new site's header and footer
   show your logo in place of its name, visitors in dark mode see the dark one, and the

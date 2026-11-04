@@ -45,7 +45,7 @@ first. An allotment larger than the pool is allowed; the pool simply stops first
 ### Limiting models {#limiting-models}
 
 An allotment can also carry a list of models. The person or site then runs only on those
-models, including when **Auto** chooses. On Agency and Enterprise, the organization can
+models, including when **Auto** chooses. On the Custom plan, the organization can
 restrict the models everyone uses the same way.
 
 ## Who can set them {#who-can-set-them}

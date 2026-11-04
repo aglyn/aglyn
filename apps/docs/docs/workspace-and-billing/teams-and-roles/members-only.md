@@ -15,10 +15,10 @@ Three things here share the word "member", and they are on different plans:
 - **Member accounts**: signing up, signing in, recovering a password, and the
   account page with past orders. These work wherever commerce does.
 - **Members-only content**: members-only pages, gated video and the content
-  paywall. These need the content-gating feature, on **Business** and above.
+  paywall. These need the content-gating feature, on **Pro** and up.
   On a lower plan, or if a subscription lapses, gated content is not served.
 - **Recurring billing**: subscription products and paid memberships charged on
-  a schedule. Also **Business** and above.
+  a schedule. Also **Pro** and up.
 :::
 
 ![A site's Users page: the Site users table of members with their email, name, join date and status, under its Columns, Filters, Export and Search controls, above the Users card that grants site access](/img/teams-and-roles/host-users-page.png)
@@ -72,7 +72,7 @@ link on the sign-in form (or by visiting `/recover` directly):
 
 ## Gate a page {#gate-a-screen}
 
-Members-only pages are on **Business** and above.
+Members-only pages are on **Pro** and up.
 
 1. Open the page you want to protect.
 2. Mark it **members-only**.

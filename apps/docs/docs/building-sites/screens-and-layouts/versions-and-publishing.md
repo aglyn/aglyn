@@ -64,9 +64,9 @@ plan that includes it and an **Upgrade** button to the plans on Billing:
 
 - **Creating versions** requires **Pro or above** — on a lower tier **New version** is
   disabled and the Versions dialog says *"Included from Pro"*.
-- **Scheduled publishing** requires **Business or above** — on a lower tier every
+- **Scheduled publishing** requires **Pro or above** — on a lower plan every
   **Schedule** button is disabled and says *"Scheduled publishing is included from
-  Business."*
+  Pro."*
 - A version is snapshotted from the **saved** document, so the editor asks you to save
   the canvas first rather than silently capturing (or losing) unsaved edits.
 

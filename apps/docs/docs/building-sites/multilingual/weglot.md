@@ -11,7 +11,7 @@ published pages with your own Weglot account. Weglot translates each page in the
 visitor's browser, and a language switcher lets visitors pick their language.
 
 :::info Plan availability
-**Business** and above, the same plans as [Multilingual](overview.md). On other
+**Pro** and up, the same plans as [Multilingual](overview.md). On other
 plans, nothing is added to your pages.
 
 You need your own Weglot account. Weglot's plan decides how many words and
