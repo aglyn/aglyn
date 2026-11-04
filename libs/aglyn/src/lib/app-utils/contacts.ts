@@ -200,7 +200,10 @@ export interface HostContact {
    * viewing group's facet. `ORG_CONTACT_FIELDS` below is an allow-list, so
    * neither reaches the org view either.
    */
-  /** E.164, mirrored from the last facet write that set one. */
+  /**
+   * E.164, mirrored from the last facet write that set one: the Phone, or
+   * the mobile of a person who gave no other number.
+   */
   phone?: string
   /** The company name as typed, mirrored the same way. */
   companyName?: string

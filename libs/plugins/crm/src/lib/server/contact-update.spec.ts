@@ -212,6 +212,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   }
 })
 
+import { crmContactListFields } from '@aglyn/aglyn/app-utils/crm'
 import {
   CONTACT_EMAIL_CHANGE_REFUSAL,
   CONTACT_EMAIL_TAKEN_REFUSAL,
@@ -756,6 +757,99 @@ describe('the address', () => {
     const { status } = await post(onSite({ email: 'ada@example.com' }, ['ada', 'theirs']))
     expect(status).toBe(400)
     expect(contactWrites).toEqual([])
+  })
+})
+
+/**
+ * A person who gave only a mobile is found by it (AGL-4122): New contact
+ * makes the mobile the search echo when there is no other number, and a
+ * save of the record page's Properties card — which sends every phone
+ * field, the empty Phone among them — must keep it there.
+ */
+describe('a person with only a mobile', () => {
+  const MOBILE = '+15125550123'
+  /** The document New contact writes at the organization level for a name and a mobile. */
+  const mobileOnly = () => {
+    const record = {
+      email: '',
+      name: 'Jordan Lee',
+      visibleTo: ['org'],
+      capturedByHostIds: [],
+      phone: MOBILE,
+      facets: {
+        org: {
+          sources: { manual: true },
+          interactions: [],
+          tags: [],
+          name: 'Jordan Lee',
+          mobilePhone: MOBILE,
+        },
+      },
+    }
+    store[`${CONTACTS}/jordan`] = { ...record, ...crmContactListFields(record) }
+  }
+  /** The phone fields exactly as the Properties card sends them. */
+  const cardPhones = (mobilePhone: string) => ({
+    phone: '',
+    mobilePhone,
+    homePhone: '',
+    otherPhone: '',
+    fax: '',
+    assistantPhone: '',
+  })
+  const saveCard = (set: Record<string, unknown>) =>
+    post({ orgId: ORG_ID, contactIds: ['jordan'], set })
+  /** What the restamp after the write stores as the record's search tokens. */
+  const tokens = () => crmContactListFields(contact('jordan')).searchTokens
+
+  beforeEach(() => {
+    caller = { uid: 'owner-uid' }
+    mockEmailHolder = null
+    mobileOnly()
+  })
+
+  it('is found by the number before anything is saved', () => {
+    expect(contact('jordan').searchTokens).toEqual(expect.arrayContaining(['5125550123', '0123']))
+  })
+
+  it('keeps the mobile as the number searched by when an email is added', async () => {
+    const { payload } = await saveCard({
+      email: 'jordan@example.com',
+      firstName: '',
+      lastName: '',
+      name: 'Jordan Lee',
+      ...cardPhones(MOBILE),
+    })
+    expect(payload.results).toEqual([{ contactId: 'jordan', ok: true }])
+    expect(contact('jordan').email).toBe('jordan@example.com')
+    expect(facetOf('jordan', 'org')).not.toHaveProperty('phone')
+    expect(facetOf('jordan', 'org').mobilePhone).toBe(MOBILE)
+    expect(contact('jordan').phone).toBe(MOBILE)
+    expect(tokens()).toEqual(expect.arrayContaining(['5125550123', '0123', 'jordan']))
+  })
+
+  it('follows the mobile when it changes, and lets go of the number when it is cleared', async () => {
+    await saveCard(cardPhones('+15125550199'))
+    expect(contact('jordan').phone).toBe('+15125550199')
+    expect(tokens()).toEqual(expect.arrayContaining(['5125550199']))
+    expect(tokens()).not.toContain('5125550123')
+
+    await saveCard(cardPhones(''))
+    expect(contact('jordan').phone).toBeUndefined()
+    expect(tokens()).not.toContain('5125550199')
+  })
+
+  it('searches by the Phone once there is one, as New contact does', async () => {
+    await saveCard({ ...cardPhones(MOBILE), phone: '+15125550100' })
+    expect(contact('jordan').phone).toBe('+15125550100')
+    expect(facetOf('jordan', 'org').mobilePhone).toBe(MOBILE)
+  })
+
+  it('keeps the Phone as the echo when only the mobile is sent', async () => {
+    store[`${CONTACTS}/jordan`].facets.org.phone = '+15125550100'
+    store[`${CONTACTS}/jordan`].phone = '+15125550100'
+    await saveCard({ mobilePhone: '+15125550199' })
+    expect(contact('jordan').phone).toBe('+15125550100')
   })
 })
 
