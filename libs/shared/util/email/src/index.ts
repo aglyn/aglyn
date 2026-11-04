@@ -82,6 +82,9 @@ export * from './lib/outbound-phishing-screen'
 // The send seam's gate for that screen — the store a hold writes is injected
 // by `@aglyn/tenant-data-admin`, like the governor's.
 export * from './lib/outbound-screen-gate'
+// The per-organization daily ceiling on a site's non-campaign mail
+// (AGL-4145). Pure; the counter it claims against is `tenant-data-admin`'s.
+export * from './lib/transactional-send-ceiling'
 // The same screen read over a published page (AGL-3356): lookalike links and
 // embeds, author-defined credential fields, a brand's call to action.
 export * from './lib/hosted-page-screen'

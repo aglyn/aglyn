@@ -1314,10 +1314,15 @@ const StaffOrgActions = ({
               // comp included (AGL-3034) — not the stored plan, which a
               // canceled workspace does not get. An uncapped comp reads every
               // band as unlimited, and never a fee (AGL-3049).
+              // A field that carries its own figures is not a plan band, and
+              // no comp lifts it (AGL-4145's abuse ceiling).
               const plan = savedPlan
-              const fallback =
-                savedCompCaps === 'uncapped' &&
-                !PRICE_ENTITLEMENT_KEYS.has(field.key)
+              const fallback = field.byPlan
+                ? plan
+                  ? field.byPlan[plan]
+                  : undefined
+                : savedCompCaps === 'uncapped' &&
+                    !PRICE_ENTITLEMENT_KEYS.has(field.key)
                   ? Number.POSITIVE_INFINITY
                   : plan
                     ? (PLAN_ENTITLEMENTS[plan] as any)?.[field.key]
