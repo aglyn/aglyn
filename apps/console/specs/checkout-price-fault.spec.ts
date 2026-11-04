@@ -86,7 +86,7 @@ describe('configuredPriceFault (AGL-1137)', () => {
     expect(message).toContain('STRIPE_PRICE_METERED_YEARLY')
   })
 
-  it('names the AI tier env when the failed item is the add-on (AGL-2897, AGL-3965)', () => {
+  it('names the AI credits env when the failed item is the add-on (AGL-2897, AGL-4144)', () => {
     // The add-on follows the metered item, so it sits at [2] when metered is
     // configured and at [1] when it is not — the caller says which.
     const message = configuredPriceFault(
@@ -95,28 +95,17 @@ describe('configuredPriceFault (AGL-1137)', () => {
       'month',
       2,
     )
-    // No tier named: the one a plan-named purchase means, Pro's Boost.
-    expect(message).toContain('STRIPE_PRICE_AI_BOOST')
+    // One flat block price on every plan, per interval.
+    expect(message).toContain('STRIPE_PRICE_AI_CREDITS ')
     expect(message).not.toContain('STRIPE_PRICE_METERED')
     expect(
       configuredPriceFault(
         { ...REAL_DEAD_PRICE_ERROR, param: 'items[2][price]' },
-        'pro',
+        'starter',
         'year',
         2,
       ),
-    ).toContain('STRIPE_PRICE_AI_BOOST_YEARLY')
-    // The tier the checkout sold, when it names one.
-    expect(
-      configuredPriceFault(
-        { ...REAL_DEAD_PRICE_ERROR, param: 'items[2][price]' },
-        'pro',
-        'year',
-        2,
-        null,
-        'studio',
-      ),
-    ).toContain('STRIPE_PRICE_AI_STUDIO_YEARLY')
+    ).toContain('STRIPE_PRICE_AI_CREDITS_YEARLY')
   })
 
   it('tells the add-on at [1] from the metered item at [1] by the index it was given', () => {
@@ -128,7 +117,7 @@ describe('configuredPriceFault (AGL-1137)', () => {
       'month',
       1,
     )
-    expect(atOne).toContain('STRIPE_PRICE_AI_BOOST')
+    expect(atOne).toContain('STRIPE_PRICE_AI_CREDITS')
     expect(atOne).not.toContain('STRIPE_PRICE_METERED')
     // Metered configured, add-on at [2]: a failure at [1] is still metered.
     const metered = configuredPriceFault(
@@ -179,15 +168,13 @@ describe('configuredPriceFault (AGL-1137)', () => {
         'year',
         4,
         5,
-        'plus',
         addonItems,
       )
     expect(at(2)).toContain('STRIPE_PRICE_PRO_EXTRA_HOST_YEARLY')
     expect(at(3)).toContain('STRIPE_PRICE_EVENT_CALENDAR_YEARLY')
     expect(at(3)).not.toContain('EXTRA_HOST')
     // The AI and Site Care items keep their own names behind them.
-    // The AI item names the tier the checkout sold (AGL-3965), not the plan's.
-    expect(at(4)).toContain('STRIPE_PRICE_AI_PLUS_YEARLY')
+    expect(at(4)).toContain('STRIPE_PRICE_AI_CREDITS_YEARLY')
     expect(at(5)).toContain('STRIPE_PRICE_SITE_CARE_YEARLY')
   })
 

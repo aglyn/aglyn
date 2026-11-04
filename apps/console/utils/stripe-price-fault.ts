@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { defaultAiTierForPlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { aiCreditBlockPriceEnvName } from '@aglyn/aglyn/app-utils/ai-credit-blocks'
 
 /**
  * Turn Stripe's `resource_missing` into the env var that caused it (AGL-1137).
@@ -41,11 +41,6 @@ export function configuredPriceFault(
    */
   siteCareItemIndex: number | null = null,
   /**
-   * The Aglyn AI tier that item sells (AGL-3965): its env is per tier.
-   * Absent, the tier a plan-named purchase means (`defaultAiTierForPlan`).
-   */
-  aiTier: string | null = null,
-  /**
    * Every other add-on item a bundle checkout attached (AGL-3955): where it
    * sits and the env var its price came from, which only the caller knows.
    */
@@ -65,7 +60,7 @@ export function configuredPriceFault(
   const envVar = addonItem
     ? addonItem.envVar
     : at(aiAddonItemIndex)
-    ? `STRIPE_PRICE_AI_${String(aiTier ?? defaultAiTierForPlan(plan) ?? 'spark').toUpperCase()}${yearly}`
+    ? aiCreditBlockPriceEnvName(interval)
     : at(siteCareItemIndex)
       ? `STRIPE_PRICE_SITE_CARE${yearly}`
       : param.includes('[1]')

@@ -226,39 +226,54 @@ describe('proposing an upgrade (AGL-3466)', () => {
       'https://app.aglyn.test/acme/billing?plan=starter&interval=year&addons=ai,siteCare&coupon=BOOTH25',
     )
     expect(mockActivity.map((row) => row.action)).toEqual([
-      'Proposed the Starter plan (Starter with Aglyn AI and Site Care, billed yearly, code BOOTH25)',
+      'Proposed the Starter plan (Starter with Aglyn AI credit block and Site Care, billed yearly, code BOOTH25)',
     ])
   })
 
-  it('keeps the Aglyn AI tier staff picked, and sends Billing with it chosen (AGL-4025)', async () => {
+  it('keeps the credit blocks staff picked, and sends Billing with them chosen (AGL-4144)', async () => {
     seedTrial()
     const result = await proposeOrgUpgrade({
       orgId: ORG,
       plan: 'starter',
-      addons: { siteCare: 1, aiAddon: 1 },
+      addons: { siteCare: 1, aiAddon: 3 },
       interval: 'year',
-      aiTier: 'max',
       actor: { uid: 'staff', email: 'zed@aglyn.test' },
       origin: 'https://app.aglyn.test',
     })
-    expect(result.proposal).toMatchObject({ addons: { siteCare: 1, aiAddon: 1 }, aiTier: 'max' })
-    expect(org()['upgradeProposal']).toMatchObject({ aiTier: 'max' })
+    expect(result.proposal).toMatchObject({ addons: { siteCare: 1, aiAddon: 3 } })
+    expect(result.proposal).not.toHaveProperty('aiTier')
+    expect(org()['upgradeProposal']).toMatchObject({ addons: { siteCare: 1, aiAddon: 3 } })
     expect(String(mockSent[0]['text'])).toContain(
-      'https://app.aglyn.test/acme/billing?plan=starter&interval=year&addons=ai:max,siteCare',
+      'https://app.aglyn.test/acme/billing?plan=starter&interval=year&addons=ai:3,siteCare',
     )
     expect(mockActivity.map((row) => row.action)).toEqual([
-      'Proposed the Starter plan (Starter with Aglyn AI Max and Site Care, billed yearly)',
+      'Proposed the Starter plan (Starter with 3 × Aglyn AI credit block and Site Care, billed yearly)',
     ])
   })
 
-  it('the hand-off’s proposal keeps the tier too, and only with Aglyn AI (AGL-4025)', () => {
+  it('refuses a retired Aglyn AI tier, writing nothing (AGL-4144)', async () => {
     const actor = { uid: 'staff' }
-    expect(
+    expect(() =>
       buildUpgradeProposal({ plan: 'pro', addons: { aiAddon: 1 }, aiTier: 'ultra', actor }),
-    ).toMatchObject({ addons: { aiAddon: 1 }, aiTier: 'ultra' })
+    ).toThrow(UpgradeProposalError)
+    seedTrial()
+    await expect(
+      proposeOrgUpgrade({
+        orgId: ORG,
+        plan: 'starter',
+        addons: { aiAddon: 1 },
+        aiTier: 'max',
+        actor: { uid: 'staff', email: 'zed@aglyn.test' },
+        origin: 'https://app.aglyn.test',
+      }),
+    ).rejects.toBeInstanceOf(UpgradeProposalError)
+    expect(org()['upgradeProposal']).toBeUndefined()
+    expect(audits()).toHaveLength(0)
+    expect(mockSent).toHaveLength(0)
+    // An `ai:<tier>` entry is no number of blocks: left off, never stored.
     expect(
-      buildUpgradeProposal({ plan: 'pro', addons: { siteCare: 1 }, aiTier: 'ultra', actor }),
-    ).not.toHaveProperty('aiTier')
+      buildUpgradeProposal({ plan: 'pro', addons: 'siteCare,ai:ultra', actor }),
+    ).toMatchObject({ addons: { siteCare: 1 } })
   })
 
   it('refuses a plan the workspace cannot buy itself, writing nothing', async () => {

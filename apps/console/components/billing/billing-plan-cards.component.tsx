@@ -18,7 +18,8 @@
 
 import {
   type AglynOrgBilling,
-  AI_TIERS,
+  AI_CREDIT_BLOCK_MONTHLY_USD,
+  AI_CREDITS_PER_BLOCK,
   aiAddonName,
   checkEntitlement,
   isCustomPricedPlan,
@@ -26,7 +27,7 @@ import {
   PLAN_LABELS,
   PLAN_PRICING,
   PLATFORM_BRAND_NAME,
-  planSellsAiTiers,
+  planSellsAiCredits,
   resolveOrgEntitlements,
   resolveTransactionFeePct,
   SELF_SERVE_PLANS,
@@ -227,17 +228,20 @@ interface FeatureRow {
 }
 
 /**
- * The Aglyn AI line in a card's quota block (AGL-2899, AGL-3965): a tier is
- * sold on its own, at the same prices on every paid plan, so the line names
- * the cheapest tier rather than a per-plan price. Enterprise's AI is in the
- * agreement; Free sells no tier.
+ * The Aglyn AI line in a card's quota block (AGL-2899, AGL-4144): credits are
+ * sold by the block, at the same price on every paid plan, so the line names
+ * the block rather than a per-plan price. Enterprise's AI is in the
+ * agreement; Free sells no blocks.
  */
-export function aiTiersLine(plan: OrgPlan, brand: string): string {
+export function aiCreditsLine(plan: OrgPlan, brand: string): string {
   const name = aiAddonName(brand)
-  if (planSellsAiTiers(plan)) {
-    return `More AI credits: ${name} tiers from +$${AI_TIERS.spark.monthlyUsd}/mo`
+  if (planSellsAiCredits(plan)) {
+    return (
+      `More AI credits: ${AI_CREDITS_PER_BLOCK.toLocaleString()} for ` +
+      `+$${AI_CREDIT_BLOCK_MONTHLY_USD}/mo a block`
+    )
   }
-  return isCustomPricedPlan(plan) ? `${name} included` : `No ${name} tiers`
+  return isCustomPricedPlan(plan) ? `${name} included` : `No ${name} credit blocks`
 }
 
 /**
@@ -660,7 +664,7 @@ function headlineLimits(
       : 'No campaign email',
     // The Aglyn AI tiers (AGL-2899, AGL-3965), a line rather than a suffix:
     // a purchase on its own, not overage on a band above.
-    aiTiersLine(plan, brand),
+    aiCreditsLine(plan, brand),
   ]
 }
 
@@ -1613,7 +1617,7 @@ function PlanCardBody({
       {/* The Aglyn AI tiers line (AGL-2899, AGL-3965), in the same slot on
           every card so the ladder reads across. */}
       <Typography variant="body2">
-        {aiTiersLine(plan, brand)}
+        {aiCreditsLine(plan, brand)}
       </Typography>
     </Stack>
     <Stack spacing={1.5}>

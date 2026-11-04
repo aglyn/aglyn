@@ -16,20 +16,19 @@
  */
 
 /**
- * The Aglyn AI add-on follows a plan switch (AGL-2897), keeping its TIER
- * (AGL-3965).
+ * Aglyn AI credit blocks follow a plan switch (AGL-2897), keeping their COUNT
+ * (AGL-4144).
  *
  * `/api/billing/subscription` re-prices every add-on item it recognises onto
  * the target — `buildTargetItems` for the schedule phase, and the same
  * `addonKindFromPriceId`/`addonTargetPriceId` pair for the instant delta —
  * and carries anything it cannot classify through verbatim while warning that
- * it did so. The add-on has to land on the FIRST side of that line: an
+ * it did so. The blocks have to land on the FIRST side of that line: an
  * `aiAddon` item that read as "unrecognised" would survive a switch at a
  * price the target interval cannot carry.
  *
- * Since AGL-3965 a tier is chosen on its own, at the same price on every paid
- * plan, so a plan change keeps the tier and moves only its interval; a line
- * still on a legacy per-plan price becomes the tier with that price and band.
+ * A block is one flat price on every paid plan, so a plan change keeps the
+ * line and its quantity and moves only its interval.
  *
  * Pure: `buildTargetItems` reads env-resolved price ids and nothing else.
  */
@@ -39,15 +38,12 @@ import { buildTargetItems } from '../utils/server/billing-schedule'
 const PRICE_ENV: Record<string, string> = {
   STRIPE_PRICE_STARTER: 'price_starter',
   STRIPE_PRICE_STARTER_YEARLY: 'price_starter_yearly',
-  STRIPE_PRICE_AGENCY: 'price_agency',
-  STRIPE_PRICE_AGENCY_YEARLY: 'price_agency_yearly',
-  // Starter's add-on as it was sold before tiers.
-  STRIPE_PRICE_STARTER_AI_ADDON: 'price_starter_ai_addon',
-  STRIPE_PRICE_STARTER_AI_ADDON_YEARLY: 'price_starter_ai_addon_yearly',
-  STRIPE_PRICE_AI_SPARK: 'price_ai_spark',
-  STRIPE_PRICE_AI_SPARK_YEARLY: 'price_ai_spark_yearly',
+  STRIPE_PRICE_PRO: 'price_pro',
+  STRIPE_PRICE_PRO_YEARLY: 'price_pro_yearly',
+  STRIPE_PRICE_AI_CREDITS: 'price_ai_credits',
+  STRIPE_PRICE_AI_CREDITS_YEARLY: 'price_ai_credits_yearly',
+  // A retired tier price still set in an environment: nothing reads it now.
   STRIPE_PRICE_AI_BOOST: 'price_ai_boost',
-  STRIPE_PRICE_AI_BOOST_YEARLY: 'price_ai_boost_yearly',
   STRIPE_PRICE_METERED: 'price_metered_usage',
   STRIPE_PRICE_METERED_YEARLY: 'price_metered_usage_yearly',
 }
@@ -72,88 +68,86 @@ const item = (priceId: string, quantity = 1, interval = 'month') => ({
   quantity,
 })
 
-const STARTER_WITH_BOOST = [
+const STARTER_WITH_THREE_BLOCKS = [
   item('price_starter'),
-  item('price_ai_boost'),
+  item('price_ai_credits', 3),
   item('price_metered_usage'),
 ]
 
-const STARTER_WITH_LEGACY = [
-  item('price_starter'),
-  item('price_starter_ai_addon'),
-  item('price_metered_usage'),
-]
-
-describe('the AI add-on keeps its tier across a plan switch (AGL-2897, AGL-3965)', () => {
-  it('Starter -> Agency keeps Boost at Boost\'s price, quantity intact', () => {
-    const target = buildTargetItems(STARTER_WITH_BOOST, {
-      targetPlan: 'agency',
+describe('AI credit blocks keep their count across a plan switch (AGL-2897, AGL-4144)', () => {
+  it('Starter -> Pro keeps three blocks on the same price, quantity intact', () => {
+    const target = buildTargetItems(STARTER_WITH_THREE_BLOCKS, {
+      targetPlan: 'pro',
       targetInterval: 'month',
-      targetPlanPrice: 'price_agency',
+      targetPlanPrice: 'price_pro',
       meteredPrice: 'price_metered_usage',
     })
-    expect(target.items).toContainEqual({ price: 'price_ai_boost', quantity: 1 })
+    expect(target.items).toContainEqual({ price: 'price_ai_credits', quantity: 3 })
     // Recognised, so neither dropped nor carried through as a stranger.
     expect(target.droppedAddons).toEqual([])
     expect(target.clampedAddons).toEqual([])
     expect(target.unrecognizedPriceIds).toEqual([])
   })
 
-  it('follows an interval switch onto the tier\'s yearly variant', () => {
-    const target = buildTargetItems(STARTER_WITH_BOOST, {
-      targetPlan: 'agency',
+  it('follows an interval switch onto the yearly block price', () => {
+    const target = buildTargetItems(STARTER_WITH_THREE_BLOCKS, {
+      targetPlan: 'pro',
       targetInterval: 'year',
-      targetPlanPrice: 'price_agency_yearly',
+      targetPlanPrice: 'price_pro_yearly',
       meteredPrice: 'price_metered_usage_yearly',
     })
-    expect(target.items).toContainEqual({ price: 'price_ai_boost_yearly', quantity: 1 })
+    expect(target.items).toContainEqual({ price: 'price_ai_credits_yearly', quantity: 3 })
+    expect(target.items.map((entry) => entry.price)).not.toContain('price_ai_credits')
     expect(target.unrecognizedPriceIds).toEqual([])
   })
 
-  it('moves a legacy per-plan line onto the tier with its price and band', () => {
-    // Starter's $9 / 4,000 add-on is Spark, on Agency as on Starter — not
-    // Agency's old $299 add-on.
-    const target = buildTargetItems(STARTER_WITH_LEGACY, {
-      targetPlan: 'agency',
-      targetInterval: 'month',
-      targetPlanPrice: 'price_agency',
-      meteredPrice: 'price_metered_usage',
-    })
-    expect(target.items).toContainEqual({ price: 'price_ai_spark', quantity: 1 })
-    expect(target.items.map((entry) => entry.price)).not.toContain('price_starter_ai_addon')
-    expect(target.unrecognizedPriceIds).toEqual([])
-  })
-
-  it('never exceeds one — the add-on is a toggle on every plan', () => {
-    // A hand-edited quantity of 2 in the dashboard is clamped to what the
+  it('never exceeds 30 — the most blocks any plan sells', () => {
+    // A hand-edited quantity of 40 in the dashboard is clamped to what the
     // plan can deliver, and the clamp is reported so the confirm can say so.
     const target = buildTargetItems(
-      [item('price_starter'), item('price_ai_boost', 2)],
+      [item('price_starter'), item('price_ai_credits', 40)],
       {
-        targetPlan: 'agency',
+        targetPlan: 'pro',
         targetInterval: 'month',
-        targetPlanPrice: 'price_agency',
+        targetPlanPrice: 'price_pro',
         meteredPrice: null,
       },
     )
-    expect(target.items).toContainEqual({ price: 'price_ai_boost', quantity: 1 })
-    expect(target.clampedAddons).toEqual([{ kind: 'aiAddon', from: 2, to: 1 }])
+    expect(target.items).toContainEqual({ price: 'price_ai_credits', quantity: 30 })
+    expect(target.clampedAddons).toEqual([{ kind: 'aiAddon', from: 40, to: 30 }])
   })
 
-  it('is dropped, and named, when the tier has no price configured at the target interval', () => {
-    delete process.env.STRIPE_PRICE_AI_BOOST_YEARLY
-    const target = buildTargetItems(STARTER_WITH_BOOST, {
-      targetPlan: 'agency',
+  it('reads a retired tier price as no add-on at all', () => {
+    // No subscription carries one (the 10/19 dry run found none); were one
+    // there, it is not read as some number of blocks the owner never chose.
+    const target = buildTargetItems(
+      [item('price_starter'), item('price_ai_boost')],
+      {
+        targetPlan: 'pro',
+        targetInterval: 'month',
+        targetPlanPrice: 'price_pro',
+        meteredPrice: null,
+      },
+    )
+    expect(target.unrecognizedPriceIds).toEqual(['price_ai_boost'])
+    expect(target.droppedAddons).toEqual([])
+    expect(target.items.map((entry) => entry.price)).not.toContain('price_ai_credits')
+  })
+
+  it('is dropped, and named, when the block has no price configured at the target interval', () => {
+    delete process.env.STRIPE_PRICE_AI_CREDITS_YEARLY
+    const target = buildTargetItems(STARTER_WITH_THREE_BLOCKS, {
+      targetPlan: 'pro',
       targetInterval: 'year',
-      targetPlanPrice: 'price_agency_yearly',
+      targetPlanPrice: 'price_pro_yearly',
       meteredPrice: 'price_metered_usage_yearly',
     })
     expect(target.droppedAddons).toEqual(['aiAddon'])
-    expect(target.items.map((entry) => entry.price)).not.toContain('price_ai_boost')
+    expect(target.items.map((entry) => entry.price)).not.toContain('price_ai_credits')
   })
 
-  it('is dropped, and named, on a target that sells no tier', () => {
-    const target = buildTargetItems(STARTER_WITH_BOOST, {
+  it('is dropped, and named, on a target that sells no blocks', () => {
+    const target = buildTargetItems(STARTER_WITH_THREE_BLOCKS, {
       targetPlan: 'free',
       targetInterval: 'month',
       targetPlanPrice: null as never,

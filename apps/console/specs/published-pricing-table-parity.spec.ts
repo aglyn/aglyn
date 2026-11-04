@@ -44,10 +44,10 @@
  * `-jejSg7GLa`), and every allowance and metered rate AGL-3469 and AGL-3476
  * moved from the second republish that day (version `qE5PwfZM-K`), and the
  * Site Care card and the Managed sentence from the AGL-3954 republish of
- * **2026-10-19** (version `4OlwBbptBB`), and the Aglyn AI tiers — the
- * generative door ticking on every paid plan, the "AI credits included / mo"
- * row and the tier card — from the AGL-3965 republish later that day
- * (version `U6Vbrc6Jr5`, 14:39Z) — and their whole job is to be a fixed point that does NOT move when the constants do.
+ * **2026-10-19** (version `4OlwBbptBB`), and the generative door ticking on
+ * every paid plan and the "AI credits included / mo" row from the AGL-3965
+ * republish later that day (version `U6Vbrc6Jr5`, 14:39Z), and the Aglyn AI
+ * card's one credit block (AGL-4144) — and their whole job is to be a fixed point that does NOT move when the constants do.
  * Deriving them from `PLAN_ENTITLEMENTS` would make the file assert `x === x`
  * and prove nothing at all.
  *
@@ -81,11 +81,13 @@ import {
   METERED_UNIT_RATES_USD,
 } from '../utils/usage-metering'
 import {
-  AI_TIER_IDS,
-  AI_TIERS,
+  AI_CREDIT_BLOCK_MONTHLY_USD,
+  AI_CREDIT_BLOCK_YEARLY_USD,
+  AI_CREDIT_BLOCKS_MAX,
+  AI_CREDITS_PER_BLOCK,
   PLAN_ENTITLEMENTS,
   PLAN_PRICING,
-  planSellsAiTiers,
+  planSellsAiCredits,
   RELEASE_FLAGS,
   SELF_SERVE_PLANS,
   SITE_CARE_ADDON_MONTHLY_USD,
@@ -967,8 +969,8 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
         free.extraContactsUsdPer1k,
         free.extraAssistCreditsUsdPer1k,
       ]).toEqual([null, null, null, null, null, null, null, null])
-      // …and no Aglyn AI tier (AGL-3965).
-      expect(planSellsAiTiers('free')).toBe(false)
+      // …and no Aglyn AI credit block (AGL-4144).
+      expect(planSellsAiCredits('free')).toBe(false)
     })
 
     /**
@@ -1105,30 +1107,27 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
     })
 
     /**
-     * THE AGLYN AI CARD (AGL-2900, AGL-3965). The page prints "From $9 / mo"
-     * and the six TIERS once in the card's sentence — Spark, Boost, Plus,
-     * Max, Ultra, Studio — each with the credits it adds on top of the
-     * plan's included credits, on any paid plan. Free sells none; Enterprise
-     * by agreement. Transcribed from the AGL-3965 republish of
-     * **2026-10-19** (version `U6Vbrc6Jr5`); until then the page printed a
-     * price per plan.
+     * THE AGLYN AI CARD (AGL-2900, AGL-4144). Since AGL-4144 the card sells
+     * ONE add-on, AI credits by the block: "$10 / mo" a block of 5,000
+     * credits, on top of the plan's included credits, up to 30 blocks per
+     * workspace, on any paid plan. Free sells none; Enterprise by agreement.
+     * These are the figures the pricing page republish that follows prints;
+     * until it lands, the page still shows the retired tiers, and
+     * `build-pricing-tables.mts` declares that one stale cell.
      */
     describe('Aglyn AI card', () => {
-      it('From $9 / mo — Spark $9 · Boost $19 · Plus $39 · Max $69 · Ultra $99 · Studio $299 a month, per workspace', () => {
-        const PUBLISHED = { Spark: 9, Boost: 19, Plus: 39, Max: 69, Ultra: 99, Studio: 299 }
-        expect(
-          Object.fromEntries(AI_TIER_IDS.map((id) => [AI_TIERS[id].label, AI_TIERS[id].monthlyUsd])),
-        ).toEqual(PUBLISHED)
-        expect(Math.min(...Object.values(PUBLISHED))).toBe(9)
+      it('$10 / mo a block — 5,000 AI credits a month each, on top of the plan', () => {
+        expect(AI_CREDIT_BLOCK_MONTHLY_USD).toBe(10)
+        expect(AI_CREDIT_BLOCK_YEARLY_USD).toBe(120)
+        expect(AI_CREDITS_PER_BLOCK).toBe(5000)
         // On any paid plan; Free and Enterprise sell none.
-        expect(PAID.every((p) => planSellsAiTiers(p))).toBe(true)
-        expect(planSellsAiTiers('free')).toBe(false)
-        expect(planSellsAiTiers('enterprise')).toBe(false)
+        expect(PAID.every((p) => planSellsAiCredits(p))).toBe(true)
+        expect(planSellsAiCredits('free')).toBe(false)
+        expect(planSellsAiCredits('enterprise')).toBe(false)
       })
 
-      it('adds 4,000 · 9,000 · 19,000 · 34,000 · 49,000 · 149,000 AI credits a month, on top of the plan', () => {
-        const PUBLISHED = [4000, 9000, 19000, 34000, 49000, 149000]
-        expect(AI_TIER_IDS.map((id) => AI_TIERS[id].credits)).toEqual(PUBLISHED)
+      it('up to 30 blocks per workspace', () => {
+        expect(AI_CREDIT_BLOCKS_MAX).toBe(30)
       })
     })
 

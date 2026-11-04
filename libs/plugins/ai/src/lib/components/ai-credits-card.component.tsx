@@ -17,12 +17,14 @@
 'use client'
 
 import {
-  AI_TIERS,
+  AI_CREDIT_BLOCK_MONTHLY_USD,
+  AI_CREDITS_PER_BLOCK,
   aiAddonName,
-  aiTierName,
+  aiCreditBlocksCredits,
+  aiCreditBlocksLabel,
   isUnlimitedQuota,
-  orgCanBuyAiTier,
-  resolveAiTier,
+  orgCanBuyAiCredits,
+  resolveAiCreditBlocks,
   resolveOrgEntitlements,
   type AglynOrgBilling,
 } from '@aglyn/aglyn'
@@ -61,9 +63,10 @@ export interface AiCreditsCardProps {
  * but says the plan has no credits and links to Billing (AGL-3982), since a
  * missing card reads as AI not existing here. ONE meter for one pool: the
  * plan's included credits pay for every AI action, generation included
- * (AGL-3965), and an Aglyn AI tier widens `assistCreditsPerMonth` rather than
- * opening a second band, so the limit here is already plan plus tier and the
- * caption under it says how much of that the tier is.
+ * (AGL-3965), and Aglyn AI credit blocks (AGL-4144) widen
+ * `assistCreditsPerMonth` rather than opening a second band, so the limit here
+ * is already plan plus blocks and the caption under it says how much of that
+ * the blocks are.
  *
  * From the server, not from Firestore like the platform's meters:
  * `orgs/{orgId}/assistUsage` is default-deny for every client, so a browser
@@ -101,7 +104,7 @@ export default function AiCreditsCard(props: AiCreditsCardProps) {
     anchor: '#see-your-credits',
     excerpt:
       'AI credits drawn this month against one pool: your plan’s included ' +
-      'credits plus your AI tier’s, if you have one. Every AI action draws on ' +
+      'credits plus any AI credit blocks you bought. Every AI action draws on ' +
       'it. The pool resets on the first of the month.',
   })
   // A band of zero (AGL-3982): said, with the way to a plan that has one,
@@ -115,10 +118,10 @@ export default function AiCreditsCard(props: AiCreditsCardProps) {
       </CardDisplay>
     )
   }
-  const aiTier = resolveAiTier(org)
+  const aiBlocks = resolveAiCreditBlocks(org)
   // Sold to THIS workspace, not merely on its plan: a staff comp has no
   // subscription to add the item to, so it sells none (AGL-3034).
-  const tiersSold = orgCanBuyAiTier(org)
+  const blocksSold = orgCanBuyAiCredits(org)
   return (
     <CardDisplay
       header={'AI credits'}
@@ -135,29 +138,29 @@ export default function AiCreditsCard(props: AiCreditsCardProps) {
         unlimited={isUnlimitedQuota(entitlements.assistCreditsPerMonth)}
         upgradeHref={billingHref ? `${billingHref}#plans` : '#plans'}
       />
-      {aiTier ? (
+      {aiBlocks > 0 ? (
         <Typography
           variant="caption"
           color="text.secondary"
           sx={{ display: 'block', mt: -1.5, mb: 2 }}
         >
-          {`Includes ${AI_TIERS[aiTier].credits.toLocaleString()} credits a month ` +
-            `from ${aiTierName(aiTier)}, on top of your plan's.`}
+          {`Includes ${aiCreditBlocksCredits(aiBlocks).toLocaleString()} credits a month ` +
+            `from ${aiCreditBlocksLabel(aiBlocks)} of ${aiAddonName()} credits, on top of your plan's.`}
         </Typography>
       ) : null}
-      {/* A plan that sells tiers and holds none: the one line on the meters
+      {/* A plan that sells blocks and holds none: the one line on the meters
           that points at more capacity rather than at an upgrade. */}
-      {!aiTier && tiersSold ? (
+      {aiBlocks === 0 && blocksSold ? (
         <Typography
           variant="caption"
           color="text.secondary"
           sx={{ display: 'block', mt: -1.5, mb: 2 }}
         >
-          {`Need more? An ${aiAddonName()} tier adds ` +
-            `${AI_TIERS.spark.credits.toLocaleString()} to ` +
-            `${AI_TIERS.studio.credits.toLocaleString()} credits a month to this pool: `}
+          {`Need more? Each block of ${aiAddonName()} credits adds ` +
+            `${AI_CREDITS_PER_BLOCK.toLocaleString()} credits a month to this pool for ` +
+            `$${AI_CREDIT_BLOCK_MONTHLY_USD}: `}
           <Link href={`${billingHref ?? ''}#addons`} color="primary" underline="hover">
-            {'Choose a tier'}
+            {'Add credits'}
           </Link>
           {' in Billing → Plan.'}
         </Typography>

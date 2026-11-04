@@ -88,7 +88,6 @@ export type {
   OrgSubscription,
   OrgUid,
   OrgUpgradeProposal,
-  AiTierId,
 } from './definitions/org-billing.types'
 export type {
   AglynDocument,

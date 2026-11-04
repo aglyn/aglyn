@@ -18,7 +18,7 @@
 import type { AglynOrgBilling } from '@aglyn/aglyn'
 import {
   aiAddonName,
-  aiTierCreditsPerMonth,
+  aiCreditBlocksCreditsPerMonth,
   hasAiAddon,
   isUncappedPlanComp,
   resolveOrgEntitlements,
@@ -103,7 +103,7 @@ export function staffAssistPool(
   const creditsPerMonth = resolveOrgEntitlements(org).assistCreditsPerMonth
   return {
     aiAddon,
-    addonCredits: aiTierCreditsPerMonth(org),
+    addonCredits: aiCreditBlocksCreditsPerMonth(org),
     // Finite only: an uncapped comp resolves the band `UNLIMITED`, which is
     // no band to name a figure for.
     creditsPerMonth:

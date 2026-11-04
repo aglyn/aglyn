@@ -44,8 +44,6 @@ import {
   PLAN_PRICING,
   PLAN_LABELS,
   UNLIMITED,
-  AI_TIER_IDS,
-  AI_TIERS,
   aiAddonName,
   EVENT_CALENDAR_ADDON_MONTHLY_USD,
   SITE_CARE_ADDON_MONTHLY_USD,
@@ -58,6 +56,11 @@ import {
   PAGE_VIEW_CDN_REQUEST_COST_USD,
   publishedMeteredPrice,
 } from '../../libs/aglyn/src/lib/app-utils/plan-entitlements.ts'
+import {
+  AI_CREDIT_BLOCK_MONTHLY_USD,
+  AI_CREDIT_BLOCKS_MAX,
+  AI_CREDITS_PER_BLOCK,
+} from '../../libs/aglyn/src/lib/app-utils/ai-credit-blocks.ts'
 import {
   onboardingSignupHref,
   type OnboardingInterval,
@@ -77,11 +80,6 @@ const PAID: Plan[] = ['starter', 'pro', 'business', 'scale', 'advanced', 'agency
  */
 const AI_ADDON = aiAddonName()
 
-/**
- * The Aglyn AI tiers (AGL-3965), smallest first: sold on their own to any
- * paid plan, so the card states each tier once rather than a price per plan.
- */
-const AI_TIER_ROWS = AI_TIER_IDS.map((id) => AI_TIERS[id])
 
 // ---------------------------------------------------------------- format
 
@@ -1020,32 +1018,23 @@ const addons = {
     },
     {
       label: AI_ADDON,
-      // Priced PER TIER (AGL-3965), unlike the two flat cards above: six
-      // tiers, the same on every paid plan, so there is no single
-      // `priceUsd` to print. Free sells none; Enterprise by agreement.
-      tiers: AI_TIER_ROWS.map((tier) => ({
-        label: tier.label,
-        priceUsd: tier.monthlyUsd,
-        credits: tier.credits,
-      })),
+      // Credits by the block (AGL-4144): one flat price a block, the same on
+      // every paid plan, bought in any quantity up to the ceiling. Free sells
+      // none; Enterprise by agreement.
+      priceUsd: AI_CREDIT_BLOCK_MONTHLY_USD,
       scope: 'organization',
-      maxQuantity: 1,
+      maxQuantity: AI_CREDIT_BLOCKS_MAX,
+      creditsPerBlock: AI_CREDITS_PER_BLOCK,
       /*
-       * What the card prints. One headline the way the flat cards print
-       * theirs — the cheapest tier, as "From $9 / mo" — and the tiers in the
-       * sentence beneath it: each tier's price, then the credits each adds
-       * on top of the plan's included credits, each beside its tier's name
-       * so the add-on card reconciler can read them back one token at a
-       * time. The sentence is the transcription source for the page; a
-       * figure in it is a figure the page states.
+       * What the card prints under its price: what one block adds, the most
+       * a workspace buys, and that the plan's included credits come first.
+       * The sentence is the transcription source for the page; a figure in
+       * it is a figure the page states.
        */
-      priceLabel: `From $${Math.min(...AI_TIER_ROWS.map((tier) => tier.monthlyUsd))} / mo`,
       blurb:
-        AI_TIER_ROWS.map((tier) => `${tier.label} $${tier.monthlyUsd}`).join(' · ') +
-        ' a month, per workspace, on any paid plan. Each tier adds AI credits on top ' +
-        'of the credits your plan includes — ' +
-        AI_TIER_ROWS.map((tier) => `${num(tier.credits)} with ${tier.label}`).join(', ') +
-        '. Enterprise by agreement.',
+        `${num(AI_CREDITS_PER_BLOCK)} AI credits a month per block, on any paid plan, ` +
+        `on top of the credits your plan includes. Up to ${AI_CREDIT_BLOCKS_MAX} blocks ` +
+        'per workspace. Enterprise by agreement.',
     },
     {
       // The managed-website add-on (AGL-3954): staff time on the customer's
@@ -2048,20 +2037,24 @@ feeLadder.finish()
  * with the price" rule would pass `$89 / mo · per organization` on a per-site
  * add-on.
  *
- * The AI card is priced per tier (AGL-3965), so its headline is the cheapest
- * tier and the six tiers live in the sentence beneath it. The wide
- * breakpoints draw that sentence as the one-cell record after the heading and
- * every figure in it is read back beside its tier's name; mobile draws the
- * heading only, so there the headline is all there is to compare. A card
- * whose sentence a wide breakpoint has dropped is reported, because the
- * sentence is where six prices and six credit amounts are published.
+ * The AI card is one flat price a block since AGL-4144, so it is matched
+ * like the other flat cards: its headline, exactly.
  *
  * NOT reconciled: `maxQuantity`, `scope` and the per-plan `included` counts.
  * The frame states none of them. `POS_REGISTERS_ADDON_MAX` in particular is
  * the ceiling `POST /api/billing/addons` enforces, and publishing it beside
  * an $89/mo line is what would give it a surface to be checked against.
  *=========================================*/
-const ADDONS_STALE: Record<string, Divergence> = {}
+const ADDONS_STALE: Record<string, Divergence> = {
+  // Aglyn AI is sold by the block since AGL-4144 ($10 a month for 5,000
+  // credits); the published page and its frames still print the retired
+  // tiers' "From $9 / mo" until the pricing page and its Figma frames are
+  // republished. Delete this the moment every breakpoint prints the block.
+  'Aglyn AI · price': {
+    frame: 'From $9 / mo',
+    why: 'AGL-4144: the AI tiers became one credit block; the page republish follows',
+  },
+}
 
 /**
  * Cards we publish that the page carries nowhere. Empty since AGL-3954 put
@@ -2083,13 +2076,9 @@ const ADDON_FRAME_LABELS: Record<string, string[]> = {
   'Site Care': ['Site Care'],
 }
 
-/** A per-plan token read out of the AI card's sentence, or what is missing. */
-const stated = (body: string, pattern: RegExp): string =>
-  pattern.exec(body)?.[1] ?? '(not stated)'
-
 for (const v of frames) {
-  const wide = records(v, 'Usage pricing', 'cards')
-  const cards = wide ?? records(v, 'Usage pricing', 'Optional add-ons')
+  const cards =
+    records(v, 'Usage pricing', 'cards') ?? records(v, 'Usage pricing', 'Optional add-ons')
   if (!cards) {
     addonCards.absent('no add-on cards in either shape', v.name)
     continue
@@ -2102,7 +2091,8 @@ for (const v of frames) {
       addonCards.absentRow(row.label, v.name)
       continue
     }
-    const headline = 'priceUsd' in row ? `$${row.priceUsd} / mo` : row.priceLabel
+    // Every card is one flat price since AGL-4144 put Aglyn AI on a block.
+    const headline = `$${row.priceUsd} / mo`
     const scoped = `${headline} · per ${row.scope}`
     addonCards.cell(
       `${row.label} · price`,
@@ -2110,30 +2100,6 @@ for (const v of frames) {
       rec.cells[1],
       v.name,
     )
-    if ('priceUsd' in row || !wide) continue
-    // The sentence is the record after the heading, and only a one-cell
-    // record is a sentence: a two-cell record there is the next card's
-    // heading, which means this card's sentence is gone.
-    const next = cards[at + 1]
-    const body = next && next.cells.length === 1 ? next.cells[0] : null
-    if (body === null) {
-      addonCards.absent(`the ${row.label} card's sentence`, v.name)
-      continue
-    }
-    for (const tier of row.tiers) {
-      addonCards.cell(
-        `${row.label} · ${tier.label}`,
-        `$${tier.priceUsd}`,
-        stated(body, new RegExp(`${tier.label} (\\$[\\d.]+)`)),
-        v.name,
-      )
-      addonCards.cell(
-        `${row.label} · ${tier.label} credits`,
-        num(tier.credits),
-        stated(body, new RegExp(`([\\d,]+) with ${tier.label}\\b`)),
-        v.name,
-      )
-    }
   }
 }
 
