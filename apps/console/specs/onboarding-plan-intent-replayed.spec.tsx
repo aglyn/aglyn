@@ -193,7 +193,7 @@ describe('AGL-1535 · the org jump honours the intent that survived verification
 
   it('lets an intent on the URL outrank the remembered one', async () => {
     // What this visit says beats what a past one did.
-    mockSearchParams = new URLSearchParams('plan=business&interval=month')
+    mockSearchParams = new URLSearchParams('plan=starter&interval=month')
     mockStoredUserDoc = {
       onboardingPlanIntent: {
         query: 'plan=pro&interval=year',
@@ -202,7 +202,7 @@ describe('AGL-1535 · the org jump honours the intent that survived verification
     }
     await jump()
     expect(mockReplace).toHaveBeenCalledWith(
-      '/acme/billing?plan=business&interval=month',
+      '/acme/billing?plan=starter&interval=month',
     )
   })
 

@@ -281,11 +281,12 @@ fun RecordDetail(context: NativePluginContext, kind: CrmKind, id: String, listSc
             (row.data["createdAt"]?.let(::millisOf))?.let { PropertyRow("Created", formatReceiptTime(it)) }
           }
           RelatedCard(context, kind, id, row, scope, reference)
+          if (kind == CrmKind.DEAL || kind == CrmKind.COMPANY) ContactRolesCard(context, kind, id, doc.data, scope, api, reference) { notice = it }
           RecordTasksCard(context, kind, id, scope, api, reference)
           TimelineCard(context, kind, id, scope, api)
         }
       }
-      RecordDialogs(kind, id, row, fields, values, scope, api, reference, dialog, onClose = { dialog = null }, onNotice = { notice = it })
+      RecordDialogs(context, kind, id, row, fields, values, scope, api, reference, dialog, onClose = { dialog = null }, onNotice = { notice = it })
     }
   }
 }
@@ -505,6 +506,7 @@ private fun ActivityRow(line: CrmActivityLine, meta: String, modifier: Modifier 
 /** Every dialog a record's actions open. */
 @Composable
 private fun RecordDialogs(
+  context: NativePluginContext,
   kind: CrmKind,
   id: String,
   row: CrmRow,
@@ -559,9 +561,19 @@ private fun RecordDialogs(
         }
       },
     )
-    RecordDialog.LOG -> LogActivityDialog(busy, onClose) { activityKind, body, outcome, minutes, direction ->
+    RecordDialog.LOG -> LogActivityDialog(
+      context,
+      scope,
+      reference,
+      start = activityPicks(kind, id, row),
+      deal = if (kind == CrmKind.DEAL) row.data else null,
+      known = activityKnownLabels(kind, id, row),
+      busy = busy,
+      onDismiss = onClose,
+    ) { activityKind, body, outcome, minutes, direction, picks ->
       busy.run(coroutines, { onClose(); onNotice("Logged.") }) {
-        api.logActivity(activityKind, body, activityLinks(kind, id, row), byName = null, outcome = outcome, durationMinutes = minutes, direction = direction)
+        val links = picks?.let { crmActivityLinkFromPicks(it) } ?: mapOf(kind.linkField to id)
+        api.logActivity(activityKind, body, links, byName = null, outcome = outcome, durationMinutes = minutes, direction = direction)
       }
     }
     RecordDialog.EMAIL -> EmailDialog(row, busy, onClose) { subject, message ->
@@ -670,11 +682,22 @@ private fun RecordDialogs(
 internal fun leadStatusLabel(reference: CrmReference, status: String): String =
   Contracts.crmLeadStatusLabels[status] ?: status
 
-/** The links an activity on this record carries: the record, and for a deal its contact and company too. */
-internal fun activityLinks(kind: CrmKind, id: String, row: CrmRow): Map<String, String> = buildMap {
-  put(kind.linkField, id)
-  if (kind == CrmKind.DEAL || kind == CrmKind.CONTACT) (row.data["companyId"] as? String)?.takeIf { it.isNotEmpty() }?.let { put("companyId", it) }
-  if (kind == CrmKind.DEAL) (row.data["contactId"] as? String)?.takeIf { it.isNotEmpty() }?.let { put("contactId", it) }
+/**
+ * What Name and Related To open on (`crmActivityPicksFrom`): the record itself, and on a deal its Primary as Name. Null for a
+ * lead's own log, which offers neither: a lead is the entry's only link until it converts.
+ */
+internal fun activityPicks(kind: CrmKind, id: String, row: CrmRow): CrmActivityPicks? {
+  if (kind == CrmKind.LEAD) return null
+  val primary = if (kind == CrmKind.DEAL) contactRolesPrimary(dealContactRolesOf(row.data)) else null
+  return crmActivityPicksFrom(mapOf(kind.linkField to id), primary)
+}
+
+/** The record's own name, for a field that opens on it while the reference's windows do not hold it. */
+internal fun activityKnownLabels(kind: CrmKind, id: String, row: CrmRow): Map<String, String> = when (kind) {
+  CrmKind.CONTACT -> mapOf(id to row.title)
+  CrmKind.COMPANY -> mapOf(CrmRelated(CrmRelated.COMPANY, id).key to row.title)
+  CrmKind.DEAL -> mapOf(CrmRelated(CrmRelated.DEAL, id).key to row.title)
+  CrmKind.LEAD -> emptyMap()
 }
 
 internal fun TaskDraft.withLink(kind: CrmKind, id: String, row: CrmRow): TaskDraft = when (kind) {
@@ -697,6 +720,8 @@ internal fun EditSheet(
   onDismiss: () -> Unit,
   confirmLabel: String = "Save",
   header: (@Composable () -> Unit)? = null,
+  /** What the form asks below its fields that is not a field of the record (New contact's opt-in), on the same values. */
+  footer: (@Composable (values: Map<String, String>, onChange: (String, String) -> Unit) -> Unit)? = null,
   onSave: (Map<String, String>) -> Unit,
 ) {
   var values by remember { mutableStateOf(initial) }
@@ -715,6 +740,7 @@ internal fun EditSheet(
   ) {
     header?.invoke()
     FieldForm(fields.map { it.spec }, values, { key, value -> values = values + (key to value) }, errors = if (tried) problems else emptyMap(), enabled = !busy.busy)
+    footer?.invoke(values) { key, value -> values = values + (key to value) }
   }
 }
 
@@ -743,6 +769,12 @@ private fun CreateRecordDialog(context: NativePluginContext, kind: CrmKind, scop
   var pipelineId by remember { mutableStateOf(reference.pipeline(null).id) }
   var stageId by remember { mutableStateOf(reference.pipeline(null).stages.firstOrNull { it.kind == "open" }?.id ?: "") }
   val initial = remember { mapOf("ownerUid" to scope.uid, CRM_SITE_FIELD_KEY to CrmCreateSiteMemory.pick(scope.orgId).orEmpty()) }
+  // The group a new contact's opt-in is recorded for (the console's `createGroup`): the site's, or at the workspace's level the
+  // source site's; null with none, where the route records it on every site.
+  fun consentGroup(values: Map<String, String>): ConsentGroup? {
+    val site = if (scope.workspaceWide) crmCreateHost(values[CRM_SITE_FIELD_KEY]?.ifEmpty { null }, sites?.map { it.id }.orEmpty()) else scope.hostId
+    return site?.let { consentGroupForHost(scope.org, it) }
+  }
   EditSheet(
     title = "New ${kind.singular.lowercase()}",
     fields = fields,
@@ -760,6 +792,7 @@ private fun CreateRecordDialog(context: NativePluginContext, kind: CrmKind, scop
       }
       FieldEditor(FieldSpec("stageId", "Stage", FieldKind.SELECT, required = true, options = pipeline.stages.filter { it.kind == "open" }.map { FieldOption(it.id, it.name) }, emptyLabel = null), stageId, { stageId = it })
     }) else null,
+    footer = if (kind == CrmKind.CONTACT) ({ values, onChange -> ContactConsentBox(values, consentGroup(values), onChange) }) else null,
   ) { values ->
     if (kind == CrmKind.CONTACT && !crmContactIdentified(values)) {
       busy.error = "Enter a name, an email or a phone number."
@@ -772,7 +805,7 @@ private fun CreateRecordDialog(context: NativePluginContext, kind: CrmKind, scop
     busy.run(coroutines) {
       val created = createdFields(fields, values)
       val id = when (kind) {
-        CrmKind.CONTACT -> siteApi.createContact(created)
+        CrmKind.CONTACT -> siteApi.createContact(created + contactConsentFields(values, consentGroup(values)))
         CrmKind.LEAD -> siteApi.createLead(created)
         CrmKind.COMPANY -> siteApi.createRecord(kind, created + mapOf("contactsCount" to 0L))
         CrmKind.DEAL -> {
@@ -799,23 +832,46 @@ private fun CreateRecordDialog(context: NativePluginContext, kind: CrmKind, scop
   }
 }
 
+/**
+ * Log a call, a note or anything else (the console's log dialog): what happened, and **Name** and **Related To**, who it was with
+ * and the deal or company it is about. Opened from a deal, Name starts on its Primary and its contact roles lead the list;
+ * Related To leads with the open deals of the person and the company on the entry. [start] is null for a lead's own log, which
+ * offers neither.
+ */
 @Composable
-private fun LogActivityDialog(busy: Busy, onDismiss: () -> Unit, onLog: (kind: String, body: String, outcome: String?, minutes: Long?, direction: String?) -> Unit) {
+private fun LogActivityDialog(
+  context: NativePluginContext,
+  scope: CrmScope,
+  reference: CrmReference,
+  start: CrmActivityPicks?,
+  deal: Map<String, Any?>?,
+  known: Map<String, String>,
+  busy: Busy,
+  onDismiss: () -> Unit,
+  onLog: (kind: String, body: String, outcome: String?, minutes: Long?, direction: String?, picks: CrmActivityPicks?) -> Unit,
+) {
   var kind by remember { mutableStateOf("note") }
   var body by remember { mutableStateOf("") }
   var outcome by remember { mutableStateOf("") }
   var minutes by remember { mutableStateOf("") }
   var direction by remember { mutableStateOf("") }
+  var picks by remember { mutableStateOf(start) }
   val directions = Contracts.nativeCrmActivityDirections[kind].orEmpty()
+  // The company whose open deals lead Related To: the one it names, else the record's.
+  val dealsCompany = picks?.related?.takeIf { it.kind == CrmRelated.COMPANY }?.id ?: start?.related?.takeIf { it.kind == CrmRelated.COMPANY }?.id
+  var linked by remember { mutableStateOf<List<com.aglyn.core.FirestoreDoc>>(emptyList()) }
+  LaunchedEffect(picks?.contactId, dealsCompany) {
+    if (start != null) linked = crmLinkedDeals(context.firestore, scope, picks?.contactId, dealsCompany)
+  }
   ActionDialog(
     title = "Log activity",
     icon = "sticky_note",
     confirmLabel = "Log",
-    confirmEnabled = body.isNotBlank(),
+    confirmEnabled = body.isNotBlank() && picks?.linked != false,
     busy = busy.busy,
     error = busy.error,
     onDismiss = onDismiss,
-    onConfirm = { onLog(kind, body, outcome.trim().ifEmpty { null }, minutes.toLongOrNull(), direction.ifEmpty { null }) },
+    onConfirm = { onLog(kind, body, outcome.trim().ifEmpty { null }, minutes.toLongOrNull(), direction.ifEmpty { null }, picks) },
   ) {
     ChoiceChipRow(
       Contracts.crmActivityKindLabels.filterKeys { it != "email" }.map { ChipOption(it.key, it.value) },
@@ -830,6 +886,25 @@ private fun LogActivityDialog(busy: Busy, onDismiss: () -> Unit, onLog: (kind: S
     if (kind == "call") OutlinedTextField(outcome, { outcome = it.take(80) }, label = { Text("Outcome") }, singleLine = true, modifier = Modifier.fillMaxWidth())
     if (directions.isNotEmpty()) {
       ChoiceChipRow(directions.map { ChipOption(it, Contracts.crmActivityDirectionLabels[it] ?: it) }, direction, { direction = it })
+    }
+    picks?.let { current ->
+      val pinned = deal?.let(::dealContactRolesOf).orEmpty().map { CrmPickOption(it.contactId, reference.contactLabel(it.contactId) ?: known[it.contactId] ?: "Contact", "") }
+      CrmPickerField(
+        "Name",
+        crmNameOptions(pinned, reference.contacts),
+        current.contactId,
+        selectedLabel = current.contactId?.let { reference.contactLabel(it) ?: known[it] } ?: "Contact",
+        modifier = Modifier.testTag("activity-name"),
+      ) { picks = current.copy(contactId = it) }
+      CrmPickerField(
+        "Related To",
+        crmRelatedToOptions(linked, reference.deals, reference.companies.map { com.aglyn.core.FirestoreDoc(it.value, "", mapOf("name" to it.label)) }),
+        current.related?.key,
+        selectedLabel = current.related?.let { known[it.key] ?: if (it.kind == CrmRelated.DEAL) "Deal" else "Company" },
+        supporting = if (current.linked) null else "Name a contact, or what this is related to.",
+        isError = !current.linked,
+        modifier = Modifier.testTag("activity-related"),
+      ) { picks = current.copy(related = CrmRelated.ofKey(it)) }
     }
   }
 }
@@ -898,5 +973,29 @@ private fun ConvertDialog(row: CrmRow, scope: CrmScope, reference: CrmReference,
       OutlinedTextField(amount, { amount = it }, label = { Text("Amount") }, prefix = { Text("$") }, singleLine = true, modifier = Modifier.fillMaxWidth())
       FieldEditor(FieldSpec("stage", "Stage", FieldKind.SELECT, options = pipeline.stages.filter { it.kind == "open" }.map { FieldOption(it.id, it.name) }, emptyLabel = null), stageId, { stageId = it })
     }
+  }
+}
+
+/**
+ * New contact's marketing opt-in (the console's drawer): a box worded as the person's own act, off and saying why until the form
+ * has an address, with the consent group's sentence and what no source site means beside it.
+ */
+@Composable
+private fun ContactConsentBox(values: Map<String, String>, group: ConsentGroup?, onChange: (String, String) -> Unit) {
+  val hasEmail = !values["email"].isNullOrBlank()
+  Column(verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
+    CheckboxRow(
+      "This person opted in to marketing email",
+      hasEmail && values[CONTACT_CONSENT_KEY] == "true",
+      { onChange(CONTACT_CONSENT_KEY, it.toString()) },
+      enabled = hasEmail,
+      modifier = Modifier.testTag("crm-contact-consent"),
+    )
+    Text(
+      contactConsentHelp(hasEmail, group),
+      Modifier.testTag("crm-contact-consent-help"),
+      style = MaterialTheme.typography.bodySmall,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
   }
 }

@@ -31,10 +31,8 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { render, screen } from '@testing-library/react'
-import {
-  AI_TIERS,
-  PLAN_ENTITLEMENTS,
-} from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { PLAN_ENTITLEMENTS } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { AI_CREDITS_PER_BLOCK } from '@aglyn/aglyn/app-utils/ai-credit-blocks'
 // The AI add-on's band is this plugin's declaration: without it the pool
 // resolves no add-on credits at all.
 import '../declarations'
@@ -101,8 +99,8 @@ describe('the AI columns of the staff usage table', () => {
 describe('the AI credit pool line on the staff usage table', () => {
   it('names the add-on, the whole band, and the add-on’s share of it', () => {
     expect(
-      assistPoolSentence({ aiAddon: true, addonCredits: 9_000, creditsPerMonth: 11_750 }),
-    ).toBe('Aglyn AI add-on on — 11,750 AI credits/mo, 9,000 of them from the add-on.')
+      assistPoolSentence({ aiAddon: true, addonCredits: 10_000, creditsPerMonth: 12_750 }),
+    ).toBe('Aglyn AI add-on on — 12,750 AI credits/mo, 10,000 of them from the add-on.')
     expect(
       assistPoolSentence({ aiAddon: false, addonCredits: 0, creditsPerMonth: 2_750 }),
     ).toBe('Aglyn AI add-on off — 2,750 AI credits/mo.')
@@ -125,22 +123,23 @@ describe('the AI credit pool line on the staff usage table', () => {
       } as never),
     ).toEqual({
       aiAddon: true,
-      // No `aiTier` written: Pro's old add-on, which is Boost (AGL-3965).
-      addonCredits: AI_TIERS.boost.credits,
-      creditsPerMonth: 12_000 + AI_TIERS.boost.credits,
+      // One block of Aglyn AI credits (AGL-4144).
+      addonCredits: AI_CREDITS_PER_BLOCK,
+      creditsPerMonth: 12_000 + AI_CREDITS_PER_BLOCK,
     })
-    // The tier held, whatever the plan.
+    // The blocks held, whatever the plan: 5,000 each. A retired tier written
+    // beside them is not read.
     expect(
       staffAssistPool({
         plan: 'pro',
-        seatAddons: { aiAddon: 1 },
+        seatAddons: { aiAddon: 4 },
         aiTier: 'studio',
         subscription: { status: 'active' },
       } as never),
     ).toEqual({
       aiAddon: true,
-      addonCredits: AI_TIERS.studio.credits,
-      creditsPerMonth: PLAN_ENTITLEMENTS.pro.assistCreditsPerMonth + AI_TIERS.studio.credits,
+      addonCredits: 4 * AI_CREDITS_PER_BLOCK,
+      creditsPerMonth: PLAN_ENTITLEMENTS.pro.assistCreditsPerMonth + 4 * AI_CREDITS_PER_BLOCK,
     })
     // A bare plan row reads as its own band: Starter includes 750 credits
     // since AGL-3203.

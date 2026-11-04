@@ -55,16 +55,23 @@ const FROM_PRO: Readonly<Record<OrgPlan, boolean>> = {
   pro: true,
 }
 
-/** Commerce's plan gates, for the manifest generator. */
+/**
+ * Commerce's plan gates, for the manifest generator.
+ *
+ * Recurring billing, paid memberships and gift cards start at Pro since
+ * pricing v4 (2026-11-03, AGL-4126): every Business feature moved into Pro at
+ * no charge, and the 3% digital fee is their usage price. `FROM_BUSINESS`
+ * stays the shape a retired plan reads.
+ */
 export function commercePlanEntitlements(): PluginPlanEntitlementsDeclaration {
   return {
     features: [
       {
         key: 'storefrontSubscriptions',
         label: 'Storefront subscriptions',
-        byPlan: FROM_BUSINESS,
+        byPlan: FROM_PRO,
       },
-      { key: 'giftCards', label: 'Gift cards', byPlan: FROM_BUSINESS },
+      { key: 'giftCards', label: 'Gift cards', byPlan: FROM_PRO },
       {
         key: 'commerceAnalytics',
         label: 'Commerce analytics',

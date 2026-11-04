@@ -70,7 +70,7 @@ describe('the Weglot page enricher (AGL-3700)', () => {
   it('reads nothing on a plan without multilingual', async () => {
     const read = jest.fn(async () => config)
     const enrich = createWeglotSitePageEnricher(read)
-    for (const org of [{ plan: 'free' }, { plan: 'pro' }, null]) {
+    for (const org of [{ plan: 'free' }, { plan: 'starter' }, null]) {
       await expect(enrich(context({ org }))).resolves.toEqual({})
     }
     expect(read).not.toHaveBeenCalled()

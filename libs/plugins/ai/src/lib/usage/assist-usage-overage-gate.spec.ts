@@ -314,10 +314,11 @@ describe('Starter WITH the AI add-on is bounded like every plan that sells past 
     seatAddons: { aiAddon: 1 },
   }
   /**
-   * Starter's whole band with the add-on on: the plan's own 750 credits
-   * (AGL-3203) plus the add-on's 4,000. The add-on widens the one pool.
+   * Starter's whole band with one block of Aglyn AI credits: the plan's own
+   * 750 credits (AGL-3203) plus the block's 5,000 (AGL-4144). The block
+   * widens the one pool.
    */
-  const ADDON_BAND = 4_750
+  const ADDON_BAND = 5_750
   /** $50.00 of overage past that band, at $3.00 per 1,000. */
   const FIFTY_PAST_THE_ADDON_BAND = (ADDON_BAND + (50 / 3) * 1_000) * 0.001
   /** The top rung of the ladder, so only the unpaid limit can refuse. */

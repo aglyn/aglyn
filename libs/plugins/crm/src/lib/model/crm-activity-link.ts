@@ -209,3 +209,67 @@ export function crmActivityPicksEqual(a: CrmActivityPicks, b: CrmActivityPicks):
     a.related?.id === b.related?.id
   )
 }
+
+/** A record as a picker reads it: its id, and whatever fields it was stored with. */
+export type CrmPickerRow = Record<string, unknown> & { $id: string }
+
+/** One row of **Related To**: the record, the name it shows, and the heading it is listed under. */
+export interface CrmRelatedToOption extends CrmActivityRelated {
+  label: string
+  group: string
+}
+
+/** Where **Related To** lists the rows it offers. */
+export const CRM_RELATED_TO_GROUPS = {
+  openDeals: 'Open deals',
+  companies: 'Companies',
+  deals: 'Deals',
+} as const
+
+const byOptionLabel = (a: CrmRelatedToOption, b: CrmRelatedToOption) => a.label.localeCompare(b.label)
+
+/**
+ * What **Related To** offers, in the order its menu lists it (AGL-4123).
+ *
+ * The open deals of the person and the company on the entry lead, because
+ * logging a call with someone who has a deal in flight is the case the field
+ * exists for: `linkedDeals` is every deal that names them (as Primary, in a
+ * contact role, or as the company's), and only the open ones are listed, each
+ * once. Then the companies the reader may see, then every other deal, each
+ * group by name.
+ *
+ * A deal or company with no name reads as its id, so a row is never blank,
+ * and an open deal with no title as "Untitled deal".
+ */
+export function crmRelatedToOptions(input: {
+  linkedDeals: readonly CrmPickerRow[]
+  deals: readonly CrmPickerRow[]
+  companies: readonly CrmPickerRow[]
+}): CrmRelatedToOption[] {
+  const open = new Map<string, CrmRelatedToOption>()
+  for (const deal of input.linkedDeals) {
+    if (deal['status'] !== 'open') continue
+    open.set(deal.$id, {
+      kind: 'deal',
+      id: deal.$id,
+      label: String(deal['title'] ?? '') || 'Untitled deal',
+      group: CRM_RELATED_TO_GROUPS.openDeals,
+    })
+  }
+  const named = (row: CrmPickerRow, field: string) => String(row[field] ?? '') || row.$id
+  const companies = input.companies.map<CrmRelatedToOption>((row) => ({
+    kind: 'company',
+    id: row.$id,
+    label: named(row, 'name'),
+    group: CRM_RELATED_TO_GROUPS.companies,
+  }))
+  const deals = input.deals
+    .filter((row) => !open.has(row.$id))
+    .map<CrmRelatedToOption>((row) => ({
+      kind: 'deal',
+      id: row.$id,
+      label: named(row, 'title'),
+      group: CRM_RELATED_TO_GROUPS.deals,
+    }))
+  return [...[...open.values()].sort(byOptionLabel), ...companies.sort(byOptionLabel), ...deals.sort(byOptionLabel)]
+}

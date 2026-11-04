@@ -15,19 +15,18 @@
  * limitations under the License.
  */
 
+import { PLAN_PRICING, RETIRED_PLANS, SELF_SERVE_PLANS } from './plan-entitlements'
 import {
-  AI_TIER_IDS,
-  AI_TIERS,
-  aiTierAddonKey,
-  defaultAiTierForPlan,
-  PLAN_PRICING,
-} from './plan-entitlements'
+  AI_CREDIT_BLOCK_MONTHLY_USD,
+  AI_CREDIT_BLOCK_YEARLY_USD,
+  AI_CREDIT_BLOCKS_MAX,
+} from './ai-credit-blocks'
 import {
   ADDON_KINDS,
   addonMaxForPlan,
   addonUnitUsd,
+  bundleAddonLabel,
   bundleAddonsParam,
-  bundleAiTier,
   bundleListPriceCents,
   firstPlanSellingAddon,
   bundleDomainLine,
@@ -35,9 +34,10 @@ import {
   fitBundleAddonsToPlan,
   normalizeBundleCoupon,
   normalizeBundleDomain,
+  describeBundleAddon,
   parseBundleAddons,
   planSellsAddon,
-  resolveAiAddonTier,
+  TOGGLE_ADDON_KIND_LIST,
 } from './bundle-intent'
 import {
   intentAddons,
@@ -70,47 +70,62 @@ describe('the bundle link’s add-ons (AGL-3955)', () => {
   })
 
   it('holds a toggle at one however many the link asks for', () => {
-    expect(parseBundleAddons('siteCare:5,ai:3').addons).toEqual({ siteCare: 1, aiAddon: 1 })
+    expect(parseBundleAddons('siteCare:5,eventCalendar:2').addons).toEqual({ siteCare: 1, eventCalendar: 1 })
   })
 
-  it('reads `ai:<tier>` as that Aglyn AI tier (AGL-3965), and drops a tier nobody sells', () => {
-    expect(parseBundleAddons('siteCare,ai:boost')).toEqual({
-      addons: { siteCare: 1, aiAddon: 1 },
-      dropped: [],
-      aiTier: 'boost',
+  it('counts Aglyn AI credits in blocks (AGL-4144): `ai` is one, `ai:3` three', () => {
+    expect(TOGGLE_ADDON_KIND_LIST).not.toContain('aiAddon')
+    expect(parseBundleAddons('siteCare:5,ai:3').addons).toEqual({ siteCare: 1, aiAddon: 3 })
+    expect(parseBundleAddons('ai').addons).toEqual({ aiAddon: 1 })
+    expect(parseBundleAddons({ aiAddon: 4 }).addons).toEqual({ aiAddon: 4 })
+    expect(parseBundleAddons('aiCredits:2').addons).toEqual({ aiAddon: 2 })
+    // Held to the ceiling once fitted to a plan that sells blocks.
+    expect(fitBundleAddonsToPlan(parseBundleAddons('ai:40').addons, 'pro').addons).toEqual({
+      aiAddon: AI_CREDIT_BLOCKS_MAX,
     })
-    // Every tier id, in any case, through the one `ai:<tier>` spelling.
-    for (const tier of AI_TIER_IDS) {
-      expect(resolveAiAddonTier(tier.toUpperCase())).toEqual({ kind: 'aiAddon', quantity: 1, tier })
-      expect(parseBundleAddons(aiTierAddonKey(tier)).aiTier).toBe(tier)
-    }
-    expect(parseBundleAddons({ ai: 'studio' })).toMatchObject({ addons: { aiAddon: 1 }, aiTier: 'studio' })
-    // Not a tier: left off with the notice, never read as "whichever tier".
-    expect(parseBundleAddons('ai:pro')).toEqual({ addons: {}, dropped: ['ai:pro'] })
-    // A bare `ai` names no tier: checkout sells the plan's default one.
-    expect(parseBundleAddons('ai').aiTier).toBeUndefined()
   })
 
-  it('writes and words the tier with the add-on (AGL-3965)', () => {
-    expect(bundleAddonsParam({ siteCare: 1, aiAddon: 1 }, 'max')).toBe('ai:max,siteCare')
-    expect(bundleAddonsParam({ siteCare: 1 }, 'max')).toBe('siteCare')
-    expect(
-      describeBundle({ plan: 'pro', addons: { aiAddon: 1 }, aiTier: 'studio' }, { brand: 'Aglyn' }),
-    ).toBe('Pro with Aglyn AI Studio')
+  it('drops a retired Aglyn AI tier name and reports it, never read as some blocks (AGL-4144)', () => {
+    for (const tier of ['spark', 'boost', 'plus', 'max', 'ultra', 'studio']) {
+      expect(parseBundleAddons(`siteCare,ai:${tier}`)).toEqual({
+        addons: { siteCare: 1 },
+        dropped: [`ai:${tier}`],
+      })
+      expect(parseBundleAddons({ ai: tier })).toEqual({ addons: {}, dropped: ['ai'] })
+    }
+    // The parse result carries no tier field at all any more.
+    expect(parseBundleAddons('ai:boost')).not.toHaveProperty('aiTier')
   })
 
-  it('names the tier a bundle sells: the one chosen, else the plan’s default, and none without AI (AGL-4025)', () => {
-    expect(bundleAiTier({ siteCare: 1, aiAddon: 1 }, 'starter', 'plus')).toBe('plus')
-    // Nothing chosen: the plan's default tier, the one checkout would sell.
-    expect(bundleAiTier({ aiAddon: 1 }, 'pro')).toBe(defaultAiTierForPlan('pro'))
-    expect(bundleAiTier({ aiAddon: 1 }, 'pro', 'gold' as never)).toBe(defaultAiTierForPlan('pro'))
-    // A tier without the add-on, or on a plan that sells none, is no tier.
-    expect(bundleAiTier({ siteCare: 1 }, 'starter', 'plus')).toBeNull()
-    expect(bundleAiTier({ aiAddon: 1 }, 'enterprise', 'plus')).toBeNull()
-    // The price a picker shows for it is the tier's own, from AI_TIERS.
-    for (const tier of AI_TIER_IDS) {
-      expect(addonUnitUsd('aiAddon', 'starter', tier)).toBe(AI_TIERS[tier].monthlyUsd)
+  it('writes and words the blocks with the add-on (AGL-4144)', () => {
+    expect(bundleAddonsParam({ siteCare: 1, aiAddon: 3 })).toBe('ai:3,siteCare')
+    expect(bundleAddonsParam({ siteCare: 1, aiAddon: 1 })).toBe('ai,siteCare')
+    expect(bundleAddonLabel('aiAddon', 'Aglyn')).toBe('Aglyn AI credit block')
+    expect(describeBundleAddon('aiAddon', 3, 'Aglyn')).toBe('3 × Aglyn AI credit block')
+    expect(describeBundle({ plan: 'pro', addons: { aiAddon: 3 } }, { brand: 'Aglyn' })).toBe(
+      'Pro with 3 × Aglyn AI credit block',
+    )
+  })
+
+  it('prices a block at $10 on every paid plan, 0–30 of them, and on no other (AGL-4144)', () => {
+    // The paid plans SOLD since pricing v4 (AGL-4126).
+    const sold = SELF_SERVE_PLANS.filter((plan) => plan !== 'free')
+    expect(sold).toEqual(['starter', 'pro'])
+    for (const plan of sold) {
+      expect(addonUnitUsd('aiAddon', plan)).toBe(AI_CREDIT_BLOCK_MONTHLY_USD)
+      expect(addonMaxForPlan('aiAddon', plan)).toBe(AI_CREDIT_BLOCKS_MAX)
+      expect(planSellsAddon('aiAddon', plan)).toBe(true)
     }
+    // A plan pricing v4 retired sells no blocks.
+    for (const plan of RETIRED_PLANS) {
+      expect(addonUnitUsd('aiAddon', plan)).toBeNull()
+      expect(addonMaxForPlan('aiAddon', plan)).toBe(0)
+      expect(planSellsAddon('aiAddon', plan)).toBe(false)
+    }
+    expect(addonUnitUsd('aiAddon', 'free')).toBeNull()
+    expect(addonUnitUsd('aiAddon', 'enterprise')).toBeNull()
+    expect(addonMaxForPlan('aiAddon', 'free')).toBe(0)
+    expect(addonMaxForPlan('aiAddon', 'enterprise')).toBe(0)
   })
 
   it('names the smallest plan that sells an add-on, for one the chosen plan does not (AGL-4025)', () => {
@@ -122,7 +137,6 @@ describe('the bundle link’s add-ons (AGL-3955)', () => {
 
   it('prices a bundle at list price before tax, at the cadence chosen (AGL-4026)', () => {
     const starter = PLAN_PRICING.starter
-    const plus = AI_TIERS.plus
     const seat = addonUnitUsd('managers', 'starter')!
     const care = addonUnitUsd('siteCare', 'starter')!
     expect(bundleListPriceCents({ plan: 'starter', interval: 'month' })).toBe(starter.basePriceMonthlyUsd * 100)
@@ -131,13 +145,14 @@ describe('the bundle link’s add-ons (AGL-3955)', () => {
       bundleListPriceCents({
         plan: 'starter',
         interval: 'year',
-        addons: { siteCare: 1, aiAddon: 1, managers: 2 },
-        aiTier: 'plus',
+        addons: { siteCare: 1, aiAddon: 2, managers: 2 },
       }),
-    ).toBe((starter.basePriceAnnualMonthlyUsd * 12 + plus.yearlyUsd + care * 12 + seat * 2 * 12) * 100)
-    // Without a tier named, Aglyn AI is the plan's default tier.
-    expect(bundleListPriceCents({ plan: 'pro', interval: 'month', addons: { aiAddon: 1 } })).toBe(
-      (PLAN_PRICING.pro.basePriceMonthlyUsd + AI_TIERS[defaultAiTierForPlan('pro')!].monthlyUsd) * 100,
+    ).toBe(
+      (starter.basePriceAnnualMonthlyUsd * 12 + AI_CREDIT_BLOCK_YEARLY_USD * 2 + care * 12 + seat * 2 * 12) * 100,
+    )
+    // Aglyn AI credits are $10 a block a month, whatever the plan.
+    expect(bundleListPriceCents({ plan: 'pro', interval: 'month', addons: { aiAddon: 3 } })).toBe(
+      (PLAN_PRICING.pro.basePriceMonthlyUsd + AI_CREDIT_BLOCK_MONTHLY_USD * 3) * 100,
     )
     // What the plan does not sell costs nothing here, as checkout would refuse it.
     expect(bundleListPriceCents({ plan: 'starter', interval: 'month', addons: { posRegisters: 2 } })).toBe(
@@ -191,7 +206,7 @@ describe('the bundle link’s add-ons (AGL-3955)', () => {
       describeBundle({ plan: 'starter', addons: { siteCare: 1, aiAddon: 1 }, interval: 'year', coupon: 'BOOTH25' }, {
         brand: 'Aglyn',
       }),
-    ).toBe('Starter with Aglyn AI and Site Care, billed yearly, code BOOTH25')
+    ).toBe('Starter with Aglyn AI credit block and Site Care, billed yearly, code BOOTH25')
     expect(describeBundle({ plan: 'pro' })).toBe('Pro')
   })
 })
@@ -238,37 +253,46 @@ describe('the Billing link carries the bundle (AGL-3955)', () => {
     expect(onboardingPlanQuery(intent!)).toBe('plan=pro&ai=1')
   })
 
-  it('carries an `ai:<tier>` token as the intent’s tier, through every hop (AGL-3965)', () => {
-    const intent = parseOnboardingPlanIntent(query('plan=starter&addons=siteCare,ai:studio'))
-    expect(intent).toMatchObject({ ai: true, aiTier: 'studio', addons: { siteCare: 1, aiAddon: 1 } })
-    expect(onboardingPlanQuery(intent!)).toBe('plan=starter&addons=ai:studio,siteCare')
-    expect(parseOnboardingPlanIntent(query(onboardingPlanQuery(intent!)))?.aiTier).toBe('studio')
-    // Alone, the tier keeps the pricing CTAs' `ai=<tier>` spelling.
-    const alone = parseOnboardingPlanIntent(query('plan=pro&addons=ai:max'))
-    expect(onboardingPlanQuery(alone!)).toBe('plan=pro&ai=max')
-    // `?ai=<tier>` is the explicit statement and wins over a token.
-    expect(parseOnboardingPlanIntent(query('plan=pro&ai=plus&addons=ai:max'))?.aiTier).toBe('plus')
+  it('carries a count of credit blocks through every hop (AGL-4144)', () => {
+    const intent = parseOnboardingPlanIntent(query('plan=starter&addons=siteCare,ai:3'))
+    expect(intent).toMatchObject({ ai: true, addons: { siteCare: 1, aiAddon: 3 } })
+    expect(onboardingPlanQuery(intent!)).toBe('plan=starter&addons=ai:3,siteCare')
+    expect(intentAddons(parseOnboardingPlanIntent(query(onboardingPlanQuery(intent!))))).toEqual({
+      siteCare: 1,
+      aiAddon: 3,
+    })
+    // Alone, three blocks keep the pricing CTAs' `ai=` spelling.
+    const alone = parseOnboardingPlanIntent(query('plan=pro&addons=ai:3'))
+    expect(onboardingPlanQuery(alone!)).toBe('plan=pro&ai=3')
+    expect(intentAddons(parseOnboardingPlanIntent(query('plan=pro&ai=3')))).toEqual({ aiAddon: 3 })
+    expect(intentAddons(parseOnboardingPlanIntent(query('plan=pro&ai=1')))).toEqual({ aiAddon: 1 })
   })
 
-  it('every tier staff can pick reaches Billing preselected, beside Site Care and the cadence (AGL-4025)', () => {
-    for (const tier of AI_TIER_IDS) {
-      const link = onboardingDestination('acme', {
-        plan: 'starter',
-        interval: 'year',
-        intervalStated: true,
-        contactSales: false,
-        ai: true,
-        aiTier: tier,
-        addons: { siteCare: 1, aiAddon: 1 },
-      })
-      expect(link).toBe(`/acme/billing?plan=starter&interval=year&addons=ai:${tier},siteCare`)
-      expect(parseOnboardingPlanIntent(query(link.split('?')[1]))).toMatchObject({
-        plan: 'starter',
-        interval: 'year',
-        ai: true,
-        aiTier: tier,
-        addons: { siteCare: 1, aiAddon: 1 },
-      })
-    }
+  it('reads a retired tier on the link as no Aglyn AI at all (AGL-4144)', () => {
+    const named = parseOnboardingPlanIntent(query('plan=pro&ai=boost'))
+    expect(named?.ai).toBeUndefined()
+    expect(intentAddons(named)).toEqual({})
+    expect(named).not.toHaveProperty('aiTier')
+    const token = parseOnboardingPlanIntent(query('plan=starter&addons=siteCare,ai:studio'))
+    expect(token?.addons).toEqual({ siteCare: 1 })
+    expect(token?.droppedAddons).toEqual(['ai:studio'])
+  })
+
+  it('a staff bundle with blocks reaches Billing preselected, beside Site Care and the cadence', () => {
+    const link = onboardingDestination('acme', {
+      plan: 'starter',
+      interval: 'year',
+      intervalStated: true,
+      contactSales: false,
+      ai: true,
+      addons: { siteCare: 1, aiAddon: 4 },
+    })
+    expect(link).toBe('/acme/billing?plan=starter&interval=year&addons=ai:4,siteCare')
+    expect(parseOnboardingPlanIntent(query(link.split('?')[1]))).toMatchObject({
+      plan: 'starter',
+      interval: 'year',
+      ai: true,
+      addons: { siteCare: 1, aiAddon: 4 },
+    })
   })
 })

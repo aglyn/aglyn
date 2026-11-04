@@ -51,6 +51,10 @@ afterAll(() => {
   delete process.env.AGLYN_TENANT_DEMO
 })
 
+// What Next's own Node server loads first: the adapter needs the global
+// `AsyncLocalStorage` it installs.
+import 'next/dist/server/node-environment-baseline'
+import { adapter } from 'next/dist/server/web/adapter'
 import { NextRequest } from 'next/server'
 import { middleware } from '../middleware'
 
@@ -93,7 +97,11 @@ describe('a redirect keeps the visitor’s query string', () => {
     redirectAnswer = { destination: '/pricing', statusCode: 301 }
     const response = await request('moved-site', '/plans?plan=pro')
     expect(response.status).toBe(301)
-    expect(response.headers.get('location')).toBe('/pricing?plan=pro')
+    // Absolute against the request (AGL-4153); Next's adapter makes a
+    // same-host `Location` relative again, see the block below.
+    expect(response.headers.get('location')).toBe(
+      `http://${TENANT_DEMO_HOST}/pricing?plan=pro`,
+    )
   })
 
   it('CONTROL — no query asks nothing and rewrites to the page as before', async () => {
@@ -130,5 +138,65 @@ describe('a redirect keeps the visitor’s query string', () => {
     const response = await request('locked-site', '/booth?ref=x')
     expect(asked()).toHaveLength(0)
     expect(response.headers.get('x-middleware-rewrite')).toContain('/api/locked')
+  })
+})
+
+/**
+ * AGL-4153: the response above is not what a visitor gets. Next runs the
+ * middleware through its adapter, which parses `Location` with no base URL, so
+ * a relative one (`/pricing?plan=pro`) threw there and every on-site redirect
+ * with a query string failed as a 500 `MIDDLEWARE_INVOCATION_FAILED`. Calling
+ * `middleware()` directly never reached that step, which is how the bug
+ * shipped; these run the same adapter production does.
+ */
+describe('a redirect with a query survives Next’s middleware adapter', () => {
+  async function throughAdapter(host: string, pathAndQuery: string) {
+    process.env.AGLYN_TENANT_DEMO = host
+    const { response } = await adapter({
+      handler: middleware as never,
+      page: '/middleware',
+      request: {
+        url: `http://${TENANT_DEMO_HOST}${pathAndQuery}`,
+        headers: { host: TENANT_DEMO_HOST },
+        method: 'GET',
+        nextConfig: {},
+      },
+    } as never)
+    return response
+  }
+
+  it('an on-site destination redirects with the visitor’s query merged in', async () => {
+    redirectAnswer = {
+      destination: '/solutions/agencies?utm_source=site',
+      statusCode: 308,
+    }
+    const response = await throughAdapter(
+      'agency-site',
+      '/about-us?gclid=abc&utm_source=ads',
+    )
+    expect(response.status).toBe(308)
+    expect(response.headers.get('location')).toBe(
+      '/solutions/agencies?utm_source=site&gclid=abc',
+    )
+  })
+
+  it('an absolute destination behaves as before', async () => {
+    redirectAnswer = {
+      destination: 'https://app.aglyn.com/signup?utm_campaign=booth-left',
+      statusCode: 302,
+    }
+    const response = await throughAdapter('booth-site', '/booth-left?x=1')
+    expect(response.status).toBe(302)
+    expect(response.headers.get('location')).toBe(
+      'https://app.aglyn.com/signup?utm_campaign=booth-left&x=1',
+    )
+  })
+
+  it('CONTROL — an on-site rule with no query is left to the page', async () => {
+    redirectAnswer = { destination: '/solutions/agencies', statusCode: 308 }
+    const response = await throughAdapter('quiet-site', '/about-us')
+    expect(asked()).toHaveLength(0)
+    expect(response.headers.get('location')).toBeNull()
+    expect(response.headers.get('x-middleware-rewrite')).toContain('/about-us')
   })
 })

@@ -408,6 +408,68 @@ surface: a change to `SITE_CARE_ADDON_MONTHLY_USD` owes it an edit.
 
 With the switch off, every figure on the page is what it was before.
 
+### 2026-11-03 — v4: four plans, Pro at $49/$69, runs metered (AGL-4126, AGL-4143)
+
+Pricing v4 is a price RISE on Pro ($39/$56 → $49/$69) and a band rise
+everywhere else on Pro, so the page goes first (2026-10-01 above): it may
+quote more than billing charges for a while, never less. The code lane
+(AGL-4143) moved these surfaces:
+
+- **#1 `plan-entitlements.ts`:** `SELF_SERVE_PLANS` is Free, Starter, Pro;
+  `RETIRED_PLANS` names Business, Scale, Advanced and Agency, whose rows stay
+  for reading; `PLAN_LADDER` orders every plan a workspace can be on.
+  `PLAN_LABELS.enterprise` is "Custom". Pro: $69 / $49, every Business
+  feature, unlimited counts and add-on ceilings, 1,500 API requests at $0.50
+  per 1,000 past them, 0.5% on physical sales. `extraRunsUsdPer1k` is new —
+  $0.02 per 1,000 runs (`RUN_OVERAGE_USD_PER_1K`, from `perRun` at cost + 30%
+  kept after card fees) — billed by `report-usage` through
+  `estimateRunOverage` and shown on Billing → Usage. The commerce plugin's
+  recurring billing and gift cards, and the AI plugin's deep model picks,
+  start at Pro.
+- **#3 env:** checkout and the plan switch read `STRIPE_PRICE_STARTER*` and
+  `STRIPE_PRICE_PRO*` only, and the per-plan add-on env is read for those two
+  plans only. The retired plans' `STRIPE_PRICE_*` vars can be removed from the
+  console project; `STRIPE_PRICE_PRO` and `STRIPE_PRICE_PRO_YEARLY` must point
+  at the v4 prices (`price_1UXszBDYHP4psn7hHDzdaF3v` monthly,
+  `price_1UXszEDYHP4psn7hbmVBNVmN` yearly) before the promotion carrying this
+  ships, then redeploy.
+- **#2 Stripe:** `setup-stripe.mjs` mints Starter and Pro only, Pro under
+  `aglyn_pro_v4` / `aglyn_pro_v4_yearly` (both exist live); the `aglyn_pro_v2`
+  pair stays as history, never re-minted. Archiving the eight retired base
+  prices is a by-hand step, not done here.
+- **#4 `LOCKED`:** Pro 69 / 49 and physical 0.5; the retired rows stay pinned
+  at the figures they were last sold at. `lib/pricing-drift.mjs` reads Pro's
+  base price under the v4 key and no longer compares the retired plans'.
+- **#5 `DECISION_LOG.md`:** the 2026-11-03 entry, titled as the Drive entry.
+- **#6 `tables.json`:** regenerated. The Figma frames still carry v3, so the
+  generator declares each stale v4 cell (`FRAME_STALE_CELLS`,
+  `COLUMNS_STALE`, `USAGE_STALE`, `FEES_STALE`), reads the frames' "Enterprise"
+  as the Custom plan (`FRAME_LEGACY_PLAN_LABELS`) and declares the new runs row
+  absent; each declaration reports itself for deletion the moment the
+  re-extracted frames catch up. The compare columns still follow the frames'
+  eight-plan shape — dropping the retired columns is the page lane's.
+- `tier-margin-floor.spec.ts`: the ladder the rule is held on is Starter and
+  Pro; Pro pins at "$47.55 net of Stripe, vs $28.94 cost", 38% at full use.
+
+Owed by other lanes, in the order above:
+
+- **#7 `/pricing`** and **#9 its SEO description** (page lane): four columns,
+  the Pro figures, Custom, the runs rate, 0.5% physical; the "Need more scale?"
+  strip names retired plans.
+- **#8 Figma** (Figma lane): the four frames, re-extracted into
+  `pricing-copy/copy-*.json`, after which the declarations in #6 are deleted.
+- **The calculator** (`plan_rates`, `plan_<id>`, `estimate_plan`): Pro's
+  price, bands, 0.5% and the runs rate; the retired plans out of the
+  comparison.
+- **Terms §4.1** (legal lane): names the seven self-serve plans; the Google
+  Doc first, then the site, with a `LEGAL_DOCUMENT_VERSION` bump.
+- **Native** (`SignUp.swift`, `SignUp.kt`): the sign-up plan lists, in their
+  own PRs.
+- **The Drive source-of-truth doc** still prints Pro at $56;
+  `check:pricing-drift` reports it when Drive is mounted.
+- **The AI credits block** (Lane B) replaces the six AI tiers and their
+  per-plan legacy env.
+
 ## Enterprise has no price here, but it has bands
 
 `PLAN_ENTITLEMENTS.enterprise` is a row of **finite fallbacks** — twice

@@ -17,7 +17,7 @@
 'use client'
 
 import { aiAddonName } from '@aglyn/aglyn'
-import { AI_TIERS } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { aiCreditBlocksLabel } from '@aglyn/aglyn/app-utils/ai-credit-blocks'
 import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console-routes'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { mdiOpenInNew } from '@aglyn/shared-data-mdi'
@@ -555,7 +555,7 @@ const StaffOrgAiCard = ({ orgId }: { orgId: string }) => {
                 color={data.addon.on ? 'primary' : 'default'}
                 label={
                   data.addon.on
-                    ? `${name}${data.addon.tier ? ` ${AI_TIERS[data.addon.tier].label}` : ''} on`
+                    ? `${name}${data.addon.blocks > 0 ? ` credits, ${aiCreditBlocksLabel(data.addon.blocks)}` : ''} on`
                     : `${name} off`
                 }
               />

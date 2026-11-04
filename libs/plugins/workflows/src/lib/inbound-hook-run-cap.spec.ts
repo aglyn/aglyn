@@ -268,7 +268,11 @@ jest.mock('./engine/run-event-actions', () => ({
   }),
 }))
 
-import { PLAN_ENTITLEMENTS } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import {
+  PLAN_ENTITLEMENTS,
+  resolveOrgEntitlements,
+  runOverageSold,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { registerWorkflowsApi } from './server'
 
 registerWorkflowsApi()
@@ -277,8 +281,19 @@ const inboundHook = mockRegistered[0]
 const MONTH = new Date().toISOString().slice(0, 7)
 const SECRET = 'sh-secret-value'
 
-/** A plan with webhooks AND a finite run allowance. */
-const BUSINESS_RUNS = PLAN_ENTITLEMENTS.business.workflowRunsPerMonth
+/**
+ * An org with webhooks AND a run allowance that is a WALL. Since pricing v4
+ * (AGL-4126) every plan that carries webhooks — Pro, and the retired plans —
+ * also sells runs past its band (`runOverageSold`), so the band is a wall only
+ * on Starter and below. The capped org is therefore Starter with webhooks
+ * granted per org, the shape a staff override produces.
+ */
+const CAPPED_ORG = {
+  plan: 'starter',
+  subscription: { status: 'active' },
+  entitlements: { features: { webhooks: true } },
+}
+const CAPPED_RUNS = PLAN_ENTITLEMENTS.starter.workflowRunsPerMonth
 
 interface Captured {
   status: number
@@ -343,19 +358,18 @@ beforeEach(() => {
   // A site the org index does not name: no workspace to share a band with,
   // so the site's own counter is the figure (see the AGL-3472 block below
   // for a site that has one).
-  mockGetOrgForHost.mockResolvedValue({
-    org: { plan: 'business', subscription: { status: 'active' } },
-  })
+  mockGetOrgForHost.mockResolvedValue({ org: CAPPED_ORG })
 })
 
 describe('the premise', () => {
-  it('business carries webhooks AND a finite monthly run allowance', () => {
+  it('the capped org carries webhooks AND a finite monthly run allowance that is a wall', () => {
     // Without both, every case below is vacuous: no webhooks and the
     // entitlement refuses first; an infinite allowance and the cap can never
-    // speak.
-    expect(PLAN_ENTITLEMENTS.business.features.webhooks).toBe(true)
-    expect(Number.isFinite(BUSINESS_RUNS)).toBe(true)
-    expect(BUSINESS_RUNS).toBeGreaterThan(0)
+    // speak; a plan that sells runs past its band runs on (pricing v4).
+    expect(resolveOrgEntitlements(CAPPED_ORG as never).features.webhooks).toBe(true)
+    expect(runOverageSold(CAPPED_ORG as never)).toBe(false)
+    expect(Number.isFinite(CAPPED_RUNS)).toBe(true)
+    expect(CAPPED_RUNS).toBeGreaterThan(0)
     // …and free, which is what an unreadable org doc resolves to, carries
     // neither. That is the direction an org we cannot read must fall.
     expect(PLAN_ENTITLEMENTS.free.features.webhooks).toBe(false)
@@ -365,25 +379,39 @@ describe('the premise', () => {
 
 describe('the monthly run cap (AGL-2228)', () => {
   it('runs the LAST hook inside the allowance', async () => {
-    mockStore.runCounter = { [MONTH]: BUSINESS_RUNS - 1 }
+    mockStore.runCounter = { [MONTH]: CAPPED_RUNS - 1 }
     const response = await callHook(nextHookId())
     expect(response.status).toBe(200)
     // …and it counted, which is the half a refusal test cannot see.
-    expect(mockStore.runCounter[MONTH]).toBe(BUSINESS_RUNS)
+    expect(mockStore.runCounter[MONTH]).toBe(CAPPED_RUNS)
   })
 
   it('refuses the NEXT one with a 402 and runs nothing', async () => {
-    mockStore.runCounter = { [MONTH]: BUSINESS_RUNS }
+    mockStore.runCounter = { [MONTH]: CAPPED_RUNS }
     const response = await callHook(nextHookId())
     expect(response.status).toBe(402)
     expect(String((response.body as any).error)).toContain(
-      String(BUSINESS_RUNS),
+      String(CAPPED_RUNS),
     )
     // A refused run must not count, must not log activity, and must not have
     // executed — "refused, and billed anyway" is the same defect with a
     // smaller number.
-    expect(mockStore.runCounter[MONTH]).toBe(BUSINESS_RUNS)
+    expect(mockStore.runCounter[MONTH]).toBe(CAPPED_RUNS)
     expect(mockStore.activity).toHaveLength(0)
+  })
+
+  it('runs PAST the band on Pro, which sells runs past it (pricing v4, AGL-4126)', async () => {
+    // Pro carries webhooks and a run rate: at its band the run goes ahead and
+    // is counted, so the excess reaches the month's invoice.
+    const proRuns = PLAN_ENTITLEMENTS.pro.workflowRunsPerMonth
+    mockGetOrgForHost.mockResolvedValue({
+      org: { plan: 'pro', subscription: { status: 'active' } },
+    })
+    mockStore.runCounter = { [MONTH]: proRuns }
+    const response = await callHook(nextHookId())
+    expect(response.status).toBe(200)
+    expect(mockStore.runCounter[MONTH]).toBe(proRuns + 1)
+    expect(mockStore.activity).toHaveLength(1)
   })
 
   it('counts a run that FAILED, exactly as the event path does', async () => {
@@ -399,11 +427,11 @@ describe('the monthly run cap (AGL-2228)', () => {
   })
 
   it('counts LAST MONTH separately — the cap is monthly, not lifetime', async () => {
-    mockStore.runCounter = { '2020-01': BUSINESS_RUNS }
+    mockStore.runCounter = { '2020-01': CAPPED_RUNS }
     const response = await callHook(nextHookId())
     expect(response.status).toBe(200)
     expect(mockStore.runCounter[MONTH]).toBe(1)
-    expect(mockStore.runCounter['2020-01']).toBe(BUSINESS_RUNS)
+    expect(mockStore.runCounter['2020-01']).toBe(CAPPED_RUNS)
   })
 })
 
@@ -456,39 +484,39 @@ describe('one band for the workspace’s sites (AGL-3472)', () => {
   beforeEach(() => {
     mockGetOrgForHost.mockResolvedValue({
       orgId: 'org-1',
-      org: { plan: 'business', subscription: { status: 'active' } },
+      org: CAPPED_ORG,
     })
     mockStore.sites = { 'host-1': 'org-1', 'host-2': 'org-1', 'host-9': 'org-9' }
   })
 
   it('refuses a site that has run nothing when its sibling spent the band', async () => {
-    mockStore.counters[SIBLING_RUNS] = { [MONTH]: BUSINESS_RUNS }
+    mockStore.counters[SIBLING_RUNS] = { [MONTH]: CAPPED_RUNS }
     // Another workspace's site is not this workspace's spend.
     mockStore.counters['hosts/host-9/counters/workflowRuns'] = { [MONTH]: 5 }
     const response = await callHook(nextHookId())
     expect(response.status).toBe(402)
     expect(String((response.body as any).error)).toBe(
-      `This workspace has used its ${BUSINESS_RUNS} workflow runs for the month`,
+      `This workspace has used its ${CAPPED_RUNS} workflow runs for the month`,
     )
     expect(mockStore.runCounter[MONTH]).toBeUndefined()
     expect(mockStore.activity).toHaveLength(0)
     // Seeded from the workspace's two sites, once, and marked so.
     expect(mockStore.counters[ORG_RUNS]).toEqual({
-      [MONTH]: BUSINESS_RUNS,
+      [MONTH]: CAPPED_RUNS,
       seededFrom: MONTH,
     })
   })
 
   it('runs the last run the workspace has left, on both counters, then refuses', async () => {
-    mockStore.counters[SIBLING_RUNS] = { [MONTH]: BUSINESS_RUNS - 3 }
+    mockStore.counters[SIBLING_RUNS] = { [MONTH]: CAPPED_RUNS - 3 }
     mockStore.runCounter = { [MONTH]: 2 }
     expect((await callHook(nextHookId())).status).toBe(200)
     expect(mockStore.runCounter[MONTH]).toBe(3)
-    expect(mockStore.counters[ORG_RUNS]?.[MONTH]).toBe(BUSINESS_RUNS)
+    expect(mockStore.counters[ORG_RUNS]?.[MONTH]).toBe(CAPPED_RUNS)
     // The site's own counter (3) is far inside the band; the workspace's is not.
     expect((await callHook(nextHookId())).status).toBe(402)
     expect(mockStore.runCounter[MONTH]).toBe(3)
-    expect(mockStore.counters[ORG_RUNS]?.[MONTH]).toBe(BUSINESS_RUNS)
+    expect(mockStore.counters[ORG_RUNS]?.[MONTH]).toBe(CAPPED_RUNS)
   })
 
   it('keeps the two in step: the workspace figure is the sum of its sites', async () => {
@@ -507,11 +535,11 @@ describe('one band for the workspace’s sites (AGL-3472)', () => {
   })
 
   it('seeds once: a seeded counter is the figure, whatever the sites say', async () => {
-    mockStore.counters[ORG_RUNS] = { [MONTH]: BUSINESS_RUNS, seededFrom: '2020-01' }
+    mockStore.counters[ORG_RUNS] = { [MONTH]: CAPPED_RUNS, seededFrom: '2020-01' }
     mockStore.counters[SIBLING_RUNS] = { [MONTH]: 0 }
     expect((await callHook(nextHookId())).status).toBe(402)
     expect(mockStore.counters[ORG_RUNS]).toEqual({
-      [MONTH]: BUSINESS_RUNS,
+      [MONTH]: CAPPED_RUNS,
       seededFrom: '2020-01',
     })
   })
@@ -521,7 +549,7 @@ describe('a suspended workspace takes no inbound run (AGL-3356)', () => {
   it('answers 423 and runs, logs and counts nothing', async () => {
     mockGetOrgForHost.mockResolvedValue({
       org: {
-        plan: 'business',
+        plan: 'pro',
         subscription: { status: 'active' },
         suspendedAt: { seconds: 1 },
         suspendedReasonCode: 'security',
@@ -537,7 +565,7 @@ describe('a suspended workspace takes no inbound run (AGL-3356)', () => {
   it('still runs through a read-only maintenance window', async () => {
     mockGetOrgForHost.mockResolvedValue({
       org: {
-        plan: 'business',
+        plan: 'pro',
         subscription: { status: 'active' },
         suspendedAt: { seconds: 1 },
         suspendedMode: 'read-only',

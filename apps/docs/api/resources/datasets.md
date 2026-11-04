@@ -323,10 +323,10 @@ the console enforces on the same write:
 | `record_quota` | The dataset already holds every record the plan includes. The message names the limit. | Upgrade. |
 | `data_storage_quota` | Dataset storage is exhausted, or the plan includes none at all. The message names the included size. | Upgrade. |
 
-On the self-serve plans that include the API — Business through Agency — crossing the
+On Pro, the self-serve plan that includes the API, crossing the
 included storage band **bills as
 [overage](../rate-limits.md#monthly-quota--overage) rather than refusing**, so a bulk
-import runs to completion and shows up on the invoice. Enterprise has no overage rate,
+import runs to completion and shows up on the invoice. Custom has no overage rate,
 so it hard-caps: past its included storage, a record write gets the
 `data_storage_quota` refusal above.
 

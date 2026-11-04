@@ -17,7 +17,7 @@
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { CONSOLE_WIDGET_SLOTS, PERSON_ERASURE_NOT_REACHED, PERSON_ERASURE_REMOVES, PERSON_ERASURE_RETAINS, resolveOrgEntitlements } from '@aglyn/aglyn'
+import { CONSOLE_WIDGET_SLOTS, PERSON_ERASURE_NOT_REACHED, PERSON_ERASURE_REMOVES, PERSON_ERASURE_RETAINS, PLAN_LABELS, planLabelGrantingFeature, resolveOrgEntitlements } from '@aglyn/aglyn'
 import { RISK_OWNER_ACTIONS } from '@aglyn/shared-util-email/risk-notice-catalog'
 
 /**
@@ -103,7 +103,8 @@ describe('native workspace settings', () => {
         'This is the only time the key is shown. Copy it now and store it securely — you can’t retrieve it later.',
         'No API keys yet.',
       ])
-      expect(nativeText('core.settings.apiKeys')).toContain('The REST API and API keys are included on the Business plan — see Billing to upgrade.')
+      // The plan the console's card names: the cheapest that grants the API (Pro since pricing v4).
+      expect(nativeText('core.settings.apiKeys')).toContain(`The REST API and API keys are included on the ${planLabelGrantingFeature('apiAccess')} plan — see Billing to upgrade.`)
       expect(card).toContain("checkEntitlement(org, 'apiAccess')")
       expect(Object.keys(resolveOrgEntitlements(null).features)).toContain('apiAccess')
       expect(nativeText('core.settings.apiKeys')).toContain('data.ent.features.apiAccess')
@@ -240,8 +241,16 @@ describe('native workspace settings', () => {
       expect(card).toContain("checkEntitlement(org, 'ssoEnabled')")
       expect(Object.keys(resolveOrgEntitlements(null).features)).toContain('ssoEnabled')
       expect(native).toContain('data.ent.features.ssoEnabled')
+      // The card names the plan by its label since pricing v4 (AGL-4126),
+      // which reads "Custom": the source carries the template, the screen the
+      // sentence it renders.
+      expect(flat(card)).toContain(
+        'Single sign-on is part of the ${PLAN_LABELS.enterprise} plan.',
+      )
+      expect(flat(native)).toContain(
+        `Single sign-on is part of the ${PLAN_LABELS.enterprise} plan.`,
+      )
       sentences(card, flat(native), [
-        'Single sign-on is part of Enterprise.',
         'Add each email domain your team signs in with.',
         'We found a record but the value did not match. Seen:',
         'No matching TXT record yet — DNS can take a few minutes.',

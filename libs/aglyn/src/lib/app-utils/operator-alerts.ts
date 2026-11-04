@@ -722,6 +722,25 @@ export const CORE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
     defaultEnabled: true,
   },
   {
+    // An abuse ceiling, not a fault (AGL-4145): every other workspace's mail
+    // is unaffected, and the one that reached it is refused only until
+    // 00:00 UTC. Told once per workspace per day; the refusal count is on
+    // `orgs/{orgId}/counters/transactionalEmailsRefused`.
+    type: 'deliverability.transactionalCeilingReached',
+    label: 'A workspace reached its daily transactional email ceiling',
+    description:
+      'A workspace’s sites sent as many transactional emails today as its abuse ceiling allows, so the rest of today’s are refused until 00:00 UTC. Security mail still sends. Find out whether it is real traffic: if it is, raise that workspace’s ceiling with an override; if it is not, lock it.',
+    tier: 'should',
+    category: 'deliverability',
+    title: '{{orgName}} reached its daily transactional email ceiling',
+    body:
+      'Workspace {{orgName}} ({{orgId}}) has sent {{used}} transactional emails today against a ceiling of {{ceiling}} a day, so further ones are refused until 00:00 UTC. The first refused came from {{context}}. Security mail still sends. If this is real traffic, raise the ceiling with an override on the organization; if it is not, lock it on Staff → Lockdown (/admin/lockdown).',
+    link: '/admin/orgs/{{orgId}}',
+    delivery: 'immediate',
+    dedupeWindowMinutes: DAY,
+    defaultEnabled: true,
+  },
+  {
     type: 'deliverability.gatewayBlocking',
     label: 'A recipient gateway is blocking the shared domain',
     description:

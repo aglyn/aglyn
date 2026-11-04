@@ -205,6 +205,9 @@ export * from './upload-cors'
 export * from './docs-help'
 export * from './platform-brand'
 export * from './plan-entitlements'
+// Aglyn AI credits by the block (AGL-4144): the block and the arithmetic
+// `plan-entitlements` folds into the plan's included credits.
+export * from './ai-credit-blocks'
 // The free plan's bandwidth hard cap (AGL-1967/2070/2155). After
 // `plan-entitlements`, which owns the predicate it keys off.
 export * from './bandwidth-cap'

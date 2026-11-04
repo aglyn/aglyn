@@ -37,7 +37,6 @@ import {
   resolveOrgEntitlements,
   UNLIMITED,
   type AglynOrgBilling,
-  type AiTierId,
   type LockdownRefusalNotice,
   type OrgPlan,
 } from '@aglyn/aglyn'
@@ -79,7 +78,10 @@ import BillingAddonsCardComponent, {
   ADDON_LABELS,
   TOGGLE_ADDON_KINDS,
 } from '../../../../../components/billing/billing-addons-card.component'
-import { standingUpgradeProposal } from '@aglyn/aglyn/app-utils/upgrade-proposal'
+import {
+  billingPlanIntent,
+  standingUpgradeProposal,
+} from '@aglyn/aglyn/app-utils/upgrade-proposal'
 import { intentAddons } from '@aglyn/aglyn/app-utils/onboarding-deep-link'
 import {
   bundleAddonLabel,
@@ -287,13 +289,34 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
    * declined cannot be carried into a purchase as though it had worked.
    */
   const [appliedPromotionCode, setAppliedPromotionCode] = useState('')
+  const subscriptionStatus = org?.subscription?.status
+  // One list, in `org-billing-doc.ts` (AGL-1715). This decides whether Upgrade
+  // opens a Checkout or a proration preview, and `/api/billing/checkout`
+  // decides whether to allow the session — if the two ever disagree in that
+  // direction the page sends a subscribed org to checkout and the route lets
+  // it through, which is the duplicate subscription AGL-1697 closed.
+  const subscriptionActive = isLiveSubscriptionStatus(subscriptionStatus)
+  // The plan staff proposed (AGL-3466), while no subscription is live. Held
+  // on both reads for the reason `planWithoutSubscription` gives below: before
+  // the billing doc lands every paying org looks unsubscribed.
+  const upgradeProposal =
+    orgReady && orgBillingReady && !subscriptionActive
+      ? standingUpgradeProposal(org)
+      : null
   // The plan the visitor picked on the marketing site, if they arrived by a
-  // pricing CTA (AGL-1117). Read once off the URL: it preselects the toggle
-  // and emphasizes the matching card, and nothing here submits on its own.
+  // pricing CTA (AGL-1117), else the bundle staff proposed (AGL-4154), so an
+  // owner who opens Billing from the menu meets the proposed plan, cadence,
+  // add-ons and code just as the proposal's link would show them. It
+  // preselects the toggle and emphasizes the matching card, and nothing here
+  // submits on its own.
   const searchParams = useSearchParams()
+  // `standingUpgradeProposal` builds a fresh object on every render, so the
+  // intent is keyed by the proposal as stored.
+  const upgradeProposalKey = upgradeProposal ? JSON.stringify(upgradeProposal) : ''
   const planIntent = useMemo(
-    () => parseOnboardingPlanIntent(searchParams),
-    [searchParams],
+    () => billingPlanIntent(parseOnboardingPlanIntent(searchParams), upgradeProposal),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [searchParams, upgradeProposalKey],
   )
   /**
    * The add-ons the purchase carries (AGL-3955): preselected from the link
@@ -302,23 +325,6 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
    * because the quote prices and this page buys.
    */
   const [bundleAddons, setBundleAddons] = useState<BundleAddons>({})
-  /**
-   * The checkout body for a set of add-ons: the map, and the Aglyn AI tier
-   * when the AI add-on is in it. The tier starts on the one the link named
-   * (`?ai=boost`, or `ai:boost` in `addons=`, AGL-3965) and the owner can
-   * change it beside the quote's AI switch (AGL-4025); the switch is worded
-   * and priced as that tier, so the tier chosen is the one quoted and paid.
-   */
-  const linkAiTier = planIntent?.aiTier ?? null
-  const [aiTier, setAiTier] = useState<AiTierId | null>(linkAiTier)
-  useEffect(() => setAiTier(linkAiTier), [linkAiTier])
-  const withAiTier = useCallback(
-    (addons: BundleAddons) => ({
-      addons,
-      ...((addons.aiAddon ?? 0) > 0 && aiTier ? { aiTier } : {}),
-    }),
-    [aiTier],
-  )
   const intentAddonsKey = bundleAddonsParam(intentAddons(planIntent))
   useEffect(() => {
     setBundleAddons(intentAddons(planIntent))
@@ -373,9 +379,10 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
   /**
    * The plan the quote prices.
    *
-   * The one the visitor arrived intending, which is also the one the grid
-   * emphasizes — so the total on screen belongs to the card they are looking
-   * at. Null when nothing is being considered, and the quote renders nothing
+   * The one the visitor arrived intending, or the one staff proposed, which
+   * is also the one the grid emphasizes — so the total on screen belongs to
+   * the card they are looking at. Null when nothing is being considered, and
+   * the quote renders nothing
    * rather than pricing a plan nobody asked about: the preview is a Stripe
    * call, and making it on every billing page view would be a read nobody
    * requested.
@@ -495,13 +502,6 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
   const resolved = resolveOrgEntitlements(org)
   const fmtLimit = (n: number) =>
     n === UNLIMITED ? 'Unlimited' : n.toLocaleString()
-  const subscriptionStatus = org?.subscription?.status
-  // One list, in `org-billing-doc.ts` (AGL-1715). This decides whether Upgrade
-  // opens a Checkout or a proration preview, and `/api/billing/checkout`
-  // decides whether to allow the session — if the two ever disagree in that
-  // direction the page sends a subscribed org to checkout and the route lets
-  // it through, which is the duplicate subscription AGL-1697 closed.
-  const subscriptionActive = isLiveSubscriptionStatus(subscriptionStatus)
   /**
    * A PAID PLAN WITH NOTHING BEHIND IT — the state the grid had no word for.
    *
@@ -531,13 +531,6 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
    */
   const planWithoutSubscription =
     orgReady && orgBillingReady && plan !== 'free' && !subscriptionActive
-  // The plan staff proposed (AGL-3466), while no subscription is live. Held
-  // on both reads for the reason above: before the billing doc lands every
-  // paying org looks unsubscribed.
-  const upgradeProposal =
-    orgReady && orgBillingReady && !subscriptionActive
-      ? standingUpgradeProposal(org)
-      : null
   const showUpgradeProposal =
     !!upgradeProposal && permissionsLoaded && can('billing.manage')
   /**
@@ -910,10 +903,9 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
             promotionCode,
             // The add-ons the link or the quote's switches chose (AGL-2897,
             // AGL-3955), fitted to the plan being bought and quoted on the
-            // same invoice so the total shown is the total charged. The
-            // Aglyn AI tier the link named rides with the AI add-on
-            // (AGL-3965); absent, the route sells the plan's default tier.
-            ...withAiTier(fitBundleAddonsToPlan(bundleAddons, targetPlan).addons),
+            // same invoice so the total shown is the total charged. Aglyn AI
+            // credits ride as a number of blocks (AGL-4144).
+            addons: fitBundleAddonsToPlan(bundleAddons, targetPlan).addons,
           }),
         })
         const payload = await response.json().catch(() => ({}))
@@ -972,7 +964,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
         return null
       }
     },
-    [user, orgId, interval, bundleAddons, withAiTier, enqueueSnackbar],
+    [user, orgId, interval, bundleAddons, enqueueSnackbar],
   )
 
   /**
@@ -1115,8 +1107,8 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
             // the confirmed figure describe the same invoice.
             ...(pricedCode ? { promotionCode: pricedCode } : {}),
             // The same add-ons the quote above priced (AGL-2897, AGL-3955),
-            // with the same Aglyn AI tier (AGL-3965).
-            ...withAiTier(purchasedAddons),
+            // Aglyn AI credit blocks among them (AGL-4144).
+            addons: purchasedAddons,
             gaClientId: await readGaClientId(
               process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
             ),
@@ -1301,7 +1293,6 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
       orgSlug,
       interval,
       bundleAddons,
-      withAiTier,
       bundleDomain,
       router,
       appliedPromotionCode,
@@ -1577,8 +1568,9 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
               ? [{ size: { xs: 12 }, children: <OrgUpgradeProposalCard /> }]
               : []),
             // The quote, only when there is a plan to quote: `quotedPlan` is
-            // null on an ordinary visit — no `?plan=` — and an empty "What
-            // you will pay" box reads as a thing that failed to load.
+            // null on an ordinary visit — no `?plan=` and no standing
+            // proposal — and an empty "What you will pay" box reads as a
+            // thing that failed to load.
             //
             // FIRST, under the proposal (AGL-3955): a bundle link is opened on
             // a phone, at a booth, and the bundle with its total and its Pay
@@ -1637,8 +1629,6 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                         onAppliedCodeChange={setAppliedPromotionCode}
                         addons={bundleAddons}
                         onAddonsChange={setBundleAddons}
-                        aiTier={aiTier}
-                        onAiTierChange={setAiTier}
                         offered={linkAddonKinds}
                         onIntervalChange={setInterval}
                         initialCoupon={planIntent?.coupon ?? null}
@@ -2203,7 +2193,6 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
           plan={collectingForPlan}
           interval={interval}
           addons={bundleAddons}
-          aiTier={aiTier}
           orgId={orgId}
           profile={billingProfile}
           canManage={can('billing.manage')}

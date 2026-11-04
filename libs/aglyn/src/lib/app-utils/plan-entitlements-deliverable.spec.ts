@@ -60,12 +60,15 @@ describe('R3 holds for the plans we actually sell', () => {
    * empty.
    */
   it('CONTROL — the plans are real and the ceiling is not infinite', () => {
-    expect(SELF_SERVE_PLANS.length).toBeGreaterThan(3)
+    // Three self-serve plans since pricing v4 (AGL-4126), and campaign email
+    // is sold on one of them, Pro: named, so the loop above provably reads a
+    // positive band rather than a table of zeros.
+    expect(SELF_SERVE_PLANS).toEqual(['free', 'starter', 'pro'])
     expect(Number.isFinite(deliverable)).toBe(true)
     expect(
       SELF_SERVE_PLANS.filter(
         (plan) => PLAN_ENTITLEMENTS[plan].emailSendsPerMonth > 0,
-      ).length,
-    ).toBeGreaterThan(3)
+      ),
+    ).toEqual(['pro'])
   })
 })

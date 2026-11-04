@@ -43,7 +43,7 @@
  * writes them; the rules deny every client, staff included.
  */
 
-import type { AiTierId, OrgPlan } from '@aglyn/aglyn/server'
+import type { OrgPlan } from '@aglyn/aglyn/server'
 import {
   fitBundleAddonsToPlan,
   normalizeBundleDomain,
@@ -53,7 +53,6 @@ import {
 } from '@aglyn/aglyn/app-utils/bundle-intent'
 import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import { onboardingDestination } from '@aglyn/aglyn/app-utils/onboarding-deep-link'
-import { isAiTierId } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   isUpgradeProposalPlan,
   normalizeUpgradeProposalBundle,
@@ -121,8 +120,6 @@ export interface BundleLinkDoc {
     addons?: BundleAddons
     interval?: 'month' | 'year'
     coupon?: string
-    /** The Aglyn AI tier an `ai:<tier>` entry named (AGL-3965). */
-    aiTier?: AiTierId
   }
   domain?: BundleLinkDomain
 }
@@ -148,8 +145,8 @@ export interface MintBundleLinkOptions {
   interval?: unknown
   coupon?: unknown
   /**
-   * The Aglyn AI tier staff chose (AGL-4025), kept with the AI add-on; an
-   * `ai:<tier>` entry in `addons` names one too, and this wins when both do.
+   * A retired Aglyn AI tier (AGL-4025). Credits are sold by the block since
+   * AGL-4144 (`ai:<blocks>` in `addons`), so a link naming a tier is refused.
    */
   aiTier?: unknown
   /** The chosen domain, quoted from the registrar's search; optional. */
@@ -197,15 +194,17 @@ export async function mintBundleLink(options: MintBundleLinkOptions): Promise<Mi
     throw new BundleLinkError('Choose a paid plan the workspace can buy itself')
   }
   const plan: OrgPlan = options.plan
+  if (options.aiTier != null) {
+    throw new BundleLinkError(
+      'AI tiers were replaced by AI credit blocks. Choose a number of blocks instead.',
+    )
+  }
   const parsed = parseBundleAddons(options.addons)
   const fitted = fitBundleAddonsToPlan(parsed.addons, plan)
   const bundle = normalizeUpgradeProposalBundle(plan, {
     addons: fitted.addons,
     interval: options.interval,
     coupon: options.coupon,
-    // The tier staff chose (AGL-4025), or the one an `ai:<tier>` entry named
-    // (AGL-3965), kept with the AI add-on.
-    aiTier: isAiTierId(options.aiTier) ? options.aiTier : parsed.aiTier,
   })
   const intent: BundleLinkDoc['intent'] = { plan, ...bundle }
 

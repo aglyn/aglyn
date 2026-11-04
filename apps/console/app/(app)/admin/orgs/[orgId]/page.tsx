@@ -18,10 +18,10 @@
 
 import {
   aiAddonName,
-  aiTierName,
+  aiCreditBlocksLabel,
   checkDiscountMargin,
   hasAiAddon,
-  resolveAiTier,
+  resolveAiCreditBlocks,
   hasSiteCare,
   MARGIN_SCOPE_NOTE,
   netMarginRating,
@@ -1151,8 +1151,8 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
    * credit band, and the entitlements table names it beside that key.
    */
   const aiAddon = hasAiAddon(org)
-  // Which tier it is (AGL-3965), named on the chip beside the band it widens.
-  const aiTier = resolveAiTier(org)
+  // How many credit blocks (AGL-4144), named on the chip beside the band.
+  const aiBlocks = resolveAiCreditBlocks(org)
   /*
    * Whether the org has Site Care in force (AGL-3954), through the same
    * dead-subscription rule as the AI add-on. It raises no quota, so it has no
@@ -1686,8 +1686,8 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                                       aiAddon ? (
                                         <Chip
                                           label={
-                                            aiTier
-                                              ? aiTierName(aiTier)
+                                            aiBlocks
+                                              ? `${aiAddonName()} credits, ${aiCreditBlocksLabel(aiBlocks)}`
                                               : `${aiAddonName()} add-on`
                                           }
                                           size="small"

@@ -96,9 +96,18 @@ import type { AiWorkflowRunRead, AiWorkflowTarget } from './ai-workflow-records'
 
 const NOW = new Date('2026-09-16T20:00:00.000Z')
 const USAGE = { inputTokens: 900, outputTokens: 700, cacheReadTokens: 4_000, cacheWriteTokens: 0 }
-/** Pro: the actions builder and the CRM, and no webhooks. */
-const PRO = { plan: 'pro', billingStatus: 'active', enabledPlugins: ['workflows'] }
-const PRO_WITHOUT_CRM = { ...PRO, entitlements: { features: { crm: false } } }
+/**
+ * Pro with webhooks taken away: the actions builder and the CRM, and no
+ * webhooks. Pricing v4 (AGL-4126) put webhooks on Pro, so no plan sold has the
+ * builder without them, and the reach this file measures is written per org.
+ */
+const PRO = {
+  plan: 'pro',
+  billingStatus: 'active',
+  enabledPlugins: ['workflows'],
+  entitlements: { features: { webhooks: false } },
+}
+const PRO_WITHOUT_CRM = { ...PRO, entitlements: { features: { webhooks: false, crm: false } } }
 
 // ── Sentinels: what must never reach the model ───────────────────────────
 
@@ -451,7 +460,10 @@ describe('drafting an automation', () => {
     const outcome = await runStep()
     expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
     const reask = mockRunAiRequest.mock.calls[1][0].messages.at(-1).content
-    expect(reask).toContain('Step 4 (Send a webhook (Business)) needs webhooks, which this workspace does not have.')
+    // The step's catalog label names the plan it was gated at; the reask is
+    // read without it, since webhooks moved to Pro in pricing v4 (AGL-4126).
+    expect(reask).toContain('Step 4 (Send a webhook')
+    expect(reask).toContain('needs webhooks, which this workspace does not have.')
     expect(drafts[0].action.steps.map((one) => one.type)).toEqual(['enrollList', 'setContactStage', 'sendEmail'])
     expect(outcome.usage.outputTokens).toBe(USAGE.outputTokens * 2)
   })

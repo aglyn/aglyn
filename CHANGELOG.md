@@ -9,6 +9,64 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.9.0 — 2026-11-04
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.8.0...v1.9.0)
+
+### Added
+
+- **native:** plan screens list Free, Starter and Pro and name the top plan Custom ([AGL-4150](https://linear.app/aglyn/issue/AGL-4150))
+- **ios:** sign-up links sell Starter and Pro, the top plan reads Custom ([AGL-4150](https://linear.app/aglyn/issue/AGL-4150))
+- **android:** sign-up links sell Starter and Pro, the top plan reads Custom ([AGL-4150](https://linear.app/aglyn/issue/AGL-4150))
+- **console:** sell Free, Starter and Pro and name the top plan Custom ([AGL-4143](https://linear.app/aglyn/issue/AGL-4143))
+- **billing:** workflow and action runs past the bands bill at $0.02 per 1,000 ([AGL-4143](https://linear.app/aglyn/issue/AGL-4143))
+- **pricing:** pricing v4 plan catalog: Free, Starter, Pro and Custom ([AGL-4143](https://linear.app/aglyn/issue/AGL-4143))
+- **billing:** Aglyn AI credits are one add-on sold by the block ([AGL-4144](https://linear.app/aglyn/issue/AGL-4144))
+- **legal:** pin Legal v22, Terms 4.1 names Free, Starter, Pro and Custom ([AGL-4149](https://linear.app/aglyn/issue/AGL-4149))
+- **staff:** override a workspace's daily transactional ceiling ([AGL-4145](https://linear.app/aglyn/issue/AGL-4145))
+- **email:** a daily per-workspace ceiling on a site's transactional mail ([AGL-4145](https://linear.app/aglyn/issue/AGL-4145))
+- **crm-native:** Kotlin Log activity names who and what, roles, New contact opt-in ([AGL-4142](https://linear.app/aglyn/issue/AGL-4142))
+- **crm-native:** Apple Log activity names who and what, roles, New contact opt-in ([AGL-4142](https://linear.app/aglyn/issue/AGL-4142))
+- **crm:** Related To rows and contact role rules become pure modules the apps replay ([AGL-4142](https://linear.app/aglyn/issue/AGL-4142))
+
+### Fixed
+
+- **tenant:** internal redirects keep the query string without a 500 ([AGL-4153](https://linear.app/aglyn/issue/AGL-4153))
+- **billing:** a standing proposal's bundle and code are priced without its link ([AGL-4154](https://linear.app/aglyn/issue/AGL-4154))
+- **native:** automation steps name Pro on the webhook and custom JS steps ([AGL-4150](https://linear.app/aglyn/issue/AGL-4150))
+- **native:** the overage screen meters Pro's API requests, API keys name Pro ([AGL-4150](https://linear.app/aglyn/issue/AGL-4150))
+- **billing:** read the run counts off the declared bands, not the plugin's meters ([AGL-4143](https://linear.app/aglyn/issue/AGL-4143))
+- **console:** staff broadcast and coupon rating read the v4 plans ([AGL-4143](https://linear.app/aglyn/issue/AGL-4143))
+- **ai:** the live fidelity report finds a page's photos in its library ([AGL-4109](https://linear.app/aglyn/issue/AGL-4109))
+- **ai:** wave rows count the old page's own words, and say when they are in preview ([AGL-4084](https://linear.app/aglyn/issue/AGL-4084))
+- **ai:** an imported film's card keeps the source's width; words under it stay under ([AGL-4140](https://linear.app/aglyn/issue/AGL-4140), [AGL-4138](https://linear.app/aglyn/issue/AGL-4138))
+- **ai:** an imported page keeps each photo's size, so it is framed at its own shape ([AGL-4138](https://linear.app/aglyn/issue/AGL-4138))
+- **crm:** a mobile-only person every door writes is found by the mobile ([AGL-4122](https://linear.app/aglyn/issue/AGL-4122))
+- **crm:** a Properties card save keeps the mobile as the number a contact is found by ([AGL-4122](https://linear.app/aglyn/issue/AGL-4122))
+- **crm-native:** Apple Add contact opens from the record screen, in the form's own header ([AGL-4142](https://linear.app/aglyn/issue/AGL-4142))
+
+### Documentation
+
+- **pricing:** self-host price names and the v4 decision carry the AI block ([AGL-4143](https://linear.app/aglyn/issue/AGL-4143))
+- **pricing:** the docs describe pricing v4, four plans and AI credits by the block ([AGL-4148](https://linear.app/aglyn/issue/AGL-4148))
+
+<details>
+<summary>Also in this release: 4 test, 7 chore</summary>
+
+- **pricing:** the plan specs read v4's bands, with Starter as the bounded plan ([AGL-4143](https://linear.app/aglyn/issue/AGL-4143))
+- **native:** regenerate the staff screens' plan names, enterprise reads Custom ([AGL-4150](https://linear.app/aglyn/issue/AGL-4150))
+- **native:** an entitlement load names Pro as the plan with gift cards ([AGL-4150](https://linear.app/aglyn/issue/AGL-4150))
+- **pricing:** the feature matrix and the staff plan pickers name the Custom plan ([AGL-4143](https://linear.app/aglyn/issue/AGL-4143))
+- **workflows:** pin the Pro plan suffix on the webhook and custom-JS steps ([AGL-4143](https://linear.app/aglyn/issue/AGL-4143))
+- **pricing:** reconcile the pricing tables against the v4 Figma frames ([AGL-4143](https://linear.app/aglyn/issue/AGL-4143))
+- **pricing:** move the pricing v4 pins, Stripe script, tables and records ([AGL-4143](https://linear.app/aglyn/issue/AGL-4143))
+- **linear:** raise the id ceiling to AGL-4152 ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152), [AGL-4145](https://linear.app/aglyn/issue/AGL-4145), [AGL-4140](https://linear.app/aglyn/issue/AGL-4140))
+- **billing:** transactional sends reach the org cost meter ([AGL-4145](https://linear.app/aglyn/issue/AGL-4145))
+- **pricing:** the v4 Figma Pricing frames, extracted ([AGL-4148](https://linear.app/aglyn/issue/AGL-4148))
+- **crm-native:** Name, Related To, contact roles and the opt-in land on main ([AGL-4142](https://linear.app/aglyn/issue/AGL-4142))
+
+</details>
+
 ## v1.8.0 — 2026-11-03
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.7.0...v1.8.0)

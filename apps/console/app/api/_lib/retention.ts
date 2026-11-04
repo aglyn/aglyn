@@ -27,7 +27,10 @@
 // module is imported by a SERVER route, so the barrel dragged a client-only
 // module into a server graph. `app-router-graph.spec` caught it. The module
 // this actually wants has no React in it.
-import { SELF_SERVE_PLANS } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import {
+  PLAN_LADDER,
+  SELF_SERVE_PLANS,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
 import type { OrgPlan } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 
 /**
@@ -230,11 +233,18 @@ export function assertBoundedWinbackCoupon(coupon: WinbackCouponShape): void {
  * Paid-only is the margin constraint stated structurally: every paid tier's
  * list price covers its own floor, so any answer this returns is an org we
  * keep without losing money on.
+ *
+ * Sold-only since pricing v4 (AGL-4126): a workspace still on a retired plan
+ * is placed by `PLAN_LADDER` and offered the highest plan SOLD below it —
+ * Pro, from any of the four — never another retired one. A custom agreement
+ * is changed by talking to us, so it is offered nothing here, as before.
  */
 export function downsellTargetPlan(plan: string | null | undefined): OrgPlan | null {
-  if (!plan) return null
-  const index = SELF_SERVE_PLANS.indexOf(plan as OrgPlan)
-  // Index 0 is `free`; a paid downsell needs index >= 1 to land on.
-  if (index < 2) return null
-  return SELF_SERVE_PLANS[index - 1] ?? null
+  if (!plan || plan === 'enterprise') return null
+  const at = PLAN_LADDER.indexOf(plan as OrgPlan)
+  if (at < 0) return null
+  const below = PLAN_LADDER.slice(0, at).filter(
+    (tier) => SELF_SERVE_PLANS.includes(tier) && tier !== 'free',
+  )
+  return below[below.length - 1] ?? null
 }

@@ -414,11 +414,13 @@ export async function logAiAddonChanged(
   const before = aiAddonUnits(change.before)
   const after = aiAddonUnits(change.after)
   if (before === after) return false
+  // Credit blocks are a quantity (AGL-4144): more blocks is a purchase, fewer
+  // a removal, and the row names the count it moved between.
   await logOrgActivity(
     orgId,
     actor,
-    after === 1 ? AI_ACTIVITY_ACTIONS.addonPurchased : AI_ACTIVITY_ACTIONS.addonRemoved,
-    { type: 'subscription', name: aiAddonName() },
+    after > before ? AI_ACTIVITY_ACTIONS.addonPurchased : AI_ACTIVITY_ACTIONS.addonRemoved,
+    { type: 'subscription', name: `${aiAddonName()} credits (${before} → ${after} blocks)` },
   )
   return true
 }

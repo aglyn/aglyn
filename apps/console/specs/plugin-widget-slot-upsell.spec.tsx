@@ -107,8 +107,8 @@ jest.mock('@aglyn/aglyn', () => ({
 }))
 
 import {
-  aiTierQuotaPerUnit,
-  planSellsAiTiers,
+  aiCreditsQuotaPerUnit,
+  planSellsAiCredits,
   registerPluginEntitlements,
   resetPluginEntitlementsForTests,
 } from '@aglyn/aglyn'
@@ -163,8 +163,8 @@ beforeAll(() => {
         key: 'demoUpsellAddon',
         label: 'Demo add-on',
         maxUnits: 1,
-        quota: { key: 'demoUpsellQuota', perUnit: aiTierQuotaPerUnit },
-        soldOn: planSellsAiTiers,
+        quota: { key: 'demoUpsellQuota', perUnit: aiCreditsQuotaPerUnit },
+        soldOn: planSellsAiCredits,
         features: ['demoUpsell'],
       },
     ],

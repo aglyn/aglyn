@@ -341,7 +341,13 @@ describe('get — what the card reads', () => {
     mockDocs.set('orgs/org-1', { ...org('starter'), seatAddons: { aiAddon: 1 } })
     expect(
       await (await POST(post({ orgId: 'org-1', action: 'get' }))).json(),
-    ).toMatchObject({ bandCredits: 4_750, overageRateUsdPer1k: 3, sellsOverage: true })
+    ).toMatchObject({ bandCredits: 5_750, overageRateUsdPer1k: 3, sellsOverage: true })
+    // The band is the plan's 750 plus one 5,000-credit block (AGL-4144); a
+    // retired tier on the document widens nothing.
+    mockDocs.set('orgs/org-1', { ...org('starter'), seatAddons: { aiAddon: 1 }, aiTier: 'studio' })
+    expect(
+      await (await POST(post({ orgId: 'org-1', action: 'get' }))).json(),
+    ).toMatchObject({ bandCredits: 5_750 })
     // THE CONTROL: bare Starter, which used to be the divergent half.
     mockDocs.set('orgs/org-1', org('starter'))
     expect(

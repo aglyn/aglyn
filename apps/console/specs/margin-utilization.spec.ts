@@ -198,15 +198,15 @@ describe('the bands are real, and the plan is what selects them', () => {
         'workflowRuns',
         'actionRuns',
       ],
-      // API access is Business-and-above; campaign email and action runs are
-      // Pro-and-above. Assist credits are NOT: every plan sells a band since
+      // API access, campaign email and action runs are Pro-and-above (the API
+      // moved down from Business with pricing v4, AGL-4126). Assist credits are NOT: every plan sells a band since
       // AGL-3203 gave Starter 750, so `assistCredits` is absent from every
       // list here. Starter sells workflow runs but no actions, and its email
       // band is 0 for the same reason Free's is — sending campaigns needs a
       // per-site verified sending domain, so the allowance starts at the
       // tier that carries that cost.
       starter: ['apiRequests', 'emailSends', 'actionRuns'],
-      pro: ['apiRequests'],
+      pro: [],
       business: [],
       scale: [],
       advanced: [],
@@ -590,15 +590,18 @@ describe('the realised margin', () => {
   it('falls as utilization rises — the whole point of measuring it', () => {
     const at = (utilization: number) =>
       orgMarginRow({
-        orgId: 'pro-1',
-        org: orgOn('pro') as never,
+        orgId: 'starter-1',
+        org: orgOn('starter') as never,
         month: '2026-07',
-        rollup: rollupAt('pro', utilization),
+        rollup: rollupAt('starter', utilization),
       }).marginPct as number
     const ladder = [0.03, 0.25, 0.5, 1].map(at)
     expect(ladder).toEqual([...ladder].sort((a, b) => b - a))
     // …and it really does fall to a thin number, so the surface can find
-    // one. 71% on Pro at the monthly price, over the metered axes alone,
+    // one. Starter is the thin rung since pricing v4 (AGL-4126) raised Pro's
+    // price and kept its bands (Pro at 100% reads 76% monthly now), so the
+    // measurement is taken there: under 75% at the monthly price, over the
+    // metered axes alone,
     // which price a page view at its weight; the whole-plan figure at the
     // annual price, with the CRM terms and the CDN requests counted, is about
     // 23% (`tier-margin-floor.spec.ts`).
@@ -778,9 +781,9 @@ describe('the fleet distribution', () => {
 
   it('names the orgs under the margin floor and the ones underwater', () => {
     const fleet = fleetUtilization([
-      rowFor('pro', 0.03, 'healthy'),
-      rowFor('pro', 1, 'thin'),
-      rowFor('pro', 4, 'bleeding'),
+      rowFor('starter', 0.03, 'healthy'),
+      rowFor('starter', 1, 'thin'),
+      rowFor('starter', 4, 'bleeding'),
     ])
     expect(fleet.orgsUnderFloor).toBe(2)
     expect(fleet.orgsUnderwater).toBe(1)

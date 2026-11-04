@@ -67,6 +67,9 @@ data class WorkspaceOrgLogo(
   /** The workspace's own release-flag overrides (`releaseFlags`), which win over the published values. */
   val releaseFlags: Map<String, Any?>? = null,
 ) {
+  /** The plan as the console names it ("Pro"; `enterprise` reads "Custom"). */
+  val planLabel: String? get() = plan?.let { OnboardingPlanIntent.labelOf(it) }
+
   companion object {
     fun from(data: Map<String, Any?>?): WorkspaceOrgLogo = WorkspaceOrgLogo(
       light = (data?.get("logoUrl") as? String)?.ifBlank { null },

@@ -13,6 +13,18 @@
         "/billing",
         "/billing/plans"
       ],
+      "constants": {
+        "labels": {
+          "free": "Free",
+          "starter": "Starter",
+          "pro": "Pro",
+          "business": "Business",
+          "scale": "Scale",
+          "advanced": "Advanced",
+          "agency": "Agency",
+          "enterprise": "Custom"
+        }
+      },
       "load": {
         "org": {
           "doc": "orgs/{org.id}"
@@ -51,7 +63,7 @@
           "type": "notice",
           "tone": "info",
           "when": "data.billing.subscription.pendingDowngrade",
-          "text": "Moving to {data.billing.subscription.pendingDowngrade.plan:title} at the end of this period."
+          "text": "Moving to {const.labels[@data.billing.subscription.pendingDowngrade.plan]|data.billing.subscription.pendingDowngrade.plan:title} at the end of this period."
         },
         {
           "type": "fields",
@@ -59,7 +71,7 @@
           "rows": [
             {
               "label": "Plan",
-              "value": "{data.billing.plan|data.org.plan|'Free':title}",
+              "value": "{const.labels[@data.billing.plan]|const.labels[@data.org.plan]|data.billing.plan|data.org.plan|'Free':title}",
               "chip": true,
               "tone": "info"
             },
@@ -473,26 +485,6 @@
             "id": "pro",
             "label": "Pro",
             "blurb": "3 sites, 3 team members, 5 datasets"
-          },
-          {
-            "id": "business",
-            "label": "Business",
-            "blurb": "10 sites, 5 team members, 10 datasets"
-          },
-          {
-            "id": "scale",
-            "label": "Scale",
-            "blurb": "15 sites, 5 team members, 15 datasets"
-          },
-          {
-            "id": "advanced",
-            "label": "Advanced",
-            "blurb": "25 sites, 10 team members, 25 datasets"
-          },
-          {
-            "id": "agency",
-            "label": "Agency",
-            "blurb": "100 sites, 10 team members, 50 datasets"
           }
         ],
         "labels": {
@@ -503,7 +495,7 @@
           "scale": "Scale",
           "advanced": "Advanced",
           "agency": "Agency",
-          "enterprise": "Enterprise"
+          "enterprise": "Custom"
         },
         "limits": {
           "free": {
@@ -549,11 +541,7 @@
         },
         "aiTiersSold": {
           "starter": true,
-          "pro": true,
-          "business": true,
-          "scale": true,
-          "advanced": true,
-          "agency": true
+          "pro": true
         }
       },
       "load": {

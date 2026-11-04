@@ -175,52 +175,47 @@ describe('minting a bundle link (AGL-3955)', () => {
     ])
   })
 
-  it('keeps the Aglyn AI tier an `ai:<tier>` entry names, on the record and the link (AGL-3965)', async () => {
-    const minted = await mint({ addons: 'siteCare,ai:studio' })
+  it('carries Aglyn AI credits as a number of blocks, on the record and the link (AGL-4144)', async () => {
+    const minted = await mint({ addons: 'siteCare,ai:3' })
     expect(minted.url).toBe(
-      'https://app.aglyn.test/acme/billing?plan=starter&interval=year&addons=ai:studio,siteCare&coupon=BOOTH25',
-    )
-    expect(minted.intent).toMatchObject({ addons: { aiAddon: 1, siteCare: 1 }, aiTier: 'studio' })
-    expect(links()[0]).toMatchObject({ intent: { aiTier: 'studio' } })
-  })
-
-  it('writes the tier staff picked as `ai:<tier>`, and Billing reads it back (AGL-4025)', async () => {
-    // The staff card posts its switches as a map and the tier beside them.
-    const minted = await mint({ addons: { siteCare: 1, aiAddon: 1 }, aiTier: 'plus' })
-    expect(minted.url).toBe(
-      'https://app.aglyn.test/acme/billing?plan=starter&interval=year&addons=ai:plus,siteCare&coupon=BOOTH25',
+      'https://app.aglyn.test/acme/billing?plan=starter&interval=year&addons=ai:3,siteCare&coupon=BOOTH25',
     )
     expect(minted.intent).toEqual({
       plan: 'starter',
-      addons: { aiAddon: 1, siteCare: 1 },
+      addons: { aiAddon: 3, siteCare: 1 },
       interval: 'year',
       coupon: 'BOOTH25',
-      aiTier: 'plus',
     })
-    expect(links()[0]).toMatchObject({ intent: { aiTier: 'plus' } })
-    expect(audits()[0]).toMatchObject({ after: { intent: { aiTier: 'plus' } } })
-    // What the owner's Billing page parses off that link: the same tier.
+    expect(links()[0]).toMatchObject({ intent: { addons: { aiAddon: 3 } } })
+    expect(audits()[0]).toMatchObject({ after: { intent: { addons: { aiAddon: 3 } } } })
+    // What the owner's Billing page parses off that link: the same blocks.
     expect(parseOnboardingPlanIntent(new URL(minted.url).searchParams)).toMatchObject({
       plan: 'starter',
       interval: 'year',
       ai: true,
-      aiTier: 'plus',
-      addons: { siteCare: 1, aiAddon: 1 },
+      addons: { siteCare: 1, aiAddon: 3 },
       coupon: 'BOOTH25',
+    })
+    // The staff card posts its counts as a map, held to the 30-block ceiling.
+    expect((await mint({ addons: { siteCare: 1, aiAddon: 45 } })).intent.addons).toEqual({
+      siteCare: 1,
+      aiAddon: 30,
     })
   })
 
-  it('the picked tier wins over an `ai:<tier>` entry; an unknown one or no AI add-on carries none (AGL-4025)', async () => {
-    expect((await mint({ addons: 'siteCare,ai:studio', aiTier: 'boost' })).intent.aiTier).toBe('boost')
-    // Not a tier: the entry's tier stands, and without one the link sells the default.
-    expect((await mint({ addons: 'siteCare,ai:studio', aiTier: 'gold' })).intent.aiTier).toBe('studio')
-    const unnamed = await mint({ addons: 'siteCare,ai', aiTier: 'gold' })
-    expect(unnamed.intent.aiTier).toBeUndefined()
-    expect(unnamed.url).toContain('addons=ai,siteCare')
-    // A tier with Aglyn AI switched off is not sold.
-    const off = await mint({ addons: { siteCare: 1 }, aiTier: 'plus' })
-    expect(off.intent.aiTier).toBeUndefined()
-    expect(off.url).toContain('addons=siteCare&')
+  it('refuses a retired Aglyn AI tier, as a field or as an entry (AGL-4144)', async () => {
+    // A tier field is refused before anything is written: the link would
+    // otherwise sell blocks at a price the staff member never quoted.
+    await expect(mint({ addons: { siteCare: 1, aiAddon: 1 }, aiTier: 'plus' })).rejects.toBeInstanceOf(
+      BundleLinkError,
+    )
+    expect(links()).toEqual([])
+    expect(audits()).toEqual([])
+    // An `ai:<tier>` entry is no number of blocks: left off and reported.
+    const entry = await mint({ addons: 'siteCare,ai:studio' })
+    expect(entry.intent.addons).toEqual({ siteCare: 1 })
+    expect(entry.droppedAddons).toEqual(['ai:studio'])
+    expect(entry.intent).not.toHaveProperty('aiTier')
   })
 
   it('refuses a plan nobody buys through checkout, and a workspace that already pays', async () => {

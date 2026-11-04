@@ -179,7 +179,7 @@ struct CrmRowView: View {
 }
 
 private enum RecordAction: String, Identifiable {
-  case edit, delete, log, email, task, status, unqualify, convert, stage, move, won, lost
+  case edit, delete, log, email, task, status, unqualify, convert, stage, move, won, lost, addRole
   var id: String { rawValue }
   /// A one-sentence confirmation with nothing to fill in: an alert, never a sheet (HIG alerts).
   var confirmsInAlert: Bool { self == .delete || self == .won }
@@ -305,6 +305,11 @@ struct RecordDetail: View {
         }
       }
       relatedSection(row)
+      if kind == .deal || kind == .company {
+        ContactRolesSection(
+          context: context, kind: kind, id: id, data: document.data, scope: scope, api: api, reference: reference,
+          onAdd: { action = .addRole }, onNotice: { notice = $0 }, onError: { error = $0 })
+      }
       if kind != .lead {
         Section("Open tasks") {
           if tasks.rows.isEmpty { Text(tasks.ready ? "Nothing to do here." : "Loading…").foregroundStyle(.secondary) }
@@ -485,8 +490,12 @@ struct RecordDetail: View {
         done("\(kind.singular) saved.")
       }
     case .log:
-      LogActivitySheet { activityKind, body, outcome, minutes, direction in
-        try await api.logActivity(kind: activityKind, body: body, links: activityLinks(row), outcome: outcome, minutes: minutes, direction: direction)
+      LogActivitySheet(
+        reader: context.firestore, scope: scope, reference: reference, start: activityPicks(row), deal: kind == .deal ? row.data : nil,
+        known: activityKnownLabels(row)
+      ) { activityKind, body, outcome, minutes, direction, picks in
+        let links = picks.map { crmActivityLinkFromPicks($0) } ?? [kind.linkField: id]
+        try await api.logActivity(kind: activityKind, body: body, links: links, outcome: outcome, minutes: minutes, direction: direction)
         done("Logged.")
       }
     case .email:
@@ -537,17 +546,38 @@ struct RecordDetail: View {
         try await api.convertLead(id, draft)
         done("\(row.title) is converted.")
       }
+    case .addRole:
+      let roles = contactRolesOf(kind, row.data)
+      AddContactRoleSheet(
+        noun: kind.singular.lowercased(), roles: roles, contacts: reference.contacts,
+        roleLabels: reference.picklists.labels(crmContactRolePicklist)
+      ) { contactID, role, primary in
+        try await saveContactRoles(
+          kind, id, row.data, contactRolesAdded(roles, contactID: contactID, role: role, primary: primary), api: api, reference: reference)
+        done("Contact added.")
+      }
     case .delete, .won:
       // Confirmed in an alert (see `confirmsInAlert`), never a sheet.
       EmptyView()
     }
   }
 
-  private func activityLinks(_ row: CrmRow) -> [String: String] {
-    var links = [kind.linkField: id]
-    if kind == .deal || kind == .contact, let company = row.data["companyId"] as? String, !company.isEmpty { links["companyId"] = company }
-    if kind == .deal, let contact = row.data["contactId"] as? String, !contact.isEmpty { links["contactId"] = contact }
-    return links
+  /// What Name and Related To open on (`crmActivityPicksFrom`): the record itself, and on a deal its Primary as Name.
+  /// Nil for a lead's own log, which offers neither: a lead is the entry's only link until it converts.
+  private func activityPicks(_ row: CrmRow) -> CrmActivityPicks? {
+    guard kind != .lead else { return nil }
+    let primary = kind == .deal ? contactRolesPrimary(dealContactRolesOf(row.data)) : nil
+    return crmActivityPicksFrom([kind.linkField: id], primaryContactID: primary)
+  }
+
+  /// The record's own name, for a field that opens on it while the reference's windows do not hold it.
+  private func activityKnownLabels(_ row: CrmRow) -> [String: String] {
+    switch kind {
+    case .contact: [id: row.title]
+    case .company: [CrmRelated(kind: .company, id: id).key: row.title]
+    case .deal: [CrmRelated(kind: .deal, id: id).key: row.title]
+    case .lead: [:]
+    }
   }
 
   private func taskDraft(_ row: CrmRow) -> TaskDraft {
@@ -625,14 +655,29 @@ struct DealStagePath: View {
 
 // MARK: Sheets
 
-struct EditRecordSheet: View {
+struct EditRecordSheet<Footer: View>: View {
   let title: String
   let fields: [CrmField]
   let initial: [String: String]
   var confirm = "Save"
+  /// What the form asks below its fields that is not a field of the record (New contact's opt-in), reading and writing
+  /// the same values.
+  let footer: (Binding<[String: String]>) -> Footer
   let save: ([String: String]) async throws -> Void
   @State private var values: [String: String] = [:]
   @State private var tried = false
+
+  init(
+    title: String, fields: [CrmField], initial: [String: String], confirm: String = "Save",
+    @ViewBuilder footer: @escaping (Binding<[String: String]>) -> Footer, save: @escaping ([String: String]) async throws -> Void
+  ) {
+    self.title = title
+    self.fields = fields
+    self.initial = initial
+    self.confirm = confirm
+    self.footer = footer
+    self.save = save
+  }
 
   var body: some View {
     let problems = fieldProblems(fields.map(\.spec), values)
@@ -642,8 +687,41 @@ struct EditRecordSheet: View {
       try await save(values)
     }) {
       FieldFormSection(specs: fields.map(\.spec), values: $values, errors: tried ? problems : [:])
+      footer($values)
     }
     .onAppear { if values.isEmpty { values = initial } }
+  }
+}
+
+extension EditRecordSheet where Footer == EmptyView {
+  init(
+    title: String, fields: [CrmField], initial: [String: String], confirm: String = "Save",
+    save: @escaping ([String: String]) async throws -> Void
+  ) {
+    self.init(title: title, fields: fields, initial: initial, confirm: confirm, footer: { _ in EmptyView() }, save: save)
+  }
+}
+
+/// New contact's marketing opt-in (the console's drawer): a box worded as the person's own act, off and saying why
+/// until the form has an address, with the consent group's sentence and what no source site means beside it.
+struct ContactConsentBox: View {
+  @Binding var values: [String: String]
+  /// The group the opt-in is recorded for: the source site's, or nil with none, which records it on every site.
+  let group: ConsentGroup?
+
+  var body: some View {
+    let hasEmail = !(values["email"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    Section {
+      Toggle(
+        "This person opted in to marketing email",
+        isOn: Binding(get: { hasEmail && values[contactConsentKey] == "true" }, set: { values[contactConsentKey] = $0 ? "true" : "false" })
+      )
+      .toggleStyle(.aglynCheckbox)
+      .disabled(!hasEmail)
+      .accessibilityIdentifier("crm-contact-consent")
+    } footer: {
+      Text(contactConsentHelp(hasEmail: hasEmail, group: group)).accessibilityIdentifier("crm-contact-consent-help")
+    }
   }
 }
 
@@ -689,20 +767,58 @@ struct ReasonSheet: View {
   }
 }
 
+/// Log a call, a note or anything else (the console's log dialog): what happened, and **Name** and **Related To**, who
+/// it was with and the deal or company it is about. Opened from a deal, Name starts on its Primary and its contact roles
+/// lead the list; Related To leads with the open deals of the person and the company on the entry.
 struct LogActivitySheet: View {
-  let save: (String, String, String?, Int?, String?) async throws -> Void
+  let reader: FirestoreReader
+  let scope: CrmScope
+  let reference: CrmReference
+  /// What the fields open on; nil for a lead's own log, which offers neither.
+  let start: CrmActivityPicks?
+  /// The deal the sheet was opened on, whose contact roles lead Name.
+  var deal: [String: Any]?
+  /// Names for the records the fields open on, which the reference's windows may not hold.
+  var known: [String: String] = [:]
+  let save: (String, String, String?, Int?, String?, CrmActivityPicks?) async throws -> Void
   @State private var kind = "note"
   @State private var text = ""
   @State private var outcome = ""
   @State private var minutes = ""
   @State private var direction = ""
+  @State private var picks: CrmActivityPicks?
+  @State private var linked: [FirestoreDocument] = []
+
+  private var current: CrmActivityPicks? { picks ?? start }
+
+  /// The company whose open deals lead Related To: the one it names, else the record's.
+  private var dealsCompany: String? {
+    if let related = current?.related, related.kind == .company { return related.id }
+    return start?.related?.kind == .company ? start?.related?.id : nil
+  }
+
+  private var nameOptions: [CrmPickOption] {
+    let pinned = (deal.map(dealContactRolesOf) ?? []).map {
+      CrmPickOption(key: $0.contactID, label: reference.contactLabel($0.contactID) ?? known[$0.contactID] ?? "Contact", group: "")
+    }
+    return crmNameOptions(pinned: pinned, contacts: reference.contacts)
+  }
+
+  private var relatedOptions: [CrmPickOption] {
+    crmRelatedToOptions(
+      linkedDeals: linked, deals: reference.deals,
+      companies: reference.companies.map { FirestoreDocument(id: $0.value, data: ["name": $0.label]) })
+  }
 
   var body: some View {
     let kinds = ContractValues.shared.nativeCrmActivityKinds.filter { $0 != "email" }
     let directions = ContractValues.shared.nativeCrmActivityDirections[kind] ?? []
-    AglynFormSheet("Log activity", confirm: "Log", canConfirm: !text.trimmingCharacters(in: .whitespaces).isEmpty, save: {
-      try await save(kind, text, outcome.isEmpty ? nil : outcome, Int(minutes), direction.isEmpty ? nil : direction)
-    }) {
+    let picks = current
+    let linkedOK = picks?.linked ?? true
+    AglynFormSheet(
+      "Log activity", confirm: "Log", canConfirm: !text.trimmingCharacters(in: .whitespaces).isEmpty && linkedOK,
+      save: { try await save(kind, text, outcome.isEmpty ? nil : outcome, Int(minutes), direction.isEmpty ? nil : direction, picks) }
+    ) {
       Section {
         Picker("Kind", selection: $kind) {
           ForEach(kinds, id: \.self) { Text(ContractValues.shared.crmActivityKindLabels[$0] ?? $0).tag($0) }
@@ -725,6 +841,24 @@ struct LogActivitySheet: View {
           }
         }
       }
+      if let picks {
+        Section {
+          CrmPickerField(
+            "Name", options: nameOptions, selected: picks.contactID,
+            selectedLabel: picks.contactID.flatMap { reference.contactLabel($0) ?? known[$0] } ?? "Contact", identifier: "activity-name"
+          ) { self.picks = CrmActivityPicks(contactID: $0, related: picks.related) }
+          CrmPickerField(
+            "Related To", options: relatedOptions, selected: picks.related?.key,
+            selectedLabel: picks.related.map { known[$0.key] ?? ($0.kind == .deal ? "Deal" : "Company") }, identifier: "activity-related"
+          ) { self.picks = CrmActivityPicks(contactID: picks.contactID, related: $0.flatMap(CrmRelated.init(key:))) }
+        } footer: {
+          if !picks.linked { Text("Name a contact, or what this is related to.").foregroundStyle(AglynColor.error) }
+        }
+      }
+    }
+    .task(id: "\(picks?.contactID ?? "")|\(dealsCompany ?? "")") {
+      guard start != nil else { return }
+      linked = await crmLinkedDeals(reader, scope, contactID: picks?.contactID, companyID: dealsCompany)
     }
   }
 }
@@ -848,6 +982,13 @@ struct CreateRecordSheet: View {
   @State private var pipelineID = ""
   @State private var stageID = ""
 
+  /// The group a new contact's opt-in is recorded for (the console's `createGroup`): the site's, or at the workspace's
+  /// level the source site's; nil with none, where the route records it on every site.
+  private func consentGroup(_ values: [String: String]) -> ConsentGroup? {
+    let site = scope.orgLevel ? values[crmSiteFieldKey].flatMap { $0.isEmpty ? nil : $0 } : scope.createHostID
+    return site.map { consentGroupForHost(scope.org, $0) }
+  }
+
   var body: some View {
     // At the workspace's level a new record names its site in its own form; none is an answer unless the workspace
     // keeps its sites apart.
@@ -858,6 +999,8 @@ struct CreateRecordSheet: View {
       title: "New \(kind.singular.lowercased())", fields: fields, initial: ["ownerUid": scope.uid, crmSiteFieldKey: startSite ?? ""],
       confirm: "Create"
     ) { values in
+      if kind == .contact { ContactConsentBox(values: values, group: consentGroup(values.wrappedValue)) }
+    } save: { values in
       if kind == .contact, !crmContactIdentified(values) {
         throw ConsoleAPIError(status: 400, message: "Enter a name, an email or a phone number.")
       }
@@ -867,7 +1010,10 @@ struct CreateRecordSheet: View {
       let created = createdFields(fields, values)
       var id: String?
       switch kind {
-      case .contact: id = try await api.createContact(created)
+      case .contact:
+        var fields = created
+        for (key, value) in contactConsentFields(values, group: consentGroup(values)) { fields[key] = value }
+        id = try await api.createContact(fields)
       case .lead: id = try await api.createLead(created)
       case .company: id = try await api.createRecord(kind, created, extra: ["contactsCount": 0])
       case .deal:

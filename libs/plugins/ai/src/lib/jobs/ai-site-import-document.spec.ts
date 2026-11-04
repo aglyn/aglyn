@@ -228,6 +228,24 @@ describe('the page input', () => {
     expect(aiSiteImportDocumentOf({ [AI_LAYOUT_IMPORTED_SECTIONS_INPUT]: doc })?.blocks).toEqual(doc.blocks)
     expect(aiSiteImportDocumentOf({ importedPage: { url: 'x', text: 'y' } })).toBeNull()
   })
+
+  it('keeps each photo’s size, which frames a picture whose tag gives none at its own shape (AGL-4138)', () => {
+    const doc = aiSiteImportDocumentOf({
+      [AI_LAYOUT_IMPORTED_SECTIONS_INPUT]: {
+        build: 'arranged',
+        title: 'Home',
+        blocks: [{ kind: 'paragraph', text: 'Hello' }],
+        photos: [
+          { mediaId: 'm1', src: 'media:host/m1', from: 'https://a.example/poster.jpg', width: 1920, height: 1080, alt: 'The film' },
+          { mediaId: 'm2', src: 'media:host/m2', width: '640', height: -1 },
+        ],
+      },
+    })
+    expect(doc?.photos).toEqual([
+      { mediaId: 'm1', src: 'media:host/m1', width: 1920, height: 1080, alt: 'The film', from: 'https://a.example/poster.jpg' },
+      { mediaId: 'm2', src: 'media:host/m2' },
+    ])
+  })
 })
 
 

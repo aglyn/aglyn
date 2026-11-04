@@ -19,7 +19,7 @@ you from a data model to dynamic pages — and, optionally, the API.
 5. **[Bindings, variables & functions](/building-sites/bindings/overview)** — pull
    live values into your content.
 6. **[Read & write over the API](/api/resources/datasets)** — manage records
-   programmatically (Business plan).
+   programmatically (Pro plan).
 
 ## Next
 

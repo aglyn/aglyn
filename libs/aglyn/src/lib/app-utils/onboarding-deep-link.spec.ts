@@ -100,12 +100,12 @@ describe('onboardingDestination', () => {
   it('carries a paid plan through to billing', () => {
     expect(
       onboardingDestination('acme', {
-        plan: 'business',
+        plan: 'starter',
         interval: 'year',
         intervalStated: true,
         contactSales: false,
       }),
-    ).toBe('/acme/billing?plan=business&interval=year')
+    ).toBe('/acme/billing?plan=starter&interval=year')
   })
 
   it('sends enterprise to support, not billing', () => {
@@ -154,14 +154,16 @@ describe('an interval the link never stated (AGL-1535)', () => {
     // This is the whole bug: `?plan=scale` became `…&interval=month` at the
     // first hop, and the billing page — which deliberately only lets a stated
     // interval move its toggle — could no longer tell that nobody had said.
-    const intent = parseOnboardingPlanIntent(query('plan=scale'))
-    expect(onboardingPlanQuery(intent)).toBe('plan=scale')
-    expect(onboardingDestination('acme', intent)).toBe('/acme/billing?plan=scale')
+    // Read on Starter since pricing v4 (AGL-4126): Scale is retired, and its
+    // link carries no intent at all.
+    const intent = parseOnboardingPlanIntent(query('plan=starter'))
+    expect(onboardingPlanQuery(intent)).toBe('plan=starter')
+    expect(onboardingDestination('acme', intent)).toBe('/acme/billing?plan=starter')
   })
 
   it('round-trips a stated interval unchanged', () => {
-    const intent = parseOnboardingPlanIntent(query('plan=scale&interval=annual'))
-    expect(onboardingPlanQuery(intent)).toBe('plan=scale&interval=year')
+    const intent = parseOnboardingPlanIntent(query('plan=starter&interval=annual'))
+    expect(onboardingPlanQuery(intent)).toBe('plan=starter&interval=year')
     expect(parseOnboardingPlanIntent(query(onboardingPlanQuery(intent)))).toEqual(
       intent,
     )
@@ -171,14 +173,16 @@ describe('an interval the link never stated (AGL-1535)', () => {
 describe('onboardingSignupHref — the CTA the marketing site publishes (AGL-1989)', () => {
   const SIGNUP = 'https://app.aglyn.com/signup'
   /**
-   * The three tiers in the /pricing "Need more scale?" strip, which is the
-   * table whose CHOOSE links shipped with no interval on either tab.
+   * The paid plans the pricing page sells. The bug was found on the three
+   * tiers of the /pricing "Need more scale?" strip — Scale, Advanced, Agency —
+   * whose CHOOSE links shipped with no interval on either tab; pricing v4
+   * (AGL-4126) retired all three, so the rule is held on the paid plans sold.
    */
-  const SCALE_STRIP = ['scale', 'advanced', 'agency'] as const
+  const SCALE_STRIP = ['starter', 'pro'] as const
 
-  it('states the interval for every tier the scale strip quotes', () => {
+  it('states the interval for every paid tier the page quotes', () => {
     // The published links were `?plan=scale`, `?plan=advanced`, `?plan=agency`
-    // — on the Annual tab too. Naming all three because a fix that repairs one
+    // — on the Annual tab too. Naming every one because a fix that repairs one
     // reads as done.
     for (const plan of SCALE_STRIP) {
       expect(onboardingSignupHref(SIGNUP, plan, 'year')).toBe(
@@ -205,11 +209,16 @@ describe('onboardingSignupHref — the CTA the marketing site publishes (AGL-198
         })
       }
     }
+    // …and a retired tier's old link carries no intent at all (pricing v4).
+    for (const plan of ['scale', 'advanced', 'agency', 'business'] as const) {
+      const href = onboardingSignupHref(SIGNUP, plan, 'year')
+      expect(parseOnboardingPlanIntent(new URL(href).searchParams)).toBeNull()
+    }
   })
 
   it('omits the interval entirely when the CTA does not commit to one', () => {
-    const href = onboardingSignupHref(SIGNUP, 'scale', null)
-    expect(href).toBe(`${SIGNUP}?plan=scale`)
+    const href = onboardingSignupHref(SIGNUP, 'pro', null)
+    expect(href).toBe(`${SIGNUP}?plan=pro`)
     expect(parseOnboardingPlanIntent(new URL(href).searchParams)?.intervalStated).toBe(
       false,
     )
@@ -269,6 +278,27 @@ describe('the Aglyn AI add-on rides the same link (AGL-2897)', () => {
     }
   })
 
+  it('reads ai=<n> as that many credit blocks, held to 30 (AGL-4144)', () => {
+    expect(parseOnboardingPlanIntent(query('plan=pro&ai=3'))).toMatchObject({
+      ai: true,
+      addons: { aiAddon: 3 },
+    })
+    expect(parseOnboardingPlanIntent(query('plan=pro&ai=99'))?.addons).toEqual({ aiAddon: 30 })
+    // One block is the bare flag, as every published CTA writes it.
+    expect(parseOnboardingPlanIntent(query('plan=pro&ai=1'))?.addons).toBeUndefined()
+    const three = parseOnboardingPlanIntent(query('plan=pro&interval=year&ai=3'))!
+    expect(onboardingPlanQuery(three)).toBe('plan=pro&interval=year&ai=3')
+  })
+
+  it('reads a retired tier name on ai= as no add-on at all (AGL-4144)', () => {
+    for (const tier of ['spark', 'boost', 'plus', 'max', 'ultra', 'studio']) {
+      const intent = parseOnboardingPlanIntent(query(`plan=pro&ai=${tier}`))
+      expect(intent).not.toBeNull()
+      expect('ai' in (intent ?? {})).toBe(false)
+      expect(intent).not.toHaveProperty('aiTier')
+    }
+  })
+
   it('never rides an enterprise link — the add-on is quoted with the deal', () => {
     const intent = parseOnboardingPlanIntent(query('plan=enterprise&ai=1'))
     expect(intent?.contactSales).toBe(true)
@@ -297,6 +327,16 @@ describe('the Aglyn AI add-on rides the same link (AGL-2897)', () => {
     )
     expect(onboardingSignupHref(SIGNUP, 'pro', 'year')).toBe(
       `${SIGNUP}?plan=pro&interval=year`,
+    )
+    // A count of credit blocks (AGL-4144), held to the ceiling.
+    expect(onboardingSignupHref(SIGNUP, 'pro', 'year', { aiBlocks: 3 })).toBe(
+      `${SIGNUP}?plan=pro&interval=year&ai=3`,
+    )
+    expect(onboardingSignupHref(SIGNUP, 'pro', 'month', { aiBlocks: 50 })).toBe(
+      `${SIGNUP}?plan=pro&interval=month&ai=30`,
+    )
+    expect(onboardingSignupHref(SIGNUP, 'enterprise', 'year', { aiBlocks: 3 })).toBe(
+      `${SIGNUP}?plan=enterprise`,
     )
     expect(onboardingSignupHref(SIGNUP, 'enterprise', 'year', { ai: true })).toBe(
       `${SIGNUP}?plan=enterprise`,

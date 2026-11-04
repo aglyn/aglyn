@@ -208,4 +208,4 @@ internal fun roleLabel(role: String): String = role.replaceFirstChar { it.upperc
 
 /** The detail line under a workspace in a picker: its role and plan. */
 internal fun orgDetail(org: WorkspaceOrg, workspace: WorkspaceState): String =
-  listOfNotNull(roleLabel(org.role).ifEmpty { null }, workspace.orgLogos[org.id]?.plan?.replaceFirstChar { it.uppercase() }).joinToString(" · ")
+  listOfNotNull(roleLabel(org.role).ifEmpty { null }, workspace.orgLogos[org.id]?.planLabel).joinToString(" · ")

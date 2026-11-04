@@ -76,7 +76,7 @@ internal fun utcMonthKey(nowMs: Long, monthsBack: Int = 0): String {
 internal suspend fun loadPlanReadings(services: ShellServices, orgId: String, hostId: String?, siteIds: List<String>): PlanReadings? {
   services.entitlements.load(orgId)
   val ent = services.entitlements.state(orgId).value ?: return null
-  val plan = ent.plan?.let { com.aglyn.core.OnboardingPlanIntent.PLAN_LABELS[it] ?: it.replaceFirstChar { c -> c.uppercase() } } ?: "Free"
+  val plan = ent.plan?.let { com.aglyn.core.OnboardingPlanIntent.labelOf(it) } ?: "Free"
   fun quota(key: String) = ent.limit(key)?.toDouble()
   suspend fun api(path: String, query: Map<String, Any?>) = runCatching { services.api.request(path, query = query) }.getOrNull()
   val now = com.aglyn.core.nowMillis()

@@ -22,7 +22,7 @@
             "meteredInfraPassThrough": true
           },
           "pro": {
-            "extraApiRequestsUsdPer1k": null,
+            "extraApiRequestsUsdPer1k": 0.5,
             "extraContactsUsdPer1k": 0.75,
             "extraEmailSendsUsdPer1k": 2.25,
             "meteredInfraPassThrough": true

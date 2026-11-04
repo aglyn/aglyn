@@ -20,7 +20,12 @@ import { Autocomplete, TextField } from '@mui/material'
 import { useMemo, useState } from 'react'
 import { useCrmFoldsScope } from '../hooks/use-crm-list-query'
 import { useContactRoleDeals, useLinkedDeals } from '../hooks/use-deals'
-import type { CrmActivityRelated } from '../model/crm-activity-link'
+import {
+  type CrmActivityRelated,
+  type CrmPickerRow,
+  type CrmRelatedToOption,
+  crmRelatedToOptions,
+} from '../model/crm-activity-link'
 import { CRM_RECORD_PICKER_LIMIT, useCrmRecordWindow } from './crm-record-picker'
 
 export interface CrmRelatedToPickerProps {
@@ -40,17 +45,10 @@ export interface CrmRelatedToPickerProps {
   disabled?: boolean
 }
 
-interface RelatedOption extends CrmActivityRelated {
-  label: string
-  group: string
-}
-
-const OPEN_DEALS_GROUP = 'Open deals'
+type RelatedOption = CrmRelatedToOption
 
 const sameRecord = (a: CrmActivityRelated, b: CrmActivityRelated) =>
   a.kind === b.kind && a.id === b.id
-
-const byLabel = (a: RelatedOption, b: RelatedOption) => a.label.localeCompare(b.label)
 
 /**
  * An activity's **Related To** (AGL-4123), Salesforce's What: one company or
@@ -83,43 +81,19 @@ export function CrmRelatedToPicker(props: CrmRelatedToPickerProps) {
     companyId: opened ? (companyId ?? '') : '',
   })
 
-  const options = useMemo<RelatedOption[]>(() => {
-    const open = new Map<string, RelatedOption>()
-    for (const deal of [
-      ...(contactDeals.data ?? []),
-      ...(roleDeals.data ?? []),
-      ...(companyDeals.data ?? []),
-    ]) {
-      if (deal.status !== 'open') continue
-      open.set(deal.$id, {
-        kind: 'deal',
-        id: deal.$id,
-        label: deal.title || 'Untitled deal',
-        group: OPEN_DEALS_GROUP,
-      })
-    }
-    const named = (row: Record<string, unknown> & { $id: string }, field: string) =>
-      String(row[field] ?? '') || row.$id
-    const otherDeals = (deals.data ?? [])
-      .filter((row) => !open.has(row.$id))
-      .map<RelatedOption>((row) => ({
-        kind: 'deal',
-        id: row.$id,
-        label: named(row, 'title'),
-        group: 'Deals',
-      }))
-    const listed = (companies.data ?? []).map<RelatedOption>((row) => ({
-      kind: 'company',
-      id: row.$id,
-      label: named(row, 'name'),
-      group: 'Companies',
-    }))
-    return [
-      ...[...open.values()].sort(byLabel),
-      ...listed.sort(byLabel),
-      ...otherDeals.sort(byLabel),
-    ]
-  }, [contactDeals.data, roleDeals.data, companyDeals.data, deals.data, companies.data])
+  const options = useMemo<RelatedOption[]>(
+    () =>
+      crmRelatedToOptions({
+        linkedDeals: [
+          ...(contactDeals.data ?? []),
+          ...(roleDeals.data ?? []),
+          ...(companyDeals.data ?? []),
+        ] as unknown as CrmPickerRow[],
+        deals: deals.data ?? [],
+        companies: companies.data ?? [],
+      }),
+    [contactDeals.data, roleDeals.data, companyDeals.data, deals.data, companies.data],
+  )
 
   const windowFull =
     (companies.data?.length ?? 0) >= CRM_RECORD_PICKER_LIMIT ||

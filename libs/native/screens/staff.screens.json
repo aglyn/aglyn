@@ -489,7 +489,7 @@
           },
           {
             "value": "enterprise",
-            "label": "Enterprise"
+            "label": "Custom"
           }
         ],
         "scopeNote": "Contribution margin: net revenue less infrastructure COGS only. Support, customer acquisition (CAC) and overhead are not in this figure."
@@ -1379,22 +1379,6 @@
                     {
                       "value": "pro",
                       "label": "Pro"
-                    },
-                    {
-                      "value": "business",
-                      "label": "Business"
-                    },
-                    {
-                      "value": "scale",
-                      "label": "Scale"
-                    },
-                    {
-                      "value": "advanced",
-                      "label": "Advanced"
-                    },
-                    {
-                      "value": "agency",
-                      "label": "Agency"
                     }
                   ]
                 },
@@ -1540,7 +1524,7 @@
                   "options": [
                     {
                       "value": "enterprise",
-                      "label": "Enterprise"
+                      "label": "Custom"
                     },
                     {
                       "value": "agency",
@@ -1621,7 +1605,7 @@
                   "options": [
                     {
                       "value": "enterprise",
-                      "label": "Enterprise"
+                      "label": "Custom"
                     },
                     {
                       "value": "agency",
@@ -1862,22 +1846,6 @@
                     {
                       "value": "pro",
                       "label": "Pro"
-                    },
-                    {
-                      "value": "business",
-                      "label": "Business"
-                    },
-                    {
-                      "value": "scale",
-                      "label": "Scale"
-                    },
-                    {
-                      "value": "advanced",
-                      "label": "Advanced"
-                    },
-                    {
-                      "value": "agency",
-                      "label": "Agency"
                     }
                   ]
                 },
@@ -2920,22 +2888,6 @@
                     {
                       "value": "pro",
                       "label": "Pro"
-                    },
-                    {
-                      "value": "business",
-                      "label": "Business"
-                    },
-                    {
-                      "value": "scale",
-                      "label": "Scale"
-                    },
-                    {
-                      "value": "advanced",
-                      "label": "Advanced"
-                    },
-                    {
-                      "value": "agency",
-                      "label": "Agency"
                     }
                   ]
                 },
@@ -3058,22 +3010,6 @@
                     {
                       "value": "pro",
                       "label": "Pro"
-                    },
-                    {
-                      "value": "business",
-                      "label": "Business"
-                    },
-                    {
-                      "value": "scale",
-                      "label": "Scale"
-                    },
-                    {
-                      "value": "advanced",
-                      "label": "Advanced"
-                    },
-                    {
-                      "value": "agency",
-                      "label": "Agency"
                     }
                   ]
                 },
@@ -8318,7 +8254,7 @@
           },
           {
             "value": "enterprise",
-            "label": "Enterprise"
+            "label": "Custom"
           }
         ],
         "scopeNote": "Contribution margin: net revenue less infrastructure COGS only. Support, customer acquisition (CAC) and overhead are not in this figure."
@@ -22745,7 +22681,7 @@
                 },
                 {
                   "value": "enterprise",
-                  "label": "Enterprise"
+                  "label": "Custom"
                 }
               ],
               "help": "Where a live subscription decides the plan this is edited as it always was. Without one a plan has to be a staff comp, below."
@@ -22793,7 +22729,7 @@
                 },
                 {
                   "value": "enterprise",
-                  "label": "Enterprise"
+                  "label": "Custom"
                 }
               ]
             },
@@ -23047,6 +22983,13 @@
               "label": "Limit: AI credits / mo",
               "kind": "number",
               "initial": "{item.entitlements.assistCreditsPerMonth}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.transactionalEmailsPerDay",
+              "label": "Limit: Transactional emails / day (abuse ceiling)",
+              "kind": "number",
+              "initial": "{item.entitlements.transactionalEmailsPerDay}",
               "help": "Empty inherits the plan default. 0 is a real limit of none."
             },
             {

@@ -59,17 +59,35 @@ class SignUpTest {
   @Test
   fun theLinksPlanIsReadAsTheConsoleReadsIt() {
     assertEquals(OnboardingPlanIntent("pro", "year", true, false), OnboardingPlanIntent.parse(mapOf("plan" to "Pro", "interval" to "annual")))
-    assertEquals(OnboardingPlanIntent("business", "month", false, false), OnboardingPlanIntent.parse(mapOf("plan" to "business")))
+    assertEquals(OnboardingPlanIntent("starter", "month", false, false), OnboardingPlanIntent.parse(mapOf("plan" to "starter")))
     assertTrue(OnboardingPlanIntent.parse(mapOf("plan" to "enterprise", "ai" to "1"))!!.contactSales)
     assertFalse(OnboardingPlanIntent.parse(mapOf("plan" to "enterprise", "ai" to "1"))!!.ai)
     assertNull(OnboardingPlanIntent.parse(mapOf("plan" to "free")))
     assertNull(OnboardingPlanIntent.parse(emptyMap()))
+    // The retired plans (pricing v4) are no longer sold, so an old link carries no plan.
+    for (retired in listOf("business", "scale", "advanced", "agency")) {
+      assertNull(OnboardingPlanIntent.parse(mapOf("plan" to retired, "interval" to "year")), retired)
+    }
+    assertEquals(listOf("starter", "pro"), OnboardingPlanIntent.SELF_SERVE_PLANS)
     val pro = OnboardingPlanIntent.parse(mapOf("plan" to "pro", "interval" to "year", "ai" to "yes"))!!
     assertEquals("plan=pro&interval=year&ai=1", pro.query)
     assertEquals("/acme/billing?plan=pro&interval=year&ai=1", pro.destination("acme"))
     assertEquals("Create your account to start on Pro, billed yearly", pro.signUpHeadline)
-    assertEquals("/acme/support?topic=enterprise", OnboardingPlanIntent.parse(mapOf("plan" to "enterprise"))!!.destination("acme"))
-    assertEquals("plan=scale", OnboardingPlanIntent.parse(mapOf("plan" to "scale"))!!.query)
+    val custom = OnboardingPlanIntent.parse(mapOf("plan" to "enterprise"))!!
+    assertEquals("Custom", custom.label)
+    assertEquals("/acme/support?topic=enterprise", custom.destination("acme"))
+    assertEquals("Create your account — we’ll get you set up on Custom", custom.signUpHeadline)
+    assertEquals("plan=starter", OnboardingPlanIntent.parse(mapOf("plan" to "starter"))!!.query)
+  }
+
+  @Test
+  fun anUpgradeIsOfferedOnlyBelowTheTopSelfServePlan() {
+    assertEquals(listOf("free", "starter"), OnboardingPlanIntent.UPGRADABLE_PLANS)
+    for (top in listOf("pro", "business", "scale", "advanced", "agency", "enterprise")) {
+      assertFalse(top in OnboardingPlanIntent.UPGRADABLE_PLANS, top)
+    }
+    assertEquals("Custom", OnboardingPlanIntent.labelOf("enterprise"))
+    assertEquals("Business", OnboardingPlanIntent.labelOf("business"))
   }
 
   @Test

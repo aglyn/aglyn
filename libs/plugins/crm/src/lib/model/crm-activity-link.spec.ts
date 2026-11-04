@@ -28,6 +28,7 @@ import {
   crmActivityLinkFromPicks,
   crmActivityPicksEqual,
   crmActivityPicksFrom,
+  crmRelatedToOptions,
   resolveCrmActivityCompany,
   stampCrmActivityCompany,
 } from './crm-activity-link'
@@ -211,5 +212,44 @@ describe('the Name and Related To fields', () => {
     expect(crmActivityPicksEqual(picks, { ...picks, related: { ...picks.related } })).toBe(true)
     expect(crmActivityPicksEqual(picks, { ...picks, contactId: null })).toBe(false)
     expect(crmActivityPicksEqual(picks, { ...picks, related: null })).toBe(false)
+  })
+})
+
+describe('crmRelatedToOptions', () => {
+  it('leads with the open deals that name the person or the company, each once, then companies, then other deals', () => {
+    const options = crmRelatedToOptions({
+      linkedDeals: [
+        { $id: 'd-won', title: 'Renewal', status: 'won' },
+        { $id: 'd-2', title: 'Website', status: 'open' },
+        { $id: 'd-1', title: 'Audit', status: 'open' },
+        { $id: 'd-2', title: 'Website', status: 'open' },
+      ],
+      deals: [
+        { $id: 'd-1', title: 'Audit' },
+        { $id: 'd-9', title: 'Zebra' },
+        { $id: 'd-won', title: 'Renewal' },
+      ],
+      companies: [
+        { $id: 'co-2', name: 'Globex' },
+        { $id: 'co-1', name: 'Acme Builders' },
+      ],
+    })
+    expect(options.map((option) => [option.group, option.kind, option.id, option.label])).toEqual([
+      ['Open deals', 'deal', 'd-1', 'Audit'],
+      ['Open deals', 'deal', 'd-2', 'Website'],
+      ['Companies', 'company', 'co-1', 'Acme Builders'],
+      ['Companies', 'company', 'co-2', 'Globex'],
+      ['Deals', 'deal', 'd-won', 'Renewal'],
+      ['Deals', 'deal', 'd-9', 'Zebra'],
+    ])
+  })
+
+  it('never shows a blank row', () => {
+    const options = crmRelatedToOptions({
+      linkedDeals: [{ $id: 'd-1', status: 'open' }],
+      deals: [{ $id: 'd-2', title: '' }],
+      companies: [{ $id: 'co-1' }],
+    })
+    expect(options.map((option) => option.label)).toEqual(['Untitled deal', 'co-1', 'd-2'])
   })
 })

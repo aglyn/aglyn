@@ -8,7 +8,7 @@ description: Sell in person from the console register and take date-range reserv
 
 :::info Plan availability
 POS requires **Pro** or above. The number of **registers** a site can run at
-once follows your plan — Pro 1, Business 2, Advanced 5 — plus any additional
+once follows your plan — 1 on Pro — plus any additional
 register seats you've assigned to **that site**. A seat is bought once for the
 workspace and then placed on one site, so buying one does not raise the limit
 everywhere; see [Assigning register seats](../../workspace-and-billing/billing-and-plans/add-ons.md#assigning-register-seats).
@@ -215,8 +215,8 @@ worked out on the whole charge, tip included, because that is what Stripe
 charges on.
 
 The customer never pays the fee, and the amount **Due** on the register is
-the same on every tender. On plans with a 0% fee there is no platform fee
-to collect either way. See
+the same on every tender. On Custom, which carries no platform fee, there is
+nothing to collect either way. See
 [Billing & plans](../../workspace-and-billing/billing-and-plans/overview.md#platform-fees)
 for your plan's rates.
 

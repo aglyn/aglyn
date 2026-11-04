@@ -167,7 +167,8 @@ describe('what a save stores', () => {
     )
     expect(read).toEqual({
       ok: false,
-      problem: expect.stringMatching(/^Step 2: “Send a webhook \(Business\)” belongs to one site/),
+      // The label names Pro, the plan webhooks open on since pricing v4 (AGL-4126).
+      problem: expect.stringMatching(/^Step 2: “Send a webhook \(Pro\)” belongs to one site/),
     })
   })
 

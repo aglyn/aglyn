@@ -74,6 +74,12 @@ import {
   resolveOrgEntitlements,
   resolvePlanPricing,
 } from '@aglyn/aglyn/server'
+import {
+  resolveTransactionalEmailDailyCeiling,
+  TRANSACTIONAL_EMAIL_CEILING_OVERRIDE_KEYS,
+  TRANSACTIONAL_EMAILS_PER_DAY_BY_PLAN,
+  TRANSACTIONAL_EMAILS_PER_DAY_KEY,
+} from '@aglyn/aglyn/app-utils/transactional-email-ceiling'
 
 /** Orgs whose tenant pages the route asked to drop, in order (AGL-3034). */
 let mockRevalidatedOrgs: string[] = []
@@ -626,6 +632,26 @@ describe('clearing ONE numeric quota removes it (AGL-1789)', () => {
     })
   })
 
+  it('writes the daily transactional ceiling override, and the ceiling resolves it (AGL-4145)', async () => {
+    // The abuse ceiling is not a plan-table key, so this route is the only
+    // staff door to it: a contract or a support case that needs more writes
+    // it here, on the same map, and the send seam's figure follows.
+    mockStore['orgs/org-1'] = { plan: 'business', billingStatus: 'active' }
+    const response = await post(
+      validBody({ quotas: { [TRANSACTIONAL_EMAILS_PER_DAY_KEY]: 40_000 } }),
+    )
+    expect(response.status).toBe(200)
+    expect(storedQuotas()).toEqual({ [TRANSACTIONAL_EMAILS_PER_DAY_KEY]: 40_000 })
+    expect(resolveTransactionalEmailDailyCeiling(storedOrg())).toBe(40_000)
+
+    // Cleared, it hands the org back to its plan's figure.
+    await post(validBody({ quotas: {} }))
+    expect(TRANSACTIONAL_EMAILS_PER_DAY_KEY in storedQuotas()).toBe(false)
+    expect(resolveTransactionalEmailDailyCeiling(storedOrg())).toBe(
+      TRANSACTIONAL_EMAILS_PER_DAY_BY_PLAN.business,
+    )
+  })
+
   it('expands from the REGISTRY, so every quota key is decided', async () => {
     // The same property the features expansion has: the key set comes from
     // `PLAN_ENTITLEMENTS`, not from what the caller happened to send, so a
@@ -636,9 +662,14 @@ describe('clearing ONE numeric quota removes it (AGL-1789)', () => {
       string,
       any
     >
-    const quotaKeys = Object.entries(PLAN_ENTITLEMENTS.free)
-      .filter(([, value]) => typeof value === 'number')
-      .map(([key]) => key)
+    // The daily transactional abuse ceiling (AGL-4145) rides the same map
+    // without being a plan-table key, so it is cleared the same way.
+    const quotaKeys = [
+      ...Object.entries(PLAN_ENTITLEMENTS.free)
+        .filter(([, value]) => typeof value === 'number')
+        .map(([key]) => key),
+      ...TRANSACTIONAL_EMAIL_CEILING_OVERRIDE_KEYS,
+    ]
     expect(Object.keys(entitlements).sort()).toEqual(
       [...quotaKeys, 'features'].sort(),
     )
@@ -1310,8 +1341,10 @@ describe('a comp can be uncapped, and capped again (AGL-3049)', () => {
     })
     expect(payload.after.entitlements.planComp).toMatchObject({ uncapped: true })
     expect(text).not.toMatch(/Infinity|"uncapped":null/)
+    // The `enterprise` plan reads "Custom" since pricing v4 (AGL-4126), in
+    // every summary below.
     expect(payload.planEffect.summary).toMatch(
-      /^Uncapped Enterprise comp granted\. Enterprise is in force as an uncapped staff comp, because no subscription pays for this workspace\. It bills nothing, every band and quota reads as unlimited/,
+      /^Uncapped Custom comp granted\. Custom is in force as an uncapped staff comp, because no subscription pays for this workspace\. It bills nothing, every band and quota reads as unlimited/,
     )
 
     // The row, as booleans, and the published sites told the caps moved
@@ -1346,7 +1379,7 @@ describe('a comp can be uncapped, and capped again (AGL-3049)', () => {
     const payload = await response.json()
     expect(payload.planEffect).toMatchObject({ uncapped: false, compChange: 'granted' })
     expect(payload.planEffect.summary).toMatch(
-      /^Enterprise comp granted\..*every band is a hard limit that a quota override can raise/,
+      /^Custom comp granted\..*every band is a hard limit that a quota override can raise/,
     )
     // Neither the plan nor the caps moved, so nothing is revalidated.
     expect(mockRevalidatedOrgs).toEqual([])
@@ -1392,7 +1425,7 @@ describe('a comp can be uncapped, and capped again (AGL-3049)', () => {
       uncapped: true,
       before: { uncapped: false },
     })
-    expect(payload.planEffect.summary).toMatch(/^The Enterprise comp is now uncapped\./)
+    expect(payload.planEffect.summary).toMatch(/^The Custom comp is now uncapped\./)
     expect(onlyAuditRow()['planEffect']).toMatchObject({
       compChange: 'uncapped',
       before: { uncapped: false },
@@ -1431,7 +1464,7 @@ describe('a comp can be uncapped, and capped again (AGL-3049)', () => {
     const payload = await response.json()
     expect(payload.planEffect).toMatchObject({ compChange: 'capped', uncapped: false })
     expect(payload.planEffect.summary).toMatch(
-      /^The Enterprise comp is now capped\..*every band is a hard limit/,
+      /^The Custom comp is now capped\..*every band is a hard limit/,
     )
     expect(mockRevalidatedOrgs).toEqual(['org-1'])
   })
@@ -1453,7 +1486,7 @@ describe('a comp can be uncapped, and capped again (AGL-3049)', () => {
     const payload = await response.json()
     expect(payload.planEffect.compChange).toBe('replaced')
     expect(payload.planEffect.summary).toMatch(
-      /^Comp changed from uncapped Enterprise to Business\. Effective plan: Enterprise → Business\./,
+      /^Comp changed from uncapped Custom to Business\. Effective plan: Custom → Business\./,
     )
   })
 
@@ -1469,7 +1502,7 @@ describe('a comp can be uncapped, and capped again (AGL-3049)', () => {
     const payload = await response.json()
     expect(payload.planEffect).toMatchObject({ compChange: 'kept', uncapped: true })
     expect(payload.planEffect.summary).toMatch(
-      /^The uncapped Enterprise comp already stands and is unchanged\./,
+      /^The uncapped Custom comp already stands and is unchanged\./,
     )
     expect(mockRevalidatedOrgs).toEqual([])
   })
@@ -1494,7 +1527,7 @@ describe('a comp can be uncapped, and capped again (AGL-3049)', () => {
       decidedBy: 'stored-plan',
       before: { uncapped: true, decidedBy: 'comp' },
     })
-    expect(payload.planEffect.summary).toMatch(/^Uncapped Enterprise comp removed\./)
+    expect(payload.planEffect.summary).toMatch(/^Uncapped Custom comp removed\./)
     expect(mockRevalidatedOrgs).toEqual(['org-1'])
   })
 

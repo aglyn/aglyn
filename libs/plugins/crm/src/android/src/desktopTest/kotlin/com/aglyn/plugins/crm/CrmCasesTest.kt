@@ -140,6 +140,149 @@ class CrmCasesTest {
     assertEquals(want.getValue("reasons").jsonArray.map { it.jsonObject.getValue("label").jsonPrimitive.content to it.jsonObject.getValue("count").jsonPrimitive.longOrNull?.toInt() }, got.reasons)
   }
 
+  private fun role(element: Any?): CrmContactRole {
+    val o = element as Map<*, *>
+    return CrmContactRole(o["contactId"] as String, o["role"] as? String, o["primary"] == true)
+  }
+
+  private fun roles(element: JsonElement?): List<CrmContactRole> = (plain(element) as? List<*>).orEmpty().map(::role)
+
+  private fun picklistValues(element: JsonElement): List<Pair<String, Boolean>> =
+    (map(element)?.get("values") as? List<*>).orEmpty().map { val o = it as Map<*, *>; (o["label"] as String) to (o["active"] == true) }
+
+  private fun picks(element: JsonElement): CrmActivityPicks {
+    val o = map(element).orEmpty()
+    val related = o["related"] as? Map<*, *>
+    return CrmActivityPicks(o["contactId"] as? String, related?.let { CrmRelated(it["kind"] as String, it["id"] as String) })
+  }
+
+  private fun docs(value: Any?): List<com.aglyn.core.FirestoreDoc> =
+    (value as? List<*>).orEmpty().map { val o = it as Map<*, *>; @Suppress("UNCHECKED_CAST") com.aglyn.core.FirestoreDoc(o["\$id"] as String, "", o as Map<String, Any?>) }
+
+  @Test
+  fun theLogFieldsOpenAsTheConsolesDo() = cases("crmActivityPicksFrom").forEach { (args, result) ->
+    assertEquals(picks(result), crmActivityPicksFrom(map(args[0]).orEmpty(), (args.getOrNull(1) as? JsonPrimitive)?.contentOrNull), args.toString())
+  }
+
+  @Test
+  fun thePicksWriteTheConsolesLinks() = cases("crmActivityLinkFromPicks").forEach { (args, result) ->
+    assertEquals(map(result), crmActivityLinkFromPicks(picks(args[0]), (args.getOrNull(1) as? JsonPrimitive)?.contentOrNull), args.toString())
+  }
+
+  @Test
+  fun relatedToListsWhatTheConsoleLists() = cases("crmRelatedToOptions").forEach { (args, result) ->
+    val input = map(args[0]).orEmpty()
+    val want = (plain(result) as List<*>).map { val o = it as Map<*, *>; CrmPickOption("${o["kind"]}:${o["id"]}", o["label"] as String, o["group"] as String) }
+    assertEquals(want, crmRelatedToOptions(docs(input["linkedDeals"]), docs(input["deals"]), docs(input["companies"])), args.toString())
+  }
+
+  @Test
+  fun nameLeadsWithTheDealsRoles() {
+    val contacts = listOf(com.aglyn.ui.FieldOption("c2", "Pat Lee"), com.aglyn.ui.FieldOption("c1", "Jordan Lee"), com.aglyn.ui.FieldOption("c3", "acme buyer"))
+    val pinned = crmNameOptions(listOf(CrmPickOption("c1", "Jordan Lee", "")), contacts)
+    assertEquals(listOf("c1", "c3", "c2"), pinned.map { it.key })
+    assertEquals(listOf("On this deal", "All contacts", "All contacts"), pinned.map { it.group })
+    assertEquals(listOf("", "", ""), crmNameOptions(emptyList(), contacts).map { it.group })
+    assertEquals(CrmRelated("deal", "d1"), CrmRelated.ofKey("deal:d1"))
+    assertEquals(null, CrmRelated.ofKey("lead:l1"))
+  }
+
+  @Test
+  fun contactRolesReadAsTheConsoleReadsThem() {
+    cases("dealContactRolesOf").forEach { (args, result) -> assertEquals(roles(result), dealContactRolesOf(map(args[0]).orEmpty()), args.toString()) }
+    cases("companyContactRolesOf").forEach { (args, result) -> assertEquals(roles(result), companyContactRolesOf(map(args[0]).orEmpty()), args.toString()) }
+  }
+
+  @Test
+  fun eachRoleEditMakesTheConsolesList() {
+    cases("dealContactRolesWithPrimary").forEach { (args, result) ->
+      assertEquals(roles(result), contactRolesWithPrimary(roles(args[0]), (args[1] as? JsonPrimitive)?.contentOrNull), args.toString())
+    }
+    cases("dealContactRolesWithout").forEach { (args, result) -> assertEquals(roles(result), contactRolesWithout(roles(args[0]), args[1].jsonPrimitive.content), args.toString()) }
+    cases("dealContactRolesWithRole").forEach { (args, result) ->
+      assertEquals(roles(result), contactRolesWithRole(roles(args[0]), args[1].jsonPrimitive.content, args[2].jsonPrimitive.content), args.toString())
+    }
+    cases("dealContactRolesAdded").forEach { (args, result) ->
+      val added = map(args[1]).orEmpty()
+      assertEquals(roles(result), contactRolesAdded(roles(args[0]), added["contactId"] as String, added["role"] as? String, added["primary"] == true), args.toString())
+    }
+    cases("dealContactRoleAddProblem").forEach { (args, result) ->
+      assertEquals((result as? JsonPrimitive)?.contentOrNull, contactRoleAddProblem(roles(args[0]), args[1].jsonPrimitive.content, args[2].jsonPrimitive.content), args.toString())
+    }
+  }
+
+  @Test
+  fun aRoleSaveWritesWhatTheConsoleWrites() {
+    cases("dealContactRolesSave").forEach { (args, result) ->
+      val want = map(result).orEmpty()
+      val got = dealContactRolesSave(map(args[0]).orEmpty(), roles(args[1]), picklistValues(args[2]))
+      if (want["ok"] == true) {
+        val write = got.getOrThrow()
+        assertEquals(roles(result.jsonObject["contactRoles"]), write.contactRoles, args.toString())
+        assertEquals(want["contactId"] as? String, write.contactId, args.toString())
+        assertEquals(want["primaryChanged"], write.primaryChanged, args.toString())
+      } else {
+        assertEquals(want["error"], got.exceptionOrNull()?.message, args.toString())
+      }
+    }
+    cases("companyContactRolesSave").forEach { (args, result) ->
+      val want = map(result).orEmpty()
+      val got = companyContactRolesSave(map(args[0]).orEmpty(), roles(args[1]), picklistValues(args[2]))
+      if (want["ok"] == true) {
+        val judged = got.getOrThrow()
+        assertEquals(roles(result.jsonObject["contactRoles"]), judged, args.toString())
+        val list = contactRoleListFields(judged, null)
+        assertEquals(want["contactRoleContactIds"], list.ids, args.toString())
+        assertEquals(want["contactRoleKeys"], list.keys, args.toString())
+      } else {
+        assertEquals(want["error"], got.exceptionOrNull()?.message, args.toString())
+      }
+    }
+  }
+
+  @Test
+  fun theRoleListFieldsAreTheConsoles() = cases("crmDealContactRoleListFields").forEach { (args, result) ->
+    val deal = map(args[0]).orEmpty()
+    val want = map(result).orEmpty()
+    val got = contactRoleListFields(dealContactRolesOf(deal), deal["visibleTo"])
+    assertEquals(want["contactRoleContactIds"], got.ids, args.toString())
+    assertEquals(want["scopedContactRoleContactIds"], got.scoped, args.toString())
+    assertEquals(want["contactRoleKeys"], got.keys, args.toString())
+  }
+
+  @Test
+  fun thePicklistOffersItsValuesWithWhetherTheyAreActive() {
+    val stored = Picklists(mapOf(CRM_CONTACT_ROLE_PICKLIST to listOf("Evaluator" to true, "Champion" to false)))
+    assertEquals(listOf("Evaluator", "Champion"), stored.values(CRM_CONTACT_ROLE_PICKLIST).map { it.first })
+    assertEquals(listOf("Evaluator"), stored.labels(CRM_CONTACT_ROLE_PICKLIST))
+    assertTrue(Picklists(emptyMap()).values(CRM_CONTACT_ROLE_PICKLIST).all { it.second })
+    assertTrue("Decision Maker" in Picklists(emptyMap()).labels(CRM_CONTACT_ROLE_PICKLIST))
+  }
+
+  @Test
+  fun theOptInSentenceAndItsKeyAreTheConsoles() {
+    cases("consentGroupDisclosure").forEach { (args, result) -> assertEquals((result as? JsonPrimitive)?.contentOrNull, consentGroupDisclosure(group(args[0])), args.toString()) }
+    cases("consentGroupDisclosureKey").forEach { (args, result) -> assertEquals((result as? JsonPrimitive)?.contentOrNull, consentGroupDisclosureKey(group(args[0])), args.toString()) }
+  }
+
+  @Test
+  fun theOptInSaysWhyItIsOffAndWhatNoSiteMeans() {
+    val declared = ConsentGroup("h1", "brands", "North Brands", listOf("h1", "h2"), true)
+    assertEquals("Add an email first: there is nowhere to send marketing without one.", contactConsentHelp(false, declared))
+    assertEquals("You'll receive marketing email from North Brands, which covers 2 sites. Tick it only if they agreed. Adding a contact is never itself consent.", contactConsentHelp(true, declared))
+    assertEquals("With no source site, this records it on every site. Tick it only if they agreed. Adding a contact is never itself consent.", contactConsentHelp(true, null))
+    assertEquals("Tick it only if they agreed. Adding a contact is never itself consent.", contactConsentHelp(true, soloConsentGroup("h1")))
+  }
+
+  @Test
+  fun theCreateSendsTheBoxAndTheSentencesKey() {
+    val declared = ConsentGroup("h1", "brands", "North Brands", listOf("h1", "h2"), true)
+    assertEquals(mapOf("marketingConsent" to true, "disclosedConsentGroup" to consentGroupDisclosureKey(declared)), contactConsentFields(mapOf("email" to "pat@example.com", CONTACT_CONSENT_KEY to "true"), declared))
+    assertEquals(mapOf<String, Any?>("marketingConsent" to true), contactConsentFields(mapOf("email" to "pat@example.com", CONTACT_CONSENT_KEY to "true"), soloConsentGroup("h1")))
+    assertEquals(mapOf<String, Any?>("marketingConsent" to false), contactConsentFields(mapOf("email" to "pat@example.com", CONTACT_CONSENT_KEY to "false"), declared))
+    assertEquals(mapOf<String, Any?>("marketingConsent" to false), contactConsentFields(mapOf("email" to " ", CONTACT_CONSENT_KEY to "true"), declared))
+  }
+
   private val owner = CrmScope("o1", "h1", "h1", "u1", "owner", true, listOf("org", "host:h1"), listOf("host:h1"), true, emptyMap())
   private val collaborator = owner.copy(role = "editor", orgWide = false)
 

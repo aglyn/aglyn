@@ -576,6 +576,12 @@ class Picklists(private val stored: Map<String, List<Pair<String, Boolean>>>) {
 
   fun options(id: String): List<FieldOption> = labels(id).map { FieldOption(it, it) }
 
+  /**
+   * Every value of a list with whether it is active, which a save judges a pick against; the standard values, all active, for an
+   * org that has not stored the list.
+   */
+  fun values(id: String): List<Pair<String, Boolean>> = stored[id] ?: standardLabels(id).map { it to true }
+
   companion object {
     fun standardLabels(id: String): List<String> = Contracts.nativeCrmPicklists.firstOrNull { it.id == id }?.standardLabels.orEmpty()
 

@@ -76,7 +76,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
   aiCredits: {
     '#before-a-job-starts': 'Every job tells you what it will cost before it spends anything: A plan shows Estimated cost: About N credits (up to M) beside Confirm plan: about what jobs like it cost on real builds, and the most it can cost.',
     '#past-the-band': 'On a paid plan, AI keeps working past the included band, and the extra credits are billed on your monthly invoice at your plan\'s rate per 1,000 credits.',
-    '#see-your-credits': 'Billing → Usage → AI credits shows the credits drawn this month against the pool, and how many of them your tier adds.',
+    '#see-your-credits': 'Billing → Usage → AI credits shows the credits drawn this month against the pool, and how many of them your blocks add.',
   },
   aiCrm: {
     '#draft-an-email': 'In the email composer on a contact, a deal or a lead, describe what the email should say (for example, "follow up on the quote and offer a call next week") and press Draft the message.',
@@ -172,7 +172,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#where-the-money-goes': 'Costs on this board are our estimated provider cost at the serving model\'s list rates.',
   },
   billing: {
-    '#api-access': 'The customer REST API is a Business tier and above feature — mint scoped API keys and call the versioned /v1 endpoints from anywhere.',
+    '#api-access': 'The customer REST API is included on Pro and Custom — mint scoped API keys and call the versioned /v1 endpoints from anywhere.',
     '#billing-address': 'The address Aglyn issues your invoices to, and the address sales tax on your Aglyn subscription is calculated from.',
     '#billing-address-on-profile': 'Settings → Profile shows your billing address read-only, beside the workspace\'s other details; change it on Billing → Settings.',
     '#billing-email': 'Invoices are sent to the billing email, along with receipts and — the one that matters most — the notices we send when a card fails and a subscription is about to lapse.',
@@ -379,7 +379,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#email-page': 'Open any email from Messages to see what it did on its own: where it went and its state, its delivery and engagement figures with every rate over the population it is measured against, the links followed, and who it…',
     '#email-preview': 'The Preview card at the foot of an email\'s page draws the email as an inbox receives it, with the same renderer the send uses; merge tokens are left standing, because a real send fills them from each recipient.',
     '#email-recipients': 'An email\'s Recipients table lists everyone it was sent to; to see only the people who opened it, or only those who clicked something, choose Engagement in the table\'s Filters panel.',
-    '#experiments': 'Business plans can A/B test pages, sections, and emails from the Experiments card on the Marketing page: weighted variants, deterministic visitor assignment, a conversion goal, and per-variant exposure/conversion…',
+    '#experiments': 'Pro and Custom plans can A/B test pages, sections, and emails from the Experiments card on the Marketing page: weighted variants, deterministic visitor assignment, a conversion goal, and per-variant…',
     '#experiments-across-sites': 'Your organization\'s own Marketing → A/B testing lists every site\'s tests, grouped by site, with what each one tests, how many variants it has and its status.',
     '#last-campaign-card': 'The Last campaign card on a site\'s dashboard shows how many emails your most recent sent campaign sent, and how many opens and clicks it has had; Campaigns in its header opens the full history.',
     '#list-members': 'Press Members on any list row to open it. You get the membership a page at a time — address, name, when they joined, how they got there, and what their consent record says — plus the controls to change it.',

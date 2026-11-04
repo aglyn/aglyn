@@ -107,6 +107,11 @@ import { getSiteLockdown } from './tenant-write-lockdown'
 // has therefore installed the gate the workspace stamped below is read by.
 import { sendingWorkspaceFor } from './outbound-send-review'
 import { flagLookalikeDomain } from './hosted-page-review'
+import { resolveTransactionalEmailDailyCeiling } from '@aglyn/aglyn/app-utils/transactional-email-ceiling'
+// Also INSTALLS the daily transactional ceiling's counter on `sendEmail`
+// (AGL-4145), for the same reason: the ceiling stamped on the workspace below
+// is only read by a send path that has the gate installed.
+import './email-transactional-ceiling'
 
 const firestore = () => firebaseAdmin.app().firestore()
 
@@ -909,14 +914,25 @@ export async function hostSendingIdentity(
    */
   const verdict: SendingIdentityVerdict = {
     ...resolved,
-    workspace: sendingWorkspaceFor({
-      hostId: id,
-      orgId: owner?.orgId ?? null,
-      org: (owner?.org as Record<string, unknown> | undefined) ?? null,
-      host: snapshot?.exists
-        ? ((snapshot.data() as Record<string, unknown>) ?? null)
+    workspace: {
+      ...sendingWorkspaceFor({
+        hostId: id,
+        orgId: owner?.orgId ?? null,
+        org: (owner?.org as Record<string, unknown> | undefined) ?? null,
+        host: snapshot?.exists
+          ? ((snapshot.data() as Record<string, unknown>) ?? null)
+          : null,
+      }),
+      /*
+       * THE DAILY TRANSACTIONAL CEILING (AGL-4145), from the same org
+       * document, so the send seam's count costs no read of its own. No
+       * organization read means no ceiling known, and none is applied —
+       * an unreadable org must not put a paying store on Free's figure.
+       */
+      transactionalEmailsPerDay: owner?.org
+        ? resolveTransactionalEmailDailyCeiling(owner.org as never)
         : null,
-    }),
+    },
     /*
      * THE NAME THE SITE SENDS UNDER (AGL-3442), from the same two documents,
      * so it costs no read. `sendEmail` puts it where a sender passed the

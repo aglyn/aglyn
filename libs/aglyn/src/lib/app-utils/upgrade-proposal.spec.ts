@@ -15,7 +15,9 @@
  * limitations under the License.
  */
 
+import { parseOnboardingPlanIntent } from './onboarding-deep-link'
 import {
+  billingPlanIntent,
   isUpgradeProposalPlan,
   normalizeUpgradeProposalNote,
   readUpgradeProposal,
@@ -35,7 +37,13 @@ describe('upgrade proposals (AGL-3466)', () => {
     expect(UPGRADE_PROPOSAL_PLANS).not.toContain('free')
     expect(UPGRADE_PROPOSAL_PLANS).not.toContain('enterprise')
     expect(UPGRADE_PROPOSAL_PLANS).toContain('starter')
-    expect(isUpgradeProposalPlan('agency')).toBe(true)
+    expect(isUpgradeProposalPlan('pro')).toBe(true)
+    // The plans pricing v4 retired (AGL-4126) are not bought any more, so
+    // staff cannot propose them either.
+    expect(UPGRADE_PROPOSAL_PLANS).toEqual(['starter', 'pro'])
+    for (const retired of ['business', 'scale', 'advanced', 'agency']) {
+      expect(isUpgradeProposalPlan(retired)).toBe(false)
+    }
     expect(isUpgradeProposalPlan('free')).toBe(false)
     expect(isUpgradeProposalPlan('enterprise')).toBe(false)
     expect(isUpgradeProposalPlan('platinum')).toBe(false)
@@ -124,32 +132,61 @@ describe('upgrade proposals (AGL-3466)', () => {
       )
     })
 
+    it('prices on Billing without its link, the code included (AGL-4154)', () => {
+      expect(billingPlanIntent(null, bundled as never)).toMatchObject({
+        plan: 'starter',
+        interval: 'year',
+        intervalStated: true,
+        addons: { siteCare: 1, hosts: 2 },
+        coupon: 'BOOTH25',
+      })
+    })
+
+    it('gives way to a link, which says what the visitor came to buy', () => {
+      const link = parseOnboardingPlanIntent(new URLSearchParams('plan=pro&interval=month'))
+      expect(billingPlanIntent(link, bundled as never)).toBe(link)
+      expect(billingPlanIntent(link, bundled as never)?.coupon).toBeUndefined()
+    })
+
+    it('prices nothing with neither a link nor a proposal', () => {
+      expect(billingPlanIntent(null, null)).toBeNull()
+    })
+
     it('summarizes it in one line', () => {
       expect(upgradeProposalSummary(bundled as never)).toBe(
         'Starter with 2 × Extra site and Site Care, billed yearly, code BOOTH25',
       )
     })
 
-    it('keeps the Aglyn AI tier an `ai:<tier>` entry names, only with the AI add-on (AGL-3965)', () => {
-      const stored = normalizeUpgradeProposalBundle('starter', { addons: 'siteCare,ai:studio' })
-      expect(stored).toEqual({ addons: { siteCare: 1, aiAddon: 1 }, aiTier: 'studio' })
-      const tiered = { ...proposal, ...stored }
-      expect(readUpgradeProposal({ upgradeProposal: tiered } as never)).toEqual(tiered)
-      expect(upgradeProposalDestination('acme', tiered as never)).toBe(
-        '/acme/billing?plan=starter&addons=ai:studio,siteCare',
+    it('stores Aglyn AI credits as a number of blocks, held to 30 (AGL-4144)', () => {
+      const stored = normalizeUpgradeProposalBundle('starter', { addons: 'siteCare,ai:3' })
+      expect(stored).toEqual({ addons: { siteCare: 1, aiAddon: 3 } })
+      const blocks = { ...proposal, ...stored }
+      expect(readUpgradeProposal({ upgradeProposal: blocks } as never)).toEqual(blocks)
+      expect(upgradeProposalDestination('acme', blocks as never)).toBe(
+        '/acme/billing?plan=starter&addons=ai:3,siteCare',
       )
-      expect(upgradeProposalSummary(tiered as never, { brand: 'Aglyn' })).toBe(
-        'Starter with Aglyn AI Studio and Site Care',
+      expect(upgradeProposalSummary(blocks as never, { brand: 'Aglyn' })).toBe(
+        'Starter with 3 × Aglyn AI credit block and Site Care',
       )
-      // A stored tier with no AI add-on, or one no tier answers to, is dropped.
+      expect(normalizeUpgradeProposalBundle('starter', { addons: { aiAddon: 45 } })).toEqual({
+        addons: { aiAddon: 30 },
+      })
+    })
+
+    it('stores no retired Aglyn AI tier, as an entry or as a field (AGL-4144)', () => {
+      // An `ai:<tier>` entry is no number of blocks: left off.
+      expect(normalizeUpgradeProposalBundle('starter', { addons: 'siteCare,ai:studio' })).toEqual({
+        addons: { siteCare: 1 },
+      })
+      // A tier field beside the add-on is not read, and never stored.
+      expect(
+        normalizeUpgradeProposalBundle('starter', { addons: { aiAddon: 1 }, aiTier: 'studio' } as never),
+      ).toEqual({ addons: { aiAddon: 1 } })
+      // A proposal stored with one before AGL-4144 reads without it.
       expect(
         readUpgradeProposal({
-          upgradeProposal: { ...proposal, addons: { siteCare: 1 }, aiTier: 'studio' },
-        } as never),
-      ).toEqual({ ...proposal, addons: { siteCare: 1 } })
-      expect(
-        readUpgradeProposal({
-          upgradeProposal: { ...proposal, addons: { aiAddon: 1 }, aiTier: 'mega' },
+          upgradeProposal: { ...proposal, addons: { aiAddon: 1 }, aiTier: 'studio' },
         } as never),
       ).toEqual({ ...proposal, addons: { aiAddon: 1 } })
     })

@@ -199,6 +199,8 @@ export interface AiLayoutPictureFit {
   /** Rounded by the source, 10 px or more. */
   rounded?: true
   shadow?: true
+  /** Held narrower than its column by the source, to the theme's width at that breakpoint. */
+  measure?: Exclude<AiLayoutWidth, 'xl'>
 }
 
 /** A link of a page brought in (AGL-4107): its words and where it goes, `page:<id>`, `https:`, `mailto:` or `tel:`. */

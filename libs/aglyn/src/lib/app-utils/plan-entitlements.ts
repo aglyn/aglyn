@@ -17,7 +17,6 @@
 
 import type {
   AglynOrgBilling,
-  AiTierId,
   CoreOrgEntitlements,
   CoreOrgFeatureFlags,
   OrgBrandingProfile,
@@ -35,6 +34,11 @@ import {
   isOrgOverrideReasonCode,
   type OrgOverrideReasonCode,
 } from './org-override-reason'
+import {
+  AI_CREDIT_BLOCK_MONTHLY_USD,
+  AI_CREDITS_PER_BLOCK,
+  aiCreditBlockCount,
+} from './ai-credit-blocks'
 import type { ResolvedBrandingProfile } from './platform-brand'
 import {
   PLATFORM_BRAND_NAME,
@@ -519,16 +523,26 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       ssoEnabled: false,
     },
   },
+  // Pricing v4 (2026-11-03, AGL-4126): Pro is the full platform, priced by
+  // use. Every Business feature moved in, and every count with no cost term
+  // (pages, saved forms, variables, functions, workflows, redirects,
+  // products, records per dataset) is UNLIMITED, as are the add-on ceilings
+  // on seats, collaborators and datasets. What costs money stays banded at
+  // Pro's size (sites, storage, bandwidth, seats, collaborators, datasets,
+  // data, CRM records, campaign email, runs, API requests, AI credits), and
+  // past each band the plan meters rather than refuses. `full-use-cost.ts`
+  // prices exactly the banded terms, so the counts lifted here move no cost
+  // figure; the API band is the one new cost term.
   pro: {
     hostLimit: 3,
-    screensPerHost: 100,
+    screensPerHost: UNLIMITED,
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
     storagePerHostMb: 5120,
     membersPerHost: 3,
     managersPerOrg: 3,
-    maxManagersPerOrg: 20,
-    maxMembersPerHost: 25,
+    maxManagersPerOrg: UNLIMITED,
+    maxMembersPerHost: UNLIMITED,
     // Page views are the largest term of this tier's modeled COGS. One GB is
     // 1,035 views at `ESTIMATED_PAGE_TRANSFER_BYTES`, priced where Vercel is
     // dearest because it bills in the region that serves a visitor: $0.413 of
@@ -539,8 +553,8 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     // bandwidth costs $0.637, and the bandwidth band is what decides whether
     // the tier survives a customer spending the whole allowance it was sold.
     //
-    // The invariant the band is sized against is the ANNUAL price ($39 a
-    // month) net of Stripe's fee, with every band at 100% and the CRM seat
+    // The invariant the band is sized against is the ANNUAL price ($49 a
+    // month since v4, $39 when the band was sized) net of Stripe's fee, with every band at 100% and the CRM seat
     // and one-to-one email terms counted — the 2026-09-07 pricing decision —
     // at that all-in gigabyte (AGL-3444), and it must cover that cost plus
     // 30%, the same markup the metered overages carry (AGL-3469). 25 GB is
@@ -551,30 +565,43 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     // `meteredInfraPassThrough` is true here, so traffic past the band BILLS
     // at the page-view pass-through rather than being refused or absorbed.
     bandwidthGb: 25,
-    formsPerHost: 25,
+    formsPerHost: UNLIMITED,
     componentsPerHost: UNLIMITED,
-    variablesPerHost: 100,
-    functionsPerHost: 50,
-    workflowsPerHost: 25,
+    variablesPerHost: UNLIMITED,
+    functionsPerHost: UNLIMITED,
+    workflowsPerHost: UNLIMITED,
     servicesPerHost: UNLIMITED,
-    redirectsPerHost: 100,
+    redirectsPerHost: UNLIMITED,
     contactsPerHost: 10000,
     emailSendsPerMonth: 2500,
     actionRunsPerMonth: 5000,
-    apiRequestsPerMonth: 0,
+    // API access moved in from Business with Business's band (v4), and the
+    // excess meters at Business's rate rather than refusing mid-integration.
+    apiRequestsPerMonth: 1_500,
     datasetsPerOrg: 5,
-    maxDatasetsPerOrg: 50,
-    recordsPerDataset: 10000,
+    maxDatasetsPerOrg: UNLIMITED,
+    recordsPerDataset: UNLIMITED,
     dataStorageMbPerOrg: 2048,
-    productsPerHost: 2500,
+    productsPerHost: UNLIMITED,
     inventoryLocations: 2,
     posRegisters: 1,
-    transactionFeePhysicalPct: 0,
-    // Pricing v3 (2026-07): softened 5→3 to smooth the digital fee ladder
-    // (Starter 5 → Pro 3 → Business 2 → Scale 1 → Advanced/Agency 0).
+    // 0.5% on physical sales (v4, decision 9): Stripe Connect's account and
+    // payout fees ($2 a month per active account, 0.25% + $0.25 a payout) are
+    // paid by the platform, and at 0% a register doing $10k a month cost
+    // about $32 against Pro's margin. Fractional on purpose: every reader
+    // rounds the fee in cents (`resolveTransactionFeeCents`, the cart, the
+    // register) and prints the rate as it stands, so 0.5 reads "0.5%".
+    transactionFeePhysicalPct: 0.5,
+    // Pricing v3 (2026-07): softened 5→3 to smooth the digital fee ladder.
+    // v4 keeps it: the fee is the usage price of memberships, subscriptions,
+    // gift cards and digital goods, the features that moved into Pro.
     transactionFeeDigitalPct: 3,
+    // Every Business feature, at no charge (v4): A/B tests, scheduled
+    // publishing, webhooks, the API, multilingual sites and members-only
+    // content here; recurring billing, paid memberships and gift cards in the
+    // commerce plugin's declaration; the deep model tier in the AI plugin's.
     features: {
-      abTesting: false,
+      abTesting: true,
       versioning: true,
       reusableComponents: true,
       customDomain: true,
@@ -602,7 +629,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       // request is filled.
       dedicatedSendingDomain: true,
       removeBranding: true,
-      scheduledPublishing: false,
+      scheduledPublishing: true,
       aiAssist: true,
       aiGenerative: true,
       workflows: true,
@@ -613,10 +640,10 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       outreach: false,
       interactions: true,
       actions: true,
-      webhooks: false,
-      apiAccess: false,
+      webhooks: true,
+      apiAccess: true,
       siteExport: true,
-      multilingual: false,
+      multilingual: true,
       eventCalendar: false,
       siteCare: false,
       redirects: true,
@@ -625,7 +652,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       marketingOverlays: true,
       commerce: true,
       pos: true,
-      contentGating: false,
+      contentGating: true,
       productReviews: true,
       abandonedCart: true,
       dropshipRouting: true,
@@ -1078,16 +1105,45 @@ fillPluginPlanEntitlements(PLAN_ENTITLEMENTS)
  * marketing pricing table, the plan-change dialog) MUST iterate this rather
  * than `Object.keys(PLAN_ENTITLEMENTS)`, so a custom-priced tier can never
  * show a self-serve Upgrade button or a $0 headline price.
+ *
+ * Pricing v4 (2026-11-03, AGL-4126): three self-serve plans and Custom above
+ * them. Business, Scale, Advanced and Agency are RETIRED_PLANS: never sold
+ * again, their rows kept so a stored `plan`, a comp and an old record still
+ * resolve and type-check.
  */
-export const SELF_SERVE_PLANS: OrgPlan[] = [
-  'free',
-  'starter',
-  'pro',
+export const SELF_SERVE_PLANS: OrgPlan[] = ['free', 'starter', 'pro']
+
+/**
+ * The plans pricing v4 retired (2026-11-03, AGL-4126). Nothing offers them:
+ * no plan card, no checkout price, no comp picker, no sign-up link. Their
+ * `PLAN_ENTITLEMENTS` and `PLAN_PRICING` rows stay, read-only, so an org whose
+ * stored `plan` still names one resolves exactly as it always did. When v4
+ * shipped no subscription was on any of them.
+ */
+export const RETIRED_PLANS: readonly OrgPlan[] = [
   'business',
   'scale',
   'advanced',
   'agency',
 ]
+
+/**
+ * Every plan a workspace can be ON, cheapest first: the self-serve ladder,
+ * the retired plans in their old place above it, then the custom plan. The
+ * ORDER question ("is this move down?", "what is the plan below this one?")
+ * reads this, so a workspace left on a retired plan is still placed on the
+ * ladder; the SALE question ("what may be bought?") reads `SELF_SERVE_PLANS`.
+ */
+export const PLAN_LADDER: readonly OrgPlan[] = [
+  ...SELF_SERVE_PLANS,
+  ...RETIRED_PLANS,
+  'enterprise',
+]
+
+/** Whether a plan is one pricing v4 retired (`RETIRED_PLANS`). */
+export function isRetiredPlan(plan: OrgPlan | string | undefined | null): boolean {
+  return RETIRED_PLANS.includes(plan as OrgPlan)
+}
 
 /**
  * Whether the plan has no list price and is quoted per deal (AGL-1118).
@@ -1121,7 +1177,9 @@ export const PLAN_LABELS: Record<OrgPlan, string> = {
   scale: 'Scale',
   advanced: 'Advanced',
   agency: 'Agency',
-  enterprise: 'Enterprise',
+  // The top plan reads "Custom" since pricing v4 (2026-11-03, AGL-4126); its
+  // code id stays `enterprise`, and `ENTERPRISE_PLAN_LABEL` reads this.
+  enterprise: 'Custom',
 }
 
 /**
@@ -1208,188 +1266,12 @@ export const SITE_CARE_PROJECT_SPLIT_ABOVE_USD = 500
 export const POS_REGISTER_ADDON_MONTHLY_USD = 89
 
 /**
- * The Aglyn AI tiers (AGL-3965): credits sold on their own, to ANY paid
- * plan, on top of what the plan includes.
- *
- * ## One pool
- *
- * Every plan's `assistCreditsPerMonth` pays for ALL of Aglyn AI — the
- * assistant and generation alike — and `features.aiGenerative` is on for
- * every plan. A tier ADDS `credits` to that same band in
- * `resolveOrgEntitlements`, so `resolveAssistCreditBudget`, the overage
- * price and the hard-cap switch all still see one number. Past the pool the
- * plan's `extraAssistCreditsUsdPer1k` bills per 1,000 credits unless the
- * owner turned on `assistOverage.hardCap`; a tier changes neither.
- *
- * ## Sized against the tier's own price
- *
- * A credit is `ASSIST_CREDIT_COST_USD` of provider spend, so `credits` is a
- * cost figure: 1,000 credits are $1.00. Every tier costs at most 50% of its
- * price at full consumption — Spark $4 of $9, Boost $9 of $19, Plus $19 of
- * $39, Max $34 of $69, Ultra $49 of $99, Studio $149 of $299 — the same
- * line-margin floor (`ASSIST_CREDIT_MIN_MARGIN_PCT`) every retail assist
- * rate clears. The plan's included band is priced at 100% burn on its own
- * tier, so a tier's margin never leans on the plan's; that is what
- * `tier-margin-floor.spec.ts` holds, per tier.
- *
- * These are the six price/credit pairs the add-on was sold at per plan
- * before AGL-3965 (Starter's $9 / 4,000 through Agency's $299 / 149,000),
- * now chosen independently of the plan. `LEGACY_AI_ADDON_TIER_BY_PLAN` maps
- * each old per-plan add-on to the tier with its price and band.
- *
- * Yearly is ×12 with no discount, as every add-on is. Studio is the top;
- * more is an Enterprise contract. Free sells none (`planSellsAiTiers`).
+ * Whether a plan sells Aglyn AI credit blocks (AGL-4144): every paid
+ * self-serve plan. Not Free, which has no subscription to carry them, and
+ * not Enterprise, whose AI is in the agreement. The block itself — 5,000
+ * credits for $10 a month, up to 30 — is `ai-credit-blocks.ts`.
  */
-export interface AiTier {
-  /** The tier's name as a person sees it, after the product name. */
-  label: string
-  monthlyUsd: number
-  yearlyUsd: number
-  /** Credits a month the tier adds to the plan's included band. */
-  credits: number
-}
-
-/** The tiers, smallest first — the order every picker lists them in. */
-export const AI_TIER_IDS: readonly AiTierId[] = [
-  'spark',
-  'boost',
-  'plus',
-  'max',
-  'ultra',
-  'studio',
-]
-
-export const AI_TIERS: Readonly<Record<AiTierId, AiTier>> = {
-  spark: {
-    label: 'Spark',
-    monthlyUsd: 9,
-    yearlyUsd: 108,
-    credits: 4_000,
-  },
-  boost: {
-    label: 'Boost',
-    monthlyUsd: 19,
-    yearlyUsd: 228,
-    credits: 9_000,
-  },
-  plus: {
-    label: 'Plus',
-    monthlyUsd: 39,
-    yearlyUsd: 468,
-    credits: 19_000,
-  },
-  max: {
-    label: 'Max',
-    monthlyUsd: 69,
-    yearlyUsd: 828,
-    credits: 34_000,
-  },
-  ultra: {
-    label: 'Ultra',
-    monthlyUsd: 99,
-    yearlyUsd: 1188,
-    credits: 49_000,
-  },
-  studio: {
-    label: 'Studio',
-    monthlyUsd: 299,
-    yearlyUsd: 3588,
-    credits: 149_000,
-  },
-}
-
-/**
- * The tier an add-on bought before AGL-3965 is (AGL-3965): the one with the
- * same price and the same band the plan sold it at, so a workspace that
- * held "the Pro add-on" holds Boost — $19, 9,000 credits — and neither its
- * bill nor its credits move. Read when `aiTier` is absent and to classify a
- * per-plan `STRIPE_PRICE_{PLAN}_AI_ADDON` item still on a subscription.
- */
-export const LEGACY_AI_ADDON_TIER_BY_PLAN: Readonly<Partial<Record<OrgPlan, AiTierId>>> = {
-  starter: 'spark',
-  pro: 'boost',
-  business: 'plus',
-  scale: 'max',
-  advanced: 'ultra',
-  agency: 'studio',
-}
-
-/**
- * The tier a purchase that names a plan and no tier means (AGL-3965): a
- * `?plan=pro&ai=1` deep link, a checkout posting `aiAddon: true` alone. The
- * tier with that plan's old price and band, so a link published before tiers
- * existed still sells what it quoted. Null where the plan sells no tier.
- */
-export function defaultAiTierForPlan(plan: OrgPlan | string | null | undefined): AiTierId | null {
-  if (!planSellsAiTiers(plan)) return null
-  return LEGACY_AI_ADDON_TIER_BY_PLAN[plan as OrgPlan] ?? null
-}
-
-/** Whether a value is one of the tier ids. */
-export function isAiTierId(value: unknown): value is AiTierId {
-  return typeof value === 'string' && (AI_TIER_IDS as readonly string[]).includes(value)
-}
-
-/**
- * The add-on key an Aglyn AI tier travels under outside the billing routes
- * (AGL-3965): `ai:<tier>`, e.g. `ai:boost`. The ONE spelling a bundle
- * checkout link (AGL-3955) and a hand-off proposal's add-on list (AGL-3956)
- * name a tier by, parsed and listed here, beside the tiers, so neither
- * restates the ids.
- */
-export type AiTierAddonKey = `ai:${AiTierId}`
-
-/** `ai:<tier>` for a tier. */
-export function aiTierAddonKey(tier: AiTierId): AiTierAddonKey {
-  return `ai:${tier}`
-}
-
-/**
- * The tier an `ai:<tier>` key names, or null for anything else — another
- * add-on's key, a bare `ai`, an unknown tier, a non-string. Exact and
- * case-sensitive: a key is read off a link, and guessing is the expensive
- * direction to be wrong in (`parseOnboardingPlanIntent` reads `?ai=` the
- * same way).
- */
-export function parseAiTierAddonKey(key: unknown): AiTierId | null {
-  if (typeof key !== 'string' || !key.startsWith('ai:')) return null
-  const tier = key.slice(3)
-  return isAiTierId(tier) ? tier : null
-}
-
-/** One tier as an add-on a bundle or a proposal can carry. */
-export interface AiTierAddonOption {
-  key: AiTierAddonKey
-  tier: AiTierId
-  label: string
-  monthlyUsd: number
-  yearlyUsd: number
-  credits: number
-}
-
-/**
- * Every tier as an `ai:<tier>` add-on, smallest first — what a picker that
- * offers "Aglyn AI" beside the other add-ons lists. Empty for a plan that
- * sells no tier (Free, Enterprise) when a plan is given.
- */
-export function listAiTierAddons(plan?: OrgPlan | string | null): AiTierAddonOption[] {
-  if (plan !== undefined && !planSellsAiTiers(plan)) return []
-  return AI_TIER_IDS.map((tier) => ({
-    key: aiTierAddonKey(tier),
-    tier,
-    label: AI_TIERS[tier].label,
-    monthlyUsd: AI_TIERS[tier].monthlyUsd,
-    yearlyUsd: AI_TIERS[tier].yearlyUsd,
-    credits: AI_TIERS[tier].credits,
-  }))
-}
-
-/**
- * Whether a plan may buy an Aglyn AI tier (AGL-3965): every paid self-serve
- * plan. Not Free, which has no subscription to carry it, and not Enterprise,
- * whose AI is in the agreement.
- */
-export function planSellsAiTiers(plan: OrgPlan | string | undefined | null): boolean {
+export function planSellsAiCredits(plan: OrgPlan | string | undefined | null): boolean {
   return planSellsSiteCare(plan)
 }
 
@@ -1507,9 +1389,9 @@ export interface PlanPricing {
   extraDataGbMonthlyUsd: number | null
   /**
    * Metered overage per 1,000 customer REST API requests beyond
-   * `apiRequestsPerMonth` (AGL-634). API access starts at Business and every
-   * tier above it carries it, so Free, Starter and Pro are null (no API to
-   * meter).
+   * `apiRequestsPerMonth` (AGL-634). API access starts at Pro since pricing
+   * v4 (Business before it) and every tier above it carries it, so Free and
+   * Starter are null (no API to meter).
    */
   extraApiRequestsUsdPer1k: number | null
   /**
@@ -1580,6 +1462,9 @@ export interface PlanPricing {
    * month above its band whenever receipts, invites, booking reminders and
    * workflow notifications carry it there. That excess is real provider spend
    * that no gate could have stopped, and this is the rate it bills at.
+   * (The one bound on it is an abuse ceiling per UTC day, far above any real
+   * store's volume and named nowhere a customer reads:
+   * `transactional-email-ceiling.ts`, AGL-4145.)
    *
    * ## Retail, NOT the infrastructure pass-through
    *
@@ -1623,6 +1508,31 @@ export interface PlanPricing {
    */
   extraEmailSendsUsdPer1k: number | null
   /**
+   * Overage per 1,000 workflow and action runs past the plan's run bands
+   * (`workflowRunsPerMonth`, `actionRunsPerMonth`), since pricing v4
+   * (2026-11-03, AGL-4126). Null where the bands are walls: Free and Starter
+   * keep every wall, and Enterprise's terms are contractual.
+   *
+   * ## Derived from cost, like the pass-through
+   *
+   * Not a retail ladder like contacts or email: it is
+   * `ORG_COGS_UNIT_RATES_USD.perRun` ($13 per million) at cost + 30% kept
+   * after Stripe's percentage fee — `publishedMeteredPrice(perRun × 1,000, 2)`,
+   * the rule `METERED_PRICE_MULTIPLE` sets for storage, bandwidth and form
+   * submissions — which is $0.0174 per 1,000, rounded UP to the cent the page
+   * quotes it in: $0.02. Written as {@link RUN_OVERAGE_USD_PER_1K} because a
+   * `const` declared further down this file cannot be read while this table
+   * is built; `tier-margin-floor.spec.ts` derives it and pins the two equal.
+   *
+   * ## What it decides at the gate
+   *
+   * A plan WITH a rate runs past its band and bills the excess
+   * (`runOverageSold`); a plan without one stops at the band, as every plan
+   * did before v4. Billed by `report-usage` through `priceRunOverage`, on the
+   * same invoice line as the other overages.
+   */
+  extraRunsUsdPer1k: number | null
+  /**
    * Whether the plan carries the metered infrastructure pass-through
    * (AGL-41, turned on in AGL-1280): media storage, bandwidth (page views)
    * and form submissions BEYOND the plan's included bands, billed at
@@ -1642,6 +1552,16 @@ export interface PlanPricing {
 }
 
 /**
+ * The run overage, per 1,000 workflow or action runs past the bands (pricing
+ * v4, 2026-11-03, AGL-4126): `ORG_COGS_UNIT_RATES_USD.perRun` × 1,000 ×
+ * `METERED_PRICE_MULTIPLE`, rounded up to the cent — $0.013 × 1.3388 is
+ * $0.0174, published as $0.02. A literal because the cost table and the
+ * multiple are declared below `PLAN_PRICING`, which reads this at load;
+ * `tier-margin-floor.spec.ts` derives it from them and pins it.
+ */
+export const RUN_OVERAGE_USD_PER_1K = 0.02
+
+/**
  * Flat subscription pricing per tier (AGL-68). Kept beside the entitlements
  * so price changes ride the same review path; Stripe price ids map to plans
  * via `STRIPE_PRICE_*` env vars on the billing API routes.
@@ -1659,6 +1579,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraAssistCreditsUsdPer1k: null,
     extraContactsUsdPer1k: null,
     extraEmailSendsUsdPer1k: null,
+    extraRunsUsdPer1k: null,
     meteredInfraPassThrough: false,
   },
   starter: {
@@ -1683,20 +1604,28 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     // so a rate here would price volume that can never be computed, which is
     // the same defect as a rate beside an UNLIMITED band.
     extraEmailSendsUsdPer1k: null,
+    // Starter keeps every wall (v4): its run bands stop rather than bill.
+    extraRunsUsdPer1k: null,
     meteredInfraPassThrough: true,
   },
+  // Pricing v4 (2026-11-03, AGL-4126): $49 a month billed yearly ($588 a
+  // year), $69 month to month, from $39/$56, for the full platform. Live
+  // Stripe prices `aglyn_pro_v4` and `aglyn_pro_v4_yearly`; the v2 prices
+  // stay in Stripe as history.
   pro: {
-    basePriceMonthlyUsd: 56,
-    basePriceAnnualMonthlyUsd: 39,
+    basePriceMonthlyUsd: 69,
+    basePriceAnnualMonthlyUsd: 49,
     extraHostMonthlyUsd: 20,
     extraSeatMonthlyUsd: 4,
     extraCollaboratorMonthlyUsd: 2,
     extraDatasetMonthlyUsd: 2,
     extraDataGbMonthlyUsd: 0.36,
-    extraApiRequestsUsdPer1k: null,
+    // Business's rate, with the band and the API that moved in from it (v4).
+    extraApiRequestsUsdPer1k: 0.5,
     extraAssistCreditsUsdPer1k: 3,
     extraContactsUsdPer1k: 0.75,
     extraEmailSendsUsdPer1k: 2.25,
+    extraRunsUsdPer1k: RUN_OVERAGE_USD_PER_1K,
     meteredInfraPassThrough: true,
   },
   business: {
@@ -1711,6 +1640,9 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraAssistCreditsUsdPer1k: 2.75,
     extraContactsUsdPer1k: 0.5,
     extraEmailSendsUsdPer1k: 2,
+    // A runs band and the pass-through: the rate every such plan carries
+    // since v4. Retired with the plan; kept so the row reads whole.
+    extraRunsUsdPer1k: RUN_OVERAGE_USD_PER_1K,
     meteredInfraPassThrough: true,
   },
   scale: {
@@ -1725,6 +1657,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraAssistCreditsUsdPer1k: 2.5,
     extraContactsUsdPer1k: 0.4,
     extraEmailSendsUsdPer1k: 1.9,
+    extraRunsUsdPer1k: RUN_OVERAGE_USD_PER_1K,
     meteredInfraPassThrough: true,
   },
   advanced: {
@@ -1747,6 +1680,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     // infrastructure pass-through earns while being sold as cost recovery.
     extraContactsUsdPer1k: 0.4,
     extraEmailSendsUsdPer1k: 1.85,
+    extraRunsUsdPer1k: RUN_OVERAGE_USD_PER_1K,
     meteredInfraPassThrough: true,
   },
   // Agency is the one tier whose PRICE moved. It included 100 hosts, 20 TB of
@@ -1795,6 +1729,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     // sentinel.
     extraContactsUsdPer1k: 0.4,
     extraEmailSendsUsdPer1k: 1.8,
+    extraRunsUsdPer1k: RUN_OVERAGE_USD_PER_1K,
     meteredInfraPassThrough: true,
   },
   // Enterprise (AGL-1118) has NO list price — every figure here is the
@@ -1817,6 +1752,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraAssistCreditsUsdPer1k: null,
     extraContactsUsdPer1k: null,
     extraEmailSendsUsdPer1k: null,
+    extraRunsUsdPer1k: null,
     meteredInfraPassThrough: false,
   },
 }
@@ -2347,26 +2283,21 @@ export function orgListPriceMonthlyUsd(
     seats(addons.posRegisters, POS_REGISTER_ADDON_MONTHLY_USD) +
     seats(addons.eventCalendar, EVENT_CALENDAR_ADDON_MONTHLY_USD) +
     seats(siteCareUnits(addons), SITE_CARE_ADDON_MONTHLY_USD) +
-    // A toggle, not a quantity: one purchase covers the org, so a stored
-    // quantity above one bills once, at its tier's price (AGL-3965).
-    aiTierMonthlyUsd(aiTierOfPurchase(org))
+    // Aglyn AI credit blocks (AGL-4144), $10 each on a plan that sells them.
+    seats(
+      planSellsAiCredits(org?.plan) ? aiAddonUnits(addons) : 0,
+      AI_CREDIT_BLOCK_MONTHLY_USD,
+    )
   )
 }
 
-/** A tier's monthly price, or 0 for no tier. */
-function aiTierMonthlyUsd(tier: AiTierId | null): number {
-  return tier ? AI_TIERS[tier].monthlyUsd : 0
-}
-
 /**
- * How many Aglyn AI add-ons a purchase map counts as: 0 or 1 (AGL-2896).
- * The add-on is org-wide like Event Calendar, so a quantity above one — a
- * hand edit, a doubled webhook item — is one purchase, and a non-number,
- * `NaN` or a negative is none.
+ * How many Aglyn AI credit blocks a purchase map counts as (AGL-4144): a
+ * whole number from 0 to 30 (`aiCreditBlockCount`). A non-number, `NaN` or a
+ * negative is none, and a quantity above the ceiling is the ceiling.
  */
-export function aiAddonUnits(addons: OrgSeatAddons | null | undefined): 0 | 1 {
-  const quantity = Number(addons?.aiAddon ?? 0)
-  return Number.isFinite(quantity) && quantity >= 1 ? 1 : 0
+export function aiAddonUnits(addons: OrgSeatAddons | null | undefined): number {
+  return aiCreditBlockCount(addons?.aiAddon)
 }
 
 /**
@@ -3394,103 +3325,82 @@ function resolvePurchasedAddons(
 }
 
 /**
- * Whether the org's Aglyn AI add-on currently applies (AGL-2896): bought,
- * and on a subscription that is still paying for it. The ONE reading of
- * `seatAddons.aiAddon` — the entitlement fold and the assist overage rate
- * both ask this, so a dead subscription drops the band and the rate
- * together rather than leaving a rate on a band that has gone.
+ * Whether the org holds Aglyn AI credit blocks that currently apply
+ * (AGL-2896, AGL-4144): bought, and on a subscription that is still paying
+ * for them. The ONE reading of `seatAddons.aiAddon` — the entitlement fold
+ * and the assist overage rate both ask this, so a dead subscription drops
+ * the credits and the rate together rather than leaving a rate on a band
+ * that has gone.
  */
 export function hasAiAddon(
   org: Partial<AglynOrgBilling> | null | undefined,
 ): boolean {
-  return aiAddonUnits(resolvePurchasedAddons(org)) === 1
+  return aiAddonUnits(resolvePurchasedAddons(org)) > 0
 }
 
 /**
- * Which Aglyn AI tier the org's purchase map holds (AGL-3965), whether or
- * not the subscription is still paying for it — `resolveAiTier` is the
- * reading that drops a dead one. `org.aiTier` when it names a tier;
- * otherwise, for an add-on bought before tiers existed, the tier with that
- * plan's old price and band (`LEGACY_AI_ADDON_TIER_BY_PLAN`). Null when no
- * add-on is held or the plan sells no tier (Free, Enterprise).
+ * How many Aglyn AI credit blocks currently apply (AGL-4144): bought, on a
+ * subscription still paying for them, on a plan that sells blocks. 0 on a
+ * dead subscription, on Free, and on Enterprise (whose add-on is the
+ * agreement's figure, not blocks). The ONE reading every surface that shows
+ * or counts blocks goes through.
  */
-export function aiTierOfPurchase(
+export function resolveAiCreditBlocks(
   org: Partial<AglynOrgBilling> | null | undefined,
-): AiTierId | null {
-  if (aiAddonUnits(org?.seatAddons) !== 1) return null
-  if (!planSellsAiTiers(org?.plan)) return null
-  if (isAiTierId(org?.aiTier)) return org.aiTier
-  return LEGACY_AI_ADDON_TIER_BY_PLAN[org?.plan as OrgPlan] ?? null
+): number {
+  if (!planSellsAiCredits(resolveEffectivePlan(org))) return 0
+  return aiAddonUnits(resolvePurchasedAddons(org))
 }
 
 /**
- * The Aglyn AI tier that currently applies (AGL-3965): bought, on a
- * subscription still paying for it, on a plan that sells tiers. The ONE
- * reading every surface that shows or counts a tier goes through.
+ * What one unit of `seatAddons.aiAddon` adds on an Enterprise org (AGL-2896,
+ * kept through AGL-3965 and AGL-4144): 298,000 credits, the figure the
+ * per-plan table carried as twice the top plan's band, and still what a
+ * contract that names the add-on starts from before its own number is
+ * written. Enterprise buys no blocks — its AI is in the agreement — so this
+ * is the contract figure kept, not a price; finite, never `UNLIMITED`, for
+ * the reason `ENTERPRISE_ASSIST_CREDITS_PER_MONTH` gives.
  */
-export function resolveAiTier(
-  org: Partial<AglynOrgBilling> | null | undefined,
-): AiTierId | null {
-  return hasAiAddon(org) ? aiTierOfPurchase(org) : null
-}
-
-/**
- * What `seatAddons.aiAddon` adds on an Enterprise org (AGL-2896, kept by
- * AGL-3965): twice Studio's band, the figure the per-plan table carried as
- * twice Agency's (the rule every Enterprise fallback follows since AGL-2654),
- * and still what a contract that names the add-on starts from before its own
- * number is written. Enterprise buys no tier — its AI is in the agreement —
- * so this is the contract figure kept, not a price; finite, never
- * `UNLIMITED`, for the reason `ENTERPRISE_ASSIST_CREDITS_PER_MONTH` gives.
- */
-export const ENTERPRISE_AI_ADDON_CREDITS_PER_MONTH = AI_TIERS.studio.credits * 2
+export const ENTERPRISE_AI_ADDON_CREDITS_PER_MONTH = 298_000
 
 /**
  * The Aglyn AI add-on's per-unit quota as `resolveOrgEntitlements` folds it
- * (AGL-3965): the purchased tier's credits, on a plan that sells tiers;
- * Enterprise's contract figure (`ENTERPRISE_AI_ADDON_CREDITS_PER_MONTH`);
- * else 0 (Free). The AI plugin declares its seat add-on with this as
- * `quota.perUnit`.
+ * (AGL-4144): 5,000 credits a block on a plan that sells blocks; Enterprise's
+ * contract figure (`ENTERPRISE_AI_ADDON_CREDITS_PER_MONTH`); else 0 (Free).
+ * The AI plugin declares its seat add-on with this as `quota.perUnit`.
  */
-export function aiTierQuotaPerUnit(
-  org: Partial<AglynOrgBilling> | null | undefined,
+export function aiCreditsQuotaPerUnit(
+  _org: Partial<AglynOrgBilling> | null | undefined,
   plan: OrgPlan,
 ): number {
   if (plan === 'enterprise') return ENTERPRISE_AI_ADDON_CREDITS_PER_MONTH
-  if (!planSellsAiTiers(plan)) return 0
-  const tier = aiTierOfPurchase(org)
-  return tier ? AI_TIERS[tier].credits : 0
+  return planSellsAiCredits(plan) ? AI_CREDITS_PER_BLOCK : 0
 }
 
 /**
  * The credits a month the org's Aglyn AI add-on adds to its plan's included
- * band (AGL-3965) — 0 with none held. The SAME figure `resolveOrgEntitlements`
- * folds into `assistCreditsPerMonth` (`aiTierQuotaPerUnit`), so a surface
- * quoting "your tier adds" and the meter agree.
+ * band (AGL-4144) — 0 with none held. The SAME figure `resolveOrgEntitlements`
+ * folds into `assistCreditsPerMonth` (units × `aiCreditsQuotaPerUnit`), so a
+ * surface quoting "your blocks add" and the meter agree.
  */
-export function aiTierCreditsPerMonth(
+export function aiCreditBlocksCreditsPerMonth(
   org: Partial<AglynOrgBilling> | null | undefined,
 ): number {
   if (!hasAiAddon(org)) return 0
-  return aiTierQuotaPerUnit(org, resolveEffectivePlan(org))
+  const plan = resolveEffectivePlan(org)
+  return aiAddonUnits(resolvePurchasedAddons(org)) * aiCreditsQuotaPerUnit(org, plan)
 }
 
 /**
- * Whether this org can buy or change an Aglyn AI tier itself (AGL-3965): a
- * plan that sells tiers, and not one a staff comp grants — a comp has no
- * subscription to put the tier on (`compPricing`).
+ * Whether this org can buy or change Aglyn AI credit blocks itself
+ * (AGL-4144): a plan that sells them, and not one a staff comp grants — a
+ * comp has no subscription to put the blocks on (`compPricing`).
  */
-export function orgCanBuyAiTier(
+export function orgCanBuyAiCredits(
   org: Partial<AglynOrgBilling> | null | undefined,
 ): boolean {
-  return !resolvePlanComp(org) && planSellsAiTiers(resolveEffectivePlan(org))
+  return !resolvePlanComp(org) && planSellsAiCredits(resolveEffectivePlan(org))
 }
-
-/** "Aglyn AI Boost": the product name, then the tier's. */
-export const aiTierName = (
-  tier: AiTierId,
-  brand: string = PLATFORM_BRAND_NAME,
-): string => `${aiAddonName(brand)} ${AI_TIERS[tier].label}`
 
 /**
  * Whether the org's Site Care add-on currently applies (AGL-3954): bought,
@@ -5066,7 +4976,7 @@ export interface ApiRequestQuotaResult {
 
 /**
  * Customer REST API request meter (AGL-634): the monthly request count for an
- * org. Business and every tier above it carry `apiAccess` and an
+ * org. Pro (since pricing v4) and every tier above it carry `apiAccess` and an
  * `extraApiRequestsUsdPer1k` rate, so requests past the included quota meter
  * onto the monthly invoice
  * (cost-plus, like storage overage — never a hard wall mid-integration); plans
@@ -5093,6 +5003,71 @@ export function checkApiRequestQuota(
         ? 0
         : Math.round((overageRequests / 1000) * overageRateUsd * 100) / 100,
     overageRateUsd,
+  }
+}
+
+/** The two monthly run bands the workflows plugin's gates are held to. */
+export type RunBandKey = 'workflowRunsPerMonth' | 'actionRunsPerMonth'
+
+/** Both run bands, in the order the usage page meters them. */
+export const RUN_BAND_KEYS: readonly RunBandKey[] = ['workflowRunsPerMonth', 'actionRunsPerMonth']
+
+/**
+ * Whether the org's plan sells runs past its run bands (pricing v4,
+ * 2026-11-03, AGL-4126): a non-null `extraRunsUsdPer1k` on the row the org is
+ * priced at (`resolvePlanPricing`, so a comp sells nothing). The run gates ask
+ * this before refusing at the band: true and the run goes ahead and is billed
+ * past the band; false — Free, Starter, a comp, Enterprise — and the band is
+ * the wall it always was.
+ */
+export function runOverageSold(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): boolean {
+  return resolvePlanPricing(org).extraRunsUsdPer1k !== null
+}
+
+export interface RunOveragePrice {
+  /** Runs past each band, summed: workflow runs plus action runs. */
+  overageRuns: number
+  /** Per-1,000 rate; null when the plan sells no runs past its bands. */
+  overageRateUsd: number | null
+  /** The month's charge at that rate, to the cent; 0 without a rate. */
+  overageMonthlyUsd: number
+}
+
+/**
+ * The month's run overage (pricing v4, AGL-4126): each band's excess on its
+ * own — a workspace far under its action band does not lend headroom to its
+ * workflow band — summed and priced at the plan's `extraRunsUsdPer1k`. The
+ * counts are the WORKSPACE's (`run-meter.ts`), the figure each band is held
+ * to. A plan with no rate prices nothing, whatever the counts say.
+ *
+ * `used` is keyed by the band each count is held to (`RUN_BAND_KEYS`), so a
+ * caller outside the workflows plugin reads its counts off the declared bands
+ * and never names the plugin's own meters.
+ */
+export function priceRunOverage(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  used: Readonly<Partial<Record<RunBandKey, number | null>>>,
+): RunOveragePrice {
+  const entitlements = resolveOrgEntitlements(org) as unknown as Record<string, unknown>
+  const overageRateUsd = resolvePlanPricing(org).extraRunsUsdPer1k
+  const past = (count: number | null | undefined, band: RunBandKey): number => {
+    const value = Number(count ?? 0)
+    const included = Number(entitlements[band] ?? 0)
+    // A corrupt count bills nothing, and an UNLIMITED band has no excess.
+    if (!Number.isFinite(value) || value <= 0) return 0
+    if (!Number.isFinite(included)) return 0
+    return Math.max(0, Math.floor(value) - Math.max(0, included))
+  }
+  const overageRuns = RUN_BAND_KEYS.reduce((sum, band) => sum + past(used[band], band), 0)
+  return {
+    overageRuns,
+    overageRateUsd,
+    overageMonthlyUsd:
+      overageRateUsd === null
+        ? 0
+        : Math.round((overageRuns / 1000) * overageRateUsd * 100) / 100,
   }
 }
 
@@ -5260,7 +5235,9 @@ export function checkCrmEmailQuota(
 /**
  * Volume above the plan's included band, in emails.
  *
- * Transactional mail is never refused, so an org CAN and will finish a month
+ * Transactional mail is never refused by a quota (only by the daily abuse
+ * ceiling in `transactional-email-ceiling.ts`, which no real store reaches),
+ * so an org CAN and will finish a month
  * over its included allowance. That is not an error and not a failed send —
  * it is the overage the cap chose not to enforce, and recording it is what
  * keeps it from being a surprise at invoicing. `UNLIMITED` (and any

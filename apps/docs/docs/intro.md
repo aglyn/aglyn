@@ -95,11 +95,11 @@ flowchart TD
 | **Component** | A building block on the canvas (Button, Image, Video, Form, and more). Can be made **reusable**. |
 | **Binding** | A live reference in a text prop — `{'{{variable}}'}`, `{'{{fn:name(args)}}'}`, or a dataset field — resolved at render time. |
 | **Dataset** | Structured content (a typed model with records) that pages read from and forms write to. |
-| **Plan & entitlements** | Your subscription tier gates features and quotas (Free, Pro, Business). |
+| **Plan & entitlements** | Your plan gates features and quotas (Free, Starter, Pro, Custom). |
 
 :::info Plan availability
-**Free** for core building. **Pro** and **Business** unlock advanced features — each page
-notes what it needs.
+**Free** for core building. **Starter** adds your own domain and a store, and **Pro**
+unlocks the full platform — each page notes what it needs.
 :::
 
 Ready? Head to **[Create your first site](getting-started/create-a-site.md)**.

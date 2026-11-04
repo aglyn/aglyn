@@ -52,7 +52,7 @@ let store: Record<string, Record<string, any>> = {}
 let updates: { path: string; data: Record<string, any> }[] = []
 let minted = 0
 /** The owning org's billing doc — the plan every gate reads. */
-let mockOrg: Record<string, any> = { plan: 'business' }
+let mockOrg: Record<string, any> = { plan: 'pro' }
 /** Every message handed to the mail provider. */
 let sentMessages: Record<string, any>[] = []
 /** Every manager notification. */
@@ -338,7 +338,7 @@ beforeEach(() => {
   store = {}
   updates = []
   minted = 0
-  mockOrg = { plan: 'business' }
+  mockOrg = { plan: 'pro' }
   sentMessages = []
   notices = []
   seed(hostPath, { name: 'Site' })
@@ -511,15 +511,16 @@ describe('the Actions tier gates, inside a workflow', () => {
     )
   })
 
-  it('keeps a webhook on Business, as it is in an action', async () => {
-    mockOrg = { plan: 'pro' }
+  it('keeps a webhook behind the webhooks gate, as it is in an action', async () => {
+    // Pricing v4 (AGL-4126) put webhooks on Pro beside the Actions builder,
+    // so no plan sold carries one without the other. The gate is exercised on
+    // a Pro org whose per-org override takes webhooks away.
+    mockOrg = { plan: 'pro', entitlements: { features: { webhooks: false } } }
     seedWorkflow([{ type: 'webhookPost', webhookId: 'hook-1' }])
 
     await runEventWorkflows(HOST_ID, 'formSubmission', SUBMISSION)
 
-    expect(String(history()[0]['action'])).toContain(
-      'webhooks require a Business plan',
-    )
+    expect(String(history()[0]['action'])).toContain('webhooks require a')
   })
 })
 
@@ -575,7 +576,7 @@ describe('one run, metered once', () => {
 describe('a suspended site', () => {
   it('runs no workflow when the WORKSPACE is suspended', async () => {
     seedWorkflow(INTAKE_STEPS)
-    mockOrg = { plan: 'business', suspendedAt: { seconds: 1 }, suspendedReasonCode: 'security' }
+    mockOrg = { plan: 'pro', suspendedAt: { seconds: 1 }, suspendedReasonCode: 'security' }
 
     await runEventWorkflows(HOST_ID, 'formSubmission', {
       ...SUBMISSION,
@@ -614,7 +615,7 @@ describe('a suspended site', () => {
 
   it('keeps running through a read-only maintenance window', async () => {
     seedWorkflow(INTAKE_STEPS)
-    mockOrg = { plan: 'business', suspendedAt: { seconds: 1 }, suspendedMode: 'read-only' }
+    mockOrg = { plan: 'pro', suspendedAt: { seconds: 1 }, suspendedMode: 'read-only' }
 
     await runEventWorkflows(HOST_ID, 'formSubmission', {
       ...SUBMISSION,

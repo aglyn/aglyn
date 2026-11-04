@@ -73,17 +73,17 @@ const NO_BAND = {
   entitlements: { assistCreditsPerMonth: 0 },
 } as any
 
-/** Named for the ONE pool (AGL-2899): a tier widens it, never a second meter. */
+/** Named for the ONE pool (AGL-2899): a block widens it, never a second meter. */
 const METER = 'AI credits (this month)'
-/** Pro with no tier: 2,750 credits, and the tiers on offer. */
+/** Pro with no blocks: 2,750 credits, and blocks on offer. */
 const PRO = { $id: 'org-1', plan: 'pro' } as any
-/** Pro with the add-on bought before tiers (Boost): 2,750 + 9,000 in one band. */
+/** Pro with two blocks of Aglyn AI credits (AGL-4144): 2,750 + 10,000 in one band. */
 const PRO_WITH_AI = {
   $id: 'org-1',
   plan: 'pro',
-  seatAddons: { aiAddon: 1 },
+  seatAddons: { aiAddon: 2 },
 } as any
-/** Starter with the add-on bought before tiers (Spark): its own 750, plus 4,000. */
+/** Starter with one block: its own 750, plus 5,000. */
 const STARTER_WITH_AI = {
   $id: 'org-1',
   plan: 'starter',
@@ -197,10 +197,10 @@ describe('a workspace with a band can see how much of it is left', () => {
 })
 
 /**
- * ONE meter, ONE pool (AGL-2899, AGL-3965). An Aglyn AI tier adds its credits
- * (`AI_TIERS[tier].credits`) to `assistCreditsPerMonth`, so the denominator
- * here is plan plus tier, the caption names the tier's share, and a plan that
- * sells tiers but holds none is pointed at the add-ons card — on the Billing
+ * ONE meter, ONE pool (AGL-2899, AGL-4144). Aglyn AI credit blocks add 5,000
+ * credits each to `assistCreditsPerMonth`, so the denominator here is plan
+ * plus blocks, the caption names the blocks' share, and a plan that sells
+ * blocks but holds none is pointed at the add-ons card — on the Billing
  * overview, because these meters render on the Usage section where a bare
  * hash resolves to nothing.
  */
@@ -254,8 +254,8 @@ describe('an uncapped staff comp has a meter and no band (AGL-3049)', () => {
   })
 })
 
-describe('an Aglyn AI tier widens the one meter (AGL-2899, AGL-3965)', () => {
-  it('without a tier: the plan band, and the Choose a tier link', async () => {
+describe('Aglyn AI credit blocks widen the one meter (AGL-2899, AGL-4144)', () => {
+  it('without blocks: the plan band, and the Add credits link', async () => {
     mockCredits = { used: 1_000, limit: 2_750, remaining: 1_750 }
     render(
       <AiCreditsCard orgId="org-1" org={PRO} billingHref="/acme/billing" />,
@@ -263,44 +263,58 @@ describe('an Aglyn AI tier widens the one meter (AGL-2899, AGL-3965)', () => {
     await waitFor(() => expect(screen.getByText(METER)).toBeTruthy())
     const row = screen.getByText(METER).parentElement?.parentElement
     await waitFor(() => expect(row?.textContent).toContain('1000 / 2750'))
-    const link = screen.getByRole('link', { name: 'Choose a tier' })
+    const link = screen.getByRole('link', { name: 'Add credits' })
     expect(link.getAttribute('href')).toBe('/acme/billing#addons')
-    // The range the tiers add, smallest to largest, on any paid plan.
-    expect(screen.getByText(/tier adds 4,000 to 149,000 credits a month to this pool/)).toBeTruthy()
+    // What one block adds, at its price, on any paid plan — never a tier.
+    expect(
+      screen.getByText(/Each block of Aglyn AI credits adds 5,000 credits a month to this pool for \$10/),
+    ).toBeTruthy()
+    expect(screen.queryByText(/tier/i)).toBeNull()
     expect(screen.queryByText(/on top of your plan's/)).toBeNull()
   })
 
-  it('with a tier: plan plus tier as the included figure, and no link', async () => {
+  it('with blocks: plan plus blocks as the included figure, and no link', async () => {
     // FORCED RED by a meter that read the plan band alone: 2,750 is not the
-    // figure the assistant is refused at once the add-on is on.
-    mockCredits = { used: 4_500, limit: 11_750, remaining: 7_250 }
+    // figure the assistant is refused at once blocks are bought.
+    mockCredits = { used: 4_500, limit: 12_750, remaining: 8_250 }
     render(<AiCreditsCard orgId="org-1" org={PRO_WITH_AI} />)
     await waitFor(() => expect(screen.getByText(METER)).toBeTruthy())
     const row = screen.getByText(METER).parentElement?.parentElement
-    await waitFor(() => expect(row?.textContent).toContain('4500 / 11750'))
-    // No `aiTier` written: Pro's old add-on, which is Boost.
+    await waitFor(() => expect(row?.textContent).toContain('4500 / 12750'))
     expect(
-      screen.getByText("Includes 9,000 credits a month from Aglyn AI Boost, on top of your plan's."),
+      screen.getByText(
+        "Includes 10,000 credits a month from 2 blocks of Aglyn AI credits, on top of your plan's.",
+      ),
     ).toBeTruthy()
-    expect(screen.queryByRole('link', { name: 'Choose a tier' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Add credits' })).toBeNull()
     // Still one meter: the add-on is not a second row.
     expect(screen.getAllByText(METER)).toHaveLength(1)
     expect(screen.queryAllByText(/credits \(this month\)/)).toHaveLength(1)
   })
 
-  it('Starter with the add-on widens its band to 750 + 4,000 (AGL-3203)', async () => {
-    // The add-on ADDS to the plan's own 750; it is not the band itself, and
-    // a meter reading 4,000 would be short by the credits the plan includes.
-    // The caption names the add-on's SHARE, which is still 4,000.
-    mockCredits = { used: 500, limit: 4_750, remaining: 4_250 }
+  it('a retired tier on the document names no tier and adds nothing', async () => {
+    mockCredits = { used: 500, limit: 5_750, remaining: 5_250 }
+    render(<AiCreditsCard orgId="org-1" org={{ ...STARTER_WITH_AI, aiTier: 'studio' }} />)
+    await waitFor(() => expect(screen.getByText(METER)).toBeTruthy())
+    expect(
+      screen.getByText("Includes 5,000 credits a month from 1 block of Aglyn AI credits, on top of your plan's."),
+    ).toBeTruthy()
+    expect(screen.queryByText(/Studio/)).toBeNull()
+  })
+
+  it('Starter with one block widens its band to 750 + 5,000 (AGL-3203)', async () => {
+    // The block ADDS to the plan's own 750; it is not the band itself, and
+    // a meter reading 5,000 would be short by the credits the plan includes.
+    // The caption names the block's SHARE, which is 5,000.
+    mockCredits = { used: 500, limit: 5_750, remaining: 5_250 }
     render(<AiCreditsCard orgId="org-1" org={STARTER_WITH_AI} />)
     await waitFor(() => expect(screen.getByText(METER)).toBeTruthy())
     const row = screen.getByText(METER).parentElement?.parentElement
-    await waitFor(() => expect(row?.textContent).toContain('500 / 4750'))
+    await waitFor(() => expect(row?.textContent).toContain('500 / 5750'))
     expect(
-      screen.getByText("Includes 4,000 credits a month from Aglyn AI Spark, on top of your plan's."),
+      screen.getByText("Includes 5,000 credits a month from 1 block of Aglyn AI credits, on top of your plan's."),
     ).toBeTruthy()
-    // Still one meter: the add-on widened the pool, it did not open a second.
+    // Still one meter: the block widened the pool, it did not open a second.
     expect(screen.getAllByText(METER)).toHaveLength(1)
   })
 
@@ -311,7 +325,7 @@ describe('an Aglyn AI tier widens the one meter (AGL-2899, AGL-3965)', () => {
     mockCredits = null
     render(<AiCreditsCard orgId="org-1" org={NO_BAND} billingHref="/acme/billing" />)
     await waitFor(() => expect(screen.queryAllByText(METER)).toHaveLength(0))
-    expect(screen.queryByRole('link', { name: 'Choose a tier' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Add credits' })).toBeNull()
   })
 
   it('says a band of zero is the plan’s, and links to Billing’s plans (AGL-3982)', async () => {
@@ -339,9 +353,9 @@ describe('an Aglyn AI tier widens the one meter (AGL-2899, AGL-3965)', () => {
     await waitFor(() => expect(screen.getByText(METER)).toBeTruthy())
     const row = screen.getByText(METER).parentElement?.parentElement
     await waitFor(() => expect(row?.textContent).toContain('200 / 750'))
-    const link = screen.getByRole('link', { name: 'Choose a tier' })
+    const link = screen.getByRole('link', { name: 'Add credits' })
     expect(link.getAttribute('href')).toBe('/acme/billing#addons')
-    expect(screen.getByText(/tier adds 4,000 to 149,000 credits a month to this pool/)).toBeTruthy()
+    expect(screen.getByText(/Each block of Aglyn AI credits adds 5,000 credits a month/)).toBeTruthy()
   })
 
   it('Free shows the taste as a meter and never the add-on link (AGL-2925)', async () => {
@@ -355,6 +369,6 @@ describe('an Aglyn AI tier widens the one meter (AGL-2899, AGL-3965)', () => {
       />,
     )
     await waitFor(() => expect(screen.getByText(METER)).toBeTruthy())
-    expect(screen.queryByRole('link', { name: 'Choose a tier' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Add credits' })).toBeNull()
   })
 })

@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { checkEntitlement } from '@aglyn/aglyn'
+import { checkEntitlement, PLAN_LABELS } from '@aglyn/aglyn'
 import { protectsIfDesignated, ssoEnforcementLoses } from '@aglyn/aglyn/app-utils/sso-enforcement'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
@@ -379,10 +379,11 @@ export function OrgSsoCard() {
       <SsoCardShell>
         <Stack spacing={2}>
           <Alert severity="info">
-            {'Single sign-on is part of Enterprise.'}
+            {`Single sign-on is part of the ${PLAN_LABELS.enterprise} plan.`}
           </Alert>
           <Typography variant="body2" color="text.secondary">
-            {'Once your organization is on an Enterprise plan, you set SSO up ' +
+            {`Once your organization is on the ${PLAN_LABELS.enterprise} ` +
+              'plan, you set SSO up ' +
               'yourself here — verify your domain, paste your identity ' +
               'provider’s details, and turn it on. There is no provisioning ' +
               'step on our side and nothing to wait for.'}

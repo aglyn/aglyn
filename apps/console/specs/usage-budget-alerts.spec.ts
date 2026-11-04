@@ -1197,13 +1197,13 @@ describe('the AI credits band alerts the customer (AGL-2898)', () => {
     // invoice charged $3.00. AGL-3203 put the rate on the plan row, so the
     // two readings cannot diverge again — asserted here BOTH ways.
     //
-    // With the add-on the band is 750 + 4,000 = 4,750.
+    // With one Aglyn AI credit block (AGL-4144) the band is 750 + 5,000 = 5,750.
     mockOrgs = [
       seededOrg({
         plan: 'starter',
         seatAddons: { aiAddon: 1 },
         rollup: null,
-        assistEstCostUsd: credits(5_250),
+        assistEstCostUsd: credits(6_250),
       }),
     ]
     await run()
@@ -1211,7 +1211,7 @@ describe('the AI credits band alerts the customer (AGL-2898)', () => {
     const [alert] = assistAlerts()
     expect(alert.title).toContain('extra credits are now billed')
     expect(alert.body).toContain(
-      'has used 5,250 AI assist credits — more than the 4,750 your plan includes this month',
+      'has used 6,250 AI assist credits — more than the 5,750 your plan includes this month',
     )
     expect(alert.body).toContain('metered on your monthly invoice at $3.00 per 1,000')
     expect(alert.body).not.toContain('$0.00 per 1,000')

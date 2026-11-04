@@ -714,12 +714,6 @@ export interface OrgPlanComp {
 }
 
 /**
- * The Aglyn AI tiers (AGL-3965), smallest first. Sold on their own to any
- * paid plan; the figures are `AI_TIERS` in `plan-entitlements.ts`.
- */
-export type AiTierId = 'spark' | 'boost' | 'plus' | 'max' | 'ultra' | 'studio'
-
-/**
  * Paid addon quantities (AGL-112/524) purchased on top of the plan's
  * included allowances, billed as items on the org's Stripe subscription.
  * Seat/dataset kinds resolve as `included + purchased` clamped to the
@@ -772,12 +766,10 @@ export interface OrgSeatAddons {
    */
   siteCare?: number
   /**
-   * Aglyn AI org-wide toggle, 0/1 (AGL-2896). One purchase covers every
-   * host in the org, the way Event Calendar does: `resolveOrgEntitlements`
-   * reads any quantity >= 1 as one and adds the purchased tier's credits
-   * (`AI_TIERS[org.aiTier].credits`, AGL-3965) to `assistCreditsPerMonth`.
-   * WHICH tier is `AglynOrgBilling.aiTier`; the price is the tier's, on any
-   * paid plan (`planSellsAiTiers`).
+   * Aglyn AI credit blocks, 0 to 30 (AGL-2896, AGL-4144). Org-wide: one
+   * pool covers every host. `resolveOrgEntitlements` adds 5,000 credits a
+   * block (`ai-credit-blocks.ts`) to `assistCreditsPerMonth`, on any paid
+   * self-serve plan (`planSellsAiCredits`), at $10 a month a block.
    */
   aiAddon?: number
 }
@@ -1211,18 +1203,6 @@ export interface AglynOrgBilling extends AglynDocument {
   /** Purchased addon seats (AGL-112); billed monthly per seat. */
   seatAddons?: OrgSeatAddons
   /**
-   * Which Aglyn AI tier `seatAddons.aiAddon` is (AGL-3965): Spark through
-   * Studio, read off the subscription's AI item by the webhook and the
-   * add-ons route, and written beside `seatAddons` by the same writes. An
-   * ENTITLEMENT INPUT like `seatAddons`, so Admin-SDK-only.
-   *
-   * Absent on an org whose add-on was bought before tiers existed: it then
-   * reads as the tier with that plan's old band and price
-   * (`LEGACY_AI_ADDON_TIER_BY_PLAN`), so no bill and no credit figure moved.
-   * `null` once written means no tier is held.
-   */
-  aiTier?: AiTierId | null
-  /**
    * POS register seats assigned out of the org pool (AGL-1775). An
    * ENTITLEMENT INPUT: it raises a per-site cap, so it is Admin-SDK-only.
    * @see OrgRegisterAllocations
@@ -1349,12 +1329,6 @@ export interface OrgUpgradeProposal {
   interval?: 'month' | 'year'
   /** A promotion code minted on the staff Coupons page, applied at checkout. */
   coupon?: string
-  /**
-   * The Aglyn AI tier proposed with the AI add-on (AGL-3965), written
-   * `ai:<tier>` in the add-on list. Absent, checkout sells the plan's
-   * default tier.
-   */
-  aiTier?: AiTierId
 }
 
 /**

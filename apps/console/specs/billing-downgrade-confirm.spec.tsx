@@ -65,11 +65,27 @@ import type { ReactNode } from 'react'
 
 const mockEnqueueSnackbar = jest.fn()
 
-/** A paying Pro org — the only shape for which anything below is a DOWNGRADE. */
-const ORG = {
+/**
+ * A paying Pro org — the shape for which a move to Starter is a DOWNGRADE.
+ *
+ * Mutable since pricing v4 (AGL-4126): Pro is the top self-serve plan, so it
+ * has no self-serve step UP — Custom above it is a conversation. The upgrade
+ * cases below run on a paying Starter org (`onStarter`), whose step up is Pro.
+ */
+const ORG: { $id: string; plan: 'pro' | 'starter'; subscription: { status: string } } = {
   $id: 'org-1',
-  plan: 'pro' as const,
+  plan: 'pro',
   subscription: { status: 'active' },
+}
+
+/** Run a describe's cases on a paying Starter org, for its step up to Pro. */
+function onStarter() {
+  beforeEach(() => {
+    ORG.plan = 'starter'
+  })
+  afterEach(() => {
+    ORG.plan = 'pro'
+  })
 }
 
 /** The period end every preview quotes, and the date the confirm must name. */
@@ -367,6 +383,7 @@ beforeEach(() => {
 
 afterEach(() => {
   jest.restoreAllMocks()
+  ORG.plan = 'pro'
 })
 
 /** POSTs that actually changed the subscription, as opposed to priced it. */
@@ -439,8 +456,11 @@ describe('a downgrade is never one-click from the billing card (AGL-1859 §2)', 
     )[0]
     expect(downgrade.className).toMatch(/MuiButton-text/)
     expect(downgrade.className).not.toMatch(/MuiButton-contained/)
-    const upgrade = screen.getAllByRole('button', { name: /^Upgrade/ })[0]
-    expect(upgrade.className).toMatch(/MuiButton-contained/)
+    // The loud control is the step UP. Above Pro that is Custom's "Contact
+    // sales" since pricing v4 (AGL-4126) — there is no self-serve Upgrade.
+    const stepUp = screen.getAllByRole('link', { name: /^Contact sales/ })[0]
+    expect(stepUp.className).toMatch(/MuiButton-contained/)
+    expect(screen.queryByRole('button', { name: /^Upgrade/ })).toBeNull()
   })
 
   it('the click PRICES the move and changes nothing — the confirm comes first', async () => {
@@ -532,6 +552,8 @@ describe('a downgrade is never one-click from the billing card (AGL-1859 §2)', 
 })
 
 describe('a held upgrade is not reported as a switch (AGL-3358)', () => {
+  onStarter()
+
   it('runs the bank challenge through handleNextAction, then says it is confirmed', async () => {
     confirmAnswers = [true]
     switchAnswers = [
@@ -543,8 +565,8 @@ describe('a held upgrade is not reported as a switch (AGL-3358)', () => {
           requiresAction: true,
           paymentClientSecret: 'pi_upgrade_secret_123',
           hostedInvoiceUrl: 'https://invoice.stripe.com/i/held',
-          plan: 'pro',
-          pendingPlan: 'business',
+          plan: 'starter',
+          pendingPlan: 'pro',
         },
       },
     ]
@@ -604,6 +626,8 @@ describe('a held upgrade is not reported as a switch (AGL-3358)', () => {
 })
 
 describe('an upgrade is the frictionless direction (AGL-1859 §2)', () => {
+  onStarter()
+
   it('is reachable WITHOUT a disclosure — it is on screen already', async () => {
     render(<BillingPage />)
     const upgrades = await screen.findAllByRole('button', { name: /^Upgrade/ })
@@ -672,14 +696,15 @@ describe('a plan change from the grid is reported to GA4 (AGL-2235)', () => {
 
   it('an in-place upgrade is reported too — expansion revenue was dark', async () => {
     // `purchase` only covers the Checkout path, so a subscriber moving UP
-    // minted no event at all before this.
+    // minted no event at all before this. From Starter: Pro has no
+    // self-serve step up since pricing v4 (AGL-4126).
+    ORG.plan = 'starter'
     confirmAnswers = [true]
     await press('Upgrade')
     await waitFor(() => expect(mockTrackEvent).toHaveBeenCalled())
 
     const params = eventNamed('plan_upgraded')
-    expect(params).toMatchObject({ from_plan: 'pro', interval: 'year' })
-    expect(String(params?.to_plan)).not.toBe('pro')
+    expect(params).toMatchObject({ from_plan: 'starter', to_plan: 'pro', interval: 'year' })
     // An upgrade lands now, so it carries no effective date to explain away.
     expect(params).not.toHaveProperty('effective_at')
     expect(eventNamed('plan_downgrade_scheduled')).toBeUndefined()
@@ -736,6 +761,8 @@ describe('a plan change from the grid is reported to GA4 (AGL-2235)', () => {
  * against calls and state in `billing-upgrade-collects-in-flow.spec.tsx`.
  */
 describe('the plan grid announces what an upgrade will collect', () => {
+  onStarter()
+
   /** Re-mount with a billing profile that is missing something. */
   function renderWithProfile(profile: Record<string, unknown>) {
     const real = global.fetch as any

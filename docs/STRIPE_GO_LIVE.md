@@ -14,7 +14,7 @@ STRIPE_SECRET_KEY=sk_live_... node tools/scripts/setup-stripe.mjs \
 Idempotent — prices are keyed by `lookup_key` (`aglyn_{plan}_v2` monthly,
 `aglyn_{plan}_v2_yearly` annual, the per-plan add-ons
 `aglyn_{plan}_extra_host` / `_extra_seat` / `_extra_member` / `_extra_dataset`
-each with a `_yearly` twin, the Aglyn AI tiers `aglyn_ai_{tier}[_yearly]`, the
+each with a `_yearly` twin, the Aglyn AI credit block `aglyn_ai_credits[_yearly]`, the
 flat `aglyn_pos_register_addon` / `aglyn_event_calendar_addon` pairs, and the
 `aglyn_metered_usage` pair; plans: starter/pro/business/scale/advanced/agency),
 so re-running reuses them. `--dry-run` resolves every key and creates nothing
@@ -33,43 +33,40 @@ The script prints the env block to paste into the console app's environment
 - `STRIPE_PRICE_{PLAN}_EXTRA_HOST`, `_EXTRA_SEAT`, `_EXTRA_MEMBER` and
   `_EXTRA_DATASET`, each with a `_YEARLY` variant, for the same six plans (the
   per-plan add-ons read by `libs/tenant/data/admin/src/lib/server/billing-addons.ts`)
-- `STRIPE_PRICE_AI_{SPARK|BOOST|PLUS|MAX|ULTRA|STUDIO}` and their `_YEARLY`
-  variants (the Aglyn AI tiers)
+- `STRIPE_PRICE_AI_CREDITS` and `STRIPE_PRICE_AI_CREDITS_YEARLY` (the Aglyn
+  AI credit block)
 - `STRIPE_PRICE_POS_REGISTER`, `STRIPE_PRICE_EVENT_CALENDAR`,
   `STRIPE_PRICE_SITE_CARE` and their `_YEARLY` variants (the flat add-ons)
 - `STRIPE_PRICE_METERED`, `STRIPE_PRICE_METERED_YEARLY`, `STRIPE_METER_ID`,
   `STRIPE_METER_EVENT_NAME`
 - `STRIPE_WEBHOOK_SECRET`, `STRIPE_CONNECT_WEBHOOK_SECRET`
 
-### The Aglyn AI tiers (AGL-2896/2897, AGL-3965)
+### Aglyn AI credits by the block (AGL-2896/2897, AGL-4144)
 
-Sold as a second recurring item on the org's one subscription, quantity 1,
-priced per TIER from `AI_TIERS` (Spark … Studio; annual is ×12), the same on
-every paid plan. It reaches Stripe two ways: `POST /api/billing/checkout` with
-`aiTier: '<tier>'` (or `aiAddon: true` alone, which means the tier with the
-plan's old price and band — what the `?plan=pro&ai=1` signup deep link sends;
-`&ai=boost` names a tier), and `POST /api/billing/addons` with
-`kind: 'aiAddon'` and `tier` on a live subscription, where moving up is
-charged now and moving down is scheduled for the period end. Either way the
-webhook mirrors the item onto `org.seatAddons.aiAddon` and `org.aiTier`, which
-is what adds the tier's credits to the assist band. Generation itself is open
-on every plan against the plan's own credits.
+Sold as one more recurring item on the org's one subscription: the
+`aglyn_ai_credits` price (or `aglyn_ai_credits_yearly` on an annual
+subscription) at $10 a month a block, ×12 yearly, the same on every paid plan,
+with the item's **quantity** the number of blocks (1 to 30). Each block adds
+5,000 credits a month to the plan's included band
+(`libs/aglyn/src/lib/app-utils/ai-credit-blocks.ts`); past the plan's and the
+blocks' credits, the plan's own overage rate applies. It reaches Stripe two
+ways: `POST /api/billing/checkout` with the blocks in `addons` (`ai:3`, or
+`aiAddon: true` for one; the `?plan=pro&ai=1` signup deep link sends one,
+`&ai=3` three), and `POST /api/billing/addons` with `kind: 'aiAddon'` and a
+`quantity` on a live subscription, where an increase is charged now, prorated,
+and a decrease is scheduled for the period end, exactly as POS registers are.
+Either way the webhook mirrors the item's quantity onto
+`org.seatAddons.aiAddon`, which is what adds the blocks' credits to the assist
+band. A request that still names a retired tier (`aiTier`, `tier`, `ai:boost`)
+is refused. An unset `STRIPE_PRICE_AI_CREDITS[_YEARLY]` refuses the purchase
+(501 naming the env), and `npm run check:pricing-drift` reports an unminted
+block price as `UNMINTED`.
 
-The twelve per-plan `aglyn_{plan}_ai_addon[_yearly]` prices minted on
-2026-09-14 stay live until the migration: the console still reads
-`STRIPE_PRICE_{PLAN}_AI_ADDON[_YEARLY]` to recognise an item on one as the
-tier with the same price, and `tools/scripts/migrate-ai-addon-tiers.mjs`
-(dry run by default, `--commit` to apply) moves each such item to its tier's
-price, after the console that reads the tier prices is deployed. Archive the
-per-plan prices only once the migration reports nothing left to move. The dry
-run makes GET requests only and counts every item on a legacy price even
-before the tier prices exist; its live run on 2026-10-19 found all twelve
-per-plan prices and **no** subscription item on any of them, so today the
-`--commit` step has nothing to move. Run the dry run again just before
-`--commit`, because a checkout between now and then could add one. An
-unset tier env refuses the purchase (501 naming the env), and
-`npm run check:pricing-drift` reports an unminted tier as `UNMINTED` and a
-legacy price that no longer charges its tier's amount as `DIFFERS`.
+The six retired tier prices (`aglyn_ai_{spark…studio}[_yearly]`) and the
+per-plan `aglyn_{plan}_ai_addon[_yearly]` prices are no longer read by the
+console. No subscription item carried any of them (the 2026-10-19 dry run
+found none), so nothing migrates; archive them once the console that sells
+blocks is live.
 
 ### The Site Care add-on (AGL-3954)
 

@@ -42,7 +42,7 @@ const ORG_RUNS = `orgs/${ORG_ID}/counters/actionRuns`
 /** Every document, by full path. */
 let store: Record<string, Record<string, any>> = {}
 /** The owning org's billing doc — the plan every gate reads. */
-let mockOrg: Record<string, any> = { plan: 'business' }
+let mockOrg: Record<string, any> = { plan: 'pro' }
 /** Makes the org lookup throw, for the one refusal that is a failure. */
 let mockOrgLookupFails = false
 
@@ -165,7 +165,7 @@ const seedAction = (overrides: Record<string, unknown> = {}) => {
 
 beforeEach(() => {
   store = {}
-  mockOrg = { plan: 'business' }
+  mockOrg = { plan: 'pro' }
   mockOrgLookupFails = false
 })
 
@@ -226,6 +226,10 @@ describe('runSingleActionOutcome', () => {
 
   it('says the allowance is spent, and which allowance', async () => {
     seedAction()
+    // Since pricing v4 (AGL-4126) every plan sold with the Actions builder
+    // sells runs past its band, so the band is a wall only where nothing is
+    // sold past it: a staff comp of Pro, which has no subscription to bill.
+    mockOrg = { plan: 'pro', entitlements: { planComp: { plan: 'pro', reason: 'other' } } }
     const limit = resolveOrgEntitlements(mockOrg as never).actionRunsPerMonth
     // Spent by the WORKSPACE (AGL-3472): this site has run none of them.
     store[ORG_RUNS] = { [MONTH]: limit, seededFrom: MONTH }
@@ -238,6 +242,16 @@ describe('runSingleActionOutcome', () => {
     expect(metered()).toBe(0)
     expect(store[ORG_RUNS]?.[MONTH]).toBe(limit)
     expect(history()).toEqual([])
+  })
+
+  it('runs past a spent band on a paying Pro org, which sells the excess (pricing v4)', async () => {
+    seedAction()
+    mockOrg = { plan: 'pro', subscription: { status: 'active' } }
+    const limit = resolveOrgEntitlements(mockOrg as never).actionRunsPerMonth
+    store[ORG_RUNS] = { [MONTH]: limit, seededFrom: MONTH }
+    const outcome = await runSingleActionOutcome(HOST_ID, 'act-1', 'scrollDepth', {})
+    expect(outcome.ran).toBe(true)
+    expect(store[ORG_RUNS]?.[MONTH]).toBe(limit + 1)
   })
 
   it('says it failed when a read before the first step throws, and logs it', async () => {
