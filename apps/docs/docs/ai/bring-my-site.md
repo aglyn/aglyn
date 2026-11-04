@@ -142,8 +142,11 @@ Under **Improve it**, **Also improve my wording** is on unless you switch it off
 rewrites the headings, paragraphs and buttons of your main pages so they read better. Every
 name, price, number, date, address, phone number and email stays exactly as you wrote it,
 and quotes, policy pages, tables and forms keep every word. Pages of a collection, such as
-blog posts, and your header and footer keep every word too. Improving the wording uses more
-AI credits, and the switch says how many before you start a wave.
+blog posts, and your header and footer keep every word too, and so do the names on your
+cards, your plans and prices, your figures and badges, the small labels above your headings,
+your fine print and any sentence with a link in it. A line Aglyn AI cannot reword without
+changing a fact keeps the words you wrote. Improving the wording uses more AI credits, and
+the switch says how many before you start a wave.
 
 **You can change it before each wave.** Your import's page says how the next wave will be
 built, for example **How your new site looks: Keep my site**. Choose **Change**, pick again,
@@ -232,11 +235,12 @@ Each page is built one of two ways, and the wave's row for the page says which:
   alignment, and how each group is drawn.
 - **Arranged and reworded by Aglyn AI**: a main page whose wording was improved. Its row
   says **Every fact kept** where other pages count their words. A policy page, such as your
-  privacy policy, reads **Arranged by Aglyn AI · Words kept**.
+  privacy policy, reads **Arranged by Aglyn AI · Words kept**, and so does a page whose
+  rewrite could not keep every fact: it keeps your words as you wrote them.
 
 To start a wave, choose its **Start** button, for example **Start Main pages**. Each wave
-shows its cost before you start it, and how many of its pages are arranged and how many are
-copied. A page copied as it is uses no AI credits unless its listing has to be written. Credits
+shows its cost before you start it, and how many of its pages are arranged, arranged and
+reworded, or copied. A page copied as it is uses no AI credits unless its listing has to be written. Credits
 are used as each page is brought in. A page that fails on our side gives its credits back.
 
 **Start every remaining wave** starts every wave that is left, one after another, with no
