@@ -615,22 +615,22 @@
   },
   "tiers": {
     "heading": "Need more than Pro?",
-    "lede": "Custom plans for portfolios, white-label and single sign-on.",
+    "lede": "White-label, single sign-on and contracts, quoted per agreement.",
     "enterprise": {
       "plan": "enterprise",
       "label": "Enterprise",
       "priceLabel": "Custom",
       "tagline": "Sized and priced per agreement",
       "annualLabel": "Quoted per agreement",
-      "blurb": "For portfolios and organizations that need white-label, single sign-on or a contract — quoted for you.",
+      "blurb": "For portfolios and organizations that need white-label, single sign-on or a contract.",
       "specs": [
-        "Every limit sized by agreement",
         "0% transaction fees",
-        "white-label",
+        "white-label console & email",
         "SSO",
         "dedicated support",
         "custom contracts",
-        "volume pricing"
+        "volume pricing",
+        "limits set by agreement"
       ],
       "cta": "CONTACT SALES",
       "byInterval": null

@@ -520,7 +520,7 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     assert.match(run.stderr, /scale strip: CODE-vs-FRAME disagreements/)
     assert.match(
       run.stderr,
-      /Enterprise · spec 2 .*code=0% transaction fees {2}frame=9% transaction fees/,
+      /Enterprise · spec 1 .*code=0% transaction fees {2}frame=9% transaction fees/,
     )
   })
 
