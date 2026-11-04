@@ -322,10 +322,23 @@ export interface AiLayoutSection {
   hero?: AiLayoutImportHero
   /** A page brought in (AGL-4083): its Container's Max Width, as wide as its source runs. */
   width?: AiLayoutWidth
+  /**
+   * A page brought in and kept as it is (AGL-4152): the width its opening's
+   * words are held to, the theme's breakpoint nearest the source's heading
+   * measure. Absent, the hero's own share of its Container.
+   */
+  measure?: AiLayoutWidth
 }
 
 /** The Container element's Max Width choices a page brought in draws a section at (AGL-4083). */
 export type AiLayoutWidth = 'sm' | 'md' | 'lg' | 'xl'
+
+/**
+ * How a page brought in is finished (AGL-4152): `keep` draws it as its source
+ * lays it out; `improve` lets its design move the layout. Either way every
+ * word, item, picture and link is the source's.
+ */
+export type AiLayoutImportFinish = 'keep' | 'improve'
 
 /** A page: its plan's sections, in order. */
 export interface AiLayoutPageDoc {
