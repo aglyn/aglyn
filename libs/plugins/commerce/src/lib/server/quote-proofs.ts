@@ -20,11 +20,11 @@ import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
 import { VISITOR_UPLOAD_HONEYPOT_FIELD, visitorUploadFileView, visitorUploadFolder } from '@aglyn/aglyn/app-utils/visitor-upload'
 import { notifyHostManagers } from '@aglyn/tenant-data-admin'
 import * as CommerceModel from '../model'
-import { orderStatusUrl } from './order-status-token'
 import {
   defaultQuotePayDeps,
   limitedQuoteLink,
   loadLinkedQuote,
+  payLinkPageView,
   quoteLinkParams,
   sendQuoteLinkOutcome,
   type QuoteLinkOutcome,
@@ -365,12 +365,11 @@ export async function handleQuoteRespond(deps: QuoteProofDeps, req: PluginApiReq
       await claim.release()
       return settled.outcome
     }
-    const view = CommerceModel.buildQuotePageView({
-      order: settled.order,
+    // The page's own view, so an approval brings Pay back only where Pay would work.
+    const view = await payLinkPageView(deps, {
+      hostId,
       orderId: quoteId,
-      storeName,
-      currency: String(store.get('currency') ?? 'USD'),
-      receiptUrl: CommerceModel.isUnpaidQuote(settled.order) ? null : orderStatusUrl(host, hostId, quoteId),
+      loaded: { host, order: settled.order, storeName, store, kind: 'quote' },
     })
     const outcome = { status: 200, body: { view } as Record<string, unknown> }
     await claim.record(200, outcome.body)

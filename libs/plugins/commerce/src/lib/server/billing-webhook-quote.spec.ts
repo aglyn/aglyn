@@ -358,6 +358,31 @@ describe('a quote paid through its pay link', () => {
     })
   })
 
+  it('records the tax a quote saved before the store chose was paid under (AGL-4162)', async () => {
+    const undecided = JSON.parse(JSON.stringify(QUOTE_ORDER))
+    undecided.quote.tax = { kind: 'none', reason: 'undecided' }
+    undecided.totals.taxCents = 0
+    delete undecided.taxMode
+    docs.set('hosts/host-1/orders/q-1', undecided)
+    await deliver({
+      ...QUOTE_SESSION,
+      amount_total: 274_500,
+      total_details: { amount_shipping: 4_500, amount_tax: 0 },
+      metadata: { ...QUOTE_SESSION.metadata, quoteTax: '{"kind":"none","reason":"not-collected"}' },
+    })
+    expect(stored()).toMatchObject({
+      status: 'paid',
+      taxMode: 'none',
+      totals: { taxCents: 0, totalCents: 274_500 },
+      quote: { tax: { kind: 'none', reason: 'not-collected' } },
+    })
+  })
+
+  it('keeps the quote’s own basis for a session that carries none, and reads no junk as one', async () => {
+    await deliver({ ...QUOTE_SESSION, metadata: { ...QUOTE_SESSION.metadata, quoteTax: '{"kind":"free"}' } })
+    expect(stored().quote.tax).toEqual({ kind: 'rate', pct: 8.25 })
+  })
+
   it('never calls Stripe', async () => {
     await deliver(QUOTE_SESSION)
     expect(fetchMock).not.toHaveBeenCalled()

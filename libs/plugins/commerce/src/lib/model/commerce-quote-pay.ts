@@ -31,14 +31,18 @@ import {
   formatQuoteNumber,
   quoteLineAmounts,
   quotePaymentBlockedByApproval,
+  quoteTaxBasisFromSettings,
   type OrderQuote,
   type QuoteDiscount,
+  type QuoteNoTaxReason,
   type QuoteTaxBasis,
+  type QuoteTaxKind,
   type QuoteUnmatchedPayment,
 } from './commerce-quotes'
 import { currentQuoteProofs, latestQuoteResponse, quoteRespondRefusal } from './commerce-quote-proofs'
-import type { StorefrontTaxMode } from './commerce-tax-decision'
-import { engineLineTaxPercentages } from './commerce-tax-engine'
+import type { TaxSettings } from './commerce-tax'
+import { storefrontTaxDecision, type StorefrontTaxMode } from './commerce-tax-decision'
+import { engineLineTaxPercentages, storeTaxAllowsEngine } from './commerce-tax-engine'
 import { withOrderListFields, type OrderListFields } from './order-list-fields'
 
 /*==========================================
@@ -57,6 +61,8 @@ import { withOrderListFields, type OrderListFields } from './order-list-fields'
  * - {@link quotePayRefusal}: why a quote cannot be paid now, if it cannot.
  * - {@link quotePaymentDisposition} and {@link paidQuoteOrder}: what a
  *   completed payment does to the quote, and the order it becomes.
+ * - {@link quotePayTax}: the tax every one of them reads, which for a quote
+ *   saved before the store chose its sales tax is the store's choice now.
  *
  * The customer side has no expiry and no open or closed states: a quote and
  * its link stay until the quote is paid or the business replaces the link.
@@ -89,6 +95,130 @@ export function orderPayLinkUnmatched(
 ): QuoteUnmatchedPayment[] {
   const list = order?.quote ? order.quote.unmatchedPayments : order?.payLink?.unmatchedPayments
   return Array.isArray(list) ? list.filter((entry) => entry && typeof entry === 'object') : []
+}
+
+/*==========================================
+ * THE TAX A QUOTE IS SHOWN AND PAID UNDER
+ *=========================================*/
+
+/**
+ * The store a pay link is read against: its sales tax choice, as
+ * `hosts/{hostId}/settings/store` keeps it under `tax`. Absent or null, the
+ * store has not chosen.
+ */
+export interface PayLinkStore {
+  tax?: TaxSettings | null
+}
+
+/** The store a pay link reads, from the store settings document's data (nothing, for no document). */
+export function payLinkStoreOf(settings: { tax?: unknown } | null | undefined): PayLinkStore {
+  const tax = settings?.tax
+  return { tax: tax && typeof tax === 'object' ? (tax as TaxSettings) : null }
+}
+
+/** Whether a basis records that nobody had chosen the store's sales tax, which is no choice at all. */
+export function quoteTaxIsUndecided(basis: Pick<QuoteTaxBasis, 'kind' | 'reason'> | null | undefined): boolean {
+  return basis?.kind === 'none' && basis.reason === 'undecided'
+}
+
+/**
+ * Where a quote's tax comes from when it is shown and paid:
+ *
+ * - `stored`: the basis it was saved with.
+ * - `current`: it was saved before the store chose, and takes the store's
+ *   choice as it stands now.
+ * - `save`: it was saved before the store chose, and the store's choice now
+ *   prices it only when it is saved again.
+ */
+export type QuotePayTaxSource = 'stored' | 'current' | 'save'
+
+export interface QuotePayTax {
+  basis: QuoteTaxBasis
+  source: QuotePayTaxSource
+}
+
+/**
+ * The tax a quote is shown, charged and paid under (AGL-4162): the one answer
+ * the quote page, Pay, the payment's record (carried on its session) and the
+ * console's notice all read.
+ *
+ * A quote keeps the basis it was saved with, except one saved before the
+ * store chose how it handles sales tax. That basis records no choice, so the
+ * quote takes the store's choice as it stands now, through the same
+ * `quoteTaxBasisFromSettings` the editor prices a save with: no sales tax,
+ * prices that include tax, or Stripe Tax at payment. Nothing is written for
+ * it; the next save stores the same basis.
+ *
+ * The store's own rates on prices that exclude tax are the one choice not
+ * taken this way. On those settings a save asks the site's tax service where
+ * one is connected (`priceQuote` in `server/quote.ts`), and only that save
+ * knows the figure: which service is connected is the tax service's own to
+ * say. Such a quote keeps its basis, and so stays unpaid, until it is saved.
+ *
+ * Without a store, the stored basis stands.
+ */
+export function quotePayTax(
+  quote: Pick<OrderQuote, 'tax' | 'shipTo'> | null | undefined,
+  store?: PayLinkStore | null,
+): QuotePayTax {
+  const stored: QuoteTaxBasis = quote?.tax ?? { kind: 'none', reason: 'not-collected' }
+  if (!store || !quoteTaxIsUndecided(stored)) return { basis: stored, source: 'stored' }
+  if (storefrontTaxDecision({ settings: store.tax }).kind === 'undecided') return { basis: stored, source: 'stored' }
+  if (storeTaxAllowsEngine(store.tax)) return { basis: stored, source: 'save' }
+  return { basis: quoteTaxBasisFromSettings(store.tax, quote?.shipTo), source: 'current' }
+}
+
+const TAX_KINDS: ReadonlySet<string> = new Set<QuoteTaxKind>(['rate', 'service', 'at-payment', 'none'])
+const NO_TAX_REASONS: ReadonlySet<string> = new Set<QuoteNoTaxReason>([
+  'not-collected',
+  'prices-include-tax',
+  'no-rate',
+  'undecided',
+])
+const BASIS_LABEL_MAX = 120
+
+/** A basis holding only what its kind carries, in one order, or null for anything that is not one. */
+function tidyTaxBasis(raw: unknown): QuoteTaxBasis | null {
+  if (!raw || typeof raw !== 'object') return null
+  const source = raw as Record<string, unknown>
+  const kind = String(source['kind'] ?? '')
+  if (!TAX_KINDS.has(kind)) return null
+  const label = (value: unknown) => (typeof value === 'string' && value.trim() ? value.trim().slice(0, BASIS_LABEL_MAX) : '')
+  if (kind === 'rate') {
+    const pct = Number(source['pct'])
+    if (!Number.isFinite(pct)) return null
+    const named = label(source['label'])
+    return { kind, pct, ...(named ? { label: named } : {}) }
+  }
+  if (kind === 'service') {
+    const taxCents = Math.round(Number(source['taxCents']))
+    if (!Number.isFinite(taxCents) || taxCents < 0) return null
+    const named = label(source['providerLabel'])
+    return { kind, taxCents, ...(named ? { providerLabel: named } : {}) }
+  }
+  if (kind === 'at-payment') return { kind }
+  const reason = String(source['reason'] ?? '')
+  return { kind: 'none', reason: (NO_TAX_REASONS.has(reason) ? reason : 'not-collected') as QuoteNoTaxReason }
+}
+
+/**
+ * A basis as one short string: what the quote page sends back with Pay, so a
+ * payment is refused when the tax it would charge is not the tax the page
+ * showed, and what a session records as the basis it charged. Equal bases
+ * have one key.
+ */
+export function quoteTaxBasisKey(basis: QuoteTaxBasis): string {
+  return JSON.stringify(tidyTaxBasis(basis) ?? { kind: 'none', reason: 'not-collected' })
+}
+
+/** A basis back from {@link quoteTaxBasisKey}, or null for anything else. */
+export function quoteTaxBasisFromKey(key: unknown): QuoteTaxBasis | null {
+  if (typeof key !== 'string' || !key || key.length > 500) return null
+  try {
+    return tidyTaxBasis(JSON.parse(key))
+  } catch {
+    return null
+  }
 }
 
 /*==========================================
@@ -204,6 +334,19 @@ export interface QuotePageView {
   approvalRequired: boolean
   /** A Pay button belongs on the page. */
   payable: boolean
+  /**
+   * What the page says in place of Pay when the business can't take payments
+   * online right now (AGL-4162): the Pay route's own refusal, word for word.
+   * Null otherwise, and the page asks the customer to contact the business.
+   */
+  notPayableMessage: string | null
+  /**
+   * The tax the quote's totals are priced under ({@link quoteTaxBasisKey}),
+   * which Pay sends back as `tax`: a quote whose tax would charge differently
+   * from the page is shown again before it is paid (AGL-4162). Null for an
+   * invoice, whose tax is fixed when it is made, and once paid.
+   */
+  taxKey: string | null
   /** The revision the page shows (AGL-4096). */
   revision: number
   /** That revision's proofs. */
@@ -270,7 +413,10 @@ function paidAt(order: Pick<HostOrder, 'status' | 'quote' | 'timeline'>): number
 /**
  * The quote page's view of an order document on the `quote` channel. Totals
  * are the stored lines' through {@link computeQuoteTotals} until the quote is
- * paid, and the paid order's own totals (what Stripe charged) after.
+ * paid, and the paid order's own totals (what Stripe charged) after. The tax
+ * is {@link quotePayTax}'s for the store given, and Pay belongs on the page
+ * only when nothing would refuse it: the store's payments included, when the
+ * caller says whether it can take them.
  */
 export function buildQuotePageView(input: {
   order: Pick<HostOrder, 'number' | 'status' | 'lineItems' | 'totals' | 'quote' | 'timeline'>
@@ -279,13 +425,18 @@ export function buildQuotePageView(input: {
   currency: string
   /** The order's status page, for a paid quote. */
   receiptUrl?: string | null
+  /** The store's sales tax choice, which a quote saved before it was made takes. */
+  store?: PayLinkStore | null
+  /** Whether the business can take a card payment now; absent, it is not judged here. */
+  paymentsReady?: boolean
 }): QuotePageView {
   const { order } = input
   const quote = order.quote
   const lines = order.lineItems ?? []
   const status = quotePageStatus(order.status)
   const unpaid = status.status === 'unpaid'
-  const charge = quoteCheckoutCharge(order, input.orderId)
+  const payTax = quotePayTax(quote, input.store)
+  const charge = quoteCheckoutCharge(order, input.orderId, input.store)
   const stored = order.totals
   const totals = unpaid || !stored
     ? {
@@ -303,7 +454,10 @@ export function buildQuotePageView(input: {
         totalCents: cents(stored.totalCents),
       }
   const approvalRequired = unpaid && quotePaymentBlockedByApproval(quote)
-  const taxAtPayment = unpaid && quote?.tax?.kind === 'at-payment'
+  const taxAtPayment = unpaid && payTax.basis.kind === 'at-payment'
+  const refused = unpaid
+    ? payLinkRefusalWithPayments(quotePayRefusal(order, input.orderId, input.store), input.paymentsReady)
+    : null
   return {
     state: 'quote',
     kind: 'quote',
@@ -320,7 +474,7 @@ export function buildQuotePageView(input: {
     totals,
     discountLabel: discountLabel(quote?.discount),
     // Once paid, the tax is what was charged: Stripe's figure under Stripe Tax.
-    taxLabel: unpaid || quote?.tax?.kind !== 'at-payment' ? describeQuoteTax(quote?.tax) : 'Tax',
+    taxLabel: unpaid || payTax.basis.kind !== 'at-payment' ? describeQuoteTax(payTax.basis) : 'Tax',
     taxAtPayment,
     shippingAtPayment: false,
     notes: text(quote?.notes),
@@ -330,7 +484,9 @@ export function buildQuotePageView(input: {
     paidAtMs: paidAt(order),
     receiptUrl: unpaid ? null : (input.receiptUrl ?? null),
     approvalRequired,
-    payable: unpaid && !approvalRequired && quotePayRefusal(order, input.orderId) === null,
+    payable: unpaid && refused === null,
+    notPayableMessage: refused === 'payments-unavailable' ? payLinkPaymentsUnavailableMessage(input.storeName, 'quote') : null,
+    taxKey: unpaid ? quoteTaxBasisKey(payTax.basis) : null,
     revision: Math.max(1, Number(quote?.revision ?? 1) || 1),
     proofs: currentQuoteProofs(quote).map((proof) => ({
       id: String(proof.id),
@@ -437,7 +593,9 @@ function feeProductTypeOf(lines: readonly OrderLineItem[]): ProductType {
 /**
  * The charge for a quote, from its stored lines, discount, shipping and tax
  * basis through {@link computeQuoteTotals} — the same function that priced it
- * when it was saved, so the page, the session and the stored quote agree.
+ * when it was saved, so the page, the session and the stored quote agree. The
+ * basis is {@link quotePayTax}'s: a quote saved before the store chose its
+ * sales tax is charged under the store's choice now.
  *
  * The goods are charged as at most two lines, the taxed and the tax-exempt,
  * each after its share of the discount. A store rate is applied to the taxed
@@ -449,10 +607,11 @@ function feeProductTypeOf(lines: readonly OrderLineItem[]): ProductType {
 export function quoteCheckoutCharge(
   order: Pick<HostOrder, 'number' | 'lineItems' | 'quote'>,
   orderId: string,
+  store?: PayLinkStore | null,
 ): QuoteCheckoutCharge {
   return payLinkCheckoutCharge({
     lineItems: order.lineItems ?? [],
-    tax: order.quote?.tax ?? { kind: 'none', reason: 'not-collected' },
+    tax: quotePayTax(order.quote, store).basis,
     discount: order.quote?.discount ?? null,
     shippingCents: Math.max(0, cents(order.quote?.shipping?.amountCents)),
     label: formatQuoteNumber(order, orderId),
@@ -536,17 +695,45 @@ export type QuotePayRefusal =
   | 'tax-undecided'
   | 'nothing-to-pay'
 
-/** Why a quote cannot be paid now, or null when it can. */
+/**
+ * Why a quote cannot be paid now, or null when it can. With the store, its
+ * tax is {@link quotePayTax}'s, and a store that has not chosen its sales tax
+ * refuses every sale (AGL-1999), whatever basis the quote was saved with.
+ */
 export function quotePayRefusal(
   order: Pick<HostOrder, 'number' | 'status' | 'lineItems' | 'quote'>,
   orderId: string,
+  store?: PayLinkStore | null,
 ): QuotePayRefusal | null {
   if (order.status === 'cancelled' || order.status === 'refunded') return 'closed'
   if (order.status !== 'pending') return 'paid'
   if (quotePaymentBlockedByApproval(order.quote)) return 'approval-required'
-  if (order.quote?.tax?.kind === 'none' && order.quote.tax.reason === 'undecided') return 'tax-undecided'
-  if (quoteCheckoutCharge(order, orderId).totalCents < QUOTE_MIN_CHARGE_CENTS) return 'nothing-to-pay'
+  if (store && storefrontTaxDecision({ settings: store.tax }).kind === 'undecided') return 'tax-undecided'
+  if (quoteTaxIsUndecided(quotePayTax(order.quote, store).basis)) return 'tax-undecided'
+  if (quoteCheckoutCharge(order, orderId, store).totalCents < QUOTE_MIN_CHARGE_CENTS) return 'nothing-to-pay'
   return null
+}
+
+/**
+ * A pay link's refusal once the store's payments are judged too: a business
+ * that can't take a card payment now outranks every refusal but the ones a
+ * payment never gets past (paid, closed, not linked, waiting on the
+ * customer's approval). `paymentsReady` absent leaves the refusal as it is.
+ */
+export function payLinkRefusalWithPayments<Reason extends string>(
+  reason: Reason | null,
+  paymentsReady: boolean | undefined,
+): Reason | 'payments-unavailable' | null {
+  if (paymentsReady !== false) return reason
+  if (reason === 'paid' || reason === 'closed' || reason === 'not-payable' || reason === 'approval-required') {
+    return reason
+  }
+  return 'payments-unavailable'
+}
+
+/** What the customer is told when the business can't take a card payment now: the page's words and Pay's. */
+export function payLinkPaymentsUnavailableMessage(storeName: string, kind: 'quote' | 'invoice'): string {
+  return `${storeName || 'This business'} can’t take payments online right now. Contact them to pay this ${kind === 'invoice' ? 'invoice' : 'quote'}.`
 }
 
 /** What the customer is told for a {@link QuotePayRefusal}, naming the business. */
@@ -590,6 +777,13 @@ export interface QuotePaymentFacts {
   taxMode: StorefrontTaxMode
   /** The address Stripe collected, when the session asked for one. */
   shippingAddress: OrderAddress | null
+  /**
+   * The tax the session charged under when it was not the quote's stored
+   * basis: {@link quotePayTax}'s answer for a quote saved before the store
+   * chose its sales tax, carried on the session (`quoteTax`,
+   * {@link quoteTaxBasisKey}) by the press that opened it (AGL-4162).
+   */
+  taxBasis?: QuoteTaxBasis | null
 }
 
 /**
@@ -678,6 +872,9 @@ export function quoteUnmatchedPaymentDetail(
  *   quote's bill-to bills it.
  * - The totals are what Stripe charged: its shipping and tax where it charged
  *   any, the platform fee the session was minted with, and its total.
+ * - The quote keeps the tax basis it was paid under: the session's
+ *   ({@link QuotePaymentFacts.taxBasis}) where the press took the store's
+ *   choice for it, so the order says how its tax was worked out.
  * - The list fields (`withOrderListFields`) are stamped from all of that.
  */
 export function paidQuoteOrder(
@@ -718,7 +915,7 @@ export function paidQuoteOrder(
     paymentIntentId: facts.paymentIntentId ?? undefined,
     checkoutSessionId: facts.sessionId,
     timeline: appendOrderEvent(order, 'paid', `${label} paid through its pay link`, facts.paidAtMs),
-    quote: { ...quote, paidAtMs: facts.paidAtMs },
+    quote: { ...quote, ...(facts.taxBasis ? { tax: facts.taxBasis } : {}), paidAtMs: facts.paidAtMs },
     // New to a shipping tool's feed from the moment it is paid.
     updatedAtMs: facts.paidAtMs,
   }

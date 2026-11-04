@@ -23,6 +23,7 @@ import {
   orderCreatedAtMs,
   orderPaidAtMs,
   type HostOrder,
+  type PayLinkStore,
 } from '../model'
 
 /*==========================================
@@ -61,6 +62,8 @@ export interface InvoiceEmailContentInput {
   payUrl: string | null
   /** The site's time zone, for the dates. */
   timeZone?: string | null
+  /** The store's sales tax choice, which a quote saved before it was made takes (`quotePayTax`). */
+  store?: PayLinkStore | null
 }
 
 export interface InvoiceEmailContent {
@@ -112,7 +115,7 @@ export function invoiceEmailContent(input: InvoiceEmailContentInput): InvoiceEma
   const date = longDate(dateMs, timeZone)
 
   // What it shows: what the link charges while it is unpaid, the order's own figures once paid.
-  const charge = paid ? null : invoiceCheckoutCharge(order, orderId)
+  const charge = paid ? null : invoiceCheckoutCharge(order, orderId, input.store)
   const totalCents = charge ? charge.totalCents : Math.max(0, Math.round(Number(order.totals?.totalCents ?? 0)))
   const money = formatOrderMoney(totalCents, input.currency)
   const later = charge ? laterParts(charge.shippingOptions.length > 0, charge.taxAtPayment) : ''

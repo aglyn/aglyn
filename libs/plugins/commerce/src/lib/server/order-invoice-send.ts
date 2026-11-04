@@ -143,7 +143,7 @@ export async function handleOrderInvoiceSend(deps: OrderInvoiceSendDeps, req: Pl
   const [snapshot, store] = await Promise.all([ref.get(), hostRef.collection('settings').doc('store').get()])
   const order = snapshot.exists ? (snapshot.data() as CommerceModel.HostOrder) : null
   const to = CommerceModel.invoiceSendRecipient(order, parsed.input.to)
-  const refused = CommerceModel.invoiceSendRefusal(order, orderId, to)
+  const refused = CommerceModel.invoiceSendRefusal(order, orderId, to, CommerceModel.payLinkStoreOf(store.data()))
   if (refused) {
     return refuse(CommerceModel.invoiceSendRefusalStatus(refused), CommerceModel.invoiceSendRefusalMessage(refused))
   }

@@ -243,6 +243,8 @@ const QuotePageBody = forwardRef<HTMLDivElement, QuotePageProps>((props, ref) =>
           q: link.current.quoteId,
           t: link.current.token,
           v: view.version,
+          // The tax the page priced it under; a quote whose tax moved since is shown again.
+          ...(view.taxKey ? { tax: view.taxKey } : {}),
         }),
       })
       const payload = await response.json().catch(() => ({}))
@@ -530,7 +532,7 @@ const QuotePageBody = forwardRef<HTMLDivElement, QuotePageProps>((props, ref) =>
                 </>
               ) : (
                 <Alert severity="info">
-                  {`Contact ${quote.storeName || 'the business'} to pay this ${noun}.`}
+                  {quote.notPayableMessage || `Contact ${quote.storeName || 'the business'} to pay this ${noun}.`}
                 </Alert>
               )}
             </Stack>

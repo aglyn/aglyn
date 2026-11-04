@@ -234,6 +234,7 @@ export async function quotePdfFile(
     storeName: brand.businessName,
     currency: String(input.store?.['currency'] ?? 'USD'),
     receiptUrl: CommerceModel.isUnpaidQuote(input.order) ? null : orderStatusUrl(input.host, input.hostId, input.quoteId),
+    store: CommerceModel.payLinkStoreOf(input.store),
   })
   return {
     bytes: renderQuotePdf({ brand, view, revision: Number(input.order.quote?.revision) || 1, payUrl: input.payUrl }),

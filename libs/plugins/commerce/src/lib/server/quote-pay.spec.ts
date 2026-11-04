@@ -561,11 +561,125 @@ describe('an invoiced draft order’s link (AGL-4099)', () => {
     docs.set('profiles/owner-1', { stripeAccountId: 'acct_merchant', stripeChargesEnabled: false, stripeAccountLivemode: false })
     const outcome = await press()
     expect(outcome.body['error']).toBe('Acme Tents can’t take payments online right now. Contact them to pay this invoice.')
+    // The page says the same, with no Pay (AGL-4162).
+    const page = await handleQuoteView(deps, viewRequest({ hostId: 'site1', q: 'd-1', t: draftToken() }))
+    expect(page.body).toMatchObject({ payable: false, notPayableMessage: outcome.body['error'] })
   })
 
   it('serves no proof route: those stay a quote’s alone', async () => {
     const { loadLinkedQuote } = await import('./quote-pay')
     const linked = await loadLinkedQuote(deps, 'site1', 'd-1', draftToken())
     expect('outcome' in linked && linked.outcome.status).toBe(404)
+  })
+})
+
+/*
+ * The page never offers a Pay that can't work, and a quote saved before the
+ * store chose its sales tax is paid under the store's choice, with no second
+ * save (AGL-4162).
+ */
+describe('a Pay that works', () => {
+  const view = () => handleQuoteView(deps, viewRequest({ hostId: 'site1', q: 'q-1', t: token() }))
+  const press = (body: Record<string, unknown> = {}, key = 'press-1') =>
+    handleQuotePay(deps, payRequest({ hostId: 'site1', q: 'q-1', t: token(), v: 2_000, ...body }, key))
+
+  /** A quote saved before the store chose: no tax, and the basis that says so. */
+  function storeUndecided() {
+    storeQuote(
+      { tax: { kind: 'none', reason: 'undecided' } },
+      { taxMode: undefined, totals: { itemsCents: 270_000, discountCents: 0, shippingCents: 4_500, taxCents: 0, feeCents: 0, totalCents: 274_500 } },
+    )
+  }
+  const chooseTax = (tax: Record<string, unknown> | null) =>
+    docs.set('hosts/site1/settings/store', { currency: 'USD', ...(tax ? { tax } : {}) })
+
+  it('has no Pay where the business can’t take payments, and says what Pay would', async () => {
+    docs.set('profiles/owner-1', { stripeChargesEnabled: false })
+    const page = await view()
+    const refused = await press({ tax: page.body['taxKey'] })
+    expect(refused).toMatchObject({ status: 409, body: { reason: 'payments-unavailable' } })
+    expect(page.body).toMatchObject({
+      payable: false,
+      notPayableMessage: 'Acme Tents can’t take payments online right now. Contact them to pay this quote.',
+    })
+    expect(page.body['notPayableMessage']).toBe(refused.body['error'])
+  })
+
+  it('names payments over the tax choice, on the page and from Pay alike', async () => {
+    docs.delete('profiles/owner-1')
+    storeUndecided()
+    chooseTax(null)
+    const page = await view()
+    expect(page.body).toMatchObject({ payable: false, notPayableMessage: expect.stringMatching(/can’t take payments online/) })
+    expect(await press()).toMatchObject({ status: 409, body: { reason: 'payments-unavailable' } })
+  })
+
+  it('has no Pay for a plan without commerce either', async () => {
+    const unentitled: QuotePayDeps = { ...deps, orgForHost: async () => ({ id: 'org-1', org: {} }) }
+    const page = await handleQuoteView(unentitled, viewRequest({ hostId: 'site1', q: 'q-1', t: token() }))
+    expect(page.body).toMatchObject({ payable: false, notPayableMessage: expect.stringMatching(/^Acme Tents can’t take payments/) })
+  })
+
+  it('has no Pay while the store has not chosen its sales tax, as Pay refuses', async () => {
+    chooseTax(null)
+    expect((await view()).body).toMatchObject({ payable: false, notPayableMessage: null })
+    expect(await press()).toMatchObject({ status: 409, body: { reason: 'tax-undecided' } })
+  })
+
+  it('pays a quote saved before the store chose “Don’t collect sales tax”, with no second save', async () => {
+    storeUndecided()
+    chooseTax({ mode: 'none' })
+    const before = JSON.stringify(docs.get(QUOTE_PATH))
+    const page = await view()
+    expect(page.body).toMatchObject({
+      payable: true,
+      taxAtPayment: false,
+      taxLabel: 'No sales tax',
+      totals: { taxCents: 0, totalCents: 274_500 },
+    })
+    // Nothing is written for a look.
+    expect(JSON.stringify(docs.get(QUOTE_PATH))).toBe(before)
+    const outcome = await press({ tax: page.body['taxKey'] })
+    expect(outcome.status).toBe(200)
+    const params = created[0].params
+    // The goods untaxed, as the page showed, with no tax rate and no Stripe Tax.
+    expect(params.get('line_items[0][price_data][unit_amount]')).toBe('270000')
+    expect(params.get('line_items[0][tax_rates][0]')).toBeNull()
+    expect(params.get('automatic_tax[enabled]')).toBeNull()
+    expect(params.get('metadata[quoteTax]')).toBe(page.body['taxKey'])
+    expect(JSON.parse(String(params.get('metadata[quoteTax]')))).toEqual({ kind: 'none', reason: 'not-collected' })
+    expect(taxRateId).not.toHaveBeenCalled()
+  })
+
+  it('pays one under Stripe Tax at payment once the store chose it', async () => {
+    storeUndecided()
+    chooseTax({ mode: 'stripe' })
+    const page = await view()
+    expect(page.body).toMatchObject({ payable: true, taxAtPayment: true, taxLabel: 'Tax is added at payment' })
+    await press({ tax: page.body['taxKey'] })
+    expect(created[0].params.get('automatic_tax[enabled]')).toBe('true')
+    expect(JSON.parse(String(created[0].params.get('metadata[quoteTax]')))).toEqual({ kind: 'at-payment' })
+  })
+
+  it('shows one again before charging a tax the page didn’t show', async () => {
+    storeUndecided()
+    chooseTax({ mode: 'none' })
+    const page = await view()
+    chooseTax({ mode: 'stripe' })
+    expect(await press({ tax: page.body['taxKey'] })).toMatchObject({ status: 409, body: { reason: 'updated' } })
+    // A page that said nothing of the tax is shown again too, for a quote whose tax is the store's.
+    expect(await press()).toMatchObject({ status: 409, body: { reason: 'updated' } })
+    expect(created).toHaveLength(0)
+  })
+
+  it('keeps refusing one the store’s own rates price only on a save, and asks for no tax key of a saved basis', async () => {
+    storeUndecided()
+    // The spec's store is on its own rates.
+    const page = await view()
+    expect(page.body).toMatchObject({ payable: false, taxLabel: 'Sales tax is not set up' })
+    expect(await press({ tax: page.body['taxKey'] })).toMatchObject({ status: 409, body: { reason: 'tax-undecided' } })
+    storeQuote()
+    expect((await press()).status).toBe(200)
+    expect(created[0].params.get('metadata[quoteTax]')).toBeNull()
   })
 })
