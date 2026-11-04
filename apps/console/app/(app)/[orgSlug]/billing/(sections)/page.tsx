@@ -87,6 +87,7 @@ import {
   bundleAddonLabel,
   bundleAddonsParam,
   bundleDomainLine,
+  describeBundle,
   fitBundleAddonsToPlan,
   type AddonKind,
   type BundleAddons,
@@ -116,6 +117,7 @@ import { finishPendingCharge } from '../../../../../utils/finish-pending-charge'
 import {
   carriedAiAddonSentence,
   prorationQuote,
+  switchCodeSentence,
 } from '../../../../../utils/proration-quote'
 import { purchaseConfirmQuote } from '../../../../../utils/purchase-confirm-quote'
 import { subscriptionPeriodNotice } from '../../../../../utils/subscription-period-notice'
@@ -296,13 +298,13 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
   // direction the page sends a subscribed org to checkout and the route lets
   // it through, which is the duplicate subscription AGL-1697 closed.
   const subscriptionActive = isLiveSubscriptionStatus(subscriptionStatus)
-  // The plan staff proposed (AGL-3466), while no subscription is live. Held
+  // The plan staff proposed (AGL-3466), while no subscription is live — or a
+  // change proposed to a workspace that already subscribes (AGL-4160), until
+  // the subscription is on it; `standingUpgradeProposal` decides which. Held
   // on both reads for the reason `planWithoutSubscription` gives below: before
   // the billing doc lands every paying org looks unsubscribed.
   const upgradeProposal =
-    orgReady && orgBillingReady && !subscriptionActive
-      ? standingUpgradeProposal(org)
-      : null
+    orgReady && orgBillingReady ? standingUpgradeProposal(org) : null
   // The plan the visitor picked on the marketing site, if they arrived by a
   // pricing CTA (AGL-1117), else the bundle staff proposed (AGL-4154), so an
   // owner who opens Billing from the menu meets the proposed plan, cadence,
@@ -1349,11 +1351,49 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
         // preview + subscription update, never a second Checkout (AGL-269).
         if (subscriptionActive && org?.plan && targetPlan !== 'free') {
           dequeue()
-          const preview = await subscriptionRequest({
-            action: 'preview',
-            plan: targetPlan,
-            interval,
-          })
+          // The offer's code (AGL-4160): the link's, else the standing
+          // proposal's, for the plan it names. The preview prices with it and
+          // the switch applies it; one the server refuses — unknown, expired,
+          // for another plan, or offered on a move down — is left off with
+          // the server's reason in the confirm, as a link's code is on a new
+          // subscription (AGL-4157).
+          const offeredCode =
+            planIntent?.coupon && planIntent.plan === targetPlan ? planIntent.coupon : ''
+          let preview: any = null
+          let codeLeftOff = ''
+          if (offeredCode) {
+            const tried = await authorizedFetch(user, '/api/billing/subscription', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                orgId,
+                action: 'preview',
+                plan: targetPlan,
+                interval,
+                promotionCode: offeredCode,
+              }),
+            })
+            const payload = await tried.json().catch(() => ({}))
+            if (tried.ok) preview = payload
+            else if (tried.status === 400) {
+              codeLeftOff =
+                ` Code ${offeredCode} was left off: ` +
+                `${payload?.error ?? 'it could not be applied to this change.'}`
+            } else {
+              enqueueSnackbar(payload?.error ?? 'Billing request failed', {
+                variant: 'warning',
+                persist: false,
+              })
+              return
+            }
+          }
+          if (!preview) {
+            preview = await subscriptionRequest({
+              action: 'preview',
+              plan: targetPlan,
+              interval,
+            })
+          }
           if (!preview) return
           const over = await overLimitSummary(targetPlan)
           // A downgrade and an upgrade are not the same sentence (AGL-1862).
@@ -1376,6 +1416,10 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                   `to ${targetPlan}. You can keep your current plan any ` +
                   `time before then.`
                 : prorationQuote(preview, effective)) +
+              // The code the figure was priced with, and what it replaces
+              // (AGL-4160) — or why the offered one was left off.
+              switchCodeSentence(preview, targetPlan) +
+              codeLeftOff +
               // The add-on the plan carries with it, named (AGL-2899): the
               // proration already prices its move to the target's rate, and
               // the figure alone cannot say a line changed.
@@ -1410,6 +1454,10 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
             action: 'switch',
             plan: targetPlan,
             interval,
+            // The code the confirmed figure was priced with, and only that.
+            ...(preview.promotionCodeApplied
+              ? { promotionCode: String(preview.promotionCodeApplied) }
+              : {}),
           })
           // The upgrade was charged but the charge has not gone through
           // (AGL-3358): the bank wants the customer to confirm it, or the card
@@ -1529,6 +1577,12 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
       org?.plan,
       overLimitSummary,
       subscriptionRequest,
+      // The offer's code a live switch carries (AGL-4160), and the request
+      // that tries it.
+      planIntent?.plan,
+      planIntent?.coupon,
+      user,
+      orgId,
       missingBillingPieces,
       startSubscribe,
       confirm,
@@ -1586,7 +1640,14 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
             // a phone, at a booth, and the bundle with its total and its Pay
             // button is the whole reason the owner is on this page. On a
             // phone the masonry is one column, so first means first.
-            ...(quotedPlan
+            // A subscriber is shown a CHANGE (AGL-4160), so a link or proposal
+            // naming the plan and cadence it already has quotes nothing.
+            ...(quotedPlan &&
+            !(
+              subscriptionActive &&
+              quotedPlan === org?.plan &&
+              interval === (org?.subscription as { interval?: unknown } | undefined)?.interval
+            )
               ? [{
                   size: { xs: 12, md: 8 },
                   children: (
@@ -1596,15 +1657,32 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                         anchor: '#what-you-will-pay',
                       })}
                       subheader={
-                        'What the plan you are looking at costs: with tax from ' +
-                        'Stripe once your billing address is on file, before tax until then.'
+                        subscriptionActive
+                          ? 'A change to the plan you already have: what it costs ' +
+                            'today is shown, with tax and any code, before anything is charged.'
+                          : 'What the plan you are looking at costs: with tax from ' +
+                            'Stripe once your billing address is on file, before tax until then.'
                       }
                       HeaderProps={
-                        // Pay, in the card's header, for a workspace with no
-                        // live subscription (a subscribed one changes plans
-                        // from the grid). Labelled with the total on screen,
-                        // so the one tap is a tap on the amount.
-                        !subscriptionActive && can('billing.manage') && permissions.editBilling
+                        // A workspace that already subscribes changes plans
+                        // (AGL-4160): the switch's own preview and confirm,
+                        // carrying the offer's code, from this button.
+                        subscriptionActive && can('billing.manage') && permissions.editBilling
+                          ? {
+                              action: (
+                                <Button
+                                  size="small"
+                                  variant="contained"
+                                  onClick={() => void handleUpgrade(quotedPlan)()}
+                                >
+                                  {`Switch to ${PLAN_LABELS[quotedPlan] ?? quotedPlan}`}
+                                </Button>
+                              ),
+                            }
+                          : // Pay, in the card's header, for a workspace with no
+                            // live subscription. Labelled with the total on
+                            // screen, so the one tap is a tap on the amount.
+                            !subscriptionActive && can('billing.manage') && permissions.editBilling
                           ? {
                               action: (
                                 <Button
@@ -1630,6 +1708,34 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                       contentGutterX
                       contentGutterY
                     >
+                      {subscriptionActive ? (
+                        // Checkout's quote is for a first subscription and
+                        // refuses a live one, so a subscriber is shown the
+                        // change and its code, and the switch prices it.
+                        <Stack spacing={1}>
+                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                            {describeBundle({
+                              plan: quotedPlan,
+                              interval,
+                              coupon: planIntent?.coupon ?? null,
+                            })}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            {`This workspace already subscribes, so this is a plan change. ` +
+                              `Switch to ${PLAN_LABELS[quotedPlan] ?? quotedPlan} shows what it costs today` +
+                              (planIntent?.coupon
+                                ? `, with code ${planIntent.coupon} applied` +
+                                  (org?.discount ? ' in place of your current discount,' : ',')
+                                : '') +
+                              ' before anything is charged.' +
+                              // The switch moves the plan; add-ons are bought
+                              // on their own card, as they always are.
+                              (linkAddonKinds.length
+                                ? ' Add-ons are added from Plan add-ons once you have switched.'
+                                : '')}
+                          </Typography>
+                        </Stack>
+                      ) : (
                       <BillingPlanQuoteComponent
                         orgId={orgId}
                         plan={quotedPlan}
@@ -1662,6 +1768,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                           ) : null
                         }
                       />
+                      )}
                     </CardDisplay>
                   ),
                 }]

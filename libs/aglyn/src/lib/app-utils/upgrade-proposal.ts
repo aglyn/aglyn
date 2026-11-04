@@ -93,7 +93,22 @@ export function readUpgradeProposal(
     proposedAt: Number.isFinite(raw.proposedAt) ? Number(raw.proposedAt) : 0,
     ...(note ? { note } : {}),
     ...bundle,
+    ...(raw.forSubscriber === true ? { forSubscriber: true } : {}),
   }
+}
+
+/**
+ * Whether a subscription on `current.plan`, billed `current.interval`, is
+ * what the proposal asks for (AGL-4160): the same plan, and the proposed
+ * cadence when one was proposed. A cadence that is not known does not answer
+ * a proposal that names one.
+ */
+export function upgradeProposalAnsweredBy(
+  proposal: Pick<OrgUpgradeProposal, 'plan' | 'interval'>,
+  current: { plan?: unknown; interval?: unknown },
+): boolean {
+  if (proposal.plan !== current.plan) return false
+  return !proposal.interval || proposal.interval === current.interval
 }
 
 /**
@@ -126,19 +141,29 @@ export function normalizeUpgradeProposalBundle(
 
 /**
  * The proposal the workspace should be shown: the stored one, while no
- * subscription is live.
+ * subscription is live — or, for one proposed to a workspace that already
+ * subscribes (AGL-4160), while the subscription is not yet on the proposed
+ * plan and cadence.
  *
  * `billingStatus` is the org document's mirror of the subscription status,
  * readable by every member, so this answers from the document the console
  * already holds. A live subscription means the workspace has bought a plan,
- * which settles the question the proposal asked; `writeOrgBilling`'s caller
- * clears the field then, and this hides it in the meantime.
+ * which settles the question a proposal made before it asked;
+ * `writeOrgBilling`'s caller clears the field then, and this hides it in the
+ * meantime. A proposal made to a subscriber asks a different question, a
+ * change of plan, which only the change answers.
  */
 export function standingUpgradeProposal(
   org: Partial<AglynOrgBilling> | null | undefined,
 ): OrgUpgradeProposal | null {
-  if (isLiveSubscriptionStatus(org?.billingStatus)) return null
-  return readUpgradeProposal(org)
+  const proposal = readUpgradeProposal(org)
+  if (!isLiveSubscriptionStatus(org?.billingStatus)) return proposal
+  if (!proposal?.forSubscriber) return null
+  const current = {
+    plan: org?.plan,
+    interval: (org?.subscription as { interval?: unknown } | undefined)?.interval,
+  }
+  return upgradeProposalAnsweredBy(proposal, current) ? null : proposal
 }
 
 type ProposalBundle = Pick<OrgUpgradeProposal, 'plan'> &

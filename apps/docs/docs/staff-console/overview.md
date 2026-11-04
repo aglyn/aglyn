@@ -450,7 +450,13 @@ at any step: staff take none of a workspace's seats.
 5. **Ask to upgrade** is for an owner who already has the workspace: pick the same
    bundle and add a note if you like. The owner gets an email, and the workspace's
    billing managers see a card on the workspace's home and on Billing with the
-   bundle preselected. **Withdraw proposal** takes it back.
+   bundle preselected. **Withdraw proposal** takes it back. A workspace that already
+   subscribes can be asked to **change**: another plan, or another billing cadence,
+   usually with a coupon for the switch. Its email and card say to switch rather than
+   to subscribe, the card stands until the subscription is on the proposed plan and
+   cadence, and the coupon replaces the workspace's current discount when they switch.
+   Proposing the plan and cadence it already has is refused. See [Changing plans with
+   a promotion code](../workspace-and-billing/billing-and-plans/overview.md#switch-with-a-code).
 6. **The owner subscribes from Billing.** The **What you will pay** card comes first,
    with the bundle and its total; its **Pay** button pays with the card on file and
    asks for a card and billing address first if there are none. The comped tier's
@@ -1465,8 +1471,9 @@ is for: at checkout ("This code is for the Starter plan."), on the Billing page'
 and when staff apply the coupon from an organization's page. A link or a plan change that
 carries such a code onto another plan leaves it off with a one-line notice, rather than
 showing it as applied to a price it does not reduce. When a customer on a one-plan coupon
-upgrades, the new plan is billed in full; if they later return to the plan the coupon is
-for, the coupon's remaining months apply to it again.
+upgrades without a code, the new plan is billed in full; if they later return to the plan
+the coupon is for, the coupon's remaining months apply to it again. An upgrade made with a
+code, from a link or a proposal, replaces the coupon with that code.
 
 The plan's base price is found from the deployment's own plan prices, the same price ids
 checkout sells

@@ -426,8 +426,13 @@ describe('what a subscription event earns in the feed', () => {
     await post(
       signed(event(subscription({ plan: 'starter' }), 'customer.subscription.created')),
     )
+    // With the plan and cadence it is on (AGL-4160), which settle a change
+    // proposed to a subscriber only once the subscription reaches it.
     expect(mockSettles).toEqual([
-      { orgId: 'org-real', context: { status: 'active', subscriptionId: 'sub_1' } },
+      {
+        orgId: 'org-real',
+        context: { status: 'active', subscriptionId: 'sub_1', plan: 'starter', interval: 'month' },
+      },
     ])
   })
 

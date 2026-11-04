@@ -9537,6 +9537,16 @@
               "sample": "https://app.aglyn.com/test-org/billing?plan=starter&interval=year&addons=siteCare"
             },
             {
+              "name": "proposal.nextStep",
+              "description": "What the owner does next: start the subscription, or, for a workspace that already subscribes, switch to the proposed plan",
+              "sample": "When you are ready, start the subscription from Billing. The plan is already selected there, beside the others so you can compare them first."
+            },
+            {
+              "name": "proposal.unchanged",
+              "description": "The line under the button: nothing changes until the owner acts",
+              "sample": "Nothing changes until you start the subscription."
+            },
+            {
               "name": "brand.productName",
               "description": "The sender's product name — the org's own on white-label",
               "sample": "Aglyn"
