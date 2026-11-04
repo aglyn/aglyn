@@ -1527,22 +1527,6 @@
                       "label": "Custom"
                     },
                     {
-                      "value": "agency",
-                      "label": "Agency"
-                    },
-                    {
-                      "value": "advanced",
-                      "label": "Advanced"
-                    },
-                    {
-                      "value": "scale",
-                      "label": "Scale"
-                    },
-                    {
-                      "value": "business",
-                      "label": "Business"
-                    },
-                    {
                       "value": "pro",
                       "label": "Pro"
                     },
@@ -1606,22 +1590,6 @@
                     {
                       "value": "enterprise",
                       "label": "Custom"
-                    },
-                    {
-                      "value": "agency",
-                      "label": "Agency"
-                    },
-                    {
-                      "value": "advanced",
-                      "label": "Advanced"
-                    },
-                    {
-                      "value": "scale",
-                      "label": "Scale"
-                    },
-                    {
-                      "value": "business",
-                      "label": "Business"
                     },
                     {
                       "value": "pro",

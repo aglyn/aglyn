@@ -17,11 +17,14 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
+  AI_CREDIT_BLOCK_MONTHLY_USD,
+  AI_CREDIT_BLOCKS_MAX,
   PLAN_ENTITLEMENTS,
   PLAN_LABELS,
   planSellsAiCredits,
   SELF_SERVE_PLANS,
 } from '@aglyn/aglyn'
+import { carriedAiAddonSentence } from '../utils/proration-quote'
 
 /**
  * The native plan-change screen restates what the console's plan cards and
@@ -60,27 +63,80 @@ describe('native plan change', () => {
     }
   })
 
-  it('knows which plans sell Aglyn AI credits (the screen still calls the set `aiTiersSold`)', () => {
-    // The SET of plans is unchanged by AGL-4144 — every paid self-serve plan —
-    // so the screen's constant still agrees with the console, under its old
-    // name. Its words do not: see the native lane's owed items below.
+  it('knows which plans sell Aglyn AI credit blocks, and what a block costs', () => {
     const sold = Object.fromEntries(
       Object.keys(PLAN_ENTITLEMENTS)
         .filter((plan) => planSellsAiCredits(plan))
         .map((plan) => [plan, true]),
     )
-    expect(plans.aiTiersSold).toEqual(sold)
-    // No per-plan AI price is restated: a block is one price on every plan.
+    expect(plans.aiCreditsSold).toEqual(sold)
+    // The retired per-tier set is gone (AGL-4155).
+    expect(plans.aiTiersSold).toBeUndefined()
+    // One price on every plan that sells blocks, and the ceiling a stored
+    // count is read against.
+    expect(plans.aiCreditBlockUsd).toBe(AI_CREDIT_BLOCK_MONTHLY_USD)
+    expect(plans.aiCreditBlocksMax).toBe(AI_CREDIT_BLOCKS_MAX)
     expect(plans.aiPrice).toBeUndefined()
   })
 
   /*
-   * What the native plan-change screen still says about the retired tiers
-   * (AGL-4144). Not asserted either way: the console's sentence is
-   * `carriedAiAddonSentence`, in blocks, and the native lane owes the match.
+   * The sentence the switch confirm appends about the workspace's credit
+   * blocks, in `carriedAiAddonSentence`'s words (AGL-4144, AGL-4155). The
+   * screen states it in parts, one per count (one block, more) and outcome
+   * (not sold, dropped, carried); each part is the console's sentence with
+   * the target plan's name and the block count left as the screen's
+   * templates, so a change of wording on either side reds here.
    */
-  it.todo(
-    'native lane (AGL-4144): the plan-change notices say "Your Aglyn AI tier …"; they owe ' +
-      '`carriedAiAddonSentence`\'s blocks wording ("Your 3 blocks of Aglyn AI credits carry over at $30/mo …")',
-  )
+  describe('the Aglyn AI credit blocks sentence', () => {
+    const sw = (
+      screens.find((s) => s.id === 'core.billing.plans') as any
+    ).blocks
+      .find((b: { type: string }) => b.type === 'list')
+      .actions.find((a: { id: string }) => a.id === 'switch')
+    const parts: Array<{ when?: string; text: string }> = sw.confirm.filter(
+      (part: { when?: string }) => /seatAddons\.aiAddon/.test(part.when ?? ''),
+    )
+    const org = (blocks: number) =>
+      ({ plan: 'pro', subscription: { status: 'active' }, seatAddons: { aiAddon: blocks } }) as any
+    /** The screen's part for a count and outcome, with its templates filled the way the renderer fills them. */
+    function screenSays(blocks: number, outcome: 'unsold' | 'dropped' | 'carried', label: string): string {
+      const count = blocks === 1 ? 'aiAddon == 1' : 'aiAddon > 1'
+      const matches = parts.filter((part) => {
+        const when = part.when ?? ''
+        if (!when.includes(count)) return false
+        if (outcome === 'unsold') return when.includes('!const.aiCreditsSold')
+        if (when.includes('!const.aiCreditsSold')) return false
+        return outcome === 'dropped'
+          ? when.includes('droppedAddons ~= aiAddon')
+          : when.includes('droppedAddons !~= aiAddon')
+      })
+      expect(matches).toHaveLength(1)
+      const held = Math.min(AI_CREDIT_BLOCKS_MAX, blocks)
+      return matches[0].text
+        .replace('{item.label}', label)
+        .replace(
+          '{min(const.aiCreditBlocksMax, data.org.seatAddons.aiAddon) * const.aiCreditBlockUsd}',
+          String(held * AI_CREDIT_BLOCK_MONTHLY_USD),
+        )
+        .replace('{min(const.aiCreditBlocksMax, data.org.seatAddons.aiAddon)}', String(held))
+        .replace('{const.aiCreditBlockUsd}', String(AI_CREDIT_BLOCK_MONTHLY_USD))
+    }
+
+    it('names no tier', () => {
+      expect(parts).toHaveLength(6)
+      for (const part of parts) expect(part.text).not.toMatch(/tier/i)
+    })
+
+    it.each([1, 3, 45])('says what the console says for %i block(s)', (blocks) => {
+      expect(screenSays(blocks, 'unsold', 'Free')).toBe(
+        carriedAiAddonSentence(org(blocks), 'free', []),
+      )
+      expect(screenSays(blocks, 'dropped', 'Starter')).toBe(
+        carriedAiAddonSentence(org(blocks), 'starter', ['aiAddon']),
+      )
+      expect(screenSays(blocks, 'carried', 'Starter')).toBe(
+        carriedAiAddonSentence(org(blocks), 'starter', []),
+      )
+    })
+  })
 })

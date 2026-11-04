@@ -1169,88 +1169,125 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertNil(set.insteadEntry(in: ScreenContext.with(base, "response", ["ok": true, "quantities": ["hosts": 3]])))
   }
 
-  /// The Aglyn AI row is the console's tier picker (AGL-4008): every tier with its price and credits, the held one marked,
-  /// an unconfigured one shown and not pickable with its reason, "No tier"; the console's confirm wording for a move.
+  /// The Aglyn AI row is the console's block stepper (AGL-4155): whole blocks from 0 to 30, the line under it moving with
+  /// the count, Apply only once the count changes, and the console's confirm and snackbar words, in blocks.
   @MainActor
-  func testTheAiTierPickerOffersTheConsoleTiersAndQuotesAMove() throws {
+  func testTheAiCreditsStepperStepsBlocksAndQuotesTheConsole() throws {
     let spec = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.billing.addons" })
     let list = try XCTUnwrap(spec.blocks.first { $0.type == "list" })
     let actions = list["actions"].array.compactMap(ActionSpec.init)
-    let tier = try XCTUnwrap(actions.first { $0.id == "tier" })
+    XCTAssertNil(actions.first { $0.id == "tier" })
+    let blocks = try XCTUnwrap(actions.first { $0.id == "blocks" })
+    let set = try XCTUnwrap(actions.first { $0.id == "set" })
     let turnOn = try XCTUnwrap(actions.first { $0.id == "on" })
-    let tiers: JSONValue = [
-      ["id": "spark", "label": "Spark", "credits": 4000, "unitUsd": 9, "configured": true],
-      ["id": "plus", "label": "Plus", "credits": 19000, "unitUsd": 39, "configured": true],
-      ["id": "studio", "label": "Studio", "credits": 99000, "unitUsd": 199, "configured": false],
-    ]
     let base: JSONValue = [
       "org": ["id": "o1", "manager": true],
+      "const": spec.raw["constants"] ?? .null,
       "data": ["addons": [
-        "hasSubscription": true, "plan": "pro", "interval": "month", "aiTier": "plus", "aiTiers": tiers,
-        "quantities": ["aiAddon": 1], "catalog": ["aiAddon": ["unitUsd": 39, "configured": true, "upgradeRequired": false]],
+        "hasSubscription": true, "plan": "pro", "interval": "month", "quantities": ["aiAddon": 3],
+        "catalog": ["aiAddon": ["unitUsd": 10, "max": 30, "credits": 5000, "configured": true, "upgradeRequired": false]],
       ]],
-      "item": ["kind": "aiAddon", "label": "Aglyn AI", "toggle": true],
+      "item": ["kind": "aiAddon", "label": "Aglyn AI credits", "toggle": false],
     ]
-    // The picker replaces the switch on a plan that sells tiers.
-    XCTAssertTrue(ScreenValues.condition(tier.when, in: base))
+    // The stepper is the AI row's one control: no switch, no typed quantity.
+    XCTAssertTrue(ScreenValues.condition(blocks.when, in: base))
+    XCTAssertFalse(ScreenValues.condition(set.when, in: base))
     XCTAssertFalse(ScreenValues.condition(turnOn.when, in: base))
-    XCTAssertEqual(ScreenValues.render(tier.label, in: base), "Aglyn AI tier")
-    let field = try XCTUnwrap(tier.prompt.first)
-    XCTAssertEqual(field.kind, "choice")
-    let rows = field.choiceRows(in: base)
-    XCTAssertEqual(rows.map(\.value), ["none", "spark", "plus", "studio"])
-    XCTAssertEqual(rows.map(\.label), ["No tier", "Spark — $9/mo", "Plus — $39/mo", "Studio — $199/mo"])
-    XCTAssertEqual(rows[0].detail, "Your plan's included credits only")
-    XCTAssertEqual(rows[1].detail, "+4,000 credits a month")
-    XCTAssertEqual(rows[2].badge, FieldChoiceBadge(text: "Current", tone: "info"))
-    XCTAssertNil(rows[0].badge)
-    XCTAssertEqual(rows[3].enabled, false)
-    XCTAssertEqual(rows[3].detail, "+99,000 credits a month (not configured yet)")
-    // Applying the tier already held changes nothing, so it is not offered.
-    XCTAssertEqual(ScreenValues.render(try XCTUnwrap(field.initial), in: base), "plus")
-    XCTAssertTrue(field.unmet("plus", in: base))
-    XCTAssertFalse(field.unmet("spark", in: base))
-    // A tier is one line at quantity 1 with its id; "No tier" removes the line and names no tier.
-    let check = try XCTUnwrap(tier.check?.action.body)
+    let field = try XCTUnwrap(blocks.prompt.first)
+    XCTAssertEqual(field.kind, "stepper")
+    XCTAssertEqual(field.min, 0)
+    XCTAssertEqual(field.max, 30)
+    XCTAssertEqual(field.countLabel(0), "0 blocks")
+    XCTAssertEqual(field.countLabel(1), "1 block")
+    XCTAssertEqual(field.countLabel(30), "30 blocks")
+    // The line under the stepper is the console's `aiAddonIncludedLine`, over Pro's 2,750.
+    XCTAssertEqual(field.says(0, in: base), "With no blocks: 2,750 AI credits a month, your plan's own.")
+    XCTAssertEqual(field.says(1, in: base), "With 1 block: 7,750 AI credits a month in all.")
+    XCTAssertEqual(field.says(3, in: base), "With 3 blocks: 17,750 AI credits a month in all.")
+    XCTAssertEqual(field.says(30, in: base), "With 30 blocks: 152,750 AI credits a month in all.")
+    // The count held is where it opens, and Apply waits for a different one; past 30 or under 0 is never sent.
+    XCTAssertEqual(ScreenValues.render(try XCTUnwrap(field.initial), in: base), "3")
+    XCTAssertTrue(field.unmet(3, in: base))
+    XCTAssertFalse(field.unmet(4, in: base))
+    XCTAssertFalse(field.unmet(0, in: base))
+    XCTAssertTrue(field.unmet(31, in: base))
+    XCTAssertTrue(field.unmet(-1, in: base))
+    XCTAssertEqual(fieldJSON(field, .text("4")), 4)
+    // The count is the quantity, on the preview and on the purchase.
     XCTAssertEqual(
-      ScreenValues.resolveBody(check, in: ScreenContext.with(base, "form", ["tier": "spark"])),
-      ["orgId": "o1", "action": "preview", "kind": "aiAddon", "quantity": 1, "tier": "spark"])
+      ScreenValues.resolveBody(try XCTUnwrap(blocks.check?.action.body), in: ScreenContext.with(base, "form", ["blocks": 5])),
+      ["orgId": "o1", "action": "preview", "kind": "aiAddon", "quantity": 5])
     XCTAssertEqual(
-      ScreenValues.resolveBody(try XCTUnwrap(tier.body), in: ScreenContext.with(base, "form", ["tier": "none"])),
+      ScreenValues.resolveBody(try XCTUnwrap(blocks.body), in: ScreenContext.with(base, "form", ["blocks": 0])),
       ["orgId": "o1", "action": "set", "kind": "aiAddon", "quantity": 0])
-    // Down a tier waits for the period end; up is charged now; none removes it.
-    let down = ScreenContext.with(
-      ScreenContext.with(base, "form", ["tier": "spark"]), "preview",
-      ["defersToPeriodEnd": true, "effectiveAt": "2026-11-01T00:00:00Z", "currency": "usd"])
-    XCTAssertEqual(
-      tier.confirmText(in: down),
-      "Aglyn AI Spark? Nothing is charged and nothing is refunded. You keep Plus for the rest of the period you have paid for, and Spark starts on Nov 1, 2026. From then: $9/mo, adding 4,000 AI credits a month on top of your plan's.")
-    let none = ScreenContext.with(
-      ScreenContext.with(base, "form", ["tier": "none"]), "preview",
-      ["defersToPeriodEnd": true, "effectiveAt": "2026-11-01T00:00:00Z", "currency": "usd"])
-    XCTAssertEqual(
-      tier.confirmText(in: none),
-      "Aglyn AI: 0? Nothing is charged and nothing is refunded. You keep this capacity for the rest of the period you have paid for, and it ends on Nov 1, 2026. From then: nothing, this add-on is removed.")
-    var fresh = base
-    fresh = ScreenContext.with(fresh, "data", ["addons": [
-      "hasSubscription": true, "plan": "pro", "interval": "year", "aiTiers": tiers,
-      "catalog": ["aiAddon": ["unitUsd": 9, "configured": true, "upgradeRequired": false]],
-    ]])
+    // Up is charged now; down waits for the period end; none removes it.
     let up = ScreenContext.with(
-      ScreenContext.with(fresh, "form", ["tier": "plus"]), "preview",
-      ["chargedNowCents": 3900, "currency": "usd", "taxComplete": true])
+      ScreenContext.with(base, "form", ["blocks": 5]), "preview",
+      ["chargedNowCents": 2000, "currency": "usd", "taxComplete": true])
     XCTAssertEqual(
-      tier.confirmText(in: up),
-      "Aglyn AI Plus? $39.00 will be charged to your card now, prorated for the rest of this period. Ongoing: $39/mo (billed yearly with your plan), adding 19,000 AI credits a month on top of your plan's.")
-    XCTAssertEqual(field.choiceRows(in: fresh)[0].badge, FieldChoiceBadge(text: "Current", tone: "neutral"))
-    // What it says once applied: a move that waits names the day, as the console's snackbar does.
-    let moved = ScreenModel.message(
-      for: tier, response: ["ok": true, "pendingAddonChange": ["effectiveAt": "2026-11-01T00:00:00Z"]],
-      in: ScreenContext.with(base, "form", ["tier": "spark"]))
-    XCTAssertEqual(moved, "Aglyn AI moves to Spark on Nov 1, 2026.")
+      blocks.confirmText(in: up),
+      "Aglyn AI credits: 5 blocks? $20.00 will be charged to your card now, prorated for the rest of this period. Ongoing: $50/mo, adding 25,000 AI credits a month on top of your plan's.")
+    let down = ScreenContext.with(
+      ScreenContext.with(base, "form", ["blocks": 1]), "preview",
+      ["defersToPeriodEnd": true, "effectiveAt": "2026-11-01T00:00:00Z", "currency": "usd"])
     XCTAssertEqual(
-      ScreenModel.message(for: tier, response: ["ok": true], in: ScreenContext.with(base, "form", ["tier": "spark"])),
-      "Aglyn AI updated")
+      blocks.confirmText(in: down),
+      "Aglyn AI credits: 1 block? Nothing is charged and nothing is refunded. You keep this capacity for the rest of the period you have paid for, and it ends on Nov 1, 2026. From then: $10/mo, adding 5,000 AI credits a month on top of your plan's.")
+    let none = ScreenContext.with(
+      ScreenContext.with(base, "form", ["blocks": 0]), "preview",
+      ["defersToPeriodEnd": true, "effectiveAt": "2026-11-01T00:00:00Z", "currency": "usd"])
+    XCTAssertEqual(
+      blocks.confirmText(in: none),
+      "Aglyn AI credits: 0 blocks? Nothing is charged and nothing is refunded. You keep this capacity for the rest of the period you have paid for, and it ends on Nov 1, 2026. From then: nothing, this add-on is removed.")
+    let yearly = ScreenContext.with(
+      ScreenContext.with(ScreenContext.with(base, "data", ["addons": [
+        "interval": "year", "catalog": ["aiAddon": ["unitUsd": 10, "credits": 5000]],
+      ]]), "form", ["blocks": 30]), "preview", ["chargedNowCents": 0, "currency": "usd"])
+    XCTAssertEqual(
+      blocks.confirmText(in: yearly),
+      "Aglyn AI credits: 30 blocks? $0.00 will be charged to your card now, prorated for the rest of this period. Ongoing: $300/mo (billed yearly with your plan), adding 150,000 AI credits a month on top of your plan's.")
+    // What it says once applied: a lower count that waits names the day, as the console's snackbar does.
+    XCTAssertEqual(
+      ScreenModel.message(
+        for: blocks, response: ["ok": true, "pendingAddonChange": ["effectiveAt": "2026-11-01T00:00:00Z"]],
+        in: ScreenContext.with(base, "form", ["blocks": 1])),
+      "Aglyn AI credits changes on Nov 1, 2026.")
+    XCTAssertEqual(
+      ScreenModel.message(
+        for: blocks, response: ["ok": true, "pendingAddonChange": ["effectiveAt": "2026-11-01T00:00:00Z"]],
+        in: ScreenContext.with(base, "form", ["blocks": 0])),
+      "Aglyn AI credits ends on Nov 1, 2026.")
+    XCTAssertEqual(
+      ScreenModel.message(for: blocks, response: ["ok": true], in: ScreenContext.with(base, "form", ["blocks": 5])),
+      "Aglyn AI credits updated")
+    // The row's chip names what is held, in blocks and credits.
+    let badges = list["badges"].array
+    let held = badges.filter { ScreenValues.condition($0["when"]?.stringValue, in: base) }
+      .map { ScreenValues.render($0["text"]?.stringValue ?? "", in: base) }
+    XCTAssertEqual(held, ["3 blocks · 15,000 credits a month"])
+  }
+
+  /// The staff custom-billing picker offers the base plans the console's picker does: Custom, Pro and Starter (AGL-4155).
+  @MainActor
+  func testTheStaffBasePlanPickerOffersTheSellingPlans() throws {
+    var found = 0
+    // Wherever a screen nests them, every "Base plan" pick.
+    func walk(_ node: JSONValue) {
+      switch node {
+      case .object(let record):
+        if record["key"] == "plan", record["label"] == "Base plan" {
+          found += 1
+          XCTAssertEqual(record["options"].array.map { ScreenValues.text($0["value"]) }, ["enterprise", "pro", "starter"])
+          XCTAssertEqual(record["options"].array.map { ScreenValues.text($0["label"]) }, ["Custom", "Pro", "Starter"])
+          XCTAssertEqual(record["initial"]?.stringValue, "enterprise")
+        }
+        record.values.forEach(walk)
+      case .array(let items): items.forEach(walk)
+      default: break
+      }
+    }
+    CoreScreens.specs.forEach { walk($0.raw) }
+    XCTAssertEqual(found, 2)
   }
 
   @MainActor
@@ -1287,13 +1324,31 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(
       quote(["downgrade": true, "periodEnd": "2026-11-01T00:00:00Z"]),
       "Move down to Business? Nothing is charged today, and nothing changes yet. You keep Pro — and everything you've already paid for — until Nov 1, 2026, when this organization moves to Business. You can keep your current plan any time before then.")
-    // The AI tier is dropped where the target sells none, and over-limit counts are named.
+    // The credit blocks are dropped where the target sells none, and over-limit counts are named.
     var data = base["data"] ?? .null
     data = ScreenContext.with(data, "org", ["plan": "pro", "subscription": ["status": "active"], "seatAddons": ["aiAddon": 1]])
     data = ScreenContext.with(data, "seats", ["managerSeats": 7])
     base = ScreenContext.with(base, "item", ["id": "free", "label": "Free"])
     let text = quote(["downgrade": true, "periodEnd": "2026-11-01T00:00:00Z", "droppedAddons": ["aiAddon"]], data: data)
-    XCTAssertTrue(text.contains("Your Aglyn AI tier is not sold on Free, so it is removed"))
+    XCTAssertTrue(text.contains("Your 1 block of Aglyn AI credits is not sold on Free, so it is removed with this change and the credits go with it."))
+    XCTAssertFalse(text.contains("tier"))
+    // More blocks are named as many, and carried at their own price onto a plan that sells them.
+    var three = ScreenContext.with(data, "org", ["plan": "pro", "subscription": ["status": "active"], "seatAddons": ["aiAddon": 3]])
+    XCTAssertTrue(
+      quote(["downgrade": true, "periodEnd": "2026-11-01T00:00:00Z"], data: three)
+        .contains("Your 3 blocks of Aglyn AI credits are not sold on Free, so they are removed with this change and the credits go with them."))
+    base = ScreenContext.with(base, "item", ["id": "starter", "label": "Starter"])
+    XCTAssertTrue(
+      quote(["downgrade": true, "periodEnd": "2026-11-01T00:00:00Z", "droppedAddons": []], data: three)
+        .contains("Your 3 blocks of Aglyn AI credits carry over at $30/mo on Starter, billed with the plan."))
+    XCTAssertTrue(
+      quote(["downgrade": true, "periodEnd": "2026-11-01T00:00:00Z", "droppedAddons": ["aiAddon"]], data: three)
+        .contains("Your 3 blocks of Aglyn AI credits cannot move to Starter with this change, so they are removed and the credits go with them. You can add blocks again under Plan add-ons afterwards."))
+    three = ScreenContext.with(data, "org", ["plan": "pro", "subscription": ["status": "active"], "seatAddons": ["aiAddon": 1]])
+    XCTAssertTrue(
+      quote(["downgrade": true, "periodEnd": "2026-11-01T00:00:00Z", "droppedAddons": []], data: three)
+        .contains("Your 1 block of Aglyn AI credits carries over at $10/mo on Starter, billed with the plan."))
+    base = ScreenContext.with(base, "item", ["id": "free", "label": "Free"])
     XCTAssertTrue(text.contains("over the Free plan on: 2 sites (Free includes 1)"))
     XCTAssertTrue(text.contains("7 team members (Free includes 1)"))
     XCTAssertTrue(text.contains("Nothing is deleted and these keep working"))

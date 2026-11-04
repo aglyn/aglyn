@@ -18,6 +18,11 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { ADDON_KINDS } from '@aglyn/tenant-data-admin/server/billing-addons'
 import {
+  AI_CREDIT_BLOCK_TERMS,
+  AI_CREDIT_BLOCKS_MAX,
+  AI_CREDITS_PER_BLOCK,
+  aiCreditBlocksLabel,
+  includedAiCreditsPerMonth,
   isCustomPricedPlan,
   PLAN_ENTITLEMENTS,
   planSellsAiCredits,
@@ -34,12 +39,29 @@ function aiAddonOffer(plan: OrgPlan): 'included' | 'upgrade' | 'sold' {
 }
 
 /**
+ * `aiAddonDescription(null)` and `aiAddonIncludedLine` from the same file,
+ * restated for the same reason. The description is the plan-free sentence:
+ * the plan's own figure is in the stepper's line, which moves with the count.
+ */
+const aiAddonDescription =
+  'Questions, copy, generated pages, emails, campaigns and products all ' +
+  'draw on one pool of AI credits. ' +
+  `Add blocks on top: ${AI_CREDIT_BLOCK_TERMS}, up to ${AI_CREDIT_BLOCKS_MAX}.`
+function aiAddonIncludedLine(plan: OrgPlan, blocks: number): string {
+  const total = includedAiCreditsPerMonth(PLAN_ENTITLEMENTS[plan].assistCreditsPerMonth, blocks)
+  const amount = `${total.toLocaleString()} AI credits a month`
+  return blocks > 0
+    ? `With ${aiCreditBlocksLabel(blocks)}: ${amount} in all.`
+    : `With no blocks: ${amount}, your plan's own.`
+}
+
+/**
  * The native "Plan add-ons" screen restates what the console works out in
  * code, because a screen spec has no arithmetic or plan tables: which add-on
  * kinds exist, and which plan has Aglyn AI included rather than for sale.
- * It restates no credit figure of its own: the credits are read off the
- * route (`catalog.aiAddon.credits`), which since AGL-4144 is what ONE credit
- * block adds — 5,000 — so the row describes what its one purchase buys.
+ * The credits a block adds and its price are read off the route
+ * (`catalog.aiAddon.credits`, `unitUsd`); the screen restates only each
+ * selling plan's own included band and the block ceiling (AGL-4155).
  */
 const SPEC = join(
   __dirname,
@@ -57,31 +79,95 @@ describe('native plan add-ons', () => {
     ])
   })
 
-  it('reads the AI credits off the route, not a per-plan table', () => {
+  it('describes the AI row in the console\'s words, and reads a block\'s credits off the route', () => {
     expect(screen.constants.aiCredits).toBeUndefined()
-    const badges = screen.blocks.find((b: { type: string }) => b.type === 'list').badges
-    const credits = badges.find((b: { text: string }) => /credits\/mo/.test(b.text))
-    expect(credits.text).toBe('+{data.addons.catalog[@item.kind].credits:number} credits/mo')
-    expect(credits.when).toBe('item.kind == aiAddon && data.addons.catalog[@item.kind].credits')
-    // The row says one pool, as the console's `aiAddonDescription` does.
     const ai = screen.constants.addons.find((row: { kind: string }) => row.kind === 'aiAddon')
-    expect(ai.description).toContain('one pool of AI credits')
-    expect(ai.description).not.toMatch(/\{const\./)
+    expect(ai.label).toBe('Aglyn AI credits')
+    expect(ai.description).toBe(aiAddonDescription)
+    // A stepper, not a switch (AGL-4155).
+    expect(ai.toggle).toBe(false)
+    const badges = screen.blocks.find((b: { type: string }) => b.type === 'list').badges
+    const held = badges.filter((b: { text: string }) => /credits a month$/.test(b.text))
+    expect(held.map((b: { text: string }) => b.text)).toEqual([
+      '1 block · {data.addons.catalog[@item.kind].credits:number} credits a month',
+      '{data.addons.quantities[@item.kind]} blocks · ' +
+        '{data.addons.quantities[@item.kind] * data.addons.catalog[@item.kind].credits:number} credits a month',
+    ])
+    // Free points at the plan grid in the add-on's own name, as the console's link does.
+    expect(badges.map((b: { text: string }) => b.text)).toContain('Upgrade your plan to add Aglyn AI')
   })
 
-  it('can post a retired tier only behind the route\'s tier list, which the route no longer sends', () => {
-    // The add-ons route answers `catalog` and `quantities` and NO `aiTiers`
-    // since AGL-4144 (and refuses any `tier` with `ai_tier_retired`). So every
-    // native control whose request names a `tier` must be gated on
-    // `data.addons.aiTiers`, or the screen could offer a purchase the route
-    // refuses. Holds vacuously once the native lane removes the tier control.
-    const actions = screen.blocks.find((b: { type: string }) => b.type === 'list').actions ?? []
-    const postsTier = actions.filter(
-      (action: { body?: Record<string, unknown>; check?: { body?: Record<string, unknown> } }) =>
-        'tier' in (action.body ?? {}) || 'tier' in (action.check?.body ?? {}),
-    )
-    for (const action of postsTier) {
-      expect(`${action.id}: ${action.when}`).toMatch(/data\.addons\.aiTiers/)
+  describe('the AI credits stepper', () => {
+    const actions = screen.blocks.find((b: { type: string }) => b.type === 'list').actions
+    const blocks = actions.find((a: { id: string }) => a.id === 'blocks')
+    const field = blocks.prompt[0]
+
+    it('steps whole blocks from 0 to the console\'s ceiling', () => {
+      expect(field.kind).toBe('stepper')
+      expect(field.integer).toBe(true)
+      expect(field.min).toBe(0)
+      expect(field.max).toBe(AI_CREDIT_BLOCKS_MAX)
+      expect(field.mustChange).toBe(true)
+      expect(field.unit).toEqual({ one: 'block', other: 'blocks' })
+      expect(blocks.body).toEqual({
+        orgId: '{org.id}',
+        action: 'set',
+        kind: '{item.kind}',
+        quantity: '{form.blocks}',
+      })
+      expect(blocks.check.body.quantity).toBe('{form.blocks}')
+    })
+
+    it('knows each selling plan\'s own included band', () => {
+      const sold = (Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]).filter((plan) => planSellsAiCredits(plan))
+      expect(Object.keys(screen.constants.aiCreditsIncluded).sort()).toEqual([...sold].sort())
+      for (const plan of sold) {
+        expect(screen.constants.aiCreditsIncluded[plan]).toBe(
+          PLAN_ENTITLEMENTS[plan].assistCreditsPerMonth,
+        )
+      }
+    })
+
+    it.each([0, 1, 3, 30])('says the console\'s line under the stepper for %i block(s)', (count) => {
+      const when = count === 0 ? 'form.blocks == 0' : count === 1 ? 'form.blocks == 1' : 'form.blocks > 1'
+      const part = field.says.filter((p: { when: string }) => p.when === when)
+      expect(part).toHaveLength(1)
+      for (const plan of ['starter', 'pro'] as OrgPlan[]) {
+        // The screen's arithmetic, done as its renderer does it, over the route's credits per block.
+        const total = screen.constants.aiCreditsIncluded[plan] + count * AI_CREDITS_PER_BLOCK
+        const rendered = part[0].text
+          .replace('{form.blocks}', String(count))
+          .replace(/\{const\.aiCreditsIncluded[^}]*:number\}/, total.toLocaleString('en-US'))
+        expect(rendered).toBe(aiAddonIncludedLine(plan, count))
+      }
+    })
+
+    it('confirms in blocks, as the console\'s confirm does', () => {
+      const texts = blocks.confirm.map((p: { text: string }) => p.text)
+      expect(texts).toContain('{item.label}: 1 block? ')
+      expect(texts).toContain('{item.label}: {form.blocks} blocks? ')
+      expect(texts).toContain('${form.blocks * data.addons.catalog[@item.kind].unitUsd}/mo')
+      expect(texts).toContain(
+        ", adding {form.blocks * data.addons.catalog[@item.kind].credits:number} AI credits a month on top of your plan's.",
+      )
+    })
+
+    it('says when a lower count takes effect, as the console\'s snackbar does', () => {
+      expect(blocks.report.map((p: { text: string }) => p.text)).toEqual([
+        '{item.label} ends on {response.pendingAddonChange.effectiveAt:date}.',
+        '{item.label} changes on {response.pendingAddonChange.effectiveAt:date}.',
+        '{item.label} updated',
+      ])
+    })
+  })
+
+  it('has no tier control: the route sends no tiers and refuses one', () => {
+    const actions = screen.blocks.find((b: { type: string }) => b.type === 'list').actions
+    expect(actions.find((a: { id: string }) => a.id === 'tier')).toBeUndefined()
+    expect(JSON.stringify(screen)).not.toMatch(/aiTiers?\b|\btier\b/i)
+    for (const action of actions) {
+      expect('tier' in (action.body ?? {})).toBe(false)
+      expect('tier' in (action.check?.body ?? {})).toBe(false)
     }
   })
 
@@ -99,24 +185,4 @@ describe('native plan add-ons', () => {
     expect(badge.when).toBe('item.kind == aiAddon && data.addons.plan == enterprise')
     expect(PLAN_ENTITLEMENTS.enterprise.features.aiGenerative).toBe(true)
   })
-
-  /*
-   * What the native add-ons screen still has of the retired tiers (AGL-4144).
-   * Not asserted either way — the console is the stepper — and owed by the
-   * native lane. Until then the AI row's switch buys ONE block ($10, 5,000
-   * credits, both read off the route), which is a true purchase, just not
-   * the whole range.
-   */
-  it.todo(
-    'native lane (AGL-4144): the AI row is `toggle: true` (0/1); the console sells 0–30 blocks ' +
-      'with a stepper and "With N blocks: X AI credits a month in all."',
-  )
-  it.todo(
-    'native lane (AGL-4144): the AI row\'s description still says "an Aglyn AI tier adds more on top"; ' +
-      'the console says "Add blocks on top: 5,000 credits each, $10 a month per block, up to 30."',
-  )
-  it.todo(
-    'native lane (AGL-4144): the "{item.label} tier" action (tier picker reading `aiTiers`, posting `tier`) ' +
-      'is dead and should go',
-  )
 })

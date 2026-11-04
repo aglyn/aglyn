@@ -1180,64 +1180,56 @@ class ScreenSpecTest {
     assertNull(set.insteadEntry(scope("{}", """"response":{"ok":true,"quantities":{"hosts":3}}""")))
   }
 
-  /** The Aglyn AI row is the console's tier picker (AGL-4008); Apple's ScreenSpecTests asserts the same. */
+  /** The Aglyn AI row is the console's block stepper (AGL-4155); Apple's ScreenSpecTests asserts the same. */
   @Test
-  fun theAiTierPickerOffersTheConsoleTiersAndQuotesAMove() {
+  fun theAiCreditsStepperStepsBlocksAndQuotesTheConsole() {
     val spec = ScreenSpec.parseFile(File(screensDir, "billing.screens.json").readText()).first { it.id == "core.billing.addons" }
     val list = spec.blocks.first { it.type == "list" }
     val actions = list.raw.arr("actions").mapNotNull { ActionSpec.parse(it) }
-    val tier = actions.first { it.id == "tier" }
+    assertNull(actions.firstOrNull { it.id == "tier" })
+    val blocks = actions.first { it.id == "blocks" }
+    val set = actions.first { it.id == "set" }
     val turnOn = actions.first { it.id == "on" }
-    val tiers = """[{"id":"spark","label":"Spark","credits":4000,"unitUsd":9,"configured":true},""" +
-      """{"id":"plus","label":"Plus","credits":19000,"unitUsd":39,"configured":true},""" +
-      """{"id":"studio","label":"Studio","credits":99000,"unitUsd":199,"configured":false}]"""
+    val constants = spec.raw.obj("constants").toString()
     fun scope(addons: String, extra: String = "") = Json.parseToJsonElement(
-      """{"org":{"id":"o1","manager":true},"data":{"addons":$addons},"item":{"kind":"aiAddon","label":"Aglyn AI","toggle":true}$extra}""",
+      """{"org":{"id":"o1","manager":true},"const":$constants,"data":{"addons":$addons},"item":{"kind":"aiAddon","label":"Aglyn AI credits","toggle":false}$extra}""",
     )
-    val held = """{"hasSubscription":true,"plan":"pro","interval":"month","aiTier":"plus","aiTiers":$tiers,"quantities":{"aiAddon":1},""" +
-      """"catalog":{"aiAddon":{"unitUsd":39,"configured":true,"upgradeRequired":false}}}"""
+    val held = """{"hasSubscription":true,"plan":"pro","interval":"month","quantities":{"aiAddon":3},""" +
+      """"catalog":{"aiAddon":{"unitUsd":10,"max":30,"credits":5000,"configured":true,"upgradeRequired":false}}}"""
     val base = scope(held)
-    assertTrue(ScreenValues.condition(tier.whenCondition, base))
+    assertTrue(ScreenValues.condition(blocks.whenCondition, base))
+    assertFalse(ScreenValues.condition(set.whenCondition, base))
     assertFalse(ScreenValues.condition(turnOn.whenCondition, base))
-    assertEquals("Aglyn AI tier", ScreenValues.render(tier.label, base))
-    val field = tier.prompt.first()
-    assertEquals("choice", field.kind)
-    val rows = field.choiceRows(base)
-    assertEquals(listOf("none", "spark", "plus", "studio"), rows.map { it.value })
-    assertEquals(listOf("No tier", "Spark — \$9/mo", "Plus — \$39/mo", "Studio — \$199/mo"), rows.map { it.label })
-    assertEquals("Your plan's included credits only", rows[0].detail)
-    assertEquals("+4,000 credits a month", rows[1].detail)
-    assertEquals(FieldChoiceBadge("Current", "info"), rows[2].badge)
-    assertNull(rows[0].badge)
-    assertFalse(rows[3].enabled)
-    assertEquals("+99,000 credits a month (not configured yet)", rows[3].detail)
-    assertEquals("plus", ScreenValues.render(field.initial!!, base))
-    assertTrue(field.unmet(JsonPrimitive("plus"), base))
-    assertFalse(field.unmet(JsonPrimitive("spark"), base))
+    val field = blocks.prompt.first()
+    assertEquals("stepper", field.kind)
+    assertEquals(0.0, field.min)
+    assertEquals(30.0, field.max)
+    assertEquals("3", ScreenValues.render(field.initial!!, base))
     assertEquals(
-      Json.parseToJsonElement("""{"orgId":"o1","action":"preview","kind":"aiAddon","quantity":1,"tier":"spark"}"""),
-      ScreenValues.resolveBody(tier.check!!.body!!, scope(held, ""","form":{"tier":"spark"}""")),
+      Json.parseToJsonElement("""{"orgId":"o1","action":"preview","kind":"aiAddon","quantity":5}"""),
+      ScreenValues.resolveBody(blocks.check!!.body!!, scope(held, ""","form":{"blocks":5}""")),
     )
     assertEquals(
       Json.parseToJsonElement("""{"orgId":"o1","action":"set","kind":"aiAddon","quantity":0}"""),
-      ScreenValues.resolveBody(tier.body!!, scope(held, ""","form":{"tier":"none"}""")),
+      ScreenValues.resolveBody(blocks.body!!, scope(held, ""","form":{"blocks":0}""")),
+    )
+    assertEquals(
+      "Aglyn AI credits: 5 blocks? \$20.00 will be charged to your card now, prorated for the rest of this period. Ongoing: \$50/mo, adding 25,000 AI credits a month on top of your plan's.",
+      blocks.confirmText(scope(held, ""","form":{"blocks":5},"preview":{"chargedNowCents":2000,"currency":"usd","taxComplete":true}""")),
     )
     val later = ""","preview":{"defersToPeriodEnd":true,"effectiveAt":"2026-11-01T00:00:00Z","currency":"usd"}"""
     assertEquals(
-      "Aglyn AI Spark? Nothing is charged and nothing is refunded. You keep Plus for the rest of the period you have paid for, and Spark starts on Nov 1, 2026. From then: \$9/mo, adding 4,000 AI credits a month on top of your plan's.",
-      tier.confirmText(scope(held, ""","form":{"tier":"spark"}$later""")),
+      "Aglyn AI credits: 1 block? Nothing is charged and nothing is refunded. You keep this capacity for the rest of the period you have paid for, and it ends on Nov 1, 2026. From then: \$10/mo, adding 5,000 AI credits a month on top of your plan's.",
+      blocks.confirmText(scope(held, ""","form":{"blocks":1}$later""")),
     )
     assertEquals(
-      "Aglyn AI: 0? Nothing is charged and nothing is refunded. You keep this capacity for the rest of the period you have paid for, and it ends on Nov 1, 2026. From then: nothing, this add-on is removed.",
-      tier.confirmText(scope(held, ""","form":{"tier":"none"}$later""")),
+      "Aglyn AI credits: 0 blocks? Nothing is charged and nothing is refunded. You keep this capacity for the rest of the period you have paid for, and it ends on Nov 1, 2026. From then: nothing, this add-on is removed.",
+      blocks.confirmText(scope(held, ""","form":{"blocks":0}$later""")),
     )
-    val fresh = """{"hasSubscription":true,"plan":"pro","interval":"year","aiTiers":$tiers,""" +
-      """"catalog":{"aiAddon":{"unitUsd":9,"configured":true,"upgradeRequired":false}}}"""
-    assertEquals(
-      "Aglyn AI Plus? \$39.00 will be charged to your card now, prorated for the rest of this period. Ongoing: \$39/mo (billed yearly with your plan), adding 19,000 AI credits a month on top of your plan's.",
-      tier.confirmText(scope(fresh, ""","form":{"tier":"plus"},"preview":{"chargedNowCents":3900,"currency":"usd","taxComplete":true}""")),
-    )
-    assertEquals(FieldChoiceBadge("Current", "neutral"), field.choiceRows(scope(fresh))[0].badge)
+    val badges = list.raw.arr("badges")
+    val shown = badges.filter { ScreenValues.condition((it as JsonObject)["when"]?.jsonPrimitive?.content, base) }
+      .map { ScreenValues.render((it as JsonObject)["text"]!!.jsonPrimitive.content, base) }
+    assertEquals(listOf("3 blocks · 15,000 credits a month"), shown)
   }
 
   @Test
@@ -1266,7 +1258,13 @@ class ScreenSpecTest {
     )
     val withAi = """{"org":{"plan":"pro","subscription":{"status":"active"},"seatAddons":{"aiAddon":1}},"billing":{"subscription":{}},"collab":{"sites":[{"hostId":"a"},{"hostId":"b"}]},"seats":{"managerSeats":7},"datasets":{"count":1}}"""
     val text = switchPlan.confirmText(scope("""{"id":"free","label":"Free"}""", """{"downgrade":true,"periodEnd":"2026-11-01T00:00:00Z","droppedAddons":["aiAddon"]}""", withAi))!!
-    assertTrue("Your Aglyn AI tier is not sold on Free, so it is removed" in text)
+    assertTrue("Your 1 block of Aglyn AI credits is not sold on Free, so it is removed with this change and the credits go with it." in text)
+    assertFalse("tier" in text)
+    val threeBlocks = withAi.replace(""""aiAddon":1""", """"aiAddon":3""")
+    assertTrue(
+      "Your 3 blocks of Aglyn AI credits carry over at \$30/mo on Starter, billed with the plan." in
+        switchPlan.confirmText(scope("""{"id":"starter","label":"Starter"}""", """{"downgrade":true,"periodEnd":"2026-11-01T00:00:00Z","droppedAddons":[]}""", threeBlocks))!!,
+    )
     assertTrue("over the Free plan on: 2 sites (Free includes 1)" in text)
     assertTrue("7 team members (Free includes 1)" in text)
     assertTrue("Nothing is deleted and these keep working" in text)
