@@ -350,6 +350,29 @@ describe('a Salesforce contacts file', () => {
     ])
   })
 
+  /*
+   * A row whose one number is a Mobile (AGL-4122): the capture door makes the
+   * mobile the number the person is found by when there is no Phone, which
+   * it can only do if the row hands it over as the mobile.
+   */
+  it('hands the capture door a row whose one number is a Mobile as the mobile', async () => {
+    const job = await uploaded('Email,First Name,Last Name,Mobile\njordan@example.com,Jordan,Lee,(512) 555-0123')
+    const { match } = await analyzeTransferJob(deps, { orgId: ORG, jobId: job.id, actorUid: ME })
+    const plan = await planTransferJob(deps, { orgId: ORG, jobId: job.id, actorUid: ME, choices: { mapping: match.mapping } })
+    expect(plan.summary).toMatchObject({ create: 1 })
+    await applyTransferJob(deps, {
+      orgId: ORG,
+      jobId: job.id,
+      actorUid: ME,
+      acknowledged: plan.acknowledgementsRequired as TransferWarningClass[],
+      deadlineMs: Date.now() + 120_000,
+      driver: 'spec',
+    })
+    const jordan = mockCaptures.find((options) => options.email === 'jordan@example.com')
+    expect(jordan?.facet).toMatchObject({ firstName: 'Jordan', lastName: 'Lee', mobilePhone: '+15125550123' })
+    expect(jordan?.facet).not.toHaveProperty('phone')
+  })
+
   it('never takes consent from a file', async () => {
     const job = await uploaded('Email,Marketing consent\nnew@person.test,yes')
     const { match } = await analyzeTransferJob(deps, { orgId: ORG, jobId: job.id, actorUid: ME })
