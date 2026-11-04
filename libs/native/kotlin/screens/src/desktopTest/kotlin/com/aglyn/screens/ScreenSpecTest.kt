@@ -1205,6 +1205,21 @@ class ScreenSpecTest {
     assertEquals(0.0, field.min)
     assertEquals(30.0, field.max)
     assertEquals("3", ScreenValues.render(field.initial!!, base))
+    // The count named in blocks, and the console's `aiAddonIncludedLine` under it, over Pro's 2,750.
+    assertEquals("0 blocks", field.countLabel(0))
+    assertEquals("1 block", field.countLabel(1))
+    assertEquals("30 blocks", field.countLabel(30))
+    assertEquals("With no blocks: 2,750 AI credits a month, your plan's own.", field.says(0, base))
+    assertEquals("With 1 block: 7,750 AI credits a month in all.", field.says(1, base))
+    assertEquals("With 3 blocks: 17,750 AI credits a month in all.", field.says(3, base))
+    assertEquals("With 30 blocks: 152,750 AI credits a month in all.", field.says(30, base))
+    // The count held is where it opens and Apply waits for another; past 30 or under 0 is never sent.
+    assertTrue(field.unmet(JsonPrimitive(3), base))
+    assertFalse(field.unmet(JsonPrimitive(4), base))
+    assertFalse(field.unmet(JsonPrimitive(0), base))
+    assertTrue(field.unmet(JsonPrimitive(31), base))
+    assertTrue(field.unmet(JsonPrimitive(-1), base))
+    assertEquals(JsonPrimitive(4.0), fieldJson(field, FieldValue.Text("4")))
     assertEquals(
       Json.parseToJsonElement("""{"orgId":"o1","action":"preview","kind":"aiAddon","quantity":5}"""),
       ScreenValues.resolveBody(blocks.check!!.body!!, scope(held, ""","form":{"blocks":5}""")),
@@ -1230,6 +1245,29 @@ class ScreenSpecTest {
     val shown = badges.filter { ScreenValues.condition((it as JsonObject)["when"]?.jsonPrimitive?.content, base) }
       .map { ScreenValues.render((it as JsonObject)["text"]!!.jsonPrimitive.content, base) }
     assertEquals(listOf("3 blocks · 15,000 credits a month"), shown)
+  }
+
+  /** The staff custom-billing picks offer the base plans the console's picker does: Custom, Pro and Starter (AGL-4155). */
+  @Test
+  fun theStaffBasePlanPickerOffersTheSellingPlans() {
+    var found = 0
+    fun walk(node: JsonElement) {
+      when (node) {
+        is JsonObject -> {
+          if (node["key"] == JsonPrimitive("plan") && node["label"] == JsonPrimitive("Base plan")) {
+            found++
+            val options = node["options"] as JsonArray
+            assertEquals(listOf("enterprise", "pro", "starter"), options.map { (it as JsonObject)["value"]!!.jsonPrimitive.content })
+            assertEquals(listOf("Custom", "Pro", "Starter"), options.map { (it as JsonObject)["label"]!!.jsonPrimitive.content })
+          }
+          node.values.forEach(::walk)
+        }
+        is JsonArray -> node.forEach(::walk)
+        else -> Unit
+      }
+    }
+    walk(Json.parseToJsonElement(File(screensDir, "staff.screens.json").readText()))
+    assertEquals(2, found)
   }
 
   @Test
