@@ -26,11 +26,20 @@ import {
   aiSiteImportLedger,
   aiSiteImportPhotosIn,
   aiSiteImportWaveClosed,
+  aiSiteImportWaveStamped,
   aiSiteImportWaveStarted,
   type AiSiteImportListedPage,
   type AiSiteImportState,
 } from './ai-site-import'
 import {
+  AI_SITE_IMPORT_REWORDED_WORDS,
+  aiSiteImportBuiltText,
+  aiSiteImportChoiceText,
+  aiSiteImportFieldChoice,
+  aiSiteImportFinishFieldOf,
+  aiSiteImportRunningLede,
+  aiSiteImportWaveHeading,
+  aiSiteImportWordingCreditsText,
   AI_SITE_IMPORT_PLAN_COPY,
   AI_SITE_IMPORT_ROLE_COPY,
   aiSiteImportFoundText,
@@ -287,5 +296,65 @@ describe('each row says what came through', () => {
     const last = aiSiteImportWaveClosed(aiSiteImportWaveStarted(state, 0, 'x', new Map()), 0, 'y')
     const reviewed = { ...last, waves: last.waves.map((wave) => (wave.index === 1 ? wave : { ...wave, status: 'done' as const })) }
     expect(aiSiteImportStartAllAction(summary({ siteImport: reviewed, items: aiSiteImportLedger(reviewed) }))).toBeNull()
+  })
+})
+
+describe('Keep my site or Improve it, as the import’s page says it (AGL-4152)', () => {
+  it('names the choice, and how each wave that started was built, never a wave still to start', () => {
+    expect(aiSiteImportChoiceText({ finish: 'keep', wording: false })).toBe('Keep my site')
+    expect(aiSiteImportChoiceText({ finish: 'improve', wording: false })).toBe('Improve it')
+    expect(aiSiteImportChoiceText({ finish: 'improve', wording: true })).toBe('Improve it, and my wording')
+    expect(aiSiteImportBuiltText({ finish: 'improve', wording: true })).toBe('Improved, wording too')
+    const state = aiSiteImportWaveStamped(aiSiteImportWaveStarted({ ...harbor(), finish: 'improve', wording: false }, 0, 'x', new Map()), 0)
+    expect(aiSiteImportWaveHeading(state, state.waves[0])).toBe('Main pages · Improved')
+    expect(aiSiteImportWaveHeading(state, state.waves[1])).toBe(state.waves[1].label)
+    // A wave that ran before the choice existed was built as Keep my site.
+    const older = aiSiteImportWaveStarted(harbor(), 0, 'x', new Map())
+    expect(aiSiteImportWaveHeading(older, older.waves[0])).toBe('Main pages · Keep my site')
+  })
+
+  it('says a reworded page is reworded with every fact kept, and that a policy on its wave keeps its words', () => {
+    let state = aiSiteImportWaveStamped(aiSiteImportWaveStarted({ ...harbor(), finish: 'improve', wording: true }, 0, 'x', new Map()), 0)
+    state = {
+      ...state,
+      pages: state.pages.map((page) =>
+        page.slot === 'p0'
+          ? { ...page, build: 'arranged' as const, brought: { words: 90 } }
+          : page.slot === 'p1'
+            ? { ...page, build: 'arranged' as const, wording: 'kept' as const, brought: { words: 100 } }
+            : page,
+      ),
+    }
+    const rows = aiSiteImportWaveRows(summary({ status: 'needs_review', items: aiSiteImportLedger(state), siteImport: state }), state.waves[0])
+    expect(rows[1]).toMatchObject({ build: 'Arranged and reworded by Aglyn AI', words: AI_SITE_IMPORT_REWORDED_WORDS })
+    expect(rows[2]).toMatchObject({ build: 'Arranged by Aglyn AI · Words kept', words: '100 of 100 words' })
+    // On a wave that kept every word, a page is arranged and counts its words.
+    const kept = aiSiteImportWaveStamped(aiSiteImportWaveStarted({ ...harbor(), finish: 'keep' }, 0, 'x', new Map()), 0)
+    const keptRows = aiSiteImportWaveRows(
+      summary({ items: aiSiteImportLedger(kept), siteImport: { ...kept, pages: kept.pages.map((page) => (page.slot === 'p1' ? { ...page, build: 'arranged' as const } : page)) } }),
+      kept.waves[0],
+    )
+    expect(keptRows[2]).toMatchObject({ build: 'Arranged by Aglyn AI' })
+  })
+
+  it('says what a running wave does with each page, the way it is built', () => {
+    expect(aiSiteImportRunningLede({ finish: 'keep', wording: false })).toMatch(/^Each page keeps its layout and every word as you wrote it/)
+    expect(aiSiteImportRunningLede({ finish: 'improve', wording: false })).toMatch(/^Aglyn AI redesigns each page with its own words/)
+    expect(aiSiteImportRunningLede({ finish: 'improve', wording: true })).toMatch(/improves its wording, keeping every name, price, number/)
+  })
+
+  it('says what Also improve my wording adds, a main page’s before the site is read and the wave’s after', () => {
+    expect(aiSiteImportWordingCreditsText(null)).toBe('About 17 more AI credits for each main page.')
+    const state = harbor()
+    const job = summary({ items: aiSiteImportLedger(state), siteImport: state })
+    expect(aiSiteImportWordingCreditsText({ job, wave: state.waves[0] })).toBe('Adds about 51 AI credits to this wave.')
+    expect(aiSiteImportWordingCreditsText({ job, wave: state.waves[1] })).toBe('This wave’s pages keep every word, so it adds no AI credits.')
+  })
+
+  it('opens the choice where the import has it, the switch on where it was never turned off under Improve it', () => {
+    expect(aiSiteImportFinishFieldOf(null)).toEqual({ finish: 'keep', wording: true })
+    expect(aiSiteImportFinishFieldOf({ finish: 'improve', wording: false })).toEqual({ finish: 'improve', wording: false })
+    expect(aiSiteImportFieldChoice({ finish: 'keep', wording: true })).toEqual({ finish: 'keep', wording: false })
+    expect(aiSiteImportFieldChoice({ finish: 'improve', wording: true })).toEqual({ finish: 'improve', wording: true })
   })
 })

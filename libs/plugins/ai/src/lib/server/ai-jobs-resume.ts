@@ -43,6 +43,7 @@ import {
 } from '../model/ai-build-job'
 import { aiCreditsConfirmation, type AiCreditsPrompt } from '../model/ai-credit-estimate'
 import { aiJobInputProblems } from '../model/ai-job-input'
+import { aiSiteImportFinishUpdate } from '../model/ai-site-import'
 import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
 import { aiGateLadder } from '../runtime/ai-gate'
 import { releaseAssistMessage } from '../usage/assist-usage'
@@ -51,7 +52,10 @@ import { releaseAssistMessage } from '../usage/assist-usage'
  * Resume a job that stopped for a person (AGL-2935): confirm its plan, or
  * try again the step whose answer broke a building rule on its re-ask — or
  * answer what a job waiting in `needs_input` asks (`input`, AGL-3978), which
- * returns it to its plan card, or a 400 with `fieldErrors` by field.
+ * returns it to its plan card, or a 400 with `fieldErrors` by field. An
+ * import's next wave may carry the owner's Keep my site or Improve it
+ * (`finish`, `wording`, AGL-4152), written after the kind's own admission and
+ * only onto an import waiting for a wave that has not started.
  *
  * A door that SPENDS — the next step calls the provider — so it climbs the
  * whole ladder the create door climbs: `aiGenerative`,
@@ -104,6 +108,13 @@ export async function POST(
   if ((existing.hostId ?? null) !== hostId) {
     await release()
     return Response.json({ error: 'That job belongs to another site' }, { status: 400 })
+  }
+  // Keep my site or Improve it (AGL-4152): one of the two, and the wording switch on or off.
+  const rawFinish = payload?.['finish']
+  const rawWording = payload?.['wording']
+  if ((rawFinish !== undefined && rawFinish !== 'keep' && rawFinish !== 'improve') || (rawWording !== undefined && typeof rawWording !== 'boolean')) {
+    await release()
+    return Response.json({ error: 'Choose Keep my site or Improve it.', job: aiJobSummary(existing, new Date()) }, { status: 400 })
   }
   // "Build what fits" (AGL-3722): a Free job past what is left, started on
   // the person's go-ahead, which the job keeps.
@@ -214,8 +225,18 @@ export async function POST(
     payload?.['startAll'] === true && existing.kind === 'import'
       ? (await import('../jobs/ai-job-import-step')).aiSiteImportStartAllUpdate(existing)
       : null
-  if (startAll) {
-    await gate.firestore.collection('orgs').doc(gate.orgId).collection(AI_JOBS_COLLECTION).doc(jobId).update(startAll)
+  // Keep my site or Improve it (AGL-4152), changed before a wave: the waves
+  // not yet started are built the new way, and a wave already in never is.
+  const finish = rawFinish === 'keep' || rawFinish === 'improve' ? rawFinish : null
+  const choosing = finish !== null || typeof rawWording === 'boolean'
+  const finishUpdate = choosing ? aiSiteImportFinishUpdate(existing, { finish, wording: typeof rawWording === 'boolean' ? rawWording : null }) : null
+  if (startAll || finishUpdate) {
+    await gate.firestore
+      .collection('orgs')
+      .doc(gate.orgId)
+      .collection(AI_JOBS_COLLECTION)
+      .doc(jobId)
+      .update({ ...(startAll ?? {}), ...(finishUpdate ?? {}) })
   }
   const now = new Date()
   const confirmation = aiCreditsConfirmation(confirmedCredits, gate.uid, now)
@@ -244,6 +265,7 @@ export async function POST(
       status: job.status,
       reason: retryFailedItems ? 'retry-failed-items' : answering ? 'input' : (existing.review?.reason ?? null),
       kind: existing.kind,
+      ...(finishUpdate ? { finish: finishUpdate['siteImport.finish'], wording: finishUpdate['siteImport.wording'] } : {}),
     },
   })
   if (job.status !== 'queued') {

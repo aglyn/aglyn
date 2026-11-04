@@ -718,3 +718,88 @@ describe('a film a page plays from the old site may play on the new one (AGL-414
     expect(result.item?.note).toBe("A video on this page plays from your old site's address; pick it from your media library to move it.")
   })
 })
+
+describe('Keep my site or Improve it, as Bring my site asked it (AGL-4152)', () => {
+  const admission = createAiSiteImportAdmission({
+    releaseFlagOn: async () => true,
+    ownership: async () => ({ current: true, method: 'meta', provenAt: 1, detail: null }),
+    holdsSiteImport: async () => true,
+  })
+  const context = (inputs: Record<string, unknown>) => ({
+    firestore: {} as never,
+    orgId: 'org-pro',
+    hostId: 'host-1',
+    inputs: { domain: HARBOR_DOMAIN, ...inputs },
+    org: { plan: 'pro', billingStatus: 'active' },
+    uid: 'uid-1',
+  })
+
+  it('admits either choice, or none, and refuses anything else before anything is read', async () => {
+    expect(await admission(context({}))).toBeNull()
+    expect(await admission(context({ finish: 'keep' }))).toBeNull()
+    expect(await admission(context({ finish: 'improve', wording: false }))).toBeNull()
+    expect(await admission(context({ finish: 'better' }))).toEqual({ status: 400, error: AI_SITE_IMPORT_COPY.finish })
+    expect(await admission(context({ finish: 'improve', wording: 'yes' }))).toEqual({ status: 400, error: AI_SITE_IMPORT_COPY.finish })
+  })
+
+  it('keeps the choice on the import when the site is read, and reads an import that never said as Keep my site', async () => {
+    const step = createAiJobImportStep(deps())
+    const improved = await run(step, importJob({ inputs: { domain: HARBOR_DOMAIN, finish: 'improve', wording: true } }))
+    expect(improved.siteImport).toMatchObject({ finish: 'improve', wording: true })
+    const unsaid = await run(step, importJob())
+    expect(unsaid.siteImport).toMatchObject({ finish: 'keep', wording: false })
+    // Nothing is stamped on a wave before it starts.
+    expect(improved.siteImport?.waves.every((wave) => wave.finish === undefined)).toBe(true)
+  })
+
+  it('stamps a wave with the choice when it starts, and hands its pages and the look the way they are built', async () => {
+    const looked: unknown[] = []
+    const look: NonNullable<AiSiteImportStepDeps['look']> = async (input) => {
+      looked.push(input.finish)
+      return { at: NOW.toISOString(), theme: 'applied', colors: [], logo: null, seo: false, seed: 1 }
+    }
+    const step = createAiJobImportStep(deps({ look }))
+    const read = await run(step, importJob({ inputs: { domain: HARBOR_DOMAIN, finish: 'improve', wording: true } }))
+    const started = await run(step, importJob({ inputs: { domain: HARBOR_DOMAIN, finish: 'improve', wording: true }, siteImport: read.siteImport, items: read.items }))
+    const state = started.siteImport as AiSiteImportState
+    expect(state.waves[0]).toMatchObject({ status: 'running', finish: 'improve', wording: true })
+    const home = state.pages.find((page) => page.slug === '/') as AiSiteImportState['pages'][number]
+    expect(home.wording).toBe('improved')
+    const doc = aiSiteImportPageJob(importJob(), state, home, started.items ?? []).inputs[AI_LAYOUT_IMPORTED_SECTIONS_INPUT] as AiSiteImportDocument
+    expect(doc).toMatchObject({ finish: 'improve', wording: 'improved' })
+    // The look runs before the first page, told the first wave's finish.
+    await run(step, importJob({ siteImport: state, items: started.items }))
+    expect(looked).toEqual(['improve'])
+  })
+
+  it('reads a page whose rewrite was refused as kept, on the pass that built it and the one that finished it', async () => {
+    const base = harborState()
+    const read: AiSiteImportPageRead = { at: 'x', title: 'Home', text: 'Hello there, friends.', sections: [], images: [], blocks: [{ kind: 'heading', level: 1, text: 'Hello there, friends.', region: 'main' }] }
+    const started = aiSiteImportWaveStarted({ ...base, finish: 'improve', wording: true }, 0, 'x', new Map(base.waves[0].slots.map((slot) => [slot, read])))
+    const siteImport: AiSiteImportState = {
+      ...started,
+      look: { at: 'x', theme: 'applied', colors: [], logo: null, seo: true, seed: 1 } as never,
+      pages: started.pages.map((page) => ({ ...page, build: 'arranged' as const, wording: 'improved' as const, photos: { brought: 0, reused: 0, skipped: 0, assets: [] } })),
+    }
+    const items = aiSiteImportLedger(siteImport).map((row): AiJobItemLedger => (row.slot === 'frame' ? { ...row, status: 'succeeded' } : row))
+    const slot = siteImport.waves[0].slots[0] as string
+    const passes = [outcome({ continue: true, wording: 'kept' }), outcome({ outputs: [{ resource: 'screen', id: 'draft-out' } as never], wording: 'kept' })]
+    for (const pass of passes) {
+      const step = createAiJobImportStep(deps({ runnerFor: (() => async () => pass) as never, draftWords: async () => 1 }))
+      const result = await run(step, importJob({ siteImport, items }))
+      expect(result.siteImport?.pages.find((page) => page.slot === slot)?.wording).toBe('kept')
+      // Every other page keeps the words its wave stamped.
+      expect(result.siteImport?.pages.filter((page) => page.slot !== slot).every((page) => page.wording === 'improved')).toBe(true)
+    }
+    // A pass that kept its rewrite leaves the page improved.
+    const improved = await run(createAiJobImportStep(deps({ runnerFor: (() => async () => outcome({ continue: true, wording: 'improved' })) as never })), importJob({ siteImport, items }))
+    expect(improved.siteImport?.pages.find((page) => page.slot === slot)?.wording).toBe('improved')
+  })
+
+  it('hands an older import’s pages over as Keep my site, their words kept', () => {
+    const base = harborState()
+    const state = aiSiteImportWaveStarted(base, 0, NOW.toISOString(), new Map([[base.pages[0].slot, { at: 'x', title: 'Home', text: '', sections: [], images: [], blocks: [{ kind: 'paragraph', text: 'Hello there, friends.', region: 'main' }] }]]))
+    const doc = aiSiteImportPageJob(importJob(), state, state.pages[0], aiSiteImportLedger(state)).inputs[AI_LAYOUT_IMPORTED_SECTIONS_INPUT] as AiSiteImportDocument
+    expect(doc).toMatchObject({ finish: 'keep', wording: 'kept' })
+  })
+})

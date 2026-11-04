@@ -1856,7 +1856,8 @@ describe('Bring my site on the first step', () => {
       hostId: 'demo-legal',
       kind: 'import',
       brief: 'Bring in harbor-dental.com',
-      inputs: { domain: 'harbor-dental.com' },
+      // Improve it with its wording, as preselected (AGL-4152).
+      inputs: { domain: 'harbor-dental.com', finish: 'improve', wording: true },
     })
     expect(mockTrack).toHaveBeenCalledWith('site_start_choice', { choice: 'import' })
   })

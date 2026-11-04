@@ -48,13 +48,15 @@ import { join } from 'node:path'
 import { contrastRatio } from '@aglyn/aglyn/app-utils/site-theme'
 import { DEFAULT_SITE_THEME } from '@aglyn/aglyn/app-utils/default-site'
 import type { ThemeFontFacts } from '@aglyn/aglyn/plugin-manager/plugin-theme-font-catalog'
-import type { AiSiteImportHome } from '../model/ai-site-import'
-import { aiHexOklch, aiSiteTheme, type AiSiteStyle } from '../model/ai-site-look'
+import type { AiSiteImportFinish, AiSiteImportHome, SiteImportLookFacts } from '../model/ai-site-import'
+import { aiSiteKindFor } from '../model/ai-site-kinds'
+import { aiHexOklch, aiOklabDistance, aiSiteOwnButton, aiSiteSeed, aiSiteStyleFor, aiSiteTheme, type AiSiteStyle } from '../model/ai-site-look'
 import { SITE_IMPORT_EDGE_HEADER } from '../site-import/site-import-edge'
 import { extractSiteImportPage } from '../site-import/site-import-html'
-import { siteImportLookOf } from '../site-import/site-import-layout'
+import { siteImportLookOf, siteImportLookOfHtml } from '../site-import/site-import-layout'
 import type { SiteImportFrameSource } from '../site-import/site-import-nav'
 import { SITE_LAYOUT_PAGES, siteLayoutRecording, siteLayoutSameSite, type SiteLayoutPageName } from '../site-import/fixtures/site-layout-recordings'
+import { SITE_LOOK_SLATE_HTML, SITE_LOOK_SLATE_URL } from '../site-import/fixtures/site-look-slate'
 import { aiRunSiteImportLook, aiSiteImportBrandOf, aiSiteImportLookHeaders, aiSiteImportSourceFonts } from './ai-site-import-look'
 import type { PublicFetchOptions, PublicFetchResult } from './ai-theme-brand-inputs'
 
@@ -91,16 +93,32 @@ function home(name: SiteLayoutPageName): AiSiteImportHome {
 
 const ok = (url: string, text: string, contentType = 'text/html'): PublicFetchResult => ({ ok: true, url, text, bytes: text.length, truncated: false, contentType, refusal: null })
 
+/** The 11/4 evidence's slate page as the crawl keeps it (AGL-4152). */
+function slateHome(): AiSiteImportHome {
+  return { ...home('home'), url: SITE_LOOK_SLATE_URL, siteName: 'Slate Studio', look: siteImportLookOfHtml(SITE_LOOK_SLATE_HTML, SITE_LOOK_SLATE_URL) as SiteImportLookFacts }
+}
+
 /** The look pass over a recorded home page, with no seam for its headers: what it read with, and the style it saved. */
-async function runLook(name: SiteLayoutPageName, patch: { fontFacts?: typeof fontFacts } = {}) {
+async function runLook(name: SiteLayoutPageName | 'slate', patch: { fontFacts?: typeof fontFacts; finish?: AiSiteImportFinish | null } = {}) {
   const asked: Array<{ url: string; options: PublicFetchOptions }> = []
   const saved: AiSiteStyle[] = []
+  const page = name === 'slate' ? { url: SITE_LOOK_SLATE_URL, html: SITE_LOOK_SLATE_HTML, home: slateHome() } : { url: SITE_LAYOUT_PAGES[name].url, html: siteLayoutRecording(name), home: home(name) }
   const look = await aiRunSiteImportLook(
-    { firestore: {} as never, hostId: 'host-import', orgId: 'org-test', uid: 'uid-owner', jobId: 'importJob', domain: new URL(SITE_LAYOUT_PAGES[name].url).hostname.replace(/^www\./, ''), home: home(name), at: NOW },
+    {
+      firestore: {} as never,
+      hostId: 'host-import',
+      orgId: 'org-test',
+      uid: 'uid-owner',
+      jobId: 'importJob',
+      domain: new URL(page.url).hostname.replace(/^www\./, ''),
+      home: page.home,
+      at: NOW,
+      ...(patch.finish !== undefined ? { finish: patch.finish } : {}),
+    },
     {
       fetch: async (url, options) => {
         asked.push({ url, options })
-        return url === SITE_LAYOUT_PAGES[name].url ? ok(url, siteLayoutRecording(name)) : { ...ok(url, ''), ok: false, refusal: 'status' as never }
+        return url === page.url ? ok(url, page.html) : { ...ok(url, ''), ok: false, refusal: 'status' as never }
       },
       save: async (_firestore, input) => {
         saved.push(input.style)
@@ -251,5 +269,97 @@ describe('a Squarespace page’s look (AGL-4108)', () => {
     // A source whose buttons are grey takes its links' color as the brand.
     expect(aiSiteImportBrandOf({ buttonFill: '#222222', link: '#0b6e4f' })).toEqual({ brand: '#0b6e4f', accent: null })
     expect(aiSiteImportBrandOf({ buttonFill: null, link: null })).toBeNull()
+  })
+})
+
+/*------------------------------------------
+ * Keep my site, or Improve it (AGL-4152)
+ *-----------------------------------------*/
+
+/** A theme's filled and outlined primary button styles, as its components hold them. */
+const buttonVariants = (theme: ReturnType<typeof aiSiteTheme>) =>
+  ((theme.components?.['MuiButton']?.variants ?? []) as Array<{ props: Record<string, unknown>; sx?: Record<string, unknown> }>)
+
+describe('Keep my site keeps aglyn.com’s look closer (AGL-4152)', () => {
+  it('is what an import that names no finish gets', async () => {
+    const absent = (await runLook('home')).saved[0]
+    const kept = (await runLook('home', { finish: 'keep' })).saved[0]
+    expect(absent).toEqual(kept)
+    expect(absent?.finish).toBe('keep')
+  })
+
+  it('pins its dark band’s ground, its buttons’ capitals and its buttons’ own fill and words', async () => {
+    const style = (await runLook('home')).saved[0] as AiSiteStyle
+    expect(style).toMatchObject({ page: '#f5f5f5', darkPage: '#161c21', buttonCase: 'upper', buttonFill: '#00b0ff', buttonText: '#ffffff' })
+    const theme = aiSiteTheme(style, DEFAULT_SITE_THEME)
+    const dark = theme.colorSchemes?.dark
+    // The dark scheme sits on the source's own dark ground, not the near-black of every other site.
+    expect(aiOklabDistance(dark?.background?.default as string, '#161c21')).toBeLessThanOrEqual(0.05)
+    expect(theme.typography?.variants?.button).toMatchObject({ textTransform: 'uppercase', letterSpacing: '0.06em' })
+    // Its dark bands carry the cyan itself, so its outlined buttons there are cyan.
+    expect(dark?.primary?.main).toBe('#00b0ff')
+    // Its recorded white words read on the light cyan at 2.4:1 and have no lighter shade, so its
+    // light page's buttons stay the brand's deeper shade under white, as the look drew them before.
+    expect(aiSiteOwnButton(style)).toBeNull()
+    expect(contrastRatio('#ffffff', theme.colorSchemes?.light?.primary?.main)).toBeGreaterThanOrEqual(4.5)
+  })
+})
+
+describe('Keep my site on the 11/4 evidence: a slate hero and light cyan buttons under dark words (AGL-4152)', () => {
+  it('draws the dark scheme on the slate, its buttons in capitals, and its filled buttons in their own cyan under their own dark words', async () => {
+    const style = (await runLook('slate')).saved[0] as AiSiteStyle
+    expect(style).toMatchObject({ finish: 'keep', darkPage: '#2b2f36', buttonCase: 'upper', buttonFill: '#00b0ff', buttonText: '#0b1b2b' })
+    const theme = aiSiteTheme(style, DEFAULT_SITE_THEME)
+    const light = theme.colorSchemes?.light
+    const dark = theme.colorSchemes?.dark
+    expect(aiOklabDistance(dark?.background?.default as string, '#2b2f36')).toBeLessThanOrEqual(0.05)
+    expect(theme.typography?.variants?.button).toMatchObject({ textTransform: 'uppercase', letterSpacing: '0.06em' })
+    // The filled buttons are the source's own cyan, under black on its words' side of the fill.
+    const contained = buttonVariants(theme).find((variant) => variant.props['variant'] === 'contained' && variant.props['color'] === 'primary')
+    expect(contained?.sx).toMatchObject({ bgcolor: 'primary.light', color: 'common.black' })
+    expect(light?.primary?.light).toBe('#00b0ff')
+    expect(dark?.primary?.light).toBe('#00b0ff')
+    // The links keep the brand's deeper shade, which white reads on and which reads on the grey page.
+    expect(contrastRatio('#ffffff', light?.primary?.main)).toBeGreaterThanOrEqual(4.5)
+    expect(contrastRatio(light?.primary?.main, '#f5f5f5')).toBeGreaterThanOrEqual(3)
+    expect(Math.abs(aiHexOklch(light?.primary?.main as string).h - aiHexOklch('#00b0ff').h)).toBeLessThanOrEqual(4)
+    // On the slate the cyan is the brand itself, under the source's own words.
+    expect(dark?.primary).toMatchObject({ main: '#00b0ff', contrastText: '#0b1b2b' })
+  })
+})
+
+describe('Improve it pins only the brand’s colors and fonts (AGL-4152)', () => {
+  it('drops aglyn.com’s grounds, button corners, case and fill, and its eyebrows, so the base that suits the site shows', async () => {
+    const style = (await runLook('home', { finish: 'improve' })).saved[0] as AiSiteStyle
+    expect(style.finish).toBe('improve')
+    for (const key of ['page', 'darkPage', 'buttonCase', 'buttonFill', 'buttonText'] as const) expect([key, style[key]]).toEqual([key, undefined])
+    // Still its own colors and type.
+    expect(style.brand).toBe('#00b0ff')
+    expect(style.accent).toBe(Math.round(aiHexOklch('#0077ad').h) % 360)
+    expect(style.tertiary).toBe('#e040fb')
+    expect(style.sourceFonts?.body?.family).toBe('Roboto Flex')
+    // Everything else is the seed's draw for the kind: the same style as one pinned with the colors and fonts alone.
+    const drawn: Partial<AiSiteStyle> = { ...style }
+    delete drawn.finish
+    delete drawn.sourceFonts
+    const kind = aiSiteKindFor('Aglyn A website platform.')
+    const pins = { brand: '#00b0ff', hue: style.hue, accent: style.accent, tertiary: '#e040fb', fonts: style.fonts }
+    expect(drawn).toEqual(aiSiteStyleFor({ kind, answer: {}, seed: aiSiteSeed('importJob'), brand: '#00b0ff', avoid: [], pins }))
+    const theme = aiSiteTheme(style, DEFAULT_SITE_THEME)
+    expect(aiSiteOwnButton(style)).toBeNull()
+    expect(buttonVariants(theme).some((variant) => variant.props['variant'] === 'contained')).toBe(false)
+    expect(theme.colorSchemes?.light?.background?.default).not.toBe('#f5f5f5')
+    expect(theme.colorSchemes?.dark?.background?.default).not.toBe('#161c21')
+  })
+
+  it('keeps the slate page’s cyan and its type, and none of its slate, capitals or own-fill buttons', async () => {
+    const style = (await runLook('slate', { finish: 'improve' })).saved[0] as AiSiteStyle
+    expect(style).toMatchObject({ finish: 'improve', brand: '#00b0ff' })
+    expect([style.darkPage, style.buttonCase, style.buttonFill, style.page]).toEqual([undefined, undefined, undefined, undefined])
+    const theme = aiSiteTheme(style, DEFAULT_SITE_THEME)
+    expect(theme.colorSchemes?.dark?.background?.default).not.toBe('#2b2f36')
+    expect(theme.colorSchemes?.light?.primary?.light).not.toBe('#00b0ff')
+    // Every color a theme role: the components name palette paths, never a color of their own.
+    expect(JSON.stringify(theme.components ?? {})).not.toMatch(/#[0-9a-f]{6}\b/i)
   })
 })

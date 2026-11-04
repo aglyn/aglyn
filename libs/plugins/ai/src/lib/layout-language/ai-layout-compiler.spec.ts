@@ -31,7 +31,7 @@ import {
   aiLayoutSpans,
   type AiLayoutPagePlan,
 } from './ai-layout-compiler'
-import type { AiLayoutDesign } from './ai-layout-design'
+import { aiLayoutDesignChoices, type AiLayoutDesign } from './ai-layout-design'
 import { aiCompileLayoutFrame } from './ai-layout-frame'
 import { AI_SITE_KINDS } from '../model/ai-site-kinds'
 import {
@@ -42,7 +42,10 @@ import {
   aiReadLayoutFrame,
   aiReadLayoutPage,
   type AiLayoutBlock,
+  type AiLayoutImportFinish,
+  type AiLayoutImportHero,
   type AiLayoutSection,
+  type AiLayoutWidth,
 } from './ai-layout-language'
 import type { AiLayoutTargets } from './ai-layout-links'
 import { aiLayoutStoredTree } from './ai-layout-store'
@@ -1314,5 +1317,78 @@ describe('a tab of a page brought in sets its row of columns side by side (AGL-4
     const { report, stored } = build(sections, PLAN, false)
     expect(report.violations).toEqual([])
     expect(stored.ok && stored.repairs).toEqual([])
+  })
+})
+
+describe('a page brought in, kept as it is or improved (AGL-4152)', () => {
+  const plan = (count: number): AiLayoutPagePlan => ({ title: 'Home', sections: Array.from({ length: count }, (_, at) => ({ name: `Section ${at + 1}`, uses: [], items: 0 })) })
+  /** A home whose design alternates its bands. */
+  const design = ((): AiLayoutDesign => {
+    for (let seed = 1; ; seed += 1) {
+      const candidate: AiLayoutDesign = { kind: 'business', seed, home: true }
+      if (aiLayoutDesignChoices(candidate).bandRhythm === 'alternate') return candidate
+    }
+  })()
+  const compiled = (sections: AiLayoutSection[], finish?: AiLayoutImportFinish) =>
+    aiCompileLayoutPage(sections, plan(sections.length), TARGETS, {
+      reusableComponents: false,
+      verbatim: true,
+      design,
+      sectionIds: sections.map((_, at) => `sec-${at + 1}`),
+      ...(finish ? { finish } : {}),
+    })
+  const bandsOf = (tree: ReturnType<typeof compiled>['tree']) =>
+    (tree.nodes[tree.rootId]?.nodes ?? []).map((id) => {
+      const node = tree.nodes[id]
+      if (node?.props?.['colorScheme'] === 'dark') return 'dark'
+      return node?.sx?.['bgcolor'] === 'background.paper' ? 'soft' : 'plain'
+    })
+
+  it('keeps every band it is given when kept, and draws them in the design’s rhythm, a third dark band soft, when improved', () => {
+    const words = (band: NonNullable<AiLayoutSection['band']>, heading: string): AiLayoutSection => ({ band, blocks: [{ kind: 'heading', text: heading }, { kind: 'text', text: `All about ${heading.toLowerCase()}.` }] })
+    const sections = [words('plain', 'Welcome'), words('soft', 'Services'), words('soft', 'Prices'), words('dark', 'Team'), words('dark', 'Hours'), words('dark', 'Visit')]
+    const given = ['plain', 'soft', 'soft', 'dark', 'dark', 'dark']
+    expect(bandsOf(compiled(sections).tree)).toEqual(given)
+    expect(bandsOf(compiled(sections, 'keep').tree)).toEqual(given)
+    const improved = compiled(sections, 'improve')
+    expect(bandsOf(improved.tree)).toEqual(['plain', 'soft', 'plain', 'dark', 'dark', 'soft'])
+    expect(improved.settled.map((note) => note.what)).toEqual(expect.arrayContaining(['drawn plain: the page\'s alternate band rhythm', 'a third dark band drawn soft']))
+  })
+
+  const opening = (hero: AiLayoutImportHero, measure?: AiLayoutWidth): AiLayoutSection => ({
+    band: 'plain',
+    hero,
+    ...(measure ? { measure } : {}),
+    blocks: [
+      { kind: 'heading', text: 'Fresh bread every morning' },
+      { kind: 'text', text: 'Baked on the corner, six days a week.' },
+      { kind: 'image', picture: { src: 'media:host-import/m0', alt: 'Loaves cooling on a rack' } },
+    ],
+  })
+  const boxes = (tree: ReturnType<typeof compiled>['tree']) =>
+    Object.values(tree.nodes).flatMap((node) => {
+      const width = node.sx?.['maxWidth'] as Record<string, unknown> | undefined
+      return node.componentId === 'muiBox' && width && typeof width === 'object' && width['xs'] === '100%' ? [width['md']] : []
+    })
+
+  it.each([
+    ['column', '72%'],
+    ['cover', '62%'],
+    ['poster', '75%'],
+    ['bleed', '88%'],
+  ] as const)('holds a %s hero’s words to the section’s measure when kept, and to its own %s when improved or given none', (hero, share) => {
+    expect(boxes(compiled([opening(hero, 'sm')]).tree)).toEqual(['sm'])
+    expect(boxes(compiled([opening(hero, 'md')], 'keep').tree)).toEqual(['md'])
+    expect(boxes(compiled([opening(hero)], 'keep').tree)).toEqual([share])
+    expect(boxes(compiled([opening(hero, 'sm')], 'improve').tree)).toEqual([share])
+  })
+
+  it('stores a hero held to a measure with no violation: a breakpoint, never a fixed width', () => {
+    const sections = [opening('column', 'sm')]
+    const sectionIds = ['sec-1']
+    const stored = aiLayoutStoredTree(compiled(sections).tree, 'screen', checkContext(plan(1), false, sectionIds), sectionIds)
+    if (stored.ok === false) throw new Error(stored.error)
+    const report = validateAiDoctrineTree({ rootId: CANVAS_ROOT_ELEMENT_ID, nodes: stored.nodes }, 'page', checkContext(plan(1), false, sectionIds))
+    expect(report.violations).toEqual([])
   })
 })

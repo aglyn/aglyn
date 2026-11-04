@@ -79,8 +79,21 @@ import {
   AI_SITE_IMPORT_DESIGN_MAX_CHARS,
   aiCompileImportedPage,
   aiSiteImportDesignText,
+  aiSiteImportFinishOf,
   aiSiteImportSectionNames,
 } from './ai-site-import-compile'
+import { aiSiteImportPageIsLegal, type AiSiteImportWords } from '../model/ai-site-import'
+import { aiGenerationMaxTokensWithin, aiGenerationWorstCaseMs } from './ai-job-budget'
+import {
+  AI_SITE_IMPORT_WORDING_INSTRUCTIONS,
+  AI_SITE_IMPORT_WORDING_KIND,
+  AI_SITE_IMPORT_WORDING_TOOL,
+  aiSiteImportWordingCheck,
+  aiSiteImportWordingPage,
+  aiSiteImportWordingPrompt,
+  aiSiteImportWordingTokens,
+  type AiSiteImportWorded,
+} from './ai-site-import-wording'
 
 /**
  * A page built in the compact layout language (AGL-3660): the page step's
@@ -610,6 +623,12 @@ export interface AiLayoutPageBuilt {
   dropped: string[]
   /** How many repeated items each plan section shows, as built (AGL-3660). */
   items: number[]
+  /**
+   * How the words of a page brought in under Also improve my wording came
+   * out (AGL-4152): `improved` where a rewrite of its lines was kept, `kept`
+   * where none was. Absent on every other page.
+   */
+  words?: AiSiteImportWords
 }
 
 export interface AiLayoutPageCheckInput {
@@ -1102,16 +1121,25 @@ export const AI_JOB_PAGE_DESIGN_INSTRUCTIONS: readonly AiSystemBlock[] = [
   { text: UNTRUSTED_TEXT_RULE },
 ]
 
+/**
+ * The line a design answer is told when the owner asked the site improved
+ * (AGL-4152), in its user turn alone: the cached instructions and the tool are
+ * the same either way, and a page kept as it is is asked exactly as before.
+ */
+export const AI_LAYOUT_DESIGN_IMPROVE_LINE =
+  "The owner asked for a better design: choose the hero, bands, alignment and styles that read best for this kind of site; the source's own are not required."
+
 /** A design answer's user turn: the page, the kind of site it is, and its structure, the sections' names fenced. */
 export function aiLayoutDesignPrompt(input: {
   job: Pick<AiJob, 'inputs' | '$id'>
   screen: Pick<AiBuildPlanScreen, 'title' | 'slug' | 'sections'>
-  doc: Pick<AiSiteImportDocument, 'blocks' | 'title' | 'url' | 'layout'>
+  doc: Pick<AiSiteImportDocument, 'blocks' | 'title' | 'url' | 'layout' | 'finish'>
 }): string {
   const count = aiSiteImportSectionNames(input.doc).length
   return [
     `Page: "${input.screen.title}" at ${input.screen.slug}`,
     ...aiSiteKindDesignLines(input.job.inputs),
+    ...(aiSiteImportFinishOf(input.doc) === 'improve' ? [AI_LAYOUT_DESIGN_IMPROVE_LINE] : []),
     `Its ${count === 1 ? 'one section' : `${count} sections`}, each with what it shows:`,
     fenceUntrustedText(`The structure of the owner's page ${input.doc.url}`, aiSiteImportDesignText(input.doc), { maxChars: AI_SITE_IMPORT_DESIGN_MAX_CHARS }),
     `Design seed: ${input.job.$id.slice(-6)}.`,
@@ -1129,12 +1157,24 @@ function importedDesign(design: AiLayoutDesign | null | undefined, screen: Pick<
  * answer where one is given — stored, and checked whole as a page of its
  * owner's own words. An answer whose design cannot be drawn is set aside and
  * the page is drawn as its source lays it out, so no answer is asked again
- * for what code decides. Nothing in an answer can change a word.
+ * for what code decides. Nothing in a design answer can change a word.
+ *
+ * `rewritten` names the lines a wording answer reworded (AGL-4152), whose
+ * words the document already carries: rule 14's copy checks judge them as
+ * the copy a generator wrote that they are.
  */
 export function aiImportedPageCheck(
-  input: Pick<AiLayoutPageCheckInput, 'screen' | 'sectionIds' | 'targets' | 'context' | 'motion' | 'design'> & { doc: AiSiteImportDocument; language?: string },
+  input: Pick<AiLayoutPageCheckInput, 'screen' | 'sectionIds' | 'targets' | 'context' | 'motion' | 'design'> & {
+    doc: AiSiteImportDocument
+    language?: string
+    rewritten?: readonly string[]
+  },
 ): (answer: Record<string, unknown> | null) => { value: AiLayoutPageBuilt | null; violations: AiDoctrineViolation[] } {
-  const context = { ...aiLayoutListingContext(input.context, input.targets), ownWords: true }
+  const context = {
+    ...aiLayoutListingContext(input.context, input.targets),
+    ownWords: true,
+    ...(input.rewritten?.length ? { rewritten: input.rewritten } : {}),
+  }
   const plan = {
     title: input.screen.title,
     sections: input.screen.sections.map((section) => ({ name: section.name, uses: [] as string[], items: 0 })),
@@ -1147,6 +1187,8 @@ export function aiImportedPageCheck(
       targets: input.targets,
       design: importedDesign(input.design, input.screen),
       answer: design,
+      // Kept as it is or improved, as the page's wave was asked (AGL-4152).
+      finish: aiSiteImportFinishOf(input.doc),
       ...(input.language ? { language: input.language } : {}),
     })
     // A film's Video element keeps its id, as a section's root does: the button that plays it names it (AGL-4140).
@@ -1200,14 +1242,57 @@ export const AI_LAYOUT_DESIGN_MAX_TOKENS = 3_000
 const NO_USAGE: AiUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }
 
 /**
+ * The most a wording answer asks for (AGL-4152), whatever the page and the
+ * model: the rewrite of a long page's every line, with its thinking.
+ */
+export const AI_SITE_IMPORT_WORDING_MOST_TOKENS = 8_000
+
+/** The least a wording answer asks for: a short page's rewrites, and room to think before them. */
+export const AI_SITE_IMPORT_WORDING_LEAST_TOKENS = 1_500
+
+/**
+ * The ceiling a page's wording answer is asked at on this model (AGL-4152):
+ * what the time the page step registers leaves once its design answer's
+ * worst case is spent, so both answers and their re-asks fit one pass. The
+ * wording answer is offered no lookup of the site.
+ */
+export function aiSiteImportWordingMaxTokens(model: string): number {
+  const design = aiGenerationWorstCaseMs({ model, maxTokens: Math.min(AI_LAYOUT_DESIGN_MAX_TOKENS, AI_JOB_PAGE_LANGUAGE_BUDGET.maxTokens(model)) })
+  return aiGenerationMaxTokensWithin({
+    model,
+    budgetMs: AI_JOB_PAGE_LANGUAGE_BUDGET.minimumMs - design,
+    cap: AI_SITE_IMPORT_WORDING_MOST_TOKENS,
+    lookups: 0,
+  })
+}
+
+/**
+ * Whether a page brought in is asked to improve its wording (AGL-4152, G1):
+ * a main page Aglyn AI arranges, its wave under Improve it with Also improve
+ * my wording on, and never a policy page, by its address or its title.
+ */
+export function aiImportedPageRewords(doc: Pick<AiSiteImportDocument, 'build' | 'finish' | 'wording' | 'title' | 'url'>, screen: Pick<AiBuildPlanScreen, 'slug' | 'title'>): boolean {
+  if (doc.build !== 'arranged' || aiSiteImportFinishOf(doc) !== 'improve' || doc.wording !== 'improved') return false
+  let path = ''
+  try {
+    path = new URL(doc.url).pathname
+  } catch {
+    // No address: its slug and title say whether it is a policy.
+  }
+  return !aiSiteImportPageIsLegal({ slug: screen.slug, title: [screen.title, doc.title].join(' '), path })
+}
+
+/**
  * A page brought in (AGL-4084, AGL-4107). Its layout is compiled first with
  * no model: a page of a collection is that page, nothing spent; a page that
  * cannot be built so is reviewed before anything is spent on it. A main page
  * then asks one design answer on the page step's balanced tier and is drawn
- * with it, every word still the source's.
+ * with it, every word still the source's. Under Also improve my wording
+ * (AGL-4152) a main page then asks its wording too, drawn in the design its
+ * first answer chose (`aiRunImportedPageWording`).
  */
 async function aiRunImportedPage(input: AiLayoutPageRunInput, doc: AiSiteImportDocument): Promise<AiValidatedGeneration<AiLayoutPageBuilt>> {
-  const check = aiImportedPageCheck({
+  const checkInput = {
     screen: input.screen,
     sectionIds: input.sectionIds,
     targets: input.targets,
@@ -1215,8 +1300,8 @@ async function aiRunImportedPage(input: AiLayoutPageRunInput, doc: AiSiteImportD
     design: aiLayoutDesignOf(input.job, input.screen.slug),
     motion: aiLayoutMotionSiteOf(input.job, input.screen.slug),
     ...(input.plan.language ? { language: input.plan.language } : {}),
-    doc,
-  })
+  }
+  const check = aiImportedPageCheck({ ...checkInput, doc })
   const spend = { attempts: 0, usage: NO_USAGE, estCostUsd: 0, model: input.model, stopReason: null, effort: null }
   const plain = check(null)
   if (!plain.value) {
@@ -1224,7 +1309,9 @@ async function aiRunImportedPage(input: AiLayoutPageRunInput, doc: AiSiteImportD
   }
   if (doc.build === 'copied') return { ...spend, status: 'ok', value: plain.value }
   const observe = input.observe ?? ((inner) => inner)
-  return runValidatedGeneration<AiLayoutPageBuilt>(AI_LAYOUT_DESIGN_KIND, {
+  // The design answer the page was drawn with, which its reworded page is drawn with too.
+  const drawn: { answer: Record<string, unknown> | null } = { answer: null }
+  const designed = await runValidatedGeneration<AiLayoutPageBuilt>(AI_LAYOUT_DESIGN_KIND, {
     step: 'job.page',
     model: input.model,
     instructions: AI_JOB_PAGE_DESIGN_INSTRUCTIONS,
@@ -1235,7 +1322,72 @@ async function aiRunImportedPage(input: AiLayoutPageRunInput, doc: AiSiteImportD
     maxTokens: Math.min(AI_LAYOUT_DESIGN_MAX_TOKENS, AI_JOB_PAGE_LANGUAGE_BUDGET.maxTokens(input.model)),
     cutOff: { noun: 'design', smaller: 'Answer with the choices alone.' },
     ...AI_LAYOUT_LANGUAGE_THINKING,
-    check: observe((answer) => check(answer)),
+    check: observe((answer) => {
+      const result = check(answer)
+      if (result.value) drawn.answer = answer
+      return result
+    }),
     ...(input.signal ? { signal: input.signal } : {}),
   })
+  if (designed.status !== 'ok' || !aiImportedPageRewords(doc, input.screen)) return designed
+  return aiRunImportedPageWording({
+    input,
+    doc,
+    designed,
+    build: (reworded, rewritten) => aiImportedPageCheck({ ...checkInput, doc: reworded, rewritten })(drawn.answer),
+  })
+}
+
+/**
+ * A page's wording improved (AGL-4152, G1–G3): one `submit_wording` answer
+ * on the page step's own tier, after its design, over the page's lines. Each
+ * rewrite is held to its line's facts (`aiSiteImportWordingHolds`); a line
+ * refused is asked again once, and refused again keeps its words, noted on
+ * the page. The page is built whole in its rewrites and checked as any page
+ * brought in, rule 14's copy checks on for the reworded lines. A rewrite
+ * that fails as a whole, or an answer refused or cut off, leaves the page as
+ * its design drew it, every word the source's, and it reads as kept.
+ *
+ * It spends inside the page's second pass of `AI_SITE_IMPORT_PAGE_CEILING_CREDITS`,
+ * and is priced as an AI page (`AI_MEASURED_IMPORT_CREDITS.page`).
+ */
+async function aiRunImportedPageWording(scope: {
+  input: AiLayoutPageRunInput
+  doc: AiSiteImportDocument
+  designed: Extract<AiValidatedGeneration<AiLayoutPageBuilt>, { status: 'ok' }>
+  /** The page step's check of a page brought in, over the reworded document, in the design the page was drawn with. */
+  build: (reworded: AiSiteImportDocument, rewritten: readonly string[]) => { value: AiLayoutPageBuilt | null; violations: AiDoctrineViolation[] }
+}): Promise<AiValidatedGeneration<AiLayoutPageBuilt>> {
+  const { input, doc, designed } = scope
+  const kept: Extract<AiValidatedGeneration<AiLayoutPageBuilt>, { status: 'ok' }> = { ...designed, value: { ...designed.value, words: 'kept' } }
+  const ceiling = aiSiteImportWordingMaxTokens(input.model)
+  const page = aiSiteImportWordingPage(doc, { maxTokens: ceiling })
+  if (!page.lines.length) return kept
+  const named = input.job.inputs?.['businessName']
+  const siteName = typeof named === 'string' ? named : null
+  const worded = await runValidatedGeneration<AiSiteImportWorded<AiLayoutPageBuilt>>(AI_SITE_IMPORT_WORDING_KIND, {
+    step: 'job.page',
+    model: input.model,
+    instructions: AI_SITE_IMPORT_WORDING_INSTRUCTIONS,
+    messages: [{ role: 'user', content: aiSiteImportWordingPrompt({ screen: input.screen, doc, page, siteName }) }],
+    tool: AI_SITE_IMPORT_WORDING_TOOL,
+    maxTokens: Math.min(ceiling, Math.max(AI_SITE_IMPORT_WORDING_LEAST_TOKENS, aiSiteImportWordingTokens(page))),
+    cutOff: { noun: 'wording', smaller: 'Reword fewer lines, and leave out every line that already reads well.' },
+    ...AI_LAYOUT_LANGUAGE_THINKING,
+    check: aiSiteImportWordingCheck({ doc, page, siteName, framing: input.context.framing ?? null, build: scope.build }),
+    ...(input.signal ? { signal: input.signal } : {}),
+  })
+  const spent = spentTogether(designed, worded)
+  if (worded.status !== 'ok') {
+    // Logged by its codes alone: the rewrite's words are the site's content.
+    console.info('ai imported page: its wording kept as written', {
+      status: worded.status,
+      codes: worded.status === 'needs_input' ? [...new Set(worded.violations.map((violation) => violation.code))] : [],
+    })
+    return { ...kept, ...spent }
+  }
+  const { built, rewrites, kept: refused } = worded.value
+  const notes = refused.map((refusal) => ({ at: `line ${refusal.line}`, what: `kept as written, refused twice: ${refusal.code}` }))
+  if (!rewrites.size) return { ...kept, ...spent, value: { ...kept.value, settled: [...kept.value.settled, ...notes] } }
+  return { ...spent, status: 'ok', value: { ...built, settled: [...built.settled, ...notes], words: 'improved' } }
 }

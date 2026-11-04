@@ -25,6 +25,14 @@
  * reports the recorded pages and frames, read, compiled and checked offline,
  * and the same pages built as the 10/29 import built them, as a control.
  *
+ *   node libs/plugins/ai/scripts/site-import-fidelity-report.mts --finish keep|improve [--words kept|improved]
+ *
+ * scores the recorded pages as that finish asks (AGL-4152): Keep my site's
+ * look kept, or Improve it's content and design, and under improved words
+ * their facts, lines and meaning. A recorded page has no theme of its own:
+ * its theme is computed from the site style the look pass draws from its
+ * look facts, and the report says so.
+ *
  *   node libs/plugins/ai/scripts/site-import-fidelity-report.mts --host <id>
  *
  * reports a site an import built, for a live check. Its reads are Admin SDK
@@ -40,6 +48,10 @@
  *                           file (a page, or a stylesheet); may be repeated.
  *                           With any of these the source site is asked nothing,
  *                           and a page with no file is listed as not scored.
+ *   --finish keep|improve   Score every page as this finish (AGL-4152). Default: each
+ *                           page's wave stamp, else the import's own, else keep.
+ *   --words kept|improved   Score every page's words so. Default: the page's own
+ *                           stamp, else improved where its wave improved them.
  *   --json <file>           Also write every report in full.
  *
  * Against production, run it from the repo root with the Admin SDK's
@@ -100,14 +112,16 @@ interface Args {
   pages: string[]
   sources: Map<string, string>
   json: string | null
+  finish: 'keep' | 'improve' | null
+  words: 'kept' | 'improved' | null
 }
 
-const USAGE = 'Usage: site-import-fidelity-report.mts [--host <id> [--job <id>] [--page <path>]… [--source <path>=<file>]…] [--json <file>]'
+const USAGE = 'Usage: site-import-fidelity-report.mts [--host <id> [--job <id>] [--page <path>]… [--source <path>=<file>]…] [--finish keep|improve] [--words kept|improved] [--json <file>]'
 
 const pathKey = (path: string) => (path.replace(/\/+$/, '') || '/').replace(/^(?!\/)/, '/')
 
 function readArgs(argv: readonly string[]): Args {
-  const args: Args = { host: null, job: null, pages: [], sources: new Map(), json: null }
+  const args: Args = { host: null, job: null, pages: [], sources: new Map(), json: null, finish: null, words: null }
   for (let at = 0; at < argv.length; at += 2) {
     const name = argv[at] as string
     const value = argv[at + 1]
@@ -116,6 +130,13 @@ function readArgs(argv: readonly string[]): Args {
     else if (name === '--job') args.job = value
     else if (name === '--json') args.json = resolve(value)
     else if (name === '--page') args.pages.push(pathKey(value))
+    else if (name === '--finish') {
+      if (value !== 'keep' && value !== 'improve') throw new Error(`--finish takes keep or improve.\n${USAGE}`)
+      args.finish = value
+    } else if (name === '--words') {
+      if (value !== 'kept' && value !== 'improved') throw new Error(`--words takes kept or improved.\n${USAGE}`)
+      args.words = value
+    }
     else if (name === '--source') {
       const split = value.indexOf('=')
       if (split < 1) throw new Error(`--source takes <path>=<file>.\n${USAGE}`)
@@ -146,8 +167,12 @@ interface PageRow {
   report: Dict
 }
 
-/** Whether a page ships: its structure at the bar, its words exactly whole. */
-const holds = (report: Dict, threshold: number) => report.score >= threshold && report.words.ratio === 1
+/**
+ * Whether a page ships: its structure at the bar, its words exactly whole;
+ * scored as a finish (AGL-4152), as the fidelity's own rule says, set once
+ * the fidelity is loaded.
+ */
+let holds = (report: Dict, threshold: number): boolean => report.score >= threshold && report.words.ratio === 1
 
 /** The pages side by side: each measure, built over source. */
 function pagesTable(rows: readonly PageRow[], threshold: number): string {
@@ -228,15 +253,26 @@ function shortOf(rows: readonly PageRow[], frames: ReadonlyArray<{ name: string;
   for (const { name, report } of rows) {
     const short: string[] = []
     const { words } = report
-    if (words.ratio !== 1) {
+    // What the page's finish leaves free is not short of anything (AGL-4152).
+    const free = new Set<string>(report.free ?? [])
+    if (words.ratio !== 1 && !free.has('words')) {
       const said = [...words.examples.missing.map((word: string) => `-${word}`), ...words.examples.extra.map((word: string) => `+${word}`)].join(' ')
       short.push(`words: ${words.missing} missing, ${words.extra} extra${said ? ` (${said})` : ''}`)
     }
-    for (const key of ['sections', 'bands', 'widths', 'rows', 'tables', 'tabs', 'pictures', 'framing', 'icons', 'buttons', 'headings', 'forms', 'videos']) {
-      if (report[key] && report[key].ratio < 1) short.push(`${key} ${count(report[key])}`)
+    for (const key of ['sections', 'bands', 'widths', 'rows', 'tables', 'tabs', 'pictures', 'framing', 'icons', 'buttons', 'headings', 'forms', 'videos', 'align', 'boxed', 'ground', 'measure']) {
+      if (report[key] && report[key].ratio < 1 && !free.has(key)) short.push(`${key} ${count(report[key])}`)
     }
     for (const [kind, entry] of Object.entries(report.groups as Dict)) if (entry.items.ratio < 1) short.push(`${kind} ${count(entry.items)}`)
-    if (report.bands.ratio < 1) short.push(`bands read ${report.bands.read.join(', ')}; drawn ${report.bands.drawn.join(', ')}`)
+    if (report.bands.ratio < 1 && !free.has('bands')) short.push(`bands read ${report.bands.read.join(', ')}; drawn ${report.bands.drawn.join(', ')}`)
+    for (const key of ['case', 'fill']) if (report.buttons[key] && report.buttons[key].ratio < 1) short.push(`button ${key} ${count(report.buttons[key])}`)
+    if (report.ground?.worst > 0.05 && !free.has('ground')) short.push(`a ground ΔE ${report.ground.worst.toFixed(3)} from the source's`)
+    if (report.measure?.ratio < 1 && report.measure.shares && !free.has('measure')) short.push(`hero heading at ${report.measure.shares.built.toFixed(2)} of its section, the source's ${report.measure.shares.source.toFixed(2)}`)
+    if (report.facts && report.facts.ratio < 1) {
+      const said = [...report.facts.examples.missing.map((fact: string) => `-${fact}`), ...report.facts.examples.extra.map((fact: string) => `+${fact}`)].join(' ')
+      short.push(`facts: ${report.facts.missing} missing, ${report.facts.extra} added${said ? ` (${said})` : ''}`)
+    }
+    if (report.lines && report.lines.ratio < 1) short.push(`lines ${count(report.lines)}, ${report.lines.extra} added`)
+    for (const line of report.meaning?.examples ?? []) short.push(`meaning ${line.kept.toFixed(2)}: “${line.source}” → “${line.built}”`)
     if (short.length) out.push(`- ${name}: ${short.join('; ')}`)
   }
   for (const { name, report } of frames) {
@@ -247,6 +283,131 @@ function shortOf(rows: readonly PageRow[], frames: ReadonlyArray<{ name: string;
   return out
 }
 
+/*------------------------------------------
+ * The finish's tables (AGL-4152)
+ *-----------------------------------------*/
+
+const share = (line: Dict | null | undefined) => (line ? `${line.source.toFixed(2)} → ${line.built.toFixed(2)}` : '-')
+
+/** Keep my site, each page a row: its alignment, boxes, grounds, hero measure, inks, and its buttons' case and fill. */
+function keepTable(rows: readonly PageRow[], threshold: number): string | null {
+  const kept = rows.filter(({ report }) => report.scoredAs?.finish === 'keep')
+  if (!kept.length) return null
+  return table(
+    ['page', 'score', 'holds', 'align', 'boxed', 'ground', 'worst ΔE', 'measure', 'share', 'readable', 'button case', 'button fill', 'lowest'],
+    kept.map(({ name, report }) => [
+      name,
+      score(report.score),
+      holds(report, threshold) ? 'yes' : 'NO',
+      count(report.align),
+      count(report.boxed),
+      report.ground.theme ? count(report.ground) : 'no theme',
+      report.ground.worst === null ? '-' : report.ground.worst.toFixed(3),
+      report.measure.shares ? count(report.measure) : 'not read',
+      report.measure.shares ? share(report.measure.shares) : '-',
+      count(report.readable),
+      report.buttons.case ? count(report.buttons.case) : '-',
+      report.buttons.fill ? count(report.buttons.fill) : '-',
+      report.lowest ?? '-',
+    ]),
+  )
+}
+
+/** Improve it, each page a row: its content's score, and each line of its design, source → built. */
+function improveTable(rows: readonly PageRow[], threshold: number): string | null {
+  const improved = rows.filter(({ report }) => report.scoredAs?.finish === 'improve')
+  if (!improved.length) return null
+  return table(
+    ['page', 'content', 'holds', 'lowest', 'rhythm', 'measure', 'opening', 'grouped', 'readable', 'better'],
+    improved.map(({ name, report }) => [
+      name,
+      score(report.score),
+      holds(report, threshold) ? 'yes' : 'NO',
+      report.lowest ?? '-',
+      share(report.design.rhythm),
+      share(report.design.measure),
+      share(report.design.opening),
+      share(report.design.grouped),
+      share(report.design.readable),
+      report.design.better ? 'yes' : 'no',
+    ]),
+  )
+}
+
+/** What Improve it leaves free, each page a row: reported, never scored. */
+function freeTable(rows: readonly PageRow[]): string | null {
+  const improved = rows.filter(({ report }) => report.scoredAs?.finish === 'improve' || report.free?.length)
+  const keys = [...new Set(improved.flatMap(({ report }) => (report.free ?? []) as string[]))]
+  if (!keys.length) return null
+  return table(
+    ['page', ...keys],
+    improved.map(({ name, report }) => [name, ...keys.map((key) => (!report.free?.includes(key) ? '-' : key === 'words' ? `${report.words.ratio.toFixed(2)}` : report[key] ? count(report[key]) : '-'))]),
+  )
+}
+
+/** Improved words, each page a row: its facts, its lines, and the least meaning a rewrite kept. */
+function wordingTable(rows: readonly PageRow[]): string | null {
+  const reworded = rows.filter(({ report }) => report.scoredAs?.words === 'improved')
+  if (!reworded.length) return null
+  return table(
+    ['page', 'facts', 'facts added', 'lines', 'lines added', 'rewritten', 'meaning, least', 'under 0.4'],
+    reworded.map(({ name, report }) => [
+      name,
+      `${report.facts.source - report.facts.missing}/${report.facts.source}`,
+      String(report.facts.extra),
+      count(report.lines),
+      String(report.lines.extra),
+      String(report.meaning.lines),
+      report.meaning.lowest.toFixed(2),
+      String(report.meaning.below),
+    ]),
+  )
+}
+
+/** The finish's sections of the report, in order. */
+function finishSections(rows: readonly PageRow[], threshold: number, themeNote: string | null): string[] {
+  const keep = keepTable(rows, threshold)
+  const improve = improveTable(rows, threshold)
+  const free = freeTable(rows)
+  const wording = wordingTable(rows)
+  return [
+    ...(keep
+      ? [
+          '## Keep my site: the look kept',
+          '',
+          'Kept when the score holds the bar, the words are whole, and align, boxed, ground and measure are each whole. A button is kept',
+          'in its source’s case and, filled, in its fill within OKLab ΔE 0.05; a ground within 0.05 of the source’s.',
+          ...(themeNote ? ['', themeNote] : []),
+          '',
+          keep,
+          '',
+        ]
+      : []),
+    ...(improve
+      ? [
+          '## Improve it: the content and the design',
+          '',
+          'The score is the content’s alone. Each design line is the share of what it asks, source → built; better is at or above',
+          'the source on every line and above it on one.',
+          ...(themeNote ? ['', themeNote] : []),
+          '',
+          improve,
+          '',
+        ]
+      : []),
+    ...(free ? ['## Free under Improve it', '', 'Reported, never scored: what Improve it may change.', '', free, ''] : []),
+    ...(wording ? ['## Improved words', '', 'Facts and lines held at exactly 1, and every rewritten line’s meaning at 0.4 or more.', '', wording, ''] : []),
+  ]
+}
+
+/** What the bar holds, said for the finish the pages were scored as. */
+function barSaid(finish: string | null, words: string | null): string {
+  const said = words === 'improved' ? 'facts and lines exactly 1, each rewrite’s meaning at 0.4' : 'words exactly 1'
+  if (finish === 'keep') return `on structure, ${said}, align, boxed, ground and measure whole`
+  if (finish === 'improve') return `on content, ${said}`
+  return `on structure, ${said}`
+}
+
 /** What the score reads and leaves out on purpose, as the guide says it. */
 function notScored(rows: readonly PageRow[]): string | null {
   const lone = rows.reduce((total, row) => total + row.report.icons.lone, 0)
@@ -255,13 +416,13 @@ function notScored(rows: readonly PageRow[]): string | null {
 }
 
 /** The result, in one line, and the exit code it means. */
-function verdict(rows: readonly PageRow[], frames: ReadonlyArray<{ report: Dict }>, threshold: number): { line: string; ok: boolean } {
+function verdict(rows: readonly PageRow[], frames: ReadonlyArray<{ report: Dict }>, threshold: number, bar = 'on structure, words exactly 1'): { line: string; ok: boolean } {
   if (!rows.length) return { line: 'Result: NO PAGE SCORED, so this says nothing of whether the site holds the bar.', ok: false }
   const pagesHeld = rows.filter(({ report }) => holds(report, threshold)).length
   const framesHeld = frames.filter(({ report }) => report.score >= threshold).length
   const ok = pagesHeld === rows.length && framesHeld === frames.length
   const parts = [`${pagesHeld} of ${rows.length} page${rows.length === 1 ? '' : 's'}`, `${framesHeld} of ${frames.length} header${frames.length === 1 ? ' and footer' : 's and footers'}`]
-  return { line: `${ok ? 'Result: holds the bar' : 'Result: BELOW THE BAR'}: ${parts.join(' and ')} at ${score(threshold)} or above on structure, words exactly 1.`, ok }
+  return { line: `${ok ? 'Result: holds the bar' : 'Result: BELOW THE BAR'}: ${parts.join(' and ')} at ${score(threshold)} or above ${bar}.`, ok }
 }
 
 /** Each page asked for, as its row of the ledger stands: how it was built, what it came to and what it said. */
@@ -284,6 +445,15 @@ async function recordedReport(load: (file: string) => Promise<Dict>, args: Args)
   const replay = await load(`${AI}/site-import/fixtures/site-import-fidelity-replay.ts`)
   const fidelity = await load(`${AI}/model/ai-site-import-fidelity.ts`)
   const threshold = fidelity.SITE_IMPORT_FIDELITY_THRESHOLD as number
+  holds = fidelity.siteImportFidelityHolds
+  // Scored as a finish only where one is asked for (AGL-4152): with neither, as before the choice.
+  const finished = args.finish || args.words ? { finish: args.finish ?? 'keep', words: args.words ?? 'kept' } : null
+  // No recorded page stores a theme: each is computed from the site style its look facts draw.
+  const themes = new Map<string, Dict | null>()
+  const themeOf = (key: string) => {
+    if (!themes.has(key)) themes.set(key, replay.siteImportReplayTheme(key, finished?.finish))
+    return themes.get(key) ?? null
+  }
   const NAMES = [
     ['home', 'Home'],
     ['product', '/product'],
@@ -296,10 +466,12 @@ async function recordedReport(load: (file: string) => Promise<Dict>, args: Args)
     ['bakery', 'a bakery’s films, not ours'],
   ] as const
   const forms = (key: string) => (key === 'contact' ? { forms: [{ id: 'form-contact', name: 'Contact' }] } : {})
-  const scored = (built: Dict): Dict => fidelity.siteImportFidelity(built.source, built.tree)
-  const rows: PageRow[] = NAMES.map(([key, name]) => ({ name, report: scored(replay.siteImportReplayPage(key, forms(key))) }))
-  rows.splice(1, 0, { name: 'Home, arranged', report: scored(replay.siteImportReplayPage('home', { answer: replay.SITE_IMPORT_REPLAY_HOME_ANSWER })) })
-  const control: PageRow[] = NAMES.map(([key, name]) => ({ name, report: scored(replay.siteImportReplayPage(key, { ...forms(key), layout: false })) }))
+  const built = (key: string, options: Dict = {}) => replay.siteImportReplayPage(key, { ...forms(key), ...(finished ?? {}), ...options })
+  const scored = (key: string, page: Dict): Dict =>
+    finished ? fidelity.siteImportFidelity(page.source, page.tree, { ...finished, theme: themeOf(key) }) : fidelity.siteImportFidelity(page.source, page.tree)
+  const rows: PageRow[] = NAMES.map(([key, name]) => ({ name, report: scored(key, built(key)) }))
+  rows.splice(1, 0, { name: 'Home, arranged', report: scored('home', built('home', { answer: replay.SITE_IMPORT_REPLAY_HOME_ANSWER })) })
+  const control: PageRow[] = NAMES.map(([key, name]) => ({ name, report: scored(key, built(key, { layout: false })) }))
   const frames = (
     [
       ['home', 'aglyn.com'],
@@ -309,14 +481,17 @@ async function recordedReport(load: (file: string) => Promise<Dict>, args: Args)
     const frame = replay.siteImportReplayFrame(key)
     return { name, report: fidelity.siteImportFrameFidelity(frame, frame.tree) as Dict }
   })
-  const result = verdict(rows, frames, threshold)
+  const result = verdict(rows, frames, threshold, barSaid(finished?.finish ?? null, finished?.words ?? null))
   const groups = groupsTable(rows)
+  const themeNote = finished
+    ? 'Theme: a recorded page stores none, so each page’s is computed from the site style the look pass draws from its look facts.'
+    : null
   // Home is on the table twice; what it leaves out is said once.
   const said = notScored(rows.filter(({ name }) => name !== 'Home, arranged'))
   const short = shortOf(rows, frames)
   console.log(
     [
-      '# Bring my site: fidelity report, recorded pages',
+      `# Bring my site: fidelity report, recorded pages${finished ? `, scored as ${finished.finish === 'keep' ? 'Keep my site' : 'Improve it'}, words ${finished.words}` : ''}`,
       '',
       'Each cell is what the built page kept over what the source has. A page holds the bar when its structure',
       `scores ${score(threshold)} or above and its words are exactly whole.`,
@@ -326,6 +501,7 @@ async function recordedReport(load: (file: string) => Promise<Dict>, args: Args)
       pagesTable(rows, threshold),
       '',
       ...(groups ? ['## Groups, items kept by kind', '', groups, ''] : []),
+      ...finishSections(rows, threshold, themeNote),
       '## Header and footer',
       '',
       framesTable(frames),
@@ -342,7 +518,7 @@ async function recordedReport(load: (file: string) => Promise<Dict>, args: Args)
       result.line,
     ].join('\n'),
   )
-  if (args.json) writeFileSync(args.json, JSON.stringify({ threshold, pages: rows, control, frames }, null, 1))
+  if (args.json) writeFileSync(args.json, JSON.stringify({ threshold, ...(finished ? { scoredAs: finished } : {}), pages: rows, control, frames }, null, 1))
   return result.ok
 }
 
@@ -447,9 +623,10 @@ async function hostReport(load: (file: string) => Promise<Dict>, args: Args): Pr
 
 async function hostReportFrom(db: Dict, load: (file: string) => Promise<Dict>, args: Args, where: string): Promise<boolean> {
   const fidelity = await load(`${AI}/model/ai-site-import-fidelity.ts`)
-  const { siteImportCreditsLine, siteImportCreditsMeasured, siteImportLookLine } = await load(`${AI}/model/ai-site-import-report.ts`)
+  const { siteImportCreditsLine, siteImportCreditsMeasured, siteImportFidelityThemeFor, siteImportLookLine, siteImportPageFinish } = await load(`${AI}/model/ai-site-import-report.ts`)
   const { decodeStoredNodes } = await load('libs/aglyn/src/lib/app-utils/stored-nodes.ts')
   const threshold = fidelity.SITE_IMPORT_FIDELITY_THRESHOLD as number
+  holds = fidelity.siteImportFidelityHolds
   const hostId = args.host as string
   const { host, orgId, jobId, job } = await readSite(db, hostId, args.job)
   const state = job.siteImport as Dict | null
@@ -502,6 +679,9 @@ async function hostReportFrom(db: Dict, load: (file: string) => Promise<Dict>, a
   }
 
   const library = await libraryPhotos(db, load, { hostId, orgId, domain: state.domain })
+  // Each page as it was finished (AGL-4152): what was asked here, else its wave's stamp, else the import's, else keep.
+  const theme = siteImportFidelityThemeFor(host)
+  const finishes = new Map<string, number>()
   const rows: PageRow[] = []
   for (const page of chosen) {
     const read = reads.get(page.slot)
@@ -512,8 +692,18 @@ async function hostReportFrom(db: Dict, load: (file: string) => Promise<Dict>, a
       continue
     }
     const photos = page.photos?.assets?.length ? page.photos.assets : library(read.blocks ?? [], tree)
-    rows.push({ name: page.path, report: fidelity.siteImportFidelity({ layout: read.layout, blocks: read.blocks ?? [], photos }, tree) })
+    const how = siteImportPageFinish(state, page, { finish: args.finish, words: args.words })
+    const said = `${how.finish}, words ${how.words} (${how.from === 'asked' ? 'asked here' : how.from === 'wave' ? 'its wave' : how.from === 'import' ? 'the import' : 'none named: keep'})`
+    finishes.set(said, (finishes.get(said) ?? 0) + 1)
+    rows.push({ name: page.path, report: fidelity.siteImportFidelity({ layout: read.layout, blocks: read.blocks ?? [], photos }, tree, { finish: how.finish, words: how.words, theme }) })
   }
+  const themeNote = theme
+    ? theme.from === 'style'
+      ? 'Theme: the site stores none, so it is computed from its site style.'
+      : null
+    : 'Theme: the site has none to read, so its grounds, inks and buttons’ case and fill are not measured.'
+  const scoredAs = [...new Set(rows.map(({ report }) => `${report.scoredAs?.finish}/${report.scoredAs?.words}`))]
+  const [onlyFinish, onlyWords] = scoredAs.length === 1 ? (scoredAs[0] as string).split('/') : [null, null]
 
   // The header and footer, wherever the pages render inside them.
   const frames: Array<{ name: string; report: Dict }> = []
@@ -534,7 +724,7 @@ async function hostReportFrom(db: Dict, load: (file: string) => Promise<Dict>, a
   const inNow = all.filter((page) => page.brought).length
   const sourced = readAt ? `${held} from the job's own read, ${reads.size - held} read again at ${readAt}${args.sources.size ? ' from saved files' : ''}` : `${held} from the job's own read`
 
-  const result = verdict(rows, frames, threshold)
+  const result = verdict(rows, frames, threshold, barSaid(onlyFinish ?? null, onlyWords ?? null))
   const groups = groupsTable(rows)
   const said = notScored(rows)
   const short = shortOf(rows, frames)
@@ -551,6 +741,8 @@ async function hostReportFrom(db: Dict, load: (file: string) => Promise<Dict>, a
           ['import job', `${jobId}, ${job.status}; ${inNow} of ${all.length} pages in`],
           ['scored', `${rows.length} of ${chosen.length} page${chosen.length === 1 ? '' : 's'} asked for; sources: ${sourced}`],
           ['look', siteImportLookLine(host, state, jobId)],
+          ['finish', [...finishes].map(([how, pages]) => `${pages} page${pages === 1 ? '' : 's'} ${how}`).join('; ') || 'no page scored'],
+          ['theme', theme ? (theme.from === 'style' ? 'computed from the site style (none stored)' : 'the site’s own, as stored') : 'none to read'],
           ['credits', `${siteImportCreditsLine(siteImportCreditsMeasured(state, items))}${frameSpent !== undefined ? `; header and footer ${frameSpent}` : ''}; job total ${job.creditsSpent ?? 0}`],
         ],
       ),
@@ -562,6 +754,7 @@ async function hostReportFrom(db: Dict, load: (file: string) => Promise<Dict>, a
       rows.length ? pagesTable(rows, threshold) : 'No page was scored.',
       '',
       ...(groups ? ['## Groups, items kept by kind', '', groups, ''] : []),
+      ...finishSections(rows, threshold, themeNote),
       '## Header and footer',
       '',
       frames.length ? framesTable(frames) : 'Not built yet.',

@@ -246,6 +246,21 @@ describe('the page input', () => {
       { mediaId: 'm2', src: 'media:host/m2' },
     ])
   })
+
+  it('reads back how the page’s wave finishes it and whether its words are improved, and nothing else (AGL-4152)', () => {
+    const read = (patch: Record<string, unknown>) =>
+      aiSiteImportDocumentOf({ [AI_LAYOUT_IMPORTED_SECTIONS_INPUT]: { build: 'arranged', title: 'Home', blocks: [{ kind: 'paragraph', text: 'Hello' }], ...patch } })
+    expect(read({ finish: 'improve', wording: 'improved' })).toMatchObject({ finish: 'improve', wording: 'improved' })
+    expect(read({ finish: 'keep', wording: 'kept' })).toMatchObject({ finish: 'keep', wording: 'kept' })
+    // An older page's input says neither: it reads as kept, with no field to say otherwise.
+    const older = read({})
+    expect(older).not.toHaveProperty('finish')
+    expect(older).not.toHaveProperty('wording')
+    // Anything else is no finish at all, never an improvement.
+    const odd = read({ finish: 'better', wording: true })
+    expect(odd).not.toHaveProperty('finish')
+    expect(odd).not.toHaveProperty('wording')
+  })
 })
 
 

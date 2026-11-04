@@ -102,6 +102,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#who-can-use-it': 'Creating images needs the Generate with AI permission and a plan that includes AI generation — see who can use Aglyn AI.',
   },
   aiImport: {
+    '#keep-or-improve': 'Before you choose Read my site, choose how your new site should look under How should your new site look?: Keep my site keeps your pages laid out as they are, in your site\'s colors, buttons and fonts.',
     '#prove-it-is-yours': 'Use one of these three ways. The status at the top shows Verified once one of them works.',
     '#turned-away': 'Many hosts protect a site with bot protection or a firewall that turns away visitors it takes for robots.',
     '#waves': 'The first wave brings in your main pages: home, then the pages in your menu, then your other top-level pages.',

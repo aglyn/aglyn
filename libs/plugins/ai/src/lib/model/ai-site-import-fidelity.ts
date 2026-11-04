@@ -44,16 +44,34 @@
  * the same score reads a page compiled in a spec and a page stored on a live
  * site. The score is the lowest ratio of the structure; words are held apart
  * at exactly 1.
+ *
+ * How the owner asked the site to be finished (AGL-4152) changes what the
+ * score means, and each finish is asked for by name; a page scored with
+ * neither a finish nor its words scores as it did before the choice:
+ *
+ * - **Keep my site**: the structure, and the look's pins at 1.0: each
+ *   section's alignment and its groups' boxes as the source has them, each
+ *   ground within OKLab ΔE 0.05 of the source's, the hero heading's measure
+ *   within 10%, and the buttons in the source's case and fill.
+ * - **Improve it**: the content alone (words, sections, items, tables, tabs,
+ *   pictures, icons, buttons, headings, forms, films); the bands, widths,
+ *   rows, framing, grounds, measure, alignment and boxes are free, and the
+ *   `design` lines say whether the build reads better than its source.
+ * - **Improved words** (lane G): the words are free, and every fact, every
+ *   line and most of each line's meaning are held instead.
  *=========================================*/
 
+import { contrastRatio } from '@aglyn/aglyn/app-utils/site-theme'
 import type { SiteImportBlock } from '../site-import/site-import-html'
-import { SITE_IMPORT_PLAY_WORDS, siteImportWidthOf } from './ai-site-import'
+import { SITE_IMPORT_PLAY_WORDS, siteImportWidthOf, type AiSiteImportFinish, type AiSiteImportWords } from './ai-site-import'
+import { aiHexOklch } from './ai-site-look'
 import type {
   SiteImportBand,
   SiteImportButtonStyle,
   SiteImportFooter,
   SiteImportGroupKind,
   SiteImportLayout,
+  SiteImportLayoutGroup,
   SiteImportLayoutItem,
   SiteImportLayoutNode,
   SiteImportLayoutSection,
@@ -154,7 +172,17 @@ export interface SiteImportPageFidelity {
    * (a film's play button its script runs) is kept as its words: counted in
    * `unlinked`, not scored.
    */
-  buttons: SiteImportFidelityCount & { unlinked: number }
+  buttons: SiteImportFidelityCount & {
+    unlinked: number
+    /**
+     * Under Keep my site (AGL-4152), the buttons set in the source's case, and
+     * its filled ones in its own fill within OKLab ΔE 0.05: counted where the
+     * source's look and the theme say them, and a button short of either is
+     * not kept.
+     */
+    case?: SiteImportFidelityCount
+    fill?: SiteImportFidelityCount
+  }
   /** The source's headings, drawn as headings. */
   headings: SiteImportFidelityCount
   /** The source's forms, where the site has a form a page places. */
@@ -167,7 +195,146 @@ export interface SiteImportPageFidelity {
    * here: its poster is among the pictures.
    */
   videos: SiteImportFidelityCount
+  /**
+   * What the page was scored as (AGL-4152): its finish and its words. Absent
+   * on a page scored with neither, whose score is the one before the choice,
+   * and which carries none of the measures below.
+   */
+  scoredAs?: { finish: AiSiteImportFinish; words: AiSiteImportWords }
+  /** The measures this finish prints as free: reported, never scored. */
+  free?: string[]
+  /** Sections whose words are set as the source sets them, centered or at the start. */
+  align?: SiteImportFidelityCount
+  /** Groups whose items are boxed where the source boxes them, and open where it leaves them open. */
+  boxed?: SiteImportFidelityCount
+  /**
+   * Sections with a ground of their own drawn on a ground of the theme
+   * within OKLab ΔE 0.05 of it (`SITE_IMPORT_GROUND_DELTA`): `theme` says
+   * where the theme's colors were read from, `null` where none was given and
+   * nothing is measured; `worst` is the farthest one.
+   */
+  ground?: SiteImportFidelityCount & { theme: SiteImportFidelityTheme['from'] | null; worst: number | null }
+  /**
+   * The hero heading's box as a share of its section, within 10% of the
+   * source's (`SITE_IMPORT_MEASURE_SHARE`): measured where the reader kept the
+   * source's measure. `shares` are the two shares compared.
+   */
+  measure?: SiteImportFidelityCount & { shares: { source: number; built: number } | null }
+  /** Each section's ink on its ground, and a filled button's label on its fill, at 4.5:1 or better: measured where a theme is given. */
+  readable?: SiteImportFidelityCount
+  /** The lines Improve it scores the build on against its source: whether it reads better (AGL-4152). */
+  design?: SiteImportDesignFidelity
+  /** Under improved words (G4): every fact of the source (prices, numbers, emails, phones, addresses, names) as often as it says it. */
+  facts?: SiteImportFidelityFacts
+  /** Under improved words (G4): every line of the source placed once, and none the page added (`extra`). */
+  lines?: SiteImportFidelityCount & { extra: number }
+  /** Under improved words (G4): how much of each line's content its rewrite keeps, held at `floor` a line. */
+  meaning?: SiteImportFidelityMeaning
 }
+
+/** How a page was finished and its words kept (AGL-4152), and the theme it is drawn in. */
+export interface SiteImportFidelityOptions {
+  /** Keep my site or Improve it. Scored with neither this nor `words`, the page scores as it did before the choice. */
+  finish?: AiSiteImportFinish | null
+  /** Whether its words were kept as written or improved (lane G). */
+  words?: AiSiteImportWords | null
+  /**
+   * The theme the page is drawn in (`siteImportFidelityThemeOf`). A tree
+   * names roles (`background.paper`, `primary.main`), not colors: without a
+   * theme the grounds, the inks and the buttons' case and fill are not
+   * measured.
+   */
+  theme?: SiteImportFidelityTheme | null
+}
+
+/** One scheme of a theme, as the fidelity reads it. */
+export interface SiteImportFidelityScheme {
+  /** `background.default`: a plain band's ground. */
+  ground: string | null
+  /** `background.paper`: a soft band's. */
+  paper: string | null
+  /** `primary.main`: a brand band's, and a filled button's where the theme sets none apart. */
+  brand: string | null
+  /** `primary.contrastText`: the words on it. */
+  onBrand: string | null
+  /** `text.primary`: the words' ink. */
+  ink: string | null
+}
+
+/** The colors and button style of the theme a page is drawn in, `#rrggbb`. */
+export interface SiteImportFidelityTheme {
+  /** Where they were read from: the site's theme as stored, or computed from its site style. */
+  from: 'theme' | 'style'
+  light: SiteImportFidelityScheme
+  dark: SiteImportFidelityScheme | null
+  /** A filled button's own fill and label where the theme sets them apart from the brand's (`MuiButton`), and the case its words are set in. */
+  button: { fill: string | null; label: string | null; case: 'upper' | 'none' | null }
+}
+
+/** One line of the design measure: the share of what it asks that the source and the build each do, 0 to 1. */
+export interface SiteImportDesignLine {
+  source: number
+  built: number
+}
+
+/**
+ * Whether a page improved reads better than its source (AGL-4152), with no
+ * model: each line the share of what it asks that the page does. A line is
+ * `null` where the page gives it nothing to ask. Better is the build at or
+ * above the source on every line and above it on one at least; a build that
+ * is merely different is not better.
+ */
+export interface SiteImportDesignFidelity {
+  /** Neighboring sections set apart by their bands, or a rule between them. */
+  rhythm: SiteImportDesignLine | null
+  /** Sections whose words run no wider than `lg`, and a long read no wider than `md`. */
+  measure: SiteImportDesignLine | null
+  /** A first section holding a picture opens as the page's hero, its heading and its picture together. */
+  opening: SiteImportDesignLine | null
+  /** Runs of three or more like items drawn as one group, each item an element of its own. */
+  grouped: SiteImportDesignLine | null
+  /** Inks and grounds that read at 4.5:1. */
+  readable: SiteImportDesignLine | null
+  better: boolean
+}
+
+/** The facts of a page's words (G4): each found on the built page as often as the source has it, and none of its own. */
+export interface SiteImportFidelityFacts {
+  source: number
+  built: number
+  missing: number
+  extra: number
+  /** Facts found as often as said, over the larger of the two: exactly 1 or the page is wrong. */
+  ratio: number
+  examples: { missing: string[]; extra: string[] }
+}
+
+/** How much of each line's content its rewrite keeps (G4). */
+export interface SiteImportFidelityMeaning {
+  /** The lines rewritten: placed, and drawn in words other than the source's. */
+  lines: number
+  /** Those keeping less than `floor` of their content words. */
+  below: number
+  /** The least any line kept; 1 where none was rewritten. */
+  lowest: number
+  /** The lines at `floor` or above, over the lines rewritten. */
+  ratio: number
+  floor: number
+  /** The lines below the floor, for a report. */
+  examples: Array<{ line: SiteImportLineRef; kept: number; source: string; built: string }>
+}
+
+/** How far a ground of the theme may sit from the source's (AGL-4152), in OKLab. */
+export const SITE_IMPORT_GROUND_DELTA = 0.05
+
+/** How far the hero heading's share of its section may sit from the source's (AGL-4152), relatively. */
+export const SITE_IMPORT_MEASURE_SHARE = 0.1
+
+/** The least share of a line's content words a rewrite keeps (G4): a bold rewrite, the owner asked 11/4, still keeps a third. */
+export const SITE_IMPORT_MEANING_FLOOR = 0.3
+
+/** The measures Improve it prints as free (AGL-4152): what it may change. */
+export const SITE_IMPORT_IMPROVE_FREE: readonly string[] = ['bands', 'widths', 'rows', 'framing', 'ground', 'measure', 'align', 'boxed']
 
 /** A page's source as the import read it: its layout over its main-region blocks, and its photos as the library holds them. */
 export interface SiteImportFidelitySource {
@@ -296,6 +463,18 @@ class Built {
     return this.tree.nodes[id]
   }
 
+  /** A node's place in document order; -1 for one not on the page. */
+  at(id: string): number {
+    return this.enter.get(id) ?? -1
+  }
+
+  /** A node and the nodes holding it, nearest first, up to the page's root. */
+  ancestry(id: string): string[] {
+    const out: string[] = []
+    for (let at: string | undefined = id; at; at = this.parent.get(at)) out.push(at)
+    return out
+  }
+
   /** Whether `a` is `b` or holds it. */
   holds(a: string, b: string): boolean {
     const start = this.enter.get(a)
@@ -355,8 +534,12 @@ const ratioBoth = (source: number, built: number): SiteImportFidelityCount => ({
 class Placement {
   /** Line → the node showing it. */
   readonly of = new Map<SiteImportLineRef, string>()
+  /** Line → the words it is shown in, where a rewrite placed it (AGL-4152). */
+  readonly rewrittenAs = new Map<SiteImportLineRef, string>()
   private readonly claimedBy = new Map<Piece, SiteImportLineRef>()
   private readonly imageClaimed = new Set<string>()
+  /** Each section's pieces, in order. */
+  private readonly scopes: Piece[][] = []
 
   constructor(
     private readonly built: Built,
@@ -369,10 +552,16 @@ class Placement {
       const root = sectionRoots[index] ?? built.tree.rootId
       const scope = new Set(built.under(root))
       const pieces = built.pieces.filter((piece) => scope.has(piece.node))
+      this.scopes[index] = pieces
       // A film's poster is placed as its Video element's (AGL-4140).
       const images = built.under(root).filter((id) => built.node(id)?.componentId === 'image' || built.node(id)?.componentId === 'video')
       let cursor = -1
       let previous: SiteImportLineRef | null = null
+      // Each line's own words, so a line found only in part never takes a piece another line is shown in whole (AGL-4152).
+      const own = new Set(section.lines.flatMap((ref) => {
+        const line = source.blocks[ref]
+        return isLine(line) && line.kind !== 'image' ? [wordLine(clean(line.text))] : []
+      }))
       for (const ref of section.lines) {
         const block = source.blocks[ref]
         if (!isLine(block)) continue
@@ -386,7 +575,7 @@ class Placement {
           previous = ref
           continue
         }
-        const piece = this.find(pieces, clean(block.text), cursor, previous)
+        const piece = this.find(pieces, clean(block.text), cursor, previous, own)
         if (piece) {
           this.claimedBy.set(piece, ref)
           this.of.set(ref, piece.node)
@@ -398,7 +587,7 @@ class Placement {
   }
 
   /** The piece showing a line: its words exactly, else a part of them (a long paragraph split), else the run it was joined into. */
-  private find(pieces: readonly Piece[], text: string, cursor: number, previous: SiteImportLineRef | null): Piece | null {
+  private find(pieces: readonly Piece[], text: string, cursor: number, previous: SiteImportLineRef | null, own: ReadonlySet<string> = new Set()): Piece | null {
     const key = wordLine(text)
     if (!key) return null
     const free = (piece: Piece) => {
@@ -423,8 +612,77 @@ class Placement {
     const exact = pieces.filter((piece) => piece.key === key && this.claimedBy.get(piece) === undefined)
     if (exact.length) return pick(exact)
     const padded = ` ${key} `
-    const part = pieces.filter((piece) => free(piece) && piece.key && (` ${piece.key} `.includes(padded) || padded.includes(` ${piece.key} `)))
+    // A reworded heading that reads "…, and agencies build a hundred" never takes the card titled "Agencies".
+    const part = pieces.filter((piece) => free(piece) && piece.key && !(piece.key !== key && own.has(piece.key)) && (` ${piece.key} `.includes(padded) || padded.includes(` ${piece.key} `)))
     return pick(part)
+  }
+
+  /**
+   * The lines a rewrite changed (G4), placed after the lines found as
+   * written: in each section, each run of lines still unplaced is set to the
+   * free pieces between the lines placed either side of it, in order, each
+   * piece to one line, the pairs sharing most content words chosen. A line a
+   * rewrite dropped has no piece to take, and stays unplaced.
+   */
+  placeRewritten(): void {
+    this.source.layout.sections.forEach((section, index) => {
+      const pieces = this.scopes[index] ?? []
+      const lines = section.lines.filter((ref) => isLine(this.source.blocks[ref]) && this.source.blocks[ref]?.kind !== 'image')
+      let run: SiteImportLineRef[] = []
+      let from = -1
+      const settle = (to: number) => {
+        if (run.length) this.align(run, pieces.filter((piece) => piece.at >= from && piece.at <= to && this.claimedBy.get(piece) === undefined))
+        run = []
+      }
+      for (const ref of lines) {
+        const node = this.of.get(ref)
+        if (node === undefined) {
+          run.push(ref)
+          continue
+        }
+        const at = this.built.at(node)
+        settle(at)
+        from = at
+      }
+      settle(Number.POSITIVE_INFINITY)
+      // A line its neighbors leave no room for (one drawn out of the source's order) is looked for among the section's free pieces.
+      const left = lines.filter((ref) => !this.of.has(ref))
+      if (left.length) this.align(left, pieces.filter((piece) => this.claimedBy.get(piece) === undefined))
+    })
+  }
+
+  /** A run of lines set to free pieces in order (G4): as many pairs as can be, then the most content kept. */
+  private align(lines: readonly SiteImportLineRef[], pieces: readonly Piece[]): void {
+    if (!lines.length || !pieces.length) return
+    const text = (ref: SiteImportLineRef) => clean((this.source.blocks[ref] as { text?: string } | undefined)?.text)
+    const best: number[][] = Array.from({ length: lines.length + 1 }, () => new Array<number>(pieces.length + 1).fill(0))
+    for (let i = 1; i <= lines.length; i += 1) {
+      for (let j = 1; j <= pieces.length; j += 1) {
+        const pair = (best[i - 1]?.[j - 1] ?? 0) + 1 + contentKept(text(lines[i - 1] as number), (pieces[j - 1] as Piece).text)
+        ;(best[i] as number[])[j] = Math.max(pair, best[i - 1]?.[j] ?? 0, best[i]?.[j - 1] ?? 0)
+      }
+    }
+    for (let i = lines.length, j = pieces.length; i > 0 && j > 0; ) {
+      const here = best[i]?.[j] ?? 0
+      if (here === (best[i - 1]?.[j] ?? 0)) i -= 1
+      else if (here === (best[i]?.[j - 1] ?? 0)) j -= 1
+      else {
+        const ref = lines[i - 1] as SiteImportLineRef
+        const piece = pieces[j - 1] as Piece
+        this.claimedBy.set(piece, ref)
+        this.of.set(ref, piece.node)
+        this.rewrittenAs.set(ref, piece.text)
+        i -= 1
+        j -= 1
+      }
+    }
+  }
+
+  /** The pieces of the page's sections no line of the source claimed, nor holds as a part of its words: lines the page added. */
+  unclaimed(): Piece[] {
+    const pieces = [...new Set(this.scopes.flat())]
+    const said = this.source.layout.sections.flatMap((section) => section.lines).map((ref) => ` ${wordLine(clean((this.source.blocks[ref] as { text?: string } | undefined)?.text))} `)
+    return pieces.filter((piece) => this.claimedBy.get(piece) === undefined && !!piece.key && !said.some((line) => line.includes(` ${piece.key} `)))
   }
 
   /** The nodes a list of lines is shown by, and whether every one of them was found. */
@@ -536,8 +794,18 @@ function linesOf(nodes: readonly SiteImportLayoutNode[]): SiteImportLineRef[] {
  * item an element of its own with its parts; the tables, tabs, pictures,
  * icons, buttons, headings and forms. The score is the lowest ratio of the
  * structure.
+ *
+ * Scored with a `finish` or its `words` (AGL-4152), the page is scored as
+ * that finish asks, with the measures it adds; with neither, as before.
  */
-export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteImportFidelityTree): SiteImportPageFidelity {
+export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteImportFidelityTree, options: SiteImportFidelityOptions = {}): SiteImportPageFidelity {
+  const finished = !!options.finish || !!options.words
+  // An import that names no finish reads as Keep my site (AGL-4152).
+  const finish: AiSiteImportFinish = options.finish ?? 'keep'
+  const improvedWords = options.words === 'improved'
+  const theme = options.theme ?? null
+  // Keep my site holds the buttons to the source's case and fill too.
+  const pinned = finished && finish === 'keep'
   const built = new Built(tree)
   const sections = source.layout.sections
   const drawnSections = built.children(tree.rootId)
@@ -545,6 +813,9 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
   const aligned = drawnSections.length === sections.length
   const roots = sections.map((_, index) => (aligned ? (drawnSections[index] ?? null) : null))
   const placement = new Placement(built, source, roots)
+  // Lines a rewrite changed are found by their place and their content (G4).
+  if (improvedWords) placement.placeRewritten()
+  const look = new LookOf(built, source.layout.look, theme)
 
   const words = wordsScore(source, built)
   const read = sections.map((section) => section.band)
@@ -556,10 +827,32 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
   const tables = { source: 0, built: 0 }
   const tabs = { source: 0, built: 0 }
   const buttons = { source: 0, built: 0, unlinked: 0 }
+  // Keep my site's buttons in the source's case, and its filled ones in its fill (AGL-4152).
+  const buttonCase = { source: 0, built: 0 }
+  const buttonFill = { source: 0, built: 0 }
+  const boxed = { source: 0, built: 0 }
   const icons = { source: 0, built: 0, lone: 0 }
   // The films drawn as the Video element, playing from an address (AGL-4140).
   const drawnFilms = built.order.filter((id) => built.node(id)?.componentId === 'video' && !!clean(built.node(id)?.props?.['src'])).length
   const films = drawnFilms > 0
+  /** Whether a button of the source is drawn in its style, going where it goes; under Keep my site, in its case and fill too. */
+  const buttonKept = (line: SiteImportLineRef, style: SiteImportButtonStyle): boolean => {
+    const id = placement.of.get(line)
+    const drawnAs = id ? built.node(id) : undefined
+    const drawn = drawnAs?.componentId === 'muiButton' && drawnAs.props?.['variant'] === BUTTON_VARIANT[style] && hasDestination(drawnAs)
+    if (!pinned) return drawn
+    const cased = look.caseKept(id ?? null)
+    if (cased !== null) {
+      buttonCase.source += 1
+      if (drawn && cased) buttonCase.built += 1
+    }
+    const filled = style === 'primary' ? look.fillKept(id ?? null) : null
+    if (filled !== null) {
+      buttonFill.source += 1
+      if (drawn && filled) buttonFill.built += 1
+    }
+    return drawn && cased !== false && filled !== false
+  }
 
   sections.forEach((section, index) => {
     const root = roots[index] ?? null
@@ -574,9 +867,7 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
           // A button whose words say it plays a film plays the page's film where one is drawn (AGL-4140).
           if (block?.kind === 'paragraph' && films && SITE_IMPORT_PLAY_WORDS.test(block.text)) {
             buttons.source += 1
-            const id = placement.of.get(node.line)
-            const drawnAs = id ? built.node(id) : undefined
-            if (drawnAs?.componentId === 'muiButton' && drawnAs.props?.['variant'] === BUTTON_VARIANT[node.button] && hasDestination(drawnAs)) buttons.built += 1
+            if (buttonKept(node.line, node.button)) buttons.built += 1
             break
           }
           // A button that goes nowhere a page can send a visitor (a film's play button its script runs) is kept as its words.
@@ -585,9 +876,7 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
             break
           }
           buttons.source += 1
-          const id = placement.of.get(node.line)
-          const drawnAs = id ? built.node(id) : undefined
-          if (drawnAs?.componentId === 'muiButton' && drawnAs.props?.['variant'] === BUTTON_VARIANT[node.button] && hasDestination(drawnAs)) buttons.built += 1
+          if (buttonKept(node.line, node.button)) buttons.built += 1
           break
         }
         case 'row': {
@@ -613,6 +902,12 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
           })
           // Lines that only share a shape are drawn as their lines: no group to keep.
           if (node.group === 'text') break
+          // Its items boxed where the source boxes them, open where it leaves them open (AGL-4152).
+          const judged = units.filter((unit) => unit.measured && unit.element)
+          if (finished && boxesKept(node) && judged.length) {
+            boxed.source += 1
+            if (judged.every((unit) => boxedOn(built, unit) === node.boxed)) boxed.built += 1
+          }
           const entry = (groups[node.group] ??= { groups: 0, groupsKept: 0, items: 0, itemsKept: 0 })
           let kept = 0
           let measured = 0
@@ -694,7 +989,55 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
     forms,
     videos,
   }
-  return { ...lowestOf(pageMeasures(report)), ...report }
+  if (!finished) return { ...lowestOf(pageMeasures(report)), ...report }
+
+  // The measures a finish adds (AGL-4152).
+  if (pinned) report.buttons = { ...report.buttons, case: ratioKept(buttonCase.source, buttonCase.built), fill: ratioKept(buttonFill.source, buttonFill.built) }
+  const added: Partial<SiteImportPageFidelity> = {
+    scoredAs: { finish, words: improvedWords ? 'improved' : 'kept' },
+    free: finish === 'improve' ? [...SITE_IMPORT_IMPROVE_FREE, ...(improvedWords ? ['words'] : [])] : improvedWords ? ['words'] : [],
+    align: alignScore(source, built, placement),
+    boxed: ratioKept(boxed.source, boxed.built),
+    ground: groundScore(sections, look, roots),
+    measure: measureScore(source, built, placement, roots),
+    readable: look.readable(drawnSections),
+    ...(finish === 'improve' ? { design: designScore(source, built, placement, look, roots, drawnSections) } : {}),
+    ...(improvedWords ? wordingScores(source, built, placement) : {}),
+  }
+  const full = { ...report, ...added }
+  return { ...lowestOf(finishMeasures(full)), ...full }
+}
+
+/**
+ * The measures a finished page is scored on (AGL-4152). Keep my site: the
+ * structure and the look's pins, its words held apart. Improve it: the
+ * content alone, its words among it unless they were improved; everything it
+ * may change prints as free.
+ */
+function finishMeasures(report: Omit<SiteImportPageFidelity, 'score' | 'lowest'>): Array<[string, SiteImportFidelityCount]> {
+  const free = new Set(report.free ?? [])
+  const pins: Array<[string, SiteImportFidelityCount | undefined]> = [
+    ['align', report.align],
+    ['boxed', report.boxed],
+    ['ground', report.ground],
+    ['measure', report.measure],
+  ]
+  const words: Array<[string, SiteImportFidelityCount]> = report.scoredAs?.finish === 'improve' && !free.has('words') ? [['words', report.words]] : []
+  return [...words, ...pageMeasures(report), ...pins.filter((entry): entry is [string, SiteImportFidelityCount] => !!entry[1])].filter(([name]) => !free.has(name))
+}
+
+/**
+ * Whether a page ships (AGL-4109, AGL-4152): its score at the bar, and what
+ * is held at exactly 1 whole. Its words, as written, or under improved words
+ * every fact and every line, and each line's meaning at the floor; under
+ * Keep my site, its alignment, boxes, grounds and measure.
+ */
+export function siteImportFidelityHolds(report: SiteImportPageFidelity, threshold = SITE_IMPORT_FIDELITY_THRESHOLD): boolean {
+  if (report.score < threshold) return false
+  const improvedWords = report.scoredAs?.words === 'improved'
+  if (improvedWords ? report.facts?.ratio !== 1 || report.lines?.ratio !== 1 || (report.meaning?.below ?? 0) > 0 : report.words.ratio !== 1) return false
+  if (report.scoredAs?.finish !== 'keep') return true
+  return [report.align, report.boxed, report.ground, report.measure].every((count) => !count || count.ratio === 1)
 }
 
 /** Whether an item of a group is kept: its own element, every line of it found, and the parts its kind and source say it has. */
@@ -905,6 +1248,603 @@ function lowestOf(measures: ReadonlyArray<[string, SiteImportFidelityCount]>): {
     }
   }
   return { score, lowest }
+}
+
+/*------------------------------------------
+ * The finish: the look kept, the design improved, the words held (AGL-4152)
+ *-----------------------------------------*/
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
+
+/** What a path of keys holds in a record, or `undefined`. */
+const pathIn = (value: unknown, ...keys: string[]): unknown => keys.reduce<unknown>((node, key) => (isRecord(node) ? node[key] : undefined), value)
+
+const round = (value: number) => Math.round(value * 1000) / 1000
+
+/** A color as `#rrggbb`, or `null` for anything else. */
+function hexOf(value: unknown): string | null {
+  if (typeof value !== 'string' || !/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(value.trim())) return null
+  const hex = value.trim().toLowerCase()
+  return hex.length === 4 ? `#${[...hex.slice(1)].map((digit) => digit + digit).join('')}` : hex
+}
+
+/** How far apart two `#rrggbb` colors sit in OKLab (AGL-4152). */
+export function siteImportOklabDelta(a: string, b: string): number {
+  const one = aiHexOklch(a)
+  const two = aiHexOklch(b)
+  const at = (color: { C: number; h: number }, part: 'a' | 'b') => color.C * (part === 'a' ? Math.cos((color.h * Math.PI) / 180) : Math.sin((color.h * Math.PI) / 180))
+  return Math.hypot(one.L - two.L, at(one, 'a') - at(two, 'a'), at(one, 'b') - at(two, 'b'))
+}
+
+/** The contrast an ink and its ground read at: the doctrine's 4.5:1. */
+const READS_AT = 4.5
+
+const reads = (ink: string, ground: string) => (contrastRatio(ink, ground) ?? 0) >= READS_AT
+
+function schemeOf(colors: unknown): SiteImportFidelityScheme | null {
+  if (!isRecord(colors)) return null
+  const scheme: SiteImportFidelityScheme = {
+    ground: hexOf(pathIn(colors, 'background', 'default')),
+    paper: hexOf(pathIn(colors, 'background', 'paper')),
+    brand: hexOf(pathIn(colors, 'primary', 'main')),
+    onBrand: hexOf(pathIn(colors, 'primary', 'contrastText')),
+    ink: hexOf(pathIn(colors, 'text', 'primary')),
+  }
+  return Object.values(scheme).some(Boolean) ? scheme : null
+}
+
+/** A color a style names, in a scheme: a palette path (`primary.main`) as the scheme draws it, a color as itself. */
+function colorIn(value: unknown, scheme: SiteImportFidelityScheme): string | null {
+  const own = hexOf(value)
+  if (own || typeof value !== 'string') return own
+  const paths: Readonly<Record<string, string | null>> = {
+    'primary.main': scheme.brand,
+    'primary.contrastText': scheme.onBrand,
+    'background.default': scheme.ground,
+    'background.paper': scheme.paper,
+    'text.primary': scheme.ink,
+  }
+  return paths[value] ?? null
+}
+
+/** A CSS `text-transform` as the case a button's words are set in. */
+const CASE_OF: Readonly<Record<string, 'upper' | 'none'>> = { uppercase: 'upper', none: 'none', capitalize: 'none', lowercase: 'none' }
+
+/**
+ * The colors and buttons of a theme, as a page is drawn in them (AGL-4152):
+ * each scheme's grounds, brand and ink, and a filled button's own fill and
+ * label where the button's component style sets them apart from the brand's
+ * (a `contained` variant, or the contained style overrides), with the case
+ * its words are set in: the component's own, else the button Text Style's.
+ * `from` says whether the theme is the one the site stores or one computed
+ * from its site style. `null` for a theme with no light ground.
+ */
+export function siteImportFidelityThemeOf(theme: unknown, from: SiteImportFidelityTheme['from'] = 'theme'): SiteImportFidelityTheme | null {
+  const light = schemeOf(pathIn(theme, 'colorSchemes', 'light'))
+  if (!light?.ground) return null
+  const button = pathIn(theme, 'components', 'MuiButton')
+  const variants = pathIn(button, 'variants')
+  const contained = (Array.isArray(variants) ? variants : []).filter((entry) => {
+    const color = pathIn(entry, 'props', 'color')
+    return pathIn(entry, 'props', 'variant') === 'contained' && (color === undefined || color === 'primary')
+  })
+  const styles = [...contained.flatMap((entry) => [pathIn(entry, 'style'), pathIn(entry, 'sx')]), pathIn(button, 'styleOverrides', 'containedPrimary'), pathIn(button, 'styleOverrides', 'contained')].filter(isRecord)
+  const pick = (...keys: string[]) => styles.flatMap((style) => keys.map((key) => colorIn(style[key], light))).find((color): color is string => !!color) ?? null
+  const transform = [
+    pathIn(button, 'styleOverrides', 'root', 'textTransform'),
+    pathIn(button, 'sx', 'root', 'textTransform'),
+    pathIn(theme, 'typography', 'variants', 'button', 'textTransform'),
+    pathIn(theme, 'typography', 'button', 'textTransform'),
+  ].find((value): value is string => typeof value === 'string')
+  return {
+    from,
+    light,
+    dark: schemeOf(pathIn(theme, 'colorSchemes', 'dark')),
+    button: { fill: pick('backgroundColor', 'bgcolor', 'background'), label: pick('color'), case: transform ? (CASE_OF[transform] ?? null) : null },
+  }
+}
+
+/** The look a built page is drawn in, read through its theme: each node's scheme, a section's ground and ink, a button's case and fill. */
+class LookOf {
+  constructor(
+    private readonly built: Built,
+    private readonly facts: SiteImportLayout['look'] | null | undefined,
+    readonly theme: SiteImportFidelityTheme | null,
+  ) {}
+
+  /** The scheme a node is drawn in: the one the nearest node holding it sets. */
+  scheme(id: string): SiteImportFidelityScheme | null {
+    if (!this.theme) return null
+    for (const at of this.built.ancestry(id)) {
+      const scheme = this.built.node(at)?.props?.['colorScheme']
+      if (scheme === 'dark') return this.theme.dark
+      if (scheme === 'light') return this.theme.light
+    }
+    return this.theme.light
+  }
+
+  /** The color a section is drawn on: its band's role in its scheme. */
+  ground(id: string): string | null {
+    const scheme = this.scheme(id)
+    const fill = this.built.node(id)?.sx?.['bgcolor']
+    return scheme ? (fill === undefined || fill === null ? scheme.ground : colorIn(fill, scheme)) : null
+  }
+
+  /** The words' ink on that ground: the brand's label on a brand band, the scheme's ink elsewhere. */
+  ink(id: string): string | null {
+    const scheme = this.scheme(id)
+    return scheme ? (this.built.node(id)?.sx?.['bgcolor'] === 'primary.main' ? scheme.onBrand : scheme.ink) : null
+  }
+
+  /** A filled button's fill: its own, else the theme's for filled buttons, else its scheme's brand. */
+  fill(id: string): string | null {
+    const scheme = this.scheme(id)
+    if (!scheme) return null
+    const own = this.built.node(id)?.sx?.['bgcolor'] ?? this.built.node(id)?.sx?.['backgroundColor']
+    return own !== undefined ? colorIn(own, scheme) : (this.theme?.button.fill ?? scheme.brand)
+  }
+
+  /** A filled button's label: its own, else the theme's for filled buttons, else the words on its scheme's brand. */
+  label(id: string): string | null {
+    const scheme = this.scheme(id)
+    if (!scheme) return null
+    const own = this.built.node(id)?.sx?.['color']
+    return own !== undefined ? colorIn(own, scheme) : (this.theme?.button.label ?? scheme.onBrand)
+  }
+
+  /** Whether a button is set in the source's case: its own `textTransform`, else the theme's. `null` where either is not known. */
+  caseKept(id: string | null): boolean | null {
+    const wanted = this.facts?.buttonCase
+    if (wanted !== 'upper' && wanted !== 'none') return null
+    const own = id ? this.built.node(id)?.sx?.['textTransform'] : undefined
+    const drawn = typeof own === 'string' ? (CASE_OF[own] ?? 'none') : (this.theme?.button.case ?? null)
+    return drawn === null ? null : drawn === wanted
+  }
+
+  /** Whether a filled button is drawn in the source's own fill, within OKLab ΔE 0.05. `null` where either is not known. */
+  fillKept(id: string | null): boolean | null {
+    const wanted = hexOf(this.facts?.buttonFill)
+    if (!wanted || !this.theme) return null
+    // A fill its own label cannot be read on is deepened by the look's reading rule, Keep's polish, and is not a loss.
+    const label = hexOf(this.facts?.buttonText)
+    if (label && !reads(label, wanted)) return null
+    const drawn = id ? this.fill(id) : (this.theme.button.fill ?? this.theme.light.brand)
+    return drawn ? siteImportOklabDelta(wanted, drawn) <= SITE_IMPORT_GROUND_DELTA : null
+  }
+
+  /** The inks and grounds the page shows: each section's, and each filled button's label on its fill, once each. */
+  pairs(sectionIds: readonly string[]): Array<[string, string]> {
+    if (!this.theme) return []
+    const out = new Map<string, [string, string]>()
+    const add = (ink: string | null, ground: string | null) => {
+      if (ink && ground) out.set(`${ink}/${ground}`, [ink, ground])
+    }
+    for (const id of sectionIds) add(this.ink(id), this.ground(id))
+    for (const id of this.built.order) {
+      const node = this.built.node(id)
+      if (node?.componentId === 'muiButton' && node.props?.['variant'] === 'contained') add(this.label(id), this.fill(id))
+    }
+    return [...out.values()]
+  }
+
+  /** The inks and grounds that read at 4.5:1, over those the theme says. */
+  readable(sectionIds: readonly string[]): SiteImportFidelityCount {
+    const pairs = this.pairs(sectionIds)
+    return ratioKept(pairs.length, pairs.filter(([ink, ground]) => reads(ink, ground)).length)
+  }
+}
+
+/**
+ * The groups whose boxing is scored (AGL-4152): a group drawn as the source's
+ * own rows draws no box per row, and an FAQ's questions are the theme's
+ * accordions, boxed as the theme boxes them.
+ */
+function boxesKept(group: SiteImportLayoutGroup): boolean {
+  return !group.inline && group.group !== 'faq' && group.group !== 'text'
+}
+
+/** Whether a node draws a box: a card or a paper, or a fill, a shadow or a border on two sides or more of its own. */
+function drawsBox(node: SiteImportFidelityNode | undefined): boolean {
+  if (!node || node.componentId === 'section') return false
+  if (node.componentId === 'muiCard' || node.componentId === 'muiPaper') return true
+  const sx = node.sx ?? {}
+  const sides = ['borderTop', 'borderRight', 'borderBottom', 'borderLeft'].filter((side) => !!sx[side]).length
+  return (sx['bgcolor'] !== undefined && sx['bgcolor'] !== 'transparent') || !!sx['border'] || sides >= 2 || (!!sx['boxShadow'] && sx['boxShadow'] !== 'none')
+}
+
+/** Whether an item of a group is drawn boxed: a box under its element holding every part of it. */
+function boxedOn(built: Built, unit: Unit): boolean {
+  if (!unit.element) return false
+  return built.under(unit.element).some((id) => drawsBox(built.node(id)) && unit.nodes.every((node) => built.holds(id, node)))
+}
+
+/** The lines a section sets in its own flow: its lines and its rows' cells', not its groups', tables' or tabs'. */
+function flowLines(nodes: readonly SiteImportLayoutNode[]): SiteImportLineRef[] {
+  return nodes.flatMap((node) => (node.kind === 'line' && !node.button ? [node.line] : node.kind === 'row' ? node.cells.flatMap((cell) => flowLines(cell.nodes)) : []))
+}
+
+/** The paragraphs past which a section is a long read, set at `md` and at the start (the compile's own count). */
+const LONG_READ_PARAGRAPHS = 4
+
+/** Whether a section of the source is a long read: more paragraphs in its own flow (not its groups') than a section's words, which a page sets at the start to be read. */
+const longRead = (source: SiteImportFidelitySource, section: SiteImportLayoutSection) => flowLines(section.nodes).filter((ref) => source.blocks[ref]?.kind === 'paragraph').length > LONG_READ_PARAGRAPHS
+
+/**
+ * The sections set as the source sets them (AGL-4152): their headings, else
+ * their words, centered or at the start. The opening a hero draws is the
+ * hero's to place, and is measured by its framing and pictures; a long read
+ * set at the start, as text is read, is kept whatever its source centers.
+ */
+function alignScore(source: SiteImportFidelitySource, built: Built, placement: Placement): SiteImportFidelityCount {
+  let measured = 0
+  let kept = 0
+  for (const [index, section] of source.layout.sections.entries()) {
+    if (index === 0 && section.hero?.picture) continue
+    const own = flowLines(section.nodes)
+    const headings = own.filter((ref) => source.blocks[ref]?.kind === 'heading')
+    const lines = (headings.length ? headings : own.filter((ref) => ['paragraph', 'list-item', 'quote'].includes(source.blocks[ref]?.kind ?? ''))).flatMap((ref) => {
+      const id = placement.of.get(ref)
+      const node = id ? built.node(id) : undefined
+      return node?.componentId === 'muiTypography' ? [node] : []
+    })
+    if (!lines.length) continue
+    measured += 1
+    const centered = lines.filter((node) => node.props?.['align'] === 'center').length
+    const drawn = centered * 2 > lines.length ? 'center' : 'start'
+    if (drawn === section.align || (drawn === 'start' && longRead(source, section))) kept += 1
+  }
+  return ratioKept(measured, kept)
+}
+
+/** Each section with a ground of its own on a ground of the theme within OKLab ΔE 0.05 of it. A picture or a film behind its words is its ground, and is not scored. */
+function groundScore(sections: readonly SiteImportLayoutSection[], look: LookOf, roots: ReadonlyArray<string | null>): NonNullable<SiteImportPageFidelity['ground']> {
+  if (!look.theme) return { ...ratioKept(0, 0), theme: null, worst: null }
+  let measured = 0
+  let kept = 0
+  let worst: number | null = null
+  for (const [index, section] of sections.entries()) {
+    const wanted = hexOf(section.background)
+    if (!wanted || section.backdrop?.kind === 'picture' || section.backdrop?.kind === 'video') continue
+    measured += 1
+    const root = roots[index]
+    const drawn = root ? look.ground(root) : null
+    if (!drawn) continue
+    const delta = siteImportOklabDelta(wanted, drawn)
+    worst = Math.max(worst ?? 0, delta)
+    if (delta <= SITE_IMPORT_GROUND_DELTA) kept += 1
+  }
+  return { ...ratioKept(measured, kept), theme: look.theme.from, worst: worst === null ? null : round(worst) }
+}
+
+/** The width a page is measured at (AGL-4152): the 1280 the 11/4 live checks set the source beside the import at. */
+const VIEW_PX = 1280
+
+/** The Container element's Max Width steps, in px, as the theme's breakpoints set them. */
+const CONTAINER_PX: Readonly<Record<string, number>> = { xs: 444, sm: 600, md: 900, lg: 1200, xl: 1536 }
+
+/** What a responsive value is at the width a page is measured at: its `lg`, else the nearest below. */
+function atView(value: unknown): unknown {
+  if (!isRecord(value)) return value
+  for (const key of ['lg', 'md', 'sm', 'xs']) if (value[key] !== undefined) return value[key]
+  return undefined
+}
+
+/** A Grid item's columns, of 12, at the width a page is measured at: `xs:12 md:6` is 6. */
+function gridSpan(size: unknown): number | null {
+  if (typeof size === 'number') return size
+  const steps = typeof size === 'string' ? Object.fromEntries(size.split(/\s+/).flatMap((part) => (/^(\w+):(\d+)$/.exec(part) ? [[part.split(':')[0], Number(part.split(':')[1])]] : []))) : isRecord(size) ? size : null
+  const span = steps ? atView(steps) : null
+  return typeof span === 'number' && span > 0 ? Math.min(12, span) : null
+}
+
+/** How wide a node's box runs at the width a page is measured at, in px, from its section down, and how wide its section's content runs. */
+function boxPx(built: Built, id: string, root: string | null): { box: number; section: number } {
+  const chain = built.ancestry(id).reverse()
+  const from = root ? chain.indexOf(root) : 0
+  let width = VIEW_PX
+  let section: number | null = null
+  for (const at of chain.slice(Math.max(0, from))) {
+    const node = built.node(at)
+    if (!node) continue
+    if (node.componentId === 'muiContainer') {
+      const cap = CONTAINER_PX[String(atView(node.props?.['maxWidth']))]
+      if (cap) width = Math.min(width, cap)
+      section ??= width
+    }
+    if (node.componentId === 'muiGrid' && !setsSideBySide(node)) width *= (gridSpan(node.props?.['size']) ?? 12) / 12
+    const max = atView(node.sx?.['maxWidth'])
+    if (typeof max === 'number') width = max <= 1 ? width * max : Math.min(width, max)
+    else if (typeof max === 'string' && CONTAINER_PX[max]) width = Math.min(width, CONTAINER_PX[max] as number)
+    else if (typeof max === 'string' && /^\d+(?:\.\d+)?%$/.test(max)) width *= parseFloat(max) / 100
+    else if (typeof max === 'string' && /^\d+(?:\.\d+)?px$/.test(max)) width = Math.min(width, parseFloat(max))
+  }
+  return { box: width, section: section ?? VIEW_PX }
+}
+
+/** The hero heading's box as a share of its section, against the source's measure: within 10%, where the reader kept it. */
+function measureScore(source: SiteImportFidelitySource, built: Built, placement: Placement, roots: ReadonlyArray<string | null>): NonNullable<SiteImportPageFidelity['measure']> {
+  const index = source.layout.sections.findIndex((section) => !!section.hero)
+  const section = source.layout.sections[index]
+  const wanted = section?.hero?.measure
+  if (!section || typeof wanted !== 'number' || !(wanted > 0)) return { ...ratioKept(0, 0), shares: null }
+  const across = Math.min(section.width ?? VIEW_PX, VIEW_PX)
+  const share = Math.min(1, wanted / across)
+  const heading = section.lines.find((ref) => {
+    const block = source.blocks[ref]
+    return block?.kind === 'heading' && block.level === 1
+  })
+  const id = heading === undefined ? undefined : placement.of.get(heading)
+  if (!id) return { ...ratioKept(1, 0), shares: { source: round(share), built: 0 } }
+  const drawn = boxPx(built, id, roots[index] ?? null)
+  const builtShare = Math.min(1, drawn.box / drawn.section)
+  return { ...ratioKept(1, Math.abs(builtShare / share - 1) <= SITE_IMPORT_MEASURE_SHARE ? 1 : 0), shares: { source: round(share), built: round(builtShare) } }
+}
+
+/** How wide a section's words run at the width a page is measured at: its first Container's Max Width, else the page. */
+function runPx(built: Built, root: string | undefined | null): number {
+  const container = root ? built.under(root).find((id) => built.node(id)?.componentId === 'muiContainer') : undefined
+  const cap = container ? CONTAINER_PX[String(atView(built.node(container)?.props?.['maxWidth']))] : undefined
+  return Math.min(cap ?? VIEW_PX, VIEW_PX)
+}
+
+/** A line of the design measure: the share of what it asks the source and the build each do, `null` where neither is asked anything. */
+function designLine(source: [number, number], built: [number, number]): SiteImportDesignLine | null {
+  if (!source[1] || !built[1]) return null
+  return { source: round(source[0] / source[1]), built: round(built[0] / built[1]) }
+}
+
+/**
+ * Whether the build reads better than its source (AGL-4152), line by line:
+ * its rhythm, its measure, its opening, its groups and its colors. Better is
+ * at or above the source on every line and above it on one.
+ */
+function designScore(source: SiteImportFidelitySource, built: Built, placement: Placement, look: LookOf, roots: ReadonlyArray<string | null>, drawnSections: readonly string[]): SiteImportDesignFidelity {
+  const sections = source.layout.sections
+  // Rhythm: neighbors set apart by their bands, or a rule between them.
+  const apart = (pairs: number, at: (index: number) => boolean): [number, number] => [Array.from({ length: pairs }, (_, index) => at(index)).filter(Boolean).length, pairs]
+  const ruled = (id: string | undefined) => !!id && (!!built.node(id)?.sx?.['borderTop'] || !!built.node(id)?.sx?.['borderBottom'])
+  const drawnBand = (id: string | undefined) => siteImportFidelityBandOf(id ? built.node(id) : undefined)
+  const rhythm = designLine(
+    apart(Math.max(0, sections.length - 1), (index) => sections[index]?.band !== sections[index + 1]?.band),
+    apart(Math.max(0, drawnSections.length - 1), (index) => drawnBand(drawnSections[index]) !== drawnBand(drawnSections[index + 1]) || ruled(drawnSections[index]) || ruled(drawnSections[index + 1])),
+  )
+  // Measure: words that run no wider than `lg`, a long read no wider than `md`, each section as its Container runs it.
+  const caps = sections.map((section) => (longRead(source, section) ? (CONTAINER_PX['md'] as number) : (CONTAINER_PX['lg'] as number)))
+  const measure = designLine(
+    // The source's cap read as the Container step a page brought in draws it at; a section it sets none on runs the page.
+    [sections.filter((section, index) => Math.min(CONTAINER_PX[siteImportWidthOf(section.width) ?? 'xl'] as number, VIEW_PX) <= (caps[index] as number)).length, sections.length],
+    [drawnSections.filter((id, index) => runPx(built, id) <= (caps[index] ?? (CONTAINER_PX['lg'] as number))).length, drawnSections.length],
+  )
+  // Opening: a first section holding a picture opens as the hero, its heading and its picture together.
+  const first = sections[0]
+  const pictured = !!first && (first.lines.some((ref) => source.blocks[ref]?.kind === 'image') || first.backdrop?.kind === 'picture' || first.backdrop?.kind === 'video')
+  const title = sections.flatMap((section) => section.lines).find((ref) => {
+    const block = source.blocks[ref]
+    return block?.kind === 'heading' && block.level === 1
+  })
+  const titleNode = title === undefined ? undefined : placement.of.get(title)
+  const opener = drawnSections[0]
+  const opens = !!opener && !!titleNode && built.holds(opener, titleNode) && built.has(opener, (node) => node.componentId === 'image' || node.componentId === 'video')
+  const opening = pictured ? designLine([first?.hero?.picture ? 1 : 0, 1], [opens ? 1 : 0, 1]) : null
+  // Grouped: three or more like items drawn as one group: each its own element, held together apart from the section's other lines.
+  let runs = 0
+  let sourceGrouped = 0
+  let builtGrouped = 0
+  for (const [index, section] of sections.entries()) {
+    for (const node of layoutNodes(section.nodes)) {
+      if (node.kind !== 'group' || node.items.length < 3) continue
+      runs += 1
+      if (node.group !== 'text') sourceGrouped += 1
+      const units = unitsOn(built, placement, node.items.map((item) => item.lines), roots[index] ?? null).filter((unit) => unit.measured)
+      const parents = new Set(units.map((unit) => (unit.element ? built.parent.get(unit.element) : null)))
+      const parent = parents.size === 1 ? [...parents][0] : null
+      const mine = new Set(node.items.flatMap((item) => item.lines))
+      const others = section.lines.flatMap((ref) => (mine.has(ref) ? [] : [placement.of.get(ref)])).filter((id): id is string => !!id)
+      if (units.length >= 3 && parent && units.every((unit) => unit.element) && !others.some((id) => built.holds(parent, id))) builtGrouped += 1
+    }
+  }
+  const grouped = designLine([sourceGrouped, runs], [builtGrouped, runs])
+  // Readable: the source's words on its grounds and its buttons' labels on their fill, against the build's.
+  const facts = source.layout.look
+  const sourcePairs: Array<[string, string]> = []
+  const ink = hexOf(facts?.text)
+  for (const section of sections) {
+    const ground = hexOf(section.background)
+    if (ink && ground && (section.band === 'plain' || section.band === 'soft')) sourcePairs.push([ink, ground])
+  }
+  const buttonFill = hexOf(facts?.buttonFill)
+  const buttonText = hexOf(facts?.buttonText)
+  if (buttonFill && buttonText) sourcePairs.push([buttonText, buttonFill])
+  const builtPairs = look.pairs(drawnSections)
+  const readable = designLine([sourcePairs.filter(([a, b]) => reads(a, b)).length, sourcePairs.length], [builtPairs.filter(([a, b]) => reads(a, b)).length, builtPairs.length])
+  const lines = [rhythm, measure, opening, grouped, readable].filter((line): line is SiteImportDesignLine => !!line)
+  const better = lines.length > 0 && lines.every((line) => line.built >= line.source) && lines.some((line) => line.built > line.source)
+  return { rhythm, measure, opening, grouped, readable, better }
+}
+
+/*------------------------------------------
+ * Improved words (G4)
+ *-----------------------------------------*/
+
+/** The words that carry no content of a line: what a rewrite may change freely. */
+const STOP_WORDS = new Set(
+  'a about all also an and any are as at be been but by can do does each for from get had has have he her here his how i if in into is it its just me more most my no not of on one only or our out over own so some such than that the their them then there these they this those to too up us very was we were what when where which who why will with you your yours'.split(' '),
+)
+
+/** A word's crude stem (G4): its case and one ending dropped, so "builds", "building" and "build" read as one word. */
+function stemOf(word: string): string {
+  let stem = word.toLowerCase().replace(/['’]s$/, '')
+  for (const [ending, to] of [
+    [/ies$/, 'y'],
+    [/ing$/, ''],
+    [/ed$/, ''],
+    [/ly$/, ''],
+    [/(?<!s)s$/, ''],
+  ] as const) {
+    if (ending.test(stem) && stem.replace(ending, to).length >= 3) {
+      stem = stem.replace(ending, to)
+      break
+    }
+  }
+  return stem.length > 3 ? stem.replace(/e$/, '') : stem
+}
+
+/** A line's content words, by stem. */
+const contentOf = (text: string): Set<string> => new Set(wordsOf(text).filter((word) => word.length >= 2 && !STOP_WORDS.has(word.toLowerCase())).map(stemOf))
+
+/**
+ * The share of a line's content words another keeps (G4): 1 for a line with
+ * none. A rewrite's `meaning`, and the floor the wording pass holds each
+ * rewritten line to (`ai-site-import-wording.ts`), so a rewrite it keeps
+ * never scores under it here.
+ */
+export function siteImportContentKept(line: string, rewrite: string): number {
+  return contentKept(line, rewrite)
+}
+
+/** The share of a line's content words another keeps: 1 for a line with none. */
+function contentKept(line: string, rewrite: string): number {
+  const said = contentOf(line)
+  if (!said.size) return 1
+  const kept = contentOf(rewrite)
+  return [...said].filter((stem) => kept.has(stem)).length / said.size
+}
+
+/** The facts a run of words carries, each by its kind, in the order they are taken: emails, addresses, phones, numbers. */
+const FACTS: ReadonlyArray<readonly [string, RegExp, (found: string) => string | null]> = [
+  ['email', /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/gu, (found) => found.toLowerCase()],
+  [
+    'url',
+    /\bhttps?:\/\/[^\s<>"'()]+|\bwww\.[^\s<>"'()]+|\b(?:[a-z0-9-]+\.)+(?:com|org|net|io|co|ai|app|dev|us|uk|ca|au|de|fr|info|biz|me|shop|store|site|online)\b(?:\/[^\s<>"'()]*)?/giu,
+    (found) => found.toLowerCase().replace(/[.,;:!?]+$/, '').replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, ''),
+  ],
+  ['phone', /(?:\+\d{1,3}[\s.-]?)?(?:\(\d{2,4}\)[\s.-]?)?\d{2,4}[\s.-]\d{3,4}(?:[\s.-]\d{2,4})?/g, (found) => (found.replace(/\D/g, '').length >= 7 ? found.replace(/\D/g, '') : null)],
+  ['number', /[$€£¥₹]?\s?\d+(?:[.,]\d+)*\s?%?/gu, (found) => found.replace(/\s+/g, '').replace(/[.,]+$/, '')],
+]
+
+/** A line's facts: its prices and numbers with their currency, emails, phones and addresses, each as often as it says it. */
+function factsIn(text: string): string[] {
+  let rest = text
+  const out: string[] = []
+  for (const [kind, pattern, normal] of FACTS) {
+    rest = rest.replace(pattern, (found) => {
+      const value = normal(found)
+      if (!value) return found
+      out.push(`${kind}:${value}`)
+      return ' '.repeat(found.length)
+    })
+  }
+  return out
+}
+
+/** The words of a line in capitals, each with whether it opens a sentence. */
+function capitalsIn(text: string): Array<{ word: string; opens: boolean }> {
+  const out: Array<{ word: string; opens: boolean }> = []
+  let last = 0
+  for (const match of text.matchAll(/[\p{L}\p{N}][\p{L}\p{N}'’]*/gu)) {
+    const at = match.index ?? 0
+    const opens = last === 0 || /[.!?:;•·|—–"“(]/.test(text.slice(last, at))
+    last = at + match[0].length
+    if (/^\p{Lu}/u.test(match[0])) out.push({ word: match[0], opens })
+  }
+  return out
+}
+
+/** Whether a line is set all in capitals or in title case: its capitals say nothing of its names. */
+function shouted(text: string): boolean {
+  if (!/\p{Ll}/u.test(text)) return true
+  const long = wordsOf(text).filter((word) => word.length >= 4)
+  return long.length >= 3 && long.every((word) => /^\p{Lu}/u.test(word))
+}
+
+/** What a page's facts are told apart by (G4): the names its source says, and every word it says in any case. */
+export interface SiteImportFactScope {
+  /** Each word the source capitalizes past a sentence's first, in a line not set all in capitals. */
+  names: ReadonlySet<string>
+  /** Every word the source says, lowercased. */
+  said: ReadonlySet<string>
+}
+
+/** The fact scope of a page's source lines. */
+export function siteImportFactScope(sourceTexts: readonly string[]): SiteImportFactScope {
+  return {
+    names: new Set(sourceTexts.filter((text) => !shouted(text)).flatMap((text) => capitalsIn(text).filter((entry) => !entry.opens && entry.word.length > 1).map((entry) => entry.word))),
+    said: new Set(sourceTexts.flatMap(wordsOf).map((word) => word.toLowerCase())),
+  }
+}
+
+/**
+ * The fact tokens one line says (G4), each as often as it says it: its
+ * prices and numbers with their currency, emails, web addresses and phones,
+ * and its names. `own` is a rewrite's line, where a word capitalized past a
+ * sentence's first that the source never says is a name the rewrite made up.
+ * Two lines with the same tokens keep the same facts, which is how the
+ * wording pass holds each line it rewrites (`ai-site-import-wording.ts`).
+ */
+export function siteImportFactTokens(text: string, scope: SiteImportFactScope, own: boolean): string[] {
+  const out = factsIn(text)
+  for (const entry of capitalsIn(text)) {
+    if (scope.names.has(entry.word)) out.push(`name:${entry.word}`)
+    // A name the source never says, past a sentence's first word, is one the rewrite made up.
+    else if (own && !entry.opens && entry.word.length > 1 && !shouted(text) && !scope.said.has(entry.word.toLowerCase())) out.push(`name:${entry.word}`)
+  }
+  return out
+}
+
+/**
+ * The facts of a page's words (G4): every price and number with its
+ * currency, email, phone and address, and every name — a word the source
+ * capitalizes past a sentence's first — as often as the source says it,
+ * and no fact or name the source does not have.
+ */
+function factsScore(sourceTexts: readonly string[], builtTexts: readonly string[]): SiteImportFidelityFacts {
+  const scope = siteImportFactScope(sourceTexts)
+  const tally = (texts: readonly string[], own: boolean) => {
+    const counts = new Map<string, number>()
+    for (const text of texts) for (const token of siteImportFactTokens(text, scope, own)) counts.set(token, (counts.get(token) ?? 0) + 1)
+    return counts
+  }
+  const from = tally(sourceTexts, false)
+  const to = tally(builtTexts, true)
+  let source = 0
+  let builtCount = 0
+  let both = 0
+  const missing: string[] = []
+  const extra: string[] = []
+  for (const [token, count] of from) {
+    source += count
+    const on = to.get(token) ?? 0
+    both += Math.min(count, on)
+    if (on < count) missing.push(token)
+  }
+  for (const [token, count] of to) {
+    builtCount += count
+    if (count > (from.get(token) ?? 0)) extra.push(token)
+  }
+  const most = Math.max(source, builtCount)
+  return { source, built: builtCount, missing: source - both, extra: builtCount - both, ratio: most > 0 ? both / most : 1, examples: { missing: missing.slice(0, 8), extra: extra.slice(0, 8) } }
+}
+
+/** A page's words improved (G4): its facts, its lines each placed once, and each rewrite's meaning. */
+function wordingScores(source: SiteImportFidelitySource, built: Built, placement: Placement): Pick<SiteImportPageFidelity, 'facts' | 'lines' | 'meaning'> {
+  const text = (ref: SiteImportLineRef) => clean((source.blocks[ref] as { text?: string } | undefined)?.text)
+  const lines = source.layout.sections.flatMap((section) => section.lines).filter((ref) => isLine(source.blocks[ref]) && source.blocks[ref]?.kind !== 'image')
+  const placed = lines.filter((ref) => placement.of.has(ref)).length
+  const extra = placement.unclaimed().length
+  const rewritten = [...placement.rewrittenAs].flatMap(([ref, rewrite]) => (contentOf(text(ref)).size ? [{ line: ref, kept: round(contentKept(text(ref), rewrite)), source: text(ref), built: rewrite }] : []))
+  const below = rewritten.filter((line) => line.kept < SITE_IMPORT_MEANING_FLOOR)
+  return {
+    facts: factsScore(source.blocks.flatMap((block) => (isLine(block) && block.kind !== 'image' ? [clean(block.text)] : [])), built.pieces.map((piece) => piece.text)),
+    lines: { source: lines.length, built: placed, ratio: lines.length + extra > 0 ? placed / (lines.length + extra) : 1, extra },
+    meaning: {
+      lines: rewritten.length,
+      below: below.length,
+      lowest: rewritten.reduce((least, line) => Math.min(least, line.kept), 1),
+      ratio: rewritten.length ? (rewritten.length - below.length) / rewritten.length : 1,
+      floor: SITE_IMPORT_MEANING_FLOOR,
+      examples: below.slice(0, 8),
+    },
+  }
 }
 
 /*------------------------------------------
