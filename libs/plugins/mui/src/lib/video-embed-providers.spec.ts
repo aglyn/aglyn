@@ -18,7 +18,7 @@
  * limitations under the License.
  */
 
-import { FIRST_PARTY_VIDEO_EMBED_PROVIDERS } from '@aglyn/aglyn/plugin-manager/first-party-plugins.generated'
+import { FIRST_PARTY_VIDEO_EMBED_PROVIDERS } from '@aglyn/aglyn/plugin-manager/video-embed-providers.generated'
 import {
   type VideoEmbedPlayerOptions,
   videoEmbedOf,
@@ -38,6 +38,8 @@ import { muiVideoEmbedProviders } from './video-embed-providers'
 
 const ID = 'e4a27b971d'
 const WISTIA_PLAYER_ORIGIN = 'https://fast.wistia.net'
+const YOUTUBE_PLAYER_ORIGIN = 'https://www.youtube-nocookie.com'
+const VIMEO_PLAYER_ORIGIN = 'https://player.vimeo.com'
 
 const wistiaMediaId = (value: unknown) => {
   const embed = videoEmbedOf(value)
@@ -52,16 +54,25 @@ describe('the compiled declaration is this module\'s (AGL-3080)', () => {
     const compiled = FIRST_PARTY_VIDEO_EMBED_PROVIDERS.filter(
       (provider) => provider.pluginId === 'mui',
     )
+    // The generator lists every host in id order, whatever order a plugin
+    // declares them in.
     expect(compiled).toEqual(
-      muiVideoEmbedProviders().map((declaration) => ({
-        pluginId: 'mui',
-        ...declaration,
-      })),
+      muiVideoEmbedProviders()
+        .map((declaration) => ({ pluginId: 'mui', ...declaration }))
+        .sort((a, b) => a.id.localeCompare(b.id)),
     )
   })
 
   it("frames Wistia's player from its one origin", () => {
     expect(videoEmbedPlayerOrigins()).toContain(WISTIA_PLAYER_ORIGIN)
+  })
+
+  it('frames YouTube and Vimeo from the privacy-enhanced origins only (AGL-4140)', () => {
+    const origins = videoEmbedPlayerOrigins()
+    expect(origins).toContain(YOUTUBE_PLAYER_ORIGIN)
+    expect(origins).toContain(VIMEO_PLAYER_ORIGIN)
+    // Never the cookie-setting player: no declaration names its origin.
+    expect(origins).not.toContain('https://www.youtube.com')
   })
 })
 
@@ -190,5 +201,160 @@ describe('the Wistia builders rebuild the address from the id alone', () => {
       wistiaEmbedUrl('https://videos.example.com/film.mp4'),
     ).toBeUndefined()
     expect(wistiaPlayerSrc('media:host1/film')).toBeUndefined()
+  })
+})
+
+const providerOf = (value: unknown) => videoEmbedOf(value)?.provider.id
+
+describe('the declaration reads the links YouTube hands an author (AGL-4140)', () => {
+  const YT = 'dQw4w9WgXcQ'
+
+  for (const link of [
+    `https://www.youtube.com/watch?v=${YT}`,
+    `https://youtube.com/watch?v=${YT}&t=42s`,
+    `https://m.youtube.com/watch?feature=share&v=${YT}`,
+    `https://music.youtube.com/watch?v=${YT}&list=RD${YT}`,
+    `https://www.youtube.com/shorts/${YT}`,
+    `https://www.youtube.com/shorts/${YT}?feature=share`,
+    `https://www.youtube.com/live/${YT}`,
+    `https://www.youtube.com/embed/${YT}`,
+    `https://www.youtube.com/embed/${YT}?start=10`,
+    `https://www.youtube-nocookie.com/embed/${YT}`,
+    `https://www.youtube.com/v/${YT}`,
+    `https://youtu.be/${YT}`,
+    `https://youtu.be/${YT}?si=share-token`,
+    `  https://youtu.be/${YT}  `,
+  ]) {
+    it(`finds the id in ${link.trim()}`, () => {
+      const embed = videoEmbedOf(link)
+      expect(embed?.provider.id).toBe('youtube')
+      expect(embed?.mediaId).toBe(YT)
+    })
+  }
+
+  for (const [why, value] of [
+    ['a channel', 'https://www.youtube.com/@aglyn'],
+    ['a vanity page whose name is eleven letters', 'https://www.youtube.com/abcdefghijk'],
+    ['a playlist', 'https://www.youtube.com/playlist?list=PL1234567890'],
+    ['a playlist embed', 'https://www.youtube.com/embed/videoseries?list=PL1234567890'],
+    ['a watch page without a film', 'https://www.youtube.com/watch?list=PL1234567890'],
+    ['a search', 'https://www.youtube.com/results?search_query=bakery'],
+    ['an id of the wrong length', 'https://youtu.be/dQw4w9WgXc'],
+    ['a share link on the main domain', `https://www.youtube.com/${YT}`],
+    ['a host that only ends in the name', `https://notyoutube.com/watch?v=${YT}`],
+    ['the name in the query instead of the host', `https://example.net/watch?v=${YT}&h=youtube.com`],
+  ] as const) {
+    it(`refuses ${why}`, () => {
+      expect(providerOf(value)).toBeUndefined()
+    })
+  }
+
+  it('plays from the privacy-enhanced origin, whatever the author pasted', () => {
+    for (const link of [
+      `https://www.youtube.com/watch?v=${YT}&evil=1`,
+      `https://youtu.be/${YT}#frag`,
+    ]) {
+      const src = videoEmbedPlayerSrc(link) as string
+      expect(new URL(src).origin).toBe(YOUTUBE_PLAYER_ORIGIN)
+      expect(src).not.toContain('evil')
+      expect(src).not.toContain('frag')
+    }
+    expect(videoEmbedUrl(`https://youtu.be/${YT}`)).toBe(
+      `${YOUTUBE_PLAYER_ORIGIN}/embed/${YT}`,
+    )
+  })
+
+  it('autoplays a pressed player, and says autoplay=0 for one the page loads', () => {
+    expect(videoEmbedPlayerSrc(`https://youtu.be/${YT}`)).toBe(
+      `${YOUTUBE_PLAYER_ORIGIN}/embed/${YT}?autoplay=1&playsinline=1`,
+    )
+    expect(videoEmbedPlayerSrc(`https://youtu.be/${YT}`, { autoPlay: false })).toBe(
+      `${YOUTUBE_PLAYER_ORIGIN}/embed/${YT}?autoplay=0&playsinline=1`,
+    )
+  })
+
+  it('mutes and loops only when asked, looping as a playlist of the one film', () => {
+    const params = new URL(
+      videoEmbedPlayerSrc(`https://youtu.be/${YT}`, {
+        muted: true,
+        loop: true,
+        doNotTrack: true,
+      }) as string,
+    ).searchParams
+    expect(params.get('mute')).toBe('1')
+    expect(params.get('loop')).toBe('1')
+    expect(params.get('playlist')).toBe(YT)
+    // The origin is the do-not-track form already; there is no switch to send.
+    expect([...params.keys()]).toEqual([
+      'autoplay',
+      'playsinline',
+      'mute',
+      'loop',
+      'playlist',
+    ])
+  })
+})
+
+describe('the declaration reads the links Vimeo hands an author (AGL-4140)', () => {
+  const VM = '76979871'
+
+  for (const link of [
+    `https://vimeo.com/${VM}`,
+    `https://www.vimeo.com/${VM}/`,
+    `https://vimeo.com/channels/staffpicks/${VM}`,
+    `https://vimeo.com/groups/shortfilms/videos/${VM}`,
+    `https://vimeo.com/showcase/1234567/video/${VM}`,
+    `https://vimeo.com/album/1234567/video/${VM}`,
+    `https://vimeo.com/manage/videos/${VM}`,
+    `https://player.vimeo.com/video/${VM}`,
+    `https://player.vimeo.com/video/${VM}?badge=0&autopause=0`,
+  ]) {
+    it(`finds the id in ${link}`, () => {
+      const embed = videoEmbedOf(link)
+      expect(embed?.provider.id).toBe('vimeo')
+      expect(embed?.mediaId).toBe(VM)
+    })
+  }
+
+  for (const [why, value] of [
+    // The player cannot play an unlisted film from its id alone, so the
+    // link is refused rather than turned into a player that says the video
+    // does not exist.
+    ['an unlisted page with its private segment', `https://vimeo.com/${VM}/abcdef1234`],
+    ['a profile', 'https://vimeo.com/aglyn'],
+    ['a channel', 'https://vimeo.com/channels/staffpicks'],
+    ['an id too short to be one', 'https://vimeo.com/12345'],
+    ['a host that only ends in the name', `https://notvimeo.com/${VM}`],
+  ] as const) {
+    it(`refuses ${why}`, () => {
+      expect(providerOf(value)).toBeUndefined()
+    })
+  }
+
+  it('plays from the player origin with dnt=1 on every address', () => {
+    for (const options of [
+      {},
+      { autoPlay: false },
+      { doNotTrack: false, muted: true, loop: true },
+    ]) {
+      const src = videoEmbedPlayerSrc(`https://vimeo.com/${VM}?evil=1`, options) as string
+      const url = new URL(src)
+      expect(`${url.origin}${url.pathname}`).toBe(`${VIMEO_PLAYER_ORIGIN}/video/${VM}`)
+      expect(url.searchParams.get('dnt')).toBe('1')
+      expect(src).not.toContain('evil')
+    }
+  })
+
+  it('autoplays a pressed player, and mutes and loops only when asked', () => {
+    expect(videoEmbedPlayerSrc(`https://vimeo.com/${VM}`)).toBe(
+      `${VIMEO_PLAYER_ORIGIN}/video/${VM}?autoplay=1&dnt=1`,
+    )
+    expect(
+      videoEmbedPlayerSrc(`https://vimeo.com/${VM}`, {
+        autoPlay: false,
+        muted: true,
+        loop: true,
+      }),
+    ).toBe(`${VIMEO_PLAYER_ORIGIN}/video/${VM}?autoplay=0&dnt=1&muted=1&loop=1`)
   })
 })

@@ -47,7 +47,7 @@
  *=========================================*/
 
 import type { SiteImportBlock } from '../site-import/site-import-html'
-import { siteImportWidthOf } from './ai-site-import'
+import { SITE_IMPORT_PLAY_WORDS, siteImportWidthOf } from './ai-site-import'
 import type {
   SiteImportBand,
   SiteImportButtonStyle,
@@ -59,6 +59,7 @@ import type {
   SiteImportLayoutSection,
   SiteImportLineRef,
   SiteImportNavTree,
+  SiteImportPictureFit,
   SiteImportWidth,
 } from './ai-site-import'
 
@@ -132,6 +133,14 @@ export interface SiteImportPageFidelity {
   /** The source's pictures placed on the page. */
   pictures: SiteImportFidelityCount
   /**
+   * The source's pictures framed as the source frames them (AGL-4138): each
+   * in a box of the shape the source shows it at — the box or the height it
+   * crops it to, else its own — within 5%, or in no box at all where the
+   * source crops nothing. A round portrait, and a picture the source lays
+   * behind its words, are framed by design and not scored.
+   */
+  framing: SiteImportFidelityCount
+  /**
    * The source's icons drawn: each group item's own, each bullet's mark. An
    * icon standing alone in the source (a video's play mark) is no word and no
    * picture of the page, and the build leaves it out (AGL-4107): it is
@@ -150,6 +159,14 @@ export interface SiteImportPageFidelity {
   headings: SiteImportFidelityCount
   /** The source's forms, where the site has a form a page places. */
   forms: SiteImportFidelityCount
+  /**
+   * The source's videos (AGL-4140): each drawn as the Video element, playing
+   * from an address. One on a host the element has no player for is drawn as
+   * its poster, linking to it, and is not kept. A film that plays on its own
+   * behind a section's words is drawn as its poster there and is not counted
+   * here: its poster is among the pictures.
+   */
+  videos: SiteImportFidelityCount
 }
 
 /** A page's source as the import read it: its layout over its main-region blocks, and its photos as the library holds them. */
@@ -157,8 +174,8 @@ export interface SiteImportFidelitySource {
   layout: SiteImportLayout
   /** The page's main-region blocks, which the layout's lines are indexes of. */
   blocks: readonly SiteImportBlock[]
-  /** The source's pictures as the site's library holds them (`from` → `src`); without them a picture is counted, not placed. */
-  photos?: ReadonlyArray<{ from?: string; src: string }>
+  /** The source's pictures as the site's library holds them (`from` → `src`, and their size); without them a picture is counted, not placed. */
+  photos?: ReadonlyArray<{ from?: string; src: string; width?: number; height?: number }>
 }
 
 /*------------------------------------------
@@ -352,7 +369,8 @@ class Placement {
       const root = sectionRoots[index] ?? built.tree.rootId
       const scope = new Set(built.under(root))
       const pieces = built.pieces.filter((piece) => scope.has(piece.node))
-      const images = built.under(root).filter((id) => built.node(id)?.componentId === 'image')
+      // A film's poster is placed as its Video element's (AGL-4140).
+      const images = built.under(root).filter((id) => built.node(id)?.componentId === 'image' || built.node(id)?.componentId === 'video')
       let cursor = -1
       let previous: SiteImportLineRef | null = null
       for (const ref of section.lines) {
@@ -360,7 +378,7 @@ class Placement {
         if (!isLine(block)) continue
         if (block.kind === 'image') {
           const src = photoOf.get(block.url)
-          const found = src ? images.find((id) => !this.imageClaimed.has(id) && built.node(id)?.props?.['src'] === src) : undefined
+          const found = src ? images.find((id) => !this.imageClaimed.has(id) && built.node(id)?.props?.[built.node(id)?.componentId === 'video' ? 'poster' : 'src'] === src) : undefined
           if (found) {
             this.imageClaimed.add(found)
             this.of.set(ref, found)
@@ -539,6 +557,9 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
   const tabs = { source: 0, built: 0 }
   const buttons = { source: 0, built: 0, unlinked: 0 }
   const icons = { source: 0, built: 0, lone: 0 }
+  // The films drawn as the Video element, playing from an address (AGL-4140).
+  const drawnFilms = built.order.filter((id) => built.node(id)?.componentId === 'video' && !!clean(built.node(id)?.props?.['src'])).length
+  const films = drawnFilms > 0
 
   sections.forEach((section, index) => {
     const root = roots[index] ?? null
@@ -550,6 +571,14 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
         case 'line': {
           if (!node.button) break
           const block = source.blocks[node.line]
+          // A button whose words say it plays a film plays the page's film where one is drawn (AGL-4140).
+          if (block?.kind === 'paragraph' && films && SITE_IMPORT_PLAY_WORDS.test(block.text)) {
+            buttons.source += 1
+            const id = placement.of.get(node.line)
+            const drawnAs = id ? built.node(id) : undefined
+            if (drawnAs?.componentId === 'muiButton' && drawnAs.props?.['variant'] === BUTTON_VARIANT[node.button] && hasDestination(drawnAs)) buttons.built += 1
+            break
+          }
           // A button that goes nowhere a page can send a visitor (a film's play button its script runs) is kept as its words.
           if (block?.kind !== 'link' || !/^(?:https?:|mailto:|tel:)/i.test(block.href)) {
             buttons.unlinked += 1
@@ -575,7 +604,8 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
           const units = unitsOn(built, placement, node.items.map((item) => item.lines), root)
           // Each item's own icon and its bullets' marks, in the element that is the item.
           node.items.forEach((item, at) => {
-            const wanted = (item.icon !== undefined ? 1 : 0) + (item.listIcon !== undefined ? (item.list?.length ?? 0) : 0)
+            // Its corner arrow too (AGL-4138): a card's "↗" is an icon of its own.
+            const wanted = (item.icon !== undefined ? 1 : 0) + (item.mark !== undefined ? 1 : 0) + (item.listIcon !== undefined ? (item.list?.length ?? 0) : 0)
             if (!wanted) return
             icons.source += wanted
             const element = units[at]?.element
@@ -629,11 +659,20 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
   })
 
   const pictures = picturesScore(source, built, placement)
+  const framing = framingScore(source, built, placement)
   const headings = headingsScore(source, built, placement)
   const widths = widthsScore(sections, built, roots)
   const forms = ratioBoth(
     sections.reduce((total, section) => total + layoutNodes(section.nodes).filter((node) => node.kind === 'form').length, 0),
     built.order.filter((id) => built.node(id)?.componentId === 'form').length,
+  )
+  // A film playing behind a section's words is drawn as its poster there, and is the pictures' to count.
+  const videos = ratioKept(
+    sections.reduce(
+      (total, section) => total + layoutNodes(section.nodes).reduce((count, node) => count + (node.kind === 'video' ? 1 : node.kind === 'group' ? node.items.filter((item) => item.video !== undefined).length : 0), 0),
+      0,
+    ),
+    drawnFilms,
   )
 
   const report: Omit<SiteImportPageFidelity, 'score' | 'lowest'> = {
@@ -648,10 +687,12 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
     tables: ratioKept(tables.source, tables.built),
     tabs: ratioKept(tabs.source, tabs.built),
     pictures,
+    framing,
     icons: { ...ratioKept(icons.source, icons.built), lone: icons.lone },
     buttons: { ...ratioKept(buttons.source, buttons.built), unlinked: buttons.unlinked },
     headings,
     forms,
+    videos,
   }
   return { ...lowestOf(pageMeasures(report)), ...report }
 }
@@ -664,8 +705,8 @@ function itemKept(built: Built, kind: SiteImportGroupKind, item: SiteImportLayou
   if (kind === 'faq' && !built.has(element, (node) => node.componentId === 'muiAccordion')) return false
   // An item the source made a link as a whole still goes there.
   if (item.to && !built.has(element, hasDestination)) return false
-  // A picture of the item's own, where the library's copy is not known to the score.
-  if (item.image !== undefined && !built.has(element, (node) => node.componentId === 'image')) return false
+  // A picture of the item's own, where the library's copy is not known to the score; a film's poster is its Video element's (AGL-4140).
+  if (item.image !== undefined && !built.has(element, (node) => node.componentId === 'image' || node.componentId === 'video')) return false
   return true
 }
 
@@ -724,9 +765,102 @@ function widthsScore(sections: readonly SiteImportLayoutSection[], built: Built,
 /** The pictures: placed where the library's copies are known, else counted. */
 function picturesScore(source: SiteImportFidelitySource, built: Built, placement: Placement): SiteImportFidelityCount {
   const refs = source.layout.sections.flatMap((section) => section.lines).filter((ref) => source.blocks[ref]?.kind === 'image' && isLine(source.blocks[ref]))
-  const drawn = built.order.filter((id) => built.node(id)?.componentId === 'image').length
+  // A film's poster is a picture drawn, on its Video element (AGL-4140).
+  const drawn = built.order.filter((id) => built.node(id)?.componentId === 'image' || (built.node(id)?.componentId === 'video' && !!clean(built.node(id)?.props?.['poster']))).length
   if (!source.photos?.length) return ratioBoth(refs.length, drawn)
   return ratioKept(refs.length, refs.filter((ref) => placement.of.has(ref)).length)
+}
+
+/** How near two shapes must be to be one (AGL-4138): 5%. */
+const SAME_SHAPE = 0.05
+
+/** A box's shape as the compiler writes it, width over height: "1600 / 900", "1.7778", 1.5. */
+function shapeOf(value: unknown): number | null {
+  if (typeof value === 'number') return value > 0 ? value : null
+  if (typeof value !== 'string') return null
+  const match = /^\s*(\d*\.?\d+)\s*(?:\/\s*(\d*\.?\d+))?\s*$/.exec(value)
+  if (!match) return null
+  const width = Number(match[1])
+  const height = match[2] === undefined ? 1 : Number(match[2])
+  return width > 0 && height > 0 ? width / height : null
+}
+
+/** A height in px as the compiler writes one: "320px", 320. */
+function heightOf(value: unknown): number | null {
+  if (typeof value === 'number') return value > 1 ? value : null
+  const match = typeof value === 'string' ? /^\s*(\d*\.?\d+)px\s*$/.exec(value) : null
+  return match ? Number(match[1]) : null
+}
+
+/**
+ * The box a built picture is shown in: its own `aspectRatio` or height, else
+ * the frame holding it alone that sets one; `whole` where nothing frames it, or
+ * it is fitted inside its box (`contain`), which cuts nothing.
+ */
+function builtFrame(built: Built, id: string): { ratios: number[]; height: number | null } | 'whole' {
+  const image = built.node(id)
+  if (!image) return 'whole'
+  if (image.props?.['objectFit'] === 'contain') return 'whole'
+  const read = (node: SiteImportFidelityNode | undefined): { ratios: number[]; height: number | null } | null => {
+    const sx = node?.sx ?? {}
+    const height = heightOf(node?.componentId === 'image' ? (node.props?.['height'] ?? sx['height']) : sx['height'])
+    if (height !== null) return { ratios: [], height }
+    const ratio = sx['aspectRatio']
+    const ratios = (ratio && typeof ratio === 'object' ? Object.values(ratio) : [ratio]).map(shapeOf).filter((value): value is number => value !== null)
+    return ratios.length ? { ratios, height: null } : null
+  }
+  const own = read(image)
+  if (own) return own
+  const frame = built.parent.get(id)
+  const holder = frame ? built.node(frame) : undefined
+  if (holder && built.children(frame as string).length === 1 && holder.componentId === 'muiBox') return read(holder) ?? 'whole'
+  return 'whole'
+}
+
+/**
+ * The pictures framed as their source frames them (AGL-4138): each placed
+ * picture's box against the shape the source shows it at — the box or the
+ * height it crops it to, else its own, by the library's copy's size or its
+ * `width` and `height` — within 5%; a picture the source shows whole may be
+ * shown in no box. A round portrait and the picture a section lays behind
+ * its words are not scored, nor a picture whose own shape is not known.
+ */
+function framingScore(source: SiteImportFidelitySource, built: Built, placement: Placement): SiteImportFidelityCount {
+  const sizes = new Map<string, number>()
+  for (const photo of source.photos ?? []) if (photo.from && photo.width && photo.height) sizes.set(photo.from, photo.width / photo.height)
+  let measured = 0
+  let kept = 0
+  const score = (ref: SiteImportLineRef, fit: SiteImportPictureFit | undefined) => {
+    const block = source.blocks[ref]
+    const id = placement.of.get(ref)
+    if (block?.kind !== 'image' || !id || (fit?.radius ?? 0) >= 999) return
+    const frame = builtFrame(built, id)
+    const own = sizes.get(block.url) ?? fit?.ratio ?? null
+    if (fit?.height) {
+      measured += 1
+      if (frame !== 'whole' && frame.height !== null && Math.abs(frame.height / fit.height - 1) <= SAME_SHAPE) kept += 1
+      return
+    }
+    const wanted = fit?.box ?? own
+    if (wanted === null || wanted === undefined) return
+    measured += 1
+    if (frame === 'whole') {
+      if (!fit?.box) kept += 1
+      return
+    }
+    if (frame.height === null && frame.ratios.every((ratio) => Math.abs(ratio / wanted - 1) <= SAME_SHAPE)) kept += 1
+  }
+  for (const section of source.layout.sections) {
+    // A picture the section lays behind its words fills the band, as it is meant to.
+    const behind = section.hero?.picture === 'behind' ? section.lines.find((ref) => source.blocks[ref]?.kind === 'image') : undefined
+    for (const node of layoutNodes(section.nodes)) {
+      if (node.kind === 'picture' && node.line !== behind) score(node.line, node.fit)
+      // A film's poster is framed as any picture is (AGL-4140).
+      if (node.kind === 'video' && node.poster !== undefined && node.poster !== behind) score(node.poster, node.fit)
+      if (node.kind === 'group') for (const item of node.items) if (item.image !== undefined && item.image !== behind) score(item.image, item.imageFit)
+    }
+  }
+  return ratioKept(measured, kept)
 }
 
 /** The headings: each of the source's drawn as a heading (an `h1`–`h6`, or the question of an accordion). */
@@ -751,10 +885,12 @@ function pageMeasures(report: Omit<SiteImportPageFidelity, 'score' | 'lowest'>):
     ['tables', report.tables],
     ['tabs', report.tabs],
     ['pictures', report.pictures],
+    ['framing', report.framing],
     ['icons', report.icons],
     ['buttons', report.buttons],
     ['headings', report.headings],
     ['forms', report.forms],
+    ['videos', report.videos],
   ]
 }
 
@@ -798,6 +934,18 @@ export interface SiteImportFrameFidelity {
   phone: SiteImportFidelityCount
   /** The row's labels held to one line. */
   nowrap: SiteImportFidelityCount
+  /** Each column of a menu's panel drawn as its own part of the panel's row, in the source's order, with its heading, words and entries (AGL-4139). */
+  menuColumns: SiteImportFidelityCount
+  /** The source's filled columns and footer boxes, each drawn in a filled box (AGL-4139). */
+  panels: SiteImportFidelityCount
+  /** The entries whose icon sits in a filled tile, drawn so (AGL-4139). */
+  tiles: SiteImportFidelityCount
+  /** The pictures a menu's columns show, placed in them (AGL-4139). */
+  pictures: SiteImportFidelityCount
+  /** The menus the source opens on hover, opening on hover (AGL-4139). */
+  hover: SiteImportFidelityCount
+  /** The footer opens with the logo, where the source's does (AGL-4139). */
+  logo: SiteImportFidelityCount
   /** The footer's columns under their headings. */
   columns: SiteImportFidelityCount
   /** The footer's links, its columns' and its own. */
@@ -806,6 +954,30 @@ export interface SiteImportFrameFidelity {
   social: SiteImportFidelityCount
   /** Its words, address, phone, email and © line, word for word. */
   facts: SiteImportFidelityCount
+}
+
+/**
+ * A menu of the header's row as it is built (AGL-4139): the Dropdown or Mega
+ * Menu element under its name, or its name as a link and the panel its hover
+ * shows; what it holds, and whether it opens on hover.
+ */
+function siteImportBuiltMenu(built: Built, row: string, name: string): { inside: string[]; hover: boolean } | null {
+  const named = (id: string) => clean(labelOf(built.node(id))) === clean(name)
+  const hoverSteps = (id: string): Array<Record<string, unknown>> =>
+    (built.node(id)?.interactions ?? []).flatMap((interaction) => {
+      const record = interaction as { enabled?: boolean; trigger?: { event?: string }; steps?: unknown[] }
+      return record.enabled !== false && record.trigger?.event === 'elementHoverEnter' ? ((record.steps ?? []) as Array<Record<string, unknown>>) : []
+    })
+  const element = built.under(row).find((id) => (built.node(id)?.componentId === 'muiMegaMenu' || built.node(id)?.componentId === 'muiNavMenu') && named(id))
+  if (element) return { inside: built.under(element), hover: hoverSteps(element).some((step) => step['type'] === 'openMenu') }
+  const link = built.under(row).find((id) => LINK_COMPONENTS.has(built.node(id)?.componentId ?? '') && named(id))
+  if (!link) return null
+  // The panel its hover shows: on the name itself, or on the item that holds the name and its panel.
+  const item = built.children(row).find((id) => built.holds(id, link)) ?? link
+  const shown = [...hoverSteps(link), ...hoverSteps(item)].filter((step) => step['type'] === 'showElement')
+  const panelId = shown.map((step) => /^\[data-aglyn="leaf:(.+)"\]$/.exec(String(step['selector'] ?? ''))?.[1]).find((id): id is string => !!id && !!built.node(id))
+  if (!panelId) return null
+  return { inside: [...new Set([...built.under(item), ...built.under(panelId)])], hover: true }
 }
 
 /** A node's label as a menu, a link or a button carries it. */
@@ -836,8 +1008,9 @@ export function siteImportFrameFidelity(source: { nav: SiteImportNavTree | null 
   const nav = source.nav ?? null
   const groups = nav?.items ?? []
 
-  // The row: its items by name, in order.
-  const rowItems = row ? built.children(row).map((id) => labelOf(built.node(id))) : []
+  // The row: its items by name, in order; a menu drawn as its name and its panel by its name's.
+  const itemLabel = (id: string) => labelOf(built.node(id)) || labelOf(built.node(built.children(id).find((child) => LINK_COMPONENTS.has(built.node(child)?.componentId ?? '')) ?? ''))
+  const rowItems = row ? built.children(row).map(itemLabel) : []
   const wanted = groups.map((item) => clean(item.label))
   const left = [...rowItems]
   let matched = 0
@@ -854,20 +1027,60 @@ export function siteImportFrameFidelity(source: { nav: SiteImportNavTree | null 
   const menus = { source: 0, built: 0 }
   const entries = { source: 0, built: 0 }
   const details = { source: 0, built: 0 }
+  const menuColumns = { source: 0, built: 0 }
+  const panels = { source: 0, built: 0 }
+  const tiles = { source: 0, built: 0 }
+  const pictures = { source: 0, built: 0 }
+  const hover = { source: 0, built: 0 }
+  const filled = (id: string) => {
+    const node = built.node(id)
+    return !!node && (node.componentId === 'muiCard' || node.props?.['colorScheme'] === 'dark' || node.sx?.['bgcolor'] !== undefined)
+  }
+  const label = (id: string) => labelOf(built.node(id)) || shownTexts(built.node(id))[0] || ''
   for (const group of groups) {
     if (!group.items.length) continue
     menus.source += 1
     entries.source += group.items.length
-    const menu = row
-      ? built.under(row).find((id) => (built.node(id)?.componentId === 'muiMegaMenu' || built.node(id)?.componentId === 'muiNavMenu') && clean(built.node(id)?.props?.['label']) === clean(group.label))
-      : undefined
+    if (group.panel?.hover) hover.source += 1
+    const drawnMenu = row ? siteImportBuiltMenu(built, row, group.label) : null
     for (const entry of group.items) {
       if (entry.text) details.source += 1
       if (entry.iconPath) details.source += 1
+      if (entry.tile) tiles.source += 1
     }
-    if (!menu) continue
+    const columns = group.columns ?? []
+    const panelled = columns.length >= 2 || columns.some((column) => column.band !== 'plain' || !!column.image || column.lines.length > 0)
+    if (panelled) {
+      menuColumns.source += columns.length
+      panels.source += columns.filter((column) => column.band !== 'plain').length
+      pictures.source += columns.filter((column) => !!column.image).length
+    }
+    if (!drawnMenu) continue
     menus.built += 1
-    const inside = built.under(menu)
+    if (group.panel?.hover && drawnMenu.hover) hover.built += 1
+    const inside = drawnMenu.inside
+    if (panelled) {
+      // The panel's row: the part of it whose children hold the source's columns, each in its place.
+      const wanted = columns.map((column, index) => ({ column, labels: group.items.filter((entry) => Math.min(entry.at ?? 0, columns.length - 1) === index).map((entry) => clean(entry.label)) }))
+      const placed = (cell: string, want: (typeof wanted)[number]) => {
+        const texts = new Set(built.under(cell).map(label))
+        return want.labels.every((name) => texts.has(name)) && (!want.column.heading || texts.has(clean(want.column.heading))) && want.column.lines.every((line) => texts.has(clean(line)))
+      }
+      let best: string[] = []
+      for (const id of inside) {
+        const cells = built.children(id)
+        if (cells.length < columns.length) continue
+        const kept = wanted.filter((want, index) => !!cells[index] && placed(cells[index] as string, want)).length
+        if (kept > best.filter(Boolean).length) best = wanted.map((want, index) => (cells[index] && placed(cells[index] as string, want) ? (cells[index] as string) : ''))
+      }
+      menuColumns.built += best.filter(Boolean).length
+      columns.forEach((column, index) => {
+        const cell = best[index]
+        if (!cell) return
+        if (column.band !== 'plain' && built.under(cell).some(filled)) panels.built += 1
+        if (column.image && built.has(cell, (node) => node.componentId === 'image')) pictures.built += 1
+      })
+    }
     const links = inside.filter((id) => LINK_COMPONENTS.has(built.node(id)?.componentId ?? ''))
     const texts = new Set(inside.flatMap((id) => shownTexts(built.node(id))))
     for (const entry of group.items) {
@@ -876,6 +1089,10 @@ export function siteImportFrameFidelity(source: { nav: SiteImportNavTree | null 
       entries.built += 1
       if (entry.text && texts.has(clean(entry.text))) details.built += 1
       if (entry.iconPath && built.has(link, (node) => node.componentId === 'icon')) details.built += 1
+      // A tile: the icon held in a filled box of its own.
+      const icon = built.under(link).find((id) => built.node(id)?.componentId === 'icon')
+      const box = icon ? built.parent.get(icon) : undefined
+      if (entry.tile && box && box !== link && filled(box)) tiles.built += 1
     }
   }
 
@@ -891,7 +1108,12 @@ export function siteImportFrameFidelity(source: { nav: SiteImportNavTree | null 
   // The phone menu: every name, entry, link and button of the row.
   const drawerTexts = new Set(drawer ? built.under(drawer).flatMap((id) => shownTexts(built.node(id))) : [])
   const drawerWanted = [
-    ...groups.flatMap((group) => [clean(group.label), ...group.items.map((entry) => clean(entry.label))]),
+    ...groups.flatMap((group) => [
+      clean(group.label),
+      ...group.items.map((entry) => clean(entry.label)),
+      // Every word of a menu's panel too (AGL-4139): its columns' headings and lines.
+      ...(group.columns ?? []).flatMap((column) => [...(column.heading ? [clean(column.heading)] : []), ...column.lines.map(clean)]),
+    ]),
     ...(nav?.ctas ?? []).map((cta) => clean(cta.label)),
   ].filter(Boolean)
   const toggle = inHeader.some(is('muiDrawerToggle'))
@@ -918,6 +1140,16 @@ export function siteImportFrameFidelity(source: { nav: SiteImportNavTree | null 
   const hrefs = new Set(footLinks.map((id) => clean(built.node(id)?.props?.['href'])))
   const socialKept = (foot?.social ?? []).filter((profile) => profiles.some(([network, href]) => network === profile.network || href === profile.href) || hrefs.has(clean(profile.href))).length
   const facts = [...(foot?.text ?? []), foot?.address, foot?.phone, foot?.email, foot?.copyright].map(clean).filter(Boolean)
+  // Its filled boxes, each a filled box holding its heading, words and links (AGL-4139).
+  for (const box of foot?.panels ?? []) {
+    panels.source += 1
+    const want = [box.heading, ...box.lines, ...(box.links ?? []).map((entry) => entry.label)].filter((text): text is string => !!text).map(clean)
+    if (footIds.some((id) => filled(id) && want.every((text) => built.under(id).some((at) => label(at) === text)))) panels.built += 1
+  }
+  // It opens with the logo: a picture before any of its words.
+  const firstWords = footIds.find((id) => shownTexts(built.node(id)).length > 0)
+  const firstPicture = footIds.find((id) => built.node(id)?.componentId === 'image')
+  const logo = ratioKept(foot?.logo ? 1 : 0, foot?.logo && firstPicture && (!firstWords || footIds.indexOf(firstPicture) < footIds.indexOf(firstWords)) ? 1 : 0)
 
   const report: Omit<SiteImportFrameFidelity, 'score' | 'lowest'> = {
     // Over the larger of the two: a row of the site's page titles in place of the source's menus scores low.
@@ -930,6 +1162,12 @@ export function siteImportFrameFidelity(source: { nav: SiteImportNavTree | null 
     drawer: ratioKept(drawerWanted.length, drawerWanted.filter((label) => drawerTexts.has(label)).length),
     phone: ratioKept(hasRow ? 1 : 0, hasRow && toggle && !!drawer ? 1 : 0),
     nowrap: ratioKept(row ? 1 : 0, row && built.node(row)?.sx?.['whiteSpace'] === 'nowrap' ? 1 : 0),
+    menuColumns: ratioKept(menuColumns.source, menuColumns.built),
+    panels: ratioKept(panels.source, panels.built),
+    tiles: ratioKept(tiles.source, tiles.built),
+    pictures: ratioKept(pictures.source, pictures.built),
+    hover: ratioKept(hover.source, hover.built),
+    logo,
     columns: ratioKept(foot?.columns.length ?? 0, (foot?.columns ?? []).filter((column) => footTexts.has(clean(column.heading))).length),
     links: ratioKept(linksWanted.length, linksKept),
     social: ratioKept(foot?.social.length ?? 0, socialKept),
@@ -944,6 +1182,12 @@ export function siteImportFrameFidelity(source: { nav: SiteImportNavTree | null 
     ['drawer', report.drawer],
     ['phone', report.phone],
     ['nowrap', report.nowrap],
+    ['menuColumns', report.menuColumns],
+    ['panels', report.panels],
+    ['tiles', report.tiles],
+    ['pictures', report.pictures],
+    ['hover', report.hover],
+    ['logo', report.logo],
     ['columns', report.columns],
     ['links', report.links],
     ['social', report.social],

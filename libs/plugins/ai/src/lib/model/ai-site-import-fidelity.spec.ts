@@ -69,23 +69,35 @@ const WHOLE: Record<
     tables: number
     tabs: number
     pictures: number
+    /** Pictures framed as the source frames them (AGL-4138): a portrait and a picture behind a hero's words are not scored. */
+    framing: number
     icons: number
     lone: number
     buttons: number
     unlinked: number
     headings: number
     forms: number
+    /** Films drawn as the Video element (AGL-4140). */
+    videos: number
     words: number
   }
 > = {
-  home: { sections: 11, rows: 2, groups: { cards: 28, steps: 3, list: 12, faq: 11 }, tables: 0, tabs: 0, pictures: 2, icons: 34, lone: 1, buttons: 2, unlinked: 1, headings: 10, forms: 0, words: 1581 },
-  product: { sections: 11, rows: 1, groups: { logos: 8, cards: 19, steps: 3, stats: 4, pricing: 3, faq: 7 }, tables: 0, tabs: 0, pictures: 3, icons: 31, lone: 1, buttons: 6, unlinked: 0, headings: 10, forms: 0, words: 1012 },
-  pricing: { sections: 7, rows: 1, groups: { pricing: 11, cards: 69, faq: 11 }, tables: 3, tabs: 3, pictures: 0, icons: 24, lone: 0, buttons: 4, unlinked: 0, headings: 9, forms: 0, words: 2292 },
-  livePricing: { sections: 7, rows: 1, groups: { pricing: 11, cards: 69, faq: 11 }, tables: 3, tabs: 3, pictures: 0, icons: 24, lone: 0, buttons: 4, unlinked: 0, headings: 9, forms: 0, words: 2292 },
-  contact: { sections: 3, rows: 1, groups: { cards: 4 }, tables: 0, tabs: 0, pictures: 0, icons: 4, lone: 0, buttons: 0, unlinked: 0, headings: 7, forms: 1, words: 120 },
+  // Home's and /product's film are the Video element (AGL-4140): its play mark is its own, no lone icon,
+  // and Home's "Watch the 40-second film" is a button that plays it.
+  home: { sections: 11, rows: 2, groups: { cards: 28, steps: 3, list: 12, faq: 11 }, tables: 0, tabs: 0, pictures: 2, framing: 2, icons: 47, lone: 0, buttons: 3, unlinked: 0, headings: 10, forms: 0, videos: 1, words: 1581 },
+  product: { sections: 11, rows: 1, groups: { logos: 8, cards: 19, steps: 3, stats: 4, pricing: 3, faq: 7 }, tables: 0, tabs: 0, pictures: 3, framing: 3, icons: 44, lone: 0, buttons: 6, unlinked: 0, headings: 10, forms: 0, videos: 1, words: 1012 },
+  pricing: { sections: 7, rows: 1, groups: { pricing: 11, cards: 69, faq: 11 }, tables: 3, tabs: 3, pictures: 0, framing: 0, icons: 24, lone: 0, buttons: 4, unlinked: 0, headings: 9, forms: 0, videos: 0, words: 2292 },
+  livePricing: { sections: 7, rows: 1, groups: { pricing: 11, cards: 69, faq: 11 }, tables: 3, tabs: 3, pictures: 0, framing: 0, icons: 24, lone: 0, buttons: 4, unlinked: 0, headings: 9, forms: 0, videos: 0, words: 2292 },
+  contact: { sections: 3, rows: 1, groups: { cards: 4 }, tables: 0, tabs: 0, pictures: 0, framing: 0, icons: 4, lone: 0, buttons: 0, unlinked: 0, headings: 7, forms: 1, videos: 0, words: 120 },
   // The post's second row is a byline, drawn small over its words, not as columns across the page.
-  post: { sections: 3, rows: 1, groups: { list: 5, logos: 4, cards: 3 }, tables: 1, tabs: 0, pictures: 5, icons: 0, lone: 0, buttons: 2, unlinked: 0, headings: 10, forms: 0, words: 585 },
-  pottery: { sections: 8, rows: 1, groups: { cards: 3, quotes: 3, faq: 3, logos: 4 }, tables: 1, tabs: 0, pictures: 9, icons: 0, lone: 0, buttons: 2, unlinked: 0, headings: 7, forms: 0, words: 279 },
+  post: { sections: 3, rows: 1, groups: { list: 5, logos: 4, cards: 3 }, tables: 1, tabs: 0, pictures: 5, framing: 4, icons: 0, lone: 0, buttons: 2, unlinked: 0, headings: 10, forms: 0, videos: 0, words: 585 },
+  // The blog listing (AGL-4138): its cards crop their pictures to a height of their own, kept; its category tags keep their links.
+  blog: { sections: 2, rows: 1, groups: { logos: 6, cards: 5 }, tables: 0, tabs: 0, pictures: 6, framing: 6, icons: 0, lone: 0, buttons: 2, unlinked: 1, headings: 9, forms: 0, videos: 0, words: 322 },
+  pottery: { sections: 8, rows: 1, groups: { cards: 3, quotes: 3, faq: 3, logos: 4 }, tables: 1, tabs: 0, pictures: 9, framing: 8, icons: 0, lone: 0, buttons: 2, unlinked: 0, headings: 7, forms: 0, videos: 0, words: 279 },
+  // Five films (AGL-4140): the one playing behind the opening is drawn as its poster, a picture that fills its
+  // band and is not framed; the YouTube frame, the lite-youtube facade, the card's Vimeo film and the head's
+  // og:video are each the Video element, their posters framed as the source frames them.
+  bakery: { sections: 5, rows: 0, groups: { cards: 3 }, tables: 0, tabs: 0, pictures: 7, framing: 6, icons: 0, lone: 0, buttons: 2, unlinked: 0, headings: 8, forms: 0, videos: 4, words: 137 },
 }
 
 describe.each(Object.keys(SITE_LAYOUT_PAGES) as SiteLayoutPageName[])('%s: scored against its source', (name) => {
@@ -116,10 +128,12 @@ describe.each(Object.keys(SITE_LAYOUT_PAGES) as SiteLayoutPageName[])('%s: score
     expect(report.tables).toEqual({ source: whole.tables, built: whole.tables, ratio: 1 })
     expect(report.tabs).toEqual({ source: whole.tabs, built: whole.tabs, ratio: 1 })
     expect(report.pictures).toEqual({ source: whole.pictures, built: whole.pictures, ratio: 1 })
+    expect(report.framing).toEqual({ source: whole.framing, built: whole.framing, ratio: 1 })
     expect(report.icons).toEqual({ source: whole.icons, built: whole.icons, ratio: 1, lone: whole.lone })
     expect(report.buttons).toEqual({ source: whole.buttons, built: whole.buttons, ratio: 1, unlinked: whole.unlinked })
     expect(report.headings).toEqual({ source: whole.headings, built: whole.headings, ratio: 1 })
     expect(report.forms).toEqual({ source: whole.forms, built: whole.forms, ratio: 1 })
+    expect(report.videos).toEqual({ source: whole.videos, built: whole.videos, ratio: 1 })
   })
 
   it('reads the page as Firestore stores it just as it reads the compiled one', () => {
@@ -387,7 +401,34 @@ describe('a measure sees what is lost', () => {
       }),
     )
     expect(report.pictures).toEqual({ source: 2, built: 1, ratio: 0.5 })
-    expect(report.icons).toMatchObject({ source: 34, built: 0, ratio: 0 })
+    expect(report.icons).toMatchObject({ source: 47, built: 0, ratio: 0 })
+  })
+
+  it('framing: a picture cut to a shape not its own, as the 11/1 hero and every card picture were (AGL-4138)', () => {
+    const { source, tree } = home()
+    // The hero's frame holds its film, poster first (AGL-4140).
+    const frames = idsOf(tree.nodes as Nodes, (node) => node.componentId === 'muiBox' && node.sx?.['aspectRatio'] !== undefined && (node.nodes ?? []).some((id) => tree.nodes[id]?.componentId === 'image' || tree.nodes[id]?.componentId === 'video'))
+    expect(frames).toHaveLength(1)
+    // The hero's poster in the 16 / 7 box the column hero drew it in before.
+    const cut = siteImportFidelity(source, changed(tree, (nodes) => ((nodes[frames[0] as string] as Nodes[string]).sx = { ...(nodes[frames[0] as string] as Nodes[string]).sx, aspectRatio: { xs: '4 / 3', md: '16 / 7' } })))
+    expect(cut.framing).toEqual({ source: 2, built: 1, ratio: 0.5 })
+    expect(cut.score).toBe(0.5)
+    expect(cut.lowest).toBe('framing')
+    // The blog's cards forced to 16 / 9, their source's height dropped.
+    const blog = page('blog')
+    const cards = idsOf(blog.tree.nodes as Nodes, (node) => node.componentId === 'image' && node.props?.['height'] === '220px')
+    expect(cards).toHaveLength(5)
+    const sixteenNine = siteImportFidelity(
+      blog.source,
+      changed(blog.tree, (nodes) => {
+        for (const id of cards) {
+          const node = nodes[id] as Nodes[string]
+          delete (node.props as Record<string, unknown>)['height']
+          node.sx = { aspectRatio: '16 / 9' }
+        }
+      }),
+    )
+    expect(sixteenNine.framing).toEqual({ source: 6, built: 1, ratio: 1 / 6 })
   })
 
   it('pictures: counted over what is drawn when the library’s copies are not known', () => {
@@ -406,7 +447,33 @@ describe('a measure sees what is lost', () => {
         for (const id of buttons) ((nodes[id] as Nodes[string]).props as Record<string, unknown>)['variant'] = 'text'
       }),
     )
-    expect(restyled.buttons).toMatchObject({ source: 2, built: 0, ratio: 0 })
+    // The film's own button is one of them (AGL-4140).
+    expect(restyled.buttons).toMatchObject({ source: 3, built: 0, ratio: 0 })
+    const silent = siteImportFidelity(
+      source,
+      changed(tree, (nodes) => {
+        for (const id of buttons) delete (nodes[id] as Nodes[string]).interactions
+      }),
+    )
+    // The button that plays the film is kept only while it plays it.
+    expect(silent.buttons).toMatchObject({ source: 3, built: 2 })
+  })
+
+  it('videos: the film drawn as its picture is no film', () => {
+    const { source, tree } = home()
+    const report = siteImportFidelity(
+      source,
+      changed(tree, (nodes) => {
+        for (const id of idsOf(nodes, (node) => node.componentId === 'video')) {
+          const node = nodes[id] as Nodes[string]
+          nodes[id] = { ...node, componentId: 'image', props: { src: node.props?.['poster'], decorative: true } }
+        }
+      }),
+    )
+    expect(report.videos).toEqual({ source: 1, built: 0, ratio: 0 })
+    // Its poster is still placed; the score is the film it lost.
+    expect(report.pictures).toEqual({ source: 2, built: 2, ratio: 1 })
+    expect(report.lowest).toBe('videos')
   })
 
   it('headings: a heading drawn as a line', () => {
@@ -429,7 +496,13 @@ describe('a measure sees what is lost', () => {
 
   it('names the lowest measure, the score is its ratio', () => {
     const { source, tree } = home()
-    const report = siteImportFidelity(source, changed(tree, (nodes) => drop(nodes, idsOf(nodes, (node) => node.componentId === 'image')[0] as string)))
+    // The hero's picture taken off: its film's poster (AGL-4140).
+    const report = siteImportFidelity(
+      source,
+      changed(tree, (nodes) => {
+        for (const id of idsOf(nodes, (node) => node.componentId === 'video')) delete ((nodes[id] as Nodes[string]).props as Record<string, unknown>)['poster']
+      }),
+    )
     expect(report.score).toBe(0.5)
     expect(report.lowest).toBe('pictures')
   })
@@ -437,9 +510,28 @@ describe('a measure sees what is lost', () => {
 
 describe('what the score leaves out, by name', () => {
   it('a lone icon and a button that goes nowhere are reported and do not score', () => {
-    expect(scored('home').icons.lone).toBe(1)
-    expect(scored('home').buttons.unlinked).toBe(1)
-    expect(scored('home').score).toBe(1)
+    // Home as its read stood before its film was read (AGL-4140): the poster a picture, a play mark beside it, the
+    // film's button its words. A play mark is no word and no picture, and a button its script ran goes nowhere here.
+    const { source, tree } = page('home')
+    const asPicture = (nodes: readonly SiteImportLayoutNode[]): SiteImportLayoutNode[] =>
+      nodes.flatMap((node): SiteImportLayoutNode[] =>
+        node.kind === 'video' ? [...(node.poster !== undefined ? [{ kind: 'picture' as const, line: node.poster, button: true as const }] : []), { kind: 'icon' as const, icon: 0 }] : [node],
+      )
+    const before = { ...source, layout: { ...source.layout, sections: source.layout.sections.map((section) => ({ ...section, nodes: asPicture(section.nodes) })) } }
+    const flat = changed(tree, (nodes) => {
+      for (const id of idsOf(nodes, (node) => node.componentId === 'video')) {
+        const node = nodes[id] as Nodes[string]
+        nodes[id] = { ...node, componentId: 'image', props: { src: node.props?.['poster'], decorative: true } }
+      }
+      for (const id of idsOf(nodes, (node) => node.componentId === 'muiButton' && (node.interactions?.length ?? 0) > 0)) {
+        nodes[id] = { componentId: 'muiTypography', props: { children: (nodes[id] as Nodes[string]).props?.['children'], variant: 'body1' } }
+      }
+    })
+    const report = siteImportFidelity(before, flat)
+    expect(report.icons.lone).toBe(1)
+    expect(report.buttons.unlinked).toBe(1)
+    expect(report.videos).toEqual({ source: 0, built: 0, ratio: 1 })
+    expect(report.score).toBe(1)
   })
 
   it('a byline is not a row: the post reads 2 rows and scores 1', () => {
@@ -469,13 +561,23 @@ describe('the header and footer, scored against the source’s', () => {
       entries: { source: 30, built: 30, ratio: 1 },
       details: { source: 38, built: 38, ratio: 1 },
       ctas: { source: 2, built: 2, ratio: 1 },
-      drawer: { source: 37, built: 37, ratio: 1 },
+      // Every word of both panels too (AGL-4139): their columns' headings and lines.
+      drawer: { source: 45, built: 45, ratio: 1 },
       phone: { source: 1, built: 1, ratio: 1 },
       nowrap: { source: 1, built: 1, ratio: 1 },
+      // The menus as the source builds them (AGL-4139): six columns in order, the featured card, the dark column and the
+      // footer's developer card filled, nineteen tiles, the featured picture, both opening on hover, the footer's logo.
+      menuColumns: { source: 6, built: 6, ratio: 1 },
+      panels: { source: 3, built: 3, ratio: 1 },
+      tiles: { source: 19, built: 19, ratio: 1 },
+      pictures: { source: 1, built: 1, ratio: 1 },
+      hover: { source: 2, built: 2, ratio: 1 },
+      logo: { source: 1, built: 1, ratio: 1 },
       columns: { source: 6, built: 6, ratio: 1 },
-      links: { source: 54, built: 54, ratio: 1 },
+      // The developer card's link, line and heading are its box's now, not the footer's own links and words.
+      links: { source: 53, built: 53, ratio: 1 },
       social: { source: 7, built: 7, ratio: 1 },
-      facts: { source: 7, built: 7, ratio: 1 },
+      facts: { source: 5, built: 5, ratio: 1 },
     })
   })
 
@@ -491,6 +593,11 @@ describe('the header and footer, scored against the source’s', () => {
       details: { source: 0, built: 0, ratio: 1 },
       ctas: { source: 1, built: 1, ratio: 1 },
       drawer: { source: 8, built: 8, ratio: 1 },
+      // A folder of plain links the source's sheets do not hide: no columns, tiles or hover to keep (AGL-4139).
+      menuColumns: { source: 0, built: 0, ratio: 1 },
+      tiles: { source: 0, built: 0, ratio: 1 },
+      hover: { source: 0, built: 0, ratio: 1 },
+      logo: { source: 0, built: 0, ratio: 1 },
       columns: { source: 1, built: 1, ratio: 1 },
       links: { source: 3, built: 3, ratio: 1 },
       social: { source: 2, built: 2, ratio: 1 },
@@ -568,6 +675,30 @@ describe('the header and footer, scored against the source’s', () => {
     // One profile is also a link in the source's columns, which the footer still shows.
     expect(report.social).toEqual({ source: 7, built: 1, ratio: 1 / 7 })
     expect(report.lowest).toBe('social')
+  })
+
+  it('sees menus that open only on a click, tiles drawn bare, a featured card that lost its picture and its box (AGL-4139)', () => {
+    const clickOnly = siteImportFrameFidelity(aglyn, changed(aglyn.tree, (nodes) => {
+      for (const id of Object.keys(nodes)) delete (nodes[id] as Nodes[string] & { interactions?: unknown }).interactions
+    }))
+    // A name whose hover shows nothing is no menu at all, and a Mega Menu with no hover opens only on a click.
+    expect(clickOnly.hover).toEqual({ source: 2, built: 0, ratio: 0 })
+    const bare = siteImportFrameFidelity(aglyn, changed(aglyn.tree, (nodes) => {
+      for (const id of idsOf(nodes, (node) => node.componentId === 'icon')) {
+        const tile = (nodes[id] as Nodes[string]).parentId as string
+        if ((nodes[tile] as Nodes[string]).componentId === 'muiCard') {
+          ;(nodes[tile] as Nodes[string]).componentId = 'muiStack'
+          delete (nodes[tile] as Nodes[string]).sx
+        }
+      }
+    }))
+    expect(bare.tiles.built).toBe(0)
+    const plain = siteImportFrameFidelity(aglyn, changed(aglyn.tree, (nodes) => {
+      for (const id of idsOf(nodes, (node) => node.componentId === 'image' && String(node.props?.['src']).includes('/mp'))) drop(nodes, id)
+    }))
+    expect(plain.pictures).toEqual({ source: 1, built: 0, ratio: 0 })
+    // Today's frame for the same source, with neither the hover nor the columns, scores below the bar.
+    expect(siteImportFrameFidelity(aglyn, headerOf1029()).hover.built).toBe(0)
   })
 
   it('a source with no menu read and no footer read asks nothing of the frame', () => {

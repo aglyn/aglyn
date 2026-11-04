@@ -257,7 +257,7 @@ export const DOCS_HELP_EXCERPTS = {
   useShippingeasy: 'Connect your ShippingEasy account so paid orders go there as they are paid, and each label you buy marks the order shipped and emails your customer the tracking link.',
   useShipstation: 'Connect ShipStation to your Aglyn store as a Custom Store, so it imports the orders you still have to ship and each label you buy there marks the order shipped and emails your customer the tracking link.',
   versionsAndPublishing: 'Every page, layout and reusable component keeps named versions — publish one, roll back to an older one, or schedule one to go live.',
-  video: 'The Video element — the poster frame that decides what a visitor downloads, captions, the lightbox, and the fields a video search result reads.',
+  video: 'The Video element — the poster frame that decides what a visitor downloads, Wistia, YouTube and Vimeo links, captions, the lightbox, and the fields a video search result reads.',
   views: 'Keep a CRM list\'s filters, columns and sort under a name, open it from the views menu or a link, share it with the team, and use a contacts view as an email audience.',
   waivers: 'Write your waiver once. Riders sign it on their phones before they arrive, on a tablet at the window or on paper, parents sign for minors, and every signer gets a signed PDF.',
   webhooks: 'Connect Aglyn to other systems with outbound and inbound webhooks.',

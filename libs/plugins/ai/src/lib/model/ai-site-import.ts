@@ -50,7 +50,8 @@
  *=========================================*/
 
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
-import type { SiteImportBlock, SiteImportForm } from '../site-import/site-import-html'
+import { videoEmbedOf } from '@aglyn/aglyn/plugin-manager/video-embed-provider'
+import type { SiteImportBlock, SiteImportForm, SiteImportVideo } from '../site-import/site-import-html'
 import { aiCreditRangeOrdered, aiCreditRangeText, AI_MEASURED_IMPORT_CREDITS, type AiCreditRange } from './ai-credit-estimate'
 import type { AiJobItemLedger } from './ai-jobs.types'
 
@@ -238,13 +239,40 @@ export type SiteImportGroupKind = 'cards' | 'steps' | 'stats' | 'faq' | 'quotes'
 
 export const SITE_IMPORT_GROUP_KINDS: readonly SiteImportGroupKind[] = ['cards', 'steps', 'stats', 'faq', 'quotes', 'logos', 'pricing', 'list', 'text']
 
-/** One line in place. `role` only where the source's own styling says it (an uppercase eyebrow, a large lede, a small note). */
+/**
+ * One line in place. `role` only where the source's own styling says it (an
+ * uppercase eyebrow, a large lede, a large bold statement, a small note).
+ */
 export interface SiteImportLayoutLine {
   kind: 'line'
   line: SiteImportLineRef
-  role?: 'eyebrow' | 'lede' | 'note'
+  role?: 'eyebrow' | 'lede' | 'statement' | 'note'
   /** The source draws this line (a link, or a `<button>`'s words) as a button. Its destination is the link block's `href`. */
   button?: SiteImportButtonStyle
+  /** An eyebrow the source sets in a pill of its own: a fill or a border, its corners rounded (AGL-4138). */
+  chip?: true
+  /** An eyebrow's color as the source shows it, `#rrggbb` over the ground it sits on (AGL-4138). */
+  color?: string
+}
+
+/**
+ * How the source frames a picture (AGL-4138): the shape its own `width` and
+ * `height` give it, the box it crops it to, its fit in that box, its corners
+ * and its shadow. A source that draws a picture at `width: 100%; height:
+ * auto` crops nothing, and a page brought in shows it whole.
+ */
+export interface SiteImportPictureFit {
+  /** The picture's own shape, width over height, from its `width` and `height` attributes. */
+  ratio?: number
+  /** A shape the source crops it to, width over height: an `aspect-ratio` on it or its box. */
+  box?: number
+  /** A height in px the source crops it to, at whatever width its column gives it. */
+  height?: number
+  objectFit?: 'cover' | 'contain'
+  /** Its corners' radius in px, on it or its box; 999 for a round one. */
+  radius?: number
+  /** It, or its box, is set on a shadow. */
+  shadow?: true
 }
 
 /** A picture in place: an image block. */
@@ -255,6 +283,27 @@ export interface SiteImportLayoutPicture {
   href?: string
   /** It sits in a `<button>` (a video's poster, a lightbox): the picture is kept, the button is not a destination. */
   button?: true
+  /** How the source frames it (AGL-4138). */
+  fit?: SiteImportPictureFit
+}
+
+/**
+ * A filled square an icon sits in (AGL-4138): its fill and corners, and the
+ * icon's own color in it, as the source draws them, `#rrggbb`.
+ */
+export interface SiteImportIconTile {
+  fill: string
+  radius: number
+  color: string | null
+}
+
+/** A line the source draws along one side of each item of a group, in place of a box (AGL-4138): a step's rule. */
+export interface SiteImportRule {
+  side: 'top' | 'right' | 'bottom' | 'left'
+  /** Its width in px. */
+  width: number
+  /** Its color, `#rrggbb`; `null` where the source draws it in the words' own. */
+  color: string | null
 }
 
 /** An icon standing on its own, by index into `SiteImportLayout.icons`. */
@@ -267,6 +316,21 @@ export interface SiteImportLayoutIcon {
 export interface SiteImportLayoutForm {
   kind: 'form'
   form: number
+}
+
+/**
+ * Where one of the page's videos sat (AGL-4140), by index into
+ * `AiSiteImportPageRead.videos`. Its poster, when the source shows one, is an
+ * image line: the film's first paint, copied into the library as any picture.
+ */
+export interface SiteImportLayoutVideo {
+  kind: 'video'
+  video: number
+  poster?: SiteImportLineRef
+  /** How the source frames its poster (AGL-4138), as it frames any picture. */
+  fit?: SiteImportPictureFit
+  /** The box the source plays it in casts a shadow. */
+  shadow?: true
 }
 
 /**
@@ -302,12 +366,22 @@ export interface SiteImportLayoutItem {
   /** What its price is for, beside the price: "/mo" (AGL-4083). */
   period?: SiteImportLineRef
   image?: SiteImportLineRef
+  /** How the source frames its picture (AGL-4138). */
+  imageFit?: SiteImportPictureFit
   /** The icon that leads it, by index into `SiteImportLayout.icons`. */
   icon?: number
+  /** The filled square its lead icon sits in (AGL-4138). */
+  tile?: SiteImportIconTile
+  /** A second icon at the end of its first row, as an arrow that it is a link (AGL-4138), by index into `SiteImportLayout.icons`. */
+  mark?: number
+  /** Its figure is drawn in the muted words' color, not the brand's (AGL-4138). */
+  figureMuted?: true
   /** The icon each of its bullet points carries (a check mark), when they share one. */
   listIcon?: number
   /** Where the item goes as a whole: its title link's address. */
   to?: string
+  /** The video it holds (AGL-4140), by index into the read's videos; its poster is its `image`. */
+  video?: number
 }
 
 export interface SiteImportLayoutGroup {
@@ -315,8 +389,14 @@ export interface SiteImportLayoutGroup {
   group: SiteImportGroupKind
   /** Columns the source lays the items out in on a wide screen. */
   columns: number
-  /** Each item is drawn as a box (a border, a shadow or a fill of its own). */
+  /** Columns on a tablet, where the source sets fewer there than on a wide screen (AGL-4138). */
+  columnsSm?: number
+  /** Each item is drawn as a box: a shadow, a fill of its own, or a border on two sides or more. */
   boxed: boolean
+  /** Each item is drawn with a line along one side and no box (AGL-4138). */
+  rule?: SiteImportRule
+  /** How the items' words are set, where it is not the section's alignment (AGL-4138). */
+  align?: 'start' | 'center'
   /**
    * Each item is a row of its own, its parts side by side, one under another:
    * a plan's name, words and button, or a label and its value (AGL-4083).
@@ -344,6 +424,7 @@ export type SiteImportLayoutNode =
   | SiteImportLayoutPicture
   | SiteImportLayoutIcon
   | SiteImportLayoutForm
+  | SiteImportLayoutVideo
   | SiteImportLayoutRow
   | SiteImportLayoutGroup
   | SiteImportLayoutTable
@@ -360,8 +441,8 @@ export interface SiteImportLayoutSection {
   band: SiteImportBand
   /** Its background color as `#rrggbb`, when it has one. */
   background: string | null
-  /** A gradient or a photo behind it. */
-  backdrop?: { kind: 'gradient' } | { kind: 'picture'; url: string }
+  /** A gradient, a photo, or a film playing on its own behind it (AGL-4140), its poster an image line. */
+  backdrop?: { kind: 'gradient' } | { kind: 'picture'; url: string } | { kind: 'video'; video: number; poster?: SiteImportLineRef }
   align: 'start' | 'center'
   /**
    * How wide the source lets the section's content run on a wide screen, in
@@ -425,6 +506,12 @@ export interface SiteImportLookFacts {
   link: string | null
   /** Its header bar's background. */
   header: string | null
+  /**
+   * The color most of its eyebrows are drawn in, where that is a color of its
+   * own: none of its text's, its buttons' or white (AGL-4138). The look pass
+   * pins it as the theme's third color. Absent on a read made before.
+   */
+  eyebrow?: string | null
 }
 
 /** A page's layout, as the source lays it out (AGL-4106). */
@@ -447,6 +534,31 @@ export interface SiteImportNavEntry {
   viewBox?: string
   /** The heading of the menu's column it sits in ("By team"). */
   column?: string
+  /** The column of its panel it sits in, by index into its group's `columns` (AGL-4139). */
+  at?: number
+  /** The filled box its icon sits in, as the source draws it (AGL-4139): its fill, corners and the icon's own color. */
+  tile?: { fill: string; radius: number; color: string | null }
+}
+
+/**
+ * One column of a menu's panel as the source sets it (AGL-4139): its heading,
+ * its other lines of words, the fill it sits on, the picture it shows, and
+ * its own width. A footer's filled box is read the same way, with its links.
+ */
+export interface SiteImportNavColumn {
+  heading: string | null
+  /** Its words outside its links, after its heading, as written. */
+  lines: string[]
+  /** The fill it sits on against its panel's: none, a light one, the brand's, or a dark one. */
+  band: SiteImportBand
+  /** The picture it shows outside its links (a featured card's), with `src` once the look pass brings it into the library. */
+  image?: { url: string; alt: string }
+  /** Its own width in CSS pixels, where the source sets one. */
+  width?: number
+  /** A footer box's links, as written (AGL-4139). */
+  links?: SiteImportFooterLink[]
+  /** The icon beside its heading, one path on a 24-unit square. */
+  iconPath?: string
 }
 
 /** A top-level item of the source's menu: a link, or a menu of entries under a name. */
@@ -456,6 +568,13 @@ export interface SiteImportNavGroup {
   href: string | null
   /** Empty for a plain link. */
   items: SiteImportNavEntry[]
+  /** Its panel's columns side by side, in the source's order (AGL-4139); absent on a read made before. */
+  columns?: SiteImportNavColumn[]
+  /**
+   * Its panel (AGL-4139): how wide the source caps it, and whether it opens
+   * on hover — hidden until shown, under a name that is not a button.
+   */
+  panel?: { width: number | null; hover: boolean }
 }
 
 /** A button in the source's header outside its menu ("Sign in", "Start free"). */
@@ -494,6 +613,10 @@ export interface SiteImportFooter {
   email: string | null
   /** Its © line, word for word. */
   copyright: string | null
+  /** It opens with the site's logo (AGL-4139). */
+  logo?: boolean
+  /** Its filled boxes, each with its heading, words and links (AGL-4139), which `text` and `links` then leave out. */
+  panels?: SiteImportNavColumn[]
 }
 
 /** Every line a layout's nodes place, in order. */
@@ -505,6 +628,9 @@ export function siteImportLayoutLines(nodes: readonly SiteImportLayoutNode[]): S
         case 'line':
         case 'picture':
           out.push(node.line)
+          break
+        case 'video':
+          if (node.poster !== undefined) out.push(node.poster)
           break
         case 'row':
           for (const cell of node.cells) visit(cell.nodes)
@@ -542,7 +668,12 @@ export function siteImportLayoutChars(layout: SiteImportLayout | null | undefine
 export function siteImportLayoutWithin(layout: SiteImportLayout, count: number): SiteImportLayout {
   const keep = (ref: SiteImportLineRef) => ref >= 0 && ref < count
   const sections = layout.sections
-    .map((section) => ({ ...section, nodes: siteImportFilterNodes(section.nodes, keep), lines: section.lines.filter(keep) }))
+    .map((section) => {
+      const { backdrop } = section
+      // A film behind the words keeps its place; a poster past the cut goes (AGL-4140).
+      const behind = backdrop?.kind === 'video' && backdrop.poster !== undefined && !keep(backdrop.poster) ? { backdrop: { kind: 'video' as const, video: backdrop.video } } : {}
+      return { ...section, ...behind, nodes: siteImportFilterNodes(section.nodes, keep), lines: section.lines.filter(keep) }
+    })
     .filter((section) => section.lines.length)
   return { ...layout, sections }
 }
@@ -558,6 +689,12 @@ export function siteImportFilterNodes(list: readonly SiteImportLayoutNode[], kee
         case 'icon':
         case 'form':
           return [node]
+        case 'video': {
+          // The film stays where it sat; a poster past the cut goes.
+          if (node.poster === undefined || keep(node.poster)) return [node]
+          const { poster: _poster, ...rest } = node
+          return [rest]
+        }
         case 'row': {
           const cells = node.cells.map((cell) => ({ nodes: nodes(cell.nodes) }))
           return cells.some((cell) => cell.nodes.length) ? [{ ...node, cells }] : []
@@ -565,7 +702,7 @@ export function siteImportFilterNodes(list: readonly SiteImportLayoutNode[], kee
         case 'group': {
           const items = node.items
             .map((item) => trimItem(item, keep))
-            .filter((item) => item.lines.length || item.icon !== undefined)
+            .filter((item) => item.lines.length || item.icon !== undefined || item.video !== undefined)
           return items.length ? [{ ...node, items }] : []
         }
         case 'table': {
@@ -588,6 +725,8 @@ export function siteImportFilterNodes(list: readonly SiteImportLayoutNode[], kee
 function trimItem(item: SiteImportLayoutItem, keep: (ref: SiteImportLineRef) => boolean): SiteImportLayoutItem {
   const out: SiteImportLayoutItem = { ...item, lines: item.lines.filter(keep) }
   for (const key of ['title', 'figure', 'image', 'badge', 'period'] as const) if (out[key] !== undefined && !keep(out[key] as number)) delete out[key]
+  if (out.image === undefined) delete out.imageFit
+  if (out.figure === undefined) delete out.figureMuted
   for (const key of ['text', 'list', 'link'] as const) {
     const list = out[key]?.filter(keep)
     if (list?.length) out[key] = list
@@ -597,6 +736,133 @@ function trimItem(item: SiteImportLayoutItem, keep: (ref: SiteImportLineRef) => 
   if (ctas?.length) out.ctas = ctas
   else delete out.ctas
   return out
+}
+
+/*------------------------------------------
+ * A page's videos (AGL-4140)
+ *-----------------------------------------*/
+
+/** The words that name a control as one that plays a film: a facade's label, a "Watch the film" button. */
+export const SITE_IMPORT_PLAY_WORDS = /\b(?:play|watch|video|film)\b/i
+
+/**
+ * Where a video of a page brought in plays from on the new page, or `null`
+ * where the Video element cannot play it: a link to a video host whose
+ * player the element frames (`hosted`), else the file the old site serves at
+ * an https address, which the new page plays from that address. A video on
+ * any other host is shown as its poster, linking to it.
+ */
+export function siteImportFilmSource(video: Pick<SiteImportVideo, 'src' | 'embed'> | null | undefined): { src: string; hosted: boolean } | null {
+  if (!video) return null
+  const embed = video.embed?.trim()
+  if (embed && videoEmbedOf(embed)) return { src: embed, hosted: true }
+  const file = video.src?.trim()
+  return file && /^https:\/\//i.test(file) ? { src: file, hosted: false } : null
+}
+
+/**
+ * The films a page brought in plays from the old site's own address
+ * (AGL-4140): the https file of each video its layout places where it sits or
+ * in an item, which the Video element plays because its poster is in the
+ * library. A film on a host's player, one behind a section's words (drawn as
+ * its poster), and one with no poster the library holds play nothing from
+ * the old site. The rule the compile places a film by (`filmPlaces`).
+ */
+export function aiSiteImportOwnFilms(
+  read: Pick<AiSiteImportPageRead, 'videos' | 'layout' | 'blocks'> | null | undefined,
+  photos: ReadonlyArray<{ from?: string }>,
+): string[] {
+  const videos = read?.videos ?? []
+  if (!videos.length || !read?.layout) return []
+  const held = new Set(photos.flatMap((photo) => (photo.from ? [photo.from] : [])))
+  const out: string[] = []
+  const place = (video: number, poster: SiteImportLineRef | undefined) => {
+    const source = siteImportFilmSource(videos[video])
+    const block = poster === undefined ? undefined : read.blocks?.[poster]
+    if (source && !source.hosted && block?.kind === 'image' && held.has(block.url) && !out.includes(source.src)) out.push(source.src)
+  }
+  const visit = (nodes: readonly SiteImportLayoutNode[]) => {
+    for (const node of nodes) {
+      if (node.kind === 'video') place(node.video, node.poster)
+      else if (node.kind === 'row') for (const cell of node.cells) visit(cell.nodes)
+      else if (node.kind === 'tabs') for (const tab of node.tabs) visit(tab.panel)
+      else if (node.kind === 'group') for (const item of node.items) if (item.video !== undefined) place(item.video, item.image)
+    }
+  }
+  for (const section of read.layout.sections) visit(section.nodes)
+  return out
+}
+
+/**
+ * The most hosts a site approves of one kind: `APPROVED_IMAGE_HOSTS_MAX` in
+ * `security-origins.js`, the tenant policy's own ceiling, which a spec holds
+ * this to.
+ */
+export const SITE_IMPORT_APPROVED_HOSTS_MAX = 50
+
+/**
+ * A host as the Security tab keeps one and the tenant's policy reads it
+ * (`normalizeApprovedImageHost` in `security-origins.js`, which a spec holds
+ * this to): lowercase, a hostname with at least one dot and a letter-only
+ * last label, an optional leading `*.`, and no scheme, path, port or
+ * separator; `null` for anything else.
+ */
+export function siteImportApprovedHost(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const host = value.trim().toLowerCase()
+  if (!host || host.length > 253) return null
+  if (/[\s;,/\\?#@:]/.test(host)) return null
+  const bare = host.startsWith('*.') ? host.slice(2) : host
+  if (!bare || bare === '*') return null
+  return /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(bare) ? host : null
+}
+
+/**
+ * A site's approved media hosts with the old site's film hosts added
+ * (AGL-4140): every entry the owner has kept as it is and where it is, each
+ * new host once, after them, within `SITE_IMPORT_APPROVED_HOSTS_MAX`; `null`
+ * when nothing is added.
+ */
+export function siteImportApprovedHostsWith(current: unknown, addresses: readonly string[]): string[] | null {
+  const owner = Array.isArray(current) ? current.filter((entry): entry is string => typeof entry === 'string') : []
+  const have = new Set(owner.map((entry) => entry.trim().toLowerCase()))
+  const out = [...owner]
+  const hostnameOf = (address: string): string | null => {
+    try {
+      return new URL(address).hostname
+    } catch {
+      return null
+    }
+  }
+  for (const address of addresses) {
+    const host = siteImportApprovedHost(hostnameOf(address))
+    if (!host || have.has(host) || out.length >= SITE_IMPORT_APPROVED_HOSTS_MAX) continue
+    have.add(host)
+    out.push(host)
+  }
+  return out.length > owner.length ? out : null
+}
+
+/**
+ * What a page's row says of its videos (AGL-4140), or `null`: a film the old
+ * site serves itself plays from there, the owner may move it, and its address
+ * was approved for the site to play (`approved`, once the host write is in);
+ * a film the source showed no poster for is left out, since its poster is the
+ * button a visitor presses, and the owner may add it with one.
+ */
+export function aiSiteImportVideoNote(
+  videos: readonly SiteImportVideo[] | null | undefined,
+  own: { films: number; approved: boolean } = { films: 0, approved: false },
+): string | null {
+  const posterless = (videos ?? []).filter((video) => siteImportFilmSource(video) && !video.poster).length
+  const approved = own.approved ? ' Its address was added to Approved media hosts in Admin → Security, so it plays on your new site.' : ''
+  const notes = [
+    own.films === 1 ? `A video on this page plays from your old site's address; pick it from your media library to move it.${approved}` : '',
+    own.films > 1 ? `Videos on this page play from your old site's address; pick each from your media library to move it.${approved ? ' Their addresses were added to Approved media hosts in Admin → Security, so they play on your new site.' : ''}` : '',
+    posterless === 1 ? 'A video on this page had no poster picture, so it was left out: add it with the Video element and pick a poster for it.' : '',
+    posterless > 1 ? 'Videos on this page had no poster picture, so they were left out: add each with the Video element and pick a poster for it.' : '',
+  ].filter(Boolean)
+  return notes.length ? notes.join(' ') : null
 }
 
 /** A layout with its icons' drawings dropped, for a page that must be lighter. */
@@ -640,6 +906,13 @@ export interface AiSiteImportPageRead {
    * read made before they were kept.
    */
   meta?: { title: string; description: string }
+  /**
+   * The videos the page shows (AGL-4140), which its layout places by index:
+   * where each plays from, its poster's address and what a search engine
+   * reads of it. Untrusted data. Absent on a page that shows none, or a read
+   * made before they were kept; emptied with `blocks` once the page is in.
+   */
+  videos?: SiteImportVideo[]
 }
 
 /** How a page is built from its old page, as the step chose: its words copied as they are, or arranged by Aglyn AI. */
@@ -755,6 +1028,8 @@ export interface AiSiteImportHome {
   title: string
   description: string
   ogImage: string | null
+  /** The site's icon its head names (AGL-4139): its largest touch icon, else its largest picture icon. Absent on a read made before. */
+  favicon?: string | null
   siteName: string
   brand: {
     kind: 'logo-only' | 'logo-and-name' | 'name-only'
@@ -802,6 +1077,8 @@ export interface AiSiteImportLook {
   colors: string[]
   /** The source's logo, as the library holds it, for the header's brand. */
   logo: AiSiteImportPhoto | null
+  /** The pictures the home page's menus show (AGL-4139), as the library holds them, each by the address it came `from`. */
+  pictures?: AiSiteImportPhoto[]
   /** Whether the site's listing was taken from the home page's own words. */
   seo: boolean
   /** The look's seed, which every page of the import is drawn with. */
@@ -1533,7 +1810,7 @@ export function aiSiteImportPageSettled(state: AiSiteImportState, slot: string):
   if (!page?.read) return state
   const { meta: _meta, ...read } = page.read
   return withPage(state, slot, {
-    read: { ...read, text: '', sections: [], images: [], blocks: [], forms: [], layout: null },
+    read: { ...read, text: '', sections: [], images: [], blocks: [], forms: [], layout: null, ...(read.videos ? { videos: [] } : {}) },
     ...(page.photos ? { photos: { ...page.photos, assets: [] } } : {}),
   })
 }
@@ -1572,7 +1849,7 @@ export function aiSiteImportWire(state: AiSiteImportState | null | undefined): A
   return {
     ...state,
     pages: state.pages.map((page) =>
-      page.read ? { ...page, read: { ...page.read, text: '', images: [], blocks: [], forms: [], layout: null } } : page,
+      page.read ? { ...page, read: { ...page.read, text: '', images: [], blocks: [], forms: [], layout: null, ...(page.read.videos ? { videos: [] } : {}) } } : page,
     ),
   }
 }

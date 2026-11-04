@@ -364,11 +364,15 @@ A **videoEmbedProviders** entry names a function in
 `@aglyn/plugins-x/video-embed-providers` that returns the video hosts whose
 own player the plugin's Video element frames: the domains a host's links live
 on, the path patterns that carry the media id, the one origin the player is
-framed from, its path and the query it reads. The generator calls it,
+framed from, its path and the query it reads. A link shape a path pattern
+cannot describe goes in `mediaIdLinks`: one that names the id in a query
+parameter (`param`), or one read on only some of the host's domains
+(`domains`). A query value may repeat the id as `{id}`. The generator calls it,
 validates the answer and compiles it into core's
-`first-party-plugins.generated.ts`, because its readers — the published
+`video-embed-providers.generated.ts`, because its readers — the published
 page, its `VideoObject` and the tenant middleware's `frame-src` — load no
-plugin code. Core's `video-embed-provider.ts` resolves a link from the
+plugin code. It is a file of its own, not the plugin catalog, so a published
+page with no video downloads none of it. Core's `video-embed-provider.ts` resolves a link from the
 compiled list alone and rebuilds every player address from the media id, so
 a frame is only ever on a declared origin. Regenerate after changing a
 declaration; `--check` refuses a stale copy.

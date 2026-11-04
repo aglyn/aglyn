@@ -27,7 +27,6 @@ import type { FormRecordTargetDeclaration } from './submission-record-target'
 import type { ArtifactTypeDeclaration } from './plugin-artifact-types'
 import type { ResolvedBesignerDocument } from './besigner-documents'
 import type { PluginOrgKeyedCollection } from './plugin-org-erasure'
-import type { ResolvedVideoEmbedProvider } from './video-embed-provider'
 import type { PluginSiteCspDeclaration } from './plugin-site-csp'
 import type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'
 import type { InteractionStepDeclaration } from '../app-utils/site-interactions'
@@ -3089,59 +3088,6 @@ export const PLUGIN_SITE_CSP_DECLARED: readonly PluginSiteCspDeclaration[] = [
         ]
       }
     }
-  },
-]
-
-/**
- * Every video host whose own player the Video element frames, declared by
- * the plugin that plays it (AGL-3080). Core names no host.
- */
-export const FIRST_PARTY_VIDEO_EMBED_PROVIDERS: readonly ResolvedVideoEmbedProvider[] = [
-  {
-    "pluginId": "mui",
-    "id": "wistia",
-    "label": "Wistia",
-    "domains": [
-      "wistia.com",
-      "wistia.net",
-      "wi.st"
-    ],
-    "mediaIdPaths": [
-      "^\\/medias\\/([^/]+)(?:\\/manage)?\\/?$",
-      "^\\/m\\/([^/]+)\\/?$",
-      "^\\/embed\\/iframe\\/([^/]+)\\/?$",
-      "^\\/embed\\/medias\\/([^/.]+)(?:\\.jsonp?)?\\/?$"
-    ],
-    "mediaIdPattern": "^[a-z0-9]{10}$",
-    "playerOrigin": "https://fast.wistia.net",
-    "playerPath": "/embed/iframe/{id}",
-    "playerQuery": [
-      {
-        "param": "autoPlay",
-        "option": "autoPlay",
-        "on": "true",
-        "off": "false"
-      },
-      {
-        "param": "roundedPlayer",
-        "value": "false"
-      },
-      {
-        "param": "doNotTrack",
-        "option": "doNotTrack",
-        "on": "true"
-      },
-      {
-        "param": "muted",
-        "option": "muted",
-        "on": "true"
-      },
-      {
-        "param": "endVideoBehavior",
-        "option": "loop",
-        "on": "loop"
-      }
-    ]
   },
 ]
 

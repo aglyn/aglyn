@@ -77,8 +77,9 @@ Reading uses no AI credits.
 **What is read.** For each page Aglyn reads its words and how your site lays them out: its
 sections and their background colors, its columns, its cards and the icons on them, its
 numbered steps, figures, questions and answers, quotes, logo strips, plan cards with their
-badge, price and button, plan rows, tables and tabs, its pictures where they sit, your forms
-with their fields and their button, and which links your site shows as buttons. From
+badge, price and button, plan rows, tables and tabs, its pictures where they sit, its
+videos (a film on your page, with its poster, title and description), your forms with their
+fields and their button, and which links your site shows as buttons. From
 your home page it also reads your menu, with each dropdown and its entries, the buttons
 beside it, and your footer's columns, profiles and copyright line, plus your site's fonts
 and colors. Your new pages are built from this, with every word as you wrote it.
@@ -125,21 +126,34 @@ top. You can still start the first wave.
 - **The first wave** brings in your main pages: home, then the pages in your menu,
   then your other top-level pages. Before any page, it gives your new site your current
   site's look, on one of Aglyn's built-in themes: your buttons' color as its main color and
-  your links' color beside it, your pages' background color, the rounding of your buttons,
-  and your own font when Google Fonts has it, or a font in the same style when it does not.
+  your links' color beside it, the color of the small labels above your headings as its
+  third color, your pages' background color, the rounding of your buttons, and your own
+  font when Google Fonts has it, or a font in the same style when it does not.
   Colors are kept readable, so a color too light for white words is used a shade deeper. If
   you already chose a theme for the new site, it is kept.
 - **Your header and footer** come in with the first wave, as your current site shows them:
   your logo, your name, or both; your menu, each dropdown as a **Dropdown Menu** or a
   **Mega Menu** with its entries, their icons and the line under each; and your buttons,
-  such as **Sign in** or **Start free**, going where they go now. Every label stays on one
-  line, and on a screen too narrow for the whole menu it becomes a menu button that opens
-  every menu and button. Your footer keeps its columns and headings, its profiles, its
-  address, phone and email, and its copyright line as written. When your menu can be read,
-  the header and footer use no AI credits. See
+  such as **Sign in** or **Start free**, going where they go now. A large dropdown keeps
+  its columns in the same order, side by side and as wide as yours, with each column's
+  heading and words, its featured picture, its light or dark box, and the colored tile
+  behind each icon. Every label stays on one line, and on a screen too narrow for the whole
+  menu it becomes a menu button that opens every menu and button.
+- **Your menus open the way they do now.** A menu that opens when you point at it opens
+  the same way on a computer, and clicking its name opens that page, as it does on your
+  current site. A menu name with no page of its own opens its menu on a click. A menu that
+  only opens on a click stays that way. In the menu on a phone, tap a menu's name to open
+  or close it; every entry and every word of its panel is there. Each menu's panel starts
+  hidden until it is shown: select it in the **Besigner** to work on it, and change how it
+  opens in the **Interactions** tab of its name.
+- **Your footer** keeps its columns and headings, its profiles, its address, phone and
+  email, and its copyright line as written. It opens with your logo when yours does, and a
+  box your footer sets apart, such as a call to developers, stays a box with its heading,
+  words and link. When your menu can be read, the header and footer use no AI credits. See
   [Menus & navigation](../building-sites/menus-and-navigation/overview.md) to change them
   later. Your home page's title and description become your new site's search listing,
-  unless you already changed it.
+  unless you already changed it, and your site's icon becomes your new site's icon, unless
+  you already gave it one.
 - **Each later wave** brings in up to 10 pages of one collection, for example
   **Blog, 1 of 3**.
 - **Never past your plan.** Your main pages are kept first. If your site has more pages
@@ -149,7 +163,21 @@ top. You can still start the first wave.
 Your words are never rewritten. Every page is laid out as your page is: its sections in
 their own backgrounds, its columns, its cards with their icons and links, its numbered
 steps, figures, questions and answers, quotes, logo strips, plan cards and plan rows, tables and tabs,
-and its pictures where your page shows them. Each heading, paragraph, list, link and button
+and its pictures where your page shows them. It is drawn as your page draws it too:
+
+- **Pictures at their own shape, never cut.** A picture keeps the shape it has. Only a
+  picture your page itself crops, to a set height or a set shape, is cropped the same way.
+  A picture your page rounds or sets on a shadow keeps that.
+- **Labels in your site's colors.** The small label above a heading keeps its color, in
+  capitals with no line before it, and keeps its rounded outline where your page draws one.
+- **Large statements stay large.** A paragraph your page sets as large and bold as a heading
+  is set in the **Heading 4** Text Style, and stays a paragraph.
+- **Cards as your page draws them.** Each icon keeps its tinted square and each card its
+  corner arrow, the words keep their alignment, and a row of three on a wide screen is two to
+  a row on a tablet when your page does that. Steps your page sets under a line, not in boxes,
+  keep the line.
+
+Each heading, paragraph, list, link and button
 keeps the words your page has, and every link goes to the page it went to: to that page on
 your new site, once it is in. Each page also keeps your page's own title and description as
 its search listing.
@@ -159,8 +187,9 @@ Each page is built one of two ways, and the wave's row for the page says which:
 - **Copied as it is**: a page of a collection, such as a blog post or a policy. It is laid
   out as your page is, in your new site's look, with no AI.
 - **Arranged by Aglyn AI**: your main pages. They are laid out as your pages are, and
-  Aglyn AI chooses only their finish: how the first section opens around its picture, how
-  each group of cards is drawn, and a background where your page has none.
+  Aglyn AI chooses only their finish: how the first section opens around its picture, with
+  the picture kept where your page has it (under, beside or behind the words), how each
+  group of cards is drawn, and a background where your page has none.
 
 To start a wave, choose its **Start** button, for example **Start Main pages**. Each wave
 shows its cost before you start it, and how many of its pages are arranged and how many are
@@ -196,6 +225,8 @@ and shows:
   already in your media library and how many could not be brought in;
 - a page that could not be brought in, with the reason;
 - a page whose form was rebuilt, with the form's name;
+- a page with a video your old site serves itself, which plays from your old site's address,
+  and a page with a video that was left out because it had no poster picture;
 - how many AI credits the wave used.
 
 If your site started in [preview](../building-sites/site-protection/make-your-site-private.md#keep-it-to-your-team-with-preview),
@@ -216,11 +247,31 @@ the next wave's **Start** button. Nothing starts the next wave except you, unles
 preview, or as drafts. Under **Every wave**, a wave that was running reads **stopped**, and a
 wave that had not started reads **not started**.
 
-## Photos {#photos}
+## Photos and videos {#photos}
 
 A page's photos are copied into your new site's media library and placed on that page:
 on a page copied as it is, each one where your page shows it. The same photo is stored only
 once, however many pages show it.
+
+A video on your page is placed with the [Video](../building-sites/besigner/video.md) element,
+where your page shows it, and plays from where it plays now:
+
+- **A video on Wistia, YouTube or Vimeo** plays in that host's player, which loads only when a
+  visitor presses play.
+- **A video your old site serves itself** plays from your old site's address. Its page's row
+  says so. To move it, pick the video from your media library on its Video element. So it can
+  play on your new site, the address it plays from is added to
+  [Approved media hosts](../content-and-data/media/overview.md#approved-media-hosts) in
+  **Admin → Security**. Every host on that list can see the IP address of each visitor whose
+  browser plays the video from it.
+
+Its poster picture, the still a visitor presses, is copied into your media library like any
+photo, and its title, description, date and running time come with it when your page gives
+them. A button on your page that plays the video, such as **Watch the film**, plays it on the
+new page too. A video on another host is shown as its poster picture, linking to where it
+plays. A video your page shows without a poster picture is left out, and its page's row says
+so: add it with the Video element and pick a poster for it. A video that plays by itself
+behind a section's words is shown as its poster picture there.
 
 Your logo is copied once, for your header. If it is a drawing (an SVG file), it is saved as
 a picture. Your home page's share image, the one shown when your site is linked, becomes
@@ -230,7 +281,8 @@ your new site's share image unless you already chose one.
 
 - **Sign-in pages.** A page that asks for a password is left out, and so is a page AglynBot
   is asked not to read by robots.txt.
-- **Code.** Scripts and embedded frames are never brought in.
+- **Code.** Scripts are never brought in. An embedded video is placed as a video, and any
+  other embedded frame is left out.
 - **Forms that ask for a password or a card number.** These are left out. Every other form
   on your page is rebuilt as a form of your new site, with the same fields, required marks
   and button, where your page had it. What visitors send lands in your **Inbox**, a form that

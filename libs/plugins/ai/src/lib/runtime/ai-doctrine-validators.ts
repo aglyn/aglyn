@@ -28,6 +28,7 @@ import {
 } from '@aglyn/aglyn/app-utils/media-ref'
 import { ESTIMATED_PAGE_TRANSFER_BYTES } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { createIdUrlSafe } from '@aglyn/aglyn/foundation/constants/app'
+import { videoEmbedOf } from '@aglyn/aglyn/plugin-manager/video-embed-provider'
 import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
 import {
   REUSABLE_INSTANCE_COMPONENT_ID,
@@ -78,7 +79,7 @@ import {
   type AiNodeTreeContext,
   type AiNodeTreeResult,
 } from './ai-node-tree'
-import { AI_PAGE_SCROLL_TO_PROP, aiPageLinkTarget, aiStoredScrollTargets, isAiFragmentHref } from './ai-page-links'
+import { AI_PAGE_SCROLL_TO_PROP, aiPageLinkTarget, aiStoredPlayTargets, aiStoredScrollTargets, isAiFragmentHref } from './ai-page-links'
 import {
   AI_EMAIL_CLIP_BYTES,
   AI_OUTPUT_BUDGETS,
@@ -1361,15 +1362,23 @@ function mediaValues(
  * Rule 9. Images are placed from the media library — an asset, or an empty
  * slot for the author to fill — never hot-linked from another site, and
  * every picture carries alt text (or says it is decorative).
+ *
+ * A Video element's film is no picture (AGL-4140): a video host's link it
+ * plays in that host's own player, framed from the host and never fetched as
+ * a file, and, on a page brought in from its owner's site (`ownWords`), the
+ * film where the old page played it. Its poster is a picture, and held to
+ * the rule.
  */
 export function detectImageSources(
   tree: AiDoctrineTree,
-  context: AiNodeTreeContext = {},
+  context: AiNodeTreeContext & Pick<AiDoctrineTreeContext, 'ownWords'> = {},
 ): AiDoctrineViolation[] {
   const hotlinked: string[] = []
   const missingAlt: string[] = []
+  const film = (node: AiDoctrineNode, name: string, value: string) =>
+    node.componentId === 'video' && name === 'src' && (context.ownWords === true || !!videoEmbedOf(value))
   for (const { id, node } of walkTree(tree)) {
-    if (mediaValues(node, context).some(({ value }) => /^https?:\/\//i.test(value))) {
+    if (mediaValues(node, context).some(({ name, value }) => /^https?:\/\//i.test(value) && !film(node, name, value))) {
       hotlinked.push(id)
     }
     if (node.componentId === 'image' || node.componentId === 'emailImage') {
@@ -2278,6 +2287,17 @@ function isFilled(value: unknown): boolean {
 }
 
 /**
+ * Whether a stored link presses play on a Video element of its own page
+ * (AGL-4140), each target looked up by the id the page stores it under.
+ */
+function playsFilm(nodeOf: (id: string) => unknown, stored: unknown): boolean {
+  return aiStoredPlayTargets(stored).some((target) => {
+    const node = nodeOf(target)
+    return !!node && typeof node === 'object' && (node as { componentId?: unknown }).componentId === 'video'
+  })
+}
+
+/**
  * Rule 10, for a link that goes nowhere (AGL-3072). A Button or a Screen Link
  * goes where its `screenId` or its `href` says, and those are the only
  * destinations either element carries: the palette validator keeps a
@@ -2325,6 +2345,8 @@ export function detectLinksWithoutDestination(
     if (!LINK_COMPONENTS.has(node.componentId)) continue
     if (isFilled(node.props?.['screenId']) || isFilled(node.props?.['href'])) continue
     if (aiStoredScrollTargets(stored(visit.id)).some((target) => targets.has(target))) continue
+    // A button that plays a film of its page goes there (AGL-4140).
+    if (playsFilm((id) => stored(id) ?? tree.nodes[id], stored(visit.id))) continue
     const label = typeof node.props?.['children'] === 'string' ? node.props['children'].trim() : ''
     const target = aiPageLinkTarget(written(visit.id), sections)
     if (target?.kind === 'section') continue
@@ -2429,6 +2451,7 @@ function linksWithoutDestination(
     if (isFilled(href) && !isAiFragmentHref(href)) continue
     const scrolls = aiStoredScrollTargets(node)
     if (scrolls.length && (!targets || scrolls.some((target) => targets.has(target)))) continue
+    if (playsFilm((id) => tree.nodes[id], node)) continue
     const target = aiPageLinkTarget(written(visit.id), sections)
     if (target?.kind === 'section' || (target?.kind === 'unknown' && target.via === 'scrollTo')) continue
     const label = typeof node.props?.['children'] === 'string' ? node.props['children'].trim() : ''

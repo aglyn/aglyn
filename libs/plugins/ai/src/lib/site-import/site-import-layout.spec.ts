@@ -109,7 +109,11 @@ describe.each(Object.keys(SITE_LAYOUT_PAGES) as SiteLayoutPageName[])('%s: every
     const placed = layout.sections.flatMap((section) => section.lines)
     const expected = main.flatMap((block, index) => (isLine(block) ? [index] : []))
     expect([...placed].sort((a, b) => a - b)).toEqual(expected)
-    for (const section of layout.sections) expect(siteImportLayoutLines(section.nodes)).toEqual(section.lines)
+    // A film playing behind a section's words places its poster there first (AGL-4140).
+    for (const section of layout.sections) {
+      const behind = section.backdrop?.kind === 'video' && section.backdrop.poster !== undefined ? [section.backdrop.poster] : []
+      expect([...behind, ...siteImportLayoutLines(section.nodes)]).toEqual(section.lines)
+    }
   })
 
   it('reads the same blocks with its structure kept as without', () => {
@@ -177,10 +181,13 @@ describe('aglyn.com home', () => {
       ['Build my website free', 'primary'],
       ['Watch the 40-second film', 'secondary'],
     ])
-    const [picture] = all(hero?.nodes ?? [], 'picture')
-    // The poster inside the film's play button is still a picture.
-    expect(picture).toMatchObject({ button: true })
-    expect(main[picture?.line ?? -1]?.kind).toBe('image')
+    // The film's play button over its poster is the film (AGL-4140): one video, its poster the picture
+    // inside it, in the box the source shadows, and no picture of its own beside it.
+    expect(all(hero?.nodes ?? [], 'picture')).toEqual([])
+    const [film] = all(hero?.nodes ?? [], 'video')
+    expect(film).toMatchObject({ kind: 'video', video: 0, shadow: true })
+    expect(main[film?.poster ?? -1]).toMatchObject({ kind: 'image', url: 'https://aglyn.com/api/media/cdn/org:FixtureOrg:FixtureHst/v2sbemHaD1' })
+    expect(hero?.lines).toContain(film?.poster)
   })
 
   it('reads "Explore the platform" as 13 cards in 3 columns, each with its icon, its title and its link', () => {
@@ -238,7 +245,7 @@ describe('aglyn.com home', () => {
     for (const block of main) if (block.kind !== 'image' && /→\s*$/.test(block.text)) expect(block.kind).toBe('link')
   })
 
-  it('reads the look: Roboto Flex, the buttons’ #00b0ff with 4 px corners, the links’ #0077ad, the grey page', () => {
+  it('reads the look: Roboto Flex, the buttons’ #00b0ff with 4 px corners, the links’ #0077ad, the grey page, the eyebrows’ magenta', () => {
     expect(read('home').layout.look).toEqual({
       fonts: { body: 'Roboto Flex', headings: 'Roboto Flex', google: [] },
       background: '#f5f5f5',
@@ -248,8 +255,105 @@ describe('aglyn.com home', () => {
       buttonRadius: 4,
       link: '#0077ad',
       header: '#f5f5f5',
+      // Five of its nine eyebrows are magenta, a color none of its words, buttons or links are (AGL-4138).
+      eyebrow: '#e040fb',
     })
     expect(siteImportLookOfHtml(siteLayoutRecording('home'), SITE_LAYOUT_PAGES.home.url)).toEqual(read('home').layout.look)
+  })
+})
+
+/*------------------------------------------
+ * How the source draws what it holds (AGL-4138)
+ *-----------------------------------------*/
+
+describe('aglyn.com home, drawn as the source draws it (AGL-4138)', () => {
+  const section = (label: string) => sectionNamed('home', label)
+  const lines = (label: string) => all(section(label).nodes, 'line')
+
+  it('reads the hero’s picture at its own shape, in the source’s rounded, shadowed box', () => {
+    // The hero's picture is its film's poster (AGL-4140), framed as the source frames it.
+    const [film] = all(section('Introduction').nodes, 'video')
+    // The poster has no width or height of its own and no box crops it: nothing of it is cut.
+    expect(film?.fit).toEqual({ objectFit: 'cover', radius: 12, shadow: true })
+    const [screenshot] = all(section('For agencies and multi-brand teams').nodes, 'picture')
+    expect(screenshot?.fit).toEqual({ ratio: 1.5862, objectFit: 'cover' })
+  })
+
+  it('reads the hero’s eyebrow in its pill, in the muted words’ grey, and the sections’ eyebrows in their own colors', () => {
+    const [chip] = lines('Introduction')
+    expect(chip).toMatchObject({ role: 'eyebrow', chip: true, color: '#626262' })
+    expect(lines("Who it's for")[0]).toMatchObject({ role: 'eyebrow', color: '#e040fb' })
+    expect(lines("Who it's for")[0]?.chip).toBeUndefined()
+    expect(lines('What Aglyn is')[0]).toMatchObject({ role: 'eyebrow', color: '#0077ad' })
+  })
+
+  it('reads the large bold paragraph of "What Aglyn is" as a statement, not a lede', () => {
+    const { text } = read('home')
+    const statement = lines('What Aglyn is').find((line) => line.role === 'statement')
+    expect(text(statement?.line as number)).toMatch(/^Most website builders hand you a blank page/)
+  })
+
+  it('reads the platform’s cards start-aligned under a centered heading, two to a row on a tablet, each icon in its tile with an arrow', () => {
+    const [cards] = all(section('Explore the platform').nodes, 'group')
+    expect(section('Explore the platform').align).toBe('center')
+    expect(cards).toMatchObject({ group: 'cards', columns: 3, columnsSm: 2, boxed: true, align: 'start' })
+    for (const item of cards?.items ?? []) {
+      expect(item.tile).toEqual({ fill: '#f1f3f5', radius: 8, color: '#1f2020' })
+      // The film's play mark is its facade's own (AGL-4140), no icon of the page, so the arrow is one place earlier.
+      expect(item.mark).toBe(21)
+    }
+    // The "Who it's for" cards set their words as their section does: no alignment of their own.
+    expect(all(section("Who it's for").nodes, 'group')[0]?.align).toBeUndefined()
+  })
+
+  it('reads the three steps under a 3 px rule in the brand’s blue, not as boxes, their numbers grey', () => {
+    const [steps] = all(section('How it works').nodes, 'group')
+    expect(steps).toMatchObject({ group: 'steps', boxed: false, rule: { side: 'top', width: 3, color: '#00b0ff' } })
+    expect(steps?.items.every((item) => item.figureMuted === true)).toBe(true)
+  })
+})
+
+describe('pictures, pills, tiles and rules in markup of any site (AGL-4138)', () => {
+  const ORIGIN = 'https://www.example.com'
+  const layoutOf = (body: string, css = '') => {
+    const page = extractSiteImportPage(`<html><head><style>${css}</style></head><body><main>${body}</main></body></html>`, `${ORIGIN}/`, (url) => url.origin === ORIGIN, { structure: true })
+    return siteImportLayout(page as Parameters<typeof siteImportLayout>[0]) as SiteImportLayout
+  }
+  const cards = (inner: string) =>
+    `<section><h2>Our work</h2><div class="grid">${[1, 2, 3].map((n) => `<div class="card">${inner.replace(/\$n/g, String(n))}</div>`).join('')}</div></section>`
+
+  it('reads a picture the source crops to a box or a height as cropped, and one it draws whole as its own shape', () => {
+    const boxed = layoutOf('<section><h2>One</h2><div class="frame"><img src="/a.jpg" alt="A"></div><p>Words under it, enough of them.</p></section>', '.frame{aspect-ratio:16 / 9} .frame img{width:100%;height:100%;object-fit:cover}')
+    expect(all(boxed.sections[0]?.nodes ?? [], 'picture')[0]?.fit).toEqual({ box: 1.7778, objectFit: 'cover' })
+    const tall = layoutOf('<section><h2>Two</h2><img class="crop" src="/b.jpg" alt="B" width="1200" height="630"></section>', '.crop{height:320px;object-fit:cover}')
+    expect(all(tall.sections[0]?.nodes ?? [], 'picture')[0]?.fit).toEqual({ ratio: 1.9048, height: 320, objectFit: 'cover' })
+    const whole = layoutOf('<section><h2>Three</h2><img src="/c.jpg" alt="C" width="800" height="600"></section>')
+    expect(all(whole.sections[0]?.nodes ?? [], 'picture')[0]?.fit).toEqual({ ratio: 1.3333 })
+  })
+
+  it('reads a tile only where the icon’s square is small and filled apart from the card', () => {
+    const icon = '<span class="tile"><svg viewBox="0 0 24 24"><path d="M3 3h18v18H3z"/></svg></span><h3>Item $n</h3><p>What item $n does for you.</p>'
+    const tiled = layoutOf(cards(icon), '.grid{display:grid;grid-template-columns:repeat(3,1fr)} .card{border:1px solid #ddd} .tile{display:flex;width:40px;background:#eef0f2;border-radius:8px;color:#404c5c}')
+    expect(all(tiled.sections[0]?.nodes ?? [], 'group')[0]?.items[0]?.tile).toEqual({ fill: '#eef0f2', radius: 8, color: '#404c5c' })
+    const wide = layoutOf(cards(icon), '.grid{display:grid;grid-template-columns:repeat(3,1fr)} .card{border:1px solid #ddd} .tile{display:flex;width:200px;background:#eef0f2}')
+    expect(all(wide.sections[0]?.nodes ?? [], 'group')[0]?.items[0]?.tile).toBeUndefined()
+  })
+
+  it('reads a border on one side as a rule and on every side as a box, the group’s design text unchanged', () => {
+    const step = '<p>0$n</p><h3>Step $n</h3><p>What happens in step $n, said plainly.</p>'
+    const ruled = layoutOf(cards(step), '.grid{display:grid;grid-template-columns:repeat(3,1fr)} .card{border-left:2px solid #c4622d;padding-left:12px}')
+    expect(all(ruled.sections[0]?.nodes ?? [], 'group')[0]).toMatchObject({ group: 'steps', boxed: false, rule: { side: 'left', width: 2, color: '#c4622d' } })
+    const boxed = layoutOf(cards(step), '.grid{display:grid;grid-template-columns:repeat(3,1fr)} .card{border:1px solid #ddd}')
+    const box = all(boxed.sections[0]?.nodes ?? [], 'group')[0]
+    expect(box).toMatchObject({ group: 'steps', boxed: true })
+    expect(box?.rule).toBeUndefined()
+  })
+
+  it('reads a statement only where a long paragraph is set large and bold', () => {
+    const roles = (css: string) => all(layoutOf('<section><h2>Why</h2><p class="big">We make the thing you need, the way you need it, and we stay with you after.</p></section>', css).sections[0]?.nodes ?? [], 'line').map((line) => line.role ?? null)
+    expect(roles('.big{font-size:34px;font-weight:700}')).toEqual([null, 'statement'])
+    expect(roles('.big{font-size:34px;font-weight:400}')).toEqual([null, 'lede'])
+    expect(roles('.big{font-size:18px;font-weight:700}')).toEqual([null, 'lede'])
   })
 })
 
@@ -509,5 +613,34 @@ describe('a layout as a wave keeps it', () => {
     expect(Math.max(...placed)).toBeLessThan(30)
     expect(placed).toEqual(layout.sections.flatMap((section) => section.lines).filter((ref) => ref < 30))
     expect(cut.sections.length).toBeLessThan(layout.sections.length)
+  })
+})
+
+describe('a bakery’s films, where the source shows them (AGL-4140)', () => {
+  it('reads the film playing behind its opening as the opening’s backdrop, its poster the first paint', () => {
+    const { layout, main } = read('bakery')
+    const [opening] = layout.sections
+    expect(opening?.backdrop).toEqual({ kind: 'video', video: 0, poster: 0 })
+    expect(opening?.band).toBe('dark')
+    expect(opening?.hero).toEqual({ picture: 'behind' })
+    expect(main[0]).toMatchObject({ kind: 'image', url: 'https://www.hearth-bakery.example/wp-content/uploads/2026/09/ovens-poster.jpg' })
+    // The film is behind the words, never one of them.
+    expect(all(opening?.nodes ?? [], 'video')).toEqual([])
+    expect(opening?.lines[0]).toBe(0)
+  })
+
+  it('places each other film where it sits: a frame and a facade in their sections, a card’s in its card, the head’s at the end', () => {
+    const { layout } = read('bakery')
+    expect(all(sectionNamed('bakery', 'How we bake').nodes, 'video')).toEqual([expect.objectContaining({ kind: 'video', video: 1, poster: expect.any(Number) })])
+    expect(all(sectionNamed('bakery', 'A morning with us').nodes, 'video')).toMatchObject([{ video: 2 }])
+    const [cards] = all(sectionNamed('bakery', 'Our flour').nodes, 'group')
+    expect(cards).toMatchObject({ group: 'cards', columns: 3 })
+    expect(cards?.items.map((item) => item.video)).toEqual([3, undefined, undefined])
+    // A card's film is its picture: its poster.
+    expect(cards?.items[0]?.image).toBe(cards?.items[0]?.lines[0])
+    expect(all(sectionNamed('bakery', 'Visit').nodes, 'video')).toMatchObject([{ video: 4 }])
+    const counts = siteImportLayoutCounts(layout, read('bakery').main)
+    expect(counts.videos).toBe(5)
+    expect(counts.pictures).toBe(7)
   })
 })

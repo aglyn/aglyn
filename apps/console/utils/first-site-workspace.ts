@@ -79,7 +79,14 @@ export async function createFirstSiteWorkspace(
       headers: { 'Content-Type': 'application/json' },
       // The first touch rides along for the server's acquisition backstop:
       // this is the request a Google sign-up's workspace is born from.
-      body: JSON.stringify({ name, ...(slug ? { slug } : {}), ...firstTouchField() }),
+      // `derived`: nobody chose this name, so a typed name still held on the
+      // account wins over it when the sign-up claim never ran (AGL-4117).
+      body: JSON.stringify({
+        name,
+        ...(slug ? { slug } : {}),
+        derived: true,
+        ...firstTouchField(),
+      }),
     })
     const payload = await response.json().catch(() => null)
     return { response, payload }

@@ -152,7 +152,7 @@ const holds = (report: Dict, threshold: number) => report.score >= threshold && 
 /** The pages side by side: each measure, built over source. */
 function pagesTable(rows: readonly PageRow[], threshold: number): string {
   return table(
-    ['page', 'score', 'holds', 'words', 'extra', 'sections', 'bands', 'widths', 'rows', 'tables', 'tabs', 'pictures', 'icons', 'buttons', 'headings', 'forms', 'lowest'],
+    ['page', 'score', 'holds', 'words', 'extra', 'sections', 'bands', 'widths', 'rows', 'tables', 'tabs', 'pictures', 'framing', 'icons', 'buttons', 'headings', 'forms', 'videos', 'lowest'],
     rows.map(({ name, report }) => [
       name,
       score(report.score),
@@ -166,10 +166,14 @@ function pagesTable(rows: readonly PageRow[], threshold: number): string {
       count(report.tables),
       count(report.tabs),
       count(report.pictures),
+      // A report of a page scored before the framing measure (AGL-4138) has none.
+      report.framing ? count(report.framing) : '-',
       count(report.icons),
       count(report.buttons),
       count(report.headings),
       count(report.forms),
+      // A report of a page scored before the videos measure (AGL-4140) has none.
+      report.videos ? count(report.videos) : '-',
       report.lowest ?? '-',
     ]),
   )
@@ -194,6 +198,12 @@ const FRAME_MEASURES: ReadonlyArray<[string, string]> = [
   ['drawer', 'phone menu entries'],
   ['phone', 'menu button with its phone menu'],
   ['nowrap', 'row on one line'],
+  ['menuColumns', 'menu panel columns, in order'],
+  ['panels', 'filled columns and footer boxes'],
+  ['tiles', 'icon tiles'],
+  ['pictures', 'menu pictures'],
+  ['hover', 'menus opening on hover'],
+  ['logo', 'footer logo'],
   ['columns', 'footer columns'],
   ['links', 'footer links'],
   ['social', 'footer profiles'],
@@ -222,8 +232,8 @@ function shortOf(rows: readonly PageRow[], frames: ReadonlyArray<{ name: string;
       const said = [...words.examples.missing.map((word: string) => `-${word}`), ...words.examples.extra.map((word: string) => `+${word}`)].join(' ')
       short.push(`words: ${words.missing} missing, ${words.extra} extra${said ? ` (${said})` : ''}`)
     }
-    for (const key of ['sections', 'bands', 'widths', 'rows', 'tables', 'tabs', 'pictures', 'icons', 'buttons', 'headings', 'forms']) {
-      if (report[key].ratio < 1) short.push(`${key} ${count(report[key])}`)
+    for (const key of ['sections', 'bands', 'widths', 'rows', 'tables', 'tabs', 'pictures', 'framing', 'icons', 'buttons', 'headings', 'forms', 'videos']) {
+      if (report[key] && report[key].ratio < 1) short.push(`${key} ${count(report[key])}`)
     }
     for (const [kind, entry] of Object.entries(report.groups as Dict)) if (entry.items.ratio < 1) short.push(`${kind} ${count(entry.items)}`)
     if (report.bands.ratio < 1) short.push(`bands read ${report.bands.read.join(', ')}; drawn ${report.bands.drawn.join(', ')}`)
@@ -281,7 +291,9 @@ async function recordedReport(load: (file: string) => Promise<Dict>, args: Args)
     ['livePricing', '/pricing, 11/01'],
     ['contact', '/contact'],
     ['post', 'a blog post'],
+    ['blog', '/blog'],
     ['pottery', 'a studio, not ours'],
+    ['bakery', 'a bakery’s films, not ours'],
   ] as const
   const forms = (key: string) => (key === 'contact' ? { forms: [{ id: 'form-contact', name: 'Contact' }] } : {})
   const scored = (built: Dict): Dict => fidelity.siteImportFidelity(built.source, built.tree)

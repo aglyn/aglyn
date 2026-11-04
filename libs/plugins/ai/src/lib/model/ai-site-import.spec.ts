@@ -62,6 +62,12 @@ import {
   type AiSiteImportPageRead,
   type AiSiteImportReadInput,
   type AiSiteImportState,
+  aiSiteImportOwnFilms,
+  aiSiteImportVideoNote,
+  SITE_IMPORT_APPROVED_HOSTS_MAX,
+  siteImportApprovedHost,
+  siteImportApprovedHostsWith,
+  siteImportFilmSource,
 } from './ai-site-import'
 import { aglynSitemapUrls } from '../site-import/fixtures/aglyn-com-recordings'
 
@@ -577,5 +583,111 @@ describe('Start every remaining wave', () => {
     // Off by default: the same close waits for the person.
     const reviewed = aiSiteImportWaveClosed(aiSiteImportWaveStarted(inventory(), 0, 'a', new Map()), 0, 'b')
     expect(reviewed.waves[0].status).toBe('review')
+  })
+})
+
+
+describe('where a page’s films play from, and what its row says of them (AGL-4140)', () => {
+  it('plays a host’s link in that host’s player, the old site’s own https file from its address, and nothing else', () => {
+    expect(siteImportFilmSource({ embed: 'https://fast.wistia.net/embed/iframe/e4a27b971d' })).toEqual({ src: 'https://fast.wistia.net/embed/iframe/e4a27b971d', hosted: true })
+    expect(siteImportFilmSource({ embed: 'https://youtu.be/dQw4w9WgXcQ', src: 'https://www.bakery.example/a.mp4' })).toEqual({ src: 'https://youtu.be/dQw4w9WgXcQ', hosted: true })
+    expect(siteImportFilmSource({ src: 'https://www.bakery.example/a.mp4' })).toEqual({ src: 'https://www.bakery.example/a.mp4', hosted: false })
+    // A host no player is declared for, a file at an http address, nothing at all.
+    expect(siteImportFilmSource({ embed: 'https://videos.example.net/watch/1' })).toBeNull()
+    expect(siteImportFilmSource({ src: 'http://www.bakery.example/a.mp4' })).toBeNull()
+    expect(siteImportFilmSource(null)).toBeNull()
+  })
+
+  it('says a film the old site serves plays from there, that its address was approved, and a film with no poster was left out', () => {
+    const hosted = { embed: 'https://fast.wistia.net/embed/iframe/e4a27b971d', poster: 'https://www.bakery.example/b.jpg', title: 'B' }
+    const file = { src: 'https://www.bakery.example/a.mp4', poster: 'https://www.bakery.example/a.jpg', title: 'A' }
+    expect(aiSiteImportVideoNote([file], { films: 1, approved: true })).toBe(
+      "A video on this page plays from your old site's address; pick it from your media library to move it. Its address was added to Approved media hosts in Admin → Security, so it plays on your new site.",
+    )
+    // A host write that did not land claims nothing it did not do.
+    expect(aiSiteImportVideoNote([file], { films: 1, approved: false })).toBe("A video on this page plays from your old site's address; pick it from your media library to move it.")
+    expect(aiSiteImportVideoNote([file, file], { films: 2, approved: true })).toBe(
+      "Videos on this page play from your old site's address; pick each from your media library to move it. Their addresses were added to Approved media hosts in Admin → Security, so they play on your new site.",
+    )
+    expect(aiSiteImportVideoNote([{ ...hosted, poster: undefined }])).toBe('A video on this page had no poster picture, so it was left out: add it with the Video element and pick a poster for it.')
+    // A film on its host with its poster, one no player plays, and a file no page placed need no word.
+    expect(aiSiteImportVideoNote([hosted, { embed: 'https://videos.example.net/watch/1', title: 'C' }, file])).toBeNull()
+    expect(aiSiteImportVideoNote(undefined)).toBeNull()
+  })
+
+  it('finds the films a page plays from the old site: placed, poster in the library, not on a host’s player, not behind its words', () => {
+    const blocks = ['a', 'b', 'c', 'd'].map((name) => ({ kind: 'image' as const, url: `https://www.bakery.example/${name}.jpg`, alt: '', region: 'main' as const }))
+    const read = {
+      blocks,
+      videos: [
+        { src: 'https://cdn.bakery.example/a.mp4', title: 'A' },
+        { embed: 'https://fast.wistia.net/embed/iframe/e4a27b971d', title: 'B' },
+        { src: 'https://cdn.bakery.example/c.mp4', title: 'C' },
+        { src: 'https://cdn.bakery.example/d.mp4', title: 'D' },
+        { src: 'https://cdn.bakery.example/e.mp4', title: 'E' },
+      ],
+      layout: {
+        v: 1 as const,
+        sections: [
+          {
+            name: 'S',
+            from: 'heading' as const,
+            band: 'dark' as const,
+            background: null,
+            align: 'start' as const,
+            backdrop: { kind: 'video' as const, video: 4, poster: 0 },
+            nodes: [
+              { kind: 'video' as const, video: 0, poster: 0 },
+              { kind: 'video' as const, video: 1, poster: 1 },
+              { kind: 'row' as const, cols: [6, 6], cells: [{ nodes: [{ kind: 'video' as const, video: 2, poster: 2 }] }, { nodes: [] }] },
+              { kind: 'group' as const, group: 'cards' as const, columns: 1, boxed: false, items: [{ lines: [3], image: 3, video: 3 }] },
+            ],
+            lines: [0, 1, 2, 3],
+          },
+        ],
+        icons: [],
+        look: {} as never,
+      },
+    }
+    const library = blocks.map((block) => ({ from: block.url }))
+    expect(aiSiteImportOwnFilms(read, library)).toEqual(['https://cdn.bakery.example/a.mp4', 'https://cdn.bakery.example/c.mp4', 'https://cdn.bakery.example/d.mp4'])
+    // A poster the library does not hold leaves its film out of the page, and so out of this.
+    expect(aiSiteImportOwnFilms(read, library.slice(1))).toEqual(['https://cdn.bakery.example/c.mp4', 'https://cdn.bakery.example/d.mp4'])
+    expect(aiSiteImportOwnFilms({ ...read, layout: null }, library)).toEqual([])
+    expect(aiSiteImportOwnFilms(null, library)).toEqual([])
+  })
+})
+
+
+describe('the old site’s film hosts, approved for the new site as the Security tab approves one (AGL-4140)', () => {
+  // The tenant's policy and the console card read the list through this parse; the import holds itself to it.
+  // eslint-disable-next-line @nx/enforce-module-boundaries
+  const origins = require('../../../../../../security-origins') as { normalizeApprovedImageHost: (value: unknown) => string | null; APPROVED_IMAGE_HOSTS_MAX: number }
+
+  it('reads a host exactly as security-origins.js does', () => {
+    for (const value of ['cdn.example.com', 'CDN.Example.com ', '*.squarespace-cdn.com', 'video.wixstatic.com', 'https://cdn.example.com', 'cdn.example.com/path', 'cdn.example.com:443', 'evil.com; script-src *', '*', '*.', 'localhost', '127.0.0.1', 'a b.com', '', 42, null]) {
+      const ours = siteImportApprovedHost(value)
+      const theirs = origins.normalizeApprovedImageHost(value)
+      expect([value, ours === null ? null : `https://${ours}`]).toEqual([value, theirs])
+    }
+    expect(SITE_IMPORT_APPROVED_HOSTS_MAX).toBe(origins.APPROVED_IMAGE_HOSTS_MAX)
+  })
+
+  it('adds each film’s host once, after the owner’s entries, which stay as they are and where they are', () => {
+    const owner = ['images.example.net', 'Video.Bakery.example', 'not a host']
+    expect(siteImportApprovedHostsWith(owner, ['https://video.bakery.example/a.mp4', 'https://cdn.builder.example/b.mp4', 'https://cdn.builder.example/c.mp4'])).toEqual([
+      'images.example.net',
+      'Video.Bakery.example',
+      'not a host',
+      'cdn.builder.example',
+    ])
+    expect(siteImportApprovedHostsWith(undefined, ['https://cdn.builder.example/b.mp4'])).toEqual(['cdn.builder.example'])
+  })
+
+  it('writes nothing when nothing is added: a host already there, an address that names none, a list at its ceiling', () => {
+    expect(siteImportApprovedHostsWith(['cdn.builder.example'], ['https://CDN.builder.example/b.mp4'])).toBeNull()
+    expect(siteImportApprovedHostsWith([], ['not an address', 'https://127.0.0.1/a.mp4'])).toBeNull()
+    const full = Array.from({ length: SITE_IMPORT_APPROVED_HOSTS_MAX }, (_, at) => `h${at}.example.com`)
+    expect(siteImportApprovedHostsWith(full, ['https://cdn.builder.example/b.mp4'])).toBeNull()
   })
 })

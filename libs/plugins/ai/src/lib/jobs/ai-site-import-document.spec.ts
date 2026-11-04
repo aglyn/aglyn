@@ -229,3 +229,26 @@ describe('the page input', () => {
     expect(aiSiteImportDocumentOf({ importedPage: { url: 'x', text: 'y' } })).toBeNull()
   })
 })
+
+
+describe('a page’s videos, read off its job defensively (AGL-4140)', () => {
+  it('keeps each video’s place in the list, every address held to http(s) and every fact to its kind', () => {
+    const doc = aiSiteImportDocumentOf({
+      [AI_LAYOUT_IMPORTED_SECTIONS_INPUT]: {
+        build: 'arranged',
+        title: 'Home',
+        blocks: [{ kind: 'paragraph', text: 'Hello' }],
+        videos: [
+          { embed: 'https://fast.wistia.net/embed/iframe/e4a27b971d', poster: 'https://a.example/p.jpg', title: '  Our   story ', uploadDate: '2026-10-06', durationSeconds: 40.4, autoplay: true },
+          'not a video',
+          { src: 'javascript:alert(1)', embed: 'data:text/html,x', title: 7, uploadDate: 'yesterday', durationSeconds: -1, loop: 'yes' },
+        ],
+      },
+    })
+    expect(doc?.videos).toEqual([
+      { embed: 'https://fast.wistia.net/embed/iframe/e4a27b971d', poster: 'https://a.example/p.jpg', title: 'Our story', uploadDate: '2026-10-06', durationSeconds: 40, autoplay: true },
+      { title: '' },
+      { title: '' },
+    ])
+  })
+})

@@ -39,6 +39,7 @@ import {
   BEACON_STACK_TRACE_LIMIT,
   CHUNK_LOAD_KIND,
   describeRejectionReason,
+  documentLoadUrl,
   installErrorBeacon,
   isBenignBrowserNotice,
   isHydrationMismatch,
@@ -84,6 +85,19 @@ const ANDROID_INJECTED_STACK = [
   '    at sendBeforeUnloadMessage (iabjs://navigation_performance_logger_android:1:14286)',
   '    at iabjs://navigation_performance_logger_android:1:19687',
 ].join('\n')
+
+/**
+ * The same iOS bridge on a page that moved on the client, captured verbatim
+ * out of `client-errors` on 2026-10-31 05:28Z, when it paged. The report's
+ * page was `/signin`; the frames name `/`, where the webview evaluated them.
+ */
+const MOVED_PAGE_INJECTED_STACK = [
+  'sendDataToNative@https://app.aglyn.com/:1:1325',
+  'sendPageHideMessage@https://app.aglyn.com/:1:4139',
+  '@https://app.aglyn.com/:1:6257',
+].join('\n')
+const MOVED_PAGE_NOW = 'https://app.aglyn.com/signin'
+const MOVED_PAGE_SERVED = 'https://app.aglyn.com/'
 
 /** One frame in a script we served. */
 const OWN_FRAME =
@@ -185,6 +199,74 @@ describe('isInjectedThirdPartyFrame (AGL-2523)', () => {
     // handles, so a webview frame carrying `?fbclid=…` still matches.
     const q = 'f@https://aglyn.com/pricing?fbclid=abc:1:2'
     expect(isInjectedThirdPartyFrame(q, PAGE)).toBe(true)
+  })
+})
+
+describe('isInjectedThirdPartyFrame — a page that moved on the client', () => {
+  const documentAt = [MOVED_PAGE_NOW, MOVED_PAGE_SERVED]
+
+  it('is TRUE when every frame is the URL the document was served at', () => {
+    expect(isInjectedThirdPartyFrame(MOVED_PAGE_INJECTED_STACK, documentAt)).toBe(true)
+  })
+
+  it('was FALSE against the page URL alone — the miss that paged on 2026-10-31', () => {
+    expect(isInjectedThirdPartyFrame(MOVED_PAGE_INJECTED_STACK, MOVED_PAGE_NOW)).toBe(false)
+  })
+
+  it('is FALSE once a frame in a bundled /_next/ script joins them', () => {
+    const mixed = [
+      MOVED_PAGE_INJECTED_STACK,
+      '    at m (https://app.aglyn.com/_next/static/immutable/chunks/2v7qrpjkelxiy.js:22:8332)',
+    ].join('\n')
+    expect(isInjectedThirdPartyFrame(mixed, documentAt)).toBe(false)
+  })
+
+  it('is FALSE for a stack made only of bundled scripts', () => {
+    expect(isInjectedThirdPartyFrame(TENANT_MISMATCH_STACK, documentAt)).toBe(false)
+  })
+
+  it('is FALSE for a frame at a page of ours this document never was', () => {
+    // "Same origin" is not "this document": an inline script of another
+    // page cannot be on this stack, so the frame is not read as injected.
+    const elsewhere = 'f@https://app.aglyn.com/pricing:1:2'
+    expect(isInjectedThirdPartyFrame(elsewhere, documentAt)).toBe(false)
+  })
+
+  it('never reads a frame it cannot parse as the document when a URL is missing', () => {
+    // `scrubUrl` answers '' for both, and '' must match nothing.
+    const unparsable = 'f@https://[::1/:1:2'
+    expect(isInjectedThirdPartyFrame(unparsable, [MOVED_PAGE_NOW, ''])).toBe(false)
+  })
+})
+
+describe('documentLoadUrl', () => {
+  /** jsdom has no navigation timing, so a case that needs it lends one. */
+  function withNavigationEntries(entries: Array<{ name: string }>, run: () => void): void {
+    Object.defineProperty(performance, 'getEntriesByType', {
+      value: (type: string) => (type === 'navigation' ? entries : []),
+      configurable: true,
+    })
+    try {
+      run()
+    } finally {
+      delete (performance as { getEntriesByType?: unknown }).getEntriesByType
+    }
+  }
+
+  it('is the URL the navigation entry was served at, not where the page is now', () => {
+    withNavigationEntries([{ name: 'https://aglyn.com/?fbclid=abc' }], () => {
+      expect(documentLoadUrl()).toBe('https://aglyn.com/')
+    })
+  })
+
+  it('falls back to the page URL in an engine without navigation timing', () => {
+    expect(documentLoadUrl()).toBe(PAGE)
+  })
+
+  it('falls back to the page URL when the engine lists no navigation entry', () => {
+    withNavigationEntries([], () => {
+      expect(documentLoadUrl()).toBe(PAGE)
+    })
   })
 })
 
@@ -521,6 +603,28 @@ describe('the installed beacon applies both rules end to end (AGL-2523)', () => 
   it('DROPS a webview that evaluated its own code into the page', () => {
     throwInPage('null is not an object', INJECTED_STACK)
     expect(beacon).not.toHaveBeenCalled()
+  })
+
+  it('DROPS it after the page moved on the client, and still reports our own scripts there', () => {
+    // Installed while jsdom had the page at PAGE, which is where these
+    // frames point; then the app moves the page, as on 2026-10-31.
+    history.replaceState(null, '', '/signin')
+    try {
+      throwInPage(
+        "undefined is not an object (evaluating 'window.webkit.messageHandlers')",
+        INJECTED_STACK,
+      )
+      expect(beacon).not.toHaveBeenCalled()
+      throwInPage('moved-page served-script boom', OWN_STACK)
+      expect(reported()).toEqual([
+        expect.objectContaining({
+          message: 'moved-page served-script boom',
+          url: 'https://aglyn.com/signin',
+        }),
+      ])
+    } finally {
+      history.replaceState(null, '', '/pricing')
+    }
   })
 
   it('still drops the opaque cross-origin Script error.', () => {

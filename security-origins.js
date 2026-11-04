@@ -1484,6 +1484,12 @@ function tenantConnectSrcDirective(
  * every site rather than left to an owner's list because the element that
  * builds it is offered to every site, and the Security tab tells owners that
  * a player the platform builds needs no approval.
+ *
+ * YouTube and Vimeo are declared that way too (AGL-4140), and their players
+ * are the same two origins the Video block builds, so both reach the
+ * directive by both routes. That is one grant named twice, not a wider one:
+ * the declarations rebuild `https://www.youtube-nocookie.com/embed/{id}` and
+ * `https://player.vimeo.com/video/{id}` exactly as `parseVideoEmbedSrc` does.
  */
 const TENANT_FRAME_ORIGINS = [
   'https://www.youtube-nocookie.com',

@@ -10,17 +10,25 @@ Beyond your team, your **site visitors** can become **members** — and you can 
 certain pages to signed-in members only.
 
 :::info Plan availability
-**Business** and above. Members-only pages, gated video, and the content
-paywall need the content-gating feature; on lower plans (or if a
-subscription lapses) gated content is not served.
+Three things here share the word "member", and they are on different plans:
+
+- **Member accounts**: signing up, signing in, recovering a password, and the
+  account page with past orders. These work wherever commerce does.
+- **Members-only content**: members-only pages, gated video and the content
+  paywall. These need the content-gating feature, on **Business** and above.
+  On a lower plan, or if a subscription lapses, gated content is not served.
+- **Recurring billing**: subscription products and paid memberships charged on
+  a schedule. Also **Business** and above.
 :::
 
 ![A site's Users page: the Site users table of members with their email, name, join date and status, under its Columns, Filters, Export and Search controls, above the Users card that grants site access](/img/teams-and-roles/host-users-page.png)
 
 ## Let visitors sign up
 
-Enable site **membership** so visitors can **sign in / sign up** to your site. New members
-flow into your [CRM](../../content-and-data/crm/overview.md) automatically.
+Turn on **User Accounts** for the site so visitors can **sign in / sign up**. A new site
+starts with it on; the switch is at **Sites → your site → Admin → Plugins** (see
+[Member accounts](../../guides/member-accounts.md#1-turn-user-accounts-on-for-the-site)).
+New members flow into your [CRM](../../content-and-data/crm/overview.md) automatically.
 
 ## Sign-in, sign-up, and recovery pages
 
@@ -63,6 +71,8 @@ link on the sign-in form (or by visiting `/recover` directly):
    receive reset emails.
 
 ## Gate a page {#gate-a-screen}
+
+Members-only pages are on **Business** and above.
 
 1. Open the page you want to protect.
 2. Mark it **members-only**.

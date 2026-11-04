@@ -589,10 +589,13 @@ function tenantEmailsContent(entries) {
  * The video hosts whose own player the Video element frames (AGL-3080), each
  * declared by the plugin that plays them: a plugin names a function under
  * `videoEmbedProviders`, and this loads `${package}/video-embed-providers`
- * through jiti, calls it, and compiles the answer into the catalog file as
- * data. The readers are the published page and the tenant middleware's
- * `frame-src`, neither of which loads plugin code, so a runtime registry
- * would be one they had not filled (core `video-embed-provider.ts`).
+ * through jiti, calls it, and compiles the answer into its own file as data,
+ * `VIDEO_EMBED_PROVIDERS_FILE`. The readers are the published page and the
+ * tenant middleware's `frame-src`, neither of which loads plugin code, so a
+ * runtime registry would be one they had not filled (core
+ * `video-embed-provider.ts`). Not the catalog file (AGL-4140): every
+ * published page downloads the catalog, and only a page that plays a video
+ * reads these.
  *
  * Checked here, because a declaration widens every published page's
  * `frame-src`:
@@ -603,10 +606,37 @@ function tenantEmailsContent(entries) {
  *    exactly one `{id}` and no query or fragment, so every frame is on the
  *    declared origin.
  *  - PATTERNS THAT COMPILE, anchored at both ends, each path pattern with a
- *    capture group for the id.
+ *    capture group for the id. A `mediaIdLinks` shape (AGL-4140) takes the
+ *    id from a query parameter it names, or else from its capture group,
+ *    and the domains it is limited to are among the declaration's own.
  *  - A QUERY core can build: each parameter is a constant `value`, or an
- *    `option` core knows with an `on` or `off` spelling.
+ *    `option` core knows with an `on` or `off` spelling; either may name the
+ *    media id as `{id}`, which core fills in after the id passed its checks.
  */
+/**
+ * The video hosts' own file (AGL-4140), read by core `video-embed-provider.ts`
+ * alone. Kept out of the catalog file, which every published page downloads
+ * whether or not it plays a video: the declarations are several hundred bytes
+ * on the wire that only a page with a Video element, and the tenant
+ * middleware's `frame-src`, read.
+ */
+const VIDEO_EMBED_PROVIDERS_FILE = 'libs/aglyn/src/lib/plugin-manager/video-embed-providers.generated.ts'
+
+function videoEmbedProvidersContent(rows) {
+  const indent = (json) => json.split('\n').join('\n  ')
+  return (
+    `/**\n * GENERATED FILE — do not edit. Regenerate with:\n` +
+    ` *   node tools/scripts/generate-plugin-manifests.mjs\n *\n` +
+    ` * Every video host whose own player the Video element frames, declared by\n` +
+    ` * the plugin that plays it (AGL-3080). Core names no host. Its own file,\n` +
+    ` * not the catalog's, so a published page with no video downloads none of\n` +
+    ` * it (AGL-4140).\n */\n\n` +
+    `import type { ResolvedVideoEmbedProvider } from './video-embed-provider'\n\n` +
+    `export const FIRST_PARTY_VIDEO_EMBED_PROVIDERS: readonly ResolvedVideoEmbedProvider[] = [\n` +
+    `${rows.map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}\n]\n`
+  )
+}
+
 const VIDEO_EMBED_OPTIONS = ['autoPlay', 'doNotTrack', 'muted', 'loop']
 const PLAIN_DOMAIN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/
 
@@ -641,7 +671,7 @@ async function pluginVideoEmbedProviders() {
       throw new Error(`${where} declares no host — drop the entry, or declare one`)
     }
     for (const declaration of answer) {
-      const { id, label, domains: declaredDomains, mediaIdPaths, mediaIdPattern, playerOrigin, playerPath, playerQuery = [] } =
+      const { id, label, domains: declaredDomains, mediaIdPaths, mediaIdLinks = [], mediaIdPattern, playerOrigin, playerPath, playerQuery = [] } =
         declaration ?? {}
       const what = `${where} "${id ?? ''}"`
       if (typeof id !== 'string' || !/^[a-z][a-z0-9-]*$/.test(id)) throw new Error(`${where}: a host needs an "id" of lowercase letters, digits and dashes`)
@@ -663,6 +693,24 @@ async function pluginVideoEmbedProviders() {
         const pattern = anchoredPattern(source, `${what} mediaIdPaths "${source}"`)
         if (new RegExp(`${pattern.source}|`).exec('').length < 2) {
           throw new Error(`${what} mediaIdPaths "${source}" has no capture group for the media id`)
+        }
+      }
+      if (!Array.isArray(mediaIdLinks)) throw new Error(`${what}: "mediaIdLinks" is a list`)
+      for (const link of mediaIdLinks) {
+        const shape = `${what} mediaIdLinks "${link?.path ?? ''}"`
+        const pattern = anchoredPattern(link?.path, shape)
+        if (link.param !== undefined) {
+          if (typeof link.param !== 'string' || !/^[A-Za-z0-9_.-]+$/.test(link.param)) {
+            throw new Error(`${shape}: "param" is a query parameter name`)
+          }
+        } else if (new RegExp(`${pattern.source}|`).exec('').length < 2) {
+          throw new Error(`${shape} names no "param" and has no capture group for the media id`)
+        }
+        if (link.domains !== undefined) {
+          if (!Array.isArray(link.domains) || !link.domains.length) throw new Error(`${shape}: "domains" is a non-empty list`)
+          for (const domain of link.domains) {
+            if (!declaredDomains.includes(domain)) throw new Error(`${shape}: "${domain}" is not one of the declaration's domains`)
+          }
         }
       }
       anchoredPattern(mediaIdPattern, `${what} mediaIdPattern`)
@@ -3421,7 +3469,7 @@ function siteCspRows() {
   return rows
 }
 
-function catalogContent(videoEmbedRows, planEntitlements, usageAxes) {
+function catalogContent(planEntitlements, usageAxes) {
   const rows = catalogRows()
   const indent = (json) => json.split('\n').join('\n  ')
   const editBarRows = rows
@@ -3444,7 +3492,7 @@ function catalogContent(videoEmbedRows, planEntitlements, usageAxes) {
  * the types and the resolvers in \`enabled-plugins.ts\`; it holds no row.
  */
 
-import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginSitemapReaderDeclaration } from './plugin-sitemap-readers'\nimport type { ResolvedPluginSiteBundleSectionDeclaration } from './plugin-site-bundle'\nimport type { ResolvedTransferResourceDeclaration } from './plugin-transfer-resources'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { ResolvedPluginEntityPicker } from './plugin-entity-pickers'\nimport type { ResolvedPluginRecordPage } from './plugin-record-pages'\nimport type { ResolvedVisitorDoor } from './plugin-visitor-doors'\nimport type { ResolvedPluginCostAxis, ResolvedPluginSpendLine, ResolvedPluginUsageBand, ResolvedPluginUsageMeter } from './plugin-usage-axes'\nimport type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginTemplateSource } from './plugin-template-sources'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { ArtifactTypeDeclaration } from './plugin-artifact-types'\nimport type { ResolvedBesignerDocument } from './besigner-documents'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { PluginSiteCspDeclaration } from './plugin-site-csp'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { ServerStepDeclaration } from './plugin-server-steps'\nimport type { InteractionRecipeDeclaration } from './interaction-recipes'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
+import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginSitemapReaderDeclaration } from './plugin-sitemap-readers'\nimport type { ResolvedPluginSiteBundleSectionDeclaration } from './plugin-site-bundle'\nimport type { ResolvedTransferResourceDeclaration } from './plugin-transfer-resources'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { ResolvedPluginEntityPicker } from './plugin-entity-pickers'\nimport type { ResolvedPluginRecordPage } from './plugin-record-pages'\nimport type { ResolvedVisitorDoor } from './plugin-visitor-doors'\nimport type { ResolvedPluginCostAxis, ResolvedPluginSpendLine, ResolvedPluginUsageBand, ResolvedPluginUsageMeter } from './plugin-usage-axes'\nimport type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginTemplateSource } from './plugin-template-sources'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { ArtifactTypeDeclaration } from './plugin-artifact-types'\nimport type { ResolvedBesignerDocument } from './besigner-documents'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { PluginSiteCspDeclaration } from './plugin-site-csp'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { ServerStepDeclaration } from './plugin-server-steps'\nimport type { InteractionRecipeDeclaration } from './interaction-recipes'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
 ${rows.map((row) => `  ${indent(JSON.stringify(row.plugin, null, 2))},`).join('\n')}
@@ -3719,14 +3767,6 @@ ${siteCspRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join(
 ]
 
 /**
- * Every video host whose own player the Video element frames, declared by
- * the plugin that plays it (AGL-3080). Core names no host.
- */
-export const FIRST_PARTY_VIDEO_EMBED_PROVIDERS: readonly ResolvedVideoEmbedProvider[] = [
-${videoEmbedRows.map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
-]
-
-/**
  * The notification categories first-party plugins add to the settings page
  * and to every recipient's preferences, declared by each plugin (AGL-3080).
  */
@@ -3837,12 +3877,9 @@ const ALL = [
   })),
   {
     file: CATALOG_FILE,
-    content: catalogContent(
-      await pluginVideoEmbedProviders(),
-      await pluginPlanEntitlements(),
-      await pluginUsageAxes(),
-    ),
+    content: catalogContent(await pluginPlanEntitlements(), await pluginUsageAxes()),
   },
+  { file: VIDEO_EMBED_PROVIDERS_FILE, content: videoEmbedProvidersContent(await pluginVideoEmbedProviders()) },
   { file: RELEASE_FLAGS_FILE, content: releaseFlagsContent(releaseFlagRows()) },
   { file: HOST_EVENTS_FILE, content: hostEventsContent(hostEventRows()) },
   { file: TENANT_EMAILS_FILE, content: tenantEmailsContent(await pluginTenantEmails()) },

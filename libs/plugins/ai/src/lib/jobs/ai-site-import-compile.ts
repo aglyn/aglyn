@@ -35,6 +35,9 @@
  *      the palette's own elements and the theme's tokens: the Card, the
  *      Accordion, the Table, the Tabs, the hero around the source's picture.
  *      Every word is the source's, as written.
+ *   A video is the Video element where the source's film sat (AGL-4140),
+ *   poster first, playing from where the old page played it, and a button
+ *   whose words say it plays the film scrolls to it and presses play.
  *   3. A main page's DESIGN is the one question a model answers
  *      (`submit_design`, `aiSiteImportDesignText`): which hero the opening
  *      becomes, how each group is drawn, a band where the source gave none,
@@ -57,6 +60,7 @@ import {
   AI_LAYOUT_IMPORT_HEROES,
   AI_LAYOUT_MAX_COLS,
   type AiLayoutBlock,
+  type AiLayoutColorRole,
   type AiLayoutDesignAnswer,
   type AiLayoutDesignSection,
   type AiLayoutGroupStyle,
@@ -64,13 +68,17 @@ import {
   type AiLayoutItem,
   type AiLayoutLink,
   type AiLayoutPicture,
+  type AiLayoutPictureFit,
   type AiLayoutSection,
   type AiLayoutSettlement,
   type AiLayoutStyle,
+  type AiLayoutVideo,
 } from '../layout-language/ai-layout-language'
 import type { AiLayoutTargets } from '../layout-language/ai-layout-links'
 import {
   AI_SITE_IMPORT_LABEL_MAX_CHARS,
+  SITE_IMPORT_PLAY_WORDS,
+  siteImportFilmSource,
   siteImportWidthOf,
   type AiSiteImportPhoto,
   type SiteImportGroupKind,
@@ -82,8 +90,13 @@ import {
   type SiteImportLayoutLine,
   type SiteImportLayoutNode,
   type SiteImportLayoutSection,
+  type SiteImportLayoutVideo,
   type SiteImportLineRef,
+  type SiteImportLookFacts,
+  type SiteImportPictureFit,
+  type SiteImportRule,
 } from '../model/ai-site-import'
+import { aiHexOklch } from '../model/ai-site-look'
 import { aiModelAtLeastStepTier } from '../providers/routing'
 import type { SiteImportBlock } from '../site-import/site-import-html'
 import {
@@ -396,6 +409,10 @@ interface MapScope {
   groupAt: number
   settled: AiLayoutSettlement[]
   at: string
+  /** The page's films the Video element plays, by their index (AGL-4140). */
+  films: ReadonlyMap<number, AiLayoutVideo>
+  /** The film a play button of this section plays: the section's own first, else the page's. */
+  film: number | null
 }
 
 /** Where a link of the source goes on the new site, in the compiler's words; `undefined` where it can go nowhere a page may send a visitor. */
@@ -428,8 +445,36 @@ function take(scope: MapScope, ref: SiteImportLineRef | undefined): string {
   return block.kind === 'image' ? '' : clean(block.text)
 }
 
+/** A width over a height as `aspect-ratio` writes it: "1600 / 900", or "1.7778" for a ratio alone. */
+function ratioText(width: number, height = 1): string {
+  const round = (value: number) => String(Math.round(value * 10_000) / 10_000)
+  return height === 1 ? round(width) : `${round(width)} / ${round(height)}`
+}
+
+/** The radius past which a source's picture reads as rounded (AGL-4138), not merely softened: 10 px. */
+const ROUNDED_PX = 10
+
+/**
+ * How a picture of a page brought in is framed (AGL-4138): at the box the
+ * source crops it to, where it sets one, else at the picture's own shape —
+ * the library's copy's size first, its `width` and `height` second — so a
+ * frame of its own shape, filled, cuts nothing off; its fit, and the
+ * source's rounded corners and shadow. A round portrait is the byline's.
+ */
+function pictureFitOf(photo: AiSiteImportPhoto, fit: SiteImportPictureFit | undefined): AiLayoutPictureFit | undefined {
+  const out: AiLayoutPictureFit = {}
+  if (fit?.box) Object.assign(out, { ratio: ratioText(fit.box), cropped: true as const })
+  else if (fit?.height) Object.assign(out, { height: Math.round(fit.height), cropped: true as const })
+  else if (photo.width && photo.height) out.ratio = ratioText(photo.width, photo.height)
+  else if (fit?.ratio) out.ratio = ratioText(fit.ratio)
+  if (fit?.objectFit) out.objectFit = fit.objectFit
+  if (fit?.radius !== undefined && fit.radius >= ROUNDED_PX && fit.radius < 999) out.rounded = true
+  if (fit?.shadow) out.shadow = true
+  return Object.keys(out).length ? out : undefined
+}
+
 /** A picture line as the library holds it; marks it taken, and missing where the library holds none. */
-function takePicture(scope: MapScope, ref: SiteImportLineRef | undefined, href?: string): AiLayoutPicture | null {
+function takePicture(scope: MapScope, ref: SiteImportLineRef | undefined, href?: string, fit?: SiteImportPictureFit): AiLayoutPicture | null {
   if (ref === undefined || scope.used.has(ref)) return null
   const block = scope.doc.blocks[ref]
   if (!block || block.kind !== 'image') return null
@@ -442,7 +487,74 @@ function takePicture(scope: MapScope, ref: SiteImportLineRef | undefined, href?:
   const alt = clean(block.alt || photo.alt || '').slice(0, 200)
   const ratio = photo.width && photo.height ? photo.width / photo.height : 0
   const to = linkTo(scope, href)
-  return { src: photo.src, alt, ...(ratio > 0 ? { ratio } : {}), ...(to ? { to } : {}) }
+  const framed = pictureFitOf(photo, fit)
+  return { src: photo.src, alt, ...(ratio > 0 ? { ratio } : {}), ...(to ? { to } : {}), ...(framed ? { fit: framed } : {}) }
+}
+
+/*------------------------------------------
+ * The source's colors as the theme's roles (AGL-4138)
+ *-----------------------------------------*/
+
+/** How colorful a color must be to be a color, not a grey. */
+const COLORFUL_CHROMA = 0.04
+
+/** How far apart two colors look, in OKLab. */
+function colorGap(a: string, b: string): number {
+  const [x, y] = [aiHexOklch(a), aiHexOklch(b)]
+  const ax = x.C * Math.cos((x.h * Math.PI) / 180)
+  const ay = x.C * Math.sin((x.h * Math.PI) / 180)
+  const bx = y.C * Math.cos((y.h * Math.PI) / 180)
+  const by = y.C * Math.sin((y.h * Math.PI) / 180)
+  return Math.hypot(x.L - y.L, ax - bx, ay - by)
+}
+
+const HEX = /^#[0-9a-f]{6}$/i
+
+/** Whether a colorful color is the brand's: the source's buttons' fill or its links' color, by its look or its hue. */
+function brandish(hex: string, look: Pick<SiteImportLookFacts, 'buttonFill' | 'link'> | null | undefined): boolean {
+  const own = aiHexOklch(hex)
+  return [look?.buttonFill, look?.link].some((other) => {
+    if (!other || !HEX.test(other)) return false
+    const them = aiHexOklch(other)
+    if (them.C < COLORFUL_CHROMA) return false
+    const hue = Math.abs(own.h - them.h) % 360
+    return colorGap(hex, other) <= 0.1 || Math.min(hue, 360 - hue) <= 25
+  })
+}
+
+/**
+ * A source's own color as the theme role a page brought in draws it in
+ * (AGL-4138), so no value is ever written onto an element: the brand's
+ * colors as `primary`, any other color as the theme's third, which the look
+ * pins to the source's eyebrows' (`aiSiteImportStyle`); a grey as the words'
+ * ink or their muted shade, or as the divider for a rule; a light fill as the
+ * theme's tint. `null` where no role is the color's: white words on a dark
+ * band take the band's own.
+ */
+export function aiSiteImportColorRole(hex: string | null | undefined, look: Pick<SiteImportLookFacts, 'buttonFill' | 'link'> | null | undefined, use: 'ink' | 'fill' | 'rule'): AiLayoutColorRole | null {
+  if (!hex || !HEX.test(hex)) return null
+  const own = aiHexOklch(hex)
+  if (use === 'fill' && own.L >= 0.9) return 'action.hover'
+  if (own.C < COLORFUL_CHROMA) {
+    if (use === 'rule') return 'divider'
+    if (use === 'fill' || own.L >= 0.9) return null
+    return own.L <= 0.35 ? 'text.primary' : 'text.secondary'
+  }
+  return brandish(hex, look) ? 'primary.main' : 'tertiary.main'
+}
+
+/** An icon's color in a tile: the fill's own contrast where the icon is a light one on a strong fill. */
+function tileInk(fill: AiLayoutColorRole, color: string | null, look: SiteImportLookFacts): AiLayoutColorRole | null {
+  const light = !!color && HEX.test(color) && aiHexOklch(color).L >= 0.9
+  if (light && fill === 'primary.main') return 'primary.contrastText'
+  if (light && fill === 'tertiary.main') return 'tertiary.contrastText'
+  return aiSiteImportColorRole(color, look, 'ink')
+}
+
+/** A group's rule as the compiler draws it: its side, its width in the theme's border steps, its color's role. */
+function ruleOf(rule: SiteImportRule, look: SiteImportLookFacts): NonNullable<AiLayoutBlock['rule']> {
+  const width = rule.width >= 3 ? 3 : rule.width === 2 ? 2 : 1
+  return { side: rule.side, width, color: aiSiteImportColorRole(rule.color, look, 'rule') }
 }
 
 /** Words as text blocks, a paragraph longer than a text element holds split between its sentences. */
@@ -477,9 +589,20 @@ function lineBlocks(scope: MapScope, node: SiteImportLayoutLine): AiLayoutBlock[
       return [{ kind: 'list', items: [{ title: text, text: '' }] }]
     case 'quote':
       return [{ kind: 'quotes', style: 'quiet', items: [{ title: '', text }] }]
-    default:
-      if (node.role === 'eyebrow') return [{ kind: 'eyebrow', text }]
+    default: {
+      // A button whose words say it plays a film plays the section's film, else the page's (AGL-4140).
+      if (node.button && scope.film !== null && SITE_IMPORT_PLAY_WORDS.test(text) && text.length <= AI_SITE_IMPORT_LABEL_CHARS) {
+        return [{ kind: 'button', text, style: node.button, to: `video:${scope.film}` }]
+      }
+      if (node.role === 'eyebrow') {
+        // In its own pill and its own color, as the source sets it (AGL-4138).
+        const color = aiSiteImportColorRole(node.color, scope.layout.look, 'ink')
+        return [{ kind: 'eyebrow', text, ...(node.chip ? { chip: true as const } : {}), ...(color ? { color } : {}) }]
+      }
+      // A statement is a lede set large (AGL-4138), split as any text is between its sentences where it runs long.
+      if (node.role === 'statement') return textBlocks('lede', text).map((block) => ({ ...block, style: 'large' as const }))
       return textBlocks(node.role === 'lede' ? 'lede' : node.role === 'note' ? 'note' : 'text', text)
+    }
   }
 }
 
@@ -527,7 +650,7 @@ function itemOf(scope: MapScope, group: SiteImportLayoutGroup, item: SiteImportL
     // A figure stands alone: its tag, if it has one, is among its words.
     else if (ref === item.badge && kind !== 'stats') out.badge = take(scope, ref)
     else if (ref === item.image || (block.kind === 'image' && !named.has(ref))) {
-      const picture = takePicture(scope, ref)
+      const picture = takePicture(scope, ref, undefined, ref === item.image ? item.imageFit : undefined)
       if (picture && !out.picture) out.picture = picture
     } else if (item.list?.includes(ref)) {
       const line = take(scope, ref)
@@ -547,17 +670,40 @@ function itemOf(scope: MapScope, group: SiteImportLayoutGroup, item: SiteImportL
   if (icon) out.iconPath = icon
   const mark = iconAt(scope, item.listIcon)
   if (mark && out.list?.length) out.listIconPath = mark
+  // Its icon's square and its arrow, as the source draws them (AGL-4138).
+  const fill = icon && item.tile ? aiSiteImportColorRole(item.tile.fill, scope.layout.look, 'fill') : null
+  if (fill && item.tile) out.tile = { fill, color: tileInk(fill, item.tile.color, scope.layout.look) }
+  const arrow = iconAt(scope, item.mark)
+  if (arrow) out.markPath = arrow
+  if (item.figureMuted && out.figure) out.figureMuted = true
+  // A film the item holds plays from its poster (AGL-4140), and the item is no link around it.
+  const film = item.video !== undefined ? scope.films.get(item.video) : undefined
+  if (film && out.picture) {
+    out.picture = { ...out.picture, video: film }
+    return out
+  }
   const to = linkTo(scope, item.to)
   if (to) out.to = to
   return out
 }
 
-/** The style a group of cards is drawn in where its design answer chose none: the source's own box, icons or pictures. */
+/** The style a group of cards is drawn in where its design answer chose none: the source's own box, its rule, icons or pictures. */
 function defaultStyle(group: SiteImportLayoutGroup, items: readonly AiLayoutItem[]): AiLayoutGroupStyle {
   const pictured = items.length > 0 && items.every((item) => item.picture)
   if (pictured) return group.boxed ? 'articles' : 'pictures'
   if (group.boxed) return 'cards'
+  // A rule along each item, a step's line over its number, is no box (AGL-4138).
+  if (group.rule) return 'ruled'
   return items.length > 0 && items.every((item) => item.iconPath) ? 'icons' : 'ruled'
+}
+
+/** What a group of a page brought in carries of how its source draws it (AGL-4138): its items' own alignment, its tablet columns, its rule when it is drawn ruled. */
+function drawnAs(scope: MapScope, group: SiteImportLayoutGroup, style?: AiLayoutGroupStyle): Pick<AiLayoutBlock, 'itemsAlign' | 'columnsSm' | 'rule'> {
+  return {
+    ...(group.align ? { itemsAlign: group.align } : {}),
+    ...(group.columnsSm ? { columnsSm: group.columnsSm } : {}),
+    ...(style === 'ruled' && group.rule ? { rule: ruleOf(group.rule, scope.layout.look) } : {}),
+  }
 }
 
 /** The style an answer chose, where the group can be drawn so: pictures need a picture on every item, icons an icon. */
@@ -644,7 +790,9 @@ function groupBlocks(scope: MapScope, group: SiteImportLayoutGroup): AiLayoutBlo
         }
       }
       if (picture && !words.length) return [{ title: '', text: '', picture }]
-      return words.length ? [{ title: words.join(' '), text: '', ...(picture ? { picture } : {}) }] : picture ? [{ title: '', text: '', picture }] : []
+      // A strip of linked tags keeps its links (AGL-4138): a blog's categories go to their pages.
+      const to = picture ? undefined : linkTo(scope, item.to)
+      return words.length ? [{ title: words.join(' '), text: '', ...(picture ? { picture } : {}), ...(to ? { to } : {}) }] : picture ? [{ title: '', text: '', picture }] : []
     })
     return items.length ? [{ kind: 'logos', items }] : []
   }
@@ -652,12 +800,12 @@ function groupBlocks(scope: MapScope, group: SiteImportLayoutGroup): AiLayoutBlo
   if (kind === 'quotes') {
     // The reader names a quote's words its title and who said it its text.
     const quotes = items.map((item) => ({ ...item, title: [item.text, ...(item.more ?? [])].filter(Boolean).join(' '), text: item.title, more: [] as string[] }))
-    return [{ kind: 'quotes', items: quotes.map(({ more: _more, ...item }) => item), columns, ...(group.boxed ? { variant: 'cards' as const } : { style: 'quiet' as const }) }]
+    return [{ kind: 'quotes', items: quotes.map(({ more: _more, ...item }) => item), columns, ...(group.boxed ? { variant: 'cards' as const } : { style: 'quiet' as const }), ...drawnAs(scope, group) }]
   }
   if (kind === 'faq') return [{ kind: 'faq', items, columns }]
-  if (kind === 'stats') return [{ kind: 'stats', items, columns, ...(group.boxed ? { variant: 'cards' as const } : {}) }]
+  if (kind === 'stats') return [{ kind: 'stats', items, columns, ...(group.boxed ? { variant: 'cards' as const } : {}), ...drawnAs(scope, group) }]
   const style = joins ? 'ruled' : styleFor(answer?.style, group, items)
-  return [{ kind: kind === 'steps' ? 'steps' : 'cards', items, columns, variant: style }]
+  return [{ kind: kind === 'steps' ? 'steps' : 'cards', items, columns, variant: style, ...drawnAs(scope, group, style) }]
 }
 
 /** A section's nodes in the layout language, a row of columns placed by `col` where the section may still take one. */
@@ -669,12 +817,15 @@ function nodeBlocks(scope: MapScope, nodes: readonly SiteImportLayoutNode[], row
         out.push(...lineBlocks(scope, node))
         break
       case 'picture': {
-        const picture = takePicture(scope, node.line, node.button ? undefined : node.href)
+        const picture = takePicture(scope, node.line, node.button ? undefined : node.href, node.fit)
         if (picture) out.push({ kind: 'image', picture })
         break
       }
       case 'icon':
         // A lone icon is no word and no picture of the page.
+        break
+      case 'video':
+        out.push(...videoBlocks(scope, node))
         break
       case 'form': {
         // The form rebuilt for this one (AGL-4083); a read from before they were, the site's only form, once.
@@ -739,6 +890,84 @@ function nodeBlocks(scope: MapScope, nodes: readonly SiteImportLayoutNode[], row
   return out
 }
 
+/**
+ * A video of the source, where it sat (AGL-4140): the Video element, its
+ * poster the library's copy of the source's, where the Video element can play
+ * the film. One on a host it cannot play is its poster, linking to where the
+ * film plays; with no poster either, nothing of it can be shown.
+ */
+function videoBlocks(scope: MapScope, node: Pick<SiteImportLayoutVideo, 'video' | 'poster' | 'fit' | 'shadow'>): AiLayoutBlock[] {
+  const film = scope.films.get(node.video)
+  if (film) {
+    // A film is pressed to play from its poster: with none, the Video element has nothing to show, and it is left out.
+    const picture = filmPlaces(scope, node.video, node.poster) ? takePicture(scope, node.poster, undefined, node.fit) : null
+    if (!picture) {
+      scope.settled.push({ at: scope.at, what: 'a video left out: it has no poster picture' })
+      return []
+    }
+    const video: AiLayoutVideo = { ...film, ...(node.shadow ? { shadow: true } : {}) }
+    return [{ kind: 'video', video, picture }]
+  }
+  const source = scope.doc.videos?.[node.video]
+  const where = source?.embed ?? source?.src
+  const picture = takePicture(scope, node.poster, where, node.fit)
+  const host = (() => {
+    try {
+      return where ? new URL(where).hostname.replace(/^www\./, '') : ''
+    } catch {
+      return ''
+    }
+  })()
+  if (picture && source) scope.settled.push({ at: scope.at, what: `a video${host ? ` on ${host}` : ''} shown as its picture${picture.to ? ', linking to it' : ''}` })
+  return picture ? [{ kind: 'image', picture }] : []
+}
+
+/** The page's films the Video element plays, by index (AGL-4140): each read's video that plays from a host it knows, or from the old site's https address. */
+function filmsOf(doc: AiSiteImportDocument): Map<number, AiLayoutVideo> {
+  const films = new Map<number, AiLayoutVideo>()
+  ;(doc.videos ?? []).forEach((video, index) => {
+    const source = siteImportFilmSource(video)
+    if (!source) return
+    const title = clean(video.title).slice(0, 200)
+    const description = clean(video.description).slice(0, 2_000)
+    films.set(index, {
+      index,
+      src: source.src,
+      ...(title ? { title } : {}),
+      ...(description ? { description } : {}),
+      ...(video.uploadDate ? { uploadDate: video.uploadDate } : {}),
+      ...(video.durationSeconds ? { durationSeconds: video.durationSeconds } : {}),
+    })
+  })
+  return films
+}
+
+/** Whether a film is drawn as the Video element: one it plays, its poster a picture the library holds. */
+function filmPlaces(scope: Pick<MapScope, 'films' | 'doc' | 'photos'>, video: number, poster: SiteImportLineRef | undefined): boolean {
+  const block = poster === undefined ? undefined : scope.doc.blocks[poster]
+  return scope.films.has(video) && block?.kind === 'image' && scope.photos.has(block.url)
+}
+
+/** The first film of a list of nodes drawn as the Video element, rows, tabs and items opened. */
+function firstFilm(scope: Pick<MapScope, 'films' | 'doc' | 'photos'>, nodes: readonly SiteImportLayoutNode[]): number | null {
+  for (const node of nodes) {
+    const found =
+      node.kind === 'video'
+        ? filmPlaces(scope, node.video, node.poster)
+          ? node.video
+          : null
+        : node.kind === 'row'
+          ? firstFilm(scope, node.cells.flatMap((cell) => cell.nodes))
+          : node.kind === 'tabs'
+            ? firstFilm(scope, node.tabs.flatMap((tab) => tab.panel))
+            : node.kind === 'group'
+              ? (node.items.find((item) => item.video !== undefined && filmPlaces(scope, item.video, item.image))?.video ?? null)
+              : null
+    if (found !== null) return found
+  }
+  return null
+}
+
 /** The most words beside a lone picture that make a row a byline: a name, a date, a role. */
 const BYLINE_MAX_WORDS = 12
 
@@ -759,7 +988,7 @@ function bylineOf(scope: MapScope, cells: ReadonlyArray<{ nodes: SiteImportLayou
   }, 0)
   if (count === 0 || count > BYLINE_MAX_WORDS) return null
   const node = cells[at].nodes[0] as Extract<SiteImportLayoutNode, { kind: 'picture' }>
-  const picture = takePicture(scope, node.line, node.button ? undefined : node.href)
+  const picture = takePicture(scope, node.line, node.button ? undefined : node.href, node.fit)
   return [...(picture ? [{ kind: 'image' as const, picture: { ...picture, small: true } }] : []), ...nodeBlocks(scope, words, { cols: null, allowed: false })]
 }
 
@@ -785,19 +1014,38 @@ function mergeLists(blocks: readonly AiLayoutBlock[]): AiLayoutBlock[] {
 const DIMMED_HEROES: ReadonlySet<AiLayoutImportHero> = new Set(['cover', 'poster'])
 
 /**
+ * The heroes that keep the source's picture where it lays it (AGL-4138): under
+ * or over its words in a column, beside them, or behind them. An answer may
+ * choose among these alone.
+ */
+const HEROES_AT: Readonly<Record<SiteImportHeroPicture, ReadonlySet<AiLayoutImportHero>>> = {
+  below: new Set(['column', 'editorial']),
+  above: new Set(['column', 'editorial']),
+  beside: new Set(['split', 'bleed', 'panel']),
+  behind: new Set(['cover', 'poster', 'panel']),
+}
+
+/**
  * The hero a section's opening takes: the first section's, around its picture
  * beside, behind or under its words. Words dimmed over the picture draw the
  * section dark, so a section that keeps a lighter ground of its own, with its
  * picture anywhere but behind it, opens as its source does (AGL-4083): an
- * answer never repaints a section's own band.
+ * answer never repaints a section's own band. Nor does it move the picture
+ * (AGL-4138): a picture under centered words stays under them, as a picture
+ * beside the words stays beside them.
  */
 function heroOf(section: SiteImportLayoutSection, index: number, answer: AiLayoutDesignSection | null, settled: AiLayoutSettlement[]): AiLayoutImportHero | undefined {
   if (index !== 0 || !section.hero?.picture) return undefined
   // An answer of "none" keeps the opening as the source lays it out.
   if (answer?.hero === 'none') return undefined
-  const own = HERO_FOR[section.hero.picture]
-  if (answer?.hero && DIMMED_HEROES.has(answer.hero) && section.band !== 'dark' && section.hero.picture !== 'behind') {
+  const place = section.hero.picture
+  const own = HERO_FOR[place]
+  if (answer?.hero && DIMMED_HEROES.has(answer.hero) && section.band !== 'dark' && place !== 'behind') {
     settled.push({ at: 'sections[0]', what: `the ${answer.hero} hero set aside: the section keeps its own lighter ground` })
+    return own
+  }
+  if (answer?.hero && !HEROES_AT[place].has(answer.hero)) {
+    settled.push({ at: 'sections[0]', what: `the ${answer.hero} hero set aside: the source lays its picture ${place} its words` })
     return own
   }
   return answer?.hero ?? own
@@ -838,14 +1086,24 @@ export function aiSiteImportDesignedSections(
     groupAt: 0,
     settled: [],
     at: '',
+    films: filmsOf(doc),
+    film: null,
   }
+  const backdropOf = (section: SiteImportLayoutSection) => (section.backdrop?.kind === 'video' ? section.backdrop : null)
+  const pageFilm = layout.sections.reduce<number | null>((found, section) => found ?? firstFilm(scope, section.nodes), null)
   const sections = layout.sections.map((section, index): AiLayoutSection => {
     const given = answer?.sections[index] ?? null
     scope.answer = given
     scope.groupAt = 0
     scope.at = `sections[${index}]`
+    const behind = backdropOf(section)
+    scope.film = firstFilm(scope, section.nodes) ?? pageFilm
     const row = { cols: null as number[] | null, allowed: true }
-    const blocks = nodeBlocks(scope, section.nodes, row)
+    // A film playing on its own behind the section's words is drawn as its poster there (AGL-4140): the
+    // opening's hero lays it behind them. A film that starts on its own is one rule 16 refuses.
+    const poster = behind ? takePicture(scope, behind.poster) : null
+    if (behind) scope.settled.push({ at: scope.at, what: 'a film playing behind the words drawn as its poster' })
+    const blocks = [...(poster ? [{ kind: 'image' as const, picture: poster }] : []), ...nodeBlocks(scope, section.nodes, row)]
     // Every line the layout placed nowhere, at the section's end, as its kind says.
     for (const ref of section.lines) {
       if (scope.used.has(ref)) continue
@@ -889,7 +1147,7 @@ export interface AiSiteImportCompileInput {
   answer?: AiLayoutDesignAnswer | null
 }
 
-export interface AiSiteImportCompiled extends Pick<AiLayoutCompiledPage, 'tree' | 'sectionRoots'> {
+export interface AiSiteImportCompiled extends Pick<AiLayoutCompiledPage, 'tree' | 'sectionRoots' | 'videoIds'> {
   sections: AiLayoutSection[]
   /** The lines on the page, by index of its blocks, in source order. */
   placed: number[]
@@ -946,6 +1204,8 @@ export function aiCompileImportedPage(input: AiSiteImportCompileInput): AiSiteIm
   return {
     tree: compiled.tree,
     sectionRoots: compiled.sectionRoots,
+    // Its films' Video elements keep their ids when stored, as its sections do: a button that plays one names it (AGL-4140).
+    ...(compiled.videoIds?.length ? { videoIds: compiled.videoIds } : {}),
     sections,
     placed,
     lines: lineRefs.length,
@@ -971,7 +1231,8 @@ function lineKind(block: SiteImportBlock | undefined, node: SiteImportLayoutLine
   if (block.kind === 'list-item') return 'list item'
   if (block.kind === 'quote') return 'quote'
   if (block.kind === 'image') return 'picture'
-  return node.role ?? 'text'
+  // A statement is read as the lede it was before the import drew it larger (AGL-4138): the answer's text is unchanged.
+  return node.role === 'statement' ? 'lede' : (node.role ?? 'text')
 }
 
 /** What an item of a group shows, as one phrase: "icon + title + text + link". */
@@ -1008,6 +1269,8 @@ function describeNodes(doc: Pick<AiSiteImportDocument, 'blocks'>, nodes: readonl
         parts.push(lineKind(doc.blocks[node.line], node))
         break
       case 'picture':
+      // A film reads as the picture it opens on (AGL-4140): the design answer is asked nothing new of it.
+      case 'video':
         parts.push('picture')
         break
       case 'form':
@@ -1019,7 +1282,8 @@ function describeNodes(doc: Pick<AiSiteImportDocument, 'blocks'>, nodes: readonl
       case 'group': {
         groups.count += 1
         const shape = [...new Set(node.items.map((item) => itemShape(item).join(' + ')).filter(Boolean))].slice(0, 2).join(' or ')
-        parts.push(`group ${groups.count}: ${node.items.length} ${node.group} in ${node.columns} column${node.columns === 1 ? '' : 's'}${node.boxed ? ', boxed' : ''}${shape ? `, each ${shape}` : ''}`)
+        // A group set apart by a rule reads "boxed", as it did before the rule was kept (AGL-4138): the answer's text is unchanged.
+        parts.push(`group ${groups.count}: ${node.items.length} ${node.group} in ${node.columns} column${node.columns === 1 ? '' : 's'}${node.boxed || node.rule ? ', boxed' : ''}${shape ? `, each ${shape}` : ''}`)
         break
       }
       case 'table':

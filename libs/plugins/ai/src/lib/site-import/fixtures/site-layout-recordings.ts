@@ -23,9 +23,16 @@
  * `site-layout/` holds five pages of aglyn.com as AglynBot read them on
  * 2026-10-28 and 2026-10-29 (home, product, pricing, contact, one blog post),
  * its pricing page again as it read on 2026-11-01, which a live import fell
- * short on (`livePricing`), and one page in the markup a Squarespace site is
- * built with, written for these specs about a studio that does not exist, so
- * the readers are never tuned to one site's markup.
+ * short on (`livePricing`), its blog listing as it read on 2026-11-03, whose
+ * cards crop their pictures to a height of their own (`blog`, AGL-4138), and
+ * one page in the markup a Squarespace site is built with, written for these
+ * specs about a studio that does not exist, so the readers are never tuned to
+ * one site's markup.
+ * A bakery that does not exist either, in the markup a WordPress block theme
+ * writes, shows a film of every kind the reader reads (AGL-4140): a
+ * `<video>` playing behind its opening, a YouTube frame, a `lite-youtube`
+ * facade, a card's picture linking a Vimeo page, and an `og:video` in its
+ * head.
  *
  * The aglyn.com recordings keep what the `aglyn-com/` ones dropped and the
  * layout is made of: class names, inline icons and the page's own stylesheet.
@@ -37,8 +44,11 @@
  * are dropped, a grid framework's own hints kept; the pricing page keeps the
  * first 14 rows of its plan table, and the product, pricing, contact and blog
  * pages their header menu without its panels and their footer's © line. The
- * home page keeps its header and footer whole, for the menu reader. Every
- * address, phone number, author and profile is a placeholder.
+ * blog listing keeps its first page of posts, a featured one and six cards,
+ * without its search box and its newsletter band, inside the blog post's
+ * header and footer. The home page keeps its header and footer whole, for
+ * the menu reader. Every address, phone number, author and profile is a
+ * placeholder.
  */
 
 import { readFileSync } from 'node:fs'
@@ -48,6 +58,7 @@ const DIR = join(__dirname, 'site-layout')
 
 export const SITE_LAYOUT_AGLYN_ORIGIN = 'https://aglyn.com'
 export const SITE_LAYOUT_POTTERY_ORIGIN = 'https://www.tidewater-pottery.example'
+export const SITE_LAYOUT_BAKERY_ORIGIN = 'https://www.hearth-bakery.example'
 
 /** The recorded pages, by name: the file and the address it was read from. */
 export const SITE_LAYOUT_PAGES = {
@@ -57,7 +68,9 @@ export const SITE_LAYOUT_PAGES = {
   livePricing: { file: 'aglyn-pricing-2026-11.html', url: `${SITE_LAYOUT_AGLYN_ORIGIN}/pricing` },
   contact: { file: 'aglyn-contact.html', url: `${SITE_LAYOUT_AGLYN_ORIGIN}/contact` },
   post: { file: 'aglyn-blog-post.html', url: `${SITE_LAYOUT_AGLYN_ORIGIN}/blog/multi-site-cost-sheet-2026` },
+  blog: { file: 'aglyn-blog.html', url: `${SITE_LAYOUT_AGLYN_ORIGIN}/blog` },
   pottery: { file: 'squarespace-pottery.html', url: `${SITE_LAYOUT_POTTERY_ORIGIN}/` },
+  bakery: { file: 'video-bakery.html', url: `${SITE_LAYOUT_BAKERY_ORIGIN}/` },
 } as const
 
 export type SiteLayoutPageName = keyof typeof SITE_LAYOUT_PAGES

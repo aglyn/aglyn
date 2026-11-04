@@ -491,6 +491,111 @@ describe('Video plays Wistia only after a press (AGL-2826)', () => {
   })
 })
 
+/**
+ * YouTube and Vimeo (AGL-4140) take the path Wistia takes: the poster is a
+ * button, nothing of the host is in the page until a press, and the player
+ * address is the privacy-enhanced one whatever the visitor's consent says.
+ */
+describe('Video plays YouTube and Vimeo only after a press (AGL-4140)', () => {
+  const HOSTS = [
+    {
+      host: 'YouTube',
+      link: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=4s',
+      player: 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ',
+      words: ['youtube', 'dQw4w9WgXcQ'],
+    },
+    {
+      host: 'Vimeo',
+      link: 'https://vimeo.com/76979871',
+      player: 'https://player.vimeo.com/video/76979871',
+      words: ['vimeo', '76979871'],
+    },
+  ]
+  const onSite = (element: JSX.Element) => (
+    <Aglyn.SiteContext.Provider value={{ hostId: 'host1' }}>
+      {element}
+    </Aglyn.SiteContext.Provider>
+  )
+  const press = (container: HTMLElement) =>
+    fireEvent.click(container.querySelector('button') as HTMLButtonElement)
+  const frameUrl = (root: ParentNode) =>
+    new URL((root.querySelector('iframe') as HTMLIFrameElement).src)
+
+  afterEach(() => window.localStorage.clear())
+
+  for (const { host, link, player, words } of HOSTS) {
+    it(`renders a ${host} poster as a play button and nothing from ${host}`, () => {
+      const { container, baseElement } = render(
+        <Video src={link} poster="media:h/p" title="Tour" />,
+      )
+      const button = container.querySelector('button') as HTMLButtonElement
+      expect(button.getAttribute('aria-label')).toBe('Play video: Tour')
+      expect(container.querySelector('video')).toBeNull()
+      expect(baseElement.querySelector('iframe')).toBeNull()
+      for (const word of words) expect(baseElement.innerHTML).not.toContain(word)
+    })
+
+    it(`server-renders no ${host} frame and no ${host} address`, () => {
+      const html = renderToString(
+        <Video src={link} poster="media:h/p" title="Tour" />,
+      )
+      expect(html).not.toContain('<iframe')
+      for (const word of words) expect(html).not.toContain(word)
+    })
+
+    it(`plays ${host} in place of the poster after a press, autoplaying`, () => {
+      const { container } = render(
+        onSite(<Video src={link} poster="media:h/p" title="Tour" />),
+      )
+      press(container)
+      const url = frameUrl(container)
+      expect(`${url.origin}${url.pathname}`).toBe(player)
+      expect(url.searchParams.get('autoplay')).toBe('1')
+      expect(container.querySelector('iframe')?.getAttribute('title')).toBe('Tour')
+    })
+
+    it(`keeps the ${host} address the same whatever consent says`, () => {
+      const pressed = (status?: string) => {
+        window.localStorage.clear()
+        if (status) {
+          window.localStorage.setItem(
+            visitorConsentStorageKey('host1'),
+            JSON.stringify({ v: 1, at: 1, status }),
+          )
+        }
+        const { container, unmount } = render(
+          onSite(<Video src={link} poster="media:h/p" />),
+        )
+        press(container)
+        const src = frameUrl(container).toString()
+        unmount()
+        return src
+      }
+      const none = pressed()
+      expect(pressed('declined')).toBe(none)
+      expect(pressed('implied')).toBe(none)
+      expect(new URL(none).origin).toBe(new URL(player).origin)
+    })
+
+    it(`asks for a poster rather than loading the ${host} player up front`, () => {
+      const { container, getByText } = render(
+        editing(<Video src={link} title="Tour" />),
+      )
+      expect(getByText(new RegExp(`play this ${host} video`))).toBeTruthy()
+      expect(container.querySelector('iframe')).toBeNull()
+      expect(container.querySelector('video')).toBeNull()
+    })
+  }
+
+  it('says do-not-track to Vimeo on every press', () => {
+    const { container } = render(
+      onSite(<Video src={HOSTS[1].link} poster="media:h/p" />),
+    )
+    press(container)
+    expect(frameUrl(container).searchParams.get('dnt')).toBe('1')
+  })
+})
+
 
 /**
  * A press sent from outside the element (AGL-2867): a "Play a video"

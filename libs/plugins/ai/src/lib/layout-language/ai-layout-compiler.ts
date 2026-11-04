@@ -25,7 +25,7 @@ import {
 } from '../runtime/ai-icon-library'
 import { AI_INSTANCE_REF_PROP } from '../runtime/ai-node-tree'
 import { AI_TEXT_LIMITS } from '../runtime/ai-palette'
-import { aiPageScrollInteraction } from '../runtime/ai-page-links'
+import { aiPagePlayVideoInteraction, aiPageScrollInteraction } from '../runtime/ai-page-links'
 import {
   aiLayoutFitText,
   aiLayoutQuoteGap,
@@ -38,13 +38,16 @@ import {
   type AiLayoutBand,
   type AiLayoutBlock,
   type AiLayoutGroupStyle,
+  type AiLayoutImportHero,
   type AiLayoutWidth,
   type AiLayoutItem,
   type AiLayoutLink,
   type AiLayoutPicture,
+  type AiLayoutPictureFit,
   type AiLayoutSection,
   type AiLayoutSettlement,
   type AiLayoutTab,
+  type AiLayoutVideo,
 } from './ai-layout-language'
 import {
   AI_LAYOUT_HALF_HEROES,
@@ -208,6 +211,8 @@ export interface AiLayoutCompiledPage {
   itemIds: string[][]
   /** Plan sections whose only items were quotes, which a published page leaves out (AGL-3676). */
   quotesOnly: number[]
+  /** The films a page brought in places (AGL-4140), by the ids their Video elements are stored under. */
+  videoIds?: string[]
 }
 
 /** The most pictures a page carries; each beyond it is one more empty slot to fill. */
@@ -240,6 +245,10 @@ export interface PageScope {
   formsPlaced: Set<string>
   /** The tags this page has drawn. */
   pills?: number
+  /** The items of a page brought in drawn under a rule in the source's color (AGL-4138). */
+  ruled?: number
+  /** The large statements a page brought in has drawn (AGL-4138). */
+  statements?: number
   /** Each section's repeated items, by the id of the element that draws each (AGL-3660). */
   itemIds: string[][]
   /** The site's design and the choices its seed made, where the page is drawn with one. */
@@ -261,6 +270,10 @@ export interface PageScope {
   bare?: number
   /** Sections the design set beside a photo because they were the third without one (AGL-4065). */
   rhythm?: number
+  /** A page brought in (AGL-4140): each film's Video element, by the film's index. */
+  videos?: Record<number, string>
+  /** The buttons that play a film, written once every film is placed. */
+  plays?: Array<{ id: string; film: number; label: string }>
 }
 
 /** Everything one section's compile shares. */
@@ -368,6 +381,13 @@ export function aiCompileLayoutPage(
     const section = sections[index] ?? { blocks: [] }
     return compileSection(page, section, index)
   })
+  // A button that plays a film of the page scrolls to it and presses play (AGL-4140), now every film is placed;
+  // one whose film was not placed keeps its words.
+  for (const play of page.plays ?? []) {
+    const target = page.videos?.[play.film]
+    if (target) tree.nodes[play.id].interactions = [aiPagePlayVideoInteraction(target)]
+    else tree.nodes[play.id] = { componentId: 'muiTypography', props: { children: play.label, variant: 'body1' } }
+  }
   const rootId = tree.add(
     'div',
     null,
@@ -383,6 +403,7 @@ export function aiCompileLayoutPage(
     settled: page.settled,
     itemIds: page.itemIds,
     quotesOnly: page.quotesOnly,
+    ...(page.videos ? { videoIds: Object.values(page.videos) } : {}),
   }
 }
 
@@ -1100,8 +1121,11 @@ function compileBlock(
   block: AiLayoutBlock,
   room: Room,
 ): string | null {
+  const verbatim = scope.page.options.verbatim === true
   switch (block.kind) {
     case 'eyebrow':
+      // A page brought in sets its eyebrows in the source's own pill and color (AGL-4138).
+      if (verbatim && (block.chip || block.color)) return importedEyebrow(scope, block)
       return words(
         scope,
         block,
@@ -1113,6 +1137,7 @@ function compileBlock(
     case 'heading':
       return heading(scope, block)
     case 'lede':
+      if (verbatim && block.style === 'large') return statement(scope, block)
       return words(scope, block, 'lede', 'lede', {}, muted(scope))
     case 'text':
       return words(scope, block, 'text', 'body1', {}, muted(scope))
@@ -1139,6 +1164,8 @@ function compileBlock(
       return tabs(scope, block, room)
     case 'logos':
       return logos(scope, block)
+    case 'video':
+      return block.video ? video(scope, block.video, block.picture) : null
     default:
       return null
   }
@@ -1268,15 +1295,19 @@ function compileButton(
     : aiLayoutContactLabel(block.text, scope.page.targets.contact) ||
       aiLayoutFitText(block.text, 'label', scope.page.options.language)
   if (!asked) return null
-  const destination = verbatim
-    ? aiLayoutImportedDestination(block.to, scope.page.plan.sections.length)
-    : aiLayoutResolveLink(
-        block.to,
-        asked,
-        scope.link,
-        scope.page.targets,
-      )
-  if (!destination) {
+  // A button of a page brought in that plays one of its films (AGL-4140): its interaction is written once the film is placed.
+  const film = verbatim ? aiLayoutImportedFilm(block.to) : null
+  const destination = film !== null
+    ? null
+    : verbatim
+      ? aiLayoutImportedDestination(block.to, scope.page.plan.sections.length)
+      : aiLayoutResolveLink(
+          block.to,
+          asked,
+          scope.link,
+          scope.page.targets,
+        )
+  if (!destination && film === null) {
     // A page brought in keeps the words of a link that goes nowhere here (AGL-4107).
     if (verbatim) return words(scope, block, 'text', 'body1', {}, muted(scope))
     scope.page.settled.push({
@@ -1287,9 +1318,9 @@ function compileButton(
   }
   // A link of a page brought in longer than a button's label holds is its
   // words, as a link (AGL-4107): every word kept, and it still goes there.
-  if (verbatim && asked.length > AI_TEXT_LIMITS.button) return linkedWords(scope, asked, destination)
+  if (verbatim && asked.length > AI_TEXT_LIMITS.button) return destination ? linkedWords(scope, asked, destination) : words(scope, block, 'text', 'body1', {}, muted(scope))
   // A button to a page merged into the blog names the blog (AGL-3676).
-  const label = verbatim ? asked : aiLayoutRenamedLabel(asked, destination)
+  const label = verbatim || !destination ? asked : aiLayoutRenamedLabel(asked, destination)
   if (label !== asked) scope.page.settled.push({ at: scope.at, what: `the button "${asked}" named for the blog: "${label}"` })
   const style = block.style ?? 'primary'
   // Over a photo, a quiet or outlined button takes the words' own color, as on a brand band.
@@ -1306,7 +1337,7 @@ function compileButton(
       children: label,
       ...look,
       size: scope.index === 0 || block.style === 'large' ? 'large' : 'medium',
-      ...destinationProps(destination),
+      ...(destination ? destinationProps(destination) : {}),
     },
     // Sized to its words, never stretched across the column a Stack would
     // stretch it over (AGL-3660), and aligned with its section.
@@ -1314,8 +1345,15 @@ function compileButton(
     null,
     'button',
   )
-  linkTo(scope, id, destination)
+  if (destination) linkTo(scope, id, destination)
+  if (film !== null) (scope.page.plays ??= []).push({ id, film, label })
   return id
+}
+
+/** The film a button of a page brought in plays (AGL-4140), `video:<n>`, by its index; `null` for any other destination. */
+export function aiLayoutImportedFilm(to: string | undefined): number | null {
+  const match = /^video:(\d{1,3})$/.exec((to ?? '').trim())
+  return match ? Number(match[1]) : null
 }
 
 /**
@@ -1610,13 +1648,15 @@ function layOut(
   perRow: number,
   spacing: string,
   role: string,
+  /** The cells' size, where a page brought in sets its own tablet columns (AGL-4138). */
+  sized?: string,
 ): string {
   const tree = scope.page.tree
   if (items.length === 1) return items[0]
   if (perRow <= 1) {
     return tree.add('muiStack', { spacing }, null, items, role)
   }
-  const size = itemSize(perRow)
+  const size = sized ?? itemSize(perRow)
   const cells = items.map((id) =>
     tree.add('muiGrid', { size }, null, [id], 'cell'),
   )
@@ -2273,6 +2313,28 @@ interface DesignedPicture {
   alt: string
   given: boolean
   src?: string
+  /** The film it is the poster of, on a page brought in (AGL-4140): the Video element fills the frame. */
+  video?: AiLayoutVideo
+  /** How the source frames its own picture, on a page brought in (AGL-4138). */
+  fit?: AiLayoutPictureFit
+}
+
+/**
+ * The frame a page brought in sets the source's own picture in (AGL-4138):
+ * the picture's own shape, or the box the source crops it to, one shape on
+ * every screen, with the source's rounded corners and its shadow. Filled at
+ * its own shape a picture loses nothing: the 11/1 import's hero cut a sixth
+ * off the top and bottom of a screenshot in a 16 / 7 box. Every other
+ * picture takes `fallback`.
+ */
+function ownFrame(scope: SectionScope, picture: DesignedPicture, fallback: Record<string, unknown>): Record<string, unknown> {
+  const fit = scope.page.options.verbatim === true && picture.given ? picture.fit : undefined
+  if (!fit || (!fit.ratio && !fit.height)) return fallback
+  return {
+    ...(fit.height ? { height: fit.height } : { aspectRatio: fit.ratio }),
+    borderRadius: fit.rounded ? 3 : 2,
+    ...(fit.shadow ? { boxShadow: 3 } : {}),
+  }
 }
 
 /**
@@ -2291,7 +2353,12 @@ function designPicture(
   const tree = scope.page.tree
   // The picture fills its frame by its own size props, so the frame alone
   // carries a style: a page of many pictures repeats no inline style (rule 16).
-  const image = designImage(scope, picture, { width: '100%', height: '100%' }, Object.keys(imageSx).length ? imageSx : null)
+  // A source's own picture keeps the fit the source gives it (AGL-4138); a film's poster is its Video
+  // element, filling the frame as the picture would (AGL-4140).
+  const fit = scope.page.options.verbatim === true && picture.given ? picture.fit?.objectFit : undefined
+  const image = picture.video
+    ? video(scope, picture.video, picture.src ? { src: picture.src, alt: picture.alt } : undefined, 'heroVideo', { ...imageSx, ...(fit ? { objectFit: fit } : {}) })
+    : designImage(scope, picture, { width: '100%', height: '100%', ...(fit ? { objectFit: fit } : {}) }, Object.keys(imageSx).length ? imageSx : null)
   return tree.add('muiBox', null, { position: 'relative', overflow: 'hidden', bgcolor: 'action.hover', ...frameSx }, [image], role)
 }
 
@@ -2457,10 +2524,14 @@ function hero(
   scope.centered = false
   if (variant === 'split') {
     const words = compileFlow(scope, flow, 'half') as string
-    const photo = designPicture(scope, picture, {
-      aspectRatio: home ? { xs: '4 / 3', md: '4 / 5' } : { xs: '4 / 3', md: '1 / 1' },
-      borderRadius: 2,
-    })
+    const photo = designPicture(
+      scope,
+      picture,
+      ownFrame(scope, picture, {
+        aspectRatio: home ? { xs: '4 / 3', md: '4 / 5' } : { xs: '4 / 3', md: '1 / 1' },
+        borderRadius: 2,
+      }),
+    )
     const right = design.choices.featureLeft
     const row = designRow(
       scope,
@@ -2493,10 +2564,14 @@ function hero(
           'flex-end',
         )
       : (ledeId ?? actionsId)
-  const photo = designPicture(scope, picture, {
-    aspectRatio: home ? { xs: '4 / 3', md: '21 / 9' } : { xs: '16 / 9', md: '3 / 1' },
-    borderRadius: 2,
-  })
+  const photo = designPicture(
+    scope,
+    picture,
+    ownFrame(scope, picture, {
+      aspectRatio: home ? { xs: '4 / 3', md: '21 / 9' } : { xs: '16 / 9', md: '3 / 1' },
+      borderRadius: 2,
+    }),
+  )
   const stack = tree.add('muiStack', { spacing: '6', useFlexGap: true }, null, [headId, under, photo], 'content')
   const container = tree.add('muiContainer', { maxWidth: 'lg' }, { pt: { xs: 8, md: 12 }, pb: { xs: 6, md: 10 } }, [stack], 'container')
   return designedRoot(scope, [container], bandSx(band), band === 'dark')
@@ -2587,10 +2662,14 @@ function columnHero(scope: SectionScope, flow: readonly AiLayoutBlock[], picture
   scope.centered = true
   const words = compileFlow(scope, flow, 'full') as string
   const measure = tree.add('muiBox', null, { maxWidth: { xs: '100%', md: '72%' }, mx: 'auto' }, [words], 'measure')
-  const photo = designPicture(scope, picture, {
-    aspectRatio: home ? { xs: '4 / 3', md: '16 / 7' } : { xs: '16 / 9', md: '3 / 1' },
-    borderRadius: 2,
-  })
+  const photo = designPicture(
+    scope,
+    picture,
+    ownFrame(scope, picture, {
+      aspectRatio: home ? { xs: '4 / 3', md: '16 / 7' } : { xs: '16 / 9', md: '3 / 1' },
+      borderRadius: 2,
+    }),
+  )
   const stack = tree.add('muiStack', { spacing: '8', useFlexGap: true }, null, [measure, photo], 'content')
   const container = tree.add('muiContainer', { maxWidth: 'lg' }, { pt: { xs: 8, md: 12 }, pb: { xs: 6, md: 10 } }, [stack], 'container')
   return designedRoot(scope, [container], bandSx(band), band === 'dark')
@@ -3602,24 +3681,31 @@ function recordsElement(scope: SectionScope, listing: AiLayoutListing, limit: nu
 // Card, a question the Accordion, a link the Button. One style key on each
 // repeated element, so a page of many items repeats no inline style (rule 16).
 
-/** The source's picture, at its own shape, rounded as the theme rounds a frame. */
+/**
+ * The source's picture, at its own shape, rounded as the theme rounds a
+ * frame, or more where the source rounds it more (AGL-4138); cropped only to
+ * a box the source crops it to, and fitted as the source fits it.
+ */
 function sourcePicture(scope: SectionScope, picture: AiLayoutPicture, role = 'image'): string {
   const { page } = scope
   page.images += 1
   const destination = picture.to ? aiLayoutImportedDestination(picture.to, page.plan.sections.length) : null
+  const fit = picture.small ? undefined : picture.fit
   return page.tree.add(
     'image',
     {
       src: picture.src,
       ...(picture.alt ? { alt: picture.alt } : { decorative: true }),
-      objectFit: 'cover',
+      objectFit: fit?.objectFit ?? 'cover',
       // A byline's portrait is drawn at a portrait's size, round.
       ...(picture.small ? { width: AI_LAYOUT_PORTRAIT_SIZE, height: AI_LAYOUT_PORTRAIT_SIZE } : {}),
+      // A height the source crops it to is the Image's own height (AGL-4138).
+      ...(fit?.cropped && fit.height ? { height: `${fit.height}px` } : {}),
       // The first picture of the page loads at once, the rest as they are reached.
       ...(page.images > 1 ? { loading: 'lazy' } : {}),
       ...(destination ? destinationProps(destination) : {}),
     },
-    { borderRadius: picture.small ? '50%' : 2 },
+    { borderRadius: picture.small ? '50%' : fit?.rounded ? 3 : 2, ...(fit?.cropped && fit.ratio ? { aspectRatio: fit.ratio } : {}) },
     null,
     role,
   )
@@ -3628,19 +3714,69 @@ function sourcePicture(scope: SectionScope, picture: AiLayoutPicture, role = 'im
 /** The size a byline's portrait is drawn at on a page brought in (AGL-4107): the Image element's own size field, as an author sets it. */
 export const AI_LAYOUT_PORTRAIT_SIZE = '4rem'
 
-/** An item's picture, over its words: the card's own top, at one shape across its group. */
+/**
+ * A film of a page brought in (AGL-4140): the Video element where the
+ * source's film sat, its poster first, playing from where the old page
+ * played it — a video host's player once a visitor presses play, or the old
+ * site's own file — with what a search engine reads of it. It plays when a
+ * visitor asks: a film that starts on its own loads its file before anyone
+ * plays it, which rule 16 refuses. In a frame (`frame`, a hero's) it fills
+ * it, as a picture there does; elsewhere it is at its own shape, rounded as
+ * the theme rounds a frame, one style key as every repeated element has. Its
+ * id follows its section's, so a button that plays it can name it before the
+ * page is stored.
+ */
+function video(scope: SectionScope, film: AiLayoutVideo, poster: AiLayoutPicture | undefined, role = 'video', frame?: Record<string, unknown>): string {
+  const { page } = scope
+  // Its poster is the picture its place shows first: the page's pictures after it load as they are reached.
+  if (poster?.src) page.images += 1
+  const section = page.options.sectionIds?.[scope.index]
+  const fixed = section && !page.videos?.[film.index] ? `${section}-video-${film.index + 1}` : undefined
+  const id = page.tree.add(
+    'video',
+    {
+      src: film.src,
+      ...(poster?.src ? { poster: poster.src } : {}),
+      ...(film.title ? { title: film.title } : {}),
+      ...(film.description ? { description: film.description } : {}),
+      ...(film.uploadDate ? { uploadDate: film.uploadDate } : {}),
+      ...(film.durationSeconds ? { durationSeconds: String(film.durationSeconds) } : {}),
+      controls: true,
+      ...(frame ? { width: '100%', height: '100%' } : {}),
+    },
+    // Rounded and shadowed as the source frames its poster (AGL-4138).
+    frame ? { objectFit: 'cover', ...frame } : { borderRadius: poster?.fit?.rounded ? 3 : 2, ...(film.shadow || poster?.fit?.shadow ? { boxShadow: 3 } : {}) },
+    null,
+    role,
+    fixed,
+  )
+  page.videos = { ...page.videos, [film.index]: id }
+  return id
+}
+
+/**
+ * An item's picture, over its words: the card's own top. Framed as the source
+ * frames it (AGL-4138) — at the height or the box it crops it to, else at the
+ * picture's own shape — and at 16 / 9 only where nothing says its shape.
+ */
 function itemPicture(scope: SectionScope, picture: AiLayoutPicture): string {
+  // A film's poster plays it (AGL-4140).
+  if (picture.video) return video(scope, picture.video, picture.src ? picture : undefined, 'itemVideo')
   const { page } = scope
   page.images += 1
+  const fit = picture.fit
+  const height = fit?.cropped && fit.height ? fit.height : null
   return page.tree.add(
     'image',
     {
       src: picture.src,
       ...(picture.alt ? { alt: picture.alt } : { decorative: true }),
-      objectFit: 'cover',
+      objectFit: fit?.objectFit ?? 'cover',
+      // A height the source crops it to is the Image's own height field.
+      ...(height ? { height: `${height}px` } : {}),
       ...(page.images > 1 ? { loading: 'lazy' } : {}),
     },
-    { aspectRatio: '16 / 9' },
+    height ? null : { aspectRatio: fit?.ratio ?? '16 / 9' },
     null,
     'itemPicture',
   )
@@ -3746,8 +3882,15 @@ function importedGroup(scope: SectionScope, block: AiLayoutBlock, room: Room): s
     return scope.page.tree.add('muiStack', { spacing: named ? '2.5' : '1.25', divider: 'line' }, null, noted(scope, items.map((item) => importedRow(scope, item))), 'rows')
   }
   const perRow = importedAcross(block, items.length, room)
-  const ids = items.map((item) => importedItem(scope, block, item))
-  return layOut(scope, noted(scope, ids), perRow, block.kind === 'stats' ? '4' : '3', block.kind === 'cards' ? 'cards' : block.kind)
+  // Items that set their words apart from their section's: a centered heading over start-aligned cards (AGL-4138).
+  const own = block.itemsAlign ? { ...scope, centered: block.itemsAlign === 'center' } : scope
+  // A rule in the source's color while a page has no more than three like it (rule 16), in the words' own after.
+  const colored = !!block.rule?.color && (scope.page.ruled ?? 0) + items.length <= AI_LAYOUT_MAX_PILLS
+  if (colored) scope.page.ruled = (scope.page.ruled ?? 0) + items.length
+  const ids = items.map((item) => importedItem(own, block, item, colored))
+  // The source's tablet columns, fewer than its wide ones (AGL-4138).
+  const sm = block.columnsSm && block.columnsSm >= 2 && block.columnsSm < perRow && 12 % block.columnsSm === 0 && 12 % perRow === 0 ? `xs:12 sm:${12 / block.columnsSm} md:${12 / perRow}` : undefined
+  return layOut(scope, noted(scope, ids), perRow, block.kind === 'stats' ? '4' : '3', block.kind === 'cards' ? 'cards' : block.kind, sm)
 }
 
 /** The style an item of a group is drawn in: the design answer's, else the source's own box or none. */
@@ -3781,7 +3924,8 @@ function figured(scope: SectionScope, item: AiLayoutItem, role: string): string 
   const tree = scope.page.tree
   const figure = aiLayoutAsWritten(item.figure)
   if (!figure) return null
-  const number = tree.add('muiTypography', { children: figure, variant: 'h3', component: 'p', ...align(scope) }, accent(scope), null, role)
+  // A figure the source sets in its muted words' grey keeps it (AGL-4138): a step's "01".
+  const number = tree.add('muiTypography', { children: figure, variant: 'h3', component: 'p', ...align(scope) }, item.figureMuted ? muted(scope) : accent(scope), null, role)
   const period = aiLayoutAsWritten(item.period)
   if (!period) return number
   return tree.add(
@@ -3846,8 +3990,27 @@ function importedRow(scope: SectionScope, item: AiLayoutItem): string {
   return wholeLink(scope, item, title, row)
 }
 
+/**
+ * An item's lead icon as the source sets it (AGL-4138): in the filled square
+ * of its tile, the theme's surface rounded as the theme rounds one, and the
+ * arrow at the end of its first row where the source draws one. One style
+ * key on each element, so thirteen cards repeat no inline style (rule 16).
+ */
+function leadRow(scope: SectionScope, item: AiLayoutItem, style: AiLayoutGroupStyle | 'open'): { lead: string | null; mark: string | null } {
+  const tree = scope.page.tree
+  const tile = item.tile
+  const color = tile ? (tile.color ? { color: tile.color } : null) : style === 'cards' ? { color: 'primary.main' } : accent(scope)
+  const icon = sourceIcon(scope, item, tile ? '24' : '32', color)
+  const lead =
+    icon && tile
+      ? tree.add('muiPaper', { variant: 'elevation', elevation: '0' }, { bgcolor: tile.fill }, [tree.add('muiStack', null, { p: 1 }, [icon], 'tileSpace')], 'tile')
+      : icon
+  const mark = item.markPath ? sourceIcon(scope, { iconPath: item.markPath }, '20', muted(scope), 'mark') : null
+  return { lead, mark }
+}
+
 /** One item of a group of a page brought in, every part of it in the source's order. */
-function importedItem(scope: SectionScope, block: AiLayoutBlock, item: AiLayoutItem): string {
+function importedItem(scope: SectionScope, block: AiLayoutBlock, item: AiLayoutItem, colored = false): string {
   const tree = scope.page.tree
   const style = itemStyle(block)
   const kind = block.kind
@@ -3867,11 +4030,26 @@ function importedItem(scope: SectionScope, block: AiLayoutBlock, item: AiLayoutI
     parts.push(...paragraphs(scope, [item.text, ...(item.more ?? [])], 'body2', muted(scope), 'label'))
   } else {
     if (item.picture) parts.push(itemPicture(scope, item.picture))
-    parts.push(sourceIcon(scope, item, '32', style === 'cards' ? { color: 'primary.main' } : accent(scope)))
+    const { lead, mark } = leadRow(scope, item, style)
+    // The arrow sits at the end of the icon's row, or of the title's where the item has no icon (AGL-4138);
+    // a tile sits in a row of its own too, sized to its icon rather than stretched across the item.
+    const row = (ids: Array<string | null>, role: string) =>
+      tree.add(
+        'muiStack',
+        { direction: 'row', spacing: '1', justifyContent: ids.length > 1 ? 'space-between' : scope.centered ? 'center' : 'flex-start', alignItems: 'center' },
+        null,
+        ids.filter((id): id is string => !!id),
+        role,
+      )
+    parts.push(lead && (mark || item.tile) ? row(mark ? [lead, mark] : [lead], 'leadRow') : lead)
+    const named = () => {
+      const own = titled(scope, titleNode(), item)
+      return mark && !lead && own && !item.badge ? row([own, mark], 'titleRow') : own
+    }
     const number = figured(scope, item, kind === 'steps' ? 'number' : 'figure')
     // A step's number leads it; a plan's price follows its name.
-    if (kind === 'steps') parts.push(number, titled(scope, titleNode(), item))
-    else parts.push(titled(scope, titleNode(), item), number)
+    if (kind === 'steps') parts.push(number, named())
+    else parts.push(named(), number)
     parts.push(...paragraphs(scope, [item.text, ...(item.more ?? [])], 'body1', muted(scope)))
     if (item.list?.length) parts.push(bullets(scope, item.list, item.listIconPath))
     if (item.links?.length) parts.push(itemLinks(scope, item.links))
@@ -3885,7 +4063,18 @@ function importedItem(scope: SectionScope, block: AiLayoutBlock, item: AiLayoutI
     const content = tree.add('muiCardContent', null, { p: 3 }, [stack], 'cardContent')
     drawn = tree.add('muiCard', null, { height: '100%' }, picture ? [picture, content] : [content], kind === 'quotes' ? 'quoteCard' : 'card')
   } else if (style === 'ruled') {
-    drawn = tree.add('muiBox', null, { borderTop: 1 }, [tree.add('muiBox', null, { pt: 2.5 }, [stack], 'ruledWords')], 'ruled')
+    // Under the source's own rule where it draws one (AGL-4138): a step's 3 px line in the brand's color, along its side.
+    const rule = block.rule
+    const side = rule?.side ?? 'top'
+    const edge = side === 'left' ? 'borderLeft' : side === 'right' ? 'borderRight' : side === 'bottom' ? 'borderBottom' : 'borderTop'
+    const inset = side === 'left' ? 'pl' : side === 'right' ? 'pr' : side === 'bottom' ? 'pb' : 'pt'
+    drawn = tree.add(
+      'muiBox',
+      null,
+      { [edge]: rule?.width ?? 1, ...(colored && rule?.color ? { borderColor: rule.color } : {}) },
+      [tree.add('muiBox', null, { [inset]: 2.5 }, [stack], 'ruledWords')],
+      'ruled',
+    )
   } else {
     drawn = stack
   }
@@ -4046,6 +4235,40 @@ function tabPanel(scope: SectionScope, tab: AiLayoutTab, room: Room): string | n
   return scope.page.tree.add('muiStack', { spacing: '3' }, null, parts, 'panel')
 }
 
+/**
+ * A large bold statement of a page brought in (AGL-4138), a paragraph its
+ * source sets as big as a heading: a lede in the Text Style of a fourth-level
+ * heading, as the Besigner's own Text Style field sets one, so a paragraph of
+ * any length keeps every word and is no heading of the page's outline. A
+ * page's fourth is drawn as a lede: a fourth like style is a repeat (rule 16).
+ */
+function statement(scope: SectionScope, block: AiLayoutBlock): string | null {
+  const { page } = scope
+  const tone = muted(scope)
+  if ((page.statements ?? 0) >= AI_LAYOUT_MAX_PILLS) return words(scope, block, 'lede', 'lede', {}, tone)
+  page.statements = (page.statements ?? 0) + 1
+  return words(scope, block, 'lede', 'lede', { component: 'p' }, { typography: 'h4', ...(tone ?? {}) })
+}
+
+/**
+ * An eyebrow of a page brought in (AGL-4138): in the color the source sets
+ * it in, as a theme role, and in a pill where the source sets one — the
+ * outlined surface a chip is, rounded to a pill and sized to its words. On a
+ * brand band or over a photo it takes the band's own color, as any accent
+ * does. A page's fourth pill is drawn as plain words: a fourth like style is
+ * a repeat (rule 16).
+ */
+function importedEyebrow(scope: SectionScope, block: AiLayoutBlock): string | null {
+  const { page } = scope
+  const color = scope.band === 'brand' || scope.overPhoto ? null : block.color ? { color: block.color } : accent(scope)
+  if (!block.chip || (page.pills ?? 0) >= AI_LAYOUT_MAX_PILLS) return words(scope, block, 'eyebrow', 'overline', { component: 'p' }, color)
+  const text = say(scope, block.text, 'eyebrow')
+  if (!text) return null
+  page.pills = (page.pills ?? 0) + 1
+  const label = page.tree.add('muiTypography', { children: text, variant: 'overline', component: 'p', ...align(scope) }, { px: 2, ...(color ?? {}) }, null, 'eyebrow')
+  return page.tree.add('muiPaper', { variant: 'outlined' }, { py: 0.5, borderRadius: 999, alignSelf: scope.centered ? 'center' : 'flex-start' }, [label], 'eyebrowChip')
+}
+
 /** A short line on an outlined surface of the theme's own shape: a label, a tag, a tab the source draws as one. */
 function chip(scope: SectionScope, words: string, role: string): string {
   const tree = scope.page.tree
@@ -4069,7 +4292,12 @@ function logos(scope: SectionScope, block: AiLayoutBlock): string | null {
       ]
     }
     const words = aiLayoutAsWritten([item.title, item.text].filter((part) => part.trim()).join(' '))
-    return words ? [chip(scope, words, 'chip')] : []
+    if (!words) return []
+    // A tag the source links goes where it went (AGL-4138), the whole chip pressable.
+    const destination = item.to ? aiLayoutImportedDestination(item.to, scope.page.plan.sections.length) : null
+    const drawn = chip(scope, words, 'chip')
+    if (!destination || destination.kind === 'section') return [drawn]
+    return [tree.add('muiLinkBox', { ...destinationProps(destination), ariaLabel: words.slice(0, AI_TEXT_LIMITS.label), ...(destination.kind === 'href' ? { newTab: true } : {}) }, null, [drawn], 'chipLink')]
   })
   if (!ids.length) return null
   return tree.add(
@@ -4090,21 +4318,37 @@ function logos(scope: SectionScope, block: AiLayoutBlock): string | null {
 function importedHero(scope: SectionScope, raw: AiLayoutSection, blocks: readonly AiLayoutBlock[]): string | null {
   const { page } = scope
   if (!page.design || !raw.hero) return null
-  const pictures = blocks.filter((block) => block.kind === 'image' && block.picture)
+  // Its one picture, or its one film, poster first (AGL-4140).
+  const pictures = blocks.filter((block) => (block.kind === 'image' && block.picture) || (block.kind === 'video' && block.video))
   if (pictures.length !== 1) return null
-  const flow = blocks.filter((block) => block.kind !== 'image')
+  const flow = blocks.filter((block) => block.kind !== 'image' && block.kind !== 'video')
   if (!flow.length || !flow.every((block) => WORD_KINDS.has(block.kind))) return null
   if (!flow.some((block) => speaksHeading(scope, block))) {
     flow.unshift({ kind: 'heading', text: page.plan.title })
     page.settled.push({ at: scope.at, what: "no heading; the page's title written as its h1" })
   }
+  const film = pictures[0].kind === 'video' ? pictures[0].video : undefined
+  // A film a visitor presses plays where it sits, never behind the words, which would cover it.
+  let asked = raw.hero
+  if (film && FILM_BEHIND_HEROES.has(asked)) {
+    page.settled.push({ at: scope.at, what: `the ${asked} hero set aside: the opening's film is pressed to play, so it sits under its words` })
+    asked = 'column'
+  }
   const lead = flow.findIndex((block) => speaksHeading(scope, block))
   const { style: _style, ...title } = flow[lead]
-  flow[lead] = AI_LAYOUT_HALF_HEROES.has(raw.hero) ? title : { ...title, style: 'large' }
-  const picture = pictures[0].picture as AiLayoutPicture
-  const opening = hero(scope, flow, { alt: picture.alt, given: true, src: picture.src }, raw.hero)
+  flow[lead] = AI_LAYOUT_HALF_HEROES.has(asked) ? title : { ...title, style: 'large' }
+  const picture = pictures[0].picture
+  const opening = hero(
+    scope,
+    flow,
+    { alt: picture?.alt ?? '', given: true, ...(picture?.src ? { src: picture.src } : {}), ...(picture?.fit ? { fit: picture.fit } : {}), ...(film ? { video: film } : {}) },
+    asked,
+  )
   return opening && raw.width ? widened(page.tree, opening, raw.width) : opening
 }
+
+/** The heroes that lay their picture behind the words (AGL-4140): no place for a film a visitor presses. */
+const FILM_BEHIND_HEROES: ReadonlySet<AiLayoutImportHero> = new Set(['cover', 'poster', 'panel'])
 
 /** A hero of a page brought in, its columns as wide as its source runs (AGL-4083): each Container that sets the section's width, not a reading measure inside it. */
 function widened(tree: AiLayoutTreeBuilder, id: string, maxWidth: AiLayoutWidth): string {
