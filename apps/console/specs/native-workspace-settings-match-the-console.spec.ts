@@ -17,7 +17,7 @@
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { CONSOLE_WIDGET_SLOTS, PERSON_ERASURE_NOT_REACHED, PERSON_ERASURE_REMOVES, PERSON_ERASURE_RETAINS, PLAN_LABELS, resolveOrgEntitlements } from '@aglyn/aglyn'
+import { CONSOLE_WIDGET_SLOTS, PERSON_ERASURE_NOT_REACHED, PERSON_ERASURE_REMOVES, PERSON_ERASURE_RETAINS, PLAN_LABELS, planLabelGrantingFeature, resolveOrgEntitlements } from '@aglyn/aglyn'
 import { RISK_OWNER_ACTIONS } from '@aglyn/shared-util-email/risk-notice-catalog'
 
 /**
@@ -103,7 +103,8 @@ describe('native workspace settings', () => {
         'This is the only time the key is shown. Copy it now and store it securely — you can’t retrieve it later.',
         'No API keys yet.',
       ])
-      expect(nativeText('core.settings.apiKeys')).toContain('The REST API and API keys are included on the Business plan — see Billing to upgrade.')
+      // The plan the console's card names: the cheapest that grants the API (Pro since pricing v4).
+      expect(nativeText('core.settings.apiKeys')).toContain(`The REST API and API keys are included on the ${planLabelGrantingFeature('apiAccess')} plan — see Billing to upgrade.`)
       expect(card).toContain("checkEntitlement(org, 'apiAccess')")
       expect(Object.keys(resolveOrgEntitlements(null).features)).toContain('apiAccess')
       expect(nativeText('core.settings.apiKeys')).toContain('data.ent.features.apiAccess')
