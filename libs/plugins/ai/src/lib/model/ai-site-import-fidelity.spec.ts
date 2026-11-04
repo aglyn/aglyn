@@ -61,7 +61,7 @@ const FORM = [{ id: 'form-contact', name: 'Contact' }]
 const pages = new Map<string, SiteImportReplayPage>()
 
 /** A recorded page built as the page step stores it; a page that holds a form has the site's. */
-function page(name: SiteLayoutPageName, options: { answer?: Record<string, unknown>; layout?: boolean } = {}): SiteImportReplayPage {
+function page(name: SiteLayoutPageName, options: { answer?: Record<string, unknown>; layout?: boolean; finish?: 'keep' | 'improve' } = {}): SiteImportReplayPage {
   const key = `${name}:${JSON.stringify(options)}`
   const held = pages.get(key)
   if (held) return held
@@ -906,17 +906,17 @@ describe('Keep my site sees each of the 11/4 Home gaps (AGL-4152)', () => {
     expect(report.measure).toEqual({ source: 1, built: 0, ratio: 0, shares: { source: 0.5, built: 0.72 } })
     expect(report.lowest).toBe('measure')
     expect(siteImportFidelityHolds(report)).toBe(false)
-    // Today's compile draws it at 72%.
-    expect(keep(page('home').tree, KEPT).measure?.shares?.built).toBe(0.72)
+    // The compile now holds Home's words to the width step its 920 px measure maps to (md).
+    expect(siteImportFidelity(page('home').source, page('home').tree, { finish: 'keep', theme: KEPT }).measure?.ratio).toBe(1)
   })
 
-  it('reproduces the near-black ground and the deepened fill on the theme the look pass draws today', () => {
-    // The recorded page's own look, before lane D: its dark band and its brand drawn as today's theme draws them.
-    const today = siteImportReplayTheme('home')
-    const report = siteImportFidelity(page('home').source, page('home').tree, { finish: 'keep', theme: today })
-    expect(report.ground?.ratio).toBeLessThan(1)
-    expect(report.buttons.fill?.ratio).toBeLessThan(1)
-    expect(siteImportFidelityHolds(report)).toBe(false)
+  it('holds the recorded page’s own ground and fill on the theme the look pass now draws', () => {
+    // Keep's look keeps its dark band's own ground. Its 10/29 white label cannot be read on its cyan, so the
+    // reading rule deepens that fill, and a fill the source's own label cannot be read on is not a loss.
+    const theme = siteImportReplayTheme('home')
+    const report = siteImportFidelity(page('home').source, page('home').tree, { finish: 'keep', theme })
+    expect(report.ground?.ratio).toBe(1)
+    expect(report.buttons.fill?.ratio).toBe(1)
   })
 
   it('leaves all four free under Improve it', () => {
@@ -948,9 +948,12 @@ describe('Keep my site sees an alignment and a box the source did not draw (AGL-
     expect(siteImportFidelityHolds(report)).toBe(false)
   })
 
-  it('boxed: a boxed group drawn open, as the recorded answer’s ruled style draws it', () => {
-    const arranged = page('home', { answer: SITE_IMPORT_REPLAY_HOME_ANSWER as Record<string, unknown> })
-    expect(siteImportFidelity(arranged.source, arranged.tree).score).toBe(1)
+  it('boxed: a boxed group drawn open, as the recorded answer’s ruled style draws it on an improved page', () => {
+    // Kept, the compile holds the source's boxes whatever the answer says.
+    const kept = page('home', { answer: SITE_IMPORT_REPLAY_HOME_ANSWER as Record<string, unknown> })
+    expect(siteImportFidelity(kept.source, kept.tree, { finish: 'keep' }).boxed?.ratio).toBe(1)
+    // Improved, the answer's ruled style draws a boxed group open: Keep's measure sees it.
+    const arranged = page('home', { answer: SITE_IMPORT_REPLAY_HOME_ANSWER as Record<string, unknown>, finish: 'improve' })
     const report = siteImportFidelity(arranged.source, arranged.tree, { finish: 'keep' })
     expect(report.boxed?.built).toBeLessThan(report.boxed?.source as number)
     expect(siteImportFidelityHolds(report)).toBe(false)

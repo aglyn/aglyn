@@ -925,7 +925,8 @@ describe('Home’s hero as its source draws it, whatever the answer says (AGL-41
     expect(designedWith(doc, 'editorial').sections[0]?.hero).toBe('editorial')
     expect(designedWith(doc, 'editorial').settled).toEqual([])
     const { stored } = build('home', asked('split'))
-    const measure = Object.values(stored).find((node) => node.componentId === 'muiBox' && JSON.stringify(node.sx) === JSON.stringify({ maxWidth: { xs: '100%', md: '72%' }, mx: 'auto' }))
+    // Its words held to the width step the source's 920 px heading measure maps to (AGL-4152).
+    const measure = Object.values(stored).find((node) => node.componentId === 'muiBox' && JSON.stringify(node.sx) === JSON.stringify({ maxWidth: { xs: '100%', md: 'md' }, mx: 'auto' }))
     expect(measure).toBeDefined()
   })
 
@@ -1410,8 +1411,15 @@ describe('Keep my site holds the opening’s words to the source’s own heading
   })
 
   it('keeps the hero’s own share where the source sets no measure', () => {
-    expect(wordBoxes(finished('home', 'keep'))).toEqual([{ xs: '100%', md: '72%' }, { xs: '100%', md: '72%' }])
-    expect(finished('home', 'keep').compiled.sections[0]?.measure).toBeUndefined()
+    const none = {
+      key: 'no-measure',
+      doc: (doc: AiSiteImportDocument): AiSiteImportDocument => {
+        const layout = layoutOf(doc)
+        return { ...doc, layout: { ...layout, sections: layout.sections.map((section, index) => (index === 0 && section.hero ? { ...section, hero: { picture: section.hero.picture } } : section)) } }
+      },
+    }
+    expect(wordBoxes(finished('home', 'keep', null, none))).toEqual([{ xs: '100%', md: '72%' }, { xs: '100%', md: '72%' }])
+    expect(finished('home', 'keep', null, none).compiled.sections[0]?.measure).toBeUndefined()
   })
 
   it('holds the words over a cover at the source’s measure too: the pottery studio’s opening', () => {

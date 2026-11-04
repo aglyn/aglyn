@@ -1399,6 +1399,9 @@ class LookOf {
   fillKept(id: string | null): boolean | null {
     const wanted = hexOf(this.facts?.buttonFill)
     if (!wanted || !this.theme) return null
+    // A fill its own label cannot be read on is deepened by the look's reading rule, Keep's polish, and is not a loss.
+    const label = hexOf(this.facts?.buttonText)
+    if (label && !reads(label, wanted)) return null
     const drawn = id ? this.fill(id) : (this.theme.button.fill ?? this.theme.light.brand)
     return drawn ? siteImportOklabDelta(wanted, drawn) <= SITE_IMPORT_GROUND_DELTA : null
   }
