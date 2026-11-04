@@ -69,7 +69,7 @@
  * the declaration to the links it must keep reading.
  */
 
-import { FIRST_PARTY_VIDEO_EMBED_PROVIDERS } from './first-party-plugins.generated'
+import { FIRST_PARTY_VIDEO_EMBED_PROVIDERS } from './video-embed-providers.generated'
 
 /**
  * A choice the Video element makes for each player it frames. A declaration

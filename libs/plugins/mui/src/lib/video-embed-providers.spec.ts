@@ -18,7 +18,7 @@
  * limitations under the License.
  */
 
-import { FIRST_PARTY_VIDEO_EMBED_PROVIDERS } from '@aglyn/aglyn/plugin-manager/first-party-plugins.generated'
+import { FIRST_PARTY_VIDEO_EMBED_PROVIDERS } from '@aglyn/aglyn/plugin-manager/video-embed-providers.generated'
 import {
   type VideoEmbedPlayerOptions,
   videoEmbedOf,
