@@ -1,7 +1,7 @@
 ---
 sidebar_position: 2.75
 title: Bring my site
-description: Bring the website you have now into Aglyn, every word as you wrote it, laid out as your pages are, in waves you review and start yourself, once you have proved the site is yours.
+description: Bring the website you have now into Aglyn, kept as it is with a light polish or improved around your brand, in waves you review and start yourself, once you have proved the site is yours.
 ---
 
 # Bring my site
@@ -13,11 +13,13 @@ while how it reads and rebuilds your pages, and the steps on this page, may
 still change.
 :::
 
-**Bring my site** moves the website you have now into a new Aglyn site. Each page keeps
-every word as you wrote it and is laid out as your page is: its sections and their
-backgrounds, its columns, cards, icons, pictures, tables and tabs, drawn with Aglyn's own
-elements in your site's look. Pages come in a few at a time, in **waves**, into your new
-site's preview. You review each wave before you start the next.
+**Bring my site** moves the website you have now into a new Aglyn site. Every page comes
+across with its sections, columns, cards, icons, pictures, tables, tabs and forms, drawn with
+Aglyn's own elements. You choose how it looks: **Keep my site** lays each page out as your
+page is, every word as you wrote it, in your site's look, and **Improve it** redesigns each
+page around your brand and can improve the wording of your main pages too. Pages come in a
+few at a time, in **waves**, into your new site's preview. You review each wave before you
+start the next.
 
 It is included on every paid plan. On the Free plan the card is shown but turned off,
 with a link to upgrade.
@@ -62,7 +64,8 @@ Once the site is verified, choose **Next**. A proof stays valid for 30 days.
 
 ## Read my site {#read-my-site}
 
-Choose **Read my site**. Aglyn then:
+Choose how your new site should look (see [Keep my site or improve it](#keep-or-improve)),
+then choose **Read my site**. Aglyn then:
 
 - creates your new site, with nothing on it and nothing published;
 - reads your current site as **AglynBot**, starting with its robots.txt file and its
@@ -82,7 +85,8 @@ videos (a film on your page, with its poster, title and description), your forms
 fields and their button, and which links your site shows as buttons. From
 your home page it also reads your menu, with each dropdown and its entries, the buttons
 beside it, and your footer's columns, profiles and copyright line, plus your site's fonts
-and colors. Your new pages are built from this, with every word as you wrote it.
+and colors. Your new pages are built from this, with every word as you wrote it unless you
+chose to improve your wording.
 
 **Your home page comes first.** If AglynBot cannot read your home page, nothing is
 planned and no AI credits are used. The import waits and says why:
@@ -121,11 +125,40 @@ Each page left out is listed under one of these reasons:
 If more than half of your pages were turned away, **Your site is read** says so at the
 top. You can still start the first wave.
 
+## Keep my site or improve it {#keep-or-improve}
+
+Before you choose **Read my site**, choose how your new site should look under **How should
+your new site look?**:
+
+- **Keep my site** keeps your pages laid out as they are, in your site's colors, buttons and
+  fonts. Aglyn tidies spacing, type and color so every page reads well. Every word stays as
+  you wrote it.
+- **Improve it**, chosen unless you pick otherwise, has Aglyn AI redesign each page with your
+  pictures, menus and forms, in a theme built around your brand. Every page and section, every
+  picture, icon, button and heading, your forms, videos and menus all come across, in your
+  brand's colors and fonts.
+
+Under **Improve it**, **Also improve my wording** is on unless you switch it off. Aglyn AI
+rewrites the headings, paragraphs and buttons of your main pages so they read better. Every
+name, price, number, date, address, phone number and email stays exactly as you wrote it,
+and quotes, policy pages, tables and forms keep every word. Pages of a collection, such as
+blog posts, and your header and footer keep every word too. Improving the wording uses more
+AI credits, and the switch says how many before you start a wave.
+
+**You can change it before each wave.** Your import's page says how the next wave will be
+built, for example **How your new site looks: Keep my site**. Choose **Change**, pick again,
+then start the wave. A wave that is already in is never redrawn. Each wave's heading says
+how it was built, for example **Main pages · Keep my site** or **Main pages · Improved**.
+
+An import started before this choice existed is built as **Keep my site**.
+
 ## Waves {#waves}
 
 - **The first wave** brings in your main pages: home, then the pages in your menu,
-  then your other top-level pages. Before any page, it gives your new site your current
-  site's look, on one of Aglyn's built-in themes: your buttons' color as its main color and
+  then your other top-level pages. Before any page, it gives your new site its look. With
+  **Improve it**, that is the built-in theme that fits your kind of site, in your brand's
+  colors and fonts. With **Keep my site**, it is your current site's look, on one of
+  Aglyn's built-in themes: your buttons' color as its main color and
   your links' color beside it, the color of the small labels above your headings as its
   third color, your pages' background color, the rounding of your buttons, and your own
   font when Google Fonts has it, or a font in the same style when it does not.
@@ -160,7 +193,12 @@ top. You can still start the first wave.
   than your plan allows, the last pages of your collections are the ones left out, each
   listed with **Past your plan's page count**. **See plans** opens Billing.
 
-Your words are never rewritten. Every page is laid out as your page is: its sections in
+With **Keep my site**, your words are never rewritten. With **Improve it** and **Also
+improve my wording** on, Aglyn AI rewrites the headings, paragraphs and buttons of your main
+pages; every name, price, number, date, address, phone number and email stays exactly as you
+wrote it, and quotes, policy pages, tables and forms keep every word.
+
+With **Keep my site**, every page is laid out as your page is: its sections in
 their own backgrounds, its columns, its cards with their icons and links, its numbered
 steps, figures, questions and answers, quotes, logo strips, plan cards and plan rows, tables and tabs,
 and its pictures where your page shows them. It is drawn as your page draws it too:
@@ -177,19 +215,24 @@ and its pictures where your page shows them. It is drawn as your page draws it t
   a row on a tablet when your page does that. Steps your page sets under a line, not in boxes,
   keep the line.
 
-Each heading, paragraph, list, link and button
-keeps the words your page has, and every link goes to the page it went to: to that page on
-your new site, once it is in. Each page also keeps your page's own title and description as
-its search listing.
+Unless its wording is improved, each heading, paragraph, list, link and button keeps the
+words your page has. Every link goes to the page it went to: to that page on your new site,
+once it is in. Each page also keeps your page's own title and description as its search
+listing.
 
 Each page is built one of two ways, and the wave's row for the page says which:
 
 - **Copied as it is**: a page of a collection, such as a blog post or a policy. It is laid
   out as your page is, in your new site's look, with no AI.
-- **Arranged by Aglyn AI**: your main pages. They are laid out as your pages are, and
-  Aglyn AI chooses only their finish: how the first section opens around its picture, with
-  the picture kept where your page has it (under, beside or behind the words), how each
-  group of cards is drawn, and a background where your page has none.
+- **Arranged by Aglyn AI**: your main pages. With **Keep my site**, they are laid out as
+  your pages are, and Aglyn AI chooses only their finish: how the first section opens around
+  its picture, with the picture kept where your page has it (under, beside or behind the
+  words), how each group of cards is drawn, and a background where your page has none. With
+  **Improve it**, Aglyn AI redesigns them: how each section opens, its background and
+  alignment, and how each group is drawn.
+- **Arranged and reworded by Aglyn AI**: a main page whose wording was improved. Its row
+  says **Every fact kept** where other pages count their words. A policy page, such as your
+  privacy policy, reads **Arranged by Aglyn AI · Words kept**.
 
 To start a wave, choose its **Start** button, for example **Start Main pages**. Each wave
 shows its cost before you start it, and how many of its pages are arranged and how many are
