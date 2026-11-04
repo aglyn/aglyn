@@ -16,7 +16,7 @@
  */
 
 import { type CrmMemberOption, crmMemberOption, findOrgMember } from '@aglyn/aglyn'
-import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+import { authorizedFetch, type TokenSource } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { useCallback, useEffect, useState } from 'react'
 
@@ -44,9 +44,73 @@ export function resetOrgMemberDirectoryCache(): void {
   rosterCache.clear()
 }
 
+/** The one empty roster, so a caller's memo does not change on every render while it loads. */
+const NO_MEMBERS: OrgMemberOption[] = []
+
+/** Tries per roster read, and the wait before each retry. */
+const ROSTER_ATTEMPTS = 3
+const ROSTER_RETRY_MS = 1_000
+
+/**
+ * A failure that may answer differently a moment later: the request never
+ * went out because the sign-in token was not ready in time (`authorizedFetch`
+ * answers that `401` itself), the route timed out, was busy, or failed. A
+ * `403` (not a member), `400` or `423` (locked) will not change by asking
+ * again.
+ */
+const RETRYABLE_STATUSES = new Set([401, 408, 429])
+
+class RosterReadError extends Error {
+  constructor(
+    message: string,
+    readonly retryable: boolean,
+  ) {
+    super(message)
+  }
+}
+
 function memberOption(member: Record<string, unknown>): OrgMemberOption | null {
   const option = crmMemberOption(member)
   return option ? { ...option, role: String(member['role'] ?? '') } : null
+}
+
+async function readRosterOnce(user: TokenSource, orgId: string): Promise<OrgMemberOption[]> {
+  const response = await authorizedFetch(
+    user,
+    `/api/orgs/members?orgId=${encodeURIComponent(orgId)}`,
+  )
+  const payload = (await response.json().catch(() => ({}))) as {
+    members?: Array<Record<string, unknown>>
+    error?: string
+  }
+  if (!response.ok) {
+    throw new RosterReadError(
+      payload.error || 'The team could not be loaded.',
+      RETRYABLE_STATUSES.has(response.status) || response.status >= 500,
+    )
+  }
+  return (payload.members ?? [])
+    .map(memberOption)
+    .filter((member): member is OrgMemberOption => member !== null)
+    .sort((a, b) => a.label.localeCompare(b.label))
+}
+
+/**
+ * The roster, asked again when the first answer was a failure that can
+ * clear. A page that loses the read keeps naming owners by their uid until
+ * it is reloaded, so one late token or one busy moment on the route must not
+ * be the final answer.
+ */
+async function readRoster(user: TokenSource, orgId: string): Promise<OrgMemberOption[]> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await readRosterOnce(user, orgId)
+    } catch (error) {
+      const retryable = !(error instanceof RosterReadError) || error.retryable
+      if (!retryable || attempt >= ROSTER_ATTEMPTS) throw error
+      await new Promise((resolve) => setTimeout(resolve, ROSTER_RETRY_MS * attempt))
+    }
+  }
 }
 
 export interface OrgMemberDirectory {
@@ -71,35 +135,20 @@ export function useOrgMemberDirectory(
     members: OrgMemberOption[]
     loading: boolean
     error: string | null
-  }>({ orgId: null, members: [], loading: false, error: null })
+  }>({ orgId: null, members: NO_MEMBERS, loading: false, error: null })
 
   useEffect(() => {
     if (!orgId || !user) return
     let active = true
     let roster = rosterCache.get(orgId)
     if (!roster) {
-      roster = authorizedFetch(
-        user,
-        `/api/orgs/members?orgId=${encodeURIComponent(orgId)}`,
-      ).then(async (response) => {
-        const payload = (await response.json().catch(() => ({}))) as {
-          members?: Array<Record<string, unknown>>
-          error?: string
-        }
-        if (!response.ok) {
-          throw new Error(payload.error || 'The team could not be loaded.')
-        }
-        return (payload.members ?? [])
-          .map(memberOption)
-          .filter((member): member is OrgMemberOption => member !== null)
-          .sort((a, b) => a.label.localeCompare(b.label))
-      })
+      roster = readRoster(user, orgId)
       rosterCache.set(orgId, roster)
       // A failed read is not kept: the next mount asks again rather than
       // remembering an outage for the life of the page.
       roster.catch(() => rosterCache.delete(orgId))
     }
-    setState({ orgId, members: [], loading: true, error: null })
+    setState({ orgId, members: NO_MEMBERS, loading: true, error: null })
     roster.then(
       (members) => {
         if (active) setState({ orgId, members, loading: false, error: null })
@@ -108,7 +157,7 @@ export function useOrgMemberDirectory(
         if (active) {
           setState({
             orgId,
-            members: [],
+            members: NO_MEMBERS,
             loading: false,
             error: error instanceof Error ? error.message : String(error),
           })
@@ -120,7 +169,7 @@ export function useOrgMemberDirectory(
     }
   }, [orgId, user])
 
-  const members = state.orgId === orgId ? state.members : []
+  const members = state.orgId === orgId ? state.members : NO_MEMBERS
   const nameOf = useCallback(
     (ref: string | null | undefined) => {
       if (!ref) return ''
