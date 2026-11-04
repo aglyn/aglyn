@@ -60,6 +60,14 @@ export interface SendingWorkspace {
   ownNames: string[]
   /** The site's hosts — a link to one is never "elsewhere". */
   ownDomains: string[]
+  /**
+   * The organization's daily transactional ceiling (AGL-4145), resolved by
+   * `hostSendingIdentity` from the org document it already read, so the
+   * send seam's count costs no read of its own. `Infinity` is unlimited;
+   * absent or `null` means no organization was read and no ceiling applies.
+   * See `transactional-send-ceiling.ts`.
+   */
+  transactionalEmailsPerDay?: number | null
 }
 
 export interface OutboundScreenGateRequest {

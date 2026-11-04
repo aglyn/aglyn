@@ -93,6 +93,11 @@ export * from './lib/server/email-metering'
 // platform send-rate governor on `sendEmail`. Every server surface already
 // imports this barrel, so nothing has to remember to call an installer.
 export * from './lib/server/email-send-rate'
+// Side-effecting on purpose, for the same reason (AGL-4145): evaluating this
+// module INSTALLS the daily transactional ceiling on `sendEmail`, so a site's
+// non-campaign mail is counted per organization per UTC day on every send
+// path at once.
+export * from './lib/server/email-transactional-ceiling'
 // Side-effecting on purpose, for the same reason (AGL-3328): evaluating this
 // module INSTALLS the deliverability preflight on `sendEmail`, so a recipient
 // whose domain takes no mail is refused, and bulk mail behind a gateway that
