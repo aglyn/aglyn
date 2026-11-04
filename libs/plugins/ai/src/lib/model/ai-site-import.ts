@@ -273,6 +273,8 @@ export interface SiteImportPictureFit {
   radius?: number
   /** It, or its box, is set on a shadow. */
   shadow?: true
+  /** A width in px the source holds it to, its `max-width` or its box's: a film's card narrower than its column. */
+  measure?: number
 }
 
 /** A picture in place: an image block. */
