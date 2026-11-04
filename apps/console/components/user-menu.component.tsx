@@ -39,6 +39,7 @@ import {
   PLAN_LABELS,
   readOrgPlanComp,
   resolveEffectivePlan,
+  SELF_SERVE_PLANS,
 } from '@aglyn/aglyn'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
@@ -87,12 +88,14 @@ import { useUrlNamesOrg } from '../hooks/use-secondary-nav'
 const ReportIssueDialog = lazy(() => import('./report-issue-dialog.component'))
 
 /**
- * Plans with nothing above them to sell (org-billing.types): `agency` tops the
- * self-serve ladder since pricing v3, and `enterprise` sits off it entirely
- * (custom-priced, AGL-1118). Pitching either an upgrade is nonsense — this
- * used to name only `advanced`, so both saw the CTA.
+ * Plans with a self-serve step above them to sell: every self-serve plan but
+ * the top one. Since pricing v4 (AGL-4126) that is Free and Starter — Pro tops
+ * the ladder, the custom plan sits off it (AGL-1118), and a workspace left on
+ * a retired plan has no sold plan above it. Named as the plans that CAN
+ * upgrade rather than the ones that cannot, so a retired plan (or any plan
+ * nobody listed) never sees the CTA; the native apps offer it on the same two.
  */
-const TOP_PLANS: ReadonlySet<string> = new Set(['agency', 'enterprise'])
+const UPGRADEABLE_PLANS: ReadonlySet<string> = new Set(SELF_SERVE_PLANS.slice(0, -1))
 
 /**
  * The account menu in the top bar (AGL-858), redesigned after Vercel's:
@@ -180,7 +183,8 @@ export function UserMenu() {
   const showUpgrade =
     Boolean(orgSlug) &&
     orgReady &&
-    !TOP_PLANS.has(String(plan)) &&
+    // An org with no plan reads as Free (`resolveEffectivePlan`).
+    UPGRADEABLE_PLANS.has(String(plan || 'free')) &&
     !isEnterpriseOrg(org) &&
     showOrgLinks
 

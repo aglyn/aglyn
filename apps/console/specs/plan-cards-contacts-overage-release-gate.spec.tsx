@@ -62,6 +62,10 @@ import {
   PLATFORM_BRAND_NAME,
   PLATFORM_SUPPORT_URL,
 } from '@aglyn/aglyn/app-utils/platform-brand'
+import {
+  PLAN_ENTITLEMENTS,
+  PLAN_PRICING,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { render, screen, waitFor } from '@testing-library/react'
 import React from 'react'
 
@@ -213,8 +217,17 @@ describe('plan cards, contacts overage release gate', () => {
     expect(billedLater().length).toBeGreaterThan(0)
 
     // The band alone would read as a hard cap. Records over it are not
-    // capped, only uncharged, so a bare count is its own false claim.
-    expect(screen.queryAllByText(/[\d,]+ CRM records$/)).toHaveLength(0)
+    // capped, only uncharged, so a bare count is its own false claim — on
+    // every card that SELLS records past its band. The one bare count left is
+    // the Custom rung's, which pricing v4 (AGL-4126) put beside Pro in the
+    // focused view: its band is a contract fallback with no rate, a cap by
+    // design, so its count is the true claim there.
+    expect(
+      screen.queryAllByText(/[\d,]+ CRM records$/).map((row) => row.textContent),
+    ).toEqual([
+      `${PLAN_ENTITLEMENTS.enterprise.contactsPerHost.toLocaleString()} CRM records`,
+    ])
+    expect(PLAN_PRICING.enterprise.extraContactsUsdPer1k).toBeNull()
   })
 
   it('quotes the charge as active once the flag is on', async () => {

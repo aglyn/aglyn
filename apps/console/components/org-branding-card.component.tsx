@@ -18,6 +18,7 @@
 
 import {
   checkEntitlement,
+  PLAN_LABELS,
   resolveBrandingProfile,
 } from '@aglyn/aglyn'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
@@ -182,11 +183,14 @@ export function OrgBrandingCard() {
           {'Checking your plan…'}
         </Typography>
       ) : !entitled ? (
+        // White-label is the custom plan's alone since pricing v4 (AGL-4126,
+        // decision 4): Agency, which this named, is retired, and no
+        // self-serve plan carries it — so the way to it is a conversation,
+        // not the Billing page.
         <Alert severity="info">
           {'White-labeling the platform is included on the '}
-          <strong>{'Agency'}</strong>
-          {' plan — see Billing to upgrade. Enterprise plans can enable it ' +
-            'per organization.'}
+          <strong>{PLAN_LABELS.enterprise}</strong>
+          {' plan — talk to us to add it to your organization.'}
         </Alert>
       ) : (
         <Stack spacing={2} sx={{ maxWidth: 520 }}>

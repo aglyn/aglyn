@@ -68,8 +68,10 @@ import {
   type OrgEmailSendCeiling,
 } from '../../utils/email-send-ceiling'
 import {
+  estimateRunOverage,
   meteredIncludedAllowance,
   orgBandwidthGb,
+  runCountsByBand,
 } from '../../utils/usage-metering'
 import { docsHelp } from '../../constants/docs-links'
 import { formatMediaBytes } from '../media/media-storage-copy'
@@ -804,6 +806,13 @@ export function BillingUsageComponent(props: BillingUsageProps) {
    * cannot be charged.
    */
   const apiQuota = checkApiRequestQuota(org, apiRequests ?? 0)
+  // The run overage (pricing v4) from the workspace-counted run bands,
+  // matched by the entitlement each band is held to. A band still loading
+  // reads 0, which is never over a band, so no figure appears early.
+  const runOverage = estimateRunOverage(
+    org,
+    runCountsByBand(ORG_COUNTED_BANDS, (band) => orgCounted[band.id] ?? 0),
+  )
   /*
    * Email past the plan's included band, and what it costs.
    *
@@ -1110,6 +1119,27 @@ export function BillingUsageComponent(props: BillingUsageProps) {
           />
         ) : null,
       )}
+      {/* The run rate (pricing v4, AGL-4126), on a plan that sells runs past
+          its bands: stated before anything is over, so a workspace reading
+          its meters knows the band is not a wall, and the running figure
+          once it is. The same `estimateRunOverage` call the invoice sweep
+          makes, so the page and the bill cannot disagree. */}
+      {runOverage.overageRateUsd != null ? (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ display: 'block', mt: -1.5, mb: 2 }}
+        >
+          {runOverage.overageRuns > 0
+            ? `Run overage: ${runOverage.overageRuns.toLocaleString()} runs ` +
+              `over the included bands at $${runOverage.overageRateUsd.toFixed(2)}` +
+              `/1,000 — ≈$${runOverage.overageMonthlyUsd.toFixed(2)} on this ` +
+              "month's invoice."
+            : 'Workflow and action runs past the included amounts keep ' +
+              `running and bill at $${runOverage.overageRateUsd.toFixed(2)}` +
+              '/1,000 runs.'}
+        </Typography>
+      ) : null}
       {/* Org-wide by definition (AGL-1371): `bandwidthGb` is an org limit, not
           a per-site one, and the invoice and the usage-alerts cron both
           measure the org-wide total against it. Rendered here, once, rather

@@ -73,8 +73,9 @@ async function handler(request: Request): Promise<Response> {
         plan: body?.plan,
         note: body?.note,
         // The bundle proposed with the plan (AGL-3956): add-ons, cadence and
-        // a coupon, fitted to the plan by the shared parser, and the Aglyn
-        // AI tier chosen with the AI add-on (AGL-4025).
+        // a coupon, fitted to the plan by the shared parser. A retired Aglyn
+        // AI tier (AGL-4025) is passed on so the proposal refuses it
+        // (AGL-4144): credits are blocks in `addons` now.
         addons: body?.addons,
         interval: body?.interval,
         coupon: body?.coupon,

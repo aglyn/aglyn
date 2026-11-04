@@ -353,26 +353,38 @@ describe('permissions (for the roles and members routes)', () => {
 })
 
 describe('the add-on', () => {
-  it('ai.addon.purchased when the mirror goes 0 → 1, removed when 1 → 0, nothing otherwise', async () => {
+  it('ai.addon.purchased when the blocks go up, removed when they go down, nothing otherwise (AGL-4144)', async () => {
     await expect(
-      logAiAddonChanged(ORG, PERSON, { before: undefined, after: { aiAddon: 1 } as never }),
+      logAiAddonChanged(ORG, PERSON, { before: undefined, after: { aiAddon: 3 } as never }),
     ).resolves.toBe(true)
     await expect(
-      logAiAddonChanged(ORG, PERSON, { before: { aiAddon: 1 } as never, after: { aiAddon: 1 } as never }),
+      logAiAddonChanged(ORG, PERSON, { before: { aiAddon: 3 } as never, after: { aiAddon: 3 } as never }),
     ).resolves.toBe(false)
     await expect(
-      logAiAddonChanged(ORG, NOBODY, { before: { aiAddon: 1 } as never, after: { aiAddon: 0 } as never }),
+      logAiAddonChanged(ORG, PERSON, { before: { aiAddon: 3 } as never, after: { aiAddon: 2 } as never }),
     ).resolves.toBe(true)
+    await expect(
+      logAiAddonChanged(ORG, NOBODY, { before: { aiAddon: 2 } as never, after: { aiAddon: 0 } as never }),
+    ).resolves.toBe(true)
+    // A count past the ceiling is the ceiling, so 30 → 45 moved nothing.
+    await expect(
+      logAiAddonChanged(ORG, PERSON, { before: { aiAddon: 30 } as never, after: { aiAddon: 45 } as never }),
+    ).resolves.toBe(false)
     expect(orgRows()).toEqual([
       {
         ...shaped(PERSON),
         action: 'ai.addon.purchased',
-        target: { type: 'subscription', name: expect.stringMatching(/ AI$/) },
+        target: { type: 'subscription', name: expect.stringMatching(/ AI credits \(0 → 3 blocks\)$/) },
+      },
+      {
+        ...shaped(PERSON),
+        action: 'ai.addon.removed',
+        target: { type: 'subscription', name: expect.stringMatching(/ AI credits \(3 → 2 blocks\)$/) },
       },
       {
         ...shaped(NOBODY),
         action: 'ai.addon.removed',
-        target: { type: 'subscription', name: expect.stringMatching(/ AI$/) },
+        target: { type: 'subscription', name: expect.stringMatching(/ AI credits \(2 → 0 blocks\)$/) },
       },
     ])
   })

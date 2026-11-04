@@ -1561,12 +1561,14 @@ describe('a lapsed storefront stops renewing (AGL-2071)', () => {
 
   /**
    * BOTH flags, because `checkout.ts` required both to create the
-   * subscription. A Business org that merely drops to Pro still has a
+   * subscription. A Pro org that merely drops to Starter still has a
    * storefront — `commerce` is true there — and must still stop billing
-   * subscribers, because Pro cannot sell a recurring product at all.
+   * subscribers, because Starter cannot sell a recurring product at all.
+   * (Recurring products start at Pro since pricing v4, AGL-4126; they
+   * started at Business before.)
    */
   it('stops a merchant who downgraded below recurring products', async () => {
-    orgFixture = { id: 'org-1', plan: 'pro', ownerUid: 'owner-1' }
+    orgFixture = { id: 'org-1', plan: 'starter', ownerUid: 'owner-1' }
     acceptStop()
 
     await deliver(RENEWAL_INVOICE)

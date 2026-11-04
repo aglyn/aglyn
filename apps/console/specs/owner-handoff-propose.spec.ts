@@ -138,10 +138,16 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     )
     return {
       UpgradeProposalError,
-      // The library's own shape: a paid plan, the bundle normalized to it.
+      // The library's own shape: a paid plan, no retired AI tier (AGL-4144),
+      // the bundle normalized to it.
       buildUpgradeProposal: (options: Record<string, any>) => {
         if (!['starter', 'pro', 'business'].includes(String(options['plan']))) {
           throw new UpgradeProposalError('Choose a paid plan the workspace can buy itself')
+        }
+        if (options['aiTier'] != null) {
+          throw new UpgradeProposalError(
+            'AI tiers were replaced by AI credit blocks. Propose a number of blocks instead.',
+          )
         }
         return {
           plan: options['plan'],
@@ -315,17 +321,29 @@ describe('hand off and propose, one act (AGL-3956)', () => {
     )
   })
 
-  it('the proposal keeps the Aglyn AI tier staff picked beside the AI switch (AGL-4025)', async () => {
+  it('the proposal keeps the Aglyn AI credit blocks staff counted (AGL-4144)', async () => {
+    signedInAs('staff', 'zed@aglyn.test', STAFF_CLAIMS)
+    const response = await post(
+      handoffAndPropose({ ...BUNDLE, addons: { siteCare: 1, aiAddon: 3 } }),
+    )
+    expect(response.status).toBe(200)
+    const { proposal } = await response.json()
+    expect(proposal).toMatchObject({ addons: { siteCare: 1, aiAddon: 3 } })
+    expect(proposal.aiTier).toBeUndefined()
+    expect(mockStore.get('orgs/org-1')?.['upgradeProposal']).toMatchObject({
+      addons: { siteCare: 1, aiAddon: 3 },
+    })
+  })
+
+  it('a hand-off that still names a retired AI tier is refused, and nothing is sent (AGL-4144)', async () => {
     signedInAs('staff', 'zed@aglyn.test', STAFF_CLAIMS)
     const response = await post(
       handoffAndPropose({ ...BUNDLE, addons: { siteCare: 1, aiAddon: 1 }, aiTier: 'boost' }),
     )
-    expect(response.status).toBe(200)
-    expect((await response.json()).proposal).toMatchObject({
-      addons: { siteCare: 1, aiAddon: 1 },
-      aiTier: 'boost',
-    })
-    expect(mockStore.get('orgs/org-1')?.['upgradeProposal']).toMatchObject({ aiTier: 'boost' })
+    expect(response.status).toBe(400)
+    expect((await response.json()).error).toMatch(/AI tiers were replaced by AI credit blocks/)
+    expect(mockStore.get('orgs/org-1/invites/invite-new')).toBeUndefined()
+    expect(mockStore.get('orgs/org-1')?.['upgradeProposal']).toBeUndefined()
   })
 
   it('a workspace that already pays is handed off alone, and the answer says so', async () => {

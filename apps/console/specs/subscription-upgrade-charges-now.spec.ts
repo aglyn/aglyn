@@ -90,15 +90,8 @@ jest.mock('@aglyn/aglyn/server', () => ({
       host: 'app.aglyn.com',
     },
   }),
-  SELF_SERVE_PLANS: [
-    'free',
-    'starter',
-    'pro',
-    'business',
-    'scale',
-    'advanced',
-    'agency',
-  ],
+  // Pricing v4 (AGL-4126): the sold ladder is Free, Starter, Pro.
+  SELF_SERVE_PLANS: ['free', 'starter', 'pro'],
   PLAN_PRICING: {},
   POS_REGISTER_ADDON_MONTHLY_USD: 89,
   EVENT_CALENDAR_ADDON_MONTHLY_USD: 9,
@@ -119,16 +112,18 @@ const ORIGINAL_ENV = process.env
 
 const STRIPE_ENV = {
   STRIPE_SECRET_KEY: 'sk_test_fake',
+  // Pricing v4 (AGL-4126): only Starter and Pro are sold, so the upgrade
+  // these cases drive is Starter → Pro; the retired plans' env is not read.
+  STRIPE_PRICE_STARTER: 'price_starter_monthly',
+  STRIPE_PRICE_STARTER_YEARLY: 'price_starter_yearly',
   STRIPE_PRICE_PRO: 'price_pro_monthly',
-  STRIPE_PRICE_BUSINESS: 'price_business_monthly',
-  STRIPE_PRICE_ADVANCED: 'price_advanced_monthly',
   STRIPE_PRICE_PRO_YEARLY: 'price_pro_yearly',
   STRIPE_PRICE_METERED: 'price_metered_usage',
 }
 
 const PLAN_ITEM = {
   id: 'si_plan',
-  price: { id: 'price_pro_monthly', recurring: { interval: 'month' } },
+  price: { id: 'price_starter_monthly', recurring: { interval: 'month' } },
 }
 const METERED_ITEM = {
   id: 'si_metered',
@@ -166,11 +161,11 @@ const PAID_UPDATE = {
 const HELD_FOR_3DS = {
   status: 'active',
   cancel_at_period_end: false,
-  metadata: { plan: 'pro' },
+  metadata: { plan: 'starter' },
   pending_update: {
     expires_at: 1790685512,
-    metadata: { plan: 'advanced' },
-    subscription_items: [{ id: 'si_plan', price: { id: 'price_advanced_monthly' } }],
+    metadata: { plan: 'pro' },
+    subscription_items: [{ id: 'si_plan', price: { id: 'price_pro_monthly' } }],
   },
   items: { data: [PLAN_ITEM, METERED_ITEM] },
   latest_invoice: {
@@ -243,8 +238,9 @@ function planWrites(): unknown[] {
 beforeEach(() => {
   automaticTax = { enabled: true }
   collectionMethod = 'charge_automatically'
-  // Pro → Advanced mid-cycle: a credit for Pro's unused time and a charge
-  // for Advanced's remaining time, netting positive.
+  // Starter → Pro mid-cycle: a credit for Starter's unused time and a charge
+  // for Pro's remaining time, netting positive. (The upgrade was Pro →
+  // Advanced until pricing v4 retired every plan above Pro, AGL-4126.)
   previewLines = [
     { proration: true, amount: -3733 },
     { proration: true, amount: 38088 },
@@ -255,7 +251,7 @@ beforeEach(() => {
   orgWrites = []
   mockVerifyIdToken.mockResolvedValue({ uid: 'u-1', email_verified: true })
   mockOrgGet.mockResolvedValue({
-    get: (field: string) => (field === 'plan' ? 'pro' : 'acme'),
+    get: (field: string) => (field === 'plan' ? 'starter' : 'acme'),
     ref: {
       id: 'org-1',
       set: async (value: Record<string, unknown>) => {
@@ -325,21 +321,21 @@ afterEach(() => {
 describe('an upgrade is charged now and held until paid (AGL-3358)', () => {
   it('updates with always_invoice + pending_if_incomplete, never create_prorations', async () => {
     const post = loadSubscription()
-    const response = await call(post, { action: 'switch', plan: 'advanced' })
+    const response = await call(post, { action: 'switch', plan: 'pro' })
     expect(response.status).toBe(200)
     const body = itemUpdate()
-    expect(body?.get('items[0][price]')).toBe('price_advanced_monthly')
+    expect(body?.get('items[0][price]')).toBe('price_pro_monthly')
     expect(body?.get('proration_behavior')).toBe('always_invoice')
     expect(body?.get('payment_behavior')).toBe('pending_if_incomplete')
     expect(body?.get('expand[]')).toBe('latest_invoice.payment_intent')
     // The metadata the webhook projects `plan` from rides the SAME call, so
     // Stripe holds it in `pending_update` along with the items.
-    expect(body?.get('metadata[plan]')).toBe('advanced')
+    expect(body?.get('metadata[plan]')).toBe('pro')
   })
 
   it('prices the change first, under the same always_invoice mechanic', async () => {
     const post = loadSubscription()
-    await call(post, { action: 'switch', plan: 'advanced' })
+    await call(post, { action: 'switch', plan: 'pro' })
     const preview = stripeCalls.find((c) => c.href.includes('/invoices/upcoming'))
     expect(preview).toBeDefined()
     const query = new URL(String(preview?.href)).searchParams
@@ -353,26 +349,26 @@ describe('an upgrade is charged now and held until paid (AGL-3358)', () => {
   it('a PAID upgrade moves the plan and reports what it charged', async () => {
     const post = loadSubscription()
     const payload = await (
-      await call(post, { action: 'switch', plan: 'advanced' })
+      await call(post, { action: 'switch', plan: 'pro' })
     ).json()
     expect(payload.ok).toBe(true)
-    expect(payload.plan).toBe('advanced')
+    expect(payload.plan).toBe('pro')
     expect(payload.chargedNowCents).toBe(34355)
     expect(payload.paymentPending).toBeUndefined()
-    expect(planWrites()).toEqual(['advanced'])
+    expect(planWrites()).toEqual(['pro'])
   })
 
   it('THE LEAK: an upgrade held for 3DS writes NO plan and hands back the challenge', async () => {
     updateAnswer = HELD_FOR_3DS
     const post = loadSubscription()
-    const response = await call(post, { action: 'switch', plan: 'advanced' })
+    const response = await call(post, { action: 'switch', plan: 'pro' })
     expect(response.status).toBe(200)
     const payload = await response.json()
     expect(planWrites()).toEqual([])
     expect(payload.ok).toBe(false)
     expect(payload.paymentPending).toBe(true)
-    expect(payload.plan).toBe('pro')
-    expect(payload.pendingPlan).toBe('advanced')
+    expect(payload.plan).toBe('starter')
+    expect(payload.pendingPlan).toBe('pro')
     expect(payload.requiresAction).toBe(true)
     expect(payload.paymentClientSecret).toBe('pi_held_secret_abc')
     expect(payload.hostedInvoiceUrl).toBe('https://invoice.stripe.com/i/held')
@@ -387,7 +383,7 @@ describe('an upgrade is charged now and held until paid (AGL-3358)', () => {
     updateAnswer = HELD_DECLINED
     const post = loadSubscription()
     const payload = await (
-      await call(post, { action: 'switch', plan: 'advanced' })
+      await call(post, { action: 'switch', plan: 'pro' })
     ).json()
     expect(planWrites()).toEqual([])
     expect(payload.paymentPending).toBe(true)
@@ -397,17 +393,17 @@ describe('an upgrade is charged now and held until paid (AGL-3358)', () => {
   })
 
   it('a month → year move that raises the amount due is charged the same way', async () => {
-    // Pro monthly → Pro yearly: the unused month credited against the
-    // year's charge, netting positive.
+    // Starter monthly → Starter yearly: the unused month credited against
+    // the year's charge, netting positive.
     previewLines = [
       { proration: true, amount: -3733 },
       { proration: true, amount: 55733 },
     ]
     previewAmountDue = 52000
     const post = loadSubscription()
-    await call(post, { action: 'switch', plan: 'pro', interval: 'year' })
+    await call(post, { action: 'switch', plan: 'starter', interval: 'year' })
     const body = itemUpdate()
-    expect(body?.get('items[0][price]')).toBe('price_pro_yearly')
+    expect(body?.get('items[0][price]')).toBe('price_starter_yearly')
     expect(body?.get('proration_behavior')).toBe('always_invoice')
     expect(body?.get('payment_behavior')).toBe('pending_if_incomplete')
   })
@@ -415,7 +411,7 @@ describe('an upgrade is charged now and held until paid (AGL-3358)', () => {
   it('turns automatic tax on in a call of its own, BEFORE the charge, when Stripe reports it off', async () => {
     automaticTax = { enabled: false }
     const post = loadSubscription()
-    const response = await call(post, { action: 'switch', plan: 'advanced' })
+    const response = await call(post, { action: 'switch', plan: 'pro' })
     // The mock refuses `automatic_tax` beside `pending_if_incomplete`, as
     // Stripe does; a 200 means the two were kept apart.
     expect(response.status).toBe(200)
@@ -430,7 +426,7 @@ describe('an upgrade is charged now and held until paid (AGL-3358)', () => {
 
   it('makes no tax call when the subscription already has it', async () => {
     const post = loadSubscription()
-    await call(post, { action: 'switch', plan: 'advanced' })
+    await call(post, { action: 'switch', plan: 'pro' })
     expect(subscriptionPosts()).toHaveLength(1)
   })
 })
@@ -442,7 +438,7 @@ describe('an invoiced (net-terms) subscription', () => {
     // pending update on them.
     collectionMethod = 'send_invoice'
     const post = loadSubscription()
-    const response = await call(post, { action: 'switch', plan: 'advanced' })
+    const response = await call(post, { action: 'switch', plan: 'pro' })
     expect(response.status).toBe(200)
     const body = itemUpdate()
     expect(body?.get('proration_behavior')).toBe('always_invoice')
@@ -459,7 +455,7 @@ describe('a switch that owes nothing today keeps its old mechanic', () => {
     previewAmountDue = 0
     const post = loadSubscription()
     const payload = await (
-      await call(post, { action: 'switch', plan: 'business' })
+      await call(post, { action: 'switch', plan: 'pro' })
     ).json()
     const body = itemUpdate()
     expect(body?.get('proration_behavior')).toBe('create_prorations')
@@ -474,7 +470,7 @@ describe('the preview says what the switch will take, and when', () => {
   it('an upgrade quotes chargesNow with the amount due now', async () => {
     const post = loadSubscription()
     const payload = await (
-      await call(post, { action: 'preview', plan: 'advanced' })
+      await call(post, { action: 'preview', plan: 'pro' })
     ).json()
     expect(payload.prorationCents).toBe(34355)
     expect(payload.chargesNow).toBe(true)
@@ -486,7 +482,7 @@ describe('the preview says what the switch will take, and when', () => {
     previewAmountDue = 0
     const post = loadSubscription()
     const payload = await (
-      await call(post, { action: 'preview', plan: 'business' })
+      await call(post, { action: 'preview', plan: 'pro' })
     ).json()
     expect(payload.chargesNow).toBe(false)
     expect(payload.chargedNowCents).toBe(0)

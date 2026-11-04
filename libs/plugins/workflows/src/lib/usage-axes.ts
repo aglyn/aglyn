@@ -61,6 +61,17 @@ export function workflowsUsageAxes(): PluginUsageAxesDeclaration {
           approach:
             'Nothing changes and nothing is charged — at the included amount, ' +
             'workflows pause until next month unless you upgrade in Billing.',
+          // A plan with a run rate (pricing v4: Pro) keeps running past the
+          // band and bills the excess on the month's invoice.
+          overage: {
+            pricedBy: 'extraRunsUsdPer1k',
+            reached:
+              'Workflows keep running, and runs past the included amount are ' +
+              'billed on your monthly invoice.',
+            approach:
+              'Nothing is charged yet — past the included amount, extra ' +
+              'workflow runs are billed on your monthly invoice.',
+          },
         },
       },
       {

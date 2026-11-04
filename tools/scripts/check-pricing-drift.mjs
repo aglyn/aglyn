@@ -50,8 +50,8 @@ import {
   parseUnitRates,
   indexStripePrices,
   comparePlansToStripe,
-  compareAiTiersToStripe,
-  AI_TIER_IDS,
+  compareAiCreditBlockToStripe,
+  parseAiCreditBlock,
   compareFeeLadder,
   compareUnitRateTables,
   publishedMeteredRates,
@@ -60,6 +60,7 @@ import {
 
 const PLAN_ENTITLEMENTS_TS = 'libs/aglyn/src/lib/app-utils/plan-entitlements.ts'
 const USAGE_METERING_TS = 'apps/console/utils/usage-metering.ts'
+const AI_CREDIT_BLOCKS_TS = 'libs/aglyn/src/lib/app-utils/ai-credit-blocks.ts'
 
 /**
  * The price set LOCKED for the Sept 1 public beta.
@@ -79,18 +80,23 @@ const USAGE_METERING_TS = 'apps/console/utils/usage-metering.ts'
  * $0.07, recorded in "2026-10-01 — Every price and band holds its margin in
  * Vercel's dearest region", then $0.70 → $0.80 and $0.07 → $0.08, recorded
  * in "2026-10-01 — Vercel bills a decimal GB, Firestore is nam5, and an API
- * request is a function". Each is pinned here because the decision is
- * written down, not because the check was red: a pin moved to silence a
- * failure records nothing and can catch nothing afterwards. Every other
- * column is where Sept 1 put it.
+ * request is a function". Pro moved with pricing v4 — 56 → 69 monthly, 39 →
+ * 49 annual, and its physical fee 0 → 0.5% — recorded in "2026-11-03 —
+ * Pricing v4: four plans (Free, Starter, Pro, Custom) …" (AGL-4126), which
+ * also retired Business, Scale, Advanced and Agency: their rows stay pinned
+ * at the figures they were last sold at, because the code keeps them for
+ * reading and a retired row that moved would be a change nobody decided.
+ * Each is pinned here because the decision is written down, not because the
+ * check was red: a pin moved to silence a failure records nothing and can
+ * catch nothing afterwards. Every other column is where Sept 1 put it.
  */
 const LOCKED = {
-  monthly: { free: 0, starter: 25, pro: 56, business: 139, scale: 249, advanced: 399, agency: 1299 },
-  annualPerMonth: { free: 0, starter: 16, pro: 39, business: 99, scale: 179, advanced: 299, agency: 1049 },
+  monthly: { free: 0, starter: 25, pro: 69, business: 139, scale: 249, advanced: 399, agency: 1299 },
+  annualPerMonth: { free: 0, starter: 16, pro: 49, business: 99, scale: 179, advanced: 299, agency: 1049 },
   ladder: {
     free: { digital: 0, physical: 0 },
     starter: { digital: 5, physical: 2 },
-    pro: { digital: 3, physical: 0 },
+    pro: { digital: 3, physical: 0.5 },
     business: { digital: 2, physical: 0 },
     scale: { digital: 1, physical: 0 },
     advanced: { digital: 0, physical: 0 },
@@ -306,9 +312,12 @@ if (args.stripe) {
   else {
     const prices = indexStripePrices(stripe.payload)
     verdicts.push(...comparePlansToStripe(planPricing, prices))
-    // The Aglyn AI tiers (AGL-3965), and the per-plan prices they replace.
+    // The Aglyn AI credit block (AGL-4144).
     verdicts.push(
-      ...compareAiTiersToStripe(parsePlanRecord(entitlementsSrc, 'AI_TIERS', AI_TIER_IDS), prices),
+      ...compareAiCreditBlockToStripe(
+        parseAiCreditBlock(existsSync(AI_CREDIT_BLOCKS_TS) ? readFileSync(AI_CREDIT_BLOCKS_TS, 'utf8') : ''),
+        prices,
+      ),
     )
   }
 } else {

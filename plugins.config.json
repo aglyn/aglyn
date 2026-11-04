@@ -2753,7 +2753,7 @@
         },
         {
           "type": "webhookPost",
-          "label": "Send a webhook (Business)",
+          "label": "Send a webhook (Pro)",
           "offered": false,
           "typedFields": [{ "key": "webhookName", "names": "the webhook" }]
         },

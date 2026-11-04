@@ -37,7 +37,6 @@ import {
   resolveOrgEntitlements,
   UNLIMITED,
   type AglynOrgBilling,
-  type AiTierId,
   type LockdownRefusalNotice,
   type OrgPlan,
 } from '@aglyn/aglyn'
@@ -302,23 +301,6 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
    * because the quote prices and this page buys.
    */
   const [bundleAddons, setBundleAddons] = useState<BundleAddons>({})
-  /**
-   * The checkout body for a set of add-ons: the map, and the Aglyn AI tier
-   * when the AI add-on is in it. The tier starts on the one the link named
-   * (`?ai=boost`, or `ai:boost` in `addons=`, AGL-3965) and the owner can
-   * change it beside the quote's AI switch (AGL-4025); the switch is worded
-   * and priced as that tier, so the tier chosen is the one quoted and paid.
-   */
-  const linkAiTier = planIntent?.aiTier ?? null
-  const [aiTier, setAiTier] = useState<AiTierId | null>(linkAiTier)
-  useEffect(() => setAiTier(linkAiTier), [linkAiTier])
-  const withAiTier = useCallback(
-    (addons: BundleAddons) => ({
-      addons,
-      ...((addons.aiAddon ?? 0) > 0 && aiTier ? { aiTier } : {}),
-    }),
-    [aiTier],
-  )
   const intentAddonsKey = bundleAddonsParam(intentAddons(planIntent))
   useEffect(() => {
     setBundleAddons(intentAddons(planIntent))
@@ -910,10 +892,9 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
             promotionCode,
             // The add-ons the link or the quote's switches chose (AGL-2897,
             // AGL-3955), fitted to the plan being bought and quoted on the
-            // same invoice so the total shown is the total charged. The
-            // Aglyn AI tier the link named rides with the AI add-on
-            // (AGL-3965); absent, the route sells the plan's default tier.
-            ...withAiTier(fitBundleAddonsToPlan(bundleAddons, targetPlan).addons),
+            // same invoice so the total shown is the total charged. Aglyn AI
+            // credits ride as a number of blocks (AGL-4144).
+            addons: fitBundleAddonsToPlan(bundleAddons, targetPlan).addons,
           }),
         })
         const payload = await response.json().catch(() => ({}))
@@ -972,7 +953,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
         return null
       }
     },
-    [user, orgId, interval, bundleAddons, withAiTier, enqueueSnackbar],
+    [user, orgId, interval, bundleAddons, enqueueSnackbar],
   )
 
   /**
@@ -1115,8 +1096,8 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
             // the confirmed figure describe the same invoice.
             ...(pricedCode ? { promotionCode: pricedCode } : {}),
             // The same add-ons the quote above priced (AGL-2897, AGL-3955),
-            // with the same Aglyn AI tier (AGL-3965).
-            ...withAiTier(purchasedAddons),
+            // Aglyn AI credit blocks among them (AGL-4144).
+            addons: purchasedAddons,
             gaClientId: await readGaClientId(
               process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
             ),
@@ -1301,7 +1282,6 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
       orgSlug,
       interval,
       bundleAddons,
-      withAiTier,
       bundleDomain,
       router,
       appliedPromotionCode,
@@ -1637,8 +1617,6 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                         onAppliedCodeChange={setAppliedPromotionCode}
                         addons={bundleAddons}
                         onAddonsChange={setBundleAddons}
-                        aiTier={aiTier}
-                        onAiTierChange={setAiTier}
                         offered={linkAddonKinds}
                         onIntervalChange={setInterval}
                         initialCoupon={planIntent?.coupon ?? null}
@@ -2203,7 +2181,6 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
           plan={collectingForPlan}
           interval={interval}
           addons={bundleAddons}
-          aiTier={aiTier}
           orgId={orgId}
           profile={billingProfile}
           canManage={can('billing.manage')}

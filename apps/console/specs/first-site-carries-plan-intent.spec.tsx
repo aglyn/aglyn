@@ -180,9 +180,17 @@ describe('AGL-1117 · the zero-org first site keeps the plan intent', () => {
   })
 
   it('does not restate an interval the CTA never stated', async () => {
-    mockSearchParams = new URLSearchParams('plan=scale')
+    mockSearchParams = new URLSearchParams('plan=starter')
     await createFirstSite()
-    expect(mockHardNavigate).toHaveBeenCalledWith('/smoke-test-0831/billing?plan=scale')
+    expect(mockHardNavigate).toHaveBeenCalledWith('/smoke-test-0831/billing?plan=starter')
+  })
+
+  it('carries no intent for a retired plan’s old link (pricing v4, AGL-4126)', async () => {
+    // Business is no longer sold, so a cached `?plan=business` is not a
+    // purchase to quote: the first site opens as an ordinary one.
+    mockSearchParams = new URLSearchParams('plan=business&interval=year')
+    await createFirstSite()
+    expect(mockHardNavigate).toHaveBeenCalledWith('/smoke-test-0831/hosts?create=site')
   })
 
   it('sends an enterprise CTA to support rather than a checkout', async () => {
@@ -201,10 +209,10 @@ describe('AGL-1117 · the zero-org first site keeps the plan intent', () => {
     // A pending invite leads the zero-org state (AGL-851), and "Create my own
     // site instead" is the same path under a different button.
     mockInvites = { invites: [{ $id: 'inv-1' }], loading: false }
-    mockSearchParams = new URLSearchParams('plan=business&interval=year')
+    mockSearchParams = new URLSearchParams('plan=starter&interval=year')
     await createFirstSite('Create my own site instead')
     expect(mockHardNavigate).toHaveBeenCalledWith(
-      '/smoke-test-0831/billing?plan=business&interval=year',
+      '/smoke-test-0831/billing?plan=starter&interval=year',
     )
   })
 })
