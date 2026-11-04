@@ -1686,6 +1686,16 @@ function stemOf(word: string): string {
 /** A line's content words, by stem. */
 const contentOf = (text: string): Set<string> => new Set(wordsOf(text).filter((word) => word.length >= 2 && !STOP_WORDS.has(word.toLowerCase())).map(stemOf))
 
+/**
+ * The share of a line's content words another keeps (G4): 1 for a line with
+ * none. A rewrite's `meaning`, and the floor the wording pass holds each
+ * rewritten line to (`ai-site-import-wording.ts`), so a rewrite it keeps
+ * never scores under it here.
+ */
+export function siteImportContentKept(line: string, rewrite: string): number {
+  return contentKept(line, rewrite)
+}
+
 /** The share of a line's content words another keeps: 1 for a line with none. */
 function contentKept(line: string, rewrite: string): number {
   const said = contentOf(line)
@@ -1741,6 +1751,40 @@ function shouted(text: string): boolean {
   return long.length >= 3 && long.every((word) => /^\p{Lu}/u.test(word))
 }
 
+/** What a page's facts are told apart by (G4): the names its source says, and every word it says in any case. */
+export interface SiteImportFactScope {
+  /** Each word the source capitalizes past a sentence's first, in a line not set all in capitals. */
+  names: ReadonlySet<string>
+  /** Every word the source says, lowercased. */
+  said: ReadonlySet<string>
+}
+
+/** The fact scope of a page's source lines. */
+export function siteImportFactScope(sourceTexts: readonly string[]): SiteImportFactScope {
+  return {
+    names: new Set(sourceTexts.filter((text) => !shouted(text)).flatMap((text) => capitalsIn(text).filter((entry) => !entry.opens && entry.word.length > 1).map((entry) => entry.word))),
+    said: new Set(sourceTexts.flatMap(wordsOf).map((word) => word.toLowerCase())),
+  }
+}
+
+/**
+ * The fact tokens one line says (G4), each as often as it says it: its
+ * prices and numbers with their currency, emails, web addresses and phones,
+ * and its names. `own` is a rewrite's line, where a word capitalized past a
+ * sentence's first that the source never says is a name the rewrite made up.
+ * Two lines with the same tokens keep the same facts, which is how the
+ * wording pass holds each line it rewrites (`ai-site-import-wording.ts`).
+ */
+export function siteImportFactTokens(text: string, scope: SiteImportFactScope, own: boolean): string[] {
+  const out = factsIn(text)
+  for (const entry of capitalsIn(text)) {
+    if (scope.names.has(entry.word)) out.push(`name:${entry.word}`)
+    // A name the source never says, past a sentence's first word, is one the rewrite made up.
+    else if (own && !entry.opens && entry.word.length > 1 && !shouted(text) && !scope.said.has(entry.word.toLowerCase())) out.push(`name:${entry.word}`)
+  }
+  return out
+}
+
 /**
  * The facts of a page's words (G4): every price and number with its
  * currency, email, phone and address, and every name — a word the source
@@ -1748,19 +1792,10 @@ function shouted(text: string): boolean {
  * and no fact or name the source does not have.
  */
 function factsScore(sourceTexts: readonly string[], builtTexts: readonly string[]): SiteImportFidelityFacts {
-  const names = new Set(sourceTexts.filter((text) => !shouted(text)).flatMap((text) => capitalsIn(text).filter((entry) => !entry.opens && entry.word.length > 1).map((entry) => entry.word)))
-  const said = new Set(sourceTexts.flatMap(wordsOf).map((word) => word.toLowerCase()))
+  const scope = siteImportFactScope(sourceTexts)
   const tally = (texts: readonly string[], own: boolean) => {
     const counts = new Map<string, number>()
-    const add = (token: string) => counts.set(token, (counts.get(token) ?? 0) + 1)
-    for (const text of texts) {
-      factsIn(text).forEach(add)
-      for (const entry of capitalsIn(text)) {
-        if (names.has(entry.word)) add(`name:${entry.word}`)
-        // A name the source never says, past a sentence's first word, is one the rewrite made up.
-        else if (own && !entry.opens && entry.word.length > 1 && !shouted(text) && !said.has(entry.word.toLowerCase())) add(`name:${entry.word}`)
-      }
-    }
+    for (const text of texts) for (const token of siteImportFactTokens(text, scope, own)) counts.set(token, (counts.get(token) ?? 0) + 1)
     return counts
   }
   const from = tally(sourceTexts, false)

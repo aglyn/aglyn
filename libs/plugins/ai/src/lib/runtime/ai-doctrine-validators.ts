@@ -260,6 +260,15 @@ export interface AiDoctrineTreeContext extends AiNodeTreeContext {
    */
   ownWords?: boolean
   /**
+   * Lines a model reworded on a page of its owner's own words (AGL-4152).
+   * Rule 14's filler, placeholder and judgment-word checks judge copy a
+   * generator wrote, which `ownWords` sets aside; these lines are such copy,
+   * so the checks run again over them. `true` judges all of the page's copy;
+   * a list judges the copy that shows one of its lines, and never a line the
+   * owner wrote that the rewrite left as it was.
+   */
+  rewritten?: boolean | readonly string[]
+  /**
    * The site's home screens, by id (AGL-3056): the screen a link falls back
    * to when the site has none for what it promises. Absent: none is known.
    */
@@ -3332,6 +3341,37 @@ export function detectPlaceholderTokens(
   return placeholderViolation(treePlaceholderCopy(tree, outputKind, context))
 }
 
+/**
+ * Rule 14 on the lines a model reworded on a page of its owner's own words
+ * (AGL-4152, `AiDoctrineTreeContext.rewritten`): no filler, no placeholder
+ * and, for copy framed for agencies and enterprises, no judgment words, in
+ * the copy that shows a reworded line. A piece of copy shows one where it is
+ * that line, a part of it (a long paragraph split between elements), or holds
+ * it whole (lines a build joined). `true` judges every piece of the page's
+ * copy.
+ */
+export function detectRewrittenCopy(
+  tree: AiDoctrineTree,
+  outputKind: AiOutputKind,
+  context: AiNodeTreeContext & Pick<AiDoctrineTreeContext, 'framing'>,
+  rewritten: true | readonly string[],
+): AiDoctrineViolation[] {
+  const squash = (text: string) => text.replace(/\s+/g, ' ').trim()
+  const lines = rewritten === true ? [] : rewritten.map(squash).filter(Boolean)
+  if (rewritten !== true && !lines.length) return []
+  const shows = (text: string) => {
+    if (rewritten === true) return true
+    const piece = squash(text)
+    return !!piece && lines.some((line) => line === piece || line.includes(piece) || piece.includes(line))
+  }
+  const samples = aiTreeCopy(tree, context).filter((sample) => shows(sample.text))
+  const nodes = new Set(samples.map((sample) => sample.at))
+  return [
+    ...detectOffVoiceCopy(samples, context.framing),
+    ...placeholderViolation(treePlaceholderCopy(tree, outputKind, context).filter((entry) => nodes.has(entry.at))),
+  ]
+}
+
 /** Rule 14 on copy that is not a tree, such as a plan's titles and search fields, named by path. */
 export function detectPlaceholderCopy(samples: readonly AiCopySample[]): AiDoctrineViolation[] {
   return placeholderViolation(
@@ -4280,6 +4320,7 @@ export function validateAiDoctrineTree(
     ...detectUnresponsiveGrids(tree, outputKind, writtenOf),
     ...(context.ownWords ? [] : detectOffVoiceCopy(aiTreeCopy(tree, context), context.framing)),
     ...(context.ownWords ? [] : detectPlaceholderTokens(tree, outputKind, context)),
+    ...(context.ownWords && context.rewritten ? detectRewrittenCopy(tree, outputKind, context, context.rewritten) : []),
     ...detectCutLines(validated.repairs, written, (id) => minted.get(id) ?? id),
     ...(context.ownWords ? [] : detectDanglingWords(tree)),
     ...detectHeavyDocument(tree, outputKind, context),
