@@ -206,6 +206,8 @@ export type PrimaryLeaseProbe =
 export type WedgeEvidence =
   | { reason: 'lease-locked' }
   | { reason: 'lease-stale'; ownerId: string; ageMs: number }
+  /** The SDK's AsyncQueue has failed for good (AGL-4156). */
+  | { reason: 'queue-failed' }
 
 /** The fallback this tab recorded, and why. */
 export type MemoryCacheFallback = WedgeEvidence & { at: number }
@@ -670,10 +672,100 @@ export function fallBackToMemoryCache(
     return
   }
   console.warn(
-    '[firestore] The multi-tab cache is locked by another tab; reloading this tab on the memory cache (AGL-3428).',
+    evidence.reason === 'queue-failed'
+      ? '[firestore] The multi-tab cache failed this tab\'s Firestore client; reloading this tab on the memory cache (AGL-4156).'
+      : '[firestore] The multi-tab cache is locked by another tab; reloading this tab on the memory cache (AGL-3428).',
     record,
   )
   reload()
+}
+
+/**
+ * A FIRESTORE CLIENT WHOSE QUEUE HAS FAILED, AND THE WAY OUT (AGL-4156).
+ *
+ * The SDK runs every operation on one AsyncQueue. When an operation rejects
+ * with an error the queue does not retry, it keeps that error and refuses
+ * every later operation with the assertion `Unexpected state (ID: b815)`,
+ * whose `CONTEXT` names the first error. Nothing restarts it: the
+ * client is dead until the page reloads, so every read and listener in the tab
+ * fails, and pages stop loading.
+ *
+ * The durable cache is what kills it in production. On 2026-11-04 (v1.9.0,
+ * `@firebase/firestore` 4.18.0) a new Firefox sign-up's console lost its client
+ * on three page loads in 25 minutes. Each time, an IndexedDB request in the
+ * SDK's transaction threw "Attempt to get a record from database without an
+ * in-progress transaction". The SDK retries a failed transaction three times,
+ * then hands the raw `DOMException` to the queue, which counts it as fatal
+ * rather than as an `IndexedDbTransactionError` to back off from. The earlier
+ * cases ended the same way: a full `localStorage` (AGL-2845) and a null target
+ * from the IndexedDB target cache (`isCorePipeline`, 2026-10-14, Chrome).
+ *
+ * So the first b815 of a durable multi-tab client moves the tab onto the
+ * memory cache, which does not use IndexedDB, through the same per-tab
+ * {@link fallBackToMemoryCache} as the wedge. Nothing that could be saved is
+ * lost: the dead queue had already stopped every write in the tab. A tab already
+ * on the fallback runs the memory cache, which is never watched, so a b815 there
+ * cannot loop. No lock is shared, because another tab's client is not dead.
+ */
+const QUEUE_FAILURE = /INTERNAL ASSERTION FAILED: Unexpected state \(ID: b815\)/
+
+/** Whether `thrown` (an error, an event's message, a rejection reason) is the SDK's failed-queue assertion. */
+export function isFirestoreQueueFailure(thrown: unknown): boolean {
+  try {
+    const message =
+      typeof thrown === 'string'
+        ? thrown
+        : thrown && typeof thrown === 'object' && 'message' in thrown
+          ? String((thrown as { message: unknown }).message)
+          : ''
+    return QUEUE_FAILURE.test(message)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Watches `target` for the failed-queue assertion, as an uncaught error or an
+ * unhandled rejection, and calls `fallBack` once, the first time it appears.
+ * Returns the function that stops watching.
+ */
+export function watchFirestoreQueueFailure(
+  fallBack: (evidence: WedgeEvidence) => void,
+  {
+    target = typeof window === 'undefined' ? undefined : window,
+    isFallbackActive = () => memoryCacheFallbackActive(),
+  }: {
+    target?: Pick<Window, 'addEventListener' | 'removeEventListener'>
+    isFallbackActive?: () => boolean
+  } = {},
+): () => void {
+  if (!target) return () => undefined
+  let fired = false
+  const onError = (event: Event) => {
+    const { error, message } = event as ErrorEvent
+    check(isFirestoreQueueFailure(error) || isFirestoreQueueFailure(message))
+  }
+  const onRejection = (event: Event) => {
+    check(isFirestoreQueueFailure((event as PromiseRejectionEvent).reason))
+  }
+  const stop = () => {
+    target.removeEventListener('error', onError)
+    target.removeEventListener('unhandledrejection', onRejection)
+  }
+  const check = (failed: boolean) => {
+    if (!failed || fired) return
+    fired = true
+    stop()
+    try {
+      if (isFallbackActive()) return
+      fallBack({ reason: 'queue-failed' })
+    } catch {
+      // Watching never breaks the page.
+    }
+  }
+  target.addEventListener('error', onError)
+  target.addEventListener('unhandledrejection', onRejection)
+  return stop
 }
 
 /** The IndexedDB database of each client running the durable multi-tab cache. */
@@ -682,10 +774,16 @@ const multiTabDatabases = new WeakMap<Firestore, string>()
 /**
  * Registers `firestore` as running the durable multi-tab cache under
  * `databaseName` (`<persistence prefix>main`). Only a registered client ever
- * escalates past the network cycle.
+ * escalates past the network cycle, and only its page is watched for a failed
+ * queue ({@link watchFirestoreQueueFailure}).
  */
 export function markMultiTabFirestore(firestore: Firestore, databaseName: string): void {
   if (firestore && typeof firestore === 'object') {
+    if (!multiTabDatabases.has(firestore)) {
+      watchFirestoreQueueFailure((evidence) =>
+        fallBackToMemoryCache(evidence, { databaseName }),
+      )
+    }
     multiTabDatabases.set(firestore, databaseName)
   }
 }
