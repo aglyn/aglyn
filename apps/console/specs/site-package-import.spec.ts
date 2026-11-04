@@ -489,8 +489,13 @@ describe('caps count only what an import adds', () => {
   }
 
   it('lets a replace land on a site at its cap, and refuses a kept copy that would add a page', async () => {
-    mockOrg = { plan: 'pro' }
-    fillTo(PLAN_ENTITLEMENTS.pro.screensPerHost - 2)
+    // Pro's own row caps no pages since pricing v4 (AGL-4126), and no plan that
+    // sells `siteExport` does, so the cap is a contract's per-org override at
+    // the 100 Pro carried until v4.
+    expect(PLAN_ENTITLEMENTS.pro.screensPerHost).toBe(Number.POSITIVE_INFINITY)
+    const cap = 100
+    mockOrg = { plan: 'pro', entitlements: { screensPerHost: cap } }
+    fillTo(cap - 2)
     const pkg = await exportSite('&items=page/page-about')
     pkg.items['page/page-about'].displayName = 'About, again'
 
@@ -498,11 +503,11 @@ describe('caps count only what an import adds', () => {
     // would add one past the cap, and the plan says so before anything is written.
     expect((await call({ action: 'plan', package: pkg })).body.capRefusal).toBeNull()
     const plan = await call({ action: 'plan', package: pkg, decisions: { 'page/page-about': 'keepBoth' } })
-    expect(plan.body.capRefusal).toContain(`of ${PLAN_ENTITLEMENTS.pro.screensPerHost}`)
+    expect(plan.body.capRefusal).toContain(`of ${cap}`)
 
     const copy = await call({ action: 'apply', package: pkg, decisions: { 'page/page-about': 'keepBoth' } })
     expect(copy.status).toBe(403)
-    expect(copy.body.error).toContain(`of ${PLAN_ENTITLEMENTS.pro.screensPerHost}`)
+    expect(copy.body.error).toContain(`of ${cap}`)
 
     const replace = await call({ action: 'apply', package: pkg, decisions: { 'page/page-about': 'replace' } })
     expect(replace.status).toBe(200)

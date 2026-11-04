@@ -1341,8 +1341,10 @@ describe('a comp can be uncapped, and capped again (AGL-3049)', () => {
     })
     expect(payload.after.entitlements.planComp).toMatchObject({ uncapped: true })
     expect(text).not.toMatch(/Infinity|"uncapped":null/)
+    // The `enterprise` plan reads "Custom" since pricing v4 (AGL-4126), in
+    // every summary below.
     expect(payload.planEffect.summary).toMatch(
-      /^Uncapped Enterprise comp granted\. Enterprise is in force as an uncapped staff comp, because no subscription pays for this workspace\. It bills nothing, every band and quota reads as unlimited/,
+      /^Uncapped Custom comp granted\. Custom is in force as an uncapped staff comp, because no subscription pays for this workspace\. It bills nothing, every band and quota reads as unlimited/,
     )
 
     // The row, as booleans, and the published sites told the caps moved
@@ -1377,7 +1379,7 @@ describe('a comp can be uncapped, and capped again (AGL-3049)', () => {
     const payload = await response.json()
     expect(payload.planEffect).toMatchObject({ uncapped: false, compChange: 'granted' })
     expect(payload.planEffect.summary).toMatch(
-      /^Enterprise comp granted\..*every band is a hard limit that a quota override can raise/,
+      /^Custom comp granted\..*every band is a hard limit that a quota override can raise/,
     )
     // Neither the plan nor the caps moved, so nothing is revalidated.
     expect(mockRevalidatedOrgs).toEqual([])
@@ -1423,7 +1425,7 @@ describe('a comp can be uncapped, and capped again (AGL-3049)', () => {
       uncapped: true,
       before: { uncapped: false },
     })
-    expect(payload.planEffect.summary).toMatch(/^The Enterprise comp is now uncapped\./)
+    expect(payload.planEffect.summary).toMatch(/^The Custom comp is now uncapped\./)
     expect(onlyAuditRow()['planEffect']).toMatchObject({
       compChange: 'uncapped',
       before: { uncapped: false },
@@ -1462,7 +1464,7 @@ describe('a comp can be uncapped, and capped again (AGL-3049)', () => {
     const payload = await response.json()
     expect(payload.planEffect).toMatchObject({ compChange: 'capped', uncapped: false })
     expect(payload.planEffect.summary).toMatch(
-      /^The Enterprise comp is now capped\..*every band is a hard limit/,
+      /^The Custom comp is now capped\..*every band is a hard limit/,
     )
     expect(mockRevalidatedOrgs).toEqual(['org-1'])
   })
@@ -1484,7 +1486,7 @@ describe('a comp can be uncapped, and capped again (AGL-3049)', () => {
     const payload = await response.json()
     expect(payload.planEffect.compChange).toBe('replaced')
     expect(payload.planEffect.summary).toMatch(
-      /^Comp changed from uncapped Enterprise to Business\. Effective plan: Enterprise → Business\./,
+      /^Comp changed from uncapped Custom to Business\. Effective plan: Custom → Business\./,
     )
   })
 
@@ -1500,7 +1502,7 @@ describe('a comp can be uncapped, and capped again (AGL-3049)', () => {
     const payload = await response.json()
     expect(payload.planEffect).toMatchObject({ compChange: 'kept', uncapped: true })
     expect(payload.planEffect.summary).toMatch(
-      /^The uncapped Enterprise comp already stands and is unchanged\./,
+      /^The uncapped Custom comp already stands and is unchanged\./,
     )
     expect(mockRevalidatedOrgs).toEqual([])
   })
@@ -1525,7 +1527,7 @@ describe('a comp can be uncapped, and capped again (AGL-3049)', () => {
       decidedBy: 'stored-plan',
       before: { uncapped: true, decidedBy: 'comp' },
     })
-    expect(payload.planEffect.summary).toMatch(/^Uncapped Enterprise comp removed\./)
+    expect(payload.planEffect.summary).toMatch(/^Uncapped Custom comp removed\./)
     expect(mockRevalidatedOrgs).toEqual(['org-1'])
   })
 

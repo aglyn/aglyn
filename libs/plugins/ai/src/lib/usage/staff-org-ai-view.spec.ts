@@ -31,12 +31,12 @@ const ZERO_COUNTS = { queued: 0, running: 0, needs_input: 0, needs_review: 0, do
 
 const response = (patch: Partial<StaffOrgAiResponse> = {}): StaffOrgAiResponse => ({
   month: '2026-10',
-  addon: { on: true, tier: 'boost', priceUsd: 19, since: '2026-09-01T00:00:00.000Z', sinceSource: 'stripe' },
+  addon: { on: true, blocks: 2, priceUsd: 20, since: '2026-09-01T00:00:00.000Z', sinceSource: 'stripe' },
   pool: {
     planCredits: 5000,
     overrideCredits: null,
-    addonCredits: 8000,
-    totalCredits: 13000,
+    addonCredits: 10000,
+    totalCredits: 15000,
     usedCredits: 2500,
     returnedCredits: 0,
     billedUsd: 2.5,
@@ -78,7 +78,7 @@ const response = (patch: Partial<StaffOrgAiResponse> = {}): StaffOrgAiResponse =
 describe('the staff AI card as it prints (AGL-3667)', () => {
   it('names the parts of the pool, the override replacing the plan band', () => {
     const view = response()
-    expect(poolPartsSentence(view.pool, 'Aglyn AI')).toBe('5,000 plan band + 8,000 Aglyn AI tier')
+    expect(poolPartsSentence(view.pool, 'Aglyn AI')).toBe('5,000 plan band + 10,000 Aglyn AI credit blocks')
     expect(poolPartsSentence({ ...view.pool, overrideCredits: 12000, addonCredits: 0 }, 'Aglyn AI')).toBe('12,000 staff override')
   })
 
@@ -142,10 +142,18 @@ describe('the staff AI card as it prints (AGL-3667)', () => {
     expect(idle.tokens).toBeNull()
   })
 
-  it('words the add-on row for off, and for a date Stripe could not give', () => {
-    const off = staffOrgAiView(response({ addon: { on: false, tier: null, priceUsd: null, since: null, sinceSource: 'no-subscription' } }), 'Aglyn AI')
-    expect(off.addon).toMatchObject({ status: 'Aglyn AI off', price: 'No tier', since: null, sinceNote: '' })
-    const unreachable = staffOrgAiView(response({ addon: { on: true, tier: 'boost', priceUsd: 19, since: null, sinceSource: 'unavailable' } }), 'Aglyn AI')
+  it('words the add-on row as blocks held, for off, and for a date Stripe could not give (AGL-4144)', () => {
+    const on = staffOrgAiView(response({ addon: { on: true, blocks: 3, priceUsd: 30, since: null, sinceSource: 'stripe' } }), 'Aglyn AI')
+    expect(on.addon).toMatchObject({ status: 'Aglyn AI credits, 3 blocks on', price: '$30.00/mo' })
+    // No tier name is ever printed, whatever a stale payload carries.
+    const stale = staffOrgAiView(
+      response({ addon: { on: true, blocks: 1, priceUsd: 10, since: null, sinceSource: 'stripe', tier: 'boost' } as never }),
+      'Aglyn AI',
+    )
+    expect(stale.addon.status).toBe('Aglyn AI credits, 1 block on')
+    const off = staffOrgAiView(response({ addon: { on: false, blocks: 0, priceUsd: null, since: null, sinceSource: 'no-subscription' } }), 'Aglyn AI')
+    expect(off.addon).toMatchObject({ status: 'Aglyn AI off', price: 'No blocks', since: null, sinceNote: '' })
+    const unreachable = staffOrgAiView(response({ addon: { on: true, blocks: 2, priceUsd: 20, since: null, sinceSource: 'unavailable' } }), 'Aglyn AI')
     expect(unreachable.addon.sinceNote).toBe('Stripe not reachable')
   })
 

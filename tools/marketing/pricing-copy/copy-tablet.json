@@ -5,7 +5,7 @@
   "frameName": "Pricing — Tablet",
   "frameSize": {
     "width": 768,
-    "height": 10002
+    "height": 9578
   },
   "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-pricing-copy.mjs (AGL-1278). `kind` and `notes` are left null for a human pass — the frame does not name its own section types. THE CODE WINS OVER THE FRAME: this file is a record of the design, not of the truth. Prices here have been caught drifting from libs/aglyn/src/lib/app-utils/plan-entitlements.ts twice; that file is the source of truth for every number.",
   "sections": [
@@ -47,14 +47,14 @@
         },
         {
           "figmaNodeId": "572:2895",
-          "name": "Every paid plan includes the full platform — Besigner, CRM, commerce, forms, media, workflows and a band of Aglyn AI credits. Start free with one website; upgrade for your own domain and a store.",
+          "name": "Start free with one website. Starter adds your own domain and a store. Pro is the full platform — Besigner, CRM, commerce, forms, media, workflows, the API and a band of Aglyn AI credits — and grows with add-ons.",
           "widthPx": 680,
           "records": [
             {
               "figmaNodeId": "572:2895",
               "name": null,
               "cells": [
-                "Every paid plan includes the full platform — Besigner, CRM, commerce, forms, media, workflows and a band of Aglyn AI credits. Start free with one website; upgrade for your own domain and a store."
+                "Start free with one website. Starter adds your own domain and a store. Pro is the full platform — Besigner, CRM, commerce, forms, media, workflows, the API and a band of Aglyn AI credits — and grows with add-ons."
               ]
             }
           ]
@@ -83,7 +83,7 @@
       "name": "Plans",
       "order": 1,
       "widthPx": 768,
-      "heightPx": 1630,
+      "heightPx": 1344,
       "groups": [
         {
           "figmaNodeId": "572:2902",
@@ -184,7 +184,7 @@
               "figmaNodeId": "572:2984",
               "name": "price",
               "cells": [
-                "$56",
+                "$69",
                 "/mo"
               ]
             },
@@ -192,14 +192,14 @@
               "figmaNodeId": "572:2987",
               "name": null,
               "cells": [
-                "$39/mo billed yearly"
+                "$49/mo billed yearly"
               ]
             },
             {
               "figmaNodeId": "572:2988",
               "name": null,
               "cells": [
-                "For pros running a few sites."
+                "The full platform, for one site or many."
               ]
             },
             {
@@ -207,54 +207,15 @@
               "name": "fl",
               "cells": [
                 "Everything in Starter, plus:",
-                "3 sites · 3 collaborators",
+                "3 sites · more at $20/site",
                 "Versioning & AI assist",
                 "Video, POS & marketplace",
                 "Site export & analytics",
-                "2,500 products / site",
-                "2,500 campaign emails/mo"
-              ]
-            },
-            {
-              "figmaNodeId": "572:3019",
-              "name": "h",
-              "cells": [
-                "Business"
-              ]
-            },
-            {
-              "figmaNodeId": "572:3021",
-              "name": "price",
-              "cells": [
-                "$139",
-                "/mo"
-              ]
-            },
-            {
-              "figmaNodeId": "572:3024",
-              "name": null,
-              "cells": [
-                "$99/mo billed yearly"
-              ]
-            },
-            {
-              "figmaNodeId": "572:3025",
-              "name": null,
-              "cells": [
-                "For teams & agencies at scale."
-              ]
-            },
-            {
-              "figmaNodeId": "572:3027",
-              "name": "fl",
-              "cells": [
-                "Everything in Pro, plus:",
-                "10 sites · 5 collaborators",
-                "API access · 1.5k req/mo",
-                "A/B testing & webhooks",
-                "Multilingual & scheduling",
-                "Full commerce + POS",
-                "15,000 campaign emails/mo"
+                "Unlimited pages, products & forms",
+                "2,500 campaign emails/mo",
+                "API access & webhooks",
+                "A/B testing, multilingual & scheduling",
+                "Recurring billing, gift cards & members-only content"
               ]
             }
           ]
@@ -268,92 +229,23 @@
               "figmaNodeId": "572:3056",
               "name": "Frame",
               "cells": [
-                "Need more scale? Higher-volume plans for stores, orgs, and agencies."
-              ]
-            },
-            {
-              "figmaNodeId": "572:3059",
-              "name": "Frame",
-              "cells": [
-                "Scale",
-                "$249 /mo"
-              ]
-            },
-            {
-              "figmaNodeId": "572:3062",
-              "name": "Frame",
-              "cells": [
-                "For high-growth stores and multi-site teams that have outgrown Business.",
-                "15 sites · 5 collaborators · 1% commerce fees · 5k API requests/mo · 25,000 products per site · 70 GB bandwidth · 25,000 campaign emails/mo"
-              ]
-            },
-            {
-              "figmaNodeId": "572:3065",
-              "name": "Frame",
-              "cells": [
-                "CHOOSE"
-              ]
-            },
-            {
-              "figmaNodeId": "572:3068",
-              "name": "Frame",
-              "cells": [
-                "Advanced",
-                "$399 /mo"
-              ]
-            },
-            {
-              "figmaNodeId": "572:3071",
-              "name": "Frame",
-              "cells": [
-                "For high-volume organizations that need headroom on every limit.",
-                "25 sites · 5 collaborators · 0% commerce fees · 17k API requests/mo · unlimited products · priority scale & limits · 65,000 campaign emails/mo"
-              ]
-            },
-            {
-              "figmaNodeId": "572:3074",
-              "name": "Frame",
-              "cells": [
-                "CHOOSE"
-              ]
-            },
-            {
-              "figmaNodeId": "572:3077",
-              "name": "Frame",
-              "cells": [
-                "Agency",
-                "$1299 /mo"
-              ]
-            },
-            {
-              "figmaNodeId": "572:3080",
-              "name": "Frame",
-              "cells": [
-                "For agencies and resellers running whole client portfolios under one roof.",
-                "100 sites · 5 collaborators · full white-label incl. custom console domain · 85k API requests/mo · unlimited records & variables · 20 POS registers per site · 130,000 campaign emails/mo"
-              ]
-            },
-            {
-              "figmaNodeId": "572:3083",
-              "name": "Frame",
-              "cells": [
-                "CHOOSE"
+                "Need more than Pro?  Custom plans for portfolios, white-label and single sign-on."
               ]
             },
             {
               "figmaNodeId": "572:3086",
               "name": "Frame",
               "cells": [
-                "Enterprise",
-                "Custom"
+                "Custom",
+                "Quoted"
               ]
             },
             {
               "figmaNodeId": "572:3089",
               "name": "Frame",
               "cells": [
-                "For large organizations with bespoke requirements — volume pricing available.",
-                "Scale as you grow · 0% transaction fees · white-label · SSO · dedicated support · custom contracts · campaign email volume by agreement"
+                "For portfolios and organizations that need white-label, single sign-on or a contract — quoted for you.",
+                "Every limit sized by agreement · 0% transaction fees · white-label · SSO · dedicated support · custom contracts · volume pricing"
               ]
             },
             {
@@ -374,7 +266,7 @@
       "name": "Compare features",
       "order": 2,
       "widthPx": 768,
-      "heightPx": 3056,
+      "heightPx": 3009,
       "groups": [
         {
           "figmaNodeId": "572:3095",
@@ -393,20 +285,6 @@
           ]
         },
         {
-          "figmaNodeId": "572:3099",
-          "name": "First column stays pinned — scroll to compare all 8 plans →",
-          "widthPx": 353,
-          "records": [
-            {
-              "figmaNodeId": "572:3099",
-              "name": null,
-              "cells": [
-                "First column stays pinned — scroll to compare all 8 plans →"
-              ]
-            }
-          ]
-        },
-        {
           "figmaNodeId": "572:3100",
           "name": "Feature table",
           "widthPx": 688,
@@ -419,11 +297,7 @@
                 "Free",
                 "Starter",
                 "Pro",
-                "Business",
-                "Scale",
-                "Advanced",
-                "Agency",
-                "Enterprise"
+                "Custom"
               ]
             },
             {
@@ -433,12 +307,8 @@
                 "Text",
                 "$0",
                 "$25",
-                "$56",
-                "$139",
-                "$249",
-                "$399",
-                "$1299",
-                "Custom"
+                "$69",
+                "Quoted"
               ]
             },
             {
@@ -456,10 +326,6 @@
                 "1",
                 "1",
                 "3",
-                "10",
-                "15",
-                "25",
-                "100",
                 "Talk to us"
               ]
             },
@@ -470,10 +336,6 @@
                 "Pages per site",
                 "5",
                 "25",
-                "100",
-                "Unlimited",
-                "Unlimited",
-                "Unlimited",
                 "Unlimited",
                 "Talk to us"
               ]
@@ -486,10 +348,6 @@
                 "250 MB",
                 "2 GB",
                 "5 GB",
-                "10 GB",
-                "15 GB",
-                "20 GB",
-                "20 GB",
                 "Talk to us"
               ]
             },
@@ -501,10 +359,6 @@
                 "2 GB",
                 "15 GB",
                 "25 GB",
-                "45 GB",
-                "70 GB",
-                "80 GB",
-                "395 GB",
                 "Talk to us"
               ]
             },
@@ -514,10 +368,6 @@
               "cells": [
                 "Custom domain & SSL",
                 "—",
-                "✓",
-                "✓",
-                "✓",
-                "✓",
                 "✓",
                 "✓",
                 "✓"
@@ -531,10 +381,6 @@
                 "—",
                 "✓",
                 "✓",
-                "✓",
-                "✓",
-                "✓",
-                "✓",
                 "✓"
               ]
             },
@@ -544,10 +390,6 @@
               "cells": [
                 "Reusable components",
                 "1",
-                "✓",
-                "✓",
-                "✓",
-                "✓",
                 "✓",
                 "✓",
                 "✓"
@@ -561,10 +403,6 @@
                 "—",
                 "—",
                 "✓",
-                "✓",
-                "✓",
-                "✓",
-                "✓",
                 "✓"
               ]
             },
@@ -575,10 +413,6 @@
                 "Scheduled publishing",
                 "—",
                 "—",
-                "—",
-                "✓",
-                "✓",
-                "✓",
                 "✓",
                 "✓"
               ]
@@ -591,10 +425,6 @@
                 "—",
                 "✓",
                 "✓",
-                "✓",
-                "✓",
-                "✓",
-                "✓",
                 "✓"
               ]
             },
@@ -605,10 +435,6 @@
                 "Multilingual sites",
                 "—",
                 "—",
-                "—",
-                "✓",
-                "✓",
-                "✓",
                 "✓",
                 "✓"
               ]
@@ -620,10 +446,6 @@
                 "A/B testing",
                 "—",
                 "—",
-                "—",
-                "✓",
-                "✓",
-                "✓",
                 "✓",
                 "✓"
               ]
@@ -642,11 +464,7 @@
                 "Team seats",
                 "1",
                 "2 · max 5",
-                "3 · max 20",
-                "5 · max 100",
-                "5 · max 150",
-                "10 · max 250",
-                "10 · max 500",
+                "3 · unlimited",
                 "Custom"
               ]
             },
@@ -657,11 +475,7 @@
                 "Site collaborators",
                 "1",
                 "2 · max 10",
-                "3 · max 25",
-                "5 · max 100",
-                "5 · max 150",
-                "5 · max 250",
-                "5 · max 1,000",
+                "3 · unlimited",
                 "Custom"
               ]
             },
@@ -670,10 +484,6 @@
               "name": "row",
               "cells": [
                 "Member accounts",
-                "Unlimited",
-                "Unlimited",
-                "Unlimited",
-                "Unlimited",
                 "Unlimited",
                 "Unlimited",
                 "Unlimited",
@@ -688,10 +498,6 @@
                 "—",
                 "—",
                 "—",
-                "—",
-                "—",
-                "—",
-                "✓",
                 "✓"
               ]
             },
@@ -700,10 +506,6 @@
               "name": "row",
               "cells": [
                 "Single sign-on (SAML/OIDC)",
-                "—",
-                "—",
-                "—",
-                "—",
                 "—",
                 "—",
                 "—",
@@ -724,11 +526,7 @@
                 "Datasets",
                 "—",
                 "2 · max 10",
-                "5 · max 50",
-                "10 · max 250",
-                "15 · max 500",
-                "25 · max 1,000",
-                "50 · max 5,000",
+                "5 · unlimited",
                 "Custom"
               ]
             },
@@ -739,10 +537,6 @@
                 "Records per dataset",
                 "—",
                 "1,000",
-                "10,000",
-                "100,000",
-                "500,000",
-                "1,000,000",
                 "Unlimited",
                 "Talk to us"
               ]
@@ -754,10 +548,6 @@
                 "Variables per site",
                 "3",
                 "25",
-                "100",
-                "1,000",
-                "5,000",
-                "Unlimited",
                 "Unlimited",
                 "Talk to us"
               ]
@@ -769,10 +559,6 @@
                 "Functions per site",
                 "1",
                 "10",
-                "50",
-                "250",
-                "500",
-                "1,000",
                 "Unlimited",
                 "Talk to us"
               ]
@@ -784,10 +570,6 @@
                 "Workflows per site",
                 "—",
                 "3",
-                "25",
-                "100",
-                "250",
-                "500",
                 "Unlimited",
                 "Talk to us"
               ]
@@ -800,10 +582,6 @@
                 "—",
                 "500",
                 "5,000",
-                "50,000",
-                "150,000",
-                "500,000",
-                "2,000,000",
                 "Talk to us"
               ]
             },
@@ -815,10 +593,6 @@
                 "—",
                 "—",
                 "✓",
-                "✓",
-                "✓",
-                "✓",
-                "✓",
                 "✓"
               ]
             },
@@ -828,10 +602,6 @@
               "cells": [
                 "Appointment bookings",
                 "—",
-                "✓",
-                "✓",
-                "✓",
-                "✓",
                 "✓",
                 "✓",
                 "✓"
@@ -845,10 +615,6 @@
                 "20",
                 "200",
                 "1,000",
-                "5,000",
-                "10,000",
-                "10,000",
-                "10,000",
                 "Talk to us"
               ]
             },
@@ -860,10 +626,6 @@
                 "—",
                 "1,000",
                 "10,000",
-                "30,000",
-                "100,000",
-                "150,000",
-                "500,000",
                 "Talk to us"
               ]
             },
@@ -873,10 +635,6 @@
               "cells": [
                 "CRM: contacts, leads, companies, deals & tasks",
                 "—",
-                "✓",
-                "✓",
-                "✓",
-                "✓",
                 "✓",
                 "✓",
                 "✓"
@@ -890,10 +648,6 @@
                 "—",
                 "35",
                 "150",
-                "200",
-                "300",
-                "500",
-                "1,000",
                 "Talk to us"
               ]
             },
@@ -905,10 +659,6 @@
                 "—",
                 "—",
                 "2,500",
-                "15,000",
-                "25,000",
-                "65,000",
-                "130,000",
                 "Talk to us"
               ]
             },
@@ -920,10 +670,6 @@
                 "—",
                 "—",
                 "✓",
-                "✓",
-                "✓",
-                "✓",
-                "✓",
                 "✓"
               ]
             },
@@ -934,10 +680,6 @@
                 "Video & file uploads",
                 "—",
                 "—",
-                "✓",
-                "✓",
-                "✓",
-                "✓",
                 "✓",
                 "✓"
               ]
@@ -957,10 +699,6 @@
                 "—",
                 "✓",
                 "✓",
-                "✓",
-                "✓",
-                "✓",
-                "✓",
                 "✓"
               ]
             },
@@ -971,10 +709,6 @@
                 "Products per site",
                 "—",
                 "100",
-                "2,500",
-                "10,000",
-                "25,000",
-                "Unlimited",
                 "Unlimited",
                 "Talk to us"
               ]
@@ -987,10 +721,6 @@
                 "—",
                 "—",
                 "1",
-                "2",
-                "3",
-                "5",
-                "20",
                 "Talk to us"
               ]
             },
@@ -1002,10 +732,6 @@
                 "—",
                 "5%",
                 "3%",
-                "2%",
-                "1%",
-                "0%",
-                "0%",
                 "0%"
               ]
             },
@@ -1016,11 +742,7 @@
                 "Physical transaction fee",
                 "—",
                 "2%",
-                "0%",
-                "0%",
-                "0%",
-                "0%",
-                "0%",
+                "0.5%",
                 "0%"
               ]
             },
@@ -1031,10 +753,6 @@
                 "Subscriptions & memberships",
                 "—",
                 "—",
-                "—",
-                "✓",
-                "✓",
-                "✓",
                 "✓",
                 "✓"
               ]
@@ -1046,10 +764,6 @@
                 "Gift cards",
                 "—",
                 "—",
-                "—",
-                "✓",
-                "✓",
-                "✓",
                 "✓",
                 "✓"
               ]
@@ -1062,10 +776,6 @@
                 "—",
                 "—",
                 "✓",
-                "✓",
-                "✓",
-                "✓",
-                "✓",
                 "✓"
               ]
             },
@@ -1077,10 +787,6 @@
                 "—",
                 "—",
                 "✓",
-                "✓",
-                "✓",
-                "✓",
-                "✓",
                 "✓"
               ]
             },
@@ -1091,10 +797,6 @@
                 "Content gating",
                 "—",
                 "—",
-                "—",
-                "✓",
-                "✓",
-                "✓",
                 "✓",
                 "✓"
               ]
@@ -1106,10 +808,6 @@
                 "Commerce analytics",
                 "—",
                 "—",
-                "✓",
-                "✓",
-                "✓",
-                "✓",
                 "✓",
                 "✓"
               ]
@@ -1129,10 +827,6 @@
                 "✓",
                 "✓",
                 "✓",
-                "✓",
-                "✓",
-                "✓",
-                "✓",
                 "✓"
               ]
             },
@@ -1144,10 +838,6 @@
                 "—",
                 "✓",
                 "✓",
-                "✓",
-                "✓",
-                "✓",
-                "✓",
                 "✓"
               ]
             },
@@ -1156,10 +846,6 @@
               "name": "row",
               "cells": [
                 "CDN & responsive images",
-                "✓",
-                "✓",
-                "✓",
-                "✓",
                 "✓",
                 "✓",
                 "✓",
@@ -1174,10 +860,6 @@
                 "—",
                 "✓",
                 "✓",
-                "✓",
-                "✓",
-                "✓",
-                "✓",
                 "✓"
               ]
             },
@@ -1187,10 +869,6 @@
               "cells": [
                 "Aglyn AI: generate pages, emails, campaigns, products and more",
                 "300 credits",
-                "✓",
-                "✓",
-                "✓",
-                "✓",
                 "✓",
                 "✓",
                 "✓"
@@ -1204,10 +882,6 @@
                 "300 / mo",
                 "750 / mo",
                 "2.75k / mo",
-                "7.5k / mo",
-                "10k / mo",
-                "13k / mo",
-                "58k / mo",
                 "Talk to us"
               ]
             },
@@ -1219,10 +893,6 @@
                 "—",
                 "—",
                 "✓",
-                "✓",
-                "✓",
-                "✓",
-                "✓",
                 "✓"
               ]
             },
@@ -1233,10 +903,6 @@
                 "Sell on the marketplace",
                 "—",
                 "—",
-                "✓",
-                "✓",
-                "✓",
-                "✓",
                 "✓",
                 "✓"
               ]
@@ -1255,11 +921,7 @@
                 "API access",
                 "—",
                 "—",
-                "—",
                 "1.5k / mo",
-                "5k / mo",
-                "17k / mo",
-                "85k / mo",
                 "Talk to us"
               ]
             },
@@ -1270,10 +932,6 @@
                 "Webhooks",
                 "—",
                 "—",
-                "—",
-                "✓",
-                "✓",
-                "✓",
                 "✓",
                 "✓"
               ]
@@ -1285,10 +943,6 @@
                 "Site export & backup",
                 "—",
                 "—",
-                "✓",
-                "✓",
-                "✓",
-                "✓",
                 "✓",
                 "✓"
               ]
@@ -1304,7 +958,7 @@
       "name": "Usage pricing",
       "order": 3,
       "widthPx": 768,
-      "heightPx": 1661,
+      "heightPx": 1618,
       "groups": [
         {
           "figmaNodeId": "572:4087",
@@ -1323,20 +977,6 @@
           ]
         },
         {
-          "figmaNodeId": "572:4091",
-          "name": "First column stays pinned — scroll to compare all 8 plans →",
-          "widthPx": 356,
-          "records": [
-            {
-              "figmaNodeId": "572:4091",
-              "name": null,
-              "cells": [
-                "First column stays pinned — scroll to compare all 8 plans →"
-              ]
-            }
-          ]
-        },
-        {
           "figmaNodeId": "572:4092",
           "name": "Metered table",
           "widthPx": 688,
@@ -1348,11 +988,7 @@
                 "Add-on capacity",
                 "Starter",
                 "Pro",
-                "Business",
-                "Scale",
-                "Advanced",
-                "Agency",
-                "Enterprise"
+                "Custom"
               ]
             },
             {
@@ -1360,10 +996,6 @@
               "name": "row",
               "cells": [
                 "Extra site, per month",
-                "$20",
-                "$20",
-                "$20",
-                "$20",
                 "$20",
                 "$20",
                 "Custom"
@@ -1376,10 +1008,6 @@
                 "Extra team seat, per month",
                 "$5",
                 "$4",
-                "$3",
-                "$2",
-                "$2",
-                "$2",
                 "Custom"
               ]
             },
@@ -1390,10 +1018,6 @@
                 "Extra site collaborator, per month",
                 "$3",
                 "$2",
-                "$1",
-                "$1",
-                "$1",
-                "$1",
                 "Custom"
               ]
             },
@@ -1404,10 +1028,6 @@
                 "Extra dataset, per month",
                 "$2",
                 "$2",
-                "$1",
-                "$1",
-                "$1",
-                "$1",
                 "Custom"
               ]
             },
@@ -1416,10 +1036,6 @@
               "name": "row",
               "cells": [
                 "Extra dataset storage, per GB-month",
-                "$0.36",
-                "$0.36",
-                "$0.36",
-                "$0.36",
                 "$0.36",
                 "$0.36",
                 "Custom"
@@ -1431,11 +1047,7 @@
               "cells": [
                 "API requests, per 1,000 over limit",
                 "—",
-                "—",
                 "$0.50",
-                "$0.35",
-                "$0.25",
-                "$0.25",
                 "Custom"
               ]
             },
@@ -1446,10 +1058,6 @@
                 "CRM records, per 1,000 over the included band",
                 "$1",
                 "$0.75",
-                "$0.50",
-                "$0.40",
-                "$0.40",
-                "$0.40",
                 "Custom"
               ]
             },
@@ -1460,10 +1068,6 @@
                 "AI credits, per 1,000 over the included band",
                 "$3",
                 "$3",
-                "$2.75",
-                "$2.50",
-                "$2.25",
-                "$2",
                 "Custom"
               ]
             }
@@ -1501,22 +1105,22 @@
               "figmaNodeId": "572:4243",
               "name": null,
               "cells": [
-                "Plans already include registers — 1 on Pro, 2 on Business, 3 on Scale, 5 on Advanced, 20 on Agency. This adds one beyond that."
+                "Pro includes one register per site. This adds one beyond that, for the site you assign it to."
               ]
             },
             {
               "figmaNodeId": "2146:637",
               "name": "h",
               "cells": [
-                "Aglyn AI",
-                "From $9 / mo"
+                "AI credits",
+                "$10 / mo a block"
               ]
             },
             {
               "figmaNodeId": "2146:640",
               "name": null,
               "cells": [
-                "Spark $9 · Boost $19 · Plus $39 · Max $69 · Ultra $99 · Studio $299 a month, per workspace, on any paid plan. Each tier adds AI credits on top of the credits your plan includes — 4,000 with Spark, 9,000 with Boost, 19,000 with Plus, 34,000 with Max, 49,000 with Ultra, 149,000 with Studio. Enterprise by agreement."
+                "Blocks of 5,000 AI credits a month, per workspace, on any paid plan — up to 30 blocks. They add to the credits your plan includes; past both, credits bill at your plan’s rate. Custom by agreement."
               ]
             },
             {
@@ -1632,7 +1236,7 @@
       "name": "FAQ",
       "order": 4,
       "widthPx": 768,
-      "heightPx": 1725,
+      "heightPx": 1677,
       "groups": [
         {
           "figmaNodeId": "572:4279",
@@ -1674,7 +1278,7 @@
               "name": "qa",
               "cells": [
                 "What does Aglyn AI cost?",
-                "Every paid plan includes a monthly band of AI credits, and every Aglyn AI action draws on it, generation included. For more, add an Aglyn AI tier to any paid plan, per workspace: Spark $9, Boost $19, Plus $39, Max $69, Ultra $99 or Studio $299 a month, adding 4,000 to 149,000 credits a month on top of the plan’s own; Enterprise by agreement. Credits past the band are billed per 1,000 at the rate in the usage table. If you’d rather it stopped, turn on Stop AI assist at the included band in Billing, or set a monthly dollar ceiling on overage. Free includes 300 credits a month and stops there — nothing is billed."
+                "Every paid plan includes a monthly band of AI credits, and every Aglyn AI action draws on it, generation included. For more, add AI credits to any paid plan, per workspace: blocks of 5,000 credits for $10 a month, up to 30 blocks, on top of the plan’s own; Custom by agreement. Credits past the band are billed per 1,000 at the rate in the usage table. If you’d rather it stopped, turn on Stop AI assist at the included band in Billing, or set a monthly dollar ceiling on overage. Free includes 300 credits a month and stops there — nothing is billed."
               ]
             },
             {
@@ -1682,7 +1286,7 @@
               "name": "qa",
               "cells": [
                 "How do transaction fees work?",
-                "Payments run on Stripe. Aglyn adds a transaction fee on top of Stripe’s processing — 0–5% depending on plan and what you sell: physical goods on the lower rate, digital products and services (bookings included) on the higher one. It steps down as you move up — 1% on Scale, 0% from Advanced up."
+                "Payments run on Stripe. Aglyn adds a transaction fee on top of Stripe’s processing, depending on plan and what you sell: physical goods on the lower rate, digital products and services (bookings included) on the higher one. Starter is 5% digital and 2% physical, Pro 3% and 0.5%, and Custom 0%."
               ]
             },
             {
@@ -1714,7 +1318,7 @@
               "name": "qa",
               "cells": [
                 "Do you offer SSO or an SLA?",
-                "SAML / OIDC single sign-on is available on Enterprise today — you set it up yourself in the console after proving your domain. Enterprise also includes dedicated support with a named manager and a 24–48 hour first response. We do not offer a contractual uptime SLA."
+                "SAML / OIDC single sign-on is available on the Custom plan today — you set it up yourself in the console after proving your domain. Custom also includes dedicated support with a named manager and a 24–48 hour first response. We do not offer a contractual uptime SLA."
               ]
             },
             {

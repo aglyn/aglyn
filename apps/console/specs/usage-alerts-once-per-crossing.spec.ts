@@ -553,12 +553,22 @@ describe('a count quota is announced once per crossing (AGL-3431)', () => {
 /**
  * A Pro workspace with one site, for a BIG limit: 100 pages per site, so each
  * of the four steps is its own reading.
+ *
+ * Pro's own page count is unlimited since pricing v4 (AGL-4126), so the 100
+ * is a per-org `entitlements.screensPerHost` — the instrument a contract that
+ * sets a number is written with, resolved ahead of the plan's.
  */
-const PRO_PAGES = PLAN_ENTITLEMENTS.pro.screensPerHost as number
+const PRO_PAGES = 100
 
 function proSite(guards: Record<string, unknown> = {}) {
   orgStore = {
-    acme: { name: 'Acme', slug: 'acme', plan: 'pro', usageAlerts: { ...guards } },
+    acme: {
+      name: 'Acme',
+      slug: 'acme',
+      plan: 'pro',
+      entitlements: { screensPerHost: PRO_PAGES },
+      usageAlerts: { ...guards },
+    },
   }
   mockHosts = [{ id: 'host-acme', orgId: 'acme', displayName: 'Acme Shop' }]
 }
@@ -569,7 +579,9 @@ const atPages = (pages: number) => {
 
 describe('the four steps — 75, 80, 90, 100 — each once (AGL-3431)', () => {
   it('steps through every band on a big limit, announcing each exactly once', async () => {
-    expect(PRO_PAGES).toBe(100)
+    // Unlimited on the plan itself (pricing v4), so no step could ever fire
+    // without the per-org figure above.
+    expect(PLAN_ENTITLEMENTS.pro.screensPerHost).toBe(Number.POSITIVE_INFINITY)
     proSite()
     const days = [
       [75, 'above 75%'],
@@ -794,6 +806,8 @@ describe('the body stands on its own (AGL-3431)', () => {
         name: 'Acme',
         slug: 'acme',
         plan: 'pro',
+        // A finite page count: Pro's own is unlimited since pricing v4.
+        entitlements: { screensPerHost: PRO_PAGES },
         usageAlerts: {},
       },
     }
@@ -801,7 +815,7 @@ describe('the body stands on its own (AGL-3431)', () => {
       { id: 'host-a', orgId: 'acme', displayName: 'Alpha Blog' },
       { id: 'host-b', orgId: 'acme', displayName: 'Beta Shop' },
     ]
-    const limit = PLAN_ENTITLEMENTS.pro.screensPerHost as number
+    const limit = PRO_PAGES
     mockScreens = { maxBillable: limit, overCapHostIds: [] }
     mockScreenRows = [
       { hostId: 'host-a', billable: 12 },

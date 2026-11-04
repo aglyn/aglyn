@@ -19,9 +19,10 @@
 // on the server at boot, and the full barrel carries client-only contexts
 // (AGL-405).
 import {
-  aiTierQuotaPerUnit,
-  planSellsAiTiers,
+  aiCreditsQuotaPerUnit,
+  planSellsAiCredits,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { AI_CREDIT_BLOCKS_MAX } from '@aglyn/aglyn/app-utils/ai-credit-blocks'
 import { registerPluginConfigSchema } from '@aglyn/aglyn/plugin-manager/plugin-config'
 import {
   registerPluginEntitlements,
@@ -44,8 +45,8 @@ import { registerAiActivityActions } from './activity/ai-activity-actions'
  * reaches a provider, Firestore or React.
  *
  * The plan tables keep the per-plan defaults for `aiGenerative` and
- * `aiAssist`, and `AI_TIERS` keeps each tier's price and credits, so this
- * names keys and restates no figure.
+ * `aiAssist`, and `ai-credit-blocks.ts` keeps the credit block's price and
+ * credits, so this names keys and restates no figure.
  *
  * `ai-assist` and `ai-generate` are separate levers because the two doors
  * spend at different rates and an incident on one need not stop the other
@@ -59,16 +60,16 @@ export const AI_PLUGIN_ENTITLEMENTS: PluginEntitlementRegistration = {
     {
       key: 'aiAddon',
       label: 'AI add-on',
-      maxUnits: 1,
-      // The purchased tier's credits on top of the plan's included band
-      // (AGL-3965): one pool, widened by what was bought rather than by
-      // which plan bought it.
+      // Credits by the block (AGL-4144): 0 to 30 blocks, each adding 5,000
+      // credits to the plan's included band — one pool, widened by what was
+      // bought rather than by which plan bought it.
+      maxUnits: AI_CREDIT_BLOCKS_MAX,
       quota: {
         key: 'assistCreditsPerMonth',
-        perUnit: aiTierQuotaPerUnit,
+        perUnit: aiCreditsQuotaPerUnit,
       },
       features: ['aiGenerative', 'aiAssist'],
-      soldOn: planSellsAiTiers,
+      soldOn: planSellsAiCredits,
     },
   ],
   features: [

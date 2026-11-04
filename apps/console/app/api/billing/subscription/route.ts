@@ -24,6 +24,11 @@ import {
   SELF_SERVE_PLANS,
   type OrgPlan,
 } from '@aglyn/aglyn/server'
+// By path: the route's specs stub the `/server` barrel with a partial object.
+import {
+  PLAN_LABELS,
+  RETIRED_PLANS,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -37,7 +42,6 @@ import {
   addonKindFromPriceId,
   addonTargetPriceId,
   addonQuantitiesFromItems,
-  aiTierFromItems,
   findPlanItem,
   isMeteredPriceId,
   meteredPriceId,
@@ -66,23 +70,21 @@ import { PAYMENT_METHOD_UPDATE_FLOW } from '../../../../utils/update-payment-met
 // lockdown-423: exempt — managing/reactivating the subscription IS the recovery path out of a
 // billing lock; part of the surface AGL-1501 keeps sessions alive for.
 
+/**
+ * The plans a switch can move TO, by price (pricing v4, AGL-4126): Starter
+ * and Pro. Business, Scale, Advanced and Agency are retired and never sold
+ * again, so their `STRIPE_PRICE_*` env is no longer read; no subscription was
+ * on one of them when v4 shipped.
+ */
 const PRICE_ENV: Record<string, string | undefined> = {
   starter: process.env.STRIPE_PRICE_STARTER,
   pro: process.env.STRIPE_PRICE_PRO,
-  business: process.env.STRIPE_PRICE_BUSINESS,
-  scale: process.env.STRIPE_PRICE_SCALE,
-  advanced: process.env.STRIPE_PRICE_ADVANCED,
-  agency: process.env.STRIPE_PRICE_AGENCY,
 }
 
 /** Annual prices (AGL-269/532); switches honor the page's toggle. */
 const YEARLY_PRICE_ENV: Record<string, string | undefined> = {
   starter: process.env.STRIPE_PRICE_STARTER_YEARLY,
   pro: process.env.STRIPE_PRICE_PRO_YEARLY,
-  business: process.env.STRIPE_PRICE_BUSINESS_YEARLY,
-  scale: process.env.STRIPE_PRICE_SCALE_YEARLY,
-  advanced: process.env.STRIPE_PRICE_ADVANCED_YEARLY,
-  agency: process.env.STRIPE_PRICE_AGENCY_YEARLY,
 }
 
 async function stripeRequest(
@@ -136,8 +138,11 @@ function planFromConfiguredPriceId(priceId?: string): OrgPlan | null {
  */
 function isLadderDowngrade(from: OrgPlan | null, to: string): boolean {
   if (!from) return false
-  const fromIndex = SELF_SERVE_PLANS.indexOf(from)
-  const toIndex = SELF_SERVE_PLANS.indexOf(to as OrgPlan)
+  // The whole ladder, retired plans in their old place (pricing v4): a
+  // workspace left on Business moving to Pro is still walking DOWN.
+  const ladder = [...SELF_SERVE_PLANS, ...RETIRED_PLANS]
+  const fromIndex = ladder.indexOf(from)
+  const toIndex = ladder.indexOf(to as OrgPlan)
   return fromIndex >= 0 && toIndex >= 0 && toIndex < fromIndex
 }
 
@@ -452,7 +457,7 @@ async function handler(request: Request): Promise<Response> {
     // provision it via /api/admin/enterprise-billing.
     if (isCustomPricedPlan(targetPlan as OrgPlan)) {
       return Response.json(
-        { error: 'Enterprise is custom-priced — contact sales.' },
+        { error: `${PLAN_LABELS.enterprise} is custom-priced — contact sales.` },
         { status: 400 },
       )
     }
@@ -641,8 +646,8 @@ async function handler(request: Request): Promise<Response> {
     for (const item of items) {
       const kind = addonKindFromPriceId(item?.price?.id)
       if (!kind) continue
-      // The AI add-on keeps its tier and only follows the interval
-      // (AGL-3965); every other kind re-prices to the target plan.
+      // Flat add-ons (Aglyn AI credit blocks among them, AGL-4144) only follow
+      // the interval; per-plan kinds re-price to the target plan.
       const target = addonTargetPriceId(kind, targetPlan as OrgPlan, targetInterval, item?.price?.id)
       if (target === item?.price?.id) continue
       if (target) {
@@ -1023,7 +1028,6 @@ async function handler(request: Request): Promise<Response> {
       await org.ref.set({ plan: targetPlan }, { merge: true })
       await writeOrgBilling(org.ref.id, {
         seatAddons: addonQuantitiesFromItems(updated?.items?.data ?? []),
-        aiTier: aiTierFromItems(updated?.items?.data ?? []),
         subscription: {
           status: updated.status ?? subscription.status,
           priceId: targetPrice,

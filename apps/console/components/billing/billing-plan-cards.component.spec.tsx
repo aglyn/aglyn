@@ -186,40 +186,47 @@ function actionOn(label: string): HTMLElement {
   return button
 }
 
+/*
+ * PRICING V4 (2026-11-03, AGL-4126): the ladder these cases walk is Free,
+ * Starter and Pro, with Custom (`PLAN_LABELS.enterprise`) the rung above Pro.
+ * Business, Scale, Advanced and Agency are retired — never drawn for sale —
+ * so every case that stood on one of them now stands on the v4 rung in the
+ * same position: the step up is Starter → Pro, and the top self-serve tier
+ * is Pro.
+ */
 describe('the page opens on the decision, not the catalogue', () => {
   it('shows the current plan and the next two rungs, and nothing else', () => {
-    renderCards({ plan: 'pro' })
+    renderCards({ plan: 'free' })
+    expect(cardShown('Free')).toBe(true)
+    expect(cardShown('Starter')).toBe(true)
     expect(cardShown('Pro')).toBe(true)
-    expect(cardShown('Business')).toBe(true)
-    expect(cardShown('Scale')).toBe(true)
-    // Nothing below, and nothing further up. Seven cards at once is the
-    // reference table; this is the decision being asked.
-    expect(cardShown('Free')).toBe(false)
-    expect(cardShown('Starter')).toBe(false)
-    expect(cardShown('Agency')).toBe(false)
+    // Nothing further up. Every card at once is the reference table; this is
+    // the decision being asked.
+    expect(cardShown('Custom')).toBe(false)
+    // And no retired plan, ever.
+    expect(cardShown('Business')).toBe(false)
   })
 
   /**
-   * ENTERPRISE IS THE RUNG ABOVE AGENCY, which is what lets one walk express
-   * all three rules. Advanced reaches it going up; Agency reaches it with
-   * nothing left above, so the walk back-fills one downward and the result is
-   * the one-down-one-up the top of the ladder needs.
+   * CUSTOM IS THE RUNG ABOVE PRO, which is what lets one walk express all
+   * three rules. Starter reaches it going up; Pro reaches it with nothing
+   * left above, and the row is shorter rather than back-filled downward.
    */
-  it('treats Enterprise as the rung above Agency', () => {
-    renderCards({ plan: 'advanced' })
-    expect(cardShown('Advanced')).toBe(true)
-    expect(cardShown('Agency')).toBe(true)
-    expect(cardShown('Enterprise')).toBe(true)
+  it('treats Custom as the rung above Pro', () => {
+    renderCards({ plan: 'starter' })
+    expect(cardShown('Starter')).toBe(true)
+    expect(cardShown('Pro')).toBe(true)
+    expect(cardShown('Custom')).toBe(true)
   })
 
   it('the top self-serve tier shows itself and the one step left', () => {
-    renderCards({ plan: 'agency' })
-    expect(cardShown('Agency')).toBe(true)
-    expect(cardShown('Enterprise')).toBe(true)
+    renderCards({ plan: 'pro' })
+    expect(cardShown('Pro')).toBe(true)
+    expect(cardShown('Custom')).toBe(true)
     // A shorter row is the honest shape. Padding it with a downgrade would
     // make the cheapest thing on screen the only alternative on offer.
-    expect(cardShown('Advanced')).toBe(false)
-    expect(cardShown('Scale')).toBe(false)
+    expect(cardShown('Starter')).toBe(false)
+    expect(cardShown('Free')).toBe(false)
   })
 
   it('an upgrade card lists what it ADDS, not what it also has', () => {
@@ -256,34 +263,32 @@ describe('the page opens on the decision, not the catalogue', () => {
   })
 
   it('exactly one contained control, and it is the step up', () => {
-    renderCards({ plan: 'pro' })
-    const upgrade = screen.getByRole('button', { name: /Upgrade to Business/ })
+    renderCards({ plan: 'starter' })
+    const upgrade = screen.getByRole('button', { name: /Upgrade to Pro/ })
     expect(upgrade.className).toMatch(/MuiButton-contained/)
     // ONE. Six identical contained Upgrade buttons is what made the previous
-    // default read as a price list; the rung beyond the recommended one is
-    // reachable but quieter.
+    // default read as a price list; the rung beyond the recommended one —
+    // Custom, a conversation since pricing v4 — is reachable but quieter.
     expect(
-      screen
-        .queryAllByRole('button')
-        .filter((button) => /MuiButton-contained/.test(button.className)),
+      [...screen.queryAllByRole('button'), ...screen.queryAllByRole('link')]
+        .filter((control) => /MuiButton-contained/.test(control.className)),
     ).toHaveLength(1)
     expect(
-      screen.getByRole('button', { name: /Upgrade to Scale/ }).className,
+      screen.getByRole('link', { name: /Contact us/ }).className,
     ).toMatch(/MuiButton-outlined/)
   })
 
   it('the upgrade still selects the tier it names', () => {
-    const { onSelect } = renderCards({ plan: 'pro' })
-    fireEvent.click(screen.getByRole('button', { name: /Upgrade to Business/ }))
-    expect(onSelect).toHaveBeenCalledWith('business')
+    const { onSelect } = renderCards({ plan: 'starter' })
+    fireEvent.click(screen.getByRole('button', { name: /Upgrade to Pro/ }))
+    expect(onSelect).toHaveBeenCalledWith('pro')
   })
 
   it('⛔ NOTHING IS REMOVED — one click reaches every tier', () => {
     renderCards({ plan: 'pro' })
     fireEvent.click(screen.getByRole('button', { name: /Compare all/ }))
-    expect(cardShown('Business')).toBe(true)
-    expect(cardShown('Scale')).toBe(true)
-    expect(cardShown('Agency')).toBe(true)
+    expect(cardShown('Pro')).toBe(true)
+    expect(cardShown('Custom')).toBe(true)
     // The cheaper plans are one further click away, and the disclosure says
     // so IN NUMBERS — hiding a downsell outright is a dark pattern, and a
     // fold that does not say what it holds is that dark pattern with a label.
@@ -295,11 +300,11 @@ describe('the page opens on the decision, not the catalogue', () => {
 
   it('the way to every other plan is a real control, not a hint', () => {
     renderCards({ plan: 'pro' })
-    // EIGHT, not seven: the seven self-serve tiers plus Enterprise, which the
-    // grid draws from outside `PLAN_ORDER`. Seven was the count of the array
-    // alone, and it happened to equal the number of CARDS an org on Pro saw,
-    // so the total agreed with the page while Free was absent from both.
-    const compare = screen.getByRole('button', { name: /Compare all 8 plans/ })
+    // FOUR, not three: the three self-serve tiers plus Custom, which the
+    // grid draws from outside `PLAN_ORDER`. The array alone once counted
+    // seven of eight and happened to equal the number of CARDS an org on Pro
+    // saw, so the total agreed with the page while Free was absent from both.
+    const compare = screen.getByRole('button', { name: /Compare all 4 plans/ })
     // Named, counted, and NOT de-emphasized. A quiet route to the cheaper end
     // is the dark-pattern version of collapsing it.
     expect(compare.className).toMatch(/MuiButton-outlined/)
@@ -311,7 +316,9 @@ describe('the page opens on the decision, not the catalogue', () => {
     fireEvent.click(
       screen.getByRole('button', { name: /Show just my plan and the next step/ }),
     )
-    expect(cardShown('Agency')).toBe(false)
+    // Back on the decision: Pro and Custom, the fold and its tiers gone.
+    expect(disclosure()).toBeNull()
+    expect(cardShown('Custom')).toBe(true)
   })
 
   /**
@@ -322,15 +329,18 @@ describe('the page opens on the decision, not the catalogue', () => {
   it('a prospect with no plan still gets the whole ladder', () => {
     renderCards({ plan: undefined })
     expect(cardShown('Free')).toBe(true)
-    expect(cardShown('Agency')).toBe(true)
+    expect(cardShown('Pro')).toBe(true)
+    expect(cardShown('Custom')).toBe(true)
     expect(
       screen.queryByRole('button', { name: /Compare all/ }),
     ).toBeNull()
   })
 
   it('a deep link lands on the card it named (AGL-1117)', () => {
-    renderCards({ plan: 'pro', highlight: 'agency' })
-    expect(cardShown('Agency')).toBe(true)
+    renderCards({ plan: 'starter', highlight: 'pro' })
+    expect(cardShown('Pro')).toBe(true)
+    // It opens the grid rather than the focused view.
+    expect(screen.queryByRole('button', { name: /Compare all/ })).toBeNull()
   })
 
   /**
@@ -339,7 +349,7 @@ describe('the page opens on the decision, not the catalogue', () => {
    * counted and collapsed — never a peer of an upgrade on the opening view.
    */
   it('the focused view never offers a downgrade', () => {
-    for (const plan of ['free', 'pro', 'agency'] as const) {
+    for (const plan of ['free', 'starter', 'pro'] as const) {
       renderCards({ plan })
       expect(screen.queryAllByRole('button', { name: /Downgrade/ })).toHaveLength(
         0,
@@ -354,12 +364,14 @@ describe('the page opens on the decision, not the catalogue', () => {
    * list; only the wording differs.
    */
   it('every card labels its tick list, and both upgrades label it alike', () => {
-    renderCards({ plan: 'starter' })
+    // On Free since pricing v4 (AGL-4126): the two self-serve rungs above it
+    // are both upgrades, which is the pair this case reads across.
+    renderCards({ plan: 'free' })
     // The current card states what it has; each upgrade card names what it
     // BUILDS ON, so a short delta reads as cumulative rather than as a gap.
     expect(screen.queryAllByText('Included')).toHaveLength(1)
+    expect(screen.getByText('Everything in Free, plus')).toBeTruthy()
     expect(screen.getByText('Everything in Starter, plus')).toBeTruthy()
-    expect(screen.getByText('Everything in Pro, plus')).toBeTruthy()
   })
 
   it('says what the current tier is MISSING, not only what it has', () => {
@@ -370,7 +382,8 @@ describe('the page opens on the decision, not the catalogue', () => {
   })
 
   it('never lists a loss nobody sells above you', () => {
-    renderCards({ plan: 'agency' })
+    // Pro: the top self-serve tier since pricing v4 (AGL-4126).
+    renderCards({ plan: 'pro' })
     // The top self-serve tier has nothing above it to be missing, so the
     // section is absent rather than empty or invented.
     expect(screen.queryByText('Not in your plan')).toBeNull()
@@ -429,7 +442,8 @@ describe('the page opens on the decision, not the catalogue', () => {
   })
 
   it('and Enterprise, which has no meter, prints no rate', () => {
-    renderCards({ plan: 'agency' })
+    // Pro and Custom side by side since pricing v4 (AGL-4126).
+    renderCards({ plan: 'pro' })
     // A finite fallback — twice Agency's band, since 2026-09-07 — and the
     // price negotiated, so there is no pass-through to quote: the row is the
     // number, with nothing after it.
@@ -456,17 +470,17 @@ describe('the page opens on the decision, not the catalogue', () => {
   })
 
   it('the Enterprise card states its limits like every other card', () => {
-    renderCards({ plan: 'agency' })
-    // Agency's own figures — with its per-unit rate, since Agency meters —
-    // and Enterprise's answer beside them, which carries no rate.
-    expect(screen.queryAllByText(/^100 hosts/)).toHaveLength(1)
+    renderCards({ plan: 'pro' })
+    // Pro's own figures — with its per-unit rate, since Pro meters — and
+    // Custom's answer beside them, which carries no rate (pricing v4).
+    expect(screen.queryAllByText(/^3 hosts/)).toHaveLength(1)
     expect(screen.queryAllByText('200 hosts')).toHaveLength(1)
-    // Never the raw sentinel (AGL-2482).
+    // Never the raw sentinel (AGL-2482) — Pro's lifted counts included.
     expect(screen.queryAllByText(/∞|Infinity/)).toHaveLength(0)
   })
 
   it('and does not print its highlights twice', () => {
-    renderCards({ plan: 'agency' })
+    renderCards({ plan: 'pro' })
     // The highlights are the tick list. Substituting them into the limits
     // slot as well printed the same five lines twice in one card.
     expect(
@@ -476,11 +490,12 @@ describe('the page opens on the decision, not the catalogue', () => {
 
   it('an enterprise org sees its own plan and nothing else', () => {
     renderCards({ plan: 'pro', enterprise: true })
-    expect(cardShown('Enterprise')).toBe(true)
+    // Labelled Custom since pricing v4 (AGL-4126).
+    expect(cardShown('Custom')).toBe(true)
     // Every rung below is a downgrade it cannot self-serve, and there is no
     // step up to offer, so the page opens on no decision at all.
     expect(cardShown('Pro')).toBe(false)
-    expect(cardShown('Agency')).toBe(false)
+    expect(cardShown('Starter')).toBe(false)
     expect(
       screen.queryAllByRole('button', { name: /^Upgrade to/ }),
     ).toHaveLength(0)
@@ -506,27 +521,35 @@ describe('the page opens on the decision, not the catalogue', () => {
  * rather than "Unlimited") would have had nowhere to appear.
  */
 describe('the Enterprise card in the comparison grid', () => {
-  /** The Enterprise `Card` element, scoped so neighbours cannot satisfy a query. */
+  /**
+   * The Enterprise `Card` element, scoped so neighbours cannot satisfy a
+   * query. Headed "Custom" since pricing v4 (AGL-4126); its code id stays
+   * `enterprise`.
+   */
   function enterpriseCard(): HTMLElement {
     const heading = screen
-      .queryAllByText('Enterprise')
+      .queryAllByText('Custom')
       .map((node) => node.closest('.MuiCard-root'))
       .find(Boolean)
-    if (!heading) throw new Error('no Enterprise card in the grid')
+    if (!heading) throw new Error('no Custom card in the grid')
     return heading as HTMLElement
   }
 
+  /**
+   * The tier beside it: Pro, the top self-serve plan since pricing v4 retired
+   * Agency (AGL-4126).
+   */
   function agencyCard(): HTMLElement {
     const heading = screen
-      .queryAllByText('Agency')
+      .queryAllByText('Pro')
       .map((node) => node.closest('.MuiCard-root'))
       .find(Boolean)
-    if (!heading) throw new Error('no Agency card in the grid')
+    if (!heading) throw new Error('no Pro card in the grid')
     return heading as HTMLElement
   }
 
   it('renders the same allowance rows as the tier beside it', () => {
-    renderGrid({ plan: 'agency' })
+    renderGrid({ plan: 'pro' })
     const enterprise = within(enterpriseCard())
     // One row per axis, in the order every other card prints them. Asserted
     // by LABEL rather than by value, because the values differ by design and
@@ -552,7 +575,7 @@ describe('the Enterprise card in the comparison grid', () => {
   })
 
   it('renders the sectioned feature checklist too', () => {
-    renderGrid({ plan: 'agency' })
+    renderGrid({ plan: 'pro' })
     const enterprise = within(enterpriseCard())
     for (const section of [
       'Build & publish',
@@ -571,7 +594,7 @@ describe('the Enterprise card in the comparison grid', () => {
     // The comparison property itself, rather than a list of rows that happen
     // to be present. If either card grows or loses a row the other does not,
     // the grid stops being readable across and this goes red.
-    renderGrid({ plan: 'agency' })
+    renderGrid({ plan: 'pro' })
     const rowLabels = (card: HTMLElement) =>
       [...card.querySelectorAll('.MuiTypography-body2')]
         .map((node) => (node.textContent ?? '').trim())
@@ -588,7 +611,7 @@ describe('the Enterprise card in the comparison grid', () => {
     // The figure this whole change introduces, on the surface where a
     // customer meets it. A card that could not render allowances would have
     // hidden the one Enterprise band that is no longer unlimited.
-    renderGrid({ plan: 'agency' })
+    renderGrid({ plan: 'pro' })
     const enterprise = within(enterpriseCard())
     expect(enterprise.getByText('260,000 campaign emails/mo')).toBeTruthy()
     // …and no overage rate beside it: Enterprise publishes none, and quoting
@@ -597,10 +620,10 @@ describe('the Enterprise card in the comparison grid', () => {
     // Never the sentinel, in either of the shapes it takes when mishandled.
     expect(enterprise.queryByText(/Unlimited campaign emails/)).toBeNull()
     expect(enterprise.queryByText(/∞|Infinity|null campaign/)).toBeNull()
-    // And Agency's own band beside it, so the row can be read across.
+    // And Pro's own band beside it, so the row can be read across.
     expect(
       within(agencyCard()).getByText(
-        '130,000 campaign emails/mo (+$1.80/1k over)',
+        '2,500 campaign emails/mo (+$2.25/1k over)',
       ),
     ).toBeTruthy()
   })
@@ -618,7 +641,7 @@ describe('the Enterprise card in the comparison grid', () => {
     ).toHaveLength(1)
     expect(enterprise.getByText('YOUR AGREEMENT')).toBeTruthy()
     expect(
-      enterprise.getByText(/on an Enterprise agreement/),
+      enterprise.getByText(/on a Custom agreement/),
     ).toBeTruthy()
     expect(
       enterprise.getByRole('button', { name: 'Contact us to change' }),
@@ -626,7 +649,7 @@ describe('the Enterprise card in the comparison grid', () => {
   })
 
   it('a PROSPECT is offered the tier, with a live route to sales', () => {
-    renderGrid({ plan: 'agency' })
+    renderGrid({ plan: 'pro' })
     const enterprise = within(enterpriseCard())
     const contact = enterprise.getByRole('link', { name: 'Contact sales' })
     expect(contact.getAttribute('href')).toBeTruthy()
@@ -639,7 +662,7 @@ describe('the Enterprise card in the comparison grid', () => {
     // said here rather than left to the rows.
     expect(enterprise.getByText(/Priced, invoiced, and contracted/)).toBeTruthy()
     // No agreement, so no note about one.
-    expect(enterprise.queryByText(/on an Enterprise agreement/)).toBeNull()
+    expect(enterprise.queryByText(/on a Custom agreement/)).toBeNull()
   })
 
   /**
@@ -660,13 +683,14 @@ describe('the Enterprise card in the comparison grid', () => {
    * still gets the block, still per-org, still with the caption.
    */
   it('does not say the same thing twice to a prospect', () => {
-    renderGrid({ plan: 'agency' })
+    renderGrid({ plan: 'pro' })
     const enterprise = within(enterpriseCard())
     // The heading is the tell: a per-org answer that has no org to be about.
     expect(enterprise.queryByText('WHAT AN AGREEMENT INCLUDES')).toBeNull()
     expect(enterprise.queryByText('YOUR AGREEMENT')).toBeNull()
     for (const restated of [
-      'Twice Agency’s sites, seats and storage, unlimited pages, and more by agreement',
+      // Named in the row's own figures since pricing v4 retired Agency.
+      'Up to 200 sites, 20 team seats and 40 GB a site, unlimited pages, and more by agreement',
       'SAML / OIDC single sign-on for your whole team',
       'Full white-label — your brand, not ours',
     ]) {
@@ -683,7 +707,7 @@ describe('the Enterprise card in the comparison grid', () => {
   it('NEGATIVE CONTROL: no other tier changed shape', () => {
     // The Enterprise card is the only one that ever carried the highlights,
     // and de-duplicating it must not have reached the ladder beside it.
-    renderGrid({ plan: 'agency' })
+    renderGrid({ plan: 'pro' })
     const agency = within(agencyCard())
     expect(agency.getByText('Build & publish')).toBeTruthy()
     expect(agency.getByText('Full white-label')).toBeTruthy()
@@ -714,8 +738,9 @@ describe('lower tiers are collapsed by default (AGL-1864)', () => {
     expect(cardShown('Free')).toBe(false)
     expect(cardShown('Starter')).toBe(false)
     // The tiers ABOVE are the page's default content — the upgrade path leads.
-    expect(cardShown('Business')).toBe(true)
-    expect(cardShown('Scale')).toBe(true)
+    // Above Pro that is Custom alone since pricing v4 (AGL-4126).
+    expect(cardShown('Pro')).toBe(true)
+    expect(cardShown('Custom')).toBe(true)
   })
 
   it('an org on Pro sees neither Free nor Starter until it asks', () => {
@@ -725,8 +750,8 @@ describe('lower tiers are collapsed by default (AGL-1864)', () => {
     renderGrid({ plan: 'pro' })
     expect(cardShown('Free')).toBe(false)
     expect(cardShown('Starter')).toBe(false)
-    expect(cardShown('Business')).toBe(true)
-    expect(cardShown('Scale')).toBe(true)
+    expect(cardShown('Pro')).toBe(true)
+    expect(cardShown('Custom')).toBe(true)
   })
 
   it('the disclosure counts what it is hiding, and one click reveals them', () => {
@@ -788,9 +813,10 @@ describe('every plan the grid promises is accounted for (AGL-1864)', () => {
     const promised = Number(
       /Compare all (\d+) plans/.exec(compare.textContent ?? '')?.[1],
     )
-    // Eight: the seven self-serve tiers plus Enterprise, which the grid draws
-    // from outside `PLAN_ORDER` (commit d4ec1aead).
-    expect(promised).toBe(8)
+    // Four: the three self-serve tiers plus Custom, which the grid draws from
+    // outside `PLAN_ORDER` (commit d4ec1aead) — eight before pricing v4
+    // retired four plans (AGL-4126).
+    expect(promised).toBe(4)
     fireEvent.click(compare)
     const folded = Number(
       /Show (\d+) lower plans?/.exec(disclosure()?.textContent ?? '')?.[1] ?? 0,
@@ -814,7 +840,7 @@ describe('every plan the grid promises is accounted for (AGL-1864)', () => {
     expect(cardCount()).toBe(drawn + folded)
     expect(cardShown('Free')).toBe(true)
     expect(cardShown('Starter')).toBe(true)
-    expect(cardShown('Enterprise')).toBe(true)
+    expect(cardShown('Custom')).toBe(true)
   })
 
   /**
@@ -827,9 +853,11 @@ describe('every plan the grid promises is accounted for (AGL-1864)', () => {
    * is explicitly against.
    */
   it('CONTROL: the revealed tiers are de-emphasized, not promoted', () => {
-    renderGrid({ plan: 'pro' })
+    // On Starter since pricing v4 (AGL-4126): the org with a tier folded
+    // below it AND a self-serve step above it — Free below, Pro above.
+    renderGrid({ plan: 'starter' })
     revealLowerTiers()
-    const upgrade = actionOn('Business')
+    const upgrade = actionOn('Pro')
     // The loud controls are the steps UP, and every loud control on the grid
     // is one of them. Counted rather than sampled: this is what would fail if
     // a lower card were ever promoted to a contained button.
@@ -839,8 +867,8 @@ describe('every plan the grid promises is accounted for (AGL-1864)', () => {
       .filter((button) => /MuiButton-contained/.test(button.className))
     expect(loud.length).toBeGreaterThan(0)
     for (const button of loud) expect(button.textContent).toBe('Upgrade')
-    // The quiet ones are text buttons in the inherited color, never primary.
-    for (const label of ['Free', 'Starter']) {
+    // The quiet one is a text button in the inherited color, never primary.
+    for (const label of ['Free']) {
       const action = actionOn(label)
       expect(action.className).toMatch(/MuiButton-text/)
       expect(action.className).not.toMatch(/MuiButton-contained/)
@@ -849,7 +877,7 @@ describe('every plan the grid promises is accounted for (AGL-1864)', () => {
     }
     // And nothing below the current plan is badged as a recommendation.
     expect(within(cardFor('Free')).queryByText('Recommended')).toBeNull()
-    expect(within(cardFor('Starter')).queryByText('Recommended')).toBeNull()
+    expect(within(cardFor('Pro')).getByText('Recommended')).toBeTruthy()
     expect(screen.getAllByText('Recommended')).toHaveLength(1)
   })
 
@@ -873,22 +901,30 @@ describe('every plan the grid promises is accounted for (AGL-1864)', () => {
 
 describe('the upgrade path leads (AGL-1864)', () => {
   it('the next tier up is the recommended one', () => {
-    renderGrid({ plan: 'pro' })
-    expect(screen.getAllByText('Recommended').length).toBe(1)
-    // Business is the tier directly above Pro.
-    expect(cardShown('Business')).toBe(true)
+    renderGrid({ plan: 'starter' })
+    const chips = screen.getAllByText('Recommended')
+    expect(chips.length).toBe(1)
+    // Pro is the tier directly above Starter (pricing v4, AGL-4126).
+    expect(within(cardFor('Pro')).getByText('Recommended')).toBe(chips[0])
   })
 
   it('upgrades say Upgrade and downgrades say Downgrade — never the same control', () => {
-    renderGrid({ plan: 'pro' })
+    // Pro has no self-serve step up since pricing v4 (AGL-4126), so the org
+    // with BOTH directions on one grid is one with a paid tier above and a
+    // paid tier below — the upgrade half on Starter, the downgrade half on Pro.
+    renderGrid({ plan: 'starter' })
     expect(screen.getAllByRole('button', { name: 'Upgrade' }).length).toBeGreaterThan(0)
     // Nothing offers a downgrade until the disclosure is opened: a downgrade
     // is never a one-click peer of Upgrade on this card grid.
     expect(screen.queryByRole('button', { name: 'Downgrade' })).toBeNull()
+    cleanup()
     // And once it is opened the words still never blur — the one thing a card
     // must never do is call a move down by the name of a move up.
+    renderGrid({ plan: 'pro' })
+    expect(screen.queryByRole('button', { name: 'Downgrade' })).toBeNull()
     revealLowerTiers()
     expect(screen.getAllByRole('button', { name: 'Downgrade' }).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: 'Upgrade' })).toBeNull()
   })
 
   it('EVERY upgrade rung says what the next screen will ask for', () => {
@@ -900,12 +936,14 @@ describe('the upgrade path leads (AGL-1864)', () => {
      * right for every tier above the current one.
      */
     const notice = 'We will ask for a payment method as you go.'
-    renderCards({ plan: 'starter', subscribeCollectsNotice: notice })
+    renderCards({ plan: 'free', subscribeCollectsNotice: notice })
 
-    // Starter's focused view is Starter (current), Pro (recommended) and
-    // Business (the rung above that) — so both upgrade cards are on screen.
+    // Free's focused view is Free (current), Starter (recommended) and Pro
+    // (the rung above that) — so both upgrade cards are on screen. (On
+    // Starter the rung above Pro is Custom since pricing v4, a conversation
+    // rather than a subscribe flow.)
+    expect(within(cardFor('Starter')).getByText(notice)).toBeTruthy()
     expect(within(cardFor('Pro')).getByText(notice)).toBeTruthy()
-    expect(within(cardFor('Business')).getByText(notice)).toBeTruthy()
   })
 
   it('CONTROL: the current plan is not an upgrade and says nothing of the sort', () => {
@@ -918,7 +956,8 @@ describe('the upgrade path leads (AGL-1864)', () => {
   })
 
   it('the TOP self-serve tier recommends nothing — there is nothing above it', () => {
-    renderGrid({ plan: 'agency' })
+    // Pro since pricing v4 (AGL-4126).
+    renderGrid({ plan: 'pro' })
     expect(screen.queryByText('Recommended')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Upgrade' })).toBeNull()
   })
@@ -928,7 +967,7 @@ describe('collapsing only ever applies to an org with a tier to be below (AGL-18
   it('a visitor with NO plan yet sees the whole ladder', () => {
     renderGrid({ plan: undefined })
     expect(cardShown('Free')).toBe(true)
-    expect(cardShown('Agency')).toBe(true)
+    expect(cardShown('Pro')).toBe(true)
     // Nothing is a downgrade for them, so there is nothing to disclose.
     expect(disclosure()).toBeNull()
   })
@@ -966,23 +1005,24 @@ describe('a stated intent overrides the default (AGL-1117 under AGL-1864)', () =
     // The card used to carry the "Recommended" chip and a primary border while
     // simultaneously being dimmed and labelled Downgrade — recommending and
     // de-emphasizing itself at once. AGL-1859 §2: a downgrade is never the
-    // emphasized control.
-    renderGrid({ plan: 'pro', highlight: 'starter' })
+    // emphasized control. On Starter, linked down to Free, since pricing v4
+    // (AGL-4126) left Pro with no tier above to fall back to.
+    renderGrid({ plan: 'starter', highlight: 'free' })
     const chips = screen.getAllByText('Recommended')
     expect(chips.length).toBe(1)
     // The recommendation falls back to the next tier UP, not the deep link.
-    expect(chips[0].closest('.MuiCard-root')?.textContent).toMatch(/Business/)
-    expect(chips[0].closest('.MuiCard-root')?.textContent).not.toMatch(/Starter/)
+    expect(chips[0].closest('.MuiCard-root')).toBe(cardFor('Pro'))
+    expect(chips[0].closest('.MuiCard-root')).not.toBe(cardFor('Free'))
   })
 
   it('a deep link to a HIGHER tier leaves the lower ones collapsed', () => {
-    renderGrid({ plan: 'pro', highlight: 'scale' })
+    renderGrid({ plan: 'starter', highlight: 'pro' })
     expect(cardShown('Free')).toBe(false)
-    expect(disclosure()?.textContent).toMatch(/Show 2 lower plans/)
+    expect(disclosure()?.textContent).toMatch(/Show 1 lower plan/)
   })
 
   it('a deep link to the plan the org is ALREADY on recommends nothing new', () => {
-    renderGrid({ plan: 'pro', highlight: 'pro' })
+    renderGrid({ plan: 'starter', highlight: 'starter' })
     // Falls back to the next-tier-up default rather than badging the current
     // card as a recommendation to buy what they have.
     expect(screen.getAllByText('Recommended').length).toBe(1)
@@ -1213,7 +1253,8 @@ describe('a plan the org did not buy explains itself', () => {
     cleanup()
     renderGrid({ plan: 'pro', enterprise: true, planWithoutSubscription: true })
     expect(screen.queryByText(NOTICE)).toBeNull()
-    expect(screen.getByText(/on an Enterprise agreement/)).toBeTruthy()
+    // The plan reads "Custom" since pricing v4 (AGL-4126).
+    expect(screen.getByText(/on a Custom agreement/)).toBeTruthy()
   })
 })
 
@@ -1305,10 +1346,12 @@ describe('an uncapped quota never leaks its sentinel (AGL-2482)', () => {
     // — is a finite fallback of twice Agency's since 2026-09-07, so no plan
     // row reaches `quotaCount` with the sentinel any more; the class guard
     // below is what holds the glyph rule for whichever quota next turns
-    // uncapped. What this case holds is the shape the two top cards print.
-    renderGrid({ plan: 'agency' })
+    // uncapped. What this case holds is the shape the two top cards print —
+    // Pro and Custom since pricing v4 (AGL-4126), whose lifted Pro counts are
+    // the uncapped values the glyph rule now has to hold against.
+    renderGrid({ plan: 'pro' })
     expect(screen.queryAllByText(/∞/).length).toBe(0)
-    expect(screen.queryAllByText(/500,000 CRM records/).length).toBeGreaterThan(0)
+    expect(screen.queryAllByText(/10,000 CRM records/).length).toBeGreaterThan(0)
     expect(screen.queryAllByText(/1,000,000 CRM records/).length).toBeGreaterThan(0)
     expect(screen.queryAllByText(/Unlimited CRM records/).length).toBe(0)
   })
@@ -1332,9 +1375,11 @@ describe('an uncapped quota never leaks its sentinel (AGL-2482)', () => {
   it('a finite quota still reads exactly as it did, grouped', () => {
     // The counter-case. A "fix" that formatted every quota as Unlimited would
     // be the same defect pointed the other way, and grouping must survive:
-    // Scale is 500,000 CRM records, never 500000.
-    renderGrid({ plan: 'scale' })
-    expect(screen.queryAllByText(/500,000 CRM records/).length).toBeGreaterThan(0)
+    // Pro is 10,000 CRM records, never 10000 (Scale's 500,000 until pricing
+    // v4 retired it, AGL-4126).
+    renderGrid({ plan: 'pro' })
+    expect(screen.queryAllByText(/^10,000 CRM records/).length).toBeGreaterThan(0)
+    expect(screen.queryAllByText(/10000 CRM records/)).toHaveLength(0)
   })
 })
 
@@ -1362,27 +1407,32 @@ describe('the ladder ends on a full row', () => {
     )
   }
 
-  it('Agency fills what the fold left beside it, and Enterprise takes a row', () => {
-    // Five rungs drawn: Pro, Business, Scale, Advanced, Agency. Advanced ends
-    // a row of three four columns short, so Agency is eight wide.
-    renderGrid({ plan: 'pro' })
-    expect([spanOf('Agency'), spanOf('Enterprise')]).toEqual(['8', '12'])
+  /*
+   * Since pricing v4 (AGL-4126) the ladder is three rungs — Free, Starter,
+   * Pro — with Custom after it, so the top rung that fills the row is Pro.
+   */
+  it('Pro fills what the fold left beside it, and Custom takes a row', () => {
+    // Two rungs drawn: Starter, Pro. Starter starts a row of three, so Pro
+    // takes the eight columns left and Custom the row below.
+    renderGrid({ plan: 'starter' })
+    expect([spanOf('Pro'), spanOf('Custom')]).toEqual(['8', '12'])
   })
 
   it('and pairs the two top rungs when the ladder ends evenly', () => {
-    // Seven rungs — what a Free org sees — end on a full row, so Agency starts
-    // a fresh one and Enterprise sits beside it at half each.
-    renderGrid({ plan: 'free' })
-    expect([spanOf('Agency'), spanOf('Enterprise')]).toEqual(['6', '6'])
+    // One rung — what a Pro org sees — leaves no remainder, so Pro and Custom
+    // share a row at half each.
+    renderGrid({ plan: 'pro' })
+    expect([spanOf('Pro'), spanOf('Custom')]).toEqual(['6', '6'])
   })
 
   it('sizes from what is DRAWN, not from the ladder', () => {
-    // The same org as the first case, with the fold opened: seven rungs are
-    // now on screen, so the pairing comes back. A span computed from
-    // `PLAN_ORDER` rather than from the fold would not move.
+    // The same org as the second case, with the fold opened: three rungs are
+    // now on screen and fill a row, so Pro is a third and Custom takes the
+    // row below. A span computed from `PLAN_ORDER` rather than from the fold
+    // would not move.
     renderGrid({ plan: 'pro' })
     revealLowerTiers()
-    expect([spanOf('Agency'), spanOf('Enterprise')]).toEqual(['6', '6'])
+    expect([spanOf('Pro'), spanOf('Custom')]).toEqual(['4', '12'])
   })
 })
 
@@ -1456,15 +1506,20 @@ describe('a comped tier offers to start its subscription', () => {
  * directly above the submissions band it is most often confused with.
  */
 describe('the saved-forms-per-site row', () => {
+  // The cards a visitor sees since pricing v4 (AGL-4126): the three plans
+  // sold, and Custom above them.
   const CARDS = [
     ['Free', 'free'],
     ['Starter', 'starter'],
     ['Pro', 'pro'],
-    ['Business', 'business'],
-    ['Agency', 'agency'],
+    ['Custom', 'enterprise'],
   ] as const
 
-  const rowFor = (count: number) => `${count} form${count === 1 ? '' : 's'} per site`
+  // Pro's allowance is UNLIMITED since v4, and reads as the word.
+  const rowFor = (count: number) =>
+    Number.isFinite(count)
+      ? `${count} form${count === 1 ? '' : 's'} per site`
+      : 'Unlimited forms per site'
 
   it('states each plan’s own allowance, from the entitlement', () => {
     renderCards({ plan: undefined })
@@ -1474,6 +1529,7 @@ describe('the saved-forms-per-site row', () => {
     }
     // Free's one form reads singular, the control on the plural above it.
     expect(within(cardFor('Free')).getByText('1 form per site')).toBeTruthy()
+    expect(within(cardFor('Pro')).getByText('Unlimited forms per site')).toBeTruthy()
   })
 
   it('sits directly above the form submissions row', () => {
@@ -1494,12 +1550,12 @@ describe('the saved-forms-per-site row', () => {
  * above the saved-forms line — the other per-site catalog the plan counts.
  */
 describe('the reusable-components-per-site row', () => {
+  // The cards a visitor sees since pricing v4 (AGL-4126).
   const CARDS = [
     ['Free', 'free'],
     ['Starter', 'starter'],
     ['Pro', 'pro'],
-    ['Business', 'business'],
-    ['Agency', 'agency'],
+    ['Custom', 'enterprise'],
   ] as const
 
   it('states each plan’s own allowance, from the entitlement', () => {

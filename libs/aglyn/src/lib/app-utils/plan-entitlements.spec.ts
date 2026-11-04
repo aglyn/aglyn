@@ -46,7 +46,10 @@ import {
   isEnterpriseOrg,
   applyDiscountUsd,
   ENTERPRISE_PLAN_LABEL,
+  isRetiredPlan,
   PLAN_LABELS,
+  PLAN_LADDER,
+  RETIRED_PLANS,
   SELF_SERVE_PLANS,
   orgListPriceMonthlyUsd,
   orgMonthlyRevenueUsd,
@@ -71,28 +74,24 @@ import {
   EXTRA_HOSTS_ADDON_MAX,
   POS_REGISTERS_ADDON_MAX,
   UNLIMITED,
-  AI_TIER_IDS,
-  AI_TIERS,
   aiAddonUnits,
-  aiTierCreditsPerMonth,
-  aiTierName,
-  aiTierQuotaPerUnit,
-  aiTierAddonKey,
-  defaultAiTierForPlan,
+  aiCreditBlocksCreditsPerMonth,
+  aiCreditsQuotaPerUnit,
   ENTERPRISE_AI_ADDON_CREDITS_PER_MONTH,
-  listAiTierAddons,
-  parseAiTierAddonKey,
   hasAiAddon,
-  isAiTierId,
-  LEGACY_AI_ADDON_TIER_BY_PLAN,
-  orgCanBuyAiTier,
-  planSellsAiTiers,
-  resolveAiTier,
+  orgCanBuyAiCredits,
+  planSellsAiCredits,
+  resolveAiCreditBlocks,
   hasSiteCare,
   planSellsSiteCare,
   siteCareUnits,
   SITE_CARE_ADDON_MONTHLY_USD,
 } from './plan-entitlements'
+import {
+  AI_CREDIT_BLOCK_MONTHLY_USD,
+  AI_CREDIT_BLOCKS_MAX,
+  AI_CREDITS_PER_BLOCK,
+} from './ai-credit-blocks'
 import { pluginUsageBands } from '../plugin-manager/plugin-usage-axes'
 import { registerPluginEntitlements } from '../plugin-manager/plugin-entitlements'
 
@@ -104,9 +103,9 @@ registerPluginEntitlements({
     {
       key: 'aiAddon',
       label: 'AI add-on',
-      maxUnits: 1,
-      quota: { key: 'assistCreditsPerMonth', perUnit: aiTierQuotaPerUnit },
-      soldOn: planSellsAiTiers,
+      maxUnits: AI_CREDIT_BLOCKS_MAX,
+      quota: { key: 'assistCreditsPerMonth', perUnit: aiCreditsQuotaPerUnit },
+      soldOn: planSellsAiCredits,
       features: ['aiGenerative', 'aiAssist'],
     },
   ],
@@ -202,7 +201,8 @@ describe('plan entitlements', () => {
     ).toEqual({
       free: [1, 5, 1],
       starter: [1, 25, 3],
-      pro: [3, 100, UNLIMITED],
+      // Pages per site are unlimited on Pro since pricing v4 (AGL-4126).
+      pro: [3, UNLIMITED, UNLIMITED],
       business: [10, UNLIMITED, UNLIMITED],
       scale: [15, UNLIMITED, UNLIMITED],
       advanced: [25, UNLIMITED, UNLIMITED],
@@ -249,7 +249,9 @@ describe('plan entitlements', () => {
       ),
     ).toBe(true)
     expect(PLAN_ENTITLEMENTS.pro.features.marketplaceSelling).toBe(true)
-    expect(PLAN_ENTITLEMENTS.pro.features.scheduledPublishing).toBe(false)
+    // Scheduled publishing moved from Business into Pro (pricing v4, AGL-4126).
+    expect(PLAN_ENTITLEMENTS.starter.features.scheduledPublishing).toBe(false)
+    expect(PLAN_ENTITLEMENTS.pro.features.scheduledPublishing).toBe(true)
     expect(PLAN_ENTITLEMENTS.business.features.scheduledPublishing).toBe(true)
     // Builder gating (AGL-99): paid tiers unlock workflows/datasets, free
     // keeps a taste of variables/functions only.
@@ -258,7 +260,9 @@ describe('plan entitlements', () => {
     expect(PLAN_ENTITLEMENTS.free.features.workflows).toBe(false)
     expect(PLAN_ENTITLEMENTS.starter.variablesPerHost).toBe(25)
     expect(PLAN_ENTITLEMENTS.starter.features.dataStore).toBe(true)
-    expect(PLAN_ENTITLEMENTS.pro.functionsPerHost).toBe(50)
+    // Unlimited on Pro since pricing v4 (AGL-4126): a count with no cost term.
+    expect(PLAN_ENTITLEMENTS.pro.functionsPerHost).toBe(UNLIMITED)
+    expect(PLAN_ENTITLEMENTS.pro.recordsPerDataset).toBe(UNLIMITED)
     expect(PLAN_ENTITLEMENTS.business.recordsPerDataset).toBe(100000)
     // CDN media delivery: EVERY plan, free included (AGL-1152).
     //
@@ -305,6 +309,7 @@ describe('plan entitlements', () => {
         extraAssistCreditsUsdPer1k: null,
         extraContactsUsdPer1k: null,
         extraEmailSendsUsdPer1k: null,
+        extraRunsUsdPer1k: null,
         meteredInfraPassThrough: false,
       },
       starter: {
@@ -319,20 +324,25 @@ describe('plan entitlements', () => {
         extraAssistCreditsUsdPer1k: 3,
         extraContactsUsdPer1k: 1,
         extraEmailSendsUsdPer1k: null,
+        // Starter keeps every wall (pricing v4): no runs are sold past its bands.
+        extraRunsUsdPer1k: null,
         meteredInfraPassThrough: true,
       },
+      // Pricing v4 (2026-11-03, AGL-4126): $69 monthly / $49 annual, the API
+      // at Business's $0.50 per 1,000, and runs at $0.02 per 1,000.
       pro: {
-        basePriceMonthlyUsd: 56,
-        basePriceAnnualMonthlyUsd: 39,
+        basePriceMonthlyUsd: 69,
+        basePriceAnnualMonthlyUsd: 49,
         extraHostMonthlyUsd: 20,
         extraSeatMonthlyUsd: 4,
         extraCollaboratorMonthlyUsd: 2,
         extraDatasetMonthlyUsd: 2,
         extraDataGbMonthlyUsd: 0.36,
-        extraApiRequestsUsdPer1k: null,
+        extraApiRequestsUsdPer1k: 0.5,
         extraAssistCreditsUsdPer1k: 3,
         extraContactsUsdPer1k: 0.75,
         extraEmailSendsUsdPer1k: 2.25,
+        extraRunsUsdPer1k: 0.02,
         meteredInfraPassThrough: true,
       },
       business: {
@@ -347,6 +357,7 @@ describe('plan entitlements', () => {
         extraAssistCreditsUsdPer1k: 2.75,
         extraContactsUsdPer1k: 0.5,
         extraEmailSendsUsdPer1k: 2,
+        extraRunsUsdPer1k: 0.02,
         meteredInfraPassThrough: true,
       },
       scale: {
@@ -361,6 +372,7 @@ describe('plan entitlements', () => {
         extraAssistCreditsUsdPer1k: 2.5,
         extraContactsUsdPer1k: 0.4,
         extraEmailSendsUsdPer1k: 1.9,
+        extraRunsUsdPer1k: 0.02,
         meteredInfraPassThrough: true,
       },
       advanced: {
@@ -375,6 +387,7 @@ describe('plan entitlements', () => {
         extraAssistCreditsUsdPer1k: 2.25,
         extraContactsUsdPer1k: 0.4,
         extraEmailSendsUsdPer1k: 1.85,
+        extraRunsUsdPer1k: 0.02,
         meteredInfraPassThrough: true,
       },
       agency: {
@@ -389,6 +402,7 @@ describe('plan entitlements', () => {
         extraAssistCreditsUsdPer1k: 2,
         extraContactsUsdPer1k: 0.4,
         extraEmailSendsUsdPer1k: 1.8,
+        extraRunsUsdPer1k: 0.02,
         meteredInfraPassThrough: true,
       },
       // Enterprise (AGL-1118) is quoted per deal — these zeros/nulls are the
@@ -406,6 +420,7 @@ describe('plan entitlements', () => {
         extraAssistCreditsUsdPer1k: null,
         extraContactsUsdPer1k: null,
         extraEmailSendsUsdPer1k: null,
+        extraRunsUsdPer1k: null,
         meteredInfraPassThrough: false,
       },
     })
@@ -420,27 +435,31 @@ describe('plan entitlements', () => {
     // SELF_SERVE_PLANS. If a new plan is added to PLAN_ENTITLEMENTS it must
     // either be sellable (listed here) or custom-priced — never silently
     // absent from both, which is how a tier goes missing from pricing.
-    expect(SELF_SERVE_PLANS).toEqual([
-      'free',
-      'starter',
-      'pro',
-      'business',
-      'scale',
-      'advanced',
-      'agency',
-    ])
+    //
+    // Pricing v4 (AGL-4126) sells three, and RETIRED is the third answer: a
+    // plan no longer sold, whose row stays so a workspace on it still resolves.
+    expect(SELF_SERVE_PLANS).toEqual(['free', 'starter', 'pro'])
+    expect(RETIRED_PLANS).toEqual(['business', 'scale', 'advanced', 'agency'])
     const all = Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]
     expect(SELF_SERVE_PLANS).not.toContain('enterprise')
     for (const plan of all) {
       expect(
-        SELF_SERVE_PLANS.includes(plan) || isCustomPricedPlan(plan),
-      ).toBe(true)
+        [
+          SELF_SERVE_PLANS.includes(plan),
+          isRetiredPlan(plan),
+          isCustomPricedPlan(plan),
+        ].filter(Boolean),
+      ).toEqual([true])
     }
+    // Every plan a workspace can be on is on the ladder, in price order.
+    expect([...PLAN_LADDER].sort()).toEqual([...all].sort())
+    expect(PLAN_LADDER).toEqual([...SELF_SERVE_PLANS, ...RETIRED_PLANS, 'enterprise'])
     // Every plan has a label — the one source plan badges read.
     for (const plan of all) {
       expect(PLAN_LABELS[plan]).toBeTruthy()
     }
-    expect(PLAN_LABELS.enterprise).toBe('Enterprise')
+    // The top plan reads "Custom" since pricing v4; its id stays `enterprise`.
+    expect(PLAN_LABELS.enterprise).toBe('Custom')
     expect(ENTERPRISE_PLAN_LABEL).toBe(PLAN_LABELS.enterprise)
   })
 
@@ -614,7 +633,9 @@ describe('plan entitlements', () => {
       // choice; the maxima a plan may buy up to did not move (AGL-3469).
       free: [1, 1, 1, 1],
       starter: [2, 5, 2, 10],
-      pro: [3, 20, 3, 25],
+      // The ceilings are lifted on Pro since pricing v4 (AGL-4126): it buys
+      // as many seats and collaborators as it needs, each at its add-on price.
+      pro: [3, UNLIMITED, 3, UNLIMITED],
       advanced: [10, 250, 5, 250],
       business: [5, 100, 5, 100],
       scale: [5, 150, 5, 150],
@@ -881,7 +902,12 @@ describe('plan entitlements', () => {
       ['starter', 'versioning', false],
       ['pro', 'versioning', true],
       ['pro', 'aiAssist', true],
-      ['pro', 'webhooks', false],
+      // Webhooks and multilingual sites moved from Business into Pro with
+      // pricing v4 (AGL-4126), so Starter is the plan below the line now.
+      ['starter', 'webhooks', false],
+      ['starter', 'multilingual', false],
+      ['pro', 'webhooks', true],
+      ['pro', 'multilingual', true],
       ['business', 'webhooks', true],
       ['business', 'multilingual', true],
     ]
@@ -957,7 +983,7 @@ describe('plan entitlements', () => {
     expect(free.overageRateUsd).toBeNull()
   })
 
-  it('checkApiRequestQuota meters overage on Business/Advanced, blocks below (AGL-634)', () => {
+  it('checkApiRequestQuota meters overage on Pro/Business/Advanced, blocks below (AGL-634)', () => {
     // Business includes 1,500 requests; 51,500 used → 50k over at $0.50/1k = $25.
     const business = checkApiRequestQuota({ plan: 'business' } as any, 51_500)
     expect(business.allowed).toBe(true)
@@ -974,11 +1000,18 @@ describe('plan entitlements', () => {
     const within = checkApiRequestQuota({ plan: 'business' } as any, 400)
     expect(within.overageRequests).toBe(0)
     expect(within.remaining).toBe(1_100)
+    // Pro carries Business's band and rate since pricing v4 (AGL-4126):
+    // 1,500 included, 51,500 used → 50k over at $0.50/1k = $25.
+    const pro = checkApiRequestQuota({ plan: 'pro' } as any, 51_500)
+    expect(pro.allowed).toBe(true)
+    expect(pro.included).toBe(1_500)
+    expect(pro.overageMonthlyUsd).toBeCloseTo(25)
+    expect(pro.overageRateUsd).toBe(0.5)
     // Plans without API access have zero included and always block.
-    const pro = checkApiRequestQuota({ plan: 'pro' } as any, 1)
-    expect(pro.allowed).toBe(false)
-    expect(pro.included).toBe(0)
-    expect(pro.overageRateUsd).toBeNull()
+    const starter = checkApiRequestQuota({ plan: 'starter' } as any, 1)
+    expect(starter.allowed).toBe(false)
+    expect(starter.included).toBe(0)
+    expect(starter.overageRateUsd).toBeNull()
   })
 
   it('checkCrmRecordsQuota meters the records band on paid plans, hard-bands free (AGL-890/2611)', () => {
@@ -1297,8 +1330,14 @@ describe('plan entitlements', () => {
       ['starter', 'pos', false],
       ['pro', 'pos', true],
       ['pro', 'abandonedCart', true],
-      ['pro', 'giftCards', false],
-      ['pro', 'storefrontSubscriptions', false],
+      // Recurring billing, gift cards and members-only content moved from
+      // Business into Pro with pricing v4 (AGL-4126); Starter has none.
+      ['starter', 'giftCards', false],
+      ['starter', 'storefrontSubscriptions', false],
+      ['starter', 'contentGating', false],
+      ['pro', 'giftCards', true],
+      ['pro', 'storefrontSubscriptions', true],
+      ['pro', 'contentGating', true],
       ['business', 'storefrontSubscriptions', true],
       ['business', 'contentGating', true],
       ['business', 'giftCards', true],
@@ -1328,8 +1367,10 @@ describe('plan entitlements', () => {
       .toBe(2)
     expect(resolveTransactionFeePct({ plan: 'starter' } as any, 'digital'))
       .toBe(5)
+    // 0.5% on physical sales since pricing v4 (AGL-4126, decision 9), for the
+    // Stripe Connect account and payout fees the platform pays.
     expect(resolveTransactionFeePct({ plan: 'pro' } as any, 'physical'))
-      .toBe(0)
+      .toBe(0.5)
     expect(resolveTransactionFeePct({ plan: 'pro' } as any, 'service'))
       .toBe(3)
     expect(resolveTransactionFeePct({ plan: 'business' } as any, 'digital'))
@@ -1455,10 +1496,12 @@ describe('plan entitlements', () => {
       ),
     ).toBe(1)
 
-    // The floor is scoped to FREE. A paid plan's deliberate 0% — every tier
-    // above starter zero-rates physical sales — is untouched, and so is an
-    // ordinary free org, which cannot sell at all.
-    expect(resolveTransactionFeePct({ plan: 'pro' } as any, 'physical')).toBe(0)
+    // The floor is scoped to FREE. A paid plan's own rate is untouched — Pro's
+    // fractional 0.5% physical (pricing v4, AGL-4126) is not lifted to
+    // Starter's 2%, and a deliberate 0% on a plan above it stays 0 — and so is
+    // an ordinary free org, which cannot sell at all.
+    expect(resolveTransactionFeePct({ plan: 'pro' } as any, 'physical')).toBe(0.5)
+    expect(resolveTransactionFeePct({ plan: 'business' } as any, 'physical')).toBe(0)
     expect(resolveTransactionFeePct({ plan: 'agency' } as any, 'digital'))
       .toBe(0)
     expect(resolveTransactionFeePct({ plan: 'free' } as any, 'physical'))
@@ -1526,9 +1569,10 @@ describe('plan entitlements', () => {
 
     it('counts active, trialing, and past_due as revenue', () => {
       for (const status of ['active', 'trialing', 'past_due']) {
+        // Pro's monthly price since pricing v4 (AGL-4126).
         expect(
           orgMonthlyRevenueUsd({ plan: 'pro', subscription: { status } } as any),
-        ).toBe(56)
+        ).toBe(69)
       }
     })
 
@@ -1576,7 +1620,7 @@ describe('plan entitlements', () => {
           plan: 'pro',
           subscription: { status: 'active', interval: 'month' },
         } as any),
-      ).toBeCloseTo(56 * (1 - 0.029) - 0.3, 2)
+      ).toBeCloseTo(69 * (1 - 0.029) - 0.3, 2)
     })
 
     it('amortizes the fixed 30¢ over 12 months for annual billing', () => {
@@ -1610,11 +1654,12 @@ describe('plan entitlements', () => {
       subscription: { status: 'active', interval: 'month' },
     } as any
 
+    // Pro at $69 a month since pricing v4 (AGL-4126).
     it('orgListPriceMonthlyUsd stays the pre-discount sticker', () => {
-      expect(orgListPriceMonthlyUsd(proMonthly)).toBe(56)
+      expect(orgListPriceMonthlyUsd(proMonthly)).toBe(69)
       expect(
         orgListPriceMonthlyUsd({ ...proMonthly, discount: { percentOff: 25 } }),
-      ).toBe(56)
+      ).toBe(69)
     })
 
     it('applyDiscountUsd handles percent, fixed, clamps and floors', () => {
@@ -1633,7 +1678,7 @@ describe('plan entitlements', () => {
           ...proMonthly,
           discount: { couponId: 'co_1', percentOff: 20, appliedBy: 'u' },
         }),
-      ).toBe(44.8)
+      ).toBe(55.2)
     })
 
     it('orgMonthlyRevenueUsd subtracts an applied fixed discount', () => {
@@ -1647,7 +1692,7 @@ describe('plan entitlements', () => {
     })
 
     it('an undiscounted org still reads its full list price', () => {
-      expect(orgMonthlyRevenueUsd(proMonthly)).toBe(56)
+      expect(orgMonthlyRevenueUsd(proMonthly)).toBe(69)
       expect(orgMonthlyRevenueUsd(proMonthly)).toBe(
         orgListPriceMonthlyUsd(proMonthly),
       )
@@ -1667,9 +1712,9 @@ describe('plan entitlements', () => {
         ...proMonthly,
         discount: { couponId: 'co_4', percentOff: 20, appliedBy: 'u' },
       }
-      // 56 → 44.80 after the discount, then less Stripe 2.9% + 30¢.
+      // 69 → 55.20 after the discount, then less Stripe 2.9% + 30¢.
       expect(orgNetMonthlyRevenueUsd(org)).toBeCloseTo(
-        netOfProcessorFee(44.8, false),
+        netOfProcessorFee(55.2, false),
         2,
       )
     })
@@ -2349,8 +2394,9 @@ describe('plan entitlements', () => {
   it('prices the AGL-278 table (annual headline, monthly billing)', () => {
     expect(PLAN_PRICING.starter.basePriceAnnualMonthlyUsd).toBe(16)
     expect(PLAN_PRICING.starter.basePriceMonthlyUsd).toBe(25)
-    expect(PLAN_PRICING.pro.basePriceAnnualMonthlyUsd).toBe(39)
-    expect(PLAN_PRICING.pro.basePriceMonthlyUsd).toBe(56)
+    // Pricing v4 (AGL-4126): $49 billed yearly, $69 month to month.
+    expect(PLAN_PRICING.pro.basePriceAnnualMonthlyUsd).toBe(49)
+    expect(PLAN_PRICING.pro.basePriceMonthlyUsd).toBe(69)
     expect(PLAN_PRICING.business.basePriceAnnualMonthlyUsd).toBe(99)
     expect(PLAN_PRICING.business.basePriceMonthlyUsd).toBe(139)
   })
@@ -2729,11 +2775,15 @@ describe('a first payment that never completed is not a paid workspace', () => {
 
 describe('the saved-form ladder (AGL-3597)', () => {
   const FORM_PLANS = Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]
-  /** The published ladder: what one site may save on each plan. */
+  /**
+   * The published ladder: what one site may save on each plan. Pro's is
+   * UNLIMITED since pricing v4 (AGL-4126) — a saved form is a count with no
+   * cost term — and the retired plans keep the rungs they were sold with.
+   */
   const LADDER: Record<OrgPlan, number> = {
     free: 1,
     starter: 5,
-    pro: 25,
+    pro: UNLIMITED,
     business: 100,
     scale: FORMS_PER_HOST_CEILING,
     advanced: FORMS_PER_HOST_CEILING,
@@ -2761,11 +2811,19 @@ describe('the saved-form ladder (AGL-3597)', () => {
   })
 
   it('climbs with the plan, and never steps down', () => {
-    const order: OrgPlan[] = ['free', 'starter', 'pro', 'business', 'scale', 'advanced', 'agency', 'enterprise']
-    const values = order.map((plan) => PLAN_ENTITLEMENTS[plan].formsPerHost)
-    for (let index = 1; index < values.length; index++) {
-      expect([order[index], values[index] >= values[index - 1]]).toEqual([order[index], true])
+    // Over the plans SOLD (pricing v4, AGL-4126), and over the retired rows
+    // on their own: Pro's unlimited catalog sits above Business's 100, which
+    // no workspace can step to any more, so the two chains are read apart.
+    for (const order of [
+      [...SELF_SERVE_PLANS],
+      ['business', 'scale', 'advanced', 'agency', 'enterprise'],
+    ] as OrgPlan[][]) {
+      const values = order.map((plan) => PLAN_ENTITLEMENTS[plan].formsPerHost)
+      for (let index = 1; index < values.length; index++) {
+        expect([order[index], values[index] >= values[index - 1]]).toEqual([order[index], true])
+      }
     }
+    expect(SELF_SERVE_PLANS).toEqual(['free', 'starter', 'pro'])
   })
 
   it('gives Free its one form without the component feature', () => {
@@ -2803,6 +2861,17 @@ describe('the saved-form ladder (AGL-3597)', () => {
     for (const plan of FORM_PLANS) {
       const org = { plan, subscription: { status: 'active' } } as any
       const rung = LADDER[plan]
+      if (isUnlimitedQuota(rung)) {
+        // An unlimited rung (Pro, pricing v4) is never spent: a catalog well
+        // past the top finite rung is still allowed, and the limit says so.
+        expect([plan, checkQuota(org, 'formsPerHost', 0).allowed]).toEqual([plan, true])
+        expect([plan, checkQuota(org, 'formsPerHost', FORMS_PER_HOST_CEILING * 10).allowed]).toEqual([
+          plan,
+          true,
+        ])
+        expect([plan, checkQuota(org, 'formsPerHost', 0).limit]).toEqual([plan, UNLIMITED])
+        continue
+      }
       expect([plan, checkQuota(org, 'formsPerHost', 0).allowed]).toEqual([plan, true])
       expect([plan, checkQuota(org, 'formsPerHost', rung - 1).allowed]).toEqual([plan, true])
       expect([plan, checkQuota(org, 'formsPerHost', rung).allowed]).toEqual([plan, false])
@@ -2834,15 +2903,24 @@ describe('the saved-form ladder (AGL-3597)', () => {
     /*
      * `JSON.stringify(Infinity)` is `null` and `Number(null)` is `0`, so an
      * uncapped quota needs the `unlimited` flag to survive a route boundary
-     * or it renders as "no forms at all". A finite allowance on every plan
-     * needs none of that apparatus.
+     * or it renders as "no forms at all". A finite allowance needs none of
+     * that apparatus. Pro's is UNLIMITED since pricing v4 (AGL-4126), the one
+     * plan that does, and it is named so a second one cannot appear unseen.
      */
     const roundTrip = (value: number) => JSON.parse(JSON.stringify({ value })).value
+    const unlimited: OrgPlan[] = []
     for (const plan of FORM_PLANS) {
       const allowance = PLAN_ENTITLEMENTS[plan].formsPerHost
-      expect(Number.isFinite(allowance)).toBe(true)
+      if (isUnlimitedQuota(allowance)) {
+        unlimited.push(plan)
+        // Lost on the wire, rebuilt from the route's explicit flag.
+        expect(roundTrip(allowance)).toBeNull()
+        expect(restoreQuotaLimit(roundTrip(allowance), true)).toBe(UNLIMITED)
+        continue
+      }
       expect(roundTrip(allowance)).toBe(allowance)
     }
+    expect(unlimited).toEqual(['pro'])
     expect(roundTrip(UNLIMITED)).toBeNull()
   })
 
@@ -2934,9 +3012,15 @@ describe('reusable components per site (AGL-3615)', () => {
   })
 })
 
-describe('the Aglyn AI tiers (AGL-2896, AGL-3965)', () => {
+describe('Aglyn AI credits by the block (AGL-2896, AGL-4144)', () => {
   const PLANS = Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]
-  const SOLD = ['starter', 'pro', 'business', 'scale', 'advanced', 'agency'] as const
+  // Every paid self-serve plan sells blocks; read off the plan list rather
+  // than restated, so a plan row that comes or goes moves this with it.
+  // Since pricing v4 (AGL-4126) that is Starter and Pro.
+  const SOLD = SELF_SERVE_PLANS.filter((plan) => plan !== 'free')
+  /** Retired by v4: readable rows, never sold, so they sell no blocks either. */
+  const RETIRED = RETIRED_PLANS
+  const band = (plan: OrgPlan) => PLAN_ENTITLEMENTS[plan].assistCreditsPerMonth
 
   it('opens generation on EVERY plan: one pool, paid for by the plan’s included credits', () => {
     // AGL-3965: the included band pays for generation and assist alike, so
@@ -2945,7 +3029,7 @@ describe('the Aglyn AI tiers (AGL-2896, AGL-3965)', () => {
     for (const plan of PLANS) {
       expect(`${plan}: ${PLAN_ENTITLEMENTS[plan].features.aiGenerative}`).toBe(`${plan}: true`)
     }
-    for (const plan of SOLD) {
+    for (const plan of [...SOLD, ...RETIRED]) {
       expect(checkEntitlement({ plan } as any, 'aiGenerative')).toBe(true)
       expect(PLAN_ENTITLEMENTS[plan].features.aiAssist).toBe(true)
     }
@@ -2954,165 +3038,147 @@ describe('the Aglyn AI tiers (AGL-2896, AGL-3965)', () => {
     expect(checkEntitlement({ plan: 'free' } as any, 'aiGenerative')).toBe(true)
   })
 
-  it('sells six tiers, smallest first, the same pairs the per-plan add-on was sold at', () => {
-    expect(AI_TIER_IDS).toEqual(['spark', 'boost', 'plus', 'max', 'ultra', 'studio'])
-    expect(AI_TIER_IDS.map((tier) => AI_TIERS[tier].label)).toEqual([
-      'Spark',
-      'Boost',
-      'Plus',
-      'Max',
-      'Ultra',
-      'Studio',
-    ])
-    expect(AI_TIER_IDS.map((tier) => AI_TIERS[tier].monthlyUsd)).toEqual([9, 19, 39, 69, 99, 299])
-    expect(AI_TIER_IDS.map((tier) => AI_TIERS[tier].credits)).toEqual([
-      4_000, 9_000, 19_000, 34_000, 49_000, 149_000,
-    ])
-    // Yearly is x12 with no discount, as every add-on is.
-    for (const tier of AI_TIER_IDS) {
-      expect(AI_TIERS[tier].yearlyUsd).toBe(AI_TIERS[tier].monthlyUsd * 12)
-    }
-  })
-
-  it('every tier costs at most 50% of its own price at full burn', () => {
+  it('a block costs at most 50% of its own price at full burn', () => {
     const ASSIST_CREDIT_COST_USD = pluginUsageBands().find(
       (band) => band.id === 'assistCredits',
     )?.unitCostUsd as number
     expect(ASSIST_CREDIT_COST_USD).toBeGreaterThan(0)
-    for (const tier of AI_TIER_IDS) {
-      const costUsd = AI_TIERS[tier].credits * ASSIST_CREDIT_COST_USD
-      expect(`${tier}: ${costUsd <= AI_TIERS[tier].monthlyUsd * 0.5}`).toBe(`${tier}: true`)
-      expect(Number.isFinite(AI_TIERS[tier].credits)).toBe(true)
-    }
+    expect(AI_CREDITS_PER_BLOCK * ASSIST_CREDIT_COST_USD).toBeLessThanOrEqual(
+      AI_CREDIT_BLOCK_MONTHLY_USD * 0.5,
+    )
     // Starter's overage rate joins the ladder at Pro's figure (AGL-3203).
     expect(PLAN_PRICING.starter.extraAssistCreditsUsdPer1k).toBe(
       PLAN_PRICING.pro.extraAssistCreditsUsdPer1k,
     )
   })
 
-  it('any paid plan may hold any tier: the pool is the plan’s band plus the tier’s credits', () => {
+  it('any paid plan may hold any number of blocks: the pool is the plan’s band plus 5,000 a block', () => {
     for (const plan of SOLD) {
-      for (const tier of AI_TIER_IDS) {
-        const org = { plan, seatAddons: { aiAddon: 1 }, aiTier: tier } as any
-        expect(`${plan}/${tier}: ${resolveOrgEntitlements(org).assistCreditsPerMonth}`).toBe(
-          `${plan}/${tier}: ${PLAN_ENTITLEMENTS[plan].assistCreditsPerMonth + AI_TIERS[tier].credits}`,
+      for (const blocks of [1, 3, AI_CREDIT_BLOCKS_MAX]) {
+        const org = { plan, subscription: { status: 'active' }, seatAddons: { aiAddon: blocks } } as any
+        expect(`${plan}/${blocks}: ${resolveOrgEntitlements(org).assistCreditsPerMonth}`).toBe(
+          `${plan}/${blocks}: ${band(plan) + blocks * AI_CREDITS_PER_BLOCK}`,
         )
-        expect(resolveAiTier(org)).toBe(tier)
-        expect(aiTierCreditsPerMonth(org)).toBe(AI_TIERS[tier].credits)
-        expect(orgListPriceMonthlyUsd({ ...org, subscription: { status: 'active' } })).toBe(
-          PLAN_PRICING[plan].basePriceMonthlyUsd + AI_TIERS[tier].monthlyUsd,
+        expect(resolveAiCreditBlocks(org)).toBe(blocks)
+        expect(aiCreditBlocksCreditsPerMonth(org)).toBe(blocks * AI_CREDITS_PER_BLOCK)
+        expect(orgListPriceMonthlyUsd(org)).toBe(
+          PLAN_PRICING[plan].basePriceMonthlyUsd + blocks * AI_CREDIT_BLOCK_MONTHLY_USD,
         )
       }
     }
-    // A small plan with a big tier, and the other way round — the case the
-    // per-plan add-on could not sell.
-    expect(
-      resolveOrgEntitlements({ plan: 'starter', seatAddons: { aiAddon: 1 }, aiTier: 'studio' } as any)
-        .assistCreditsPerMonth,
-    ).toBe(750 + 149_000)
-    expect(
-      resolveOrgEntitlements({ plan: 'agency', seatAddons: { aiAddon: 1 }, aiTier: 'spark' } as any)
-        .assistCreditsPerMonth,
-    ).toBe(58_000 + 4_000)
+    // A retired plan (pricing v4, AGL-4126) sells no blocks, so a quantity
+    // written on one adds nothing and bills nothing: its own band is the pool.
+    for (const plan of RETIRED) {
+      const org = { plan, subscription: { status: 'active' }, seatAddons: { aiAddon: 3 } } as any
+      expect(planSellsAiCredits(plan)).toBe(false)
+      expect(resolveAiCreditBlocks(org)).toBe(0)
+      expect(aiCreditBlocksCreditsPerMonth(org)).toBe(0)
+      expect(resolveOrgEntitlements(org).assistCreditsPerMonth).toBe(band(plan))
+      expect(orgListPriceMonthlyUsd(org)).toBe(PLAN_PRICING[plan].basePriceMonthlyUsd)
+    }
   })
 
-  it('an add-on bought before tiers reads as the tier with its plan’s old price and band', () => {
-    // Back-compat: no `aiTier` on the document. Nobody's credits or bill move.
-    const expected: Record<(typeof SOLD)[number], [string, number, number]> = {
-      starter: ['spark', 4_000, 9],
-      pro: ['boost', 9_000, 19],
-      business: ['plus', 19_000, 39],
-      scale: ['max', 34_000, 69],
-      advanced: ['ultra', 49_000, 99],
-      agency: ['studio', 149_000, 299],
-    }
-    for (const plan of SOLD) {
-      const org = { plan, subscription: { status: 'active' }, seatAddons: { aiAddon: 1 } } as any
-      const [tier, credits, usd] = expected[plan]
-      expect(LEGACY_AI_ADDON_TIER_BY_PLAN[plan]).toBe(tier)
-      expect(defaultAiTierForPlan(plan)).toBe(tier)
-      expect(resolveAiTier(org)).toBe(tier)
-      expect(resolveOrgEntitlements(org).assistCreditsPerMonth).toBe(
-        PLAN_ENTITLEMENTS[plan].assistCreditsPerMonth + credits,
-      )
-      expect(orgListPriceMonthlyUsd(org)).toBe(PLAN_PRICING[plan].basePriceMonthlyUsd + usd)
-    }
-    // An unknown stored tier is not trusted: it falls back the same way.
-    expect(
-      resolveAiTier({ plan: 'pro', seatAddons: { aiAddon: 1 }, aiTier: 'mega' } as any),
-    ).toBe('boost')
-    expect(isAiTierId('mega')).toBe(false)
-    expect(isAiTierId('max')).toBe(true)
+  it('reads a stored retired tier as nothing: only the block count decides', () => {
+    // `aiTier` was written beside the add-on until AGL-4144. Nothing reads it
+    // now, so a stale value adds no credits and costs nothing.
+    const withTier = {
+      plan: 'pro',
+      subscription: { status: 'active' },
+      seatAddons: { aiAddon: 1 },
+      aiTier: 'studio',
+    } as any
+    expect(resolveOrgEntitlements(withTier).assistCreditsPerMonth).toBe(
+      band('pro') + AI_CREDITS_PER_BLOCK,
+    )
+    expect(orgListPriceMonthlyUsd(withTier)).toBe(
+      PLAN_PRICING.pro.basePriceMonthlyUsd + AI_CREDIT_BLOCK_MONTHLY_USD,
+    )
+    const tierOnly = { plan: 'pro', subscription: { status: 'active' }, aiTier: 'studio' } as any
+    expect(hasAiAddon(tierOnly)).toBe(false)
+    expect(resolveAiCreditBlocks(tierOnly)).toBe(0)
+    expect(resolveOrgEntitlements(tierOnly).assistCreditsPerMonth).toBe(band('pro'))
   })
 
-  it('clamps at one: the add-on is org-wide, so a quantity above one is one purchase', () => {
-    for (const quantity of [1, 2, 9]) {
+  it('clamps the count to 0–30: junk is none, a fraction floors, more than 30 is 30', () => {
+    for (const [quantity, blocks] of [
+      [1, 1],
+      [2.9, 2],
+      [30, 30],
+      [31, 30],
+      [999, 30],
+    ] as const) {
+      expect(aiAddonUnits({ aiAddon: quantity })).toBe(blocks)
       expect(
-        resolveOrgEntitlements({ plan: 'business', seatAddons: { aiAddon: quantity }, aiTier: 'plus' } as any)
+        resolveOrgEntitlements({ plan: 'pro', seatAddons: { aiAddon: quantity } } as any)
           .assistCreditsPerMonth,
-      ).toBe(PLAN_ENTITLEMENTS.business.assistCreditsPerMonth + AI_TIERS.plus.credits)
-      expect(aiAddonUnits({ aiAddon: quantity })).toBe(1)
+      ).toBe(band('pro') + blocks * AI_CREDITS_PER_BLOCK)
     }
-    for (const quantity of [0, -3, Number.NaN, undefined]) {
+    for (const quantity of [0, 0.5, -3, Number.NaN, undefined]) {
       expect(aiAddonUnits({ aiAddon: quantity })).toBe(0)
-      // No tier held: the plan's own band, and generation still open on it.
-      const org = { plan: 'business', seatAddons: { aiAddon: quantity }, aiTier: 'plus' } as any
-      expect(resolveOrgEntitlements(org).assistCreditsPerMonth).toBe(
-        PLAN_ENTITLEMENTS.business.assistCreditsPerMonth,
-      )
+      // No blocks held: the plan's own band, and generation still open on it.
+      const org = { plan: 'pro', seatAddons: { aiAddon: quantity } } as any
+      expect(resolveOrgEntitlements(org).assistCreditsPerMonth).toBe(band('pro'))
       expect(resolveOrgEntitlements(org).features.aiGenerative).toBe(true)
-      expect(resolveAiTier(org)).toBeNull()
+      expect(resolveAiCreditBlocks(org)).toBe(0)
+      expect(hasAiAddon(org)).toBe(false)
     }
     expect(aiAddonUnits(null)).toBe(0)
-    // A stored quantity above one bills ONCE.
+    // A stored quantity above the ceiling bills the ceiling, never more.
+    // Pro's $69 (pricing v4), 30 blocks, one extra site.
     expect(
       orgListPriceMonthlyUsd({
-        plan: 'agency',
+        plan: 'pro',
         subscription: { status: 'active' },
-        seatAddons: { aiAddon: 3, hosts: 1 },
+        seatAddons: { aiAddon: 45, hosts: 1 },
       } as any),
-    ).toBe(1299 + 299 + 20)
+    ).toBe(
+      PLAN_PRICING.pro.basePriceMonthlyUsd +
+        AI_CREDIT_BLOCKS_MAX * AI_CREDIT_BLOCK_MONTHLY_USD +
+        (PLAN_PRICING.pro.extraHostMonthlyUsd ?? 0),
+    )
+    expect(PLAN_PRICING.pro.basePriceMonthlyUsd).toBe(69)
   })
 
   it('stacks on a per-org override, after it, the way purchased sites stack on a raised hostLimit', () => {
     const contracted = resolveOrgEntitlements({
       plan: 'starter',
       entitlements: { assistCreditsPerMonth: 1_000 },
-      seatAddons: { aiAddon: 1 },
-      aiTier: 'boost',
+      seatAddons: { aiAddon: 2 },
     } as any)
-    expect(contracted.assistCreditsPerMonth).toBe(1_000 + 9_000)
+    expect(contracted.assistCreditsPerMonth).toBe(1_000 + 2 * AI_CREDITS_PER_BLOCK)
   })
 
   it('goes with the subscription, and sells nothing on Free or Enterprise', () => {
     const dead = {
       plan: 'pro',
       subscription: { status: 'canceled' },
-      seatAddons: { aiAddon: 1 },
-      aiTier: 'max',
+      seatAddons: { aiAddon: 4 },
     } as any
     expect(hasAiAddon(dead)).toBe(false)
-    expect(resolveAiTier(dead)).toBeNull()
+    expect(resolveAiCreditBlocks(dead)).toBe(0)
+    expect(aiCreditBlocksCreditsPerMonth(dead)).toBe(0)
     // Dead resolves to Free, whose taste is the whole band.
-    expect(resolveOrgEntitlements(dead).assistCreditsPerMonth).toBe(300)
+    expect(resolveOrgEntitlements(dead).assistCreditsPerMonth).toBe(band('free'))
     expect(resolveOrgEntitlements(dead).features.aiGenerative).toBe(true)
     expect(resolveOrgEntitlements(dead).features.aiAssist).toBe(false)
     // Dunning grace keeps it, as it keeps every other add-on.
     const pastDue = { ...dead, subscription: { status: 'past_due' } }
-    expect(resolveAiTier(pastDue)).toBe('max')
-    expect(resolveOrgEntitlements(pastDue).assistCreditsPerMonth).toBe(2_750 + 34_000)
-    // Free and Enterprise sell no tier. On Free a quantity adds nothing; on
-    // Enterprise it keeps the contract figure it always added (twice Studio,
-    // `ENTERPRISE_AI_ADDON_CREDITS_PER_MONTH`), whatever tier is written —
-    // "Enterprise keeps its contract figure", so no Enterprise band moved.
+    expect(resolveAiCreditBlocks(pastDue)).toBe(4)
+    expect(resolveOrgEntitlements(pastDue).assistCreditsPerMonth).toBe(
+      band('pro') + 4 * AI_CREDITS_PER_BLOCK,
+    )
+    // Free and Enterprise sell no blocks. On Free a quantity adds nothing; on
+    // Enterprise each unit keeps the contract figure it always added
+    // (`ENTERPRISE_AI_ADDON_CREDITS_PER_MONTH`), so no Enterprise band moved.
     for (const plan of ['free', 'enterprise'] as const) {
-      expect(planSellsAiTiers(plan)).toBe(false)
-      expect(defaultAiTierForPlan(plan)).toBeNull()
-      const org = { plan, seatAddons: { aiAddon: 1 }, aiTier: 'studio' } as any
-      expect(resolveAiTier(org)).toBeNull()
+      expect(planSellsAiCredits(plan)).toBe(false)
+      const org = { plan, seatAddons: { aiAddon: 1 } } as any
+      expect(resolveAiCreditBlocks(org)).toBe(0)
       expect(resolveOrgEntitlements(org).assistCreditsPerMonth).toBe(
-        PLAN_ENTITLEMENTS[plan].assistCreditsPerMonth +
-          (plan === 'enterprise' ? ENTERPRISE_AI_ADDON_CREDITS_PER_MONTH : 0),
+        band(plan) + (plan === 'enterprise' ? ENTERPRISE_AI_ADDON_CREDITS_PER_MONTH : 0),
+      )
+      expect(aiCreditsQuotaPerUnit(org, plan)).toBe(
+        plan === 'enterprise' ? ENTERPRISE_AI_ADDON_CREDITS_PER_MONTH : 0,
       )
     }
     expect(ENTERPRISE_AI_ADDON_CREDITS_PER_MONTH).toBe(298_000)
@@ -3123,24 +3189,34 @@ describe('the Aglyn AI tiers (AGL-2896, AGL-3965)', () => {
         seatAddons: { aiAddon: 1 },
       } as any),
     ).toBe(0)
-    for (const plan of SOLD) expect(planSellsAiTiers(plan)).toBe(true)
+    for (const plan of SOLD) {
+      expect(planSellsAiCredits(plan)).toBe(true)
+      expect(aiCreditsQuotaPerUnit({}, plan)).toBe(AI_CREDITS_PER_BLOCK)
+    }
+    expect([...SOLD]).toEqual(['starter', 'pro'])
+    // …and no retired plan sells one (pricing v4, AGL-4126).
+    for (const plan of RETIRED) {
+      expect(planSellsAiCredits(plan)).toBe(false)
+      expect(aiCreditsQuotaPerUnit({}, plan)).toBe(0)
+    }
+    expect(planSellsAiCredits('nonsense')).toBe(false)
+    expect(planSellsAiCredits(undefined)).toBe(false)
   })
 
-  it('reaches the revenue figure: a tier bills once, monthly, on either interval', () => {
+  it('reaches the revenue figure: blocks bill monthly, on either interval', () => {
     expect(
       orgMonthlyRevenueUsd({
         plan: 'starter',
         subscription: { status: 'active', interval: 'year' },
-        seatAddons: { aiAddon: 1 },
-        aiTier: 'boost',
+        seatAddons: { aiAddon: 2 },
       } as any),
-    ).toBe(16 + 19)
+    ).toBe(PLAN_PRICING.starter.basePriceAnnualMonthlyUsd + 2 * AI_CREDIT_BLOCK_MONTHLY_USD)
   })
 
-  it('a comp buys no tier; a paying plan can', () => {
-    expect(orgCanBuyAiTier({ plan: 'pro', subscription: { status: 'active' } } as any)).toBe(true)
-    expect(orgCanBuyAiTier({ plan: 'free' } as any)).toBe(false)
-    expect(aiTierName('ultra')).toBe('Aglyn AI Ultra')
+  it('a comp buys no blocks; a paying plan can', () => {
+    expect(orgCanBuyAiCredits({ plan: 'pro', subscription: { status: 'active' } } as any)).toBe(true)
+    expect(orgCanBuyAiCredits({ plan: 'free' } as any)).toBe(false)
+    expect(orgCanBuyAiCredits({ plan: 'enterprise' } as any)).toBe(false)
   })
 })
 
@@ -3214,43 +3290,5 @@ describe('Site Care add-on (AGL-3954)', () => {
     expect(planSellsSiteCare('enterprise')).toBe(false)
     expect(planSellsSiteCare('nonsense')).toBe(false)
     expect(planSellsSiteCare(undefined)).toBe(false)
-  })
-})
-
-describe('the `ai:<tier>` add-on key (AGL-3965)', () => {
-  it('round-trips every tier', () => {
-    for (const tier of ['spark', 'boost', 'plus', 'max', 'ultra', 'studio'] as const) {
-      expect(aiTierAddonKey(tier)).toBe(`ai:${tier}`)
-      expect(parseAiTierAddonKey(aiTierAddonKey(tier))).toBe(tier)
-    }
-  })
-
-  it('refuses anything that is not exactly a tier key', () => {
-    for (const key of ['ai', 'ai:', 'ai:mega', 'AI:boost', 'ai:Boost', 'siteCare', 'boost', 1, null, undefined, {}]) {
-      expect(parseAiTierAddonKey(key)).toBeNull()
-    }
-  })
-
-  it('lists the tiers smallest first, with price and credits, and none on a plan that sells none', () => {
-    const all = listAiTierAddons()
-    expect(all.map((option) => option.key)).toEqual([
-      'ai:spark',
-      'ai:boost',
-      'ai:plus',
-      'ai:max',
-      'ai:ultra',
-      'ai:studio',
-    ])
-    expect(all[1]).toEqual({
-      key: 'ai:boost',
-      tier: 'boost',
-      label: 'Boost',
-      monthlyUsd: 19,
-      yearlyUsd: 228,
-      credits: 9_000,
-    })
-    expect(listAiTierAddons('starter')).toHaveLength(6)
-    expect(listAiTierAddons('free')).toEqual([])
-    expect(listAiTierAddons('enterprise')).toEqual([])
   })
 })

@@ -136,11 +136,18 @@ describe('/api/admin/bundle-link: staff mint the link (AGL-3955)', () => {
     })
   })
 
-  it('passes the Aglyn AI tier staff picked to the mint (AGL-4025)', async () => {
-    await mint({ plan: 'starter', addons: { siteCare: 1, aiAddon: 1 }, aiTier: 'boost' })
+  it('passes the Aglyn AI credit blocks staff counted to the mint (AGL-4144)', async () => {
+    await mint({ plan: 'starter', addons: { siteCare: 1, aiAddon: 3 } })
     expect(mockMint).toHaveBeenCalledWith(
-      expect.objectContaining({ addons: { siteCare: 1, aiAddon: 1 }, aiTier: 'boost' }),
+      expect.objectContaining({ addons: { siteCare: 1, aiAddon: 3 } }),
     )
+  })
+
+  it('passes a posted retired AI tier on, so the mint refuses it rather than drops it (AGL-4144)', async () => {
+    // `mintBundleLink` refuses any tier (its own spec pins that); the route
+    // must not strip it, or a link would be minted without what staff named.
+    await mint({ plan: 'starter', addons: { aiAddon: 1 }, aiTier: 'boost' })
+    expect(mockMint).toHaveBeenCalledWith(expect.objectContaining({ aiTier: 'boost' }))
   })
 
   it('a domain that is not an object is no domain line', async () => {

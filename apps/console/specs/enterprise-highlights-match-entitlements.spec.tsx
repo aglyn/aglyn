@@ -154,7 +154,8 @@ describe('the Enterprise highlights ask the entitlement model', () => {
   it('a comped org holds only what an agreement inherently gives', () => {
     expect(labelled('single sign-on').holds(COMPED)).toBe(false)
     expect(labelled('white-label').holds(COMPED)).toBe(false)
-    expect(labelled('Twice Agency').holds(COMPED)).toBe(false)
+    // Named in the row's own figures since pricing v4 retired Agency (AGL-4126).
+    expect(labelled('Up to 200 sites').holds(COMPED)).toBe(false)
     // Having an agreement at all is not an entitlement flag, and every org the
     // card marks current has one by construction.
     expect(labelled('Custom pricing').holds(COMPED)).toBe(true)

@@ -105,7 +105,7 @@ describe('aiActionOutline', () => {
       '10. Create a CRM task: "Call them", a high-priority call, due in 1 day, for a named teammate.',
       '11. Log a CRM activity: an inbound call: "Asked for a quote".',
       '12. Add a CSS class: runs in the visitor’s browser on the page.',
-      '13. Run custom JS (Business): runs in the visitor’s browser on the page.',
+      '13. Run custom JS (Pro): runs in the visitor’s browser on the page.',
       '14. Set the contact’s lifecycle stage: "Sales qualified".',
     ])
   })

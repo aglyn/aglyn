@@ -361,8 +361,10 @@ describe('the grid holds until the plan is KNOWN (AGL-1864 · AGL-1422)', () => 
      * invisible in it: a reader counted the cards, got the promised number,
      * and had no reason to look for an eighth.
      *
-     * An org on Pro has Free and Starter below it, so the grid draws six of
-     * the eight and the disclosure names the other two. THE INVARIANT IS THE
+     * An org on Pro has Free and Starter below it, so the grid draws two of
+     * the four — Pro and Custom, since pricing v4 (AGL-4126) sells Free,
+     * Starter and Pro with Custom above them — and the disclosure names the
+     * other two. THE INVARIANT IS THE
      * SUM: every plan the button promised is either on screen or counted by
      * the fold. That is what the original defect broke — a promise of seven
      * against seven cards, with Free in neither number and nothing anywhere
@@ -371,7 +373,7 @@ describe('the grid holds until the plan is KNOWN (AGL-1864 · AGL-1422)', () => 
      */
     render(<BillingPage />)
     const compare = screen.getByRole('button', { name: /Compare all/ })
-    expect(compare.textContent).toBe('Compare all 8 plans')
+    expect(compare.textContent).toBe('Compare all 4 plans')
 
     fireEvent.click(compare)
     const drawn = Object.values(PLAN_LABELS).filter((label) =>
@@ -386,7 +388,7 @@ describe('the grid holds until the plan is KNOWN (AGL-1864 · AGL-1422)', () => 
     // Every plan the button promises is either on screen or named by the
     // disclosure. Nothing is unaccounted for.
     expect(folded).toBeGreaterThan(0)
-    expect(drawn + folded).toBe(8)
+    expect(drawn + folded).toBe(4)
     // And the fold really does deliver what it counted, so the sum above is
     // an accounting of real cards rather than of a number in a label.
     fireEvent.click(
@@ -395,7 +397,9 @@ describe('the grid holds until the plan is KNOWN (AGL-1864 · AGL-1422)', () => 
     expect(
       Object.values(PLAN_LABELS).filter((label) => Boolean(cardFor(label)))
         .length,
-    ).toBe(8)
+    ).toBe(4)
+    // None of them is a retired plan: those are never drawn for sale.
+    expect(cardFor(PLAN_LABELS.business)).toBeNull()
   })
 
   it('and the ones the fold was holding are quiet, not promoted', () => {
@@ -406,16 +410,22 @@ describe('the grid holds until the plan is KNOWN (AGL-1864 · AGL-1422)', () => 
      * the case above while presenting a downgrade as a peer of an upgrade —
      * the dark pattern pointed the other way, and the thing AGL-1859 §2
      * forbids.
+     *
+     * On a paying STARTER org since pricing v4 (AGL-4126): Pro is the top of
+     * the self-serve ladder and has no step up to recommend, so the org with
+     * both a fold below it and an upgrade above it is Starter — Free folded,
+     * Pro the step up.
      */
+    mockOrg = { ...ANNUAL_PRO, plan: 'starter' as const }
     render(<BillingPage />)
     fireEvent.click(screen.getByRole('button', { name: /Compare all/ }))
     fireEvent.click(
       screen.getByRole('button', { name: /Show \d+ lower plans?/ }),
     )
     const free = cardFor(PLAN_LABELS.free) as HTMLElement
-    const business = cardFor(PLAN_LABELS.business) as HTMLElement
+    const pro = cardFor(PLAN_LABELS.pro) as HTMLElement
     expect(
-      within(business).getByRole('button').className,
+      within(pro).getByRole('button').className,
     ).toMatch(/MuiButton-contained/)
     expect(within(free).getByRole('button').className).toMatch(/MuiButton-text/)
     expect(
@@ -423,7 +433,7 @@ describe('the grid holds until the plan is KNOWN (AGL-1864 · AGL-1422)', () => 
     ).not.toMatch(/MuiButton-contained/)
     // The recommendation still points UP the ladder, and only there.
     expect(within(free).queryByText('Recommended')).toBeNull()
-    expect(within(business).getByText('Recommended')).toBeTruthy()
+    expect(within(pro).getByText('Recommended')).toBeTruthy()
   })
 })
 
@@ -566,23 +576,33 @@ describe('the quoted interval survives the jump (AGL-1864 · AGL-1989)', () => {
     (cardFor(label) as HTMLElement).querySelector('.MuiTypography-h4')
       ?.textContent
 
+  /*
+   * The CTA these cases follow is a step UP the ladder from the org's own
+   * plan. Pricing v4 (AGL-4126) retired Scale, so `?plan=scale` parses to no
+   * intent at all — which would leave every case below green for the wrong
+   * reason — and Pro is the top self-serve plan. So the org is on Starter
+   * and the link names Pro, the same shape one rung down.
+   */
+  const ANNUAL_STARTER = { ...ANNUAL_PRO, plan: 'starter' as const }
+  const MONTHLY_STARTER = { ...MONTHLY_PRO, plan: 'starter' as const }
+
   it('a stated annual interval moves the toggle, even on a monthly org', async () => {
-    mockOrg = MONTHLY_PRO
-    mockSearch = 'plan=scale&interval=year'
+    mockOrg = MONTHLY_STARTER
+    mockSearch = 'plan=pro&interval=year'
     render(<BillingPage />)
     await waitFor(() => expect(annualToggle().checked).toBe(true))
     // What the customer actually reads, not just the input's state.
     expect(toggleLabel().textContent).toContain('Annual billing')
     // The number they were sold on /pricing is the number here — read back
     // out of the price list, never asserted as a literal.
-    expect(headline(PLAN_LABELS.scale)).toBe(
-      `$${PLAN_PRICING.scale.basePriceAnnualMonthlyUsd}`,
+    expect(headline(PLAN_LABELS.pro)).toBe(
+      `$${PLAN_PRICING.pro.basePriceAnnualMonthlyUsd}`,
     )
   })
 
   it('a stated monthly interval outranks the subscription too', async () => {
-    mockOrg = ANNUAL_PRO
-    mockSearch = 'plan=scale&interval=month'
+    mockOrg = ANNUAL_STARTER
+    mockSearch = 'plan=pro&interval=month'
     render(<BillingPage />)
     await waitFor(() => expect(annualToggle().checked).toBe(false))
   })
@@ -592,12 +612,12 @@ describe('the quoted interval survives the jump (AGL-1864 · AGL-1989)', () => {
     // commits to neither (AGL-1989). The parser's safe 'month' default is not
     // a statement, and honouring it here would re-quote every card at the
     // monthly price for a customer already billed yearly.
-    mockOrg = ANNUAL_PRO
-    mockSearch = 'plan=scale'
+    mockOrg = ANNUAL_STARTER
+    mockSearch = 'plan=pro'
     render(<BillingPage />)
     await waitFor(() => expect(annualToggle().checked).toBe(true))
-    expect(headline(PLAN_LABELS.scale)).toBe(
-      `$${PLAN_PRICING.scale.basePriceAnnualMonthlyUsd}`,
+    expect(headline(PLAN_LABELS.pro)).toBe(
+      `$${PLAN_PRICING.pro.basePriceAnnualMonthlyUsd}`,
     )
   })
 
@@ -610,15 +630,15 @@ describe('the quoted interval survives the jump (AGL-1864 · AGL-1989)', () => {
     // tell the two apart. The old expression saw a non-empty string, believed
     // it, and flipped an ANNUAL customer's page to monthly — off a link whose
     // author was trying to say "year".
-    mockOrg = ANNUAL_PRO
-    mockSearch = 'plan=scale&interval=yearly'
+    mockOrg = ANNUAL_STARTER
+    mockSearch = 'plan=pro&interval=yearly'
     render(<BillingPage />)
     await waitFor(() => expect(annualToggle().checked).toBe(true))
   })
 
   it('`monthly` is junk as well — a broken link states nothing either way', async () => {
-    mockOrg = ANNUAL_PRO
-    mockSearch = 'plan=scale&interval=monthly'
+    mockOrg = ANNUAL_STARTER
+    mockSearch = 'plan=pro&interval=monthly'
     render(<BillingPage />)
     await waitFor(() => expect(annualToggle().checked).toBe(true))
   })
@@ -637,12 +657,12 @@ describe('the quoted interval survives the jump (AGL-1864 · AGL-1989)', () => {
   it('NEGATIVE CONTROL: a monthly org with no stated interval stays monthly', async () => {
     // Without this the assertions above are satisfied by a toggle that is
     // simply stuck on annual.
-    mockOrg = MONTHLY_PRO
-    mockSearch = 'plan=scale'
+    mockOrg = MONTHLY_STARTER
+    mockSearch = 'plan=pro'
     render(<BillingPage />)
     await waitFor(() => expect(annualToggle().checked).toBe(false))
-    expect(headline(PLAN_LABELS.scale)).toBe(
-      `$${PLAN_PRICING.scale.basePriceMonthlyUsd}`,
+    expect(headline(PLAN_LABELS.pro)).toBe(
+      `$${PLAN_PRICING.pro.basePriceMonthlyUsd}`,
     )
   })
 
@@ -694,19 +714,19 @@ describe('the quoted interval survives the jump (AGL-1864 · AGL-1989)', () => {
   it('a free org that states monthly is still honoured', async () => {
     // The default is a floor, not an override: it must not outrank the link.
     mockOrg = { $id: 'org-1', plan: 'free' as const }
-    mockSearch = 'plan=scale&interval=month'
+    mockSearch = 'plan=pro&interval=month'
     render(<BillingPage />)
     await waitFor(() => expect(annualToggle().checked).toBe(false))
-    expect(headline(PLAN_LABELS.scale)).toBe(
-      `$${PLAN_PRICING.scale.basePriceMonthlyUsd}`,
+    expect(headline(PLAN_LABELS.pro)).toBe(
+      `$${PLAN_PRICING.pro.basePriceMonthlyUsd}`,
     )
   })
 
   it('NEGATIVE CONTROL: the two headline prices are actually different', () => {
     // And without THIS, every price assertion above would hold even if the
     // interval never reached the cards.
-    expect(PLAN_PRICING.scale.basePriceAnnualMonthlyUsd).not.toBe(
-      PLAN_PRICING.scale.basePriceMonthlyUsd,
+    expect(PLAN_PRICING.pro.basePriceAnnualMonthlyUsd).not.toBe(
+      PLAN_PRICING.pro.basePriceMonthlyUsd,
     )
   })
 })

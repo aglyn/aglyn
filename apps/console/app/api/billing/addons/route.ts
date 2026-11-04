@@ -23,16 +23,10 @@ import {
   resolveEffectivePlan,
   resolveOrgEntitlements,
   UNLIMITED,
-  type AiTierId,
 } from '@aglyn/aglyn/server'
-// The Aglyn AI tiers (AGL-3965) by their own module, not the server barrel
-// route specs stub with a partial object.
-import {
-  AI_TIER_IDS,
-  AI_TIERS,
-  defaultAiTierForPlan,
-  isAiTierId,
-} from '@aglyn/aglyn/app-utils/plan-entitlements'
+// The Aglyn AI credit block (AGL-4144) by its own module, not the server
+// barrel route specs stub with a partial object.
+import { AI_CREDITS_PER_BLOCK } from '@aglyn/aglyn/app-utils/ai-credit-blocks'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -45,12 +39,8 @@ import {
 import { runPluginEventHandlers } from '@aglyn/aglyn/server'
 import {
   ADDON_KINDS,
-  addonKindFromPriceId,
   addonPriceId,
   addonQuantitiesFromItems,
-  aiTierFromItems,
-  aiTierFromPriceId,
-  aiTierPriceId,
   addonMaxForBaseline,
   addonUnitUsd,
   findPlanItem,
@@ -181,23 +171,8 @@ async function scheduleAddonReduction(options: {
   kind: AddonKind
   /** Its quantity from the period end; 0 removes the item entirely. */
   quantity: number
-  /**
-   * The Aglyn AI tier the line moves to from the period end (AGL-3965), for
-   * a tier DOWNGRADE: the line keeps its quantity and takes that tier's
-   * price at the phase's interval. Absent for a quantity change.
-   */
-  toTier?: AiTierId
-  /** The subscription's interval today, for the line's new price. */
-  interval: BillingInterval
 }): Promise<{ effectiveAt: string; scheduleId: string } | null> {
-  const { secretKey, subscription, items, priceId, kind, quantity, toTier, interval } = options
-  /**
-   * Whether a phase line is this add-on. By id; and for the Aglyn AI add-on,
-   * which is one line in any of its tier or legacy prices, by kind.
-   */
-  const isThisAddon = (price: string, matchPrice: string) =>
-    price === matchPrice ||
-    (kind === 'aiAddon' && addonKindFromPriceId(price) === 'aiAddon')
+  const { secretKey, subscription, items, priceId, kind, quantity } = options
   /**
    * One line moved on an otherwise untouched item list.
    *
@@ -208,23 +183,16 @@ async function scheduleAddonReduction(options: {
   const withAddonMoved = (
     base: readonly PhaseItem[],
     matchPrice: string,
-    toPrice: string | null = null,
   ): PhaseItem[] =>
     base
       .map((item) =>
-        isThisAddon(item.price, matchPrice)
-          ? toPrice
-            ? { ...item, price: toPrice }
-            : quantity === 0
-              ? null
-              : { ...item, quantity }
+        item.price === matchPrice
+          ? quantity === 0
+            ? null
+            : { ...item, quantity }
           : item,
       )
       .filter((item): item is PhaseItem => item !== null)
-  /** The tier's price at an interval, or null for a quantity change. */
-  const tierPrice = (at: BillingInterval): string | null =>
-    toTier ? aiTierPriceId(toTier, at) : null
-  if (toTier && !tierPrice(interval)) return null
 
   /**
    * The id this add-on carries ON a given phase.
@@ -248,19 +216,8 @@ async function scheduleAddonReduction(options: {
       | Parameters<typeof addonPriceId>[1]
       | undefined
     if (!phasePlan) return priceId
-    return (
-      addonPriceId(kind, phasePlan, base?.interval ?? 'month', aiTierFromPriceId(priceId)) ??
-      priceId
-    )
+    return addonPriceId(kind, phasePlan, base?.interval ?? 'month') ?? priceId
   }
-  /** The interval a phase is priced at, read the way `addonPriceOnPhase` does. */
-  const phaseInterval = (phase: any): BillingInterval =>
-    ((phase?.items ?? [])
-      .map((item: any) =>
-        typeof item?.price === 'string' ? item.price : item?.price?.id,
-      )
-      .map((id: string) => planAndIntervalFromPriceId(id))
-      .find((match: unknown) => match)?.interval as BillingInterval | undefined) ?? interval
 
   const existingScheduleId =
     typeof subscription?.schedule === 'string'
@@ -298,7 +255,7 @@ async function scheduleAddonReduction(options: {
     writePhaseItems(
       params,
       1,
-      withAddonMoved(subscriptionItemsAsPhaseItems(items), priceId, tierPrice(interval)),
+      withAddonMoved(subscriptionItemsAsPhaseItems(items), priceId),
     )
     params.set('phases[1][iterations]', '1')
     params.set('phases[1][automatic_tax][enabled]', 'true')
@@ -331,11 +288,7 @@ async function scheduleAddonReduction(options: {
         index,
         phase,
         index === targetIndex
-          ? withAddonMoved(
-              phaseItemsOf(phase),
-              addonPriceOnPhase(phase),
-              tierPrice(phaseInterval(phase)),
-            )
+          ? withAddonMoved(phaseItemsOf(phase), addonPriceOnPhase(phase))
           : undefined,
       )
     })
@@ -499,30 +452,20 @@ async function handler(request: Request): Promise<Response> {
     const interval: BillingInterval =
       planItem?.price?.recurring?.interval === 'year' ? 'year' : 'month'
 
-    // The Aglyn AI tier the subscription carries now (AGL-3965).
-    const currentAiTier = aiTierFromItems(items)
-
     if (action === 'get') {
       const quantities = addonQuantitiesFromItems(items)
       const catalog = Object.fromEntries(
         ADDON_KINDS.map((kind) => {
-          // The Aglyn AI row is priced at the tier held, else the tier a
-          // plain "turn it on" buys (`defaultAiTierForPlan`, AGL-3965).
-          const tier = kind === 'aiAddon' ? currentAiTier : null
-          const unitUsd = addonUnitUsd(kind, plan, tier)
+          const unitUsd = addonUnitUsd(kind, plan)
           const max = addonMax(kind, baseline, plan)
-          const aiTier = kind === 'aiAddon' && unitUsd !== null
-            ? (tier ?? defaultAiTierForPlan(plan))
-            : null
           return [kind, {
             unitUsd,
             max,
-            configured: Boolean(addonPriceId(kind, plan, interval, tier)),
+            configured: Boolean(addonPriceId(kind, plan, interval)),
             upgradeRequired: unitUsd === null || max <= 0,
-            // The credits that tier adds on top of the plan's own, so a
-            // client without the tier list (the native screen) states the
-            // figure the toggle buys.
-            ...(aiTier ? { credits: AI_TIERS[aiTier].credits } : {}),
+            // The credits ONE block adds on top of the plan's own (AGL-4144),
+            // so every client states the figure each block buys.
+            ...(kind === 'aiAddon' && unitUsd !== null ? { credits: AI_CREDITS_PER_BLOCK } : {}),
           }]
         }),
       )
@@ -532,18 +475,6 @@ async function handler(request: Request): Promise<Response> {
         interval,
         quantities,
         catalog,
-        // The tier picker (AGL-3965): every tier with its credits and price,
-        // the one held marked by `aiTier`. Empty where the plan sells none.
-        aiTier: currentAiTier,
-        aiTiers: addonMax('aiAddon', baseline, plan) > 0
-          ? AI_TIER_IDS.map((id) => ({
-              id,
-              label: AI_TIERS[id].label,
-              credits: AI_TIERS[id].credits,
-              unitUsd: AI_TIERS[id].monthlyUsd,
-              configured: Boolean(aiTierPriceId(id, interval)),
-            }))
-          : [],
       }, { status: 200 })
     }
 
@@ -597,51 +528,33 @@ async function handler(request: Request): Promise<Response> {
         { status: 409 },
       )
     }
-    // The Aglyn AI tier asked for (AGL-3965): the body's `tier`, else the
-    // one held, else the tier a plan-named purchase means. Anything that is
-    // not a tier id is refused rather than guessed.
-    if (kind === 'aiAddon' && body?.tier != null && !isAiTierId(body.tier)) {
-      return Response.json({ error: 'Unknown AI tier' }, { status: 400 })
+    // The Aglyn AI tiers are retired (AGL-4144): credits are bought by the
+    // block, as a quantity. A request that still names a tier was priced
+    // against a tier's credits and price, so it is refused rather than read
+    // as some number of blocks the person never saw.
+    if (body?.tier != null) {
+      return Response.json(
+        {
+          error: 'AI tiers were replaced by AI credit blocks. Choose a number of blocks instead.',
+          code: 'ai_tier_retired',
+        },
+        { status: 400 },
+      )
     }
-    const tier: AiTierId | null =
-      kind === 'aiAddon'
-        ? (isAiTierId(body?.tier) ? body.tier : currentAiTier ?? defaultAiTierForPlan(plan))
-        : null
-    const unitUsd = addonUnitUsd(kind, plan, tier)
+    const unitUsd = addonUnitUsd(kind, plan)
     if (unitUsd === null) {
       return Response.json({
         error: 'Your plan does not sell this add-on — upgrade to add it',
         code: 'upgrade_required',
       }, { status: 409 })
     }
-    const priceId = addonPriceId(kind, plan, interval, tier)
-    // The AI add-on is ONE line in whichever tier (or legacy per-plan) price
-    // it carries, so it is found by kind; every other kind by its price.
-    const existing = kind === 'aiAddon'
-      ? items.find((item) => addonKindFromPriceId(item?.price?.id) === 'aiAddon')
-      : items.find((item) => item?.price?.id === priceId)
-    // Removing an AI line that is already there needs no price to sell: the
-    // line goes by its id, whatever tier or legacy price it carries.
-    const removingHeldAiLine = kind === 'aiAddon' && Boolean(existing) && quantity === 0
-    if (!priceId && !removingHeldAiLine) {
+    const priceId = addonPriceId(kind, plan, interval)
+    if (!priceId) {
       return Response.json({
         error: 'This add-on price is not configured yet',
       }, { status: 501 })
     }
-    /**
-     * A move between Aglyn AI tiers (AGL-3965): the line stays, its price
-     * changes. Up is charged now, prorated, like a plan upgrade; down waits
-     * for the period end, like a plan downgrade — `isReduction` below.
-     */
-    const tierChange =
-      kind === 'aiAddon' &&
-      Boolean(existing) &&
-      quantity === 1 &&
-      tier !== null &&
-      aiTierFromPriceId(existing?.price?.id) !== tier
-    const currentTierUsd = tierChange
-      ? addonUnitUsd('aiAddon', plan, aiTierFromPriceId(existing?.price?.id)) ?? 0
-      : 0
+    const existing = items.find((item) => item?.price?.id === priceId)
     /**
      * This add-on's quantity RIGHT NOW: 0 when no item exists, and `null`
      * when an item exists but Stripe reports no quantity on it at all
@@ -659,10 +572,8 @@ async function handler(request: Request): Promise<Response> {
         : null
       : 0
     /** Whether this change makes the add-on cheaper: deferred, never refunded. */
-    const isReduction = tierChange
-      ? unitUsd < currentTierUsd
-      : currentQuantity !== null && quantity < currentQuantity
-    if (currentQuantity === quantity && !tierChange) {
+    const isReduction = currentQuantity !== null && quantity < currentQuantity
+    if (currentQuantity === quantity) {
       // Nothing changes; report the no-op instead of calling Stripe.
       //
       // Two shapes of no-op: nothing to remove (no item, quantity 0), and
@@ -727,11 +638,9 @@ async function handler(request: Request): Promise<Response> {
     // One modified line item, shared by preview and set. Stripe treats
     // quantity 0 as an explicit deletion flag on updates.
     const itemParams: Array<[string, string]> = existing
-      ? tierChange
-        ? [['id', String(existing.id)], ['price', priceId]]
-        : quantity === 0
-          ? [['id', String(existing.id)], ['deleted', 'true']]
-          : [['id', String(existing.id)], ['quantity', String(quantity)]]
+      ? quantity === 0
+        ? [['id', String(existing.id)], ['deleted', 'true']]
+        : [['id', String(existing.id)], ['quantity', String(quantity)]]
       : [['price', priceId], ['quantity', String(quantity)]]
 
     /*
@@ -842,13 +751,9 @@ async function handler(request: Request): Promise<Response> {
         secretKey,
         subscription,
         items,
-        // The line as it stands today: for the AI add-on, the price it
-        // carries now (a tier, or a legacy per-plan price).
-        priceId: kind === 'aiAddon' && existing ? String(existing?.price?.id) : String(priceId),
+        priceId: String(priceId),
         kind,
         quantity,
-        ...(tierChange && tier ? { toTier: tier } : {}),
-        interval,
       })
       if (!scheduled) {
         return Response.json(
@@ -869,7 +774,6 @@ async function handler(request: Request): Promise<Response> {
           pendingAddonChange: {
             kind,
             quantity,
-            ...(tierChange ? { tier } : {}),
             effectiveAt: scheduled.effectiveAt,
             scheduleId: scheduled.scheduleId,
           },
@@ -973,8 +877,7 @@ async function handler(request: Request): Promise<Response> {
     // Mirror the full quantity map (explicit zeros) so removals converge;
     // the webhook re-derives the same map on the subscription event.
     const quantities = addonQuantitiesFromItems(updated?.items?.data ?? [])
-    const aiTier = aiTierFromItems(updated?.items?.data ?? [])
-    await orgSnapshot.ref.set({ seatAddons: quantities, aiTier }, { merge: true })
+    await orgSnapshot.ref.set({ seatAddons: quantities }, { merge: true })
     // The AI add-on in the workspace's own feed (AGL-2929), attributed to the
     // member who bought it — the webhook confirming the same map afterwards
     // sees no change and writes no second row.
@@ -990,7 +893,6 @@ async function handler(request: Request): Promise<Response> {
       {
         ok: true,
         quantities,
-        aiTier,
         // What the purchase cost, from the invoice that paid for it.
         chargedNowCents: Number(addonInvoice?.amount_due ?? 0),
         chargeCurrency: String(addonInvoice?.currency ?? 'usd'),

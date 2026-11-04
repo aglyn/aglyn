@@ -19,6 +19,7 @@
 import {
   type AglynOrgBilling,
   checkEntitlement,
+  planLabelGrantingFeature,
   pluginDocsHelp,
 } from '@aglyn/aglyn'
 import {
@@ -215,8 +216,9 @@ export function OrgExperimentsCard(props: OrgExperimentsCardProps) {
     >
       {!entitled ? (
         <Alert severity="info">
-          {'A/B experiments are included in the Business plan — see ' +
-            'Billing to upgrade.'}
+          {`A/B experiments are included in the ${
+            planLabelGrantingFeature('abTesting') ?? 'Pro'
+          } plan — see Billing to upgrade.`}
         </Alert>
       ) : !mount || !mount.hostsReady ? null : !sites.length ? (
         <Typography variant="body2" color="text.secondary">

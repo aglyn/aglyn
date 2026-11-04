@@ -21,7 +21,7 @@
 /**
  * The server declarations (AGL-2939): the platform events core raises
  * reach the plugin's activity writers. The routes prove they RAISE the
- * events (`addon-ai-toggle`, `billing-webhook-ai-addon`, the member and
+ * events (`addon-ai-credit-blocks`, `billing-webhook-ai-addon`, the member and
  * role routes); this proves the subscription turns each into the row
  * `ai-activity.spec.ts` pins.
  */
@@ -67,6 +67,7 @@ import { resolveSiteStyleLooks } from '@aglyn/aglyn/plugin-manager/plugin-site-s
 import { registerPluginThemePresets } from '@aglyn/aglyn/plugin-manager/plugin-theme-presets'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { AI_PLUGIN_ENTITLEMENTS, registerAiDeclarations } from './declarations'
+import { AI_CREDIT_BLOCKS_MAX, AI_CREDITS_PER_BLOCK } from '@aglyn/aglyn/app-utils/ai-credit-blocks'
 import { registerAiServerDeclarations } from './declarations.server'
 import { aiSiteKind } from './model/ai-site-kinds'
 import { aiSiteKindDefaultLook } from './model/ai-site-look'
@@ -87,10 +88,20 @@ describe('the AI plugin declares its keys through the generic seams', () => {
     // The reset forgot it; the declaration itself is what the plugin owns.
     expect(AI_PLUGIN_ENTITLEMENTS.seatAddons?.[0]).toMatchObject({
       key: 'aiAddon',
-      maxUnits: 1,
+      // Credit blocks, 0 to 30 (AGL-4144): a count, not a 0/1 toggle.
+      maxUnits: AI_CREDIT_BLOCKS_MAX,
       quota: { key: 'assistCreditsPerMonth' },
       features: ['aiGenerative', 'aiAssist'],
     })
+    expect(AI_CREDIT_BLOCKS_MAX).toBe(30)
+    // 5,000 credits a block on a paid plan, whatever a stored tier says;
+    // none on Free.
+    const addon = AI_PLUGIN_ENTITLEMENTS.seatAddons![0]
+    expect(addon.quota?.perUnit?.({ aiTier: 'studio' } as never, 'pro')).toBe(AI_CREDITS_PER_BLOCK)
+    expect(addon.quota?.perUnit?.({}, 'free')).toBe(0)
+    expect(addon.soldOn?.('starter')).toBe(true)
+    expect(addon.soldOn?.('free')).toBe(false)
+    expect(addon.soldOn?.('enterprise')).toBe(false)
     expect(AI_PLUGIN_ENTITLEMENTS.lockdownFeatures?.map((lever) => lever.key)).toEqual([
       'ai-assist',
       'ai-generate',

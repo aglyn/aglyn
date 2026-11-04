@@ -43,10 +43,10 @@ import {
 
 /**
  * "Create with AI" where generation is switched off for a workspace that
- * could buy an Aglyn AI tier (AGL-3601, AGL-3965). Since AGL-3965 every paid
+ * could buy Aglyn AI credits (AGL-3601, AGL-4144). Since AGL-3965 every paid
  * plan's own credits pay for generation, so this is reached only where a
  * per-org setting closed it. The shell mounts the entry with
- * `entitled={false}` only where a tier is sold to this workspace, and the
+ * `entitled={false}` only where credit blocks are sold to this workspace, and the
  * jobs route has said that is the one thing missing; the entry then keeps its
  * place on the page and opens this instead of the brief.
  */
@@ -67,7 +67,7 @@ export interface AiUpsellDialogProps {
 const aiUpsellHelp = () =>
   pluginDocsHelp('aiCreate', {
     anchor: '#without-the-add-on',
-    excerpt: `On every paid plan, Create with AI runs on the AI credits the plan includes. Where it is switched off for a workspace, an ${aiAddonName()} tier switches it on; an owner or admin chooses one in Billing.`,
+    excerpt: `On every paid plan, Create with AI runs on the AI credits the plan includes. Where it is switched off for a workspace, ${aiAddonName()} credits switch it on; an owner or admin adds them in Billing.`,
   })
 
 export function AiUpsellDialog({ kind, open, onClose, upgrade }: AiUpsellDialogProps) {

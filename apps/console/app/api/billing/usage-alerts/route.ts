@@ -24,6 +24,12 @@ import { isCronAuthorized } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
 // By path: the route's specs replace the `/server` barrel wholesale.
 import { analyticsBandwidthReading } from '@aglyn/aglyn/app-utils/media-bandwidth'
+// By path, for the same reason: whether a run band bills past itself
+// (pricing v4) is the plan table's answer.
+import {
+  resolvePlanPricing,
+  runOverageSold,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   bandwidthCapMonthKey,
   bandwidthCapShouldEngage,
@@ -798,6 +804,9 @@ async function handler(request: Request): Promise<Response> {
       // it? Read once, and only used to choose the alert's wording — the
       // thresholds themselves are identical either way.
       const metersInfra = planMetersInfraOverage(orgData as never)
+      // Whether automation runs past the band bill rather than pause (pricing
+      // v4: a plan with a run rate) — again only the wording.
+      const actionRunsBill = runOverageSold(orgData as never)
       // The workspace's pooled storage band (AGL-2075), from the expression
       // ingress refuses at, and the library's share of what fills it.
       const mediaBandMb = orgMediaAllowanceMb(entitlements)
@@ -1210,8 +1219,17 @@ async function handler(request: Request): Promise<Response> {
         // Each plugin band declared with an alert, against what the plan
         // includes of the entitlement it names — per site where it says so —
         // in the words the declaration gives it.
-        ...alertBands.map((band) =>
-          pluginCheck({
+        ...alertBands.map((band) => {
+          // A band whose excess this org's plan SELLS tells the billed story
+          // (`alert.overage`, pricing v4); every other plan reads the
+          // declaration's own sentences.
+          const overage = band.alert!.overage
+          const sold =
+            overage != null &&
+            (resolvePlanPricing(orgData as never) as unknown as Record<string, unknown>)[
+              overage.pricedBy
+            ] != null
+          return pluginCheck({
             key: band.id,
             label: band.alert!.label,
             noun: band.alert!.noun,
@@ -1220,18 +1238,18 @@ async function handler(request: Request): Promise<Response> {
               planQuotaOf(entitlements, band.entitlement) *
               (band.perHost ? Math.max(1, entitlements.hostLimit) : 1),
             cadence: 'monthly',
-            outcome: band.alert!.outcome,
-            reached: band.alert!.reached,
-            approach: band.alert!.approach,
-          }),
-        ),
+            outcome: sold ? 'bills' : band.alert!.outcome,
+            reached: sold ? overage!.reached : band.alert!.reached,
+            approach: sold ? overage!.approach : band.alert!.approach,
+          })
+        }),
         {
           key: 'actionRuns',
           label: 'monthly automation runs',
           used: actionRuns,
           limit: entitlements.actionRunsPerMonth,
           cadence: 'monthly',
-          outcome: 'stops',
+          outcome: actionRunsBill ? 'bills' : 'stops',
           lead: () =>
             `${workspace.subject} has used ` +
             usagePhrase({
@@ -1243,12 +1261,16 @@ async function handler(request: Request): Promise<Response> {
               suffix: 'this month',
             }) +
             '.',
-          reached:
-            'Automations pause until next month and nothing is charged — ' +
-            'upgrade in Billing to keep them running.',
-          approach:
-            'Nothing changes and nothing is charged — at the included amount, ' +
-            'automations pause until next month unless you upgrade in Billing.',
+          reached: actionRunsBill
+            ? 'Automations keep running, and runs past the included amount ' +
+              'are billed on your monthly invoice.'
+            : 'Automations pause until next month and nothing is charged — ' +
+              'upgrade in Billing to keep them running.',
+          approach: actionRunsBill
+            ? 'Nothing is charged yet — past the included amount, extra ' +
+              'automation runs are billed on your monthly invoice.'
+            : 'Nothing changes and nothing is charged — at the included amount, ' +
+              'automations pause until next month unless you upgrade in Billing.',
         },
         {
           // AGL-1106: bandwidth was displayed but never alerted/enforced.

@@ -80,7 +80,8 @@ async function handler(request: Request): Promise<Response> {
       addons: body?.addons,
       interval: body?.interval,
       coupon: body?.coupon,
-      // The Aglyn AI tier staff chose (AGL-4025), written as `ai:<tier>`.
+      // A retired Aglyn AI tier (AGL-4025) is passed on so the mint refuses
+      // it (AGL-4144): credits are blocks in `addons` now.
       aiTier: body?.aiTier,
       domain: body?.domain && typeof body.domain === 'object' ? body.domain : null,
     })

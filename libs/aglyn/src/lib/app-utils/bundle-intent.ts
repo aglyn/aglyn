@@ -35,24 +35,20 @@
  */
 
 import type {
-  AiTierId,
   OrgPlan,
   OrgSeatAddons,
 } from '../foundation/definitions/org-billing.types'
 import {
-  AI_TIER_IDS,
-  AI_TIERS,
+  AI_CREDIT_BLOCK_MONTHLY_USD,
+  AI_CREDIT_BLOCKS_MAX,
+} from './ai-credit-blocks'
+import {
   aiAddonName,
-  aiTierAddonKey,
-  aiTierName,
-  defaultAiTierForPlan,
   EVENT_CALENDAR_ADDON_MONTHLY_USD,
   EXTRA_HOSTS_ADDON_MAX,
-  isAiTierId,
   PLAN_LABELS,
-  parseAiTierAddonKey,
   PLAN_PRICING,
-  planSellsAiTiers,
+  planSellsAiCredits,
   planSellsSiteCare,
   POS_REGISTER_ADDON_MONTHLY_USD,
   POS_REGISTERS_ADDON_MAX,
@@ -80,10 +76,12 @@ export const ADDON_KINDS: readonly AddonKind[] = [
   'siteCare',
 ]
 
-/** The org-wide 0/1 kinds: one purchase covers the workspace. */
+/**
+ * The org-wide 0/1 kinds: one purchase covers the workspace. Aglyn AI is a
+ * quantity since AGL-4144 — blocks of credits, 0 to 30 — not a toggle.
+ */
 export const TOGGLE_ADDON_KIND_LIST: readonly AddonKind[] = [
   'eventCalendar',
-  'aiAddon',
   'siteCare',
 ]
 
@@ -94,14 +92,12 @@ export function isAddonKind(value: unknown): value is AddonKind {
 /**
  * Monthly USD per unit for an add-on on a plan (yearly prices are ×12 of
  * this); null when the plan doesn't sell the kind. Single pricing source
- * of truth: `PLAN_PRICING`, the three flat add-on constants and `AI_TIERS`
- * (`tier` as `addonPriceId` reads it; absent, the tier a plan-named purchase
- * means, `defaultAiTierForPlan`, AGL-3965).
+ * of truth: `PLAN_PRICING`, the flat add-on constants and the Aglyn AI
+ * credit block (`ai-credit-blocks.ts`, AGL-4144).
  */
 export function addonUnitUsd(
   kind: AddonKind,
   plan: OrgPlan,
-  tier?: AiTierId | null,
 ): number | null {
   const pricing = PLAN_PRICING[plan]
   switch (kind) {
@@ -117,10 +113,9 @@ export function addonUnitUsd(
       return POS_REGISTER_ADDON_MONTHLY_USD
     case 'eventCalendar':
       return EVENT_CALENDAR_ADDON_MONTHLY_USD
-    case 'aiAddon': {
-      const chosen = planSellsAiTiers(plan) ? (tier ?? defaultAiTierForPlan(plan)) : null
-      return chosen ? AI_TIERS[chosen].monthlyUsd : null
-    }
+    case 'aiAddon':
+      // A block of credits, the same price on every plan that sells it.
+      return planSellsAiCredits(plan) ? AI_CREDIT_BLOCK_MONTHLY_USD : null
     case 'siteCare':
       return SITE_CARE_ADDON_MONTHLY_USD
   }
@@ -130,8 +125,8 @@ export function addonUnitUsd(
  * Max purchasable quantity per kind, from a purchases-free entitlement
  * resolution (plan defaults + staff overrides only) so the ceiling does not
  * drift as the org buys: seat/dataset kinds stop at the plan's hard max,
- * hosts/registers use flat ceilings, the Event Calendar, Aglyn AI and Site
- * Care are 0/1 toggles. POS registers additionally require the `pos`
+ * hosts/registers use flat ceilings, Aglyn AI credit blocks stop at 30, the
+ * Event Calendar and Site Care are 0/1 toggles. POS registers additionally require the `pos`
  * feature, and Site Care a plan that sells it (`planSellsSiteCare`), which is
  * why the plan travels with the baseline.
  *
@@ -160,9 +155,9 @@ export function addonMaxForBaseline(
     case 'eventCalendar':
       return 1
     case 'aiAddon':
-      // Org-wide like the Event Calendar: one purchase, of one tier, on any
-      // plan that sells tiers (AGL-3965) — not Free, not Enterprise.
-      return planSellsAiTiers(plan) ? 1 : 0
+      // Blocks of credits, 0 to 30, on any plan that sells them (AGL-4144)
+      // — not Free, not Enterprise.
+      return planSellsAiCredits(plan) ? AI_CREDIT_BLOCKS_MAX : 0
     case 'siteCare':
       // Flat-priced, so the price map cannot say "not sold here" the way it
       // does for Aglyn AI. This ceiling is the rule that keeps Free (no
@@ -234,7 +229,7 @@ export const TOKEN_KINDS: Readonly<Record<string, AddonKind>> = (() => {
   add('hosts', 'extraHosts', 'extraSite', 'extraSites', 'sites')
   add('posRegisters', 'registers', 'register')
   add('eventCalendar', 'events', 'calendar')
-  add('aiAddon', 'aglynAi')
+  add('aiAddon', 'aglynAi', 'aiCredits', 'aiBlocks')
   add('siteCare', 'site-care', 'site_care', 'care')
   return map
 })()
@@ -242,41 +237,21 @@ export const TOKEN_KINDS: Readonly<Record<string, AddonKind>> = (() => {
 /** The most of a quantity kind a link may ask for, before the plan's ceiling. */
 const MAX_LINK_QUANTITY = 999
 
-/** One add-on a token names, with the Aglyn AI tier when it names one. */
+/**
+ * One add-on a token names. Aglyn AI is `ai` (one block) or `ai:<blocks>`
+ * (AGL-4144); a retired tier name (`ai:boost`) is not a number and is
+ * dropped with the notice like any other unknown add-on, never read as
+ * "some blocks".
+ */
 interface ParsedToken {
   kind: AddonKind
   quantity: number
-  tier?: AiTierId
-}
-
-/**
- * THE `ai:<tier>` TOKENS (AGL-3965).
- *
- * Aglyn AI is a tier chosen on its own, on any paid plan: `ai:boost` adds
- * Aglyn AI Boost. The words are the tier ids, lower-cased as every token is,
- * and resolve through `parseAiTierAddonKey`, the one spelling of the
- * `ai:<tier>` key. A bare `ai` (or `ai:1`) still means "add it" and sells
- * the plan's default tier (`defaultAiTierForPlan`). An unknown tier is
- * dropped with the notice like any other unknown add-on, never read as
- * "add whichever tier": that would sell a tier nobody chose.
- */
-export const AI_ADDON_TIER_TOKENS: Readonly<Record<string, AiTierId>> = Object.freeze(
-  Object.fromEntries(AI_TIER_IDS.map((tier) => [tier.toLowerCase(), tier])),
-)
-
-export function resolveAiAddonTier(tier: string): ParsedToken | null {
-  const word = tier.trim().toLowerCase()
-  if (!Object.prototype.hasOwnProperty.call(AI_ADDON_TIER_TOKENS, word)) return null
-  const parsed = parseAiTierAddonKey(aiTierAddonKey(AI_ADDON_TIER_TOKENS[word]))
-  return parsed ? { kind: 'aiAddon', quantity: 1, tier: parsed } : null
 }
 
 export interface ParsedBundleAddons {
   addons: BundleAddons
   /** The tokens nothing understood, as they were written. */
   dropped: string[]
-  /** The Aglyn AI tier an `ai:<tier>` token named (AGL-3965), if any. */
-  aiTier?: AiTierId
 }
 
 /** One token, `kind` or `kind:quantity`, or null when nothing understands it. */
@@ -296,7 +271,7 @@ function parseToken(raw: string): ParsedToken | null {
       quantity: (TOGGLE_ADDON_KIND_LIST as readonly string[]).includes(kind) ? 1 : quantity,
     }
   }
-  return kind === 'aiAddon' ? resolveAiAddonTier(value) : null
+  return null
 }
 
 /**
@@ -310,15 +285,12 @@ function parseToken(raw: string): ParsedToken | null {
 export function parseBundleAddons(input: unknown): ParsedBundleAddons {
   const addons: BundleAddons = {}
   const dropped: string[] = []
-  let aiTier: AiTierId | undefined
   const take = (parsed: ParsedToken | null, raw: string) => {
     if (!parsed) {
       if (raw.trim()) dropped.push(raw.trim().slice(0, 40))
       return
     }
     addons[parsed.kind] = Math.max(addons[parsed.kind] ?? 0, parsed.quantity)
-    // The first tier named wins: one workspace holds one tier.
-    if (parsed.tier && !aiTier) aiTier = parsed.tier
   }
   if (typeof input === 'string') {
     for (const raw of input.split(/[,\s]+/)) take(parseToken(raw), raw)
@@ -346,7 +318,7 @@ export function parseBundleAddons(input: unknown): ParsedBundleAddons {
       take(parseToken(quantity ? `${name}:${quantity}` : name), name)
     }
   }
-  return { addons, dropped, ...(aiTier ? { aiTier } : {}) }
+  return { addons, dropped }
 }
 
 export interface FittedBundleAddons {
@@ -380,36 +352,16 @@ export function fitBundleAddonsToPlan(
 }
 
 /**
- * The add-ons as the link writes them: `siteCare,ai:boost,extraHost:2`.
- * Aglyn AI is written with its tier when one is named (AGL-3965), as bare
- * `ai` otherwise.
+ * The add-ons as the link writes them: `siteCare,ai:3,extraHost:2`. Aglyn AI
+ * is written with its block count past one (AGL-4144), as bare `ai` for one.
  */
-export function bundleAddonsParam(
-  addons: BundleAddons | null | undefined,
-  aiTier?: AiTierId | null,
-): string {
+export function bundleAddonsParam(addons: BundleAddons | null | undefined): string {
   return ADDON_KINDS.filter((kind) => (addons?.[kind] ?? 0) > 0)
     .map((kind) => {
-      if (kind === 'aiAddon' && aiTier) return aiTierAddonKey(aiTier)
       const quantity = addons?.[kind] ?? 0
       return quantity > 1 ? `${BUNDLE_ADDON_TOKENS[kind]}:${quantity}` : BUNDLE_ADDON_TOKENS[kind]
     })
     .join(',')
-}
-
-/**
- * The Aglyn AI tier a bundle sells (AGL-4025): the tier named, or the plan's
- * default (`defaultAiTierForPlan`) when none is; null when the bundle has no
- * Aglyn AI or the plan sells no tier. A picker shows this tier as chosen, the
- * link writes it as `ai:<tier>`, and checkout charges it, so the three agree.
- */
-export function bundleAiTier(
-  addons: BundleAddons | null | undefined,
-  plan: OrgPlan,
-  tier?: AiTierId | null,
-): AiTierId | null {
-  if (!((addons?.aiAddon ?? 0) > 0) || !planSellsAiTiers(plan)) return null
-  return isAiTierId(tier) ? tier : defaultAiTierForPlan(plan)
 }
 
 /**
@@ -427,7 +379,6 @@ export function bundleListPriceCents(bundle: {
   plan: OrgPlan
   interval: 'month' | 'year'
   addons?: BundleAddons | null
-  aiTier?: AiTierId | null
 }): number {
   const pricing = PLAN_PRICING[bundle.plan]
   const yearly = bundle.interval === 'year'
@@ -436,7 +387,7 @@ export function bundleListPriceCents(bundle: {
   const addons = fitBundleAddonsToPlan(bundle.addons, bundle.plan).addons
   for (const kind of ADDON_KINDS) {
     const quantity = addons[kind] ?? 0
-    const unit = addonUnitUsd(kind, bundle.plan, kind === 'aiAddon' ? bundle.aiTier : null)
+    const unit = addonUnitUsd(kind, bundle.plan)
     if (quantity > 0 && unit != null) cents += Math.round(unit * 100) * quantity * (yearly ? 12 : 1)
   }
   return cents
@@ -447,15 +398,8 @@ export function hasBundleAddons(addons: BundleAddons | null | undefined): boolea
   return ADDON_KINDS.some((kind) => (addons?.[kind] ?? 0) > 0)
 }
 
-/**
- * How each kind is named to a customer, singular. Aglyn AI carries its tier
- * when one is named: "Aglyn AI Boost" (AGL-3965).
- */
-export function bundleAddonLabel(
-  kind: AddonKind,
-  brand?: string,
-  aiTier?: AiTierId | null,
-): string {
+/** How each kind is named to a customer, singular: "Aglyn AI credit block". */
+export function bundleAddonLabel(kind: AddonKind, brand?: string): string {
   switch (kind) {
     case 'managers':
       return 'Extra manager seat'
@@ -470,20 +414,20 @@ export function bundleAddonLabel(
     case 'eventCalendar':
       return 'Event Calendar'
     case 'aiAddon':
-      return aiTier ? aiTierName(aiTier, brand) : aiAddonName(brand)
+      // One unit is a block of credits (AGL-4144).
+      return `${aiAddonName(brand)} credit block`
     case 'siteCare':
       return 'Site Care'
   }
 }
 
-/** "Site Care", "2 × Extra site", "Aglyn AI Boost". */
+/** "Site Care", "2 × Extra site", "3 × Aglyn AI credit block". */
 export function describeBundleAddon(
   kind: AddonKind,
   quantity: number,
   brand?: string,
-  aiTier?: AiTierId | null,
 ): string {
-  const label = bundleAddonLabel(kind, brand, aiTier)
+  const label = bundleAddonLabel(kind, brand)
   return quantity > 1 ? `${quantity} × ${label}` : label
 }
 
@@ -556,13 +500,11 @@ export function describeBundle(
     addons?: BundleAddons | null
     interval?: 'month' | 'year' | null
     coupon?: string | null
-    /** The Aglyn AI tier, named with the AI add-on (AGL-3965). */
-    aiTier?: AiTierId | null
   },
   options: { brand?: string } = {},
 ): string {
   const parts = ADDON_KINDS.filter((kind) => (bundle.addons?.[kind] ?? 0) > 0).map((kind) =>
-    describeBundleAddon(kind, bundle.addons?.[kind] ?? 0, options.brand, bundle.aiTier),
+    describeBundleAddon(kind, bundle.addons?.[kind] ?? 0, options.brand),
   )
   const addons =
     parts.length === 0

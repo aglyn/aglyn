@@ -187,7 +187,7 @@ describe('the Org automations card', () => {
     expect(within(steps).getByRole('option', { name: 'Send an email' })).toBeTruthy()
     expect(within(steps).queryByRole('option', { name: 'Run a workflow' })).toBeNull()
     expect(
-      within(steps).queryByRole('option', { name: 'Send a webhook (Business)' }),
+      within(steps).queryByRole('option', { name: 'Send a webhook (Pro)' }),
     ).toBeNull()
     expect(within(steps).queryByRole('option', { name: 'Show a popup or bar' })).toBeNull()
   })

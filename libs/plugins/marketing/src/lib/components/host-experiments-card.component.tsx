@@ -22,6 +22,7 @@ import {
   createResourceUid,
   HOST_EVENT_TYPES,
   isScreenGroup,
+  planLabelGrantingFeature,
   pluginDocsHelp,
   SITE_EVENT_TYPES,
 } from '@aglyn/aglyn'
@@ -641,8 +642,9 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
     >
       {!entitled ? (
         <Alert severity="info">
-          {'A/B experiments are included in the Business plan — see ' +
-            'Billing to upgrade.'}
+          {`A/B experiments are included in the ${
+            planLabelGrantingFeature('abTesting') ?? 'Pro'
+          } plan — see Billing to upgrade.`}
         </Alert>
       ) : (
         <Stack spacing={1.5}>

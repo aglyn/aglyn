@@ -382,12 +382,12 @@ describe('report-usage records Assist provider spend (AGL-2280)', () => {
       table quoted $0.00 while the invoice charged $3.00.
 
       AGL-3203 ended the split — the plan carries 750 credits and $3.00 on its
-      own row — so the add-on now WIDENS a band rather than creating one:
-      750 + 4,000 = 4,750. The overage card, the ceiling, the 100% alert and
-      the refusal sentence all quote the same rate, so the invoice line is
-      pinned in plain figures rather than re-derived through the helper it
-      shares with them: $10.50 of billed spend is 10,500 credits, 5,750 past
-      the band, $17.25.
+      own row — so the add-on now WIDENS a band rather than creating one: one
+      Aglyn AI credit block (AGL-4144) makes it 750 + 5,000 = 5,750. The
+      overage card, the ceiling, the 100% alert and the refusal sentence all
+      quote the same rate, so the invoice line is pinned in plain figures
+      rather than re-derived through the helper it shares with them: $10.50 of
+      billed spend is 10,500 credits, 4,750 past the band, $14.25.
 
       FORCED RED by answering `null` from the rate resolver: the rollup
       recorded no rate and `billedCents` did not move.
@@ -397,13 +397,13 @@ describe('report-usage records Assist provider spend (AGL-2280)', () => {
     const over = await rollupFor(10.5, starterWithAi)
     expect(over).toMatchObject({
       assistCredits: 10_500,
-      assistCreditsBand: 4_750,
-      assistCreditsOverage: 5_750,
-      assistOverageUsd: 17.25,
+      assistCreditsBand: 5_750,
+      assistCreditsOverage: 4_750,
+      assistOverageUsd: 14.25,
       assistOverageRateUsd: 3,
-      assistOverageMeteredUsd: 17.25,
+      assistOverageMeteredUsd: 14.25,
     })
-    expect(over['billedCents']).toBe(none['billedCents'] + 1_725)
+    expect(over['billedCents']).toBe(none['billedCents'] + 1_425)
 
     // WITHOUT the add-on the same workspace is invoiced too, against the
     // plan's own 750 and at the same rate — the shape AGL-3203 introduced,

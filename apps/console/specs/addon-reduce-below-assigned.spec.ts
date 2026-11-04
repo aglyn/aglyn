@@ -149,10 +149,10 @@ const ORIGINAL_FETCH = global.fetch
 
 const STRIPE_ENV = {
   STRIPE_SECRET_KEY: 'sk_test_fake',
-  STRIPE_PRICE_BUSINESS: 'price_business_monthly',
+  STRIPE_PRICE_PRO: 'price_pro_monthly',
   STRIPE_PRICE_POS_REGISTER: 'price_pos_register',
-  STRIPE_PRICE_BUSINESS_EXTRA_MEMBER: 'price_business_member',
-  STRIPE_PRICE_BUSINESS_EXTRA_SEAT: 'price_business_seat',
+  STRIPE_PRICE_PRO_EXTRA_MEMBER: 'price_pro_member',
+  STRIPE_PRICE_PRO_EXTRA_SEAT: 'price_pro_seat',
 }
 
 function loadAddons() {
@@ -229,10 +229,11 @@ function scheduledQuantity(price: string): string | null {
 beforeEach(() => {
   mockStripeCalls = []
   mockOrgWrites = []
-  // A Business org: four register seats bought, THREE of them assigned to two
-  // different sites. Business sells `pos`, so the ceiling is well above these.
+  // A Pro org: four register seats bought, THREE of them assigned to two
+  // different sites. Pro sells `pos`, so the ceiling is well above these. (It
+  // was a Business org until pricing v4 retired that plan, AGL-4126.)
   mockOrg = {
-    plan: 'business',
+    plan: 'pro',
     subscription: { status: 'active' },
     seatAddons: { posRegisters: 4, members: 4, managers: 4 },
     registerAllocations: { 'host-a': 2, 'host-b': 1 },
@@ -242,7 +243,7 @@ beforeEach(() => {
     {
       id: 'si_plan',
       quantity: 1,
-      price: { id: 'price_business_monthly', recurring: { interval: 'month' } },
+      price: { id: 'price_pro_monthly', recurring: { interval: 'month' } },
     },
     {
       id: 'si_pos',
@@ -252,12 +253,12 @@ beforeEach(() => {
     {
       id: 'si_member',
       quantity: 4,
-      price: { id: 'price_business_member', recurring: { interval: 'month' } },
+      price: { id: 'price_pro_member', recurring: { interval: 'month' } },
     },
     {
       id: 'si_seat',
       quantity: 4,
-      price: { id: 'price_business_seat', recurring: { interval: 'month' } },
+      price: { id: 'price_pro_seat', recurring: { interval: 'month' } },
     },
   ]
   global.fetch = jest.fn(async (url: unknown, init: any) => {
@@ -276,7 +277,7 @@ beforeEach(() => {
             status: 'active',
             currency: 'usd',
             current_period_end: PERIOD_END,
-            metadata: { plan: 'business', orgId: ORG_ID },
+            metadata: { plan: 'pro', orgId: ORG_ID },
             items: { data: mockItems },
           },
         ],
@@ -403,7 +404,7 @@ describe('CONTROL — what the guard must still let through', () => {
     // Proceeding means the removal is scheduled: gone from the target phase,
     // still on the phase the org is billed for today.
     expect(targetPhasePrices()).not.toContain('price_pos_register')
-    expect(targetPhasePrices()).toContain('price_business_monthly')
+    expect(targetPhasePrices()).toContain('price_pro_monthly')
   })
 
   it('an org-wide kind with NO allocation map is not gated by this', async () => {
@@ -418,6 +419,6 @@ describe('CONTROL — what the guard must still let through', () => {
     // that one permits — which is why the doubles above count for real.
     const response = await setQuantity('managers', 1)
     expect(response.status).toBe(200)
-    expect(scheduledQuantity('price_business_seat')).toBe('1')
+    expect(scheduledQuantity('price_pro_seat')).toBe('1')
   })
 })

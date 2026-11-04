@@ -102,17 +102,24 @@ describe('asking a workspace to upgrade (AGL-3466)', () => {
     })
   })
 
-  it('the bundle rides along with the Aglyn AI tier staff picked (AGL-4025)', async () => {
+  it('the bundle rides along, Aglyn AI credit blocks counted (AGL-4144)', async () => {
     await post({
       action: 'propose',
       plan: 'starter',
-      addons: { siteCare: 1, aiAddon: 1 },
+      addons: { siteCare: 1, aiAddon: 3 },
       interval: 'year',
-      aiTier: 'plus',
     })
     expect(mockPropose).toHaveBeenCalledWith(
-      expect.objectContaining({ addons: { siteCare: 1, aiAddon: 1 }, interval: 'year', aiTier: 'plus' }),
+      expect.objectContaining({ addons: { siteCare: 1, aiAddon: 3 }, interval: 'year' }),
     )
+  })
+
+  it('a posted retired AI tier is handed to the proposal, which is what refuses it (AGL-4144)', async () => {
+    // The route does not filter it out: dropping it here would store a
+    // proposal the staff member believes names a tier. `proposeOrgUpgrade`
+    // refuses it (its own spec pins that).
+    await post({ action: 'propose', plan: 'starter', addons: { aiAddon: 1 }, aiTier: 'plus' })
+    expect(mockPropose).toHaveBeenCalledWith(expect.objectContaining({ aiTier: 'plus' }))
   })
 
   it('staff withdraw it', async () => {

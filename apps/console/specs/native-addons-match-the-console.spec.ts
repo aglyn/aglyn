@@ -20,7 +20,7 @@ import { ADDON_KINDS } from '@aglyn/tenant-data-admin/server/billing-addons'
 import {
   isCustomPricedPlan,
   PLAN_ENTITLEMENTS,
-  planSellsAiTiers,
+  planSellsAiCredits,
   type OrgPlan,
 } from '@aglyn/aglyn'
 
@@ -29,7 +29,7 @@ import {
  * the component drags MUI into this spec for one three-line rule.
  */
 function aiAddonOffer(plan: OrgPlan): 'included' | 'upgrade' | 'sold' {
-  if (planSellsAiTiers(plan)) return 'sold'
+  if (planSellsAiCredits(plan)) return 'sold'
   return isCustomPricedPlan(plan) ? 'included' : 'upgrade'
 }
 
@@ -37,9 +37,9 @@ function aiAddonOffer(plan: OrgPlan): 'included' | 'upgrade' | 'sold' {
  * The native "Plan add-ons" screen restates what the console works out in
  * code, because a screen spec has no arithmetic or plan tables: which add-on
  * kinds exist, and which plan has Aglyn AI included rather than for sale.
- * Since AGL-3965 it restates no credit figure of its own: the credits a tier
- * adds are read off the route (`catalog.aiAddon.credits`), so a tier the
- * workspace holds is the one the row describes.
+ * It restates no credit figure of its own: the credits are read off the
+ * route (`catalog.aiAddon.credits`), which since AGL-4144 is what ONE credit
+ * block adds — 5,000 — so the row describes what its one purchase buys.
  */
 const SPEC = join(
   __dirname,
@@ -69,6 +69,22 @@ describe('native plan add-ons', () => {
     expect(ai.description).not.toMatch(/\{const\./)
   })
 
+  it('can post a retired tier only behind the route\'s tier list, which the route no longer sends', () => {
+    // The add-ons route answers `catalog` and `quantities` and NO `aiTiers`
+    // since AGL-4144 (and refuses any `tier` with `ai_tier_retired`). So every
+    // native control whose request names a `tier` must be gated on
+    // `data.addons.aiTiers`, or the screen could offer a purchase the route
+    // refuses. Holds vacuously once the native lane removes the tier control.
+    const actions = screen.blocks.find((b: { type: string }) => b.type === 'list').actions ?? []
+    const postsTier = actions.filter(
+      (action: { body?: Record<string, unknown>; check?: { body?: Record<string, unknown> } }) =>
+        'tier' in (action.body ?? {}) || 'tier' in (action.check?.body ?? {}),
+    )
+    for (const action of postsTier) {
+      expect(`${action.id}: ${action.when}`).toMatch(/data\.addons\.aiTiers/)
+    }
+  })
+
   it('says "Included in your plan" for exactly the plans the console does', () => {
     const included = (Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]).filter(
       (plan) => aiAddonOffer(plan) === 'included',
@@ -83,4 +99,24 @@ describe('native plan add-ons', () => {
     expect(badge.when).toBe('item.kind == aiAddon && data.addons.plan == enterprise')
     expect(PLAN_ENTITLEMENTS.enterprise.features.aiGenerative).toBe(true)
   })
+
+  /*
+   * What the native add-ons screen still has of the retired tiers (AGL-4144).
+   * Not asserted either way — the console is the stepper — and owed by the
+   * native lane. Until then the AI row's switch buys ONE block ($10, 5,000
+   * credits, both read off the route), which is a true purchase, just not
+   * the whole range.
+   */
+  it.todo(
+    'native lane (AGL-4144): the AI row is `toggle: true` (0/1); the console sells 0–30 blocks ' +
+      'with a stepper and "With N blocks: X AI credits a month in all."',
+  )
+  it.todo(
+    'native lane (AGL-4144): the AI row\'s description still says "an Aglyn AI tier adds more on top"; ' +
+      'the console says "Add blocks on top: 5,000 credits each, $10 a month per block, up to 30."',
+  )
+  it.todo(
+    'native lane (AGL-4144): the "{item.label} tier" action (tier picker reading `aiTiers`, posting `tier`) ' +
+      'is dead and should go',
+  )
 })

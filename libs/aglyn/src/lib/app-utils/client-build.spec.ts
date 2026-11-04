@@ -151,14 +151,14 @@ describe('the intent the hand-off carries (AGL-3958)', () => {
 
   it('reads a stored intent back, and nothing that is not one', () => {
     const stored = {
-      plan: 'business',
+      plan: 'pro',
       addons: ['siteCare', 'aiAddon', 7],
       interval: 'year',
       coupon: ' BOOTH25 ',
       domain: { name: 'HarborPlumbing.com', firstYearUsd: 11.25, renewalUsd: 18.99 },
     }
     expect(readClientBuildIntent(stored)).toEqual({
-      plan: 'business',
+      plan: 'pro',
       addons: ['siteCare', 'aiAddon'],
       interval: 'year',
       coupon: 'BOOTH25',
@@ -168,6 +168,9 @@ describe('the intent the hand-off carries (AGL-3958)', () => {
       existingDomain: 'example.com',
     })
     expect(readClientBuildIntent({ plan: 'platinum' })).toBeNull()
+    // A build proposes only a plan that is sold: pricing v4 (AGL-4126)
+    // retired Business, so a stored intent naming it is not one.
+    expect(readClientBuildIntent({ plan: 'business' })).toBeNull()
     expect(readClientBuildIntent(null)).toBeNull()
   })
 })
