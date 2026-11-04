@@ -95,6 +95,7 @@ import {
   type SiteImportLookFacts,
   type SiteImportPictureFit,
   type SiteImportRule,
+  type AiSiteImportFinish,
 } from '../model/ai-site-import'
 import { aiHexOklch } from '../model/ai-site-look'
 import { aiModelAtLeastStepTier } from '../providers/routing'
@@ -1148,6 +1149,8 @@ export interface AiSiteImportCompileInput {
   language?: string
   /** The page's design answer, for a main page; absent, the page is drawn as its source lays it out. */
   answer?: AiLayoutDesignAnswer | null
+  /** How the page is finished (AGL-4152); absent is `keep`. */
+  finish?: AiSiteImportFinish | null
 }
 
 export interface AiSiteImportCompiled extends Pick<AiLayoutCompiledPage, 'tree' | 'sectionRoots' | 'videoIds'> {

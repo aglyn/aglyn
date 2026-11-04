@@ -54,7 +54,7 @@ import type { PluginMediaIngest } from '@aglyn/aglyn/plugin-manager/plugin-media
 import { themeFontFacts, type ThemeFontFacts } from '@aglyn/aglyn/plugin-manager/plugin-theme-font-catalog'
 import { syncHostProjectionForMembers } from '@aglyn/tenant-data-admin/server/host-memberships'
 import { aiSiteListingSeeded } from '../model/ai-site-entity'
-import type { AiSiteImportHome, AiSiteImportLook, AiSiteImportPhoto, SiteImportLookFacts } from '../model/ai-site-import'
+import type { AiSiteImportFinish, AiSiteImportHome, AiSiteImportLook, AiSiteImportPhoto, SiteImportLookFacts } from '../model/ai-site-import'
 import { aiSiteKindFor } from '../model/ai-site-kinds'
 import { aiHexOklch, aiSiteSeed, aiSiteStyleFor, type AiSiteSourceFont, type AiSiteStyle } from '../model/ai-site-look'
 import { aiSiteIsStarterSrc } from '../model/ai-site-photos'
@@ -339,6 +339,8 @@ export interface AiSiteImportLookInput {
   home: AiSiteImportHome
   at: string
   signal?: AbortSignal
+  /** How the site is finished (AGL-4152): Keep my site keeps more of the source's look. Absent is `keep`. */
+  finish?: AiSiteImportFinish | null
 }
 
 async function readHostDoc(firestore: FirebaseFirestore.Firestore, hostId: string): Promise<Record<string, unknown> | null> {

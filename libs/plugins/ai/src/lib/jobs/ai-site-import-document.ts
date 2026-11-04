@@ -40,7 +40,9 @@ import {
   AI_SITE_IMPORT_LABEL_MAX_CHARS,
   AI_SITE_IMPORT_MAX_SECTIONS,
   type AiSiteImportBuild,
+  type AiSiteImportFinish,
   type AiSiteImportPhoto,
+  type AiSiteImportWords,
   type SiteImportLayout,
 } from '../model/ai-site-import'
 import type { SiteImportBlock, SiteImportVideo } from '../site-import/site-import-html'
@@ -70,6 +72,10 @@ export interface AiSiteImportDocument {
    * absent on a read made before the reader, or one past its budget.
    */
   layout?: SiteImportLayout | null
+  /** How the page's wave finishes it (AGL-4152); absent is `keep`. */
+  finish?: AiSiteImportFinish | null
+  /** Whether its words are improved (AGL-4152); absent is kept as written. */
+  wording?: AiSiteImportWords | null
   /** Each form of the read, by its index, and the saved form that takes its place (AGL-4083); absent on a page that asked for none. */
   forms?: Array<{ index: number; formId: string | null }> | null
   /** The page's videos (AGL-4140), which its layout places by index; absent on a page that shows none. */

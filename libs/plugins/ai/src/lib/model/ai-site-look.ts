@@ -138,6 +138,10 @@ export interface AiSiteStyle {
    * Absent, the ground is drawn as `ground` says.
    */
   page?: string
+  /** A site brought in's own dark ground (AGL-4152), `#rrggbb`, kept by Keep my site. Absent, the dark scheme's own. */
+  darkPage?: string
+  /** A site brought in's button case (AGL-4152), kept by Keep my site. Absent, the buttons' own style says. */
+  buttonCase?: 'upper' | 'none'
   /**
    * A site brought in's own type (AGL-4108): the families its source sets
    * its body and its headings in, where the theme font catalog has them,

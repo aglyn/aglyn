@@ -452,8 +452,11 @@ export interface SiteImportLayoutSection {
    * content. Absent where the source sets none.
    */
   width?: number
-  /** Set on the section holding the page's first `<h1>`. */
-  hero?: { picture: SiteImportHeroPicture | null }
+  /**
+   * Set on the section holding the page's first `<h1>`; `measure` the
+   * narrowest width in px the source holds its heading to (AGL-4152).
+   */
+  hero?: { picture: SiteImportHeroPicture | null; measure?: number }
   nodes: SiteImportLayoutNode[]
   /** Every line of the section, in order. */
   lines: SiteImportLineRef[]
@@ -508,6 +511,10 @@ export interface SiteImportLookFacts {
   link: string | null
   /** Its header bar's background. */
   header: string | null
+  /** The fill of its dark bands, the most used first (AGL-4152): the dark ground Keep my site keeps. Absent on a read made before. */
+  darkBackground?: string | null
+  /** Whether its filled buttons are set in capitals (AGL-4152). Absent on a read made before. */
+  buttonCase?: 'upper' | 'none' | null
   /**
    * The color most of its eyebrows are drawn in, where that is a color of its
    * own: none of its text's, its buttons' or white (AGL-4138). The look pass
@@ -920,6 +927,21 @@ export interface AiSiteImportPageRead {
 /** How a page is built from its old page, as the step chose: its words copied as they are, or arranged by Aglyn AI. */
 export type AiSiteImportBuild = 'copied' | 'arranged'
 
+/**
+ * How an import finishes the owner's site (AGL-4152): kept as it is with a
+ * light polish, or improved. Absent on an older import, which is `keep`.
+ */
+export type AiSiteImportFinish = 'keep' | 'improve'
+
+/** The job input the finish is carried in from Bring my site. */
+export const AI_SITE_IMPORT_FINISH_INPUT = 'finish'
+
+/** The job input carrying whether an improved site's wording is improved too (AGL-4152). */
+export const AI_SITE_IMPORT_WORDING_INPUT = 'wording'
+
+/** Whether a page's words were kept as written or improved (AGL-4152). */
+export type AiSiteImportWords = 'kept' | 'improved'
+
 export interface AiSiteImportPage {
   /** The item ledger slot: `p0`, `p1`, … */
   slot: string
@@ -942,6 +964,8 @@ export interface AiSiteImportPage {
   build?: AiSiteImportBuild | null
   /** What came through once the page is in: its words on the new page. */
   brought?: { words: number } | null
+  /** Whether its words were kept or improved, stamped with its build at its wave's start (AGL-4152). */
+  wording?: AiSiteImportWords | null
   /** Filled once the page's photos are in the library. */
   photos?: {
     brought: number
@@ -974,6 +998,10 @@ export interface AiSiteImportWave {
   status: AiSiteImportWaveStatus
   startedAt: string | null
   finishedAt: string | null
+  /** How the wave was built, stamped at its start (AGL-4152): the site's finish then. */
+  finish?: AiSiteImportFinish | null
+  /** Whether its improved pages' wording was improved too, stamped at its start (AGL-4152). */
+  wording?: boolean | null
 }
 
 export interface AiSiteImportState {
@@ -1017,6 +1045,10 @@ export interface AiSiteImportState {
   home?: AiSiteImportHome | null
   /** The look pass, once it ran in the first wave (AGL-4084). */
   look?: AiSiteImportLook | null
+  /** How the owner asked the site to be finished (AGL-4152); absent reads as `keep`. Changeable before each wave. */
+  finish?: AiSiteImportFinish | null
+  /** Under `improve`, whether the main pages' wording is improved too (AGL-4152): on unless the owner turns it off. */
+  wording?: boolean | null
 }
 
 /**
