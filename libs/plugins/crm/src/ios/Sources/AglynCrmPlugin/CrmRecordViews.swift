@@ -179,7 +179,7 @@ struct CrmRowView: View {
 }
 
 private enum RecordAction: String, Identifiable {
-  case edit, delete, log, email, task, status, unqualify, convert, stage, move, won, lost
+  case edit, delete, log, email, task, status, unqualify, convert, stage, move, won, lost, addRole
   var id: String { rawValue }
   /// A one-sentence confirmation with nothing to fill in: an alert, never a sheet (HIG alerts).
   var confirmsInAlert: Bool { self == .delete || self == .won }
@@ -308,7 +308,7 @@ struct RecordDetail: View {
       if kind == .deal || kind == .company {
         ContactRolesSection(
           context: context, kind: kind, id: id, data: document.data, scope: scope, api: api, reference: reference,
-          onNotice: { notice = $0 }, onError: { error = $0 })
+          onAdd: { action = .addRole }, onNotice: { notice = $0 }, onError: { error = $0 })
       }
       if kind != .lead {
         Section("Open tasks") {
@@ -545,6 +545,16 @@ struct RecordDetail: View {
       ConvertSheet(row: row, scope: scope, reference: reference) { draft in
         try await api.convertLead(id, draft)
         done("\(row.title) is converted.")
+      }
+    case .addRole:
+      let roles = contactRolesOf(kind, row.data)
+      AddContactRoleSheet(
+        noun: kind.singular.lowercased(), roles: roles, contacts: reference.contacts,
+        roleLabels: reference.picklists.labels(crmContactRolePicklist)
+      ) { contactID, role, primary in
+        try await saveContactRoles(
+          kind, id, row.data, contactRolesAdded(roles, contactID: contactID, role: role, primary: primary), api: api, reference: reference)
+        done("Contact added.")
       }
     case .delete, .won:
       // Confirmed in an alert (see `confirmsInAlert`), never a sheet.

@@ -193,9 +193,28 @@ func contactRoleListFields(_ roles: [CrmContactRole], visibleTo: Any?) -> (ids: 
 
 // MARK: The section
 
+/// Writes a record's whole list of roles, as its card does: a deal's through `dealContactRolesSave`, a company's through
+/// `companyContactRolesSave`. A refusal throws the console's sentence.
+@MainActor
+func saveContactRoles(_ kind: CrmKind, _ id: String, _ data: [String: Any], _ next: [CrmContactRole], api: CrmAPI, reference: CrmReference)
+  async throws
+{
+  let values = reference.picklists.values(crmContactRolePicklist)
+  if kind == .deal {
+    try await api.saveDealContactRoles(id, deal: data, next, values: values) { reference.contactLabel($0) }
+  } else {
+    try await api.saveCompanyContactRoles(id, company: data, next, values: values)
+  }
+}
+
+/// The roles a deal or a company holds.
+func contactRolesOf(_ kind: CrmKind, _ data: [String: Any]) -> [CrmContactRole] {
+  kind == .deal ? dealContactRolesOf(data) : companyContactRolesOf(data)
+}
+
 /// A record's Contact roles (the console's card, on a deal and on a company): who is on it, the part each plays, and
-/// which one is Primary. Add contact sits in the section's header; each row's ⋯ sets its role, makes it Primary or
-/// removes it.
+/// which one is Primary. Add contact sits in the section's header and opens the record's add sheet (`onAdd`); each
+/// row's ⋯ sets its role, makes it Primary or removes it.
 struct ContactRolesSection: View {
   let context: NativePluginContext
   let kind: CrmKind
@@ -204,13 +223,13 @@ struct ContactRolesSection: View {
   let scope: CrmScope
   let api: CrmAPI
   let reference: CrmReference
+  let onAdd: () -> Void
   let onNotice: (String) -> Void
   let onError: (String) -> Void
-  @State private var adding = false
   @State private var busy = false
 
   private var noun: String { kind.singular.lowercased() }
-  private var roles: [CrmContactRole] { kind == .deal ? dealContactRolesOf(data) : companyContactRolesOf(data) }
+  private var roles: [CrmContactRole] { contactRolesOf(kind, data) }
 
   private func name(_ contactID: String) -> String { reference.contactLabel(contactID) ?? "Contact" }
 
@@ -231,19 +250,17 @@ struct ContactRolesSection: View {
       }
       ForEach(roles) { row in roleRow(row, roles) }
     } header: {
-      AglynSectionHeader("Contact roles") {
+      HStack(alignment: .firstTextBaseline) {
+        Text("Contact roles")
+        Spacer()
         if scope.canWrite {
-          Button("Add contact", systemImage: "person.badge.plus") { adding = true }
+          // The action keeps its own case; the header around it is the form's, as every section's is.
+          Button("Add contact", systemImage: "person.badge.plus", action: onAdd)
+            .textCase(nil)
+            .font(AglynFont.subheadline)
             .disabled(busy)
             .accessibilityIdentifier("crm-roles-add")
         }
-      }
-    }
-    .sheet(isPresented: $adding) {
-      AddContactRoleSheet(noun: noun, roles: roles, contacts: reference.contacts, roleLabels: reference.picklists.labels(crmContactRolePicklist)) {
-        contactID, role, primary in
-        try await write(contactRolesAdded(roles, contactID: contactID, role: role, primary: primary))
-        onNotice("Contact added.")
       }
     }
   }
@@ -284,7 +301,6 @@ struct ContactRolesSection: View {
         .accessibilityIdentifier("crm-roles-actions-\(row.contactID)")
       }
     }
-    .accessibilityIdentifier("crm-role-\(row.contactID)")
   }
 
   /// The list's active roles, and the one a contact holds when the list no longer offers it.
@@ -308,12 +324,7 @@ struct ContactRolesSection: View {
   }
 
   private func write(_ next: [CrmContactRole]) async throws {
-    let values = reference.picklists.values(crmContactRolePicklist)
-    if kind == .deal {
-      try await api.saveDealContactRoles(id, deal: data, next, values: values) { reference.contactLabel($0) }
-    } else {
-      try await api.saveCompanyContactRoles(id, company: data, next, values: values)
-    }
+    try await saveContactRoles(kind, id, data, next, api: api, reference: reference)
   }
 }
 
