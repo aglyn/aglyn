@@ -28,12 +28,14 @@ jest.mock('next/navigation', () => ({
 }))
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import axe from 'axe-core'
 import type { AiJobItemLedger, AiJobSummary } from '../model/ai-jobs.types'
 import {
   aiSiteImportCanceled,
   aiSiteImportInventory,
   aiSiteImportLedger,
   aiSiteImportWaveClosed,
+  aiSiteImportWaveStamped,
   aiSiteImportWaveStarted,
   type AiSiteImportListedPage,
   type AiSiteImportState,
@@ -99,7 +101,7 @@ beforeEach(() => {
   global.fetch = mockFetch as unknown as typeof fetch
 })
 
-const view = (job: AiJobSummary, onResume = jest.fn(), onStartAll?: () => void) =>
+const view = (job: AiJobSummary, onResume: jest.Mock = jest.fn(), onStartAll?: jest.Mock) =>
   render(
     <AiSiteImportJob
       job={job}
@@ -230,6 +232,8 @@ describe('an import job’s page', () => {
     expect(screen.queryByRole('button', { name: /^Start / })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Check again' }))
     expect(onResume).toHaveBeenCalledTimes(1)
+    // Reading the site again carries no choice: no wave starts.
+    expect(onResume).toHaveBeenCalledWith()
   })
 
   it('offers every remaining wave beside the next one only where the page can start them, quoting them all (AGL-4083)', () => {
@@ -251,5 +255,61 @@ describe('an import job’s page', () => {
     const old = screen.getAllByRole('link', { name: /Old page/ })
     expect(old[0].getAttribute('href')).toBe('https://harbor-dental.com/')
     expect(old[0].getAttribute('target')).toBe('_blank')
+  })
+})
+
+describe('Keep my site or Improve it, before each wave (AGL-4152)', () => {
+  it('says how the next wave will be built, and Change posts the new choice with the wave’s start', () => {
+    const state = harbor()
+    const onResume = jest.fn()
+    view(summary({ siteImport: state, items: aiSiteImportLedger(state) }), onResume)
+    // An import that never said is Keep my site.
+    expect(screen.getByText('How your new site looks: Keep my site')).toBeTruthy()
+    expect(screen.queryByRole('radiogroup')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Change how your new site looks' }))
+    expect((screen.getByRole('radio', { name: /^Keep my site/ }) as HTMLInputElement).checked).toBe(true)
+    fireEvent.click(screen.getByRole('radio', { name: /^Improve it/ }))
+    // The wording switch, on as Improve it opens, with what it adds to this wave.
+    expect((screen.getByRole('switch', { name: 'Also improve my wording' }) as HTMLInputElement).checked).toBe(true)
+    expect(screen.getByText('Adds about 54 AI credits to this wave.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Start Main pages' }))
+    expect(onResume).toHaveBeenCalledWith({ finish: 'improve', wording: true })
+  })
+
+  it('starts the wave the way the import has it when nothing is changed, and every remaining wave too', () => {
+    const state = { ...harbor(), finish: 'improve' as const, wording: false }
+    const onResume = jest.fn()
+    const onStartAll = jest.fn()
+    view(summary({ siteImport: state, items: aiSiteImportLedger(state) }), onResume, onStartAll)
+    expect(screen.getByText('How your new site looks: Improve it')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Start Main pages' }))
+    expect(onResume).toHaveBeenCalledWith({ finish: 'improve', wording: false })
+    fireEvent.click(screen.getByRole('button', { name: 'Start every remaining wave' }))
+    expect(onStartAll).toHaveBeenCalledWith({ finish: 'improve', wording: false })
+  })
+
+  it('says how a wave that is in was built, beside the next wave’s choice', () => {
+    let state = aiSiteImportWaveStamped(aiSiteImportWaveStarted({ ...harbor(), finish: 'keep', wording: false }, 0, 'x', new Map()), 0)
+    state = aiSiteImportWaveClosed(state, 0, 'y')
+    view(summary({ siteImport: state, items: aiSiteImportLedger(state), review: { reason: 'wave', message: 'Main pages is in.', findings: [] } }))
+    expect(screen.getByText('Main pages · Keep my site')).toBeTruthy()
+    expect(screen.getByText('Next: Blog')).toBeTruthy()
+    expect(screen.getByText('How your new site looks: Keep my site')).toBeTruthy()
+  })
+
+  it('says what a running wave does with each page, the way it was built, and offers no change', () => {
+    const state = aiSiteImportWaveStamped(aiSiteImportWaveStarted({ ...harbor(), finish: 'improve', wording: true }, 0, 'x', new Map()), 0)
+    view(summary({ status: 'running', review: null, siteImport: state, items: aiSiteImportLedger(state) }))
+    expect(screen.getByText(/^Aglyn AI redesigns each page and improves its wording/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Change how your new site looks' })).toBeNull()
+  })
+
+  it('has no axe violations with the choice open', async () => {
+    const state = harbor()
+    const { container } = view(summary({ siteImport: state, items: aiSiteImportLedger(state) }))
+    fireEvent.click(screen.getByRole('button', { name: 'Change how your new site looks' }))
+    fireEvent.click(screen.getByRole('radio', { name: /^Improve it/ }))
+    const results = await axe.run(container, { rules: { 'color-contrast': { enabled: false }, region: { enabled: false } } })
+    expect(results.violations.map((violation) => `${violation.id}: ${violation.nodes.map((node) => node.html.slice(0, 120)).join(' | ')}`)).toEqual([])
   })
 })
