@@ -375,12 +375,13 @@ describe('other ways to start a form sit beside Create Form (AGL-3043)', () => {
 
 describe('the readout names the plan’s allowance', () => {
   it('reads the allowance the server enforces, not the listing window', () => {
-    renderForms({ org: { plan: 'pro' }, used: 3 })
-    // 25 is Pro's `formsPerHost` (AGL-3597), and it is what
+    renderForms({ org: { plan: 'starter' }, used: 3 })
+    // 5 is Starter's `formsPerHost` (AGL-3597; Pro's is unlimited since
+    // pricing v4), and it is what
     // `/api/hosts/resources` refuses at. 1000 is `FORMS_MAX_PER_HOST`, which
     // bounds a READ — quoting it would promise room the plan does not have
     // and send a customer into a refusal the page called impossible.
-    expect(quotaReadout()).toBe('3/25 forms on your plan')
+    expect(quotaReadout()).toBe('3/5 forms on your plan')
   })
 
   it('gives Free its one form, and invents no more room', () => {

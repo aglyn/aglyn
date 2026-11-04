@@ -44,6 +44,7 @@ import {
   MEMORY_CACHE_FALLBACK_KEY,
   MEMORY_CACHE_FALLBACK_TTL_MS,
   firestoreClientId,
+  isFirestoreQueueFailure,
   leaseCheckFrom,
   LEASE_PROBE_TIMEOUT_MS,
   LEASE_PROMPT_READ_MS,
@@ -55,6 +56,7 @@ import {
   SHARED_CACHE_LOCK_TTL_MS,
   STALE_PRIMARY_LEASE_MS,
   WEDGE_LOCK_MS,
+  watchFirestoreQueueFailure,
   wedgeEvidenceFrom,
   type WedgeEvidence,
 } from './firestore-multitab-wedge'
@@ -778,5 +780,101 @@ describe('confirmSharedCacheLock: the record lasts only as long as the lock (AGL
       }),
     ).resolves.toBe('still-locked')
     expect(readSharedCacheLock(window.localStorage, DATABASE, NOW + 1_000)?.at).toBe(NOW + 500)
+  })
+})
+
+describe('a tab whose Firestore queue has failed recovers onto the memory cache (AGL-4156)', () => {
+  // Verbatim from production, 2026-11-04 (Firefox, v1.9.0).
+  const B815 =
+    'FIRESTORE (13.0.0) INTERNAL ASSERTION FAILED: Unexpected state (ID: b815) CONTEXT: {"RE":"Attempt to get a record from database without an in-progress transaction"}'
+  const rejection = (reason: unknown) => {
+    const event = new Event('unhandledrejection') as Event & { reason: unknown }
+    event.reason = reason
+    return event
+  }
+
+  beforeEach(() => window.sessionStorage.clear())
+
+  it('knows the failed-queue assertion, and nothing else', () => {
+    expect(isFirestoreQueueFailure(new Error(B815))).toBe(true)
+    expect(isFirestoreQueueFailure(`Uncaught Error: ${B815}`)).toBe(true)
+    // The first, raw IndexedDB error is not yet the dead queue.
+    expect(
+      isFirestoreQueueFailure(
+        new Error('Attempt to get a record from database without an in-progress transaction'),
+      ),
+    ).toBe(false)
+    expect(
+      isFirestoreQueueFailure(
+        new Error('FIRESTORE (13.0.0) INTERNAL ASSERTION FAILED: Unexpected state (ID: ca9) CONTEXT: {}'),
+      ),
+    ).toBe(false)
+    expect(isFirestoreQueueFailure(undefined)).toBe(false)
+    expect(isFirestoreQueueFailure({ message: 42 })).toBe(false)
+  })
+
+  it('falls back once, on the first uncaught b815 or unhandled rejection', () => {
+    const fallBack = jest.fn()
+    const target = new EventTarget()
+    watchFirestoreQueueFailure(fallBack, { target: target as unknown as Window })
+
+    target.dispatchEvent(rejection(new Error('some other failure')))
+    expect(fallBack).not.toHaveBeenCalled()
+
+    target.dispatchEvent(rejection(new Error(B815)))
+    target.dispatchEvent(new ErrorEvent('error', { error: new Error(B815), message: B815 }))
+    expect(fallBack).toHaveBeenCalledTimes(1)
+    expect(fallBack).toHaveBeenCalledWith({ reason: 'queue-failed' })
+  })
+
+  it('hears an uncaught error by its message when the error object is gone', () => {
+    const fallBack = jest.fn()
+    const target = new EventTarget()
+    watchFirestoreQueueFailure(fallBack, { target: target as unknown as Window })
+    target.dispatchEvent(new ErrorEvent('error', { message: `Uncaught Error: ${B815}` }))
+    expect(fallBack).toHaveBeenCalledTimes(1)
+  })
+
+  it('never loops: a tab already on the fallback does not reload again', () => {
+    const fallBack = jest.fn()
+    const target = new EventTarget()
+    watchFirestoreQueueFailure(fallBack, {
+      target: target as unknown as Window,
+      isFallbackActive: () => true,
+    })
+    target.dispatchEvent(rejection(new Error(B815)))
+    expect(fallBack).not.toHaveBeenCalled()
+  })
+
+  it('reloads this tab alone onto the memory cache and shares no lock', () => {
+    const reload = jest.fn()
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    window.localStorage.removeItem(SHARED_CACHE_LOCK_KEY)
+    const target = new EventTarget()
+    watchFirestoreQueueFailure(
+      (evidence) => fallBackToMemoryCache(evidence, { databaseName: 'db', reload }),
+      { target: target as unknown as Window },
+    )
+    target.dispatchEvent(rejection(new Error(B815)))
+
+    expect(reload).toHaveBeenCalledTimes(1)
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('AGL-4156'),
+      expect.objectContaining({ reason: 'queue-failed' }),
+    )
+    warn.mockRestore()
+    expect(readMemoryCacheFallback(window.sessionStorage, Date.now())?.reason).toBe('queue-failed')
+    expect(firestoreCacheClassFor('durable')).toBe('ephemeral')
+    // Another tab's client is alive: nothing tells the next tab to skip the durable cache.
+    expect(window.localStorage.getItem(SHARED_CACHE_LOCK_KEY)).toBeNull()
+  })
+
+  it('stops watching when asked', () => {
+    const fallBack = jest.fn()
+    const target = new EventTarget()
+    const stop = watchFirestoreQueueFailure(fallBack, { target: target as unknown as Window })
+    stop()
+    target.dispatchEvent(rejection(new Error(B815)))
+    expect(fallBack).not.toHaveBeenCalled()
   })
 })
