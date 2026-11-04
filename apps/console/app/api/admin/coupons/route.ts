@@ -29,17 +29,30 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
+import type { OrgPlan } from '@aglyn/aglyn/foundation'
 import {
+  COUPON_APPLIES_TO_CHOICES,
   COUPON_FILTER_FIELDS,
   COUPON_NAME_MAX,
+  COUPON_PLAN_CHOICES,
   COUPON_READ_BOUND,
   COUPON_SEARCH_PATHS,
   COUPON_SORT_COLUMNS,
+  type CouponAppliesToChoice,
   type CouponRow,
   couponListRow,
+  couponPlanList,
   PROMOTION_CODE_READ_BOUND,
   STRIPE_LIST_PAGE,
 } from '../../../../utils/coupon-list-query'
+import {
+  configuredPlanPriceIds,
+  couponLimitedProducts,
+  planPriceEnvNames,
+  type PlanProducts,
+  plansForProducts,
+  readPlanProducts,
+} from '../../../../utils/server/coupon-plan-products'
 import { answerStaffCompleteList } from '../../../../utils/server/staff-complete-list'
 import { readStaffListQuery } from '../../../../utils/server/staff-list-query'
 
@@ -61,6 +74,12 @@ import { readStaffListQuery } from '../../../../utils/server/staff-list-query'
  *          `create` builds a Stripe coupon (percent OR fixed amount; once/
  *          repeating/forever; optional max redemptions and expiry) and, when
  *          a code is given, a promotion code customers can type at checkout.
+ *          `appliesTo` picks what it discounts (AGL-4159): `subscription`,
+ *          the default, is every line of the bill; `base_price` is only the
+ *          base price of `plan` (Starter, Pro), or of every plan sold when no
+ *          plan is named. That is Stripe's `applies_to[products]`, the
+ *          products resolved from the deployment's own plan price env, so
+ *          add-ons, the metered usage item and other plans bill in full.
  *          A ≥`DISCOUNT_APPROVAL_THRESHOLD_PCT`% coupon needs an explicit
  *          `confirmHighDiscount` flag. Every create answers with the
  *          coupon's full-use verdict (`fullUseVerdict`) — a warning when a
@@ -108,9 +127,10 @@ const PROMOTION_CODE_ID = /^promo_[A-Za-z0-9]+$/
 /**
  * A coupon's full-use verdict, for the response and the audit row (AGL-3473).
  *
- * A coupon here carries no plan restriction, so its code can be redeemed on
- * any paid plan at either interval by a customer using everything the plan
- * includes. The verdict says whether each discounted charge — on the charges
+ * A coupon with no plan restriction can be redeemed on any paid plan at
+ * either interval by a customer using everything the plan includes; one
+ * limited to a plan's base price (AGL-4159) only on the plans it names,
+ * `plans`. The verdict says whether each discounted charge — on the charges
  * its duration actually reaches — still covers that plan's full-use cost net
  * of Stripe, and by how much the worst one falls short. It is a WARNING: a
  * coupon is a tool for closing a deal, so a discount that spends cost is
@@ -119,8 +139,9 @@ const PROMOTION_CODE_ID = /^promo_[A-Za-z0-9]+$/
 function fullUseVerdict(
   discount: { percentOff?: number; amountOffUsd?: number },
   duration: CouponDuration,
+  plans?: readonly OrgPlan[] | null,
 ) {
-  const verdict = rateCouponAgainstFullUse(discount, duration)
+  const verdict = rateCouponAgainstFullUse(discount, duration, plans)
   const worst = verdict.worst
   return {
     ok: verdict.ok,
@@ -156,8 +177,23 @@ function serializePromotionCode(code: any) {
   }
 }
 
+/**
+ * What a Stripe coupon applies to, for the row (AGL-4159): null for the whole
+ * subscription, else the products it is limited to and the plans whose base
+ * price those are, as the deployment's own price env names them.
+ */
+function couponAppliesTo(coupon: any, planProducts: PlanProducts['products']) {
+  const products = couponLimitedProducts(coupon)
+  if (!products) return null
+  return { products, plans: plansForProducts(products, planProducts, COUPON_PLAN_CHOICES) }
+}
+
 /** Shape one Stripe coupon (+ any promotion codes) for the console. */
-function serializeCoupon(coupon: any, promotionCodes: any[] = []) {
+function serializeCoupon(
+  coupon: any,
+  promotionCodes: any[] = [],
+  planProducts: PlanProducts['products'] = {},
+): CouponRow {
   return {
     id: coupon.id as string,
     name: (coupon.name as string) ?? null,
@@ -179,7 +215,22 @@ function serializeCoupon(coupon: any, promotionCodes: any[] = []) {
     codes: promotionCodes
       .filter((code) => code?.coupon?.id === coupon.id || code?.coupon === coupon.id)
       .map(serializePromotionCode),
+    appliesTo: couponAppliesTo(coupon, planProducts),
   }
+}
+
+/**
+ * The plans' base-price products, read only when some coupon in hand is
+ * limited: a list of whole-subscription coupons costs no extra Stripe call.
+ * A plan that cannot be read is left out, so its coupons label by the plans
+ * that could be.
+ */
+async function planProductsFor(
+  secretKey: string,
+  coupons: any[],
+): Promise<PlanProducts['products']> {
+  if (!coupons.some((coupon) => couponLimitedProducts(coupon))) return {}
+  return (await readPlanProducts(secretKey, COUPON_PLAN_CHOICES)).products
 }
 
 /**
@@ -191,6 +242,7 @@ async function readAllStripe(
   secretKey: string,
   path: string,
   bound: number,
+  extraQuery = '',
 ): Promise<
   | { ok: true; data: any[]; complete: boolean }
   | { ok: false; status: number; body: any }
@@ -200,7 +252,7 @@ async function readAllStripe(
   for (;;) {
     const page = await stripe(
       secretKey,
-      `${path}?limit=${STRIPE_LIST_PAGE}${after ? `&starting_after=${encodeURIComponent(after)}` : ''}`,
+      `${path}?limit=${STRIPE_LIST_PAGE}${extraQuery ? `&${extraQuery}` : ''}${after ? `&starting_after=${encodeURIComponent(after)}` : ''}`,
     )
     if (!page.ok) return { ok: false, status: page.status, body: page.body }
     const objects: any[] = Array.isArray(page.body?.data) ? page.body.data : []
@@ -244,7 +296,8 @@ async function handler(request: Request): Promise<Response> {
         return Response.json({ error: 'Unreadable filters' }, { status: 400 })
       }
       const [couponsRead, codesRead] = await Promise.all([
-        readAllStripe(secretKey, 'coupons', COUPON_READ_BOUND),
+        // `applies_to` is answered only when expanded (AGL-4159).
+        readAllStripe(secretKey, 'coupons', COUPON_READ_BOUND, 'expand[]=data.applies_to'),
         readAllStripe(secretKey, 'promotion_codes', PROMOTION_CODE_READ_BOUND),
       ])
       if (!couponsRead.ok || !codesRead.ok) {
@@ -268,8 +321,9 @@ async function handler(request: Request): Promise<Response> {
           { status: 413 },
         )
       }
+      const planProducts = await planProductsFor(secretKey, couponsRead.data)
       const coupons: CouponRow[] = couponsRead.data.map((coupon: any) =>
-        serializeCoupon(coupon, codesRead.data),
+        serializeCoupon(coupon, codesRead.data, planProducts),
       )
       if (!listRequest) return Response.json({ coupons }, { status: 200 })
       // Newest first, the order Stripe lists them in, unless a header
@@ -304,9 +358,11 @@ async function handler(request: Request): Promise<Response> {
       // Read before writing: the audit row's `before` has to be the state
       // Stripe actually held, not the state the caller assumed, and an
       // unknown id has to fail before anything is written.
+      // Its coupon's `applies_to` expanded, so turning a code limited to one
+      // plan back on is rated on that plan (AGL-4159).
       const current = await stripe(
         secretKey,
-        `promotion_codes/${promotionCodeId}`,
+        `promotion_codes/${promotionCodeId}?expand[]=coupon.applies_to`,
       )
       if (!current.ok) {
         return Response.json(
@@ -343,6 +399,12 @@ async function handler(request: Request): Promise<Response> {
       }
 
       const amountOff = current.body?.coupon?.amount_off
+      const limitedTo = active
+        ? couponAppliesTo(
+            current.body?.coupon,
+            await planProductsFor(secretKey, [current.body?.coupon]),
+          )
+        : null
       const fullUse = active
         ? fullUseVerdict(
             typeof percentOff === 'number'
@@ -354,6 +416,7 @@ async function handler(request: Request): Promise<Response> {
               duration: current.body?.coupon?.duration ?? null,
               durationInMonths: current.body?.coupon?.duration_in_months ?? null,
             },
+            limitedTo?.plans,
           )
         : null
 
@@ -450,6 +513,66 @@ async function handler(request: Request): Promise<Response> {
       )
     }
 
+    // What it applies to (AGL-4159). Refused before anything reaches Stripe
+    // when it names something no coupon can be limited to, or a plan this
+    // deployment has no price for: a coupon "for Starter" minted with no
+    // product would discount the whole subscription instead.
+    const appliesTo = String(body?.appliesTo ?? 'subscription') as CouponAppliesToChoice
+    if (!COUPON_APPLIES_TO_CHOICES.includes(appliesTo)) {
+      return Response.json(
+        { error: 'appliesTo must be subscription or base_price' },
+        { status: 400 },
+      )
+    }
+    const requestedPlan = String(body?.plan ?? '').trim()
+    if (appliesTo === 'subscription' && requestedPlan) {
+      return Response.json(
+        { error: 'A coupon for the whole subscription names no plan' },
+        { status: 400 },
+      )
+    }
+    if (requestedPlan && !COUPON_PLAN_CHOICES.includes(requestedPlan as OrgPlan)) {
+      return Response.json(
+        {
+          error:
+            `A coupon can be limited to ${couponPlanList(COUPON_PLAN_CHOICES)}, ` +
+            `not "${requestedPlan.slice(0, 40)}"`,
+        },
+        { status: 400 },
+      )
+    }
+    // One plan, or — "any plan" — every plan this deployment sells a price
+    // for. Any plan with none of them configured has nothing to limit to.
+    const limitPlans: OrgPlan[] =
+      appliesTo !== 'base_price'
+        ? []
+        : requestedPlan
+          ? [requestedPlan as OrgPlan]
+          : COUPON_PLAN_CHOICES.filter((plan) => configuredPlanPriceIds(plan).length > 0)
+    if (appliesTo === 'base_price' && !limitPlans.length) {
+      return Response.json(
+        {
+          error:
+            'No plan has a price configured, so there is no base price to limit ' +
+            `the coupon to. Set ${COUPON_PLAN_CHOICES.map((plan) => planPriceEnvNames(plan)[0]).join(' or ')}.`,
+        },
+        { status: 501 },
+      )
+    }
+    for (const plan of limitPlans) {
+      if (!configuredPlanPriceIds(plan).length) {
+        const [monthly, yearly] = planPriceEnvNames(plan)
+        return Response.json(
+          {
+            error:
+              `${couponPlanList([plan])} has no price configured, so the coupon ` +
+              `cannot be limited to it. Set ${monthly} or ${yearly}.`,
+          },
+          { status: 501 },
+        )
+      }
+    }
+
     // Approval gate (AGL-1105): a big percent-off coupon is a real revenue
     // commitment. Fixed-amount coupons are bounded by the amount, so the gate
     // is on the percent path only. Requires an explicit confirm.
@@ -473,7 +596,23 @@ async function handler(request: Request): Promise<Response> {
     const fullUse = fullUseVerdict(
       hasPercent ? { percentOff: percentOff! } : { amountOffUsd: amountOffUsd! },
       { duration, durationInMonths: durationInMonths ?? null },
+      limitPlans,
     )
+
+    // The products the discount is limited to, read from the plans' own
+    // prices (AGL-4159) — never a product id written here. A plan whose price
+    // Stripe cannot read refuses the coupon rather than mint it unlimited.
+    let limitProducts: string[] = []
+    let limitPlanProducts: PlanProducts['products'] = {}
+    if (limitPlans.length) {
+      const read = await readPlanProducts(secretKey, limitPlans)
+      const fault = read.faults[0]
+      if (fault) {
+        return Response.json({ error: fault.error }, { status: fault.status })
+      }
+      limitPlanProducts = read.products
+      limitProducts = [...new Set(limitPlans.flatMap((plan) => read.products[plan] ?? []))]
+    }
 
     const couponParams: Record<string, string> = { duration }
     if (hasPercent) couponParams.percent_off = String(percentOff)
@@ -497,6 +636,16 @@ async function handler(request: Request): Promise<Response> {
       }
     }
     couponParams['metadata[createdBy]'] = decoded.uid
+    if (limitProducts.length) {
+      limitProducts.forEach((product, index) => {
+        couponParams[`applies_to[products][${index}]`] = product
+      })
+      // For a person reading the coupon in Stripe; the console reads the
+      // products, which are what Stripe enforces.
+      couponParams['metadata[appliesTo]'] = 'base_price'
+      couponParams['metadata[plans]'] = limitPlans.join(',')
+      couponParams['expand[]'] = 'applies_to'
+    }
 
     const created = await stripe(secretKey, 'coupons', couponParams)
     if (!created.ok) {
@@ -540,6 +689,11 @@ async function handler(request: Request): Promise<Response> {
         duration,
         code: promotionCode?.code ?? null,
         maxRedemptions: maxRedemptions > 0 ? maxRedemptions : null,
+        // What the discount reaches (AGL-4159): the whole subscription, or
+        // the base price of these plans, by these Stripe products.
+        appliesTo,
+        appliesToPlans: limitPlans.length ? limitPlans : null,
+        appliesToProducts: limitProducts.length ? limitProducts : null,
         // What the staff member was warned about when they created it.
         fullUseOk: fullUse.ok,
         fullUseWorstCoverage: fullUse.worst.coverage,
@@ -549,7 +703,14 @@ async function handler(request: Request): Promise<Response> {
 
     return Response.json(
       {
-        coupon: serializeCoupon(coupon, promotionCode ? [promotionCode] : []),
+        coupon: serializeCoupon(
+          // Stripe's own `applies_to` when it expanded it, else what was sent.
+          limitProducts.length && !couponLimitedProducts(coupon)
+            ? { ...coupon, applies_to: { products: limitProducts } }
+            : coupon,
+          promotionCode ? [promotionCode] : [],
+          limitPlanProducts,
+        ),
         fullUse,
       },
       { status: 200 },

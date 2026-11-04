@@ -511,7 +511,7 @@ export interface CouponFullUseCase extends DiscountFullUseAssessment {
 export interface CouponFullUseVerdict {
   /** Every case clears: no discounted charge, on any plan, falls under its full-use cost. */
   ok: boolean
-  /** Every paid self-serve plan, monthly and annual, judged. */
+  /** Every paid self-serve plan the coupon reaches, monthly and annual, judged. */
   cases: CouponFullUseCase[]
   /** The case with the least cover — the one the warning leads with. */
   worst: CouponFullUseCase
@@ -525,20 +525,29 @@ export interface CouponFullUseVerdict {
  * Judge a coupon or promotion code against full-use cost before it is minted
  * (AGL-3473) — a WARNING for staff, never a refusal.
  *
- * A coupon here carries no plan restriction, so its code can be redeemed on
- * any paid self-serve plan, on either interval, by a customer using
- * everything the plan includes; each case is that plan's list price against
- * its own bands at 100%, on the charges `duration` reaches. Enterprise is
- * quoted per deal and never takes a code at checkout; a coupon applied to one
- * is judged on that org.
+ * A coupon with no plan restriction can be redeemed on any paid self-serve
+ * plan, on either interval, by a customer using everything the plan
+ * includes; each case is that plan's list price against its own bands at
+ * 100%, on the charges `duration` reaches. Enterprise is quoted per deal and
+ * never takes a code at checkout; a coupon applied to one is judged on that
+ * org.
+ *
+ * `plans` narrows the cases to the plans a coupon is limited to (AGL-4159): a
+ * coupon that takes its discount off one plan's base price is redeemed on
+ * that plan only, so the others are not its risk. Each case still prices the
+ * plan's own list price, which is exactly the line such a coupon reaches —
+ * add-ons and usage past the bands bill in full. A restriction that names no
+ * paid self-serve plan is judged on all of them, the cautious reading.
  */
 export function rateCouponAgainstFullUse(
   discount: Pick<OrgDiscount, 'percentOff' | 'amountOffUsd'>,
   duration?: CouponDuration | null,
+  plans?: readonly OrgPlan[] | null,
 ): CouponFullUseVerdict {
+  const paid = SELF_SERVE_PLANS.filter((plan) => PLAN_PRICING[plan]?.basePriceMonthlyUsd > 0)
+  const limited = plans?.length ? paid.filter((plan) => plans.includes(plan)) : []
   const cases: CouponFullUseCase[] = []
-  for (const plan of SELF_SERVE_PLANS) {
-    if (!(PLAN_PRICING[plan]?.basePriceMonthlyUsd > 0)) continue
+  for (const plan of limited.length ? limited : paid) {
     for (const interval of ['month', 'year'] as const) {
       const org = { plan, subscription: { status: 'active', interval } } as never
       cases.push({ plan, interval, ...orgDiscountFullUse(org, discount, duration) })

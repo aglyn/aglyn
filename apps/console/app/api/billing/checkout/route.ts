@@ -64,6 +64,14 @@ import {
   describeDiscountFullUse,
   orgDiscountFullUse,
 } from '@aglyn/aglyn/app-utils/full-use-cost'
+import { COUPON_PLAN_CHOICES } from '../../../../utils/coupon-list-query'
+import {
+  couponLimitedProducts,
+  couponPlanRefusal,
+  couponReachesPrice,
+  plansForProducts,
+  readPlanProducts,
+} from '../../../../utils/server/coupon-plan-products'
 
 // lockdown-423: exempt — the payment recovery path — a billing-locked org must be able to pay
 // its way out (AGL-1501 keeps those sessions for exactly this). That exemption is about
@@ -205,14 +213,38 @@ export function describeInvoiceAmounts(invoice: any): InvoiceAmounts {
  * from an expanded invoice field: a promotion code carries its coupon inline,
  * so the fact is already in a response the resolve path always reads, and
  * reading it here cannot add a request to the purchase path.
+ *
+ * ## A code limited to a plan's base price (AGL-4159)
+ *
+ * A coupon minted for one plan's base price carries `applies_to.products`,
+ * which Stripe answers only when expanded, so the lookup expands it. Given
+ * the `sale` being priced, a limited code is held to it: the plan's price is
+ * read for its product, and a code whose products do not include it is
+ * REFUSED with the plans it is for ("This code is for the Starter plan.").
+ * Stripe would otherwise accept it and discount nothing — the customer shown
+ * the code as applied and charged the full price. The extra reads happen for
+ * a limited code only; every other code costs the one lookup it always did.
  */
 export async function resolvePromotionCode(
   secretKey: string,
   code: string,
+  sale?: { plan: OrgPlan; priceId: string },
 ): Promise<{
   id?: string
   code?: string
   error?: string
+  /**
+   * Why a code that exists was refused, beside `error`: `plan` when it is
+   * limited to other plans, `unavailable` when the plan's price could not be
+   * read to tell. Absent for a code Stripe does not recognize.
+   */
+  refusal?: 'plan' | 'unavailable'
+  /**
+   * The products the code's coupon is limited to (AGL-4159), or null when it
+   * reaches the whole subscription. A limited code that resolved reaches the
+   * base price being sold, and only the lines of its products.
+   */
+  limitedToProducts?: string[] | null
   /** Stripe's `coupon.duration` — `once`, `repeating` or `forever`. */
   duration?: string | null
   /** Stripe's `coupon.duration_in_months`, set only for `repeating`. */
@@ -227,7 +259,7 @@ export async function resolvePromotionCode(
   const response = await fetch(
     `https://api.stripe.com/v1/promotion_codes?code=${encodeURIComponent(
       wanted,
-    )}&active=true&limit=1`,
+    )}&active=true&limit=1&expand[]=data.coupon.applies_to`,
     { headers: { Authorization: `Bearer ${secretKey}` } },
   )
   const payload = await response.json()
@@ -235,7 +267,29 @@ export async function resolvePromotionCode(
   if (!response.ok || !found?.id) {
     return { error: `We do not recognize the code “${wanted.slice(0, 40)}”.` }
   }
+  const limitedToProducts = couponLimitedProducts(found?.coupon)
+  if (limitedToProducts && sale) {
+    const reaches = await couponReachesPrice(secretKey, limitedToProducts, sale.priceId)
+    if (reaches === 'unknown') {
+      return {
+        error: 'We could not check that code against this plan just now.',
+        refusal: 'unavailable',
+      }
+    }
+    if (reaches === 'no') {
+      // Named by the plans it IS for, read from the same price env.
+      const { products } = await readPlanProducts(secretKey, COUPON_PLAN_CHOICES)
+      return {
+        error: couponPlanRefusal(
+          plansForProducts(limitedToProducts, products, COUPON_PLAN_CHOICES),
+          sale.plan,
+        ),
+        refusal: 'plan',
+      }
+    }
+  }
   return {
+    limitedToProducts,
     id: String(found.id),
     code: String(found.code ?? wanted),
     // Reported, never defaulted. An absent duration answers "we do not know
@@ -280,7 +334,10 @@ function promotionCodeFullUseMetadata(
       {
         plan,
         subscription: { status: 'active', interval },
-        seatAddons: { ...addons },
+        // A code limited to the plan's base price (AGL-4159) discounts that
+        // line alone; the add-ons bill in full and pay their own way, so the
+        // discount is judged on the plan by itself.
+        seatAddons: promo.limitedToProducts ? {} : { ...addons },
       } as never,
       {
         percentOff: promo.percentOff ?? undefined,
@@ -658,8 +715,19 @@ async function handler(request: Request): Promise<Response> {
       const promo = await resolvePromotionCode(
         secretKey,
         String(body?.promotionCode ?? ''),
+        { plan: plan as OrgPlan, priceId },
       )
-      if (promo.error) return Response.json({ error: promo.error }, { status: 400 })
+      // A code limited to another plan (AGL-4159) is the code's own refusal
+      // too — a 400 with no `code` — marked so a link's notice can say why.
+      if (promo.error) {
+        return Response.json(
+          {
+            error: promo.error,
+            ...(promo.refusal === 'plan' ? { promotionCodeRefusal: 'plan' } : {}),
+          },
+          { status: promo.refusal === 'unavailable' ? 502 : 400 },
+        )
+      }
       // What the code is, for a card with no Stripe figures yet: it shows the
       // code and the list total after it, and the page carries the code into
       // the purchase.
@@ -670,6 +738,9 @@ async function handler(request: Request): Promise<Response> {
             promotionCodeDurationInMonths: promo.durationInMonths ?? null,
             promotionCodePercentOff: promo.percentOff ?? null,
             promotionCodeAmountOffUsd: promo.amountOffUsd ?? null,
+            // Off the plan's base price only (AGL-4159): the card takes it
+            // off the plan's list price, never the add-ons.
+            promotionCodeBasePriceOnly: Boolean(promo.limitedToProducts),
           }
         : {}
       if (!existingCustomerId) {
@@ -766,6 +837,9 @@ async function handler(request: Request): Promise<Response> {
           promotionCodeDurationInMonths: promo.id
             ? (promo.durationInMonths ?? null)
             : null,
+          // Whether the code reaches the plan's base price alone (AGL-4159),
+          // so the card can say add-ons and usage still bill.
+          promotionCodeBasePriceOnly: promo.id ? Boolean(promo.limitedToProducts) : null,
         },
         { status: 200 },
       )
@@ -824,7 +898,20 @@ async function handler(request: Request): Promise<Response> {
     const promo = await resolvePromotionCode(
       secretKey,
       String(body?.promotionCode ?? ''),
+      { plan: plan as OrgPlan, priceId },
     )
+    // A code limited to another plan (AGL-4159) would be accepted by Stripe
+    // and discount nothing, so the purchase is refused, as the quote was,
+    // rather than charged the full price under a code shown as applied.
+    if (promo.refusal === 'plan') {
+      return Response.json(
+        { error: promo.error, promotionCodeRefusal: 'plan' },
+        { status: 400 },
+      )
+    }
+    if (promo.refusal === 'unavailable') {
+      return Response.json({ error: promo.error }, { status: 502 })
+    }
 
     // Point of no return (AGL-1697): the only thing left is the subscription
     // itself. Every refusal — lockdown, membership, permission, the

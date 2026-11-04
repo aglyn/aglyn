@@ -141,6 +141,8 @@ let updateAnswer: Record<string, unknown>
 let stripeCalls: Array<{ href: string; method: string; body: string }>
 /** Everything `org.ref.set` was handed — the org doc's `plan` lives here. */
 let orgWrites: Array<Record<string, unknown>>
+/** The live subscription's discounts, as Stripe serializes them. */
+let liveDiscounts: unknown[]
 
 const PAID_UPDATE = {
   status: 'active',
@@ -249,6 +251,7 @@ beforeEach(() => {
   updateAnswer = PAID_UPDATE
   stripeCalls = []
   orgWrites = []
+  liveDiscounts = []
   mockVerifyIdToken.mockResolvedValue({ uid: 'u-1', email_verified: true })
   mockOrgGet.mockResolvedValue({
     get: (field: string) => (field === 'plan' ? 'starter' : 'acme'),
@@ -280,6 +283,7 @@ beforeEach(() => {
             automatic_tax: automaticTax,
             collection_method: collectionMethod,
             items: { data: [PLAN_ITEM, METERED_ITEM] },
+            discounts: liveDiscounts,
           },
         ],
       }
@@ -331,6 +335,29 @@ describe('an upgrade is charged now and held until paid (AGL-3358)', () => {
     // The metadata the webhook projects `plan` from rides the SAME call, so
     // Stripe holds it in `pending_update` along with the items.
     expect(body?.get('metadata[plan]')).toBe('pro')
+  })
+
+  it('leaves a base-price coupon where it is, so the new plan is not discounted (AGL-4159)', async () => {
+    // A coupon limited to Starter's product rides the subscription. The
+    // upgrade swaps the plan item's price and writes no discount at all: the
+    // coupon stays on the subscription, and Stripe applies it by product, so
+    // Pro's line (another product) is billed in full, and the proration is
+    // priced the same way.
+    liveDiscounts = [
+      {
+        id: 'di_1',
+        coupon: { id: 'cpn_starter', percent_off: 100, applies_to: { products: ['prod_starter'] } },
+      },
+    ]
+    const post = loadSubscription()
+    const response = await call(post, { action: 'switch', plan: 'pro' })
+    expect(response.status).toBe(200)
+    expect(itemUpdate()?.get('items[0][price]')).toBe('price_pro_monthly')
+    for (const body of subscriptionPosts()) {
+      expect([...body.keys()].filter((key) => /discount|coupon|promotion/.test(key))).toEqual([])
+    }
+    const preview = stripeCalls.find((c) => c.href.includes('/invoices/upcoming'))
+    expect(String(preview?.href)).not.toMatch(/discount|coupon|promotion/)
   })
 
   it('prices the change first, under the same always_invoice mechanic', async () => {

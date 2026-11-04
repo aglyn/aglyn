@@ -1414,10 +1414,11 @@ Make a discount code for Aglyn's own subscriptions here: give it a name, a type 
 duration, read the cost warnings the form shows, then create it.
 
 **Create a coupon** takes a name (the text that appears on the customer's invoice), a
-type — **Percent off** or **Fixed amount off** — a **Duration** of *Once*, *Repeating*
-(for a number of months) or *Forever*, and optionally a **redemption code**, a **max
-redemptions** cap and an expiry date. A coupon with no code is applied by staff to a
-subscription; a coupon with one can be typed by the customer at checkout.
+type — **Percent off** or **Fixed amount off** — what it **Applies to**, a **Duration**
+of *Once*, *Repeating* (for a number of months) or *Forever*, and optionally a
+**redemption code**, a **max redemptions** cap and an expiry date. A coupon with no code
+is applied by staff to a subscription; a coupon with one can be typed by the customer at
+checkout.
 
 The three durations cover the usual deal terms:
 
@@ -1431,12 +1432,57 @@ The three durations cover the usual deal terms:
 A fixed amount comes off each charge it reaches, so $100 off an annual purchase is $100
 off the year, not $100 a month.
 
+##### What a coupon applies to {#coupon-applies-to}
+
+**Applies to** decides which lines of the customer's bill the discount reaches:
+
+| Choice | What it comes off | What still bills |
+|---|---|---|
+| *The whole subscription* (the default) | Every line: the plan, its add-ons and usage past the plan's limits | Nothing the discount reaches |
+| *Base price only, any plan* | The base price of whichever plan the customer subscribes to | Add-ons and usage past the plan's limits. A move to another plan keeps the discount on the new plan's base price |
+| *Base price only, one plan* (pick the plan) | That plan's base price | Add-ons, usage past the plan's limits, and a move to any other plan, which is billed at its full price |
+
+A base-price coupon is a real subscription with the plan's price discounted, not a staff
+comp. The customer adds a card and subscribes as usual, and everything the base price
+does not cover is charged to that card as normal: add-ons they buy, and usage past what
+the plan includes. A comp, by contrast, bills nothing at all.
+
+Combined with a duration, it covers the common offers:
+
+| To offer | Applies to | Type and duration |
+|---|---|---|
+| A plan free for as long as they subscribe, usage still billed | *Base price only, one plan* | 100% off, *Forever* |
+| A plan free for the first two years, then billing starts | *Base price only, one plan* | 100% off, *Repeating*, 24 months |
+| Half off a plan's price for the first six months | *Base price only, one plan* | 50% off, *Repeating*, 6 months |
+| Any plan's price free for the first year | *Base price only, any plan* | 100% off, *Repeating*, 12 months |
+
+When a repeating coupon ends, the subscription bills at the plan's list price from the
+next charge, with nothing for anyone to do. On annual billing, *Repeating* for 24 months
+reaches the first two annual charges.
+
+A code for one plan is refused on any other plan, with a message that names the plan it
+is for: at checkout ("This code is for the Starter plan."), on the Billing page's quote,
+and when staff apply the coupon from an organization's page. A link or a plan change that
+carries such a code onto another plan leaves it off with a one-line notice, rather than
+showing it as applied to a price it does not reduce. When a customer on a one-plan coupon
+upgrades, the new plan is billed in full; if they later return to the plan the coupon is
+for, the coupon's remaining months apply to it again.
+
+The plan's base price is found from the deployment's own plan prices, the same price ids
+checkout sells
+([Plan and add-on price ids](../developers/self-hosting-environment.md#stripe-prices)), so
+a self-hosted install limits coupons to its own plans with no further setup. The page
+refuses to create a base-price coupon for a plan with no price configured, and says which
+setting to add. *Base price only, any plan* reaches the plans that have a price at the
+time the coupon is created.
+
 Before you commit, the form shows two readings. Neither stops you creating the coupon,
 apart from the sign-off a discount of 40% or more asks for.
 
 The **full-use cost** warning says what the discount spends. A code can be redeemed on
-any paid plan, monthly or annual, so the form prices the discount on every one of them as
-if the customer used everything the plan includes — every band at 100%, at the
+any paid plan, monthly or annual (or, for a *Base price only, one plan* coupon, on that
+plan only), so the form prices the discount on every plan it can reach as if the customer
+used everything the plan includes — every band at 100%, at the
 platform's own cost rates — on the charges the chosen duration reaches, after Stripe's
 fee. A discount that only spends the margin a plan carries above that cost is marked as
 covering it. One that reaches into the cost is shown as a warning: how many plan and
@@ -1465,7 +1511,9 @@ costs more than the floor, which no organization's usage does yet.
 
 A coupon applied from an organization's page is judged on **that** organization: its
 plan, its entitlement overrides, the sites and seats it bought, the price it actually pays
-and its billing interval, on the charges the coupon's duration reaches. The card shows the
+and its billing interval, on the charges the coupon's duration reaches. A base-price
+coupon is judged on the plan's price alone, since the add-ons still bill in full, and a
+coupon for another plan's base price is refused, because it would take nothing off. The card shows the
 full-use warning beside the net-margin rating, and the apply route returns it with its
 answer. It does not stop the discount: only the net-margin rating's **block** asks for
 **Override the margin floor**, exactly as before.
@@ -1484,8 +1532,10 @@ provisioned until an entitlement override bounds it.
 
 #### Existing coupons {#existing-coupons}
 
-**Existing coupons** lists Stripe coupons with their promotion codes, redemption
-count, and a **valid** or **expired** state, a page at a time. The list reads **every**
+**Existing coupons** lists Stripe coupons with what each **Applies to** (*Whole
+subscription*, *Base price, any plan*, or *Base price, Starter* and so on), their
+promotion codes, redemption count, and a **valid** or **expired** state, a page at a
+time. The list reads **every**
 coupon and promotion code Stripe holds, not a first page of them, and its toolbar filters
 and searches all of them, not only the page shown: **Duration** (*Once*, *Repeating*,
 *Forever*) and **Status** (*Valid*, *Expired*) are pickers; the coupon name filters as

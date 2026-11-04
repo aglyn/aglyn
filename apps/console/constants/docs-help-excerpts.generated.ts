@@ -975,7 +975,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#email-delivery': 'An Email delivery card on the same detail page answers "they say they never got it." It lists every message we sent the account\'s addresses, newest first, a page at a time: the subject, which of our senders produced…',
     '#emails-sent': 'Emails sent — on a site\'s staff page, and on an organization\'s for all of its sites — lists every email the site sent, newest first: the recipient, the subject and the sender tag (a campaign, a form notification,…',
     '#enterprise-custom-billing': 'Provision a negotiated price for an organization: enter the Custom price per month, how it is Billed, the Base plan it rides on, and whether to Invoice now (net-30, no card) or Send a Checkout link, then provision it.',
-    '#existing-coupons': 'Existing coupons lists Stripe coupons with their promotion codes, redemption count, and a valid or expired state, a page at a time.',
+    '#existing-coupons': 'Existing coupons lists Stripe coupons with what each Applies to (Whole subscription, Base price, any plan, or Base price, Starter and so on), their promotion codes, redemption count, and a valid or expired state, a…',
     '#filter-the-directory': 'The grid\'s toolbar filters and searches the whole directory, not the page on screen.',
     '#filter-the-site-list': 'The grid\'s toolbar filters and searches every site, not the page on screen.',
     '#first-party-hosts': 'The hosts the platform serves itself, on Staff → Platform settings.',

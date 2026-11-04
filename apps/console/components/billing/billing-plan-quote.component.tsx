@@ -79,6 +79,11 @@ interface QuoteState {
    */
   promotionCodePercentOff?: number | null
   promotionCodeAmountOffUsd?: number | null
+  /**
+   * The code takes its discount off the plan's base price alone (AGL-4159):
+   * add-ons and usage past the plan's limits bill in full.
+   */
+  promotionCodeBasePriceOnly?: boolean | null
   needsBillingDetails?: boolean
   needsBillingAddress?: boolean
 }
@@ -175,16 +180,29 @@ function money(cents: number, currency: string): string {
  * no Stripe figures yet: a percentage of the whole bundle, or an amount off
  * the charge, never more than the total. Labeled before tax like the total
  * it adjusts.
+ *
+ * A code limited to the plan's base price (AGL-4159, `basePriceOnly`) is
+ * taken off `planCents`, the plan's own list price, and never off the
+ * add-ons beside it, which is what Stripe will do with it.
  */
 export function listDiscountCents(
   listCents: number,
-  terms: { percentOff?: number | null; amountOffUsd?: number | null },
+  terms: {
+    percentOff?: number | null
+    amountOffUsd?: number | null
+    basePriceOnly?: boolean | null
+    planCents?: number
+  },
 ): number {
+  const base =
+    terms.basePriceOnly && typeof terms.planCents === 'number'
+      ? Math.min(listCents, terms.planCents)
+      : listCents
   if (terms.percentOff) {
-    return Math.min(listCents, Math.round((listCents * terms.percentOff) / 100))
+    return Math.min(base, Math.round((base * terms.percentOff) / 100))
   }
   if (terms.amountOffUsd) {
-    return Math.min(listCents, Math.round(terms.amountOffUsd * 100))
+    return Math.min(base, Math.round(terms.amountOffUsd * 100))
   }
   return 0
 }
@@ -192,20 +210,35 @@ export function listDiscountCents(
 /**
  * How long the code's discount lasts, in the sentence under the total, or
  * null when Stripe did not say. A discount that ends is stated with the price
- * it ends at, as the purchase confirm does.
+ * it ends at, as the purchase confirm does: `renewal` is the list price of
+ * everything quoted, which is what the subscription bills once it ends.
+ *
+ * A code limited to the plan's base price (AGL-4159) says so, and says what
+ * it does not cover: the add-ons and usage past the plan's limits bill as
+ * usual from the first charge. A whole-subscription code makes no claim about
+ * usage either way.
  */
-function codeDurationSentence(
+export function codeDurationSentence(
   code: string,
   duration: string | null | undefined,
   months: number | null | undefined,
   renewal: string,
+  basePriceOnly = false,
 ): string | null {
-  if (duration === 'forever') return `Code ${code} applies for as long as you subscribe.`
+  const what = basePriceOnly ? ' covers the plan’s base price' : ' applies'
+  const rest = basePriceOnly
+    ? ' Add-ons and usage past the plan’s limits bill as usual.'
+    : ''
+  if (duration === 'forever') {
+    return `Code ${code}${what} for as long as you subscribe.${rest}`
+  }
   if (duration === 'once') {
-    return `Code ${code} applies to the first charge only; after it, ${renewal}.`
+    return basePriceOnly
+      ? `Code ${code}${what} on the first charge only; after it, ${renewal}.${rest}`
+      : `Code ${code} applies to the first charge only; after it, ${renewal}.`
   }
   if (duration === 'repeating' && months) {
-    return `Code ${code} applies for the first ${months} months; after that, ${renewal}.`
+    return `Code ${code}${what} for the first ${months} months; after that, ${renewal}.${rest}`
   }
   return null
 }
@@ -299,7 +332,11 @@ export default function BillingPlanQuoteComponent({
   // quote per digit, and only the newest answer may land (AGL-4026).
   const quoteSeq = useRef(0)
   const fetchQuote = useCallback(
-    async (promotionCode: string, fromLink = false) => {
+    // `carried`: the code the page already holds, re-quoted on a new plan or
+    // interval. One limited to another plan (AGL-4159) is left off with a
+    // notice, as a link's is, rather than left applied to a plan it is not
+    // for — a quote with no figures shows no code box to remove it from.
+    async (promotionCode: string, fromLink = false, carried = false) => {
       if (!orgId || !plan || !user) return
       const mine = ++quoteSeq.current
       setBusy(true)
@@ -327,16 +364,21 @@ export default function BillingPlanQuoteComponent({
         // without it, rather than greeting the owner with an error. Only the
         // code's own refusal, which carries no `code`: an add-on refusal
         // (`unknown_addon`, `addon_over_max`…) is not the coupon's fault.
+        // A code limited to another plan says which plan it is for.
+        const planRefusal = payload?.promotionCodeRefusal === 'plan'
         if (
           !response.ok &&
           response.status === 400 &&
-          fromLink &&
+          (fromLink || (carried && planRefusal)) &&
           promotionCode &&
           !payload?.code
         ) {
           setCouponNotice(
-            `The code ${promotionCode} from your link is not valid or has ` +
-              'expired, so it was left off.',
+            planRefusal
+              ? `The code ${promotionCode}${fromLink ? ' from your link' : ''} ` +
+                  `was left off. ${payload?.error ?? ''}`.trim()
+              : `The code ${promotionCode} from your link is not valid or has ` +
+                  'expired, so it was left off.',
           )
           onAppliedCodeChange('')
           setBusy(false)
@@ -373,7 +415,9 @@ export default function BillingPlanQuoteComponent({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [orgId, plan, interval, addonsKey, user, enqueueSnackbar, onAppliedCodeChange, onQuoted],
   )
-  const fetchQuoteRef = useRef<((code: string, fromLink?: boolean) => Promise<void>) | null>(null)
+  const fetchQuoteRef = useRef<
+    ((code: string, fromLink?: boolean, carried?: boolean) => Promise<void>) | null
+  >(null)
   fetchQuoteRef.current = fetchQuote
 
   useEffect(() => {
@@ -393,7 +437,7 @@ export default function BillingPlanQuoteComponent({
       void fetchQuote(fromLink, true)
       return
     }
-    void fetchQuote(appliedCode)
+    void fetchQuote(appliedCode, false, Boolean(appliedCode))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan, interval, addonsKey])
 
@@ -528,10 +572,18 @@ export default function BillingPlanQuoteComponent({
     // takes off, so the owner a proposal sent here sees the price they were
     // offered before they add a card.
     const listCode = !failed ? (quote?.promotionCodeApplied ?? '') : ''
+    // A code for the plan's base price alone (AGL-4159) comes off the plan's
+    // own list price, never the add-ons.
+    const basePriceOnly = quote?.promotionCodeBasePriceOnly === true
     const listDiscount = listCode
       ? listDiscountCents(listCents, {
           percentOff: quote?.promotionCodePercentOff,
           amountOffUsd: quote?.promotionCodeAmountOffUsd,
+          basePriceOnly,
+          planCents:
+            basePriceOnly && knownPlan
+              ? bundleListPriceCents({ plan: knownPlan, interval, addons: {} })
+              : undefined,
         })
       : 0
     // A discount that ends makes the total the first charge, not the price
@@ -545,6 +597,7 @@ export default function BillingPlanQuoteComponent({
             quote?.promotionCodeDuration,
             quote?.promotionCodeDurationInMonths,
             money(listCents, 'usd') + per,
+            basePriceOnly,
           )
         : null
     return (
@@ -744,7 +797,11 @@ export default function BillingPlanQuoteComponent({
           ) : null}
           {appliedCode ? (
             <Typography variant="caption" color="success.main" sx={{ display: 'block', mt: 1 }}>
-              {`Code ${appliedCode} applied — the total above already includes it.`}
+              {quote?.promotionCodeBasePriceOnly === true
+                ? `Code ${appliedCode} applied to the plan’s base price — the total ` +
+                  'above already includes it. Add-ons and usage past the plan’s ' +
+                  'limits bill as usual.'
+                : `Code ${appliedCode} applied — the total above already includes it.`}
             </Typography>
           ) : null}
         </Box>
