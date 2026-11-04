@@ -35,6 +35,13 @@
 //                           `tools/scripts/seed-native` (default: this one's)
 //   --verify                read every planned document back and report
 //                           any field the stored copy is missing
+//   --only <prefix,…>       print, write or verify only the planned documents
+//                           whose path starts with one of these prefixes,
+//                           and skip the sibling sites, the prune and the
+//                           booking pass: how one new area reaches a
+//                           workspace without re-writing every record the
+//                           seed made before. Each matched document is still
+//                           written whole (a merge-set of its planned fields)
 //
 // Re-runnable: every id is deterministic (`seed-review-…`) and every write is
 // a merge-set. After a write, this seed's own documents that the plan no
@@ -79,12 +86,19 @@ const siblings = args.includes('--create-sibling-sites')
 const orgId = argValue('--org')
 const hostId = argValue('--host')
 const fixturesDir = resolve(argValue('--fixtures') ?? join(HERE, 'seed-native'))
+const only = args.includes('--only')
+  ? String(argValue('--only') ?? '')
+      .split(',')
+      .map((prefix) => prefix.trim())
+      .filter(Boolean)
+  : null
 
 const fail = (message) => {
   console.error(`seed-review-org: ${message}`)
   process.exit(1)
 }
 if (!orgId || !hostId) fail('--org and --host are both required.')
+if (only && !only.length) fail('--only needs one or more path prefixes, comma-separated.')
 if (orgId !== REVIEW_ORG_ID || hostId !== REVIEW_HOST_ID) {
   fail(`only --org ${REVIEW_ORG_ID} --host ${REVIEW_HOST_ID} (the reviewer workspace) is accepted.`)
 }
@@ -120,9 +134,13 @@ const nowMs = Date.now()
 const loadArea = (file) => import(pathToFileURL(join(fixturesDir, `${file}.mjs`)).href)
 const records = [...(await recordNativeAreas(loadArea, nowMs)), ...(await recordCrmFixtures(nowMs))]
 const target = { orgId, hostId, orgSlug, ownerUid, ownerName }
-const { docs, skipped } = buildReviewOrgPlan({ records, target, nowMs, siblings })
+const plan = buildReviewOrgPlan({ records, target, nowMs, siblings })
+const { skipped } = plan
 const hostIds = [hostId, ...(siblings ? JUNIPER.siblings.map((site) => site.hostId) : [])]
-assertPlanSafe(docs, { orgId, hostIds, ownerUid })
+assertPlanSafe(plan.docs, { orgId, hostIds, ownerUid })
+// The whole plan is checked; `--only` narrows what this run touches.
+const docs = only ? plan.docs.filter((doc) => only.some((prefix) => doc.path.startsWith(prefix))) : plan.docs
+if (only && !docs.length) fail(`--only ${only.join(',')} matches no planned document.`)
 
 const summary = () => {
   console.log(`\n${docs.length} documents (${fixturesDir}):`)
@@ -148,7 +166,7 @@ if (!write) {
 }
 
 // ── The sibling sites ──────────────────────────────────────────────────────
-if (siblings) {
+if (siblings && !only) {
   for (const site of JUNIPER.siblings) {
     await ensureHost({
       firestore,
@@ -192,6 +210,11 @@ for (const { path, data, existing } of docs) {
 }
 if (inBatch) await batch.commit()
 console.log(`Wrote ${written} documents${missing ? `; ${missing} merge-only documents did not exist` : ''}.`)
+if (only) {
+  console.log(`Only ${only.join(', ')}: no prune and no booking pass.`)
+  summary()
+  process.exit(0)
+}
 
 // ── Prune this seed's documents the plan no longer names ──────────────────
 const planned = new Set(docs.map((doc) => doc.path))
