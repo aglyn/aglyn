@@ -128,17 +128,26 @@ describe('collaborator seat allocation (AGL-2439)', () => {
 
   describe('the plan BAND still clamps — the one difference from registers', () => {
     it('assigning past `maxMembersPerHost` cannot raise the cap', () => {
+      // Read on Starter, whose ceiling is finite: Pro's is UNLIMITED since
+      // pricing v4 (AGL-4126), so there is no band left there to clamp at.
+      const STARTER_MAX = PLAN_ENTITLEMENTS.starter.maxMembersPerHost
+      expect(Number.isFinite(STARTER_MAX)).toBe(true)
       const overBand = {
-        plan: 'pro',
+        plan: 'starter',
         seatAddons: { members: 100 },
         collaboratorAllocations: { 'host-a': 100 },
       } as any
       // Dropping the `Math.min(…, maxSeats)` in `resolveHostCollaboratorCap`
-      // reds this: the site would resolve to 110 on a plan that sells 25.
-      expect(resolveHostCollaboratorCap(overBand, 'host-a')).toBe(PRO_MAX)
+      // reds this: the site would resolve to 102 on a plan that sells 10.
+      expect(resolveHostCollaboratorCap(overBand, 'host-a')).toBe(STARTER_MAX)
       expect(checkHostCollaboratorQuota(overBand, 'host-a', 0).upgradeRequired).toBe(
         true,
       )
+      // …and on Pro the same purchase is delivered whole: its ceiling is lifted.
+      expect(PRO_MAX).toBe(UNLIMITED)
+      expect(
+        resolveHostCollaboratorCap({ ...overBand, plan: 'pro' }, 'host-a'),
+      ).toBe(PRO_CAP + 100)
     })
 
     it('leaves a contracted UNLIMITED unlimited rather than clamping it to a number', () => {

@@ -615,6 +615,10 @@ describe('the answer carries the strip, and a model pick is bounded (AGL-2942)',
   })
 
   it('a pick the plan does not offer runs on Auto — the request and the meter agree', async () => {
+    // Starter: the deep model picks moved into Pro with pricing v4
+    // (AGL-4126), so Pro now offers this pick and Starter does not.
+    mockGetOrgForUser = async (uid: string, orgId?: string | null) =>
+      orgId === ORG ? { orgId: ORG, org: { plan: 'starter' }, member: { $id: uid } } : null
     const deep = onProvider('deep')
     const result = await call({ ...BODY, model: deep }, 'token-deep')
     expect(result.status).toBe(200)

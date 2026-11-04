@@ -85,7 +85,8 @@ const db = getFirestore(process.env.FIRESTORE_DATABASE_ID)
 export const AUDIT_PLAN_COLLABORATOR_CAPS = {
   free: { membersPerHost: 1, maxMembersPerHost: 1 },
   starter: { membersPerHost: 2, maxMembersPerHost: 10 },
-  pro: { membersPerHost: 3, maxMembersPerHost: 25 },
+  // The ceiling is lifted on Pro since pricing v4 (AGL-4126).
+  pro: { membersPerHost: 3, maxMembersPerHost: Number.POSITIVE_INFINITY },
   business: { membersPerHost: 5, maxMembersPerHost: 100 },
   scale: { membersPerHost: 5, maxMembersPerHost: 150 },
   advanced: { membersPerHost: 5, maxMembersPerHost: 250 },

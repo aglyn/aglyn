@@ -53,16 +53,16 @@
     },
     "pro": {
       "marketingOverlays": true,
-      "abTesting": false,
+      "abTesting": true,
       "screenAnalytics": true,
       "outreach": false,
-      "giftCards": false,
-      "storefrontSubscriptions": false,
+      "giftCards": true,
+      "storefrontSubscriptions": true,
       "commerceAnalytics": true,
       "abandonedCart": true,
       "productReviews": true,
       "dropshipRouting": true,
-      "contentGating": false,
+      "contentGating": true,
       "crm": true,
       "commerce": true,
       "bookings": true,
@@ -174,15 +174,15 @@
   },
   "grantedFrom": {
     "marketingOverlays": "Starter",
-    "abTesting": "Business",
+    "abTesting": "Pro",
     "screenAnalytics": "Pro",
-    "giftCards": "Business",
-    "storefrontSubscriptions": "Business",
+    "giftCards": "Pro",
+    "storefrontSubscriptions": "Pro",
     "commerceAnalytics": "Pro",
     "abandonedCart": "Pro",
     "productReviews": "Pro",
     "dropshipRouting": "Pro",
-    "contentGating": "Business",
+    "contentGating": "Pro",
     "crm": "Starter",
     "commerce": "Starter",
     "bookings": "Starter",
@@ -458,7 +458,7 @@
         "plan": "pro"
       },
       "feature": "abTesting",
-      "result": false
+      "result": true
     },
     {
       "org": {
@@ -479,14 +479,14 @@
         "plan": "pro"
       },
       "feature": "giftCards",
-      "result": false
+      "result": true
     },
     {
       "org": {
         "plan": "pro"
       },
       "feature": "storefrontSubscriptions",
-      "result": false
+      "result": true
     },
     {
       "org": {
@@ -521,7 +521,7 @@
         "plan": "pro"
       },
       "feature": "contentGating",
-      "result": false
+      "result": true
     },
     {
       "org": {
@@ -1892,7 +1892,7 @@
         }
       },
       "feature": "abTesting",
-      "result": false
+      "result": true
     },
     {
       "org": {
@@ -1931,7 +1931,7 @@
         }
       },
       "feature": "giftCards",
-      "result": false
+      "result": true
     },
     {
       "org": {
@@ -1944,7 +1944,7 @@
         }
       },
       "feature": "storefrontSubscriptions",
-      "result": false
+      "result": true
     },
     {
       "org": {
@@ -2009,7 +2009,7 @@
         }
       },
       "feature": "contentGating",
-      "result": false
+      "result": true
     },
     {
       "org": {
@@ -5818,7 +5818,7 @@
       "scale": "Scale",
       "advanced": "Advanced",
       "agency": "Agency",
-      "enterprise": "Enterprise"
+      "enterprise": "Custom"
     },
     "planMax": {
       "free": {
@@ -5842,9 +5842,9 @@
         "siteCare": 1
       },
       "pro": {
-        "managers": 17,
-        "members": 22,
-        "datasets": 45,
+        "managers": 100,
+        "members": 100,
+        "datasets": 100,
         "hosts": 100,
         "posRegisters": 50,
         "eventCalendar": 1,
@@ -5858,8 +5858,8 @@
         "hosts": 100,
         "posRegisters": 50,
         "eventCalendar": 1,
-        "aiAddon": 1,
-        "siteCare": 1
+        "aiAddon": 0,
+        "siteCare": 0
       },
       "scale": {
         "managers": 145,
@@ -5868,8 +5868,8 @@
         "hosts": 100,
         "posRegisters": 50,
         "eventCalendar": 1,
-        "aiAddon": 1,
-        "siteCare": 1
+        "aiAddon": 0,
+        "siteCare": 0
       },
       "advanced": {
         "managers": 240,
@@ -5878,8 +5878,8 @@
         "hosts": 100,
         "posRegisters": 50,
         "eventCalendar": 1,
-        "aiAddon": 1,
-        "siteCare": 1
+        "aiAddon": 0,
+        "siteCare": 0
       },
       "agency": {
         "managers": 490,
@@ -5888,8 +5888,8 @@
         "hosts": 100,
         "posRegisters": 50,
         "eventCalendar": 1,
-        "aiAddon": 1,
-        "siteCare": 1
+        "aiAddon": 0,
+        "siteCare": 0
       },
       "enterprise": {
         "managers": 0,
@@ -5947,9 +5947,9 @@
           "interval": "year"
         }
       },
-      "plan": "business",
-      "summary": "Business, billed yearly",
-      "bundled": true
+      "plan": null,
+      "summary": null,
+      "bundled": false
     },
     {
       "org": {
@@ -5959,9 +5959,9 @@
           "coupon": "BOOTH25"
         }
       },
-      "plan": "business",
-      "summary": "Business, billed monthly, code BOOTH25",
-      "bundled": true
+      "plan": null,
+      "summary": null,
+      "bundled": false
     },
     {
       "org": {
@@ -5970,8 +5970,8 @@
           "coupon": "not a code!"
         }
       },
-      "plan": "business",
-      "summary": "Business",
+      "plan": null,
+      "summary": null,
       "bundled": false
     },
     {
@@ -6044,9 +6044,9 @@
           }
         }
       },
-      "plan": "business",
-      "summary": "Business with 2 × Extra manager seat and Extra site",
-      "bundled": true
+      "plan": null,
+      "summary": null,
+      "bundled": false
     },
     {
       "org": {
@@ -6059,9 +6059,9 @@
           }
         }
       },
-      "plan": "scale",
-      "summary": "Scale with Extra manager seat, Extra collaborator seat and Site Care",
-      "bundled": true
+      "plan": null,
+      "summary": null,
+      "bundled": false
     },
     {
       "org": {
@@ -6082,9 +6082,9 @@
           "interval": "year"
         }
       },
-      "plan": "business",
-      "summary": "Business, billed yearly",
-      "bundled": true
+      "plan": null,
+      "summary": null,
+      "bundled": false
     }
   ],
   "siteStyles": [

@@ -639,14 +639,19 @@ describe('an Aglyn AI tier widens the ONE pool and sells past it (AGL-2896, AGL-
       2_750 + 9_000,
     )
     expect(resolveAssistOverageRateUsdPer1k({ plan: 'pro', seatAddons: { aiAddon: 1 } })).toBe(3)
-    expect(resolveAssistCreditBudget({ plan: 'agency', seatAddons: { aiAddon: 1 } })).toBe(
-      58_000 + 149_000,
-    )
-    expect(resolveAssistOverageRateUsdPer1k({ plan: 'agency', seatAddons: { aiAddon: 1 } })).toBe(2)
+    // Pricing v4 (AGL-4126): Pro is the top plan a tier is sold on, so the
+    // second example is Pro's biggest tier rather than Agency's old add-on.
+    expect(
+      resolveAssistCreditBudget({ plan: 'pro', seatAddons: { aiAddon: 1 }, aiTier: 'studio' }),
+    ).toBe(2_750 + 149_000)
+    expect(
+      resolveAssistOverageRateUsdPer1k({ plan: 'pro', seatAddons: { aiAddon: 1 }, aiTier: 'studio' }),
+    ).toBe(3)
   })
 
   it('adds the TIER bought, whatever the plan, at the plan rate (AGL-3965)', () => {
-    // Studio on Starter and Spark on Agency: the decoupling.
+    // Studio on Starter and Spark on Pro: the decoupling. (Pro, the top plan
+    // sold since pricing v4, AGL-4126, where Agency stood.)
     expect(
       resolveAssistCreditBudget({ plan: 'starter', seatAddons: { aiAddon: 1 }, aiTier: 'studio' }),
     ).toBe(750 + 149_000)
@@ -654,10 +659,10 @@ describe('an Aglyn AI tier widens the ONE pool and sells past it (AGL-2896, AGL-
       resolveAssistOverageRateUsdPer1k({ plan: 'starter', seatAddons: { aiAddon: 1 }, aiTier: 'studio' }),
     ).toBe(3)
     expect(
-      resolveAssistCreditBudget({ plan: 'agency', seatAddons: { aiAddon: 1 }, aiTier: 'spark' }),
-    ).toBe(58_000 + 4_000)
-    // Every tier on every paid plan is the plan's band plus the tier's.
-    for (const plan of ['starter', ...PAID_TIERS] as const) {
+      resolveAssistCreditBudget({ plan: 'pro', seatAddons: { aiAddon: 1 }, aiTier: 'spark' }),
+    ).toBe(2_750 + 4_000)
+    // Every tier on every paid plan SOLD is the plan's band plus the tier's.
+    for (const plan of ['starter', 'pro'] as const) {
       for (const tier of AI_TIER_IDS) {
         expect(
           resolveAssistCreditBudget({ plan, seatAddons: { aiAddon: 1 }, aiTier: tier }),

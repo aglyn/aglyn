@@ -122,7 +122,7 @@ const door = (query: Record<string, string>, token: string | null = 'token') =>
     }),
   )
 
-const ENTITLED = { plan: 'business', billingStatus: 'active', entitlements: { features: { aiGenerative: true } } }
+const ENTITLED = { plan: 'pro', billingStatus: 'active', entitlements: { features: { aiGenerative: true } } }
 
 beforeEach(() => {
   mockPermission = { 'ai.generate': true, 'billing.manage': true }
@@ -150,7 +150,9 @@ describe('GET /api/ai/create', () => {
     const view = await (await door({ kind: 'layout' })).json()
     expect(view.door).toBe('create')
     expect(view.copy.submit).toBe('Plan the layout')
-    expect(view.credits).toEqual({ text: '6,500 of 7,500 AI credits left this month.', exhausted: false })
+    // Pro's 2,750-credit band (the entitled org is Pro since pricing v4,
+    // AGL-4126; it was Business's 7,500).
+    expect(view.credits).toEqual({ text: '1,750 of 2,750 AI credits left this month.', exhausted: false })
   })
 
   it.each([
@@ -164,7 +166,7 @@ describe('GET /api/ai/create', () => {
   })
 
   it('opens on every paid plan against its own credits: one pool (AGL-3965)', async () => {
-    mockOrg = { plan: 'business', billingStatus: 'active' }
+    mockOrg = { plan: 'pro', billingStatus: 'active' }
     expect((await (await door({ kind: 'form' })).json()).door).toBe('create')
     mockOrg = { plan: 'starter', billingStatus: 'active' }
     expect((await (await door({ kind: 'form' })).json()).door).toBe('create')
@@ -172,9 +174,10 @@ describe('GET /api/ai/create', () => {
 
   it('is the add-on’s offer where generation is closed on a plan that sells tiers, with the action only for billing managers', async () => {
     // Since AGL-3965 no plan lacks generation; a per-org override closing it
-    // is what reaches this door.
+    // is what reaches this door. Pro, a plan that sells tiers: Business is
+    // retired in pricing v4 (AGL-4126) and sells none.
     mockOrg = {
-      plan: 'business',
+      plan: 'pro',
       billingStatus: 'active',
       entitlements: { features: { aiGenerative: false } },
     }

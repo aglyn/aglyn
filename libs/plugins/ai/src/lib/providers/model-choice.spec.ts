@@ -76,14 +76,17 @@ describe('Auto is the routing table', () => {
 })
 
 describe('a pick is bounded', () => {
-  it('by the plan’s tiers: the dearest tier is declined on Pro and honored on Agency', () => {
+  it('by the plan’s tiers: the dearest tier is declined on Starter and honored on Pro', () => {
+    // The deep model picks moved into Pro with pricing v4 (AGL-4126); Starter
+    // keeps the fast and balanced tiers.
     const deep = ofTier('deep')
-    expect(resolveAiModelChoice('copy.section', deep.id, { plan: 'pro' })).toEqual({
+    expect(resolveAiModelChoice('copy.section', deep.id, { plan: 'starter' })).toEqual({
       model: aiModelForStep('copy.section'),
       auto: true,
       declined: deep.id,
     })
-    expect(resolveAiModelChoice('copy.section', deep.id, { plan: 'agency' })).toEqual({
+    expect(AI_PLAN_MODEL_TIERS.pro).toEqual(['fast', 'balanced', 'deep'])
+    expect(resolveAiModelChoice('copy.section', deep.id, { plan: 'pro' })).toEqual({
       model: deep.id,
       auto: false,
       declined: null,

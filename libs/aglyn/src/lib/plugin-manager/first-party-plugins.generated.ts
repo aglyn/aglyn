@@ -2190,7 +2190,7 @@ export const PLUGIN_PLAN_FEATURES_DECLARED: readonly ResolvedPluginPlanFeature[]
     "byPlan": {
       "free": false,
       "starter": false,
-      "pro": false,
+      "pro": true,
       "business": true,
       "scale": true,
       "advanced": true,
@@ -2205,7 +2205,7 @@ export const PLUGIN_PLAN_FEATURES_DECLARED: readonly ResolvedPluginPlanFeature[]
     "byPlan": {
       "free": false,
       "starter": false,
-      "pro": false,
+      "pro": true,
       "business": true,
       "scale": true,
       "advanced": true,
@@ -2379,7 +2379,12 @@ export const PLUGIN_USAGE_BANDS_DECLARED: readonly ResolvedPluginUsageBand[] = [
       "noun": "workflow runs",
       "outcome": "stops",
       "reached": "Workflows pause until next month and nothing is charged — upgrade in Billing to keep them running.",
-      "approach": "Nothing changes and nothing is charged — at the included amount, workflows pause until next month unless you upgrade in Billing."
+      "approach": "Nothing changes and nothing is charged — at the included amount, workflows pause until next month unless you upgrade in Billing.",
+      "overage": {
+        "pricedBy": "extraRunsUsdPer1k",
+        "reached": "Workflows keep running, and runs past the included amount are billed on your monthly invoice.",
+        "approach": "Nothing is charged yet — past the included amount, extra workflow runs are billed on your monthly invoice."
+      }
     }
   },
   {
@@ -2848,7 +2853,7 @@ export const PLUGIN_INTERACTION_STEPS_DECLARED: readonly InteractionStepDeclarat
   {
     "pluginId": "workflows",
     "type": "webhookPost",
-    "label": "Send a webhook (Business)",
+    "label": "Send a webhook (Pro)",
     "offered": false,
     "typedFields": [
       {
