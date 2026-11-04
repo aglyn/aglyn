@@ -597,9 +597,15 @@ describe('StaffOrgActions (AGL-939)', () => {
       )
       expect(within(dialog).queryByRole('combobox', { name: 'Comp plan' })).toBeNull()
       fireEvent.mouseDown(within(dialog).getByRole('combobox', { name: 'Stored plan' }))
-      fireEvent.click(await screen.findByRole('option', { name: 'Scale' }))
+      // A retired plan is shown only as the value the org is stored on, and
+      // the other retired plans are never offered (AGL-4158).
+      expect(screen.getByRole('option', { name: 'Business (retired, current)' })).toBeTruthy()
+      for (const retired of ['Scale', 'Advanced', 'Agency']) {
+        expect(screen.queryByRole('option', { name: new RegExp(`^${retired}`) })).toBeNull()
+      }
+      fireEvent.click(await screen.findByRole('option', { name: 'Custom' }))
       const body = await save(dialog)
-      expect(body.plan).toBe('scale')
+      expect(body.plan).toBe('enterprise')
       expect(body).not.toHaveProperty('comp')
     })
 

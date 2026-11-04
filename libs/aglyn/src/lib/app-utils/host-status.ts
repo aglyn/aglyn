@@ -120,12 +120,12 @@ export function describeHostStatus(host: {
 }
 
 /**
- * `6 of 10 sites · Business plan` — the meta line the Sites mockup puts
+ * `6 of 10 sites · Pro plan` — the meta line the Sites mockup puts
  * opposite the section heading.
  *
  * Returns `undefined` rather than a partial line while the org or its plan
  * is still resolving. A count against the FREE limit is what an unresolved
- * org produces, and telling a Business customer they are at "1 of 1 sites"
+ * org produces, and telling a Pro customer they are at "1 of 1 sites"
  * is how a correct page delivers a false upgrade prompt.
  */
 export function describeSiteAllowance(options: {

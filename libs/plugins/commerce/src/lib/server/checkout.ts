@@ -22,6 +22,7 @@ import {
   recordAdvertisingOrderConsent,
 } from '@aglyn/aglyn/plugin-manager/plugin-advertising-conversions'
 import * as Aglyn from '@aglyn/aglyn/server'
+import { planLabelGrantingFeature } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import * as CommerceModel from '../model'
 import { claimAttempt, deriveStripeObjectKey } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
@@ -77,6 +78,22 @@ import { ensureCheckoutDomain } from './payment-method-domains'
  *    gates the marketplace, and reading this comment as current would gate a
  *    storefront on the wrong one.
  */
+/**
+ * The 403 body for a sale whose product type the shop's plan does not carry
+ * (AGL-4158): names the cheapest plan that includes `feature`, read from
+ * `PLAN_ENTITLEMENTS` through `planLabelGrantingFeature`, so it can never
+ * name a plan pricing retired (AGL-4126).
+ */
+export function planRequiredMessage(
+  subject: string,
+  feature: 'storefrontSubscriptions' | 'giftCards',
+): string {
+  const planLabel = planLabelGrantingFeature(feature)
+  return planLabel
+    ? `${subject} require the ${planLabel} plan`
+    : `${subject} require a paid add-on`
+}
+
 export const checkoutHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
@@ -261,7 +278,8 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       CommerceModel.resolveCheckoutBillingMode(lifted, billing) ===
       'subscription'
     // Tiered product types (AGL-470): recurring subscriptions and gift
-    // cards are Business+ entitlements, checked per sale — the product doc
+    // cards are plan entitlements (Pro and up since pricing v4, AGL-4126),
+    // checked per sale — the product doc
     // alone must not unlock them. Gated whenever the session ends up in
     // subscription mode (a subscriptionOptional one-time sale is a plain
     // order, so it rides the base `commerce` entitlement).
@@ -269,9 +287,9 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       isSubscription &&
       !Aglyn.checkEntitlement(ownerOrg.org as any, 'storefrontSubscriptions')
     ) {
-      return res
-        .status(403)
-        .json({ error: 'Subscription products require a Business plan' })
+      return res.status(403).json({
+        error: planRequiredMessage('Subscription products', 'storefrontSubscriptions'),
+      })
     }
     // ALREADY SUBSCRIBED? (AGL-1849)
     //
@@ -341,9 +359,9 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       product.giftCard &&
       !Aglyn.checkEntitlement(ownerOrg.org as any, 'giftCards')
     ) {
-      return res
-        .status(403)
-        .json({ error: 'Gift cards require a Business plan' })
+      return res.status(403).json({
+        error: planRequiredMessage('Gift cards', 'giftCards'),
+      })
     }
     // A gift card is issued only by the cart's completion (AGL-3363): the
     // buy-now order branch mints no code, so a buy-now of one took the money
