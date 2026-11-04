@@ -86,7 +86,8 @@ export const WEGLOT_PAGE_PROP = 'weglotIntegration'
 
 /**
  * The entitlement translating a site needs: the same `multilingual` key
- * that prices "Multilingual sites" on the plan table (Business and above).
+ * that prices "Multilingual sites" on the plan table (Pro and above since
+ * pricing v4).
  * No new key and no price change.
  */
 export const WEGLOT_ENTITLEMENT = 'multilingual'

@@ -26,7 +26,7 @@ export interface PlanUpsellNoticeProps {
    * something: "Schedule a version to go live at a set time."
    */
   children: ReactNode
-  /** The cheapest plan that includes it ("Business"), when one does. */
+  /** The cheapest plan that includes it ("Pro"), when one does. */
   planLabel: string | undefined
   /** The plan grid on the Billing page. */
   upgradeHref: string | undefined
@@ -39,7 +39,7 @@ export interface PlanUpsellNoticeProps {
  * and one click to the plan grid.
  *
  * The plan name is not decoration. "This is a paid feature" is a dead end;
- * "Included from Business" beside an Upgrade button is the path. It is a
+ * "Included from Pro" beside an Upgrade button is the path. It is a
  * {@link PrerequisiteNotice} — a plan is one more prerequisite a workspace
  * can fix itself — so it looks and reads like every other one.
  *

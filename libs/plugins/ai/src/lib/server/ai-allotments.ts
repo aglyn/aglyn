@@ -22,7 +22,10 @@ import {
 } from '../usage/assist-credits'
 import { hostRoleFor, isOrgWideMember } from '@aglyn/aglyn/app-utils/organizations'
 import { resolveSiteRolePresetPermissions } from '@aglyn/aglyn/app-utils/host-permissions'
-import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import {
+  ENTERPRISE_PLAN_LABEL,
+  resolveEffectivePlan,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
 import type { AglynOrgMember } from '@aglyn/aglyn/foundation/definitions/organization.types'
 import {
   emailUnverifiedResponse,
@@ -465,7 +468,9 @@ async function handlePost(request: Request): Promise<Response> {
   if (restricting && !AI_MODEL_RESTRICTION_PLANS.includes(resolveEffectivePlan(org as never))) {
     return json(
       {
-        error: 'Restricting models for the whole organization is available on Agency and Enterprise.',
+        // The plan that sells it is Custom since pricing v4 (AGL-4158); a
+        // workspace still stored on the retired Agency plan keeps it.
+        error: `Restricting models for the whole organization is available on the ${ENTERPRISE_PLAN_LABEL} plan.`,
         code: 'not_available',
       },
       409,

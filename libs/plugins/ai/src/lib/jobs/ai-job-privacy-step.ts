@@ -18,7 +18,12 @@
 import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import { holdsSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
 import { orgPermissionLabel } from '@aglyn/aglyn/app-utils/org-permissions'
-import { aiAddonName, checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import {
+  aiAddonName,
+  checkEntitlement,
+  ENTERPRISE_PLAN_LABEL,
+  planLabelGrantingFeature,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { SCREEN_ROOT_PATH } from '@aglyn/aglyn/app-utils/screen-route'
 import { HostScreenVisibility } from '@aglyn/aglyn/foundation/definitions/platform.types'
@@ -98,6 +103,13 @@ export const AI_PRIVACY_PASSWORD_COPY =
   `To put a page behind a password, set it in that page’s Page Access card; ${aiAddonName()} never handles passwords.`
 
 /** The most pages one item may change. */
+/**
+ * The cheapest plan with members-only pages (`contentGating`), read from
+ * `PLAN_ENTITLEMENTS` so the copy can never name a retired plan (AGL-4158).
+ */
+export const AI_MEMBERS_ONLY_PLAN_LABEL =
+  planLabelGrantingFeature('contentGating') ?? ENTERPRISE_PLAN_LABEL
+
 export const AI_PRIVACY_MAX_PAGES = 20
 
 /** The visibilities a build may set, by the Page Access card's labels. */
@@ -154,7 +166,7 @@ export const AI_PRIVACY_ARGS_SCHEMA: PluginAiCapabilityArgsSchema = {
     },
     membersPages: {
       type: 'array',
-      description: 'Pages to make Members only: only visitors signed in to the site can open them (Business plan and above). Each by its id from the site inventory.',
+      description: `Pages to make Members only: only visitors signed in to the site can open them (the ${AI_MEMBERS_ONLY_PLAN_LABEL} plan and above). Each by its id from the site inventory.`,
       items: { type: 'string', maxLength: 64 },
       maxItems: AI_PRIVACY_MAX_PAGES,
     },
@@ -301,7 +313,7 @@ export async function writeAiSitePrivacy(
       if (asked.visibility === 'members' && !input.contentGating) {
         // The tenant serves gated pages only on plans with content gating, so
         // writing it here would close the page to everyone.
-        notDone.push(`“${name}” was not made Members only: members-only pages need the Business plan or above.`)
+        notDone.push(`“${name}” was not made Members only: members-only pages need the ${AI_MEMBERS_ONLY_PLAN_LABEL} plan or above.`)
         return
       }
       const value = VISIBILITY_VALUES[asked.visibility]

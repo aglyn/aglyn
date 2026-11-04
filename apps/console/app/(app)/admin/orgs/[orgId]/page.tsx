@@ -31,8 +31,10 @@ import {
   orgCogsPreview,
   netOfProcessorFee,
   orgSiteCount,
+  CUSTOM_BILLING_BASE_PLANS,
   PLAN_ENTITLEMENTS,
-  PLAN_PRICING,
+  PLAN_LABELS,
+  type OrgPlan,
   resolveEffectivePlan,
   resolveOrgEntitlements,
   UNLIMITED,
@@ -967,25 +969,11 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
   // amount + base plan and provisions a Stripe subscription (net-30 invoice)
   // or a Checkout link — entirely in Aglyn, no Stripe dashboard. The webhook
   // mirrors the price onto `subscription.customMonthlyUsd` so MRR is truthful.
-  // `enterprise` leads the list and is the default (AGL-1118): a negotiated
-  // deal should land on the real Enterprise plan, not on Agency-plus-a-label.
-  // The lower tiers stay selectable for a custom-priced deal that is genuinely
-  // scoped to that tier's capability.
-  const paidPlans = useMemo(
-    () =>
-      (
-        [
-          'enterprise',
-          'agency',
-          'advanced',
-          'scale',
-          'business',
-          'pro',
-          'starter',
-        ] as const
-      ).filter((plan) => PLAN_PRICING[plan]),
-    [],
-  )
+  // `enterprise` (Custom) leads the list and is the default (AGL-1118); the
+  // paid self-serve plans follow for a custom-priced deal genuinely scoped
+  // to that plan's capability. `CUSTOM_BILLING_BASE_PLANS` is built from
+  // `SELF_SERVE_PLANS`, so a retired plan is never offered (AGL-4158).
+  const paidPlans = CUSTOM_BILLING_BASE_PLANS
   const [entAmount, setEntAmount] = useState('')
   const [entInterval, setEntInterval] = useState<'month' | 'year'>('month')
   const [entPlan, setEntPlan] = useState<string>('enterprise')
@@ -2175,7 +2163,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                           >
                             {paidPlans.map((plan) => (
                               <MenuItem key={plan} value={plan}>
-                                {plan}
+                                {PLAN_LABELS[plan]}
                               </MenuItem>
                             ))}
                           </TextField>
@@ -2261,7 +2249,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                               (entFullUse.ok
                                 ? 'clears. '
                                 : 'under it — provisioning is refused. ') +
-                              `On ${entPlan}, it ` +
+                              `On ${PLAN_LABELS[entPlan as OrgPlan] ?? entPlan}, it ` +
                               describeFullUseFloor(entFullUse)}
                           </Alert>
                         ) : null}

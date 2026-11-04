@@ -28,6 +28,10 @@ import { isSupportedTimeZone } from '@aglyn/aglyn/app-utils/collection-entry-dat
 import { CONSENT_GROUPS_AWAIT_CONFIRMATION_FIELD } from '@aglyn/aglyn/app-utils/consent-groups'
 import type { AglynOrgBilling } from '@aglyn/aglyn/server'
 import {
+  ENTERPRISE_PLAN_LABEL,
+  planLabelGrantingFeature,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
+import {
   checkEntitlement,
   isValidOrgSlug,
   normalizePhone,
@@ -575,7 +579,13 @@ async function handler(request: Request): Promise<Response> {
         )
       ) {
         return Response.json(
-          { error: 'White-label branding requires the Agency plan' },
+          {
+            // White label is the Custom plan's since pricing v4 (AGL-4158),
+            // named from the entitlement table, never a retired plan.
+            error: `White-label branding is part of the ${
+              planLabelGrantingFeature('whiteLabel') ?? ENTERPRISE_PLAN_LABEL
+            } plan`,
+          },
           { status: 403 },
         )
       }

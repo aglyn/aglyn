@@ -169,6 +169,24 @@ const SHARED_WITH_PREVIEW = {
  * price id in a preview running a test-mode key resolves to a plausible id
  * that no test-mode call can use. Production-only keeps the mode consistent.
  */
+/**
+ * The Stripe price ids pricing v4 (AGL-4126) reads, as `setup-stripe.mjs`
+ * mints them and the self-hosting environment page lists them: Starter and
+ * Pro with their per-plan add-ons, then the flat add-ons and the metered
+ * component, each monthly and `_YEARLY`. No retired plan reads a price
+ * variable any more (AGL-4158), and Custom is quoted per deal.
+ */
+const STRIPE_PRICE_KEYS = [
+  ...['STARTER', 'PRO'].flatMap((plan) =>
+    ['', '_EXTRA_SEAT', '_EXTRA_MEMBER', '_EXTRA_DATASET', '_EXTRA_HOST'].map(
+      (kind) => `STRIPE_PRICE_${plan}${kind}`,
+    ),
+  ),
+  ...['POS_REGISTER', 'EVENT_CALENDAR', 'SITE_CARE', 'AI_CREDITS', 'METERED'].map(
+    (kind) => `STRIPE_PRICE_${kind}`,
+  ),
+].flatMap((key) => [key, `${key}_YEARLY`])
+
 const envTarget = (key) => (SHARED_WITH_PREVIEW[key] ? ['production', 'preview'] : ['production'])
 
 {
@@ -183,9 +201,8 @@ const envTarget = (key) => (SHARED_WITH_PREVIEW[key] ? ['production', 'preview']
       keys: [
         'STRIPE_SECRET_KEY',
         'STRIPE_WEBHOOK_SECRET',
-        'STRIPE_PRICE_STARTER',
-        'STRIPE_PRICE_PRO',
-        'STRIPE_PRICE_BUSINESS',
+        ...STRIPE_PRICE_KEYS,
+        'STRIPE_METER_ID',
         'AGLYN_TENANT_HOST_CNAME',
         'NEXT_PUBLIC_AGLYN_TENANT_HOST_CNAME',
         'ANTHROPIC_API_KEY',

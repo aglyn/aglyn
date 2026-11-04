@@ -504,6 +504,17 @@ describe('claim-release semantics (AGL-1714)', () => {
   })
 })
 
+describe('the base plan is one that exists (AGL-4158)', () => {
+  it.each(['business', 'scale', 'advanced', 'agency'])(
+    'refuses a deal on the retired %s plan before any Stripe call',
+    async (plan) => {
+      const post = loadRoute()
+      expect((await provision(post, { plan })).status).toBe(400)
+      expect(calls).toHaveLength(0)
+    },
+  )
+})
+
 /**
  * THE QUOTE FLOOR (AGL-3473): a quote must clear cost + 30% after Stripe's
  * fee, with the customer using every band the deal sells. The route refuses

@@ -279,8 +279,8 @@ const RESOURCES: Record<string, HostResource> = {
    * label had always been one list.
    *
    * ONE gate: `formsPerHost`, how many saved forms one site may hold — Free
-   * 1, Starter 5, Pro 25, Business 100, `FORMS_PER_HOST_CEILING` above
-   * (AGL-3597). It is deliberately NOT behind `reusableComponents`: a Free
+   * 1, Starter 5, Pro and Custom unlimited (AGL-4158); the retired plans
+   * keep Business 100 and `FORMS_PER_HOST_CEILING` above it (AGL-3597). It is deliberately NOT behind `reusableComponents`: a Free
    * site saves its one form, as it saves its one component (AGL-3615). It
    * rides an entitlement key so the refusal happens inside the counting
    * transaction, and so one org's number can be overridden by contract.
