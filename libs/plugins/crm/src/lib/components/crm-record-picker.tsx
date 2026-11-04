@@ -27,6 +27,7 @@ import {
   CRM_RECORD_COLLECTIONS,
   type CrmRecordKind,
   crmRecordName,
+  useCrmRecordNames,
 } from '../hooks/use-crm-record-names'
 import { crmVisibleToClause } from '../hooks/use-crm-scope'
 import { contactPrimaryGroup } from '../model/contact-record'
@@ -162,15 +163,25 @@ export function CrmRecordPicker(props: CrmRecordPickerProps) {
   const pinnedIds = useMemo(() => new Set(pinned?.map((option) => option.id)), [pinned])
   /*
    * The linked record may sit outside the window — an old contact a record
-   * page's button linked — so the value is a placeholder carrying its id
-   * until (unless) the window turns out to hold it.
+   * page's button linked — so the value is a placeholder until (unless) the
+   * window turns out to hold it. Its name is the caller's, or one read of the
+   * record itself (AGL-4163); the kind's name stands in while that read is in
+   * flight, never the id.
    */
+  const held = value ? options.find((option) => option.id === value) : undefined
+  const unnamed = value && !held && !valueLabel ? value : null
+  const names = useCrmRecordNames({
+    orgId: scope?.[1],
+    groupId,
+    org,
+    records: unnamed ? [{ kind, id: unnamed }] : [],
+  })
+  // Read on every render: the lookup is stable and the read lands as a re-render.
+  const placeholder = valueLabel || (unnamed && names(kind, unnamed)) || PICKER_LABELS[kind]
   const selected = useMemo(() => {
     if (!value) return null
-    return (
-      options.find((option) => option.id === value) ?? { id: value, label: valueLabel || value }
-    )
-  }, [options, value, valueLabel])
+    return held ?? { id: value, label: placeholder }
+  }, [held, value, placeholder])
 
   return (
     <Autocomplete
