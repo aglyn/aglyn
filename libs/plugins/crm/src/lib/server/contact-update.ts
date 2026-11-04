@@ -452,13 +452,17 @@ export function contactPatch(
   else if (fields.name !== undefined && !composed) update[path('name')] = text(fields.name)
 
   if (fields.salutation !== undefined) update[path('salutation')] = text(fields.salutation)
-  if (fields.phone !== undefined) {
-    update[path('phone')] = text(fields.phone)
-    // The search echo — see `HostContact.phone`.
-    update['phone'] = text(fields.phone)
-  }
+  if (fields.phone !== undefined) update[path('phone')] = text(fields.phone)
   for (const key of CONTACT_EXTRA_PHONE_FIELDS) {
     if (fields[key] !== undefined) update[path(key)] = text(fields[key] ?? '')
+  }
+  if (fields.phone !== undefined || fields.mobilePhone !== undefined) {
+    // The search echo — see `HostContact.phone`: the Phone, or the mobile of
+    // a person who gave no other number, as New contact stores it. The card
+    // sends an empty Phone on every save, and the mobile must outlive it.
+    update['phone'] = text(
+      (fields.phone ?? stored.phone ?? '') || (fields.mobilePhone ?? stored.mobilePhone ?? ''),
+    )
   }
   if (fields.jobTitle !== undefined) update[path('jobTitle')] = text(fields.jobTitle)
   if (fields.department !== undefined) update[path('department')] = text(fields.department)
