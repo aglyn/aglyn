@@ -39,10 +39,13 @@ import { firebaseAdmin } from './firebase-admin'
  * ### `emailSends` — the COST meter. Counts everything. Gates nothing.
  *
  * Every `sendEmail` call site increments this, whatever sent it. It is what the
- * monthly rollup carries for COGS, and it is RECORDED, NOT PRICED — there is
- * still no per-email rate anywhere, so it enters neither `billedCents` nor
- * `costUsd` nor `ORG_COGS_UNIT_RATES_USD`. Pricing it is a decision with an
- * invoice month behind it.
+ * monthly rollup carries for COGS: `report-usage` sums every site's counter and
+ * the org's own into the rollup's `emailSends`, and `orgMonthlyCogsUsd` prices
+ * that figure at `ORG_COGS_UNIT_RATES_USD.perEmailSend` — campaigns and
+ * transactional mail alike, which is what the staff margin readouts read
+ * (`transactional-sends-reach-the-cost-meter.spec.ts`). Only the overage past
+ * a plan's band can reach an invoice, and only from the month
+ * `BILL_EMAIL_SEND_OVERAGE_FROM` names.
  *
  * ### `campaignEmailSends` — the ENFORCEABLE meter. Counts campaigns only.
  *
@@ -61,6 +64,11 @@ import { firebaseAdmin } from './firebase-admin'
  * and billable. It is the same fail-open posture the rest of this codebase
  * takes: rate limiting fails soft, robots/sitemap fail open so a transient
  * error cannot de-index a customer's site.
+ *
+ * The one bound on it is not a quota (AGL-4145): a per-organization ABUSE
+ * ceiling per UTC day on a site's non-campaign mail, sized so no real store
+ * reaches it, with security mail exempt even from that. It counts on its own
+ * counter (`email-transactional-ceiling.ts`), never on these two.
  *
  * ### Not double-counted
  *
