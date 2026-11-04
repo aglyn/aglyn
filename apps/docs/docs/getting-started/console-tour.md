@@ -261,13 +261,13 @@ would otherwise be. The published site applies the same rule, so the two agree.
 ### Your site allowance {#your-site-allowance}
 
 Opposite the **All Sites** heading, beside **Create site**, a line reads
-`6 of 10 sites · Business plan` — how many sites this workspace has, against how many
+`2 of 3 sites · Pro plan` — how many sites this workspace has, against how many
 its plan includes, and which plan that is. **Create site** sits next to it, and appears
 only if your role can create sites.
 
 The line stays **blank** until both the workspace and its plan have resolved, rather
 than filling in a partial answer. An unresolved organization reads as Free, and a
-Business customer told for a moment that they're at "1 of 1 site" has been handed a
+Pro customer told for a moment that they're at "1 of 1 site" has been handed a
 false upgrade prompt by a page that was only loading. No line at all is the better
 answer while it waits.
 

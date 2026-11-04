@@ -53,14 +53,16 @@ it from there rather than from memory:
 | -- | -- | -- |
 | Free, Starter | Community | forum only — **no ticket commitment** |
 | Pro | Standard | 7–14 business days |
-| Business, Scale, Advanced | Business | 4–6 business days |
-| Agency | Priority | 1–3 business days |
-| Enterprise | Dedicated | **24–48 hours**, clock time, named manager |
+| Custom (the plan once labeled Enterprise) | Dedicated | **24–48 hours**, clock time, named manager |
 
-Enterprise is quoted in **clock** hours on purpose: 24–48 hours runs through a
+Business, Scale, Advanced and Agency are retired and no longer sold. Their rows stay
+in `SUPPORT_BY_PLAN` (Business 4–6 business days, Agency Priority at 1–3), because the
+map is keyed by every plan value an organization can still hold.
+
+Custom is quoted in **clock** hours on purpose: 24–48 hours runs through a
 weekend where "1–3 business days" does not. Read as business hours it would be
-slower than Agency and invert the ladder; `ladderIsMonotonic` in that module
-fails the build if it ever does.
+slower than the retired Agency row and invert the ladder; `ladderIsMonotonic` in
+that module fails the build if it ever does.
 
 Free and Starter carry **no first-response commitment**. That is a commercial
 decision, not permission to ignore them — it means an unanswered Starter ticket

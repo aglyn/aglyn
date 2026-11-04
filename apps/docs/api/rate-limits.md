@@ -134,8 +134,8 @@ to its plan:
 
 | Plan | Included requests / month | Overage |
 | --- | --- | --- |
-| Business | 100,000 | $0.50 per additional 1,000 |
-| Advanced | 1,000,000 | $0.20 per additional 1,000 |
+| Pro | 1,500 | Metered per additional 1,000, at the rate on [aglyn.com/pricing](https://aglyn.com/pricing) |
+| Custom | Set by your agreement | — |
 
 Requests beyond the included quota **keep working** and bill as metered overage on the
 monthly invoice — the quota is a meter, not a wall, so it can never break a live

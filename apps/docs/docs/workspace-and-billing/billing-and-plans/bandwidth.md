@@ -24,16 +24,12 @@ until the start of the next month.
 | Plan | Included bandwidth per month | Past the allowance |
 |---|---|---|
 | Free | 2 GB | Sites are **paused** until the start of next month |
-| Starter | 20 GB | Keeps serving; the extra is billed |
-| Pro | 30 GB | Keeps serving; the extra is billed |
-| Business | 45 GB | Keeps serving; the extra is billed |
-| Scale | 70 GB | Keeps serving; the extra is billed |
-| Advanced | 80 GB | Keeps serving; the extra is billed |
-| Agency | 395 GB | Keeps serving; the extra is billed |
-| Enterprise | 790 GB by default; more by agreement | Keeps serving; not billed — your agreement sets the terms |
+| Starter | 15 GB | Keeps serving; the extra is billed |
+| Pro | 25 GB | Keeps serving; the extra is billed |
+| Custom | Set by your agreement | Keeps serving; not billed — your agreement sets the terms |
 
 The allowance is per **organization**, across every site in it — not per site. If you run
-four sites on one Business plan, they share the 45 GB.
+four sites on one Pro plan (three included and one extra), they share the 25 GB.
 
 ## Where to see your usage {#where-to-see-it}
 

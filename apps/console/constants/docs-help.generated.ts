@@ -355,7 +355,7 @@ export const DOCS_HELP_TOPICS = {
   },
   enterprise: {
     path: '/enterprise/overview',
-    title: 'Enterprise overview',
+    title: 'Enterprise and the Custom plan',
   },
   errorScreens: {
     path: '/building-sites/site-protection/error-screens',
@@ -1045,7 +1045,7 @@ export const DOCS_HELP_ANCHORS = {
   emailCampaigns: ['#send-a-campaign', '#campaigns-belong-to-the-organization', '#organization-emails-page', '#campaigns-group-emails', '#campaign-page', '#filter-the-lists', '#what-belongs-to-a-campaign', '#who-the-email-comes-from', '#sending-domains', '#account-email-always-sends', '#marketing-needs-a-domain', '#two-ways-to-get-a-domain', '#a-domain-we-set-up-is-a-request', '#domain-states', '#org-sending-domain', '#senders', '#add-a-sender', '#send-a-test', '#preview-the-email', '#monthly-send-cap', '#personalize-with-merge-tags', '#recipient-count', '#who-a-campaign-is-allowed-to-reach', '#schedule-a-send', '#held-for-review', '#duplicate-an-email', '#email-lists', '#manual-lists', '#list-members', '#add-to-a-list', '#import-a-list', '#export-a-list', '#remove-from-a-list', '#lists-built-from-a-rule', '#experiments', '#experiments-across-sites', '#opens--clicks', '#last-campaign-card', '#messages-list', '#email-page', '#email-preview', '#email-recipients', '#the-campaign-report', '#per-contact-engagement', '#which-links-were-clicked', '#revenue-from-a-campaign', '#how-a-visit-is-credited', '#utm-labels', '#who-it-reached', '#conversions', '#compliance', '#list-unsubscribe', '#topics', '#preference-page', '#consent-groups', '#consent-group-create', '#consent-group-join', '#consent-group-leave', '#consent-group-rename', '#consent-group-progress', '#frequency-opt-down', '#double-opt-in', '#consent-group-confirmation', '#marketing-mail', '#frequency-cap', '#suppressions', '#org-suppressions', '#add-a-suppression', '#import-export-suppressions', '#platform-suppressions', '#related'],
   emailPlatforms: ['#connect', '#who-is-sent', '#unsubscribes-from-the-platform', '#settings', '#sync-log', '#disconnect', '#one-off-imports'],
   emailTemplates: ['#templates-and-snippets', '#merge-fields', '#saving', '#managing-templates', '#duplicate-a-template', '#shared-or-personal', '#over-the-rest-api', '#related'],
-  enterprise: ['#what-enterprise-does-not-change', '#getting-enterprise'],
+  enterprise: ['#what-custom-does-not-change', '#getting-the-custom-plan'],
   errorScreens: ['#the-error-screens', '#design-one', '#what-the-built-in-fallback-gives-you', '#error-screens-are-free', '#tips', '#related'],
   events: ['#manage-events', '#import-and-export-events', '#columns', '#how-a-row-finds-an-existing-event', '#conflicts-the-dry-run-and-undo', '#files-from-other-calendars', '#show-events-on-a-screen', '#ask-aglyn-ai', '#search-engines', '#related'],
   export: ['#the-fields', '#the-records', '#the-format', '#bringing-it-back-in', '#related'],
@@ -1167,7 +1167,7 @@ export const DOCS_HELP_ANCHORS = {
   storeImportAndExport: ['#export', '#products-are-a-row-per-variant', '#the-shopify-preset', '#import', '#products', '#categories', '#discounts-and-coupons', '#gift-cards', '#orders-are-exported-only'],
   supportAndCommunity: ['#support-tickets', '#your-tickets', '#ticket-status', '#what-to-include', '#community-forum', '#forum-threads', '#support-link', '#related'],
   supportQueue: ['#support-queue-page', '#triage', '#notifications', '#related'],
-  supportTiers: ['#why-enterprise-is-in-hours-not-business-days', '#what-starts-and-stops-the-clock', '#where-to-see-it'],
+  supportTiers: ['#why-custom-is-in-hours-not-business-days', '#what-starts-and-stops-the-clock', '#where-to-see-it'],
   supportTriage: ['#why-this-exists', '#1-order-the-queue', '#not-a-support-ticket', '#3-the-billing-answers', '#4-acting-on-the-customers-account', '#escalation', '#site-care', '#site-care-working', '#site-care-month', '#site-care-reconciliation', '#site-care-projects', '#related'],
   tasks: ['#task-picklists', '#the-tasks-page', '#the-calendar-view', '#snoozing-a-task', '#selecting-exporting-and-acting-on-many', '#import-from-csv', '#creating-a-task', '#assigning-a-task-to-someone-else', '#completing-and-reopening', '#organization-tasks', '#tasks-on-a-contact-company-or-deal', '#reminders', '#turning-reminders-off', '#next-activity', '#the-daily-digest', '#turning-it-off', '#the-dashboard-card', '#who-can-do-what', '#related'],
   taxServices: ['#before-you-start', '#connect', '#when-the-service-is-not-used', '#how-sales-are-taxed', '#product-tax-codes', '#exempt-customers', '#recording-orders-and-refunds', '#disconnect', '#what-is-sent-to-the-vendor'],

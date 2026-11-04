@@ -10,7 +10,7 @@ Where the [REST API](/api) is for reading and writing data on demand,
 webhooks are for **events** — Aglyn calling your system when something happens,
 or your system calling Aglyn to run a workflow. Both are configured under a
 site's [Automation](/marketing-and-automation/workflows-and-actions/webhooks),
-and both are a **Business**-plan feature.
+and both are included from the **Pro** plan.
 
 ## Outbound (Aglyn → your system)
 
