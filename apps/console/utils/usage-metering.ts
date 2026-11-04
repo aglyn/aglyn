@@ -29,6 +29,8 @@ import {
   planMetersInfraOverage,
   priceRunOverage,
   resolveOrgEntitlements,
+  RUN_BAND_KEYS,
+  type RunBandKey,
   type RunOveragePrice,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { planQuotaOf } from '@aglyn/aglyn/plugin-manager/plugin-plan-entitlements'
@@ -213,10 +215,11 @@ export { RUN_OVERAGE_USD_PER_1K } from '@aglyn/aglyn/app-utils/plan-entitlements
 
 /** A month of runs, priced: what the sweep bills and the usage page shows. */
 export interface RunOverageEstimate extends RunOveragePrice {
-  /** The workspace's workflow runs this month (its org counter). */
-  workflowRuns: number
-  /** The workspace's action runs this month (its org counter). */
-  actionRuns: number
+  /**
+   * The workspace's runs this month, by the band each is held to
+   * (`RUN_BAND_KEYS`): the counts that were priced, cleaned to whole runs.
+   */
+  runs: Readonly<Partial<Record<RunBandKey, number>>>
   /** `overageMonthlyUsd` in whole cents, the unit the invoice line is in. */
   billedCents: number
 }
@@ -233,21 +236,39 @@ export interface RunOverageEstimate extends RunOveragePrice {
  */
 export function estimateRunOverage(
   org: Partial<AglynOrgBilling> | null | undefined,
-  used: { workflowRuns?: number | null; actionRuns?: number | null },
+  used: Readonly<Partial<Record<RunBandKey, number | null>>>,
 ): RunOverageEstimate {
   const count = (value: number | null | undefined): number => {
     const parsed = Number(value ?? 0)
     return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 0
   }
-  const workflowRuns = count(used.workflowRuns)
-  const actionRuns = count(used.actionRuns)
-  const price = priceRunOverage(org, { workflowRuns, actionRuns })
+  const runs = Object.fromEntries(
+    RUN_BAND_KEYS.map((band) => [band, count(used[band])]),
+  ) as Record<RunBandKey, number>
+  const price = priceRunOverage(org, runs)
   return {
     ...price,
-    workflowRuns,
-    actionRuns,
+    runs,
     billedCents: Math.round(price.overageMonthlyUsd * 100),
   }
+}
+
+/**
+ * A month of runs keyed by band, read off the declared plugin bands: each
+ * band whose entitlement is a run band, counted by `read(band)`. The one
+ * place a console reader turns the workflows plugin's meters into the input
+ * `estimateRunOverage` takes, without naming them.
+ */
+export function runCountsByBand<Band extends { entitlement: string }>(
+  bands: readonly Band[],
+  read: (band: Band) => number | null | undefined,
+): Partial<Record<RunBandKey, number>> {
+  const out: Partial<Record<RunBandKey, number>> = {}
+  for (const band of bands) {
+    if (!(RUN_BAND_KEYS as readonly string[]).includes(band.entitlement)) continue
+    out[band.entitlement as RunBandKey] = Number(read(band) ?? 0)
+  }
+  return out
 }
 
 /**

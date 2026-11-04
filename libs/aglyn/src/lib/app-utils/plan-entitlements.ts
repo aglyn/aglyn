@@ -5009,6 +5009,9 @@ export function checkApiRequestQuota(
 /** The two monthly run bands the workflows plugin's gates are held to. */
 export type RunBandKey = 'workflowRunsPerMonth' | 'actionRunsPerMonth'
 
+/** Both run bands, in the order the usage page meters them. */
+export const RUN_BAND_KEYS: readonly RunBandKey[] = ['workflowRunsPerMonth', 'actionRunsPerMonth']
+
 /**
  * Whether the org's plan sells runs past its run bands (pricing v4,
  * 2026-11-03, AGL-4126): a non-null `extraRunsUsdPer1k` on the row the org is
@@ -5038,10 +5041,14 @@ export interface RunOveragePrice {
  * workflow band — summed and priced at the plan's `extraRunsUsdPer1k`. The
  * counts are the WORKSPACE's (`run-meter.ts`), the figure each band is held
  * to. A plan with no rate prices nothing, whatever the counts say.
+ *
+ * `used` is keyed by the band each count is held to (`RUN_BAND_KEYS`), so a
+ * caller outside the workflows plugin reads its counts off the declared bands
+ * and never names the plugin's own meters.
  */
 export function priceRunOverage(
   org: Partial<AglynOrgBilling> | null | undefined,
-  used: { workflowRuns?: number | null; actionRuns?: number | null },
+  used: Readonly<Partial<Record<RunBandKey, number | null>>>,
 ): RunOveragePrice {
   const entitlements = resolveOrgEntitlements(org) as unknown as Record<string, unknown>
   const overageRateUsd = resolvePlanPricing(org).extraRunsUsdPer1k
@@ -5053,9 +5060,7 @@ export function priceRunOverage(
     if (!Number.isFinite(included)) return 0
     return Math.max(0, Math.floor(value) - Math.max(0, included))
   }
-  const overageRuns =
-    past(used.workflowRuns, 'workflowRunsPerMonth') +
-    past(used.actionRuns, 'actionRunsPerMonth')
+  const overageRuns = RUN_BAND_KEYS.reduce((sum, band) => sum + past(used[band], band), 0)
   return {
     overageRuns,
     overageRateUsd,

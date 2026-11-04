@@ -71,6 +71,7 @@ import {
   estimateRunOverage,
   meteredIncludedAllowance,
   orgBandwidthGb,
+  runCountsByBand,
 } from '../../utils/usage-metering'
 import { docsHelp } from '../../constants/docs-links'
 import { formatMediaBytes } from '../media/media-storage-copy'
@@ -808,14 +809,10 @@ export function BillingUsageComponent(props: BillingUsageProps) {
   // The run overage (pricing v4) from the workspace-counted run bands,
   // matched by the entitlement each band is held to. A band still loading
   // reads 0, which is never over a band, so no figure appears early.
-  const runCount = (entitlement: string): number => {
-    const band = ORG_COUNTED_BANDS.find((each) => each.entitlement === entitlement)
-    return band ? (orgCounted[band.id] ?? 0) : 0
-  }
-  const runOverage = estimateRunOverage(org, {
-    workflowRuns: runCount('workflowRunsPerMonth'),
-    actionRuns: runCount('actionRunsPerMonth'),
-  })
+  const runOverage = estimateRunOverage(
+    org,
+    runCountsByBand(ORG_COUNTED_BANDS, (band) => orgCounted[band.id] ?? 0),
+  )
   /*
    * Email past the plan's included band, and what it costs.
    *

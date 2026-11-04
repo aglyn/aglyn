@@ -49,6 +49,7 @@ import {
   estimateMonthlyUsageCost,
   estimateRunOverage,
   hostMeterReadings,
+  runCountsByBand,
   type HostUsageSnapshot,
   meteredBands,
 } from '../../../../utils/usage-metering'
@@ -1050,14 +1051,14 @@ async function handler(request: Request): Promise<Response> {
        * No start-month gate like email's: before v4 every run band was a
        * wall, so there is no counted-and-never-charged volume to backdate.
        *=========================================*/
-      const workflowRunsBand = counterBands.find(
-        (band) => band.entitlement === 'workflowRunsPerMonth',
-      )
+      // Each run band measured by a host counter is read off its declaration;
+      // the action band rides the platform's own `actionRuns` total.
       const runOverage = estimateRunOverage(orgData, {
-        workflowRuns: workflowRunsBand
-          ? (counterTotals.counters[workflowRunsBand.hostCounter] ?? 0)
-          : 0,
-        actionRuns: counterTotals.actionRuns,
+        actionRunsPerMonth: counterTotals.actionRuns,
+        ...runCountsByBand(
+          counterBands,
+          (band) => counterTotals.counters[band.hostCounter] ?? 0,
+        ),
       })
       /*==========================================
        * THE POS FEE THAT STRIPE CANNOT COLLECT (AGL-2111).

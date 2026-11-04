@@ -2729,17 +2729,17 @@ describe('runs past the bands bill at cost + 30% after card fees (pricing v4)', 
     expect(runOverageSold(pro)).toBe(true)
     // 7,000 workflow runs against 5,000 and 4,000 action runs against 5,000:
     // 2,000 over, and the action band's headroom is not lent to the other.
-    const estimate = estimateRunOverage(pro, { workflowRuns: 7_000, actionRuns: 4_000 })
+    const estimate = estimateRunOverage(pro, { workflowRunsPerMonth: 7_000, actionRunsPerMonth: 4_000 })
     expect(estimate.overageRuns).toBe(2_000)
     expect(estimate.overageRateUsd).toBe(0.02)
     expect(estimate.overageMonthlyUsd).toBe(0.04)
     expect(estimate.billedCents).toBe(4)
     // A million runs past the band is $20.
-    expect(estimateRunOverage(pro, { workflowRuns: 1_005_000 }).overageMonthlyUsd).toBe(20)
+    expect(estimateRunOverage(pro, { workflowRunsPerMonth: 1_005_000 }).overageMonthlyUsd).toBe(20)
     // Starter's bands are walls: nothing is sold past them at any count.
     const starter = { plan: 'starter', subscription: { status: 'active' } } as never
     expect(runOverageSold(starter)).toBe(false)
-    expect(estimateRunOverage(starter, { workflowRuns: 9_999, actionRuns: 9_999 }).billedCents).toBe(0)
+    expect(estimateRunOverage(starter, { workflowRunsPerMonth: 9_999, actionRunsPerMonth: 9_999 }).billedCents).toBe(0)
     // A staff comp has no subscription to bill, so its bands are walls too.
     const comped = {
       plan: 'pro',
