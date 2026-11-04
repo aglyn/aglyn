@@ -32,6 +32,7 @@ content on the marketing site and is written separately.
 ### Fixed
 
 - **tenant:** internal redirects keep the query string without a 500 ([AGL-4153](https://linear.app/aglyn/issue/AGL-4153))
+- **billing:** a standing proposal's bundle and code are priced without its link ([AGL-4154](https://linear.app/aglyn/issue/AGL-4154))
 - **native:** automation steps name Pro on the webhook and custom JS steps ([AGL-4150](https://linear.app/aglyn/issue/AGL-4150))
 - **native:** the overage screen meters Pro's API requests, API keys name Pro ([AGL-4150](https://linear.app/aglyn/issue/AGL-4150))
 - **billing:** read the run counts off the declared bands, not the plugin's meters ([AGL-4143](https://linear.app/aglyn/issue/AGL-4143))
