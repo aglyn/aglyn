@@ -15,54 +15,54 @@ record and must never be edited to say something the code does not.
 > A reader who wanted to know what Free includes had to read TypeScript.
 
 Columns are the plans on sale: the self-serve ladder and the quoted
-Enterprise plan (code id `enterprise`). A plan retired from sale keeps
+Custom plan (code id `enterprise`). A plan retired from sale keeps
 its row in the code and is not shown.
 
 **Change control.** A feature moving between plans is a packaging change and
 takes a Pricing Decision Log entry, exactly as a price move does. Regenerating
 this file is the last step, not the decision.
 
-| Feature | Free | Starter | Pro | Business | Scale | Advanced | Agency | Enterprise |
-|---|---|---|---|---|---|---|---|---|
-| `abTesting` | — | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `abandonedCart` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `actions` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `aiAssist` | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `aiGenerative` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `apiAccess` | — | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `bookings` | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `commerce` | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `commerceAnalytics` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `contentGating` | — | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `crm` | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `customDomain` | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `customSendingDomain` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `dataStore` | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `dedicatedSendingDomain` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `dropshipRouting` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `eventCalendar` | — | — | — | — | — | — | — | — |
-| `giftCards` | — | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `interactions` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `marketingOverlays` | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `marketplaceSelling` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `mediaCdn` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `multilingual` | — | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `outreach` | — | — | — | — | — | — | — | — |
-| `pos` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `productReviews` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `redirects` | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `removeBranding` | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `reusableComponents` | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `scheduledPublishing` | — | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `screenAnalytics` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `siteCare` | — | — | — | — | — | — | — | — |
-| `siteExport` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `ssoEnabled` | — | — | — | — | — | — | — | ✓ |
-| `storefrontSubscriptions` | — | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `versioning` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `videoMedia` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `webhooks` | — | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `whiteLabel` | — | — | — | — | — | — | ✓ | ✓ |
-| `workflows` | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Feature | Free | Starter | Pro | Custom |
+|---|---|---|---|---|
+| `abTesting` | — | — | ✓ | ✓ |
+| `abandonedCart` | — | — | ✓ | ✓ |
+| `actions` | — | — | ✓ | ✓ |
+| `aiAssist` | — | ✓ | ✓ | ✓ |
+| `aiGenerative` | ✓ | ✓ | ✓ | ✓ |
+| `apiAccess` | — | — | ✓ | ✓ |
+| `bookings` | — | ✓ | ✓ | ✓ |
+| `commerce` | — | ✓ | ✓ | ✓ |
+| `commerceAnalytics` | — | — | ✓ | ✓ |
+| `contentGating` | — | — | ✓ | ✓ |
+| `crm` | — | ✓ | ✓ | ✓ |
+| `customDomain` | — | ✓ | ✓ | ✓ |
+| `customSendingDomain` | — | — | ✓ | ✓ |
+| `dataStore` | — | ✓ | ✓ | ✓ |
+| `dedicatedSendingDomain` | — | — | ✓ | ✓ |
+| `dropshipRouting` | — | — | ✓ | ✓ |
+| `eventCalendar` | — | — | — | — |
+| `giftCards` | — | — | ✓ | ✓ |
+| `interactions` | ✓ | ✓ | ✓ | ✓ |
+| `marketingOverlays` | — | ✓ | ✓ | ✓ |
+| `marketplaceSelling` | — | — | ✓ | ✓ |
+| `mediaCdn` | ✓ | ✓ | ✓ | ✓ |
+| `multilingual` | — | — | ✓ | ✓ |
+| `outreach` | — | — | — | — |
+| `pos` | — | — | ✓ | ✓ |
+| `productReviews` | — | — | ✓ | ✓ |
+| `redirects` | — | ✓ | ✓ | ✓ |
+| `removeBranding` | — | ✓ | ✓ | ✓ |
+| `reusableComponents` | — | ✓ | ✓ | ✓ |
+| `scheduledPublishing` | — | — | ✓ | ✓ |
+| `screenAnalytics` | — | — | ✓ | ✓ |
+| `siteCare` | — | — | — | — |
+| `siteExport` | — | — | ✓ | ✓ |
+| `ssoEnabled` | — | — | — | ✓ |
+| `storefrontSubscriptions` | — | — | ✓ | ✓ |
+| `versioning` | — | — | ✓ | ✓ |
+| `videoMedia` | — | — | ✓ | ✓ |
+| `webhooks` | — | — | ✓ | ✓ |
+| `whiteLabel` | — | — | — | ✓ |
+| `workflows` | — | ✓ | ✓ | ✓ |
 
-_40 features across 8 plans._
+_40 features across 4 plans._
