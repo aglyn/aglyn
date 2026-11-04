@@ -140,6 +140,10 @@ const MENTIONS_ONLY = new Map<string, string>([
     "The Sites I like live eval (AGL-3975). Like the live plan eval above, it runs only when a developer sets AGLYN_LIVE_AI=1 with the key SET, and refuses new requests near its spend cap (AGLYN_LIVE_AI_CAP_USD); the requests go through the adapter, and what it sends is fixed sample briefs written in the spec plus signals read from recorded pages committed under its fixtures, never a customer's content or a live fetch. CI never sets the switch, so CI never calls the provider.",
   ],
   [
+    'libs/plugins/ai/src/lib/jobs/ai-site-import-wording-live.spec.ts',
+    "Bring my site's live Improve and wording eval (AGL-4152). Like the live evals here, it runs only when a developer sets AGLYN_LIVE_AI=1 with the key SET, and refuses new requests near its spend cap (AGLYN_LIVE_AI_CAP_USD); the requests go through the adapter, and what it sends is the recorded pages committed under its fixtures (made-up businesses and aglyn.com's own pages) with their design and wording asks, never a customer's content or a live fetch. CI never sets the switch, so CI never calls the provider.",
+  ],
+  [
     'libs/plugins/ai/src/lib/jobs/ai-job-page-sections-live.spec.ts',
     "The guided start's live page-sections eval (AGL-3596). Like the live plan eval above, it checks the key is SET and runs only when a developer sets AGLYN_LIVE_AI=1; the request goes through the adapter, and what it sends is the fixed sample briefs written in the spec, never a customer's content. CI never sets the switch, so CI never calls the provider.",
   ],
