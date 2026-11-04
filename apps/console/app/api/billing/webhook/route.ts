@@ -999,6 +999,10 @@ async function handler(request: Request): Promise<Response> {
               const settled = await settleSubscriptionStart(String(orgId), {
                 status: mirroredStatus,
                 subscriptionId: object?.id ? String(object.id) : null,
+                // A plan change proposed to a subscriber (AGL-4160) settles
+                // only once the subscription is on its plan and cadence.
+                plan: String(plan),
+                interval: isYearly ? 'year' : 'month',
               })
               if (settled.proposalCleared || settled.trialCompRemoved) {
                 ledger.effect('subscription-start-settled')

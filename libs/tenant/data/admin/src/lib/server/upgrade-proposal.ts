@@ -28,6 +28,11 @@
  * the subscription goes live, the proposal and the trial comp both clear,
  * so a comp granted to evaluate cannot revive free access if the customer
  * later cancels.
+ *
+ * A workspace that already subscribes can be proposed a CHANGE (AGL-4160):
+ * another plan or billing cadence, usually with a code for the switch. That
+ * proposal is marked `forSubscriber` and settled only when the subscription
+ * moves to it, since a subscription being live is what it starts from.
  */
 
 import type {
@@ -41,6 +46,7 @@ import {
   isUpgradeProposalPlan,
   normalizeUpgradeProposalBundle,
   normalizeUpgradeProposalNote,
+  upgradeProposalAnsweredBy,
   upgradeProposalDestination,
   upgradeProposalSummary,
 } from '@aglyn/aglyn/app-utils/upgrade-proposal'
@@ -113,21 +119,28 @@ export interface ProposeOrgUpgradeResult {
  * commit and is best-effort: the card on the org home is the proposal, and
  * an email that failed must not undo it.
  *
- * Refused when the workspace already has a live subscription — the question
- * a proposal asks is already answered — and for any plan a customer cannot
- * buy themselves.
+ * Refused for any plan a customer cannot buy themselves. A workspace with a
+ * live subscription can be proposed a change of plan or cadence (AGL-4160),
+ * stored as `forSubscriber`; a proposal of the plan and cadence it already
+ * has is refused, since there is nothing to propose.
  */
 export async function proposeOrgUpgrade(
   options: ProposeOrgUpgradeOptions,
 ): Promise<ProposeOrgUpgradeResult> {
   const { orgId, actor, origin } = options
-  const proposal = buildUpgradeProposal(options)
+  const built = buildUpgradeProposal(options)
   const db = firestore()
   const orgRef = db.collection('orgs').doc(orgId)
-  const org = await db.runTransaction(async (tx) => {
-    const data = await readUpgradeProposalTarget(tx, orgRef)
-    stageUpgradeProposal(tx, db, { orgId, proposal, before: data, actorUid: actor.uid })
-    return data
+  const { org, proposal } = await db.runTransaction(async (tx) => {
+    const target = await readUpgradeProposalChange(tx, orgRef, built)
+    const staged: OrgUpgradeProposal = target.live ? { ...built, forSubscriber: true } : built
+    stageUpgradeProposal(tx, db, {
+      orgId,
+      proposal: staged,
+      before: target.data,
+      actorUid: actor.uid,
+    })
+    return { org: target.data, proposal: staged }
   })
   await recordUpgradeProposalActivity(orgId, actor, proposal)
   const emailed = await emailUpgradeProposal({ orgId, org, proposal, origin })
@@ -171,28 +184,59 @@ export function buildUpgradeProposal(
 /**
  * Read the org a proposal is for, inside the caller's transaction, refusing
  * an unknown workspace and one whose subscription is already live — the
- * question a proposal asks is then already answered.
+ * question a proposal asks is then already answered. The owner hand-off,
+ * which proposes a first plan, reads through this.
  */
 export async function readUpgradeProposalTarget(
   tx: FirebaseFirestore.Transaction,
   orgRef: FirebaseFirestore.DocumentReference,
 ): Promise<Partial<AglynOrgBilling>> {
+  const target = await readUpgradeProposalChange(tx, orgRef, null)
+  return target.data
+}
+
+/**
+ * Read the org a proposal is for, and whether its subscription is live
+ * (AGL-4160). A live subscription takes a proposal that CHANGES it — another
+ * plan, or the cadence it is not billed on — and refuses one it already
+ * answers, or no proposal at all.
+ */
+export async function readUpgradeProposalChange(
+  tx: FirebaseFirestore.Transaction,
+  orgRef: FirebaseFirestore.DocumentReference,
+  proposal: Pick<OrgUpgradeProposal, 'plan' | 'interval'> | null,
+): Promise<{ data: Partial<AglynOrgBilling>; live: boolean }> {
   const snapshot = await tx.get(orgRef)
   if (!snapshot.exists) throw new UpgradeProposalError('Unknown organization', 404)
   const data = snapshot.data() as Partial<AglynOrgBilling>
   const billing = await tx.get(
     orgRef.collection(ORG_BILLING_SUBCOLLECTION).doc(ORG_BILLING_DOC_ID),
   )
-  const status =
-    (billing.get('subscription') as { status?: unknown } | undefined)?.status ??
-    data.billingStatus
-  if (isLiveSubscriptionStatus(status)) {
+  const subscription = billing.get('subscription') as
+    | { status?: unknown; interval?: unknown }
+    | undefined
+  const status = subscription?.status ?? data.billingStatus
+  if (!isLiveSubscriptionStatus(status)) return { data, live: false }
+  if (!proposal) {
     throw new UpgradeProposalError(
       'This workspace already has a live subscription, so there is nothing to propose',
       409,
     )
   }
-  return data
+  if (upgradeProposalAnsweredBy(proposal, { plan: data.plan, interval: subscription?.interval })) {
+    const cadence =
+      subscription?.interval === 'year'
+        ? ', billed yearly'
+        : subscription?.interval === 'month'
+          ? ', billed monthly'
+          : ''
+    throw new UpgradeProposalError(
+      `This workspace already subscribes to ${planName(data.plan)}${cadence}, so there is ` +
+        'nothing to propose. Propose another plan or billing cadence.',
+      409,
+    )
+  }
+  return { data, live: true }
 }
 
 /**
@@ -305,7 +349,17 @@ export async function withdrawOrgUpgrade(options: {
  */
 export async function settleSubscriptionStart(
   orgId: string,
-  context: { status: string; subscriptionId?: string | null },
+  context: {
+    status: string
+    subscriptionId?: string | null
+    /**
+     * The plan and cadence the live subscription is on (AGL-4160). A
+     * proposal made to a subscriber is settled only by the subscription
+     * reaching it; absent, the org doc's `plan` stands in for the plan.
+     */
+    plan?: string | null
+    interval?: string | null
+  },
 ): Promise<{ proposalCleared: boolean; trialCompRemoved: boolean }> {
   const db = firestore()
   const orgRef = db.collection('orgs').doc(orgId)
@@ -313,7 +367,17 @@ export async function settleSubscriptionStart(
     const snapshot = await tx.get(orgRef)
     if (!snapshot.exists) return null
     const data = snapshot.data() as Partial<AglynOrgBilling>
-    const proposal = data.upgradeProposal ?? null
+    const stored = data.upgradeProposal ?? null
+    // A change proposed to a subscriber stands until the subscription is on
+    // it: being live is where it started, so it settles nothing.
+    const proposal =
+      stored?.forSubscriber === true &&
+      !upgradeProposalAnsweredBy(stored, {
+        plan: context.plan ?? data.plan,
+        interval: context.interval,
+      })
+        ? null
+        : stored
     const entitlements = (data.entitlements ?? null) as Record<string, unknown> | null
     const comp = entitlements?.['planComp'] as
       | { plan?: string; reason?: string }
@@ -344,7 +408,9 @@ export async function settleSubscriptionStart(
       reason: {
         code: 'subscription_live',
         note:
-          `The subscription went live (${context.status})` +
+          (proposal?.forSubscriber
+            ? `The subscription moved to the proposed plan (${context.status})`
+            : `The subscription went live (${context.status})`) +
           (context.subscriptionId ? `, ${context.subscriptionId}` : '') +
           ', which settles the upgrade proposal and ends the sales-trial comp.',
       },
@@ -365,7 +431,10 @@ export async function settleSubscriptionStart(
     await logOrgActivity(
       orgId,
       { uid: null },
-      `The ${planName(outcome.proposal.plan)} plan proposal closed — the subscription is live`,
+      `The ${planName(outcome.proposal.plan)} plan proposal closed — ` +
+        (outcome.proposal.forSubscriber
+          ? 'the subscription moved to it'
+          : 'the subscription is live'),
       { type: 'subscription', id: orgId },
     )
   }
@@ -412,6 +481,17 @@ async function emailUpgradeProposal(options: {
     const label = planName(proposal.plan)
     const productName = brand.merge['brand.productName'] || PLATFORM_BRAND_NAME
     const summary = upgradeProposalSummary(proposal, { brand: productName })
+    // A workspace that already subscribes switches; one that does not starts
+    // a subscription (AGL-4160).
+    const nextStep = proposal.forSubscriber
+      ? 'When you are ready, switch to it from Billing. The plan is already selected ' +
+        'there, and Billing shows what the switch costs today, with any code applied, ' +
+        'before anything is charged.'
+      : 'When you are ready, start the subscription from Billing. The plan is already ' +
+        'selected there, beside the others so you can compare them first.'
+    const unchanged = proposal.forSubscriber
+      ? 'Nothing changes until you switch.'
+      : 'Nothing changes until you start the subscription.'
     const content = await renderSystemEmailContent(
       'org-upgrade-proposal',
       {
@@ -419,6 +499,8 @@ async function emailUpgradeProposal(options: {
         'plan.name': label,
         'proposal.note': proposal.note ?? '',
         'proposal.summary': summary === label ? '' : summary,
+        'proposal.nextStep': nextStep,
+        'proposal.unchanged': unchanged,
         billingUrl,
       },
       brand,
@@ -427,7 +509,9 @@ async function emailUpgradeProposal(options: {
         text:
           `Your ${productName} team proposed moving ${orgName} to the ${label} ` +
           (summary === label ? 'plan. ' : `plan (${summary}). `) +
-          'When you are ready, start the subscription from Billing, ' +
+          (proposal.forSubscriber
+            ? 'When you are ready, switch to it from Billing, '
+            : 'When you are ready, start the subscription from Billing, ') +
           `where the plan is already selected:\n\n${billingUrl}` +
           (proposal.note ? `\n\n${proposal.note}` : ''),
       },

@@ -185,3 +185,53 @@ export function prorationQuote(
       : `Unused time credits $${amount} ${currency} back on your next invoice on ${effective}.`) + taxClause
   )
 }
+
+/** The code a plan switch is priced with (AGL-4160), as the preview reports it. */
+export interface SwitchCodeTerms {
+  promotionCodeApplied?: string | null
+  promotionCodeDuration?: string | null
+  promotionCodeDurationInMonths?: number | null
+  promotionCodePercentOff?: number | null
+  promotionCodeAmountOffUsd?: number | null
+  /** The code reaches the plan's base price alone (AGL-4159). */
+  promotionCodeBasePriceOnly?: boolean | null
+  /** The subscription carries a discount now, which the code takes the place of. */
+  promotionCodeReplacesDiscount?: boolean | null
+}
+
+/**
+ * The sentence the switch confirm appends for the code it carries (AGL-4160),
+ * or '' when none: what it takes off, off what, for how long, that the
+ * figure above already includes it, and — said before the click, because it
+ * cannot be taken back — that it replaces the discount the subscription has
+ * now. A base-price code says what it does not cover.
+ */
+export function switchCodeSentence(terms: SwitchCodeTerms, targetPlan: OrgPlan): string {
+  const code = terms.promotionCodeApplied
+  if (!code) return ''
+  const label = PLAN_LABELS[targetPlan] ?? targetPlan
+  const off =
+    typeof terms.promotionCodePercentOff === 'number'
+      ? `${terms.promotionCodePercentOff}% off`
+      : typeof terms.promotionCodeAmountOffUsd === 'number'
+        ? `$${terms.promotionCodeAmountOffUsd.toFixed(2)} off`
+        : 'a discount off'
+  const what = terms.promotionCodeBasePriceOnly ? `${label}’s base price` : label
+  const months = terms.promotionCodeDurationInMonths
+  const lasts =
+    terms.promotionCodeDuration === 'forever'
+      ? ' for as long as you subscribe'
+      : terms.promotionCodeDuration === 'once'
+        ? ' on the next charge only'
+        : terms.promotionCodeDuration === 'repeating' && typeof months === 'number' && months > 0
+          ? ` for the next ${months === 1 ? 'month' : `${months} months`}`
+          : ''
+  return (
+    ` Code ${code} takes ${off} ${what}${lasts}` +
+    (terms.promotionCodeReplacesDiscount ? ', in place of the discount you have now' : '') +
+    '; the amount above already includes it.' +
+    (terms.promotionCodeBasePriceOnly
+      ? ' Add-ons and usage past the plan’s limits bill as usual.'
+      : '')
+  )
+}

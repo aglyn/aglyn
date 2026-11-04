@@ -547,6 +547,20 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           description: 'Billing page with the proposed plan, add-ons, cadence and coupon preselected',
           sample: `${SAMPLE_CONSOLE_ORIGIN}/test-org/billing?plan=starter&interval=year&addons=siteCare`,
         },
+        {
+          name: 'proposal.nextStep',
+          description:
+            'What the owner does next: start the subscription, or, for a workspace that ' +
+            'already subscribes, switch to the proposed plan',
+          sample:
+            'When you are ready, start the subscription from Billing. The plan is already ' +
+            'selected there, beside the others so you can compare them first.',
+        },
+        {
+          name: 'proposal.unchanged',
+          description: 'The line under the button: nothing changes until the owner acts',
+          sample: 'Nothing changes until you start the subscription.',
+        },
       ],
       // Mirrors the fallback text in /api/admin/org-upgrade-proposal.
       defaultBody: [
@@ -555,9 +569,9 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         { block: 'text', text: 'Your {{brand.productName}} team proposed moving {{org.name}} to the {{plan.name}} plan.', variant: 'body' },
         { block: 'text', text: '{{proposal.summary}}', variant: 'details' },
         { block: 'text', text: '{{proposal.note}}', variant: 'body' },
-        { block: 'text', text: 'When you are ready, start the subscription from Billing. The plan is already selected there, beside the others so you can compare them first.', variant: 'body' },
+        { block: 'text', text: '{{proposal.nextStep}}', variant: 'body' },
         { block: 'button', label: 'Review the {{plan.name}} plan', href: '{{billingUrl}}' },
-        { block: 'text', text: 'Nothing changes until you start the subscription.', variant: 'caption' },
+        { block: 'text', text: '{{proposal.unchanged}}', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because you own {{org.name}} on ' +

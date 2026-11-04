@@ -1329,6 +1329,14 @@ export interface OrgUpgradeProposal {
   interval?: 'month' | 'year'
   /** A promotion code minted on the staff Coupons page, applied at checkout. */
   coupon?: string
+  /**
+   * Proposed to a workspace that already subscribes (AGL-4160): a change of
+   * plan or billing cadence, with its code applied to the switch. It stands
+   * until the subscription moves to the proposed plan and cadence, rather
+   * than being settled by a subscription being live, which is what settles
+   * a proposal made before the workspace bought anything.
+   */
+  forSubscriber?: boolean
 }
 
 /**

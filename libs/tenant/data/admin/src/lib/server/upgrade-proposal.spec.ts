@@ -285,11 +285,25 @@ describe('proposing an upgrade (AGL-3466)', () => {
     expect(audits()).toHaveLength(0)
   })
 
-  it('refuses when a subscription is already live', async () => {
-    seedTrial()
-    store.set(`orgs/${ORG}/billing/stripe`, { subscription: { status: 'active' } })
+  it('refuses a proposal the live subscription already answers', async () => {
+    // Since AGL-4160 a subscriber can be proposed a CHANGE; the plan and
+    // cadence it is already on is still nothing to propose.
+    seedTrial({ plan: 'starter' })
+    store.set(`orgs/${ORG}/billing/stripe`, {
+      subscription: { status: 'active', interval: 'month' },
+    })
     await expect(propose()).rejects.toMatchObject({ status: 409 })
+    await expect(
+      proposeOrgUpgrade({
+        orgId: ORG,
+        plan: 'starter',
+        interval: 'month',
+        actor: { uid: 'staff' },
+        origin: 'https://app.aglyn.test',
+      }),
+    ).rejects.toThrow('already subscribes to Starter, billed monthly')
     expect(mockSent).toHaveLength(0)
+    expect(audits()).toHaveLength(0)
   })
 
   it('withdraws a standing proposal, audited, and says when there was none', async () => {
@@ -299,6 +313,67 @@ describe('proposing an upgrade (AGL-3466)', () => {
     expect(audits()[0]).toMatchObject({ action: 'org.upgradeProposal.withdraw' })
     expect(await withdrawOrgUpgrade({ orgId: ORG, actor: { uid: 'staff' } })).toBe(false)
     expect(audits()).toHaveLength(1)
+  })
+})
+
+describe('a plan change proposed to a workspace that already subscribes (AGL-4160)', () => {
+  const proposeChange = (extra: Record<string, unknown> = {}) =>
+    proposeOrgUpgrade({
+      orgId: ORG,
+      plan: 'pro',
+      interval: 'year',
+      coupon: 'PRO40',
+      actor: { uid: 'staff' },
+      origin: 'https://app.aglyn.test',
+      ...extra,
+    })
+
+  beforeEach(() => {
+    seedTrial({ plan: 'starter', entitlements: undefined })
+    store.set(`orgs/${ORG}/billing/stripe`, {
+      subscription: { status: 'active', interval: 'month' },
+    })
+  })
+
+  it('is recorded as one for a subscriber, and the email says to switch', async () => {
+    const result = await proposeChange()
+    expect(result.proposal).toMatchObject({
+      plan: 'pro',
+      interval: 'year',
+      coupon: 'PRO40',
+      forSubscriber: true,
+    })
+    expect(org()['upgradeProposal']).toMatchObject({ forSubscriber: true })
+    expect(String(mockSent[0]['text'])).toContain('switch to it from Billing')
+    expect(String(mockSent[0]['text'])).toContain(
+      'https://app.aglyn.test/acme/billing?plan=pro&interval=year&coupon=PRO40',
+    )
+  })
+
+  it('takes a change of cadence on the same plan', async () => {
+    const result = await proposeChange({ plan: 'starter', interval: 'year', coupon: undefined })
+    expect(result.proposal).toMatchObject({ plan: 'starter', interval: 'year', forSubscriber: true })
+  })
+
+  it('stands while the subscription is on another plan, and closes once it reaches it', async () => {
+    await proposeChange()
+    // A renewal, or any event, on the plan the subscriber already had.
+    expect(
+      await settleSubscriptionStart(ORG, { status: 'active', plan: 'starter', interval: 'month' }),
+    ).toEqual({ proposalCleared: false, trialCompRemoved: false })
+    expect(org()['upgradeProposal']).toMatchObject({ plan: 'pro' })
+    // On Pro, but monthly: the proposed cadence is yearly.
+    await settleSubscriptionStart(ORG, { status: 'active', plan: 'pro', interval: 'month' })
+    expect(org()['upgradeProposal']).toMatchObject({ plan: 'pro' })
+    // Pro, yearly: answered.
+    mockActivity.length = 0
+    expect(
+      await settleSubscriptionStart(ORG, { status: 'active', plan: 'pro', interval: 'year' }),
+    ).toEqual({ proposalCleared: true, trialCompRemoved: false })
+    expect(org()['upgradeProposal']).toBeUndefined()
+    expect(mockActivity.map((row) => row.action)).toEqual([
+      'The Pro plan proposal closed — the subscription moved to it',
+    ])
   })
 })
 

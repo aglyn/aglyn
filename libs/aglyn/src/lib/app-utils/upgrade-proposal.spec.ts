@@ -86,6 +86,23 @@ describe('upgrade proposals (AGL-3466)', () => {
     }
   })
 
+  it('keeps a change proposed to a subscriber standing until the subscription is on it (AGL-4160)', () => {
+    const change = { plan: 'pro', interval: 'year', proposedBy: 'staff-1', proposedAt: 1, forSubscriber: true }
+    const live = (plan: string, interval: string) =>
+      standingUpgradeProposal({
+        upgradeProposal: change as never,
+        billingStatus: 'active',
+        plan: plan as never,
+        subscription: { status: 'active', interval } as never,
+      })
+    expect(live('starter', 'month')?.plan).toBe('pro')
+    // The plan, but not yet the proposed cadence.
+    expect(live('pro', 'month')?.plan).toBe('pro')
+    expect(live('pro', 'year')).toBeNull()
+    // And the flag survives the read.
+    expect(readUpgradeProposal({ upgradeProposal: change as never })?.forSubscriber).toBe(true)
+  })
+
   it('sends the button to Billing with the plan preselected and no interval claimed', () => {
     expect(upgradeProposalDestination('acme', proposal as never)).toBe(
       '/acme/billing?plan=starter',

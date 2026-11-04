@@ -36,8 +36,9 @@ import { useOrgScope, useOrgSlug } from '../hooks/use-org-scope'
  * org home and on Billing.
  *
  * Shown only to the people who can act on it — holders of `billing.manage`,
- * the owner and admins by default — and only while the proposal stands and
- * no subscription is live. Everyone else sees nothing, which is also what
+ * the owner and admins by default — and only while the proposal stands: no
+ * subscription is live, or, for a change proposed to a workspace that already
+ * subscribes (AGL-4160), the subscription is not yet on it. Everyone else sees nothing, which is also what
  * this renders while the permissions or the org document are still loading:
  * a card that flashed and vanished would be worse than one that arrives.
  *
@@ -86,7 +87,9 @@ export function OrgUpgradeProposalCard() {
         </Typography>
       ) : null}
       <Typography variant="body2" color="text.secondary">
-        {'When you are ready, start the subscription from Billing, where the ' +
+        {(proposal.forSubscriber
+          ? 'When you are ready, switch to it from Billing, where the '
+          : 'When you are ready, start the subscription from Billing, where the ') +
           (bundled ? 'whole bundle is' : 'plan is') +
           ' already selected. Nothing changes until you do.'}
       </Typography>
