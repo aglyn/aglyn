@@ -74,6 +74,12 @@ import {
   resolveOrgEntitlements,
   resolvePlanPricing,
 } from '@aglyn/aglyn/server'
+import {
+  resolveTransactionalEmailDailyCeiling,
+  TRANSACTIONAL_EMAIL_CEILING_OVERRIDE_KEYS,
+  TRANSACTIONAL_EMAILS_PER_DAY_BY_PLAN,
+  TRANSACTIONAL_EMAILS_PER_DAY_KEY,
+} from '@aglyn/aglyn/app-utils/transactional-email-ceiling'
 
 /** Orgs whose tenant pages the route asked to drop, in order (AGL-3034). */
 let mockRevalidatedOrgs: string[] = []
@@ -626,6 +632,26 @@ describe('clearing ONE numeric quota removes it (AGL-1789)', () => {
     })
   })
 
+  it('writes the daily transactional ceiling override, and the ceiling resolves it (AGL-4145)', async () => {
+    // The abuse ceiling is not a plan-table key, so this route is the only
+    // staff door to it: a contract or a support case that needs more writes
+    // it here, on the same map, and the send seam's figure follows.
+    mockStore['orgs/org-1'] = { plan: 'business', billingStatus: 'active' }
+    const response = await post(
+      validBody({ quotas: { [TRANSACTIONAL_EMAILS_PER_DAY_KEY]: 40_000 } }),
+    )
+    expect(response.status).toBe(200)
+    expect(storedQuotas()).toEqual({ [TRANSACTIONAL_EMAILS_PER_DAY_KEY]: 40_000 })
+    expect(resolveTransactionalEmailDailyCeiling(storedOrg())).toBe(40_000)
+
+    // Cleared, it hands the org back to its plan's figure.
+    await post(validBody({ quotas: {} }))
+    expect(TRANSACTIONAL_EMAILS_PER_DAY_KEY in storedQuotas()).toBe(false)
+    expect(resolveTransactionalEmailDailyCeiling(storedOrg())).toBe(
+      TRANSACTIONAL_EMAILS_PER_DAY_BY_PLAN.business,
+    )
+  })
+
   it('expands from the REGISTRY, so every quota key is decided', async () => {
     // The same property the features expansion has: the key set comes from
     // `PLAN_ENTITLEMENTS`, not from what the caller happened to send, so a
@@ -636,9 +662,14 @@ describe('clearing ONE numeric quota removes it (AGL-1789)', () => {
       string,
       any
     >
-    const quotaKeys = Object.entries(PLAN_ENTITLEMENTS.free)
-      .filter(([, value]) => typeof value === 'number')
-      .map(([key]) => key)
+    // The daily transactional abuse ceiling (AGL-4145) rides the same map
+    // without being a plan-table key, so it is cleared the same way.
+    const quotaKeys = [
+      ...Object.entries(PLAN_ENTITLEMENTS.free)
+        .filter(([, value]) => typeof value === 'number')
+        .map(([key]) => key),
+      ...TRANSACTIONAL_EMAIL_CEILING_OVERRIDE_KEYS,
+    ]
     expect(Object.keys(entitlements).sort()).toEqual(
       [...quotaKeys, 'features'].sort(),
     )

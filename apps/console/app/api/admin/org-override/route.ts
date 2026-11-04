@@ -172,6 +172,7 @@ import {
   RELEASE_FLAGS,
   type OrgPlan,
 } from '@aglyn/aglyn/server'
+import { TRANSACTIONAL_EMAIL_CEILING_OVERRIDE_KEYS } from '@aglyn/aglyn/app-utils/transactional-email-ceiling'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -184,12 +185,17 @@ import { setAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write
 
 export const dynamic = 'force-dynamic'
 
-/** Every numeric entitlement the resolver applies, by name. */
-const QUOTA_KEYS = new Set(
-  Object.entries(PLAN_ENTITLEMENTS.free)
+/**
+ * Every numeric entitlement the resolver applies, by name — and the daily
+ * transactional abuse ceiling (AGL-4145), which is read off the same
+ * `org.entitlements` map but is deliberately not a plan-table key.
+ */
+const QUOTA_KEYS = new Set([
+  ...Object.entries(PLAN_ENTITLEMENTS.free)
     .filter(([, value]) => typeof value === 'number')
     .map(([key]) => key),
-)
+  ...TRANSACTIONAL_EMAIL_CEILING_OVERRIDE_KEYS,
+])
 
 /** Every plan feature boolean, by name. */
 const FEATURE_KEYS = Object.keys(PLAN_ENTITLEMENTS.free.features)

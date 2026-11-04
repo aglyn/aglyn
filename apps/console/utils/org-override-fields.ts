@@ -23,7 +23,9 @@
  * Pure: no React, no fetch, no Firestore.
  */
 
+import type { OrgPlan } from '@aglyn/aglyn/foundation'
 import { PLAN_ENTITLEMENTS } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { TRANSACTIONAL_EMAIL_CEILING_OVERRIDE_FIELDS } from '@aglyn/aglyn/app-utils/transactional-email-ceiling'
 import { RELEASE_FLAGS } from '@aglyn/aglyn/app-utils/release-flags'
 import { pluginPlanQuotas } from '@aglyn/aglyn/plugin-manager/plugin-plan-entitlements'
 
@@ -101,13 +103,26 @@ const humanizeKey = (key: string): string => {
  * resolver applies any numeric key found on `org.entitlements`, so the set
  * it accepts and the set shown here are now the same set by construction.
  */
-export const QUOTA_FIELDS: Array<{ key: string; label: string }> =
-  Object.entries(PLAN_ENTITLEMENTS.free)
+export const QUOTA_FIELDS: Array<{
+  key: string
+  label: string
+  /**
+   * The inherited figure per plan, for a key the plan table does not carry
+   * (AGL-4145). Absent, the dialog reads `PLAN_ENTITLEMENTS`.
+   */
+  byPlan?: Readonly<Record<OrgPlan, number>>
+}> = [
+  ...Object.entries(PLAN_ENTITLEMENTS.free)
     .filter(([, value]) => typeof value === 'number')
     .map(([key]) => ({
       key,
       label: QUOTA_LABELS[key] ?? pluginQuotaLabel(key) ?? humanizeKey(key),
-    }))
+    })),
+  // The daily transactional abuse ceiling (AGL-4145): read off the same
+  // `org.entitlements` map, and deliberately not a plan-table key — see
+  // `transactional-email-ceiling.ts` for why it is not something a plan sells.
+  ...TRANSACTIONAL_EMAIL_CEILING_OVERRIDE_FIELDS.map((field) => ({ ...field })),
+]
 
 /** Every boolean feature flag, overridable as inherit / on / off. */
 // Every feature key, derived from the plan model so new flags (the
