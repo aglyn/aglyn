@@ -32,7 +32,9 @@ import {
   AI_SITE_IMPORT_FRAME_SLOT,
   AI_SITE_IMPORT_LEFT_OUT_COPY,
   AI_SITE_IMPORT_LEFT_OUT_REASONS,
+  AI_SITE_IMPORT_DEFAULT_CHOICE,
   AI_SITE_IMPORT_UNREAD_REASONS,
+  aiSiteImportChoiceOf,
   aiSiteImportNextWave,
   aiSiteImportPagesText,
   aiSiteImportQuoteText,
@@ -42,9 +44,15 @@ import {
   aiSiteImportRemainingCreditRange,
   aiSiteImportReviewWave,
   aiSiteImportRunningWave,
+  aiSiteImportWaveChoice,
   aiSiteImportWaveCreditRange,
   aiSiteImportWaveOwed,
+  aiSiteImportWordingCredits,
+  aiSiteImportWordingPages,
+  type AiSiteImportChoice,
+  type AiSiteImportFinish,
   type AiSiteImportLeftOutReason,
+  type AiSiteImportPage,
   type AiSiteImportState,
   type AiSiteImportWave,
 } from './ai-site-import'
@@ -177,7 +185,11 @@ export interface AiSiteImportRowView {
   oldPage: string
   /** "1,204 of 1,310 words", once the page is in and the step has counted them. */
   words: string | null
-  /** "Copied as it is" or "Arranged by Aglyn AI", once the step has chosen. */
+  /**
+   * "Copied as it is" or "Arranged by Aglyn AI", once the step has chosen;
+   * "Arranged and reworded by Aglyn AI" once its wave improved its words, and
+   * "Arranged by Aglyn AI · Words kept" for a policy page on such a wave (AGL-4152).
+   */
   build: string | null
 }
 
@@ -215,7 +227,25 @@ export function aiSiteImportPhotosText(
   return `${into} of ${tried} ${tried === 1 ? 'photo' : 'photos'}: ${parts.join(', ')}`
 }
 
-const BUILD_COPY = { copied: 'Copied as it is', arranged: `Arranged by ${PLATFORM_BRAND_NAME} AI` } as const
+const BUILD_COPY = {
+  copied: 'Copied as it is',
+  arranged: `Arranged by ${PLATFORM_BRAND_NAME} AI`,
+  /** A main page whose wording was improved (AGL-4152). */
+  reworded: `Arranged and reworded by ${PLATFORM_BRAND_NAME} AI`,
+  /** A policy page on a wave that improved the wording of the rest: it keeps every word. */
+  wordsKept: `Arranged by ${PLATFORM_BRAND_NAME} AI · Words kept`,
+} as const
+
+/** A page's build as its row says it, with whether its words were improved where its wave improved wording (AGL-4152). */
+function buildCopy(page: AiSiteImportPage, choice: AiSiteImportChoice): string | null {
+  if (!page.build) return null
+  if (page.build === 'arranged' && page.wording === 'improved') return BUILD_COPY.reworded
+  if (page.build === 'arranged' && page.wording === 'kept' && choice.wording) return BUILD_COPY.wordsKept
+  return BUILD_COPY[page.build]
+}
+
+/** What the row of a page whose words were improved says in place of its word count (AGL-4152). */
+export const AI_SITE_IMPORT_REWORDED_WORDS = 'Every fact kept'
 
 /** One wave's rows, the header and footer first where the wave builds them. */
 export function aiSiteImportWaveRows(
@@ -232,6 +262,7 @@ export function aiSiteImportWaveRows(
     return true
   }
   const rows: AiSiteImportRowView[] = []
+  const choice = aiSiteImportWaveChoice(state, wave)
   if (wave.frame && state.frame) {
     const row = items.get(AI_SITE_IMPORT_FRAME_SLOT)
     rows.push({
@@ -263,8 +294,13 @@ export function aiSiteImportWaveRows(
       outputId: row?.outputs[0] ?? null,
       oldPage: page.url,
       // Beside the old page's own words, its main region's as the wave read them: its menu and footer are the site's (AGL-4084).
-      words: page.brought ? `${page.brought.words.toLocaleString('en-US')} of ${(page.read?.words ?? page.words).toLocaleString('en-US')} words` : null,
-      build: page.build ? BUILD_COPY[page.build] : null,
+      // A page whose words were improved keeps its facts, not its count (AGL-4152).
+      words: page.brought
+        ? page.wording === 'improved'
+          ? AI_SITE_IMPORT_REWORDED_WORDS
+          : `${page.brought.words.toLocaleString('en-US')} of ${(page.read?.words ?? page.words).toLocaleString('en-US')} words`
+        : null,
+      build: buildCopy(page, choice),
     })
   }
   return rows
@@ -381,4 +417,95 @@ export function aiSiteImportStartAllAction(
     quote: aiCreditRangeText(aiSiteImportRemainingCreditRange(state, job.items ?? null)),
     waves,
   }
+}
+
+/*------------------------------------------
+ * Keep my site, or Improve it (AGL-4152)
+ *-----------------------------------------*/
+
+/** What Bring my site asks, and what each answer means, as the console draws it. */
+export const AI_SITE_IMPORT_FINISH_COPY = {
+  heading: 'How should your new site look?',
+  keep: {
+    label: 'Keep my site',
+    description: `Your pages stay laid out as they are, in your site’s colors, buttons and fonts. ${PLATFORM_BRAND_NAME} tidies spacing, type and color so every page reads well. Every word stays as you wrote it.`,
+  },
+  improve: {
+    label: 'Improve it',
+    description: `${PLATFORM_BRAND_NAME} AI redesigns each page with your pictures, menus and forms, in a theme built around your brand.`,
+  },
+  wording: {
+    label: 'Also improve my wording',
+    description: `${PLATFORM_BRAND_NAME} AI rewrites the headings, paragraphs and buttons of your main pages so they read better. Every name, price, number, date, address, phone number and email stays exactly as you wrote it. Quotes, policies, tables and forms keep every word.`,
+  },
+  helper: 'You can change this before each wave.',
+  /** The job page's line before it opens the choice: "How your new site looks: Keep my site". */
+  current: 'How your new site looks',
+  change: 'Change',
+} as const
+
+/** The choice in a few words: "Keep my site", "Improve it", or "Improve it, and my wording". */
+export function aiSiteImportChoiceText(choice: AiSiteImportChoice): string {
+  if (choice.finish === 'keep') return AI_SITE_IMPORT_FINISH_COPY.keep.label
+  return choice.wording ? `${AI_SITE_IMPORT_FINISH_COPY.improve.label}, and my wording` : AI_SITE_IMPORT_FINISH_COPY.improve.label
+}
+
+/** How a wave was built, as its heading says it: "Keep my site", "Improved", or "Improved, wording too". */
+export function aiSiteImportBuiltText(choice: AiSiteImportChoice): string {
+  if (choice.finish === 'keep') return AI_SITE_IMPORT_FINISH_COPY.keep.label
+  return choice.wording ? 'Improved, wording too' : 'Improved'
+}
+
+/**
+ * A wave's heading (AGL-4152): once it has started, its name and how it was
+ * built, "Main pages · Keep my site"; before, its name alone, since how it is
+ * built is still the owner's to change.
+ */
+export function aiSiteImportWaveHeading(state: Pick<AiSiteImportState, 'finish' | 'wording'> | null | undefined, wave: AiSiteImportWave): string {
+  if (!wave.startedAt) return wave.label
+  return `${wave.label} · ${aiSiteImportBuiltText(aiSiteImportWaveChoice(state, wave))}`
+}
+
+/** What a running wave's page says it does with each page, the way the wave is built (AGL-4152). */
+export function aiSiteImportRunningLede(choice: AiSiteImportChoice): string {
+  const review = 'You review the wave when it is in.'
+  if (choice.finish === 'keep') return `Each page keeps its layout and every word as you wrote it, in your site’s own look. ${review}`
+  return choice.wording
+    ? `${PLATFORM_BRAND_NAME} AI redesigns each page and improves its wording, keeping every name, price, number, date, address, phone number and email as you wrote it. ${review}`
+    : `${PLATFORM_BRAND_NAME} AI redesigns each page with its own words, pictures, menus and forms. ${review}`
+}
+
+/**
+ * What Also improve my wording adds (AGL-4152): for a wave, its pages'
+ * rewrites, "Adds about 162 AI credits to this wave."; before the site is
+ * read, a main page's.
+ */
+export function aiSiteImportWordingCreditsText(
+  scope: { job: Pick<AiJobSummary, 'items' | 'siteImport'>; wave: AiSiteImportWave } | null,
+): string {
+  if (!scope?.job.siteImport) return `About ${aiSiteImportWordingCredits(1).likely.toLocaleString('en-US')} more AI credits for each main page.`
+  const pages = aiSiteImportWordingPages(scope.job.siteImport, scope.wave, { finish: 'improve', wording: true }, scope.job.items ?? null)
+  if (!pages) return 'This wave’s pages keep every word, so it adds no AI credits.'
+  return `Adds about ${aiSiteImportWordingCredits(pages).likely.toLocaleString('en-US')} AI credits to this wave.`
+}
+
+/**
+ * The choice as Bring my site draws it (AGL-4152): the finish, and where the
+ * Also improve my wording switch sits, which counts only under Improve it, so
+ * a person who picks Keep my site and then Improve it finds it on.
+ */
+export interface AiSiteImportFinishField {
+  finish: AiSiteImportFinish
+  wording: boolean
+}
+
+/** The field an import's page opens with: the import's choice, the switch on where it was never turned off under Improve it. */
+export function aiSiteImportFinishFieldOf(state: Pick<AiSiteImportState, 'finish' | 'wording'> | null | undefined): AiSiteImportFinishField {
+  const choice = aiSiteImportChoiceOf(state)
+  return choice.finish === 'improve' ? choice : { finish: 'keep', wording: AI_SITE_IMPORT_DEFAULT_CHOICE.wording }
+}
+
+/** The choice a field asks for: its wording only under Improve it. */
+export function aiSiteImportFieldChoice(field: AiSiteImportFinishField): AiSiteImportChoice {
+  return { finish: field.finish, wording: field.finish === 'improve' && field.wording }
 }

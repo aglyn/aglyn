@@ -1001,6 +1001,8 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         ...spent,
         continue: true,
         ...(latePass ? { sitePhotos: { pages: [{ screen: draftId, slots: starters }], lists: [] } } : {}),
+        // How a page brought in under Also improve my wording came out, for its row (AGL-4152).
+        ...(result.value.words ? { wording: result.value.words } : {}),
       }
     }
     const maxTokens = aiJobPageSectionMaxTokens(model)

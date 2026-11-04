@@ -489,6 +489,9 @@ describe('registerConsoleDomain — the entitlement is checked server-side', () 
       domain: 'console.acme.com',
     })
     expect(result).toMatchObject({ status: 403, claim: null })
+    // White label is the Custom plan's since pricing v4 (AGL-4158): the body
+    // names a plan that exists, never a retired one.
+    expect(result.error).toBe('A custom console domain is part of the Custom plan')
     // A refused org must not learn whether the name was free, and must not
     // park a claim that blocks the org that IS entitled to it.
     expect(store.has('consoleDomains/console.acme.com')).toBe(false)

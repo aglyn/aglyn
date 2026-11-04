@@ -36,7 +36,7 @@ export interface PlanFeatureLock {
    * workspace would see its own feature refused while its doc loads.
    */
   locked: boolean
-  /** The cheapest plan carrying the feature ("Business"), if any plan does. */
+  /** The cheapest plan carrying the feature ("Pro"), if any plan does. */
   planLabel: string | undefined
   /**
    * The console's plan grid (`/{org}/billing#plans`), or its add-ons section

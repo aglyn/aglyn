@@ -596,7 +596,7 @@ public struct FieldSpec: Sendable, Identifiable {
   public var id: String { key }
   public let key: String
   public let label: String
-  /// `text`, `email`, `url`, `number`, `multiline`, `password`, `toggle`, `select`, `country`, `date`, `hours`.
+  /// `text`, `email`, `url`, `number`, `stepper`, `multiline`, `password`, `toggle`, `select`, `country`, `date`, `hours`.
   public let kind: String
   public let initial: String?
   public let placeholder: String?
@@ -673,7 +673,7 @@ public struct FieldSpec: Sendable, Identifiable {
       if choices(in: context).contains(where: { !chosen.contains($0.value) }) { return true }
     }
     // A number field is finished by any number, zero too.
-    let finished = ScreenValues.truthy(value) || (kind == "number" && ScreenValues.number(value) != nil)
+    let finished = ScreenValues.truthy(value) || (counts && ScreenValues.number(value) != nil)
     return required && kind != "toggle" && !finished
   }
 
@@ -753,10 +753,35 @@ public struct FieldSpec: Sendable, Identifiable {
     }
   }
 
+  /// Whether the field holds a number: a `number` typed, or a `stepper` stepped.
+  var counts: Bool { kind == "number" || kind == "stepper" }
+
+  /// A `stepper` field's count as the person reads it: `1 block`, `3 blocks` (its `unit`, `{ one, other }`), or the bare
+  /// number without one.
+  public func countLabel(_ count: Int) -> String {
+    let unit = config?["unit"]
+    guard let word = (count == 1 ? unit?["one"] : unit?["other"])?.stringValue else { return String(count) }
+    return "\(count) \(word)"
+  }
+
+  /// The line under a `stepper` for a count (the console's "With 3 blocks: 15,750 AI credits a month in all."): its `says`
+  /// parts whose `when` holds, joined, read with `form.<key>` the count shown. Nil without one.
+  public func says(_ count: Int, in context: JSONValue) -> String? {
+    let parts = config?["says"].array ?? []
+    guard !parts.isEmpty else { return nil }
+    var form: [String: JSONValue] = [:]
+    for (name, value) in context["form"].objectEntries { form[name] = value }
+    form[key] = .number(Double(count))
+    let scope = ScreenContext.with(context, "form", .object(form))
+    let text = parts.filter { ScreenValues.condition($0["when"]?.stringValue, in: scope) }
+      .map { ScreenValues.render($0["text"]?.stringValue ?? "", in: scope) }.joined()
+    return text.isEmpty ? nil : text
+  }
+
   /// Whether a number field holds something typed that is not a number, or a number outside its bounds.
   public func outOfBounds(_ value: JSONValue) -> Bool {
     let typed = ScreenValues.text(value).trimmingCharacters(in: .whitespaces)
-    guard kind == "number", !typed.isEmpty else { return false }
+    guard counts, !typed.isEmpty else { return false }
     guard let number = Double(typed) ?? ScreenValues.number(value) else { return true }
     if let min, number < min { return true }
     if let max, number > max { return true }

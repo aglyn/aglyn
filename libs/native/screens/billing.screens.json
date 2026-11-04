@@ -359,16 +359,28 @@
                   "text": " No tax applies to this charge in your location."
                 },
                 {
-                  "when": "data.org.seatAddons.aiAddon && !const.aiTiersSold[@item.id]",
-                  "text": " Your Aglyn AI tier is not sold on {item.label}, so it is removed with this change and its AI credits go with it."
+                  "when": "data.org.seatAddons.aiAddon == 1 && !const.aiCreditsSold[@item.id]",
+                  "text": " Your 1 block of Aglyn AI credits is not sold on {item.label}, so it is removed with this change and the credits go with it."
                 },
                 {
-                  "when": "data.org.seatAddons.aiAddon && const.aiTiersSold[@item.id] && preview.droppedAddons ~= aiAddon",
-                  "text": " Your Aglyn AI tier cannot move to {item.label} with this change, so it is removed and its AI credits go with it. You can choose a tier again under Plan add-ons afterwards."
+                  "when": "data.org.seatAddons.aiAddon > 1 && !const.aiCreditsSold[@item.id]",
+                  "text": " Your {min(const.aiCreditBlocksMax, data.org.seatAddons.aiAddon)} blocks of Aglyn AI credits are not sold on {item.label}, so they are removed with this change and the credits go with them."
                 },
                 {
-                  "when": "data.org.seatAddons.aiAddon && const.aiTiersSold[@item.id] && preview.droppedAddons !~= aiAddon",
-                  "text": " Your Aglyn AI tier carries over at the same price on {item.label}, billed with the plan."
+                  "when": "data.org.seatAddons.aiAddon == 1 && const.aiCreditsSold[@item.id] && preview.droppedAddons ~= aiAddon",
+                  "text": " Your 1 block of Aglyn AI credits cannot move to {item.label} with this change, so it is removed and the credits go with it. You can add blocks again under Plan add-ons afterwards."
+                },
+                {
+                  "when": "data.org.seatAddons.aiAddon > 1 && const.aiCreditsSold[@item.id] && preview.droppedAddons ~= aiAddon",
+                  "text": " Your {min(const.aiCreditBlocksMax, data.org.seatAddons.aiAddon)} blocks of Aglyn AI credits cannot move to {item.label} with this change, so they are removed and the credits go with them. You can add blocks again under Plan add-ons afterwards."
+                },
+                {
+                  "when": "data.org.seatAddons.aiAddon == 1 && const.aiCreditsSold[@item.id] && preview.droppedAddons !~= aiAddon",
+                  "text": " Your 1 block of Aglyn AI credits carries over at ${const.aiCreditBlockUsd}/mo on {item.label}, billed with the plan."
+                },
+                {
+                  "when": "data.org.seatAddons.aiAddon > 1 && const.aiCreditsSold[@item.id] && preview.droppedAddons !~= aiAddon",
+                  "text": " Your {min(const.aiCreditBlocksMax, data.org.seatAddons.aiAddon)} blocks of Aglyn AI credits carry over at ${min(const.aiCreditBlocksMax, data.org.seatAddons.aiAddon) * const.aiCreditBlockUsd}/mo on {item.label}, billed with the plan."
                 },
                 {
                   "when": "data.billing.subscription.cancelAtPeriodEnd",
@@ -539,10 +551,12 @@
             "datasetsPerOrg": 100
           }
         },
-        "aiTiersSold": {
+        "aiCreditsSold": {
           "starter": true,
           "pro": true
-        }
+        },
+        "aiCreditBlockUsd": 10,
+        "aiCreditBlocksMax": 30
       },
       "load": {
         "org": {
@@ -1662,12 +1676,12 @@
           "badges": [
             {
               "text": "{data.addons.catalog[@item.kind].unitUsd:dollars}/mo",
-              "when": "data.addons.catalog[@item.kind].unitUsd",
+              "when": "data.addons.catalog[@item.kind].unitUsd && item.kind != aiAddon",
               "tone": "neutral"
             },
             {
               "text": "{data.addons.quantities[@item.kind]|'0':number} in use",
-              "when": "!item.toggle && data.addons.quantities[@item.kind]",
+              "when": "!item.toggle && data.addons.quantities[@item.kind] && item.kind != aiAddon",
               "tone": "info"
             },
             {
@@ -1676,9 +1690,14 @@
               "tone": "success"
             },
             {
-              "text": "+{data.addons.catalog[@item.kind].credits:number} credits/mo",
-              "when": "item.kind == aiAddon && data.addons.catalog[@item.kind].credits",
-              "tone": "neutral"
+              "text": "1 block · {data.addons.catalog[@item.kind].credits:number} credits a month",
+              "when": "item.kind == aiAddon && data.addons.quantities[@item.kind] == 1 && data.addons.catalog[@item.kind].credits",
+              "tone": "info"
+            },
+            {
+              "text": "{data.addons.quantities[@item.kind]} blocks · {data.addons.quantities[@item.kind] * data.addons.catalog[@item.kind].credits:number} credits a month",
+              "when": "item.kind == aiAddon && data.addons.quantities[@item.kind] > 1 && data.addons.catalog[@item.kind].credits",
+              "tone": "info"
             },
             {
               "text": "Included in your plan",
@@ -1686,8 +1705,13 @@
               "tone": "success"
             },
             {
+              "text": "Upgrade your plan to add Aglyn AI",
+              "when": "item.kind == aiAddon && data.addons.catalog[@item.kind].upgradeRequired && data.addons.plan != enterprise",
+              "tone": "warning"
+            },
+            {
               "text": "Upgrade your plan to add these",
-              "when": "data.addons.catalog[@item.kind].upgradeRequired && data.addons.plan != enterprise",
+              "when": "data.addons.catalog[@item.kind].upgradeRequired && item.kind != aiAddon && data.addons.plan != enterprise",
               "tone": "warning"
             },
             {
@@ -1711,7 +1735,7 @@
               "id": "set",
               "label": "Change quantity",
               "icon": "slider.horizontal.3|tune",
-              "when": "!item.toggle && org.manager && data.addons.hasSubscription && data.addons.catalog[@item.kind].configured && !data.addons.catalog[@item.kind].upgradeRequired",
+              "when": "!item.toggle && org.manager && data.addons.hasSubscription && data.addons.catalog[@item.kind].configured && !data.addons.catalog[@item.kind].upgradeRequired && item.kind != aiAddon",
               "prompt": [
                 {
                   "key": "quantity",
@@ -1813,7 +1837,7 @@
               "id": "on",
               "label": "Turn on",
               "icon": "power|power_settings_new",
-              "when": "item.toggle && org.manager && data.addons.hasSubscription && data.addons.catalog[@item.kind].configured && !data.addons.catalog[@item.kind].upgradeRequired && !data.addons.quantities[@item.kind] && item.kind != aiAddon",
+              "when": "item.toggle && org.manager && data.addons.hasSubscription && data.addons.catalog[@item.kind].configured && !data.addons.catalog[@item.kind].upgradeRequired && !data.addons.quantities[@item.kind]",
               "check": {
                 "label": "Preview",
                 "url": "/api/billing/addons",
@@ -1900,7 +1924,7 @@
               "id": "off",
               "label": "Turn off",
               "icon": "poweroff|power_settings_new",
-              "when": "item.toggle && org.manager && data.addons.hasSubscription && data.addons.catalog[@item.kind].configured && !data.addons.catalog[@item.kind].upgradeRequired && data.addons.quantities[@item.kind] && item.kind != aiAddon",
+              "when": "item.toggle && org.manager && data.addons.hasSubscription && data.addons.catalog[@item.kind].configured && !data.addons.catalog[@item.kind].upgradeRequired && data.addons.quantities[@item.kind]",
               "check": {
                 "label": "Preview",
                 "url": "/api/billing/addons",
@@ -1977,42 +2001,38 @@
               "success": "{item.label} updated"
             },
             {
-              "id": "tier",
-              "label": "{item.label} tier",
+              "id": "blocks",
+              "label": "Change blocks",
               "icon": "sparkles|auto_awesome",
-              "when": "item.kind == aiAddon && org.manager && data.addons.hasSubscription && data.addons.aiTiers[?item.configured] && !data.addons.catalog[@item.kind].upgradeRequired",
+              "when": "item.kind == aiAddon && org.manager && data.addons.hasSubscription && data.addons.catalog[@item.kind].configured && !data.addons.catalog[@item.kind].upgradeRequired",
               "prompt": [
                 {
-                  "key": "tier",
-                  "label": "{item.label} tier",
-                  "kind": "choice",
-                  "initial": "{data.addons.aiTier|'none'}",
+                  "key": "blocks",
+                  "label": "Blocks of credits",
+                  "kind": "stepper",
+                  "integer": true,
+                  "min": 0,
+                  "max": 30,
                   "mustChange": true,
-                  "options": [
+                  "initial": "{data.addons.quantities[@item.kind]|'0'}",
+                  "unit": {
+                    "one": "block",
+                    "other": "blocks"
+                  },
+                  "says": [
                     {
-                      "value": "none",
-                      "label": "No tier",
-                      "detail": "Your plan's included credits only",
-                      "badge": {
-                        "text": "Current",
-                        "when": "!data.addons.aiTier",
-                        "tone": "neutral"
-                      }
+                      "when": "form.blocks == 0",
+                      "text": "With no blocks: {const.aiCreditsIncluded[@data.addons.plan]:number} AI credits a month, your plan's own."
+                    },
+                    {
+                      "when": "form.blocks == 1",
+                      "text": "With 1 block: {const.aiCreditsIncluded[@data.addons.plan] + data.addons.catalog[@item.kind].credits:number} AI credits a month in all."
+                    },
+                    {
+                      "when": "form.blocks > 1",
+                      "text": "With {form.blocks} blocks: {const.aiCreditsIncluded[@data.addons.plan] + form.blocks * data.addons.catalog[@item.kind].credits:number} AI credits a month in all."
                     }
-                  ],
-                  "optionsFrom": {
-                    "items": "data.addons.aiTiers",
-                    "value": "{item.id}",
-                    "label": "{item.label} — ${item.unitUsd}/mo",
-                    "detail": "+{item.credits:number} credits a month",
-                    "disabledDetail": "+{item.credits:number} credits a month (not configured yet)",
-                    "enabled": "item.configured",
-                    "badge": {
-                      "text": "Current",
-                      "when": "item.id == @data.addons.aiTier",
-                      "tone": "info"
-                    }
-                  }
+                  ]
                 }
               ],
               "check": {
@@ -2022,36 +2042,20 @@
                   "orgId": "{org.id}",
                   "action": "preview",
                   "kind": "{item.kind}",
-                  "quantity": {
-                    "$if": "form.tier != none",
-                    "then": 1,
-                    "else": 0
-                  },
-                  "tier": {
-                    "$if": "form.tier != none",
-                    "then": "{form.tier}"
-                  }
+                  "quantity": "{form.blocks}"
                 }
               },
               "confirm": [
                 {
-                  "when": "form.tier != none",
-                  "text": "{item.label} {data.addons.aiTiers[id=form.tier].label}? "
+                  "when": "form.blocks == 1",
+                  "text": "{item.label}: 1 block? "
                 },
                 {
-                  "when": "form.tier == none",
-                  "text": "{item.label}: 0? "
+                  "when": "form.blocks != 1",
+                  "text": "{item.label}: {form.blocks} blocks? "
                 },
                 {
-                  "when": "preview.defersToPeriodEnd && data.addons.aiTier && form.tier != none",
-                  "text": "Nothing is charged and nothing is refunded. You keep {data.addons.aiTiers[id=data.addons.aiTier].label} for the rest of the period you have paid for, and {data.addons.aiTiers[id=form.tier].label} starts on {preview.effectiveAt:date}. From then: "
-                },
-                {
-                  "when": "preview.defersToPeriodEnd && !data.addons.aiTier",
-                  "text": "Nothing is charged and nothing is refunded. You keep this capacity for the rest of the period you have paid for, and it ends on {preview.effectiveAt:date}. From then: "
-                },
-                {
-                  "when": "preview.defersToPeriodEnd && data.addons.aiTier && form.tier == none",
+                  "when": "preview.defersToPeriodEnd",
                   "text": "Nothing is charged and nothing is refunded. You keep this capacity for the rest of the period you have paid for, and it ends on {preview.effectiveAt:date}. From then: "
                 },
                 {
@@ -2071,20 +2075,20 @@
                   "text": ". Ongoing: "
                 },
                 {
-                  "when": "form.tier == none",
+                  "when": "form.blocks == 0",
                   "text": "nothing, this add-on is removed."
                 },
                 {
-                  "when": "form.tier != none",
-                  "text": "${data.addons.aiTiers[id=form.tier].unitUsd}/mo"
+                  "when": "form.blocks != 0",
+                  "text": "${form.blocks * data.addons.catalog[@item.kind].unitUsd}/mo"
                 },
                 {
-                  "when": "form.tier != none && data.addons.interval == year",
+                  "when": "form.blocks != 0 && data.addons.interval == year",
                   "text": " (billed yearly with your plan)"
                 },
                 {
-                  "when": "form.tier != none",
-                  "text": ", adding {data.addons.aiTiers[id=form.tier].credits:number} AI credits a month on top of your plan's."
+                  "when": "form.blocks != 0",
+                  "text": ", adding {form.blocks * data.addons.catalog[@item.kind].credits:number} AI credits a month on top of your plan's."
                 }
               ],
               "url": "/api/billing/addons",
@@ -2092,15 +2096,7 @@
                 "orgId": "{org.id}",
                 "action": "set",
                 "kind": "{item.kind}",
-                "quantity": {
-                  "$if": "form.tier != none",
-                  "then": 1,
-                  "else": 0
-                },
-                "tier": {
-                  "$if": "form.tier != none",
-                  "then": "{form.tier}"
-                }
+                "quantity": "{form.blocks}"
               },
               "instead": [
                 {
@@ -2132,12 +2128,12 @@
               ],
               "report": [
                 {
-                  "when": "response.pendingAddonChange.effectiveAt && form.tier != none",
-                  "text": "{item.label} moves to {data.addons.aiTiers[id=form.tier].label} on {response.pendingAddonChange.effectiveAt:date}."
+                  "when": "response.pendingAddonChange.effectiveAt && form.blocks == 0",
+                  "text": "{item.label} ends on {response.pendingAddonChange.effectiveAt:date}."
                 },
                 {
-                  "when": "response.pendingAddonChange.effectiveAt && form.tier == none",
-                  "text": "{item.label} ends on {response.pendingAddonChange.effectiveAt:date}."
+                  "when": "response.pendingAddonChange.effectiveAt && form.blocks != 0",
+                  "text": "{item.label} changes on {response.pendingAddonChange.effectiveAt:date}."
                 },
                 {
                   "when": "!response.pendingAddonChange.effectiveAt",
@@ -2195,9 +2191,9 @@
           },
           {
             "kind": "aiAddon",
-            "label": "Aglyn AI",
-            "description": "Questions, copy, generated pages, emails, campaigns and products all draw on one pool of AI credits. Your plan includes some; an Aglyn AI tier adds more on top.",
-            "toggle": true,
+            "label": "Aglyn AI credits",
+            "description": "Questions, copy, generated pages, emails, campaigns and products all draw on one pool of AI credits. Add blocks on top: 5,000 credits each, $10 a month per block, up to 30.",
+            "toggle": false,
             "icon": "sparkles|auto_awesome"
           },
           {
@@ -2207,7 +2203,11 @@
             "toggle": true,
             "icon": "hammer|construction"
           }
-        ]
+        ],
+        "aiCreditsIncluded": {
+          "starter": 750,
+          "pro": 2750
+        }
       }
     },
     {

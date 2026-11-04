@@ -38,8 +38,13 @@ import kotlin.test.assertTrue
 /** The navigation shell (AGL-3946): the rail, the scope's manifest lists, settings as a mode, the phone's tabs, pins and Add account. */
 @OptIn(ExperimentalTestApi::class)
 class NavShellUiTest {
+  /**
+   * What the shell wrote. The shell writes from its own coroutines while the test reads (`waitUntil { writes.all.any … }`),
+   * so a plain list threw ConcurrentModificationException under load (a flaky `native kotlin` run); a copy-on-write list
+   * gives every read a snapshot and every write its own copy.
+   */
   private class Writes : FirestoreWriter {
-    val all = mutableListOf<Pair<String, Map<String, Any?>>>()
+    val all: MutableList<Pair<String, Map<String, Any?>>> = java.util.concurrent.CopyOnWriteArrayList()
     override suspend fun merge(path: String, data: Map<String, Any?>) { all += path to data }
   }
 

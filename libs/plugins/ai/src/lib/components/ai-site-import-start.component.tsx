@@ -27,10 +27,23 @@ import { Alert, Box, Button, Stack, TextField, Typography } from '@mui/material'
 import { useRouter } from 'next/navigation'
 import { useCallback, useRef, useState } from 'react'
 import type { AiJobSummary } from '../model/ai-jobs.types'
-import { AI_SITE_IMPORT_DOMAIN_INPUT, AI_SITE_IMPORT_KIND, AI_SITE_IMPORT_WAVE_PAGES } from '../model/ai-site-import'
-import type { AiSiteImportClaim } from '../model/ai-site-import-view'
+import {
+  AI_SITE_IMPORT_DEFAULT_CHOICE,
+  AI_SITE_IMPORT_DOMAIN_INPUT,
+  AI_SITE_IMPORT_FINISH_INPUT,
+  AI_SITE_IMPORT_KIND,
+  AI_SITE_IMPORT_WAVE_PAGES,
+  AI_SITE_IMPORT_WORDING_INPUT,
+} from '../model/ai-site-import'
+import {
+  aiSiteImportFieldChoice,
+  aiSiteImportWordingCreditsText,
+  type AiSiteImportClaim,
+  type AiSiteImportFinishField,
+} from '../model/ai-site-import-view'
 import { aiSiteBuildHref } from './ai-job-links'
 import { publishAiJob } from './ai-jobs-store'
+import { AiSiteImportFinish } from './ai-site-import-finish.component'
 import { AiSiteOwnershipProof, postAiSiteOwnership } from './ai-site-ownership-proof.component'
 
 /** Each part of the flow links its own section of the Bring my site guide. */
@@ -42,6 +55,10 @@ export const AI_SITE_IMPORT_HELP = {
   prove: pluginDocsHelp('aiImport', {
     anchor: '#prove-it-is-yours',
     excerpt: 'Add a DNS record, add a tag to your home page, or get a code at an address at your domain. Any one is enough.',
+  }),
+  finish: pluginDocsHelp('aiImport', {
+    anchor: '#keep-or-improve',
+    excerpt: 'Keep my site keeps your pages laid out as they are, every word as you wrote it. Improve it redesigns each page around your brand, and can improve the wording of your main pages too. You can change it before each wave.',
   }),
   waves: pluginDocsHelp('aiImport', {
     anchor: '#waves',
@@ -71,8 +88,11 @@ export interface AiSiteImportStartProps {
 
 /**
  * "Bring my site" (AGL-3976): the address of the site the person has now,
- * the proof that it is theirs, and what happens next — then the site is read
- * and its waves planned, nothing built, on the import job's own page.
+ * the proof that it is theirs, what happens next, and how the new site should
+ * look: Keep my site or Improve it (AGL-4152), Improve it preselected with its
+ * wording switch on — then the site is read and its waves planned, nothing
+ * built, on the import job's own page, where the choice can change before
+ * each wave.
  *
  * Nothing is created until "Read my site": the site in Create site is made
  * then, empty, and the import job is started on it. The job reads the site
@@ -90,6 +110,8 @@ export function AiSiteImportStart({ orgId, orgSlug, hostId, host, user, pendingS
   const [busy, setBusy] = useState(false)
   // A site already verified skips the proof step, and Back skips it too.
   const [proved, setProved] = useState(false)
+  // Keep my site or Improve it (AGL-4152): Improve it, with its wording, unless the person picks otherwise.
+  const [finish, setFinish] = useState<AiSiteImportFinishField>(() => ({ ...AI_SITE_IMPORT_DEFAULT_CHOICE }))
 
   const claimIt = useCallback(async () => {
     setBusy(true)
@@ -110,6 +132,7 @@ export function AiSiteImportStart({ orgId, orgSlug, hostId, host, user, pendingS
     setBusy(true)
     setNotice(null)
     try {
+      const choice = aiSiteImportFieldChoice(finish)
       const requestJob = (siteId: string | null, check: boolean) =>
         authorizedFetch(userRef.current, '/api/ai/jobs', {
           method: 'POST',
@@ -119,7 +142,11 @@ export function AiSiteImportStart({ orgId, orgSlug, hostId, host, user, pendingS
             hostId: siteId,
             kind: AI_SITE_IMPORT_KIND,
             brief: `Bring in ${claim.domain}`,
-            inputs: { [AI_SITE_IMPORT_DOMAIN_INPUT]: claim.domain },
+            inputs: {
+              [AI_SITE_IMPORT_DOMAIN_INPUT]: claim.domain,
+              [AI_SITE_IMPORT_FINISH_INPUT]: choice.finish,
+              [AI_SITE_IMPORT_WORDING_INPUT]: choice.wording,
+            },
             ...(check ? { check: true } : {}),
           }),
         })
@@ -162,7 +189,7 @@ export function AiSiteImportStart({ orgId, orgSlug, hostId, host, user, pendingS
     } finally {
       setBusy(false)
     }
-  }, [claim, orgId, hostId, host, orgSlug, pendingSite, onBack, leave, router])
+  }, [claim, finish, orgId, hostId, host, orgSlug, pendingSite, onBack, leave, router])
 
   const back = () => {
     setNotice(null)
@@ -228,12 +255,20 @@ export function AiSiteImportStart({ orgId, orgSlug, hostId, host, user, pendingS
               {'If your home page cannot be read, nothing is planned and no AI credits are used. You are told why, and you check again once it can be.'}
             </Typography>
             <Typography component="li" variant="body2">
-              {'Each page keeps every word as you wrote it and is laid out as your page is: its sections, columns, cards, icons, pictures, tables and tabs, in your site’s own look. You review each wave and start the next yourself.'}
+              {'Every page comes across with its sections, columns, cards, icons, pictures, tables, tabs and forms, finished the way you choose below. You review each wave and start the next yourself.'}
             </Typography>
             <Typography component="li" variant="body2">
               {'Each wave lands in your new site’s preview, where only you and your team can see it, until you make the site public. A site not in preview keeps its pages as drafts. Your current site is not changed.'}
             </Typography>
           </Box>
+          {/* Keep my site or Improve it (AGL-4152), above the preview control. */}
+          <AiSiteImportFinish
+            value={finish}
+            onChange={setFinish}
+            wordingCredits={aiSiteImportWordingCreditsText(null)}
+            help={AI_SITE_IMPORT_HELP.finish}
+            disabled={busy}
+          />
           {/* Start in preview (AGL-4086), for a site this creates: on unless
               the person switches it off. */}
           {!hostId && pendingSite && !pendingSite.created

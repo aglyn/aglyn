@@ -29,17 +29,30 @@
 
 import { compress } from '@aglyn/aglyn/app-utils/compress'
 import { decodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
-import { SITE_IMPORT_REPLAY_HOME_ANSWER, siteImportReplayFrame, siteImportReplayPage, type SiteImportReplayPage } from '../site-import/fixtures/site-import-fidelity-replay'
+import {
+  SITE_IMPORT_REPLAY_HOME_ANSWER,
+  siteImportReplayDocument,
+  siteImportReplayFrame,
+  siteImportReplayPage,
+  siteImportReplayTheme,
+  type SiteImportReplayPage,
+} from '../site-import/fixtures/site-import-fidelity-replay'
 import { SITE_LAYOUT_PAGES, type SiteLayoutPageName } from '../site-import/fixtures/site-layout-recordings'
 import { AI_LAYOUT_ALIGNS, AI_LAYOUT_DESIGN_BANDS, AI_LAYOUT_DESIGN_GROUP_KINDS, AI_LAYOUT_DESIGN_SOURCE, AI_LAYOUT_GROUP_STYLES, AI_LAYOUT_IMPORT_HEROES } from '../layout-language/ai-layout-language'
 import type { SiteImportGroupKind, SiteImportLayoutNode } from './ai-site-import'
 import {
   SITE_IMPORT_FIDELITY_THRESHOLD,
+  SITE_IMPORT_IMPROVE_FREE,
   siteImportFidelity,
   siteImportFidelityBandOf,
+  siteImportFidelityHolds,
+  siteImportFidelityThemeOf,
   siteImportFidelityTreeOf,
   siteImportFrameFidelity,
+  siteImportOklabDelta,
   type SiteImportFidelityNode,
+  type SiteImportFidelitySource,
+  type SiteImportFidelityTheme,
   type SiteImportFidelityTree,
 } from './ai-site-import-fidelity'
 
@@ -48,7 +61,7 @@ const FORM = [{ id: 'form-contact', name: 'Contact' }]
 const pages = new Map<string, SiteImportReplayPage>()
 
 /** A recorded page built as the page step stores it; a page that holds a form has the site's. */
-function page(name: SiteLayoutPageName, options: { answer?: Record<string, unknown>; layout?: boolean } = {}): SiteImportReplayPage {
+function page(name: SiteLayoutPageName, options: { answer?: Record<string, unknown>; layout?: boolean; finish?: 'keep' | 'improve' } = {}): SiteImportReplayPage {
   const key = `${name}:${JSON.stringify(options)}`
   const held = pages.get(key)
   if (held) return held
@@ -725,5 +738,423 @@ describe('a stored page’s tree and bands', () => {
     expect(siteImportFidelityBandOf({ sx: { bgcolor: 'primary.main' } })).toBe('brand')
     expect(siteImportFidelityBandOf({})).toBe('plain')
     expect(siteImportFidelityBandOf(undefined)).toBe('plain')
+  })
+})
+
+/*------------------------------------------
+ * Keep my site or Improve it (AGL-4152)
+ *-----------------------------------------*/
+
+const FINISHES = ['keep', 'improve'] as const
+
+describe.each(Object.keys(SITE_LAYOUT_PAGES) as SiteLayoutPageName[])('%s: scored as each finish (AGL-4152)', (name) => {
+  it('scores as it did before the choice with no finish, and carries none of a finish’s measures', () => {
+    const report = scored(name)
+    for (const key of ['scoredAs', 'free', 'align', 'boxed', 'ground', 'measure', 'readable', 'design', 'facts', 'lines', 'meaning']) expect(report).not.toHaveProperty(key)
+    expect(report.buttons).not.toHaveProperty('case')
+    expect(siteImportFidelity(page(name).source, page(name).tree, {})).toEqual(report)
+  })
+
+  it('holds the bar as Keep my site, its sections aligned and its groups boxed as the source sets them', () => {
+    const report = siteImportFidelity(page(name).source, page(name).tree, { finish: 'keep' })
+    expect(report.scoredAs).toEqual({ finish: 'keep', words: 'kept' })
+    expect(report.free).toEqual([])
+    expect(report.score).toBeGreaterThanOrEqual(SITE_IMPORT_FIDELITY_THRESHOLD)
+    expect(report.align?.source).toBeGreaterThan(0)
+    expect(report.align?.ratio).toBe(1)
+    expect(report.boxed?.ratio).toBe(1)
+    // No theme given: no ground or button color is measured, and none is said to be kept.
+    expect(report.ground).toMatchObject({ source: 0, theme: null })
+    expect(siteImportFidelityHolds(report)).toBe(true)
+  })
+
+  it('scores Improve it on its content alone, at 1, with its design computed', () => {
+    const report = siteImportFidelity(page(name).source, page(name).tree, { finish: 'improve' })
+    expect(report.score).toBe(1)
+    expect(report.lowest).toBeNull()
+    expect(report.free).toEqual([...SITE_IMPORT_IMPROVE_FREE])
+    const lines = Object.entries(report.design ?? {}).filter(([key, line]) => key !== 'better' && line !== null)
+    expect(lines.length).toBeGreaterThan(0)
+    for (const [, line] of lines) expect(line).toEqual({ source: expect.any(Number), built: expect.any(Number) })
+    expect(siteImportFidelityHolds(report)).toBe(true)
+  })
+
+  it('still scores the 10/29 control below the bar, kept or improved', () => {
+    const lines = page(name, { layout: false })
+    for (const finish of FINISHES) {
+      const report = siteImportFidelity(lines.source, lines.tree, { finish })
+      expect(report.score).toBeLessThan(SITE_IMPORT_FIDELITY_THRESHOLD)
+      expect(siteImportFidelityHolds(report)).toBe(false)
+    }
+  })
+
+  it('places every line once and keeps every fact under improved words, on a page whose words are as written', () => {
+    const report = siteImportFidelity(page(name).source, page(name).tree, { finish: 'improve', words: 'improved' })
+    expect(report.scoredAs).toEqual({ finish: 'improve', words: 'improved' })
+    expect(report.free).toContain('words')
+    expect(report.facts).toMatchObject({ ratio: 1, missing: 0, extra: 0 })
+    expect(report.lines).toMatchObject({ ratio: 1, extra: 0 })
+    expect(report.meaning).toMatchObject({ lines: 0, below: 0, ratio: 1 })
+    expect(report.score).toBe(1)
+    expect(siteImportFidelityHolds(report)).toBe(true)
+  })
+})
+
+describe('the replay builds a page as its finish stamps it (AGL-4152)', () => {
+  it('carries the finish and the words on the page’s document, and builds the same page while the compile reads neither', () => {
+    const kept = siteImportReplayPage('home', { finish: 'keep', words: 'kept' })
+    expect(kept.doc).toMatchObject({ finish: 'keep', wording: 'kept' })
+    expect(kept.violations).toEqual([])
+    expect(siteImportFidelity(kept.source, kept.tree, { finish: 'keep' }).score).toBe(1)
+    expect(siteImportReplayPage('home').doc).not.toHaveProperty('finish')
+  })
+
+  it('draws a recorded page’s theme from the site style its look facts draw, and says so', () => {
+    const theme = siteImportReplayTheme('home')
+    expect(theme?.from).toBe('style')
+    expect(theme?.light.ground).toMatch(/^#[0-9a-f]{6}$/)
+    expect(theme?.dark?.ground).toMatch(/^#[0-9a-f]{6}$/)
+  })
+})
+
+/** The nodes holding one, nearest first. */
+function holders(tree: SiteImportFidelityTree, id: string): string[] {
+  const parent = new Map<string, string>()
+  for (const [at, node] of Object.entries(tree.nodes)) for (const child of node.nodes ?? []) parent.set(child, at)
+  const out: string[] = []
+  for (let at = parent.get(id); at; at = parent.get(at)) out.push(at)
+  return out
+}
+
+describe('Keep my site sees each of the 11/4 Home gaps (AGL-4152)', () => {
+  /**
+   * aglyn.com's Home as the 11/4 live read saw it: a dark slate closer, cyan
+   * capital buttons with a dark label, and a hero heading held to half its
+   * section.
+   */
+  const source = (): SiteImportFidelitySource => {
+    const { source: read } = page('home')
+    const sections = read.layout.sections.map((section, index) => ({
+      ...section,
+      ...(section.band === 'dark' ? { background: '#2b2f36' } : {}),
+      ...(index === 0 && section.hero ? { hero: { ...section.hero, measure: 640 } } : {}),
+    }))
+    return { ...read, layout: { ...read.layout, sections, look: { ...read.layout.look, darkBackground: '#2b2f36', buttonCase: 'upper', buttonFill: '#00b0ff', buttonText: '#0b1f2a' } } }
+  }
+  /** A theme that keeps all of it, as lane D's Keep my site draws one. */
+  const KEPT: SiteImportFidelityTheme = {
+    from: 'theme',
+    light: { ground: '#ffffff', paper: '#f5f5f5', brand: '#00b0ff', onBrand: '#0b1f2a', ink: '#000000' },
+    dark: { ground: '#2b2f36', paper: '#353a42', brand: '#00b0ff', onBrand: '#0b1f2a', ink: '#ffffff' },
+    button: { fill: '#00b0ff', label: '#0b1f2a', case: 'upper' },
+  }
+  /** The built Home with its hero words held to a share of their section, as the compile sets them. */
+  const heldTo = (share: string) =>
+    changed(page('home').tree, (nodes) => {
+      const title = idsOf(nodes, (node) => node.props?.['component'] === 'h1')[0] as string
+      const box = holders({ rootId: '_@_', nodes }, title).find((id) => (nodes[id] as Nodes[string]).sx?.['maxWidth'] !== undefined) as string
+      ;(nodes[box] as Nodes[string]).sx = { ...(nodes[box] as Nodes[string]).sx, maxWidth: { xs: '100%', md: share } }
+    })
+  const keep = (tree: SiteImportFidelityTree, theme: SiteImportFidelityTheme) => siteImportFidelity(source(), tree, { finish: 'keep', theme })
+
+  it('keeps the page whole where the theme and the build keep the source’s look', () => {
+    const report = keep(heldTo('50%'), KEPT)
+    expect(report.ground).toMatchObject({ source: 11, built: 11, ratio: 1, theme: 'theme' })
+    expect(report.measure).toEqual({ source: 1, built: 1, ratio: 1, shares: { source: 0.5, built: 0.5 } })
+    expect(report.buttons).toMatchObject({ source: 3, built: 3, ratio: 1, case: { source: 3, built: 3, ratio: 1 }, fill: { ratio: 1 } })
+    expect(report.readable?.ratio).toBe(1)
+    expect(report.score).toBe(1)
+    expect(siteImportFidelityHolds(report)).toBe(true)
+  })
+
+  it('a near-black dark ground: the closer’s slate drawn on #0d1117', () => {
+    const report = keep(heldTo('50%'), { ...KEPT, dark: { ...(KEPT.dark as NonNullable<SiteImportFidelityTheme['dark']>), ground: '#0d1117' } })
+    expect(siteImportOklabDelta('#2b2f36', '#0d1117')).toBeGreaterThan(0.05)
+    expect(report.ground).toMatchObject({ source: 11, built: 10 })
+    expect(report.ground?.worst).toBeGreaterThan(0.05)
+    expect(report.lowest).toBe('ground')
+    expect(siteImportFidelityHolds(report)).toBe(false)
+  })
+
+  it('sentence-case buttons where the source sets them in capitals', () => {
+    const report = keep(heldTo('50%'), { ...KEPT, button: { ...KEPT.button, case: 'none' } })
+    expect(report.buttons.case).toEqual({ source: 3, built: 0, ratio: 0 })
+    expect(report.buttons.built).toBe(0)
+    expect(report.lowest).toBe('buttons')
+    expect(siteImportFidelityHolds(report)).toBe(false)
+    // A button that sets its own case is read by its own.
+    const own = siteImportFidelity(
+      source(),
+      changed(heldTo('50%'), (nodes) => {
+        for (const id of idsOf(nodes, (node) => node.componentId === 'muiButton')) (nodes[id] as Nodes[string]).sx = { ...(nodes[id] as Nodes[string]).sx, textTransform: 'uppercase' }
+      }),
+      { finish: 'keep', theme: { ...KEPT, button: { ...KEPT.button, case: 'none' } } },
+    )
+    expect(own.buttons.case?.ratio).toBe(1)
+  })
+
+  it('a deepened button fill: the cyan drawn as #0970a4', () => {
+    const report = keep(heldTo('50%'), { ...KEPT, light: { ...KEPT.light, brand: '#0970a4', onBrand: '#ffffff' }, button: { fill: null, label: null, case: 'upper' } })
+    expect(report.buttons.fill?.built).toBeLessThan(report.buttons.fill?.source as number)
+    expect(report.buttons.ratio).toBeLessThan(1)
+    expect(report.lowest).toBe('buttons')
+    expect(siteImportFidelityHolds(report)).toBe(false)
+  })
+
+  it('a wider heading measure: the hero heading at 72% of its section where the source holds it to half', () => {
+    const report = keep(heldTo('72%'), KEPT)
+    expect(report.measure).toEqual({ source: 1, built: 0, ratio: 0, shares: { source: 0.5, built: 0.72 } })
+    expect(report.lowest).toBe('measure')
+    expect(siteImportFidelityHolds(report)).toBe(false)
+    // The compile now holds Home's words to the width step its 920 px measure maps to (md).
+    expect(siteImportFidelity(page('home').source, page('home').tree, { finish: 'keep', theme: KEPT }).measure?.ratio).toBe(1)
+  })
+
+  it('holds the recorded page’s own ground and fill on the theme the look pass now draws', () => {
+    // Keep's look keeps its dark band's own ground. Its 10/29 white label cannot be read on its cyan, so the
+    // reading rule deepens that fill, and a fill the source's own label cannot be read on is not a loss.
+    const theme = siteImportReplayTheme('home')
+    const report = siteImportFidelity(page('home').source, page('home').tree, { finish: 'keep', theme })
+    expect(report.ground?.ratio).toBe(1)
+    expect(report.buttons.fill?.ratio).toBe(1)
+  })
+
+  it('leaves all four free under Improve it', () => {
+    const report = siteImportFidelity(source(), heldTo('72%'), { finish: 'improve', theme: { ...KEPT, dark: { ...(KEPT.dark as NonNullable<SiteImportFidelityTheme['dark']>), ground: '#0d1117' }, button: { fill: '#0970a4', label: '#ffffff', case: 'none' } } })
+    expect(report.score).toBe(1)
+    expect(report.buttons).not.toHaveProperty('case')
+    expect(report.ground?.ratio).toBeLessThan(1)
+    expect(report.measure?.ratio).toBe(0)
+    expect(siteImportFidelityHolds(report)).toBe(true)
+  })
+})
+
+describe('Keep my site sees an alignment and a box the source did not draw (AGL-4152)', () => {
+  it('align: a section the source sets at the start, centered', () => {
+    const { source, tree } = page('home')
+    const at = source.layout.sections.findIndex((section, index) => index > 0 && section.align === 'start')
+    const report = siteImportFidelity(
+      source,
+      changed(tree, (nodes) => {
+        const root = (nodes[tree.rootId] as Nodes[string]).nodes?.[at] as string
+        for (const id of idsOf(nodes, (node) => node.componentId === 'muiTypography')) {
+          if (holders({ rootId: tree.rootId, nodes }, id).includes(root)) ((nodes[id] as Nodes[string]).props as Record<string, unknown>)['align'] = 'center'
+        }
+      }),
+      { finish: 'keep' },
+    )
+    expect(report.align?.built).toBe((report.align?.source as number) - 1)
+    expect(report.lowest).toBe('align')
+    expect(siteImportFidelityHolds(report)).toBe(false)
+  })
+
+  it('boxed: a boxed group drawn open, as the recorded answer’s ruled style draws it on an improved page', () => {
+    // Kept, the compile holds the source's boxes whatever the answer says.
+    const kept = page('home', { answer: SITE_IMPORT_REPLAY_HOME_ANSWER as Record<string, unknown> })
+    expect(siteImportFidelity(kept.source, kept.tree, { finish: 'keep' }).boxed?.ratio).toBe(1)
+    // Improved, the answer's ruled style draws a boxed group open: Keep's measure sees it.
+    const arranged = page('home', { answer: SITE_IMPORT_REPLAY_HOME_ANSWER as Record<string, unknown>, finish: 'improve' })
+    const report = siteImportFidelity(arranged.source, arranged.tree, { finish: 'keep' })
+    expect(report.boxed?.built).toBeLessThan(report.boxed?.source as number)
+    expect(siteImportFidelityHolds(report)).toBe(false)
+    // Under Improve it the style is the answer's to choose.
+    expect(siteImportFidelityHolds(siteImportFidelity(arranged.source, arranged.tree, { finish: 'improve' }))).toBe(true)
+  })
+
+  it('boxed: cards drawn open, the open groups still open', () => {
+    const { source, tree } = page('home')
+    const groupsOf = (nodes: readonly SiteImportLayoutNode[]): Array<Extract<SiteImportLayoutNode, { kind: 'group' }>> =>
+      nodes.flatMap((node) => (node.kind === 'group' ? [node] : node.kind === 'row' ? node.cells.flatMap((cell) => groupsOf(cell.nodes)) : []))
+    const scored = source.layout.sections.flatMap((section) => groupsOf(section.nodes)).filter((group) => !group.inline && group.group !== 'faq' && group.group !== 'text')
+    expect(scored.filter((group) => group.boxed).length).toBe(4)
+    const report = siteImportFidelity(
+      source,
+      changed(tree, (nodes) => {
+        for (const id of idsOf(nodes, (node) => node.componentId === 'muiCard')) (nodes[id] as Nodes[string]).componentId = 'muiStack'
+      }),
+      { finish: 'keep' },
+    )
+    expect(report.boxed).toEqual({ source: scored.length, built: scored.length - 4, ratio: (scored.length - 4) / scored.length })
+    expect(report.lowest).toBe('boxed')
+  })
+})
+
+describe('Improve it: what it may change is free, and better is better on every line (AGL-4152)', () => {
+  it('bands and widths changed: below the bar kept, whole improved', () => {
+    const { source, tree } = page('home')
+    const redrawn = changed(tree, (nodes) => {
+      for (const id of (nodes[tree.rootId] as Nodes[string]).nodes ?? []) {
+        const node = nodes[id] as Nodes[string]
+        delete (node.props as Record<string, unknown>)['colorScheme']
+        node.sx = { ...node.sx, bgcolor: 'background.paper' }
+      }
+      for (const id of idsOf(nodes, (node) => node.componentId === 'muiContainer')) ((nodes[id] as Nodes[string]).props as Record<string, unknown>)['maxWidth'] = 'lg'
+    })
+    expect(siteImportFidelity(source, redrawn, { finish: 'keep' }).score).toBeLessThan(SITE_IMPORT_FIDELITY_THRESHOLD)
+    const improved = siteImportFidelity(source, redrawn, { finish: 'improve' })
+    expect(improved.score).toBe(1)
+    expect(improved.bands?.ratio).toBeLessThan(1)
+    expect(improved.widths?.ratio).toBeLessThan(1)
+    expect(siteImportFidelityHolds(improved)).toBe(true)
+  })
+
+  /** /pricing with its sections' bands redrawn, one by one. */
+  const pricingIn = (bands: ReadonlyArray<'plain' | 'soft'>) => {
+    const { source, tree } = page('livePricing')
+    return siteImportFidelity(
+      source,
+      changed(tree, (nodes) => {
+        ;((nodes[tree.rootId] as Nodes[string]).nodes ?? []).forEach((id, index) => {
+          const node = nodes[id] as Nodes[string]
+          node.sx = bands[index] === 'soft' ? { ...node.sx, bgcolor: 'background.paper' } : Object.fromEntries(Object.entries(node.sx ?? {}).filter(([key]) => key !== 'bgcolor'))
+        })
+      }),
+      { finish: 'improve' },
+    )
+  }
+
+  it('better: the same page with its sections set apart, band after band', () => {
+    const report = pricingIn(['plain', 'soft', 'plain', 'soft', 'plain', 'soft', 'plain'])
+    expect(report.design?.rhythm).toEqual({ source: 0.333, built: 1 })
+    expect(report.design?.better).toBe(true)
+  })
+
+  it('different alone is not better: the bands moved, set apart no more often', () => {
+    // The source is plain, plain, plain, plain, soft, plain, plain: two neighbors set apart of six.
+    const report = pricingIn(['soft', 'plain', 'plain', 'plain', 'plain', 'plain', 'plain'])
+    expect(report.design?.rhythm).toEqual({ source: 0.333, built: 0.167 })
+    expect(report.design?.better).toBe(false)
+    const same = pricingIn(['plain', 'plain', 'soft', 'plain', 'plain', 'plain', 'plain'])
+    expect(same.design?.rhythm?.built).toBe(same.design?.rhythm?.source)
+    expect(same.design?.better).toBe(false)
+  })
+
+  it('measure: words run no wider than lg, and a long read no wider than md', () => {
+    const { source, tree } = page('home')
+    const narrowed = siteImportFidelity(
+      source,
+      changed(tree, (nodes) => {
+        for (const id of idsOf(nodes, (node) => node.componentId === 'muiContainer' && node.props?.['maxWidth'] === 'xl')) ((nodes[id] as Nodes[string]).props as Record<string, unknown>)['maxWidth'] = 'lg'
+      }),
+      { finish: 'improve' },
+    )
+    expect(narrowed.design?.measure).toEqual({ source: 0, built: 1 })
+    expect(narrowed.design?.better).toBe(true)
+  })
+})
+
+describe('improved words: facts, lines and meaning (G4)', () => {
+  /** A line of a recorded page that is its own paragraph, the first one `test` takes. */
+  const lineOf = (name: SiteLayoutPageName, test: (text: string) => boolean): number => {
+    const doc = siteImportReplayDocument(name)
+    const buttons = new Set<number>()
+    const walk = (nodes: readonly SiteImportLayoutNode[]): void => {
+      for (const node of nodes) {
+        if (node.kind === 'line' && node.button) buttons.add(node.line)
+        if (node.kind === 'row') for (const cell of node.cells) walk(cell.nodes)
+        if (node.kind === 'group') for (const item of node.items) for (const cta of item.ctas ?? []) buttons.add(cta.line)
+      }
+    }
+    for (const section of doc.layout?.sections ?? []) walk(section.nodes)
+    const at = doc.blocks.findIndex((block, index) => block.kind === 'paragraph' && !buttons.has(index) && test(block.text))
+    expect(at).toBeGreaterThanOrEqual(0)
+    return at
+  }
+  const improved = (name: SiteLayoutPageName, wording: Array<{ line: number; text: string }>) => {
+    const built = siteImportReplayPage(name, { finish: 'improve', words: 'improved', wording, ...(name === 'contact' ? { forms: FORM } : {}) })
+    expect(built.violations).toEqual([])
+    return siteImportFidelity(built.source, built.tree, { finish: 'improve', words: 'improved' })
+  }
+  const textOf = (name: SiteLayoutPageName, line: number) => String((siteImportReplayDocument(name).blocks[line] as { text?: string }).text)
+
+  it('a clean rewrite: every line placed once, every fact kept, its meaning kept, the structure whole', () => {
+    const line = lineOf('home', (text) => text.split(' ').length > 12 && !/\d/.test(text))
+    const words = textOf('home', line).split(' ')
+    const report = improved('home', [{ line, text: [...words.slice(words.length / 2), ...words.slice(0, words.length / 2)].join(' ') }])
+    expect(report.lines).toMatchObject({ ratio: 1, extra: 0 })
+    expect(report.facts?.ratio).toBe(1)
+    expect(report.meaning).toMatchObject({ lines: 1, below: 0 })
+    expect(report.words.ratio).toBe(1)
+    expect(report.score).toBe(1)
+    expect(siteImportFidelityHolds(report)).toBe(true)
+    // Scored as written, the same page loses the line and its structure with it.
+    expect(siteImportFidelity(page('home').source, siteImportReplayPage('home', { wording: [{ line, text: 'Something else entirely' }] }).tree).words.ratio).toBeLessThan(1)
+  })
+
+  it('facts: a price the rewrite dropped', () => {
+    const line = lineOf('livePricing', (text) => /\$\d/.test(text) && text.split(' ').length > 4)
+    const price = /\$\d+(?:[.,]\d+)*/.exec(textOf('livePricing', line))?.[0] as string
+    const report = improved('livePricing', [{ line, text: textOf('livePricing', line).replace(price, 'a fair price') }])
+    expect(report.facts?.ratio).toBeLessThan(1)
+    expect(report.facts?.examples.missing).toContain(`number:${price}`)
+    expect(report.lines?.ratio).toBe(1)
+    expect(siteImportFidelityHolds(report)).toBe(false)
+  })
+
+  it('facts: a name or a number the rewrite made up', () => {
+    const line = lineOf('home', (text) => text.split(' ').length > 12 && !/\d/.test(text))
+    const report = improved('home', [{ line, text: `${textOf('home', line)} Trusted by Zorblatt in 4,000 towns.` }])
+    expect(report.facts?.examples.extra).toEqual(expect.arrayContaining(['number:4,000', 'name:Zorblatt']))
+    expect(report.facts?.ratio).toBeLessThan(1)
+  })
+
+  it('meaning: a line rewritten into words of its own is flagged under 0.4', () => {
+    const line = lineOf('home', (text) => text.split(' ').length > 12 && !/\d/.test(text))
+    const report = improved('home', [{ line, text: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed tempor incididunt.' }])
+    expect(report.lines?.ratio).toBe(1)
+    expect(report.meaning).toMatchObject({ lines: 1, below: 1, ratio: 0 })
+    expect(report.meaning?.examples[0]?.line).toBe(line)
+    expect(report.meaning?.examples[0]?.kept).toBeLessThan(0.4)
+    expect(siteImportFidelityHolds(report)).toBe(false)
+  })
+
+  it('lines: a line the rewrite dropped, and one it added', () => {
+    const { source, tree } = siteImportReplayPage('home', { finish: 'improve', words: 'improved' })
+    const line = idsOf(tree.nodes as Nodes, (node) => node.componentId === 'muiTypography' && node.props?.['variant'] === 'body1')[0] as string
+    const dropped = siteImportFidelity(source, changed(tree, (nodes) => drop(nodes, line)), { finish: 'improve', words: 'improved' })
+    expect(dropped.lines?.built).toBe((dropped.lines?.source as number) - 1)
+    const added = siteImportFidelity(
+      source,
+      changed(tree, (nodes) => {
+        nodes['added'] = { componentId: 'muiTypography', props: { children: 'A line no source ever said.', variant: 'body1' } }
+        ;(nodes[(nodes[tree.rootId] as Nodes[string]).nodes?.[1] as string] as Nodes[string]).nodes?.push('added')
+      }),
+      { finish: 'improve', words: 'improved' },
+    )
+    expect(added.lines).toMatchObject({ extra: 1 })
+    expect(added.lines?.ratio).toBeLessThan(1)
+  })
+})
+
+describe('the theme a page is drawn in (AGL-4152)', () => {
+  const theme = {
+    colorSchemes: {
+      light: { background: { default: '#FFF', paper: '#f5f5f5' }, primary: { main: '#0970a4', contrastText: '#ffffff' }, text: { primary: '#111111' } },
+      dark: { background: { default: '#2b2f36', paper: '#353a42' }, primary: { main: '#7fd3ff', contrastText: '#0b1f2a' }, text: { primary: '#f5f5f5' } },
+    },
+    typography: { variants: { button: { textTransform: 'none' } } },
+    components: { MuiButton: { variants: [{ props: { variant: 'contained' }, style: { backgroundColor: '#00b0ff', color: 'primary.contrastText' } }], styleOverrides: { root: { textTransform: 'uppercase' } } } },
+  }
+
+  it('reads each scheme’s grounds, brand and ink, and a filled button’s own fill, label and case', () => {
+    expect(siteImportFidelityThemeOf(theme)).toEqual({
+      from: 'theme',
+      light: { ground: '#ffffff', paper: '#f5f5f5', brand: '#0970a4', onBrand: '#ffffff', ink: '#111111' },
+      dark: { ground: '#2b2f36', paper: '#353a42', brand: '#7fd3ff', onBrand: '#0b1f2a', ink: '#f5f5f5' },
+      // The component's case over the Text Style's.
+      button: { fill: '#00b0ff', label: '#ffffff', case: 'upper' },
+    })
+  })
+
+  it('falls back to the Text Style’s case, and to no fill of its own, and says where it came from', () => {
+    const plain = siteImportFidelityThemeOf({ ...theme, components: {} }, 'style')
+    expect(plain).toMatchObject({ from: 'style', button: { fill: null, label: null, case: 'none' } })
+    expect(siteImportFidelityThemeOf({})).toBeNull()
+  })
+
+  it('measures colors apart in OKLab', () => {
+    expect(siteImportOklabDelta('#ffffff', '#ffffff')).toBe(0)
+    expect(siteImportOklabDelta('#ffffff', '#f5f5f5')).toBeLessThan(0.05)
+    expect(siteImportOklabDelta('#00b0ff', '#0970a4')).toBeGreaterThan(0.05)
   })
 })

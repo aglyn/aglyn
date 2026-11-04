@@ -43,26 +43,41 @@ import {
   Stack,
   Typography,
 } from '@mui/material'
-import { useCallback, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import type { AiJobSummary } from '../model/ai-jobs.types'
-import { aiSiteImportReviewWave, aiSiteImportRunningWave, type AiSiteImportWave } from '../model/ai-site-import'
 import {
+  aiSiteImportReviewWave,
+  aiSiteImportRunningWave,
+  aiSiteImportWaveChoice,
+  type AiSiteImportChoice,
+  type AiSiteImportWave,
+} from '../model/ai-site-import'
+import {
+  AI_SITE_IMPORT_FINISH_COPY,
+  aiSiteImportChoiceText,
+  aiSiteImportFieldChoice,
+  aiSiteImportFinishFieldOf,
   aiSiteImportFoundText,
   aiSiteImportHeldCopy,
   aiSiteImportLeftOutLines,
   aiSiteImportPhaseOf,
   aiSiteImportPlanText,
+  aiSiteImportRunningLede,
   aiSiteImportStartAction,
   aiSiteImportStartAllAction,
   aiSiteImportStoppedCopy,
   aiSiteImportVerdictNote,
+  aiSiteImportWaveHeading,
   aiSiteImportWaveRows,
   aiSiteImportWaveSpent,
+  aiSiteImportWordingCreditsText,
   type AiSiteImportClaim,
+  type AiSiteImportFinishField,
   type AiSiteImportRowState,
 } from '../model/ai-site-import-view'
 import { AiJobCancelButton } from './ai-job-cancel.component'
 import { aiCreditsBillingHref, aiJobOutputHref } from './ai-job-links'
+import { AiSiteImportFinish } from './ai-site-import-finish.component'
 import { AI_SITE_IMPORT_HELP } from './ai-site-import-start.component'
 import { AiSiteOwnershipProof, postAiSiteOwnership } from './ai-site-ownership-proof.component'
 
@@ -87,65 +102,63 @@ function RowIcon({ state }: { state: AiSiteImportRowState }) {
 function WaveRows({ job, wave, orgSlug }: { job: AiJobSummary; wave: AiSiteImportWave; orgSlug: string }) {
   const rows = aiSiteImportWaveRows(job, wave)
   return (
-    <Box component="ol" aria-label={wave.label} sx={{ listStyle: 'none', m: 0, p: { xs: 2, sm: 3 } }}>
-      <Stack spacing={2}>
-        {rows.map((row) => {
-          const output = row.outputId ? job.outputs.find((entry) => entry.id === row.outputId) : undefined
-          const href = output ? aiJobOutputHref(output, orgSlug) : null
-          return (
-            <Stack component="li" key={row.slot} direction="row" spacing={2} sx={{ alignItems: 'flex-start' }}>
-              <Box sx={{ width: (theme) => theme.spacing(3), display: 'flex', justifyContent: 'center' }}>
-                <RowIcon state={row.state} />
-              </Box>
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Stack direction="row" spacing={1} sx={{ alignItems: 'baseline', justifyContent: 'space-between' }}>
-                  <Typography variant="body1" color={row.state === 'waiting' || row.state === 'skipped' ? 'text.secondary' : 'text.primary'}>
-                    {row.title}
-                  </Typography>
-                  {href && row.state === 'done' ? (
-                    <Button size="small" component={AppLink} href={href}>
-                      {'Open draft'}
-                    </Button>
-                  ) : null}
-                </Stack>
-                <Stack direction="row" spacing={1} sx={{ alignItems: 'baseline', flexWrap: 'wrap' }}>
-                  <Typography variant="body2" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>
-                    {`${row.from} → ${row.to}`}
-                  </Typography>
-                  <Button
-                    size="small"
-                    component="a"
-                    href={row.oldPage}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    endIcon={<MdiIcon path={mdiOpenInNew.path} aria-hidden />}
-                    aria-label={`Old page: ${row.from}, opens in a new tab`}
-                    sx={{ minWidth: 0, py: 0 }}
-                  >
-                    {'Old page'}
+    <Stack component="ol" spacing={2} aria-label={wave.label} sx={{ listStyle: 'none', m: 0, p: { xs: 2, sm: 3 } }}>
+      {rows.map((row) => {
+        const output = row.outputId ? job.outputs.find((entry) => entry.id === row.outputId) : undefined
+        const href = output ? aiJobOutputHref(output, orgSlug) : null
+        return (
+          <Stack component="li" key={row.slot} direction="row" spacing={2} sx={{ alignItems: 'flex-start' }}>
+            <Box sx={{ width: (theme) => theme.spacing(3), display: 'flex', justifyContent: 'center' }}>
+              <RowIcon state={row.state} />
+            </Box>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'baseline', justifyContent: 'space-between' }}>
+                <Typography variant="body1" color={row.state === 'waiting' || row.state === 'skipped' ? 'text.secondary' : 'text.primary'}>
+                  {row.title}
+                </Typography>
+                {href && row.state === 'done' ? (
+                  <Button size="small" component={AppLink} href={href}>
+                    {'Open draft'}
                   </Button>
-                </Stack>
-                {row.build || row.words ? (
-                  <Typography variant="body2" color="text.secondary">
-                    {[row.build, row.words].filter(Boolean).join(' · ')}
-                  </Typography>
                 ) : null}
-                {row.photos ? (
-                  <Typography variant="body2" color="text.secondary">
-                    {row.photos}
-                  </Typography>
-                ) : null}
-                {row.note && row.state !== 'done' ? (
-                  <Typography variant="body2" color="text.secondary">
-                    {row.note}
-                  </Typography>
-                ) : null}
-              </Box>
-            </Stack>
-          )
-        })}
-      </Stack>
-    </Box>
+              </Stack>
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'baseline', flexWrap: 'wrap' }}>
+                <Typography variant="body2" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>
+                  {`${row.from} → ${row.to}`}
+                </Typography>
+                <Button
+                  size="small"
+                  component="a"
+                  href={row.oldPage}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  endIcon={<MdiIcon path={mdiOpenInNew.path} aria-hidden />}
+                  aria-label={`Old page: ${row.from}, opens in a new tab`}
+                  sx={{ minWidth: 0, py: 0 }}
+                >
+                  {'Old page'}
+                </Button>
+              </Stack>
+              {row.build || row.words ? (
+                <Typography variant="body2" color="text.secondary">
+                  {[row.build, row.words].filter(Boolean).join(' · ')}
+                </Typography>
+              ) : null}
+              {row.photos ? (
+                <Typography variant="body2" color="text.secondary">
+                  {row.photos}
+                </Typography>
+              ) : null}
+              {row.note && row.state !== 'done' ? (
+                <Typography variant="body2" color="text.secondary">
+                  {row.note}
+                </Typography>
+              ) : null}
+            </Box>
+          </Stack>
+        )
+      })}
+    </Stack>
   )
 }
 
@@ -185,13 +198,16 @@ export interface AiSiteImportJobProps {
   user: MaybeTokenSource
   busy: boolean
   notice: string | null
-  /** Starts the next wave, or reads the site again: the resume door. */
-  onResume: () => void
+  /**
+   * Starts the next wave, or reads the site again: the resume door. A wave
+   * that has not started carries how it is to be built (AGL-4152).
+   */
+  onResume: (choice?: AiSiteImportChoice) => void
   /**
    * Starts every remaining wave with no review between them (AGL-4083). The
    * button is drawn only where the page can start them this way.
    */
-  onStartAll?: () => void
+  onStartAll?: (choice?: AiSiteImportChoice) => void
   onJob: (job: AiJobSummary) => void
 }
 
@@ -201,12 +217,27 @@ export interface AiSiteImportJobProps {
  * a wave in for its review with its drafts to open, and the next wave's
  * button — the only way the next one starts. A wave held for a new proof, the
  * day's limit or a site that could not be read says so and offers the way on.
+ *
+ * Before a wave starts, the page says how it will be built, Keep my site or
+ * Improve it, and Change opens the choice (AGL-4152); the wave's button posts
+ * it. Each wave that has started says how it was built, which never changes.
  */
 export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, busy, notice, onResume, onStartAll, onJob }: AiSiteImportJobProps) {
   const phase = aiSiteImportPhaseOf(job)
   const state = job.siteImport ?? null
   const start = aiSiteImportStartAction(job)
   const startAll = onStartAll ? aiSiteImportStartAllAction(job) : null
+  // Keep my site or Improve it (AGL-4152), changeable while the next wave has not started.
+  const choosable = start?.wave.status === 'waiting'
+  const [field, setField] = useState<AiSiteImportFinishField>(() => aiSiteImportFinishFieldOf(state))
+  const [choosing, setChoosing] = useState(false)
+  const storedFinish = state?.finish ?? null
+  const storedWording = state?.wording ?? null
+  useEffect(() => {
+    // The import's own choice, once it changes elsewhere, unless the person is choosing here.
+    if (!choosing) setField(aiSiteImportFinishFieldOf({ finish: storedFinish, wording: storedWording }))
+  }, [storedFinish, storedWording, choosing])
+  const choice = choosable ? aiSiteImportFieldChoice(field) : undefined
   const held = aiSiteImportHeldCopy(job)
   const pagesHref = host && orgSlug ? buildRoute(Route.HOST_SCREENS, { orgSlug, host }) : null
   const [claim, setClaim] = useState<AiSiteImportClaim | null>(null)
@@ -224,17 +255,37 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
       <AiJobCancelButton job={job} user={user} orgId={orgId} onJob={onJob} variant="text" size="small" />
     </Box>
   )
+  const finishChoice =
+    start && choosable ? (
+      choosing ? (
+        <AiSiteImportFinish
+          value={field}
+          onChange={setField}
+          wordingCredits={aiSiteImportWordingCreditsText({ job, wave: start.wave })}
+          help={AI_SITE_IMPORT_HELP.finish}
+          disabled={busy}
+        />
+      ) : (
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+          <Typography variant="body2">{`${AI_SITE_IMPORT_FINISH_COPY.current}: ${aiSiteImportChoiceText(aiSiteImportFieldChoice(field))}`}</Typography>
+          <Button size="small" disabled={busy} onClick={() => setChoosing(true)} aria-label={`${AI_SITE_IMPORT_FINISH_COPY.change} how your new site looks`}>
+            {AI_SITE_IMPORT_FINISH_COPY.change}
+          </Button>
+        </Stack>
+      )
+    ) : null
   const startButton = start ? (
     <Stack spacing={1}>
+      {finishChoice}
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ alignItems: { sm: 'center' } }}>
         <Box>
-          <Button variant="contained" size="large" disabled={busy} onClick={onResume}>
+          <Button variant="contained" size="large" disabled={busy} onClick={() => onResume(choice)}>
             {busy ? 'Starting…' : start.label}
           </Button>
         </Box>
         {startAll && onStartAll ? (
           <Box>
-            <Button variant="outlined" size="large" disabled={busy} onClick={onStartAll}>
+            <Button variant="outlined" size="large" disabled={busy} onClick={() => onStartAll(choice)}>
               {startAll.label}
             </Button>
           </Box>
@@ -254,15 +305,15 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
     </Stack>
   ) : null
   const waves = state ? (
-    <Accordion variant="outlined" disableGutters sx={{ borderRadius: 2, '&::before': { display: 'none' } }}>
+    <Accordion variant="outlined" disableGutters slotProps={{ heading: { component: 'h2' } }} sx={{ borderRadius: 2, '&::before': { display: 'none' } }}>
       <AccordionSummary expandIcon={<MdiIcon path={mdiChevronDown.path} />}>
-        <Typography variant="subtitle1">{`Every wave (${state.waves.length})`}</Typography>
+        <Typography variant="subtitle1" component="span">{`Every wave (${state.waves.length})`}</Typography>
       </AccordionSummary>
       <AccordionDetails>
         <Stack component="ol" spacing={1} sx={{ m: 0, pl: 2.5 }}>
           {state.waves.map((wave) => (
             <Typography component="li" variant="body2" key={wave.index}>
-              {`${wave.label}: ${wave.slots.length} ${wave.slots.length === 1 ? 'page' : 'pages'}${wave.frame ? ', with your header and footer' : ''}${
+              {`${aiSiteImportWaveHeading(state, wave)}: ${wave.slots.length} ${wave.slots.length === 1 ? 'page' : 'pages'}${wave.frame ? ', with your header and footer' : ''}${
                 wave.status === 'done' || wave.status === 'review'
                   ? ' (in)'
                   : wave.status === 'running'
@@ -281,9 +332,9 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
   ) : null
   const leftOut = state ? aiSiteImportLeftOutLines(state) : []
   const leftOutCard = leftOut.length ? (
-    <Accordion variant="outlined" disableGutters sx={{ borderRadius: 2, '&::before': { display: 'none' } }}>
+    <Accordion variant="outlined" disableGutters slotProps={{ heading: { component: 'h2' } }} sx={{ borderRadius: 2, '&::before': { display: 'none' } }}>
       <AccordionSummary expandIcon={<MdiIcon path={mdiChevronDown.path} />}>
-        <Typography variant="subtitle1">{`Not brought in (${leftOut.reduce((total, line) => total + line.count, 0)})`}</Typography>
+        <Typography variant="subtitle1" component="span">{`Not brought in (${leftOut.reduce((total, line) => total + line.count, 0)})`}</Typography>
       </AccordionSummary>
       <AccordionDetails>
         <Stack spacing={1.5}>
@@ -335,8 +386,8 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
         </Stack>
         {start ? (
           <Card variant="outlined" sx={{ borderRadius: 2 }}>
-            <Typography variant="subtitle1" sx={{ px: { xs: 2, sm: 3 }, pt: { xs: 2, sm: 3 } }}>
-              {`First: ${start.wave.label}`}
+            <Typography variant="subtitle1" component="h2" sx={{ px: { xs: 2, sm: 3 }, pt: { xs: 2, sm: 3 } }}>
+              {`First: ${aiSiteImportWaveHeading(state, start.wave)}`}
             </Typography>
             <WaveRows job={job} wave={start.wave} orgSlug={orgSlug} />
           </Card>
@@ -357,7 +408,8 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
       <Frame
         siteName={siteName}
         heading={wave ? `Bringing in ${wave.label}` : 'Bringing in your site'}
-        lede="Each page is rewritten into your new site’s design with its own words, facts and photos. You review the wave when it is in."
+        // What the wave does with each page, the way it is built (AGL-4152).
+        lede={aiSiteImportRunningLede(wave ? aiSiteImportWaveChoice(state, wave) : aiSiteImportFieldChoice(field))}
       >
         <Card variant="outlined" sx={{ borderRadius: 2 }}>
           {rows.length ? (
@@ -391,6 +443,9 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
       >
         {notice && <Alert severity="warning">{notice}</Alert>}
         <Card variant="outlined" sx={{ borderRadius: 2 }}>
+          <Typography variant="subtitle1" component="h2" sx={{ px: { xs: 2, sm: 3 }, pt: { xs: 2, sm: 3 } }}>
+            {aiSiteImportWaveHeading(state, wave)}
+          </Typography>
           <WaveRows job={job} wave={wave} orgSlug={orgSlug} />
         </Card>
         <Typography variant="body2" color="text.secondary">
@@ -405,8 +460,8 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
         ) : null}
         {start ? (
           <Card variant="outlined" sx={{ borderRadius: 2 }}>
-            <Typography variant="subtitle1" sx={{ px: { xs: 2, sm: 3 }, pt: { xs: 2, sm: 3 } }}>
-              {`Next: ${start.wave.label}`}
+            <Typography variant="subtitle1" component="h2" sx={{ px: { xs: 2, sm: 3 }, pt: { xs: 2, sm: 3 } }}>
+              {`Next: ${aiSiteImportWaveHeading(state, start.wave)}`}
             </Typography>
             <WaveRows job={job} wave={start.wave} orgSlug={orgSlug} />
           </Card>
@@ -427,7 +482,7 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
         {notice && <Alert severity="warning">{notice}</Alert>}
         <Alert severity="warning">{held.message}</Alert>
         <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
-          <Button variant="contained" disabled={busy} onClick={onResume}>
+          <Button variant="contained" disabled={busy} onClick={() => onResume()}>
             {busy ? 'Checking…' : held.action}
           </Button>
           <HelpTip {...AI_SITE_IMPORT_HELP.turnedAway} ariaLabel="How to let AglynBot in" />
@@ -457,7 +512,7 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
           )
         ) : null}
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ alignItems: { sm: 'center' } }}>
-          <Button variant="contained" disabled={busy || (ownership && !claim?.current)} onClick={onResume}>
+          <Button variant="contained" disabled={busy || (ownership && !claim?.current)} onClick={() => onResume()}>
             {busy ? 'Starting…' : phase === 'paused' ? 'Resume' : start ? `${start.label} again` : 'Read the site again'}
           </Button>
           {phase === 'paused' && orgSlug ? (
@@ -489,8 +544,8 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
         ) : null}
         {state.waves.map((wave) => (
           <Card key={wave.index} variant="outlined" sx={{ borderRadius: 2 }}>
-            <Typography variant="subtitle1" sx={{ px: { xs: 2, sm: 3 }, pt: { xs: 2, sm: 3 } }}>
-              {wave.label}
+            <Typography variant="subtitle1" component="h2" sx={{ px: { xs: 2, sm: 3 }, pt: { xs: 2, sm: 3 } }}>
+              {aiSiteImportWaveHeading(state, wave)}
             </Typography>
             <WaveRows job={job} wave={wave} orgSlug={orgSlug} />
           </Card>

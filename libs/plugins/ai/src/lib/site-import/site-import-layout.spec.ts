@@ -38,8 +38,9 @@ import {
   type SiteImportLayoutTabs,
 } from '../model/ai-site-import'
 import { extractSiteImportPage, type SiteImportBlock } from './site-import-html'
-import { siteImportLayout, siteImportLayoutCounts, siteImportLookOfHtml } from './site-import-layout'
+import { siteImportLayout, siteImportLayoutCounts, siteImportLookOfHtml, siteImportMeasurePx } from './site-import-layout'
 import { SITE_LAYOUT_PAGES, siteLayoutRecording, siteLayoutSameSite, type SiteLayoutPageName } from './fixtures/site-layout-recordings'
+import { SITE_LOOK_SLATE_HTML, SITE_LOOK_SLATE_URL } from './fixtures/site-look-slate'
 
 interface Read {
   layout: SiteImportLayout
@@ -174,7 +175,8 @@ describe('aglyn.com home', () => {
   it('reads the hero with its words, its two buttons and its picture below them', () => {
     const { layout, text, main } = read('home')
     const hero = layout.sections[0]
-    expect(hero?.hero).toEqual({ picture: 'below' })
+    // Its heading is held to 920 px inside a 1536 px container (AGL-4152).
+    expect(hero?.hero).toEqual({ picture: 'below', measure: 920 })
     expect(hero?.align).toBe('center')
     const buttons = all(hero?.nodes ?? [], 'line').filter((line) => line.button)
     expect(buttons.map((line) => [text(line.line), line.button])).toEqual([
@@ -255,6 +257,10 @@ describe('aglyn.com home', () => {
       buttonRadius: 4,
       link: '#0077ad',
       header: '#f5f5f5',
+      // Its one dark band, the closing call, sits on #161c21 under its gradient (AGL-4152).
+      darkBackground: '#161c21',
+      // MUI's buttons, set in capitals by their own text-transform.
+      buttonCase: 'upper',
       // Five of its nine eyebrows are magenta, a color none of its words, buttons or links are (AGL-4138).
       eyebrow: '#e040fb',
     })
@@ -400,7 +406,7 @@ describe('aglyn.com /product', () => {
     expect(siteImportLayoutCounts(layout, main).pictures).toBe(3)
     const [row] = all(sectionNamed('product', 'One console').nodes, 'row')
     expect(all(row?.cells[1]?.nodes ?? [], 'picture')).toHaveLength(1)
-    expect(layout.sections[0]?.hero).toEqual({ picture: 'below' })
+    expect(layout.sections[0]?.hero).toEqual({ picture: 'below', measure: 920 })
   })
 })
 
@@ -658,5 +664,70 @@ describe('a bakery’s films, where the source shows them (AGL-4140)', () => {
     const counts = siteImportLayoutCounts(layout, read('bakery').main)
     expect(counts.videos).toBe(5)
     expect(counts.pictures).toBe(7)
+  })
+})
+
+/*------------------------------------------
+ * What Keep my site keeps of a source's look (AGL-4152)
+ *-----------------------------------------*/
+
+describe('the look facts Keep my site keeps (AGL-4152)', () => {
+  const slate = () => {
+    const page = extractSiteImportPage(SITE_LOOK_SLATE_HTML, SITE_LOOK_SLATE_URL, (url) => url.origin === new URL(SITE_LOOK_SLATE_URL).origin, { structure: true })
+    const layout = siteImportLayout(page as Parameters<typeof siteImportLayout>[0])
+    if (!layout) throw new Error('no layout for the slate page')
+    return layout
+  }
+
+  it('reads aglyn.com’s dark ground, its buttons’ capitals and its hero heading’s 920 px measure', () => {
+    const { layout } = read('home')
+    expect(layout.look).toMatchObject({ darkBackground: '#161c21', buttonCase: 'upper' })
+    // The section runs 1536 px; its heading is held to 920.
+    expect(layout.sections[0]).toMatchObject({ width: 1536, hero: { picture: 'below', measure: 920 } })
+  })
+
+  it('takes the fill most of a page’s dark bands sit on, and its filled buttons’ capitals from their own text-transform', () => {
+    const layout = slate()
+    expect(layout.sections.map((section) => [section.band, section.background])).toEqual([
+      ['dark', '#2b2f36'],
+      ['soft', '#f5f5f5'],
+      ['dark', '#2b2f36'],
+      ['dark', '#1b1e23'],
+    ])
+    // Two bands of slate outnumber the one near-black band.
+    expect(layout.look).toMatchObject({ darkBackground: '#2b2f36', buttonFill: '#00b0ff', buttonText: '#0b1b2b', buttonCase: 'upper' })
+    // The look pass reads the same facts off the markup alone.
+    expect(siteImportLookOfHtml(SITE_LOOK_SLATE_HTML, SITE_LOOK_SLATE_URL)).toEqual(layout.look)
+  })
+
+  it('holds the hero’s heading to its own 12 em, narrower than its 1200 px column', () => {
+    const [hero] = slate().sections
+    expect(hero?.width).toBe(1200)
+    expect(hero?.hero).toEqual({ picture: null, measure: 768 })
+  })
+
+  it('keeps no measure for a heading that runs its section’s width, and no dark ground for a page with no dark band', () => {
+    const html = SITE_LOOK_SLATE_HTML.replace('h1 { font-size: 64px; max-width: 12em; }', 'h1 { font-size: 64px; }').replace(/ (?:slate|night)"/g, '"')
+    const page = extractSiteImportPage(html, SITE_LOOK_SLATE_URL, () => true, { structure: true })
+    const layout = siteImportLayout(page as Parameters<typeof siteImportLayout>[0])
+    expect(layout?.sections[0]?.hero).toEqual({ picture: null })
+    expect(layout?.look.darkBackground).toBeNull()
+  })
+
+  it('reads its buttons in sentence case where they are set so, and no case where it draws no filled button', () => {
+    expect(siteImportLookOfHtml(SITE_LOOK_SLATE_HTML.replace(' text-transform: uppercase;', ''), SITE_LOOK_SLATE_URL)?.buttonCase).toBe('none')
+    // Words written in capitals are capitals, set so or not.
+    const written = SITE_LOOK_SLATE_HTML.replace(' text-transform: uppercase;', '').replace(/>(Start free|See the plans|Get started)<\/a>/g, (_, words: string) => `>${words.toUpperCase()}</a>`)
+    expect(siteImportLookOfHtml(written, SITE_LOOK_SLATE_URL)?.buttonCase).toBe('upper')
+    expect(siteImportLookOfHtml(SITE_LOOK_SLATE_HTML.replace(/ class="cta"/g, ''), SITE_LOOK_SLATE_URL)?.buttonCase).toBeNull()
+  })
+
+  it('reads a measure in px, rem, em, ch or the least of a min(), and none for a share of the column', () => {
+    expect(siteImportMeasurePx('920px', 72)).toBe(920)
+    expect(siteImportMeasurePx('40rem', 72)).toBe(640)
+    expect(siteImportMeasurePx('12em', 64)).toBe(768)
+    expect(siteImportMeasurePx('20ch', 40)).toBeCloseTo(440)
+    expect(siteImportMeasurePx('min(36rem, 100%)', 16)).toBe(576)
+    for (const value of ['100%', '80vw', 'none', 'calc(100% - 2rem)', undefined]) expect(siteImportMeasurePx(value, 16)).toBeNull()
   })
 })

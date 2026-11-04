@@ -19,7 +19,7 @@ import type {
   PluginApiRequest,
   PluginApiResponse,
 } from '@aglyn/aglyn/server'
-import { checkoutHandler } from './checkout'
+import { checkoutHandler, planRequiredMessage } from './checkout'
 import { memberCookieName, mintMemberSession } from './membership'
 
 /**
@@ -477,5 +477,29 @@ describe('the guard covers exactly what identity it has (AGL-1849)', () => {
 
     expect(result.status).toBe(200)
     expect(sessionCalls()).toHaveLength(1)
+  })
+})
+
+describe('a plan refusal names a plan that exists (AGL-4158)', () => {
+  it('refuses a subscription on a plan without it, naming Pro', async () => {
+    const plan = mockOrg.org.plan
+    mockOrg.org.plan = 'starter'
+    try {
+      const result = await post()
+      expect(result.status).toBe(403)
+      expect(result.body.error).toBe('Subscription products require the Pro plan')
+      expect(sessionCalls()).toHaveLength(0)
+    } finally {
+      mockOrg.org.plan = plan
+    }
+  })
+
+  it('names the cheapest plan carrying each product type, never a retired one', () => {
+    expect(planRequiredMessage('Subscription products', 'storefrontSubscriptions')).toBe(
+      'Subscription products require the Pro plan',
+    )
+    expect(planRequiredMessage('Gift cards', 'giftCards')).toBe(
+      'Gift cards require the Pro plan',
+    )
   })
 })

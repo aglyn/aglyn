@@ -16,7 +16,8 @@
  */
 
 import { claimAttempt, pluginRequestFromWeb } from '@aglyn/aglyn/server'
-import { isOrgSubscriptionLive, PLAN_PRICING } from '@aglyn/aglyn/server'
+import { isOrgSubscriptionLive } from '@aglyn/aglyn/server'
+import { CUSTOM_BILLING_BASE_PLANS } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import type { OrgPlan } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
@@ -177,7 +178,9 @@ async function handler(request: Request): Promise<Response> {
       { status: 400 },
     )
   }
-  if (!PLAN_PRICING[plan] || plan === 'free') {
+  // Custom or a paid self-serve plan, never `free` and never a plan pricing
+  // v4 retired (AGL-4158): the same list the staff picker offers.
+  if (!CUSTOM_BILLING_BASE_PLANS.includes(plan)) {
     return Response.json(
       { error: 'Provide a valid paid base plan for the enterprise deal' },
       { status: 400 },

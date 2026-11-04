@@ -179,6 +179,19 @@ const TILE_MAX_PX = 64
 export function siteImportLayout(page: SiteImportLayoutSource, stylesheets: readonly string[] = []): SiteImportLayout | null {
   const { structure, blocks } = page
   if (!structure) return null
+  const { css, styles, sections } = readSections(page, stylesheets)
+  if (!sections.length) return null
+  return {
+    v: 1,
+    sections,
+    icons: structure.icons.map((icon) => ({ ...icon })),
+    look: siteImportLookFacts(structure, styles, css.fontFaces, blocks, sections),
+  }
+}
+
+/** A page's sections, as the layout reads them, with the stylesheets and styles they were read through. */
+function readSections(page: SiteImportLayoutSource, stylesheets: readonly string[]) {
+  const { structure, blocks } = page
   const sheets = [...structure.styles, ...stylesheets]
   const css = siteImportCssOf(sheets)
   const styles = siteImportStylesOf(structure, css)
@@ -190,14 +203,7 @@ export function siteImportLayout(page: SiteImportLayoutSource, stylesheets: read
     () => siteImportStylesOf(structure, siteImportCssOf(sheets, TABLET_WIDTH)),
     page.videos ?? [],
   )
-  const sections = reader.sections()
-  if (!sections.length) return null
-  return {
-    v: 1,
-    sections,
-    icons: structure.icons.map((icon) => ({ ...icon })),
-    look: siteImportLookFacts(structure, styles, css.fontFaces, blocks),
-  }
+  return { css, styles, sections: reader.sections() }
 }
 
 class LayoutReader {
@@ -1555,7 +1561,31 @@ class LayoutReader {
         else picture = hero.lines.indexOf(image) > hero.lines.indexOf(h1) ? 'below' : 'above'
       }
     }
-    hero.hero = { picture }
+    const measure = this.measureOf(hero, hero.lines.find((ref) => mainBlocks[ref]?.kind === 'heading' && (mainBlocks[ref] as { level: number }).level === 1) as number)
+    hero.hero = { picture, ...(measure !== null ? { measure } : {}) }
+  }
+
+  /**
+   * The narrowest width the source holds its hero's heading to (AGL-4152), in
+   * px: the least `max-width` on the `<h1>` or on the wrappers around it inside
+   * its section, as a wide screen reads them. `null` where none is narrower
+   * than the section's own cap, and the heading runs the section's width.
+   */
+  private measureOf(section: SiteImportLayoutSection, h1: number): number | null {
+    const element = this.elements.find((node) => node.blocks.some((index) => this.mainIndex[index] === h1))
+    if (!element) return null
+    this.wideStyles ??= this.wideStylesOf()
+    const inside = new Set(section.lines)
+    const caps: number[] = []
+    for (let at = element.id; at >= 0; at = this.elements[at]?.parent ?? -1) {
+      // A wrapper that holds a line of another section is around the section, not in it.
+      if (at !== element.id && this.leaves(at).some((leaf) => leaf.kind === 'line' && !inside.has(leaf.ref))) break
+      const style = this.wideStyles.of(at)
+      const px = siteImportMeasurePx(style.get('max-width'), siteImportFontSizePx(style) ?? this.bodySize)
+      if (px !== null) caps.push(px)
+    }
+    const measure = caps.length ? Math.round(Math.min(...caps)) : null
+    return measure !== null && (section.width === undefined || measure < section.width) ? measure : null
   }
 
   /** A picture laid over its section's whole area, behind the words. */
@@ -1580,6 +1610,31 @@ function keepOwnAlign(nodes: readonly SiteImportLayoutNode[], align: 'start' | '
     else if (node.kind === 'row') for (const cell of node.cells) keepOwnAlign(cell.nodes, align)
     else if (node.kind === 'tabs') for (const tab of node.tabs) keepOwnAlign(tab.panel, align)
   }
+}
+
+/** How wide a `ch` is, in ems: the width of a zero in the faces a page is set in. */
+const CH_EM = 0.55
+
+/**
+ * A `max-width` as px (AGL-4152), at the font size of the element it is set
+ * on: a length in px, rem, em or ch, or the least of those a `min()` names. A
+ * share of the parent (`%`, `vw`), `none` or anything else is `null`, because
+ * it holds a heading to no width of its own.
+ */
+export function siteImportMeasurePx(value: string | undefined, fontPx: number): number | null {
+  const text = value?.trim().toLowerCase() ?? ''
+  if (!text) return null
+  const one = (term: string): number | null => {
+    const match = /^(\d*\.?\d+)(px|rem|em|ch)$/.exec(term.trim())
+    if (!match) return null
+    const amount = Number(match[1])
+    const px = match[2] === 'px' ? amount : match[2] === 'rem' ? amount * 16 : match[2] === 'em' ? amount * fontPx : amount * fontPx * CH_EM
+    return px > 0 ? px : null
+  }
+  const min = /^min\((.+)\)$/.exec(text)
+  if (!min) return one(text)
+  const terms = (min[1] as string).split(',').map(one).filter((px): px is number => px !== null)
+  return terms.length ? Math.min(...terms) : null
 }
 
 /** Whether a short line reads as an eyebrow: ten words at most, in capitals or set in them. */
@@ -1728,11 +1783,22 @@ export function siteImportGoogleFamilies(urls: readonly string[]): string[] {
   return families
 }
 
-/** The look facts of a page read with its structure, through its linked stylesheets' text; its blocks, where given, for its eyebrows' color. */
-export function siteImportLookOf(page: Pick<SiteImportLayoutSource, 'structure'> & { blocks?: readonly SiteImportBlock[] }, stylesheets: readonly string[] = []): SiteImportLookFacts | null {
+/**
+ * The look facts of a page read with its structure, through its linked
+ * stylesheets' text; its blocks, where given, for its eyebrows' color and its
+ * sections' dark ground, read as its layout reads them.
+ */
+export function siteImportLookOf(
+  page: Pick<SiteImportLayoutSource, 'structure'> & { blocks?: readonly SiteImportBlock[]; videos?: SiteImportExtract['videos'] },
+  stylesheets: readonly string[] = [],
+): SiteImportLookFacts | null {
   if (!page.structure) return null
+  if (page.blocks?.length) {
+    const { css, styles, sections } = readSections({ structure: page.structure, blocks: [...page.blocks], ...(page.videos ? { videos: page.videos } : {}) }, stylesheets)
+    return siteImportLookFacts(page.structure, styles, css.fontFaces, page.blocks, sections)
+  }
   const css = siteImportCssOf([...page.structure.styles, ...stylesheets])
-  return siteImportLookFacts(page.structure, siteImportStylesOf(page.structure, css), css.fontFaces, page.blocks ?? [])
+  return siteImportLookFacts(page.structure, siteImportStylesOf(page.structure, css), css.fontFaces, [])
 }
 
 /**
@@ -1747,7 +1813,7 @@ export function siteImportLookOfHtml(html: string, pageUrl: string, stylesheets:
     return null
   }
   const extract = extractSiteImportPage(html, pageUrl, (url) => url.origin === origin, { structure: true })
-  return extract.structure ? siteImportLookOf({ structure: extract.structure, blocks: extract.blocks }, stylesheets) : null
+  return extract.structure ? siteImportLookOf({ structure: extract.structure, blocks: extract.blocks, ...(extract.videos ? { videos: extract.videos } : {}) }, stylesheets) : null
 }
 
 /** How far two colors may sit apart and still be one (AGL-4138), in OKLab. */
@@ -1789,12 +1855,39 @@ function eyebrowColorOf(structure: SiteImportStructure, styles: SiteImportStyles
   return others.some((other) => siteImportColorDistance(own, other) < SAME_COLOR) ? null : top
 }
 
+/** The fill most of a page's dark sections sit on (AGL-4152), the first of them on a tie; `null` where none has one. */
+function darkBackgroundOf(sections: readonly SiteImportLayoutSection[]): string | null {
+  const counts = new Map<string, number>()
+  for (const section of sections) {
+    if (section.band === 'dark' && section.background && /^#[0-9a-f]{6}$/i.test(section.background)) {
+      const hex = section.background.toLowerCase()
+      counts.set(hex, (counts.get(hex) ?? 0) + 1)
+    }
+  }
+  // A map keeps the order its keys came in, and a stable sort keeps the first of a tie first.
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
+}
+
+/** Whether a button's words are written in capitals: three letters or more, none of them lower case. */
+function writtenInCapitals(text: string): boolean {
+  const letters = text.replace(/[^\p{L}]/gu, '')
+  return letters.length >= 3 && letters === letters.toUpperCase() && letters !== letters.toLowerCase()
+}
+
 /**
  * What the source's look is made of (AGL-4106): its fonts, its page's
- * background and text, its filled buttons' fill, text and corners, its links'
- * color, its header's background, and its eyebrows' own color (AGL-4138).
+ * background and text, its filled buttons' fill, text, corners and case
+ * (AGL-4152), its links' color, its header's background, its eyebrows' own
+ * color (AGL-4138), and, given its sections, the fill its dark bands sit on
+ * (AGL-4152).
  */
-export function siteImportLookFacts(structure: SiteImportStructure, styles: SiteImportStyles, fontFaces: readonly string[] = [], blocks: readonly SiteImportBlock[] = []): SiteImportLookFacts {
+export function siteImportLookFacts(
+  structure: SiteImportStructure,
+  styles: SiteImportStyles,
+  fontFaces: readonly string[] = [],
+  blocks: readonly SiteImportBlock[] = [],
+  sections: readonly SiteImportLayoutSection[] = [],
+): SiteImportLookFacts {
   const { elements } = structure
   const body = structure.body >= 0 ? structure.body : -2
   const bodyStyle = styles.of(body)
@@ -1811,6 +1904,23 @@ export function siteImportLookFacts(structure: SiteImportStructure, styles: Site
   const background = siteImportBackgroundOf(bodyStyle).color ?? siteImportBackgroundOf(styles.of(-2)).color
   // Buttons, the page's own and its header's: the most used fill.
   const fills = new Map<string, { count: number; text: string | null; radius: number[] }>()
+  // Its filled buttons' case (AGL-4152): set in capitals, or written in them.
+  let upper = 0
+  let lower = 0
+  const wordsOf = (element: SiteImportElement): string => {
+    const own: number[] = []
+    const visit = (at: number, depth: number) => {
+      const node = elements[at]
+      if (!node || depth > 3) return
+      own.push(...node.blocks)
+      for (const child of node.children) visit(child, depth + 1)
+    }
+    visit(element.id, 0)
+    return own.map((index) => {
+      const block = blocks[index]
+      return block && block.kind !== 'image' ? block.text : ''
+    }).join(' ')
+  }
   const linkColors = new Map<string, number>()
   for (const element of elements) {
     if (element.tag !== 'a' && element.tag !== 'button') continue
@@ -1834,6 +1944,8 @@ export function siteImportLookFacts(structure: SiteImportStructure, styles: Site
       const radius = siteImportRadiusPx(style)
       if (radius !== null) entry.radius.push(radius)
       fills.set(hex, entry)
+      if (style.get('text-transform') === 'uppercase' || writtenInCapitals(wordsOf(element))) upper += 1
+      else lower += 1
     } else if (!kind && element.tag === 'a' && element.region === 'main') {
       const color = hexOf(style.get('color'))
       if (color) linkColors.set(color, (linkColors.get(color) ?? 0) + 1)
@@ -1864,6 +1976,9 @@ export function siteImportLookFacts(structure: SiteImportStructure, styles: Site
     buttonRadius: radii.length ? (radii.sort((a, b) => a - b)[Math.floor(radii.length / 2)] as number) : null,
     link,
     header: headerFill,
+    darkBackground: darkBackgroundOf(sections),
+    // Most of its filled buttons decide; none, and the case is no fact of the source's.
+    buttonCase: upper + lower ? (upper > lower ? 'upper' : 'none') : null,
     // Its eyebrows' own color: none of its words', its buttons' or its links', which the theme draws already.
     eyebrow: blocks.length ? eyebrowColorOf(structure, styles, blocks, [text, topFill?.[0] ?? null, link]) : null,
   }

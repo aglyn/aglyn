@@ -1151,7 +1151,7 @@ export function AiSiteStartCard({
                       icon={mdiWebSync.path}
                       iconId="web-sync"
                       title="Bring my site"
-                      description={`Bring the website you have now into ${PLATFORM_BRAND_NAME}: every word as you wrote it, laid out as your pages are, in your new site’s preview.`}
+                      description={`Bring the website you have now into ${PLATFORM_BRAND_NAME}: every page, picture, menu and form, kept as it is or improved, in your new site’s preview.`}
                       blocked={importAvailability.state === 'blocked' ? importAvailability.message : null}
                       onChoose={chooseImport}
                     >

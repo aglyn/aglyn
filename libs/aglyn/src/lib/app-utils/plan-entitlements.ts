@@ -301,8 +301,9 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     // A `Form` node placed on a page still needs no definition to collect,
     // and the 20 submissions above are the band those replies spend.
     //
-    // The ladder: Free 1, Starter 5, Pro 25, Business 100, and
-    // `FORMS_PER_HOST_CEILING` on Scale and above.
+    // The ladder: Free 1, Starter 5, Pro and Custom UNLIMITED; the retired
+    // rows keep theirs (Business 100, `FORMS_PER_HOST_CEILING` on Scale,
+    // Advanced and Agency).
     formsPerHost: 1,
     // One reusable component per Free site (AGL-3615), counted the way the
     // one saved form is: the create is refused on this number, with the
@@ -990,8 +991,8 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
   // ceiling still flags and pages staff at 3× the band, and does NOT degrade
   // the render on this plan — see `bandwidthCeilingDegradesRender`.
   //
-  // `formsPerHost` is `FORMS_PER_HOST_CEILING`, the top of the saved-form
-  // ladder (AGL-3597), shared with Scale, Advanced and Agency.
+  // `formsPerHost` is UNLIMITED, as on Pro (AGL-4158): Custom is never below
+  // Pro, and a contract that wants a bound sets the per-org override.
   enterprise: {
     hostLimit: 200,
     screensPerHost: UNLIMITED,
@@ -1003,7 +1004,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     maxManagersPerOrg: 1_000,
     maxMembersPerHost: 2_000,
     bandwidthGb: 790,
-    formsPerHost: FORMS_PER_HOST_CEILING,
+    formsPerHost: UNLIMITED,
     componentsPerHost: UNLIMITED,
     variablesPerHost: UNLIMITED,
     functionsPerHost: UNLIMITED,
@@ -1138,6 +1139,18 @@ export const PLAN_LADDER: readonly OrgPlan[] = [
   ...SELF_SERVE_PLANS,
   ...RETIRED_PLANS,
   'enterprise',
+]
+
+/**
+ * The plans a staff custom-billing deal may ride on (AGL-4158): Custom first,
+ * the default a negotiated deal lands on, then the paid self-serve plans from
+ * the top down (Pro, Starter) for a deal scoped to that plan's capability.
+ * Built from `SELF_SERVE_PLANS`, so a retired plan is never offered and the
+ * staff "Base plan" picker and the provisioning route agree by construction.
+ */
+export const CUSTOM_BILLING_BASE_PLANS: readonly OrgPlan[] = [
+  'enterprise',
+  ...SELF_SERVE_PLANS.filter((plan) => plan !== 'free').reverse(),
 ]
 
 /** Whether a plan is one pricing v4 retired (`RETIRED_PLANS`). */
@@ -4379,7 +4392,7 @@ export function planGrantingFeature(
 }
 
 /**
- * The plan name an upsell should name, ready to interpolate — "Business",
+ * The plan name an upsell should name, ready to interpolate — "Pro",
  * or undefined when {@link planGrantingFeature} has no answer.
  */
 export function planLabelGrantingFeature(
@@ -4391,7 +4404,7 @@ export function planLabelGrantingFeature(
 
 /**
  * The one sentence a locked control carries, on hover and for a screen
- * reader: "Scheduled publishing is included from Business."
+ * reader: "Scheduled publishing is included from Pro."
  */
 export function planLockReason(
   subject: string,

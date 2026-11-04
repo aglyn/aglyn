@@ -32,8 +32,10 @@
 
 import { createHash } from 'node:crypto'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
-import { AI_LAYOUT_DESIGN_TOOL, aiReadLayoutDesign } from '../layout-language/ai-layout-language'
+import { aiLayoutDesignChoices } from '../layout-language/ai-layout-design'
+import { AI_LAYOUT_DESIGN_TOOL, AI_LAYOUT_GROUP_STYLES, aiReadLayoutDesign } from '../layout-language/ai-layout-language'
 import type { AiLayoutRawTree } from '../layout-language/ai-layout-tree'
+import { siteImportFidelity, type SiteImportFidelityTree } from '../model/ai-site-import-fidelity'
 import { AI_MODEL_CATALOG, aiCatalogEntry } from '../providers/catalog'
 import { resolveAiRoute } from '../providers/routing'
 import type { SiteImportLayoutGroup, SiteImportLayoutNode } from '../model/ai-site-import'
@@ -43,10 +45,12 @@ import { siteImportLayout, siteImportLayoutCounts } from '../site-import/site-im
 import { siteImportPageRead } from '../site-import/site-import-page'
 import { aiPageWithoutLinksTo } from './ai-site-publish'
 import { aiSiteImportUnbuilt } from './ai-site-import-publish'
-import { aiImportedPageCheck, aiLayoutDesignPrompt } from './ai-job-page-language'
+import { AI_LAYOUT_DESIGN_IMPROVE_LINE, AI_LAYOUT_DESIGN_TEXT, aiImportedPageCheck, aiLayoutDesignPrompt } from './ai-job-page-language'
 import {
   aiCompileImportedPage,
   aiSiteImportDesignedSections,
+  aiSiteImportFinishOf,
+  aiSiteImportHeroMeasure,
   aiImportedPageListing,
   aiImportedPageListingOwed,
   aiImportPageModel,
@@ -921,7 +925,8 @@ describe('Home’s hero as its source draws it, whatever the answer says (AGL-41
     expect(designedWith(doc, 'editorial').sections[0]?.hero).toBe('editorial')
     expect(designedWith(doc, 'editorial').settled).toEqual([])
     const { stored } = build('home', asked('split'))
-    const measure = Object.values(stored).find((node) => node.componentId === 'muiBox' && JSON.stringify(node.sx) === JSON.stringify({ maxWidth: { xs: '100%', md: '72%' }, mx: 'auto' }))
+    // Its words held to the width step the source's 920 px heading measure maps to (AGL-4152).
+    const measure = Object.values(stored).find((node) => node.componentId === 'muiBox' && JSON.stringify(node.sx) === JSON.stringify({ maxWidth: { xs: '100%', md: 'md' }, mx: 'auto' }))
     expect(measure).toBeDefined()
   })
 
@@ -1160,5 +1165,456 @@ describe('a video on a page brought in is a video on the new page (AGL-4140)', (
     const designed = aiSiteImportDesignedSections({ ...doc, videos: [] })
     const blocks = designed.sections[0]?.blocks ?? []
     expect(blocks.find((block) => block.text === 'Watch the 40-second film')?.kind).toBe('text')
+  })
+})
+
+/*------------------------------------------
+ * Keep my site, or Improve it (AGL-4152)
+ *-----------------------------------------*/
+
+const PAGES = Object.keys(SITE_LAYOUT_PAGES) as SiteLayoutPageName[]
+
+type Finish = 'keep' | 'improve'
+
+/** The groups of a list of nodes, in the order a design answer numbers them: rows and tabs opened. */
+function groupsIn(nodes: readonly SiteImportLayoutNode[]): SiteImportLayoutGroup[] {
+  return nodes.flatMap((node): SiteImportLayoutGroup[] => {
+    if (node.kind === 'group') return [node]
+    if (node.kind === 'row') return groupsIn(node.cells.flatMap((cell) => cell.nodes))
+    if (node.kind === 'tabs') return groupsIn(node.tabs.flatMap((tab) => tab.panel))
+    return []
+  })
+}
+
+const layoutOf = (doc: AiSiteImportDocument) => doc.layout as NonNullable<AiSiteImportDocument['layout']>
+
+/** A design answer for every section and group of a page, in the tool's shape. */
+function answerFor(
+  doc: AiSiteImportDocument,
+  pick: { hero?: string; band?: (index: number) => string; align?: (index: number) => string; group?: (group: SiteImportLayoutGroup) => { kind: string; style?: string } } = {},
+): Record<string, unknown> {
+  return {
+    sections: layoutOf(doc).sections.map((section, index) => ({
+      hero: index === 0 ? (pick.hero ?? 'none') : 'none',
+      band: pick.band?.(index) ?? 'source',
+      align: pick.align?.(index) ?? 'source',
+      groups: groupsIn(section.nodes).map((group) => pick.group?.(group) ?? { kind: 'source', style: 'cards' }),
+    })),
+  }
+}
+
+/** An answer that moves all a design may: the hero beside its words, every band and alignment, every group in the theme's cards. */
+const freeAnswer = (doc: AiSiteImportDocument) =>
+  answerFor(doc, { hero: 'split', band: (index) => (index % 2 ? 'soft' : 'plain'), align: (index) => (index % 2 ? 'start' : 'center') })
+
+interface Finished extends Built {
+  compiled: ReturnType<typeof aiCompileImportedPage>
+  fidelity: ReturnType<typeof siteImportFidelity>
+}
+
+const finishedPages = new Map<string, Finished>()
+
+/** A page built as the page step builds it, its document carrying the finish its wave was asked; checked, stored and scored. */
+function finishedDoc(source: AiSiteImportDocument, finish: Finish | null, answer: Record<string, unknown> | null, slug: string, key: string): Finished {
+  const held = finishedPages.get(key)
+  if (held) return held
+  const doc: AiSiteImportDocument = finish ? { ...source, finish } : source
+  const names = aiSiteImportSectionNames(doc)
+  const sectionIds = names.map((_, index) => `sec-${index}`)
+  const screen = { title: doc.title, slug, sections: names.map((section) => ({ name: section, uses: [], items: 0 })) }
+  const design = { kind: 'business', seed: 7, home: slug === '/' }
+  const check = aiImportedPageCheck({
+    screen: screen as never,
+    sectionIds,
+    targets: TARGETS,
+    context: { screenIds: doc.links.map((link) => link.id), formIds: [], componentIds: [], codeBuilt: true },
+    design,
+    doc,
+  })
+  const result = check(answer)
+  const compiled = aiCompileImportedPage({
+    doc,
+    sectionIds,
+    plan: { title: screen.title, sections: screen.sections },
+    targets: TARGETS as never,
+    design,
+    ...(answer ? { answer: aiReadLayoutDesign(answer, names.length) } : {}),
+  })
+  const stored = (result.value?.nodes ?? {}) as unknown as Record<string, Node>
+  const fidelity = siteImportFidelity({ layout: layoutOf(doc), blocks: doc.blocks, photos: doc.photos }, { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: stored as unknown as SiteImportFidelityTree['nodes'] })
+  const out: Finished = { doc, tree: compiled.tree, stored, violations: result.violations, compiled, fidelity }
+  finishedPages.set(key, out)
+  return out
+}
+
+function finished(name: SiteLayoutPageName, finish: Finish | null, answer: Record<string, unknown> | null = null, edit?: { key: string; doc: (doc: AiSiteImportDocument) => AiSiteImportDocument }): Finished {
+  const doc = edit ? edit.doc(docOf(name)) : docOf(name)
+  return finishedDoc(doc, finish, answer, name === 'home' ? '/' : `/${name}`, `${name}:${finish}:${JSON.stringify(answer)}:${edit?.key ?? ''}`)
+}
+
+/** The page's opening section with the heading measure the reader keeps (AGL-4152), set by hand until it reads one. */
+const withMeasure = (measure: number) => ({
+  key: `measure-${measure}`,
+  doc: (doc: AiSiteImportDocument): AiSiteImportDocument => {
+    const layout = layoutOf(doc)
+    return { ...doc, layout: { ...layout, sections: layout.sections.map((section, index) => (index === 0 && section.hero ? { ...section, hero: { ...section.hero, measure } } : section)) } }
+  },
+})
+
+/** Each section's Container width as drawn: the Max Width of the first Container under it that is no reading measure. */
+const containerWidths = (tree: AiLayoutRawTree) =>
+  sectionsOf(tree).map(({ id }) => tree.nodes[under(tree, id).find((at) => tree.nodes[at].componentId === 'muiContainer' && !tree.nodes[at].props?.['disableGutters']) as string]?.props?.['maxWidth'])
+
+/** The boxes that hold a hero's words: its section's Boxes held to a share of their Container on a wide screen. Home's column has two, its words and the line under its film. */
+const wordBoxes = (built: Pick<Built, 'tree'>) =>
+  under(built.tree, sectionsOf(built.tree)[0].id)
+    .map((id) => built.tree.nodes[id] as Node)
+    .filter((node) => node.componentId === 'muiBox' && typeof node.sx?.['maxWidth'] === 'object' && (node.sx['maxWidth'] as Record<string, unknown>)['xs'] === '100%')
+    .map((node) => node.sx?.['maxWidth'])
+
+/** The source's content a page shows, as the fidelity report scores it: every measure that is no layout. */
+const contentOf = (fidelity: Finished['fidelity']) => ({
+  words: fidelity.words.ratio,
+  sections: fidelity.sections.ratio,
+  tables: fidelity.tables.ratio,
+  tabs: fidelity.tabs.ratio,
+  pictures: fidelity.pictures.ratio,
+  icons: fidelity.icons.ratio,
+  buttons: fidelity.buttons.ratio,
+  headings: fidelity.headings.ratio,
+  forms: fidelity.forms.ratio,
+  videos: fidelity.videos.ratio,
+})
+
+describe('a page’s finish (AGL-4152)', () => {
+  it('reads as Keep my site wherever none was asked: the one asked first, then the document’s', () => {
+    expect(aiSiteImportFinishOf(null)).toBe('keep')
+    expect(aiSiteImportFinishOf({ finish: null })).toBe('keep')
+    expect(aiSiteImportFinishOf({ finish: 'improve' })).toBe('improve')
+    expect(aiSiteImportFinishOf({ finish: 'improve' }, 'keep')).toBe('keep')
+    expect(aiSiteImportFinishOf({}, 'improve')).toBe('improve')
+    expect(aiSiteImportFinishOf({ finish: 'redesign' as never })).toBe('keep')
+  })
+})
+
+describe('Keep my site: the source’s layout, lightly polished (AGL-4152)', () => {
+  it.each(PAGES)('%s: draws exactly what a page with no finish draws, with no answer and with one', (name) => {
+    const doc = docOf(name)
+    const answer = freeAnswer(doc)
+    expect(finished(name, 'keep').tree).toEqual(finished(name, null).tree)
+    expect(finished(name, 'keep', answer).tree).toEqual(finished(name, null, answer).tree)
+    expect(finished(name, 'keep', answer).violations).toEqual([])
+  })
+
+  it.each(PAGES)('%s: sets the answer’s alignment aside, every section aligned as its source aligns it', (name) => {
+    const doc = { ...docOf(name), finish: 'keep' as const }
+    const names = aiSiteImportSectionNames(doc)
+    const own = aiSiteImportDesignedSections(doc).sections.map((section) => section.align)
+    for (const align of ['start', 'center']) {
+      const answer = aiReadLayoutDesign(answerFor(doc, { align: () => align }), names.length)
+      expect(aiSiteImportDesignedSections(doc, answer).sections.map((section) => section.align)).toEqual(own)
+    }
+  })
+
+  it.each(PAGES)('%s: keeps the source’s boxing, whatever style the answer asks of a group', (name) => {
+    const doc = { ...docOf(name), finish: 'keep' as const }
+    const names = aiSiteImportSectionNames(doc)
+    const asked = (style: (group: SiteImportLayoutGroup) => string | undefined) =>
+      aiSiteImportDesignedSections(doc, aiReadLayoutDesign(answerFor(doc, { group: (group) => ({ kind: 'source', ...(style(group) ? { style: style(group) } : {}) }) }), names.length))
+    // A style of the other boxing is set aside: the group is drawn as it is with no style asked.
+    const across = asked((group) => (group.boxed ? 'ruled' : 'cards'))
+    expect(across.sections).toEqual(asked(() => undefined).sections)
+    // Every style of every group, as drawn: a boxed group boxed, an open one open.
+    for (const style of AI_LAYOUT_GROUP_STYLES) {
+      const drawn = asked(() => style).sections.flatMap((section) => section.blocks).flatMap((block) => (block.variant ? [block.variant] : []))
+      const own = asked(() => undefined).sections.flatMap((section) => section.blocks).flatMap((block) => (block.variant ? [block.variant] : []))
+      expect(drawn.map((variant) => ['cards', 'articles'].includes(variant))).toEqual(own.map((variant) => ['cards', 'articles'].includes(variant)))
+    }
+  })
+
+  it('draws Home’s boxed cards boxed and its ruled steps ruled for an answer of ruled groups, as Improve it does not', () => {
+    const answer = answerFor(docOf('home'), { group: () => ({ kind: 'source', style: 'ruled' }) })
+    const cardsIn = (built: Finished, index: number) => ofKind(built.tree, under(built.tree, sectionsOf(built.tree)[index].id), 'muiCard')
+    expect(cardsIn(finished('home', 'keep', answer), 3)).toHaveLength(13)
+    expect(cardsIn(finished('home', 'improve', answer), 3)).toEqual([])
+    expect(role(finished('home', 'improve', answer).tree, 'ruled').length).toBeGreaterThan(role(finished('home', 'keep', answer).tree, 'ruled').length)
+  })
+
+  it.each(PAGES)('%s: keeps every band and width the source drew, whatever the answer asks', (name) => {
+    const doc = docOf(name)
+    const kept = finished(name, 'keep', answerFor(doc, { band: () => 'dark' }))
+    expect(kept.violations).toEqual([])
+    expect(sectionsOf(kept.tree).map(({ node }) => bandOf(node))).toEqual(layoutOf(doc).sections.map((section) => section.band))
+    expect(containerWidths(kept.tree)).toEqual(containerWidths(finished(name, null).tree))
+  })
+})
+
+describe('Keep my site asks the design answer exactly what it asked before (AGL-4152)', () => {
+  /** Digests of each page's user turn and its design text, taken on the tree before Keep my site or Improve it. */
+  const BEFORE: Record<SiteLayoutPageName, { prompt: string; text: string }> = {
+    home: { prompt: '1529b7c65d0902d5c4a549ead6999be727ee247c110496adb79035fb7d7af824', text: 'aefeaebbe0d75a10d68835b3cda0c3341502d2b8b61c6dcc3cd496d263cb5dae' },
+    product: { prompt: '9308acb726d1d8596c0430e282ad2024572346da003e77b20ed203a2a1965648', text: '3f291a72d118038d53b868496e63430800f05956433674658cd1fdebb4ca451b' },
+    pricing: { prompt: '059d869271edb576464aba63e85b4de1c554e26601a380ace2d022d4445f95d0', text: '2215e9716b5ae4872ebaa9d87d5c8b4cb940ad9dd5cf8f95bfdfa80beaebb5c3' },
+    livePricing: { prompt: 'dc4342f3159207b000a7af27189598f3241208b007cf54faab3a14f1d5e69255', text: 'cc5e62018ad66a9afe15b3d9b52529b081769fbbfb9694d7b71e4f2fa493d603' },
+    contact: { prompt: '1dc026ec23cf023f51f31e57302d08c214f3e6218548f74fe6af567b6e19f8a3', text: '50f18902c98c9d7da19d782bf2a0e31d849d5ba3bcf21dffb9f56a09b9bd5d6d' },
+    post: { prompt: 'c5302b1e98b6577beb4a6ae6d8e89819ffd8b565dfa82cd0a51d9e3eeb22718b', text: '0a12998087f6eecfc6df313f309fe704923b2c74ac3972032f6041938a3c9c17' },
+    blog: { prompt: 'c1f377a23fc3df4d155cbeaf429109191d89884fece926bb23e75fb894401cb4', text: '846955ead3d1603f553b6ee7bb4451227103ba1526dc51c62d8fd2d44055dccc' },
+    pottery: { prompt: '9fc5893fa82bcda9e92ae7995c3bdccd65ced1db798faca6b8e96d22872350a6', text: '82071847c6f3017142ac35f03c0961df58ad1d9d8e199889b1e221896dca6235' },
+    bakery: { prompt: 'f4cde60dad094b9ff6cf7ec2028e4c1d5ca6c1c04b02bd4888c7ad53bdf5a1e5', text: '780d4382764f90f6be7ae70f7998ca221e35b85e02e435d7b8883f75bd74b422' },
+  }
+  const digest = (text: string) => createHash('sha256').update(text).digest('hex')
+  const promptOf = (name: SiteLayoutPageName, finish: Finish | null) => {
+    const doc = docOf(name)
+    return aiLayoutDesignPrompt({ job: { $id: 'job-import-page', inputs: { siteKind: 'business' } }, screen: { title: doc.title, slug: name === 'home' ? '/' : `/${name}`, sections: [] }, doc: finish ? { ...doc, finish } : doc })
+  }
+
+  it.each(PAGES)('%s: its user turn and its design text, byte for byte, kept or with no finish', (name) => {
+    expect(digest(promptOf(name, 'keep'))).toBe(BEFORE[name].prompt)
+    expect(digest(promptOf(name, null))).toBe(BEFORE[name].prompt)
+    for (const finish of ['keep', 'improve'] as const) {
+      const doc: AiSiteImportDocument = { ...docOf(name), finish }
+      expect(digest(aiSiteImportDesignText(doc))).toBe(BEFORE[name].text)
+    }
+  })
+
+  it.each(PAGES)('%s: Improve it adds its one line to the user turn, after the kind of site, and nothing else', (name) => {
+    const kept = promptOf(name, 'keep').split('\n')
+    const improved = promptOf(name, 'improve').split('\n')
+    const at = improved.indexOf(AI_LAYOUT_DESIGN_IMPROVE_LINE)
+    expect(at).toBe(2)
+    expect([...improved.slice(0, at), ...improved.slice(at + 1)]).toEqual(kept)
+  })
+
+  it('leaves the cached instructions and the tool as they were, either way', () => {
+    expect(AI_LAYOUT_DESIGN_IMPROVE_LINE).toBe("The owner asked for a better design: choose the hero, bands, alignment and styles that read best for this kind of site; the source's own are not required.")
+    expect(digest(AI_LAYOUT_DESIGN_TEXT)).toBe('de6ee2cf28bf625e7f982e10af9f49f511239d8f28d4897ef9564cdf09ab3fe4')
+    expect(digest(JSON.stringify(AI_LAYOUT_DESIGN_TOOL))).toBe('02fcea665d78b12fcc901866c2d2c6fe3a160e91e371c0f39e817b5f6538c455')
+  })
+})
+
+describe('Keep my site holds the opening’s words to the source’s own heading measure (AGL-4152)', () => {
+  it('maps a measure to the theme’s breakpoint nearest it, a page’s at most, and none where the source sets none', () => {
+    const at = (measure?: number) => aiSiteImportHeroMeasure({ hero: { picture: 'below', ...(measure === undefined ? {} : { measure }) } })
+    expect([at(480), at(720), at(760), at(1080), at(1100), at(1536)]).toEqual(['sm', 'sm', 'md', 'md', 'lg', 'lg'])
+    expect([at(), at(0), at(Number.NaN)]).toEqual([null, null, null])
+    expect(aiSiteImportHeroMeasure({})).toBeNull()
+  })
+
+  it('holds Home’s words to the width step its measure maps to, never a pixel width, and passes the page check', () => {
+    for (const [measure, step] of [[640, 'sm'], [980, 'md'], [1200, 'lg']] as const) {
+      const built = finished('home', 'keep', null, withMeasure(measure))
+      expect(built.violations).toEqual([])
+      expect(built.compiled.sections[0]).toMatchObject({ hero: 'column', measure: step })
+      expect(wordBoxes(built)).toEqual([{ xs: '100%', md: step }, { xs: '100%', md: step }])
+      expect(JSON.stringify(wordBoxes(built))).not.toMatch(/px/)
+    }
+  })
+
+  it('keeps the hero’s own share where the source sets no measure', () => {
+    const none = {
+      key: 'no-measure',
+      doc: (doc: AiSiteImportDocument): AiSiteImportDocument => {
+        const layout = layoutOf(doc)
+        return { ...doc, layout: { ...layout, sections: layout.sections.map((section, index) => (index === 0 && section.hero ? { ...section, hero: { picture: section.hero.picture } } : section)) } }
+      },
+    }
+    expect(wordBoxes(finished('home', 'keep', null, none))).toEqual([{ xs: '100%', md: '72%' }, { xs: '100%', md: '72%' }])
+    expect(finished('home', 'keep', null, none).compiled.sections[0]?.measure).toBeUndefined()
+  })
+
+  it('holds the words over a cover at the source’s measure too: the pottery studio’s opening', () => {
+    expect(wordBoxes(finished('pottery', 'keep'))).toEqual([{ xs: '100%', md: '62%' }])
+    const built = finished('pottery', 'keep', null, withMeasure(560))
+    expect(built.violations).toEqual([])
+    expect(wordBoxes(built)).toEqual([{ xs: '100%', md: 'sm' }])
+  })
+
+  it('draws the hero’s own share on a page its owner asked improved, whatever the source’s measure', () => {
+    const built = finished('home', 'improve', null, withMeasure(640))
+    expect(built.compiled.sections[0]?.measure).toBeUndefined()
+    expect(wordBoxes(built)).toEqual([{ xs: '100%', md: '72%' }, { xs: '100%', md: '72%' }])
+  })
+})
+
+describe.each(PAGES)('Improve it: %s drawn freely, every word, picture and heading kept (AGL-4152)', (name) => {
+  const doc = docOf(name)
+  const keep = () => finished(name, 'keep')
+  const cases: Array<[string, Record<string, unknown> | null]> = [
+    ['with no answer, as a copied page is', null],
+    ['with an answer that moves all a design may', freeAnswer(doc)],
+  ]
+
+  it.each(cases)('%s: passes the page check with no violation', (_label, answer) => {
+    expect(finished(name, 'improve', answer).violations).toEqual([])
+  })
+
+  it.each(cases)('%s: shows every word of the source exactly once, as written', (_label, answer) => {
+    const built = finished(name, 'improve', answer)
+    expect(tally(shownWords(built.stored))).toEqual(tally(sourceLines(doc)))
+    expect(built.compiled.words).toBe(built.compiled.sourceWords)
+  })
+
+  it.each(cases)('%s: keeps all the source’s content Keep my site keeps: its sections, tables, tabs, pictures, icons, buttons, headings, forms and films', (_label, answer) => {
+    const improved = contentOf(finished(name, 'improve', answer).fidelity)
+    const kept = contentOf(keep().fidelity)
+    expect(improved.words).toBe(1)
+    for (const [measure, ratio] of Object.entries(kept)) expect([measure, improved[measure as keyof typeof improved]]).toEqual([measure, ratio])
+  })
+
+  it.each(cases)('%s: draws every section at the theme’s widths, a page’s or a long read’s, never the source’s', (_label, answer) => {
+    const widths = containerWidths(finished(name, 'improve', answer).tree)
+    expect(widths.every((width) => width === 'lg' || width === 'md')).toBe(true)
+    expect(finished(name, 'improve', answer).compiled.sections.map((section) => section.width)).toEqual(
+      aiSiteImportDesignedSections({ ...doc, finish: 'improve' }).sections.map((section) => section.width),
+    )
+  })
+
+  it.each(cases)('%s: draws its bands in the site’s rhythm, two strong bands of a kind at most', (_label, answer) => {
+    const bands = sectionsOf(finished(name, 'improve', answer).tree).map(({ node }) => bandOf(node))
+    const { bandRhythm } = aiLayoutDesignChoices({ kind: 'business', seed: 7, home: name === 'home' })
+    bands.forEach((band, index) => {
+      if (index === 0 || (band !== 'plain' && band !== 'soft')) return
+      if (bandRhythm === 'plain') expect([index, band]).toEqual([index, 'plain'])
+      else expect([index, band]).not.toEqual([index, bands[index - 1]])
+    })
+    expect(bands.filter((band) => band === 'dark').length).toBeLessThanOrEqual(2)
+    expect(bands.filter((band) => band === 'brand').length).toBeLessThanOrEqual(2)
+  })
+})
+
+describe('Improve it: what the design answer may change (AGL-4152)', () => {
+  const asked = (hero: string, band = 'source') => ({ sections: [{ hero, band, align: 'source', groups: [] }] })
+
+  it('opens Home as the hero the answer asks, its picture beside its words, which Keep my site sets aside', () => {
+    const grid = (built: Finished) => Object.values(built.stored).some((node) => node.componentId === 'muiGrid' && node.props?.['size'] === 'xs:12 md:6')
+    expect(finished('home', 'improve', asked('split')).compiled.sections[0]?.hero).toBe('split')
+    expect(grid(finished('home', 'improve', asked('split')))).toBe(true)
+    expect(finished('home', 'keep', asked('split')).compiled.sections[0]?.hero).toBe('column')
+    expect(grid(finished('home', 'keep', asked('split')))).toBe(false)
+  })
+
+  it('still never dims words over a lighter ground: a cover on Home’s white opening is its own column, on a dark one a cover', () => {
+    const light = finished('home', 'improve', asked('cover'))
+    expect(light.compiled.sections[0]?.hero).toBe('column')
+    expect(light.compiled.settled.map((note) => note.what)).toContain('the cover hero set aside: the section keeps its own lighter ground')
+    const dark = finished('home', 'improve', asked('cover', 'dark'))
+    expect(dark.violations).toEqual([])
+    expect(dark.compiled.sections[0]).toMatchObject({ hero: 'cover', band: 'dark' })
+    expect(dark.stored['sec-0']?.props?.['colorScheme']).toBe('dark')
+  })
+
+  it('gives a section that has a ground of its own the band and the alignment the answer asks', () => {
+    const doc = docOf('home')
+    const answer = answerFor(doc, { band: (index) => (index === 2 ? 'dark' : 'source'), align: (index) => (index === 1 ? 'center' : 'source') })
+    const improved = finished('home', 'improve', answer)
+    expect(improved.compiled.sections[2]?.band).toBe('dark')
+    expect(improved.stored['sec-2']?.props?.['colorScheme']).toBe('dark')
+    expect(improved.compiled.sections[1]?.align).toBe('center')
+    const kept = finished('home', 'keep', answer)
+    expect(kept.stored['sec-2']?.props?.['colorScheme']).toBeUndefined()
+    expect(kept.compiled.sections[1]?.align).toBe(layoutOf(doc).sections[1]?.align)
+  })
+
+  it('keeps a group of questions as questions a visitor opens, whatever kind the answer names', () => {
+    // The 11/4 eval's answers redrew five pages' questions as cards: they stay questions (AGL-4152).
+    const doc = docOf('home')
+    const answer = answerFor(doc, { group: (group) => (group.group === 'faq' ? { kind: 'cards', style: 'cards' } : { kind: 'source', style: 'cards' }) })
+    const improved = finished('home', 'improve', answer)
+    expect(improved.violations).toEqual([])
+    expect(ofKind(improved.tree, Object.keys(improved.tree.nodes), 'muiAccordion')).toHaveLength(11)
+    expect(ofKind(finished('home', 'keep', answer).tree, Object.keys(finished('home', 'keep', answer).tree.nodes), 'muiAccordion')).toHaveLength(11)
+    expect(contentOf(improved.fidelity)).toEqual(contentOf(finished('home', 'keep').fidelity))
+  })
+
+  it('keeps a quote a quote and a strip of logos a strip, whatever kind the answer names', () => {
+    const answer = answerFor(docOf('pottery'), { group: () => ({ kind: 'cards', style: 'cards' }) })
+    const improved = finished('pottery', 'improve', answer)
+    expect(improved.violations).toEqual([])
+    expect(role(improved.tree, 'quote')).toHaveLength(3)
+    expect(role(improved.tree, 'logo')).toHaveLength(4)
+  })
+
+  it('leaves the source’s rows as rows for a style alone, and reads them as the kind an answer names', () => {
+    const shape = (built: Finished) => role(built.tree, 'ruledRow').length
+    const styled = finished('livePricing', 'improve', answerFor(docOf('livePricing'), { group: () => ({ kind: 'source', style: 'cards' }) }))
+    expect(shape(styled)).toBe(shape(finished('livePricing', 'keep')))
+    const kinded = finished('livePricing', 'improve', answerFor(docOf('livePricing'), { group: (group) => (group.inline ? { kind: 'cards', style: 'ruled' } : { kind: 'source', style: 'cards' }) }))
+    expect(kinded.violations).toEqual([])
+    expect(shape(kinded)).toBeLessThan(shape(styled))
+    expect(tally(shownWords(kinded.stored))).toEqual(tally(sourceLines(kinded.doc)))
+  })
+})
+
+describe('Improve it draws three or more like runs of lines as cards; Keep my site leaves them lines (AGL-4152)', () => {
+  const region = 'main' as const
+  const SERVICES: Array<[string, string]> = [
+    ['Cleanings', 'A gentle cleaning twice a year keeps teeth strong.'],
+    ['Fillings', 'Tooth-colored fillings, done in one visit.'],
+    ['Crowns', 'A crown made to match, fitted the same week.'],
+  ]
+  const blocks: SiteImportBlock[] = [
+    { kind: 'heading', level: 1, text: 'A family dental practice', region },
+    { kind: 'paragraph', text: 'Care for every age, close to home.', region },
+    { kind: 'heading', level: 2, text: 'What we do', region },
+    ...SERVICES.flatMap(([title, text]): SiteImportBlock[] => [
+      { kind: 'heading', level: 3, text: title, region },
+      { kind: 'paragraph', text, region },
+    ]),
+  ]
+  const runs = (count: number) => ({
+    kind: 'group' as const,
+    group: 'text' as const,
+    columns: 3,
+    boxed: false,
+    items: Array.from({ length: count }, (_, at) => ({ lines: [3 + at * 2, 4 + at * 2], title: 3 + at * 2, text: [4 + at * 2] })),
+  })
+  const docWith = (count: number): AiSiteImportDocument => ({
+    build: 'arranged',
+    title: 'Home',
+    url: 'https://dental.example.com/',
+    blocks: blocks.slice(0, 3 + count * 2),
+    photos: [],
+    links: [],
+    origins: ['https://dental.example.com'],
+    layout: {
+      v: 1,
+      sections: [
+        { name: 'Welcome', from: 'heading', band: 'plain', background: '#ffffff', align: 'center', nodes: [{ kind: 'line', line: 0 }, { kind: 'line', line: 1 }], lines: [0, 1] },
+        {
+          name: 'What we do',
+          from: 'heading',
+          band: 'soft',
+          background: '#f4f4f4',
+          align: 'start',
+          nodes: [{ kind: 'line', line: 2 }, runs(count)],
+          lines: Array.from({ length: 1 + count * 2 }, (_, at) => 2 + at),
+        },
+      ],
+      icons: [],
+      look: { fonts: { body: null, headings: null, google: [] }, background: null, text: null, buttonFill: null, buttonText: null, buttonRadius: null, link: null, header: null },
+    },
+  })
+  const cardsOf = (designed: ReturnType<typeof aiSiteImportDesignedSections>) => designed.sections[1]?.blocks.filter((block) => block.kind === 'cards') ?? []
+
+  it('reads the three services as cards, each its title over its words', () => {
+    const designed = aiSiteImportDesignedSections({ ...docWith(3), finish: 'improve' })
+    expect(cardsOf(designed).map((block) => block.items?.map((item) => [item.title, item.text]))).toEqual([SERVICES])
+    expect(designed.settled.map((note) => note.what)).toContain('3 like runs of lines drawn as cards')
+  })
+
+  it('leaves them lines when the page is kept, and two of them lines either way', () => {
+    expect(cardsOf(aiSiteImportDesignedSections({ ...docWith(3), finish: 'keep' }))).toEqual([])
+    expect(cardsOf(aiSiteImportDesignedSections({ ...docWith(2), finish: 'improve' }))).toEqual([])
+  })
+
+  it('builds either way with no violation, every word and every heading kept, the cards open as the source draws them', () => {
+    const built = (finish: Finish) => finishedDoc(docWith(3), finish, null, '/', `dental:${finish}`)
+    for (const finish of ['keep', 'improve'] as const) {
+      expect(built(finish).violations).toEqual([])
+      expect(tally(shownWords(built(finish).stored))).toEqual(tally(sourceLines(built(finish).doc)))
+      expect(built(finish).fidelity.headings.ratio).toBe(1)
+    }
+    expect(role(built('improve').tree, 'ruled')).toHaveLength(3)
+    expect(role(built('keep').tree, 'ruled')).toEqual([])
   })
 })

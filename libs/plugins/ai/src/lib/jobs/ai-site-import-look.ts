@@ -54,9 +54,9 @@ import type { PluginMediaIngest } from '@aglyn/aglyn/plugin-manager/plugin-media
 import { themeFontFacts, type ThemeFontFacts } from '@aglyn/aglyn/plugin-manager/plugin-theme-font-catalog'
 import { syncHostProjectionForMembers } from '@aglyn/tenant-data-admin/server/host-memberships'
 import { aiSiteListingSeeded } from '../model/ai-site-entity'
-import type { AiSiteImportHome, AiSiteImportLook, AiSiteImportPhoto, SiteImportLookFacts } from '../model/ai-site-import'
+import type { AiSiteImportFinish, AiSiteImportHome, AiSiteImportLook, AiSiteImportPhoto, SiteImportLookFacts } from '../model/ai-site-import'
 import { aiSiteKindFor } from '../model/ai-site-kinds'
-import { aiHexOklch, aiSiteSeed, aiSiteStyleFor, type AiSiteSourceFont, type AiSiteStyle } from '../model/ai-site-look'
+import { aiHexOklch, aiSiteSeed, aiSiteStyleFor, type AiSiteLookPins, type AiSiteSourceFont, type AiSiteStyle } from '../model/ai-site-look'
 import { aiSiteIsStarterSrc } from '../model/ai-site-photos'
 import { AGLYN_BOT_USER_AGENT, siteImportOrigins, type SiteImportCrawlSeams } from '../site-import/site-import-crawl'
 import { NO_SITE_IMPORT_HEADERS, siteImportEdgeHeadersFor, type SiteImportHeadersFor } from '../site-import/site-import-edge'
@@ -178,14 +178,25 @@ export function aiSiteImportBrandOf(facts: Pick<SiteImportLookFacts, 'buttonFill
   return { brand, accent: link && link !== brand ? link : null }
 }
 
+const solidHex = (value: string | null | undefined): string | null => (value && /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : null)
+
 /**
  * The look a source's signals pin (AGL-4084), drawn the way a guided start's
  * is: the kind of site its own description says, the import's seed, its
  * strongest color as the brand. What the reader found of its look
  * (`facts`, AGL-4108) pins it closer: its buttons' fill as the brand and its
- * links' color as the accent, its page's ground, and its own fonts where the
- * catalog has them (`fonts`). `null` where the source showed no color to
- * carry a brand, so the site keeps the theme it has.
+ * links' color as the accent, its eyebrows' own color as the third, and its
+ * own fonts where the catalog has them (`fonts`). `null` where the source
+ * showed no color to carry a brand, so the site keeps the theme it has.
+ *
+ * How the owner asked the site to be finished (AGL-4152) says what else:
+ * - **Keep my site** (`keep`, and an import that names none) pins the rest
+ *   of its look as it draws it: its page's ground and its dark bands', its
+ *   buttons' corners and case and their own fill and words, every inspiration
+ *   signal, and its eyebrows set as spaced capitals.
+ * - **Improve it** (`improve`) pins only the brand, accent and third colors
+ *   and the fonts, so the base that suits the kind of site shows with its own
+ *   corners, buttons, grounds and eyebrows.
  */
 export function aiSiteImportStyle(
   site: AiSiteInspirationSite | null,
@@ -195,13 +206,25 @@ export function aiSiteImportStyle(
     avoid?: readonly AiSiteStyle[]
     facts?: SiteImportLookFacts | null
     fonts?: AiSiteStyle['sourceFonts']
+    finish?: AiSiteImportFinish | null
   },
 ): AiSiteStyle | null {
   const facts = input.facts ?? null
+  const finish: AiSiteImportFinish = input.finish === 'improve' ? 'improve' : 'keep'
   const own = aiSiteImportBrandOf(facts)
   if (!site && !own) return null
   const kind = aiSiteKindFor(input.description)
-  const pins = site ? aiSiteInspirationLookPins({ v: 1, sites: [site], unread: 0 }, { kind, seed: input.seed }) : {}
+  const signals = site ? aiSiteInspirationLookPins({ v: 1, sites: [site], unread: 0 }, { kind, seed: input.seed }) : {}
+  // Improve keeps the brand's colors and its type, and nothing else its source draws.
+  const pins: AiSiteLookPins =
+    finish === 'improve'
+      ? {
+          ...(signals.brand ? { brand: signals.brand } : {}),
+          ...(signals.hue !== undefined ? { hue: signals.hue } : {}),
+          ...(signals.accent !== undefined ? { accent: signals.accent } : {}),
+          ...(signals.fonts ? { fonts: signals.fonts } : {}),
+        }
+      : signals
   if (own) {
     pins.brand = own.brand
     pins.hue = Math.round(aiHexOklch(own.brand).h) % 360
@@ -209,22 +232,34 @@ export function aiSiteImportStyle(
   }
   // Its buttons' corners round the theme's shape where its stylesheets did not say (AGL-4108).
   const radius = facts?.buttonRadius
-  if (typeof radius === 'number' && Number.isFinite(radius) && radius >= 0) {
+  if (finish === 'keep' && typeof radius === 'number' && Number.isFinite(radius) && radius >= 0) {
     pins.buttons ??= radius >= 24 ? 'pill' : radius <= 2 ? 'square' : 'rounded'
     pins.corners ??= radius <= 2 ? 'sharp' : radius <= 10 ? 'soft' : radius <= 20 ? 'round' : 'pill'
   }
   // Its eyebrows as it sets them (AGL-4138): spaced capitals with no line before them — the
   // reader takes an eyebrow only in capitals, and no mark a page draws before one is a word of
   // it — and their own color, where it is one, as the theme's third.
-  if (facts) pins.eyebrow = 'caps'
+  if (facts && finish === 'keep') pins.eyebrow = 'caps'
   if (colorful(facts?.eyebrow)) pins.tertiary = (facts?.eyebrow as string).toLowerCase()
   if (!pins.brand) return null
   const style = aiSiteStyleFor({ kind, answer: {}, seed: input.seed, brand: pins.brand, avoid: input.avoid ?? [], pins })
-  const page = facts?.background && /^#[0-9a-f]{6}$/i.test(facts.background) ? facts.background.toLowerCase() : null
+  const fonts = input.fonts ? { sourceFonts: input.fonts } : {}
+  if (finish === 'improve') return { ...style, finish, ...fonts }
+  // Keep my site (AGL-4152): its grounds, its buttons' case, and its filled buttons as it draws them.
+  const page = solidHex(facts?.background)
+  const darkPage = solidHex(facts?.darkBackground)
+  const buttonFill = solidHex(facts?.buttonFill)
+  const buttonText = buttonFill ? solidHex(facts?.buttonText) : null
+  const buttonCase = facts?.buttonCase === 'upper' || facts?.buttonCase === 'none' ? facts.buttonCase : null
   return {
     ...style,
+    finish,
     ...(page ? { page } : {}),
-    ...(input.fonts ? { sourceFonts: input.fonts } : {}),
+    ...(darkPage ? { darkPage } : {}),
+    ...(buttonCase ? { buttonCase } : {}),
+    ...(buttonFill ? { buttonFill } : {}),
+    ...(buttonText ? { buttonText } : {}),
+    ...fonts,
   }
 }
 
@@ -339,6 +374,8 @@ export interface AiSiteImportLookInput {
   home: AiSiteImportHome
   at: string
   signal?: AbortSignal
+  /** How the site is finished (AGL-4152): Keep my site keeps more of the source's look. Absent is `keep`. */
+  finish?: AiSiteImportFinish | null
 }
 
 async function readHostDoc(firestore: FirebaseFirestore.Firestore, hostId: string): Promise<Record<string, unknown> | null> {
@@ -426,7 +463,7 @@ export async function aiRunSiteImportLook(input: AiSiteImportLookInput, deps: Ai
   // What the reader found of its look, its buttons, ground and fonts (AGL-4108).
   const facts = home.look ?? null
   const fonts = await aiSiteImportSourceFonts(facts, deps.fontFacts)
-  const style = aiSiteImportStyle(site, { seed, description: `${home.siteName} ${home.description}`, avoid, facts, fonts })
+  const style = aiSiteImportStyle(site, { seed, description: `${home.siteName} ${home.description}`, avoid, facts, fonts, finish: input.finish ?? null })
   let theme: AiSiteImportLook['theme'] = 'unread'
   if (style) {
     const saved = await (deps.save ?? aiSaveSiteTheme)(firestore, { hostId, jobId: input.jobId, style })

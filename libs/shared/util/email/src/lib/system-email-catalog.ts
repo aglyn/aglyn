@@ -1171,7 +1171,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         {
           name: 'notification.body',
           description: 'The detail under it, when it has any',
-          sample: 'Test Org canceled, leaving the Advanced plan.',
+          sample: 'Test Org canceled, leaving the Pro plan.',
         },
         {
           name: 'notification.details',

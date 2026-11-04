@@ -188,11 +188,27 @@ interface Row {
 const TALK = 'Talk to us'
 const CUSTOM_LABEL = 'Custom'
 /**
- * Custom's price, wherever the page states one: the compare grid's price strip
- * and the strip's card. The plan is NAMED Custom (`PLAN_LABELS.enterprise`)
- * since pricing v4, so its price reads "Quoted" rather than repeating the name.
+ * The name each plan carries in the /pricing page's header positions: the
+ * plan cards, the compare grid's column header, both plan-tab strips and the
+ * add-on table's column header. Since 2026-11-04 (AGL-4126) the free plan
+ * reads "Hobby" and the top plan "Enterprise" there, and ONLY there: the
+ * console, the docs, the Terms and the page's own prose sentences keep
+ * `PLAN_LABELS` ("Free", "Custom"). So this is a page-local overlay, not a
+ * rename, and the cell keys the declarations below use stay on `PLAN_LABELS`.
  */
-const QUOTED = 'Quoted'
+const PAGE_PLAN_LABELS: Record<Plan, string> = {
+  ...PLAN_LABELS,
+  free: 'Hobby',
+  enterprise: 'Enterprise',
+}
+
+/**
+ * The top plan's price, wherever the page states one: the compare grid's
+ * price strip and the strip's card. Since the header positions name the plan
+ * Enterprise (2026-11-04, AGL-4126) its price reads "Custom"; it read
+ * "Quoted" while the plan itself was named Custom.
+ */
+const QUOTED = 'Custom'
 
 const E = (p: Plan) => PLAN_ENTITLEMENTS[p]
 const F = (p: Plan) => PLAN_ENTITLEMENTS[p].features
@@ -568,8 +584,9 @@ const USAGE_ROWS: UsageRow[] = [
      * Runs past the bands (pricing v4, 2026-11-03, AGL-4126): `perRun` at cost
      * + 30% kept after card fees, rounded up to the cent — $0.02 on every plan
      * whose run bands bill, and a dash where they are walls (Free, Starter).
+     * Labelled the way `/pricing` and every breakpoint print it.
      */
-    label: 'Workflow and action runs, per 1,000 over the included bands',
+    label: 'Workflow runs, per 1,000 over the included band',
     rate: 'extraRunsUsdPer1k',
   },
 ]
@@ -600,7 +617,7 @@ const compare = {
   highlightPlan: 'pro' as const,
   columns: PLANS.map((p) => ({
     plan: p,
-    label: PLAN_LABELS[p],
+    label: PAGE_PLAN_LABELS[p],
     monthlyUsd: PLAN_PRICING[p].basePriceMonthlyUsd,
     annualMonthlyUsd: PLAN_PRICING[p].basePriceAnnualMonthlyUsd,
     priceLabel:
@@ -625,7 +642,7 @@ const compare = {
 const USAGE_PLANS: Plan[] = [...PAID, 'enterprise']
 
 const usage = {
-  columns: USAGE_PLANS.map((p) => ({ plan: p, label: PLAN_LABELS[p] })),
+  columns: USAGE_PLANS.map((p) => ({ plan: p, label: PAGE_PLAN_LABELS[p] })),
   rowLabel: 'Add-on capacity',
   highlightPlan: 'pro' as const,
   rows: USAGE_ROWS.map((r) => ({
@@ -712,37 +729,41 @@ const METERED_ROWS: Array<{
   decimals: number
   unit: string
 }> = [
-  {
-    label: 'Media & file storage',
-    costUsd: ORG_COGS_UNIT_RATES_USD.storagePerGbMonth,
-    quotedPer: 1,
-    decimals: 4,
-    unit: '/ GB-mo',
-  },
+  // In the page's order and its words (AGL-4126): page views first, the
+  // storage row last and named "Site media & file storage", per-1k rates
+  // written "/ 1,000".
   {
     label: 'Page views (bandwidth + reads)',
     costUsd: ORG_COGS_UNIT_RATES_USD.perPageView + PAGE_VIEW_CDN_REQUEST_COST_USD,
     quotedPer: 1000,
     decimals: 2,
-    unit: '/ 1k views',
+    unit: '/ 1,000',
   },
   {
     label: 'Form submissions',
     costUsd: ORG_COGS_UNIT_RATES_USD.perFormSubmission,
     quotedPer: 1000,
     decimals: 3,
-    unit: '/ 1k',
+    unit: '/ 1,000',
+  },
+  {
+    label: 'Site media & file storage',
+    costUsd: ORG_COGS_UNIT_RATES_USD.storagePerGbMonth,
+    quotedPer: 1,
+    decimals: 4,
+    unit: '/ GB-mo',
   },
 ]
 
 const metered = {
-  heading: 'Metered infrastructure — passed through at cost + 30%, after card fees',
+  heading: 'What usage past your plan costs.',
   markupPct: Math.round((METERED_MARKUP - 1) * 100),
-  columns: [
-    'Metered item',
-    'Our cost',
-    `You pay (+${Math.round((METERED_MARKUP - 1) * 100)}% after card fees)`,
-  ],
+  /*
+   * The page prints two columns, the item and what the customer pays
+   * (AGL-4126). The cost each price is derived from stays in `rows[].ourCost`
+   * so the "+30%" the prose states can still be checked against a figure.
+   */
+  columns: ['Metered item', 'You pay'],
   rows: METERED_ROWS.map((r) => ({
     label: r.label,
     unit: r.unit,
@@ -826,21 +847,21 @@ const fees = {
  */
 const tiers = {
   heading: 'Need more than Pro?',
-  lede: 'Custom plans for portfolios, white-label and single sign-on.',
+  lede: 'White-label, single sign-on and contracts, quoted per agreement.',
   enterprise: {
     plan: 'enterprise',
-    label: PLAN_LABELS.enterprise,
+    label: PAGE_PLAN_LABELS.enterprise,
     priceLabel: QUOTED,
+    /** The line under the price on the card. */
+    tagline: 'Sized and priced per agreement',
     annualLabel: 'Quoted per agreement',
     blurb:
-      'For portfolios and organizations that need white-label, single sign-on or a contract — quoted for you.',
+      'For portfolios and organizations that need white-label, single sign-on or a contract.',
     specs: [
-      // Not "Unlimited scale": since AGL-2654 a Custom agreement falls back to
-      // finite bands on every axis it does not name, so every limit is one
-      // the agreement sizes.
-      'Every limit sized by agreement',
       `${pct(PLAN_ENTITLEMENTS.enterprise.transactionFeeDigitalPct)} transaction fees`,
-      'white-label',
+      // White-label covers the console and the workspace's email, which is
+      // how the live card words it.
+      'white-label console & email',
       'SSO',
       // Was `'SLA & dedicated support'` (AGL-2194 P4). Dedicated support is
       // real — a named manager and a 24–48h first response, which the FAQ
@@ -855,6 +876,10 @@ const tiers = {
       'dedicated support',
       'custom contracts',
       'volume pricing',
+      // Not "Unlimited scale": since AGL-2654 a Custom agreement falls back to
+      // finite bands on every axis it does not name, so every limit is one
+      // the agreement sizes. Last on the live card, after the contract terms.
+      'limits set by agreement',
     ],
     cta: 'CONTACT SALES',
     // Deliberately no signup href and no cadence: Custom is quoted, not
@@ -905,8 +930,6 @@ const addons = {
       // every paid plan sold, bought in any quantity up to the ceiling. Free
       // sells none; Custom by agreement.
       priceUsd: AI_CREDIT_BLOCK_MONTHLY_USD,
-      /** What one price buys, which the headline names: "$10 / mo a block". */
-      unit: 'block',
       scope: 'organization',
       maxQuantity: AI_CREDIT_BLOCKS_MAX,
       creditsPerBlock: AI_CREDITS_PER_BLOCK,
@@ -917,9 +940,10 @@ const addons = {
        * it is a figure the page states, read from the block's constants.
        */
       blurb:
-        `Blocks of ${num(AI_CREDITS_PER_BLOCK)} AI credits a month, per workspace, on any ` +
-        `paid plan — up to ${AI_CREDIT_BLOCKS_MAX} blocks. They add to the credits your plan ` +
-        'includes; past both, credits bill at your plan’s rate. Custom by agreement.',
+        `${num(AI_CREDITS_PER_BLOCK)} AI credits a month for $${AI_CREDIT_BLOCK_MONTHLY_USD}, per ` +
+        'workspace, on any paid plan. Add as many blocks as you need, up to ' +
+        `${AI_CREDIT_BLOCKS_MAX}, on top of the credits your plan includes; past those, credits ` +
+        'bill at your plan’s rate in the usage table. Custom by agreement.',
     },
     {
       // The managed-website add-on (AGL-3954): staff time on the customer's
@@ -972,7 +996,7 @@ const frameTable = frame.sections
   ?.groups.find((g) => g.name === 'Feature table')
 
 /**
- * The columns the frame draws, left to right: Free, Starter, Pro, Custom
+ * The columns the frame draws, left to right: Hobby, Starter, Pro, Enterprise
  * since pricing v4 — the same list every table here publishes.
  */
 const framePlanOrder: Plan[] = PLANS
@@ -1207,13 +1231,10 @@ const frameMetered = frame.sections
  * fails too and forces the entry out. An entry that matches nothing is the one
  * thing this cannot become.
  */
-const FRAME_STALE_METERED: Record<
-  string,
-  { ourCost: string; youPay: string; why: string }
-> = {}
+const FRAME_STALE_METERED: Record<string, { youPay: string; why: string }> = {}
 
-for (const [label, [ourCost, youPay]] of injected('--declare-stale-metered', 3)) {
-  FRAME_STALE_METERED[label] = { ourCost, youPay, why: INJECTED_WHY }
+for (const [label, [youPay]] of injected('--declare-stale-metered', 2)) {
+  FRAME_STALE_METERED[label] = { youPay, why: INJECTED_WHY }
 }
 
 const meteredDiffs: string[] = []
@@ -1231,24 +1252,19 @@ for (const row of metered.rows) {
     continue
   }
   const declared = FRAME_STALE_METERED[row.label]
-  const agrees = rec.cells[1] === row.ourCost && rec.cells[2] === row.youPay
+  // The page prints the item and what the customer pays (AGL-4126); the cost
+  // column it once printed beside them is gone, so the price is the cell.
+  const agrees = rec.cells[1] === row.youPay
   if (agrees) {
     // The page caught up. The declaration has to go with it, or the next
     // regression is silently pre-excused.
     if (declared) staleResolved.push(row.label)
     continue
   }
-  if (
-    declared &&
-    rec.cells[1] === declared.ourCost &&
-    rec.cells[2] === declared.youPay
-  ) {
-    continue
-  }
+  if (declared && rec.cells[1] === declared.youPay) continue
   meteredDiffs.push(
-    `${row.label}: code=${row.ourCost} / ${row.youPay}  ` +
-      `frame=${rec.cells[1]} / ${rec.cells[2]}` +
-      (declared ? `  (declared stale value was ${declared.ourCost} / ${declared.youPay})` : ''),
+    `${row.label}: code=${row.youPay}  frame=${rec.cells[1]}` +
+      (declared ? `  (declared stale value was ${declared.youPay})` : ''),
   )
 }
 
@@ -1460,7 +1476,7 @@ const reconciler = (
  * nothing here reads, and is reported as an unrecognized header rather than
  * compared against a row the page no longer sells.
  */
-const planByLabel = new Map<string, Plan>(PLANS.map((p) => [PLAN_LABELS[p], p] as const))
+const planByLabel = new Map<string, Plan>(PLANS.map((p) => [PAGE_PLAN_LABELS[p], p] as const))
 
 /**
  * Which plan a mobile export is showing. The mobile compare grid and the
@@ -1585,13 +1601,20 @@ for (const v of frames) {
     tierStrip.absent('no heading record', v.name)
   }
 
-  /** label → the three records the frame draws for that card, in order. */
-  const cards = new Map<string, { price: string; blurb: string; specs: string; cta: string }>()
+  /**
+   * label → the three records the frame draws for that card, in order. The
+   * first is the name, the price and the tagline under it.
+   */
+  const cards = new Map<
+    string,
+    { price: string; tagline: string; blurb: string; specs: string; cta: string }
+  >()
   strip.forEach((rec, i) => {
     const name = rec.cells[0]
-    if (rec.cells.length !== 2 || !tierLabels.has(name)) return
+    if (rec.cells.length !== 3 || !tierLabels.has(name)) return
     cards.set(name, {
       price: rec.cells[1],
+      tagline: rec.cells[2],
       blurb: strip[i + 1]?.cells[0] ?? '',
       specs: strip[i + 1]?.cells[1] ?? '',
       cta: strip[i + 2]?.cells[0] ?? '',
@@ -1605,6 +1628,7 @@ for (const v of frames) {
       continue
     }
     tierStrip.cell(`${tier.label} · price`, tier.priceLabel, card.price, v.name)
+    tierStrip.cell(`${tier.label} · tagline`, tier.tagline, card.tagline, v.name)
     tierStrip.cell(`${tier.label} · blurb`, tier.blurb, card.blurb, v.name)
     tierStrip.cell(`${tier.label} · CTA`, tier.cta, card.cta, v.name)
     const theirs = card.specs.split(' · ')
@@ -1667,8 +1691,6 @@ const USAGE_STALE: Record<string, Divergence> = {}
 const USAGE_EXPECTED_ABSENT: Record<string, string> = {
   'Email sends, per 1,000 over the included band':
     'the page states an email ALLOWANCE ("Campaign emails / mo" in the compare grid) and no overage rate, while `priceEmailSendOverage` bills `extraEmailSendsUsdPer1k` on every paid tier — and the cap refuses campaigns only, so transactional mail carries an org past its band with nothing able to stop it. Resolves when `/pricing` carries the row',
-  'Workflow and action runs, per 1,000 over the included bands':
-    'pricing v4 (AGL-4126) gives runs an overage rate, `extraRunsUsdPer1k`, which `report-usage` bills past the bands on Pro; the Figma frames predate it. Resolves when the page lane puts the row on `/pricing` and re-extracts the frames',
 }
 
 const addOnRates = reconciler(
@@ -1805,6 +1827,10 @@ for (const v of frames) {
  * gets edited like copy, while being every bit as much a published price as
  * the cell above it. The rate is extracted and matched exactly; the sentence
  * around it is design copy and may be rewritten freely.
+ *
+ * Since AGL-4126 the page's footnote names dataset storage without a rate and
+ * points at the add-on table, so no breakpoint carries the sentence today; a
+ * frame that states the rate again is read here.
  */
 const datasetRate = `${money(PLAN_PRICING.pro.extraDataGbMonthlyUsd)} / GB-mo`
 for (const v of frames) {
@@ -1933,8 +1959,8 @@ feeLadder.finish()
  * add-on.
  *
  * The AI credits card is one flat price a block since AGL-4144, so it is
- * matched like the other flat cards — its headline, exactly — with the unit
- * one price buys named after it: "$10 / mo a block".
+ * matched like the other flat cards — its headline, exactly: "$10 / mo". The
+ * card's sentence says what the block holds.
  *
  * NOT reconciled: `maxQuantity`, `scope` and the per-plan `included` counts.
  * The frame states none of them. `POS_REGISTERS_ADDON_MAX` in particular is
@@ -1978,9 +2004,9 @@ for (const v of frames) {
       addonCards.absentRow(row.label, v.name)
       continue
     }
-    // Every card is one flat price since AGL-4144 put Aglyn AI on a block;
-    // a card whose price buys a unit names it ("$10 / mo a block").
-    const headline = `$${row.priceUsd} / mo${'unit' in row && row.unit ? ` a ${row.unit}` : ''}`
+    // Every card is one flat price since AGL-4144 put Aglyn AI on a block,
+    // and every card prints it the same way: "$10 / mo" (AGL-4126).
+    const headline = `$${row.priceUsd} / mo`
     const scoped = `${headline} · per ${row.scope}`
     addonCards.cell(
       `${row.label} · price`,
@@ -2126,7 +2152,7 @@ console.log(`declared divergences from the frame: ` +
 // the one whose cells are a published price.
 for (const [label, d] of Object.entries(FRAME_STALE_METERED)) {
   console.log(
-    `  pass-through exempt: ${label} — frame draws ${d.ourCost} / ${d.youPay}`,
+    `  pass-through exempt: ${label} — frame draws ${d.youPay}`,
   )
 }
 // …and the stale compare and scale-strip cells, for the same reason: a cell
