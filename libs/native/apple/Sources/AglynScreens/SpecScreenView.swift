@@ -663,7 +663,9 @@ struct SpecScreenBody: View {
   private func trigger(_ action: ActionSpec, scope: JSONValue) {
     if action.asksInputs(in: scope) {
       prompting = PendingAction(action: action, scope: scope)
-    } else if action.asksConfirmation, ScreenValues.condition(action.confirmWhen, in: scope) {
+    } else if action.check == nil, action.asksConfirmation, ScreenValues.condition(action.confirmWhen, in: scope) {
+      // An action with a `check` is confirmed over the check's answer, once `execute` has asked it: confirming first drew
+      // the confirm without `preview` (a plan switch read "Switch to Starter? The change is prorated …" for a move down).
       confirming = PendingAction(action: action, scope: scope)
     } else {
       Task { await execute(action, scope: scope) }

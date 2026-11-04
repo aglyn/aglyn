@@ -32,8 +32,8 @@ enum AiInsightUpsell {
     let feature = ContractValues.shared.aiInsightCardCopy.title
     let addon = "\(ContractValues.shared.platformBrandName) AI"
     return canManageBilling
-      ? "\(feature) is switched off for this workspace. It comes with an \(addon) tier, which you can choose in Billing."
-      : "\(feature) is switched off for this workspace. It comes with an \(addon) tier. Ask a workspace owner or admin to choose one in Billing."
+      ? "\(feature) is switched off for this workspace. It comes with \(addon) credits, which you can add in Billing."
+      : "\(feature) is switched off for this workspace. It comes with \(addon) credits. Ask a workspace owner or admin to add them in Billing."
   }
 }
 
