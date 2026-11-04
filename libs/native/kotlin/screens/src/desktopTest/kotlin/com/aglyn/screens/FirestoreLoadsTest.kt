@@ -88,7 +88,8 @@ class FirestoreLoadsTest {
     assertEquals("true", (gate(business)["carried"] as JsonPrimitive).content)
     assertEquals("false", (gate(free)["carried"] as JsonPrimitive).content)
     assertEquals("true", (gate(override)["carried"] as JsonPrimitive).content, "a per-workspace override wins over the plan")
-    assertEquals("Business", (gate(free)["label"] as JsonPrimitive).content)
+    // The cheapest plan that carries gift cards: Pro since pricing v4 (Business is retired).
+    assertEquals("Pro", (gate(free)["label"] as JsonPrimitive).content)
     assertEquals(JsonNull, gate(free).let { runBlocking { FirestoreLoads.entitlement(free, "nothingLikeIt", "o1") }.jsonObject["label"] })
   }
 }

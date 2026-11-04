@@ -103,7 +103,8 @@ final class FirestoreLoadsTests: XCTestCase {
     XCTAssertEqual(business["carried"], .bool(true))
     let free = try await gate(["plan": "free"])
     XCTAssertEqual(free["carried"], .bool(false))
-    XCTAssertEqual(free["label"], .string("Business"))
+    // The cheapest plan that carries gift cards: Pro since pricing v4 (Business is retired).
+    XCTAssertEqual(free["label"], .string("Pro"))
     let override = try await gate(["plan": "free", "entitlements": ["features": ["giftCards": true]]])
     XCTAssertEqual(override["carried"], .bool(true), "a per-workspace override wins over the plan")
     let unknown = try await gate(["plan": "free"], "nothingLikeIt")
