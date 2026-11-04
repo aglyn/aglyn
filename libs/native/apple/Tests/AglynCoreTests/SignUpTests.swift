@@ -30,22 +30,35 @@ final class SignUpTests: XCTestCase {
       OnboardingPlanIntent.parse(["plan": "Pro", "interval": "annual"]),
       OnboardingPlanIntent(plan: "pro", interval: "year", intervalStated: true, contactSales: false))
     XCTAssertEqual(
-      OnboardingPlanIntent.parse(["plan": "business"]),
-      OnboardingPlanIntent(plan: "business", interval: "month", intervalStated: false, contactSales: false))
+      OnboardingPlanIntent.parse(["plan": "starter"]),
+      OnboardingPlanIntent(plan: "starter", interval: "month", intervalStated: false, contactSales: false))
     XCTAssertEqual(OnboardingPlanIntent.parse(["plan": "enterprise", "ai": "1"])?.contactSales, true)
     XCTAssertEqual(OnboardingPlanIntent.parse(["plan": "enterprise", "ai": "1"])?.ai, false)
     XCTAssertNil(OnboardingPlanIntent.parse(["plan": "free"]))
     XCTAssertNil(OnboardingPlanIntent.parse(["plan": "gold"]))
     XCTAssertNil(OnboardingPlanIntent.parse([:]))
+    // The retired plans (pricing v4) are no longer sold, so an old link carries no plan.
+    for retired in ["business", "scale", "advanced", "agency"] {
+      XCTAssertNil(OnboardingPlanIntent.parse(["plan": retired, "interval": "year"]), retired)
+    }
+    XCTAssertEqual(OnboardingPlanIntent.selfServePlans, ["starter", "pro"])
     let pro = OnboardingPlanIntent.parse(["plan": "pro", "interval": "year", "ai": "yes"])!
     XCTAssertEqual(pro.query, "plan=pro&interval=year&ai=1")
     XCTAssertEqual(pro.destination(orgSlug: "acme"), "/acme/billing?plan=pro&interval=year&ai=1")
     XCTAssertEqual(pro.signUpHeadline, "Create your account to start on Pro, billed yearly")
-    let enterprise = OnboardingPlanIntent.parse(["plan": "enterprise"])!
-    XCTAssertEqual(enterprise.destination(orgSlug: "acme"), "/acme/support?topic=enterprise")
-    XCTAssertEqual(enterprise.signUpHeadline, "Create your account — we’ll get you set up on Enterprise")
+    let custom = OnboardingPlanIntent.parse(["plan": "enterprise"])!
+    XCTAssertEqual(custom.label, "Custom")
+    XCTAssertEqual(custom.destination(orgSlug: "acme"), "/acme/support?topic=enterprise")
+    XCTAssertEqual(custom.signUpHeadline, "Create your account — we’ll get you set up on Custom")
     // A stated-less plan keeps its interval unstated across the hop.
-    XCTAssertEqual(OnboardingPlanIntent.parse(["plan": "scale"])?.query, "plan=scale")
+    XCTAssertEqual(OnboardingPlanIntent.parse(["plan": "starter"])?.query, "plan=starter")
+  }
+
+  func testOffersAnUpgradeOnlyBelowTheTopSelfServePlan() {
+    XCTAssertEqual(OnboardingPlanIntent.upgradablePlans, ["free", "starter"])
+    for top in ["pro", "business", "scale", "advanced", "agency", "enterprise"] {
+      XCTAssertFalse(OnboardingPlanIntent.upgradablePlans.contains(top), top)
+    }
   }
 
   func testKeepsOnlyTheThreeCampaignKeysAndNeverAnAddress() {
