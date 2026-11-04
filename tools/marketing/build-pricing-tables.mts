@@ -188,11 +188,27 @@ interface Row {
 const TALK = 'Talk to us'
 const CUSTOM_LABEL = 'Custom'
 /**
- * Custom's price, wherever the page states one: the compare grid's price strip
- * and the strip's card. The plan is NAMED Custom (`PLAN_LABELS.enterprise`)
- * since pricing v4, so its price reads "Quoted" rather than repeating the name.
+ * The name each plan carries in the /pricing page's header positions: the
+ * plan cards, the compare grid's column header, both plan-tab strips and the
+ * add-on table's column header. Since 2026-11-04 (AGL-4126) the free plan
+ * reads "Hobby" and the top plan "Enterprise" there, and ONLY there: the
+ * console, the docs, the Terms and the page's own prose sentences keep
+ * `PLAN_LABELS` ("Free", "Custom"). So this is a page-local overlay, not a
+ * rename, and the cell keys the declarations below use stay on `PLAN_LABELS`.
  */
-const QUOTED = 'Quoted'
+const PAGE_PLAN_LABELS: Record<Plan, string> = {
+  ...PLAN_LABELS,
+  free: 'Hobby',
+  enterprise: 'Enterprise',
+}
+
+/**
+ * The top plan's price, wherever the page states one: the compare grid's
+ * price strip and the strip's card. Since the header positions name the plan
+ * Enterprise (2026-11-04, AGL-4126) its price reads "Custom"; it read
+ * "Quoted" while the plan itself was named Custom.
+ */
+const QUOTED = 'Custom'
 
 const E = (p: Plan) => PLAN_ENTITLEMENTS[p]
 const F = (p: Plan) => PLAN_ENTITLEMENTS[p].features
@@ -600,7 +616,7 @@ const compare = {
   highlightPlan: 'pro' as const,
   columns: PLANS.map((p) => ({
     plan: p,
-    label: PLAN_LABELS[p],
+    label: PAGE_PLAN_LABELS[p],
     monthlyUsd: PLAN_PRICING[p].basePriceMonthlyUsd,
     annualMonthlyUsd: PLAN_PRICING[p].basePriceAnnualMonthlyUsd,
     priceLabel:
@@ -625,7 +641,7 @@ const compare = {
 const USAGE_PLANS: Plan[] = [...PAID, 'enterprise']
 
 const usage = {
-  columns: USAGE_PLANS.map((p) => ({ plan: p, label: PLAN_LABELS[p] })),
+  columns: USAGE_PLANS.map((p) => ({ plan: p, label: PAGE_PLAN_LABELS[p] })),
   rowLabel: 'Add-on capacity',
   highlightPlan: 'pro' as const,
   rows: USAGE_ROWS.map((r) => ({
@@ -829,8 +845,10 @@ const tiers = {
   lede: 'Custom plans for portfolios, white-label and single sign-on.',
   enterprise: {
     plan: 'enterprise',
-    label: PLAN_LABELS.enterprise,
+    label: PAGE_PLAN_LABELS.enterprise,
     priceLabel: QUOTED,
+    /** The line under the price on the card. */
+    tagline: 'Sized and priced per agreement',
     annualLabel: 'Quoted per agreement',
     blurb:
       'For portfolios and organizations that need white-label, single sign-on or a contract — quoted for you.',
@@ -972,7 +990,7 @@ const frameTable = frame.sections
   ?.groups.find((g) => g.name === 'Feature table')
 
 /**
- * The columns the frame draws, left to right: Free, Starter, Pro, Custom
+ * The columns the frame draws, left to right: Hobby, Starter, Pro, Enterprise
  * since pricing v4 — the same list every table here publishes.
  */
 const framePlanOrder: Plan[] = PLANS
@@ -1460,7 +1478,7 @@ const reconciler = (
  * nothing here reads, and is reported as an unrecognized header rather than
  * compared against a row the page no longer sells.
  */
-const planByLabel = new Map<string, Plan>(PLANS.map((p) => [PLAN_LABELS[p], p] as const))
+const planByLabel = new Map<string, Plan>(PLANS.map((p) => [PAGE_PLAN_LABELS[p], p] as const))
 
 /**
  * Which plan a mobile export is showing. The mobile compare grid and the
@@ -1585,13 +1603,20 @@ for (const v of frames) {
     tierStrip.absent('no heading record', v.name)
   }
 
-  /** label → the three records the frame draws for that card, in order. */
-  const cards = new Map<string, { price: string; blurb: string; specs: string; cta: string }>()
+  /**
+   * label → the three records the frame draws for that card, in order. The
+   * first is the name, the price and the tagline under it.
+   */
+  const cards = new Map<
+    string,
+    { price: string; tagline: string; blurb: string; specs: string; cta: string }
+  >()
   strip.forEach((rec, i) => {
     const name = rec.cells[0]
-    if (rec.cells.length !== 2 || !tierLabels.has(name)) return
+    if (rec.cells.length !== 3 || !tierLabels.has(name)) return
     cards.set(name, {
       price: rec.cells[1],
+      tagline: rec.cells[2],
       blurb: strip[i + 1]?.cells[0] ?? '',
       specs: strip[i + 1]?.cells[1] ?? '',
       cta: strip[i + 2]?.cells[0] ?? '',
@@ -1605,6 +1630,7 @@ for (const v of frames) {
       continue
     }
     tierStrip.cell(`${tier.label} · price`, tier.priceLabel, card.price, v.name)
+    tierStrip.cell(`${tier.label} · tagline`, tier.tagline, card.tagline, v.name)
     tierStrip.cell(`${tier.label} · blurb`, tier.blurb, card.blurb, v.name)
     tierStrip.cell(`${tier.label} · CTA`, tier.cta, card.cta, v.name)
     const theirs = card.specs.split(' · ')

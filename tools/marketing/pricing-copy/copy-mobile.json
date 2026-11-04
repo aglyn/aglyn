@@ -5,7 +5,7 @@
   "frameName": "Pricing — Mobile",
   "frameSize": {
     "width": 375,
-    "height": 10858
+    "height": 10874
   },
   "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-pricing-copy.mjs (AGL-1278). `kind` and `notes` are left null for a human pass — the frame does not name its own section types. THE CODE WINS OVER THE FRAME: this file is a record of the design, not of the truth. Prices here have been caught drifting from libs/aglyn/src/lib/app-utils/plan-entitlements.ts twice; that file is the source of truth for every number.",
   "sections": [
@@ -83,7 +83,7 @@
       "name": "Plans",
       "order": 1,
       "widthPx": 375,
-      "heightPx": 1868,
+      "heightPx": 1884,
       "groups": [
         {
           "figmaNodeId": "247:3579",
@@ -94,14 +94,14 @@
               "figmaNodeId": "247:3580",
               "name": "h",
               "cells": [
-                "Free"
+                "Hobby"
               ]
             },
             {
               "figmaNodeId": "247:3582",
               "name": "price",
               "cells": [
-                "$0"
+                "Free"
               ]
             },
             {
@@ -170,7 +170,7 @@
               "figmaNodeId": "247:3627",
               "name": "fl",
               "cells": [
-                "Everything in Free, plus:",
+                "Everything in Hobby, plus:",
                 "25 pages · 2 collaborators",
                 "Custom domain & SSL",
                 "Remove Aglyn branding",
@@ -250,8 +250,9 @@
               "figmaNodeId": "574:1253",
               "name": "Frame",
               "cells": [
+                "Enterprise",
                 "Custom",
-                "Quoted"
+                "Sized and priced per agreement"
               ]
             },
             {
@@ -307,10 +308,10 @@
               "figmaNodeId": "268:1996",
               "name": "Plan selector",
               "cells": [
-                "Free",
+                "Hobby",
                 "Starter",
                 "Pro",
-                "Custom"
+                "Enterprise"
               ]
             }
           ]
