@@ -165,6 +165,7 @@ async function runOne(page: SiteLayoutPageName, answer: number): Promise<Wording
   const sectionIds = names.map((_, index) => `sec-${index}`)
   const screen = { title: doc.title, slug: page === 'home' || page === 'pottery' || page === 'bakery' ? '/' : `/${page}`, sections: names.map((section) => ({ name: section, uses: [] as string[], items: 0 })) }
   const siteName = siteNameOf(page)
+  const forms = page === 'contact' ? [{ id: 'form-contact', name: 'Contact' }] : []
   const result = await mockRunTag.run(tag, () =>
     aiRunLayoutPage({
       // A job of its own each answer, so each design answer is asked for a seed of its own.
@@ -172,8 +173,9 @@ async function runOne(page: SiteLayoutPageName, answer: number): Promise<Wording
       plan: { create: [], screens: [screen], reuse: [], labels: {}, status: 'confirmed' } as never,
       screen: screen as never,
       sectionIds,
-      targets: { pageId: 'p0', pages: [], homeIds: [], forms: [], formPageId: null, components: [], facts: '' } as never,
-      context: { screenIds: doc.links.map((link) => link.id), formIds: [], componentIds: [], codeBuilt: true },
+      // A page with a form places the site's saved one, as the import rebuilds it first (AGL-4152).
+      targets: { pageId: 'p0', pages: [], homeIds: [], forms, formPageId: null, components: [], facts: '' } as never,
+      context: { screenIds: doc.links.map((link) => link.id), formIds: forms.map((form) => form.id), componentIds: [], codeBuilt: true },
       reusableComponents: false,
       inventory: null,
       model: MODEL,

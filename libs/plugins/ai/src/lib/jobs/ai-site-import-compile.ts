@@ -397,9 +397,11 @@ const OPEN_KINDS: ReadonlySet<SiteImportGroupKind> = new Set(['cards', 'steps', 
 /**
  * The groups that keep their kind even on a page its owner asked improved
  * (AGL-4152): a quote's words and a strip of logos have no place in a card's
- * title or a step's, and would stop being what they are.
+ * title or a step's, and would stop being what they are; questions and
+ * answers stay questions a visitor opens, and plans stay plan cards. The 11/4
+ * eval's answers redrew five pages' questions as cards.
  */
-const FIXED_KINDS: ReadonlySet<SiteImportGroupKind> = new Set(['quotes', 'logos'])
+const FIXED_KINDS: ReadonlySet<SiteImportGroupKind> = new Set(['quotes', 'logos', 'faq', 'pricing'])
 
 /** The styles that box a group's items, and the ones that leave them open: Keep my site keeps a group's own (AGL-4152). */
 const BOXED_STYLES: ReadonlySet<AiLayoutGroupStyle> = new Set(['cards', 'articles'])
@@ -799,7 +801,7 @@ function groupBlocks(scope: MapScope, group: SiteImportLayoutGroup): AiLayoutBlo
     if (answer?.kind || answer?.style) scope.settled.push({ at: scope.at, what: `a ${group.group} group drawn as the source's rows` })
     return [{ kind: 'cards', items: group.items.map((item) => itemOf(scope, group, item)), columns: 1, inline: true }]
   }
-  // A page its owner asked improved reads any group as the answer does (AGL-4152), but a quote or a logo.
+  // A page its owner asked improved reads any group as the answer does (AGL-4152), but a quote, a logo, a question or a plan.
   const opens = improve ? !FIXED_KINDS.has(group.group) : OPEN_KINDS.has(group.group)
   const answered: SiteImportGroupKind = answer?.kind && opens ? answer.kind : group.group
   // Lines that only share a shape, three or more alike, are cards on a page its owner asked improved (AGL-4152).

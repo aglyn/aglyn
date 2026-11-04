@@ -1515,12 +1515,13 @@ describe('Improve it: what the design answer may change (AGL-4152)', () => {
     expect(kept.compiled.sections[1]?.align).toBe(layoutOf(doc).sections[1]?.align)
   })
 
-  it('reads a group of questions as the cards an answer names, every question still a heading', () => {
+  it('keeps a group of questions as questions a visitor opens, whatever kind the answer names', () => {
+    // The 11/4 eval's answers redrew five pages' questions as cards: they stay questions (AGL-4152).
     const doc = docOf('home')
     const answer = answerFor(doc, { group: (group) => (group.group === 'faq' ? { kind: 'cards', style: 'cards' } : { kind: 'source', style: 'cards' }) })
     const improved = finished('home', 'improve', answer)
     expect(improved.violations).toEqual([])
-    expect(ofKind(improved.tree, Object.keys(improved.tree.nodes), 'muiAccordion')).toEqual([])
+    expect(ofKind(improved.tree, Object.keys(improved.tree.nodes), 'muiAccordion')).toHaveLength(11)
     expect(ofKind(finished('home', 'keep', answer).tree, Object.keys(finished('home', 'keep', answer).tree.nodes), 'muiAccordion')).toHaveLength(11)
     expect(contentOf(improved.fidelity)).toEqual(contentOf(finished('home', 'keep').fidelity))
   })

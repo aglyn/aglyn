@@ -557,6 +557,11 @@ class Placement {
       const images = built.under(root).filter((id) => built.node(id)?.componentId === 'image' || built.node(id)?.componentId === 'video')
       let cursor = -1
       let previous: SiteImportLineRef | null = null
+      // Each line's own words, so a line found only in part never takes a piece another line is shown in whole (AGL-4152).
+      const own = new Set(section.lines.flatMap((ref) => {
+        const line = source.blocks[ref]
+        return isLine(line) && line.kind !== 'image' ? [wordLine(clean(line.text))] : []
+      }))
       for (const ref of section.lines) {
         const block = source.blocks[ref]
         if (!isLine(block)) continue
@@ -570,7 +575,7 @@ class Placement {
           previous = ref
           continue
         }
-        const piece = this.find(pieces, clean(block.text), cursor, previous)
+        const piece = this.find(pieces, clean(block.text), cursor, previous, own)
         if (piece) {
           this.claimedBy.set(piece, ref)
           this.of.set(ref, piece.node)
@@ -582,7 +587,7 @@ class Placement {
   }
 
   /** The piece showing a line: its words exactly, else a part of them (a long paragraph split), else the run it was joined into. */
-  private find(pieces: readonly Piece[], text: string, cursor: number, previous: SiteImportLineRef | null): Piece | null {
+  private find(pieces: readonly Piece[], text: string, cursor: number, previous: SiteImportLineRef | null, own: ReadonlySet<string> = new Set()): Piece | null {
     const key = wordLine(text)
     if (!key) return null
     const free = (piece: Piece) => {
@@ -607,7 +612,8 @@ class Placement {
     const exact = pieces.filter((piece) => piece.key === key && this.claimedBy.get(piece) === undefined)
     if (exact.length) return pick(exact)
     const padded = ` ${key} `
-    const part = pieces.filter((piece) => free(piece) && piece.key && (` ${piece.key} `.includes(padded) || padded.includes(` ${piece.key} `)))
+    // A reworded heading that reads "…, and agencies build a hundred" never takes the card titled "Agencies".
+    const part = pieces.filter((piece) => free(piece) && piece.key && !(piece.key !== key && own.has(piece.key)) && (` ${piece.key} `.includes(padded) || padded.includes(` ${piece.key} `)))
     return pick(part)
   }
 
