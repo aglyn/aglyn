@@ -5,7 +5,7 @@
   "frameName": "Pricing — Widescreen",
   "frameSize": {
     "width": 1920,
-    "height": 7887
+    "height": 7903
   },
   "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-pricing-copy.mjs (AGL-1278). `kind` and `notes` are left null for a human pass — the frame does not name its own section types. THE CODE WINS OVER THE FRAME: this file is a record of the design, not of the truth. Prices here have been caught drifting from libs/aglyn/src/lib/app-utils/plan-entitlements.ts twice; that file is the source of truth for every number.",
   "sections": [
@@ -83,7 +83,7 @@
       "name": "Plans",
       "order": 1,
       "widthPx": 1920,
-      "heightPx": 799,
+      "heightPx": 815,
       "groups": [
         {
           "figmaNodeId": "572:1230",
@@ -94,14 +94,14 @@
               "figmaNodeId": "572:1232",
               "name": "h",
               "cells": [
-                "Free"
+                "Hobby"
               ]
             },
             {
               "figmaNodeId": "572:1234",
               "name": "price",
               "cells": [
-                "$0"
+                "Free"
               ]
             },
             {
@@ -163,7 +163,7 @@
               "figmaNodeId": "572:1279",
               "name": "fl",
               "cells": [
-                "Everything in Free, plus:",
+                "Everything in Hobby, plus:",
                 "25 pages · 2 collaborators",
                 "Custom domain & SSL",
                 "Remove Aglyn branding",
@@ -236,8 +236,9 @@
               "figmaNodeId": "572:1414",
               "name": "Frame",
               "cells": [
+                "Enterprise",
                 "Custom",
-                "Quoted"
+                "Sized and priced per agreement"
               ]
             },
             {
@@ -294,10 +295,10 @@
               "name": "row",
               "cells": [
                 "Text",
-                "Free",
+                "Hobby",
                 "Starter",
                 "Pro",
-                "Custom"
+                "Enterprise"
               ]
             },
             {
@@ -308,7 +309,7 @@
                 "$0",
                 "$25",
                 "$69",
-                "Quoted"
+                "Custom"
               ]
             },
             {
@@ -988,7 +989,7 @@
                 "Add-on capacity",
                 "Starter",
                 "Pro",
-                "Custom"
+                "Enterprise"
               ]
             },
             {
