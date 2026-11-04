@@ -50,6 +50,8 @@ jest.mock('firebase/firestore', () => ({
 }))
 let managers: Record<string, Record<string, unknown>> = {}
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  // The record-names hook re-reads when the session heals; nothing heals here.
+  subscribeFirestoreSessionHeal: () => () => undefined,
   useFirestore: () => ({}),
   useUser: () => ({ data: { uid: 'uid-me', getIdToken: async () => 'token-abc' } }),
 }))
