@@ -18,6 +18,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { PLAN_ENTITLEMENTS, RELEASE_FLAGS } from '@aglyn/aglyn'
 import { pluginPlanQuotas } from '@aglyn/aglyn/plugin-manager/plugin-plan-entitlements'
+import { TRANSACTIONAL_EMAIL_CEILING_OVERRIDE_KEYS } from '@aglyn/aglyn/app-utils/transactional-email-ceiling'
 
 /**
  * Coverage of the staff override surface (AGL-1635).
@@ -150,10 +151,19 @@ describe('staff org override surface coverage (AGL-1635)', () => {
         .map(([key]) => key)
       const offered = new Set(QUOTA_FIELDS.map((field) => field.key))
       expect(numeric.filter((key) => !offered.has(key))).toEqual([])
-      // and nothing offered that is not a real numeric entitlement
+      // and nothing offered that is not a real numeric entitlement — or the
+      // daily transactional abuse ceiling (AGL-4145), which rides the same
+      // map without being a plan-table key, and carries its own figures.
       expect(
-        [...offered].filter((key) => !numeric.includes(key)),
+        [...offered].filter(
+          (key) =>
+            !numeric.includes(key) &&
+            !TRANSACTIONAL_EMAIL_CEILING_OVERRIDE_KEYS.has(key),
+        ),
       ).toEqual([])
+      for (const key of TRANSACTIONAL_EMAIL_CEILING_OVERRIDE_KEYS) {
+        expect(QUOTA_FIELDS.find((field) => field.key === key)?.byPlan).toBeDefined()
+      }
     })
 
     it('names the eight keys that were missing, so a silent revert is loud', () => {

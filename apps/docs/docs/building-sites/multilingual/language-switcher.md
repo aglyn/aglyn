@@ -10,7 +10,7 @@ Once you've [added a locale](add-a-locale.md), give visitors a **language switch
 can pick their language.
 
 :::info Plan availability
-**Business** and above.
+**Pro** and up.
 :::
 
 ![The Languages card in Setup → Basic details](/img/multilingual/setup-languages.png)

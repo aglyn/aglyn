@@ -13,8 +13,17 @@ and shows **usage meters** so you always know where you stand.
 ![The Billing page's Plan section: the Navigation card with Plan, Usage, Invoices and Settings, beside the Current plan card with its subscription status, plan limits, and the Manage payment methods and Cancel subscription actions](/img/billing-and-plans/billing-page.png)
 
 :::info Plan availability
-Every site has a plan. **Free**, **Starter**, **Pro**, **Business**, **Scale**, **Advanced**,
-and **Agency** unlock progressively more, and **Enterprise** sits above them all.
+Every site has a plan. There are four: **Free**, **Starter**, **Pro** and **Custom**.
+Free and Starter are for one site; **Pro** is the full platform, and grows past its
+included amounts through add-ons and metered usage; **Custom**, quoted for you, adds
+white-label, single sign-on and a support commitment.
+:::
+
+:::note Plans retired in November 2026
+**Business**, **Scale**, **Advanced** and **Agency** are no longer sold. Every feature
+Business carried is now in Pro, and what Agency added on top of it, white-label among
+it, is on Custom. The plan once labeled **Enterprise** is now called **Custom**; what it
+includes has not changed.
 :::
 
 ## The Billing page {#billing-page}
@@ -77,31 +86,34 @@ WORKS; it deliberately does not restate the numbers, because a second copy is a
 copy that goes stale.
 :::
 
-| Plan | Commerce |
+| Plan | What it is for |
 |---|---|
-| Free | Build & publish only — no selling |
-| Starter | Sell products, with the highest transaction fee of the paid tiers |
-| Pro | More products, a lower fee, POS, abandoned-cart recovery, reviews, dropshipping |
-| Business | More products again, a lower fee, subscriptions & paywalls, gift cards |
-| Scale | Higher product and site limits, lower fee again |
-| Advanced | Unlimited products, no transaction fee, high-volume commerce & API |
-| Agency | Many sites under one organization, white-label |
-| Enterprise | Twice Agency's capacity by default and more by agreement, SSO, white-label, no transaction fee |
+| Free | One site to build and publish — no selling, no custom domain |
+| Starter | One site with your own domain, a store, bookings and the CRM, with the highest transaction fee |
+| Pro | The full platform: unlimited pages, products, forms, workflows and dataset records, POS, video, recurring billing, members-only content, gift cards, A/B testing, multilingual sites, scheduled publishing, the API and webhooks |
+| Custom | Everything in Pro, plus white-label, single sign-on, a dedicated support commitment, no transaction fee, and limits set by agreement |
+
+**Pro grows by add-ons, not by changing plan.** It includes three sites and a set
+amount of storage, bandwidth, team seats, collaborators, datasets, CRM records, email,
+workflow runs, API requests and AI credits. Past any of them you buy more — an extra
+site, seat or dataset from [Add-ons](add-ons.md) — or the extra usage is metered on
+your invoice. There is no ceiling on how many seats, collaborators or datasets a Pro
+workspace can add.
 
 Transaction fees are Aglyn platform fees on the sales you take through your site —
-storefront orders, paid memberships and paid bookings alike — separate from
-Stripe's payment-processing fees. Upgrading is the way to reduce them.
+storefront orders, recurring billing and paid bookings alike — separate from
+Stripe's payment-processing fees. Pro's are lower than Starter's, and Custom has none.
 
-Every plan also includes an amount of monthly **traffic** — 2 GB on Free, rising to
-790 GB on Enterprise by default (an agreement can set more). Passing it is metered and
-billed on a paid plan, and pauses the site until the start of next month on Free. See [Bandwidth](bandwidth.md) for the table and
+Every plan also includes an amount of monthly **traffic** — 2 GB on Free, more on each
+paid plan, and on Custom whatever the agreement sets. Passing it is metered and
+billed on Starter and Pro, and pauses the site until the start of next month on Free. See [Bandwidth](bandwidth.md) for the table and
 for what a paused site shows a visitor.
 
 Video, audio, file downloads and other media served from our servers count 1.6× toward bandwidth, because serving them costs more than serving pages. See [how usage is counted](bandwidth.md#how-usage-is-counted).
 
 Each site also holds a number of [saved forms](../../content-and-data/forms/overview.md#saved-forms-per-site)
 and [reusable components](../../building-sites/besigner/reusable-components.md): one of
-each on Free, more on every paid plan (components are unlimited from Starter up). The
+each on Free, more on Starter, and no limit on Pro (components are unlimited from Starter up). The
 limit applies when you create one, never to what a site already holds, so a site that
 moves to a smaller plan keeps everything it built.
 
@@ -148,17 +160,18 @@ If the team built your site and handed the workspace to you, the plan comes with
 invitation: the email's button opens Billing, and once you accept the invitation you
 land there with the plan and add-ons already chosen.
 
-### Enterprise
+### Custom {#enterprise}
 
-**Enterprise** is the one tier you cannot buy from the Billing page. It has no list
-price — the plan, term, and invoicing are agreed with us, and we provision the
-organization directly. On top of everything in Agency it doubles every quota Agency
-bounds — and your agreement can set any of them higher — and adds **SAML / OIDC single
-sign-on**, so your team signs in through your own identity provider.
+**Custom**, the plan once labeled Enterprise, is the one plan you cannot buy from the
+Billing page. It has no list price — the plan, term, and invoicing are agreed with us,
+and we provision the organization directly. On top of everything in Pro it sets every
+limit by agreement and adds [white-label](../white-label.md), a dedicated
+[support commitment](../../enterprise/support-tiers.md), no transaction fee and **SAML /
+OIDC single sign-on**, so your team signs in through your own identity provider.
 
-To start a conversation, use the **Contact sales** button on the Enterprise card at the
-bottom of your Billing page. Once your organization is on Enterprise, plan changes go
-through us rather than the self-serve upgrade and downgrade buttons.
+To start a conversation, use the **Contact sales** button on the Custom card on your
+Billing page. Once your organization is on Custom, plan changes go through us rather
+than the self-serve upgrade and downgrade buttons.
 
 #### Single sign-on and enforcement
 
@@ -296,8 +309,8 @@ site, or a whole site a monthly share of the workspace's AI credits. A **hard** 
 stops AI requests at the line; a **soft** one keeps them working and notifies the person
 and the owners and admins at 75%, 80%, 90% and 100%. Select several members or sites to set one
 allotment for all of them, or use **Same for every client site** to give every site the
-same share. An allotment can also limit which models are used, and on Agency and
-Enterprise the organization can restrict models for everyone.
+same share. An allotment can also limit which models are used, and on Custom the
+organization can restrict models for everyone.
 
 An allotment is a share of the pool, never extra credits: the workspace's included credits
 and its own stops are checked first. Seeing allotments requires **View billing**; changing
@@ -335,8 +348,8 @@ takes effect immediately.
 On the Free plan there is no storage overage at all. Your included storage is a fixed
 cap, shared the same way: your uploads stop when the workspace reaches it, wherever they
 are going, nothing is metered, and no amount of usage produces a charge —
-so there is nothing to cap and nothing to configure. Enterprise storage is a fixed
-default that an agreement raises, with no overage either: uploads stop there. Files your
+so there is nothing to cap and nothing to configure. Custom storage is a fixed
+amount set by the agreement, with no overage either: uploads stop there. Files your
 customers send are still taken; see below.
 :::
 
@@ -365,8 +378,8 @@ of your allowance mean nobody first learns about overage from an invoice. The op
 
 Paid plans include a monthly band of **AI assist credits** — the **Aglyn Assist credits**
 meter on the billing page shows how much of it this month's assistant use has drawn. The
-included credits pay for every AI request, building included, and an
-[Aglyn AI tier](add-ons.md#aglyn-ai) adds credits on top; it is one pool, so everything
+included credits pay for every AI request, building included, and
+[blocks of AI credits](add-ons.md#aglyn-ai) add credits on top; it is one pool, so everything
 below applies to the widened band as a whole. What the
 credits are spent on, and what each kind of request costs relative to the others, is
 under [Aglyn AI](../../ai/overview.md#credits-and-caps). On a plan that sells credits
@@ -406,9 +419,9 @@ applied unless you set one.
 :::info Plans that sell no overage
 Every paid plan includes AI assist credits and sells credits past them, so the switch
 and the ceiling are on every paid billing page — Starter included, at the same rate as
-Pro, with or without an [Aglyn AI tier](add-ons.md#aglyn-ai).
+Pro, with or without [blocks of AI credits](add-ons.md#aglyn-ai).
 
-A workspace on a plan that sells no credits past its band — Enterprise, whose credits
+A workspace on a plan that sells no credits past its band — Custom, whose credits
 are set by agreement, or a Free workspace — stops at the band on its own: the assistant
 refuses there until next month or an upgrade, and **nothing is ever billed** for AI
 assist. Neither the switch nor the ceiling is offered, because neither would change
@@ -472,7 +485,8 @@ warning you against the new number straight away.
 - Buy **paid seat add-ons** to grow your team beyond the included seats —
   self-serve from [Billing → Add-ons](add-ons.md), alongside extra sites,
   datasets, POS registers, the Event Calendar, and
-  [Aglyn AI](add-ons.md#aglyn-ai).
+  [AI credits](add-ons.md#aglyn-ai). On Pro there is no ceiling on how many seats you
+  add.
 - **Site member accounts are not seats**: visitors who sign up to your published
   site are unlimited on every plan.
 - **Aglyn staff take no seat**, whether they built the workspace or joined it to help.
@@ -485,14 +499,12 @@ and the companies and deals your team files beside them — is priced as one **C
 records band**, not a hard cap. A record is a **contact, a company or a deal**; tasks,
 logged activities, pipelines and custom fields are not counted.
 
-- Each tier includes a band: Free 100, Starter 1,000, Pro 10,000, Business 50,000,
-  Scale 100,000, Advanced 150,000, Agency 500,000 records; Enterprise 1,000,000 by
-  default, and more by agreement.
-- On **paid tiers**, growing past the band never blocks or drops anything — extra
-  records are **metered overage** on your monthly invoice, at a per-1,000 rate that
-  falls as you move up the plans — see [pricing](https://aglyn.com/pricing) for the
-  current rate on your plan, per extra 1,000 records per month. Upgrading a tier is
-  always cheaper than sustained overage.
+- Each plan includes a band: Free 100, Starter 1,000 and Pro 10,000 records; on Custom
+  the agreement sets it.
+- On **Starter and Pro**, growing past the band never blocks or drops anything — extra
+  records are **metered overage** on your monthly invoice, at a per-1,000 rate that is
+  lower on Pro — see [pricing](https://aglyn.com/pricing) for the current rate on your
+  plan, per extra 1,000 records per month.
 - On **Free**, which includes no CRM, the band is a hard limit on capture: past 100
   records a site adds no new person — a new visitor keeps their member account and
   orders, but no contact is kept — and the count of missed captures is recorded. On
@@ -546,9 +558,8 @@ A **one-to-one email** is a message a teammate writes to one person from a CRM r
 [Activities & the timeline](../../content-and-data/crm/activities.md#sending-an-email)
 — as against a [campaign](../../marketing-and-automation/email-campaigns/overview.md),
 which is one send over an audience, or the transactional mail your site sends on its
-own. It is capped **per organization per day (UTC)**: Free 0, Starter 50, Pro 150,
-Business 200, Scale 300, Advanced 500, Agency 1,000; Enterprise 2,000 by default, and
-more by agreement. The cap
+own. It is capped **per organization per day (UTC)**: Free 0, Starter 35, Pro 150; on
+Custom the agreement sets it. The cap
 is a pace rather than a meter: at the cap the send is refused — the dialog says so and
 names the count — until the day turns over, and nothing is ever billed for it. An
 email an automation sends is metered as usage and does not count against the cap.
@@ -560,11 +571,12 @@ message. On plans that have the cap, the billing page shows
 
 - **Datasets are organization-scoped**: counts and storage meter against your
   organization, not individual sites.
-- Each paid tier includes a number of datasets and an included **data storage** size
-  (Starter 1 GB, Pro 5 GB, Business 25 GB, Scale 50 GB, Advanced 100 GB, Agency 500 GB).
-- Extra datasets are a monthly **[add-on](add-ons.md)** whose price falls as you move up
-  the plans; storage beyond the included size is **metered overage**, billed per
-  GB-month on your monthly invoice.
+- Each paid plan includes a number of datasets and an included **data storage** size
+  (Starter 512 MB, Pro 2 GB; on Custom the agreement sets both).
+- Extra datasets are a monthly **[add-on](add-ons.md)**, with no ceiling on how many a
+  Pro workspace adds; storage beyond the included size is **metered overage**, billed
+  per GB-month on your monthly invoice.
+- **Records per dataset** are capped on Starter and unlimited on Pro.
 - **The billed size is what you were storing at the end of the month**, on the same
   basis as the audience band above: the last daily reading taken before the month
   closes. Clearing datasets after a month has ended lowers the next invoice, not the
@@ -572,17 +584,14 @@ message. On plans that have the cap, the billing page shows
 
 ## API access
 
-The **customer REST API** is a **Business tier and above** feature — mint scoped API keys
+The **customer REST API** is included on **Pro and Custom** — mint scoped API keys
 and call the versioned `/v1` endpoints from anywhere. Requests are **metered per
 organization**:
 
 | Plan | Included requests / month | Overage |
 |---|---|---|
-| Business | 100,000 | Metered per additional 1,000 |
-| Scale | 300,000 | Metered, at a lower rate than Business |
-| Advanced | 1,000,000 | Metered, lower again |
-| Agency | 5,000,000 | Metered, the lowest per-unit rate |
-| Enterprise | 10,000,000 by default; more by agreement | — |
+| Pro | 1,500 | Metered per additional 1,000 |
+| Custom | Set by your agreement | — |
 
 - Requests past the included quota **keep working** and bill as metered overage on your
   monthly invoice — never a hard wall mid-integration.
@@ -643,14 +652,12 @@ button in a handoff email), the card comes first on the page with everything the
 chose, and only that:
 
 - the plan, with **Yearly** and **Monthly** to switch between;
-- each add-on the link named. Site Care, Aglyn AI and the Event Calendar are switches you
-  can turn off. Extra seats, datasets, extra sites and POS registers are counts you can
-  change;
+- each add-on the link named. Site Care and the Event Calendar are switches you can turn
+  off. Extra seats, datasets, extra sites, POS registers and blocks of AI credits are
+  counts you can change;
 - the promotion code, already applied.
 
-When the link includes Aglyn AI, an **Aglyn AI tier** field beside its switch shows the
-tier chosen for you; pick another tier there, or turn the switch off. Whatever you
-change, the total changes with it. Until your billing address is on file, the card shows
+Whatever you change, the total changes with it. Until your billing address is on file, the card shows
 the **Total before tax**; with an address, it shows Stripe's total with tax. The button in the card's header shows the total,
 and pressing it pays with the card on file. If you have no card or billing address yet,
 it asks for them first. An add-on your plan does not include, or a code that has
@@ -779,20 +786,17 @@ transferred to your connected payment account. Flat rates you configure yourself
 
 ### Platform fees
 
-Sales you take through your site carry a **declining platform fee** on top of Stripe's
-processing fee — higher tiers reduce it to 0%, which is the upgrade motion for sellers:
+Sales you take through your site carry a **platform fee** on top of Stripe's
+processing fee. It is lower on Pro than on Starter, and Custom has none:
 
-| Plan | Physical goods | Digital goods, memberships & bookings |
+| Plan | Physical goods | Digital goods, recurring billing & bookings |
 |---|---|---|
 | Starter | 2% | 5% |
-| Pro | 0% | 3% |
-| Business | 0% | 2% |
-| Scale | 0% | 1% |
-| Advanced | 0% | 0% |
-| Agency | 0% | 0% |
-| Enterprise | 0% | 0% |
+| Pro | 0.5% | 3% |
+| Custom | 0% | 0% |
 
-Paid **memberships, gated content and bookings** bill at the digital rate — the fee is
+**Recurring billing** (subscriptions and paid memberships), paid access to
+**members-only content**, and **bookings** bill at the digital rate — the fee is
 applied at checkout as the Stripe Connect application fee, on one-time sales and
 recurring member subscriptions alike. A paid booking is a service sale and sits on
 that same digital line rather than carrying a rate of its own; see
@@ -805,7 +809,7 @@ On a recurring membership it is folded into the fee percentage, because a Stripe
 subscription accepts only a percentage: the fixed per-transaction part becomes a share
 of the recurring price, rounded up to two decimals, so a $10-a-month membership carries
 a higher percentage than a $100-a-month one. The platform take itself does not move,
-and a 0% tier still takes 0%.
+and Custom still takes 0%.
 
 **At the register, cash, gift cards and store credit carry no platform fee.** Card
 and charge-to-room payments carry the same rate as an online sale. Card payments have

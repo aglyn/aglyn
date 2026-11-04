@@ -15,7 +15,7 @@ visitor side (built-in auth pages and the account block) and the console side
 
 :::info Plan availability
 Member signups and the account block work wherever commerce does; gating
-pages to members needs the content-gating feature (**Business** and above) —
+pages to members needs the content-gating feature (**Pro** and up) —
 see [Members-only areas](../workspace-and-billing/teams-and-roles/members-only.md).
 :::
 

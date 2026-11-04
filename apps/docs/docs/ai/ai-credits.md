@@ -1,7 +1,7 @@
 ---
 sidebar_position: 11.9
 title: AI credits
-description: "Everything Aglyn AI does draws AI credits from one monthly pool: what each plan includes (300 on Free), what an Aglyn AI tier adds on top, what jobs cost, the check before a job starts, and when credits come back."
+description: "Everything Aglyn AI does draws AI credits from one monthly pool: what each plan includes (300 on Free), what blocks of AI credits add on top, what jobs cost, the check before a job starts, and when credits come back."
 ---
 
 # AI credits
@@ -13,19 +13,15 @@ emails: they all draw on the same credits.
 ## Credits each month {#monthly-credits}
 
 Each plan includes credits every month, and they pay for **all** of Aglyn AI: answers,
-copy, and building pages, forms, emails, products and the rest. An
-[Aglyn AI tier](#the-aglyn-ai-add-on) adds more on top:
+copy, and building pages, forms, emails, products and the rest.
+[Blocks of AI credits](#the-aglyn-ai-add-on) add more on top:
 
 | Plan | Included each month |
 | --- | --- |
 | Free | 300 |
 | Starter | 750 |
 | Pro | 2,750 |
-| Business | 7,500 |
-| Scale | 10,000 |
-| Advanced | 13,000 |
-| Agency | 58,000 |
-| Enterprise | Set in your agreement |
+| Custom | Set in your agreement |
 
 The pool **resets on the first of each month** (UTC). Credits you did not use do not
 carry over.
@@ -48,27 +44,22 @@ together: enough to [start a site with AI](./start-with-ai.md) or try a few buil
   starts again.
 - A new account can use its credits straight away. There is no waiting period.
 
-## Aglyn AI tiers {#the-aglyn-ai-add-on}
+## More AI credits {#the-aglyn-ai-add-on}
 
-Need more than your plan includes? An **Aglyn AI tier** adds credits to the same pool every
-month, **on top of** what your plan includes. You choose the tier on its own: any paid plan
-can have any tier, and changing your plan keeps your tier.
+Need more than your plan includes? The **AI credits** add-on adds credits to the same pool
+every month, **on top of** what your plan includes, in **blocks of 5,000 credits**. Choose
+how many blocks you want, up to 30 (150,000 extra credits a month). Any paid plan can add
+blocks, and changing your plan keeps them.
 
-| Tier | Adds each month |
-| --- | --- |
-| Spark | 4,000 |
-| Boost | 9,000 |
-| Plus | 19,000 |
-| Max | 34,000 |
-| Ultra | 49,000 |
-| Studio | 149,000 |
-
-A tier is bought once for the whole workspace. Free has no tiers, and on Enterprise more AI
-is part of your agreement. Each tier's price is on
-[aglyn.com/pricing](https://aglyn.com/pricing) and in **Billing** before you confirm. Moving
-up is charged now, for the rest of the period; moving down or removing it takes effect at the
-end of the period you have paid for. See
+Blocks are bought for the whole workspace. Free cannot add them, and on Custom more AI is
+part of your agreement. The price of a block is on
+[aglyn.com/pricing](https://aglyn.com/pricing) and in **Billing** before you confirm. Adding
+blocks is charged now, for the rest of the period; removing blocks takes effect at the end of
+the period you have paid for. See
 [Add-ons](../workspace-and-billing/billing-and-plans/add-ons.md#aglyn-ai).
+
+Until November 2026 extra credits were sold as six named tiers (Spark, Boost, Plus, Max,
+Ultra and Studio). Those tiers are retired; blocks replace them.
 
 ## What things cost {#what-things-cost}
 
@@ -159,7 +150,7 @@ does not come out is never charged in the first place.
 ## See your credits {#see-your-credits}
 
 - **Billing → Usage → AI credits** shows the credits drawn this month against the
-  pool, and how many of them your tier adds. A workspace whose plan includes no AI
+  pool, and how many of them your blocks add. A workspace whose plan includes no AI
   credits sees that said here instead, with **See plans** linking to Billing.
 - **Who is generating what**, on the same page, lists each member's credits by month.
   See [Billing & Plans](../workspace-and-billing/billing-and-plans/overview.md#who-is-generating-what).

@@ -183,7 +183,7 @@ Each product's **Billing** setting picks how buyers pay:
   subscription-only product.
 
 Selling subscriptions (including the subscribe side of *Both*) requires a
-plan with storefront subscriptions (Business and above). Subscription
+plan with recurring billing (Pro and up). Subscription
 billing applies to the product page's direct checkout — cart checkouts
 always charge one-time.
 

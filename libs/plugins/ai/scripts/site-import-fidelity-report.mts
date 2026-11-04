@@ -390,6 +390,36 @@ async function storedTree(doc: Dict, decode: (raw: unknown) => Dict | null, tree
   return nodes && Object.keys(nodes).length ? { tree: treeOf(nodes), version: version?.exists ? version : snapshot } : null
 }
 
+/**
+ * A page's photos as the library holds them (AGL-4138). The job empties a
+ * page's own list once the page is in, and with no photos a picture's line is
+ * not measured: a row with a picture beside its words, and every picture's
+ * framing, would read as lost. Each copy is found by the source key the import
+ * stored it under, and named as the built page names it.
+ */
+async function libraryPhotos(db: Dict, load: (file: string) => Promise<Dict>, site: { hostId: string; orgId: string; domain: string }): Promise<(blocks: Dict[], tree: Dict) => Dict[]> {
+  const { siteImportImageKey, siteImportImageUrl } = await load(`${AI}/site-import/site-import-images.ts`)
+  const held = new Map<string, Dict>()
+  for (const scope of [db.collection('hosts').doc(site.hostId), db.collection('orgs').doc(site.orgId)]) {
+    const copies = await scope.collection('media').where('importedFrom.domain', '==', site.domain).get()
+    for (const copy of copies.docs) {
+      const key = copy.get('importedFrom.key')
+      if (typeof key === 'string' && !held.has(key)) held.set(key, { id: copy.id, width: copy.get('width'), height: copy.get('height') })
+    }
+  }
+  return (blocks, tree) => {
+    const srcs = Object.values(tree.nodes as Record<string, Dict>).flatMap((node) => [node.props?.src, node.props?.poster]).filter((src): src is string => typeof src === 'string')
+    return blocks.flatMap((block) => {
+      if (block.kind !== 'image') return []
+      const url = siteImportImageUrl(block.url)
+      const copy = url ? held.get(siteImportImageKey(url)) : undefined
+      const src = copy ? srcs.find((candidate) => candidate.endsWith(`/${copy.id}`)) : undefined
+      if (!copy || !src) return []
+      return [{ mediaId: copy.id, src, from: block.url, ...(copy.width && copy.height ? { width: copy.width, height: copy.height } : {}) }]
+    })
+  }
+}
+
 /** The saved files, answering for the source site: an address with no file is not there. */
 function savedSite(sources: ReadonlyMap<string, string>) {
   return async (url: string) => {
@@ -471,6 +501,7 @@ async function hostReportFrom(db: Dict, load: (file: string) => Promise<Dict>, a
     }
   }
 
+  const library = await libraryPhotos(db, load, { hostId, orgId, domain: state.domain })
   const rows: PageRow[] = []
   for (const page of chosen) {
     const read = reads.get(page.slot)
@@ -480,7 +511,8 @@ async function hostReportFrom(db: Dict, load: (file: string) => Promise<Dict>, a
       left.push({ page: page.path, why: 'the read has no layout to score against (too large to keep)' })
       continue
     }
-    rows.push({ name: page.path, report: fidelity.siteImportFidelity({ layout: read.layout, blocks: read.blocks ?? [], photos: page.photos?.assets ?? [] }, tree) })
+    const photos = page.photos?.assets?.length ? page.photos.assets : library(read.blocks ?? [], tree)
+    rows.push({ name: page.path, report: fidelity.siteImportFidelity({ layout: read.layout, blocks: read.blocks ?? [], photos }, tree) })
   }
 
   // The header and footer, wherever the pages render inside them.

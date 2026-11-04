@@ -47,8 +47,8 @@ function or variable, and vice versa; workflows are composable.
 email, notify site admins, enroll the contact in a list, assign a campaign, send a
 webhook, the [CRM steps](actions-builder.md#crm-steps), and the flow steps below. They
 take the same fields, the same **Only if** condition, and the same plan tiers they take
-in the actions builder: server-side steps are **Pro+**, a webhook and custom JS are
-**Business**, and the CRM steps need the CRM.
+in the actions builder: server-side steps, a webhook and custom JS are **Pro+**,
+and the CRM steps need the CRM.
 
 The in-page effects — menus, drawers, class toggles, redirects, analytics events — are
 **not** offered. A workflow runs on a server event, and there is no page open to perform

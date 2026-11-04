@@ -39,7 +39,11 @@
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 
-import { PLAN_ENTITLEMENTS } from '../../libs/aglyn/src/lib/app-utils/plan-entitlements'
+import {
+  PLAN_ENTITLEMENTS,
+  PLAN_LABELS,
+  SELF_SERVE_PLANS,
+} from '../../libs/aglyn/src/lib/app-utils/plan-entitlements'
 import { DRIVE_MOUNT_ENV, driveDocPath } from './lib/drive-mount.mjs'
 
 const REPO_OUT = 'docs/feature-matrix.md'
@@ -54,12 +58,23 @@ const entitlements = PLAN_ENTITLEMENTS as unknown as Record<
   string,
   { features?: Record<string, unknown> }
 >
-const plans = Object.keys(entitlements)
+/**
+ * The plans on sale: the self-serve ladder and the quoted top plan, in ladder
+ * order. A plan retired from sale keeps its `PLAN_ENTITLEMENTS` row so the
+ * organizations still holding it resolve, but it is not a column here: a
+ * matrix of plans nobody can buy answers nothing a reader of this file asks
+ * (pricing v4, AGL-4148). Read from `SELF_SERVE_PLANS` rather than listed, so
+ * a plan leaving or joining the ladder moves the matrix with it.
+ */
+const plans: string[] = [...SELF_SERVE_PLANS, 'enterprise'].filter(
+  (plan, index, all) => plan in entitlements && all.indexOf(plan) === index,
+)
+const labels = PLAN_LABELS as Record<string, string>
 const features = [
   ...new Set(plans.flatMap((p) => Object.keys(entitlements[p].features ?? {}))),
 ].sort()
 
-const title = (plan: string) => plan.charAt(0).toUpperCase() + plan.slice(1)
+const title = (plan: string) => labels[plan] ?? plan.charAt(0).toUpperCase() + plan.slice(1)
 const cell = (value: unknown) => (value === true ? '✓' : value === false ? '—' : String(value))
 
 const rows = features.map((feature) => {
@@ -82,6 +97,10 @@ record and must never be edited to say something the code does not.
 > \`aglyn.com/pricing\` and drawn in Figma with no document in Pricing &
 > Packaging saying so — there was nothing to reconcile the live table against.
 > A reader who wanted to know what Free includes had to read TypeScript.
+
+Columns are the plans on sale: the self-serve ladder and the quoted
+${labels.enterprise} plan (code id \`enterprise\`). A plan retired from sale keeps
+its row in the code and is not shown.
 
 **Change control.** A feature moving between plans is a packaging change and
 takes a Pricing Decision Log entry, exactly as a price move does. Regenerating

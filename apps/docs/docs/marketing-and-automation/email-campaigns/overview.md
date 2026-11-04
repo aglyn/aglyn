@@ -887,7 +887,7 @@ Four things worth knowing:
 
 ## Experiments
 
-Business plans can A/B test pages, sections, and emails from the **Experiments** card
+Pro and Custom plans can A/B test pages, sections, and emails from the **Experiments** card
 on the Marketing page: weighted variants, deterministic visitor assignment, a conversion
 goal, and per-variant exposure/conversion rates with a pick-the-winner flow.
 

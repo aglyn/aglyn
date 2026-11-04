@@ -23,10 +23,10 @@ flowchart LR
 ```
 
 :::info Plan availability
-Selling needs a **paid** plan (fees drop as you upgrade — see
+Selling needs a **paid** plan (fees are lower on Pro — see
 [Billing & plans](../workspace-and-billing/billing-and-plans/overview.md)).
 Storefront **subscriptions** (including the subscribe side of
-"Both — buyer chooses") need **Business** and above.
+"Both — buyer chooses") need **Pro** and up.
 :::
 
 ## 1. Connect payments
@@ -307,8 +307,8 @@ can check for paid gating.
 ### Member updates {#member-updates}
 
 The **Member updates** card, in the products hub's catalog, posts updates only
-your subscribers can see, and can email each one to them. Business plan and
-above.
+your subscribers can see, and can email each one to them. Pro plan and
+up.
 
 1. Select **New update** and enter a **Title** and **Body**.
 2. Choose the **Audience**: **All live subscribers**, or the subscribers of one

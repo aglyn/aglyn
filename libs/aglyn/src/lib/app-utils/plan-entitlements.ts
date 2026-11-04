@@ -1408,6 +1408,9 @@ export interface PlanPricing {
    * month above its band whenever receipts, invites, booking reminders and
    * workflow notifications carry it there. That excess is real provider spend
    * that no gate could have stopped, and this is the rate it bills at.
+   * (The one bound on it is an abuse ceiling per UTC day, far above any real
+   * store's volume and named nowhere a customer reads:
+   * `transactional-email-ceiling.ts`, AGL-4145.)
    *
    * ## Retail, NOT the infrastructure pass-through
    *
@@ -5062,7 +5065,9 @@ export function checkCrmEmailQuota(
 /**
  * Volume above the plan's included band, in emails.
  *
- * Transactional mail is never refused, so an org CAN and will finish a month
+ * Transactional mail is never refused by a quota (only by the daily abuse
+ * ceiling in `transactional-email-ceiling.ts`, which no real store reaches),
+ * so an org CAN and will finish a month
  * over its included allowance. That is not an error and not a failed send —
  * it is the overage the cap chose not to enforce, and recording it is what
  * keeps it from being a surprise at invoicing. `UNLIMITED` (and any

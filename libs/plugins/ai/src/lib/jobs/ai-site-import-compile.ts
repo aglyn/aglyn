@@ -470,6 +470,9 @@ function pictureFitOf(photo: AiSiteImportPhoto, fit: SiteImportPictureFit | unde
   if (fit?.objectFit) out.objectFit = fit.objectFit
   if (fit?.radius !== undefined && fit.radius >= ROUNDED_PX && fit.radius < 999) out.rounded = true
   if (fit?.shadow) out.shadow = true
+  // The width the source holds it to, as the theme's breakpoint nearest it; the widest is no hold at all.
+  const measure = siteImportWidthOf(fit?.measure)
+  if (measure && measure !== 'xl') out.measure = measure
   return Object.keys(out).length ? out : undefined
 }
 

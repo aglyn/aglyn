@@ -76,9 +76,8 @@ and the two answers are completely different:
 - **`metered: true`** — crossing the band **doesn't fail anything**. The excess bills
   as [overage](rate-limits.md#monthly-quota--overage) at your plan's rate. A bulk
   import runs to completion; a busy month costs more. This is the case for requests,
-  contacts and storage on every self-serve plan that includes the API, Business
-  through Agency. Enterprise has no overage rates, so all three are `metered: false`
-  there.
+  contacts and storage on Pro, the self-serve plan that includes the API. Custom has
+  no overage rates, so all three are `metered: false` there.
 - **`metered: false`** — crossing the band is a **refusal**. Once `remaining` hits `0`
   the next write answers `403 plan_required` with the matching
   [`code`](conventions.md#plan-required).

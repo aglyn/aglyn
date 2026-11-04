@@ -39,7 +39,7 @@ flowchart LR
 **Basic in-page interactions** (menu/drawer open-close, show/hide, class toggles, sticky
 nav, navigation, site alerts) are on **every plan** and never metered. The **automations
 engine** — server-side steps, analytics, overlays, and custom JS — is **Pro+** with
-metered runs per tier. **Webhooks** are **Business**.
+metered runs per plan. **Webhooks** are **Pro+** too.
 :::
 
 ## Workflows
@@ -63,7 +63,7 @@ server-side and advanced steps are **Pro+** with metered runs.
 ## Webhooks
 
 **Outbound** and **inbound** webhooks let Aglyn notify other systems and receive events from
-them. Webhooks are a **Business**-tier feature.
+them. Webhooks are included from **Pro**.
 
 ## Org automations
 
