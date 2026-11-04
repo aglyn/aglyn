@@ -37,6 +37,8 @@ export {}
 const mockVerifyIdToken = jest.fn()
 const mockAuditAdd = jest.fn()
 let mockOrgDoc: Record<string, unknown> = {}
+/** What the route merged onto the org doc: the `discount` mirror (AGL-4161). */
+const mockOrgWrites: Array<Record<string, any>> = []
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
@@ -49,7 +51,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
         collection: () => ({
           doc: () => ({
             get: async () => ({ exists: true, data: () => mockOrgDoc }),
-            set: async () => undefined,
+            set: async (data: Record<string, any>) => {
+              mockOrgWrites.push(data)
+            },
           }),
         }),
       }),
@@ -86,6 +90,7 @@ let subscriptionWrites: string[] = []
 
 beforeEach(() => {
   jest.clearAllMocks()
+  mockOrgWrites.length = 0
   stripePaths = []
   subscriptionWrites = []
   const clean = { ...ORIGINAL_ENV }
@@ -178,5 +183,20 @@ describe('POST /api/admin/org-discount — a coupon limited to a plan’s base p
         after: expect.objectContaining({ appliesToPlans: ['starter'] }),
       }),
     )
+    // The mirror net MRR reads (AGL-4161): off the base plan line only.
+    expect(mockOrgWrites[0].discount).toMatchObject({
+      couponId: 'cpn_1',
+      percentOff: 100,
+      basePriceOnly: true,
+      appliesToPlans: ['starter'],
+    })
+  })
+
+  it('mirrors a whole-subscription coupon as such (AGL-4161)', async () => {
+    mockOrgDoc = { plan: 'starter', displayName: 'Acme' }
+    coupon = { id: 'cpn_1', percent_off: 10, duration: 'forever' }
+    expect((await apply()).status).toBe(200)
+    expect(mockOrgWrites[0].discount).toMatchObject({ basePriceOnly: false })
+    expect('appliesToPlans' in mockOrgWrites[0].discount).toBe(false)
   })
 })
