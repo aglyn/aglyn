@@ -323,13 +323,13 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     // A pass-through row that AGREES with the code, chosen on purpose:
     // perturbing a declared-stale row would test the declaration rather than
     // the comparison.
-    row.cells[2] = '$9.99 / 1k'
+    row.cells[1] = '$9.99 / 1,000'
     writeFrame(data)
 
     const run = check()
     assert.equal(run.status, 1)
     assert.match(run.stderr, /PASS-THROUGH disagreements not declared/)
-    assert.match(run.stderr, /\$9\.99 \/ 1k/)
+    assert.match(run.stderr, /\$9\.99 \/ 1,000/)
   })
 
   it('fails when the page states an origin-media weight the code does not count (AGL-3474)', () => {
@@ -369,12 +369,11 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     const row = passThrough(data).records.find(
       (r) => r.cells[0] === 'Form submissions',
     )
-    row.cells[1] = '$0.50 / 1k'
-    row.cells[2] = '$1.20 / 1k'
+    row.cells[1] = '$1.20 / 1,000'
     writeFrame(data)
 
     const run = check([
-      '--declare-stale-metered=Form submissions|$0.50 / 1k|$0.65 / 1k',
+      '--declare-stale-metered=Form submissions|$0.65 / 1,000',
     ])
     assert.equal(run.status, 1)
     assert.match(run.stderr, /PASS-THROUGH disagreements not declared/)
@@ -389,21 +388,20 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     resetFixtures()
     const data = readFrame()
     const row = passThrough(data).records.find(
-      (r) => r.cells[0] === 'Media & file storage',
+      (r) => r.cells[0] === 'Site media & file storage',
     )
-    row.cells[1] = '$0.026 / GB-mo'
-    row.cells[2] = '$0.0349 / GB-mo'
+    row.cells[1] = '$0.0349 / GB-mo'
     writeFrame(data)
 
     const run = check([
-      '--declare-stale-metered=Media & file storage|$0.03 / GB-mo|$0.039 / GB-mo',
+      '--declare-stale-metered=Site media & file storage|$0.039 / GB-mo',
     ])
     assert.equal(run.status, 1)
     assert.match(
       run.stderr,
       /declared in FRAME_STALE_METERED but the frame now AGREES/,
     )
-    assert.match(run.stderr, /Media & file storage/)
+    assert.match(run.stderr, /Site media & file storage/)
   })
 
   it('fails when the pass-through group disappears from the frame', () => {
@@ -445,13 +443,9 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     assert.deepEqual(
       tables.metered.rows.map((r) => [r.label, r.ourCost, r.youPay]),
       [
-        ['Media & file storage', '$0.026 / GB-mo', '$0.0349 / GB-mo'],
-        [
-          'Page views (bandwidth + reads)',
-          '$0.615385 / 1k views',
-          '$0.83 / 1k views',
-        ],
-        ['Form submissions', '$0.061538 / 1k', '$0.083 / 1k'],
+        ['Page views (bandwidth + reads)', '$0.615385 / 1,000', '$0.83 / 1,000'],
+        ['Form submissions', '$0.061538 / 1,000', '$0.083 / 1,000'],
+        ['Site media & file storage', '$0.026 / GB-mo', '$0.0349 / GB-mo'],
       ],
     )
   })
@@ -580,6 +574,7 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     // finds nothing there, changes nothing, and reports clean. Corrupting a
     // cell only the mobile shape carries is the only way to tell a reader
     // that handles it from one that skips it.
+    // The mobile frame shows Starter selected, as the page opens (AGL-4126).
     resetFixtures()
     const data = readFrame('mobile')
     const rates = groupOf(data, 'Usage pricing', 'Add-on rates · selected plan')
@@ -595,7 +590,7 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     assert.match(run.stderr, /add-on capacity: CODE-vs-FRAME disagreements/)
     assert.match(
       run.stderr,
-      /Extra dataset storage, per GB-month · Pro \[mobile\]: code=\$0\.36 {2}frame=\$4\.00/,
+      /Extra dataset storage, per GB-month · Starter \[mobile\]: code=\$0\.36 {2}frame=\$4\.00/,
     )
   })
 
