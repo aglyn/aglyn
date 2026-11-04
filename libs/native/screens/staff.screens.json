@@ -1379,22 +1379,6 @@
                     {
                       "value": "pro",
                       "label": "Pro"
-                    },
-                    {
-                      "value": "business",
-                      "label": "Business"
-                    },
-                    {
-                      "value": "scale",
-                      "label": "Scale"
-                    },
-                    {
-                      "value": "advanced",
-                      "label": "Advanced"
-                    },
-                    {
-                      "value": "agency",
-                      "label": "Agency"
                     }
                   ]
                 },
@@ -1540,7 +1524,7 @@
                   "options": [
                     {
                       "value": "enterprise",
-                      "label": "Enterprise"
+                      "label": "Custom"
                     },
                     {
                       "value": "agency",
@@ -1621,7 +1605,7 @@
                   "options": [
                     {
                       "value": "enterprise",
-                      "label": "Enterprise"
+                      "label": "Custom"
                     },
                     {
                       "value": "agency",
@@ -1862,22 +1846,6 @@
                     {
                       "value": "pro",
                       "label": "Pro"
-                    },
-                    {
-                      "value": "business",
-                      "label": "Business"
-                    },
-                    {
-                      "value": "scale",
-                      "label": "Scale"
-                    },
-                    {
-                      "value": "advanced",
-                      "label": "Advanced"
-                    },
-                    {
-                      "value": "agency",
-                      "label": "Agency"
                     }
                   ]
                 },
@@ -2920,22 +2888,6 @@
                     {
                       "value": "pro",
                       "label": "Pro"
-                    },
-                    {
-                      "value": "business",
-                      "label": "Business"
-                    },
-                    {
-                      "value": "scale",
-                      "label": "Scale"
-                    },
-                    {
-                      "value": "advanced",
-                      "label": "Advanced"
-                    },
-                    {
-                      "value": "agency",
-                      "label": "Agency"
                     }
                   ]
                 },
@@ -3058,22 +3010,6 @@
                     {
                       "value": "pro",
                       "label": "Pro"
-                    },
-                    {
-                      "value": "business",
-                      "label": "Business"
-                    },
-                    {
-                      "value": "scale",
-                      "label": "Scale"
-                    },
-                    {
-                      "value": "advanced",
-                      "label": "Advanced"
-                    },
-                    {
-                      "value": "agency",
-                      "label": "Agency"
                     }
                   ]
                 },

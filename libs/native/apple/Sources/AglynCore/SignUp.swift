@@ -13,18 +13,26 @@ public struct OnboardingPlanIntent: Equatable, Sendable {
   public var interval: String
   /// Whether the link said an interval, rather than `interval` being the default.
   public var intervalStated: Bool
-  /// Enterprise is quoted, not bought: it goes to contact sales.
+  /// Custom (code id `enterprise`) is quoted, not bought: it goes to contact sales.
   public var contactSales: Bool
   /// The AI add-on, asked for alongside the plan (`ai=1`).
   public var ai: Bool
 
-  /// The plans a checkout can sell (`SELF_SERVE_PLANS`).
-  public static let selfServePlans = ["starter", "pro", "business", "scale", "advanced", "agency"]
+  /// The plans a checkout can sell: `SELF_SERVE_PLANS` without Free, which is a plan but not a purchase (the console's
+  /// `parseOnboardingPlanIntent` and `UPGRADE_PROPOSAL_PLANS`). Business, Scale, Advanced and Agency are retired (pricing
+  /// v4), so a link that still names one carries no plan.
+  public static let selfServePlans = ["starter", "pro"]
 
-  /// `PLAN_LABELS` (libs/aglyn/src/lib/app-utils/plan-entitlements.ts).
+  /// The plans a workspace can still move up from by itself, so the workspace menu offers "Upgrade plan" on them (the
+  /// console's `TOP_PLANS` are the rest): Pro tops the self-serve ladder, the retired plans sat above it, and Custom is
+  /// quoted.
+  public static let upgradablePlans = ["free", "starter"]
+
+  /// `PLAN_LABELS` (libs/aglyn/src/lib/app-utils/plan-entitlements.ts). The retired plans keep their names for a
+  /// workspace still on one; the top plan's code id stays `enterprise` and reads "Custom".
   public static let planLabels: [String: String] = [
     "free": "Free", "starter": "Starter", "pro": "Pro", "business": "Business", "scale": "Scale",
-    "advanced": "Advanced", "agency": "Agency", "enterprise": "Enterprise",
+    "advanced": "Advanced", "agency": "Agency", "enterprise": "Custom",
   ]
 
   public init(plan: String, interval: String, intervalStated: Bool, contactSales: Bool, ai: Bool = false) {

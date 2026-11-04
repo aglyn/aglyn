@@ -366,11 +366,11 @@ struct PlanCard: View {
 
 extension AppModel {
   /// Whether the workspace menu offers "Upgrade plan", as the console's menu does: once the plan is known, below the top
-  /// plans (Agency, Enterprise), for an owner or admin who can open Billing.
+  /// self-serve plan (Free and Starter; Pro tops the ladder, Custom is quoted), for an owner or admin who can open Billing.
   var offersUpgrade: Bool {
     guard let org = workspace?.org, let plan = workspace?.orgLogos[org.id]?.plan,
       registry.screen("core.billing") != nil
     else { return false }
-    return !["agency", "enterprise"].contains(plan) && ["owner", "admin"].contains(org.role)
+    return OnboardingPlanIntent.upgradablePlans.contains(plan) && ["owner", "admin"].contains(org.role)
   }
 }

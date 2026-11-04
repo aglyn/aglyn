@@ -31,14 +31,15 @@ import {
  * blocks, one price on every paid plan, so the screen names no per-plan
  * price). A change to any of them must change the screen.
  */
-const plans = (
-  JSON.parse(
-    readFileSync(
-      join(__dirname, '../../../libs/native/screens/billing.screens.json'),
-      'utf8',
-    ),
-  ).screens as Array<{ id: string; constants?: any }>
-).find((s) => s.id === 'core.billing.plans')!.constants
+const screens = JSON.parse(
+  readFileSync(
+    join(__dirname, '../../../libs/native/screens/billing.screens.json'),
+    'utf8',
+  ),
+).screens as Array<{ id: string; constants?: any }>
+const plans = screens.find((s) => s.id === 'core.billing.plans')!.constants
+/** Billing's own Plan row names the plan in force the same way (`enterprise` reads "Custom"). */
+const overview = screens.find((s) => s.id === 'core.billing')!.constants
 
 describe('native plan change', () => {
   it('lists the self-serve plans in the console order, under the console names', () => {
@@ -46,6 +47,7 @@ describe('native plan change', () => {
       ...SELF_SERVE_PLANS,
     ])
     expect(plans.labels).toEqual(PLAN_LABELS)
+    expect(overview.labels).toEqual(PLAN_LABELS)
   })
 
   it('knows what each plan includes of sites, team members and datasets', () => {
