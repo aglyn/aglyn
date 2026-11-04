@@ -166,6 +166,20 @@ export interface PluginUsageBandDeclaration {
     outcome: 'stops' | 'bills' | 'continues'
     reached: string
     approach: string
+    /**
+     * The band's story on a plan that SELLS what is used past it: the
+     * `PlanPricing` rate that prices the excess (`pricedBy`, a key of the
+     * platform's price table, never a number), and the two sentences that
+     * say so. Where the org's plan carries that rate the alert's outcome is
+     * `bills` and these replace `reached` and `approach`; elsewhere the
+     * declaration above stands (pricing v4, AGL-4126: runs past the band
+     * bill on Pro and stop on Starter).
+     */
+    overage?: {
+      pricedBy: string
+      reached: string
+      approach: string
+    }
   }
   /**
    * The console's quota banner WARNS an organization-wide reader on every

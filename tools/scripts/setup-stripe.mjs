@@ -111,20 +111,16 @@ let dryRunMissing = 0
 // Add-on unit prices (AGL-525) mirror the extra*MonthlyUsd columns. Aglyn
 // AI credits are a flat block since AGL-4144 (`aglyn_ai_credits` below), not
 // per plan.
+//
+// Pricing v4 (2026-11-03, AGL-4126): the plans sold are Starter and Pro.
+// Business, Scale, Advanced and Agency are retired and are not minted here
+// any more; their prices stay in Stripe, archived, as history. Pro moved to
+// $69 / $49 billed yearly under NEW lookup keys (`version: 'v4'`) because a
+// Stripe price is immutable — the `aglyn_pro_v2` pair stays as history and is
+// never re-minted. Both v4 prices already exist live.
 const PLANS = [
-  { plan: 'starter', name: 'Aglyn Starter', usd: 25, yearlyUsd: 16 * 12, extraHostUsd: 20, extraSeatUsd: 5, extraMemberUsd: 3, extraDatasetUsd: 2 },
-  { plan: 'pro', name: 'Aglyn Pro', usd: 56, yearlyUsd: 39 * 12, extraHostUsd: 20, extraSeatUsd: 4, extraMemberUsd: 2, extraDatasetUsd: 2 },
-  { plan: 'business', name: 'Aglyn Business', usd: 139, yearlyUsd: 99 * 12, extraHostUsd: 20, extraSeatUsd: 3, extraMemberUsd: 1, extraDatasetUsd: 1 },
-  // Pricing v3 (2026-07): Scale fills the $139→$399 gap; Agency sits above
-  // Advanced for high-volume multi-site orgs. Keep in sync with PLAN_PRICING.
-  // The extra host is a flat $8 from Scale up rather than a ladder that keeps
-  // descending: a host grants the tier's per-host storage and form bands, so
-  // the tiers granting the most per host would charge the least for one.
-  // Agency's annual is $1,049/mo because the live yearly price charges
-  // $12,588 and a Stripe price is immutable.
-  { plan: 'scale', name: 'Aglyn Scale', usd: 249, yearlyUsd: 179 * 12, extraHostUsd: 20, extraSeatUsd: 2, extraMemberUsd: 1, extraDatasetUsd: 1 },
-  { plan: 'advanced', name: 'Aglyn Advanced', usd: 399, yearlyUsd: 299 * 12, extraHostUsd: 20, extraSeatUsd: 2, extraMemberUsd: 1, extraDatasetUsd: 1 },
-  { plan: 'agency', name: 'Aglyn Agency', usd: 1299, yearlyUsd: 1049 * 12, extraHostUsd: 20, extraSeatUsd: 2, extraMemberUsd: 1, extraDatasetUsd: 1 },
+  { plan: 'starter', name: 'Aglyn Starter', version: 'v2', usd: 25, yearlyUsd: 16 * 12, extraHostUsd: 20, extraSeatUsd: 5, extraMemberUsd: 3, extraDatasetUsd: 2 },
+  { plan: 'pro', name: 'Aglyn Pro', version: 'v4', usd: 69, yearlyUsd: 49 * 12, extraHostUsd: 20, extraSeatUsd: 4, extraMemberUsd: 2, extraDatasetUsd: 2 },
 ]
 
 async function stripe(path, params) {
@@ -224,18 +220,18 @@ async function ensureAddonPair({ lookupBase, productName, usd, planMetadata, uni
 
 const env = {}
 for (const {
-  plan, name, usd, yearlyUsd,
+  plan, name, version, usd, yearlyUsd,
   extraHostUsd, extraSeatUsd, extraMemberUsd, extraDatasetUsd,
 } of PLANS) {
   const base = await ensurePrice({
-    lookupKey: `aglyn_${plan}_v2`,
+    lookupKey: `aglyn_${plan}_${version}`,
     productName: name,
     usd,
     planMetadata: plan,
   })
   env[`STRIPE_PRICE_${plan.toUpperCase()}`] = base.id
   const yearly = await ensurePrice({
-    lookupKey: `aglyn_${plan}_v2_yearly`,
+    lookupKey: `aglyn_${plan}_${version}_yearly`,
     productName: name,
     usd: yearlyUsd,
     planMetadata: plan,

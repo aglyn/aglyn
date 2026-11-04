@@ -525,7 +525,9 @@ describe('the Site Care row (AGL-3954)', () => {
       if (body.action === 'set') {
         return jsonResponse({ quantities: { siteCare: 1 } })
       }
-      return jsonResponse(stateFor('business'))
+      // A plan Site Care is SOLD on: Business was retired by pricing v4
+      // (AGL-4126) and sells nothing, so the paid case is Pro.
+      return jsonResponse(stateFor('pro'))
     }) as unknown as typeof fetch
 
     render(<BillingAddonsCardComponent orgId="org-1" canManage />)
@@ -565,7 +567,8 @@ describe('the Site Care row (AGL-3954)', () => {
 
     render(<BillingAddonsCardComponent orgId="org-1" canManage />)
 
-    await screen.findByText(/Arranged in your Enterprise agreement/)
+    // The plan's label is "Custom" since pricing v4 (AGL-4126).
+    await screen.findByText(/Arranged in your Custom agreement/)
     expect(siteCareSwitch().disabled).toBe(true)
     expect(screen.queryByRole('link', { name: 'Choose a paid plan' })).toBeNull()
   })

@@ -183,8 +183,9 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     resetFixtures()
     const data = readFrame()
     const table = featureTable(data)
+    // One cell per published plan: Free, Starter, Pro and Custom (pricing v4).
     table.records.push({
-      cells: ['Quantum sync', ...Array.from({ length: 8 }, () => '✓')],
+      cells: ['Quantum sync', ...Array.from({ length: 4 }, () => '✓')],
     })
     writeFrame(data)
 
@@ -232,18 +233,19 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     // Previously the silent half of the same defect: `rec.cells.length === 9`
     // simply skipped anything else, so an extractor that emitted eight cells
     // dropped the row out of the comparison entirely — and a dropped row is
-    // exactly what a mis-extracted pricing row looks like.
+    // exactly what a mis-extracted pricing row looks like. Five cells since
+    // pricing v4: the label and one per published plan.
     resetFixtures()
     const data = readFrame()
     const table = featureTable(data)
     const row = table.records.find((r) => r.cells[0] === 'Bandwidth / mo')
-    row.cells = row.cells.slice(0, 8)
+    row.cells = row.cells.slice(0, 4)
     writeFrame(data)
 
     const run = check()
     assert.equal(run.status, 1)
     assert.match(run.stderr, /not a full plan row/)
-    assert.match(run.stderr, /Bandwidth \/ mo: 8 cells, expected 9/)
+    assert.match(run.stderr, /Bandwidth \/ mo: 4 cells, expected 5/)
   })
 
   it('does NOT flag the group bands, which are one cell by design', () => {
@@ -487,7 +489,7 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
 
   it('fails when the PLAN PRICE STRIP disagrees with the code', () => {
     // The strip was excused wholesale as Figma furniture, on the grounds that
-    // its first cell is a layer name. It is eight prices.
+    // its first cell is a layer name. It is every plan's price.
     resetFixtures()
     editWide('Compare features', 'Feature table', (table) => {
       const strip = table.records.filter((r) => r.cells[0] === 'Text')[1]
@@ -498,21 +500,27 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     const run = check()
     assert.equal(run.status, 1)
     assert.match(run.stderr, /plan columns: CODE-vs-FRAME disagreements/)
-    assert.match(run.stderr, /price · Pro \[desktop\]: code=\$56 {2}frame=\$99/)
+    // Pro's v4 price (AGL-4126).
+    assert.match(run.stderr, /price · Pro \[desktop\]: code=\$69 {2}frame=\$99/)
   })
 
   it('fails when a SCALE STRIP spec token disagrees with the code', () => {
+    // The strip carries Custom's card alone since pricing v4; its fee token is
+    // the one read from code.
     resetFixtures()
     editWide('Plans', 'scale-strip', (strip) => {
-      const scale = strip.records.find((r) => r.cells[1]?.includes('bandwidth'))
-      assert.ok(scale, 'fixture no longer carries the Scale spec line')
-      scale.cells[1] = scale.cells[1].replace('70 GB bandwidth', '9 TB bandwidth')
+      const custom = strip.records.find((r) => r.cells[1]?.includes('transaction fees'))
+      assert.ok(custom, 'fixture no longer carries the Custom spec line')
+      custom.cells[1] = custom.cells[1].replace('0% transaction fees', '9% transaction fees')
     })
 
     const run = check()
     assert.equal(run.status, 1)
     assert.match(run.stderr, /scale strip: CODE-vs-FRAME disagreements/)
-    assert.match(run.stderr, /Scale · spec 6 .*code=70 GB bandwidth {2}frame=9 TB bandwidth/)
+    assert.match(
+      run.stderr,
+      /Custom · spec 2 .*code=0% transaction fees {2}frame=9% transaction fees/,
+    )
   })
 
   it('fails when an ADD-ON CAPACITY rate disagrees with the code', () => {
@@ -561,12 +569,13 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     const run = check()
     assert.equal(run.status, 1)
     assert.match(run.stderr, /transaction fees: CODE-vs-FRAME disagreements/)
-    assert.match(run.stderr, /Physical transaction fee · Pro \[mobile\]: code=0% {2}frame=7%/)
+    // Pro's v4 physical fee (AGL-4126).
+    assert.match(run.stderr, /Physical transaction fee · Pro \[mobile\]: code=0\.5% {2}frame=7%/)
   })
 
   it('reads the MOBILE add-on shape, which is not a plan row at all', () => {
     // The trap this suite exists to close: mobile renders one selected plan
-    // as two-cell records, so a reader written for the seven-column table
+    // as two-cell records, so a reader written for the full-row table
     // finds nothing there, changes nothing, and reports clean. Corrupting a
     // cell only the mobile shape carries is the only way to tell a reader
     // that handles it from one that skips it.
@@ -594,19 +603,18 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     // exemption, extended to the new tables: a price declared stale has to
     // stop being declared the moment every breakpoint draws the code's figure.
     // The declaration is injected because the shipped set is empty whenever
-    // the frames are current — see `injected` in the generator.
+    // the frames are current — see `injected` in the generator. Every
+    // breakpoint draws Pro's $69, so a declaration of the $56 the frames drew
+    // before pricing v4 is one they have all caught up on.
     resetFixtures()
-    editWide('Compare features', 'Feature table', (table) => {
-      table.records.filter((r) => r.cells[0] === 'Text')[1].cells[7] = '$1299'
-    })
 
-    const run = check(['--declare-stale-column=price · Agency|$799'])
+    const run = check(['--declare-stale-column=price · Pro|$56'])
     assert.equal(run.status, 1)
     assert.match(
       run.stderr,
       /plan columns: declared stale but every breakpoint has CAUGHT UP/,
     )
-    assert.match(run.stderr, /price · Agency/)
+    assert.match(run.stderr, /price · Pro/)
   })
 
   it('keeps a declaration alive while ONE breakpoint is still stale', () => {
@@ -615,14 +623,15 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     // resolved on the first frame to catch up would delete the exemption
     // while three frames still carried the stale cell, and the next run would
     // report three fresh "disagreements" for a divergence already understood.
+    // Here the desktop export alone still draws the declared $56.
     resetFixtures()
     const data = readFrame('desktop')
     groupOf(data, 'Compare features', 'Feature table').records.filter(
       (r) => r.cells[0] === 'Text',
-    )[1].cells[7] = '$1299'
+    )[1].cells[3] = '$56'
     writeFrame(data, 'desktop')
 
-    const run = check()
+    const run = check(['--declare-stale-column=price · Pro|$56'])
     assert.equal(run.status, 0, `${run.stdout}${run.stderr}`)
     assert.match(run.stdout, /reconciliation clean/)
   })
@@ -688,21 +697,13 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
   const rateRecord = (label, rates) => ({ cells: [label, ...rates] })
   const EMAIL_LABEL = 'Email sends, per 1,000 over the included band'
   /**
-   * Starter→Agency then Enterprise, exactly as the code renders them.
+   * Starter, Pro, then Custom (pricing v4), exactly as the code renders them.
    *
    * Starter's cell is a DASH and not a rate: campaign email begins at Pro, so
    * Starter's band is 0 and `emailSendsOverage` can never compute an excess
    * for it. A rate there would advertise a fee that cannot be charged.
    */
-  const EMAIL_CELLS = [
-    '—',
-    '$2.25',
-    '$2',
-    '$1.90',
-    '$1.85',
-    '$1.80',
-    'Custom',
-  ]
+  const EMAIL_CELLS = ['—', '$2.25', 'Custom']
 
   it('holds the absence declaration while the page carries the row NOWHERE', () => {
     // The committed state, asserted rather than assumed: no breakpoint states
@@ -794,13 +795,10 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
 
     const email = row('extraEmailSendsUsdPer1k')
     assert.ok(email, 'the email overage row is not published')
+    // The plans sold since pricing v4 (AGL-4126), then Custom.
     assert.deepEqual(email.values, {
       starter: '—',
       pro: '$2.25',
-      business: '$2',
-      scale: '$1.90',
-      advanced: '$1.85',
-      agency: '$1.80',
       enterprise: 'Custom',
     })
 
@@ -819,10 +817,6 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     assert.deepEqual(assist.values, {
       starter: '$3',
       pro: '$3',
-      business: '$2.75',
-      scale: '$2.50',
-      advanced: '$2.25',
-      agency: '$2',
       enterprise: 'Custom',
     })
 

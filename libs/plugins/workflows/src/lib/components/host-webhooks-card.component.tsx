@@ -20,6 +20,7 @@ import {
   type AglynOrgBilling,
   checkEntitlement,
   createResourceUid,
+  planLabelGrantingFeature,
   pluginDocsHelp,
 } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
@@ -185,7 +186,9 @@ export function HostWebhooksCard(props: {
   const handleAdd = useCallback(() => {
     if (!checkEntitlement(org, 'webhooks')) {
       return void enqueueSnackbar(
-        'Webhooks require a Business plan — see Billing to upgrade',
+        `Webhooks require the ${
+          planLabelGrantingFeature('webhooks') ?? 'Pro'
+        } plan — see Billing to upgrade`,
         { variant: 'warning', persist: false },
       )
     }
@@ -287,7 +290,8 @@ export function HostWebhooksCard(props: {
       <Stack spacing={1}>
         <Typography variant="body2" color="text.secondary">
           {'Send signed JSON to outside systems from the actions builder, ' +
-            'or accept calls that run a workflow. Business plans.'}
+            'or accept calls that run a workflow. Included from ' +
+            `${planLabelGrantingFeature('webhooks') ?? 'Pro'}.`}
         </Typography>
         {webhooks.map((hook: any) => (
           <Stack

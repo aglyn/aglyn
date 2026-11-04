@@ -136,7 +136,7 @@ async function renderCard(hosts: Site[]): Promise<void> {
           basePath: '/acme/marketing',
         }}
       >
-        <OrgExperimentsCard org={{ plan: 'business' } as never} />
+        <OrgExperimentsCard org={{ plan: 'pro' } as never} />
       </MarketingOrgMountProvider>
     ) as ReactNode as never,
   )
@@ -238,6 +238,7 @@ describe('what it sends to the site', () => {
     mockEntitled = false
     await renderCard([SHOP])
     expect(reads).toHaveLength(0)
-    expect(screen.getByText(/included in the Business plan/)).toBeTruthy()
+    // A/B testing starts at Pro since pricing v4 (AGL-4126).
+    expect(screen.getByText(/included in the Pro plan/)).toBeTruthy()
   })
 })

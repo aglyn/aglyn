@@ -22,7 +22,8 @@
  * `/api/billing/subscription` moves every add-on item to the target in the
  * same update and reports the kinds it deleted as `droppedAddons`. A block is
  * one price on every paid plan, so a plan change KEEPS the blocks, their count
- * and their price; only a target that sells none (Free), or one the server
+ * and their price; only a target that sells none (Free, or a plan pricing v4
+ * retired), or one the server
  * could not carry them to, drops them. This is the sentence the switch confirm
  * appends, and the answers it has to give: carries at the blocks' own price,
  * is removed (and why), or is not mentioned because the org never had any.
@@ -76,6 +77,10 @@ describe('carriedAiAddonSentence (AGL-2899, AGL-4144)', () => {
     // The credits go with them — the sentence says so, because the meter
     // will.
     expect(many).toContain('the credits go with them')
+    // …and a plan pricing v4 retired, which sells nothing (AGL-4126).
+    expect(carriedAiAddonSentence(proWithBlocks(2), 'business', [])).toContain(
+      'not sold on Business, so they are removed',
+    )
   })
 
   it('says they are removed when the server reports the drop, without claiming the plan sells none', () => {

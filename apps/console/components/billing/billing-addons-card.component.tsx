@@ -26,6 +26,7 @@ import {
   includedAiCreditsPerMonth,
   isCustomPricedPlan,
   PLAN_ENTITLEMENTS,
+  PLAN_LABELS,
   PLAN_PRICING,
   planSellsAiCredits,
   planSellsSiteCare,
@@ -101,7 +102,7 @@ export const SITE_CARE_EXCLUSIONS =
 export function siteCareUnavailableReason(plan: OrgPlan | null): string | null {
   if (planSellsSiteCare(plan)) return null
   return plan === 'enterprise'
-    ? 'Arranged in your Enterprise agreement rather than here.'
+    ? `Arranged in your ${PLAN_LABELS.enterprise} agreement rather than here.`
     : 'Site Care is added to a paid plan, and Free has no subscription to carry it.'
 }
 

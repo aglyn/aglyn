@@ -25,6 +25,12 @@ import {
   type AttemptClaim,
   type OrgPlan,
 } from '@aglyn/aglyn/server'
+// By its own module, not the server barrel route specs stub with a partial
+// object: a retired plan (pricing v4) is refused by name.
+import {
+  isRetiredPlan,
+  PLAN_LABELS,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   emailUnverifiedResponse,
   featureLockdownRefusal,
@@ -66,23 +72,22 @@ import {
 // is a different question — it refuses only NEW checkout sessions, platform-wide, when
 // staff have turned checkout off over a live billing bug.
 
+/**
+ * The plans checkout sells, by price (pricing v4, AGL-4126): Starter and Pro.
+ * Business, Scale, Advanced and Agency are retired and never sold again, so
+ * their `STRIPE_PRICE_*` env (and the per-plan add-on env beside it, which
+ * `billing-addons.ts` derives from `SELF_SERVE_PLANS`) is no longer read; a
+ * request naming one finds no price and is refused.
+ */
 const PRICE_ENV: Record<string, string | undefined> = {
   starter: process.env.STRIPE_PRICE_STARTER,
   pro: process.env.STRIPE_PRICE_PRO,
-  business: process.env.STRIPE_PRICE_BUSINESS,
-  scale: process.env.STRIPE_PRICE_SCALE,
-  advanced: process.env.STRIPE_PRICE_ADVANCED,
-  agency: process.env.STRIPE_PRICE_AGENCY,
 }
 
 /** Annual prices (AGL-269); absent envs make the toggle degrade to 501. */
 const YEARLY_PRICE_ENV: Record<string, string | undefined> = {
   starter: process.env.STRIPE_PRICE_STARTER_YEARLY,
   pro: process.env.STRIPE_PRICE_PRO_YEARLY,
-  business: process.env.STRIPE_PRICE_BUSINESS_YEARLY,
-  scale: process.env.STRIPE_PRICE_SCALE_YEARLY,
-  advanced: process.env.STRIPE_PRICE_ADVANCED_YEARLY,
-  agency: process.env.STRIPE_PRICE_AGENCY_YEARLY,
 }
 
 
@@ -343,7 +348,21 @@ async function handler(request: Request): Promise<Response> {
   // the plan the moment someone added a STRIPE_PRICE_ENTERPRISE env.
   if (isCustomPricedPlan(plan as OrgPlan)) {
     return Response.json(
-      { error: 'Enterprise is custom-priced — contact sales.' },
+      { error: `${PLAN_LABELS.enterprise} is custom-priced — contact sales.` },
+      { status: 400 },
+    )
+  }
+  // A retired plan (pricing v4, AGL-4126) is refused for what it is, for the
+  // reason Enterprise is above: it has no price any more, and falling through
+  // would answer the "billing is not configured" 501.
+  if (isRetiredPlan(plan)) {
+    return Response.json(
+      {
+        error:
+          `${PLAN_LABELS[plan as OrgPlan]} is no longer offered — choose ` +
+          `${PLAN_LABELS.starter} or ${PLAN_LABELS.pro}.`,
+        code: 'plan_retired',
+      },
       { status: 400 },
     )
   }

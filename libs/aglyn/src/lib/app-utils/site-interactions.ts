@@ -519,7 +519,7 @@ export const CLIENT_INTERACTION_STEP_LABELS: Readonly<Record<ClientInteractionSt
   scrollTo: 'Scroll to element',
   playVideo: 'Play a video',
   showHtml: 'Show custom HTML',
-  runJs: 'Run custom JS (Business)',
+  runJs: 'Run custom JS (Pro)',
   redirect: 'Redirect the visitor',
   trackGaEvent: 'Track an analytics event',
 }
@@ -547,7 +547,7 @@ const CLIENT_INTERACTION_STEP_TYPED_FIELDS: Readonly<
  * The powerful client steps stay behind the `actions` entitlement:
  * `showOverlay` (marketing overlays), `showHtml` (arbitrary HTML
  * injection), and `trackGaEvent` (analytics). `runJs` keeps its own
- * higher `webhooks` (Business) gate. A step that is not a client step is
+ * higher `webhooks` gate (Pro since pricing v4, Business before). A step that is not a client step is
  * the server's, and is re-checked against `actions` where it runs.
  */
 export const BASIC_CLIENT_ACTION_STEP_TYPES: ReadonlySet<string> =

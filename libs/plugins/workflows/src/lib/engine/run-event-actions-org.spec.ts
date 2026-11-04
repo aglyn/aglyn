@@ -495,6 +495,17 @@ describe('what asking costs', () => {
 })
 
 describe('one meter, the site’s, inside one band, the workspace’s', () => {
+  /**
+   * A Pro workspace whose band is a WALL. Since pricing v4 (AGL-4126) a
+   * paying Pro workspace sells runs past its band (`runOverageSold`), so the
+   * band cases below run on a staff comp of Pro — no subscription to bill, so
+   * nothing is sold past any band — with the band set per org.
+   */
+  const walledPro = (actionRunsPerMonth: number) => ({
+    plan: 'pro',
+    entitlements: { planComp: { plan: 'pro', reason: 'other' }, actionRunsPerMonth },
+  })
+
   function seedSiteAction(): void {
     mockDocs.set(`hosts/${SITE}/actions/site-action-1`, {
       name: 'Site welcome',
@@ -523,7 +534,7 @@ describe('one meter, the site’s, inside one band, the workspace’s', () => {
     seedOrgAutomation('org-auto-1')
     // Room for exactly one more run this month.
     const limit = 1000
-    mockOrg = { plan: 'pro', entitlements: { actionRunsPerMonth: limit } }
+    mockOrg = walledPro(limit)
     mockDocs.set(`hosts/${SITE}`, { orgId: ORG_ID })
     mockDocs.set(`hosts/${SITE}/counters/actionRuns`, { [monthKey]: limit - 1 })
 
@@ -539,7 +550,7 @@ describe('one meter, the site’s, inside one band, the workspace’s', () => {
     seedSiteAction()
     seedOrgAutomation('org-auto-1')
     const limit = 1000
-    mockOrg = { plan: 'pro', entitlements: { actionRunsPerMonth: limit } }
+    mockOrg = walledPro(limit)
     // This site has run nothing this month; its sibling has run all but one
     // of the workspace's runs. The workspace's counter is seeded from both.
     mockDocs.set(`hosts/${SITE}`, { orgId: ORG_ID })
@@ -559,6 +570,25 @@ describe('one meter, the site’s, inside one band, the workspace’s', () => {
     await runEventActions(SITE, 'formSubmission', { email: 'c@d.co' })
     expect(mockSent).toEqual([])
     expect(workspaceActionRuns()).toBe(limit)
+  })
+
+  it('runs the site’s action past a spent band on a paying Pro workspace (pricing v4)', async () => {
+    // Pro sells runs past its band: the site's own action is not refused, and
+    // the run is counted on the workspace's band, where the invoice reads it.
+    seedSiteAction()
+    const limit = 1000
+    mockOrg = {
+      plan: 'pro',
+      subscription: { status: 'active' },
+      entitlements: { actionRunsPerMonth: limit },
+    }
+    mockDocs.set(`hosts/${SITE}`, { orgId: ORG_ID })
+    mockDocs.set(`hosts/${SITE}/counters/actionRuns`, { [monthKey]: limit })
+
+    await runEventActions(SITE, 'formSubmission', { email: 'a@b.co' })
+
+    expect(mockSent.map((message) => message.subject)).toContain('From the site')
+    expect(actionRuns(SITE)).toBe(limit + 1)
   })
 })
 

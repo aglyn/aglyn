@@ -27,6 +27,8 @@ import {
   type PluginApiHandler,
 } from '@aglyn/aglyn/server'
 import { activitySearchTokens } from '@aglyn/aglyn/app-utils/activity-search'
+// By its own module, as the event gates read it.
+import { runOverageSold } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { timingSafeEqual } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
@@ -215,7 +217,9 @@ const inboundHookHandler: PluginApiHandler = async (req, res) => {
     }
     const runLimit = resolveOrgEntitlements(org as any).workflowRunsPerMonth
     const runsUsed = await runsUsedThisMonth(meter)
-    if (!(runsUsed + 1 <= runLimit)) {
+    // A wall only where the plan sells no runs past the band (pricing v4,
+    // `runOverageSold`); otherwise the run goes ahead and the excess bills.
+    if (!(runsUsed + 1 <= runLimit) && !runOverageSold(org as any)) {
       return res.status(402).json({
         error: `This workspace has used its ${runLimit} workflow runs for the month`,
       })

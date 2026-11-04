@@ -523,16 +523,26 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       ssoEnabled: false,
     },
   },
+  // Pricing v4 (2026-11-03, AGL-4126): Pro is the full platform, priced by
+  // use. Every Business feature moved in, and every count with no cost term
+  // (pages, saved forms, variables, functions, workflows, redirects,
+  // products, records per dataset) is UNLIMITED, as are the add-on ceilings
+  // on seats, collaborators and datasets. What costs money stays banded at
+  // Pro's size (sites, storage, bandwidth, seats, collaborators, datasets,
+  // data, CRM records, campaign email, runs, API requests, AI credits), and
+  // past each band the plan meters rather than refuses. `full-use-cost.ts`
+  // prices exactly the banded terms, so the counts lifted here move no cost
+  // figure; the API band is the one new cost term.
   pro: {
     hostLimit: 3,
-    screensPerHost: 100,
+    screensPerHost: UNLIMITED,
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
     storagePerHostMb: 5120,
     membersPerHost: 3,
     managersPerOrg: 3,
-    maxManagersPerOrg: 20,
-    maxMembersPerHost: 25,
+    maxManagersPerOrg: UNLIMITED,
+    maxMembersPerHost: UNLIMITED,
     // Page views are the largest term of this tier's modeled COGS. One GB is
     // 1,035 views at `ESTIMATED_PAGE_TRANSFER_BYTES`, priced where Vercel is
     // dearest because it bills in the region that serves a visitor: $0.413 of
@@ -543,8 +553,8 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     // bandwidth costs $0.637, and the bandwidth band is what decides whether
     // the tier survives a customer spending the whole allowance it was sold.
     //
-    // The invariant the band is sized against is the ANNUAL price ($39 a
-    // month) net of Stripe's fee, with every band at 100% and the CRM seat
+    // The invariant the band is sized against is the ANNUAL price ($49 a
+    // month since v4, $39 when the band was sized) net of Stripe's fee, with every band at 100% and the CRM seat
     // and one-to-one email terms counted — the 2026-09-07 pricing decision —
     // at that all-in gigabyte (AGL-3444), and it must cover that cost plus
     // 30%, the same markup the metered overages carry (AGL-3469). 25 GB is
@@ -555,30 +565,43 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     // `meteredInfraPassThrough` is true here, so traffic past the band BILLS
     // at the page-view pass-through rather than being refused or absorbed.
     bandwidthGb: 25,
-    formsPerHost: 25,
+    formsPerHost: UNLIMITED,
     componentsPerHost: UNLIMITED,
-    variablesPerHost: 100,
-    functionsPerHost: 50,
-    workflowsPerHost: 25,
+    variablesPerHost: UNLIMITED,
+    functionsPerHost: UNLIMITED,
+    workflowsPerHost: UNLIMITED,
     servicesPerHost: UNLIMITED,
-    redirectsPerHost: 100,
+    redirectsPerHost: UNLIMITED,
     contactsPerHost: 10000,
     emailSendsPerMonth: 2500,
     actionRunsPerMonth: 5000,
-    apiRequestsPerMonth: 0,
+    // API access moved in from Business with Business's band (v4), and the
+    // excess meters at Business's rate rather than refusing mid-integration.
+    apiRequestsPerMonth: 1_500,
     datasetsPerOrg: 5,
-    maxDatasetsPerOrg: 50,
-    recordsPerDataset: 10000,
+    maxDatasetsPerOrg: UNLIMITED,
+    recordsPerDataset: UNLIMITED,
     dataStorageMbPerOrg: 2048,
-    productsPerHost: 2500,
+    productsPerHost: UNLIMITED,
     inventoryLocations: 2,
     posRegisters: 1,
-    transactionFeePhysicalPct: 0,
-    // Pricing v3 (2026-07): softened 5→3 to smooth the digital fee ladder
-    // (Starter 5 → Pro 3 → Business 2 → Scale 1 → Advanced/Agency 0).
+    // 0.5% on physical sales (v4, decision 9): Stripe Connect's account and
+    // payout fees ($2 a month per active account, 0.25% + $0.25 a payout) are
+    // paid by the platform, and at 0% a register doing $10k a month cost
+    // about $32 against Pro's margin. Fractional on purpose: every reader
+    // rounds the fee in cents (`resolveTransactionFeeCents`, the cart, the
+    // register) and prints the rate as it stands, so 0.5 reads "0.5%".
+    transactionFeePhysicalPct: 0.5,
+    // Pricing v3 (2026-07): softened 5→3 to smooth the digital fee ladder.
+    // v4 keeps it: the fee is the usage price of memberships, subscriptions,
+    // gift cards and digital goods, the features that moved into Pro.
     transactionFeeDigitalPct: 3,
+    // Every Business feature, at no charge (v4): A/B tests, scheduled
+    // publishing, webhooks, the API, multilingual sites and members-only
+    // content here; recurring billing, paid memberships and gift cards in the
+    // commerce plugin's declaration; the deep model tier in the AI plugin's.
     features: {
-      abTesting: false,
+      abTesting: true,
       versioning: true,
       reusableComponents: true,
       customDomain: true,
@@ -606,7 +629,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       // request is filled.
       dedicatedSendingDomain: true,
       removeBranding: true,
-      scheduledPublishing: false,
+      scheduledPublishing: true,
       aiAssist: true,
       aiGenerative: true,
       workflows: true,
@@ -617,10 +640,10 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       outreach: false,
       interactions: true,
       actions: true,
-      webhooks: false,
-      apiAccess: false,
+      webhooks: true,
+      apiAccess: true,
       siteExport: true,
-      multilingual: false,
+      multilingual: true,
       eventCalendar: false,
       siteCare: false,
       redirects: true,
@@ -629,7 +652,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       marketingOverlays: true,
       commerce: true,
       pos: true,
-      contentGating: false,
+      contentGating: true,
       productReviews: true,
       abandonedCart: true,
       dropshipRouting: true,
@@ -1082,16 +1105,45 @@ fillPluginPlanEntitlements(PLAN_ENTITLEMENTS)
  * marketing pricing table, the plan-change dialog) MUST iterate this rather
  * than `Object.keys(PLAN_ENTITLEMENTS)`, so a custom-priced tier can never
  * show a self-serve Upgrade button or a $0 headline price.
+ *
+ * Pricing v4 (2026-11-03, AGL-4126): three self-serve plans and Custom above
+ * them. Business, Scale, Advanced and Agency are RETIRED_PLANS: never sold
+ * again, their rows kept so a stored `plan`, a comp and an old record still
+ * resolve and type-check.
  */
-export const SELF_SERVE_PLANS: OrgPlan[] = [
-  'free',
-  'starter',
-  'pro',
+export const SELF_SERVE_PLANS: OrgPlan[] = ['free', 'starter', 'pro']
+
+/**
+ * The plans pricing v4 retired (2026-11-03, AGL-4126). Nothing offers them:
+ * no plan card, no checkout price, no comp picker, no sign-up link. Their
+ * `PLAN_ENTITLEMENTS` and `PLAN_PRICING` rows stay, read-only, so an org whose
+ * stored `plan` still names one resolves exactly as it always did. When v4
+ * shipped no subscription was on any of them.
+ */
+export const RETIRED_PLANS: readonly OrgPlan[] = [
   'business',
   'scale',
   'advanced',
   'agency',
 ]
+
+/**
+ * Every plan a workspace can be ON, cheapest first: the self-serve ladder,
+ * the retired plans in their old place above it, then the custom plan. The
+ * ORDER question ("is this move down?", "what is the plan below this one?")
+ * reads this, so a workspace left on a retired plan is still placed on the
+ * ladder; the SALE question ("what may be bought?") reads `SELF_SERVE_PLANS`.
+ */
+export const PLAN_LADDER: readonly OrgPlan[] = [
+  ...SELF_SERVE_PLANS,
+  ...RETIRED_PLANS,
+  'enterprise',
+]
+
+/** Whether a plan is one pricing v4 retired (`RETIRED_PLANS`). */
+export function isRetiredPlan(plan: OrgPlan | string | undefined | null): boolean {
+  return RETIRED_PLANS.includes(plan as OrgPlan)
+}
 
 /**
  * Whether the plan has no list price and is quoted per deal (AGL-1118).
@@ -1125,7 +1177,9 @@ export const PLAN_LABELS: Record<OrgPlan, string> = {
   scale: 'Scale',
   advanced: 'Advanced',
   agency: 'Agency',
-  enterprise: 'Enterprise',
+  // The top plan reads "Custom" since pricing v4 (2026-11-03, AGL-4126); its
+  // code id stays `enterprise`, and `ENTERPRISE_PLAN_LABEL` reads this.
+  enterprise: 'Custom',
 }
 
 /**
@@ -1335,9 +1389,9 @@ export interface PlanPricing {
   extraDataGbMonthlyUsd: number | null
   /**
    * Metered overage per 1,000 customer REST API requests beyond
-   * `apiRequestsPerMonth` (AGL-634). API access starts at Business and every
-   * tier above it carries it, so Free, Starter and Pro are null (no API to
-   * meter).
+   * `apiRequestsPerMonth` (AGL-634). API access starts at Pro since pricing
+   * v4 (Business before it) and every tier above it carries it, so Free and
+   * Starter are null (no API to meter).
    */
   extraApiRequestsUsdPer1k: number | null
   /**
@@ -1454,6 +1508,31 @@ export interface PlanPricing {
    */
   extraEmailSendsUsdPer1k: number | null
   /**
+   * Overage per 1,000 workflow and action runs past the plan's run bands
+   * (`workflowRunsPerMonth`, `actionRunsPerMonth`), since pricing v4
+   * (2026-11-03, AGL-4126). Null where the bands are walls: Free and Starter
+   * keep every wall, and Enterprise's terms are contractual.
+   *
+   * ## Derived from cost, like the pass-through
+   *
+   * Not a retail ladder like contacts or email: it is
+   * `ORG_COGS_UNIT_RATES_USD.perRun` ($13 per million) at cost + 30% kept
+   * after Stripe's percentage fee — `publishedMeteredPrice(perRun × 1,000, 2)`,
+   * the rule `METERED_PRICE_MULTIPLE` sets for storage, bandwidth and form
+   * submissions — which is $0.0174 per 1,000, rounded UP to the cent the page
+   * quotes it in: $0.02. Written as {@link RUN_OVERAGE_USD_PER_1K} because a
+   * `const` declared further down this file cannot be read while this table
+   * is built; `tier-margin-floor.spec.ts` derives it and pins the two equal.
+   *
+   * ## What it decides at the gate
+   *
+   * A plan WITH a rate runs past its band and bills the excess
+   * (`runOverageSold`); a plan without one stops at the band, as every plan
+   * did before v4. Billed by `report-usage` through `priceRunOverage`, on the
+   * same invoice line as the other overages.
+   */
+  extraRunsUsdPer1k: number | null
+  /**
    * Whether the plan carries the metered infrastructure pass-through
    * (AGL-41, turned on in AGL-1280): media storage, bandwidth (page views)
    * and form submissions BEYOND the plan's included bands, billed at
@@ -1473,6 +1552,16 @@ export interface PlanPricing {
 }
 
 /**
+ * The run overage, per 1,000 workflow or action runs past the bands (pricing
+ * v4, 2026-11-03, AGL-4126): `ORG_COGS_UNIT_RATES_USD.perRun` × 1,000 ×
+ * `METERED_PRICE_MULTIPLE`, rounded up to the cent — $0.013 × 1.3388 is
+ * $0.0174, published as $0.02. A literal because the cost table and the
+ * multiple are declared below `PLAN_PRICING`, which reads this at load;
+ * `tier-margin-floor.spec.ts` derives it from them and pins it.
+ */
+export const RUN_OVERAGE_USD_PER_1K = 0.02
+
+/**
  * Flat subscription pricing per tier (AGL-68). Kept beside the entitlements
  * so price changes ride the same review path; Stripe price ids map to plans
  * via `STRIPE_PRICE_*` env vars on the billing API routes.
@@ -1490,6 +1579,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraAssistCreditsUsdPer1k: null,
     extraContactsUsdPer1k: null,
     extraEmailSendsUsdPer1k: null,
+    extraRunsUsdPer1k: null,
     meteredInfraPassThrough: false,
   },
   starter: {
@@ -1514,20 +1604,28 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     // so a rate here would price volume that can never be computed, which is
     // the same defect as a rate beside an UNLIMITED band.
     extraEmailSendsUsdPer1k: null,
+    // Starter keeps every wall (v4): its run bands stop rather than bill.
+    extraRunsUsdPer1k: null,
     meteredInfraPassThrough: true,
   },
+  // Pricing v4 (2026-11-03, AGL-4126): $49 a month billed yearly ($588 a
+  // year), $69 month to month, from $39/$56, for the full platform. Live
+  // Stripe prices `aglyn_pro_v4` and `aglyn_pro_v4_yearly`; the v2 prices
+  // stay in Stripe as history.
   pro: {
-    basePriceMonthlyUsd: 56,
-    basePriceAnnualMonthlyUsd: 39,
+    basePriceMonthlyUsd: 69,
+    basePriceAnnualMonthlyUsd: 49,
     extraHostMonthlyUsd: 20,
     extraSeatMonthlyUsd: 4,
     extraCollaboratorMonthlyUsd: 2,
     extraDatasetMonthlyUsd: 2,
     extraDataGbMonthlyUsd: 0.36,
-    extraApiRequestsUsdPer1k: null,
+    // Business's rate, with the band and the API that moved in from it (v4).
+    extraApiRequestsUsdPer1k: 0.5,
     extraAssistCreditsUsdPer1k: 3,
     extraContactsUsdPer1k: 0.75,
     extraEmailSendsUsdPer1k: 2.25,
+    extraRunsUsdPer1k: RUN_OVERAGE_USD_PER_1K,
     meteredInfraPassThrough: true,
   },
   business: {
@@ -1542,6 +1640,9 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraAssistCreditsUsdPer1k: 2.75,
     extraContactsUsdPer1k: 0.5,
     extraEmailSendsUsdPer1k: 2,
+    // A runs band and the pass-through: the rate every such plan carries
+    // since v4. Retired with the plan; kept so the row reads whole.
+    extraRunsUsdPer1k: RUN_OVERAGE_USD_PER_1K,
     meteredInfraPassThrough: true,
   },
   scale: {
@@ -1556,6 +1657,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraAssistCreditsUsdPer1k: 2.5,
     extraContactsUsdPer1k: 0.4,
     extraEmailSendsUsdPer1k: 1.9,
+    extraRunsUsdPer1k: RUN_OVERAGE_USD_PER_1K,
     meteredInfraPassThrough: true,
   },
   advanced: {
@@ -1578,6 +1680,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     // infrastructure pass-through earns while being sold as cost recovery.
     extraContactsUsdPer1k: 0.4,
     extraEmailSendsUsdPer1k: 1.85,
+    extraRunsUsdPer1k: RUN_OVERAGE_USD_PER_1K,
     meteredInfraPassThrough: true,
   },
   // Agency is the one tier whose PRICE moved. It included 100 hosts, 20 TB of
@@ -1626,6 +1729,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     // sentinel.
     extraContactsUsdPer1k: 0.4,
     extraEmailSendsUsdPer1k: 1.8,
+    extraRunsUsdPer1k: RUN_OVERAGE_USD_PER_1K,
     meteredInfraPassThrough: true,
   },
   // Enterprise (AGL-1118) has NO list price — every figure here is the
@@ -1648,6 +1752,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraAssistCreditsUsdPer1k: null,
     extraContactsUsdPer1k: null,
     extraEmailSendsUsdPer1k: null,
+    extraRunsUsdPer1k: null,
     meteredInfraPassThrough: false,
   },
 }
@@ -4871,7 +4976,7 @@ export interface ApiRequestQuotaResult {
 
 /**
  * Customer REST API request meter (AGL-634): the monthly request count for an
- * org. Business and every tier above it carry `apiAccess` and an
+ * org. Pro (since pricing v4) and every tier above it carry `apiAccess` and an
  * `extraApiRequestsUsdPer1k` rate, so requests past the included quota meter
  * onto the monthly invoice
  * (cost-plus, like storage overage — never a hard wall mid-integration); plans
@@ -4898,6 +5003,71 @@ export function checkApiRequestQuota(
         ? 0
         : Math.round((overageRequests / 1000) * overageRateUsd * 100) / 100,
     overageRateUsd,
+  }
+}
+
+/** The two monthly run bands the workflows plugin's gates are held to. */
+export type RunBandKey = 'workflowRunsPerMonth' | 'actionRunsPerMonth'
+
+/** Both run bands, in the order the usage page meters them. */
+export const RUN_BAND_KEYS: readonly RunBandKey[] = ['workflowRunsPerMonth', 'actionRunsPerMonth']
+
+/**
+ * Whether the org's plan sells runs past its run bands (pricing v4,
+ * 2026-11-03, AGL-4126): a non-null `extraRunsUsdPer1k` on the row the org is
+ * priced at (`resolvePlanPricing`, so a comp sells nothing). The run gates ask
+ * this before refusing at the band: true and the run goes ahead and is billed
+ * past the band; false — Free, Starter, a comp, Enterprise — and the band is
+ * the wall it always was.
+ */
+export function runOverageSold(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): boolean {
+  return resolvePlanPricing(org).extraRunsUsdPer1k !== null
+}
+
+export interface RunOveragePrice {
+  /** Runs past each band, summed: workflow runs plus action runs. */
+  overageRuns: number
+  /** Per-1,000 rate; null when the plan sells no runs past its bands. */
+  overageRateUsd: number | null
+  /** The month's charge at that rate, to the cent; 0 without a rate. */
+  overageMonthlyUsd: number
+}
+
+/**
+ * The month's run overage (pricing v4, AGL-4126): each band's excess on its
+ * own — a workspace far under its action band does not lend headroom to its
+ * workflow band — summed and priced at the plan's `extraRunsUsdPer1k`. The
+ * counts are the WORKSPACE's (`run-meter.ts`), the figure each band is held
+ * to. A plan with no rate prices nothing, whatever the counts say.
+ *
+ * `used` is keyed by the band each count is held to (`RUN_BAND_KEYS`), so a
+ * caller outside the workflows plugin reads its counts off the declared bands
+ * and never names the plugin's own meters.
+ */
+export function priceRunOverage(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  used: Readonly<Partial<Record<RunBandKey, number | null>>>,
+): RunOveragePrice {
+  const entitlements = resolveOrgEntitlements(org) as unknown as Record<string, unknown>
+  const overageRateUsd = resolvePlanPricing(org).extraRunsUsdPer1k
+  const past = (count: number | null | undefined, band: RunBandKey): number => {
+    const value = Number(count ?? 0)
+    const included = Number(entitlements[band] ?? 0)
+    // A corrupt count bills nothing, and an UNLIMITED band has no excess.
+    if (!Number.isFinite(value) || value <= 0) return 0
+    if (!Number.isFinite(included)) return 0
+    return Math.max(0, Math.floor(value) - Math.max(0, included))
+  }
+  const overageRuns = RUN_BAND_KEYS.reduce((sum, band) => sum + past(used[band], band), 0)
+  return {
+    overageRuns,
+    overageRateUsd,
+    overageMonthlyUsd:
+      overageRateUsd === null
+        ? 0
+        : Math.round((overageRuns / 1000) * overageRateUsd * 100) / 100,
   }
 }
 

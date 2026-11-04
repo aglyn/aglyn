@@ -215,7 +215,9 @@ describe('the included campaign-email bands', () => {
     // The ladder now starts with TWO zeros, and monotonicity alone cannot
     // tell that from one — or from eight. Where it starts rising is the
     // product decision, so it is asserted as one.
-    expect(SELLS_EMAIL).toEqual(['pro', 'business', 'scale', 'advanced', 'agency'])
+    // Pricing v4 (AGL-4126): the plans sold are Free, Starter and Pro, so Pro
+    // is the one paid rung that sells email; the retired rows still rise.
+    expect(SELLS_EMAIL).toEqual(['pro'])
     expect(PLAN_ENTITLEMENTS.enterprise.emailSendsPerMonth).toBeGreaterThan(
       PLAN_ENTITLEMENTS.agency.emailSendsPerMonth,
     )
@@ -284,13 +286,9 @@ describe('the included campaign-email bands', () => {
     expect(Object.fromEntries(PAID.map((plan) => [plan, share(plan)]))).toEqual({
       // No band, so no included COGS — the axis costs this tier nothing.
       starter: 0,
-      pro: 4,
-      business: 9.7,
-      scale: 9,
-      advanced: 14.7,
-      // Agency reads lower than its neighbours because its PRICE moved as
-      // well as its band — $1,299, not $799.
-      agency: 9,
+      // 3.3, from 4: Pro's band stayed and its price rose to $69 in pricing
+      // v4 (AGL-4126). The four retired plans are no longer on the ladder.
+      pro: 3.3,
     })
   })
 })
@@ -715,20 +713,22 @@ describe('band and rate agree about whether an "over" exists', () => {
 // No charged price moved.
 // ---------------------------------------------------------------------------
 describe('exactly one list price moved with the email change', () => {
-  it('the six unchanged ones are still what they were', () => {
+  it('the unchanged ones are still what they were', () => {
     // The email work moved no price at all; the band resize that followed it
     // moved exactly one. Both halves are asserted, because "we changed a
-    // price" and "we changed the price list" are different events.
-    expect(
-      SELF_SERVE_PLANS.filter((plan) => plan !== 'agency').map(
-        (plan) => PLAN_PRICING[plan].basePriceMonthlyUsd,
-      ),
-    ).toEqual([0, 25, 56, 139, 249, 399])
-    expect(
-      SELF_SERVE_PLANS.filter((plan) => plan !== 'agency').map(
-        (plan) => PLAN_PRICING[plan].basePriceAnnualMonthlyUsd,
-      ),
-    ).toEqual([0, 16, 39, 99, 179, 299])
+    // price" and "we changed the price list" are different events. Read over
+    // the old ladder by name: pricing v4 (AGL-4126) shrank SELF_SERVE_PLANS,
+    // and the retired rows still carry the prices they were sold at.
+    const UNMOVED = ['free', 'starter', 'business', 'scale', 'advanced'] as OrgPlan[]
+    expect(UNMOVED.map((plan) => PLAN_PRICING[plan].basePriceMonthlyUsd)).toEqual([
+      0, 25, 139, 249, 399,
+    ])
+    expect(UNMOVED.map((plan) => PLAN_PRICING[plan].basePriceAnnualMonthlyUsd)).toEqual([
+      0, 16, 99, 179, 299,
+    ])
+    // Pro moved later, with pricing v4 — $56/$39 to $69/$49 — not with email.
+    expect(PLAN_PRICING.pro.basePriceMonthlyUsd).toBe(69)
+    expect(PLAN_PRICING.pro.basePriceAnnualMonthlyUsd).toBe(49)
   })
 
   it('Agency is the one that did, on both intervals together', () => {

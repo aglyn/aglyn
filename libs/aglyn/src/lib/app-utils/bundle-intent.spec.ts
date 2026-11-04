@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { PLAN_PRICING } from './plan-entitlements'
+import { PLAN_PRICING, RETIRED_PLANS, SELF_SERVE_PLANS } from './plan-entitlements'
 import {
   AI_CREDIT_BLOCK_MONTHLY_USD,
   AI_CREDIT_BLOCK_YEARLY_USD,
@@ -108,10 +108,19 @@ describe('the bundle link’s add-ons (AGL-3955)', () => {
   })
 
   it('prices a block at $10 on every paid plan, 0–30 of them, and on no other (AGL-4144)', () => {
-    for (const plan of ['starter', 'pro', 'business', 'scale', 'advanced', 'agency'] as const) {
+    // The paid plans SOLD since pricing v4 (AGL-4126).
+    const sold = SELF_SERVE_PLANS.filter((plan) => plan !== 'free')
+    expect(sold).toEqual(['starter', 'pro'])
+    for (const plan of sold) {
       expect(addonUnitUsd('aiAddon', plan)).toBe(AI_CREDIT_BLOCK_MONTHLY_USD)
       expect(addonMaxForPlan('aiAddon', plan)).toBe(AI_CREDIT_BLOCKS_MAX)
       expect(planSellsAddon('aiAddon', plan)).toBe(true)
+    }
+    // A plan pricing v4 retired sells no blocks.
+    for (const plan of RETIRED_PLANS) {
+      expect(addonUnitUsd('aiAddon', plan)).toBeNull()
+      expect(addonMaxForPlan('aiAddon', plan)).toBe(0)
+      expect(planSellsAddon('aiAddon', plan)).toBe(false)
     }
     expect(addonUnitUsd('aiAddon', 'free')).toBeNull()
     expect(addonUnitUsd('aiAddon', 'enterprise')).toBeNull()

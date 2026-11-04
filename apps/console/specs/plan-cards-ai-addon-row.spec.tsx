@@ -114,11 +114,13 @@ describe('Aglyn AI on the plan cards (AGL-2899, AGL-4144)', () => {
     render(<BillingPlanCardsComponent plan="pro" onSelect={jest.fn()} />)
     fireEvent.click(screen.getByRole('button', { name: /Compare all/ }))
     // One line per paid card the grid draws (a lower plan may sit behind
-    // its disclosure), the same words on each.
+    // its disclosure), the same words on each. A Pro org's grid draws Pro
+    // and Custom since pricing v4 (AGL-4126), Starter folded below.
     const paidCards = screen.getAllByText(BLOCK_LINE).length
     expect(paidCards).toBeGreaterThanOrEqual(
       SELF_SERVE_PLANS.filter((plan) => plan !== 'free').length - 1,
     )
+    expect(paidCards).toBe(1)
     expect(screen.getAllByText('Aglyn AI included')).toHaveLength(1)
     expect(screen.getAllByText('Aglyn AI generation').length).toBeGreaterThanOrEqual(paidCards)
     // No per-plan add-on price is printed anywhere.

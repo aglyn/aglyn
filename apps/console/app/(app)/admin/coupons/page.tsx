@@ -20,6 +20,7 @@ import {
   checkDiscountMargin,
   DISCOUNT_APPROVAL_THRESHOLD_PCT,
   MARGIN_SCOPE_NOTE,
+  PLAN_LABELS,
 } from '@aglyn/aglyn'
 import {
   couponCaseLabel,
@@ -88,7 +89,8 @@ const COUPON_LIST_PARAMS = { view: 'list' } as const
 
 /**
  * A representative paying subscription for the live rating readout — a
- * typical Business customer on a single site. The rating on the creation page
+ * typical Pro customer on a single site (Pro, the top plan sold since pricing
+ * v4, AGL-4126, where Business stood). The rating on the creation page
  * is a "what would this do to a normal customer" preview; the real per-org
  * check runs when staff apply the coupon on an organization.
  *
@@ -100,7 +102,7 @@ const COUPON_LIST_PARAMS = { view: 'list' } as const
  * as much rather than presenting the whole rating as binding.
  */
 const REFERENCE_ORG = {
-  plan: 'business',
+  plan: 'pro',
   subscription: { status: 'active', interval: 'month' },
 } as const
 
@@ -203,7 +205,7 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
   const [toggleConfirmed, setToggleConfirmed] = useState(false)
 
   // Live rating (AGL-1105): rate the proposed discount against a typical
-  // Business subscription so staff see the margin impact as they type.
+  // Pro subscription so staff see the margin impact as they type.
   const rating = useMemo(() => {
     const discount =
       form.kind === 'percent'
@@ -683,7 +685,7 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
                     </Stack>
                     <Typography variant="caption" color="text.secondary">
                       {`${(rating.depthPct * 100).toFixed(0)}% off list. ` +
-                        `Illustrated on a Business subscription ($${rating.grossUsd}/mo, ` +
+                        `Illustrated on a ${PLAN_LABELS[REFERENCE_ORG.plan]} subscription ($${rating.grossUsd}/mo, ` +
                         `1 site — the cheapest case to serve): discounted to ` +
                         `$${rating.discountedUsd}, keeps $${rating.netUsd} net of ` +
                         `processor fees, less $${rating.infraCogsUsd} infra.`}

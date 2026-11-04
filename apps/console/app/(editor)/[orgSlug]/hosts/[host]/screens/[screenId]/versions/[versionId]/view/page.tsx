@@ -33,6 +33,7 @@ import {
   screenSlugHasPathSeparator,
   toScreenRouteNode,
   type ConsoleSeoFieldValues,
+  planLabelGrantingFeature,
   type ScreenRouteNode,
   type ScreenUid,
 } from '@aglyn/aglyn'
@@ -1668,7 +1669,8 @@ function ScreenDetails() {
                         {skippedSchedule ? (
                           <Tooltip
                             title={
-                              'Scheduled publishing is a Business feature. ' +
+                              'Scheduled publishing is a ' +
+                              `${planLabelGrantingFeature('scheduledPublishing') ?? 'Pro'} feature. ` +
                               'This schedule came due on a plan without it, ' +
                               'so it was not applied — and it will not run ' +
                               'later if you upgrade. Schedule it again to ' +

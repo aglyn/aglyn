@@ -24,16 +24,17 @@ import { giftCardsPlanRefusal } from './gift-cards-plan'
  */
 describe('giftCardsPlanRefusal', () => {
   it('refuses a plan without gift cards, naming the plan that has them', () => {
-    for (const plan of ['free', 'starter', 'pro']) {
+    // Gift cards start at Pro since pricing v4 (AGL-4126).
+    for (const plan of ['free', 'starter']) {
       expect(giftCardsPlanRefusal({ plan })).toEqual({
         status: 403,
-        body: { error: 'Gift cards are not included on this plan. Included from Business.', reason: 'plan_required', code: 'giftCards' },
+        body: { error: 'Gift cards are not included on this plan. Included from Pro.', reason: 'plan_required', code: 'giftCards' },
       })
     }
   })
 
   it('answers nothing on a plan with them', () => {
-    expect(giftCardsPlanRefusal({ plan: 'business' })).toBeNull()
+    expect(giftCardsPlanRefusal({ plan: 'pro' })).toBeNull()
     expect(giftCardsPlanRefusal({ plan: 'enterprise' })).toBeNull()
   })
 })

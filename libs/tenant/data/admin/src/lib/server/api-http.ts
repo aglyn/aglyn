@@ -71,7 +71,8 @@ export const ApiErrors = {
     errorResponse(
       403,
       'plan_required',
-      'API access requires the Business plan or above',
+      // Pro since pricing v4 (AGL-4126), Business before it.
+      'API access requires the Pro plan or above',
       init,
     ),
   insufficientScope: (scope: string, headers?: Record<string, string>) =>

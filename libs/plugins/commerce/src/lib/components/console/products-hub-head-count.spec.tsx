@@ -58,10 +58,16 @@ import { productSearchFields } from '../../model/commerce'
 import type { ReactNode } from 'react'
 
 /**
- * Stock `pro`: `productsPerHost: 2500`, `features.commerce` on. Real
- * `checkQuota`, real `resolveOrgEntitlements` — only the counts are staged.
+ * `pro` held to `productsPerHost: 2500` by a per-org override, `features.commerce`
+ * on. Pro's own band is unlimited since pricing v4 (AGL-4126), and an
+ * unlimited band has no head-count to get wrong, so the band these cases
+ * measure is the v3 figure written on the org the way a contract writes one.
+ * Real `checkQuota`, real `resolveOrgEntitlements` — only the counts are staged.
  */
-const ORG_PLAN = { org: { $id: 'org-1', plan: 'pro' }, ready: true }
+const ORG_PLAN = {
+  org: { $id: 'org-1', plan: 'pro', entitlements: { productsPerHost: 2500 } },
+  ready: true,
+}
 
 /** What the server says the site actually has. */
 const SERVER_PRODUCTS = 3_000

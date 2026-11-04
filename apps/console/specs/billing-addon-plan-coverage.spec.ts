@@ -33,13 +33,19 @@
  * ENTITLEMENT INPUT, so the highest-paying customers silently lost every host,
  * seat, collaborator and dataset they had bought.
  *
+ * Since pricing v4 (AGL-4126) the plans sold are Starter and Pro: Business,
+ * Scale, Advanced and Agency are retired, their env is not read, and no
+ * subscription was on one of them. The guard is unchanged — PAID_PLANS is
+ * still derived, and every plan it names round-trips — and it now also says
+ * the retired plans' prices are recognised as nothing.
+ *
  * The second half pins the identification of the base plan item, which used to
  * be "whatever no add-on price claims" — by elimination, so any unexpected item
  * (the metered price, a grandfathered SKU, something added in the Stripe
  * dashboard) could be re-priced as if it were the plan.
  */
 
-import { SELF_SERVE_PLANS, type OrgPlan } from '@aglyn/aglyn/server'
+import { RETIRED_PLANS, SELF_SERVE_PLANS, type OrgPlan } from '@aglyn/aglyn/server'
 import {
   ADDON_KINDS,
   addonKindFromPriceId,
@@ -113,15 +119,18 @@ describe('PAID_PLANS covers every plan that is actually sold (AGL-1340)', () => 
     // literal this replaced looked complete for two tiers' worth of releases.
     const sellable = SELF_SERVE_PLANS.filter((plan) => plan !== 'free')
     expect([...PAID_PLANS]).toEqual(sellable)
-    // The exact regression: both Pricing v3 tiers, by name.
-    expect(PAID_PLANS).toContain('scale')
-    expect(PAID_PLANS).toContain('agency')
-    // …and nothing that has no Stripe price to sell.
+    // Pricing v4 (AGL-4126): the two plans sold, by name…
+    expect([...PAID_PLANS]).toEqual(['starter', 'pro'])
+    // …and nothing that has no Stripe price to sell: neither end of the
+    // ladder, nor a plan v4 retired.
     expect(PAID_PLANS).not.toContain('free')
     expect(PAID_PLANS).not.toContain('enterprise')
+    for (const retired of ['business', 'scale', 'advanced', 'agency'] as OrgPlan[]) {
+      expect(PAID_PLANS).not.toContain(retired)
+    }
   })
 
-  it.each(['scale', 'agency'] as OrgPlan[])(
+  it.each(['starter', 'pro'] as OrgPlan[])(
     'round-trips a %s subscription\'s seat add-ons instead of zeroing them',
     (plan) => {
       const prefix = `price_${plan}`
@@ -152,12 +161,12 @@ describe('PAID_PLANS covers every plan that is actually sold (AGL-1340)', () => 
   )
 
   it('recognises the yearly add-on variants too', () => {
-    expect(addonKindFromPriceId('price_agency_extra_host_yearly')).toBe('hosts')
-    expect(addonKindFromPriceId('price_scale_extra_seat_yearly')).toBe('managers')
+    expect(addonKindFromPriceId('price_pro_extra_host_yearly')).toBe('hosts')
+    expect(addonKindFromPriceId('price_starter_extra_seat_yearly')).toBe('managers')
   })
 
-  it.each(['starter', 'pro', 'business', 'advanced'] as OrgPlan[])(
-    'keeps working for %s — the plans the old literal did cover',
+  it.each(['starter', 'pro'] as OrgPlan[])(
+    'keeps working for %s — every plan that is sold',
     (plan) => {
       expect(addonQuantitiesFromItems([
         item(`price_${plan}`),
@@ -165,19 +174,30 @@ describe('PAID_PLANS covers every plan that is actually sold (AGL-1340)', () => 
       ])).toMatchObject({ hosts: 7, managers: 0 })
     },
   )
+
+  it.each(['business', 'scale', 'advanced', 'agency'] as OrgPlan[])(
+    'reads no %s add-on price, and sells none: the plan is retired (pricing v4)',
+    (plan) => {
+      // Even with the env still set, a retired plan's per-plan prices are
+      // neither sold nor read back as an add-on.
+      expect(addonPriceId('hosts', plan, 'month')).toBeNull()
+      expect(addonKindFromPriceId(`price_${plan}_extra_host`)).toBeNull()
+      expect(planFromPriceId(`price_${plan}`)).toBeNull()
+    },
+  )
 })
 
 describe('the base plan item is identified explicitly (AGL-1340)', () => {
   it('matches the plan price rather than eliminating the add-ons', () => {
     // Plan item LAST, so position cannot be what makes this pass.
-    const plan = item('price_scale_yearly', undefined, 'year')
+    const plan = item('price_pro_yearly', undefined, 'year')
     const found = findPlanItem([
-      item('price_scale_extra_host_yearly', 2, 'year'),
+      item('price_pro_extra_host_yearly', 2, 'year'),
       item('price_pos_register_yearly', 1, 'year'),
       plan,
     ])
     expect(found).toBe(plan)
-    expect(planFromPriceId(found?.price?.id)).toBe('scale')
+    expect(planFromPriceId(found?.price?.id)).toBe('pro')
   })
 
   it('never mistakes the metered item for the plan', () => {
@@ -185,7 +205,7 @@ describe('the base plan item is identified explicitly (AGL-1340)', () => {
     // price, so `items.find(i => !addonKindFromPriceId(...))` returned it —
     // and the caller then read the subscription's billing INTERVAL off a
     // monthly metered item, and re-priced it as if it were the plan.
-    const plan = item('price_agency_yearly', undefined, 'year')
+    const plan = item('price_pro_yearly', undefined, 'year')
     const items = [item('price_metered_usage', undefined, 'month'), plan]
     expect(findPlanItem(items)).toBe(plan)
     expect(findPlanItem(items)?.price?.recurring?.interval).toBe('year')
@@ -193,18 +213,18 @@ describe('the base plan item is identified explicitly (AGL-1340)', () => {
 
   it('is not derailed by an item nothing recognises', () => {
     // A grandfathered v1 SKU, a dashboard-added line, a plugin's own price.
-    const plan = item('price_business')
+    const plan = item('price_starter')
     const found = findPlanItem([
       item('price_unrecognised_by_anything', 1),
       plan,
-      item('price_business_extra_dataset', 2),
+      item('price_starter_extra_dataset', 2),
     ])
     expect(found).toBe(plan)
     // And it must not be counted as an add-on either — an unknown price
     // contributing to a kind would inflate an entitlement.
     expect(addonQuantitiesFromItems([
       item('price_unrecognised_by_anything', 9),
-      item('price_business_extra_dataset', 2),
+      item('price_starter_extra_dataset', 2),
     ])).toEqual({
       managers: 0,
       members: 0,
@@ -232,7 +252,7 @@ describe('the base plan item is identified explicitly (AGL-1340)', () => {
 
   it('answers null for prices that sell no plan', () => {
     expect(planFromPriceId('price_metered_usage')).toBeNull()
-    expect(planFromPriceId('price_scale_extra_host')).toBeNull()
+    expect(planFromPriceId('price_pro_extra_host')).toBeNull()
     expect(planFromPriceId(undefined)).toBeNull()
   })
 })
@@ -282,9 +302,12 @@ describe('Aglyn AI credits are a quantity kind, one flat block price on any paid
     for (const plan of PAID_PLANS) {
       expect(`${plan}: ${addonUnitUsd('aiAddon', plan)}`).toBe(`${plan}: 10`)
     }
-    // Neither end of the ladder sells one.
+    // Neither end of the ladder sells one, nor a plan pricing v4 retired.
     expect(addonUnitUsd('aiAddon', 'free')).toBeNull()
     expect(addonUnitUsd('aiAddon', 'enterprise')).toBeNull()
+    for (const plan of RETIRED_PLANS) {
+      expect(`${plan}: ${addonUnitUsd('aiAddon', plan)}`).toBe(`${plan}: null`)
+    }
     expect(SELF_SERVE_PLANS).toContain('free')
   })
 
@@ -293,6 +316,10 @@ describe('Aglyn AI credits are a quantity kind, one flat block price on any paid
     for (const plan of PAID_PLANS) {
       expect(addonPriceId('aiAddon', plan, 'month')).toBe('price_ai_credits')
       expect(addonPriceId('aiAddon', plan, 'year')).toBe('price_ai_credits_yearly')
+    }
+    // A retired plan (pricing v4) sells no blocks.
+    for (const plan of RETIRED_PLANS) {
+      expect(addonPriceId('aiAddon', plan, 'month')).toBeNull()
     }
     expect(addonPriceId('aiAddon', 'free', 'month')).toBeNull()
     expect(addonPriceId('aiAddon', 'enterprise', 'year')).toBeNull()
@@ -320,18 +347,20 @@ describe('Aglyn AI credits are a quantity kind, one flat block price on any paid
   })
 
   it('keeps its count across a plan change and only follows the interval', () => {
-    expect(addonTargetPriceId('aiAddon', 'agency', 'year', 'price_ai_credits')).toBe(
+    // Pricing v4 (AGL-4126): Pro is the top plan sold, where Agency stood.
+    expect(addonTargetPriceId('aiAddon', 'pro', 'year', 'price_ai_credits')).toBe(
       'price_ai_credits_yearly',
     )
     expect(addonTargetPriceId('aiAddon', 'starter', 'month', 'price_ai_credits_yearly')).toBe(
       'price_ai_credits',
     )
     // Every other kind re-prices to the target plan as before.
-    expect(addonTargetPriceId('hosts', 'agency', 'month', 'price_starter_extra_host')).toBe(
-      'price_agency_extra_host',
+    expect(addonTargetPriceId('hosts', 'pro', 'month', 'price_starter_extra_host')).toBe(
+      'price_pro_extra_host',
     )
-    // A target that sells no blocks drops them.
+    // A target that sells no blocks drops them: Free, and a retired plan.
     expect(addonTargetPriceId('aiAddon', 'free', 'month', 'price_ai_credits')).toBeNull()
+    expect(addonTargetPriceId('aiAddon', 'agency', 'year', 'price_ai_credits')).toBeNull()
   })
 
   it('caps at 30 on every paid plan and at zero on Free and Enterprise', () => {
@@ -347,12 +376,12 @@ describe('Aglyn AI credits are a quantity kind, one flat block price on any paid
 describe('Site Care is sold on every paid plan and never on Free (AGL-3954)', () => {
   it('is a flat price, one env per interval, and round-trips it', () => {
     expect(addonPriceId('siteCare', 'starter', 'month')).toBe('price_site_care')
-    expect(addonPriceId('siteCare', 'agency', 'year')).toBe('price_site_care_yearly')
+    expect(addonPriceId('siteCare', 'pro', 'year')).toBe('price_site_care_yearly')
     for (const interval of ['month', 'year'] as const) {
       expect(addonKindFromPriceId(addonPriceId('siteCare', 'pro', interval))).toBe('siteCare')
     }
     expect(
-      addonQuantitiesFromItems([item('price_business'), item('price_site_care', 1)]),
+      addonQuantitiesFromItems([item('price_pro'), item('price_site_care', 1)]),
     ).toMatchObject({ siteCare: 1, aiAddon: 0 })
   })
 

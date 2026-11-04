@@ -143,11 +143,14 @@ describe('/admin/flags tier targeting (AGL-2486)', () => {
     // the top of the ladder can see.
     mockApi({ enabled: true, plans: ['agency', 'enterprise'] })
     render(<AdminFlags />)
-    expect(await screen.findByText('Tiers: Agency, Enterprise')).toBeTruthy()
+    expect(await screen.findByText('Tiers: Agency, Custom')).toBeTruthy()
     expect(screen.getByText('On')).toBeTruthy()
   })
 
   it('offers every tier the plan model declares, in ladder order', async () => {
+    // `PLAN_LADDER` since pricing v4 (AGL-4126): the four retired plans stay
+    // targetable, because a workspace can still be on one, and the custom
+    // plan reads "Custom".
     render(<AdminFlags />)
     await screen.findByText('Contacts CRM')
     fireEvent.mouseDown(screen.getByLabelText('Contacts CRM tiers'))
@@ -162,7 +165,7 @@ describe('/admin/flags tier targeting (AGL-2486)', () => {
       'Scale',
       'Advanced',
       'Agency',
-      'Enterprise',
+      'Custom',
     ])
   })
 
@@ -174,7 +177,7 @@ describe('/admin/flags tier targeting (AGL-2486)', () => {
     await waitFor(() =>
       expect(
         screen.getByText(
-          'Tiers: Pro, Business, Scale, Advanced, Agency, Enterprise',
+          'Tiers: Pro, Business, Scale, Advanced, Agency, Custom',
         ),
       ).toBeTruthy(),
     )

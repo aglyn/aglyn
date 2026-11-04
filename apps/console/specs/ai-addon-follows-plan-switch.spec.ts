@@ -36,6 +36,8 @@
 import { buildTargetItems } from '../utils/server/billing-schedule'
 
 const PRICE_ENV: Record<string, string> = {
+  // Pricing v4 (AGL-4126): the switch is Starter -> Pro, the plans sold; it
+  // was Starter -> Agency until v4 retired every plan above Pro.
   STRIPE_PRICE_STARTER: 'price_starter',
   STRIPE_PRICE_STARTER_YEARLY: 'price_starter_yearly',
   STRIPE_PRICE_PRO: 'price_pro',

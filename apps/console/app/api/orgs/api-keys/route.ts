@@ -109,7 +109,8 @@ async function handler(request: Request): Promise<Response> {
 
     if (!checkEntitlement(org, 'apiAccess')) {
       return Response.json(
-        { error: 'API access requires the Business plan' },
+        // Pro since pricing v4 (AGL-4126), Business before it.
+        { error: 'API access requires the Pro plan or above' },
         { status: 403 },
       )
     }

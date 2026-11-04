@@ -67,6 +67,7 @@ import {
   PLAN_LABELS,
   PLAN_PRICING,
   resolveEffectivePlan,
+  RETIRED_PLANS,
   SELF_SERVE_PLANS,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { registerPluginEntitlements } from '@aglyn/aglyn/plugin-manager/plugin-entitlements'
@@ -637,7 +638,10 @@ describe('Aglyn AI credit blocks widen the ONE pool and sell past it (AGL-2896, 
 
   it('ADDS blocks × 5,000 on every paid plan, whatever the plan, at the plan rate it already had', () => {
     // FORCED RED by replacing the band rather than adding to it.
-    for (const plan of ['starter', ...PAID_TIERS] as const) {
+    // The plans SOLD since pricing v4 (AGL-4126): Starter and Pro.
+    const sold = SELF_SERVE_PLANS.filter((plan) => plan !== 'free')
+    expect(sold).toEqual(['starter', 'pro'])
+    for (const plan of sold) {
       for (const blocks of [1, 3, AI_CREDIT_BLOCKS_MAX]) {
         const org = { plan, seatAddons: { aiAddon: blocks } }
         expect(`${plan}/${blocks}: ${resolveAssistCreditBudget(org)}`).toBe(
@@ -647,6 +651,12 @@ describe('Aglyn AI credit blocks widen the ONE pool and sell past it (AGL-2896, 
           resolveAssistOverageRateUsdPer1k({ plan }),
         )
       }
+    }
+    // A retired plan sells no blocks, so a quantity on one widens nothing.
+    for (const plan of RETIRED_PLANS) {
+      expect(resolveAssistCreditBudget({ plan, seatAddons: { aiAddon: 3 } })).toBe(
+        PLAN_ENTITLEMENTS[plan].assistCreditsPerMonth,
+      )
     }
   })
 
