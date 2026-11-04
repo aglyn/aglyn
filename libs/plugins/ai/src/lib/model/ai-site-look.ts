@@ -23,6 +23,7 @@ import { DEFAULT_SITE_THEME } from '@aglyn/aglyn/app-utils/default-site'
 import type {
   HostTheme,
   HostThemeComponentOverride,
+  HostThemeComponentVariant,
   HostThemeFontCategory,
   HostThemeSchemeColors,
   HostThemeTypographyVariant,
@@ -133,15 +134,42 @@ export interface AiSiteStyle {
    */
   motion?: AiSiteMotionStyle
   /**
+   * How a site brought in was finished when its look was drawn (AGL-4152).
+   * `keep` (Keep my site) holds the source's look closer: its page ground is
+   * kept down to a lightness of 0.85 where the theme's text reads on it, and
+   * its dark ground, button case and filled buttons' own fill are pinned
+   * below. `improve` pins only the brand's colors and fonts, so the base
+   * shows. Absent on every other style, which draws as it always did.
+   */
+  finish?: 'keep' | 'improve'
+  /**
    * A site brought in's own page ground (AGL-4108), `#rrggbb`: the color its
    * source's pages sit on, where it is light enough for the theme's text.
    * Absent, the ground is drawn as `ground` says.
    */
   page?: string
-  /** A site brought in's own dark ground (AGL-4152), `#rrggbb`, kept by Keep my site. Absent, the dark scheme's own. */
+  /**
+   * A site brought in's own dark ground (AGL-4152), `#rrggbb`, kept by Keep
+   * my site: the dark scheme's page, with its paper a step lighter, where
+   * white reads on it. Absent, the dark scheme's own.
+   */
   darkPage?: string
-  /** A site brought in's button case (AGL-4152), kept by Keep my site. Absent, the buttons' own style says. */
+  /**
+   * A site brought in's button case (AGL-4152), kept by Keep my site: the
+   * button Text Style in capitals, or not. Absent, the buttons' own style
+   * (`caps`) says.
+   */
   buttonCase?: 'upper' | 'none'
+  /**
+   * A site brought in's filled buttons as its source draws them (AGL-4152),
+   * `#rrggbb`, kept by Keep my site: their fill, and the words' color on it.
+   * Where those words read on the fill, the fill is the brand where it reads
+   * on the page, else the theme's filled buttons alone are drawn in it.
+   * Absent, every button is drawn in the brand.
+   */
+  buttonFill?: string
+  /** The words' color on {@link AiSiteStyle.buttonFill}, `#rrggbb`, as the source draws them (AGL-4152). */
+  buttonText?: string
   /**
    * A site brought in's own type (AGL-4108): the families its source sets
    * its body and its headings in, where the theme font catalog has them,
@@ -593,6 +621,77 @@ function untilContrast(L: number, C: number, h: number, against: string, min: nu
   return lightness
 }
 
+const SOLID = /^#[0-9a-f]{6}$/i
+/** A `#rrggbb` color in lower case, or `null`. */
+const solid = (value: unknown): string | null => (typeof value === 'string' && SOLID.test(value) ? value.toLowerCase() : null)
+
+/** How far apart two colors look (AGL-4152): their distance in OKLab, 0 for one color. */
+export function aiOklabDistance(a: string, b: string): number {
+  const one = aiHexOklch(a)
+  const two = aiHexOklch(b)
+  const at = (color: { C: number; h: number }) => [color.C * Math.cos((color.h * Math.PI) / 180), color.C * Math.sin((color.h * Math.PI) / 180)] as const
+  const [a1, b1] = at(one)
+  const [a2, b2] = at(two)
+  return Math.hypot(one.L - two.L, a1 - a2, b1 - b2)
+}
+
+/**
+ * A label's nearest shade that reads on its fill at `min` (AGL-4152): the
+ * label itself, else stepped further from the fill's lightness, its hue
+ * kept. `null` where only a shade past the fill's own lightness would read:
+ * white words on a light fill have no lighter shade to go to.
+ */
+function shadeOn(label: string, fill: string, min: number): string | null {
+  if (ratio(label, fill) >= min) return label
+  const own = aiHexOklch(label)
+  const lighter = own.L >= aiHexOklch(fill).L
+  for (let L = own.L; lighter ? L < 1 : L > 0; L += lighter ? 0.01 : -0.01) {
+    const shade = aiOklchHex(L, own.C, own.h)
+    if (ratio(shade, fill) >= min) return shade
+  }
+  const end = lighter ? '#ffffff' : '#000000'
+  return ratio(end, fill) >= min ? end : null
+}
+
+/** How far a fill must sit from a ground to be drawn on it as a fill of its own (AGL-4152), in OKLab. */
+const OWN_FILL_APART = 0.1
+
+/** The colors the palette roles an own-fill button's label names stand for. */
+const COMMON: Record<'common.white' | 'common.black', string> = { 'common.white': '#ffffff', 'common.black': '#000000' }
+
+/**
+ * A fill as a ground carries it (AGL-4152): itself where it stands apart
+ * from the ground, else its nearest shade that does, stepped away from the
+ * ground's lightness, its hue kept. `null` where that shade no longer
+ * carries its label at 4.5:1.
+ */
+function apartFrom(fill: string, ground: string, label: string): string | null {
+  if (aiOklabDistance(fill, ground) >= OWN_FILL_APART) return fill
+  const own = aiHexOklch(fill)
+  const up = own.L >= aiHexOklch(ground).L
+  for (let L = own.L; up ? L <= 1 : L >= 0; L += up ? 0.01 : -0.01) {
+    const shade = aiOklchHex(L, own.C, own.h)
+    if (aiOklabDistance(shade, ground) >= OWN_FILL_APART) return ratio(label, shade) >= 4.5 ? shade : null
+  }
+  return null
+}
+
+/** The step the dark scheme's paper sits above its page. */
+const DARK_PAPER_STEP = 0.045
+
+/**
+ * The theme's filled buttons drawn in a site brought in's own fill (AGL-4152),
+ * where the brand cannot be that fill. The fill is the primary's lighter
+ * shade in both schemes (on the dark ground, its nearest shade that stands
+ * apart from it); the label a palette role, white or black on the source's
+ * words' own side of the fill; and outlined buttons take the fill too where
+ * it reads on both schemes' pages.
+ */
+export interface AiSiteOwnButton {
+  label: 'common.white' | 'common.black'
+  outlined: boolean
+}
+
 /** The label color of a fill: white or a deep ink of its hue, whichever reads at 4.5:1, or better. */
 function labelOn(fill: string, h: number): string {
   const white = '#ffffff'
@@ -619,6 +718,20 @@ const START_L: Record<AiSiteChroma, number> = { neutral: 0.52, muted: 0.48, bala
 
 /** Both schemes' colors for a style. */
 export function aiSiteColors(style: AiSiteStyle): { light: HostThemeSchemeColors; dark: HostThemeSchemeColors } {
+  const { light, dark } = colorsOf(style)
+  return { light, dark }
+}
+
+/**
+ * The filled buttons a style draws in its source's own fill (AGL-4152), as
+ * its theme's button styles take them, or `null` where they are drawn in the
+ * brand: every style but a site brought in kept by Keep my site.
+ */
+export function aiSiteOwnButton(style: AiSiteStyle): AiSiteOwnButton | null {
+  return colorsOf(style).button
+}
+
+function colorsOf(style: AiSiteStyle): { light: HostThemeSchemeColors; dark: HostThemeSchemeColors; button: AiSiteOwnButton | null } {
   const next = random(style.seed ^ 0x9e3779b9)
   const neutral = style.chroma === 'neutral'
   const brand = style.brand ? aiHexOklch(style.brand) : null
@@ -626,6 +739,10 @@ export function aiSiteColors(style: AiSiteStyle): { light: HostThemeSchemeColors
   const chroma = brand?.C ?? CHROMA[style.chroma] * (0.9 + next() * 0.2)
   const groundChroma = neutral ? 0.3 : 1
   const white = '#ffffff'
+  const textChroma = neutral ? 0.006 : 0.02
+  const ink = aiOklchHex(0.22, textChroma, h)
+  const darkInk = aiOklchHex(0.95, 0.008, h)
+  const keep = style.finish === 'keep'
 
   // The page grounds.
   const grounds: Record<AiSiteGround, { L: number; C: number; h: number; paper: [number, number] }> = {
@@ -635,15 +752,52 @@ export function aiSiteColors(style: AiSiteStyle): { light: HostThemeSchemeColors
     tinted: { L: 0.968, C: 0.02, h, paper: [0.994, 0.006] },
   }
   const ground = grounds[style.ground]
-  // A site brought in keeps the ground its source's pages sit on (AGL-4108), where its text reads on it.
-  const own = style.page && /^#[0-9a-f]{6}$/i.test(style.page) && aiHexOklch(style.page).L >= 0.9 ? style.page.toLowerCase() : null
+  // A site brought in keeps the ground its source's pages sit on (AGL-4108), where its text reads on it:
+  // kept as it is, down to a lightness of 0.85 where the words read on it at 4.5 (AGL-4152).
+  const page = solid(style.page)
+  const own = page && (keep ? aiHexOklch(page).L >= 0.85 && ratio(ink, page) >= 4.5 : aiHexOklch(page).L >= 0.9) ? page : null
   const background = own ?? aiOklchHex(ground.L, ground.C * groundChroma, ground.h)
   const paper = aiOklchHex(ground.paper[0], ground.paper[1] * groundChroma, ground.h)
+
+  // The dark scheme's ground: its own, or a site brought in's (AGL-4152) where white and the
+  // scheme's words read on it and on its paper a step lighter.
+  const darkGround = style.ground === 'tinted' ? 0.024 : style.ground === 'warm' ? 0.014 : 0.012
+  const darkOwn = (() => {
+    const hex = solid(style.darkPage)
+    if (!hex) return null
+    const at = aiHexOklch(hex)
+    const darkPaper = aiOklchHex(at.L + DARK_PAPER_STEP, at.C, at.h)
+    return ratio(white, hex) >= 4.5 && ratio(darkInk, hex) >= 4.5 && ratio(darkInk, darkPaper) >= 4.5 ? { page: hex, paper: darkPaper, L: at.L } : null
+  })()
+  const darkBackground = darkOwn?.page ?? aiOklchHex(0.17, darkGround * groundChroma, style.ground === 'warm' ? 60 : h)
+  const darkPaper = darkOwn?.paper ?? aiOklchHex(0.215, darkGround * groundChroma, style.ground === 'warm' ? 60 : h)
+  // Its cards and rules keep their place against its ground.
+  const darkShift = darkOwn ? darkOwn.L - 0.17 : 0
+
+  // A site brought in's filled buttons (AGL-4152): their fill, and their words' nearest shade that reads on it.
+  const buttonFill = solid(style.buttonFill)
+  const buttonText = solid(style.buttonText)
+  const label = buttonFill && buttonText ? shadeOn(buttonText, buttonFill, 4.5) : null
+  // The fill is the brand: drawn as the brand where its words read on it and it reads on the page.
+  const fillIsBrand = !!buttonFill && !!brand && buttonFill === solid(style.brand)
+  const ownPrimary = !!label && fillIsBrand && ratio(buttonFill as string, background) >= 3
+  // Else the filled buttons alone are drawn in it, where it is a fill of its own on the page: under
+  // white or black, on its words' own side, and on the dark ground at its nearest shade apart from it.
+  const ownLabel: AiSiteOwnButton['label'] | null = buttonFill && label ? (aiHexOklch(label).L >= aiHexOklch(buttonFill).L ? 'common.white' : 'common.black') : null
+  const darkButtonFill =
+    buttonFill && ownLabel && !ownPrimary && aiOklabDistance(buttonFill, background) >= OWN_FILL_APART ? apartFrom(buttonFill, darkBackground, COMMON[ownLabel]) : null
+  const button: AiSiteOwnButton | null =
+    ownLabel && darkButtonFill
+      ? { label: ownLabel, outlined: ratio(buttonFill as string, background) >= 3 && ratio(darkButtonFill, darkBackground) >= 3 }
+      : null
 
   // The brand color: a button label reads on it, so it reads on the page too.
   let primaryMain: string
   let primaryL: number
-  if (brand && ratio(white, style.brand as string) >= 4.5) {
+  if (ownPrimary && brand) {
+    primaryMain = buttonFill as string
+    primaryL = brand.L
+  } else if (brand && ratio(white, style.brand as string) >= 4.5) {
     primaryMain = style.brand as string
     primaryL = brand.L
   } else {
@@ -681,14 +835,14 @@ export function aiSiteColors(style: AiSiteStyle): { light: HostThemeSchemeColors
   const tertiaryChroma = third ? Math.min(0.2, Math.max(0.07, third.C)) : 0.12
   const tertiaryL = untilContrast(third ? Math.min(third.L, 0.6) : 0.52, tertiaryChroma, tertiaryHue, white, 4.6, 0)
   const tertiary = aiOklchHex(tertiaryL, tertiaryChroma, tertiaryHue)
-  const textChroma = neutral ? 0.006 : 0.02
 
   const light: HostThemeSchemeColors = {
     primary: {
       main: primaryMain,
-      light: aiOklchHex(Math.min(0.92, primaryL + 0.12), chroma, h),
+      // The filled buttons' own fill, where they are drawn in it (AGL-4152): the brand's lighter shade.
+      light: button ? (buttonFill as string) : aiOklchHex(Math.min(0.92, primaryL + 0.12), chroma, h),
       dark: aiOklchHex(Math.max(0.15, primaryL - 0.1), chroma, h),
-      contrastText: labelOn(primaryMain, h),
+      contrastText: ownPrimary ? (label as string) : labelOn(primaryMain, h),
     },
     secondary: {
       main: secondary.main,
@@ -702,10 +856,10 @@ export function aiSiteColors(style: AiSiteStyle): { light: HostThemeSchemeColors
       dark: aiOklchHex(Math.max(0.15, tertiaryL - 0.1), tertiaryChroma, tertiaryHue),
       contrastText: labelOn(tertiary, tertiaryHue),
     },
-    surface: { main: aiOklchHex(0.955, 0.012 * groundChroma, h), contrastText: aiOklchHex(0.22, textChroma, h) },
+    surface: { main: aiOklchHex(0.955, 0.012 * groundChroma, h), contrastText: ink },
     background: { default: background, paper },
     text: {
-      primary: aiOklchHex(0.22, textChroma, h),
+      primary: ink,
       secondary: aiOklchHex(0.45, textChroma + 0.005, h),
       disabled: aiOklchHex(0.68, 0.01, h),
     },
@@ -719,20 +873,21 @@ export function aiSiteColors(style: AiSiteStyle): { light: HostThemeSchemeColors
     divider: aiOklchHex(0.9, 0.012 * groundChroma, h),
   }
 
-  const darkGround = style.ground === 'tinted' ? 0.024 : style.ground === 'warm' ? 0.014 : 0.012
-  const darkBackground = aiOklchHex(0.17, darkGround * groundChroma, style.ground === 'warm' ? 60 : h)
-  const darkPaper = aiOklchHex(0.215, darkGround * groundChroma, style.ground === 'warm' ? 60 : h)
   const darkChroma = Math.min(chroma, 0.14)
-  const darkPrimaryL = untilContrast(0.78, darkChroma, h, darkBackground, 4.5, 1)
-  const darkPrimary = aiOklchHex(darkPrimaryL, darkChroma, h)
+  // A site brought in's own button fill is the dark scheme's brand where it reads on its ground (AGL-4152).
+  const darkFill = fillIsBrand && ratio(buttonFill as string, darkBackground) >= 4.5 ? (buttonFill as string) : null
+  const darkPrimaryL = darkFill ? aiHexOklch(darkFill).L : untilContrast(0.78, darkChroma, h, darkBackground, 4.5, 1)
+  const darkPrimary = darkFill ?? aiOklchHex(darkPrimaryL, darkChroma, h)
   const darkSecondary = neutral ? aiOklchHex(0.93, 0.01, h) : aiOklchHex(0.45, accentChroma * 0.85, buttonHue)
   const darkTertiary = aiOklchHex(0.8, 0.1, tertiaryHue)
+  // The cards' surface a step above a ground of its own, held where the scheme's words still read on it.
+  const darkSurfaceL = darkShift ? untilContrast(0.25 + darkShift, 0.014 * groundChroma, h, darkInk, 4.5, 0) : 0.25
   const dark: HostThemeSchemeColors = {
     primary: {
       main: darkPrimary,
-      light: aiOklchHex(Math.min(0.94, darkPrimaryL + 0.08), darkChroma, h),
+      light: button ? (darkButtonFill as string) : aiOklchHex(Math.min(0.94, darkPrimaryL + 0.08), darkChroma, h),
       dark: aiOklchHex(darkPrimaryL - 0.1, darkChroma, h),
-      contrastText: labelOn(darkPrimary, h),
+      contrastText: darkFill && label && ratio(label, darkFill) >= 4.5 ? label : labelOn(darkPrimary, h),
     },
     secondary: {
       main: darkSecondary,
@@ -746,21 +901,22 @@ export function aiSiteColors(style: AiSiteStyle): { light: HostThemeSchemeColors
       dark: aiOklchHex(0.7, 0.1, tertiaryHue),
       contrastText: labelOn(darkTertiary, tertiaryHue),
     },
-    surface: { main: aiOklchHex(0.25, 0.014 * groundChroma, h), contrastText: aiOklchHex(0.95, 0.01, h) },
+    surface: { main: aiOklchHex(darkSurfaceL, 0.014 * groundChroma, h), contrastText: aiOklchHex(0.95, 0.01, h) },
     background: { default: darkBackground, paper: darkPaper },
     text: {
-      primary: aiOklchHex(0.95, 0.008, h),
+      primary: darkInk,
       secondary: aiOklchHex(0.77, 0.014, h),
       disabled: aiOklchHex(0.52, 0.01, h),
     },
+    // The tints stay where they are: a base draws the primary's dark words on them.
     tint: {
       primary: aiOklchHex(0.27, 0.05, h),
       secondary: aiOklchHex(0.27, 0.05, buttonHue),
       tertiary: aiOklchHex(0.27, 0.04, tertiaryHue),
     },
-    divider: aiOklchHex(0.32, 0.015 * groundChroma, h),
+    divider: aiOklchHex(0.32 + darkShift, 0.015 * groundChroma, h),
   }
-  return { light, dark }
+  return { light, dark, button }
 }
 
 // ── The theme ────────────────────────────────────────────────────────────
@@ -821,10 +977,12 @@ function typographyFor(style: AiSiteStyle): HostTheme['typography'] {
     style.eyebrow === 'small'
       ? { fontSize: '0.875rem', fontWeight: bodyBold, letterSpacing: '0.01em', textTransform: 'none' }
       : { fontSize: '0.78rem', fontWeight: 700, letterSpacing: style.eyebrow === 'rule' ? '0.16em' : '0.12em', textTransform: 'uppercase' }
+  // A site brought in's own button case (AGL-4152), where it keeps one; else the buttons' style says.
+  const capitals = style.buttonCase ? style.buttonCase === 'upper' : style.buttons === 'caps'
   variants.button = {
     fontWeight: style.buttons === 'caps' ? 700 : bodyBold,
-    textTransform: style.buttons === 'caps' ? 'uppercase' : 'none',
-    ...(style.buttons === 'caps' ? { letterSpacing: '0.06em' } : {}),
+    textTransform: capitals ? 'uppercase' : 'none',
+    ...(capitals ? { letterSpacing: '0.06em' } : {}),
   }
   return { variants }
 }
@@ -843,6 +1001,22 @@ function cardSx(cards: AiSiteCards): Record<string, unknown> {
     case 'rule':
       return { boxShadow: 0, border: 0, borderTop: 3, borderColor: 'primary.main', borderRadius: 0, bgcolor: 'background.paper' }
   }
+}
+
+/**
+ * The button styles that draw a site brought in's filled buttons in its own
+ * fill (AGL-4152), in palette roles: the fill is the primary's lighter shade
+ * and the label white or black, and an outlined button takes the fill as its
+ * border and words where it reads on both pages.
+ */
+function ownButtonVariants(button: AiSiteOwnButton): HostThemeComponentVariant[] {
+  return [
+    {
+      props: { variant: 'contained', color: 'primary' },
+      sx: { bgcolor: 'primary.light', color: button.label, '&:hover': { bgcolor: 'primary.light', boxShadow: 1 } },
+    },
+    ...(button.outlined ? [{ props: { variant: 'outlined', color: 'primary' }, sx: { color: 'primary.light', borderColor: 'primary.light' } }] : []),
+  ]
 }
 
 /** The component defaults and styles a style sets: buttons, cards, fields, eyebrows, the header bar and the FAQ. */
@@ -941,8 +1115,13 @@ function merged<T>(under: T, over: unknown): T {
   return out as T
 }
 
-/** Whether a theme passes the publish check and the brand-on-page contrast the doctrine asks. */
-function themeReads(theme: HostTheme): boolean {
+/**
+ * Whether a theme passes the publish check and the brand-on-page contrast the
+ * doctrine asks; and, where its filled buttons are drawn in a site brought
+ * in's own fill (AGL-4152), whether their label reads on that fill and an
+ * outlined button's on each page.
+ */
+function themeReads(theme: HostTheme, button: AiSiteOwnButton | null = null): boolean {
   if (!validateThemeForPublish(theme).ok) return false
   for (const scheme of ['light', 'dark'] as const) {
     const colors = theme.colorSchemes?.[scheme]
@@ -952,6 +1131,11 @@ function themeReads(theme: HostTheme): boolean {
     for (const key of ['primary', 'secondary', 'tertiary'] as const) {
       const fill = colors?.[key]
       if (fill?.main && fill.contrastText && ratio(fill.contrastText, fill.main) < 4.5) return false
+    }
+    if (button) {
+      const own = colors?.primary?.light
+      if (!own || ratio(COMMON[button.label], own) < 4.5) return false
+      if (button.outlined && ratio(own, page) < 3) return false
     }
   }
   return true
@@ -965,7 +1149,7 @@ function themeReads(theme: HostTheme): boolean {
  */
 export function aiSiteTheme(style: AiSiteStyle, base: HostTheme): HostTheme {
   const pairing = aiSiteFontPairing(style.fonts) ?? (AI_SITE_FONT_PAIRINGS[0] as NonNullable<ReturnType<typeof aiSiteFontPairing>>)
-  const colors = aiSiteColors(style)
+  const colors = colorsOf(style)
   const keep = (scheme: 'light' | 'dark') => {
     const own = base.colorSchemes?.[scheme] ?? {}
     // The status colors stay the base's: they mean the same thing on every site.
@@ -977,13 +1161,14 @@ export function aiSiteTheme(style: AiSiteStyle, base: HostTheme): HostTheme {
       ...colors[scheme],
     }
   }
+  const components = merged(base.components ?? {}, componentsFor(style))
   let theme: HostTheme = {
     ...base,
     colorSchemes: { light: keep('light'), dark: keep('dark') },
     typography: merged(base.typography ?? {}, typographyFor(style)),
     shape: { ...(base.shape ?? {}), borderRadius: RADIUS[style.corners] },
     spacing: SPACING[style.density],
-    components: merged(base.components ?? {}, componentsFor(style)),
+    components: colors.button ? withOwnButton(components, colors.button) : components,
   }
   delete theme.darkScheme
   // A site brought in is set in its source's own families (AGL-4108), at the
@@ -1010,11 +1195,22 @@ export function aiSiteTheme(style: AiSiteStyle, base: HostTheme): HostTheme {
       weights: [...new Set([...(theme.fonts[0].weights ?? []), ...heading.weights])].sort((a, b) => a - b),
     }
   }
-  if (!themeReads(theme)) {
-    // Never a theme that fails the reading checks: the starter's colors, with everything else kept.
-    theme = { ...theme, colorSchemes: DEFAULT_SITE_THEME.colorSchemes }
+  if (!themeReads(theme, colors.button)) {
+    // Never a theme that fails the reading checks: the starter's colors, with everything else kept,
+    // and the buttons drawn in them rather than in a fill the starter's colors know nothing of.
+    theme = { ...theme, colorSchemes: DEFAULT_SITE_THEME.colorSchemes, components }
   }
   return theme
+}
+
+/**
+ * The components with the filled buttons drawn in a site brought in's own
+ * fill (AGL-4152): after the button styles the theme already holds, the
+ * base's or the look's, so the fill's win where both style one.
+ */
+function withOwnButton(components: Record<string, HostThemeComponentOverride>, button: AiSiteOwnButton): Record<string, HostThemeComponentOverride> {
+  const own = components['MuiButton'] ?? {}
+  return { ...components, MuiButton: { ...own, variants: [...(own.variants ?? []), ...ownButtonVariants(button)] } }
 }
 
 // ── A kind's first look (AGL-4049) ──────────────────────────────────────────
