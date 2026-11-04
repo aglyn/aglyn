@@ -501,7 +501,7 @@ func fieldJSON(_ field: FieldSpec, _ value: FieldValue?) -> JSONValue {
   case ("lines", .text(let text)?):
     // One entry per line while edited; the list is what is sent (nothing typed is an empty list).
     return .array(text.split(separator: "\n").map { String($0).trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.map(JSONValue.string))
-  case ("number", .text(let text)?):
+  case ("number", .text(let text)?), ("stepper", .text(let text)?):
     let trimmed = text.trimmingCharacters(in: .whitespaces)
     return trimmed.isEmpty ? .null : Double(trimmed).map { .number(field.integer ? $0.rounded() : $0) } ?? .string(trimmed)
   case (_, .text(let text)?):
@@ -580,6 +580,8 @@ struct FieldInput: View {
             .accessibilityIdentifier("choice-\(field.key)-\(choice.value)")
           }
         }
+      case "stepper":
+        StepperInput(field: field, context: context, text: text)
       case "hours":
         HoursInput(field: field, text: text)
       case "multiselect":
@@ -670,6 +672,42 @@ struct FieldInput: View {
       }
     }
   #endif
+}
+
+/// A `stepper` field: a whole count stepped between the field's bounds with − and +, never typed (the console's add-on
+/// stepper: blocks of AI credits from 0 to 30), the count named with its `unit`, and under it the field's `says` line
+/// for the count shown, which moves as it is stepped.
+struct StepperInput: View {
+  let field: FieldSpec
+  let context: JSONValue
+  @Binding var text: String
+
+  private var low: Int { Int(field.min ?? 0) }
+  private var high: Int { Swift.max(low, Int(field.max ?? 999)) }
+
+  private var count: Int {
+    let typed = Double(text.trimmingCharacters(in: .whitespaces)).map { Int($0.rounded()) } ?? low
+    return Swift.min(Swift.max(typed, low), high)
+  }
+
+  var body: some View {
+    let label = ScreenValues.render(field.label, in: context)
+    VStack(alignment: .leading, spacing: 4) {
+      Stepper(value: Binding(get: { count }, set: { text = String($0) }), in: low...high) {
+        HStack {
+          Text(label)
+          Spacer(minLength: AglynSpace.one)
+          Text(field.countLabel(count)).monospacedDigit().foregroundStyle(AglynColor.secondaryText)
+            .accessibilityIdentifier("stepper-count-\(field.key)")
+        }
+      }
+      .accessibilityIdentifier("stepper-\(field.key)")
+      if let says = field.says(count, in: context) {
+        Text(says).font(AglynFont.caption).foregroundStyle(.secondary)
+          .accessibilityIdentifier("stepper-says-\(field.key)")
+      }
+    }
+  }
 }
 
 /// A form on the screen: its inputs, filled from the loaded data, and the
