@@ -13,7 +13,7 @@
     "columns": [
       {
         "plan": "free",
-        "label": "Free",
+        "label": "Hobby",
         "monthlyUsd": 0,
         "annualMonthlyUsd": 0,
         "priceLabel": "$0"
@@ -34,10 +34,10 @@
       },
       {
         "plan": "enterprise",
-        "label": "Custom",
+        "label": "Enterprise",
         "monthlyUsd": 0,
         "annualMonthlyUsd": 0,
-        "priceLabel": "Quoted"
+        "priceLabel": "Custom"
       }
     ],
     "groups": [
@@ -618,8 +618,9 @@
     "lede": "Custom plans for portfolios, white-label and single sign-on.",
     "enterprise": {
       "plan": "enterprise",
-      "label": "Custom",
-      "priceLabel": "Quoted",
+      "label": "Enterprise",
+      "priceLabel": "Custom",
+      "tagline": "Sized and priced per agreement",
       "annualLabel": "Quoted per agreement",
       "blurb": "For portfolios and organizations that need white-label, single sign-on or a contract — quoted for you.",
       "specs": [
@@ -647,7 +648,7 @@
       },
       {
         "plan": "enterprise",
-        "label": "Custom"
+        "label": "Enterprise"
       }
     ],
     "rowLabel": "Add-on capacity",

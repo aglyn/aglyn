@@ -838,7 +838,7 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       expect(PLAN_PRICING.pro.basePriceAnnualMonthlyUsd * 12).toBe(588)
     })
 
-    it('Custom publishes no list price — the card reads "Quoted"', () => {
+    it('Enterprise publishes no list price — the card reads "Custom"', () => {
       expect(PLAN_PRICING.enterprise.basePriceMonthlyUsd).toBe(0)
       expect(PLAN_PRICING.enterprise.extraHostMonthlyUsd).toBeNull()
     })

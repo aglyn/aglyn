@@ -505,8 +505,9 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
   })
 
   it('fails when a SCALE STRIP spec token disagrees with the code', () => {
-    // The strip carries Custom's card alone since pricing v4; its fee token is
-    // the one read from code.
+    // The strip carries the top plan's card alone since pricing v4, named
+    // Enterprise on the page since 2026-11-04; its fee token is the one read
+    // from code.
     resetFixtures()
     editWide('Plans', 'scale-strip', (strip) => {
       const custom = strip.records.find((r) => r.cells[1]?.includes('transaction fees'))
@@ -519,7 +520,7 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     assert.match(run.stderr, /scale strip: CODE-vs-FRAME disagreements/)
     assert.match(
       run.stderr,
-      /Custom · spec 2 .*code=0% transaction fees {2}frame=9% transaction fees/,
+      /Enterprise · spec 2 .*code=0% transaction fees {2}frame=9% transaction fees/,
     )
   })
 
