@@ -36,7 +36,7 @@
  *   facts — prices, numbers, dates, times, percentages, emails, web
  *   addresses, phones and names, the site's own name among them — exactly as
  *   often as its line says them and none of its own; no contact the page
- *   does not give; no gap; its line's script; 0.6 to 1.4 times its words,
+ *   does not give; no gap; its line's script; 0.5 to 1.6 times its words,
  *   within the characters its place holds; most of its meaning
  *   (`SITE_IMPORT_MEANING_FLOOR`); and no filler, placeholder or judgment
  *   word. A line refused is asked again once; refused again, it is kept as
@@ -108,19 +108,19 @@ export const AI_SITE_IMPORT_WORDING_TOOL: AiTool = {
 }
 
 /** The most a rewrite may run to, against its line's words. */
-export const AI_SITE_IMPORT_WORDING_LENGTH = { least: 0.6, most: 1.4 } as const
+export const AI_SITE_IMPORT_WORDING_LENGTH = { least: 0.5, most: 1.6 } as const
 
 /**
  * What a wording answer is told, cached: one static block every page shares,
  * and the rule that fenced text is data. The page itself rides the user turn.
  */
 export const AI_SITE_IMPORT_WORDING_TEXT = [
-  "You improve the wording of a page brought in from its owner's own website, so that it reads better: clearer, tighter and more direct, in the owner's own voice. The page's design, its sections and what each section shows are fixed, and so is every fact on it.",
+  "You rewrite the wording of a page brought in from its owner's own website so it reads as a strong professional copywriter would write it, in the owner's voice: each heading a clear, specific promise of what the visitor gets, each paragraph leading with the benefit, in active words, with nothing that does not earn its place. Rebuild a sentence freely where that makes it clearer or stronger. The page's design, its sections and what each section shows are fixed, and so is every fact on it.",
   '',
-  'Answer with submit_wording: one entry in lines for each line you reword, by its number, with its new words. A line you leave out is kept exactly as written, so leave out every line that already reads well. Reword only a line shown as a heading, a paragraph, a list item or a button; a line shown "as written" is the owner\'s exactly and is never answered.',
+  'Answer with submit_wording: one entry in lines for each line you reword, by its number, with its new words. A line you leave out is kept exactly as written. Rewrite every heading, lede, paragraph and button that could be clearer or stronger, and leave out only a line that is already as strong as it can be. Reword only a line shown as a heading, a paragraph, a list item or a button; a line shown "as written" is the owner\'s exactly and is never answered.',
   '',
   'Each rewrite:',
-  "- says what its line says, in the line's own language and script, keeping most of its words' meaning, and makes no claim, promise, offer or detail the line does not make;",
+  "- says what its line means, in the line's own language and script, and makes no claim, promise, offer or detail the page does not make;",
   '- keeps every name, price, number, date, time, percentage, address, phone number, email and web address exactly as the line writes it, as often as the line has it, and adds none;',
   `- runs between ${AI_SITE_IMPORT_WORDING_LENGTH.least} and ${AI_SITE_IMPORT_WORDING_LENGTH.most} times its line's words, and never past the characters shown;`,
   '- stays what its line is: a heading for a heading, a sentence or more for a paragraph, a short label for a button;',
@@ -370,7 +370,7 @@ export function aiSiteImportWordingPage(doc: Pick<AiSiteImportDocument, 'blocks'
       return { section: entry.section, line: entry.ref, what: block.kind === 'quote' ? 'quote, as written' : 'as written', text: text.length > KEPT_SHOWN_CHARS ? `${text.slice(0, KEPT_SHOWN_CHARS).trimEnd()} …` : text }
     }
     const line: AiSiteImportWordingLine = { line: entry.ref, kind: reword.kind, text, limit: limitOf(reword.kind, text, reword.title), section: entry.section }
-    // A paragraph's own ceiling is far past what 1.4 times its words reach: only a tighter place's is shown.
+    // A paragraph's own ceiling is far past what 1.6 times its words reach: only a tighter place's is shown.
     const bound = line.limit < AI_SITE_IMPORT_TEXT_MAX_CHARS
     return { section: entry.section, line: entry.ref, what: bound ? `${line.kind}, up to ${line.limit} characters` : line.kind, text, reword: line }
   })

@@ -330,8 +330,8 @@ export const SITE_IMPORT_GROUND_DELTA = 0.05
 /** How far the hero heading's share of its section may sit from the source's (AGL-4152), relatively. */
 export const SITE_IMPORT_MEASURE_SHARE = 0.1
 
-/** The least share of a line's content words a rewrite keeps (G4). */
-export const SITE_IMPORT_MEANING_FLOOR = 0.4
+/** The least share of a line's content words a rewrite keeps (G4): a bold rewrite, the owner asked 11/4, still keeps a third. */
+export const SITE_IMPORT_MEANING_FLOOR = 0.3
 
 /** The measures Improve it prints as free (AGL-4152): what it may change. */
 export const SITE_IMPORT_IMPROVE_FREE: readonly string[] = ['bands', 'widths', 'rows', 'framing', 'ground', 'measure', 'align', 'boxed']
