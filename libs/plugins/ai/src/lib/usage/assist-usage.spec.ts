@@ -35,10 +35,8 @@ import {
   assistRefusedByOverageCap,
   assistUsdFromCredits,
 } from './assist-credits'
-import {
-  AI_TIERS,
-  PLAN_ENTITLEMENTS,
-} from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { PLAN_ENTITLEMENTS } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { AI_CREDITS_PER_BLOCK } from '@aglyn/aglyn/app-utils/ai-credit-blocks'
 import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
 import {
   ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD,
@@ -2529,13 +2527,13 @@ describe('tokens by kind on the month, on the signal and on the person’s month
 describe('Starter is metered the same with and without the AI add-on (AGL-3014, AGL-3203)', () => {
   const monthPath = `orgs/${ORG}/assistUsage/2026-08`
   /**
-   * Starter's whole band once the add-on is on, sold past at $3.00 per
-   * 1,000: the plan's own 750 credits (AGL-3203) PLUS the tier's 4,000 — an
-   * add-on with no `aiTier` written is Starter's old one, Spark (AGL-3965).
-   * The tier widens the one pool; it does not replace the plan's row.
+   * Starter's whole band with one block of Aglyn AI credits, sold past at
+   * $3.00 per 1,000: the plan's own 750 credits (AGL-3203) PLUS the block's
+   * 5,000 (AGL-4144). The block widens the one pool; it does not replace the
+   * plan's row.
    */
   const ADDON_BAND =
-    PLAN_ENTITLEMENTS.starter.assistCreditsPerMonth + AI_TIERS.spark.credits
+    PLAN_ENTITLEMENTS.starter.assistCreditsPerMonth + AI_CREDITS_PER_BLOCK
   /** Pinned beside the sum, so a silent move of either half is caught. */
   const BARE_BAND = 750
   const starterWithAi = { plan: 'starter' as const, seatAddons: { aiAddon: 1 } }
@@ -2547,8 +2545,8 @@ describe('Starter is metered the same with and without the AI add-on (AGL-3014, 
 
   it('the band is the plan row plus the add-on, and neither half is zero', () => {
     expect(PLAN_ENTITLEMENTS.starter.assistCreditsPerMonth).toBe(BARE_BAND)
-    expect(AI_TIERS.spark.credits).toBe(4_000)
-    expect(ADDON_BAND).toBe(4_750)
+    expect(AI_CREDITS_PER_BLOCK).toBe(5_000)
+    expect(ADDON_BAND).toBe(5_750)
   })
 
   beforeAll(() => {
@@ -2569,14 +2567,24 @@ describe('Starter is metered the same with and without the AI add-on (AGL-3014, 
       allowed: true,
       refusedBy: null,
       costLimitUsd: null,
-      budgetUsd: 4.75,
+      budgetUsd: 5.75,
     })
     expect(mockDocs.get(monthPath)).toMatchObject({ messages: 13 })
     expect(publicAssistQuota(reservation).credits).toEqual({
-      used: 6_750,
+      used: 7_750,
       limit: ADDON_BAND,
       remaining: 0,
     })
+  })
+
+  it('sizes the gate by blocks alone: a retired tier on the document widens nothing (AGL-4144)', async () => {
+    mockDocs.set(monthPath, PAST_ADDON_BAND)
+    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, {
+      ...starterWithAi,
+      aiTier: 'studio',
+    } as never)
+    expect(reservation).toMatchObject({ allowed: true, budgetUsd: 5.75 })
+    expect(publicAssistQuota(reservation).credits?.limit).toBe(ADDON_BAND)
   })
 
   it('its own ceiling refuses as `cap`, and the door names the ceiling rather than a 429', async () => {
@@ -2602,7 +2610,7 @@ describe('Starter is metered the same with and without the AI add-on (AGL-3014, 
     expect(reservation).toMatchObject({
       allowed: false,
       refusedBy: 'band',
-      costLimitUsd: 4.75,
+      costLimitUsd: 5.75,
     })
     expect(mockDocs.get(monthPath)).toMatchObject({ messages: 12 })
     expect(assistOwnControlRefusalText(stopped, coreRefusal(reservation.refusedBy))).toContain(
@@ -2614,9 +2622,9 @@ describe('Starter is metered the same with and without the AI add-on (AGL-3014, 
     // The AGL-3014 bug was Starter's band and rate living somewhere the rest
     // of the stack did not read. AGL-3203 ended that: bare Starter bands at
     // 750 on its own row and sells past it at the same $3.00 per 1,000, so
-    // the SAME stored ceiling binds it — 6,750 credits used is 6,000 past
-    // 750, which is $6.00 and meets the $6 ceiling exactly. Only the band
-    // moves when the add-on is bought.
+    // the SAME stored ceiling binds it — 7,750 credits used is 7,000 past
+    // 750, which is $21.00 and well past the $6 ceiling. Only the band moves
+    // when a block is bought.
     mockDocs.set(monthPath, PAST_ADDON_BAND)
     const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, {
       plan: 'starter',
@@ -2635,7 +2643,7 @@ describe('Starter is metered the same with and without the AI add-on (AGL-3014, 
     // What a stored ceiling still binds nothing on: an org whose band is
     // zero, which since AGL-3203 is a per-org `assistCreditsPerMonth`
     // override and never a plan row. There is no overage for the ceiling to
-    // reach, so only the operator backstop measures the month — and $6.75 is
+    // reach, so only the operator backstop measures the month — and $7.75 is
     // under it.
     mockDocs.set(monthPath, PAST_ADDON_BAND)
     const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, {

@@ -244,9 +244,30 @@ import {
   COLLECTIONS_MAX_PER_HOST,
   PLAN_ENTITLEMENTS,
   PLAN_PRICING,
+  resolveOrgEntitlements,
+  UNLIMITED,
 } from '@aglyn/aglyn/server'
 
-const PRO = PLAN_ENTITLEMENTS.pro
+/**
+ * The workspace every test imports into: Pro, with the count caps a contract
+ * writes as per-org overrides. Pricing v4 (AGL-4126) made Pro's workflows,
+ * functions, variables and dataset ceiling UNLIMITED, and the plan with
+ * `siteExport` and finite caps no longer exists on the ladder — so the caps
+ * this suite is about are written the way a contract would write them, at
+ * the figures Pro carried until v4, and the route is held to the RESOLVED
+ * entitlements, which is what it reads.
+ */
+const CAPPED_ORG: Doc = {
+  plan: 'pro',
+  entitlements: {
+    workflowsPerHost: 25,
+    functionsPerHost: 50,
+    variablesPerHost: 100,
+    maxDatasetsPerOrg: 50,
+  },
+}
+
+const PRO = resolveOrgEntitlements(CAPPED_ORG as never)
 
 /**
  * A site's datasets are the data plugin's section of the bundle, restored
@@ -342,7 +363,7 @@ const storedIdsIn = (collectionPath: string) =>
 beforeEach(() => {
   jest.clearAllMocks()
   mockVerifyIdToken.mockResolvedValue({ uid: 'user-1', email_verified: true })
-  mockOrg = { plan: 'pro' }
+  mockOrg = CAPPED_ORG
   reset()
   seedHost('host-1')
 })
@@ -351,6 +372,13 @@ describe('the premise: every bundle cap is at or over the Pro plan cap', () => {
   it('is the arithmetic this issue is about', () => {
     // Guard the premise. If any of these move, the tests below stop describing
     // anything and would go green for the wrong reason.
+    //
+    // Pro's own row carries none of these walls since pricing v4 (AGL-4126);
+    // the caps below are the contract overrides `CAPPED_ORG` writes.
+    expect(PLAN_ENTITLEMENTS.pro.workflowsPerHost).toBe(UNLIMITED)
+    expect(PLAN_ENTITLEMENTS.pro.functionsPerHost).toBe(UNLIMITED)
+    expect(PLAN_ENTITLEMENTS.pro.variablesPerHost).toBe(UNLIMITED)
+    expect(PLAN_ENTITLEMENTS.pro.maxDatasetsPerOrg).toBe(UNLIMITED)
     expect(EXPORT_COLLECTION_LIMITS.workflows).toBe(100)
     expect(PRO.workflowsPerHost).toBe(25)
 
@@ -410,7 +438,7 @@ describe('datasets: the leg that leaks revenue, and the org-scoped one', () => {
     // that has PAID for 45 extra datasets is entitled to 50, and a check
     // reading the plan's included number would refuse a customer their own
     // backup after taking their money for the room to hold it.
-    mockOrg = { plan: 'pro', seatAddons: { datasets: 45 } }
+    mockOrg = { ...CAPPED_ORG, seatAddons: { datasets: 45 } }
     const wanted = ids(DATASETS_LIMIT, 'ds')
     const response = await runImport('host-1', bundleOf({
       datasets: wanted.map((id) => datasetItem(id)),
@@ -423,7 +451,7 @@ describe('datasets: the leg that leaks revenue, and the org-scoped one', () => {
   it('names upgrading, not addons, once the addon runway is gone', async () => {
     // At the hard max the addon is not an escape and offering it would be a
     // dead end — `checkDatasetQuota` already knows this as `upgradeRequired`.
-    mockOrg = { plan: 'pro', seatAddons: { datasets: 45 } }
+    mockOrg = { ...CAPPED_ORG, seatAddons: { datasets: 45 } }
     seedWorkspaceDatasets('org-1', ids(50, 'have'))
     const response = await runImport('host-1', bundleOf({
       datasets: [datasetItem('one-more')],
@@ -517,7 +545,7 @@ describe('datasets: the leg that leaks revenue, and the org-scoped one', () => {
     // limit had before AGL-1382 gave it one home, which is why the slice lives
     // in the route's `sectionItems` and the section's refusal and restore both
     // read it.
-    mockOrg = { plan: 'pro', seatAddons: { datasets: 45 } }
+    mockOrg = { ...CAPPED_ORG, seatAddons: { datasets: 45 } }
     const response = await runImport('host-1', bundleOf({
       datasets: ids(DATASETS_LIMIT + 10, 'ds').map((id) =>
         datasetItem(id),

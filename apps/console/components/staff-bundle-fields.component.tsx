@@ -17,14 +17,14 @@
 
 'use client'
 
-import type { AiTierId, OrgPlan } from '@aglyn/aglyn'
+import type { OrgPlan } from '@aglyn/aglyn'
+import { AI_CREDITS_PER_BLOCK } from '@aglyn/aglyn/app-utils/ai-credit-blocks'
 import {
   ADDON_KINDS,
   addonMaxForPlan,
   addonUnitUsd,
   BUNDLE_COUPON_MAX,
   bundleAddonLabel,
-  bundleAiTier,
   firstPlanSellingAddon,
   fitBundleAddonsToPlan,
   normalizeBundleCoupon,
@@ -47,7 +47,6 @@ import {
   ToggleButtonGroup,
   Typography,
 } from '@mui/material'
-import { AiTierSelect } from './billing/ai-tier-select.component'
 
 /** What staff choose for a bundle (AGL-3955, AGL-3956). */
 export interface BundleDraft {
@@ -55,11 +54,6 @@ export interface BundleDraft {
   addons: BundleAddons
   interval: 'month' | 'year'
   coupon: string
-  /**
-   * The Aglyn AI tier chosen beside the AI switch (AGL-4025); absent, the
-   * plan's default tier (`bundleAiTier`), which the picker shows as chosen.
-   */
-  aiTier?: AiTierId | null
 }
 
 /**
@@ -74,27 +68,22 @@ export const DEFAULT_BUNDLE_DRAFT: BundleDraft = {
 }
 
 /**
- * The draft as the routes take it: add-ons fitted, an empty coupon left out,
- * and the Aglyn AI tier the picker shows whenever the AI add-on is on
- * (AGL-4025), so the link is written with `ai:<tier>` and the proposal
- * stores the tier staff saw.
+ * The draft as the routes take it: add-ons fitted (Aglyn AI as a number of
+ * credit blocks, AGL-4144) and an empty coupon left out.
  */
 export function bundleDraftBody(draft: BundleDraft): {
   plan: OrgPlan
   addons: BundleAddons
   interval: 'month' | 'year'
   coupon?: string
-  aiTier?: AiTierId
 } {
   const coupon = draft.coupon.trim()
   const addons = fitBundleAddonsToPlan(draft.addons, draft.plan).addons
-  const aiTier = bundleAiTier(addons, draft.plan, draft.aiTier)
   return {
     plan: draft.plan,
     addons,
     interval: draft.interval,
     ...(coupon ? { coupon } : {}),
-    ...(aiTier ? { aiTier } : {}),
   }
 }
 
@@ -113,11 +102,14 @@ export function bundleDraftFromClientBuildIntent(intent: ClientBuildIntent): Bun
   }
 }
 
-function priceLabel(kind: AddonKind, plan: OrgPlan, aiTier?: AiTierId | null): string {
-  const unit = addonUnitUsd(kind, plan, aiTier)
+function priceLabel(kind: AddonKind, plan: OrgPlan): string {
+  const unit = addonUnitUsd(kind, plan)
   if (unit == null) return ''
   const each = (TOGGLE_ADDON_KIND_LIST as readonly string[]).includes(kind) ? '' : ' each'
-  return `$${unit}/mo${each}`
+  // Aglyn AI credits are counted in blocks (AGL-4144): say what one buys.
+  return kind === 'aiAddon'
+    ? `${AI_CREDITS_PER_BLOCK.toLocaleString()} credits a block · $${unit}/mo each`
+    : `$${unit}/mo${each}`
 }
 
 export interface StaffBundleFieldsProps {
@@ -129,9 +121,8 @@ export interface StaffBundleFieldsProps {
 /**
  * The bundle picker staff fill in on the hand-off dialog, the Ask to upgrade
  * dialog and the bundle link card: the plan, every add-on that plan sells
- * (Site Care, Aglyn AI, the Event Calendar, extra sites and seats, POS
- * registers), the Aglyn AI tier beside its switch (AGL-4025), the cadence,
- * and an optional coupon. An add-on a bigger plan sells is listed too,
+ * (Site Care, Aglyn AI credit blocks, the Event Calendar, extra sites and
+ * seats, POS registers), the cadence, and an optional coupon. An add-on a bigger plan sells is listed too,
  * disabled with the plan it needs (POS registers on Starter), rather than
  * left off. A coupon is applied only — codes are minted on the staff
  * Coupons page.
@@ -202,16 +193,10 @@ export function StaffBundleFields({ value, onChange, disabled }: StaffBundleFiel
         {toggles.map((kind) => {
           const on = (value.addons[kind] ?? 0) > 0
           const unsold = needsLabel(kind)
-          // With Aglyn AI on, its tier picker beside the switch names the
-          // tier and its price, so the switch says only what it adds.
-          const tierPicked = kind === 'aiAddon' && on
-          const toggle = (
+          return (
             <FormControlLabel
               key={kind}
               disabled={disabled || !!unsold}
-              // The column below zeroes its rows' margins; the AI row nests
-              // the label in a row of its own, so zero them here too, or its
-              // switch sits 11px left of the others.
               sx={{ m: 0 }}
               control={
                 <Switch
@@ -223,33 +208,12 @@ export function StaffBundleFields({ value, onChange, disabled }: StaffBundleFiel
               label={
                 <Typography variant="body2">
                   {bundleAddonLabel(kind)}
-                  {tierPicked ? null : (
-                    <Typography component="span" variant="body2" color="text.secondary">
-                      {` · ${unsold ?? priceLabel(kind, value.plan, kind === 'aiAddon' ? value.aiTier : null)}`}
-                    </Typography>
-                  )}
+                  <Typography component="span" variant="body2" color="text.secondary">
+                    {` · ${unsold ?? priceLabel(kind, value.plan)}`}
+                  </Typography>
                 </Typography>
               }
             />
-          )
-          return tierPicked ? (
-            <Stack
-              key={kind}
-              direction="row"
-              useFlexGap
-              spacing={1.5}
-              sx={{ alignItems: 'center', flexWrap: 'wrap', py: 0.5 }}
-            >
-              {toggle}
-              <AiTierSelect
-                plan={value.plan}
-                value={bundleAiTier(value.addons, value.plan, value.aiTier)}
-                onChange={(aiTier) => set({ aiTier })}
-                disabled={disabled}
-              />
-            </Stack>
-          ) : (
-            toggle
           )
         })}
         {counted.length ? (
@@ -261,7 +225,7 @@ export function StaffBundleFields({ value, onChange, disabled }: StaffBundleFiel
                   key={kind}
                   size="small"
                   type="number"
-                  label={bundleAddonLabel(kind)}
+                  label={kind === 'aiAddon' ? `${bundleAddonLabel(kind)}s` : bundleAddonLabel(kind)}
                   helperText={unsold ?? priceLabel(kind, value.plan)}
                   value={unsold ? 0 : (value.addons[kind] ?? 0)}
                   disabled={disabled || !!unsold}
@@ -271,7 +235,7 @@ export function StaffBundleFields({ value, onChange, disabled }: StaffBundleFiel
                   slotProps={{
                     htmlInput: { min: 0, max: addonMaxForPlan(kind, value.plan), step: 1 },
                   }}
-                  sx={{ width: (theme) => theme.spacing(18) }}
+                  sx={{ width: (theme) => theme.spacing(kind === 'aiAddon' ? 26 : 18) }}
                 />
               )
             })}

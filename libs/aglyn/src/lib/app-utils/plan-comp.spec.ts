@@ -40,8 +40,8 @@
  * refuses only past that band.
  */
 
+import { AI_CREDITS_PER_BLOCK } from './ai-credit-blocks'
 import {
-  AI_TIERS,
   apiRequestEnforcementShape,
   checkApiRequestQuota,
   checkCrmEmailQuota,
@@ -58,6 +58,7 @@ import {
   describeOrgPlan,
   hasAiAddon,
   isBillingSubscription,
+  resolveAiCreditBlocks,
   isEnterpriseOrg,
   isUncappedPlanComp,
   orgListPriceMonthlyUsd,
@@ -216,16 +217,17 @@ describe('a comp applies on a dead subscription (AGL-3034)', () => {
       {
         plan: 'pro',
         billingStatus: 'canceled',
-        seatAddons: { hosts: 4, aiAddon: 1, eventCalendar: 1 },
+        seatAddons: { hosts: 4, aiAddon: 3, eventCalendar: 1 },
       },
       comp('pro'),
     )
     expect(hasAiAddon(org)).toBe(false)
+    expect(resolveAiCreditBlocks(org)).toBe(0)
     const resolved = resolveOrgEntitlements(org)
     expect(resolved.hostLimit).toBe(PLAN_ENTITLEMENTS.pro.hostLimit)
     expect(resolved.assistCreditsPerMonth).toBe(PLAN_ENTITLEMENTS.pro.assistCreditsPerMonth)
     expect(resolved.assistCreditsPerMonth).not.toBe(
-      PLAN_ENTITLEMENTS.pro.assistCreditsPerMonth + AI_TIERS.boost.credits,
+      PLAN_ENTITLEMENTS.pro.assistCreditsPerMonth + 3 * AI_CREDITS_PER_BLOCK,
     )
   })
 })
@@ -614,8 +616,9 @@ describe('a capped comp raises one band at a time (AGL-3049)', () => {
 
 describe('naming an uncapped comp to staff (AGL-3049)', () => {
   it('says uncapped wherever the comp is named, and says what the bands do', () => {
+    // The top plan is labelled Custom since pricing v4 (AGL-4126).
     expect(planCompLabel({ plan: 'enterprise', uncapped: true }, true)).toBe(
-      'Enterprise (uncapped)',
+      'Custom (uncapped)',
     )
     expect(planCompLabel({ plan: 'pro', uncapped: false }, true)).toBe('Pro')
     expect(planCompLabel({ plan: 'pro', uncapped: false }, false)).toBe('Pro (dormant)')
@@ -627,14 +630,14 @@ describe('naming an uncapped comp to staff (AGL-3049)', () => {
       'agency (uncapped)',
     )
     expect(planCompPhrase({ plan: 'enterprise', uncapped: true })).toBe(
-      'uncapped Enterprise comp',
+      'uncapped Custom comp',
     )
     expect(planCompPhrase({ plan: 'pro', uncapped: false })).toBe('Pro comp')
 
     const uncapped = describeOrgPlan(withComp(INTERNAL, uncappedComp('enterprise')))
     expect(uncapped).toMatchObject({ decidedBy: 'comp', compInForce: true, uncapped: true })
     expect(orgPlanDescriptionSentence(uncapped)).toMatch(
-      /Enterprise is in force as an uncapped staff comp.*bills nothing, every band and quota reads as unlimited/,
+      /Custom is in force as an uncapped staff comp.*bills nothing, every band and quota reads as unlimited/,
     )
     const capped = describeOrgPlan(withComp(TEST_ORG, comp('pro')))
     expect(capped.uncapped).toBe(false)

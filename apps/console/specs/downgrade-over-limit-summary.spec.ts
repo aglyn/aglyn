@@ -35,7 +35,9 @@
 
 const PLAN = {
   starter: { datasetsPerOrg: 2, maxDatasetsPerOrg: 10 },
-  pro: { datasetsPerOrg: 5, maxDatasetsPerOrg: 50 },
+  // Pricing v4 (AGL-4126) lifted Pro's dataset ceiling: still 5 included, and
+  // an unbounded number purchasable on top — two numbers, further apart.
+  pro: { datasetsPerOrg: 5, maxDatasetsPerOrg: Number.POSITIVE_INFINITY },
 }
 
 let mockDatasetCount: number | null = 0

@@ -507,19 +507,17 @@ Only needed if you **sell platform plans to your own users**. A single-tenant
 install normally leaves the whole block empty. All are **runtime**, all take a
 Stripe price id (`price_…`), and none is in `.env.selfhost.example`.
 
-Base plan, one per plan per interval:
+Base plan, one per plan per interval, for the two paid plans sold, Starter and
+Pro:
 
 ```
 STRIPE_PRICE_STARTER          STRIPE_PRICE_STARTER_YEARLY
 STRIPE_PRICE_PRO              STRIPE_PRICE_PRO_YEARLY
-STRIPE_PRICE_BUSINESS         STRIPE_PRICE_BUSINESS_YEARLY
-STRIPE_PRICE_SCALE            STRIPE_PRICE_SCALE_YEARLY
-STRIPE_PRICE_ADVANCED         STRIPE_PRICE_ADVANCED_YEARLY
-STRIPE_PRICE_AGENCY           STRIPE_PRICE_AGENCY_YEARLY
 ```
 
-There is deliberately no `STRIPE_PRICE_ENTERPRISE`: Enterprise is quoted per deal
-and is not self-serve. `free` has nothing to sell.
+There is deliberately no `STRIPE_PRICE_ENTERPRISE`: Custom is quoted per deal and
+is not self-serve. `free` has nothing to sell. The plans that are no longer sold
+read no price variable at all.
 
 Per-plan add-ons. The name is assembled at call time as
 `STRIPE_PRICE_{PLAN}_{KIND}[_YEARLY]`, so every combination below is a real
@@ -527,11 +525,10 @@ variable the code looks up:
 
 | Add-on | Name pattern |
 | --- | --- |
-| Extra manager seat | `STRIPE_PRICE_{STARTER\|PRO\|BUSINESS\|SCALE\|ADVANCED\|AGENCY}_EXTRA_SEAT[_YEARLY]` |
+| Extra manager seat | `STRIPE_PRICE_{STARTER\|PRO}_EXTRA_SEAT[_YEARLY]` |
 | Extra members | `STRIPE_PRICE_{…}_EXTRA_MEMBER[_YEARLY]` |
 | Extra datasets | `STRIPE_PRICE_{…}_EXTRA_DATASET[_YEARLY]` |
 | Extra hosts | `STRIPE_PRICE_{…}_EXTRA_HOST[_YEARLY]` |
-| Aglyn AI, bought before tiers (read only, to recognize the item) | `STRIPE_PRICE_{…}_AI_ADDON[_YEARLY]` |
 
 Flat add-ons, priced the same across plans:
 
@@ -546,11 +543,11 @@ under: the extra-time invoice item is priced against that product, and its tax c
 must be `txcd_10103001`, or the charge is refused rather than billed under the wrong
 code.
 
-Aglyn AI tiers, the same price on every paid plan, one id per tier and
-interval:
+Aglyn AI credits, sold by the block: one price, the same on every paid plan, one
+id per interval. The subscription item's quantity is the number of blocks.
 
 ```
-STRIPE_PRICE_AI_{SPARK|BOOST|PLUS|MAX|ULTRA|STUDIO}[_YEARLY]
+STRIPE_PRICE_AI_CREDITS       STRIPE_PRICE_AI_CREDITS_YEARLY
 ```
 
 :::warning Half-configured add-ons sell and then read back empty

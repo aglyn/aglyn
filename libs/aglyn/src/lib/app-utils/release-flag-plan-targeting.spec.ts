@@ -15,7 +15,12 @@
  * limitations under the License.
  */
 
-import { PLAN_LABELS, SELF_SERVE_PLANS } from './plan-entitlements'
+import {
+  PLAN_LABELS,
+  PLAN_LADDER,
+  RETIRED_PLANS,
+  SELF_SERVE_PLANS,
+} from './plan-entitlements'
 import {
   isReleaseFlagOn,
   isReleaseFlagOnForOrg,
@@ -123,11 +128,16 @@ describe('release flag plan targeting (AGL-2486)', () => {
       )
     })
 
-    it('runs cheapest-first: self-serve tiers, then enterprise', () => {
+    it('runs cheapest-first: self-serve tiers, the retired ones, then enterprise', () => {
+      // Pricing v4 (AGL-4126) retired Business, Scale, Advanced and Agency
+      // from sale, but a workspace can still be ON one, so the ladder a flag
+      // targets keeps them in their old place (`PLAN_LADDER`).
       expect(RELEASE_FLAG_PLAN_LADDER).toEqual([
         ...SELF_SERVE_PLANS,
+        ...RETIRED_PLANS,
         'enterprise',
       ])
+      expect(RELEASE_FLAG_PLAN_LADDER).toEqual(PLAN_LADDER)
     })
   })
 

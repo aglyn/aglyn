@@ -27,7 +27,11 @@ import {
   bandwidthGbFromPageViews,
   pageViewsFromBandwidthGb,
   planMetersInfraOverage,
+  priceRunOverage,
   resolveOrgEntitlements,
+  RUN_BAND_KEYS,
+  type RunBandKey,
+  type RunOveragePrice,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { planQuotaOf } from '@aglyn/aglyn/plugin-manager/plugin-plan-entitlements'
 import {
@@ -195,6 +199,76 @@ export const METERED_BILLED_RATES_USD = {
   perPageView: publishedMeteredPrice(METERED_OVERAGE_COST_USD.perPageView * 1000, 2) / 1000,
   perFormSubmission:
     publishedMeteredPrice(METERED_OVERAGE_COST_USD.perFormSubmission * 1000, 3) / 1000,
+}
+
+/**
+ * The run overage rate, per 1,000 workflow or action runs past the bands
+ * (pricing v4, 2026-11-03, AGL-4126) — RE-EXPORTED from the plan table, where
+ * `PLAN_PRICING` carries it as `extraRunsUsdPer1k` on every plan that sells
+ * runs past its bands. Derived like the three meters above (our `perRun` cost
+ * at cost + 30% kept after card fees, rounded up to the cent), but billed on
+ * its own line beside the API and email overages rather than inside
+ * {@link METERED_BILLED_RATES_USD}: it is a per-plan rate — Starter's bands
+ * are walls — and the pass-through is platform-wide.
+ */
+export { RUN_OVERAGE_USD_PER_1K } from '@aglyn/aglyn/app-utils/plan-entitlements'
+
+/** A month of runs, priced: what the sweep bills and the usage page shows. */
+export interface RunOverageEstimate extends RunOveragePrice {
+  /**
+   * The workspace's runs this month, by the band each is held to
+   * (`RUN_BAND_KEYS`): the counts that were priced, cleaned to whole runs.
+   */
+  runs: Readonly<Partial<Record<RunBandKey, number>>>
+  /** `overageMonthlyUsd` in whole cents, the unit the invoice line is in. */
+  billedCents: number
+}
+
+/**
+ * The month's run overage for an org (pricing v4): runs past each band at the
+ * plan's `extraRunsUsdPer1k`, zero on a plan without one. `report-usage` adds
+ * `billedCents` to the month's metered charge, and the Billing usage page
+ * prints the rate and the running figure from the same call, so the page and
+ * the invoice cannot name different numbers.
+ *
+ * `org` omitted resolves as free, which sells no runs past its bands — the
+ * same safe default `estimateMonthlyUsageCost` takes.
+ */
+export function estimateRunOverage(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  used: Readonly<Partial<Record<RunBandKey, number | null>>>,
+): RunOverageEstimate {
+  const count = (value: number | null | undefined): number => {
+    const parsed = Number(value ?? 0)
+    return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 0
+  }
+  const runs = Object.fromEntries(
+    RUN_BAND_KEYS.map((band) => [band, count(used[band])]),
+  ) as Record<RunBandKey, number>
+  const price = priceRunOverage(org, runs)
+  return {
+    ...price,
+    runs,
+    billedCents: Math.round(price.overageMonthlyUsd * 100),
+  }
+}
+
+/**
+ * A month of runs keyed by band, read off the declared plugin bands: each
+ * band whose entitlement is a run band, counted by `read(band)`. The one
+ * place a console reader turns the workflows plugin's meters into the input
+ * `estimateRunOverage` takes, without naming them.
+ */
+export function runCountsByBand<Band extends { entitlement: string }>(
+  bands: readonly Band[],
+  read: (band: Band) => number | null | undefined,
+): Partial<Record<RunBandKey, number>> {
+  const out: Partial<Record<RunBandKey, number>> = {}
+  for (const band of bands) {
+    if (!(RUN_BAND_KEYS as readonly string[]).includes(band.entitlement)) continue
+    out[band.entitlement as RunBandKey] = Number(read(band) ?? 0)
+  }
+  return out
 }
 
 /**

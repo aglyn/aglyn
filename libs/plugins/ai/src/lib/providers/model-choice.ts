@@ -68,14 +68,17 @@ export const AI_MODEL_AUTO = 'auto'
 /**
  * The catalog tiers a MANUAL pick may name, per plan. Free runs on Auto only:
  * its taste is a wall, and a pick there would spend the account's credits at
- * a rate nobody chose on purpose. The dearest tier opens from Scale up, where
- * the band is large enough that a slower, deeper model is a real choice
- * rather than a fast way to end the month.
+ * a rate nobody chose on purpose. The dearest tier opened from Scale up,
+ * where the band is large enough that a slower, deeper model is a real choice
+ * rather than a fast way to end the month — and from Pro since pricing v4
+ * (2026-11-03, AGL-4126), which moved the deep model picks into the plan that
+ * became the full platform. A credit is a fixed quantity of provider spend,
+ * so a deeper pick spends the band faster and never past what it covers.
  */
 export const AI_PLAN_MODEL_TIERS: Record<OrgPlan, readonly AiCatalogEntry['tier'][]> = {
   free: [],
   starter: ['fast', 'balanced'],
-  pro: ['fast', 'balanced'],
+  pro: ['fast', 'balanced', 'deep'],
   business: ['fast', 'balanced'],
   scale: ['fast', 'balanced', 'deep'],
   advanced: ['fast', 'balanced', 'deep'],

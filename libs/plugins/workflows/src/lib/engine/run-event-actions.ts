@@ -54,6 +54,8 @@ import {
   resolveOrgIdForHost,
 } from '@aglyn/tenant-data-admin'
 import { activitySearchTokens } from '@aglyn/aglyn/app-utils/activity-search'
+// By its own module, as `run-event-workflows.ts` reads it.
+import { runOverageSold } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import { triggerFilterProblem } from '@aglyn/aglyn/app-utils/site-interactions'
 // The person behind an address, and their filing under a campaign, through
@@ -566,7 +568,8 @@ async function runServerStep(
       )
       alerts.push(...nested)
     } else if (step.type === 'webhookPost') {
-      if (!env.webhooksAllowed) return failed('webhooks require a Business plan')
+      // Pro since pricing v4 (AGL-4126), Business before it.
+      if (!env.webhooksAllowed) return failed('webhooks require a Pro plan')
       // Id-first lookup (AGL-261); the name query is the legacy path.
       const hookDoc = step.webhookId?.trim()
         ? await hostRef
@@ -1659,8 +1662,11 @@ export async function runEventActions(
       const used = await runsUsedThisMonth(meter)
       // Asked as "would it go over", the question this gate has always
       // asked — so a counter that reads as no number refuses nothing, as
-      // before, rather than refusing everything.
-      runSite = actions.length > 0 && !(used + actions.length > limit)
+      // before, rather than refusing everything. Past the band is a wall only
+      // where the plan sells no runs past it (pricing v4, `runOverageSold`).
+      runSite =
+        actions.length > 0 &&
+        (!(used + actions.length > limit) || runOverageSold(org as any))
       /*
        * Only for the organization the site belongs to NOW: the automations
        * were found through the site's org, and a site that changed hands
@@ -1669,10 +1675,13 @@ export async function runEventActions(
       runOrg =
         Boolean(placed) &&
         placed?.orgId === owner?.orgId &&
-        !(
+        (!(
           used + (runSite ? actions.length : 0) + (placed?.docs.length ?? 0) >
           limit
-        )
+        ) ||
+          // Org automations run past the band on the same terms as the
+          // site's actions (pricing v4, `runOverageSold`).
+          runOverageSold(org as any))
       if (!runSite && !runOrg) return alerts
     }
 
@@ -1876,7 +1885,9 @@ export async function runSingleActionOutcome(
         org as any,
       ).actionRunsPerMonth
       const used = await runsUsedThisMonth(meter)
-      if (used + 1 > limit) return skipped('allowance', limit)
+      if (used + 1 > limit && !runOverageSold(org as any)) {
+        return skipped('allowance', limit)
+      }
     }
 
     const env: ActionRunEnv = {

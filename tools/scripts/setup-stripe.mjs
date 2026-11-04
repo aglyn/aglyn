@@ -108,23 +108,19 @@ let dryRunMissing = 0
 // Mirrors PLAN_PRICING (AGL-278/306/307). The v2 lookup keys leave the
 // original aglyn_{plan} prices untouched, so existing subscriptions are
 // grandfathered at their old price until the tenant changes plans.
-// Add-on unit prices (AGL-525) mirror the extra*MonthlyUsd columns. The
-// Aglyn AI add-on is priced per TIER since AGL-3965 (`AI_TIERS` below), not
+// Add-on unit prices (AGL-525) mirror the extra*MonthlyUsd columns. Aglyn
+// AI credits are a flat block since AGL-4144 (`aglyn_ai_credits` below), not
 // per plan.
+//
+// Pricing v4 (2026-11-03, AGL-4126): the plans sold are Starter and Pro.
+// Business, Scale, Advanced and Agency are retired and are not minted here
+// any more; their prices stay in Stripe, archived, as history. Pro moved to
+// $69 / $49 billed yearly under NEW lookup keys (`version: 'v4'`) because a
+// Stripe price is immutable — the `aglyn_pro_v2` pair stays as history and is
+// never re-minted. Both v4 prices already exist live.
 const PLANS = [
-  { plan: 'starter', name: 'Aglyn Starter', usd: 25, yearlyUsd: 16 * 12, extraHostUsd: 20, extraSeatUsd: 5, extraMemberUsd: 3, extraDatasetUsd: 2 },
-  { plan: 'pro', name: 'Aglyn Pro', usd: 56, yearlyUsd: 39 * 12, extraHostUsd: 20, extraSeatUsd: 4, extraMemberUsd: 2, extraDatasetUsd: 2 },
-  { plan: 'business', name: 'Aglyn Business', usd: 139, yearlyUsd: 99 * 12, extraHostUsd: 20, extraSeatUsd: 3, extraMemberUsd: 1, extraDatasetUsd: 1 },
-  // Pricing v3 (2026-07): Scale fills the $139→$399 gap; Agency sits above
-  // Advanced for high-volume multi-site orgs. Keep in sync with PLAN_PRICING.
-  // The extra host is a flat $8 from Scale up rather than a ladder that keeps
-  // descending: a host grants the tier's per-host storage and form bands, so
-  // the tiers granting the most per host would charge the least for one.
-  // Agency's annual is $1,049/mo because the live yearly price charges
-  // $12,588 and a Stripe price is immutable.
-  { plan: 'scale', name: 'Aglyn Scale', usd: 249, yearlyUsd: 179 * 12, extraHostUsd: 20, extraSeatUsd: 2, extraMemberUsd: 1, extraDatasetUsd: 1 },
-  { plan: 'advanced', name: 'Aglyn Advanced', usd: 399, yearlyUsd: 299 * 12, extraHostUsd: 20, extraSeatUsd: 2, extraMemberUsd: 1, extraDatasetUsd: 1 },
-  { plan: 'agency', name: 'Aglyn Agency', usd: 1299, yearlyUsd: 1049 * 12, extraHostUsd: 20, extraSeatUsd: 2, extraMemberUsd: 1, extraDatasetUsd: 1 },
+  { plan: 'starter', name: 'Aglyn Starter', version: 'v2', usd: 25, yearlyUsd: 16 * 12, extraHostUsd: 20, extraSeatUsd: 5, extraMemberUsd: 3, extraDatasetUsd: 2 },
+  { plan: 'pro', name: 'Aglyn Pro', version: 'v4', usd: 69, yearlyUsd: 49 * 12, extraHostUsd: 20, extraSeatUsd: 4, extraMemberUsd: 2, extraDatasetUsd: 2 },
 ]
 
 async function stripe(path, params) {
@@ -157,6 +153,7 @@ async function ensurePrice({
   planMetadata,
   interval = 'month',
   productId,
+  unitLabel,
 }) {
   const existing = await findPriceByLookupKey(lookupKey)
   if (existing) {
@@ -181,6 +178,9 @@ async function ensurePrice({
         // before it is taxed on 20% — a wrong return whose only symptom is
         // the filing.
         tax_code: PLATFORM_TAX_CODE,
+        // What one unit of a quantity add-on is called on the invoice
+        // ("3 blocks"), where the product has one.
+        ...(unitLabel ? { unit_label: unitLabel } : {}),
       })
   const price = await stripe('prices', {
     product: product.id,
@@ -199,12 +199,13 @@ async function ensurePrice({
  * the org's one subscription, and Stripe allows a single interval per
  * subscription, so annual orgs need `_yearly` variants (×12, no discount).
  */
-async function ensureAddonPair({ lookupBase, productName, usd, planMetadata }) {
+async function ensureAddonPair({ lookupBase, productName, usd, planMetadata, unitLabel }) {
   const monthly = await ensurePrice({
     lookupKey: lookupBase,
     productName,
     usd,
     planMetadata,
+    unitLabel,
   })
   const yearly = await ensurePrice({
     lookupKey: `${lookupBase}_yearly`,
@@ -217,41 +218,20 @@ async function ensureAddonPair({ lookupBase, productName, usd, planMetadata }) {
   return { monthly, yearly }
 }
 
-/**
- * The Aglyn AI tiers (AGL-3965), mirroring `AI_TIERS` in
- * libs/aglyn/src/lib/app-utils/plan-entitlements.ts: one flat purchase per
- * workspace, the same price on every paid plan, annual ×12. Lookup keys
- * `aglyn_ai_{tier}[_yearly]`, read by the console as
- * STRIPE_PRICE_AI_{TIER}[_YEARLY] (`aiTierPriceId` in billing-addons.ts).
- *
- * The per-plan `aglyn_{plan}_ai_addon[_yearly]` prices they replace are no
- * longer minted here. They stay live, and their STRIPE_PRICE_{PLAN}_AI_ADDON
- * envs stay set, until `migrate-ai-addon-tiers.mjs --commit` has moved every
- * subscription item off them; then they are archived by hand.
- */
-const AI_TIERS = [
-  { tier: 'spark', label: 'Spark', usd: 9 },
-  { tier: 'boost', label: 'Boost', usd: 19 },
-  { tier: 'plus', label: 'Plus', usd: 39 },
-  { tier: 'max', label: 'Max', usd: 69 },
-  { tier: 'ultra', label: 'Ultra', usd: 99 },
-  { tier: 'studio', label: 'Studio', usd: 299 },
-]
-
 const env = {}
 for (const {
-  plan, name, usd, yearlyUsd,
+  plan, name, version, usd, yearlyUsd,
   extraHostUsd, extraSeatUsd, extraMemberUsd, extraDatasetUsd,
 } of PLANS) {
   const base = await ensurePrice({
-    lookupKey: `aglyn_${plan}_v2`,
+    lookupKey: `aglyn_${plan}_${version}`,
     productName: name,
     usd,
     planMetadata: plan,
   })
   env[`STRIPE_PRICE_${plan.toUpperCase()}`] = base.id
   const yearly = await ensurePrice({
-    lookupKey: `aglyn_${plan}_v2_yearly`,
+    lookupKey: `aglyn_${plan}_${version}_yearly`,
     productName: name,
     usd: yearlyUsd,
     planMetadata: plan,
@@ -277,19 +257,6 @@ for (const {
     env[`STRIPE_PRICE_${plan.toUpperCase()}_${envKey}`] = pair.monthly.id
     env[`STRIPE_PRICE_${plan.toUpperCase()}_${envKey}_YEARLY`] = pair.yearly.id
   }
-}
-
-// The Aglyn AI tiers (AGL-3965). The console caps the add-on at quantity 1,
-// so the price is the whole tier.
-for (const { tier, label, usd } of AI_TIERS) {
-  const pair = await ensureAddonPair({
-    lookupBase: `aglyn_ai_${tier}`,
-    productName: `Aglyn AI ${label}`,
-    usd,
-    planMetadata: `ai_${tier}`,
-  })
-  env[`STRIPE_PRICE_AI_${tier.toUpperCase()}`] = pair.monthly.id
-  env[`STRIPE_PRICE_AI_${tier.toUpperCase()}_YEARLY`] = pair.yearly.id
 }
 
 /**
@@ -492,6 +459,25 @@ const siteCareAddon = await ensureAddonPair({
 })
 env['STRIPE_PRICE_SITE_CARE'] = siteCareAddon.monthly.id
 env['STRIPE_PRICE_SITE_CARE_YEARLY'] = siteCareAddon.yearly.id
+
+// Aglyn AI credits by the block (AGL-4144), mirroring `ai-credit-blocks.ts`
+// in libs/aglyn/src/lib/app-utils: 5,000 credits for $10 a month, bought in
+// any quantity from 1 to 30 on any paid plan, so the price is ONE block and
+// the subscription item's quantity is the count. Lookup keys
+// `aglyn_ai_credits[_yearly]`, read by the console as
+// STRIPE_PRICE_AI_CREDITS[_YEARLY]. The six retired tier prices
+// (`aglyn_ai_{tier}[_yearly]`) are no longer minted here; they are archived
+// by hand once nothing sells them.
+const AI_CREDITS = { envKey: 'AI_CREDITS', usd: 10 }
+const aiCreditsAddon = await ensureAddonPair({
+  lookupBase: 'aglyn_ai_credits',
+  productName: 'Aglyn AI credits',
+  usd: AI_CREDITS.usd,
+  planMetadata: 'addon',
+  unitLabel: 'block',
+})
+env[`STRIPE_PRICE_${AI_CREDITS.envKey}`] = aiCreditsAddon.monthly.id
+env[`STRIPE_PRICE_${AI_CREDITS.envKey}_YEARLY`] = aiCreditsAddon.yearly.id
 
 // Usage-based billing meter (AGL-635). The report-usage cron posts
 // `billing/meter_events` (event_name aglyn_metered_usage) carrying the

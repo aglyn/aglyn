@@ -938,7 +938,7 @@
           "type": "notice",
           "tone": "info",
           "when": "data.sw.rows[id='commerce'].on && !data.ent.features.giftCards",
-          "text": "Gift cards: exporting stays free on every plan; importing is not included in your current plan. Included from Business."
+          "text": "Gift cards: exporting stays free on every plan; importing is not included in your current plan. Included from Pro."
         },
         {
           "type": "notice",

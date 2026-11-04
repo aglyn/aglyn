@@ -17,6 +17,7 @@
 
 'use client'
 
+import { PLAN_LABELS, SELF_SERVE_PLANS } from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import {
   AppLink,
@@ -68,6 +69,13 @@ const orgRowLinkSx = {
     bgcolor: 'action.hover',
   },
 } as const
+
+/**
+ * The plans a broadcast can be aimed at: the paid plans sold (Starter and Pro
+ * since pricing v4, AGL-4126), read off `SELF_SERVE_PLANS` under their
+ * `PLAN_LABELS` names so the menu moves with the ladder.
+ */
+const BROADCAST_PLANS = SELF_SERVE_PLANS.filter((plan) => plan !== 'free')
 
 function formatDate(ms: number | null): string {
   return ms ? new Date(ms).toLocaleDateString() : '—'
@@ -466,9 +474,11 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
                           sx={{ minWidth: 160 }}
                         >
                           <MenuItem value="">{'Every org'}</MenuItem>
-                          <MenuItem value="starter">{'Starter'}</MenuItem>
-                          <MenuItem value="pro">{'Pro'}</MenuItem>
-                          <MenuItem value="business">{'Business'}</MenuItem>
+                          {BROADCAST_PLANS.map((plan) => (
+                            <MenuItem key={plan} value={plan}>
+                              {PLAN_LABELS[plan]}
+                            </MenuItem>
+                          ))}
                         </TextField>
                       </Stack>
                       <TextField

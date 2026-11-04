@@ -96,12 +96,13 @@ import {
 } from './marketing-ai-capabilities'
 
 const NOW = new Date('2026-10-06T12:00:00Z')
-const BUSINESS = { plan: 'business', billingStatus: 'active' }
+// Pro carries every feature this file drafts for since pricing v4 (AGL-4126).
+const ENTITLED_ORG = { plan: 'pro', billingStatus: 'active' }
 const context = (patch: Partial<{ uid: string; org: Doc | null }> = {}) => ({
   orgId: 'org-1',
   hostId: 'host-1',
   uid: 'editor-1',
-  org: BUSINESS as Doc,
+  org: ENTITLED_ORG as Doc,
   now: NOW,
   ...patch,
 })
@@ -209,7 +210,8 @@ describe('the experiment writer', () => {
     expect(
       writer.check({ target: 'email', variants: [{ name: 'A', subject: 'Hi' }, { name: 'B', subject: 'Hello' }] }, { hostId: 'host-1' }),
     ).toMatchObject({ ok: true })
-    expect(await writer.refusal(context({ org: { plan: 'pro', billingStatus: 'active' } }))).toEqual({
+    // Starter: A/B testing moved into Pro with pricing v4 (AGL-4126).
+    expect(await writer.refusal(context({ org: { plan: 'starter', billingStatus: 'active' } }))).toEqual({
       status: 403,
       error: EXPERIMENT_DRAFT_PLAN_REFUSAL,
     })

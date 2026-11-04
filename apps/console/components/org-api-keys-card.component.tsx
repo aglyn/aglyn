@@ -17,7 +17,7 @@
 'use client'
 
 import { buildDocsUrl } from '../constants/docs-links'
-import { checkEntitlement } from '@aglyn/aglyn'
+import { checkEntitlement, planLabelGrantingFeature } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -247,7 +247,8 @@ export function OrgApiKeysCard() {
         anchor: '#api-access',
         title: 'REST API & API keys',
         excerpt:
-          'Programmatic access to your datasets, contacts, sites, and form submissions. Included on Business and every plan above it.',
+          'Programmatic access to your datasets, contacts, sites, and form submissions. ' +
+          `Included on ${planLabelGrantingFeature('apiAccess') ?? 'Pro'} and every plan above it.`,
       })}
       contentGutterX
       contentGutterY
@@ -266,7 +267,7 @@ export function OrgApiKeysCard() {
       ) : !entitled ? (
         <Alert severity="info">
           {'The REST API and API keys are included on the '}
-          <strong>{'Business'}</strong>
+          <strong>{planLabelGrantingFeature('apiAccess') ?? 'Pro'}</strong>
           {' plan — see Billing to upgrade.'}
         </Alert>
       ) : (

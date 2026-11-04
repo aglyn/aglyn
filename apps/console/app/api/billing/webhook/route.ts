@@ -78,7 +78,6 @@ import { serverPluginLoader } from '../../../../utils/server-plugin-loader'
 import { stripeCustomerIdentityParams } from '../../../../utils/stripe-customer-identity'
 import {
   addonQuantitiesFromItems,
-  aiTierFromItems,
   findPlanItem,
   planFromPriceId,
 } from '@aglyn/tenant-data-admin/server/billing-addons'
@@ -944,15 +943,13 @@ async function handler(request: Request): Promise<Response> {
         // Add-on quantities sync from the items (AGL-527): Stripe is the
         // source of truth; explicit zeros make removals, dashboard edits, and
         // full cancellations all converge.
+        // Aglyn AI credit blocks (AGL-4144) sync the same way: the block
+        // item's quantity IS `seatAddons.aiAddon`.
         const seatAddons = addonQuantitiesFromItems(canceled ? [] : items)
-        // Which Aglyn AI tier the AI item is (AGL-3965), off the same items:
-        // a legacy per-plan item reads as the tier with its price and band.
-        const aiTier = aiTierFromItems(canceled ? [] : items)
         if (mirrored) {
           await writeOrgBilling(String(orgId), {
             stripeCustomerId,
             seatAddons,
-            aiTier,
             subscription: {
               status: canceled ? 'canceled' : (object?.status ?? 'active'),
               // WHY it ended (AGL-1877). Stripe states it on the deleted

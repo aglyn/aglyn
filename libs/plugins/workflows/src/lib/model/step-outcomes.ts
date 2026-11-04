@@ -27,7 +27,7 @@ import type { HostActionStepType } from './host-actions'
  * exactly that shape — `Sent email · saved to Leads · webhook 200`.
  *
  * Two maps rather than one derived from the other, because "Send a webhook
- * (Business)" cannot be mechanically turned into "webhook" — the plan
+ * (Pro)" cannot be mechanically turned into "webhook" — the plan
  * suffix is part of the picker's label and has no business in a log line.
  * Only the steps a SERVER run can perform appear here; the client-side
  * steps run in the visitor's browser and never reach the activity write.

@@ -201,15 +201,16 @@ describe('AGL-1117 · the multi-org picker carries the plan intent', () => {
   })
 
   it('does not restate an interval the CTA never stated', async () => {
-    // The /pricing scale strip quotes monthly and annual side by side and
-    // commits to neither; re-serializing `&interval=month` here would tell the
-    // billing toggle the visitor chose monthly (AGL-1535).
-    mockSearchParams = new URLSearchParams('plan=scale')
+    // A /pricing CTA that quotes monthly and annual side by side commits to
+    // neither; re-serializing `&interval=month` here would tell the billing
+    // toggle the visitor chose monthly (AGL-1535). Starter, since pricing v4
+    // (AGL-4126) retired the Scale plan this used to name.
+    mockSearchParams = new URLSearchParams('plan=starter')
     const { container } = render(<OrgJump />)
     await flush()
     expect(pickerHrefs(container)).toEqual([
-      '/first-org/billing?plan=scale',
-      '/second-org/billing?plan=scale',
+      '/first-org/billing?plan=starter',
+      '/second-org/billing?plan=starter',
     ])
   })
 
@@ -248,13 +249,13 @@ describe('AGL-1117 · the multi-org picker carries the plan intent', () => {
 
 describe('AGL-1117 · a workspace created from the picker keeps the intent', () => {
   it('hands the dialog a destination built from the intent', async () => {
-    mockSearchParams = new URLSearchParams('plan=business&interval=year')
+    mockSearchParams = new URLSearchParams('plan=starter&interval=year')
     render(<OrgJump />)
     await flush()
     // A workspace made DURING a buy-intent visit is the one most likely to be
     // billed — the visitor came to buy and made a place to put it.
     expect(capturedDestination?.('smoke-test-0831')).toBe(
-      '/smoke-test-0831/billing?plan=business&interval=year',
+      '/smoke-test-0831/billing?plan=starter&interval=year',
     )
   })
 
@@ -272,7 +273,7 @@ describe('AGL-1117 · a workspace created from the picker keeps the intent', () 
         open
         onClose={() => undefined}
         destination={(orgSlug: string) =>
-          `/${orgSlug}/billing?plan=business&interval=year`
+          `/${orgSlug}/billing?plan=starter&interval=year`
         }
       />,
     )
@@ -288,7 +289,7 @@ describe('AGL-1117 · a workspace created from the picker keeps the intent', () 
     // Red before the fix: the create landed on `/smoke-test-0831/hosts` with
     // an empty query string.
     expect(mockPush).toHaveBeenCalledWith(
-      '/smoke-test-0831/billing?plan=business&interval=year',
+      '/smoke-test-0831/billing?plan=starter&interval=year',
     )
   })
 

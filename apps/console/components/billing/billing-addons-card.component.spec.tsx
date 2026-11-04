@@ -33,6 +33,7 @@ import {
   PLATFORM_BRAND_NAME,
   PLATFORM_SUPPORT_URL,
 } from '@aglyn/aglyn/app-utils/platform-brand'
+import { PLAN_ENTITLEMENTS } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 /**
@@ -67,17 +68,30 @@ jest.mock('../../hooks/use-branding', () => ({
   default: () => mockBranding,
 }))
 
+/** The confirm every change opens, resolved so the change goes through. */
+const mockConfirm = jest.fn((_options: { title?: string; description?: string }) =>
+  Promise.resolve(),
+)
+
 jest.mock('@aglyn/shared-ui-jsx', () => ({
-  useConfirmationContext: () => ({ confirm: () => Promise.resolve() }),
+  useConfirmationContext: () => ({ confirm: mockConfirm }),
   useLoading: () => ({ queueLoading: () => () => undefined }),
 }))
 
+/**
+ * One snackbar function for every render: a fresh one per render would change
+ * the card's request callback on every render and re-run its load, so a
+ * change's own answer would be overwritten by the next load.
+ */
+const mockEnqueueSnackbar = jest.fn()
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
-  useSnackbar: () => ({ enqueueSnackbar: jest.fn() }),
+  useSnackbar: () => ({ enqueueSnackbar: mockEnqueueSnackbar }),
 }))
 
+/** One signed-in user for every render, for the snackbar's reason above. */
+const mockUser = { data: { uid: 'admin-1', getIdToken: async () => 'tok' } }
 jest.mock('@aglyn/tenant-feature-instance', () => ({
-  useUser: () => ({ data: { uid: 'admin-1', getIdToken: async () => 'tok' } }),
+  useUser: () => mockUser,
 }))
 
 import BillingAddonsCardComponent from './billing-addons-card.component'
@@ -177,21 +191,23 @@ describe('BillingAddonsCard billing claims (AGL-1380)', () => {
 
     render(<BillingAddonsCardComponent orgId="org-1" canManage />)
 
-    await waitFor(() => expect(screen.queryByText(NOT_CONFIGURED)).toBeNull())
-    expect(screen.queryByText('Checking your plan add-ons…')).toBeNull()
+    await waitFor(() =>
+      expect(screen.queryByText('Checking your plan add-ons…')).toBeNull(),
+    )
+    expect(screen.queryByText(NOT_CONFIGURED)).toBeNull()
     expect(screen.queryByText(/We couldn.t load your plan add-ons/)).toBeNull()
   })
 })
 
 /**
- * The Aglyn AI row (AGL-2899, AGL-3965). Three plans, three different rows:
- * Free is pointed at the plan grid, a paid plan gets the TIER PICKER (every
- * tier with its price and credits, the one held marked), Enterprise is told
- * it already has the thing. The catalog marks Free and Enterprise
- * `upgradeRequired` alike, so the row cannot be read off the catalog — which
- * is what the first and last cases pin.
+ * The Aglyn AI row (AGL-2899, AGL-4144). Three plans, three different rows:
+ * Free is pointed at the plan grid, a paid plan gets the BLOCK STEPPER (0 to
+ * 30 blocks of 5,000 credits at $10 a month each, with the credits the count
+ * comes to), Enterprise is told it already has the thing. The catalog marks
+ * Free and Enterprise `upgradeRequired` alike, so the row cannot be read off
+ * the catalog — which is what the last two cases pin.
  */
-describe('the Aglyn AI row (AGL-2899, AGL-3965)', () => {
+describe('the Aglyn AI row (AGL-2899, AGL-4144)', () => {
   /** Every body the card posted, in order. */
   const postedBodies = () =>
     (global.fetch as jest.Mock).mock.calls.map(([, init]) =>
@@ -204,198 +220,235 @@ describe('the Aglyn AI row (AGL-2899, AGL-3965)', () => {
       .queryAllByRole('switch')
       .filter((element) => element.getAttribute('aria-label') !== 'Site Care')
 
-  const TIERS = [
-    { id: 'spark', label: 'Spark', credits: 4000, unitUsd: 9, configured: true },
-    { id: 'boost', label: 'Boost', credits: 9000, unitUsd: 19, configured: true },
-    { id: 'plus', label: 'Plus', credits: 19000, unitUsd: 39, configured: true },
-    { id: 'max', label: 'Max', credits: 34000, unitUsd: 69, configured: true },
-    { id: 'ultra', label: 'Ultra', credits: 49000, unitUsd: 99, configured: true },
-    { id: 'studio', label: 'Studio', credits: 149000, unitUsd: 299, configured: false },
-  ]
+  const addOne = () => screen.getByRole('button', { name: 'Add one block of Aglyn AI credits' })
+  const removeOne = () =>
+    screen.getByRole('button', { name: 'Remove one block of Aglyn AI credits' })
 
-  const stateFor = (
-    plan: string,
-    aiAddon: { unitUsd: number | null; quantity?: number; tier?: string | null },
-  ) => ({
+  /** "2,750", read off the plan table so a band move does not need this file. */
+  const band = (plan: keyof typeof PLAN_ENTITLEMENTS) =>
+    PLAN_ENTITLEMENTS[plan].assistCreditsPerMonth
+  const credits = (value: number) => value.toLocaleString()
+
+  /** The add-ons route's answer: a block sold at $10, up to 30, where it is sold. */
+  const stateFor = (plan: string, blocks: { sold: boolean; quantity?: number }) => ({
     hasSubscription: true,
     plan,
     interval: 'month',
-    quantities: { aiAddon: aiAddon.quantity ?? 0 },
+    quantities: { aiAddon: blocks.quantity ?? 0 },
     catalog: {
-      aiAddon: {
-        unitUsd: aiAddon.unitUsd,
-        max: 1,
-        configured: aiAddon.unitUsd != null,
-        upgradeRequired: aiAddon.unitUsd == null,
-      },
+      aiAddon: blocks.sold
+        ? { unitUsd: 10, max: 30, configured: true, upgradeRequired: false, credits: 5000 }
+        : { unitUsd: null, max: 0, configured: false, upgradeRequired: true },
     },
-    aiTier: aiAddon.tier ?? null,
-    aiTiers: aiAddon.unitUsd == null ? [] : TIERS,
   })
 
-  /** Open the picker and choose a tier by its visible name. */
-  const choose = async (name: RegExp) => {
-    fireEvent.mouseDown(await screen.findByRole('combobox'))
-    fireEvent.click(await screen.findByRole('option', { name }))
-  }
+  beforeEach(() => mockConfirm.mockClear())
 
-  it('on a paid plan: a tier picker, one pool, and the plan’s own credits', async () => {
+  it('on a paid plan: a stepper from 0, the block terms, one pool and the plan’s own credits', async () => {
     global.fetch = jest.fn(async () =>
-      jsonResponse(stateFor('pro', { unitUsd: 19 })),
+      jsonResponse(stateFor('pro', { sold: true })),
     ) as unknown as typeof fetch
 
     render(<BillingAddonsCardComponent orgId="org-1" canManage />)
 
-    // The picker, showing no tier held.
-    const picker = await screen.findByRole('combobox')
-    expect(picker.textContent).toBe('No tier')
-    // The row names no per-plan price: each tier is priced in the picker.
-    expect(screen.getByText('Aglyn AI')).toBeTruthy()
-    expect(screen.queryByText('Aglyn AI — $19/mo')).toBeNull()
-    // One pool, and the included figure is the plan's own band (Pro 2,750).
+    expect(await screen.findByText('Aglyn AI credits')).toBeTruthy()
+    // One pool, the plan's own band, and the block's terms with its ceiling.
     expect(
       screen.getByText(
-        /draw on one pool of AI credits\. Your plan includes 2,750 a month; a tier adds its credits on top\./,
+        `Questions, copy, generated pages, emails, campaigns and products all draw on one ` +
+          `pool of AI credits. Your plan includes ${credits(band('pro'))} a month. Add blocks ` +
+          'on top: 5,000 credits each, $10 a month per block, up to 30.',
       ),
     ).toBeTruthy()
-    // No AI switch any more.
+    // The count the stepper comes to: none bought, the plan's own credits.
+    expect(
+      screen.getByText(`With no blocks: ${credits(band('pro'))} AI credits a month, your plan's own.`),
+    ).toBeTruthy()
+    // At the floor: nothing to remove, one to add, nothing to apply.
+    expect(removeOne().hasAttribute('disabled')).toBe(true)
+    expect(addOne().hasAttribute('disabled')).toBe(false)
+    expect(screen.queryByRole('button', { name: 'Apply' })).toBeNull()
+    // No switch and no tier picker any more.
     expect(aiSwitches()).toHaveLength(0)
+    expect(screen.queryByRole('combobox')).toBeNull()
     expect(screen.queryByText('Upgrade your plan to add Aglyn AI')).toBeNull()
     expect(screen.queryByText('Included in your plan')).toBeNull()
   })
 
-  it('lists every tier with its price and credits, an unconfigured one disabled with the reason', async () => {
+  it('the credits line moves with the count before anything is applied', async () => {
     global.fetch = jest.fn(async () =>
-      jsonResponse(stateFor('starter', { unitUsd: 9, quantity: 1, tier: 'boost' })),
+      jsonResponse(stateFor('pro', { sold: true })),
     ) as unknown as typeof fetch
 
     render(<BillingAddonsCardComponent orgId="org-1" canManage />)
-    // The tier held, in the field.
-    expect((await screen.findByRole('combobox')).textContent).toBe('Boost — $19/mo')
-    fireEvent.mouseDown(screen.getByRole('combobox'))
-    const options = await screen.findAllByRole('option')
-    expect(options.map((option) => option.textContent)).toEqual([
-      "No tierYour plan's included credits only",
-      'Spark — $9/mo+4,000 credits a month',
-      'Boost — $19/mo+9,000 credits a monthCurrent',
-      'Plus — $39/mo+19,000 credits a month',
-      'Max — $69/mo+34,000 credits a month',
-      'Ultra — $99/mo+49,000 credits a month',
-      'Studio — $299/mo+149,000 credits a month (not configured yet)',
-    ])
-    expect(options[6].getAttribute('aria-disabled')).toBe('true')
+    await screen.findByText('Aglyn AI credits')
+
+    fireEvent.click(addOne())
+    expect(
+      screen.getByText(`With 1 block: ${credits(band('pro') + 5_000)} AI credits a month in all.`),
+    ).toBeTruthy()
+    fireEvent.click(addOne())
+    fireEvent.click(addOne())
+    expect(
+      screen.getByText(`With 3 blocks: ${credits(band('pro') + 15_000)} AI credits a month in all.`),
+    ).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Apply' })).toBeTruthy()
+    // Nothing is posted until Apply.
+    expect(postedBodies().every((body) => body.action === 'get')).toBe(true)
   })
 
-  it('choosing a tier previews it, then sets it, with the tier named', async () => {
+  it('stops at 30 blocks: Add is disabled at the ceiling the route sells', async () => {
+    global.fetch = jest.fn(async () =>
+      jsonResponse(stateFor('starter', { sold: true, quantity: 29 })),
+    ) as unknown as typeof fetch
+
+    render(<BillingAddonsCardComponent orgId="org-1" canManage />)
+    await screen.findByText('Aglyn AI credits')
+
+    expect(addOne().hasAttribute('disabled')).toBe(false)
+    fireEvent.click(addOne())
+    expect(
+      screen.getByText(`With 30 blocks: ${credits(band('starter') + 150_000)} AI credits a month in all.`),
+    ).toBeTruthy()
+    expect(addOne().hasAttribute('disabled')).toBe(true)
+    expect(removeOne().hasAttribute('disabled')).toBe(false)
+  })
+
+  it('Apply previews the count, confirms it in blocks and credits, then sets it — never a tier', async () => {
     global.fetch = jest.fn(async (_url: unknown, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body))
       if (body.action === 'preview') {
-        return jsonResponse({ prorationCents: 3_900, chargedNowCents: 3_900, currency: 'usd' })
+        return jsonResponse({ prorationCents: 3_000, chargedNowCents: 3_000, currency: 'usd' })
       }
       if (body.action === 'set') {
-        return jsonResponse({ quantities: { aiAddon: 1 }, aiTier: 'plus' })
+        return jsonResponse({ ok: true, quantities: { aiAddon: 3 } })
       }
-      return jsonResponse(stateFor('pro', { unitUsd: 19 }))
+      return jsonResponse(stateFor('pro', { sold: true }))
     }) as unknown as typeof fetch
 
     render(<BillingAddonsCardComponent orgId="org-1" canManage />)
-    await choose(/^Plus/)
+    await screen.findByText('Aglyn AI credits')
+    fireEvent.click(addOne())
+    fireEvent.click(addOne())
+    fireEvent.click(addOne())
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
 
     await waitFor(() =>
       expect(postedBodies()).toContainEqual({
         orgId: 'org-1',
-        action: 'preview',
-        kind: 'aiAddon',
-        quantity: 1,
-        tier: 'plus',
-      }),
-    )
-    // The confirm resolved (mocked), so the set followed with the same shape.
-    await waitFor(() =>
-      expect(postedBodies()).toContainEqual({
-        orgId: 'org-1',
         action: 'set',
         kind: 'aiAddon',
-        quantity: 1,
-        tier: 'plus',
+        quantity: 3,
       }),
     )
-    await waitFor(() =>
-      expect(screen.getByRole('combobox').textContent).toBe('Plus — $39/mo'),
+    expect(postedBodies()).toContainEqual({
+      orgId: 'org-1',
+      action: 'preview',
+      kind: 'aiAddon',
+      quantity: 3,
+    })
+    expect(postedBodies().some((body) => 'tier' in body)).toBe(false)
+    // The confirm names the blocks, what they cost and the credits they add.
+    expect(mockConfirm).toHaveBeenCalledTimes(1)
+    const asked = mockConfirm.mock.calls[0][0]
+    expect(asked.title).toBe('Aglyn AI credits: 3 blocks?')
+    expect(asked.description).toContain('$30.00 USD will be charged to your card now')
+    expect(asked.description).toContain(
+      "$30/mo, adding 15,000 AI credits a month on top of your plan's.",
     )
+    // The applied count is now the held one: nothing left to apply.
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Apply' })).toBeNull())
+    expect(
+      screen.getByText(`With 3 blocks: ${credits(band('pro') + 15_000)} AI credits a month in all.`),
+    ).toBeTruthy()
   })
 
-  it('"No tier" on a held tier removes it, as quantity 0 with no tier', async () => {
+  it('fewer blocks wait for the period end: nothing charged, the smaller count from then', async () => {
     global.fetch = jest.fn(async (_url: unknown, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body))
       if (body.action === 'preview') {
-        return jsonResponse({ defersToPeriodEnd: true, effectiveAt: '2026-11-01T00:00:00.000Z' })
+        return jsonResponse({ defersToPeriodEnd: true, effectiveAt: '2026-12-01T00:00:00.000Z' })
       }
       if (body.action === 'set') {
         return jsonResponse({
-          quantities: { aiAddon: 1 },
-          pendingAddonChange: { kind: 'aiAddon', quantity: 0, effectiveAt: '2026-11-01T00:00:00.000Z' },
+          ok: true,
+          quantities: { aiAddon: 3 },
+          pendingAddonChange: { kind: 'aiAddon', quantity: 1, effectiveAt: '2026-12-01T00:00:00.000Z' },
         })
       }
-      return jsonResponse(stateFor('pro', { unitUsd: 19, quantity: 1, tier: 'boost' }))
+      return jsonResponse(stateFor('pro', { sold: true, quantity: 3 }))
     }) as unknown as typeof fetch
 
     render(<BillingAddonsCardComponent orgId="org-1" canManage />)
-    await choose(/^No tier/)
-    fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
+    await screen.findByText('Aglyn AI credits')
+    fireEvent.click(removeOne())
+    fireEvent.click(removeOne())
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+
     await waitFor(() =>
       expect(postedBodies()).toContainEqual({
         orgId: 'org-1',
         action: 'set',
         kind: 'aiAddon',
-        quantity: 0,
+        quantity: 1,
       }),
+    )
+    const asked = mockConfirm.mock.calls[0][0]
+    expect(asked.title).toBe('Aglyn AI credits: 1 block?')
+    expect(asked.description).toContain('Nothing is charged and nothing is refunded.')
+    expect(asked.description).toContain(
+      "$10/mo, adding 5,000 AI credits a month on top of your plan's.",
     )
   })
 
-  it('a manager without billing rights sees the picker disabled, not hidden', async () => {
+  it('a manager without billing rights sees the stepper disabled, not hidden', async () => {
     global.fetch = jest.fn(async () =>
-      jsonResponse(stateFor('pro', { unitUsd: 19 })),
+      jsonResponse(stateFor('pro', { sold: true, quantity: 2 })),
     ) as unknown as typeof fetch
 
     render(<BillingAddonsCardComponent orgId="org-1" canManage={false} />)
-    const picker = await screen.findByRole('combobox')
-    expect(picker.getAttribute('aria-disabled')).toBe('true')
+    await screen.findByText('Aglyn AI credits')
+    expect(addOne().hasAttribute('disabled')).toBe(true)
+    expect(removeOne().hasAttribute('disabled')).toBe(true)
+    expect(
+      screen.getByText(`With 2 blocks: ${credits(band('pro') + 10_000)} AI credits a month in all.`),
+    ).toBeTruthy()
   })
 
-  it('on Free: the row, an upgrade link to the plan grid, and NO picker', async () => {
+  it('on Free: the row, an upgrade link to the plan grid, and NO stepper', async () => {
     global.fetch = jest.fn(async () =>
-      jsonResponse(stateFor('free', { unitUsd: null })),
+      jsonResponse(stateFor('free', { sold: false })),
     ) as unknown as typeof fetch
 
     render(<BillingAddonsCardComponent orgId="org-1" canManage />)
 
-    expect(await screen.findByText('Aglyn AI')).toBeTruthy()
+    expect(await screen.findByText('Aglyn AI credits')).toBeTruthy()
     const link = screen.getByRole('link', { name: 'Upgrade your plan to add Aglyn AI' })
     expect(link.getAttribute('href')).toBe('#plans')
     // No AI control. The one switch on the card is Site Care's, shown off and
     // disabled with its own reason (AGL-3954).
     expect(aiSwitches()).toHaveLength(0)
+    expect(screen.queryByRole('button', { name: 'Add one block of Aglyn AI credits' })).toBeNull()
     expect(screen.queryByRole('combobox')).toBeNull()
-    // Free's own 300 credits are the pool; no tier is sold.
-    expect(screen.getByText(/Your plan includes 300 a month/)).toBeTruthy()
+    // Free's own credits are the pool; no block is sold, so no count line.
+    expect(screen.getByText(new RegExp(`Your plan includes ${credits(band('free'))} a month`))).toBeTruthy()
+    expect(screen.queryByText(/^With (no blocks|\d+ blocks?):/)).toBeNull()
     // …and NOT the generic upgrade caption, which cannot say where to go.
     expect(screen.queryByText('Upgrade your plan to add these')).toBeNull()
   })
 
-  it('on Enterprise: "included", and NO picker', async () => {
+  it('on Enterprise: "included", and NO stepper', async () => {
     // Same catalog shape as Free — `unitUsd: null`, `upgradeRequired` — and
     // the opposite sentence, because the plan's AI is in its agreement.
     global.fetch = jest.fn(async () =>
-      jsonResponse(stateFor('enterprise', { unitUsd: null })),
+      jsonResponse(stateFor('enterprise', { sold: false })),
     ) as unknown as typeof fetch
 
     render(<BillingAddonsCardComponent orgId="org-1" canManage />)
 
     expect(await screen.findByText('Included in your plan')).toBeTruthy()
     expect(aiSwitches()).toHaveLength(0)
-    expect(screen.queryByRole('combobox')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Add one block of Aglyn AI credits' })).toBeNull()
     expect(screen.queryByText('Upgrade your plan to add Aglyn AI')).toBeNull()
   })
 })
@@ -472,7 +525,9 @@ describe('the Site Care row (AGL-3954)', () => {
       if (body.action === 'set') {
         return jsonResponse({ quantities: { siteCare: 1 } })
       }
-      return jsonResponse(stateFor('business'))
+      // A plan Site Care is SOLD on: Business was retired by pricing v4
+      // (AGL-4126) and sells nothing, so the paid case is Pro.
+      return jsonResponse(stateFor('pro'))
     }) as unknown as typeof fetch
 
     render(<BillingAddonsCardComponent orgId="org-1" canManage />)
@@ -512,7 +567,8 @@ describe('the Site Care row (AGL-3954)', () => {
 
     render(<BillingAddonsCardComponent orgId="org-1" canManage />)
 
-    await screen.findByText(/Arranged in your Enterprise agreement/)
+    // The plan's label is "Custom" since pricing v4 (AGL-4126).
+    await screen.findByText(/Arranged in your Custom agreement/)
     expect(siteCareSwitch().disabled).toBe(true)
     expect(screen.queryByRole('link', { name: 'Choose a paid plan' })).toBeNull()
   })

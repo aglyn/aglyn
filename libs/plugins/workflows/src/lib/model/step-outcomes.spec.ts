@@ -55,9 +55,9 @@ describe('describeStepOutcome', () => {
   it('is past tense, unlike the picker labels', () => {
     // `HOST_ACTION_STEP_LABELS` says what a step WILL do, for a `Do`
     // select. Deriving one map from the other would put "Send a webhook
-    // (Business)" — plan suffix and all — into a log line.
+    // (Pro)" — plan suffix and all — into a log line.
     expect(HOST_ACTION_STEP_OUTCOMES.sendEmail).toBe('sent email')
-    expect(HOST_ACTION_STEP_OUTCOMES.webhookPost).not.toMatch(/Business/)
+    expect(HOST_ACTION_STEP_OUTCOMES.webhookPost).not.toMatch(/\((Pro|Business)\)/)
   })
 
   /*

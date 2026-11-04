@@ -28,8 +28,10 @@
  * plain bypass. `importVersioned('screens')` wrote the bundle's screen
  * documents and `checkQuota` was never imported into the file. The arithmetic
  * was not theoretical either: `EXPORT_COLLECTION_LIMITS.screens` is 200 and
- * `PLAN_ENTITLEMENTS.pro.screensPerHost` is 100, so the bundle cap is twice the
- * cap of the cheapest plan that can use the feature.
+ * `PLAN_ENTITLEMENTS.pro.screensPerHost` was 100, so the bundle cap was twice
+ * the cap of the cheapest plan that can use the feature. (Pricing v4 lifted
+ * Pro's page wall; the suite now holds the same arithmetic as a contract
+ * override — see `CAPPED_ORG`.)
  *
  * Both numbers are the REAL ones here rather than fixtures, because the shape
  * of this bug is that the two constants disagree.
@@ -220,11 +222,21 @@ import {
 import {
   NON_PAGE_SCREEN_MAX_PER_HOST,
   PLAN_ENTITLEMENTS,
+  UNLIMITED,
 } from '@aglyn/aglyn/server'
+
+/**
+ * The workspace the suite imports into: Pro with a page cap. Pricing v4
+ * (AGL-4126) lifted Pro's `screensPerHost` to UNLIMITED, and no plan that
+ * sells `siteExport` caps pages any more, so the cap is written the way a
+ * contract writes one — a per-org override, at the 100 Pro carried until v4.
+ * The route is still held to the REAL resolved entitlement.
+ */
+const CAPPED_ORG = { plan: 'pro', entitlements: { screensPerHost: 100 } }
 
 /** The two constants whose disagreement is this bug. */
 const BUNDLE_SCREEN_LIMIT = EXPORT_COLLECTION_LIMITS.screens
-const PRO_SCREEN_CAP = PLAN_ENTITLEMENTS.pro.screensPerHost
+const PRO_SCREEN_CAP = CAPPED_ORG.entitlements.screensPerHost
 
 const ids = (count: number, prefix: string) =>
   Array.from({ length: count }, (_unused, index) => `${prefix}-${index + 1}`)
@@ -347,7 +359,7 @@ beforeAll(async () => {
 beforeEach(() => {
   jest.clearAllMocks()
   mockVerifyIdToken.mockResolvedValue({ uid: 'user-1', email_verified: true })
-  mockOrg = { plan: 'pro' }
+  mockOrg = CAPPED_ORG
   seedHost()
 })
 
@@ -357,6 +369,8 @@ describe('the bundle cap is twice the plan cap (AGL-1398)', () => {
     // describing anything, and the suite would go green for the wrong reason.
     expect(BUNDLE_SCREEN_LIMIT).toBe(200)
     expect(PRO_SCREEN_CAP).toBe(100)
+    // Pro's own row has no page wall since pricing v4 (AGL-4126).
+    expect(PLAN_ENTITLEMENTS.pro.screensPerHost).toBe(UNLIMITED)
   })
 
   it('refuses a full bundle onto a Pro site, and writes NOTHING', async () => {

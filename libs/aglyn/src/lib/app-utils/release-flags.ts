@@ -26,7 +26,7 @@
 
 /** Remote Config parameter keys for release-gated features. */
 import type { OrgPlan } from '../foundation'
-import { PLAN_LABELS, SELF_SERVE_PLANS } from './plan-entitlements'
+import { PLAN_LABELS, PLAN_LADDER } from './plan-entitlements'
 import { PLATFORM_BRAND_NAME } from './platform-brand'
 import {
   PLUGIN_RELEASE_FLAGS,
@@ -433,16 +433,15 @@ const clampPercent = (value: unknown): number => {
 }
 
 /**
- * Every plan a flag may target, cheapest first — `SELF_SERVE_PLANS` then
- * `enterprise`, the same ladder `planGrantingFeature` walks and the same
- * order the plan grid renders. Derived, never re-typed: pricing v3 inserted
+ * Every plan a flag may target, cheapest first — `PLAN_LADDER`: the
+ * self-serve plans, the plans pricing v4 retired (AGL-4126) in their old
+ * place, then `enterprise`. Derived, never re-typed: pricing v3 inserted
  * `scale` mid-ladder and added `agency`, and a second hand-written tier list
- * here would have missed both.
+ * here would have missed both. The retired plans stay targetable because a
+ * workspace can still be ON one, and a flag aimed at "Pro and above" must
+ * reach it; a stored list naming one must not lose it on the next save.
  */
-export const RELEASE_FLAG_PLAN_LADDER: readonly OrgPlan[] = [
-  ...SELF_SERVE_PLANS,
-  'enterprise' as OrgPlan,
-]
+export const RELEASE_FLAG_PLAN_LADDER: readonly OrgPlan[] = PLAN_LADDER
 
 const isOrgPlan = (value: unknown): value is OrgPlan =>
   typeof value === 'string' &&

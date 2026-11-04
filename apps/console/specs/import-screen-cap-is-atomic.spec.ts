@@ -363,7 +363,21 @@ import {
  */
 const FIRESTORE_TRANSACTION_WRITE_LIMIT = 500
 
-const PRO_SCREEN_CAP = PLAN_ENTITLEMENTS.pro.screensPerHost
+/**
+ * Pro with a page cap, written as a contract writes one. Pricing v4
+ * (AGL-4126) lifted Pro's own `screensPerHost` to UNLIMITED and no plan that
+ * sells `siteExport` caps pages any more, so the cap this suite races against
+ * is a per-org override at the 100 Pro carried until v4 — still resolved by
+ * the real entitlement code the route reads.
+ */
+const CAPPED_ORG = { plan: 'pro', entitlements: { screensPerHost: 100 } }
+
+const PRO_SCREEN_CAP = CAPPED_ORG.entitlements.screensPerHost
+
+it('races against the override’s cap, because Pro’s own row has none (pricing v4)', () => {
+  expect(Number.isFinite(PLAN_ENTITLEMENTS.pro.screensPerHost)).toBe(false)
+  expect(PRO_SCREEN_CAP).toBe(100)
+})
 
 const ids = (count: number, prefix: string) =>
   Array.from({ length: count }, (_unused, index) => `${prefix}-${index + 1}`)
@@ -458,7 +472,7 @@ beforeEach(() => {
   arrived = 0
   releaseArrivals = null
   mockVerifyIdToken.mockResolvedValue({ uid: 'user-1', email_verified: true })
-  mockOrg = { plan: 'pro' }
+  mockOrg = CAPPED_ORG
 })
 
 describe('the screens leg is atomic (AGL-2370)', () => {

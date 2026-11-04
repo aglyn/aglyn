@@ -44,7 +44,7 @@ import {
   type OnboardingPlanIntent,
 } from './onboarding-deep-link'
 import { isLiveSubscriptionStatus } from './org-billing-doc'
-import { isAiTierId, PLAN_LABELS, SELF_SERVE_PLANS } from './plan-entitlements'
+import { PLAN_LABELS, SELF_SERVE_PLANS } from './plan-entitlements'
 
 /** The longest staff note a proposal carries. */
 export const UPGRADE_PROPOSAL_NOTE_MAX = 500
@@ -99,33 +99,28 @@ export function readUpgradeProposal(
 /**
  * The bundle half of a proposal (AGL-3956) as it is stored: add-ons through
  * the shared parser and fitted to the plan, an interval only when one was
- * chosen, a coupon only when it reads as a code, and the Aglyn AI tier
- * (AGL-3965) only with the AI add-on — an `ai:<tier>` entry, or the stored
- * `aiTier`. Whatever cannot be honored is left out rather than stored, so
- * Billing is never asked to preselect something the checkout would refuse.
+ * chosen, and a coupon only when it reads as a code. Aglyn AI is a number of
+ * credit blocks like any quantity add-on (AGL-4144); a retired tier name is
+ * dropped by the parser, never stored. Whatever cannot be honored is left out
+ * rather than stored, so Billing is never asked to preselect something the
+ * checkout would refuse.
  */
 export function normalizeUpgradeProposalBundle(
   plan: OrgPlan,
   input:
-    | { addons?: unknown; interval?: unknown; coupon?: unknown; aiTier?: unknown }
+    | { addons?: unknown; interval?: unknown; coupon?: unknown }
     | null
     | undefined,
-): Pick<OrgUpgradeProposal, 'addons' | 'interval' | 'coupon' | 'aiTier'> {
+): Pick<OrgUpgradeProposal, 'addons' | 'interval' | 'coupon'> {
   const parsed = parseBundleAddons(input?.addons)
   const addons: BundleAddons = fitBundleAddonsToPlan(parsed.addons, plan).addons
   const interval =
     input?.interval === 'year' || input?.interval === 'month' ? input.interval : undefined
   const coupon = normalizeBundleCoupon(input?.coupon)
-  const aiTier = addons.aiAddon
-    ? isAiTierId(input?.aiTier)
-      ? input.aiTier
-      : parsed.aiTier
-    : undefined
   return {
     ...(hasBundleAddons(addons) ? { addons } : {}),
     ...(interval ? { interval } : {}),
     ...(coupon ? { coupon } : {}),
-    ...(aiTier ? { aiTier } : {}),
   }
 }
 
@@ -147,7 +142,7 @@ export function standingUpgradeProposal(
 }
 
 type ProposalBundle = Pick<OrgUpgradeProposal, 'plan'> &
-  Partial<Pick<OrgUpgradeProposal, 'addons' | 'interval' | 'coupon' | 'aiTier'>>
+  Partial<Pick<OrgUpgradeProposal, 'addons' | 'interval' | 'coupon'>>
 
 /**
  * The intent a proposal carries into Billing: the plan, and the add-ons,
@@ -169,7 +164,6 @@ export function upgradeProposalIntent(proposal: ProposalBundle): OnboardingPlanI
     intervalStated: interval !== null,
     contactSales: false,
     ...(addons.aiAddon ? { ai: true as const } : {}),
-    ...(addons.aiAddon && isAiTierId(proposal.aiTier) ? { aiTier: proposal.aiTier } : {}),
     ...(hasBundleAddons(addons) ? { addons } : {}),
     ...(coupon ? { coupon } : {}),
   }
@@ -194,7 +188,6 @@ export function upgradeProposalSummary(
       addons: proposal.addons ?? null,
       interval: proposal.interval ?? null,
       coupon: proposal.coupon ?? null,
-      aiTier: proposal.aiTier ?? null,
     },
     options,
   )

@@ -25,8 +25,9 @@
  *
  * Three claims, and the second two are the ones worth having:
  *
- *  1. each plan is refused at its own rung — Free 1, Starter 5, Pro 25,
- *     Business 100, `FORMS_PER_HOST_CEILING` above (AGL-3597) — and the route
+ *  1. each plan is refused at its own rung — Free 1, Starter 5, Pro unlimited
+ *     since pricing v4 (25 before it), the retired Business 100,
+ *     `FORMS_PER_HOST_CEILING` above (AGL-3597) — and the route
  *     reads the resolved entitlement, so a per-org override still lands. Free
  *     is refused on the count, never on a feature: the saved form is not
  *     behind `reusableComponents`;
@@ -151,7 +152,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { FORMS_PER_HOST_CEILING, PLAN_ENTITLEMENTS } from '@aglyn/aglyn'
+import { FORMS_PER_HOST_CEILING, PLAN_ENTITLEMENTS, UNLIMITED } from '@aglyn/aglyn'
 import { FORMS_MAX_PER_HOST } from '@aglyn/aglyn/app-utils/forms'
 import { POST } from '../app/api/hosts/resources/route'
 
@@ -211,7 +212,8 @@ describe('each plan is refused at its own rung', () => {
     ).toEqual({
       free: 1,
       starter: 5,
-      pro: 25,
+      // Unlimited since pricing v4 (AGL-4126): saved forms carry no cost term.
+      pro: UNLIMITED,
       business: 100,
       scale: FORMS_PER_HOST_CEILING,
       advanced: FORMS_PER_HOST_CEILING,
@@ -222,6 +224,16 @@ describe('each plan is refused at its own rung', () => {
     for (const plan of plans) {
       const rung = PLAN_ENTITLEMENTS[plan].formsPerHost
       state.org = plan === 'free' ? { plan } : { plan, subscription: { status: 'active' } }
+
+      if (!Number.isFinite(rung)) {
+        // An unlimited rung has no "at it": a catalog at the top of the finite
+        // ladder is still allowed, which is the half that can be asserted.
+        jest.clearAllMocks()
+        state.forms = savedForms(FORMS_PER_HOST_CEILING)
+        expect([plan, (await createForm()).status]).toEqual([plan, 200])
+        expect([plan, mockCreate.mock.calls.length]).toEqual([plan, 1])
+        continue
+      }
 
       jest.clearAllMocks()
       state.forms = savedForms(rung - 1)
