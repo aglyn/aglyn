@@ -19,10 +19,12 @@ content on the marketing site and is written separately.
 - **billing:** a plan switch on a live subscription applies the offer's promotion code ([AGL-4160](https://linear.app/aglyn/issue/AGL-4160))
 - **tools:** the store-review workspace seeds quotes and invoices ([AGL-3812](https://linear.app/aglyn/issue/AGL-3812), [AGL-4093](https://linear.app/aglyn/issue/AGL-4093))
 - **billing:** staff coupons can take their discount off one plan's base price ([AGL-4159](https://linear.app/aglyn/issue/AGL-4159))
+- **commerce:** quotes say what Pay waits on, older quotes pay under the store's tax, and the page offers only a Pay that works ([AGL-4162](https://linear.app/aglyn/issue/AGL-4162))
 
 ### Fixed
 
 - **crm:** a record picker names a linked record outside its window, never its id ([AGL-4163](https://linear.app/aglyn/issue/AGL-4163))
+- **billing:** the billing layout spec accepts the quote card's new guard, which also skips a subscriber's own plan ([AGL-4160](https://linear.app/aglyn/issue/AGL-4160))
 
 ## v1.10.0 — 2026-11-04
 
