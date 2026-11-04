@@ -96,6 +96,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 jest.mock('@aglyn/aglyn', () => ({
   isEnterpriseOrg: () => false,
   PLAN_LABELS: {},
+  SELF_SERVE_PLANS: ['free', 'starter', 'pro'],
 }))
 jest.mock('@aglyn/shared-ui-jsx', () => ({
   AppLink: ({ children }: { children: ReactNode }) => <a>{children}</a>,

@@ -51,8 +51,9 @@ content on the marketing site and is written separately.
 - **pricing:** the docs describe pricing v4, four plans and AI credits by the block ([AGL-4148](https://linear.app/aglyn/issue/AGL-4148))
 
 <details>
-<summary>Also in this release: 3 test, 7 chore</summary>
+<summary>Also in this release: 4 test, 7 chore</summary>
 
+- **pricing:** the plan specs read v4's bands, with Starter as the bounded plan ([AGL-4143](https://linear.app/aglyn/issue/AGL-4143))
 - **native:** regenerate the staff screens' plan names, enterprise reads Custom ([AGL-4150](https://linear.app/aglyn/issue/AGL-4150))
 - **native:** an entitlement load names Pro as the plan with gift cards ([AGL-4150](https://linear.app/aglyn/issue/AGL-4150))
 - **pricing:** the feature matrix and the staff plan pickers name the Custom plan ([AGL-4143](https://linear.app/aglyn/issue/AGL-4143))

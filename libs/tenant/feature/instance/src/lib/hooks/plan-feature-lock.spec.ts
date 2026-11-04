@@ -39,7 +39,7 @@ describe('resolvePlanFeatureLock', () => {
       planLabel: planLabelGrantingFeature('scheduledPublishing'),
       upgradeHref: '/acme/billing#plans',
     })
-    expect(lock.planLabel).toBe('Business')
+    expect(lock.planLabel).toBe('Pro')
   })
 
   it('opens it on a plan that includes it', () => {

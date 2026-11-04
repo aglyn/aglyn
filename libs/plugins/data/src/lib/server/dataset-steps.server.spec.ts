@@ -184,10 +184,11 @@ describe('the row and byte bands', () => {
   })
 
   it('REFUSES an append past the row band, and says why', async () => {
-    // Pro includes 10,000 records per dataset. The step used to write the
-    // 10,001st and every one after it, forever, with no check of any kind.
-    recordCount = 10_000
-    const answer = await run('datasetAppend', { email: 'a@b.co' })
+    // Starter includes 1,000 records per dataset (Pro's band is unlimited
+    // since pricing v4). The step used to write the 1,001st and every one
+    // after it, forever, with no check of any kind.
+    recordCount = 1_000
+    const answer = await run('datasetAppend', { email: 'a@b.co' }, { plan: 'starter' })
     expect(addedRecords).toEqual([])
     expect(answer.error).toContain('dataset is full')
     expect(announced).toEqual([])
@@ -197,8 +198,8 @@ describe('the row and byte bands', () => {
     // `updateDataset` appends when nothing matches, which is a new row by
     // another name — gating one leg and not the other would leave the door
     // open to any action willing to rename its step.
-    recordCount = 10_000
-    const answer = await run('updateDataset', { email: 'a@b.co' })
+    recordCount = 1_000
+    const answer = await run('updateDataset', { email: 'a@b.co' }, { plan: 'starter' })
     expect(addedRecords).toEqual([])
     expect(answer.error).toContain('dataset is full')
   })
