@@ -38,6 +38,7 @@ import {
   type AiLayoutBand,
   type AiLayoutBlock,
   type AiLayoutGroupStyle,
+  type AiLayoutImportFinish,
   type AiLayoutImportHero,
   type AiLayoutWidth,
   type AiLayoutItem,
@@ -173,6 +174,15 @@ export interface AiLayoutCompileOptions {
    * source's own picture, as its design answer chose.
    */
   verbatim?: boolean
+  /**
+   * How a `verbatim` page is finished (AGL-4152). Absent or `keep`, as above:
+   * every band the source's, its opening's words held to the source's own
+   * measure where the section gives one. `improve`, its bands are the site's
+   * design's — the rhythm, a third strong band settled soft — and its
+   * opening's words take the hero's own share. Every word, item, picture and
+   * link is still the source's.
+   */
+  finish?: AiLayoutImportFinish
 }
 
 /** Words exactly as given, one space between them: how a page brought in shows them (AGL-4107). */
@@ -304,6 +314,8 @@ export interface SectionScope {
   heading?: string
   /** A group style the section's arrangement settled, over the one its words would pick. */
   groupStyle?: AiLayoutGroupVariant
+  /** A page brought in and kept (AGL-4152): the width its opening's words are held to, over the hero's own share. */
+  measure?: AiLayoutWidth
 }
 
 const formIdsOf = (targets: AiLayoutTargets): Set<string> =>
@@ -472,16 +484,20 @@ function rhythmBand(page: PageScope, index: number, band: AiLayoutBand): AiLayou
 function sectionScope(page: PageScope, raw: AiLayoutSection, index: number): SectionScope {
   const at = `sections[${index}]`
   const asked = raw.band ?? 'plain'
-  // A page brought in keeps the source's bands, every one (AGL-4107).
+  // A page brought in keeps the source's bands, every one (AGL-4107), unless
+  // its owner asked it improved (AGL-4152): then the site's design rhythms them.
   const verbatim = page.options.verbatim === true
-  const ruled = verbatim ? asked : rhythmBand(page, index, asked)
+  const kept = verbatim && page.options.finish !== 'improve'
+  const ruled = kept ? asked : rhythmBand(page, index, asked)
   if (ruled !== asked) page.settled.push({ at: `${at}.band`, what: `drawn ${ruled}: the page's ${page.design?.choices.bandRhythm} band rhythm` })
-  const band = verbatim ? asked : settleBand(page, ruled, at)
+  const band = kept ? asked : settleBand(page, ruled, at)
   return {
     page,
     index,
     at,
     band,
+    // The source's own measure for its opening's words, on a page kept as it is (AGL-4152).
+    ...(kept && raw.measure ? { measure: raw.measure } : {}),
     centered: raw.align === 'center',
     level: index === 0 ? 1 : 2,
     headed: false,
@@ -2581,6 +2597,16 @@ function hero(
   return designedRoot(scope, [container], bandSx(band), band === 'dark')
 }
 
+/**
+ * How wide a hero's words run on a wide screen: the hero's own share of its
+ * Container, or, on a page brought in and kept as it is (AGL-4152), the
+ * theme's breakpoint nearest the source's own heading measure, never a pixel
+ * width. A phone runs them across.
+ */
+function wordsMeasure(scope: SectionScope, share: string): { xs: string; md: string } {
+  return { xs: '100%', md: scope.measure ?? share }
+}
+
 /** Words over a full-bleed photo, on a scrim that keeps them readable, in the site's dark scheme. */
 function cover(
   scope: SectionScope,
@@ -2602,7 +2628,7 @@ function cover(
   const measure = tree.add(
     'muiBox',
     null,
-    scope.centered ? { maxWidth: { xs: '100%', md: '75%' }, mx: 'auto' } : { maxWidth: { xs: '100%', md: '62%' } },
+    scope.centered ? { maxWidth: wordsMeasure(scope, '75%'), mx: 'auto' } : { maxWidth: wordsMeasure(scope, '62%') },
     [words],
     'measure',
   )
@@ -2640,7 +2666,7 @@ function bleedHero(scope: SectionScope, flow: readonly AiLayoutBlock[], picture:
   const band = scope.band
   scope.centered = false
   const words = compileFlow(scope, flow, 'half') as string
-  const measure = tree.add('muiBox', null, { maxWidth: { xs: '100%', md: '88%' }, px: { xs: 3, sm: 6, md: 8 }, py: { xs: 6, md: 10 } }, [words], 'measure')
+  const measure = tree.add('muiBox', null, { maxWidth: wordsMeasure(scope, '88%'), px: { xs: 3, sm: 6, md: 8 }, py: { xs: 6, md: 10 } }, [words], 'measure')
   const photo = designPicture(scope, picture, { height: '100%', minHeight: home ? { xs: '46vh', md: '84vh' } : { xs: '36vh', md: '56vh' } }, 'bleedPhoto')
   const right = design.choices.featureLeft
   const row = tree.add(
@@ -2665,7 +2691,7 @@ function columnHero(scope: SectionScope, flow: readonly AiLayoutBlock[], picture
   const band = scope.band
   scope.centered = true
   const words = compileFlow(scope, flow, 'full') as string
-  const measure = tree.add('muiBox', null, { maxWidth: { xs: '100%', md: '72%' }, mx: 'auto' }, [words], 'measure')
+  const measure = tree.add('muiBox', null, { maxWidth: wordsMeasure(scope, '72%'), mx: 'auto' }, [words], 'measure')
   const photo = designPicture(
     scope,
     picture,
@@ -2675,7 +2701,7 @@ function columnHero(scope: SectionScope, flow: readonly AiLayoutBlock[], picture
     }),
   )
   // What the source sets under its picture stays under it, centered as the words above are.
-  const under = picture.after?.length ? [tree.add('muiBox', null, { maxWidth: { xs: '100%', md: '72%' }, mx: 'auto' }, [compileFlow(scope, picture.after, 'full') as string], 'measure')] : []
+  const under = picture.after?.length ? [tree.add('muiBox', null, { maxWidth: wordsMeasure(scope, '72%'), mx: 'auto' }, [compileFlow(scope, picture.after, 'full') as string], 'measure')] : []
   const stack = tree.add('muiStack', { spacing: '8', useFlexGap: true }, null, [measure, photo, ...under], 'content')
   const container = tree.add('muiContainer', { maxWidth: 'lg' }, { pt: { xs: 8, md: 12 }, pb: { xs: 6, md: 10 } }, [stack], 'container')
   return designedRoot(scope, [container], bandSx(band), band === 'dark')
@@ -2764,7 +2790,7 @@ function portraitHero(scope: SectionScope, flow: readonly AiLayoutBlock[], pictu
   scope.centered = true
   const photo = designPicture(scope, picture, { width: { xs: '44%', sm: '30%', md: '22%' }, aspectRatio: '1 / 1', borderRadius: '50%', flexShrink: 0 })
   const words = compileFlow(scope, flow, 'full') as string
-  const measure = tree.add('muiBox', null, { maxWidth: { xs: '100%', md: '72%' }, mx: 'auto' }, [words], 'measure')
+  const measure = tree.add('muiBox', null, { maxWidth: wordsMeasure(scope, '72%'), mx: 'auto' }, [words], 'measure')
   const stack = tree.add('muiStack', { spacing: '5', useFlexGap: true, alignItems: 'center' }, null, [photo, measure], 'content')
   const container = tree.add('muiContainer', { maxWidth: 'lg' }, { py: { xs: 8, md: 12 } }, [stack], 'container')
   return designedRoot(scope, [container], bandSx(band), band === 'dark')

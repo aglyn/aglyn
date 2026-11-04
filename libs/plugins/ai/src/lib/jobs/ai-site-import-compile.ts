@@ -44,6 +44,14 @@
  *      the kind of a group the reader could not tell, an alignment. A page of
  *      a collection, and any page whose answer is missing, is drawn from the
  *      layout with no model.
+ *   4. How the owner asked the site FINISHED (AGL-4152). Keep my site, the
+ *      default for an import that asked nothing, is the above held tighter:
+ *      the source's alignment, its boxing and its heading's measure, whatever
+ *      the answer says. Improve it frees the layout: the answer's bands and
+ *      alignment on every section, the site's band rhythm, the theme's widths,
+ *      any hero, any group's kind and style, like runs of lines as cards.
+ *      Either way every word, picture, icon, button, heading, form and film
+ *      is the source's.
  *
  * A read made before the reader kept no layout: its page is read into one
  * here, from its lines, one section at each second-level heading.
@@ -73,6 +81,7 @@ import {
   type AiLayoutSettlement,
   type AiLayoutStyle,
   type AiLayoutVideo,
+  type AiLayoutWidth,
 } from '../layout-language/ai-layout-language'
 import type { AiLayoutTargets } from '../layout-language/ai-layout-links'
 import {
@@ -385,6 +394,20 @@ export function aiSiteImportIconPath(shape: SiteImportIconShape | undefined): st
 /** The groups a design answer may read as another kind: the ones whose kind the reader told by their shape alone. */
 const OPEN_KINDS: ReadonlySet<SiteImportGroupKind> = new Set(['cards', 'steps', 'stats', 'list', 'text'])
 
+/**
+ * The groups that keep their kind even on a page its owner asked improved
+ * (AGL-4152): a quote's words and a strip of logos have no place in a card's
+ * title or a step's, and would stop being what they are.
+ */
+const FIXED_KINDS: ReadonlySet<SiteImportGroupKind> = new Set(['quotes', 'logos'])
+
+/** The styles that box a group's items, and the ones that leave them open: Keep my site keeps a group's own (AGL-4152). */
+const BOXED_STYLES: ReadonlySet<AiLayoutGroupStyle> = new Set(['cards', 'articles'])
+const OPEN_STYLES: ReadonlySet<AiLayoutGroupStyle> = new Set(['ruled', 'icons', 'pictures'])
+
+/** The fewest like items a run of lines needs to be drawn as cards, on a page its owner asked improved (AGL-4152). */
+const LIKE_ITEMS_AS_CARDS = 3
+
 /** The hero each place of the source's picture opens as, where no answer chose one. */
 const HERO_FOR: Readonly<Record<SiteImportHeroPicture, AiLayoutImportHero>> = {
   beside: 'split',
@@ -414,6 +437,8 @@ interface MapScope {
   films: ReadonlyMap<number, AiLayoutVideo>
   /** The film a play button of this section plays: the section's own first, else the page's. */
   film: number | null
+  /** How the owner asked the page finished (AGL-4152): kept as its source lays it out, or improved. */
+  finish: AiSiteImportFinish
 }
 
 /** Where a link of the source goes on the new site, in the compiler's words; `undefined` where it can go nowhere a page may send a visitor. */
@@ -710,13 +735,31 @@ function drawnAs(scope: MapScope, group: SiteImportLayoutGroup, style?: AiLayout
   }
 }
 
-/** The style an answer chose, where the group can be drawn so: pictures need a picture on every item, icons an icon. */
-function styleFor(asked: AiLayoutGroupStyle | undefined, group: SiteImportLayoutGroup, items: readonly AiLayoutItem[]): AiLayoutGroupStyle {
+/**
+ * The style an answer chose, where the group can be drawn so: pictures need a
+ * picture on every item, icons an icon. A page kept as it is keeps the
+ * source's boxing (AGL-4152): a boxed group takes only a boxed style, an open
+ * one only an open style.
+ */
+function styleFor(asked: AiLayoutGroupStyle | undefined, group: SiteImportLayoutGroup, items: readonly AiLayoutItem[], finish: AiSiteImportFinish): AiLayoutGroupStyle {
   const fallback = defaultStyle(group, items)
   if (!asked || !(AI_LAYOUT_GROUP_STYLES as readonly string[]).includes(asked)) return fallback
+  if (finish !== 'improve' && !(group.boxed ? BOXED_STYLES : OPEN_STYLES).has(asked)) return fallback
   if ((asked === 'pictures' || asked === 'articles') && !items.every((item) => item.picture)) return fallback
   if (asked === 'icons' && !items.every((item) => item.iconPath)) return fallback
   return asked
+}
+
+/**
+ * Whether a run of lines that only share a shape reads as cards (AGL-4152):
+ * three or more items, each showing the same parts and led by its own title,
+ * with no heading among an item's lines but its title, so every heading of
+ * the source is still a heading.
+ */
+function likeItems(scope: MapScope, group: SiteImportLayoutGroup): boolean {
+  if (group.items.length < LIKE_ITEMS_AS_CARDS) return false
+  if (new Set(group.items.map((item) => itemShape(item).join(' + '))).size !== 1) return false
+  return group.items.every((item) => item.title !== undefined && item.lines.every((ref) => ref === item.title || scope.doc.blocks[ref]?.kind !== 'heading'))
 }
 
 /** The longest line that leads a figure: "1-click", "$0.83". */
@@ -749,12 +792,20 @@ function holdsOnlyFigures(scope: MapScope, group: SiteImportLayoutGroup): boolea
 function groupBlocks(scope: MapScope, group: SiteImportLayoutGroup): AiLayoutBlock[] {
   const answer = scope.answer?.groups[scope.groupAt] ?? null
   scope.groupAt += 1
-  // Rows the source sets are drawn as its rows: no answer's kind or style is one of them (AGL-4083).
-  if (group.inline) {
+  const improve = scope.finish === 'improve'
+  // Rows the source sets are drawn as its rows: no answer's kind or style is one of them (AGL-4083). On a
+  // page its owner asked improved, a kind the answer names is (AGL-4152); a style alone has nothing to draw in rows.
+  if (group.inline && !(improve && answer?.kind)) {
     if (answer?.kind || answer?.style) scope.settled.push({ at: scope.at, what: `a ${group.group} group drawn as the source's rows` })
     return [{ kind: 'cards', items: group.items.map((item) => itemOf(scope, group, item)), columns: 1, inline: true }]
   }
-  const asked: SiteImportGroupKind = answer?.kind && OPEN_KINDS.has(group.group) ? answer.kind : group.group
+  // A page its owner asked improved reads any group as the answer does (AGL-4152), but a quote or a logo.
+  const opens = improve ? !FIXED_KINDS.has(group.group) : OPEN_KINDS.has(group.group)
+  const answered: SiteImportGroupKind = answer?.kind && opens ? answer.kind : group.group
+  // Lines that only share a shape, three or more alike, are cards on a page its owner asked improved (AGL-4152).
+  const carded = improve && answered === 'text' && likeItems(scope, group)
+  if (carded) scope.settled.push({ at: scope.at, what: `${group.items.length} like runs of lines drawn as cards` })
+  const asked: SiteImportGroupKind = carded ? 'cards' : answered
   // A list is one line an item (AGL-4083): one asked of items with more would
   // join a label to its value, and 49 of a plan's rows lost theirs so on 11/1.
   const joins = asked === 'list' && group.group !== 'list' && group.items.some((item) => item.lines.length > 1)
@@ -762,7 +813,7 @@ function groupBlocks(scope: MapScope, group: SiteImportLayoutGroup): AiLayoutBlo
   const kind: SiteImportGroupKind = joins ? 'cards' : unfigured ? group.group : asked
   if (joins) scope.settled.push({ at: scope.at, what: `a ${group.group} group kept apart: its items hold more than one line each, so it is no list` })
   else if (unfigured) scope.settled.push({ at: scope.at, what: `a ${group.group} group kept as it is: its items hold more than a figure can show` })
-  else if (kind !== group.group) scope.settled.push({ at: scope.at, what: `a ${group.group} group drawn as ${kind}, as its design answer read it` })
+  else if (kind !== group.group && !carded) scope.settled.push({ at: scope.at, what: `a ${group.group} group drawn as ${kind}, as its design answer read it` })
   const columns = Math.max(1, Math.min(AI_LAYOUT_MAX_COLS, group.columns || 1))
   if (kind === 'text') {
     // Lines that only share a shape: each where it stands.
@@ -801,14 +852,17 @@ function groupBlocks(scope: MapScope, group: SiteImportLayoutGroup): AiLayoutBlo
     return items.length ? [{ kind: 'logos', items }] : []
   }
   const items = group.items.map((item) => itemOf(scope, group, item, kind))
+  // Whether the items are boxed: the source's, or on a page its owner asked improved, the answer's style (AGL-4152).
+  const boxed = improve && answer?.style ? BOXED_STYLES.has(answer.style) : group.boxed
   if (kind === 'quotes') {
     // The reader names a quote's words its title and who said it its text.
     const quotes = items.map((item) => ({ ...item, title: [item.text, ...(item.more ?? [])].filter(Boolean).join(' '), text: item.title, more: [] as string[] }))
-    return [{ kind: 'quotes', items: quotes.map(({ more: _more, ...item }) => item), columns, ...(group.boxed ? { variant: 'cards' as const } : { style: 'quiet' as const }), ...drawnAs(scope, group) }]
+    return [{ kind: 'quotes', items: quotes.map(({ more: _more, ...item }) => item), columns, ...(boxed ? { variant: 'cards' as const } : { style: 'quiet' as const }), ...drawnAs(scope, group) }]
   }
   if (kind === 'faq') return [{ kind: 'faq', items, columns }]
-  if (kind === 'stats') return [{ kind: 'stats', items, columns, ...(group.boxed ? { variant: 'cards' as const } : {}), ...drawnAs(scope, group) }]
-  const style = joins ? 'ruled' : styleFor(answer?.style, group, items)
+  if (kind === 'stats') return [{ kind: 'stats', items, columns, ...(boxed ? { variant: 'cards' as const } : {}), ...drawnAs(scope, group) }]
+  // A group kept apart from a list is ruled, where its boxing allows (AGL-4152).
+  const style = styleFor(joins ? 'ruled' : answer?.style, group, items, scope.finish)
   return [{ kind: kind === 'steps' ? 'steps' : 'cards', items, columns, variant: style, ...drawnAs(scope, group, style) }]
 }
 
@@ -1038,21 +1092,45 @@ const HEROES_AT: Readonly<Record<SiteImportHeroPicture, ReadonlySet<AiLayoutImpo
  * (AGL-4138): a picture under centered words stays under them, as a picture
  * beside the words stays beside them.
  */
-function heroOf(section: SiteImportLayoutSection, index: number, answer: AiLayoutDesignSection | null, settled: AiLayoutSettlement[]): AiLayoutImportHero | undefined {
+function heroOf(
+  section: SiteImportLayoutSection,
+  index: number,
+  answer: AiLayoutDesignSection | null,
+  settled: AiLayoutSettlement[],
+  drawn: { band: SiteImportLayoutSection['band']; finish: AiSiteImportFinish },
+): AiLayoutImportHero | undefined {
   if (index !== 0 || !section.hero?.picture) return undefined
   // An answer of "none" keeps the opening as the source lays it out.
   if (answer?.hero === 'none') return undefined
   const place = section.hero.picture
   const own = HERO_FOR[place]
-  if (answer?.hero && DIMMED_HEROES.has(answer.hero) && section.band !== 'dark' && place !== 'behind') {
+  // Dimmed words need a dark ground: the section's own, or on a page its owner asked improved, the answer's (AGL-4152).
+  if (answer?.hero && DIMMED_HEROES.has(answer.hero) && drawn.band !== 'dark' && place !== 'behind') {
     settled.push({ at: 'sections[0]', what: `the ${answer.hero} hero set aside: the section keeps its own lighter ground` })
     return own
   }
-  if (answer?.hero && !HEROES_AT[place].has(answer.hero)) {
+  // The picture stays where the source lays it, unless the owner asked the page improved (AGL-4152).
+  if (answer?.hero && drawn.finish !== 'improve' && !HEROES_AT[place].has(answer.hero)) {
     settled.push({ at: 'sections[0]', what: `the ${answer.hero} hero set aside: the source lays its picture ${place} its words` })
     return own
   }
   return answer?.hero ?? own
+}
+
+/** How a page is finished (AGL-4152): the finish asked of it, else its document's, else kept as it is. */
+export function aiSiteImportFinishOf(doc: Pick<AiSiteImportDocument, 'finish'> | null | undefined, asked?: AiSiteImportFinish | null): AiSiteImportFinish {
+  const finish = asked ?? doc?.finish
+  return finish === 'improve' ? 'improve' : 'keep'
+}
+
+/**
+ * The Container width a source holds its opening's heading to (AGL-4152):
+ * the theme's breakpoint nearest its measure, at most a page's own, which an
+ * opening's words may span; none where the source sets none.
+ */
+export function aiSiteImportHeroMeasure(section: Pick<SiteImportLayoutSection, 'hero'>): Exclude<AiLayoutWidth, 'xl'> | null {
+  const step = siteImportWidthOf(section.hero?.measure)
+  return step === 'xl' ? 'lg' : step
 }
 
 export interface AiSiteImportDesigned {
@@ -1074,9 +1152,11 @@ export interface AiSiteImportDesigned {
 export function aiSiteImportDesignedSections(
   doc: AiSiteImportDocument,
   answer?: AiLayoutDesignAnswer | null,
-  options: { formId?: string | null } = {},
+  options: { formId?: string | null; finish?: AiSiteImportFinish | null } = {},
 ): AiSiteImportDesigned {
   const layout = aiSiteImportLayoutOf(doc)
+  const finish = aiSiteImportFinishOf(doc, options.finish)
+  const improve = finish === 'improve'
   const scope: MapScope = {
     doc,
     layout,
@@ -1092,6 +1172,7 @@ export function aiSiteImportDesignedSections(
     at: '',
     films: filmsOf(doc),
     film: null,
+    finish,
   }
   const backdropOf = (section: SiteImportLayoutSection) => (section.backdrop?.kind === 'video' ? section.backdrop : null)
   const pageFilm = layout.sections.reduce<number | null>((found, section) => found ?? firstFilm(scope, section.nodes), null)
@@ -1115,19 +1196,25 @@ export function aiSiteImportDesignedSections(
       if (!isLine(block)) continue
       blocks.push(...lineBlocks(scope, { kind: 'line', line: ref }))
     }
-    const hero = heroOf(section, index, given, scope.settled)
-    // A band only where the source gave the section none of its own.
-    const band = section.background === null && !section.backdrop && given?.band ? given.band : section.band
+    // A band only where the source gave the section none of its own; any section's, on a page its owner asked improved (AGL-4152).
+    const band = given?.band && (improve || (section.background === null && !section.backdrop)) ? given.band : section.band
+    const hero = heroOf(section, index, given, scope.settled, { band: improve ? band : section.band, finish })
     // A long read is set at the start, as text is read, whatever its source centers.
     const reading = blocks.filter((block) => block.kind === 'text').length > READING_PARAGRAPHS
+    const source = reading ? 'start' : section.align
+    // The source's own heading measure for its opening's words, on a page kept as it is (AGL-4152).
+    const measure = hero && !improve ? aiSiteImportHeroMeasure(section) : null
     return {
       band,
-      align: given?.align ?? (reading ? 'start' : section.align),
-      // As wide as the source runs (AGL-4083); where it sets no cap, a page's width, a long read's measure.
-      width: siteImportWidthOf(section.width) ?? (reading ? 'md' : 'lg'),
+      // Kept as it is, a section keeps the source's alignment (AGL-4152); improved, the answer's.
+      align: improve ? (given?.align ?? source) : source,
+      // As wide as the source runs (AGL-4083), or the theme's own on a page its owner asked improved (AGL-4152);
+      // where it sets no cap, a page's width, a long read's measure.
+      width: (improve ? null : siteImportWidthOf(section.width)) ?? (reading ? 'md' : 'lg'),
       ...(row.cols && blocks.some((block) => block.col !== undefined) ? { cols: row.cols } : {}),
       blocks: mergeLists(blocks),
       ...(hero ? { hero } : {}),
+      ...(measure ? { measure } : {}),
     }
   })
   return { sections, used: scope.used, missing: scope.missing, settled: scope.settled }
@@ -1175,13 +1262,15 @@ export interface AiSiteImportCompiled extends Pick<AiLayoutCompiledPage, 'tree' 
 export function aiCompileImportedPage(input: AiSiteImportCompileInput): AiSiteImportCompiled {
   const { doc } = input
   const formId = input.targets.forms.length === 1 ? input.targets.forms[0].id : null
-  const designed = aiSiteImportDesignedSections(doc, input.answer ?? null, { formId })
+  const finish = aiSiteImportFinishOf(doc, input.finish)
+  const designed = aiSiteImportDesignedSections(doc, input.answer ?? null, { formId, finish })
   const compile = (sections: readonly AiLayoutSection[]) =>
     aiCompileLayoutPage(sections, input.plan, input.targets, {
       // A page brought in draws its repeats as its source does (AGL-4107).
       reusableComponents: false,
       sectionIds: input.sectionIds,
       verbatim: true,
+      finish,
       ...(input.design ? { design: input.design } : {}),
       ...(input.language ? { language: input.language } : {}),
     })
