@@ -839,6 +839,14 @@ export async function upsertHostContact(
             )
           : null
       const mirror = link ? contactCompanyMirrorValue(link) : undefined
+      /*
+       * THE NUMBER THE PERSON IS FOUND BY (AGL-4122), as New contact stores
+       * it: the Phone, or the mobile of a holder with no other number. A
+       * door that carried only a mobile leaves a Phone this holder already
+       * has as the number, and one that carried neither writes no echo.
+       */
+      const phoneEcho =
+        profile.phone || (profile.mobilePhone ? facet.phone || profile.mobilePhone : '')
       await docSnapshot.ref.set(
         {
           // The search keys travel WITH the name, and only when the name is
@@ -846,7 +854,7 @@ export async function upsertHostContact(
           // contact unfindable by the name it still displays.
           ...(facetName ? nameSearchFields(facetName) : {}),
           // The search echo of the facet's phone — see `HostContact.phone`.
-          ...(profile.phone ? { phone: profile.phone } : {}),
+          ...(phoneEcho ? { phone: phoneEcho } : {}),
           // The search echo of the facet's company name — see `HostContact.companyName`.
           ...(profile.companyName ? { companyName: profile.companyName } : {}),
           ...(mirror !== undefined ? { [CONTACT_COMPANY_IDS_FIELD]: mirror } : {}),
@@ -1083,8 +1091,11 @@ export async function upsertHostContact(
           : consentGroupScope(group),
       email,
       ...(canonicalName ? nameSearchFields(canonicalName) : {}),
-      // The search echo of the facet's phone — see `HostContact.phone`.
-      ...(profile.phone ? { phone: profile.phone } : {}),
+      // The search echo of the facet's phone — see `HostContact.phone`: the
+      // Phone, or the mobile of a person who gave no other number (AGL-4122).
+      ...(profile.phone || profile.mobilePhone
+        ? { phone: profile.phone || profile.mobilePhone }
+        : {}),
       // The search echo of the facet's company name — see `HostContact.companyName`.
       ...(profile.companyName ? { companyName: profile.companyName } : {}),
       // The company mirror the company page queries (AGL-2613) — a create

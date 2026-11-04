@@ -72,7 +72,7 @@
 
 import { LEGAL_URLS } from './shared'
 
-export const LEGAL_DOCUMENT_VERSION = 'v21'
+export const LEGAL_DOCUMENT_VERSION = 'v22'
 
 export interface LegalDocumentManifestEntry {
   /** Stable key, and the snapshot's filename under `legal/{version}/`. */
@@ -1068,6 +1068,39 @@ export interface LegalDocumentManifestEntry {
  * 38630 bytes / `b315fe…`, byte for byte across the same three requests both
  * before and after publication, and terms reproduced its `v20` pin before.
  *
+ * v22 (2026-11-03, AGL-4149): the plan list for pricing v4.
+ *
+ *   - Terms §4.1 names Free, Starter, Pro and Custom, still "currently
+ *     including", so the list stays illustrative. Business, Scale, Advanced
+ *     and Agency retire, and Custom is the top plan's new label (its code id
+ *     stays `enterprise`). One sentence follows the pricing-page sentence:
+ *     the Custom plan is sold by agreement, its details are set out in that
+ *     agreement, and the agreement controls in case of conflict as §19.2
+ *     already provides. No term is added.
+ *   - Terms §4.21: "Enterprise customers" becomes "customers on the Custom
+ *     plan". Nothing else in the Section changes.
+ *   - Privacy Policy unchanged, so its pin is unchanged and it is the
+ *     control. `POS_HARDWARE_TERMS_VERSION` stays `v21`: §4.26–§4.32 did not
+ *     change.
+ *
+ * The Terms and their `/legal` index card move "Last updated" to November
+ * 3, 2026 (the Terms keep "Effective date: August 5, 2026"), published from
+ * the console's Publish now at 21:15–21:17 Central that day, in the same
+ * sitting as the pricing page. The record is
+ * `Platform Docs/Legal/Proposed/2026-11-03-pricing-v4-plan-list/`.
+ *
+ * Publication-first: the Google Doc master was edited and verified through
+ * the Docs API (revision 24 to 25: the date line, §4.1 and §4.21, nothing
+ * else), Publish now was pressed for the Terms and the `/legal` index, the
+ * live pages confirmed serving the new text on two consecutive checks, and
+ * only then was terms captured: 71090 bytes (`df8de1…`), identical across
+ * two requests and a cache-busting query in two rounds, differing from the
+ * `v21` archive by the three edited paragraphs alone, and archived in
+ * `Acceptance-Snapshots/v22`. Privacy reproduced its `v21` pin, 38630 bytes
+ * / `b315fe…`, byte for byte across the same three requests both before and
+ * after publication, and terms reproduced its `v21` pin (70966 bytes /
+ * `c6d848…`) before.
+ *
  * ## ONE snapshot in the tree, and why that is enough
  *
  * Only the CURRENT version is checked out. Superseded text is not deleted —
@@ -1127,8 +1160,8 @@ export const LEGAL_DOCUMENTS: LegalDocumentManifestEntry[] = [
     key: 'terms',
     url: LEGAL_URLS.TERMS,
     sha256:
-      'c6d84807349a34f97b22e8468e28a5c60c674216d464928362ec5f57374b2b38',
-    bytes: 70966,
+      'df8de1fff85f0e0e7b8992055184c5c14d508da199a216feaf15b8db13cbf6a9',
+    bytes: 71090,
   },
   {
     key: 'privacy',

@@ -45,7 +45,8 @@ Signup collects an **organization name** and provisions the workspace as part
 of account creation (AGL-1115), so a new user lands in a ready workspace rather
 than an empty chooser.
 
-**Enterprise never routes to checkout.** It is quoted, not bought, so the CTA
+**Custom (the plan once labeled Enterprise) never routes to checkout.** It is quoted,
+not bought, so the CTA
 lands on contact-sales and the staff enterprise-billing flow (AGL-1110) takes
 it from there. A checkout that cannot price the plan is a dead end.
 

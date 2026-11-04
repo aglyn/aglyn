@@ -201,6 +201,7 @@ export function aiSiteImportDocumentOf(inputs: Readonly<Record<string, unknown>>
     }
   })
   const strings = (list: unknown) => (Array.isArray(list) ? list.filter((entry): entry is string => typeof entry === 'string') : [])
+  const size = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.round(value) : 0)
   return {
     build,
     title: typeof value['title'] === 'string' ? value['title'] : '',
@@ -213,6 +214,9 @@ export function aiSiteImportDocumentOf(inputs: Readonly<Record<string, unknown>>
             {
               mediaId: photo['mediaId'],
               src: photo['src'],
+              // Its size, which frames it at its own shape where the source's tag gives none (AGL-4138).
+              ...(size(photo['width']) ? { width: size(photo['width']) } : {}),
+              ...(size(photo['height']) ? { height: size(photo['height']) } : {}),
               ...(typeof photo['alt'] === 'string' ? { alt: photo['alt'] } : {}),
               ...(typeof photo['from'] === 'string' ? { from: photo['from'] } : {}),
             },

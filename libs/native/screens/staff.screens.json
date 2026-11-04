@@ -22986,6 +22986,13 @@
               "help": "Empty inherits the plan default. 0 is a real limit of none."
             },
             {
+              "key": "quota.transactionalEmailsPerDay",
+              "label": "Limit: Transactional emails / day (abuse ceiling)",
+              "kind": "number",
+              "initial": "{item.entitlements.transactionalEmailsPerDay}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
               "key": "feature.abTesting",
               "label": "Feature: Ab testing",
               "kind": "select",

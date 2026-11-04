@@ -103,13 +103,9 @@ organization's plan:
 | Plan | Datasets | Most with add-ons | Records per dataset | Dataset storage |
 | --- | --- | --- | --- | --- |
 | Free | — (no data store) | — | — | — |
-| Starter | 3 | 10 | 1,000 | 1 GB |
-| Pro | 15 | 50 | 10,000 | 5 GB |
-| Business | 100 | 250 | 100,000 | 25 GB |
-| Scale | 250 | 500 | 500,000 | 50 GB |
-| Advanced | 500 | 1,000 | 1,000,000 | 100 GB |
-| Agency | 2,000 | 5,000 | Unlimited | 500 GB |
-| Enterprise | Custom | Custom | Custom | Custom |
+| Starter | 2 | 10 | 1,000 | 512 MB |
+| Pro | 5 | No limit | Unlimited | 2 GB |
+| Custom | Set by agreement | Set by agreement | Set by agreement | Set by agreement |
 
 - Creating datasets on Free is rejected with *"Datasets require a Starter plan
   or higher."*
@@ -120,8 +116,9 @@ organization's plan:
   write is skipped silently, but the inbox copy is always kept.
 - [Add-ons](../workspace-and-billing/billing-and-plans/add-ons.md) raise the
   dataset count beyond the base allowance, up to the most shown above.
-- Dataset storage past the included amount bills at $0.36 per GB-month from
-  Starter to Agency. Enterprise has no overage rate, so writes stop at its limit.
+- Dataset storage past the included amount bills per GB-month on Starter and Pro, at
+  the rate on [aglyn.com/pricing](https://aglyn.com/pricing). Custom has no overage
+  rate, so writes stop at its limit.
 
 ## Import & export
 

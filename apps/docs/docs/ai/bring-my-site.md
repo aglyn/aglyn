@@ -167,7 +167,7 @@ and its pictures where your page shows them. It is drawn as your page draws it t
 
 - **Pictures at their own shape, never cut.** A picture keeps the shape it has. Only a
   picture your page itself crops, to a set height or a set shape, is cropped the same way.
-  A picture your page rounds or sets on a shadow keeps that.
+  A picture your page rounds, sets on a shadow or holds narrower than its column keeps that.
 - **Labels in your site's colors.** The small label above a heading keeps its color, in
   capitals with no line before it, and keeps its rounded outline where your page draws one.
 - **Large statements stay large.** A paragraph your page sets as large and bold as a heading
@@ -239,7 +239,8 @@ in preview.
 If your site is not in preview, every page is a **draft**: nothing is published until you
 publish it.
 
-**Open your draft pages** opens the site's Pages list. When you are ready for more, choose
+**Open your draft pages**, or **Open your pages** when your site is in preview, opens the
+site's Pages list. When you are ready for more, choose
 the next wave's **Start** button. Nothing starts the next wave except you, unless you chose
 **Start every remaining wave**.
 

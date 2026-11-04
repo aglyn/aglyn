@@ -59,7 +59,7 @@ console. See [Member accounts](/guides/member-accounts).
 
 ## Can I access my data programmatically?
 
-On the Business plan, yes — the [REST API](/api) exposes datasets and records,
+On the Pro plan, yes — the [REST API](/api) exposes datasets and records,
 contacts, sites, and form submissions, plus [webhooks](/api/integrations/webhooks).
 
 ## How is my site kept fast and secure?

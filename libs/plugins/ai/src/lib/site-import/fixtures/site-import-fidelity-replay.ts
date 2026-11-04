@@ -31,7 +31,7 @@ import { aiSiteImportFrameJob, aiSiteImportHomeOf } from '../../jobs/ai-job-impo
 import { aiLayoutSiteBrandOf, aiLayoutSiteFrameOf, aiLayoutSourceFrameBuild } from '../../jobs/ai-job-layout-language'
 import { aiLayoutChecks } from '../../jobs/ai-job-layout-step'
 import { aiSiteImportSectionNames } from '../../jobs/ai-site-import-compile'
-import type { AiSiteImportDocument } from '../../jobs/ai-site-import-document'
+import { AI_LAYOUT_IMPORTED_SECTIONS_INPUT, aiSiteImportDocumentOf, type AiSiteImportDocument } from '../../jobs/ai-site-import-document'
 import type { AiLayoutFrameSource } from '../../layout-language/ai-layout-frame-source'
 import type { AiJob } from '../../model/ai-jobs.types'
 import { aiSiteImportLedger, type AiSiteImportPage, type AiSiteImportState, type SiteImportFooter, type SiteImportNavTree } from '../../model/ai-site-import'
@@ -104,7 +104,8 @@ export function siteImportReplayPage(
 ): SiteImportReplayPage {
   const read = siteImportReplayDocument(name)
   const { layout, ...rest } = read
-  const doc: AiSiteImportDocument = options.layout === false ? rest : read
+  // As the page step reads it: through the job's input, so a fact the reader drops is dropped here too (AGL-4138).
+  const doc = aiSiteImportDocumentOf({ [AI_LAYOUT_IMPORTED_SECTIONS_INPUT]: JSON.parse(JSON.stringify(options.layout === false ? rest : read)) }) as AiSiteImportDocument
   const names = aiSiteImportSectionNames(doc)
   const sectionIds = names.map((_, index) => `sec-${index}`)
   const screen = { title: doc.title, slug: name === 'home' ? '/' : `/${name}`, sections: names.map((section) => ({ name: section, uses: [] as string[], items: 0 })) }

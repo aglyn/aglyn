@@ -11,7 +11,7 @@ when something happens on your site; **inbound** webhooks let another system tri
 something in Aglyn.
 
 :::info Plan availability
-**Business**. Webhooks are a Business-tier feature.
+**Pro** and up. Webhooks are included from Pro.
 :::
 
 ![Webhook steps run inside workflows](/img/workflows-and-actions/workflows-page.png)

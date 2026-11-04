@@ -9,7 +9,7 @@ description: Sell physical, digital, and service products with a full catalog, o
 Aglyn commerce sells from **your own Stripe account**: buyers pay you
 directly, and Aglyn collects a per-sale platform fee set by your plan (see
 [Platform fees](../../workspace-and-billing/billing-and-plans/overview.md#platform-fees) — the fee
-falls as you upgrade, to 0% on physical goods from Pro and on everything from Advanced).
+is lower on Pro than on Starter, and Custom carries none).
 
 ```mermaid
 sequenceDiagram
@@ -26,9 +26,8 @@ sequenceDiagram
 
 :::info Plan availability
 **Paid**. Starter sells up to 100 products (2% physical / 5% digital fee).
-Higher plans raise the product limit and lower the fee: physical goods carry no
-platform fee from Pro up, while digital and service products carry 3% on Pro, 2% on
-Business, 1% on Scale and 0% from Advanced up.
+Pro has no product limit and a lower fee: 0.5% on physical goods and 3% on digital
+and service products. Custom carries no platform fee.
 :::
 
 ![The products hub](/img/commerce/products-page.png)
@@ -189,7 +188,7 @@ discrepancy is legible rather than silently rounded away.
 ## Gift cards & store credit {#gift-cards}
 
 **Gift cards** lists every card your store has issued, what is left on each
-one, and what that adds up to. Business plan and above.
+one, and what that adds up to. Pro plan and up.
 
 Cards arrive two ways:
 

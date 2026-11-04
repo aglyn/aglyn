@@ -22,7 +22,7 @@ catalog to a marketplace, sync a CRM's contacts and deals in either direction, l
 calls from a dialer, back up records, or build an integration.
 
 :::info Plan availability
-The REST API is included on **Business** and every plan above it. Create keys from
+The REST API is included on **Pro** and **Custom**. Create keys from
 **Organization → Settings → API keys**.
 :::
 

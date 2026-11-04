@@ -1,7 +1,7 @@
 ---
 sidebar_position: 3
 title: Support commitments
-description: The first-response commitment attached to each plan, why Enterprise is quoted in clock hours, and where ticket support starts.
+description: The first-response commitment attached to each plan, why the Custom plan is quoted in clock hours, and where ticket support starts.
 ---
 
 # Support commitments
@@ -18,18 +18,15 @@ Support tickets page shows you, and what the staff queue is ordered by.
 | Free | Community | Forum only | — |
 | Starter | Community | Forum only | — |
 | Pro | Standard | 7–14 business days | — |
-| Business | Business | 4–6 business days | — |
-| Scale | Business | 4–6 business days | — |
-| Advanced | Business | 4–6 business days | — |
-| Agency | Priority | 1–3 business days | — |
-| **Enterprise** | Dedicated | **24–48 hours** | Yes |
+| **Custom** | Dedicated | **24–48 hours** | Yes |
 
-## Why Enterprise is in hours, not business days
+Custom is the plan once labeled Enterprise.
+
+## Why Custom is in hours, not business days
 
 It is the point of the tier. **24–48 clock hours runs through a weekend**;
-"1–3 business days" does not. Read as business hours the Enterprise window
-would be 3–6 business days, which would make it *slower* than Agency above and
-invert the ladder.
+a window counted in business days does not. Read as business hours, the Custom
+window would stretch to 3–6 business days.
 
 There is a test asserting the ladder stays monotonic, so this cannot quietly
 regress into the wrong order.

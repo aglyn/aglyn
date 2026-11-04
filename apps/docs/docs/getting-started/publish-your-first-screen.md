@@ -51,7 +51,7 @@ Design it first, publish when it's ready.
 Every page is created with one working version, and **Save** updates that version on
 every plan — the core loop above needs nothing extra. Keeping *more* than one — named
 snapshots you can reopen, publish to roll back to, or schedule — requires **Pro or
-above**, and scheduling a version requires **Business or above**. On Free and Starter the
+above** too, as does scheduling a version. On Free and Starter the
 Versions dialog still shows **New version**, disabled, with a note naming the plan that
 includes it and an **Upgrade** button to the plans on Billing. See
 [Versions & scheduled publishing](../building-sites/screens-and-layouts/versions-and-publishing.md).
