@@ -498,7 +498,9 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     const run = check()
     assert.equal(run.status, 1)
     assert.match(run.stderr, /plan columns: CODE-vs-FRAME disagreements/)
-    assert.match(run.stderr, /price · Pro \[desktop\]: code=\$56 {2}frame=\$99/)
+    // Pro's v4 price (AGL-4126); the frame's stale $56 is declared, and a
+    // THIRD value is not that declaration.
+    assert.match(run.stderr, /price · Pro \[desktop\]: code=\$69 {2}frame=\$99/)
   })
 
   it('fails when a SCALE STRIP spec token disagrees with the code', () => {
@@ -561,7 +563,9 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     const run = check()
     assert.equal(run.status, 1)
     assert.match(run.stderr, /transaction fees: CODE-vs-FRAME disagreements/)
-    assert.match(run.stderr, /Physical transaction fee · Pro \[mobile\]: code=0% {2}frame=7%/)
+    // Pro's v4 physical fee (AGL-4126); the frame's stale 0% is declared,
+    // and a THIRD value is not that declaration.
+    assert.match(run.stderr, /Physical transaction fee · Pro \[mobile\]: code=0\.5% {2}frame=7%/)
   })
 
   it('reads the MOBILE add-on shape, which is not a plan row at all', () => {

@@ -95,6 +95,10 @@ export const WATCHED = Object.freeze([
       'SITE_CARE_PROJECT_REDESIGN_FROM_USD',
       'SITE_CARE_PROJECT_BRAND_KIT_FROM_USD',
       'SITE_CARE_PROJECT_SPLIT_ABOVE_USD',
+      // The run overage per 1,000 (pricing v4, AGL-4126), which every
+      // `PLAN_PRICING.*.extraRunsUsdPer1k` that sells runs reads, optional
+      // for the same reason.
+      'RUN_OVERAGE_USD_PER_1K',
     ]),
     // The Aglyn AI tiers (AGL-3965): a record keyed by tier rather than by
     // plan. Optional only until the base ref carries it, like the scalars.

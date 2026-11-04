@@ -28,9 +28,9 @@
       {
         "plan": "pro",
         "label": "Pro",
-        "monthlyUsd": 56,
-        "annualMonthlyUsd": 39,
-        "priceLabel": "$56"
+        "monthlyUsd": 69,
+        "annualMonthlyUsd": 49,
+        "priceLabel": "$69"
       },
       {
         "plan": "business",
@@ -62,7 +62,7 @@
       },
       {
         "plan": "enterprise",
-        "label": "Enterprise",
+        "label": "Custom",
         "monthlyUsd": 0,
         "annualMonthlyUsd": 0,
         "priceLabel": "Custom"
@@ -92,7 +92,7 @@
             "values": {
               "free": "5",
               "starter": "25",
-              "pro": "100",
+              "pro": "Unlimited",
               "business": "Unlimited",
               "scale": "Unlimited",
               "advanced": "Unlimited",
@@ -190,7 +190,7 @@
             "values": {
               "free": "—",
               "starter": "—",
-              "pro": "—",
+              "pro": "✓",
               "business": "✓",
               "scale": "✓",
               "advanced": "✓",
@@ -218,7 +218,7 @@
             "values": {
               "free": "—",
               "starter": "—",
-              "pro": "—",
+              "pro": "✓",
               "business": "✓",
               "scale": "✓",
               "advanced": "✓",
@@ -232,7 +232,7 @@
             "values": {
               "free": "—",
               "starter": "—",
-              "pro": "—",
+              "pro": "✓",
               "business": "✓",
               "scale": "✓",
               "advanced": "✓",
@@ -251,7 +251,7 @@
             "values": {
               "free": "1",
               "starter": "2 · max 5",
-              "pro": "3 · max 20",
+              "pro": "3 · unlimited",
               "business": "5 · max 100",
               "scale": "5 · max 150",
               "advanced": "10 · max 250",
@@ -265,7 +265,7 @@
             "values": {
               "free": "1",
               "starter": "2 · max 10",
-              "pro": "3 · max 25",
+              "pro": "3 · unlimited",
               "business": "5 · max 100",
               "scale": "5 · max 150",
               "advanced": "5 · max 250",
@@ -326,7 +326,7 @@
             "values": {
               "free": "—",
               "starter": "2 · max 10",
-              "pro": "5 · max 50",
+              "pro": "5 · unlimited",
               "business": "10 · max 250",
               "scale": "15 · max 500",
               "advanced": "25 · max 1,000",
@@ -340,7 +340,7 @@
             "values": {
               "free": "—",
               "starter": "1,000",
-              "pro": "10,000",
+              "pro": "Unlimited",
               "business": "100,000",
               "scale": "500,000",
               "advanced": "1,000,000",
@@ -354,7 +354,7 @@
             "values": {
               "free": "3",
               "starter": "25",
-              "pro": "100",
+              "pro": "Unlimited",
               "business": "1,000",
               "scale": "5,000",
               "advanced": "Unlimited",
@@ -368,7 +368,7 @@
             "values": {
               "free": "1",
               "starter": "10",
-              "pro": "50",
+              "pro": "Unlimited",
               "business": "250",
               "scale": "500",
               "advanced": "1,000",
@@ -382,7 +382,7 @@
             "values": {
               "free": "—",
               "starter": "3",
-              "pro": "25",
+              "pro": "Unlimited",
               "business": "100",
               "scale": "250",
               "advanced": "500",
@@ -555,7 +555,7 @@
             "values": {
               "free": "—",
               "starter": "100",
-              "pro": "2,500",
+              "pro": "Unlimited",
               "business": "10,000",
               "scale": "25,000",
               "advanced": "Unlimited",
@@ -597,7 +597,7 @@
             "values": {
               "free": "—",
               "starter": "2%",
-              "pro": "0%",
+              "pro": "0.5%",
               "business": "0%",
               "scale": "0%",
               "advanced": "0%",
@@ -611,7 +611,7 @@
             "values": {
               "free": "—",
               "starter": "—",
-              "pro": "—",
+              "pro": "✓",
               "business": "✓",
               "scale": "✓",
               "advanced": "✓",
@@ -625,7 +625,7 @@
             "values": {
               "free": "—",
               "starter": "—",
-              "pro": "—",
+              "pro": "✓",
               "business": "✓",
               "scale": "✓",
               "advanced": "✓",
@@ -667,7 +667,7 @@
             "values": {
               "free": "—",
               "starter": "—",
-              "pro": "—",
+              "pro": "✓",
               "business": "✓",
               "scale": "✓",
               "advanced": "✓",
@@ -817,7 +817,7 @@
             "values": {
               "free": "—",
               "starter": "—",
-              "pro": "—",
+              "pro": "1.5k / mo",
               "business": "1.5k / mo",
               "scale": "5k / mo",
               "advanced": "17k / mo",
@@ -831,7 +831,7 @@
             "values": {
               "free": "—",
               "starter": "—",
-              "pro": "—",
+              "pro": "✓",
               "business": "✓",
               "scale": "✓",
               "advanced": "✓",
@@ -951,7 +951,7 @@
     ],
     "enterprise": {
       "plan": "enterprise",
-      "label": "Enterprise",
+      "label": "Custom",
       "priceLabel": "Custom",
       "annualLabel": "Quoted per agreement",
       "blurb": "For large organizations with bespoke requirements — volume pricing available.",
@@ -996,7 +996,7 @@
       },
       {
         "plan": "enterprise",
-        "label": "Enterprise"
+        "label": "Custom"
       }
     ],
     "rowLabel": "Add-on capacity",
@@ -1072,7 +1072,7 @@
         "rate": "extraApiRequestsUsdPer1k",
         "values": {
           "starter": "—",
-          "pro": "—",
+          "pro": "$0.50",
           "business": "$0.50",
           "scale": "$0.35",
           "advanced": "$0.25",
@@ -1116,6 +1116,19 @@
           "scale": "$2.50",
           "advanced": "$2.25",
           "agency": "$2",
+          "enterprise": "Custom"
+        }
+      },
+      {
+        "label": "Workflow and action runs, per 1,000 over the included bands",
+        "rate": "extraRunsUsdPer1k",
+        "values": {
+          "starter": "—",
+          "pro": "$0.02",
+          "business": "$0.02",
+          "scale": "$0.02",
+          "advanced": "$0.02",
+          "agency": "$0.02",
           "enterprise": "Custom"
         }
       }
@@ -1171,7 +1184,7 @@
         "plan": "pro",
         "label": "Pro",
         "digital": "3%",
-        "physical": "0%"
+        "physical": "0.5%"
       },
       {
         "plan": "business",
@@ -1238,7 +1251,7 @@
         },
         {
           "plan": "enterprise",
-          "label": "Enterprise",
+          "label": "Custom",
           "takeRate": "20%"
         }
       ],

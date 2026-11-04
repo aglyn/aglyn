@@ -46,20 +46,29 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDatasetMonthlyUsd: null,
   },
   pro: {
-    basePriceMonthlyUsd: 56,
-    basePriceAnnualMonthlyUsd: 39,
+    basePriceMonthlyUsd: 69,
+    basePriceAnnualMonthlyUsd: 49,
     extraHostMonthlyUsd: 8,
     extraSeatMonthlyUsd: 4,
     extraCollaboratorMonthlyUsd: 2,
     extraDatasetMonthlyUsd: 2,
   },
+  business: {
+    basePriceMonthlyUsd: 139,
+    basePriceAnnualMonthlyUsd: 99,
+    extraHostMonthlyUsd: 20,
+    extraSeatMonthlyUsd: 3,
+    extraCollaboratorMonthlyUsd: 1,
+    extraDatasetMonthlyUsd: 1,
+  },
 }
 `
 
+// Pro's base price is minted under `v4` since pricing v4 (AGL-4126).
 const stripePayload = (over = {}) => ({
   data: [
-    { lookup_key: 'aglyn_pro_v2', unit_amount: 5600, active: true, recurring: { interval: 'month' } },
-    { lookup_key: 'aglyn_pro_v2_yearly', unit_amount: 46800, active: true, recurring: { interval: 'year' } },
+    { lookup_key: 'aglyn_pro_v4', unit_amount: 6900, active: true, recurring: { interval: 'month' } },
+    { lookup_key: 'aglyn_pro_v4_yearly', unit_amount: 58800, active: true, recurring: { interval: 'year' } },
     { lookup_key: 'aglyn_pro_extra_host', unit_amount: 800, active: true, recurring: { interval: 'month' } },
     ...(over.extra ?? []),
   ].map((p) => (over.mutate ? over.mutate(p) : p)),
@@ -68,7 +77,7 @@ const stripePayload = (over = {}) => ({
 test('parsePlanRecord', async (t) => {
   await t.test('reads numbers and nulls off the literal', () => {
     const parsed = parsePlanRecord(TS, 'PLAN_PRICING')
-    assert.equal(parsed.pro.basePriceMonthlyUsd, 56)
+    assert.equal(parsed.pro.basePriceMonthlyUsd, 69)
     assert.equal(parsed.free.extraHostMonthlyUsd, null)
   })
 
@@ -85,35 +94,54 @@ test('comparePlansToStripe', async (t) => {
   await t.test('agrees when Stripe matches, including yearly = monthly x 12', () => {
     const v = comparePlansToStripe(code, indexStripePrices(stripePayload()))
     assert.equal(v.filter((x) => x.status === 'differs').length, 0)
-    assert.ok(v.some((x) => x.key === 'aglyn_pro_v2_yearly' && x.status === 'in-sync'))
+    assert.ok(v.some((x) => x.key === 'aglyn_pro_v4_yearly' && x.status === 'in-sync'))
   })
 
   await t.test('CATCHES a changed amount', () => {
     const payload = stripePayload({
-      mutate: (p) => (p.lookup_key === 'aglyn_pro_v2' ? { ...p, unit_amount: 5900 } : p),
+      mutate: (p) => (p.lookup_key === 'aglyn_pro_v4' ? { ...p, unit_amount: 5900 } : p),
     })
     const v = comparePlansToStripe(code, indexStripePrices(payload))
-    const hit = v.find((x) => x.key === 'aglyn_pro_v2')
+    const hit = v.find((x) => x.key === 'aglyn_pro_v4')
     assert.equal(hit.status, 'differs')
-    assert.match(hit.detail, /code \$56 vs Stripe \$59/)
+    assert.match(hit.detail, /code \$69 vs Stripe \$59/)
   })
 
   await t.test('CATCHES an annual price updated without its monthly twin', () => {
-    // $39 x 12 = $468. A "10% rise" applied only to the annual SKU is the
+    // $49 x 12 = $588. A "10% rise" applied only to the annual SKU is the
     // drift a human comparing two tables does not see.
     const payload = stripePayload({
-      mutate: (p) => (p.lookup_key === 'aglyn_pro_v2_yearly' ? { ...p, unit_amount: 51480 } : p),
+      mutate: (p) => (p.lookup_key === 'aglyn_pro_v4_yearly' ? { ...p, unit_amount: 64680 } : p),
     })
     const v = comparePlansToStripe(code, indexStripePrices(payload))
-    assert.equal(v.find((x) => x.key === 'aglyn_pro_v2_yearly').status, 'differs')
+    assert.equal(v.find((x) => x.key === 'aglyn_pro_v4_yearly').status, 'differs')
+  })
+
+  await t.test('reads the v4 key, never the v2 history, for Pro (AGL-4126)', () => {
+    // The v2 prices stay in Stripe as history; a v2 at the old $56 beside
+    // the v4 at $69 is not drift, and the v2 key is not compared at all.
+    const payload = stripePayload({
+      extra: [{ lookup_key: 'aglyn_pro_v2', unit_amount: 5600, active: true, recurring: { interval: 'month' } }],
+    })
+    const v = comparePlansToStripe(code, indexStripePrices(payload))
+    assert.equal(v.some((x) => x.key === 'aglyn_pro_v2'), false)
+    assert.equal(v.filter((x) => x.status === 'differs').length, 0)
+  })
+
+  await t.test('does not hold a retired plan’s prices to the code (pricing v4)', () => {
+    // Business has a code row and no live price at all — archived is the end
+    // state, so it is stated as retired rather than reported unreadable.
+    const v = comparePlansToStripe(code, indexStripePrices(stripePayload()))
+    assert.ok(v.some((x) => x.key === 'retired:business' && x.status === 'in-sync'))
+    assert.equal(v.some((x) => /^aglyn_business_/.test(x.key)), false)
   })
 
   await t.test('CATCHES a deactivated price whose amount still agrees', () => {
     const payload = stripePayload({
-      mutate: (p) => (p.lookup_key === 'aglyn_pro_v2' ? { ...p, active: false } : p),
+      mutate: (p) => (p.lookup_key === 'aglyn_pro_v4' ? { ...p, active: false } : p),
     })
     const v = comparePlansToStripe(code, indexStripePrices(payload))
-    const hit = v.find((x) => x.key === 'aglyn_pro_v2')
+    const hit = v.find((x) => x.key === 'aglyn_pro_v4')
     assert.equal(hit.status, 'differs')
     assert.match(hit.detail, /INACTIVE/)
   })
@@ -132,7 +160,7 @@ test('comparePlansToStripe', async (t) => {
 
   await t.test('a MISSING price for a purchasable plan is unreadable, not in-sync', () => {
     const v = comparePlansToStripe(code, indexStripePrices({ data: [] }))
-    assert.ok(v.some((x) => x.key === 'aglyn_pro_v2' && x.status === 'unreadable'))
+    assert.ok(v.some((x) => x.key === 'aglyn_pro_v4' && x.status === 'unreadable'))
   })
 
   await t.test('a missing price for free/enterprise is EXPECTED, not a finding', () => {

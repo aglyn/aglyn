@@ -553,6 +553,15 @@ const USAGE_ROWS: UsageRow[] = [
     label: 'AI credits, per 1,000 over the included band',
     rate: 'extraAssistCreditsUsdPer1k',
   },
+  {
+    /*
+     * Runs past the bands (pricing v4, 2026-11-03, AGL-4126): `perRun` at cost
+     * + 30% kept after card fees, rounded up to the cent — $0.02 on every plan
+     * whose run bands bill, and a dash where they are walls (Free, Starter).
+     */
+    label: 'Workflow and action runs, per 1,000 over the included bands',
+    rate: 'extraRunsUsdPer1k',
+  },
 ]
 
 /** The rate as the page and every breakpoint print it. */
@@ -1235,7 +1244,35 @@ for (const [label, [why]] of injected('--declare-extra-row', 2)) {
  * matching and is reported as resolved, so it cannot outlive its reason. An
  * exemption that outlives its reason is just an untested cell.
  */
-const FRAME_STALE_CELLS: Record<string, { frame: string; why: string }> = {}
+/**
+ * Why every pricing v4 cell below is stale (2026-11-03, AGL-4126): the code
+ * moved first, and the Figma frames and `/pricing` follow in the order
+ * `docs/PRICING_SURFACES.md` gives. Each resolves, and is reported for
+ * deletion, the moment the re-extracted frames carry the v4 figure.
+ */
+const V4_FRAME_PENDING =
+  'pricing v4 (AGL-4126): Pro took every Business feature and lost its count walls; the Figma frames predate it and move with the page lane'
+
+const FRAME_STALE_CELLS: Record<string, { frame: string; why: string }> = {
+  'Pages per site · Pro': { frame: '100', why: V4_FRAME_PENDING },
+  'Scheduled publishing · Pro': { frame: NO, why: V4_FRAME_PENDING },
+  'Multilingual sites · Pro': { frame: NO, why: V4_FRAME_PENDING },
+  'A/B testing · Pro': { frame: NO, why: V4_FRAME_PENDING },
+  'Team seats · Pro': { frame: '3 · max 20', why: V4_FRAME_PENDING },
+  'Site collaborators · Pro': { frame: '3 · max 25', why: V4_FRAME_PENDING },
+  'Datasets · Pro': { frame: '5 · max 50', why: V4_FRAME_PENDING },
+  'Records per dataset · Pro': { frame: '10,000', why: V4_FRAME_PENDING },
+  'Variables per site · Pro': { frame: '100', why: V4_FRAME_PENDING },
+  'Functions per site · Pro': { frame: '50', why: V4_FRAME_PENDING },
+  'Workflows per site · Pro': { frame: '25', why: V4_FRAME_PENDING },
+  'Products per site · Pro': { frame: '2,500', why: V4_FRAME_PENDING },
+  'Physical transaction fee · Pro': { frame: '0%', why: V4_FRAME_PENDING },
+  'Subscriptions & memberships · Pro': { frame: NO, why: V4_FRAME_PENDING },
+  'Gift cards · Pro': { frame: NO, why: V4_FRAME_PENDING },
+  'Content gating · Pro': { frame: NO, why: V4_FRAME_PENDING },
+  'API access · Pro': { frame: NO, why: V4_FRAME_PENDING },
+  'Webhooks · Pro': { frame: NO, why: V4_FRAME_PENDING },
+}
 
 /*
  * `--declare-stale-cell='<row> · <plan>|<frame value>'`, repeatable.
@@ -1585,9 +1622,21 @@ const reconciler = (
   }
 }
 
-const planByLabel = new Map<string, Plan>(
-  PLANS.map((p) => [PLAN_LABELS[p], p] as const),
-)
+/**
+ * Plan names the Figma frames still print that the code no longer does
+ * (pricing v4, 2026-11-03, AGL-4126): the top plan reads "Custom" in code and
+ * "Enterprise" on the frames until the page lane republishes them. Read as an
+ * alias so the frame's columns and cards stay attributable to their plan,
+ * and reported resolved once no breakpoint prints the old name.
+ */
+const FRAME_LEGACY_PLAN_LABELS: Record<string, Plan> = {
+  Enterprise: 'enterprise',
+}
+
+const planByLabel = new Map<string, Plan>([
+  ...PLANS.map((p) => [PLAN_LABELS[p], p] as const),
+  ...Object.entries(FRAME_LEGACY_PLAN_LABELS),
+])
 
 /**
  * Which plan a mobile export is showing. The mobile compare grid and the
@@ -1613,7 +1662,16 @@ const mobileSelectedPlan = (v: FrameView): Plan | null => {
  * strip carries `priceLabel`s, neither of which is a feature spec, so they
  * cannot be compared by the row loop above and have to be compared here.
  *=========================================*/
-const COLUMNS_STALE: Record<string, Divergence> = {}
+const COLUMNS_STALE: Record<string, Divergence> = {
+  'price · Pro': {
+    frame: '$56',
+    why: 'pricing v4 (AGL-4126): Pro is $69 a month, $49 billed yearly; the Figma frames predate it and move with the page lane',
+  },
+  'plan name · Custom': {
+    frame: 'Enterprise',
+    why: 'pricing v4 (AGL-4126): the top plan is labelled Custom (its code id stays `enterprise`); the Figma frames predate it and move with the page lane',
+  },
+}
 
 for (const [key, [frame]] of injected('--declare-stale-column', 2)) {
   COLUMNS_STALE[key] = { frame, why: INJECTED_WHY }
@@ -1707,8 +1765,12 @@ for (const v of frames) {
   /** label → the three records the frame draws for that card, in order. */
   const cards = new Map<string, { price: string; blurb: string; specs: string; cta: string }>()
   strip.forEach((rec, i) => {
-    if (rec.cells.length !== 2 || !tierLabels.has(rec.cells[0])) return
-    cards.set(rec.cells[0], {
+    // A card the frame still names by a plan's old label is that plan's card
+    // (`FRAME_LEGACY_PLAN_LABELS`, pricing v4).
+    const legacy = FRAME_LEGACY_PLAN_LABELS[rec.cells[0]]
+    const name = legacy ? PLAN_LABELS[legacy] : rec.cells[0]
+    if (rec.cells.length !== 2 || !tierLabels.has(name)) return
+    cards.set(name, {
       price: rec.cells[1],
       blurb: strip[i + 1]?.cells[0] ?? '',
       specs: strip[i + 1]?.cells[1] ?? '',
@@ -1761,7 +1823,12 @@ tierStrip.finish()
  * bound achieves nothing. The pair is only ever right together, and this is
  * what reads the half of it that lives on the page.
  *=========================================*/
-const USAGE_STALE: Record<string, Divergence> = {}
+const USAGE_STALE: Record<string, Divergence> = {
+  'API requests, per 1,000 over limit · Pro': {
+    frame: NO,
+    why: 'pricing v4 (AGL-4126): the API moved into Pro with Business’s 1,500-request band and $0.50 rate; the Figma frames predate it and move with the page lane',
+  },
+}
 
 /**
  * The rate the product BILLS and the page has never stated.
@@ -1785,6 +1852,8 @@ const USAGE_STALE: Record<string, Divergence> = {}
 const USAGE_EXPECTED_ABSENT: Record<string, string> = {
   'Email sends, per 1,000 over the included band':
     'the page states an email ALLOWANCE ("Campaign emails / mo" in the compare grid) and no overage rate, while `priceEmailSendOverage` bills `extraEmailSendsUsdPer1k` on every paid tier — and the cap refuses campaigns only, so transactional mail carries an org past its band with nothing able to stop it. Resolves when `/pricing` carries the row',
+  'Workflow and action runs, per 1,000 over the included bands':
+    'pricing v4 (AGL-4126) gives runs an overage rate, `extraRunsUsdPer1k`, which `report-usage` bills past the bands on Pro; the Figma frames predate it. Resolves when the page lane puts the row on `/pricing` and re-extracts the frames',
 }
 
 const addOnRates = reconciler(
@@ -1994,6 +2063,10 @@ const FEES_STALE: Record<string, Divergence> = {
   'Physical transaction fee · Free': {
     frame: NO,
     why: 'the same commerce gate as the digital row above',
+  },
+  'Physical transaction fee · Pro': {
+    frame: '0%',
+    why: 'pricing v4 (AGL-4126, decision 9): Pro takes 0.5% on physical sales, for the Stripe Connect account and payout fees the platform pays; the Figma frames predate it and move with the page lane',
   },
 }
 

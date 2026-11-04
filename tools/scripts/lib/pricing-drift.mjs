@@ -52,21 +52,36 @@
 /** Plans that are deliberately not purchasable through Stripe. */
 export const NON_PURCHASABLE_PLANS = Object.freeze(['free', 'enterprise'])
 
-/** Every self-serve plan, in ladder order. */
-export const SELF_SERVE_PLANS = Object.freeze([
-  'starter',
-  'pro',
-  'business',
-  'scale',
-  'advanced',
-  'agency',
-])
+/** Every self-serve plan sold through Stripe, in ladder order (pricing v4). */
+export const SELF_SERVE_PLANS = Object.freeze(['starter', 'pro'])
+
+/**
+ * The plans pricing v4 retired (2026-11-03, AGL-4126). Their rows stay in
+ * `PLAN_PRICING` for reading and are parsed like any other, but they are
+ * never sold again, so their Stripe prices are not held to the code: the end
+ * state is archived, and an archived price is not drift.
+ */
+export const RETIRED_PLANS = Object.freeze(['business', 'scale', 'advanced', 'agency'])
 
 export const ALL_PLANS = Object.freeze([
   'free',
   ...SELF_SERVE_PLANS,
+  ...RETIRED_PLANS,
   'enterprise',
 ])
+
+/**
+ * The lookup-key generation each plan's BASE price is minted under. A price
+ * change mints new Stripe prices under a new key — prices are immutable — and
+ * the old key stays in Stripe as history, never re-minted: Pro is `v4` since
+ * pricing v4 (`aglyn_pro_v4`, `aglyn_pro_v4_yearly`); every other plan is
+ * still on `v2`.
+ */
+export const BASE_PRICE_KEY_VERSION = Object.freeze({ pro: 'v4' })
+
+/** `aglyn_{plan}_{version}` — the base price's lookup key. */
+export const basePriceLookupKey = (plan) =>
+  `aglyn_${plan}_${BASE_PRICE_KEY_VERSION[plan] ?? 'v2'}`
 
 /**
  * Per-plan money fields in `PLAN_PRICING`, mapped to the Stripe lookup key
@@ -78,8 +93,8 @@ export const ALL_PLANS = Object.freeze([
  * twin, which is the drift a human reading two tables will not see.
  */
 export const PRICE_FIELD_MAP = Object.freeze([
-  { field: 'basePriceMonthlyUsd', key: (p) => `aglyn_${p}_v2`, mult: 1 },
-  { field: 'basePriceAnnualMonthlyUsd', key: (p) => `aglyn_${p}_v2_yearly`, mult: 12 },
+  { field: 'basePriceMonthlyUsd', key: (p) => basePriceLookupKey(p), mult: 1 },
+  { field: 'basePriceAnnualMonthlyUsd', key: (p) => `${basePriceLookupKey(p)}_yearly`, mult: 12 },
   { field: 'extraHostMonthlyUsd', key: (p) => `aglyn_${p}_extra_host`, mult: 1 },
   { field: 'extraHostMonthlyUsd', key: (p) => `aglyn_${p}_extra_host_yearly`, mult: 12 },
   { field: 'extraSeatMonthlyUsd', key: (p) => `aglyn_${p}_extra_seat`, mult: 1 },
@@ -270,6 +285,16 @@ export function comparePlansToStripe(planPricing, stripe) {
   for (const plan of ALL_PLANS) {
     const fields = planPricing[plan]
     if (!fields) continue
+    // A retired plan (pricing v4) is sold by nothing, so its prices are not
+    // held to the code: stated once, so the report says why they are absent.
+    if (RETIRED_PLANS.includes(plan)) {
+      verdicts.push({
+        status: 'in-sync',
+        key: `retired:${plan}`,
+        detail: 'retired in pricing v4 — never sold again, so its Stripe prices are not compared',
+      })
+      continue
+    }
     for (const { field, key, mult, unminted } of PRICE_FIELD_MAP) {
       const lookupKey = key(plan)
       const codeValue = fields[field]
