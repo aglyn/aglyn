@@ -27,8 +27,12 @@
  * p90.
  */
 
+import { DEFAULT_SITE_THEME } from '@aglyn/aglyn/app-utils/default-site'
 import { readThemeOverride, resolveSiteTheme } from '@aglyn/aglyn/app-utils/site-theme'
 import type { AiJobItemLedger } from './ai-jobs.types'
+import type { AiSiteImportFinish, AiSiteImportWords } from './ai-site-import'
+import { SITE_IMPORT_GROUND_DELTA, siteImportFidelityThemeOf, siteImportOklabDelta, type SiteImportFidelityTheme } from './ai-site-import-fidelity'
+import { aiSiteTheme, type AiSiteStyle } from './ai-site-look'
 
 type Dict = Record<string, any>
 
@@ -48,6 +52,8 @@ export interface SiteImportLookReport {
   secondary: string | null
   tertiary: string | null
   fonts: string[]
+  /** What Keep my site pins of the source's look (AGL-4152), source beside theme; absent where the import read no look of its source. */
+  pins?: SiteImportLookPins
 }
 
 const named = (value: unknown): string | null => (typeof value === 'string' && value.trim() ? value : null)
@@ -57,6 +63,7 @@ export function siteImportLookReport(host: Dict, state: Dict | null | undefined)
   const theme = (resolveSiteTheme(host) ?? {}) as Dict
   const light = (theme['colorSchemes']?.['light'] ?? {}) as Dict
   const style = (host['siteStyle'] ?? null) as Dict | null
+  const pins = siteImportLookPins(host, state)
   return {
     base: named(style?.['base']),
     override: !!readThemeOverride(host),
@@ -67,10 +74,11 @@ export function siteImportLookReport(host: Dict, state: Dict | null | undefined)
     secondary: named(light['secondary']?.['main']),
     tertiary: named(light['tertiary']?.['main']),
     fonts: ((theme['fonts'] ?? []) as Dict[]).map((font) => String(font['family'] ?? '')).filter(Boolean),
+    ...(pins ? { pins } : {}),
   }
 }
 
-/** The look line of the report: what the site wears, and whether it is this job's. */
+/** The look line of the report: what the site wears, and whether it is this job's; and what Keep my site pins, source → theme, where the import read its source's look (AGL-4152). */
 export function siteImportLookLine(host: Dict, state: Dict | null | undefined, jobId: string): string {
   const look = siteImportLookReport(host, state)
   const colors = (['primary', 'secondary', 'tertiary'] as const).map((key) => `${key} ${look[key] ?? 'not set'}`).join(', ')
@@ -78,7 +86,114 @@ export function siteImportLookLine(host: Dict, state: Dict | null | undefined, j
   const fonts = look.fonts.join(', ') || 'not set'
   const wearing = look.override ? `an override over the ${look.base ?? 'site'} base` : `the ${look.base ?? 'site'} base, no override`
   const whose = look.jobId ? (look.jobId === jobId ? 'saved by this job' : `saved by job ${look.jobId}, not this one`) : 'saved by no job'
-  return `${look.pass ?? 'not run'}; ${colors}${brand}; ${fonts}; ${wearing}; ${whose}`
+  return `${look.pass ?? 'not run'}; ${colors}${brand}; ${fonts}; ${wearing}; ${whose}${look.pins ? `; ${siteImportLookPinsLine(look.pins)}` : ''}`
+}
+
+/*------------------------------------------
+ * What Keep my site pins (AGL-4152)
+ *-----------------------------------------*/
+
+/** One pin of the look: the source's, the theme's, and how far apart (OKLab ΔE, for a color). */
+export interface SiteImportLookPin {
+  source: string | null
+  theme: string | null
+  delta: number | null
+}
+
+/** The look's pins, the source's beside the theme's: its grounds, its filled buttons' fill, label and case. */
+export interface SiteImportLookPins {
+  ground: SiteImportLookPin
+  darkGround: SiteImportLookPin
+  buttonFill: SiteImportLookPin
+  buttonText: SiteImportLookPin
+  buttonCase: SiteImportLookPin
+  /** Where the theme's side was read: the site's theme as stored, or computed from its site style. */
+  from: SiteImportFidelityTheme['from'] | null
+}
+
+/** Whether a stored site style holds what its colors are drawn from. */
+function isStyle(value: unknown): value is AiSiteStyle {
+  const style = value as Partial<AiSiteStyle> | null
+  return !!style && typeof style === 'object' && typeof style.seed === 'number' && typeof style.ground === 'string' && typeof style.chroma === 'string' && typeof style.hue === 'number'
+}
+
+/**
+ * The theme a built site's pages are drawn in, for the fidelity (AGL-4152):
+ * the theme it stores, its override resolved; else, where it stores none,
+ * one computed from its site style (`siteStyle`) over the starter theme, and
+ * marked so. `null` for a site with neither.
+ */
+export function siteImportFidelityThemeFor(host: Dict): SiteImportFidelityTheme | null {
+  const stored = siteImportFidelityThemeOf(resolveSiteTheme(host), 'theme')
+  if (stored) return stored
+  const style = host['siteStyle']
+  return isStyle(style) ? siteImportFidelityThemeOf(aiSiteTheme(style, DEFAULT_SITE_THEME), 'style') : null
+}
+
+const hexOrNull = (value: unknown): string | null => (typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : null)
+
+/** A color pin: the two colors and how far apart. */
+function colorPin(source: unknown, theme: string | null): SiteImportLookPin {
+  const from = hexOrNull(source)
+  const to = hexOrNull(theme)
+  return { source: from, theme: to, delta: from && to ? Math.round(siteImportOklabDelta(from, to) * 1000) / 1000 : null }
+}
+
+/**
+ * What Keep my site pins of the source's look (AGL-4152), the source's as
+ * the reader read it (`home.look`) beside the theme's: the page ground, the
+ * dark ground, a filled button's fill and label, and its case. `null` where
+ * the import read no look of its source.
+ */
+export function siteImportLookPins(host: Dict, state: Dict | null | undefined): SiteImportLookPins | null {
+  const facts = state?.['home']?.['look'] as Dict | null | undefined
+  if (!facts || typeof facts !== 'object') return null
+  const theme = siteImportFidelityThemeFor(host)
+  const wanted = facts['buttonCase'] === 'upper' || facts['buttonCase'] === 'none' ? (facts['buttonCase'] as string) : null
+  const drawn = theme?.button.case ?? null
+  return {
+    ground: colorPin(facts['background'], theme?.light.ground ?? null),
+    darkGround: colorPin(facts['darkBackground'], theme?.dark?.ground ?? null),
+    buttonFill: colorPin(facts['buttonFill'], theme ? (theme.button.fill ?? theme.light.brand) : null),
+    buttonText: colorPin(facts['buttonText'], theme ? (theme.button.label ?? theme.light.onBrand) : null),
+    buttonCase: { source: wanted, theme: drawn, delta: null },
+    from: theme?.from ?? null,
+  }
+}
+
+/** The pins as the look line prints them: each source → theme, a color with its ΔE and whether it moved past 0.05. */
+export function siteImportLookPinsLine(pins: SiteImportLookPins): string {
+  const one = (name: string, pin: SiteImportLookPin) => {
+    const said = `${name} ${pin.source ?? 'not read'} → ${pin.theme ?? 'not set'}`
+    if (pin.delta !== null) return `${said} (ΔE ${pin.delta.toFixed(3)}, ${pin.delta <= SITE_IMPORT_GROUND_DELTA ? 'kept' : 'moved'})`
+    return pin.source && pin.theme ? `${said} (${pin.source === pin.theme ? 'kept' : 'moved'})` : said
+  }
+  const where = pins.from === 'style' ? ', the theme computed from the site style' : pins.from === null ? ', no theme to read' : ''
+  return `pins ${[one('ground', pins.ground), one('darkGround', pins.darkGround), one('buttonFill', pins.buttonFill), one('buttonText', pins.buttonText), one('buttonCase', pins.buttonCase)].join(', ')}${where}`
+}
+
+/**
+ * How a page of an import was finished (AGL-4152), as the report scores it:
+ * what was asked for on the command line, else what its wave was stamped
+ * with at its start, else the import's own; an import that names none reads
+ * as Keep my site. Its words are improved where the page says so, else where
+ * its wave (or the import) improved them under Improve it.
+ */
+export function siteImportPageFinish(
+  state: Dict,
+  page: Dict,
+  asked: { finish?: AiSiteImportFinish | null; words?: AiSiteImportWords | null } = {},
+): { finish: AiSiteImportFinish; words: AiSiteImportWords; from: 'asked' | 'wave' | 'import' | 'default' } {
+  const finishOf = (value: unknown): AiSiteImportFinish | null => (value === 'keep' || value === 'improve' ? value : null)
+  const wave = ((state['waves'] ?? []) as Dict[]).find((entry) => entry['index'] === page['wave']) ?? null
+  const stamped = finishOf(wave?.['finish'])
+  const own = finishOf(state['finish'])
+  const finish = asked.finish ?? stamped ?? own ?? 'keep'
+  const from = asked.finish ? 'asked' : stamped ? 'wave' : own ? 'import' : 'default'
+  const pageWords = page['wording'] === 'kept' || page['wording'] === 'improved' ? (page['wording'] as AiSiteImportWords) : null
+  const switched = (wave?.['wording'] ?? state['wording']) === true
+  const words = asked.words ?? pageWords ?? (finish === 'improve' && switched ? 'improved' : 'kept')
+  return { finish, words, from }
 }
 
 /** One kind of page's cost, as `AI_MEASURED_IMPORT_CREDITS` holds it. */

@@ -15,7 +15,17 @@
  * limitations under the License.
  */
 
-import { siteImportCreditsLine, siteImportCreditsMeasured, siteImportLookLine, siteImportLookReport } from './ai-site-import-report'
+import { aiSiteImportStyle } from '../jobs/ai-site-import-look'
+import {
+  siteImportCreditsLine,
+  siteImportCreditsMeasured,
+  siteImportFidelityThemeFor,
+  siteImportLookLine,
+  siteImportLookPins,
+  siteImportLookPinsLine,
+  siteImportLookReport,
+  siteImportPageFinish,
+} from './ai-site-import-report'
 
 /** A site as an import leaves it: the starter's base, the look saved over it. */
 const worn = {
@@ -84,5 +94,89 @@ describe('what a built site’s pages cost (AGL-4109)', () => {
       '77 arranged, median 9.5, p90 12, mean 9.5; 48 copied, median 0, p90 0, mean 0',
     )
     expect(siteImportCreditsLine({})).toBe('no page in yet')
+  })
+})
+
+describe('what Keep my site pins of the source’s look, source → theme (AGL-4152)', () => {
+  /** The 11/4 live import of aglyn.com: its slate ground came out near-black, its cyan capitals deepened and in sentence case. */
+  const live = {
+    ...worn,
+    themeOverride: {
+      patch: {
+        colorSchemes: {
+          light: { background: { default: '#f5f5f5', paper: '#ffffff' }, primary: { main: '#0970a4', contrastText: '#ffffff' } },
+          dark: { background: { default: '#0d1117', paper: '#161b22' } },
+        },
+        typography: { variants: { button: { textTransform: 'none' } } },
+      },
+    },
+  }
+  const read = { look: { theme: 'applied' }, home: { look: { background: '#f5f5f5', darkBackground: '#2b2f36', buttonFill: '#00b0ff', buttonText: '#0b1f2a', buttonCase: 'upper' } } }
+
+  it('sets each pin beside the theme’s, a color with how far it moved', () => {
+    const pins = siteImportLookPins(live, read)
+    expect(pins).toMatchObject({
+      from: 'theme',
+      ground: { source: '#f5f5f5', theme: '#f5f5f5', delta: 0 },
+      darkGround: { source: '#2b2f36', theme: '#0d1117' },
+      buttonFill: { source: '#00b0ff', theme: '#0970a4' },
+      buttonText: { source: '#0b1f2a', theme: '#ffffff' },
+      buttonCase: { source: 'upper', theme: 'none', delta: null },
+    })
+    expect(pins?.darkGround.delta).toBeGreaterThan(0.05)
+    expect(pins?.buttonFill.delta).toBeGreaterThan(0.05)
+  })
+
+  it('prints them on the look line, and nothing more for an import that read no look of its source', () => {
+    const line = siteImportLookLine(live, read, 'job1')
+    expect(line).toContain('; pins ground #f5f5f5 → #f5f5f5 (ΔE 0.000, kept), darkGround #2b2f36 → #0d1117 (ΔE ')
+    expect(line).toMatch(/buttonFill #00b0ff → #0970a4 \(ΔE 0\.\d{3}, moved\)/)
+    expect(line).toContain('buttonText #0b1f2a → #ffffff')
+    expect(line).toContain('buttonCase upper → none (moved)')
+    expect(siteImportLookReport(live, read).pins).toBeDefined()
+    expect(siteImportLookReport(live, { look: { theme: 'applied' } })).not.toHaveProperty('pins')
+  })
+
+  it('names a pin the reader did not read, rather than guessing it', () => {
+    const line = siteImportLookPinsLine(siteImportLookPins(live, { home: { look: { background: '#f5f5f5' } } }) as NonNullable<ReturnType<typeof siteImportLookPins>>)
+    expect(line).toContain('darkGround not read → #0d1117')
+    expect(line).toContain('buttonCase not read → none')
+  })
+
+  it('reads the theme the site stores, else computes it from its site style and says so', () => {
+    expect(siteImportFidelityThemeFor(live)?.from).toBe('theme')
+    const style = aiSiteImportStyle(null, { seed: 7, description: 'A website platform', facts: { fonts: { body: null, headings: null, google: [] }, background: '#f5f5f5', text: '#000000', buttonFill: '#00b0ff', buttonText: '#ffffff', buttonRadius: 4, link: null, header: null } })
+    const computed = siteImportFidelityThemeFor({ siteStyle: style })
+    expect(computed?.from).toBe('style')
+    expect(computed?.light.ground).toMatch(/^#[0-9a-f]{6}$/)
+    expect(siteImportFidelityThemeFor({ siteStyle: { base: 'starter', jobId: 'job1' } })).toBeNull()
+    expect(siteImportLookPinsLine(siteImportLookPins({ siteStyle: style }, read) as NonNullable<ReturnType<typeof siteImportLookPins>>)).toContain('the theme computed from the site style')
+  })
+})
+
+describe('how each page of an import was finished (AGL-4152)', () => {
+  const state = {
+    finish: 'improve',
+    wording: true,
+    waves: [
+      { index: 1, finish: 'keep', wording: false },
+      { index: 2, finish: 'improve', wording: true },
+      { index: 3 },
+    ],
+  }
+
+  it('reads the wave a page was built in, else the import, else Keep my site', () => {
+    expect(siteImportPageFinish(state, { wave: 1 })).toEqual({ finish: 'keep', words: 'kept', from: 'wave' })
+    expect(siteImportPageFinish(state, { wave: 2 })).toEqual({ finish: 'improve', words: 'improved', from: 'wave' })
+    expect(siteImportPageFinish(state, { wave: 3 })).toEqual({ finish: 'improve', words: 'improved', from: 'import' })
+    expect(siteImportPageFinish({ waves: [] }, { wave: 1 })).toEqual({ finish: 'keep', words: 'kept', from: 'default' })
+  })
+
+  it('takes a page’s own words stamp over its wave’s, and what is asked over both', () => {
+    expect(siteImportPageFinish(state, { wave: 2, wording: 'kept' })).toMatchObject({ finish: 'improve', words: 'kept' })
+    expect(siteImportPageFinish(state, { wave: 2 }, { finish: 'keep' })).toEqual({ finish: 'keep', words: 'kept', from: 'asked' })
+    expect(siteImportPageFinish(state, { wave: 1 }, { words: 'improved' })).toMatchObject({ finish: 'keep', words: 'improved' })
+    // Keep my site never improves a word on its own.
+    expect(siteImportPageFinish({ finish: 'keep', wording: true, waves: [] }, { wave: 1 })).toMatchObject({ words: 'kept' })
   })
 })
