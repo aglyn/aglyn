@@ -20,8 +20,8 @@
  * reconciles them against the Figma extraction so any disagreement is a
  * reported fact rather than a silent choice.
  *
- * Why generate rather than transcribe: the compare table is 8 plans wide and
- * ~50 rows deep — 400 cells. Hand-copying 400 numbers off a frame onto a
+ * Why generate rather than transcribe: the compare table is 4 plans wide and
+ * ~55 rows deep — over 200 cells (it was 8 wide, 400, before pricing v4). Hand-copying 400 numbers off a frame onto a
  * public pricing page is a guaranteed-defect process, and Figma has already
  * been caught drifting from `plan-entitlements.ts` twice. So the frame
  * supplies the SHAPE (which rows, in which groups, in which order) and the
@@ -55,23 +55,29 @@ import {
   ORIGIN_MEDIA_BANDWIDTH_WEIGHT,
   PAGE_VIEW_CDN_REQUEST_COST_USD,
   publishedMeteredPrice,
+  SELF_SERVE_PLANS,
 } from '../../libs/aglyn/src/lib/app-utils/plan-entitlements.ts'
 import {
   AI_CREDIT_BLOCK_MONTHLY_USD,
   AI_CREDIT_BLOCKS_MAX,
   AI_CREDITS_PER_BLOCK,
 } from '../../libs/aglyn/src/lib/app-utils/ai-credit-blocks.ts'
-import {
-  onboardingSignupHref,
-  type OnboardingInterval,
-} from '../../libs/aglyn/src/lib/app-utils/onboarding-deep-link.ts'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const OUT = join(HERE, 'pricing-copy')
 
 type Plan = keyof typeof PLAN_ENTITLEMENTS
-const PLANS = Object.keys(PLAN_ENTITLEMENTS) as Plan[]
-const PAID: Plan[] = ['starter', 'pro', 'business', 'scale', 'advanced', 'agency']
+/**
+ * The plans the page publishes, in the order it draws them (pricing v4,
+ * 2026-11-03, AGL-4126): the plans sold, then Custom. Read off
+ * `SELF_SERVE_PLANS` rather than restated, so a plan that is sold or retired
+ * moves every table here with it. Business, Scale, Advanced and Agency are
+ * retired — their rows stay in `PLAN_ENTITLEMENTS` for the workspaces still on
+ * them, and the page names none of them.
+ */
+const PLANS: Plan[] = [...SELF_SERVE_PLANS, 'enterprise']
+/** The paid plans sold: the add-on table's columns before Custom. */
+const PAID: Plan[] = SELF_SERVE_PLANS.filter((p) => p !== 'free')
 
 /**
  * The generative add-on's name as the page prints it (AGL-2896). Read the
@@ -181,6 +187,12 @@ interface Row {
 
 const TALK = 'Talk to us'
 const CUSTOM_LABEL = 'Custom'
+/**
+ * Custom's price, wherever the page states one: the compare grid's price strip
+ * and the strip's card. The plan is NAMED Custom (`PLAN_LABELS.enterprise`)
+ * since pricing v4, so its price reads "Quoted" rather than repeating the name.
+ */
+const QUOTED = 'Quoted'
 
 const E = (p: Plan) => PLAN_ENTITLEMENTS[p]
 const F = (p: Plan) => PLAN_ENTITLEMENTS[p].features
@@ -592,7 +604,7 @@ const compare = {
     monthlyUsd: PLAN_PRICING[p].basePriceMonthlyUsd,
     annualMonthlyUsd: PLAN_PRICING[p].basePriceAnnualMonthlyUsd,
     priceLabel:
-      p === 'enterprise' ? 'Custom' : `$${PLAN_PRICING[p].basePriceMonthlyUsd}`,
+      p === 'enterprise' ? QUOTED : `$${PLAN_PRICING[p].basePriceMonthlyUsd}`,
   })),
   groups: GROUPS.map((g) => ({
     title: g.title,
@@ -605,10 +617,10 @@ const compare = {
 }
 
 /**
- * The usage table runs Starter→Enterprise. Free is absent by design — it has
+ * The usage table runs Starter, Pro, Custom. Free is absent by design — it has
  * no paid add-ons at all (`PLAN_PRICING.free.*` is null throughout), so a
  * column of dashes would only invite the reader to look for a rate that does
- * not exist. Enterprise carries "Custom" for every row, matching the frame.
+ * not exist. Custom carries "Custom" for every row, matching the frame.
  */
 const USAGE_PLANS: Plan[] = [...PAID, 'enterprise']
 
@@ -799,174 +811,34 @@ const fees = {
 }
 
 /**
- * The "Need more scale?" strip under the four plan cards (frame `570:1218`).
+ * The "Need more than Pro?" strip under the three plan cards (frame
+ * `570:1218`).
  *
- * `blurb` is design copy — a positioning sentence with no numbers in it, so
- * there is nothing to drift. `specs` is assembled from code, because the
- * frame's own spec lines are dense with figures ("15 sites · 75 collaborators
- * · 1% commerce fees · 300k API requests/mo …") and every one of them is a
- * claim. The frame's numbers were checked against these and all matched; the
- * point of generating them is that they stay matched.
+ * Since pricing v4 (2026-11-03, AGL-4126) it carries ONE card, Custom's: the
+ * Scale, Advanced and Agency cards it used to carry sold plans v4 retired, and
+ * the frames no longer draw them. Pro is the top plan sold; past it is a
+ * quoted agreement.
  *
- * A few trailing items are genuinely prose ("priority scale & limits") and are
- * carried verbatim in `extras`, kept separate so it is obvious which half of
- * each line is derived and which is written.
+ * `heading`, `lede` and `blurb` are design copy — positioning sentences with
+ * no numbers in them, so there is nothing to drift. Every spec token that is
+ * a figure is read from code (the transaction fee); the rest are prose the
+ * frame wrote that has no code equivalent, carried verbatim.
  */
-/** Each token is a fact the frame chose to show, rendered from code. */
-const SPEC: Record<string, (e: (typeof PLAN_ENTITLEMENTS)[Plan]) => string> = {
-  sites: (e) => `${num(e.hostLimit)} sites`,
-  collaborators: (e) => `${num(e.membersPerHost)} collaborators`,
-  fees: (e) => `${pct(e.transactionFeeDigitalPct)} commerce fees`,
-  api: (e) =>
-    `${perMonth(e.apiRequestsPerMonth).replace(' / mo', '')} API requests/mo`,
-  products: (e) =>
-    e.productsPerHost === UNLIMITED
-      ? 'unlimited products'
-      : `${num(e.productsPerHost)} products per site`,
-  bandwidth: (e) => `${gb(e.bandwidthGb)} bandwidth`,
-  // Per site, for the same AGL-1775 reason as the compare-table row: this is
-  // the cap each site gets, not a total the org shares out.
-  registers: (e) => `${num(e.posRegisters)} POS registers per site`,
-  whiteLabel: (e) =>
-    e.features.whiteLabel
-      ? 'full white-label incl. custom console domain'
-      : 'no white-label',
-  recordsAndVars: (e) =>
-    e.recordsPerDataset === UNLIMITED && e.variablesPerHost === UNLIMITED
-      ? 'unlimited records & variables'
-      : `${num(e.recordsPerDataset)} records · ${num(e.variablesPerHost)} variables`,
-  campaignEmails: (e) => `${num(e.emailSendsPerMonth)} campaign emails/mo`,
-}
-
-/**
- * Which facts each tier leads with, in the frame's order: six capacity facts,
- * then the campaign email band each card closes on. A longer line is not more
- * informative, it just wraps. `lit` entries are prose the frame wrote that has
- * no code equivalent.
- */
-const TIER_SPEC: Partial<
-  Record<Plan, { blurb: string; specs: Array<keyof typeof SPEC | { lit: string }> }>
-> = {
-  scale: {
-    blurb:
-      'For high-growth stores and multi-site teams that have outgrown Business.',
-    specs: [
-      'sites',
-      'collaborators',
-      'fees',
-      'api',
-      'products',
-      'bandwidth',
-      'campaignEmails',
-    ],
-  },
-  advanced: {
-    blurb: 'For high-volume organizations that need headroom on every limit.',
-    specs: [
-      'sites',
-      'collaborators',
-      'fees',
-      'api',
-      'products',
-      { lit: 'priority scale & limits' },
-      'campaignEmails',
-    ],
-  },
-  agency: {
-    blurb:
-      'For agencies and resellers running whole client portfolios under one roof.',
-    specs: [
-      'sites',
-      'collaborators',
-      'whiteLabel',
-      'api',
-      'recordsAndVars',
-      'registers',
-      'campaignEmails',
-    ],
-  },
-}
-
-/**
- * Where the CTAs point. The published strip says `https://app.aglyn.com/signup`
- * and so does every plan card above it; this is that same destination, stated
- * once so the two halves of the page cannot drift apart.
- */
-const SIGNUP_URL = 'https://app.aglyn.com/signup'
-
-/**
- * The strip's copy at one billing cadence (AGL-1989).
- *
- * The four plan cards above the strip live inside a Monthly/Annual Tabs, so
- * each cadence has its own authored copy and its own CTA — the annual Starter
- * card reads "$16 /mo · $192 billed yearly" and links to
- * `?plan=starter&interval=year`. The strip is authored ONCE, OUTSIDE the tabs,
- * so it quoted the monthly headline on both tabs and its CHOOSE links carried
- * no `interval` at all: a visitor who picked Annual and then picked Scale
- * arrived pre-selected for a MONTHLY plan and lost the discount they were
- * just shown.
- *
- * The page is authored content and this file publishes nothing, so this does
- * not fix the page. What it fixes is that the string that SHOULD be published
- * now exists somewhere a check can read it: the `ctaHref` comes from the
- * deep-link contract's own writer rather than being typed, and
- * `onboardingSignupHref` is the function whose output
- * `parseOnboardingPlanIntent` is tested to read back as a STATED interval.
- *
- * The sub-line follows the CARDS' convention rather than inventing one: on the
- * monthly tab it quotes the annual per-month price ("$179/mo billed
- * annually"), on the annual tab it quotes the yearly total ("$2,148 billed
- * yearly"), which is what the annual Starter/Pro/Business cards do.
- */
-const tierAtInterval = (p: Plan, interval: OnboardingInterval) => {
-  const monthly = PLAN_PRICING[p].basePriceMonthlyUsd
-  const annualMonthly = PLAN_PRICING[p].basePriceAnnualMonthlyUsd
-  return interval === 'year'
-    ? {
-        priceLabel: `$${annualMonthly} /mo`,
-        subLabel: `$${(annualMonthly * 12).toLocaleString('en-US')} billed yearly`,
-        ctaHref: onboardingSignupHref(SIGNUP_URL, p, 'year'),
-      }
-    : {
-        priceLabel: `$${monthly} /mo`,
-        subLabel: `$${annualMonthly}/mo billed annually`,
-        ctaHref: onboardingSignupHref(SIGNUP_URL, p, 'month'),
-      }
-}
-
 const tiers = {
-  heading: 'Need more scale?',
-  lede: 'Higher-volume plans for stores, orgs, and agencies.',
-  rows: (['scale', 'advanced', 'agency'] as Plan[]).map((p) => {
-    const e = PLAN_ENTITLEMENTS[p]
-    const spec = TIER_SPEC[p]!
-    return {
-      plan: p,
-      label: PLAN_LABELS[p],
-      priceLabel: `$${PLAN_PRICING[p].basePriceMonthlyUsd} /mo`,
-      annualLabel: `$${PLAN_PRICING[p].basePriceAnnualMonthlyUsd}/mo billed annually`,
-      blurb: spec.blurb,
-      specs: spec.specs.map((s) =>
-        typeof s === 'string' ? SPEC[s](e) : s.lit,
-      ),
-      cta: 'CHOOSE',
-      byInterval: {
-        month: tierAtInterval(p, 'month'),
-        year: tierAtInterval(p, 'year'),
-      },
-    }
-  }),
+  heading: 'Need more than Pro?',
+  lede: 'Custom plans for portfolios, white-label and single sign-on.',
   enterprise: {
     plan: 'enterprise',
     label: PLAN_LABELS.enterprise,
-    priceLabel: CUSTOM_LABEL,
+    priceLabel: QUOTED,
     annualLabel: 'Quoted per agreement',
     blurb:
-      'For large organizations with bespoke requirements — volume pricing available.',
+      'For portfolios and organizations that need white-label, single sign-on or a contract — quoted for you.',
     specs: [
-      // Not "Unlimited scale": since AGL-2654 an Enterprise contract falls back
-      // to finite bands on every axis it does not name.
-      'Scale as you grow',
+      // Not "Unlimited scale": since AGL-2654 a Custom agreement falls back to
+      // finite bands on every axis it does not name, so every limit is one
+      // the agreement sizes.
+      'Every limit sized by agreement',
       `${pct(PLAN_ENTITLEMENTS.enterprise.transactionFeeDigitalPct)} transaction fees`,
       'white-label',
       'SSO',
@@ -982,10 +854,10 @@ const tiers = {
       // it back.
       'dedicated support',
       'custom contracts',
-      'campaign email volume by agreement',
+      'volume pricing',
     ],
     cta: 'CONTACT SALES',
-    // Deliberately no signup href and no cadence: Enterprise is quoted, not
+    // Deliberately no signup href and no cadence: Custom is quoted, not
     // bought, and the published CTA goes to the contact screen rather than to
     // signup. The deep-link parser reports `intervalStated: false` for a
     // custom-priced plan however the link is written, so an `interval` here
@@ -1026,11 +898,15 @@ const addons = {
       ),
     },
     {
-      label: AI_ADDON,
+      // The card's name on the page and every breakpoint: the unit sold, with
+      // no brand in it, so a renamed product reads it unchanged.
+      label: 'AI credits',
       // Credits by the block (AGL-4144): one flat price a block, the same on
-      // every paid plan, bought in any quantity up to the ceiling. Free sells
-      // none; Enterprise by agreement.
+      // every paid plan sold, bought in any quantity up to the ceiling. Free
+      // sells none; Custom by agreement.
       priceUsd: AI_CREDIT_BLOCK_MONTHLY_USD,
+      /** What one price buys, which the headline names: "$10 / mo a block". */
+      unit: 'block',
       scope: 'organization',
       maxQuantity: AI_CREDIT_BLOCKS_MAX,
       creditsPerBlock: AI_CREDITS_PER_BLOCK,
@@ -1038,12 +914,12 @@ const addons = {
        * What the card prints under its price: what one block adds, the most
        * a workspace buys, and that the plan's included credits come first.
        * The sentence is the transcription source for the page; a figure in
-       * it is a figure the page states.
+       * it is a figure the page states, read from the block's constants.
        */
       blurb:
-        `${num(AI_CREDITS_PER_BLOCK)} AI credits a month per block, on any paid plan, ` +
-        `on top of the credits your plan includes. Up to ${AI_CREDIT_BLOCKS_MAX} blocks ` +
-        'per workspace. Enterprise by agreement.',
+        `Blocks of ${num(AI_CREDITS_PER_BLOCK)} AI credits a month, per workspace, on any ` +
+        `paid plan — up to ${AI_CREDIT_BLOCKS_MAX} blocks. They add to the credits your plan ` +
+        'includes; past both, credits bill at your plan’s rate. Custom by agreement.',
     },
     {
       // The managed-website add-on (AGL-3954): staff time on the customer's
@@ -1095,16 +971,11 @@ const frameTable = frame.sections
   .find((s) => s.name === 'Compare features')
   ?.groups.find((g) => g.name === 'Feature table')
 
-const framePlanOrder: Plan[] = [
-  'free',
-  'starter',
-  'pro',
-  'business',
-  'scale',
-  'advanced',
-  'agency',
-  'enterprise',
-]
+/**
+ * The columns the frame draws, left to right: Free, Starter, Pro, Custom
+ * since pricing v4 — the same list every table here publishes.
+ */
+const framePlanOrder: Plan[] = PLANS
 
 /** One label cell plus one cell per plan. */
 const FRAME_ROW_CELLS = framePlanOrder.length + 1
@@ -1161,11 +1032,11 @@ const frameRows = new Map<string, string[]>()
 const groupBands = new Set(GROUPS.map((g) => g.title))
 /**
  * The two records the extractor names for their Figma layer rather than for a
- * feature: the plan header (Free…Enterprise) and the price strip ($0…Custom).
+ * feature: the plan header (Free…Custom) and the price strip ($0…Quoted).
  * They carry a full complement of cells, so they are plan ROWS as far as the
  * loop below is concerned, and they are skipped here because they are
  * reconciled as `compare.columns` further down — against `PLAN_LABELS` and
- * against the eight `priceLabel`s — rather than against a feature spec.
+ * against the four `priceLabel`s — rather than against a feature spec.
  */
 const FRAME_FURNITURE_LABEL = 'Text'
 for (const rec of frameTable?.records ?? []) {
@@ -1233,35 +1104,7 @@ for (const [label, [why]] of injected('--declare-extra-row', 2)) {
  * matching and is reported as resolved, so it cannot outlive its reason. An
  * exemption that outlives its reason is just an untested cell.
  */
-/**
- * Why every pricing v4 cell below is stale (2026-11-03, AGL-4126): the code
- * moved first, and the Figma frames and `/pricing` follow in the order
- * `docs/PRICING_SURFACES.md` gives. Each resolves, and is reported for
- * deletion, the moment the re-extracted frames carry the v4 figure.
- */
-const V4_FRAME_PENDING =
-  'pricing v4 (AGL-4126): Pro took every Business feature and lost its count walls; the Figma frames predate it and move with the page lane'
-
-const FRAME_STALE_CELLS: Record<string, { frame: string; why: string }> = {
-  'Pages per site · Pro': { frame: '100', why: V4_FRAME_PENDING },
-  'Scheduled publishing · Pro': { frame: NO, why: V4_FRAME_PENDING },
-  'Multilingual sites · Pro': { frame: NO, why: V4_FRAME_PENDING },
-  'A/B testing · Pro': { frame: NO, why: V4_FRAME_PENDING },
-  'Team seats · Pro': { frame: '3 · max 20', why: V4_FRAME_PENDING },
-  'Site collaborators · Pro': { frame: '3 · max 25', why: V4_FRAME_PENDING },
-  'Datasets · Pro': { frame: '5 · max 50', why: V4_FRAME_PENDING },
-  'Records per dataset · Pro': { frame: '10,000', why: V4_FRAME_PENDING },
-  'Variables per site · Pro': { frame: '100', why: V4_FRAME_PENDING },
-  'Functions per site · Pro': { frame: '50', why: V4_FRAME_PENDING },
-  'Workflows per site · Pro': { frame: '25', why: V4_FRAME_PENDING },
-  'Products per site · Pro': { frame: '2,500', why: V4_FRAME_PENDING },
-  'Physical transaction fee · Pro': { frame: '0%', why: V4_FRAME_PENDING },
-  'Subscriptions & memberships · Pro': { frame: NO, why: V4_FRAME_PENDING },
-  'Gift cards · Pro': { frame: NO, why: V4_FRAME_PENDING },
-  'Content gating · Pro': { frame: NO, why: V4_FRAME_PENDING },
-  'API access · Pro': { frame: NO, why: V4_FRAME_PENDING },
-  'Webhooks · Pro': { frame: NO, why: V4_FRAME_PENDING },
-}
+const FRAME_STALE_CELLS: Record<string, { frame: string; why: string }> = {}
 
 /*
  * `--declare-stale-cell='<row> · <plan>|<frame value>'`, repeatable.
@@ -1612,24 +1455,16 @@ const reconciler = (
 }
 
 /**
- * Plan names the Figma frames still print that the code no longer does
- * (pricing v4, 2026-11-03, AGL-4126): the top plan reads "Custom" in code and
- * "Enterprise" on the frames until the page lane republishes them. Read as an
- * alias so the frame's columns and cards stay attributable to their plan,
- * and reported resolved once no breakpoint prints the old name.
+ * The published plans by the name the page prints. Only the plans the page
+ * publishes: a frame that still drew a retired plan's column would name a plan
+ * nothing here reads, and is reported as an unrecognized header rather than
+ * compared against a row the page no longer sells.
  */
-const FRAME_LEGACY_PLAN_LABELS: Record<string, Plan> = {
-  Enterprise: 'enterprise',
-}
-
-const planByLabel = new Map<string, Plan>([
-  ...PLANS.map((p) => [PLAN_LABELS[p], p] as const),
-  ...Object.entries(FRAME_LEGACY_PLAN_LABELS),
-])
+const planByLabel = new Map<string, Plan>(PLANS.map((p) => [PLAN_LABELS[p], p] as const))
 
 /**
  * Which plan a mobile export is showing. The mobile compare grid and the
- * mobile add-on table each render ONE selected plan rather than all eight, so
+ * mobile add-on table each render ONE selected plan rather than all four, so
  * every mobile cell has to be attributed to the plan the frame chose before it
  * can be compared — reading it off the frame rather than assuming Pro, since
  * the selected plan is a design choice that can change without telling us.
@@ -1644,23 +1479,14 @@ const mobileSelectedPlan = (v: FrameView): Plan | null => {
  * THE PLAN COLUMNS — header and price strip.
  *
  * `compare.columns` is the one place on the page where a plan's own monthly
- * price is stated, which makes its eight cells the highest-consequence cells
+ * price is stated, which makes its four cells the highest-consequence cells
  * in the file: a wrong number here is a wrong number in the largest type on
  * the page. The two records are found by their Figma layer name because that
  * is all the extractor gives them — the header carries plan LABELS and the
  * strip carries `priceLabel`s, neither of which is a feature spec, so they
  * cannot be compared by the row loop above and have to be compared here.
  *=========================================*/
-const COLUMNS_STALE: Record<string, Divergence> = {
-  'price · Pro': {
-    frame: '$56',
-    why: 'pricing v4 (AGL-4126): Pro is $69 a month, $49 billed yearly; the Figma frames predate it and move with the page lane',
-  },
-  'plan name · Custom': {
-    frame: 'Enterprise',
-    why: 'pricing v4 (AGL-4126): the top plan is labelled Custom (its code id stays `enterprise`); the Figma frames predate it and move with the page lane',
-  },
-}
+const COLUMNS_STALE: Record<string, Divergence> = {}
 
 for (const [key, [frame]] of injected('--declare-stale-column', 2)) {
   COLUMNS_STALE[key] = { frame, why: INJECTED_WHY }
@@ -1721,10 +1547,11 @@ for (const v of frames) {
 columns.finish()
 
 /*==========================================
- * THE "NEED MORE SCALE?" STRIP.
+ * THE "NEED MORE THAN PRO?" STRIP.
  *
- * Four cards of almost pure claim — a price, a positioning line and six spec
- * tokens apiece, every token a figure read from `PLAN_ENTITLEMENTS`.
+ * One card since pricing v4 — Custom's — of almost pure claim: a price, a
+ * positioning line and seven spec tokens, the transaction fee read from
+ * `PLAN_ENTITLEMENTS`.
  *
  * The tokens are compared one at a time rather than as one joined line so a
  * disagreement names the fact that moved, instead of reprinting sixty
@@ -1735,7 +1562,7 @@ columns.finish()
 const TIERS_STALE: Record<string, Divergence> = {}
 
 const tierStrip = reconciler('scale strip', TIERS_STALE)
-const TIER_CARDS = [...tiers.rows, tiers.enterprise]
+const TIER_CARDS = [tiers.enterprise]
 const tierLabels = new Set(TIER_CARDS.map((t) => t.label))
 
 for (const v of frames) {
@@ -1744,9 +1571,16 @@ for (const v of frames) {
     tierStrip.absent('no "Plans / scale-strip" group', v.name)
     continue
   }
-  // The frame writes the heading and the lede into one text node.
+  // The frame writes the heading and the lede into one text node, with the
+  // space between them set as layout (two spaces on the v4 frames); the words
+  // are compared, the run of spaces is not.
   if (strip[0]) {
-    tierStrip.cell('heading', `${tiers.heading} ${tiers.lede}`, strip[0].cells[0], v.name)
+    tierStrip.cell(
+      'heading',
+      `${tiers.heading} ${tiers.lede}`,
+      strip[0].cells[0].replace(/\s+/g, ' '),
+      v.name,
+    )
   } else {
     tierStrip.absent('no heading record', v.name)
   }
@@ -1754,10 +1588,7 @@ for (const v of frames) {
   /** label → the three records the frame draws for that card, in order. */
   const cards = new Map<string, { price: string; blurb: string; specs: string; cta: string }>()
   strip.forEach((rec, i) => {
-    // A card the frame still names by a plan's old label is that plan's card
-    // (`FRAME_LEGACY_PLAN_LABELS`, pricing v4).
-    const legacy = FRAME_LEGACY_PLAN_LABELS[rec.cells[0]]
-    const name = legacy ? PLAN_LABELS[legacy] : rec.cells[0]
+    const name = rec.cells[0]
     if (rec.cells.length !== 2 || !tierLabels.has(name)) return
     cards.set(name, {
       price: rec.cells[1],
@@ -1800,8 +1631,8 @@ tierStrip.finish()
 /*==========================================
  * THE ADD-ON CAPACITY TABLE.
  *
- * Seven rates across six paid plans, every one of them a price a customer is
- * billed on their next invoice.
+ * The rates across the paid plans sold (Starter and Pro since pricing v4),
+ * every one of them a price a customer is billed on their next invoice.
  *
  * The contacts row is why a rate and its band have to be checked together. An
  * uncapped plan cannot have an "over", so a dash is the CORRECT cell beside an
@@ -1812,12 +1643,7 @@ tierStrip.finish()
  * bound achieves nothing. The pair is only ever right together, and this is
  * what reads the half of it that lives on the page.
  *=========================================*/
-const USAGE_STALE: Record<string, Divergence> = {
-  'API requests, per 1,000 over limit · Pro': {
-    frame: NO,
-    why: 'pricing v4 (AGL-4126): the API moved into Pro with Business’s 1,500-request band and $0.50 rate; the Figma frames predate it and move with the page lane',
-  },
-}
+const USAGE_STALE: Record<string, Divergence> = {}
 
 /**
  * The rate the product BILLS and the page has never stated.
@@ -2033,7 +1859,7 @@ fail('the published origin-media weight disagrees with the code', mediaWeightDif
  * `fees` has no surface of its own on the page: the ladder it publishes IS
  * the compare grid's two fee rows, which is where it is reconciled. Thin, but
  * not vacuous — the compare rows apply the `commerce` gate and `fees` does
- * not, so this is the only thing checking that the two agree on the six plans
+ * not, so this is the only thing checking that the two agree on the plans
  * where both state a number, and the only thing that would notice `fees`
  * being wired to the wrong entitlement.
  *
@@ -2053,10 +1879,6 @@ const FEES_STALE: Record<string, Divergence> = {
     frame: NO,
     why: 'the same commerce gate as the digital row above',
   },
-  'Physical transaction fee · Pro': {
-    frame: '0%',
-    why: 'pricing v4 (AGL-4126, decision 9): Pro takes 0.5% on physical sales, for the Stripe Connect account and payout fees the platform pays; the Figma frames predate it and move with the page lane',
-  },
 }
 
 const feeLadder = reconciler('transaction fees', FEES_STALE)
@@ -2070,7 +1892,7 @@ for (const v of frames) {
   const narrow = records(v, 'Compare features', 'list')
   const selected = wide ? null : mobileSelectedPlan(v)
   // A selected-plan list whose selected plan cannot be read would otherwise
-  // compare all seven plans against the one column it renders, and agree on
+  // compare every plan against the one column it renders, and agree on
   // whichever plan happened to be showing.
   if (!wide && !selected) {
     feeLadder.absent('a fee ladder with no readable plan', v.name)
@@ -2110,24 +1932,16 @@ feeLadder.finish()
  * with the price" rule would pass `$89 / mo · per organization` on a per-site
  * add-on.
  *
- * The AI card is one flat price a block since AGL-4144, so it is matched
- * like the other flat cards: its headline, exactly.
+ * The AI credits card is one flat price a block since AGL-4144, so it is
+ * matched like the other flat cards — its headline, exactly — with the unit
+ * one price buys named after it: "$10 / mo a block".
  *
  * NOT reconciled: `maxQuantity`, `scope` and the per-plan `included` counts.
  * The frame states none of them. `POS_REGISTERS_ADDON_MAX` in particular is
  * the ceiling `POST /api/billing/addons` enforces, and publishing it beside
  * an $89/mo line is what would give it a surface to be checked against.
  *=========================================*/
-const ADDONS_STALE: Record<string, Divergence> = {
-  // Aglyn AI is sold by the block since AGL-4144 ($10 a month for 5,000
-  // credits); the published page and its frames still print the retired
-  // tiers' "From $9 / mo" until the pricing page and its Figma frames are
-  // republished. Delete this the moment every breakpoint prints the block.
-  'Aglyn AI · price': {
-    frame: 'From $9 / mo',
-    why: 'AGL-4144: the AI tiers became one credit block; the page republish follows',
-  },
-}
+const ADDONS_STALE: Record<string, Divergence> = {}
 
 /**
  * Cards we publish that the page carries nowhere. Empty since AGL-3954 put
@@ -2145,7 +1959,7 @@ const addonCards = reconciler('add-on cards', ADDONS_STALE, ADDONS_EXPECTED_ABSE
 const ADDON_FRAME_LABELS: Record<string, string[]> = {
   'Event Calendar': ['Event Calendar'],
   'Extra POS register': ['Extra POS register'],
-  [AI_ADDON]: [AI_ADDON],
+  'AI credits': ['AI credits'],
   'Site Care': ['Site Care'],
 }
 
@@ -2164,8 +1978,9 @@ for (const v of frames) {
       addonCards.absentRow(row.label, v.name)
       continue
     }
-    // Every card is one flat price since AGL-4144 put Aglyn AI on a block.
-    const headline = `$${row.priceUsd} / mo`
+    // Every card is one flat price since AGL-4144 put Aglyn AI on a block;
+    // a card whose price buys a unit names it ("$10 / mo a block").
+    const headline = `$${row.priceUsd} / mo${'unit' in row && row.unit ? ` a ${row.unit}` : ''}`
     const scoped = `${headline} · per ${row.scope}`
     addonCards.cell(
       `${row.label} · price`,
@@ -2206,10 +2021,9 @@ addonCards.finish()
  *     ceiling the checkout enforces and the page never mentions, so there is
  *     nothing to disagree with.
  *
- *   `tiers.rows[].annualLabel` and `byInterval` — the strip is authored
- *     OUTSIDE the Monthly/Annual tabs, so the frame carries one headline
- *     price per card and no `interval` on the CTA. The generated cadence copy
- *     is what the strip SHOULD publish, not a transcription of what it does.
+ *   `tiers.enterprise.annualLabel` — the strip is authored OUTSIDE the
+ *     Monthly/Annual tabs, so the frame carries one headline price for the
+ *     Custom card and no cadence line.
  *
  *   The compare grid and the pass-through strip on breakpoints OTHER than the
  *     one `--frame` names. Both read the primary export only. The tablet and
@@ -2220,7 +2034,7 @@ addonCards.finish()
  *     read, by the fee ladder above, which is how the shape is known to
  *     differ.
  *
- *   The four plan CARDS in `Plans / row`. Their headline prices and feature
+ *   The three plan CARDS in `Plans / row`. Their headline prices and feature
  *     bullets are claims, but this file emits no table for them — the cards
  *     are authored copy, and generating them is a larger change than giving
  *     an existing generated table a reader.

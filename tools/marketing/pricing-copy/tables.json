@@ -33,39 +33,11 @@
         "priceLabel": "$69"
       },
       {
-        "plan": "business",
-        "label": "Business",
-        "monthlyUsd": 139,
-        "annualMonthlyUsd": 99,
-        "priceLabel": "$139"
-      },
-      {
-        "plan": "scale",
-        "label": "Scale",
-        "monthlyUsd": 249,
-        "annualMonthlyUsd": 179,
-        "priceLabel": "$249"
-      },
-      {
-        "plan": "advanced",
-        "label": "Advanced",
-        "monthlyUsd": 399,
-        "annualMonthlyUsd": 299,
-        "priceLabel": "$399"
-      },
-      {
-        "plan": "agency",
-        "label": "Agency",
-        "monthlyUsd": 1299,
-        "annualMonthlyUsd": 1049,
-        "priceLabel": "$1299"
-      },
-      {
         "plan": "enterprise",
         "label": "Custom",
         "monthlyUsd": 0,
         "annualMonthlyUsd": 0,
-        "priceLabel": "Custom"
+        "priceLabel": "Quoted"
       }
     ],
     "groups": [
@@ -79,10 +51,6 @@
               "free": "1",
               "starter": "1",
               "pro": "3",
-              "business": "10",
-              "scale": "15",
-              "advanced": "25",
-              "agency": "100",
               "enterprise": "Talk to us"
             }
           },
@@ -93,10 +61,6 @@
               "free": "5",
               "starter": "25",
               "pro": "Unlimited",
-              "business": "Unlimited",
-              "scale": "Unlimited",
-              "advanced": "Unlimited",
-              "agency": "Unlimited",
               "enterprise": "Talk to us"
             }
           },
@@ -107,10 +71,6 @@
               "free": "250 MB",
               "starter": "2 GB",
               "pro": "5 GB",
-              "business": "10 GB",
-              "scale": "15 GB",
-              "advanced": "20 GB",
-              "agency": "20 GB",
               "enterprise": "Talk to us"
             }
           },
@@ -121,10 +81,6 @@
               "free": "2 GB",
               "starter": "15 GB",
               "pro": "25 GB",
-              "business": "45 GB",
-              "scale": "70 GB",
-              "advanced": "80 GB",
-              "agency": "395 GB",
               "enterprise": "Talk to us"
             }
           },
@@ -135,10 +91,6 @@
               "free": "—",
               "starter": "✓",
               "pro": "✓",
-              "business": "✓",
-              "scale": "✓",
-              "advanced": "✓",
-              "agency": "✓",
               "enterprise": "✓"
             }
           },
@@ -149,10 +101,6 @@
               "free": "—",
               "starter": "✓",
               "pro": "✓",
-              "business": "✓",
-              "scale": "✓",
-              "advanced": "✓",
-              "agency": "✓",
               "enterprise": "✓"
             }
           },
@@ -163,10 +111,6 @@
               "free": "1",
               "starter": "✓",
               "pro": "✓",
-              "business": "✓",
-              "scale": "✓",
-              "advanced": "✓",
-              "agency": "✓",
               "enterprise": "✓"
             }
           },
@@ -177,10 +121,6 @@
               "free": "—",
               "starter": "—",
               "pro": "✓",
-              "business": "✓",
-              "scale": "✓",
-              "advanced": "✓",
-              "agency": "✓",
               "enterprise": "✓"
             }
           },
@@ -191,10 +131,6 @@
               "free": "—",
               "starter": "—",
               "pro": "✓",
-              "business": "✓",
-              "scale": "✓",
-              "advanced": "✓",
-              "agency": "✓",
               "enterprise": "✓"
             }
           },
@@ -205,10 +141,6 @@
               "free": "—",
               "starter": "✓",
               "pro": "✓",
-              "business": "✓",
-              "scale": "✓",
-              "advanced": "✓",
-              "agency": "✓",
               "enterprise": "✓"
             }
           },
@@ -219,10 +151,6 @@
               "free": "—",
               "starter": "—",
               "pro": "✓",
-              "business": "✓",
-              "scale": "✓",
-              "advanced": "✓",
-              "agency": "✓",
               "enterprise": "✓"
             }
           },
@@ -233,10 +161,6 @@
               "free": "—",
               "starter": "—",
               "pro": "✓",
-              "business": "✓",
-              "scale": "✓",
-              "advanced": "✓",
-              "agency": "✓",
               "enterprise": "✓"
             }
           }
@@ -252,10 +176,6 @@
               "free": "1",
               "starter": "2 · max 5",
               "pro": "3 · unlimited",
-              "business": "5 · max 100",
-              "scale": "5 · max 150",
-              "advanced": "10 · max 250",
-              "agency": "10 · max 500",
               "enterprise": "Custom"
             }
           },
@@ -266,10 +186,6 @@
               "free": "1",
               "starter": "2 · max 10",
               "pro": "3 · unlimited",
-              "business": "5 · max 100",
-              "scale": "5 · max 150",
-              "advanced": "5 · max 250",
-              "agency": "5 · max 1,000",
               "enterprise": "Custom"
             }
           },
@@ -280,10 +196,6 @@
               "free": "Unlimited",
               "starter": "Unlimited",
               "pro": "Unlimited",
-              "business": "Unlimited",
-              "scale": "Unlimited",
-              "advanced": "Unlimited",
-              "agency": "Unlimited",
               "enterprise": "Unlimited"
             }
           },
@@ -294,10 +206,6 @@
               "free": "—",
               "starter": "—",
               "pro": "—",
-              "business": "—",
-              "scale": "—",
-              "advanced": "—",
-              "agency": "✓",
               "enterprise": "✓"
             }
           },
@@ -308,10 +216,6 @@
               "free": "—",
               "starter": "—",
               "pro": "—",
-              "business": "—",
-              "scale": "—",
-              "advanced": "—",
-              "agency": "—",
               "enterprise": "✓"
             }
           }
@@ -327,10 +231,6 @@
               "free": "—",
               "starter": "2 · max 10",
               "pro": "5 · unlimited",
-              "business": "10 · max 250",
-              "scale": "15 · max 500",
-              "advanced": "25 · max 1,000",
-              "agency": "50 · max 5,000",
               "enterprise": "Custom"
             }
           },
@@ -341,10 +241,6 @@
               "free": "—",
               "starter": "1,000",
               "pro": "Unlimited",
-              "business": "100,000",
-              "scale": "500,000",
-              "advanced": "1,000,000",
-              "agency": "Unlimited",
               "enterprise": "Talk to us"
             }
           },
@@ -355,10 +251,6 @@
               "free": "3",
               "starter": "25",
               "pro": "Unlimited",
-              "business": "1,000",
-              "scale": "5,000",
-              "advanced": "Unlimited",
-              "agency": "Unlimited",
               "enterprise": "Talk to us"
             }
           },
@@ -369,10 +261,6 @@
               "free": "1",
               "starter": "10",
               "pro": "Unlimited",
-              "business": "250",
-              "scale": "500",
-              "advanced": "1,000",
-              "agency": "Unlimited",
               "enterprise": "Talk to us"
             }
           },
@@ -383,10 +271,6 @@
               "free": "—",
               "starter": "3",
               "pro": "Unlimited",
-              "business": "100",
-              "scale": "250",
-              "advanced": "500",
-              "agency": "Unlimited",
               "enterprise": "Talk to us"
             }
           },
@@ -397,10 +281,6 @@
               "free": "—",
               "starter": "500",
               "pro": "5,000",
-              "business": "50,000",
-              "scale": "150,000",
-              "advanced": "500,000",
-              "agency": "2,000,000",
               "enterprise": "Talk to us"
             }
           },
@@ -411,10 +291,6 @@
               "free": "—",
               "starter": "—",
               "pro": "✓",
-              "business": "✓",
-              "scale": "✓",
-              "advanced": "✓",
-              "agency": "✓",
               "enterprise": "✓"
             }
           },
@@ -425,10 +301,6 @@
               "free": "—",
               "starter": "✓",
               "pro": "✓",
-              "business": "✓",
-              "scale": "✓",
-              "advanced": "✓",
-              "agency": "✓",
               "enterprise": "✓"
             }
           },
@@ -439,10 +311,6 @@
               "free": "20",
               "starter": "200",
               "pro": "1,000",
-              "business": "5,000",
-              "scale": "10,000",
-              "advanced": "10,000",
-              "agency": "10,000",
               "enterprise": "Talk to us"
             }
           },
@@ -453,10 +321,6 @@
               "free": "—",
               "starter": "1,000",
               "pro": "10,000",
-              "business": "30,000",
-              "scale": "100,000",
-              "advanced": "150,000",
-              "agency": "500,000",
               "enterprise": "Talk to us"
             }
           },
@@ -467,10 +331,6 @@
               "free": "—",
               "starter": "✓",
               "pro": "✓",
-              "business": "✓",
-              "scale": "✓",
-              "advanced": "✓",
-              "agency": "✓",
               "enterprise": "✓"
             }
           },
@@ -481,10 +341,6 @@
               "free": "—",
               "starter": "35",
               "pro": "150",
-              "business": "200",
-              "scale": "300",
-              "advanced": "500",
-              "agency": "1,000",
               "enterprise": "Talk to us"
             }
           },
@@ -495,10 +351,6 @@
               "free": "—",
               "starter": "—",
               "pro": "2,500",
-              "business": "15,000",
-              "scale": "25,000",
-              "advanced": "65,000",
-              "agency": "130,000",
               "enterprise": "Talk to us"
             }
           },
@@ -509,10 +361,6 @@
               "free": "—",
               "starter": "—",
               "pro": "✓",
-              "business": "✓",
-              "scale": "✓",
-              "advanced": "✓",
-              "agency": "✓",
               "enterprise": "✓"
             }
           },
@@ -523,10 +371,6 @@
               "free": "—",
               "starter": "—",
               "pro": "✓",
-              "business": "✓",
-              "scale": "✓",
-              "advanced": "✓",
-              "agency": "✓",
               "enterprise": "✓"
             }
           }
@@ -542,10 +386,6 @@
               "free": "—",
               "starter": "✓",
               "pro": "✓",
-              "business": "✓",
-              "scale": "✓",
-              "advanced": "✓",
-              "agency": "✓",
               "enterprise": "✓"
             }
           },
@@ -556,10 +396,6 @@
               "free": "—",
               "starter": "100",
               "pro": "Unlimited",
-              "business": "10,000",
-              "scale": "25,000",
-              "advanced": "Unlimited",
-              "agency": "Unlimited",
               "enterprise": "Talk to us"
             }
           },
@@ -570,10 +406,6 @@
               "free": "—",
               "starter": "—",
               "pro": "1",
-              "business": "2",
-              "scale": "3",
-              "advanced": "5",
-              "agency": "20",
               "enterprise": "Talk to us"
             }
           },
@@ -584,10 +416,6 @@
               "free": "—",
               "starter": "5%",
               "pro": "3%",
-              "business": "2%",
-              "scale": "1%",
-              "advanced": "0%",
-              "agency": "0%",
               "enterprise": "0%"
             }
           },
@@ -598,10 +426,6 @@
               "free": "—",
               "starter": "2%",
               "pro": "0.5%",
-              "business": "0%",
-              "scale": "0%",
-              "advanced": "0%",
-              "agency": "0%",
               "enterprise": "0%"
             }
           },
@@ -612,10 +436,6 @@
               "free": "—",
               "starter": "—",
               "pro": "✓",
-              "business": "✓",
-              "scale": "✓",
-              "advanced": "✓",
-              "agency": "✓",
               "enterprise": "✓"
             }
           },
@@ -626,10 +446,6 @@
               "free": "—",
               "starter": "—",
               "pro": "✓",
-              "business": "✓",
-              "scale": "✓",
-              "advanced": "✓",
-              "agency": "✓",
               "enterprise": "✓"
             }
           },
@@ -640,10 +456,6 @@
               "free": "—",
               "starter": "—",
               "pro": "✓",
-              "business": "✓",
-              "scale": "✓",
-              "advanced": "✓",
-              "agency": "✓",
               "enterprise": "✓"
             }
           },
@@ -654,10 +466,6 @@
               "free": "—",
               "starter": "—",
               "pro": "✓",
-              "business": "✓",
-              "scale": "✓",
-              "advanced": "✓",
-              "agency": "✓",
               "enterprise": "✓"
             }
           },
@@ -668,10 +476,6 @@
               "free": "—",
               "starter": "—",
               "pro": "✓",
-              "business": "✓",
-              "scale": "✓",
-              "advanced": "✓",
-              "agency": "✓",
               "enterprise": "✓"
             }
           },
@@ -682,10 +486,6 @@
               "free": "—",
               "starter": "—",
               "pro": "✓",
-              "business": "✓",
-              "scale": "✓",
-              "advanced": "✓",
-              "agency": "✓",
               "enterprise": "✓"
             }
           }
@@ -701,10 +501,6 @@
               "free": "✓",
               "starter": "✓",
               "pro": "✓",
-              "business": "✓",
-              "scale": "✓",
-              "advanced": "✓",
-              "agency": "✓",
               "enterprise": "✓"
             }
           },
@@ -715,10 +511,6 @@
               "free": "—",
               "starter": "✓",
               "pro": "✓",
-              "business": "✓",
-              "scale": "✓",
-              "advanced": "✓",
-              "agency": "✓",
               "enterprise": "✓"
             }
           },
@@ -729,10 +521,6 @@
               "free": "✓",
               "starter": "✓",
               "pro": "✓",
-              "business": "✓",
-              "scale": "✓",
-              "advanced": "✓",
-              "agency": "✓",
               "enterprise": "✓"
             }
           },
@@ -743,10 +531,6 @@
               "free": "—",
               "starter": "✓",
               "pro": "✓",
-              "business": "✓",
-              "scale": "✓",
-              "advanced": "✓",
-              "agency": "✓",
               "enterprise": "✓"
             }
           },
@@ -757,10 +541,6 @@
               "free": "300 credits",
               "starter": "✓",
               "pro": "✓",
-              "business": "✓",
-              "scale": "✓",
-              "advanced": "✓",
-              "agency": "✓",
               "enterprise": "✓"
             }
           },
@@ -771,10 +551,6 @@
               "free": "300 / mo",
               "starter": "750 / mo",
               "pro": "2.75k / mo",
-              "business": "7.5k / mo",
-              "scale": "10k / mo",
-              "advanced": "13k / mo",
-              "agency": "58k / mo",
               "enterprise": "Talk to us"
             }
           },
@@ -785,10 +561,6 @@
               "free": "—",
               "starter": "—",
               "pro": "✓",
-              "business": "✓",
-              "scale": "✓",
-              "advanced": "✓",
-              "agency": "✓",
               "enterprise": "✓"
             }
           },
@@ -799,10 +571,6 @@
               "free": "—",
               "starter": "—",
               "pro": "✓",
-              "business": "✓",
-              "scale": "✓",
-              "advanced": "✓",
-              "agency": "✓",
               "enterprise": "✓"
             }
           }
@@ -818,10 +586,6 @@
               "free": "—",
               "starter": "—",
               "pro": "1.5k / mo",
-              "business": "1.5k / mo",
-              "scale": "5k / mo",
-              "advanced": "17k / mo",
-              "agency": "85k / mo",
               "enterprise": "Talk to us"
             }
           },
@@ -832,10 +596,6 @@
               "free": "—",
               "starter": "—",
               "pro": "✓",
-              "business": "✓",
-              "scale": "✓",
-              "advanced": "✓",
-              "agency": "✓",
               "enterprise": "✓"
             }
           },
@@ -846,10 +606,6 @@
               "free": "—",
               "starter": "—",
               "pro": "✓",
-              "business": "✓",
-              "scale": "✓",
-              "advanced": "✓",
-              "agency": "✓",
               "enterprise": "✓"
             }
           }
@@ -858,111 +614,22 @@
     ]
   },
   "tiers": {
-    "heading": "Need more scale?",
-    "lede": "Higher-volume plans for stores, orgs, and agencies.",
-    "rows": [
-      {
-        "plan": "scale",
-        "label": "Scale",
-        "priceLabel": "$249 /mo",
-        "annualLabel": "$179/mo billed annually",
-        "blurb": "For high-growth stores and multi-site teams that have outgrown Business.",
-        "specs": [
-          "15 sites",
-          "5 collaborators",
-          "1% commerce fees",
-          "5k API requests/mo",
-          "25,000 products per site",
-          "70 GB bandwidth",
-          "25,000 campaign emails/mo"
-        ],
-        "cta": "CHOOSE",
-        "byInterval": {
-          "month": {
-            "priceLabel": "$249 /mo",
-            "subLabel": "$179/mo billed annually",
-            "ctaHref": "https://app.aglyn.com/signup?plan=scale&interval=month"
-          },
-          "year": {
-            "priceLabel": "$179 /mo",
-            "subLabel": "$2,148 billed yearly",
-            "ctaHref": "https://app.aglyn.com/signup?plan=scale&interval=year"
-          }
-        }
-      },
-      {
-        "plan": "advanced",
-        "label": "Advanced",
-        "priceLabel": "$399 /mo",
-        "annualLabel": "$299/mo billed annually",
-        "blurb": "For high-volume organizations that need headroom on every limit.",
-        "specs": [
-          "25 sites",
-          "5 collaborators",
-          "0% commerce fees",
-          "17k API requests/mo",
-          "unlimited products",
-          "priority scale & limits",
-          "65,000 campaign emails/mo"
-        ],
-        "cta": "CHOOSE",
-        "byInterval": {
-          "month": {
-            "priceLabel": "$399 /mo",
-            "subLabel": "$299/mo billed annually",
-            "ctaHref": "https://app.aglyn.com/signup?plan=advanced&interval=month"
-          },
-          "year": {
-            "priceLabel": "$299 /mo",
-            "subLabel": "$3,588 billed yearly",
-            "ctaHref": "https://app.aglyn.com/signup?plan=advanced&interval=year"
-          }
-        }
-      },
-      {
-        "plan": "agency",
-        "label": "Agency",
-        "priceLabel": "$1299 /mo",
-        "annualLabel": "$1049/mo billed annually",
-        "blurb": "For agencies and resellers running whole client portfolios under one roof.",
-        "specs": [
-          "100 sites",
-          "5 collaborators",
-          "full white-label incl. custom console domain",
-          "85k API requests/mo",
-          "unlimited records & variables",
-          "20 POS registers per site",
-          "130,000 campaign emails/mo"
-        ],
-        "cta": "CHOOSE",
-        "byInterval": {
-          "month": {
-            "priceLabel": "$1299 /mo",
-            "subLabel": "$1049/mo billed annually",
-            "ctaHref": "https://app.aglyn.com/signup?plan=agency&interval=month"
-          },
-          "year": {
-            "priceLabel": "$1049 /mo",
-            "subLabel": "$12,588 billed yearly",
-            "ctaHref": "https://app.aglyn.com/signup?plan=agency&interval=year"
-          }
-        }
-      }
-    ],
+    "heading": "Need more than Pro?",
+    "lede": "Custom plans for portfolios, white-label and single sign-on.",
     "enterprise": {
       "plan": "enterprise",
       "label": "Custom",
-      "priceLabel": "Custom",
+      "priceLabel": "Quoted",
       "annualLabel": "Quoted per agreement",
-      "blurb": "For large organizations with bespoke requirements — volume pricing available.",
+      "blurb": "For portfolios and organizations that need white-label, single sign-on or a contract — quoted for you.",
       "specs": [
-        "Scale as you grow",
+        "Every limit sized by agreement",
         "0% transaction fees",
         "white-label",
         "SSO",
         "dedicated support",
         "custom contracts",
-        "campaign email volume by agreement"
+        "volume pricing"
       ],
       "cta": "CONTACT SALES",
       "byInterval": null
@@ -979,22 +646,6 @@
         "label": "Pro"
       },
       {
-        "plan": "business",
-        "label": "Business"
-      },
-      {
-        "plan": "scale",
-        "label": "Scale"
-      },
-      {
-        "plan": "advanced",
-        "label": "Advanced"
-      },
-      {
-        "plan": "agency",
-        "label": "Agency"
-      },
-      {
         "plan": "enterprise",
         "label": "Custom"
       }
@@ -1008,10 +659,6 @@
         "values": {
           "starter": "$20",
           "pro": "$20",
-          "business": "$20",
-          "scale": "$20",
-          "advanced": "$20",
-          "agency": "$20",
           "enterprise": "Custom"
         }
       },
@@ -1021,10 +668,6 @@
         "values": {
           "starter": "$5",
           "pro": "$4",
-          "business": "$3",
-          "scale": "$2",
-          "advanced": "$2",
-          "agency": "$2",
           "enterprise": "Custom"
         }
       },
@@ -1034,10 +677,6 @@
         "values": {
           "starter": "$3",
           "pro": "$2",
-          "business": "$1",
-          "scale": "$1",
-          "advanced": "$1",
-          "agency": "$1",
           "enterprise": "Custom"
         }
       },
@@ -1047,10 +686,6 @@
         "values": {
           "starter": "$2",
           "pro": "$2",
-          "business": "$1",
-          "scale": "$1",
-          "advanced": "$1",
-          "agency": "$1",
           "enterprise": "Custom"
         }
       },
@@ -1060,10 +695,6 @@
         "values": {
           "starter": "$0.36",
           "pro": "$0.36",
-          "business": "$0.36",
-          "scale": "$0.36",
-          "advanced": "$0.36",
-          "agency": "$0.36",
           "enterprise": "Custom"
         }
       },
@@ -1073,10 +704,6 @@
         "values": {
           "starter": "—",
           "pro": "$0.50",
-          "business": "$0.50",
-          "scale": "$0.35",
-          "advanced": "$0.25",
-          "agency": "$0.25",
           "enterprise": "Custom"
         }
       },
@@ -1086,10 +713,6 @@
         "values": {
           "starter": "$1",
           "pro": "$0.75",
-          "business": "$0.50",
-          "scale": "$0.40",
-          "advanced": "$0.40",
-          "agency": "$0.40",
           "enterprise": "Custom"
         }
       },
@@ -1099,10 +722,6 @@
         "values": {
           "starter": "—",
           "pro": "$2.25",
-          "business": "$2",
-          "scale": "$1.90",
-          "advanced": "$1.85",
-          "agency": "$1.80",
           "enterprise": "Custom"
         }
       },
@@ -1112,10 +731,6 @@
         "values": {
           "starter": "$3",
           "pro": "$3",
-          "business": "$2.75",
-          "scale": "$2.50",
-          "advanced": "$2.25",
-          "agency": "$2",
           "enterprise": "Custom"
         }
       },
@@ -1125,10 +740,6 @@
         "values": {
           "starter": "—",
           "pro": "$0.02",
-          "business": "$0.02",
-          "scale": "$0.02",
-          "advanced": "$0.02",
-          "agency": "$0.02",
           "enterprise": "Custom"
         }
       }
@@ -1185,30 +796,6 @@
         "label": "Pro",
         "digital": "3%",
         "physical": "0.5%"
-      },
-      {
-        "plan": "business",
-        "label": "Business",
-        "digital": "2%",
-        "physical": "0%"
-      },
-      {
-        "plan": "scale",
-        "label": "Scale",
-        "digital": "1%",
-        "physical": "0%"
-      },
-      {
-        "plan": "advanced",
-        "label": "Advanced",
-        "digital": "0%",
-        "physical": "0%"
-      },
-      {
-        "plan": "agency",
-        "label": "Agency",
-        "digital": "0%",
-        "physical": "0%"
       }
     ],
     "marketplace": {
@@ -1227,26 +814,6 @@
         {
           "plan": "pro",
           "label": "Pro",
-          "takeRate": "20%"
-        },
-        {
-          "plan": "business",
-          "label": "Business",
-          "takeRate": "20%"
-        },
-        {
-          "plan": "scale",
-          "label": "Scale",
-          "takeRate": "20%"
-        },
-        {
-          "plan": "advanced",
-          "label": "Advanced",
-          "takeRate": "20%"
-        },
-        {
-          "plan": "agency",
-          "label": "Agency",
           "takeRate": "20%"
         },
         {
@@ -1275,20 +842,17 @@
           "free": 0,
           "starter": 0,
           "pro": 1,
-          "business": 2,
-          "scale": 3,
-          "advanced": 5,
-          "agency": 20,
           "enterprise": 40
         }
       },
       {
-        "label": "Aglyn AI",
+        "label": "AI credits",
         "priceUsd": 10,
+        "unit": "block",
         "scope": "organization",
         "maxQuantity": 30,
         "creditsPerBlock": 5000,
-        "blurb": "5,000 AI credits a month per block, on any paid plan, on top of the credits your plan includes. Up to 30 blocks per workspace. Enterprise by agreement."
+        "blurb": "Blocks of 5,000 AI credits a month, per workspace, on any paid plan — up to 30 blocks. They add to the credits your plan includes; past both, credits bill at your plan’s rate. Custom by agreement."
       },
       {
         "label": "Site Care",

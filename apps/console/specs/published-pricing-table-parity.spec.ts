@@ -64,19 +64,21 @@
  * ⚠️ Pricing is FROZEN for the Sept 1 launch. Until then a divergence is a
  * bug in the code, never a license to edit this fixture.
  *
- * ## Pricing v4 (2026-11-03, AGL-4126) — re-pinned AHEAD of the page
+ * ## Pricing v4 (2026-11-03, AGL-4126) — pinned to the v4 frames
  *
- * A price RISE publishes on the page before billing moves
- * (`docs/PRICING_SURFACES.md`), and the page is republished from
- * `tools/marketing/pricing-copy/tables.json`, which the code lane regenerated
- * in the same change. So the Pro column and the plan list below are pinned to
- * the v4 figures that file carries — $69 / $49, every Business feature,
- * unlimited counts and add-on ceilings, 1,500 API requests at $0.50, 0.5% on
- * physical sales — rather than to a transcription of a republish that has
- * not happened yet. Each moved cell says so. Business, Scale, Advanced and
- * Agency are retired: never sold again, their rows kept for reading, and
- * their four columns still on the page (and in `tables.json`) until the page
- * lane drops them; their cells below did not move.
+ * The Figma Pricing frames were redrawn for v4 and re-extracted
+ * (`tools/marketing/pricing-copy/copy-*.json`), and `tables.json` — what the
+ * page is republished from — was regenerated against them with the
+ * reconciliation clean. The page now publishes THREE columns of figures, Free,
+ * Starter and Pro, and a fourth, Custom (the code's `enterprise`), that
+ * publishes none. A price RISE publishes on the page before billing moves
+ * (`docs/PRICING_SURFACES.md`), so the Pro column is pinned to the figures
+ * those frames carry — $69 / $49, every Business feature, unlimited counts
+ * and add-on ceilings, 1,500 API requests at $0.50, 0.5% on physical sales.
+ * Each moved cell says so. Business, Scale, Advanced and Agency are retired:
+ * never sold again, their rows kept in `PLAN_ENTITLEMENTS` for the
+ * workspaces still on them, and no column on the page, so no figure of
+ * theirs is pinned here any more.
  *
  * ## What is deliberately NOT pinned here
  *
@@ -111,29 +113,14 @@ import {
 import type { OrgPlan } from '@aglyn/aglyn'
 
 /**
- * The seven columns the public table publishes numbers for, left to right.
- * Enterprise is the eighth column on the page but publishes no figures.
+ * The three columns the public table publishes numbers for, left to right
+ * (pricing v4, AGL-4126). Custom (`enterprise`) is the fourth column on the
+ * page but publishes no figures.
  */
-const PUBLISHED_COLUMNS: OrgPlan[] = [
-  'free',
-  'starter',
-  'pro',
-  'business',
-  'scale',
-  'advanced',
-  'agency',
-]
+const PUBLISHED_COLUMNS: OrgPlan[] = ['free', 'starter', 'pro']
 
-type Row = readonly [number, number, number, number, number, number, number]
-type TickRow = readonly [
-  boolean,
-  boolean,
-  boolean,
-  boolean,
-  boolean,
-  boolean,
-  boolean,
-]
+type Row = readonly [number, number, number]
+type TickRow = readonly [boolean, boolean, boolean]
 
 /** `—` on the page: the row is absent, which for a quota is zero. */
 const NONE = 0
@@ -175,14 +162,13 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
   // would pass by comparing nothing to nothing. Assert the shape first.
   // ---------------------------------------------------------------------
   describe('premise — the sources exist and have the published shape', () => {
-    it('publishes exactly the eight plans the table has columns for', () => {
+    it('publishes a column for every plan sold, and none for a retired one', () => {
+      // Since pricing v4 (AGL-4126) the columns are the plans SOLD, then
+      // Custom; the four retired plans keep their rows and no column.
       expect(Object.keys(PLAN_ENTITLEMENTS).sort()).toEqual(
-        [...PUBLISHED_COLUMNS, 'enterprise'].sort(),
+        [...PUBLISHED_COLUMNS, ...RETIRED_PLANS, 'enterprise'].sort(),
       )
-      // The page's own footnote: "scroll sideways to see all 8 plans". Since
-      // pricing v4 (AGL-4126) three of the columns are SOLD and four are the
-      // retired plans, still drawn until the page lane drops them.
-      expect([...SELF_SERVE_PLANS, ...RETIRED_PLANS]).toEqual(PUBLISHED_COLUMNS)
+      expect(SELF_SERVE_PLANS).toEqual(PUBLISHED_COLUMNS)
       expect(SELF_SERVE_PLANS).toEqual(['free', 'starter', 'pro'])
     })
 
@@ -228,23 +214,13 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
   // "Sites & publishing"
   // ---------------------------------------------------------------------
   describe('Sites & publishing', () => {
-    it('Sites (hosts) — 1 · 1 · 3 · 10 · 15 · 25 · 100', () => {
-      expect(quotaColumn('hostLimit')).toEqual([
-        1, 1, 3, 10, 15, 25, 100,
-      ] satisfies Row)
+    it('Sites (hosts) — 1 · 1 · 3', () => {
+      expect(quotaColumn('hostLimit')).toEqual([1, 1, 3] satisfies Row)
     })
 
     // Pro 100 → Unlimited: pricing v4 (AGL-4126).
-    it('Pages per site — 5 · 25 · Unlimited ×5', () => {
-      expect(quotaColumn('screensPerHost')).toEqual([
-        5,
-        25,
-        UNLIMITED,
-        UNLIMITED,
-        UNLIMITED,
-        UNLIMITED,
-        UNLIMITED,
-      ] satisfies Row)
+    it('Pages per site — 5 · 25 · Unlimited', () => {
+      expect(quotaColumn('screensPerHost')).toEqual([5, 25, UNLIMITED] satisfies Row)
     })
 
     /**
@@ -268,8 +244,8 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * covers its full-use cost plus 30% after Stripe's fee, storage first
      * because the site count multiplies it.
      */
-    it('Storage per site — 250 MB · 2 · 5 · 10 · 15 · 20 · 20 GB', () => {
-      const PUBLISHED: Row = [250, 2048, 5120, 10240, 15360, 20480, 20480]
+    it('Storage per site — 250 MB · 2 · 5 GB', () => {
+      const PUBLISHED: Row = [250, 2048, 5120]
       expect(quotaColumn('storagePerHostMb')).toEqual(PUBLISHED)
     })
 
@@ -291,9 +267,9 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * (`tier-margin-floor.spec.ts` carries the model and the mutations that
      * prove it). Free's band can never be metered, so it is a give.
      */
-    it('Bandwidth / mo — 2 · 15 · 25 · 45 · 70 · 80 · 395 GB', () => {
-      /** What the live page says, in GB (version `qE5PwfZM-K`). */
-      const PUBLISHED: Row = [2, 15, 25, 45, 70, 80, 395]
+    it('Bandwidth / mo — 2 · 15 · 25 GB', () => {
+      /** What the page says, in GB (version `qE5PwfZM-K`; the v4 frames too). */
+      const PUBLISHED: Row = [2, 15, 25]
       expect(quotaColumn('bandwidthGb')).toEqual(PUBLISHED)
     })
 
@@ -318,13 +294,13 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
     )
 
     /**
-     * "Reusable components" — 1 · ✓ · ✓ · ✓ · ✓ · ✓ · ✓ (AGL-3615). Free's cell
+     * "Reusable components" — 1 · ✓ · ✓ (AGL-3615). Free's cell
      * was "—" while components were a Starter feature; Free now saves one per
      * site, and `tools/scripts/publish-pricing-free-component-cell.mjs` sets
      * the cell to "1" on version `oKpP7e6UeG`. A tick is an unlimited
      * allowance, which every paid plan keeps, and the flag that says so.
      */
-    it('Reusable components — 1 · ✓ · ✓ · ✓ · ✓ · ✓ · ✓', () => {
+    it('Reusable components — 1 · ✓ · ✓', () => {
       const [free, ...paid] = quotaColumn('componentsPerHost')
       expect(free).toBe(1)
       expect(flagColumn('reusableComponents')[0]).toBeFalsy()
@@ -341,47 +317,25 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
     // included seats start small so buying more is a real choice; the
     // maxima did not move.
     // Pro's ceiling is lifted by pricing v4 (AGL-4126): "3 · unlimited".
-    it('Team seats — 1 · 2·5 · 3·unlimited · 5·100 · 5·150 · 10·250 · 10·500', () => {
-      expect(quotaColumn('managersPerOrg')).toEqual([
-        1, 2, 3, 5, 5, 10, 10,
-      ] satisfies Row)
-      expect(quotaColumn('maxManagersPerOrg')).toEqual([
-        1, 5, UNLIMITED, 100, 150, 250, 500,
-      ] satisfies Row)
+    it('Team seats — 1 · 2·5 · 3·unlimited', () => {
+      expect(quotaColumn('managersPerOrg')).toEqual([1, 2, 3] satisfies Row)
+      expect(quotaColumn('maxManagersPerOrg')).toEqual([1, 5, UNLIMITED] satisfies Row)
     })
 
-    it('Site collaborators — 1 · 2·10 · 3·unlimited · 5·100 · 5·150 · 5·250 · 5·1,000', () => {
-      expect(quotaColumn('membersPerHost')).toEqual([
-        1, 2, 3, 5, 5, 5, 5,
-      ] satisfies Row)
-      expect(quotaColumn('maxMembersPerHost')).toEqual([
-        1, 10, UNLIMITED, 100, 150, 250, 1000,
-      ] satisfies Row)
+    it('Site collaborators — 1 · 2·10 · 3·unlimited', () => {
+      expect(quotaColumn('membersPerHost')).toEqual([1, 2, 3] satisfies Row)
+      expect(quotaColumn('maxMembersPerHost')).toEqual([1, 10, UNLIMITED] satisfies Row)
     })
 
-    it('White-label — Agency and Enterprise only', () => {
-      expect(flagColumn('whiteLabel')).toEqual([
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        true,
-      ] satisfies TickRow)
+    // Custom only since pricing v4: Agency, the one plan below it that
+    // carried white-label, is retired (AGL-4126).
+    it('White-label — Custom only', () => {
+      expect(flagColumn('whiteLabel')).toEqual([false, false, false] satisfies TickRow)
       expect(PLAN_ENTITLEMENTS.enterprise.features.whiteLabel).toBe(true)
     })
 
-    it('Single sign-on — Enterprise only', () => {
-      expect(flagColumn('ssoEnabled')).toEqual([
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-      ] satisfies TickRow)
+    it('Single sign-on — Custom only', () => {
+      expect(flagColumn('ssoEnabled')).toEqual([false, false, false] satisfies TickRow)
       expect(PLAN_ENTITLEMENTS.enterprise.features.ssoEnabled).toBe(true)
     })
   })
@@ -391,87 +345,31 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
   // ---------------------------------------------------------------------
   describe('Content & data', () => {
     // Pro's ceiling is lifted by pricing v4 (AGL-4126): "5 · unlimited".
-    it('Datasets — — · 2·10 · 5·unlimited · 10·250 · 15·500 · 25·1,000 · 50·5,000', () => {
-      expect(quotaColumn('datasetsPerOrg')).toEqual([
-        NONE,
-        2,
-        5,
-        10,
-        15,
-        25,
-        50,
-      ] satisfies Row)
-      expect(quotaColumn('maxDatasetsPerOrg')).toEqual([
-        NONE,
-        10,
-        UNLIMITED,
-        250,
-        500,
-        1000,
-        5000,
-      ] satisfies Row)
+    it('Datasets — — · 2·10 · 5·unlimited', () => {
+      expect(quotaColumn('datasetsPerOrg')).toEqual([NONE, 2, 5] satisfies Row)
+      expect(quotaColumn('maxDatasetsPerOrg')).toEqual([NONE, 10, UNLIMITED] satisfies Row)
     })
 
     // Pro 10k → Unlimited: pricing v4 (AGL-4126). Same for the three rows
     // below it.
-    it('Records per dataset — — · 1k · Unlimited · 100k · 500k · 1M · Unlimited', () => {
-      expect(quotaColumn('recordsPerDataset')).toEqual([
-        NONE,
-        1000,
-        UNLIMITED,
-        100000,
-        500000,
-        1000000,
-        UNLIMITED,
-      ] satisfies Row)
+    it('Records per dataset — — · 1k · Unlimited', () => {
+      expect(quotaColumn('recordsPerDataset')).toEqual([NONE, 1000, UNLIMITED] satisfies Row)
     })
 
-    it('Variables per site — 3 · 25 · Unlimited · 1,000 · 5,000 · Unlimited ×2', () => {
-      expect(quotaColumn('variablesPerHost')).toEqual([
-        3,
-        25,
-        UNLIMITED,
-        1000,
-        5000,
-        UNLIMITED,
-        UNLIMITED,
-      ] satisfies Row)
+    it('Variables per site — 3 · 25 · Unlimited', () => {
+      expect(quotaColumn('variablesPerHost')).toEqual([3, 25, UNLIMITED] satisfies Row)
     })
 
-    it('Functions per site — 1 · 10 · Unlimited · 250 · 500 · 1,000 · Unlimited', () => {
-      expect(quotaColumn('functionsPerHost')).toEqual([
-        1,
-        10,
-        UNLIMITED,
-        250,
-        500,
-        1000,
-        UNLIMITED,
-      ] satisfies Row)
+    it('Functions per site — 1 · 10 · Unlimited', () => {
+      expect(quotaColumn('functionsPerHost')).toEqual([1, 10, UNLIMITED] satisfies Row)
     })
 
-    it('Workflows per site — — · 3 · Unlimited · 100 · 250 · 500 · Unlimited', () => {
-      expect(quotaColumn('workflowsPerHost')).toEqual([
-        NONE,
-        3,
-        UNLIMITED,
-        100,
-        250,
-        500,
-        UNLIMITED,
-      ] satisfies Row)
+    it('Workflows per site — — · 3 · Unlimited', () => {
+      expect(quotaColumn('workflowsPerHost')).toEqual([NONE, 3, UNLIMITED] satisfies Row)
     })
 
-    it('Workflow runs / mo — — · 500 · 5k · 50k · 150k · 500k · 2M', () => {
-      expect(quotaColumn('workflowRunsPerMonth')).toEqual([
-        NONE,
-        500,
-        5000,
-        50000,
-        150000,
-        500000,
-        2000000,
-      ] satisfies Row)
+    it('Workflow runs / mo — — · 500 · 5k', () => {
+      expect(quotaColumn('workflowRunsPerMonth')).toEqual([NONE, 500, 5000] satisfies Row)
     })
 
     /**
@@ -497,19 +395,21 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * plan and none on Free, sold as a feature it never was.
      */
     // Pro 25 → Unlimited: pricing v4 (AGL-4126).
-    it('Saved forms per site — 1 · 5 · Unlimited · 100 · 500 · 500 · 500', () => {
-      const PUBLISHED: Row = [1, 5, UNLIMITED, 100, 500, 500, 500]
+    it('Saved forms per site — 1 · 5 · Unlimited', () => {
+      const PUBLISHED: Row = [1, 5, UNLIMITED]
       expect(quotaColumn('formsPerHost')).toEqual(PUBLISHED)
     })
 
-    it('Form submissions / mo, per site — 20 · 200 · 1k · 5k · 10k · 10k · 10k', () => {
-      const PUBLISHED: Row = [20, 200, 1000, 5000, 10000, 10000, 10000]
+    it('Form submissions / mo, per site — 20 · 200 · 1k', () => {
+      const PUBLISHED: Row = [20, 200, 1000]
       expect(quotaColumn('formSubmissionsPerMonth')).toEqual(PUBLISHED)
       // Every self-serve cell is a finite number, which is the property the
-      // cost model needs; only Enterprise's "Talk to us" is unbounded.
+      // cost model needs; only Custom's "Talk to us" is unbounded.
       for (const value of PUBLISHED) expect(Number.isFinite(value)).toBe(true)
-      // Metered, so the bound bills rather than refuses.
-      expect(PLAN_PRICING.agency.meteredInfraPassThrough).toBe(true)
+      // Metered on every paid plan, so the bound bills rather than refuses.
+      for (const plan of PUBLISHED_COLUMNS.slice(1)) {
+        expect(PLAN_PRICING[plan].meteredInfraPassThrough).toBe(true)
+      }
     })
 
     /**
@@ -531,12 +431,11 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * `prices` block below. That rate is what makes the bound METER rather
      * than wall: without it `checkCrmRecordsQuota` refuses past the band.
      */
-    it('CRM records included — — · 1k · 10k · 30k · 100k · 150k · 500k', () => {
-      // Business re-transcribed 2026-10-02 from version `qE5PwfZM-K` (AGL-3469).
-      const PUBLISHED = [NO_CRM, 1000, 10000, 30000, 100000, 150000, 500000]
+    it('CRM records included — — · 1k · 10k', () => {
+      const PUBLISHED = [NO_CRM, 1000, 10000]
       expect(crmColumn('contactsPerHost')).toEqual(PUBLISHED)
       // Every band is finite, the one Free keeps included, which is the
-      // property the cost model needs; only Enterprise's "Talk to us" is
+      // property the cost model needs; only Custom's "Talk to us" is
       // unbounded.
       for (const value of quotaColumn('contactsPerHost')) {
         expect(Number.isFinite(value)).toBe(true)
@@ -575,7 +474,7 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * not at a usability figure.
      */
     describe('CRM: contacts, leads, companies, deals & tasks — — · ✓ from Starter', () => {
-      const PUBLISHED = [NO_CRM, '✓', '✓', '✓', '✓', '✓', '✓']
+      const PUBLISHED = [NO_CRM, '✓', '✓']
 
       it('ticks exactly the plans that carry `features.crm`', () => {
         expect(flagColumn('crm').map((crm) => (crm ? '✓' : NO_CRM))).toEqual(
@@ -603,17 +502,9 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       })
     })
 
-    it('One-to-one emails / day — — · 35 · 150 · 200 · 300 · 500 · 1,000', () => {
+    it('One-to-one emails / day — — · 35 · 150', () => {
       // Starter re-transcribed 2026-10-02 from version `qE5PwfZM-K` (AGL-3469).
-      expect(quotaColumn('crmEmailsPerDay')).toEqual([
-        NONE,
-        35,
-        150,
-        200,
-        300,
-        500,
-        1000,
-      ] satisfies Row)
+      expect(quotaColumn('crmEmailsPerDay')).toEqual([NONE, 35, 150] satisfies Row)
       // Free's dash is a refusal at zero, not an absent row: a per-org
       // `features.crm` grant does not send until this is raised beside it.
       expect(PLAN_ENTITLEMENTS.free.crmEmailsPerDay).toBe(0)
@@ -651,9 +542,9 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
        * What the page says, per column, and what the code bills against —
        * re-transcribed 2026-10-02 from version `qE5PwfZM-K` (AGL-3469).
        */
-      const PUBLISHED = [NONE, NONE, 2500, 15000, 25000, 65000, 130000] satisfies Row
+      const PUBLISHED = [NONE, NONE, 2500] satisfies Row
 
-      it('— · — · 2,500 · 15,000 · 25,000 · 65,000 · 130,000', () => {
+      it('— · — · 2,500', () => {
         expect(quotaColumn('emailSendsPerMonth')).toEqual(PUBLISHED)
       })
 
@@ -671,16 +562,12 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       })
 
       it('no CHARGED price moved with the email change itself', () => {
-        // The allowance reduction is separable from the price move that came
-        // after it: the six tiers whose email band this row is about are all
-        // still at their published price, and Agency's rise is a different
-        // change with its own reasoning, pinned in the `prices` block below.
-        // So is Pro's $69, pricing v4's (AGL-4126).
+        // The allowance reduction is separable from the price moves that came
+        // after it: Pro's $69 is pricing v4's (AGL-4126), with its own
+        // reasoning, pinned in the `prices` block below.
         expect(
-          PUBLISHED_COLUMNS.filter((plan) => plan !== 'agency').map(
-            (plan) => PLAN_PRICING[plan].basePriceMonthlyUsd,
-          ),
-        ).toEqual([0, 25, 69, 139, 249, 399])
+          PUBLISHED_COLUMNS.map((plan) => PLAN_PRICING[plan].basePriceMonthlyUsd),
+        ).toEqual([0, 25, 69])
       })
     })
 
@@ -693,42 +580,24 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      */
     describe('Send email from your own domain — — · — · ✓ from Pro', () => {
       it('starts at Pro, and Free and Starter do not carry it', () => {
-        expect(flagColumn('customSendingDomain')).toEqual([
-          false,
-          false,
-          true,
-          true,
-          true,
-          true,
-          true,
-        ])
+        expect(flagColumn('customSendingDomain')).toEqual([false, false, true])
       })
 
       it('is a strictly wider grant than white-label, which has not moved', () => {
         // The point of the carve-out. `whiteLabel` replaces the Aglyn brand
-        // everywhere and is still Agency-and-above; if this assertion ever
-        // fails, the sending gate was widened by widening the brand gate,
-        // which hands Pro a set of unrelated Agency features.
-        expect(flagColumn('whiteLabel')).toEqual([
-          false,
-          false,
-          false,
-          false,
-          false,
-          false,
-          true,
-        ])
+        // everywhere and is still Custom's alone among the plans sold; if this
+        // assertion ever fails, the sending gate was widened by widening the
+        // brand gate, which hands Pro a set of unrelated features.
+        expect(flagColumn('whiteLabel')).toEqual([false, false, false])
+        expect(PLAN_ENTITLEMENTS.enterprise.features.whiteLabel).toBe(true)
       })
 
       it('no CHARGED price moved with it', () => {
-        // Adding an inclusion is not a repricing. Agency's figure is the one
-        // that moved, in its own change, and is pinned in the `prices` block —
-        // and Pro's $69, pricing v4's (AGL-4126).
+        // Adding an inclusion is not a repricing. Pro's $69 is pricing v4's
+        // (AGL-4126), pinned in the `prices` block.
         expect(
-          PUBLISHED_COLUMNS.filter((plan) => plan !== 'agency').map(
-            (plan) => PLAN_PRICING[plan].basePriceMonthlyUsd,
-          ),
-        ).toEqual([0, 25, 69, 139, 249, 399])
+          PUBLISHED_COLUMNS.map((plan) => PLAN_PRICING[plan].basePriceMonthlyUsd),
+        ).toEqual([0, 25, 69])
       })
     })
 
@@ -749,42 +618,25 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
   // ---------------------------------------------------------------------
   describe('Commerce', () => {
     // Pro 2,500 → Unlimited: pricing v4 (AGL-4126).
-    it('Products per site — — · 100 · Unlimited · 10k · 25k · Unlimited ×2', () => {
-      expect(quotaColumn('productsPerHost')).toEqual([
-        NONE,
-        100,
-        UNLIMITED,
-        10000,
-        25000,
-        UNLIMITED,
-        UNLIMITED,
-      ] satisfies Row)
+    it('Products per site — — · 100 · Unlimited', () => {
+      expect(quotaColumn('productsPerHost')).toEqual([NONE, 100, UNLIMITED] satisfies Row)
     })
 
-    it('POS registers per site — — · — · 1 · 2 · 3 · 5 · 20', () => {
-      expect(quotaColumn('posRegisters')).toEqual([
-        NONE,
-        NONE,
-        1,
-        2,
-        3,
-        5,
-        20,
-      ] satisfies Row)
+    it('POS registers per site — — · — · 1', () => {
+      expect(quotaColumn('posRegisters')).toEqual([NONE, NONE, 1] satisfies Row)
     })
 
-    it('Digital transaction fee — — · 5% · 3% · 2% · 1% · 0% · 0%', () => {
-      expect(quotaColumn('transactionFeeDigitalPct')).toEqual([
-        0, 5, 3, 2, 1, 0, 0,
-      ] satisfies Row)
+    // Custom's "0%" is a fixed fee rather than a band, and the page prints it.
+    it('Digital transaction fee — — · 5% · 3% · Custom 0%', () => {
+      expect(quotaColumn('transactionFeeDigitalPct')).toEqual([0, 5, 3] satisfies Row)
+      expect(PLAN_ENTITLEMENTS.enterprise.transactionFeeDigitalPct).toBe(0)
     })
 
     // Pro 0% → 0.5%: pricing v4, decision 9 (AGL-4126) — the Stripe Connect
     // account and payout fees the platform pays.
-    it('Physical transaction fee — — · 2% · 0.5% · 0% ×4', () => {
-      expect(quotaColumn('transactionFeePhysicalPct')).toEqual([
-        0, 2, 0.5, 0, 0, 0, 0,
-      ] satisfies Row)
+    it('Physical transaction fee — — · 2% · 0.5% · Custom 0%', () => {
+      expect(quotaColumn('transactionFeePhysicalPct')).toEqual([0, 2, 0.5] satisfies Row)
+      expect(PLAN_ENTITLEMENTS.enterprise.transactionFeePhysicalPct).toBe(0)
     })
 
     it.each([
@@ -845,29 +697,28 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * function invocation behind a CDN request that reads, writes and answers
      * — $0.117 per 1,000 at Vercel's dearest region and nam5 where it was
      * priced at $0.002 — so each API band was cut to the dollars it was sized
-     * to cost. Version `-jejSg7GLa` reads "1.5k / mo · 5k / mo · 17k / mo ·
-     * 85k / mo" in the compare table and the mobile panels, "API access ·
-     * 1.5k req/mo" on the Business card, and "5k / 17k / 85k API
-     * requests/mo" in the Scale, Advanced and Agency room-to-grow strips.
+     * to cost. Version `-jejSg7GLa` read "1.5k / mo" for Business in the
+     * compare table and the mobile panels.
      */
-    // Pro carries Business's 1.5k since pricing v4 moved the API in (AGL-4126).
-    it('API access — — · — · 1.5k · 1.5k · 5k · 17k · 85k per month', () => {
-      const PUBLISHED: Row = [NONE, NONE, 1500, 1500, 5000, 17000, 85000]
+    // Pro carries Business's 1.5k since pricing v4 moved the API in (AGL-4126);
+    // the v4 frames read "1.5k / mo" in Pro's column.
+    it('API access — — · — · 1.5k per month', () => {
+      const PUBLISHED: Row = [NONE, NONE, 1500]
       expect(quotaColumn('apiRequestsPerMonth')).toEqual(PUBLISHED)
     })
 
     /**
      * THE GENERATIVE DOOR (AGL-2900, AGL-3965). ONE POOL since AGL-3965:
      * every paid plan's included credits pay for generation, so the cell is a
-     * tick on every paid plan and on Enterprise, and "300 credits" on Free —
+     * tick on every paid plan and on Custom, and "300 credits" on Free —
      * whose band is the taste. The page printed "add-on" on the paid plans
      * until the AGL-3965 republish of **2026-10-19** (version `U6Vbrc6Jr5`),
      * published page first, before this merged; this pins the cells that
      * page states.
      */
     describe('Aglyn AI: generate pages, emails, campaigns, products and more', () => {
-      it('300 credits · ✓ ×6 · ✓ — Free generates against its taste, every paid plan against its own credits', () => {
-        const PUBLISHED = ['300 credits', '✓', '✓', '✓', '✓', '✓', '✓']
+      it('300 credits · ✓ · ✓ · ✓ — Free generates against its taste, every paid plan against its own credits', () => {
+        const PUBLISHED = ['300 credits', '✓', '✓']
         expect(
           PUBLISHED_COLUMNS.map((plan) =>
             !PLAN_ENTITLEMENTS[plan].features.aiGenerative
@@ -892,11 +743,11 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * page now serves it on the compare table and in the Starter plan panel.
      *
      * Relabeled "AI credits included / mo" by AGL-3965: the figure is the
-     * plan's own band, the one pool every AI action draws on, and an Aglyn AI
-     * tier adds on top of it.
+     * plan's own band, the one pool every AI action draws on, and the Aglyn
+     * AI credit blocks add on top of it (AGL-4144).
      */
-    it('AI credits included / mo — 300 · 750 · 2.75k · 7.5k · 10k · 13k · 58k', () => {
-      const PUBLISHED: Row = [300, 750, 2750, 7500, 10000, 13000, 58000]
+    it('AI credits included / mo — 300 · 750 · 2.75k', () => {
+      const PUBLISHED: Row = [300, 750, 2750]
       expect(quotaColumn('assistCreditsPerMonth')).toEqual(PUBLISHED)
       // The decision this row records: the first PAID rung must not include
       // less of an axis than the free one.
@@ -947,16 +798,18 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * PRO'S PRICE ROSE IN PRICING V4 (2026-11-03, AGL-4126): $56 → $69 a month
      * and $39 → $49 billed yearly ($588 a year), live Stripe prices
      * `aglyn_pro_v4` and `aglyn_pro_v4_yearly`. A rise publishes on the page
-     * BEFORE billing moves, so PUBLISHED carries the v4 figure `tables.json`
-     * hands the page lane to republish; until that republish the live page
-     * quotes $56 / $39, the safe direction for a rise.
+     * BEFORE billing moves, so PUBLISHED carries the v4 figure the v4 frames
+     * and `tables.json` carry ("$69 /mo", "$49/mo billed yearly").
+     *
+     * Agency's $1,299 above is history since pricing v4: Agency is retired
+     * and the page publishes no column for it, so it is no longer pinned.
      */
     it('monthly — the page and the code agree on every column', () => {
-      // PUBLISHED is transcribed BY HAND from the live page and is the whole
-      // value of this case: nothing in CI can read that page, so a divergence
-      // is only ever visible as a difference between these two rows.
-      const PUBLISHED: Row = [0, 25, 69, 139, 249, 399, 1299]
-      const CODE: Row = [0, 25, 69, 139, 249, 399, 1299]
+      // PUBLISHED is transcribed BY HAND from the page and is the whole value
+      // of this case: nothing in CI can read that page, so a divergence is
+      // only ever visible as a difference between these two rows.
+      const PUBLISHED: Row = [0, 25, 69]
+      const CODE: Row = [0, 25, 69]
       expect(
         PUBLISHED_COLUMNS.map((plan) => PLAN_PRICING[plan].basePriceMonthlyUsd),
       ).toEqual(CODE)
@@ -967,8 +820,8 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
     })
 
     it('annual, per month — the page and the code agree there too', () => {
-      const PUBLISHED: Row = [0, 16, 49, 99, 179, 299, 1049]
-      const CODE: Row = [0, 16, 49, 99, 179, 299, 1049]
+      const PUBLISHED: Row = [0, 16, 49]
+      const CODE: Row = [0, 16, 49]
       expect(
         PUBLISHED_COLUMNS.map(
           (plan) => PLAN_PRICING[plan].basePriceAnnualMonthlyUsd,
@@ -978,17 +831,14 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
         PUBLISHED_COLUMNS.map((plan, column) => [plan, PUBLISHED[column], CODE[column]])
           .filter(([, was, now]) => was !== now),
       ).toEqual([])
-      // $1,049/mo is $12,588 a year, which is what the live Stripe yearly
-      // price charges — the constant every surface quotes has to be the one
-      // Stripe bills, and Stripe prices are immutable. It lands within a
-      // dollar of holding the previous 18.8% discount across the rise, which
-      // is what stops the annual interval becoming the cheap way past a
-      // repricing.
-      expect(1049 * 12).toBe(12_588)
-      expect(1 - 1049 / 1299).toBeCloseTo(1 - 649 / 799, 2)
+      // Pro's $49/mo is $588 a year, which is what the live Stripe yearly
+      // price `aglyn_pro_v4_yearly` charges — the constant every surface
+      // quotes has to be the one Stripe bills, and Stripe prices are
+      // immutable.
+      expect(PLAN_PRICING.pro.basePriceAnnualMonthlyUsd * 12).toBe(588)
     })
 
-    it('Enterprise publishes no list price — the card reads "Custom"', () => {
+    it('Custom publishes no list price — the card reads "Quoted"', () => {
       expect(PLAN_PRICING.enterprise.basePriceMonthlyUsd).toBe(0)
       expect(PLAN_PRICING.enterprise.extraHostMonthlyUsd).toBeNull()
     })
@@ -1025,28 +875,20 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * than the next plan at every count, so the rate sits above the steepest
      * step on both billing intervals (2026-09-20).
      */
-    it('Extra site, per month — $20 · $20 · $20 · $20 · $20 · $20', () => {
-      expect(PAID.map((p) => PLAN_PRICING[p].extraHostMonthlyUsd)).toEqual([
-        20, 20, 20, 20, 20, 20,
-      ])
+    it('Extra site, per month — $20 · $20', () => {
+      expect(PAID.map((p) => PLAN_PRICING[p].extraHostMonthlyUsd)).toEqual([20, 20])
     })
 
-    it('Extra team seat, per month — $5 · $4 · $3 · $2 · $2 · $2', () => {
-      expect(PAID.map((p) => PLAN_PRICING[p].extraSeatMonthlyUsd)).toEqual([
-        5, 4, 3, 2, 2, 2,
-      ])
+    it('Extra team seat, per month — $5 · $4', () => {
+      expect(PAID.map((p) => PLAN_PRICING[p].extraSeatMonthlyUsd)).toEqual([5, 4])
     })
 
-    it('Extra site collaborator, per month — $3 · $2 · $1 · $1 · $1 · $1', () => {
-      expect(
-        PAID.map((p) => PLAN_PRICING[p].extraCollaboratorMonthlyUsd),
-      ).toEqual([3, 2, 1, 1, 1, 1])
+    it('Extra site collaborator, per month — $3 · $2', () => {
+      expect(PAID.map((p) => PLAN_PRICING[p].extraCollaboratorMonthlyUsd)).toEqual([3, 2])
     })
 
-    it('Extra dataset, per month — $2 · $2 · $1 · $1 · $1 · $1', () => {
-      expect(PAID.map((p) => PLAN_PRICING[p].extraDatasetMonthlyUsd)).toEqual([
-        2, 2, 1, 1, 1, 1,
-      ])
+    it('Extra dataset, per month — $2 · $2', () => {
+      expect(PAID.map((p) => PLAN_PRICING[p].extraDatasetMonthlyUsd)).toEqual([2, 2])
     })
 
     /**
@@ -1062,7 +904,7 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * one, $0.0349, is correct and must not be touched.
      */
     it('Extra dataset storage, per GB-month — $0.36 on every paid plan', () => {
-      const PUBLISHED = [0.36, 0.36, 0.36, 0.36, 0.36, 0.36]
+      const PUBLISHED = [0.36, 0.36]
       expect(PAID.map((p) => PLAN_PRICING[p].extraDataGbMonthlyUsd)).toEqual(
         PUBLISHED,
       )
@@ -1079,8 +921,8 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      */
     // Pro carries Business's $0.50 since pricing v4 moved the API and its
     // band in (AGL-4126).
-    it('API requests per 1,000 over limit — $0.50 · $0.50 · $0.35 · $0.25 · $0.25', () => {
-      const PUBLISHED = [null, 0.5, 0.5, 0.35, 0.25, 0.25]
+    it('API requests per 1,000 over limit — — · $0.50', () => {
+      const PUBLISHED = [null, 0.5]
       expect(PAID.map((p) => PLAN_PRICING[p].extraApiRequestsUsdPer1k)).toEqual(
         PUBLISHED,
       )
@@ -1103,8 +945,8 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * charged — `Math.max(0, used - Infinity)` is 0 at every usage level.
      * The band is finite now, so the rate is real.
      */
-    it('CRM records per 1,000 over band — $1 · $0.75 · $0.50 · $0.40 · $0.40 · $0.40', () => {
-      const PUBLISHED = [1, 0.75, 0.5, 0.4, 0.4, 0.4]
+    it('CRM records per 1,000 over band — $1 · $0.75', () => {
+      const PUBLISHED = [1, 0.75]
       expect(PAID.map((p) => PLAN_PRICING[p].extraContactsUsdPer1k)).toEqual(
         PUBLISHED,
       )
@@ -1119,9 +961,11 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
        * mirror image: usage past a bound that is silently free, so the bound
        * achieves nothing. The pair is only ever correct together.
        */
+      // Agency is retired (pricing v4) and publishes no column, but its row
+      // still bills the workspaces on it, so the pair is still held.
       expect(Number.isFinite(PLAN_ENTITLEMENTS.agency.contactsPerHost)).toBe(true)
       expect(PLAN_PRICING.agency.extraContactsUsdPer1k).toBe(0.4)
-      // Enterprise publishes no rate and, since 2026-09-07, no unbounded band
+      // Custom publishes no rate and, since 2026-09-07, no unbounded band
       // either: its row is a finite fallback of twice Agency's that a
       // contract raises, and the page still reads "Talk to us" for it.
       expect(PLAN_ENTITLEMENTS.enterprise.contactsPerHost).toBe(1_000_000)
@@ -1139,8 +983,8 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * silently free — the shape `plan-entitlements.spec.ts` forbids on every
      * other plan — so the rate moved onto the row and the page now states it.
      */
-    it('AI credits per 1,000 over band — $3 · $3 · $2.75 · $2.50 · $2.25 · $2', () => {
-      const PUBLISHED = [3, 3, 2.75, 2.5, 2.25, 2]
+    it('AI credits per 1,000 over band — $3 · $3', () => {
+      const PUBLISHED = [3, 3]
       expect(PAID.map((p) => PLAN_PRICING[p].extraAssistCreditsUsdPer1k)).toEqual(
         PUBLISHED,
       )
@@ -1155,15 +999,15 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * ONE add-on, AI credits by the block: "$10 / mo" a block of 5,000
      * credits, on top of the plan's included credits, up to 30 blocks per
      * workspace, on any paid plan. Free sells none; Enterprise by agreement.
-     * These are the figures the pricing page republish that follows prints;
-     * until it lands, the page still shows the retired tiers, and
-     * `build-pricing-tables.mts` declares that one stale cell.
+     * The v4 frames print the card as "AI credits", "$10 / mo a block", and
+     * `build-pricing-tables.mts` reconciles that headline exactly.
      */
     describe('Aglyn AI card', () => {
       it('$10 / mo a block — 5,000 AI credits a month each, on top of the plan', () => {
         expect(AI_CREDIT_BLOCK_MONTHLY_USD).toBe(10)
         expect(AI_CREDIT_BLOCK_YEARLY_USD).toBe(120)
         expect(AI_CREDITS_PER_BLOCK).toBe(5000)
+        expect(PAID.every((p) => planSellsAiCredits(p))).toBe(true)
         // On any paid plan that is SOLD; Free and Enterprise sell none, and
         // nor do the plans pricing v4 retired (AGL-4126).
         expect(
@@ -1211,7 +1055,7 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
   // either the rate or the markup moves the published number.
   // ---------------------------------------------------------------------
   describe('metered usage', () => {
-    it('is applied on Starter through Agency, and on neither end', () => {
+    it('is applied on Starter and Pro, and on neither end', () => {
       // "On Starter through Agency plans, page views, form submissions, and
       // site storage past the amount your plan includes are metered…" and
       // "Free plans are capped rather than billed, and Enterprise usage is
@@ -1420,10 +1264,11 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       // The published sentence claims the marketplace rate "does not step down
       // with your plan". That claim is only meaningful because the storefront
       // ladder beside it DOES reach zero — if both fell to 0% the sentence
-      // would be noise. Advanced is where they diverge most visibly.
-      expect(PLAN_ENTITLEMENTS.advanced.transactionFeeDigitalPct).toBe(0)
-      expect(PLAN_ENTITLEMENTS.advanced.transactionFeePhysicalPct).toBe(0)
-      expect(PLAN_ENTITLEMENTS.advanced.marketplaceFeePct).toBe(20)
+      // would be noise. Custom is where they diverge since pricing v4: its
+      // storefront fee is 0% and the marketplace still keeps 20%.
+      expect(PLAN_ENTITLEMENTS.enterprise.transactionFeeDigitalPct).toBe(0)
+      expect(PLAN_ENTITLEMENTS.enterprise.transactionFeePhysicalPct).toBe(0)
+      expect(PLAN_ENTITLEMENTS.enterprise.marketplaceFeePct).toBe(20)
     })
   })
 })
