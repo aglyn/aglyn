@@ -70,6 +70,7 @@ import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import { useIsStaff } from '../../../../hooks/use-is-staff'
 import { useStaffListQuery } from '../../../../hooks/use-staff-list-query'
+import type { OrgPlan } from '@aglyn/aglyn/foundation'
 import {
   COUPON_DURATIONS,
   COUPON_FILTER_FIELDS,
@@ -77,8 +78,10 @@ import {
   COUPON_FILTER_OPTIONS,
   COUPON_COLUMN_SORTS,
   COUPON_NAME_MAX,
+  COUPON_PLAN_CHOICES,
   type CouponListRow,
   type CouponRow,
+  couponAppliesToLabel,
   couponFullUse,
 } from '../../../../utils/coupon-list-query'
 
@@ -128,7 +131,42 @@ interface PendingToggle {
   amountOffUsd: number | null
   duration: string | null
   durationInMonths: number | null
+  /** What the coupon reaches (AGL-4159): a limited one is rated on its plans. */
+  appliesTo?: CouponRow['appliesTo']
 }
+
+/**
+ * What a new coupon takes its discount off (AGL-4159), as the form offers it.
+ * The two base-price choices are Stripe's `applies_to[products]`: the
+ * discount reaches the plan's own price and nothing else on the bill.
+ */
+type AppliesToChoice = 'subscription' | 'base_any' | 'base_one'
+
+const APPLIES_TO: ReadonlyArray<{ value: AppliesToChoice; label: string; help: string }> = [
+  {
+    value: 'subscription',
+    label: 'The whole subscription',
+    help:
+      'Every line of the bill: the plan, its add-ons and usage past the ' +
+      'plan’s limits.',
+  },
+  {
+    value: 'base_any',
+    label: 'Base price only, any plan',
+    help:
+      'The plan’s own price, on whichever plan they subscribe to. Add-ons and ' +
+      'usage past the plan’s limits still bill. A move to another plan keeps ' +
+      'the discount on that plan’s price.',
+  },
+  {
+    value: 'base_one',
+    label: 'Base price only, one plan',
+    help:
+      'That plan’s own price only. Add-ons, usage past the plan’s limits and ' +
+      'an upgrade to another plan still bill, and the code is refused on any ' +
+      'other plan.',
+  },
+]
 
 /** A coupon row's discount and duration, as the full-use verdict reads them. */
 /**
@@ -200,6 +238,8 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
     maxRedemptions: '',
     expiresAt: '',
     confirmHighDiscount: false,
+    appliesTo: 'subscription' as AppliesToChoice,
+    plan: COUPON_PLAN_CHOICES[0] as OrgPlan,
   })
 
   const [pendingToggle, setPendingToggle] = useState<PendingToggle | null>(null)
@@ -219,7 +259,10 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
   // on the charges the chosen duration reaches. Unlike the rating above it
   // does not depend on which org redeems the coupon — a code can be typed on
   // any plan — and it refuses nothing: the route answers the same verdict
-  // with the created coupon.
+  // with the created coupon. A coupon limited to one plan is redeemed on that
+  // plan only (AGL-4159), so it is rated there; the products are the
+  // server's to read.
+  const onePlan = form.appliesTo === 'base_one' ? form.plan : null
   const fullUse = useMemo(
     () =>
       couponFullUse({
@@ -228,9 +271,12 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
         duration: form.duration,
         durationInMonths:
           form.duration === 'repeating' ? Number(form.durationInMonths) || null : null,
+        appliesTo: onePlan ? { products: [], plans: [onePlan] } : null,
       }),
-    [form.kind, form.percentOff, form.amountOffUsd, form.duration, form.durationInMonths],
+    [form.kind, form.percentOff, form.amountOffUsd, form.duration, form.durationInMonths, onePlan],
   )
+  const appliesToHelp =
+    APPLIES_TO.find((choice) => choice.value === form.appliesTo)?.help ?? ''
   const deepestPercent = useMemo(() => deepestCouponPercentWithinFullUse(), [])
 
   const needsApproval =
@@ -258,6 +304,8 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
           maxRedemptions: form.maxRedemptions ? Number(form.maxRedemptions) : undefined,
           expiresAt: form.expiresAt || undefined,
           confirmHighDiscount: form.confirmHighDiscount,
+          appliesTo: form.appliesTo === 'subscription' ? 'subscription' : 'base_price',
+          plan: onePlan ?? undefined,
         }),
       })
       const payload = await response.json().catch(() => ({}))
@@ -397,6 +445,15 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
       valueGetter: (_value, row: CouponListRow) => discountLabel(row),
     },
     {
+      // What the discount reaches (AGL-4159): the whole subscription, or a
+      // plan's base price, read back from Stripe's `applies_to`.
+      field: 'appliesTo',
+      headerName: 'Applies to',
+      width: 170,
+      filterable: false,
+      valueGetter: (_value, row: CouponListRow) => couponAppliesToLabel(row),
+    },
+    {
       field: 'duration',
       headerName: 'Duration',
       width: 130,
@@ -476,6 +533,7 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
                       amountOffUsd: row.amountOffUsd,
                       duration: row.duration,
                       durationInMonths: row.durationInMonths,
+                      appliesTo: row.appliesTo ?? null,
                     })
                   }
                 >
@@ -592,6 +650,41 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
                       sx={{ flex: 1 }}
                     />
                   )}
+                </Stack>
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                  <TextField
+                    select
+                    size="small"
+                    label="Applies to"
+                    value={form.appliesTo}
+                    onChange={(event) =>
+                      update({ appliesTo: event.target.value as AppliesToChoice })
+                    }
+                    helperText={appliesToHelp}
+                    sx={{ flex: 1 }}
+                  >
+                    {APPLIES_TO.map(({ value, label }) => (
+                      <MenuItem key={value} value={value}>
+                        {label}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                  {form.appliesTo === 'base_one' ? (
+                    <TextField
+                      select
+                      size="small"
+                      label="Plan"
+                      value={form.plan}
+                      onChange={(event) => update({ plan: event.target.value as OrgPlan })}
+                      sx={{ width: 160 }}
+                    >
+                      {COUPON_PLAN_CHOICES.map((plan) => (
+                        <MenuItem key={plan} value={plan}>
+                          {PLAN_LABELS[plan]}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  ) : null}
                 </Stack>
                 <Stack direction="row" spacing={2}>
                   <TextField
@@ -719,7 +812,9 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
                   <Stack spacing={0.5}>
                     <Typography variant="body2" sx={{ fontWeight: fullUse.ok ? undefined : 600 }}>
                       {fullUse.ok
-                        ? 'Covers full-use cost on every paid plan.'
+                        ? onePlan
+                          ? `Covers full-use cost on ${PLAN_LABELS[onePlan]}.`
+                          : 'Covers full-use cost on every paid plan.'
                         : `Under full-use cost on ${fullUse.under.length} of ` +
                           `${fullUse.cases.length} plan and billing combinations.`}
                     </Typography>
@@ -735,9 +830,14 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
                       </Typography>
                     )}
                     <Typography variant="caption" color="text.secondary">
-                      {'A code can be redeemed on any paid plan, monthly or ' +
-                        'annual, by a customer using everything the plan ' +
-                        'includes. Judged on the charges the duration ' +
+                      {(onePlan
+                        ? `This code can be redeemed on ${PLAN_LABELS[onePlan]} ` +
+                          'only, monthly or annual, by a customer using ' +
+                          'everything the plan includes. '
+                        : 'A code can be redeemed on any paid plan, monthly or ' +
+                          'annual, by a customer using everything the plan ' +
+                          'includes. ') +
+                        'Judged on the charges the duration ' +
                         'reaches, after Stripe’s fee. ' +
                         (deepestPercent == null
                           ? 'A plan is under its full-use cost at list price, ' +
@@ -854,7 +954,9 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
                     sx={{ mt: 1 }}
                   >
                     {toggleFullUse.warning ??
-                      'Covers full-use cost on every paid plan. Worst case ' +
+                      (pendingToggle?.appliesTo
+                        ? 'Covers full-use cost on every plan it applies to. Worst case '
+                        : 'Covers full-use cost on every paid plan. Worst case ') +
                         describeDiscountFullUse(
                           toggleFullUse.worst,
                           couponCaseLabel(toggleFullUse.worst),

@@ -945,6 +945,16 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
           )
           return null
         }
+        // A code limited to another plan's base price (AGL-4159): the
+        // route's own sentence names the plan it is for, which "could not
+        // price" would hide.
+        if (response.status === 400 && payload?.promotionCodeRefusal === 'plan') {
+          enqueueSnackbar(
+            `${payload?.error ?? 'This code is for another plan.'} Nothing has been charged.`,
+            { variant: 'warning', persist: false },
+          )
+          return null
+        }
         if (!response.ok || !payload?.preview) {
           enqueueSnackbar(
             'We could not price this plan just now, so nothing has been ' +

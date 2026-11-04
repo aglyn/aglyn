@@ -519,6 +519,15 @@ There is deliberately no `STRIPE_PRICE_ENTERPRISE`: Custom is quoted per deal an
 is not self-serve. `free` has nothing to sell. The plans that are no longer sold
 read no price variable at all.
 
+The staff Coupons page reads the same four variables. A coupon limited to a plan's
+base price ([What a coupon applies to](../staff-console/overview.md#coupon-applies-to))
+is limited to the Stripe product those prices belong to, which the console looks up
+from the price ids when the coupon is created. Nothing else needs configuring for it,
+and no product id is set anywhere. With neither of a plan's two variables set, that
+plan cannot be picked for a base-price coupon, and the page says which variable to
+add. Keep each plan's monthly and yearly prices on one product, as the setup script
+does; if they are on two, the coupon is limited to both.
+
 Per-plan add-ons. The name is assembled at call time as
 `STRIPE_PRICE_{PLAN}_{KIND}[_YEARLY]`, so every combination below is a real
 variable the code looks up:

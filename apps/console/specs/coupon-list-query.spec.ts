@@ -138,11 +138,15 @@ describe('GET /api/admin/coupons reads every coupon Stripe holds', () => {
     stripeCoupons = Array.from({ length: 250 }, (_, index) => coupon(index + 1))
     const body = await (await get()).json()
     expect(body.coupons).toHaveLength(250)
+    // `applies_to` expanded on every page (AGL-4159): Stripe leaves it off
+    // a coupon unless asked, and it is what says a coupon is plan-limited.
     expect(stripeCalls.filter((path) => path.startsWith('coupons'))).toEqual([
-      'coupons?limit=100',
-      'coupons?limit=100&starting_after=cpn_0100',
-      'coupons?limit=100&starting_after=cpn_0200',
+      'coupons?limit=100&expand[]=data.applies_to',
+      'coupons?limit=100&expand[]=data.applies_to&starting_after=cpn_0100',
+      'coupons?limit=100&expand[]=data.applies_to&starting_after=cpn_0200',
     ])
+    // None of them is limited, so no plan price was read.
+    expect(stripeCalls.filter((path) => path.startsWith('prices'))).toEqual([])
   })
 
   it('refuses past the bound rather than answer from part of the set', async () => {

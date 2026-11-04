@@ -16,6 +16,14 @@
  */
 
 import { rateCouponAgainstFullUse } from '@aglyn/aglyn/app-utils/full-use-cost'
+// By its own module, not a barrel: this file is read by the page (client) and
+// the route (server), and route specs stub the server barrel partially.
+import {
+  PLAN_LABELS,
+  PLAN_PRICING,
+  SELF_SERVE_PLANS,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
+import type { OrgPlan } from '@aglyn/aglyn/foundation'
 import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
 import type { ListFilterOption } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import {
@@ -90,6 +98,74 @@ export interface CouponRow {
   valid: boolean
   created?: string | null
   codes: CouponCodeRow[]
+  /**
+   * What the discount reaches (AGL-4159): absent or null for the whole
+   * subscription, otherwise the Stripe products it is limited to and the
+   * self-serve plans whose base price those products are.
+   */
+  appliesTo?: CouponAppliesTo | null
+}
+
+/**
+ * A coupon limited to plans' base prices (AGL-4159), as Stripe enforces it:
+ * `applies_to.products`. `plans` is read back from the deployment's own plan
+ * prices (`STRIPE_PRICE_<PLAN>[_YEARLY]` → price → product), never from a
+ * stored list, so it names what the coupon really reaches today.
+ */
+export interface CouponAppliesTo {
+  products: string[]
+  plans: OrgPlan[]
+}
+
+/**
+ * The plans a coupon can be limited to: the self-serve plans that are sold
+ * at a price, in ladder order (Starter, Pro). Read off `SELF_SERVE_PLANS`, so
+ * a retired plan is never offered and a new one is offered without an edit.
+ */
+export const COUPON_PLAN_CHOICES: readonly OrgPlan[] = SELF_SERVE_PLANS.filter(
+  (plan) => PLAN_PRICING[plan]?.basePriceMonthlyUsd > 0,
+)
+
+/**
+ * What a new coupon applies to (AGL-4159). `subscription` is every line of
+ * the bill, the behavior every coupon had before; `base_price` is only the
+ * base price of the plan, or plans, it names, so add-ons, usage past the
+ * plan's limits and a move to another plan bill in full.
+ */
+export type CouponAppliesToChoice = 'subscription' | 'base_price'
+
+export const COUPON_APPLIES_TO_CHOICES: readonly CouponAppliesToChoice[] = [
+  'subscription',
+  'base_price',
+]
+
+/** "Starter", "Starter and Pro", "Starter, Pro and Max". */
+export function couponPlanList(plans: readonly OrgPlan[]): string {
+  const labels = plans.map((plan) => PLAN_LABELS[plan] ?? plan)
+  if (labels.length <= 1) return labels[0] ?? ''
+  return `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`
+}
+
+/**
+ * The plans a coupon's discount is limited to, or null for one that reaches
+ * the whole subscription. An empty list is a coupon limited to products no
+ * plan sold today is priced on.
+ */
+export function couponAppliesToPlans(
+  row: Pick<CouponRow, 'appliesTo'>,
+): OrgPlan[] | null {
+  return row.appliesTo ? row.appliesTo.plans : null
+}
+
+/** The Applies to column: "Whole subscription", "Base price, Starter", … */
+export function couponAppliesToLabel(row: Pick<CouponRow, 'appliesTo'>): string {
+  const plans = couponAppliesToPlans(row)
+  if (plans == null) return 'Whole subscription'
+  if (!plans.length) return 'Products no plan uses'
+  if (COUPON_PLAN_CHOICES.every((plan) => plans.includes(plan))) {
+    return 'Base price, any plan'
+  }
+  return `Base price, ${couponPlanList(plans)}`
 }
 
 /** A coupon row as the list matches and renders it: the fields the panel reads. */
@@ -148,7 +224,8 @@ export const COUPON_SEARCH_PATHS: readonly string[] = ['name', 'id', 'codeText']
  * its sort both read it.
  */
 export function couponFullUse(
-  row: Pick<CouponRow, 'percentOff' | 'amountOffUsd' | 'duration' | 'durationInMonths'>,
+  row: Pick<CouponRow, 'percentOff' | 'amountOffUsd' | 'duration' | 'durationInMonths'> &
+    Partial<Pick<CouponRow, 'appliesTo'>>,
 ) {
   return rateCouponAgainstFullUse(
     row.percentOff != null
@@ -157,6 +234,8 @@ export function couponFullUse(
         ? { amountOffUsd: row.amountOffUsd }
         : {},
     { duration: row.duration, durationInMonths: row.durationInMonths },
+    // A coupon limited to one plan is redeemed on that plan only (AGL-4159).
+    couponAppliesToPlans(row),
   )
 }
 
@@ -184,6 +263,8 @@ export const COUPON_SORT_COLUMNS: StaffCompleteListColumns<CouponListRow> = {
     value: (row) =>
       row.duration === 'repeating' ? `repeating ${row.durationInMonths ?? ''}` : row.duration,
   },
+  // What the discount reaches (AGL-4159), as the column words it.
+  appliesTo: { label: 'Applies to', value: (row) => couponAppliesToLabel(row) },
   // How far the worst charge covers its full-use cost: the riskiest first ascending.
   fullUse: { label: 'Full-use cost', value: (row) => couponFullUse(row).worst.coverage },
   codes: {
