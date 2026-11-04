@@ -79,6 +79,7 @@ import {
   AI_SITE_IMPORT_DESIGN_MAX_CHARS,
   aiCompileImportedPage,
   aiSiteImportDesignText,
+  aiSiteImportFinishOf,
   aiSiteImportSectionNames,
 } from './ai-site-import-compile'
 
@@ -1102,16 +1103,25 @@ export const AI_JOB_PAGE_DESIGN_INSTRUCTIONS: readonly AiSystemBlock[] = [
   { text: UNTRUSTED_TEXT_RULE },
 ]
 
+/**
+ * The line a design answer is told when the owner asked the site improved
+ * (AGL-4152), in its user turn alone: the cached instructions and the tool are
+ * the same either way, and a page kept as it is is asked exactly as before.
+ */
+export const AI_LAYOUT_DESIGN_IMPROVE_LINE =
+  "The owner asked for a better design: choose the hero, bands, alignment and styles that read best for this kind of site; the source's own are not required."
+
 /** A design answer's user turn: the page, the kind of site it is, and its structure, the sections' names fenced. */
 export function aiLayoutDesignPrompt(input: {
   job: Pick<AiJob, 'inputs' | '$id'>
   screen: Pick<AiBuildPlanScreen, 'title' | 'slug' | 'sections'>
-  doc: Pick<AiSiteImportDocument, 'blocks' | 'title' | 'url' | 'layout'>
+  doc: Pick<AiSiteImportDocument, 'blocks' | 'title' | 'url' | 'layout' | 'finish'>
 }): string {
   const count = aiSiteImportSectionNames(input.doc).length
   return [
     `Page: "${input.screen.title}" at ${input.screen.slug}`,
     ...aiSiteKindDesignLines(input.job.inputs),
+    ...(aiSiteImportFinishOf(input.doc) === 'improve' ? [AI_LAYOUT_DESIGN_IMPROVE_LINE] : []),
     `Its ${count === 1 ? 'one section' : `${count} sections`}, each with what it shows:`,
     fenceUntrustedText(`The structure of the owner's page ${input.doc.url}`, aiSiteImportDesignText(input.doc), { maxChars: AI_SITE_IMPORT_DESIGN_MAX_CHARS }),
     `Design seed: ${input.job.$id.slice(-6)}.`,
@@ -1147,6 +1157,8 @@ export function aiImportedPageCheck(
       targets: input.targets,
       design: importedDesign(input.design, input.screen),
       answer: design,
+      // Kept as it is or improved, as the page's wave was asked (AGL-4152).
+      finish: aiSiteImportFinishOf(input.doc),
       ...(input.language ? { language: input.language } : {}),
     })
     // A film's Video element keeps its id, as a section's root does: the button that plays it names it (AGL-4140).
