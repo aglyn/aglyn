@@ -19,6 +19,7 @@
 
 import * as CommerceModel from '../../model'
 import { siteContactEmail, resolveHostToken, type HostTokenSource } from '@aglyn/aglyn/app-utils/host-tokens'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
@@ -34,6 +35,7 @@ import {
 } from '@mui/material'
 import { doc, getDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { PayLinkReadinessNotice, usePayLinkReadiness } from './pay-link-readiness-notice.component'
 
 /** `Oct 29, 2026, 3:04 PM`. */
 const sentAt = (atMs: number) =>
@@ -64,17 +66,36 @@ export interface InvoiceSendDialogProps {
  * invoice PDF attached. Unpaid, the email carries a Pay button to the order's
  * lasting pay link on the business's site; paid, it is the customer's record.
  * A quote's invoice lands in the quote's conversation, and an order's in its
- * own. The site's name and contact email are read once when the form opens,
- * so the dialog that offers it listens to nothing more.
+ * own.
+ *
+ * The form's body mounts with the dialog's opening, so everything it reads
+ * (the site's name and contact email, once; the store's tax choice and its
+ * payments, live) is read only while it is open, and the dialog that offers
+ * it listens to nothing more. It says what the customer's Pay waits on, if
+ * anything (AGL-4162), and judges the send under the store's sales tax choice
+ * as the server does: a quote saved before the store chose is sent as the
+ * store's choice prices it.
  */
 export function InvoiceSendDialog(props: InvoiceSendDialogProps) {
-  const { open, onClose, hostId, orderId, order } = props
+  const { open, onClose } = props
+  const [busy, setBusy] = useState(false)
+  return (
+    <Dialog open={open} onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth aria-labelledby="invoice-send-title">
+      <InvoiceSendForm {...props} busy={busy} setBusy={setBusy} />
+    </Dialog>
+  )
+}
+
+/** The open form: filled once when it mounts; edits after that are the member's. */
+function InvoiceSendForm(
+  props: InvoiceSendDialogProps & { busy: boolean; setBusy: (busy: boolean) => void },
+) {
+  const { onClose, hostId, orderId, order, busy, setBusy } = props
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
-  const [busy, setBusy] = useState(false)
-  const [to, setTo] = useState('')
-  const [subject, setSubject] = useState('')
+  const [to, setTo] = useState(() => CommerceModel.invoiceSendPrefill(order))
+  const [subject, setSubject] = useState(() => CommerceModel.invoiceEmailDefaultSubject(order, '', orderId))
   const [message, setMessage] = useState('')
   const [contact, setContact] = useState<string | null>(null)
 
@@ -89,11 +110,7 @@ export function InvoiceSendDialog(props: InvoiceSendDialogProps) {
   }, [to, subject, message])
 
   useEffect(() => {
-    if (!open) return
     let live = true
-    setTo(CommerceModel.invoiceSendPrefill(order))
-    setSubject(CommerceModel.invoiceEmailDefaultSubject(order, '', orderId))
-    setMessage('')
     void getDoc(doc(firestore, 'hosts', hostId))
       .then((snapshot) => {
         if (!live) return
@@ -109,12 +126,19 @@ export function InvoiceSendDialog(props: InvoiceSendDialogProps) {
     }
     // Filled once per opening; edits after that are the member's.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
+  }, [])
 
+  const readiness = usePayLinkReadiness(hostId, order)
   const paid = CommerceModel.invoiceIsPaid(order)
-  const refused = CommerceModel.invoiceSendRefusal(order, orderId, to.trim())
-  // The address is the form's to fix; every other refusal is the order's, said up front.
+  const refused = CommerceModel.invoiceSendRefusal(order, orderId, to.trim(), readiness.store)
+  // The address is the form's to fix; every other refusal is the order's,
+  // said up front once the store's settings are read. One the notice already
+  // names, with its fix, is not said twice.
   const blocker = refused && refused !== 'no-address' && refused !== 'bad-address' ? refused : null
+  const toldByNotice =
+    (blocker === 'tax-undecided' && readiness.gaps?.includes('tax-undecided')) ||
+    (blocker === 'tax-save' && readiness.gaps?.includes('tax-save'))
+  const blockerLine = blocker && !readiness.storeLoading && !toldByNotice ? blocker : null
   const threaded = Boolean(CommerceModel.invoiceEmailThread(order))
   const number = CommerceModel.formatInvoiceNumber(order, orderId)
 
@@ -138,16 +162,17 @@ export function InvoiceSendDialog(props: InvoiceSendDialogProps) {
     } finally {
       setBusy(false)
     }
-  }, [user, hostId, orderId, to, subject, message, number, enqueueSnackbar, onClose])
+  }, [user, hostId, orderId, to, subject, message, number, enqueueSnackbar, onClose, setBusy])
 
   return (
-    <Dialog open={open} onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth aria-labelledby="invoice-send-title">
+    <>
       <DialogTitle id="invoice-send-title">{`Send invoice: ${number}`}</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ pt: 1 }}>
-          {blocker ? (
+          <PayLinkReadinessNotice readiness={readiness} noun="invoice" />
+          {blockerLine ? (
             <Typography variant="body2" color="error">
-              {CommerceModel.invoiceSendRefusalMessage(blocker)}
+              {CommerceModel.invoiceSendRefusalMessage(blockerLine)}
             </Typography>
           ) : null}
           <TextField
@@ -195,13 +220,23 @@ export function InvoiceSendDialog(props: InvoiceSendDialogProps) {
         <Button onClick={onClose} disabled={busy}>
           {'Cancel'}
         </Button>
-        <Button variant="contained" disabled={busy || !to.trim() || Boolean(blocker)} onClick={() => void send()}>
-          {busy ? 'Sending…' : 'Send'}
-        </Button>
+        <BlockedControl
+          blocked={Boolean(blocker) && !readiness.storeLoading}
+          reason={blocker ? CommerceModel.invoiceSendRefusalMessage(blocker) : ''}
+        >
+          <Button
+            variant="contained"
+            disabled={busy || !to.trim() || Boolean(blocker) || readiness.storeLoading}
+            onClick={() => void send()}
+          >
+            {busy ? 'Sending…' : 'Send'}
+          </Button>
+        </BlockedControl>
       </DialogActions>
-    </Dialog>
+    </>
   )
 }
+
 InvoiceSendDialog.displayName = 'InvoiceSendDialog'
 
 export default InvoiceSendDialog

@@ -19,12 +19,19 @@ import type { HostOrder } from './commerce-orders'
 import {
   buildQuotePageView,
   paidQuoteOrder,
+  payLinkPaymentsUnavailableMessage,
+  payLinkRefusalWithPayments,
+  payLinkStoreOf,
   quoteCheckoutCharge,
   quoteLinkVersion,
   quotePaymentDisposition,
   quotePayRefusal,
   quotePayRefusalMessage,
+  quotePayTax,
+  quoteTaxBasisFromKey,
+  quoteTaxBasisKey,
   quoteUnmatchedPayment,
+  type PayLinkStore,
   type QuotePaymentFacts,
 } from './commerce-quote-pay'
 
@@ -242,6 +249,9 @@ describe('the customer’s page', () => {
         'kind',
         'shippingAtPayment',
         'lines',
+        // Why Pay is missing when the business can't take payments, and the tax Pay sends back (AGL-4162).
+        'notPayableMessage',
+        'taxKey',
         'notes',
         'number',
         'payable',
@@ -448,6 +458,15 @@ describe('when a payment completes', () => {
     expect(order.shippingAddress).toEqual({ name: 'Pat', line1: '2 Other Rd', country: 'US' })
   })
 
+  it('records the tax a quote saved before the store chose was paid under (AGL-4162)', () => {
+    const undecided = quote({}, { tax: { kind: 'none', reason: 'undecided' } })
+    const order = paidQuoteOrder(undecided, 'q-1', facts({ taxBasis: { kind: 'at-payment' }, taxMode: 'stripe-automatic' }))
+    expect(order.quote?.tax).toEqual({ kind: 'at-payment' })
+    expect(order.taxMode).toBe('stripe-automatic')
+    // A session that charged the stored basis carries none, and the quote's own stands.
+    expect(paidQuoteOrder(quote(), 'q-1', facts()).quote?.tax).toEqual({ kind: 'rate', pct: 8.25, label: 'Texas sales tax' })
+  })
+
   it('records a payment it could not take, for the business to refund', () => {
     expect(quoteUnmatchedPayment(facts(), 'superseded')).toEqual({
       sessionId: 'cs_test_paid',
@@ -456,5 +475,141 @@ describe('when a payment completes', () => {
       atMs: 50_000,
       reason: 'superseded',
     })
+  })
+})
+
+/*
+ * A quote saved before the store chose how it handles sales tax (AGL-4162):
+ * it is shown, charged and recorded under the store's choice as it stands,
+ * with no second save, except where only a save can price it.
+ */
+describe('a quote saved before the store chose its sales tax', () => {
+  const undecided = () => quote({}, { tax: { kind: 'none', reason: 'undecided' } })
+  const store = (tax: PayLinkStore['tax']): PayLinkStore => ({ tax })
+  const NONE = store({ mode: 'none' })
+  const STRIPE = store({ mode: 'stripe' })
+  const INCLUSIVE = store({ mode: 'manual', pricesIncludeTax: true, origin: { country: 'US', state: 'TX' } })
+  const OWN_RATES = store({ mode: 'manual', origin: { country: 'US', state: 'TX' }, rates: [{ country: 'US', state: 'TX', pct: 8.25 }] })
+
+  it('takes each choice the editor would price it under, the way a save prices it', () => {
+    expect(quotePayTax(undecided().quote, NONE)).toEqual({ basis: { kind: 'none', reason: 'not-collected' }, source: 'current' })
+    expect(quotePayTax(undecided().quote, STRIPE)).toEqual({ basis: { kind: 'at-payment' }, source: 'current' })
+    expect(quotePayTax(undecided().quote, INCLUSIVE)).toEqual({
+      basis: { kind: 'none', reason: 'prices-include-tax' },
+      source: 'current',
+    })
+  })
+
+  it('waits for a save on the store’s own rates, which a connected tax service prices on save', () => {
+    expect(quotePayTax(undecided().quote, OWN_RATES)).toEqual({
+      basis: { kind: 'none', reason: 'undecided' },
+      source: 'save',
+    })
+    expect(quotePayRefusal(undecided(), 'q-1', OWN_RATES)).toBe('tax-undecided')
+  })
+
+  it('stays undecided while the store has still not chosen, and without a store', () => {
+    for (const nothing of [store(null), store({}), store({ mode: 'later' as never })]) {
+      expect(quotePayTax(undecided().quote, nothing).source).toBe('stored')
+      expect(quotePayRefusal(undecided(), 'q-1', nothing)).toBe('tax-undecided')
+    }
+    expect(quotePayTax(undecided().quote).source).toBe('stored')
+    expect(quotePayRefusal(undecided(), 'q-1')).toBe('tax-undecided')
+  })
+
+  it('never moves a quote saved under a choice, whatever the store chose since', () => {
+    expect(quotePayTax(quote().quote, NONE)).toEqual({ basis: { kind: 'rate', pct: 8.25, label: 'Texas sales tax' }, source: 'stored' })
+    expect(quoteCheckoutCharge(quote(), 'q-1', STRIPE).taxCents).toBe(20_048)
+  })
+
+  it('refuses every sale while the store has not chosen, whatever the quote was saved with (AGL-1999)', () => {
+    expect(quotePayRefusal(quote(), 'q-1', store(null))).toBe('tax-undecided')
+    expect(quotePayRefusal(quote(), 'q-1', OWN_RATES)).toBeNull()
+  })
+
+  it('becomes payable once the store chooses, with no second save', () => {
+    expect(quotePayRefusal(undecided(), 'q-1', NONE)).toBeNull()
+    expect(quotePayRefusal(undecided(), 'q-1', STRIPE)).toBeNull()
+    expect(quoteCheckoutCharge(undecided(), 'q-1', NONE)).toMatchObject({ taxCents: 0, taxAtPayment: false, totalCents: 256_500 })
+    expect(quoteCheckoutCharge(undecided(), 'q-1', STRIPE)).toMatchObject({ taxCents: 0, taxAtPayment: true, totalCents: 256_500 })
+  })
+
+  it('shows the page under the store’s choice, and says what Pay sends back', () => {
+    const shown = buildQuotePageView({ order: undecided(), orderId: 'q-1', storeName: 'Acme Tents', currency: 'USD', store: STRIPE })
+    expect(shown).toMatchObject({ payable: true, taxAtPayment: true, taxLabel: 'Tax is added at payment' })
+    expect(quoteTaxBasisFromKey(shown.taxKey)).toEqual({ kind: 'at-payment' })
+    const none = buildQuotePageView({ order: undecided(), orderId: 'q-1', storeName: 'Acme Tents', currency: 'USD', store: NONE })
+    expect(none).toMatchObject({ payable: true, taxAtPayment: false, taxLabel: 'No sales tax', totals: { taxCents: 0, totalCents: 256_500 } })
+    const waiting = buildQuotePageView({ order: undecided(), orderId: 'q-1', storeName: 'Acme Tents', currency: 'USD', store: OWN_RATES })
+    expect(waiting).toMatchObject({ payable: false, taxLabel: 'Sales tax is not set up', notPayableMessage: null })
+  })
+
+  it('reads the store from its settings document, an absent one as no choice', () => {
+    expect(payLinkStoreOf({ tax: { mode: 'none' }, currency: 'USD' } as never)).toEqual({ tax: { mode: 'none' } })
+    expect(payLinkStoreOf(undefined)).toEqual({ tax: null })
+    expect(payLinkStoreOf({ tax: 'none' })).toEqual({ tax: null })
+  })
+})
+
+describe('a tax basis as a key', () => {
+  it('gives equal bases one key, whatever else the stored one carries, and reads it back', () => {
+    const key = quoteTaxBasisKey({ kind: 'rate', pct: 8.25, label: ' Texas sales tax ' })
+    expect(key).toBe(quoteTaxBasisKey({ label: 'Texas sales tax', pct: 8.25, kind: 'rate', reason: 'no-rate' } as never))
+    expect(quoteTaxBasisFromKey(key)).toEqual({ kind: 'rate', pct: 8.25, label: 'Texas sales tax' })
+    expect(quoteTaxBasisFromKey(quoteTaxBasisKey({ kind: 'none', reason: 'prices-include-tax' }))).toEqual({
+      kind: 'none',
+      reason: 'prices-include-tax',
+    })
+    expect(quoteTaxBasisFromKey(quoteTaxBasisKey({ kind: 'service', taxCents: 400, providerLabel: 'TaxCo' }))).toEqual({
+      kind: 'service',
+      taxCents: 400,
+      providerLabel: 'TaxCo',
+    })
+  })
+
+  it('reads nothing that is not one', () => {
+    for (const junk of [undefined, '', 'x', '{"kind":"free"}', '{"kind":"rate"}', 7, '{'.repeat(600)]) {
+      expect(quoteTaxBasisFromKey(junk)).toBeNull()
+    }
+  })
+})
+
+describe('a store that can’t take payments (AGL-4162)', () => {
+  it('outranks every refusal but the ones a payment never gets past', () => {
+    expect(payLinkRefusalWithPayments(null, false)).toBe('payments-unavailable')
+    expect(payLinkRefusalWithPayments('tax-undecided', false)).toBe('payments-unavailable')
+    expect(payLinkRefusalWithPayments('nothing-to-pay', false)).toBe('payments-unavailable')
+    for (const kept of ['paid', 'closed', 'approval-required', 'not-payable'] as const) {
+      expect(payLinkRefusalWithPayments(kept, false)).toBe(kept)
+    }
+    expect(payLinkRefusalWithPayments('tax-undecided', true)).toBe('tax-undecided')
+    expect(payLinkRefusalWithPayments('tax-undecided', undefined)).toBe('tax-undecided')
+  })
+
+  it('has no Pay on the page, which says what Pay would, word for word', () => {
+    const page = buildQuotePageView({ order: quote(), orderId: 'q-1', storeName: 'Acme Tents', currency: 'USD', paymentsReady: false })
+    expect(page.payable).toBe(false)
+    expect(page.notPayableMessage).toBe('Acme Tents can’t take payments online right now. Contact them to pay this quote.')
+    expect(page.notPayableMessage).toBe(payLinkPaymentsUnavailableMessage('Acme Tents', 'quote'))
+    expect(payLinkPaymentsUnavailableMessage('', 'invoice')).toBe(
+      'This business can’t take payments online right now. Contact them to pay this invoice.',
+    )
+  })
+
+  it('still asks for the approval first, and says nothing of payments on a paid quote', () => {
+    const asking = quote({}, { requireProofApproval: true, proofs: [{ id: 'p1', revision: 1 }] })
+    expect(buildQuotePageView({ order: asking, orderId: 'q-1', storeName: 'Acme Tents', currency: 'USD', paymentsReady: false })).toMatchObject({
+      approvalRequired: true,
+      payable: false,
+      notPayableMessage: null,
+    })
+    const paid = buildQuotePageView({ order: quote({ status: 'paid' }), orderId: 'q-1', storeName: 'Acme Tents', currency: 'USD', paymentsReady: false })
+    expect(paid).toMatchObject({ payable: false, notPayableMessage: null, taxKey: null })
+  })
+
+  it('offers Pay when the store can take payments, as without the check', () => {
+    const page = buildQuotePageView({ order: quote(), orderId: 'q-1', storeName: 'Acme Tents', currency: 'USD', paymentsReady: true })
+    expect(page).toMatchObject({ payable: true, notPayableMessage: null })
+    expect(quoteTaxBasisFromKey(page.taxKey)).toEqual({ kind: 'rate', pct: 8.25, label: 'Texas sales tax' })
   })
 })

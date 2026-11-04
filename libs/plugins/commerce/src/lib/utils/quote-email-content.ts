@@ -20,9 +20,11 @@ import {
   formatOrderMoney,
   formatQuoteNumber,
   quotePaymentBlockedByApproval,
+  quotePayTax,
   quoteSendIsNewRevision,
   type HostOrder,
   type OrderQuote,
+  type PayLinkStore,
 } from '../model'
 import { escapeHtml } from './escape-html'
 
@@ -96,6 +98,8 @@ export interface QuoteEmailContentInput {
   colors: QuoteEmailColors
   /** The theme's corner radius in px, for the images. */
   radius?: number
+  /** The store's sales tax choice, which a quote saved before it was made takes (`quotePayTax`). */
+  store?: PayLinkStore | null
 }
 
 export interface QuoteEmailContent {
@@ -122,7 +126,7 @@ export function quoteEmailContent(input: QuoteEmailContentInput): QuoteEmailCont
   const business = businessName.trim() || 'the business'
   const revision = Math.max(1, Math.floor(Number(quote.revision ?? 1)) || 1)
   const number = formatQuoteNumber(order, input.quoteId).replace(/^Quote\s+/, '')
-  const taxAtPayment = quote.tax?.kind === 'at-payment'
+  const taxAtPayment = quotePayTax(quote, input.store).basis.kind === 'at-payment'
   const money = formatOrderMoney(Number(order.totals?.totalCents ?? 0), input.currency)
   const total = taxAtPayment ? `${money} before tax` : money
   const approvalFirst = quotePaymentBlockedByApproval(quote)

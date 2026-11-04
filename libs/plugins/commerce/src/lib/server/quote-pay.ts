@@ -70,6 +70,13 @@ import { verifyQuoteLinkToken } from './quote-link-token'
  * The payment completes in `billing-webhook.ts`, which turns this same
  * document into the order (`paidQuoteOrder`); nothing here marks it paid.
  *
+ * THE PAGE OFFERS ONLY A PAY THAT WORKS (AGL-4162). The view asks the same
+ * payments check Pay refuses on ({@link payLinkPayments}) and prices the tax
+ * the same way (`quotePayTax`): a quote saved before the store chose its
+ * sales tax is shown and charged under the store's choice now, and Pay
+ * refuses when that choice is not the one the page showed (`tax`). The
+ * session carries that basis (`quoteTax`) so the paid order records it.
+ *
  * AN INVOICE'S LINK IS THIS ONE (AGL-4099). A draft order the business sent
  * an invoice for opens on the same page from the same kind of link (its
  * version on `payLink.version`, `commerce-invoices.ts`), as "Invoice #N" with
@@ -254,6 +261,69 @@ export function quoteLinkParams(source: Record<string, unknown>) {
   return { hostId, quoteId, token, complete }
 }
 
+/** Whether the business behind a pay link can take a card payment now, and with what. */
+export interface PayLinkPayments {
+  ready: boolean
+  /** The site's workspace, for the platform fee and the attempt's record. */
+  owner: { id?: string; org?: any } | null
+  /** The owner's payment account; empty unless `ready`. */
+  accountId: string
+}
+
+/**
+ * The one payments check a pay link answers on: the workspace's plan
+ * includes commerce, and the workspace OWNER's payment account can take
+ * charges (`merchantAccountIsReady`, the check every money route makes). The
+ * page asks it before offering Pay and Pay asks it before charging, so the
+ * two never disagree.
+ */
+export async function payLinkPayments(
+  deps: QuotePayDeps,
+  input: { hostId: string; orderId: string; kind: CommerceModel.OrderPayLinkKind },
+): Promise<PayLinkPayments> {
+  const owner = await deps.orgForHost(input.hostId)
+  if (!checkEntitlement(owner?.org as never, 'commerce')) return { ready: false, owner, accountId: '' }
+  const ownerUid = owner?.org?.ownerUid
+  const profile = ownerUid ? await deps.firestore().collection('profiles').doc(String(ownerUid)).get() : null
+  const accountId = profile?.get('stripeAccountId')
+  const ready = merchantAccountIsReady(
+    {
+      accountId,
+      chargesEnabled: profile?.get('stripeChargesEnabled'),
+      accountLivemode: profile?.get('stripeAccountLivemode'),
+    },
+    { subject: `${nounOf(input.kind)} ${input.orderId} on host ${input.hostId}` },
+  )
+  return { ready, owner, accountId: ready ? String(accountId) : '' }
+}
+
+/**
+ * The page's view of a linked quote or invoice: the allow-listed projection,
+ * priced under the store's tax choice and with Pay only where the business
+ * can take it. A paid one asks nothing about payments.
+ */
+export async function payLinkPageView(
+  deps: QuotePayDeps,
+  input: { hostId: string; orderId: string; loaded: Pick<LoadedQuote, 'host' | 'order' | 'storeName' | 'store' | 'kind'> },
+): Promise<CommerceModel.QuotePageView> {
+  const { hostId, orderId } = input
+  const { host, order, storeName, store, kind } = input.loaded
+  const currency = String(store.get('currency') ?? 'USD')
+  const unpaid = order.status === 'pending'
+  const receiptUrl = unpaid ? null : orderStatusUrl(host, hostId, orderId)
+  const paymentsReady = unpaid ? (await payLinkPayments(deps, { hostId, orderId, kind })).ready : undefined
+  const view = {
+    order,
+    orderId,
+    storeName,
+    currency,
+    receiptUrl,
+    store: CommerceModel.payLinkStoreOf({ tax: store.get('tax') }),
+    paymentsReady,
+  }
+  return kind === 'quote' ? CommerceModel.buildQuotePageView(view) : CommerceModel.buildInvoicePageView(view)
+}
+
 /** `GET /api/commerce/quote-view`: the quote page's data. */
 export async function handleQuoteView(deps: QuotePayDeps, req: PluginApiRequest): Promise<QuoteLinkOutcome> {
   if (req.method !== 'GET') return { status: 405, body: { error: 'Method not allowed' } }
@@ -270,13 +340,7 @@ export async function handleQuoteView(deps: QuotePayDeps, req: PluginApiRequest)
     }
     return linked.outcome
   }
-  const { host, order, storeName, store, kind } = linked.loaded
-  const currency = String(store.get('currency') ?? 'USD')
-  const receiptUrl = order.status === 'pending' ? null : orderStatusUrl(host, hostId, quoteId)
-  const view =
-    kind === 'quote'
-      ? CommerceModel.buildQuotePageView({ order, orderId: quoteId, storeName, currency, receiptUrl })
-      : CommerceModel.buildInvoicePageView({ order, orderId: quoteId, storeName, currency, receiptUrl })
+  const view = await payLinkPageView(deps, { hostId, orderId: quoteId, loaded: linked.loaded })
   return { status: 200, body: view as unknown as Record<string, unknown> }
 }
 
@@ -291,6 +355,12 @@ export function buildQuoteSessionParams(input: {
   taxRateId: string
   returnUrl: string
   paymentMethods: CommerceModel.StorefrontPaymentMethodControls
+  /**
+   * The tax basis charged when it is not the quote's stored one: a quote
+   * saved before the store chose its sales tax, priced under the choice now
+   * (`quotePayTax`, AGL-4162). The webhook records it on the paid order.
+   */
+  chargedTax?: CommerceModel.QuoteTaxBasis | null
 }): URLSearchParams {
   const { charge, order } = input
   const invoice = CommerceModel.orderPayLinkKind(order) === 'invoice'
@@ -367,6 +437,7 @@ export function buildQuoteSessionParams(input: {
     params.set('metadata[quoteId]', input.quoteId)
     params.set('metadata[quoteLinkVersion]', String(CommerceModel.quoteLinkVersion(quote)))
     params.set('metadata[quoteUpdatedAtMs]', String(Number(quote.updatedAtMs) || 0))
+    if (input.chargedTax) params.set('metadata[quoteTax]', CommerceModel.quoteTaxBasisKey(input.chargedTax))
   }
   params.set('metadata[feeCents]', String(input.feeCents))
   // A tax charged as its own line is invisible to Stripe's tax total; this
@@ -416,38 +487,36 @@ export async function handleQuotePay(deps: QuotePayDeps, req: PluginApiRequest):
   // Every refusal the customer can be given is above the claim, so none of
   // them spends the press. `v` is the edit of the quote the page showed: a
   // quote changed since is shown again before it is paid, never charged unseen.
-  // An invoice is not edited, so it sends none.
-  const seen = Number(bodyOf(req)['v'])
+  // An invoice is not edited, so it sends none. `tax` is the tax the page
+  // priced it under: a quote saved before the store chose its sales tax is
+  // priced under the choice as it stands, so one the store changed since, or
+  // a page that did not say, is shown again too.
+  const body = bodyOf(req)
+  const seen = Number(body['v'])
   if (kind === 'quote' && Number.isFinite(seen) && seen > 0 && seen !== (Number(order.quote?.updatedAtMs) || 0)) {
     return refusal(409, 'updated', QUOTE_UPDATED_MESSAGE)
   }
-  const blocked = CommerceModel.invoicePayRefusal(order, quoteId)
-  if (blocked) return refusal(409, blocked, CommerceModel.invoicePayRefusalMessage(blocked, storeName, kind))
-  const owner = await deps.orgForHost(hostId)
-  const unavailable = refusal(
-    409,
-    'payments-unavailable',
-    `${storeName || 'This business'} can’t take payments online right now. Contact them to pay this ${noun}.`,
-  )
-  if (!checkEntitlement(owner?.org as never, 'commerce')) return unavailable
-  const ownerUid = owner?.org?.ownerUid
-  const profile = ownerUid ? await deps.firestore().collection('profiles').doc(String(ownerUid)).get() : null
-  const accountId = profile?.get('stripeAccountId')
-  const ready = merchantAccountIsReady(
-    {
-      accountId,
-      chargesEnabled: profile?.get('stripeChargesEnabled'),
-      accountLivemode: profile?.get('stripeAccountLivemode'),
-    },
-    { subject: `${noun} ${quoteId} on host ${hostId}` },
-  )
-  if (!ready) return unavailable
-  const taxSettings = (store.get('tax') ?? {}) as CommerceModel.TaxSettings
-  if (CommerceModel.storefrontTaxDecision({ settings: taxSettings }).kind === 'undecided') {
-    return refusal(409, 'tax-undecided', CommerceModel.invoicePayRefusalMessage('tax-undecided', storeName, kind))
+  const payStore = CommerceModel.payLinkStoreOf({ tax: store.get('tax') })
+  const payTax = CommerceModel.quotePayTax(order.quote, payStore)
+  if (kind === 'quote') {
+    const shownTax = typeof body['tax'] === 'string' ? body['tax'] : null
+    const taxKey = CommerceModel.quoteTaxBasisKey(payTax.basis)
+    if (shownTax !== null ? shownTax !== taxKey : payTax.source === 'current') {
+      return refusal(409, 'updated', QUOTE_UPDATED_MESSAGE)
+    }
   }
+  const payments = await payLinkPayments(deps, { hostId, orderId: quoteId, kind })
+  const blocked = CommerceModel.payLinkRefusalWithPayments(
+    CommerceModel.invoicePayRefusal(order, quoteId, payStore),
+    payments.ready,
+  )
+  if (blocked === 'payments-unavailable') {
+    return refusal(409, blocked, CommerceModel.payLinkPaymentsUnavailableMessage(storeName, kind))
+  }
+  if (blocked) return refusal(409, blocked, CommerceModel.invoicePayRefusalMessage(blocked, storeName, kind))
+  const { owner, accountId } = payments
 
-  const charge = CommerceModel.invoiceCheckoutCharge(order, quoteId)
+  const charge = CommerceModel.invoiceCheckoutCharge(order, quoteId, payStore)
   // The fee is sized on the most the buyer can pay, as a draft's first link
   // sized it on its dearest rate.
   const dearestRateCents = charge.shippingOptions.reduce((most, rate) => Math.max(most, rate.amountCents), 0)
@@ -505,7 +574,7 @@ export async function handleQuotePay(deps: QuotePayDeps, req: PluginApiRequest):
 
     let taxRateId = ''
     if (charge.taxPct !== null && charge.taxableCents > 0) {
-      const basis = order.quote?.tax
+      const basis = kind === 'quote' ? payTax.basis : null
       taxRateId =
         (await deps.taxRateId({
           hostRef,
@@ -536,6 +605,7 @@ export async function handleQuotePay(deps: QuotePayDeps, req: PluginApiRequest):
       taxRateId,
       returnUrl,
       paymentMethods,
+      chargedTax: kind === 'quote' && payTax.source === 'current' ? payTax.basis : null,
     })
     if (nativeMode.native) {
       applyNativeCheckoutParams(params, params.get('success_url') ?? returnUrl)

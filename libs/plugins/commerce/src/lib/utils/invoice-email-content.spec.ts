@@ -90,6 +90,21 @@ describe('the invoice email, unpaid', () => {
     expect(shippingOnly.tokens['invoice.nextStep']).toContain('Shipping is added when you pay.')
   })
 
+  it('prices a quote saved before the store chose under the store’s choice, as its link charges it (AGL-4162)', () => {
+    const quote = {
+      number: 1042,
+      status: 'pending',
+      channel: 'quote',
+      lineItems: [{ productId: '', name: 'Banner', productType: 'service', quantity: 1, unitAmountCents: 40_000 }],
+      totals: { itemsCents: 40_000, discountCents: 0, shippingCents: 0, taxCents: 0, feeCents: 0, totalCents: 40_000 },
+      quote: { stage: 'sent', revision: 1, tax: { kind: 'none', reason: 'undecided' }, createdAtMs: OCT_28, updatedAtMs: OCT_29, createdBy: 'a', updatedBy: 'a' },
+    } as unknown as HostOrder
+    expect(content({ order: quote, orderId: 'q1', store: { tax: { mode: 'stripe' } } }).tokens['invoice.buttonLabel']).toBe(
+      'Pay $400.00 plus tax',
+    )
+    expect(content({ order: quote, orderId: 'q1', store: { tax: { mode: 'none' } } }).tokens['invoice.buttonLabel']).toBe('Pay $400.00')
+  })
+
   it('names a quote’s invoice as for the quote, with the quote’s date and customer’s figures', () => {
     const quote = {
       number: 1042,

@@ -35,6 +35,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
+import { PayLinkReadinessNoticeFor } from './pay-link-readiness-notice.component'
 
 const SEND_REFUSAL = commerceSitePermissionRefusal('commerce.quotes.send')
 
@@ -61,6 +62,9 @@ export interface QuotePayLinkSectionProps {
  * it, and the link from before then opens only "This quote was updated". A
  * link already on screen is fetched again at the new version; Copy pay link
  * never copies one older than the quote's.
+ *
+ * Above it, what the customer's Pay waits on, if anything (AGL-4162): the
+ * link can still be copied and sent.
  */
 export function QuotePayLinkSection(props: QuotePayLinkSectionProps) {
   const { hostId, quoteId, quote, canSend, edited } = props
@@ -146,6 +150,7 @@ export function QuotePayLinkSection(props: QuotePayLinkSectionProps) {
           </Typography>
         ) : null}
       </Stack>
+      {unpaid ? <PayLinkReadinessNoticeFor hostId={hostId} order={quote} noun="quote" /> : null}
       {url ? (
         <TextField
           label="Pay link"

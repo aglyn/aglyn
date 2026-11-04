@@ -25,6 +25,7 @@ import { consumeRateLimit, firebaseAdmin } from '@aglyn/tenant-data-admin'
 import * as CommerceModel from '../model'
 import { verifyOrderStatusToken } from './order-status-token'
 import { mintQuoteLinkToken } from './quote-link-token'
+import { defaultQuotePayDeps, payLinkPayments } from './quote-pay'
 import { quotePageHref } from '../constants/quote-page'
 import { resolvePluginTrackingPages } from '@aglyn/aglyn/plugin-manager/plugin-tracking-pages'
 
@@ -86,20 +87,26 @@ async function actionsFor(
 /**
  * Pay, on the status page of an order still to be paid that its lasting pay
  * link can take payment for (AGL-4099): a draft order or a quote, opening the
- * same `/pay-quote` page its invoice links to. None for anything else.
+ * same `/pay-quote` page its invoice links to. None for anything else, nor
+ * where that page would offer no Pay (AGL-4162): the store's tax choice and
+ * its payments are read as the page reads them.
  */
 export function orderStatusPayAction(input: {
   hostId: string
   orderId: string
   order: CommerceModel.HostOrder
   currency: string
+  store?: CommerceModel.PayLinkStore | null
+  paymentsReady?: boolean
 }): CommerceModel.OrderStatusAction | null {
-  const { hostId, orderId, order } = input
+  const { hostId, orderId, order, store } = input
   if (order.status !== 'pending' || !CommerceModel.orderPayLinkKind(order)) return null
-  if (CommerceModel.invoicePayRefusal(order, orderId)) return null
+  if (CommerceModel.payLinkRefusalWithPayments(CommerceModel.invoicePayRefusal(order, orderId, store), input.paymentsReady)) {
+    return null
+  }
   const token = mintQuoteLinkToken(hostId, orderId, CommerceModel.orderPayLinkVersion(order))
   if (!token) return null
-  const charge = CommerceModel.invoiceCheckoutCharge(order, orderId)
+  const charge = CommerceModel.invoiceCheckoutCharge(order, orderId, store)
   const later = [charge.shippingOptions.length > 0 ? 'shipping' : '', charge.taxAtPayment ? 'tax' : '']
     .filter(Boolean)
     .join(' and ')
@@ -163,7 +170,17 @@ export const orderStatusHandler: PluginApiHandler = async (req, res) => {
     if (!hostSnapshot.exists || !orderSnapshot.exists) return notFound()
     const order = CommerceModel.liftLegacyOrder((orderSnapshot.data() ?? {}) as never)
     const currency = String(settingsSnapshot.get('currency') ?? 'USD')
-    const pay = orderStatusPayAction({ hostId, orderId, order, currency })
+    const linked = order.status === 'pending' ? CommerceModel.orderPayLinkKind(order) : null
+    const pay = orderStatusPayAction({
+      hostId,
+      orderId,
+      order,
+      currency,
+      store: CommerceModel.payLinkStoreOf({ tax: settingsSnapshot.get('tax') }),
+      paymentsReady: linked
+        ? (await payLinkPayments(defaultQuotePayDeps(), { hostId, orderId, kind: linked })).ready
+        : undefined,
+    })
     const view = CommerceModel.buildOrderStatusView({
       order,
       orderId,

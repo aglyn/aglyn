@@ -195,7 +195,7 @@ beforeEach(() => {
     memberRoles: { admin: 'admin', editor: 'editor', author: 'author', viewer: 'viewer', sender: 'author', denied: 'editor' },
     memberPermissions: { sender: { 'commerce.quotes.send': true }, denied: { 'commerce.quotes.send': false } },
   })
-  docs.set('hosts/site1/settings/store', { currency: 'USD' })
+  docs.set('hosts/site1/settings/store', { currency: 'USD', tax: { mode: 'none' } })
   docs.set('hosts/site1/orders/d-1', JSON.parse(JSON.stringify(DRAFT)))
   docs.set('hosts/site1/orders/q-1', JSON.parse(JSON.stringify(QUOTE)))
 })
@@ -338,6 +338,25 @@ describe('refusals, in plain words', () => {
     expect((await refusal()).error).toContain('can’t be paid online from an invoice')
     docs.set('hosts/site1/orders/d-1', { ...DRAFT, lineItems: [{ ...DRAFT.lineItems[0], productType: 'physical' }], draftShipping: undefined })
     expect((await refusal()).error).toContain('made before invoices could charge its shipping')
+  })
+
+  it('a store that has not chosen its sales tax, whose invoice Pay would refuse (AGL-4162)', async () => {
+    docs.set('hosts/site1/settings/store', { currency: 'USD' })
+    expect(await refusal()).toEqual({
+      status: 409,
+      error: 'Sales tax isn’t set up for this store yet, so the invoice can’t be paid online. Finish the tax settings, then send it.',
+    })
+  })
+
+  it('a quote saved before the store chose, by the store’s choice now (AGL-4162)', async () => {
+    const undecided = { ...QUOTE, status: 'pending', quote: { ...QUOTE.quote, tax: { kind: 'none', reason: 'undecided' }, paidAtMs: undefined } }
+    docs.set('hosts/site1/orders/q-1', JSON.parse(JSON.stringify(undecided)))
+    docs.set('hosts/site1/settings/store', { currency: 'USD', tax: { mode: 'manual', origin: { country: 'US' } } })
+    expect((await refusal({ orderId: 'q-1' })).error).toBe(
+      'This quote was saved before your store chose how it handles sales tax. Save the quote again, then send the invoice.',
+    )
+    docs.set('hosts/site1/settings/store', { currency: 'USD', tax: { mode: 'none' } })
+    expect((await send('editor', { orderId: 'q-1' })).status).toBe(200)
   })
 
   it('an unknown order, a site with no address, and email not set up', async () => {

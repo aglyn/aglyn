@@ -130,13 +130,16 @@ const uploads: QuoteUploadCalls = {
   send: async () => undefined,
 }
 
+/** A workspace whose plan sells, with its owner's payment account taking charges. */
+const ORG = { id: 'org-1', plan: 'business', billingStatus: 'active', ownerUid: 'owner-1' }
+
 const deps: QuoteProofDeps = {
   firestore: () => firestore,
   consumeRateLimit: async (key) => {
     limited.push(key)
     return { allowed: rateAllowed, resetMs: 60_000 }
   },
-  orgForHost: async () => ({ id: 'org-1', org: {} }),
+  orgForHost: async () => ({ id: 'org-1', org: ORG }),
   nativeMode: async () => ({ native: false, publishableKey: '' }) as never,
   taxRateId: async () => null,
   createSession: async () => ({ ok: false, session: {} }),
@@ -211,7 +214,8 @@ beforeEach(() => {
   process.env.TOKEN_SIGNING_SECRET = 'quote-proofs-spec-secret'
   docs.clear()
   docs.set('hosts/site1', { subdomain: 'acme', businessName: 'Acme Signs', orgId: 'org-1' })
-  docs.set('hosts/site1/settings/store', { currency: 'USD' })
+  docs.set('hosts/site1/settings/store', { currency: 'USD', tax: { mode: 'none' } })
+  docs.set('profiles/owner-1', { stripeAccountId: 'acct_merchant', stripeChargesEnabled: true, stripeAccountLivemode: false })
   storeQuote()
   rateAllowed = true
   listedCollections.length = 0
@@ -541,5 +545,16 @@ describe('POST commerce/quote-respond', () => {
     const outcome = await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee' }))
     expect(outcome.body['view']).toMatchObject({ approvalRequired: false, payable: true })
     expect(notified[0][1].body).toContain('Revision 1 is approved, so they can pay the quote now.')
+  })
+
+  it('brings Pay back only where Pay would work: the page’s own view (AGL-4162)', async () => {
+    docs.set('profiles/owner-1', { stripeChargesEnabled: false })
+    storeQuote({ requireProofApproval: true })
+    const outcome = await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee' }))
+    expect(outcome.body['view']).toMatchObject({
+      approvalRequired: false,
+      payable: false,
+      notPayableMessage: expect.stringMatching(/can’t take payments online right now\. Contact them to pay this quote\.$/),
+    })
   })
 })

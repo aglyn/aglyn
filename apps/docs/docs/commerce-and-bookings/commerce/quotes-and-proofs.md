@@ -130,8 +130,12 @@ discount, then add shipping and tax. Tax follows your store's
   out the tax when the customer pays.
 - **No sales tax**: no tax is added.
 
-If your store hasn't chosen how it handles sales tax, the quote shows no tax and
-says so, with a link to **Taxes**.
+If your store hasn't chosen how it handles sales tax, the quote shows no tax, and your
+customer can't pay it online until you choose in **Taxes**. A quote you saved before
+then takes your choice when your customer opens it and pays, with no need to save it
+again: **Don't collect sales tax**, **Stripe Tax (automatic)**, or manual rates with
+**Prices include tax** turned on. On manual rates with **Prices include tax** off, save
+the quote again so its tax is worked out, by your tax service where one is connected.
 
 ## Email the quote {#send}
 
@@ -374,7 +378,18 @@ page first, so nobody pays for a version they haven't seen. Editing a quote, del
 it or replacing its link also closes any payment your customer had started for it.
 
 Paying needs a connected Stripe account and a decision about sales tax. Until your
-store has both, **Pay** tells the customer to contact you.
+store has both, the quote page has no **Pay** button. When Stripe isn't ready, the page
+says your business can't take payments online right now and asks the customer to
+contact you to pay; otherwise it asks them to contact you to pay.
+
+You hear about it first, in the console. While Stripe or the sales tax choice stands in
+the way, a quote's editor, its **Pay link** section, the **Send quote** form and the **Send invoice** form say
+**Customers can't pay this quote online yet** (the **Send invoice** form says *invoice*)
+and name what's missing, each with a button to fix it: **Open Payments** to connect
+Stripe, **Open Taxes** to choose how your store handles sales tax, or a reminder to save
+the quote again. You can still copy the pay link and email the quote, if you take the
+payment another way. **Send invoice** sends without Stripe too, but waits until the
+quote's sales tax is settled.
 
 ## When a quote is paid {#paid}
 

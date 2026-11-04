@@ -34,6 +34,7 @@ import {
   lastInvoiceSend,
   orderPaidAtMs,
   orderPayLinkKind,
+  payLinkGaps,
 } from './commerce-invoices'
 import { orderPayLinkUnmatched, orderPayLinkVersion, quotePaymentDisposition } from './commerce-quote-pay'
 import type { OrderInvoiceSendRecord } from './commerce-quotes'
@@ -187,6 +188,71 @@ describe('what an invoice’s link charges', () => {
   })
 })
 
+describe('the invoice’s page and its Pay (AGL-4162)', () => {
+  it('has no Pay where the business can’t take payments, and says so in Pay’s words', () => {
+    const view = buildInvoicePageView({ order: DRAFT, orderId: 'd-1', storeName: 'Acme Signs', currency: 'USD', paymentsReady: false })
+    expect(view).toMatchObject({
+      payable: false,
+      notPayableMessage: 'Acme Signs can’t take payments online right now. Contact them to pay this invoice.',
+      taxKey: null,
+    })
+  })
+
+  it('has no Pay while the store has not chosen its sales tax, as Pay refuses', () => {
+    expect(invoicePayRefusal(DRAFT, 'd-1', { tax: null })).toBe('tax-undecided')
+    expect(invoicePayRefusal(DRAFT, 'd-1', { tax: { mode: 'manual' } })).toBeNull()
+    expect(buildInvoicePageView({ order: DRAFT, orderId: 'd-1', storeName: 'Acme Signs', currency: 'USD', store: { tax: null } })).toMatchObject({
+      payable: false,
+      notPayableMessage: null,
+    })
+  })
+})
+
+describe('what the console tells the business (AGL-4162)', () => {
+  const READY = { tax: { mode: 'none' as const } }
+  const undecidedQuote = { ...QUOTE, quote: { ...QUOTE.quote, tax: { kind: 'none', reason: 'undecided' } } } as HostOrder
+
+  it('waits until both answers are in', () => {
+    expect(payLinkGaps({ order: QUOTE, paymentsReady: null, store: READY })).toBeNull()
+    expect(payLinkGaps({ order: QUOTE, paymentsReady: true, store: undefined })).toBeNull()
+  })
+
+  it('names nothing for a quote customers can pay', () => {
+    expect(payLinkGaps({ order: QUOTE, paymentsReady: true, store: READY })).toEqual([])
+  })
+
+  it('names each step, payments first', () => {
+    expect(payLinkGaps({ order: undecidedQuote, paymentsReady: false, store: { tax: null } })).toEqual(['payments', 'tax-undecided'])
+    expect(payLinkGaps({ order: QUOTE, paymentsReady: false, store: READY })).toEqual(['payments'])
+    expect(payLinkGaps({ order: DRAFT, paymentsReady: false, store: READY })).toEqual(['payments'])
+    expect(payLinkGaps({ order: DRAFT, paymentsReady: true, store: { tax: null } })).toEqual(['tax-undecided'])
+  })
+
+  it('names no tax step once the store has chosen, and asks for a save only where a save prices it', () => {
+    expect(payLinkGaps({ order: undecidedQuote, paymentsReady: true, store: READY })).toEqual([])
+    expect(payLinkGaps({ order: undecidedQuote, paymentsReady: true, store: { tax: { mode: 'stripe' } } })).toEqual([])
+    expect(
+      payLinkGaps({ order: undecidedQuote, paymentsReady: true, store: { tax: { mode: 'manual', origin: { country: 'US' } } } }),
+    ).toEqual(['tax-save'])
+  })
+
+  it('names the store’s choice for a quote not saved yet, which saves under it', () => {
+    expect(payLinkGaps({ order: null, paymentsReady: true, store: { tax: null } })).toEqual(['tax-undecided'])
+    expect(payLinkGaps({ order: null, paymentsReady: true, store: { tax: { mode: 'manual' } } })).toEqual([])
+  })
+
+  it('names nothing for what the link does not charge', () => {
+    for (const order of [
+      { ...undecidedQuote, status: 'paid' },
+      { ...undecidedQuote, status: 'cancelled' },
+      { ...DRAFT, channel: 'pos' },
+      { ...DRAFT, channel: 'online', status: 'paid' },
+    ] as HostOrder[]) {
+      expect(payLinkGaps({ order, paymentsReady: false, store: { tax: null } })).toEqual([])
+    }
+  })
+})
+
 describe('the invoice’s page', () => {
   it('is "Invoice #N" with no proofs or approval, the shipping picked when the customer pays', () => {
     const view = buildInvoicePageView({ order: DRAFT, orderId: 'd-1', storeName: 'Acme Signs', currency: 'USD' })
@@ -284,9 +350,21 @@ describe('sending an invoice', () => {
     ).toBe('approval-required')
     // A paid quote is invoiced as the record whatever its approval said.
     expect(refusal({ ...QUOTE, status: 'paid', quote: { ...QUOTE.quote, requireProofApproval: true } as never })).toBeNull()
-    for (const reason of ['closed', 'empty', 'not-payable', 'shipping-unknown', 'no-address'] as const) {
+    for (const reason of ['closed', 'empty', 'not-payable', 'shipping-unknown', 'no-address', 'tax-save'] as const) {
       expect(invoiceSendRefusalMessage(reason)).toMatch(/\.$/)
     }
+  })
+
+  it('judges a quote saved before the store chose its sales tax under the store’s choice (AGL-4162)', () => {
+    const undecided = { ...QUOTE, quote: { ...QUOTE.quote, tax: { kind: 'none', reason: 'undecided' } } } as HostOrder
+    const to = 'jordan@example.com'
+    expect(invoiceSendRefusal(undecided, 'q-1', to)).toBe('tax-undecided')
+    expect(invoiceSendRefusal(undecided, 'q-1', to, { tax: null })).toBe('tax-undecided')
+    expect(invoiceSendRefusal(undecided, 'q-1', to, { tax: { mode: 'none' } })).toBeNull()
+    expect(invoiceSendRefusal(undecided, 'q-1', to, { tax: { mode: 'manual', origin: { country: 'US' } } })).toBe('tax-save')
+    expect(invoiceSendRefusalMessage('tax-save')).toBe(
+      'This quote was saved before your store chose how it handles sales tax. Save the quote again, then send the invoice.',
+    )
   })
 
   it('records the send, the timeline line (without the address) and the conversation where it belongs', () => {

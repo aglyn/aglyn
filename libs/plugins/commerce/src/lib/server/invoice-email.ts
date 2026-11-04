@@ -173,6 +173,7 @@ export function invoiceMailer(deps: InvoiceMailerDeps = defaultInvoiceMailerDeps
         message: input.message,
         payUrl: input.payUrl,
         timeZone: resolveSiteTimeZone(org, host as { timeZone?: string }),
+        store: CommerceModel.payLinkStoreOf(input.store),
       })
 
       // The PDF is what the email says is attached; without it nothing goes.
