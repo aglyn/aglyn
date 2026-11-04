@@ -772,6 +772,30 @@ describe('Keep my site or Improve it, as Bring my site asked it (AGL-4152)', () 
     expect(looked).toEqual(['improve'])
   })
 
+  it('reads a page whose rewrite was refused as kept, on the pass that built it and the one that finished it', async () => {
+    const base = harborState()
+    const read: AiSiteImportPageRead = { at: 'x', title: 'Home', text: 'Hello there, friends.', sections: [], images: [], blocks: [{ kind: 'heading', level: 1, text: 'Hello there, friends.', region: 'main' }] }
+    const started = aiSiteImportWaveStarted({ ...base, finish: 'improve', wording: true }, 0, 'x', new Map(base.waves[0].slots.map((slot) => [slot, read])))
+    const siteImport: AiSiteImportState = {
+      ...started,
+      look: { at: 'x', theme: 'applied', colors: [], logo: null, seo: true, seed: 1 } as never,
+      pages: started.pages.map((page) => ({ ...page, build: 'arranged' as const, wording: 'improved' as const, photos: { brought: 0, reused: 0, skipped: 0, assets: [] } })),
+    }
+    const items = aiSiteImportLedger(siteImport).map((row): AiJobItemLedger => (row.slot === 'frame' ? { ...row, status: 'succeeded' } : row))
+    const slot = siteImport.waves[0].slots[0] as string
+    const passes = [outcome({ continue: true, wording: 'kept' }), outcome({ outputs: [{ resource: 'screen', id: 'draft-out' } as never], wording: 'kept' })]
+    for (const pass of passes) {
+      const step = createAiJobImportStep(deps({ runnerFor: (() => async () => pass) as never, draftWords: async () => 1 }))
+      const result = await run(step, importJob({ siteImport, items }))
+      expect(result.siteImport?.pages.find((page) => page.slot === slot)?.wording).toBe('kept')
+      // Every other page keeps the words its wave stamped.
+      expect(result.siteImport?.pages.filter((page) => page.slot !== slot).every((page) => page.wording === 'improved')).toBe(true)
+    }
+    // A pass that kept its rewrite leaves the page improved.
+    const improved = await run(createAiJobImportStep(deps({ runnerFor: (() => async () => outcome({ continue: true, wording: 'improved' })) as never })), importJob({ siteImport, items }))
+    expect(improved.siteImport?.pages.find((page) => page.slot === slot)?.wording).toBe('improved')
+  })
+
   it('hands an older import’s pages over as Keep my site, their words kept', () => {
     const base = harborState()
     const state = aiSiteImportWaveStarted(base, 0, NOW.toISOString(), new Map([[base.pages[0].slot, { at: 'x', title: 'Home', text: '', sections: [], images: [], blocks: [{ kind: 'paragraph', text: 'Hello there, friends.', region: 'main' }] }]]))

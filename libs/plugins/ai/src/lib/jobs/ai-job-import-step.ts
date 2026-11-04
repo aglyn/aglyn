@@ -103,6 +103,7 @@ import {
   aiSiteImportWaveMessage,
   aiSiteImportWaveChoice,
   aiSiteImportWaveStamped,
+  aiSiteImportWordsKept,
   aiSiteImportWaveStarted,
   type AiSiteImportBuild,
   type AiSiteImportHome,
@@ -1238,9 +1239,10 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
       slot: string,
       runner: AiJobStepRunner,
       derived: AiJob,
-      current: AiSiteImportState,
+      held: AiSiteImportState,
       page: AiSiteImportPage | null,
     ): Promise<AiJobStepOutcome> {
+      let current = held
       let outcome: AiJobStepOutcome
       try {
         outcome = await runner({ ...context, job: derived })
@@ -1255,6 +1257,8 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
         }
         return closing(current, aiApplyJobItemRecord(items, item, 0, now), wave, unspent({ item }))
       }
+      // A page whose rewrite was refused keeps its words, and its row says so (AGL-4152).
+      if (page && outcome.wording === 'kept' && page.wording === 'improved') current = aiSiteImportWordsKept(current, slot)
       const spent = aiUnitSpend(outcome)
       const stopped = aiUnitFailure(slot, outcome)
       if (stopped?.status === 'running') return { ...spent, outputs: [], item: stopped, siteImport: current, continue: true }

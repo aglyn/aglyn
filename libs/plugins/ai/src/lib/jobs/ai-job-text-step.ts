@@ -32,7 +32,7 @@ import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import { aiDevEffortFor } from '../runtime/ai-dev-env'
 import { runAiRequest, type AiEffort, type AiSystemBlock } from '../runtime/ai-runtime'
 import type { AssistTokenUsage } from '../usage/assist-usage'
-import type { AiSiteImportState } from '../model/ai-site-import'
+import type { AiSiteImportState, AiSiteImportWords } from '../model/ai-site-import'
 import type { AiSitePhotos } from '../model/ai-site-photos'
 import { aiJobStepBudget } from './ai-job-budget'
 import { aiOverlayCopyRequested } from '../model/ai-overlay-copy'
@@ -167,6 +167,12 @@ export interface AiJobStepOutcome {
    * job document itself.
    */
   siteImport?: AiSiteImportState
+  /**
+   * How the words of a page brought in under Also improve my wording came
+   * out on this pass (AGL-4152): `kept` where its rewrite was refused, which
+   * the import step writes onto the page's row so it reads as kept.
+   */
+  wording?: AiSiteImportWords
   /**
    * A `site` job's pictures left on a starter photo after this pass
    * (AGL-3988), whole: what its late photo pass fills before the site is

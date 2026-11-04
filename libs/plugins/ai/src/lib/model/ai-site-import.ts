@@ -2020,6 +2020,15 @@ export function aiSiteImportFinishUpdate(
   return { 'siteImport.finish': finish, 'siteImport.wording': aiSiteImportWordingOf(finish, asked) }
 }
 
+/**
+ * A page whose rewrite was refused (AGL-4152): it keeps every word as
+ * written, and its row reads as kept. Only a page stamped `improved` changes.
+ */
+export function aiSiteImportWordsKept(state: AiSiteImportState, slot: string): AiSiteImportState {
+  if (!state.pages.some((page) => page.slot === slot && page.wording === 'improved')) return state
+  return { ...state, pages: state.pages.map((page) => (page.slot === slot ? { ...page, wording: 'kept' as const } : page)) }
+}
+
 /** The pages of a wave whose words a choice improves, of those it still owes (AGL-4152). */
 export function aiSiteImportWordingPages(
   state: AiSiteImportState,

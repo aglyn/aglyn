@@ -317,6 +317,9 @@ export const AI_DOCTRINE_KIND_SCOPE: Readonly<Record<string, AiDoctrineScope>> =
   'blog-post': 'fields',
   // A site's datasets (AGL-3616): a dataset's fields and records, which its own check holds.
   dataset: 'fields',
+  // A page brought in, its wording improved (AGL-4152): its lines' words, each
+  // held to its line's facts, which the site compiler places where they were.
+  'page-wording': 'fields',
 }
 
 /** The scope for a kind; `documents` unless the kind names another. */
