@@ -513,14 +513,37 @@ class FieldSpec private constructor(
       if (choices(context).any { it.first !in chosen }) return true
     }
     // A number field is finished by any number, zero too.
-    val finished = ScreenValues.truthy(value) || (kind == "number" && ScreenValues.number(value) != null)
+    val finished = ScreenValues.truthy(value) || (counts && ScreenValues.number(value) != null)
     return required && kind != "toggle" && !finished
+  }
+
+  /** Whether the field holds a number: a `number` typed, or a `stepper` stepped. */
+  val counts: Boolean get() = kind == "number" || kind == "stepper"
+
+  /** A `stepper` field's count as the person reads it: `1 block`, `3 blocks` (its `unit`, `{ one, other }`), or the bare number without one. */
+  fun countLabel(count: Int): String {
+    val unit = config.obj("unit")
+    val word = (if (count == 1) unit.str("one") else unit.str("other")) ?: return count.toString()
+    return "$count $word"
+  }
+
+  /**
+   * The line under a `stepper` for a count (the console's "With 3 blocks: 15,750 AI credits a month in all."): its `says`
+   * parts whose `when` holds, joined, read with `form.<key>` the count shown. Null without one.
+   */
+  fun says(count: Int, context: JsonElement): String? {
+    val parts = config.arr("says")
+    if (parts.isEmpty()) return null
+    val form = ((context as? JsonObject)?.get("form") as? JsonObject).orEmpty() + (key to JsonPrimitive(count))
+    val scope = ScreenContext.with(context, "form", JsonObject(form))
+    val text = parts.filter { ScreenValues.condition(it.str("when"), scope) }.joinToString("") { ScreenValues.render(it.str("text").orEmpty(), scope) }
+    return text.ifEmpty { null }
   }
 
   /** Whether a number field holds something typed that is not a number, or a number outside its bounds. */
   fun outOfBounds(value: JsonElement): Boolean {
     val typed = ScreenValues.text(value).trim()
-    if (kind != "number" || typed.isEmpty()) return false
+    if (!counts || typed.isEmpty()) return false
     val number = typed.toDoubleOrNull() ?: ScreenValues.number(value) ?: return true
     return (min != null && number < min) || (max != null && number > max)
   }

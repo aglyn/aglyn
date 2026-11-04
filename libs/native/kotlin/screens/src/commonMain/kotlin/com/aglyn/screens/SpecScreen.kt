@@ -383,7 +383,9 @@ private fun SpecBodyContent(
   fun trigger(action: ActionSpec, actionScope: JsonElement) {
     when {
       action.asksInputs(actionScope) -> prompting = Pending(action, actionScope)
-      action.asksConfirmation && ScreenValues.condition(action.confirmWhen, actionScope) -> confirming = Pending(action, actionScope)
+      // An action with a `check` is confirmed over the check's answer, once `execute` has asked it: confirming first would
+      // draw the confirm without `preview` (a plan switch read "Switch to Starter? The change is prorated …" for a move down).
+      action.check == null && action.asksConfirmation && ScreenValues.condition(action.confirmWhen, actionScope) -> confirming = Pending(action, actionScope)
       else -> scope.launch { execute(action, actionScope) }
     }
   }
@@ -609,7 +611,9 @@ private fun PromptDialog(pending: Pending, search: suspend (LookupGroup, String)
   val missing = inputs.any { ScreenValues.condition(it.whenCondition, visible) && it.unmet(fieldJson(it, values[it.key] ?: initialValue(it, pending.scope)), pending.scope) }
   ActionDialog(
     title = ScreenValues.render(pending.action.promptTitle ?: pending.action.label, pending.scope),
-    body = pending.action.confirmText(pending.scope),
+    // An action with a `check` confirms over the check's answer (`preview`), which it has not got yet: its confirm is asked
+    // after the inputs, never drawn here half-filled.
+    body = if (pending.action.check == null) pending.action.confirmText(pending.scope) else null,
     confirmLabel = ScreenValues.render(pending.action.submitLabel ?: pending.action.label, pending.scope),
     destructive = pending.action.destructive,
     confirmEnabled = !missing,
@@ -1124,7 +1128,7 @@ internal fun fieldJson(field: FieldSpec, value: FieldValue?): JsonElement = when
   // One entry per line while edited; the list is what is sent (nothing typed is an empty list).
   field.kind == "lines" && value is FieldValue.Text ->
     JsonArray(value.value.split('\n').map { it.trim() }.filter { it.isNotEmpty() }.map { JsonPrimitive(it) })
-  field.kind == "number" && value is FieldValue.Text -> value.value.trim().let { t -> if (t.isEmpty()) JsonNull else t.toDoubleOrNull()?.let { JsonPrimitive(if (field.integer) kotlin.math.round(it) else it) } ?: JsonPrimitive(t) }
+  (field.kind == "number" || field.kind == "stepper") && value is FieldValue.Text -> value.value.trim().let { t -> if (t.isEmpty()) JsonNull else t.toDoubleOrNull()?.let { JsonPrimitive(if (field.integer) kotlin.math.round(it) else it) } ?: JsonPrimitive(t) }
   value is FieldValue.Text -> JsonPrimitive(if (field.kind == "multiline" || field.kind == "password") value.value else value.value.trim())
   value is FieldValue.Flag -> JsonPrimitive(value.value)
   value is FieldValue.File -> JsonPrimitive(value.text)
@@ -1168,6 +1172,7 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
     when (field.kind) {
       "toggle" -> SwitchRow(label, (value as? FieldValue.Flag)?.value == true, { onChange(FieldValue.Flag(it)) }, supporting = help)
       "hours" -> HoursInput(field, text) { onChange(FieldValue.Text(it)) }
+      "stepper" -> StepperInput(field, context, label, text) { onChange(FieldValue.Text(it)) }
       "file" -> {
         // The chosen file is read whole as text (a package, a CSV); its name sits beside the button.
         val picker = com.aglyn.ui.LocalMediaPicker.current
@@ -1270,6 +1275,31 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
     } else if (help != null && field.kind != "toggle") {
       Text(help, Modifier.padding(top = space(0.5f)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
+  }
+}
+
+/**
+ * A `stepper` field: a whole count stepped between the field's bounds with outlined − and + buttons, never typed (the
+ * console's add-on stepper: blocks of AI credits from 0 to 30), the count named with its `unit`, and under it the field's
+ * `says` line for the count shown, which moves as it is stepped.
+ */
+@Composable
+private fun StepperInput(field: FieldSpec, context: JsonElement, label: String, text: String, onChange: (String) -> Unit) {
+  val low = (field.min ?: 0.0).toInt()
+  val high = maxOf(low, (field.max ?: 999.0).toInt())
+  val count = (text.trim().toDoubleOrNull()?.let { kotlin.math.round(it).toInt() } ?: low).coerceIn(low, high)
+  Row(Modifier.fillMaxWidth().testTag("stepper-${field.key}"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+    Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+    Text(field.countLabel(count), Modifier.testTag("stepper-count-${field.key}"), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    androidx.compose.material3.OutlinedIconButton(onClick = { onChange((count - 1).toString()) }, enabled = count > low, modifier = Modifier.testTag("stepper-remove-${field.key}")) {
+      Icon(AglynIcons.named("remove"), contentDescription = "Remove one")
+    }
+    androidx.compose.material3.OutlinedIconButton(onClick = { onChange((count + 1).toString()) }, enabled = count < high, modifier = Modifier.testTag("stepper-add-${field.key}")) {
+      Icon(AglynIcons.named("add"), contentDescription = "Add one")
+    }
+  }
+  field.says(count, context)?.let {
+    Text(it, Modifier.padding(top = space(0.5f)).testTag("stepper-says-${field.key}"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
   }
 }
 
