@@ -673,7 +673,8 @@ describe('StaffOrgActions (AGL-939)', () => {
       expect(within(dialog).queryByRole('radiogroup', { name: 'Comp caps' })).toBeNull()
 
       fireEvent.mouseDown(within(dialog).getByRole('combobox', { name: 'Comp plan' }))
-      fireEvent.click(await screen.findByRole('option', { name: 'Enterprise' }))
+      // The `enterprise` plan reads "Custom" since pricing v4 (AGL-4126).
+      fireEvent.click(await screen.findByRole('option', { name: 'Custom' }))
       const caps = within(dialog).getByRole('radiogroup', { name: 'Comp caps' })
       const capped = within(caps).getByRole('radio', { name: /^Capped — every band is a hard limit/ })
       const uncapped = within(caps).getByRole('radio', { name: /^Uncapped — no band or quota limits at all/ })
@@ -706,15 +707,15 @@ describe('StaffOrgActions (AGL-939)', () => {
 
     it('names a standing uncapped comp as uncapped, and an untouched save sends no comp', async () => {
       const dialog = await openOverride({ ...INTERNAL, entitlements: { planComp: UNCAPPED } })
-      expect(within(dialog).getByText('Comp: Enterprise (uncapped)')).toBeTruthy()
+      expect(within(dialog).getByText('Comp: Custom (uncapped)')).toBeTruthy()
       expect(within(dialog).getByRole('alert').textContent).toMatch(
-        /Enterprise is in force as an uncapped staff comp.*every band and quota reads as unlimited/,
+        /Custom is in force as an uncapped staff comp.*every band and quota reads as unlimited/,
       )
       expect(
         (within(dialog).getByRole('radio', { name: /^Uncapped/ }) as HTMLInputElement).checked,
       ).toBe(true)
       expect(
-        within(dialog).getByLabelText(/Remove the uncapped Enterprise comp on save/),
+        within(dialog).getByLabelText(/Remove the uncapped Custom comp on save/),
       ).toBeTruthy()
       const body = await save(dialog)
       expect(body).not.toHaveProperty('comp')
@@ -760,7 +761,7 @@ describe('StaffOrgActions (AGL-939)', () => {
 
     it('hides the caps once the comp is set to be removed', async () => {
       const dialog = await openOverride({ ...INTERNAL, entitlements: { planComp: UNCAPPED } })
-      fireEvent.click(within(dialog).getByLabelText(/Remove the uncapped Enterprise comp on save/))
+      fireEvent.click(within(dialog).getByLabelText(/Remove the uncapped Custom comp on save/))
       expect(within(dialog).queryByRole('radiogroup', { name: 'Comp caps' })).toBeNull()
       const body = await save(dialog)
       expect(body.comp).toBeNull()

@@ -93,6 +93,11 @@ const FLAT_ENV_NAME: Partial<Record<AddonKind, string>> = {
  * reintroducing it: `free` has nothing to sell and `enterprise` is quoted
  * per deal (no `STRIPE_PRICE_ENTERPRISE_*` exists), so everything else is
  * by definition a paid, priced plan.
+ *
+ * Since pricing v4 (2026-11-03, AGL-4126) that is Starter and Pro. Business,
+ * Scale, Advanced and Agency are retired: their prices are archived and
+ * their env removed, and no subscription carried one when v4 shipped, so
+ * nothing is left on Stripe for the read-back to recognise.
  */
 export const PAID_PLANS: readonly OrgPlan[] = SELF_SERVE_PLANS.filter(
   (plan) => plan !== 'free',
@@ -210,7 +215,10 @@ export function addonPriceEnvName(
   const flat = FLAT_ENV_NAME[kind]
   if (flat) return `STRIPE_PRICE_${flat}${yearly}`
   const suffix = PER_PLAN_ENV_SUFFIX[kind]
-  if (!suffix || plan === 'free') return null
+  // Only a plan that is sold has per-plan add-on prices: Free sells none, and
+  // the plans pricing v4 retired (AGL-4126) are sold no longer, so their
+  // `STRIPE_PRICE_{PLAN}_EXTRA_*` env is not read.
+  if (!suffix || !PAID_PLANS.includes(plan)) return null
   return `STRIPE_PRICE_${plan.toUpperCase()}_${suffix}${yearly}`
 }
 

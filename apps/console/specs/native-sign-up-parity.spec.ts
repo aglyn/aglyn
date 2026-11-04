@@ -99,10 +99,14 @@ describe.each(Object.entries(NATIVE))('the %s sign-up', (_platform, source) => {
       expect(quoted(plan)).toBe(true)
       expect(quoted(label)).toBe(true)
     }
-    for (const plan of ['starter', 'pro', 'business', 'scale', 'advanced', 'agency']) {
+    // The plans a link may carry since pricing v4 (AGL-4126): Starter and
+    // Pro. A retired plan's link carries no intent, as Free's does not.
+    for (const plan of ['starter', 'pro']) {
       expect(parseOnboardingPlanIntent(new URLSearchParams({ plan }))?.contactSales).toBe(false)
     }
-    expect(parseOnboardingPlanIntent(new URLSearchParams({ plan: 'free' }))).toBeNull()
+    for (const plan of ['free', 'business', 'scale', 'advanced', 'agency']) {
+      expect(parseOnboardingPlanIntent(new URLSearchParams({ plan }))).toBeNull()
+    }
     for (const key of UTM_QUERY_KEYS) expect(quoted(key)).toBe(true)
   })
 

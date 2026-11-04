@@ -37,10 +37,12 @@
 import { buildTargetItems } from '../utils/server/billing-schedule'
 
 const PRICE_ENV: Record<string, string> = {
+  // Pricing v4 (AGL-4126): the switch is Starter -> Pro, the plans sold; it
+  // was Starter -> Agency until v4 retired every plan above Pro.
   STRIPE_PRICE_STARTER: 'price_starter',
   STRIPE_PRICE_STARTER_YEARLY: 'price_starter_yearly',
-  STRIPE_PRICE_AGENCY: 'price_agency',
-  STRIPE_PRICE_AGENCY_YEARLY: 'price_agency_yearly',
+  STRIPE_PRICE_PRO: 'price_pro',
+  STRIPE_PRICE_PRO_YEARLY: 'price_pro_yearly',
   // Starter's add-on as it was sold before tiers.
   STRIPE_PRICE_STARTER_AI_ADDON: 'price_starter_ai_addon',
   STRIPE_PRICE_STARTER_AI_ADDON_YEARLY: 'price_starter_ai_addon_yearly',
@@ -85,11 +87,11 @@ const STARTER_WITH_LEGACY = [
 ]
 
 describe('the AI add-on keeps its tier across a plan switch (AGL-2897, AGL-3965)', () => {
-  it('Starter -> Agency keeps Boost at Boost\'s price, quantity intact', () => {
+  it('Starter -> Pro keeps Boost at Boost\'s price, quantity intact', () => {
     const target = buildTargetItems(STARTER_WITH_BOOST, {
-      targetPlan: 'agency',
+      targetPlan: 'pro',
       targetInterval: 'month',
-      targetPlanPrice: 'price_agency',
+      targetPlanPrice: 'price_pro',
       meteredPrice: 'price_metered_usage',
     })
     expect(target.items).toContainEqual({ price: 'price_ai_boost', quantity: 1 })
@@ -101,9 +103,9 @@ describe('the AI add-on keeps its tier across a plan switch (AGL-2897, AGL-3965)
 
   it('follows an interval switch onto the tier\'s yearly variant', () => {
     const target = buildTargetItems(STARTER_WITH_BOOST, {
-      targetPlan: 'agency',
+      targetPlan: 'pro',
       targetInterval: 'year',
-      targetPlanPrice: 'price_agency_yearly',
+      targetPlanPrice: 'price_pro_yearly',
       meteredPrice: 'price_metered_usage_yearly',
     })
     expect(target.items).toContainEqual({ price: 'price_ai_boost_yearly', quantity: 1 })
@@ -111,12 +113,12 @@ describe('the AI add-on keeps its tier across a plan switch (AGL-2897, AGL-3965)
   })
 
   it('moves a legacy per-plan line onto the tier with its price and band', () => {
-    // Starter's $9 / 4,000 add-on is Spark, on Agency as on Starter — not
-    // Agency's old $299 add-on.
+    // Starter's $9 / 4,000 add-on is Spark, on Pro as on Starter — not Pro's
+    // old $19 add-on.
     const target = buildTargetItems(STARTER_WITH_LEGACY, {
-      targetPlan: 'agency',
+      targetPlan: 'pro',
       targetInterval: 'month',
-      targetPlanPrice: 'price_agency',
+      targetPlanPrice: 'price_pro',
       meteredPrice: 'price_metered_usage',
     })
     expect(target.items).toContainEqual({ price: 'price_ai_spark', quantity: 1 })
@@ -130,9 +132,9 @@ describe('the AI add-on keeps its tier across a plan switch (AGL-2897, AGL-3965)
     const target = buildTargetItems(
       [item('price_starter'), item('price_ai_boost', 2)],
       {
-        targetPlan: 'agency',
+        targetPlan: 'pro',
         targetInterval: 'month',
-        targetPlanPrice: 'price_agency',
+        targetPlanPrice: 'price_pro',
         meteredPrice: null,
       },
     )
@@ -143,9 +145,9 @@ describe('the AI add-on keeps its tier across a plan switch (AGL-2897, AGL-3965)
   it('is dropped, and named, when the tier has no price configured at the target interval', () => {
     delete process.env.STRIPE_PRICE_AI_BOOST_YEARLY
     const target = buildTargetItems(STARTER_WITH_BOOST, {
-      targetPlan: 'agency',
+      targetPlan: 'pro',
       targetInterval: 'year',
-      targetPlanPrice: 'price_agency_yearly',
+      targetPlanPrice: 'price_pro_yearly',
       meteredPrice: 'price_metered_usage_yearly',
     })
     expect(target.droppedAddons).toEqual(['aiAddon'])

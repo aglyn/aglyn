@@ -35,7 +35,13 @@ describe('upgrade proposals (AGL-3466)', () => {
     expect(UPGRADE_PROPOSAL_PLANS).not.toContain('free')
     expect(UPGRADE_PROPOSAL_PLANS).not.toContain('enterprise')
     expect(UPGRADE_PROPOSAL_PLANS).toContain('starter')
-    expect(isUpgradeProposalPlan('agency')).toBe(true)
+    expect(isUpgradeProposalPlan('pro')).toBe(true)
+    // The plans pricing v4 retired (AGL-4126) are not bought any more, so
+    // staff cannot propose them either.
+    expect(UPGRADE_PROPOSAL_PLANS).toEqual(['starter', 'pro'])
+    for (const retired of ['business', 'scale', 'advanced', 'agency']) {
+      expect(isUpgradeProposalPlan(retired)).toBe(false)
+    }
     expect(isUpgradeProposalPlan('free')).toBe(false)
     expect(isUpgradeProposalPlan('enterprise')).toBe(false)
     expect(isUpgradeProposalPlan('platinum')).toBe(false)

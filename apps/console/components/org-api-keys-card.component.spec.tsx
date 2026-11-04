@@ -79,6 +79,11 @@ jest.mock('../hooks/use-branding', () => ({
 
 jest.mock('@aglyn/aglyn', () => ({
   checkEntitlement: () => mockEntitled,
+  // The REAL plan table names the plan the upsell points at (Pro since
+  // pricing v4, AGL-4126), so the card's copy cannot drift from it.
+  planLabelGrantingFeature: jest.requireActual(
+    '@aglyn/aglyn/app-utils/plan-entitlements',
+  ).planLabelGrantingFeature,
 }))
 
 jest.mock('@aglyn/shared-ui-jsx', () => ({
@@ -175,6 +180,10 @@ describe('OrgApiKeysCard plan claim (AGL-1380)', () => {
     render(<OrgApiKeysCard />)
 
     expect(screen.getByText(UPGRADE_COPY)).toBeTruthy()
+    // …and names the plan that carries the API: Pro since pricing v4
+    // (AGL-4126), where it read "Business".
+    expect(screen.getByText('Pro')).toBeTruthy()
+    expect(screen.queryByText('Business')).toBeNull()
     expect(screen.queryByText('Checking your plan…')).toBeNull()
   })
 })

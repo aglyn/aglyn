@@ -89,9 +89,10 @@ describe('Aglyn AI on the plan cards (AGL-2899, AGL-3965)', () => {
 
   it('names the tiers once on every paid card, Enterprise included, Free none', () => {
     // As a list, so a failure prints the whole ladder.
+    // Free, Starter and Pro since pricing v4 (AGL-4126).
     expect(SELF_SERVE_PLANS.map((plan) => aiTiersLine(plan, PLATFORM_BRAND_NAME))).toEqual([
       'No Aglyn AI tiers',
-      ...Array(6).fill('More AI credits: Aglyn AI tiers from +$9/mo'),
+      ...Array(2).fill('More AI credits: Aglyn AI tiers from +$9/mo'),
     ])
     expect(aiTiersLine('enterprise', PLATFORM_BRAND_NAME)).toBe('Aglyn AI included')
     // The figure is the cheapest tier's.
@@ -102,9 +103,10 @@ describe('Aglyn AI on the plan cards (AGL-2899, AGL-3965)', () => {
     render(<BillingPlanCardsComponent plan="pro" onSelect={jest.fn()} />)
     fireEvent.click(screen.getByRole('button', { name: /Compare all/ }))
     // One line per paid card the grid draws (a lower tier may sit behind
-    // its disclosure), the same words on each.
+    // its disclosure), the same words on each. A Pro org's grid draws Pro
+    // and Custom since pricing v4 (AGL-4126), Starter folded below.
     const paidCards = screen.getAllByText('More AI credits: Aglyn AI tiers from +$9/mo').length
-    expect(paidCards).toBeGreaterThanOrEqual(5)
+    expect(paidCards).toBe(1)
     expect(screen.getAllByText('Aglyn AI included')).toHaveLength(1)
     expect(screen.getAllByText('Aglyn AI generation').length).toBeGreaterThanOrEqual(paidCards)
     // No per-plan add-on price is printed anywhere.

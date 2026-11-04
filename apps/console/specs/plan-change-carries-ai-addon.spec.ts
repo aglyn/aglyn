@@ -38,33 +38,39 @@ const PRO_WITH_AI = {
   seatAddons: { aiAddon: 1 },
 } as any
 
+/** Starter with the add-on and no `aiTier` written: Starter's old add-on, Spark. */
+const STARTER_WITH_AI = { ...PRO_WITH_AI, plan: 'starter' } as any
+
+// Pricing v4 (AGL-4126): the plans sold are Free, Starter and Pro, so the
+// moves below are between Starter and Pro; a retired plan sells no tier.
+
 describe('carriedAiAddonSentence (AGL-2899, AGL-3965)', () => {
   it('says nothing for an org without the add-on', () => {
-    expect(carriedAiAddonSentence({ plan: 'pro' } as any, 'business', [])).toBe('')
+    expect(carriedAiAddonSentence({ plan: 'pro' } as any, 'starter', [])).toBe('')
     // A dead subscription's add-on is not carried, because it is not held.
     expect(
       carriedAiAddonSentence(
         { ...PRO_WITH_AI, subscription: { status: 'canceled' } },
-        'business',
+        'starter',
         [],
       ),
     ).toBe('')
   })
 
   it('names the tier at ITS OWN price on the target, which the plan change does not move', () => {
-    // No `aiTier` written: Pro's old add-on, which is Boost at $19. Moving to
-    // Business keeps it at $19 — not Business's old $39 add-on.
-    const sentence = carriedAiAddonSentence(PRO_WITH_AI, 'business', [])
+    // No `aiTier` written: Starter's old add-on, which is Spark at $9. Moving
+    // to Pro keeps it at $9 — not Pro's old $19 add-on.
+    const sentence = carriedAiAddonSentence(STARTER_WITH_AI, 'pro', [])
     expect(sentence).toBe(
-      ' Your Aglyn AI Boost tier carries over at $19/mo on Business, billed with the plan.',
+      ' Your Aglyn AI Spark tier carries over at $9/mo on Pro, billed with the plan.',
     )
-    expect(AI_TIERS.boost.monthlyUsd).toBe(19)
+    expect(AI_TIERS.spark.monthlyUsd).toBe(9)
     // Down the ladder too: the same tier, the same price.
     expect(carriedAiAddonSentence(PRO_WITH_AI, 'starter', [])).toContain('$19/mo on Starter')
     // And the tier written, whatever the plan.
     expect(
-      carriedAiAddonSentence({ ...PRO_WITH_AI, aiTier: 'studio' }, 'scale', []),
-    ).toBe(' Your Aglyn AI Studio tier carries over at $299/mo on Scale, billed with the plan.')
+      carriedAiAddonSentence({ ...STARTER_WITH_AI, aiTier: 'studio' }, 'pro', []),
+    ).toBe(' Your Aglyn AI Studio tier carries over at $299/mo on Pro, billed with the plan.')
   })
 
   it('says it is removed when the target sells no tier', () => {
@@ -76,18 +82,22 @@ describe('carriedAiAddonSentence (AGL-2899, AGL-3965)', () => {
     expect(carriedAiAddonSentence(PRO_WITH_AI, 'free', [])).toContain(
       'its AI credits go with it',
     )
+    // …and a plan pricing v4 retired, which sells nothing (AGL-4126).
+    expect(carriedAiAddonSentence(PRO_WITH_AI, 'business', [])).toContain(
+      'not sold on Business, so it is removed',
+    )
   })
 
   it('says it is removed when the server reports the drop, without claiming the plan sells none', () => {
-    const sentence = carriedAiAddonSentence(PRO_WITH_AI, 'business', ['aiAddon'])
-    expect(sentence).toContain('cannot move to Business with this change, so it is removed')
+    const sentence = carriedAiAddonSentence(PRO_WITH_AI, 'starter', ['aiAddon'])
+    expect(sentence).toContain('cannot move to Starter with this change, so it is removed')
     expect(sentence).toContain('its AI credits go with it')
     expect(sentence).not.toContain('not sold')
   })
 
   it('tolerates a preview without the field', () => {
-    expect(carriedAiAddonSentence(PRO_WITH_AI, 'scale', undefined)).toContain(
-      '$19/mo on Scale',
+    expect(carriedAiAddonSentence(PRO_WITH_AI, 'starter', undefined)).toContain(
+      '$19/mo on Starter',
     )
   })
 })

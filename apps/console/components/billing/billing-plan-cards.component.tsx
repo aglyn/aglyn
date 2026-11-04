@@ -22,6 +22,7 @@ import {
   aiAddonName,
   checkEntitlement,
   isCustomPricedPlan,
+  isUnlimitedQuota,
   PLAN_ENTITLEMENTS,
   PLAN_LABELS,
   PLAN_PRICING,
@@ -59,6 +60,11 @@ import { DocsHelpTip } from '../docs-help-tip.component'
  * The tiers this grid sells, in ladder order. Enterprise is deliberately NOT
  * here (AGL-1118) — it has no list price and is provisioned by staff, so it
  * gets its own contact-sales card below the grid instead of an Upgrade button.
+ *
+ * Since pricing v4 (AGL-4126) that is Free, Starter and Pro, with the custom
+ * plan (labelled `PLAN_LABELS.enterprise`, "Custom") above them. A workspace
+ * still on a retired plan finds no card of its own here and is shown the
+ * ladder as a prospect is.
  */
 export const PLAN_ORDER: OrgPlan[] = SELF_SERVE_PLANS
 
@@ -67,12 +73,12 @@ export { PLAN_LABELS }
 const planTaglines = (brand: string): Record<OrgPlan, string> => ({
   free: `Try ${brand} and publish your first site.`,
   starter: 'Everything a single production site needs.',
-  pro: 'For growing teams shipping several sites.',
+  pro: 'The full platform for growing businesses, priced by what you use.',
   business: 'Subscriptions, scheduling, and priority limits.',
   scale: 'Room to grow — 15 sites and a 1% platform fee.',
   advanced: 'High-volume commerce with zero platform fees.',
   agency: 'Run many sites under one org at agency scale.',
-  enterprise: 'Twice Agency’s capacity, more by agreement, SSO, and a dedicated contract.',
+  enterprise: 'More sites and capacity by agreement, white-label, SSO, and a dedicated contract.',
 })
 
 /**
@@ -147,15 +153,23 @@ export const ENTERPRISE_HIGHLIGHTS: Array<{
     // Enterprise org holds it from the plan alone, a comped marker on a
     // lower base plan does not, and an agreement written BELOW the default
     // reads as one that does not enable everything Enterprise can.
-    label: 'Twice Agency’s sites, seats and storage, unlimited pages, and more by agreement',
+    //
+    // Named in the row's own figures since pricing v4 (AGL-4126): it read
+    // "Twice Agency's", and Agency is a retired plan no reader can compare
+    // against. The figures are the same — the fallback is Agency's × 2.
+    label:
+      `Up to ${PLAN_ENTITLEMENTS.enterprise.hostLimit} sites, ` +
+      `${PLAN_ENTITLEMENTS.enterprise.managersPerOrg} team seats and ` +
+      `${PLAN_ENTITLEMENTS.enterprise.storagePerHostMb / 1024} GB a site, ` +
+      'unlimited pages, and more by agreement',
     holds: (org) => {
       const entitlements = resolveOrgEntitlements(org)
-      const agency = PLAN_ENTITLEMENTS.agency
+      const fallback = PLAN_ENTITLEMENTS.enterprise
       return (
-        entitlements.hostLimit >= agency.hostLimit * 2 &&
+        entitlements.hostLimit >= fallback.hostLimit &&
         entitlements.screensPerHost === UNLIMITED &&
-        entitlements.managersPerOrg >= agency.managersPerOrg * 2 &&
-        entitlements.storagePerHostMb >= agency.storagePerHostMb * 2
+        entitlements.managersPerOrg >= fallback.managersPerOrg &&
+        entitlements.storagePerHostMb >= fallback.storagePerHostMb
       )
     },
   },
@@ -974,8 +988,7 @@ function FocusedTierView(props: {
     <>
       {rungs.map((rung, index) => {
         const role = rungRole(rung, currentTier, enterpriseOrg)
-        const label =
-          rung === 'enterprise' ? 'Enterprise' : PLAN_LABELS[rung as OrgPlan]
+        const label = PLAN_LABELS[rung as OrgPlan]
         /*
          * An upgrade card states its DELTA over the card to its left; every
          * other card states what it simply has. `adds` is that distinction,
@@ -1487,9 +1500,13 @@ function PlanCardBody({
         {`${quotaLabel(entitlements.managersPerOrg)} team seat${
           entitlements.managersPerOrg === 1 ? '' : 's'
         }`}
+        {/* No "max" once the ceiling is lifted (Pro since pricing v4): "max
+            Unlimited" restates the extra price as a limit that is not one. */}
         {pricing.extraSeatMonthlyUsd != null
-          ? ` (+$${pricing.extraSeatMonthlyUsd}/extra, ` +
-            `max ${quotaLabel(entitlements.maxManagersPerOrg)})`
+          ? ` (+$${pricing.extraSeatMonthlyUsd}/extra` +
+            (isUnlimitedQuota(entitlements.maxManagersPerOrg)
+              ? ')'
+              : `, max ${quotaLabel(entitlements.maxManagersPerOrg)})`)
           : ''}
       </Typography>
       {/* Per-site console collaborators (AGL-888) — end-user
@@ -1499,8 +1516,10 @@ function PlanCardBody({
           entitlements.membersPerHost === 1 ? '' : 's'
         }`}
         {pricing.extraCollaboratorMonthlyUsd != null
-          ? ` (+$${pricing.extraCollaboratorMonthlyUsd}/extra, ` +
-            `max ${quotaLabel(entitlements.maxMembersPerHost)})`
+          ? ` (+$${pricing.extraCollaboratorMonthlyUsd}/extra` +
+            (isUnlimitedQuota(entitlements.maxMembersPerHost)
+              ? ')'
+              : `, max ${quotaLabel(entitlements.maxMembersPerHost)})`)
           : ''}
       </Typography>
       {/* Visitor signups are never capped (AGL-889). */}
@@ -2188,8 +2207,8 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
               sx={{ display: 'block', mt: -1, mb: 1.5 }}
             >
               {enterprise
-                ? 'Your organization is on an Enterprise agreement — reach ' +
-                  'out for any change to it.'
+                ? `Your organization is on a ${PLAN_LABELS.enterprise} ` +
+                  'agreement — reach out for any change to it.'
                 : 'Priced, invoiced, and contracted to your organization. ' +
                   'Everything below is what an agreement includes.'}
             </Typography>
@@ -2264,8 +2283,8 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                       sx={{ pt: 0.5 }}
                     >
                       {'Your agreement does not currently enable everything ' +
-                        'Enterprise can include — talk to us to turn the rest ' +
-                        'on.'}
+                        `the ${PLAN_LABELS.enterprise} plan can include — talk ` +
+                        'to us to turn the rest on.'}
                     </Typography>
                   ) : null}
                 </Stack>

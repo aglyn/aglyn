@@ -49,11 +49,13 @@ const ORIGINAL_ENV = process.env
  * every assertion below would pass for the wrong reason.
  */
 const ENV = {
+  // Pricing v4 (AGL-4126): Starter and Pro are the plans sold, so the move
+  // under test is between them; a retired plan's env is not read.
   STRIPE_PRICE_STARTER: 'price_starter_monthly',
-  STRIPE_PRICE_BUSINESS: 'price_business_monthly',
+  STRIPE_PRICE_PRO: 'price_pro_monthly',
   // `managers` is priced PER PLAN as `STRIPE_PRICE_{PLAN}_EXTRA_SEAT`.
   STRIPE_PRICE_STARTER_EXTRA_SEAT: 'price_mgr_starter',
-  STRIPE_PRICE_BUSINESS_EXTRA_SEAT: 'price_mgr_business',
+  STRIPE_PRICE_PRO_EXTRA_SEAT: 'price_mgr_pro',
 }
 
 function load() {
@@ -82,14 +84,14 @@ describe('a plan change clamps what it cannot deliver', () => {
         { price: { id: 'price_mgr_starter' }, quantity: 2 },
       ],
       {
-        targetPlan: 'business',
+        targetPlan: 'pro',
         targetInterval: 'month',
-        targetPlanPrice: 'price_business_monthly',
+        targetPlanPrice: 'price_pro_monthly',
         meteredPrice: null,
       },
     )
     expect(plan.unrecognizedPriceIds).toEqual([])
-    expect(plan.items.some((i) => i.price === 'price_mgr_business')).toBe(true)
+    expect(plan.items.some((i) => i.price === 'price_mgr_pro')).toBe(true)
   })
 
   it('reduces the ITEM, so the invoice follows the delivery', () => {
@@ -99,8 +101,8 @@ describe('a plan change clamps what it cannot deliver', () => {
     const wanted = ceiling + 5
     const plan = build(
       [
-        { price: { id: 'price_business_monthly' }, quantity: 1 },
-        { price: { id: 'price_mgr_business' }, quantity: wanted },
+        { price: { id: 'price_pro_monthly' }, quantity: 1 },
+        { price: { id: 'price_mgr_pro' }, quantity: wanted },
       ],
       {
         targetPlan: 'starter',
@@ -132,8 +134,8 @@ describe('a plan change clamps what it cannot deliver', () => {
     const ceiling = maxFor('managers', 'starter')
     const plan = build(
       [
-        { price: { id: 'price_business_monthly' }, quantity: 1 },
-        { price: { id: 'price_mgr_business' }, quantity: ceiling + 3 },
+        { price: { id: 'price_pro_monthly' }, quantity: 1 },
+        { price: { id: 'price_mgr_pro' }, quantity: ceiling + 3 },
       ],
       {
         targetPlan: 'starter',
@@ -150,7 +152,7 @@ describe('a plan change clamps what it cannot deliver', () => {
     // Clamping is a reduction to a ceiling, never a rewrite. An upgrade must
     // not quietly shrink an add-on the bigger plan supports.
     const { build, maxFor } = load()
-    const ceiling = maxFor('managers', 'business')
+    const ceiling = maxFor('managers', 'pro')
     const wanted = Math.max(1, Math.min(2, ceiling))
     const plan = build(
       [
@@ -158,14 +160,14 @@ describe('a plan change clamps what it cannot deliver', () => {
         { price: { id: 'price_mgr_starter' }, quantity: wanted },
       ],
       {
-        targetPlan: 'business',
+        targetPlan: 'pro',
         targetInterval: 'month',
-        targetPlanPrice: 'price_business_monthly',
+        targetPlanPrice: 'price_pro_monthly',
         meteredPrice: null,
       },
     )
     expect(
-      plan.items.find((i) => i.price === 'price_mgr_business')?.quantity,
+      plan.items.find((i) => i.price === 'price_mgr_pro')?.quantity,
     ).toBe(wanted)
     expect(plan.clampedAddons).toEqual([])
   })
@@ -177,13 +179,13 @@ describe('a plan change clamps what it cannot deliver', () => {
     const { build } = load()
     const plan = build(
       [
-        { price: { id: 'price_business_monthly' }, quantity: 1 },
-        { price: { id: 'price_mgr_business' }, quantity: 1 },
+        { price: { id: 'price_pro_monthly' }, quantity: 1 },
+        { price: { id: 'price_mgr_pro' }, quantity: 1 },
       ],
       {
-        targetPlan: 'business',
+        targetPlan: 'pro',
         targetInterval: 'month',
-        targetPlanPrice: 'price_business_monthly',
+        targetPlanPrice: 'price_pro_monthly',
         meteredPrice: null,
       },
     )

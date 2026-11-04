@@ -762,12 +762,13 @@ describe('the entry detail is its OWN route (AGL-2498)', () => {
       fireEvent.click(screen.getByRole('button', { name: /^Schedule/ }))
       // The dialog names the plan and links to it, and its Schedule button is
       // disabled with the same reason, so nothing is picked to be refused.
+      // Pro since pricing v4 (AGL-4126), which moved scheduling in from Business.
       const dialog = screen.getByRole('dialog')
-      expect(dialog.textContent).toContain('Included from Business.')
+      expect(dialog.textContent).toContain('Included from Pro.')
       const confirm = within(dialog).getByRole('button', { name: 'Schedule' })
       expect((confirm as HTMLButtonElement).disabled).toBe(true)
       expect(
-        within(dialog).getByLabelText('Scheduled publishing is included from Business.'),
+        within(dialog).getByLabelText('Scheduled publishing is included from Pro.'),
       ).toBeTruthy()
       fireEvent.click(confirm)
       expect(mockUpdateDoc).not.toHaveBeenCalled()

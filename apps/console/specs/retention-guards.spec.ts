@@ -151,8 +151,13 @@ describe('assertBoundedWinbackCoupon (AGL-1863 / AGL-1620)', () => {
 describe('downsellTargetPlan (AGL-1863)', () => {
   it('offers the next PAID tier down', () => {
     expect(downsellTargetPlan('pro')).toBe('starter')
+    // A workspace left on a plan pricing v4 retired (AGL-4126) is placed on
+    // the old ladder and offered the highest plan still SOLD below it — Pro,
+    // from any of the four — never another retired one.
     expect(downsellTargetPlan('business')).toBe('pro')
-    expect(downsellTargetPlan('agency')).toBe('advanced')
+    expect(downsellTargetPlan('scale')).toBe('pro')
+    expect(downsellTargetPlan('advanced')).toBe('pro')
+    expect(downsellTargetPlan('agency')).toBe('pro')
   })
 
   it('never offers free — below starter there is no downsell', () => {

@@ -64,6 +64,20 @@
  * ⚠️ Pricing is FROZEN for the Sept 1 launch. Until then a divergence is a
  * bug in the code, never a license to edit this fixture.
  *
+ * ## Pricing v4 (2026-11-03, AGL-4126) — re-pinned AHEAD of the page
+ *
+ * A price RISE publishes on the page before billing moves
+ * (`docs/PRICING_SURFACES.md`), and the page is republished from
+ * `tools/marketing/pricing-copy/tables.json`, which the code lane regenerated
+ * in the same change. So the Pro column and the plan list below are pinned to
+ * the v4 figures that file carries — $69 / $49, every Business feature,
+ * unlimited counts and add-on ceilings, 1,500 API requests at $0.50, 0.5% on
+ * physical sales — rather than to a transcription of a republish that has
+ * not happened yet. Each moved cell says so. Business, Scale, Advanced and
+ * Agency are retired: never sold again, their rows kept for reading, and
+ * their four columns still on the page (and in `tables.json`) until the page
+ * lane drops them; their cells below did not move.
+ *
  * ## What is deliberately NOT pinned here
  *
  * Enterprise cells. Every one of them reads "Talk to us" / "Custom" on the
@@ -87,6 +101,7 @@ import {
   PLAN_PRICING,
   planSellsAiTiers,
   RELEASE_FLAGS,
+  RETIRED_PLANS,
   SELF_SERVE_PLANS,
   SITE_CARE_ADDON_MONTHLY_USD,
   UNLIMITED,
@@ -162,8 +177,11 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       expect(Object.keys(PLAN_ENTITLEMENTS).sort()).toEqual(
         [...PUBLISHED_COLUMNS, 'enterprise'].sort(),
       )
-      // The page's own footnote: "scroll sideways to see all 8 plans".
-      expect(SELF_SERVE_PLANS).toEqual(PUBLISHED_COLUMNS)
+      // The page's own footnote: "scroll sideways to see all 8 plans". Since
+      // pricing v4 (AGL-4126) three of the columns are SOLD and four are the
+      // retired plans, still drawn until the page lane drops them.
+      expect([...SELF_SERVE_PLANS, ...RETIRED_PLANS]).toEqual(PUBLISHED_COLUMNS)
+      expect(SELF_SERVE_PLANS).toEqual(['free', 'starter', 'pro'])
     })
 
     it('reads live numbers, not undefined, for every pinned key', () => {
@@ -214,11 +232,12 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       ] satisfies Row)
     })
 
-    it('Pages per site — 5 · 25 · 100 · Unlimited ×4', () => {
+    // Pro 100 → Unlimited: pricing v4 (AGL-4126).
+    it('Pages per site — 5 · 25 · Unlimited ×5', () => {
       expect(quotaColumn('screensPerHost')).toEqual([
         5,
         25,
-        100,
+        UNLIMITED,
         UNLIMITED,
         UNLIMITED,
         UNLIMITED,
@@ -281,9 +300,11 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       ['Remove Aglyn branding', 'removeBranding', 1],
       ['URL redirects', 'redirects', 1],
       ['Page versioning', 'versioning', 2],
-      ['Scheduled publishing', 'scheduledPublishing', 3],
-      ['Multilingual sites', 'multilingual', 3],
-      ['A/B testing', 'abTesting', 3],
+      // From Pro (column index 2) since pricing v4 moved them in from
+      // Business (AGL-4126).
+      ['Scheduled publishing', 'scheduledPublishing', 2],
+      ['Multilingual sites', 'multilingual', 2],
+      ['A/B testing', 'abTesting', 2],
     ])(
       '%s — first ✓ at column %#, dashes before it',
       (_label, flag, firstTick) => {
@@ -317,21 +338,22 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
     // Re-transcribed 2026-10-02 from version `qE5PwfZM-K` (AGL-3469): the
     // included seats start small so buying more is a real choice; the
     // maxima did not move.
-    it('Team seats — 1 · 2·5 · 3·20 · 5·100 · 5·150 · 10·250 · 10·500', () => {
+    // Pro's ceiling is lifted by pricing v4 (AGL-4126): "3 · unlimited".
+    it('Team seats — 1 · 2·5 · 3·unlimited · 5·100 · 5·150 · 10·250 · 10·500', () => {
       expect(quotaColumn('managersPerOrg')).toEqual([
         1, 2, 3, 5, 5, 10, 10,
       ] satisfies Row)
       expect(quotaColumn('maxManagersPerOrg')).toEqual([
-        1, 5, 20, 100, 150, 250, 500,
+        1, 5, UNLIMITED, 100, 150, 250, 500,
       ] satisfies Row)
     })
 
-    it('Site collaborators — 1 · 2·10 · 3·25 · 5·100 · 5·150 · 5·250 · 5·1,000', () => {
+    it('Site collaborators — 1 · 2·10 · 3·unlimited · 5·100 · 5·150 · 5·250 · 5·1,000', () => {
       expect(quotaColumn('membersPerHost')).toEqual([
         1, 2, 3, 5, 5, 5, 5,
       ] satisfies Row)
       expect(quotaColumn('maxMembersPerHost')).toEqual([
-        1, 10, 25, 100, 150, 250, 1000,
+        1, 10, UNLIMITED, 100, 150, 250, 1000,
       ] satisfies Row)
     })
 
@@ -366,7 +388,8 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
   // "Content & data"
   // ---------------------------------------------------------------------
   describe('Content & data', () => {
-    it('Datasets — — · 2·10 · 5·50 · 10·250 · 15·500 · 25·1,000 · 50·5,000', () => {
+    // Pro's ceiling is lifted by pricing v4 (AGL-4126): "5 · unlimited".
+    it('Datasets — — · 2·10 · 5·unlimited · 10·250 · 15·500 · 25·1,000 · 50·5,000', () => {
       expect(quotaColumn('datasetsPerOrg')).toEqual([
         NONE,
         2,
@@ -379,7 +402,7 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       expect(quotaColumn('maxDatasetsPerOrg')).toEqual([
         NONE,
         10,
-        50,
+        UNLIMITED,
         250,
         500,
         1000,
@@ -387,11 +410,13 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       ] satisfies Row)
     })
 
-    it('Records per dataset — — · 1k · 10k · 100k · 500k · 1M · Unlimited', () => {
+    // Pro 10k → Unlimited: pricing v4 (AGL-4126). Same for the three rows
+    // below it.
+    it('Records per dataset — — · 1k · Unlimited · 100k · 500k · 1M · Unlimited', () => {
       expect(quotaColumn('recordsPerDataset')).toEqual([
         NONE,
         1000,
-        10000,
+        UNLIMITED,
         100000,
         500000,
         1000000,
@@ -399,11 +424,11 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       ] satisfies Row)
     })
 
-    it('Variables per site — 3 · 25 · 100 · 1,000 · 5,000 · Unlimited ×2', () => {
+    it('Variables per site — 3 · 25 · Unlimited · 1,000 · 5,000 · Unlimited ×2', () => {
       expect(quotaColumn('variablesPerHost')).toEqual([
         3,
         25,
-        100,
+        UNLIMITED,
         1000,
         5000,
         UNLIMITED,
@@ -411,11 +436,11 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       ] satisfies Row)
     })
 
-    it('Functions per site — 1 · 10 · 50 · 250 · 500 · 1,000 · Unlimited', () => {
+    it('Functions per site — 1 · 10 · Unlimited · 250 · 500 · 1,000 · Unlimited', () => {
       expect(quotaColumn('functionsPerHost')).toEqual([
         1,
         10,
-        50,
+        UNLIMITED,
         250,
         500,
         1000,
@@ -423,11 +448,11 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       ] satisfies Row)
     })
 
-    it('Workflows per site — — · 3 · 25 · 100 · 250 · 500 · Unlimited', () => {
+    it('Workflows per site — — · 3 · Unlimited · 100 · 250 · 500 · Unlimited', () => {
       expect(quotaColumn('workflowsPerHost')).toEqual([
         NONE,
         3,
-        25,
+        UNLIMITED,
         100,
         250,
         500,
@@ -469,8 +494,9 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * `oKpP7e6UeG`: a saved form per site was a 500 ceiling on every paid
      * plan and none on Free, sold as a feature it never was.
      */
-    it('Saved forms per site — 1 · 5 · 25 · 100 · 500 · 500 · 500', () => {
-      const PUBLISHED: Row = [1, 5, 25, 100, 500, 500, 500]
+    // Pro 25 → Unlimited: pricing v4 (AGL-4126).
+    it('Saved forms per site — 1 · 5 · Unlimited · 100 · 500 · 500 · 500', () => {
+      const PUBLISHED: Row = [1, 5, UNLIMITED, 100, 500, 500, 500]
       expect(quotaColumn('formsPerHost')).toEqual(PUBLISHED)
     })
 
@@ -647,11 +673,12 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
         // after it: the six tiers whose email band this row is about are all
         // still at their published price, and Agency's rise is a different
         // change with its own reasoning, pinned in the `prices` block below.
+        // So is Pro's $69, pricing v4's (AGL-4126).
         expect(
           PUBLISHED_COLUMNS.filter((plan) => plan !== 'agency').map(
             (plan) => PLAN_PRICING[plan].basePriceMonthlyUsd,
           ),
-        ).toEqual([0, 25, 56, 139, 249, 399])
+        ).toEqual([0, 25, 69, 139, 249, 399])
       })
     })
 
@@ -693,12 +720,13 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
 
       it('no CHARGED price moved with it', () => {
         // Adding an inclusion is not a repricing. Agency's figure is the one
-        // that moved, in its own change, and is pinned in the `prices` block.
+        // that moved, in its own change, and is pinned in the `prices` block —
+        // and Pro's $69, pricing v4's (AGL-4126).
         expect(
           PUBLISHED_COLUMNS.filter((plan) => plan !== 'agency').map(
             (plan) => PLAN_PRICING[plan].basePriceMonthlyUsd,
           ),
-        ).toEqual([0, 25, 56, 139, 249, 399])
+        ).toEqual([0, 25, 69, 139, 249, 399])
       })
     })
 
@@ -718,11 +746,12 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
   // "Commerce"
   // ---------------------------------------------------------------------
   describe('Commerce', () => {
-    it('Products per site — — · 100 · 2,500 · 10k · 25k · Unlimited ×2', () => {
+    // Pro 2,500 → Unlimited: pricing v4 (AGL-4126).
+    it('Products per site — — · 100 · Unlimited · 10k · 25k · Unlimited ×2', () => {
       expect(quotaColumn('productsPerHost')).toEqual([
         NONE,
         100,
-        2500,
+        UNLIMITED,
         10000,
         25000,
         UNLIMITED,
@@ -748,9 +777,11 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       ] satisfies Row)
     })
 
-    it('Physical transaction fee — — · 2% · 0% ×5', () => {
+    // Pro 0% → 0.5%: pricing v4, decision 9 (AGL-4126) — the Stripe Connect
+    // account and payout fees the platform pays.
+    it('Physical transaction fee — — · 2% · 0.5% · 0% ×4', () => {
       expect(quotaColumn('transactionFeePhysicalPct')).toEqual([
-        0, 2, 0, 0, 0, 0, 0,
+        0, 2, 0.5, 0, 0, 0, 0,
       ] satisfies Row)
     })
 
@@ -759,9 +790,10 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       ['Product reviews', 'productReviews', 2],
       ['Abandoned cart recovery', 'abandonedCart', 2],
       ['Commerce analytics', 'commerceAnalytics', 2],
-      ['Subscriptions & memberships', 'storefrontSubscriptions', 3],
-      ['Gift cards', 'giftCards', 3],
-      ['Content gating', 'contentGating', 3],
+      // From Pro since pricing v4 moved them in from Business (AGL-4126).
+      ['Subscriptions & memberships', 'storefrontSubscriptions', 2],
+      ['Gift cards', 'giftCards', 2],
+      ['Content gating', 'contentGating', 2],
     ])('%s — first ✓ at column %#', (_label, flag, firstTick) => {
       const published = PUBLISHED_COLUMNS.map(
         (_plan, index) => index >= (firstTick as number),
@@ -796,8 +828,9 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       ['Per-page analytics', 'screenAnalytics', 2],
       ['Sell on the marketplace', 'marketplaceSelling', 2],
       ['Site export & backup', 'siteExport', 2],
-      ['Webhooks', 'webhooks', 3],
-      ['API access', 'apiAccess', 3],
+      // From Pro since pricing v4 moved them in from Business (AGL-4126).
+      ['Webhooks', 'webhooks', 2],
+      ['API access', 'apiAccess', 2],
     ])('%s — first ✓ at column %#', (_label, flag, firstTick) => {
       const published = PUBLISHED_COLUMNS.map(
         (_plan, index) => index >= (firstTick as number),
@@ -815,8 +848,9 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * 1.5k req/mo" on the Business card, and "5k / 17k / 85k API
      * requests/mo" in the Scale, Advanced and Agency room-to-grow strips.
      */
-    it('API access — — · — · — · 1.5k · 5k · 17k · 85k per month', () => {
-      const PUBLISHED: Row = [NONE, NONE, NONE, 1500, 5000, 17000, 85000]
+    // Pro carries Business's 1.5k since pricing v4 moved the API in (AGL-4126).
+    it('API access — — · — · 1.5k · 1.5k · 5k · 17k · 85k per month', () => {
+      const PUBLISHED: Row = [NONE, NONE, 1500, 1500, 5000, 17000, 85000]
       expect(quotaColumn('apiRequestsPerMonth')).toEqual(PUBLISHED)
     })
 
@@ -907,12 +941,20 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * $799/mo" while the body was already correct. Nothing in CI can see it.
      * `docs/PRICING_SURFACES.md` lists them all.
      */
+    /**
+     * PRO'S PRICE ROSE IN PRICING V4 (2026-11-03, AGL-4126): $56 → $69 a month
+     * and $39 → $49 billed yearly ($588 a year), live Stripe prices
+     * `aglyn_pro_v4` and `aglyn_pro_v4_yearly`. A rise publishes on the page
+     * BEFORE billing moves, so PUBLISHED carries the v4 figure `tables.json`
+     * hands the page lane to republish; until that republish the live page
+     * quotes $56 / $39, the safe direction for a rise.
+     */
     it('monthly — the page and the code agree on every column', () => {
       // PUBLISHED is transcribed BY HAND from the live page and is the whole
       // value of this case: nothing in CI can read that page, so a divergence
       // is only ever visible as a difference between these two rows.
-      const PUBLISHED: Row = [0, 25, 56, 139, 249, 399, 1299]
-      const CODE: Row = [0, 25, 56, 139, 249, 399, 1299]
+      const PUBLISHED: Row = [0, 25, 69, 139, 249, 399, 1299]
+      const CODE: Row = [0, 25, 69, 139, 249, 399, 1299]
       expect(
         PUBLISHED_COLUMNS.map((plan) => PLAN_PRICING[plan].basePriceMonthlyUsd),
       ).toEqual(CODE)
@@ -923,8 +965,8 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
     })
 
     it('annual, per month — the page and the code agree there too', () => {
-      const PUBLISHED: Row = [0, 16, 39, 99, 179, 299, 1049]
-      const CODE: Row = [0, 16, 39, 99, 179, 299, 1049]
+      const PUBLISHED: Row = [0, 16, 49, 99, 179, 299, 1049]
+      const CODE: Row = [0, 16, 49, 99, 179, 299, 1049]
       expect(
         PUBLISHED_COLUMNS.map(
           (plan) => PLAN_PRICING[plan].basePriceAnnualMonthlyUsd,
@@ -1033,8 +1075,10 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * $0.117 per 1,000 requests of cost, the 50% retail floor is $0.234, so
      * Advanced's $0.20 and Agency's $0.15 rose to $0.25.
      */
-    it('API requests per 1,000 over limit — $0.50 · $0.35 · $0.25 · $0.25', () => {
-      const PUBLISHED = [null, null, 0.5, 0.35, 0.25, 0.25]
+    // Pro carries Business's $0.50 since pricing v4 moved the API and its
+    // band in (AGL-4126).
+    it('API requests per 1,000 over limit — $0.50 · $0.50 · $0.35 · $0.25 · $0.25', () => {
+      const PUBLISHED = [null, 0.5, 0.5, 0.35, 0.25, 0.25]
       expect(PAID.map((p) => PLAN_PRICING[p].extraApiRequestsUsdPer1k)).toEqual(
         PUBLISHED,
       )
@@ -1120,8 +1164,12 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
           Object.fromEntries(AI_TIER_IDS.map((id) => [AI_TIERS[id].label, AI_TIERS[id].monthlyUsd])),
         ).toEqual(PUBLISHED)
         expect(Math.min(...Object.values(PUBLISHED))).toBe(9)
-        // On any paid plan; Free and Enterprise sell none.
-        expect(PAID.every((p) => planSellsAiTiers(p))).toBe(true)
+        // On any paid plan that is SOLD; Free and Enterprise sell none, and
+        // nor do the plans pricing v4 retired (AGL-4126).
+        expect(
+          SELF_SERVE_PLANS.filter((p) => p !== 'free').every((p) => planSellsAiTiers(p)),
+        ).toBe(true)
+        expect(RETIRED_PLANS.some((p) => planSellsAiTiers(p))).toBe(false)
         expect(planSellsAiTiers('free')).toBe(false)
         expect(planSellsAiTiers('enterprise')).toBe(false)
       })

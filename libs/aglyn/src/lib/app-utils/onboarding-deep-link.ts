@@ -23,7 +23,7 @@ import {
   parseBundleAddons,
   type BundleAddons,
 } from './bundle-intent'
-import { isAiTierId, isCustomPricedPlan } from './plan-entitlements'
+import { isAiTierId, isCustomPricedPlan, SELF_SERVE_PLANS } from './plan-entitlements'
 
 /**
  * The marketing → console onboarding deep link (AGL-1117).
@@ -106,14 +106,15 @@ export interface OnboardingPlanIntent {
   droppedAddons?: string[]
 }
 
-const SELF_SERVE_PLANS: readonly OrgPlan[] = [
-  'starter',
-  'pro',
-  'business',
-  'scale',
-  'advanced',
-  'agency',
-]
+/**
+ * The plans a link may carry into checkout: every self-serve plan but Free
+ * (see below). Derived since pricing v4 (AGL-4126), so a retired plan's old
+ * link (`?plan=business`) carries no intent rather than quoting a plan that
+ * is no longer sold.
+ */
+const PURCHASABLE_PLANS: readonly OrgPlan[] = SELF_SERVE_PLANS.filter(
+  (plan) => plan !== 'free',
+)
 
 /**
  * Read a plan intent off the URL, or null when there isn't a usable one.
@@ -151,7 +152,7 @@ export function parseOnboardingPlanIntent(
       contactSales: true,
     }
   }
-  if (!SELF_SERVE_PLANS.includes(plan as OrgPlan)) return null
+  if (!PURCHASABLE_PLANS.includes(plan as OrgPlan)) return null
   const interval = read('interval')
   const known = interval === 'year' || interval === 'annual' || interval === 'month'
   // The add-on is opt-in by an explicit affirmative. Anything else — absent,

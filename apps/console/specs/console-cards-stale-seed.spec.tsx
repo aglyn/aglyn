@@ -170,8 +170,12 @@ jest.mock('../hooks/use-firestore-collection', () => ({
 // plan claim until the billing doc has answered, and a mock that omits the
 // flag is an org that never resolves — every save would stop at "checking
 // your plan" before reaching the stale-seed guard these cases are about.
-/** Mutable so a spec can render the card for a plan without `multilingual`. */
-const mockCurrentOrg = { plan: 'business' }
+/**
+ * Mutable so a spec can render the card for a plan without `multilingual`.
+ * Pro by default: it carries `multilingual` since pricing v4 (AGL-4126),
+ * which retired Business, the plan this used to name.
+ */
+const mockCurrentOrg = { plan: 'pro' }
 jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
   default: () => ({ org: mockCurrentOrg, orgId: 'org1', ready: true }),
@@ -339,7 +343,7 @@ describe('LanguagesCard on a plan without multilingual (AGL-3502)', () => {
     mockCurrentOrg.plan = 'starter'
   })
   afterEach(() => {
-    mockCurrentOrg.plan = 'business'
+    mockCurrentOrg.plan = 'pro'
   })
 
   const save = (value: string) => {
@@ -361,7 +365,8 @@ describe('LanguagesCard on a plan without multilingual (AGL-3502)', () => {
     render(<LanguagesCard hostId="host-1" />)
 
     // The plan is said up front, with the way to buy it — not after Save.
-    expect(screen.getByRole('alert').textContent).toContain('Included from Business.')
+    // Pro since pricing v4 moved multilingual sites into it (AGL-4126).
+    expect(screen.getByRole('alert').textContent).toContain('Included from Pro.')
     expect(screen.getByRole('button', { name: 'Upgrade' }).getAttribute('href')).toBe(
       '/acme/billing#plans',
     )
@@ -371,7 +376,7 @@ describe('LanguagesCard on a plan without multilingual (AGL-3502)', () => {
     const button = screen.getByRole('button', { name: 'Save languages' })
     expect((button as HTMLButtonElement).disabled).toBe(true)
     expect(
-      screen.getByLabelText('Publishing in more than one language is included from Business.'),
+      screen.getByLabelText('Publishing in more than one language is included from Pro.'),
     ).toBeTruthy()
     expect(updateDoc).not.toHaveBeenCalled()
   })

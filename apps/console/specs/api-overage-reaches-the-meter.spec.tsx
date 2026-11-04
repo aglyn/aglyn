@@ -101,10 +101,11 @@ jest.mock('firebase/firestore', () => ({
 
 import BillingUsageComponent from '../components/billing/billing-usage.component'
 
-/** Business: `apiRequestsPerMonth: 1,500`, `extraApiRequestsUsdPer1k: 0.5`. */
-const BUSINESS = { $id: 'org-1', plan: 'business' } as any
-/** Pro: no API requests included at all, so there is no meter to caption. */
+/** Pro: `apiRequestsPerMonth: 1,500`, `extraApiRequestsUsdPer1k: 0.5` — Business's band
+ * and rate, which moved into Pro with the API in pricing v4 (AGL-4126). */
 const PRO = { $id: 'org-1', plan: 'pro' } as any
+/** Starter: no API requests included at all, so there is no meter to caption. */
+const STARTER = { $id: 'org-1', plan: 'starter' } as any
 /**
  * Enterprise with a contracted `UNLIMITED` request band, and no published
  * overage rate. The plan row itself is a finite fallback of 170,000 since
@@ -131,8 +132,8 @@ beforeEach(() => {
 })
 
 describe('the fixture is a plan that really is charged for overage', () => {
-  it('Business includes a band and publishes a rate', () => {
-    const quota = checkApiRequestQuota(BUSINESS, 39_000)
+  it('Pro includes a band and publishes a rate', () => {
+    const quota = checkApiRequestQuota(PRO, 39_000)
     expect(quota.included).toBe(1_500)
     expect(quota.overageRequests).toBe(37_500)
     expect(quota.overageRateUsd).toBe(0.5)
@@ -144,8 +145,8 @@ describe('the fixture is a plan that really is charged for overage', () => {
 describe('a workspace over the band is told the price', () => {
   it('names the excess, the rate and the estimated charge', async () => {
     mockApiRequests = 39_000
-    const quota = checkApiRequestQuota(BUSINESS, 39_000)
-    render(<BillingUsageComponent org={BUSINESS} hosts={HOSTS} />)
+    const quota = checkApiRequestQuota(PRO, 39_000)
+    render(<BillingUsageComponent org={PRO} hosts={HOSTS} />)
 
     await waitFor(() => {
       expect(
@@ -171,10 +172,10 @@ describe('a workspace over the band is told the price', () => {
   })
 
   it('prints a rate with its cents column', async () => {
-    // Business bills $0.5/1,000 and a bare interpolation renders "$0.5",
+    // Pro bills $0.5/1,000 and a bare interpolation renders "$0.5",
     // which on the one line that is about money reads as a typo.
     mockApiRequests = 39_000
-    render(<BillingUsageComponent org={BUSINESS} hosts={HOSTS} />)
+    render(<BillingUsageComponent org={PRO} hosts={HOSTS} />)
     await waitFor(() => {
       expect(screen.getByText(/\$0\.50\/1,000/)).toBeTruthy()
     })
@@ -183,7 +184,7 @@ describe('a workspace over the band is told the price', () => {
 
   it('says nothing while inside the band', async () => {
     mockApiRequests = 420
-    render(<BillingUsageComponent org={BUSINESS} hosts={HOSTS} />)
+    render(<BillingUsageComponent org={PRO} hosts={HOSTS} />)
     await waitFor(() => {
       expect(
         (screen.getByText(METER).parentElement as HTMLElement).textContent,
@@ -199,7 +200,7 @@ describe('a workspace over the band is told the price', () => {
     // change the fallback to anything that can exceed the band and a dollar
     // figure appears from a number nobody has read yet.
     mockApiRequests = 'missing'
-    render(<BillingUsageComponent org={BUSINESS} hosts={HOSTS} />)
+    render(<BillingUsageComponent org={PRO} hosts={HOSTS} />)
     await waitFor(() => {
       expect(screen.getByText(METER)).toBeTruthy()
     })
@@ -212,11 +213,11 @@ describe('a workspace over the band is told the price', () => {
 
 describe('a plan that cannot be charged is quoted nothing', () => {
   it('shows no meter at all when the plan includes no API access', async () => {
-    // Pro's `apiRequestsPerMonth` is 0 — the REST API is not part of the plan,
+    // Starter's `apiRequestsPerMonth` is 0 — the REST API is not part of the plan,
     // so a meter reading `0 / 0` would invent a quota out of an absence.
-    expect(resolveOrgEntitlements(PRO).apiRequestsPerMonth).toBe(0)
+    expect(resolveOrgEntitlements(STARTER).apiRequestsPerMonth).toBe(0)
     mockApiRequests = 5_000
-    render(<BillingUsageComponent org={PRO} hosts={HOSTS} />)
+    render(<BillingUsageComponent org={STARTER} hosts={HOSTS} />)
     await waitFor(() => {
       expect(screen.getByText('Sites')).toBeTruthy()
     })
