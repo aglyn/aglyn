@@ -23,7 +23,7 @@
  * main page that is no policy has its wording improved.
  */
 
-import { AI_MEASURED_IMPORT_CREDITS } from './ai-credit-estimate'
+import { AI_MEASURED_IMPORT_CREDITS, aiCreditRangeText } from './ai-credit-estimate'
 import type { AiJob } from './ai-jobs.types'
 import {
   AI_SITE_IMPORT_DEFAULT_CHOICE,
@@ -31,16 +31,22 @@ import {
   AI_SITE_IMPORT_WORDING_INPUT,
   aiSiteImportChoiceFromInputs,
   aiSiteImportChoiceOf,
+  aiSiteImportCreditRange,
   aiSiteImportFinishUpdate,
   aiSiteImportInventory,
+  aiSiteImportPageBuild,
   aiSiteImportPageIsLegal,
   aiSiteImportPageWording,
+  aiSiteImportQuoteText,
   aiSiteImportWaveChoice,
   aiSiteImportWaveClosed,
+  aiSiteImportWaveCreditRange,
+  aiSiteImportWaveOwed,
   aiSiteImportWaveStamped,
   aiSiteImportWaveStarted,
   aiSiteImportWordingCredits,
   aiSiteImportWordingPages,
+  aiSiteImportWordsKept,
   type AiSiteImportListedPage,
   type AiSiteImportState,
 } from './ai-site-import'
@@ -206,12 +212,53 @@ describe('the change between waves the resume door writes', () => {
 
 describe('what Also improve my wording adds', () => {
   it('prices each reworded page as an AI page, and counts only the pages it rewords', () => {
-    expect(aiSiteImportWordingCredits(1)).toEqual({ likely: AI_MEASURED_IMPORT_CREDITS.page.median, p90: AI_MEASURED_IMPORT_CREDITS.page.p90 })
+    // A reworded page is an AI page in place of an arranged one: the switch adds the difference.
+    const { page, arranged } = AI_MEASURED_IMPORT_CREDITS
+    expect(aiSiteImportWordingCredits(1)).toEqual({ likely: page.median - arranged.median, p90: page.p90 - arranged.p90 })
     const state = harbor()
     // Home and about: the policy and the blog keep every word.
     expect(aiSiteImportWordingPages(state, state.waves[0], { finish: 'improve', wording: true })).toBe(2)
     expect(aiSiteImportWordingPages(state, state.waves[1], { finish: 'improve', wording: true })).toBe(0)
     expect(aiSiteImportWordingPages(state, state.waves[0], { finish: 'improve', wording: false })).toBe(0)
     expect(aiSiteImportWordingPages(state, state.waves[0], { finish: 'keep', wording: false })).toBe(0)
+  })
+
+  /** The inventory with each page's build chosen, as the import step chooses it. */
+  const built = (state: AiSiteImportState): AiSiteImportState => ({ ...state, pages: state.pages.map((entry) => ({ ...entry, build: aiSiteImportPageBuild(entry) })) })
+
+  it('quotes a reworded page on the AI page row, inside the ceiling an arranged page already holds', () => {
+    const { page } = AI_MEASURED_IMPORT_CREDITS
+    expect(aiSiteImportCreditRange(0, { arranged: 1, reworded: 1 })).toEqual({ likely: page.median, p90: page.p90, ceiling: 100 })
+    // No more reworded than arranged.
+    expect(aiSiteImportCreditRange(0, { arranged: 1, reworded: 3 })).toEqual(aiSiteImportCreditRange(0, { arranged: 1, reworded: 1 }))
+    const on = built(harbor({ finish: 'improve', wording: true }))
+    const off = built(harbor({ finish: 'improve', wording: false }))
+    expect(aiSiteImportWaveOwed(on, on.waves[0])).toMatchObject({ arranged: 3, reworded: 2 })
+    expect(aiSiteImportWaveOwed(off, off.waves[0])).toMatchObject({ arranged: 3, reworded: 0 })
+    const [withWords, without] = [aiSiteImportWaveCreditRange(on, on.waves[0]), aiSiteImportWaveCreditRange(off, off.waves[0])]
+    // The switch adds what it says it adds, and the most a page can spend does not move.
+    expect(withWords.likely - without.likely).toBe(aiSiteImportWordingCredits(2).likely)
+    expect(withWords.p90 - without.p90).toBe(aiSiteImportWordingCredits(2).p90)
+    expect(withWords.ceiling).toBe(without.ceiling)
+  })
+
+  it('names a wave’s reworded pages in its quote, and those whose words are kept apart', () => {
+    const on = built(harbor({ finish: 'improve', wording: true }))
+    const range = aiSiteImportWaveCreditRange(on, on.waves[0])
+    expect(aiSiteImportQuoteText(range, aiSiteImportWaveOwed(on, on.waves[0]))).toBe(`${aiCreditRangeText(range)}: 2 pages arranged and reworded by Aglyn AI, 1 arranged by Aglyn AI`)
+    expect(aiSiteImportQuoteText(range, { arranged: 7, reworded: 7, copied: 3 })).toBe(`${aiCreditRangeText(range)}: 7 pages arranged and reworded by Aglyn AI, 3 copied as they are`)
+    expect(aiSiteImportQuoteText(range, { arranged: 7, copied: 3 })).toBe(`${aiCreditRangeText(range)}: 7 pages arranged by Aglyn AI, 3 copied as they are`)
+  })
+
+  it('reads a page whose rewrite was refused as kept, in its row and its wave’s quote', () => {
+    const started = aiSiteImportWaveStamped(aiSiteImportWaveStarted(built(harbor({ finish: 'improve', wording: true })), 0, 'x', new Map()), 0)
+    const home = started.pages.find((entry) => entry.path === '/') as AiSiteImportState['pages'][number]
+    expect(home.wording).toBe('improved')
+    const kept = aiSiteImportWordsKept(started, home.slot)
+    expect(kept.pages.find((entry) => entry.slot === home.slot)?.wording).toBe('kept')
+    expect(aiSiteImportWaveOwed(kept, kept.waves[0]).reworded).toBe(aiSiteImportWaveOwed(started, started.waves[0]).reworded - 1)
+    // A page whose words were never improved is left as it is.
+    const policy = started.pages.find((entry) => entry.path === '/privacy-policy') as AiSiteImportState['pages'][number]
+    expect(aiSiteImportWordsKept(started, policy.slot)).toBe(started)
   })
 })

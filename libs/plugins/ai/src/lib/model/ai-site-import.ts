@@ -2044,14 +2044,16 @@ export function aiSiteImportWordingPages(
 }
 
 /**
- * What improving this many pages' wording adds (AGL-4152): each page's
- * rewrite an AI page as measured (`AI_MEASURED_IMPORT_CREDITS.page`), in the
- * second pass the page's ceiling already holds, so the most a page can spend
- * does not move.
+ * What improving this many pages' wording adds (AGL-4152): a reworded page
+ * is quoted as an AI page (`AI_MEASURED_IMPORT_CREDITS.page`) in place of an
+ * arranged one, its design answer and its wording together, so each adds the
+ * difference between the two. Its ceiling, the page's two passes, does not
+ * move, and no price is new.
  */
 export function aiSiteImportWordingCredits(pages: number): { likely: number; p90: number } {
   const count = whole(pages)
-  return { likely: count * AI_MEASURED_IMPORT_CREDITS.page.median, p90: count * AI_MEASURED_IMPORT_CREDITS.page.p90 }
+  const { page, arranged } = AI_MEASURED_IMPORT_CREDITS
+  return { likely: count * (page.median - arranged.median), p90: count * (page.p90 - arranged.p90) }
 }
 
 /*------------------------------------------
@@ -2075,20 +2077,27 @@ const whole = (value: number | undefined) => Math.max(0, Math.floor(Number.isFin
  * each page an AI page as measured, its ceiling its two passes, and the
  * site's header and footer once when the wave builds them. Pages the step has
  * chosen a build for (AGL-4083) are priced by it: `arranged` at the
- * arrangement answer and its listing, `copied` at the listing alone.
+ * arrangement answer and its listing, `copied` at the listing alone. Of the
+ * arranged, those `reworded` under Also improve my wording (AGL-4152) are
+ * priced as an AI page, inside the same ceiling.
  */
 export function aiSiteImportCreditRange(
   pages: number,
-  options: { frame?: boolean; arranged?: number; copied?: number } = {},
+  options: { frame?: boolean; arranged?: number; copied?: number; reworded?: number } = {},
 ): AiCreditRange {
   const count = whole(pages)
   const arranged = whole(options.arranged)
   const copied = whole(options.copied)
+  const wording = aiSiteImportWordingCredits(Math.min(arranged, whole(options.reworded)))
   const measured = AI_MEASURED_IMPORT_CREDITS
   return aiCreditRangeOrdered({
     likely:
-      count * measured.page.median + arranged * measured.arranged.median + copied * measured.copied.median + (options.frame ? measured.frame.median : 0),
-    p90: count * measured.page.p90 + arranged * measured.arranged.p90 + copied * measured.copied.p90 + (options.frame ? measured.frame.p90 : 0),
+      count * measured.page.median +
+      arranged * measured.arranged.median +
+      wording.likely +
+      copied * measured.copied.median +
+      (options.frame ? measured.frame.median : 0),
+    p90: count * measured.page.p90 + arranged * measured.arranged.p90 + wording.p90 + copied * measured.copied.p90 + (options.frame ? measured.frame.p90 : 0),
     ceiling:
       (count + arranged) * AI_SITE_IMPORT_PAGE_CEILING_CREDITS +
       copied * AI_SITE_IMPORT_COPIED_CEILING_CREDITS +
@@ -2096,20 +2105,28 @@ export function aiSiteImportCreditRange(
   })
 }
 
-/** What a wave still owes, by how its pages are built, and whether its header and footer are owed. */
+/**
+ * What a wave still owes, by how its pages are built, and whether its header
+ * and footer are owed. `reworded` are those of `arranged` whose words the
+ * wave improves (AGL-4152): as stamped once it has started, and as the
+ * import's choice now would stamp them before.
+ */
 export function aiSiteImportWaveOwed(
   state: AiSiteImportState,
   wave: AiSiteImportWave,
   items?: readonly AiJobItemLedger[] | null,
-): { pages: number; arranged: number; copied: number; frame: boolean } {
+): { pages: number; arranged: number; reworded: number; copied: number; frame: boolean } {
   const owed = (slot: string) => (items ? aiSiteImportItemOpen(items, slot) : true)
+  const choice = aiSiteImportWaveChoice(state, wave)
   // A header and footer drawn from the source's own menu ask no model (AGL-4108), so are owed nothing.
-  const counts = { pages: 0, arranged: 0, copied: 0, frame: wave.frame && !!state.frame && !aiSiteImportFrameIsRead(state) && owed(AI_SITE_IMPORT_FRAME_SLOT) }
+  const counts = { pages: 0, arranged: 0, reworded: 0, copied: 0, frame: wave.frame && !!state.frame && !aiSiteImportFrameIsRead(state) && owed(AI_SITE_IMPORT_FRAME_SLOT) }
   for (const slot of wave.slots) {
     const page = state.pages.find((entry) => entry.slot === slot)
     if (!owed(slot) || page?.refused) continue
-    if (page?.build === 'arranged') counts.arranged += 1
-    else if (page?.build === 'copied') counts.copied += 1
+    if (page?.build === 'arranged') {
+      counts.arranged += 1
+      if ((wave.startedAt ? page.wording : aiSiteImportPageWording(page, choice)) === 'improved') counts.reworded += 1
+    } else if (page?.build === 'copied') counts.copied += 1
     else counts.pages += 1
   }
   return counts
@@ -2122,7 +2139,7 @@ export function aiSiteImportWaveCreditRange(
   items?: readonly AiJobItemLedger[] | null,
 ): AiCreditRange {
   const owed = aiSiteImportWaveOwed(state, wave, items)
-  return aiSiteImportCreditRange(owed.pages, { frame: owed.frame, arranged: owed.arranged, copied: owed.copied })
+  return aiSiteImportCreditRange(owed.pages, { frame: owed.frame, arranged: owed.arranged, reworded: owed.reworded, copied: owed.copied })
 }
 
 /** Every wave still waiting, quoted at once: "Start every remaining wave" (AGL-4083). */
@@ -2130,26 +2147,40 @@ export function aiSiteImportRemainingCreditRange(
   state: AiSiteImportState,
   items?: readonly AiJobItemLedger[] | null,
 ): AiCreditRange {
-  const total = { pages: 0, arranged: 0, copied: 0, frame: false }
+  const total = { pages: 0, arranged: 0, reworded: 0, copied: 0, frame: false }
   for (const wave of state.waves) {
     if (wave.status !== 'waiting') continue
     const owed = aiSiteImportWaveOwed(state, wave, items)
     total.pages += owed.pages
     total.arranged += owed.arranged
+    total.reworded += owed.reworded
     total.copied += owed.copied
     total.frame = total.frame || owed.frame
   }
-  return aiSiteImportCreditRange(total.pages, { frame: total.frame, arranged: total.arranged, copied: total.copied })
+  return aiSiteImportCreditRange(total.pages, { frame: total.frame, arranged: total.arranged, reworded: total.reworded, copied: total.copied })
 }
 
-/** "About 95 credits (up to 600): 7 pages arranged by Aglyn AI, 3 copied as they are"; the build is named once the step has chosen. */
+/**
+ * "About 95 credits (up to 600): 7 pages arranged by Aglyn AI, 3 copied as
+ * they are"; the build is named once the step has chosen, and pages whose
+ * words are improved too (AGL-4152) as "arranged and reworded by Aglyn AI".
+ */
 export function aiSiteImportQuoteText(
   range: AiCreditRange,
-  owed: Pick<ReturnType<typeof aiSiteImportWaveOwed>, 'arranged' | 'copied'>,
+  owed: Pick<ReturnType<typeof aiSiteImportWaveOwed>, 'arranged' | 'copied'> & Partial<Pick<ReturnType<typeof aiSiteImportWaveOwed>, 'reworded'>>,
 ): string {
+  const reworded = Math.min(owed.arranged, whole(owed.reworded))
+  const runs: Array<[number, (count: number) => string]> = [
+    [reworded, () => `arranged and reworded by ${PLATFORM_BRAND_NAME} AI`],
+    [owed.arranged - reworded, () => `arranged by ${PLATFORM_BRAND_NAME} AI`],
+    [owed.copied, (count) => `copied as ${count === 1 ? 'it is' : 'they are'}`],
+  ]
   const parts: string[] = []
-  if (owed.arranged) parts.push(`${aiSiteImportPagesText(owed.arranged)} arranged by ${PLATFORM_BRAND_NAME} AI`)
-  if (owed.copied) parts.push(`${owed.arranged ? owed.copied.toLocaleString('en-US') : aiSiteImportPagesText(owed.copied)} copied as ${owed.copied === 1 ? 'it is' : 'they are'}`)
+  for (const [count, what] of runs) {
+    if (!count) continue
+    // The first run names its pages; the rest are counted beside it.
+    parts.push(`${parts.length ? count.toLocaleString('en-US') : aiSiteImportPagesText(count)} ${what(count)}`)
+  }
   return parts.length ? `${aiCreditRangeText(range)}: ${parts.join(', ')}` : aiCreditRangeText(range)
 }
 

@@ -344,10 +344,10 @@ describe('Keep my site or Improve it, as the import’s page says it (AGL-4152)'
   })
 
   it('says what Also improve my wording adds, a main page’s before the site is read and the wave’s after', () => {
-    expect(aiSiteImportWordingCreditsText(null)).toBe('About 27 more AI credits for each main page.')
+    expect(aiSiteImportWordingCreditsText(null)).toBe('About 17 more AI credits for each main page.')
     const state = harbor()
     const job = summary({ items: aiSiteImportLedger(state), siteImport: state })
-    expect(aiSiteImportWordingCreditsText({ job, wave: state.waves[0] })).toBe('Adds about 81 AI credits to this wave.')
+    expect(aiSiteImportWordingCreditsText({ job, wave: state.waves[0] })).toBe('Adds about 51 AI credits to this wave.')
     expect(aiSiteImportWordingCreditsText({ job, wave: state.waves[1] })).toBe('This wave’s pages keep every word, so it adds no AI credits.')
   })
 
