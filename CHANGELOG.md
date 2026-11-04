@@ -9,6 +9,21 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.11.0 — 2026-11-04
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.10.0...v1.11.0)
+
+### Added
+
+- **billing:** staff net MRR takes a base-price-only coupon off the base price only ([AGL-4161](https://linear.app/aglyn/issue/AGL-4161), [AGL-4159](https://linear.app/aglyn/issue/AGL-4159))
+- **billing:** a plan switch on a live subscription applies the offer's promotion code ([AGL-4160](https://linear.app/aglyn/issue/AGL-4160))
+- **tools:** the store-review workspace seeds quotes and invoices ([AGL-3812](https://linear.app/aglyn/issue/AGL-3812), [AGL-4093](https://linear.app/aglyn/issue/AGL-4093))
+- **billing:** staff coupons can take their discount off one plan's base price ([AGL-4159](https://linear.app/aglyn/issue/AGL-4159))
+
+### Fixed
+
+- **crm:** a record picker names a linked record outside its window, never its id ([AGL-4163](https://linear.app/aglyn/issue/AGL-4163))
+
 ## v1.10.0 — 2026-11-04
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/4cbc8c1f0...v1.10.0)
