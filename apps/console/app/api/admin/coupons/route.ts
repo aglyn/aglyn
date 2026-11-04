@@ -31,6 +31,7 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 import {
   COUPON_FILTER_FIELDS,
+  COUPON_NAME_MAX,
   COUPON_READ_BOUND,
   COUPON_SEARCH_PATHS,
   COUPON_SORT_COLUMNS,
@@ -440,6 +441,15 @@ async function handler(request: Request): Promise<Response> {
       )
     }
 
+    // Stripe refuses a longer name, which used to come back as a 502.
+    const name = String(body?.name ?? '').trim()
+    if (name.length > COUPON_NAME_MAX) {
+      return Response.json(
+        { error: `Keep the name to ${COUPON_NAME_MAX} characters (it has ${name.length})` },
+        { status: 400 },
+      )
+    }
+
     // Approval gate (AGL-1105): a big percent-off coupon is a real revenue
     // commitment. Fixed-amount coupons are bounded by the amount, so the gate
     // is on the percent path only. Requires an explicit confirm.
@@ -474,8 +484,7 @@ async function handler(request: Request): Promise<Response> {
     if (durationInMonths) {
       couponParams.duration_in_months = String(durationInMonths)
     }
-    const name = String(body?.name ?? '').trim()
-    if (name) couponParams.name = name.slice(0, 200)
+    if (name) couponParams.name = name
     const maxRedemptions = Number(body?.maxRedemptions ?? 0)
     if (maxRedemptions > 0) {
       couponParams.max_redemptions = String(Math.floor(maxRedemptions))
