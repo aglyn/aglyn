@@ -31,11 +31,14 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **billing:** a never-billed workspace keeps its link's promotion code ([AGL-4157](https://linear.app/aglyn/issue/AGL-4157))
+- **pricing:** retired plan names are out of customer and operator strings; the staff base-plan pickers offer Custom, Pro and Starter; Custom's saved forms are unlimited ([AGL-4158](https://linear.app/aglyn/issue/AGL-4158))
 - **ai:** an improved page keeps its questions and plans; a reworded line takes no other's words ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
 - **ai:** Keep my site's lanes agree: the hero measure, held boxes and a fill no label reads ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
 
 ### Documentation
 
+- **docs:** the Figma pricing frames and the pricing-tables reconciler follow the live page: Hobby and Enterprise labels, the Pro card's copy and the Enterprise strip ([AGL-4126](https://linear.app/aglyn/issue/AGL-4126))
 - **ai:** the Bring my site guide says which words Also improve my wording keeps ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
 - **ai:** the Bring my site guide says Keep my site or improve it ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
 
