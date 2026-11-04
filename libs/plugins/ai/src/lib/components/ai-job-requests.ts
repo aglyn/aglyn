@@ -19,6 +19,7 @@
 import { authorizedFetch, type MaybeTokenSource } from '@aglyn/shared-util-http/authorized-token'
 import { AI_CREDITS_CONFIRM_CODE, type AiCreditsPrompt } from '../model/ai-credit-estimate'
 import type { AiJobSummary } from '../model/ai-jobs.types'
+import type { AiSiteImportFinish } from '../model/ai-site-import'
 import { assistBuildJobRequest, type AssistBuildProposal } from '../model/assist-build'
 import { assistPageChangeJobRequest, type AssistPageChangeProposal } from '../model/assist-page-change'
 import { publishAiJob } from './ai-jobs-store'
@@ -67,6 +68,10 @@ export interface AiJobResumeOptions {
   input?: Record<string, string>
   /** "Start every remaining wave" (AGL-4084): an import starts its next wave and every one after it. */
   startAll?: boolean
+  /** Keep my site or Improve it (AGL-4152): how an import's waves not yet started are built. */
+  finish?: AiSiteImportFinish
+  /** Under Improve it, whether its main pages' wording is improved too (AGL-4152). */
+  wording?: boolean
 }
 
 /**
@@ -95,6 +100,8 @@ export async function resumeAiJobRequest(
           ...(options.reduce ? { reduce: options.reduce } : {}),
           ...(options.input ? { input: options.input } : {}),
           ...(options.startAll ? { startAll: true } : {}),
+          ...(options.finish ? { finish: options.finish } : {}),
+          ...(typeof options.wording === 'boolean' ? { wording: options.wording } : {}),
         }),
       },
     )

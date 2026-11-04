@@ -234,6 +234,9 @@ export function aiSiteImportDocumentOf(inputs: Readonly<Record<string, unknown>>
       return link && typeof link['path'] === 'string' && typeof link['id'] === 'string' ? [{ path: link['path'], id: link['id'] }] : []
     }),
     origins: strings(value['origins']),
+    // How the page's wave finishes it and whether its words are improved (AGL-4152); anything else is absent: kept.
+    ...(value['finish'] === 'keep' || value['finish'] === 'improve' ? { finish: value['finish'] } : {}),
+    ...(value['wording'] === 'kept' || value['wording'] === 'improved' ? { wording: value['wording'] } : {}),
     ...(isLayout(value['layout']) ? { layout: value['layout'] } : {}),
     ...(Array.isArray(value['videos']) ? { videos: (value['videos'] as unknown[]).map(videoOf) } : {}),
   }

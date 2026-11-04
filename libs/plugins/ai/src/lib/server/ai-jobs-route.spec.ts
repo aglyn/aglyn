@@ -80,6 +80,21 @@ function mockMakeFirestore() {
     set: async (data: Record<string, unknown>, options?: { merge?: boolean }) => {
       mockDocs.set(path, applyData(mockDocs.get(path), data, Boolean(options?.merge)))
     },
+    // A field path writes inside its map, as Firestore's update does (`siteImport.finish`).
+    update: async (data: Record<string, unknown>) => {
+      const next: Record<string, unknown> = { ...(mockDocs.get(path) ?? {}) }
+      for (const [key, value] of Object.entries(data)) {
+        const parts = key.split('.')
+        let at = next
+        for (const part of parts.slice(0, -1)) {
+          const inner = { ...((at[part] as Record<string, unknown> | undefined) ?? {}) }
+          at[part] = inner
+          at = inner
+        }
+        at[parts[parts.length - 1]] = value
+      }
+      mockDocs.set(path, next)
+    },
   })
   type Filter = { field: string; op: string; value: unknown }
   const millis = (value: unknown) =>
@@ -304,6 +319,7 @@ import {
 import { registerAiJobAdmission } from '../jobs/ai-job-admission'
 import { createAiSiteJobAdmission } from '../jobs/ai-job-site-step'
 import { aiFreeCreditsResetOn, aiFreeSitePrompt } from '../model/ai-site-job'
+import { aiSiteImportInventory, type AiSiteImportState } from '../model/ai-site-import'
 import { AI_CREDITS_CONFIRM_CODE, aiCreditsPromptText } from '../model/ai-credit-estimate'
 
 const ORG = 'org-1'
@@ -1098,6 +1114,48 @@ describe('POST /api/ai/jobs/[jobId]/resume (AGL-2935)', () => {
     ])
     expect(planRunner).not.toHaveBeenCalled()
     expect(messages()).toBe(0)
+  })
+
+  it('writes Keep my site or Improve it onto an import waiting for its next wave, audited, and refuses anything else (AGL-4152)', async () => {
+    const importRunner = jest.fn(async () => ({ outputs: [], ...spend, review: { reason: 'wave' as const, message: 'Main pages is in.', findings: [] } }))
+    registerAiJobStep('import', importRunner)
+    const job = await proposed()
+    const path = `orgs/${ORG}/aiJobs/${job.id}`
+    let id = 0
+    const state = aiSiteImportInventory({
+      domain: 'harbor-dental.com',
+      siteName: 'Harbor Dental',
+      ownership: { method: 'dns', provenAt: 1, detail: null },
+      readAt: 'x',
+      pages: [{ url: 'https://harbor-dental.com/', path: '/', title: 'Home', foundBy: 'home', words: 100, images: 0 }],
+      menu: ['/'],
+      skipped: [],
+      stoppedBy: null,
+      pageLimit: 25,
+      existingPages: 0,
+      mintId: () => `d${++id}`,
+    })
+    const stored = mockDocs.get(path) as Record<string, unknown>
+    mockDocs.set(path, {
+      ...stored,
+      kind: 'import',
+      plan: null,
+      review: { reason: 'wave', message: 'Start Main pages when you are ready.', findings: [] },
+      siteImport: { ...state, finish: 'keep', wording: false },
+    })
+    const siteImport = () => mockDocs.get(path)?.['siteImport'] as AiSiteImportState
+
+    // Only the two finishes, and the switch only on or off: nothing is written, nothing spent.
+    expect((await resume(job.id, { orgId: ORG, hostId: 'host-1', finish: 'better' })).status).toBe(400)
+    expect((await resume(job.id, { orgId: ORG, hostId: 'host-1', finish: 'improve', wording: 'yes' })).status).toBe(400)
+    expect(siteImport()).toMatchObject({ finish: 'keep', wording: false })
+    expect(importRunner).not.toHaveBeenCalled()
+
+    const response = await resume(job.id, { orgId: ORG, hostId: 'host-1', finish: 'improve', wording: true })
+    expect(response.status).toBe(200)
+    expect(siteImport()).toMatchObject({ finish: 'improve', wording: true })
+    expect(importRunner).toHaveBeenCalledTimes(1)
+    expect(auditRows().find((row) => row['action'] === 'ai.job.resume')?.['after']).toMatchObject({ kind: 'import', finish: 'improve', wording: true })
   })
 
   it('confirms the plan and runs the next step inline on its own reservation, audited', async () => {

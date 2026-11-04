@@ -72,12 +72,16 @@ import type { AiBuildPlanCreate, AiBuildPlanScreen } from '../model/ai-build-pla
 import type { AiJob, AiJobItemLedger, AiJobPlan, AiJobReview } from '../model/ai-jobs.types'
 import {
   AI_SITE_IMPORT_DOMAIN_INPUT,
+  AI_SITE_IMPORT_FINISH_INPUT,
   AI_SITE_IMPORT_FRAME_SLOT,
   AI_SITE_IMPORT_LABEL_MAX_CHARS,
   AI_SITE_IMPORT_LEFT_OUT_COPY,
   AI_SITE_IMPORT_MAX_PAGES,
   AI_SITE_IMPORT_MIN_WORDS,
   AI_SITE_IMPORT_WAVE_PAGES,
+  AI_SITE_IMPORT_WORDING_INPUT,
+  aiSiteImportChoiceFromInputs,
+  aiSiteImportChoiceOf,
   aiSiteImportFormsIn,
   aiSiteImportFrameIsRead,
   aiSiteImportInventory,
@@ -97,6 +101,8 @@ import {
   aiSiteImportWaveClosed,
   siteImportApprovedHostsWith,
   aiSiteImportWaveMessage,
+  aiSiteImportWaveChoice,
+  aiSiteImportWaveStamped,
   aiSiteImportWaveStarted,
   type AiSiteImportBuild,
   type AiSiteImportHome,
@@ -226,6 +232,8 @@ export const AI_SITE_IMPORT_COPY = {
   plan: 'Bringing an existing site in is included on every paid plan.',
   /** Names "Bring a site in" (`ai.import`, AGL-4047), never a role. */
   role: 'Your role does not include "Bring a site in" — ask an organization admin',
+  /** Keep my site or Improve it (AGL-4152), asked with anything else. */
+  finish: 'Choose Keep my site or Improve it, then read your site again.',
 } as const
 
 /*------------------------------------------
@@ -611,8 +619,12 @@ export function aiSiteImportFrameJob(job: AiJob, state: AiSiteImportState, wave:
 export function aiSiteImportDocumentFor(state: AiSiteImportState, page: AiSiteImportPage): AiSiteImportDocument | null {
   const blocks = page.read?.blocks
   if (!blocks?.length) return null
+  // How the page's wave finishes it, as stamped when the wave started (AGL-4152).
+  const wave = state.waves.find((entry) => entry.index === page.wave)
   return {
     build: page.build ?? aiSiteImportBuildOf(page),
+    finish: wave ? aiSiteImportWaveChoice(state, wave).finish : 'keep',
+    wording: page.wording === 'improved' ? 'improved' : 'kept',
     title: page.title,
     url: page.url,
     blocks,
@@ -1026,11 +1038,14 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
         verdict,
         mintId,
       })
+      // Keep my site or Improve it (AGL-4152), as Bring my site asked it, or as a
+      // read before this one kept it; an import that never said is Keep my site.
+      const choice = state?.finish ? aiSiteImportChoiceOf(state) : aiSiteImportChoiceFromInputs(job.inputs)
       if (aiSiteImportReadStops(inventory.verdict)) {
         // Check again is the read again: the job waits, with why and what to do, and no ledger.
         return unspent({
           items: [],
-          siteImport: inventory,
+          siteImport: { ...inventory, ...choice },
           review: {
             reason: aiSiteImportReadVerdictReason(inventory.verdict) ?? 'unreadable',
             message: aiSiteImportReadVerdictMessage(inventory.verdict, domain) ?? AI_SITE_IMPORT_COPY.nothing(domain),
@@ -1042,7 +1057,7 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
       const mainWords = new Map(
         crawled.pages.map((page) => [page.url, siteImportPageWords({ title: '', blocks: page.blocks.filter((block) => block.region === 'main') })]),
       )
-      const planned = { ...aiSiteImportWithBuilds(inventory, mainWords), home: aiSiteImportHomeOf(crawled) }
+      const planned = { ...aiSiteImportWithBuilds(inventory, mainWords), home: aiSiteImportHomeOf(crawled), ...choice }
       const ledger = aiSiteImportLedger(planned)
       return unspent({ items: ledger, siteImport: planned, review: waveReview(aiSiteImportWaveMessage(planned, ledger)) })
     }
@@ -1100,7 +1115,11 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
             : row,
         )
       }
-      const started = aiSiteImportWithBuilds(aiSiteImportWaveStarted(state, wave.index, nowIso, aiSiteImportReadsWithin({ ...job, items: ledger }, state, reads)))
+      // Stamped with how it is built (AGL-4152): the choice now, which a later change never redraws.
+      const started = aiSiteImportWaveStamped(
+        aiSiteImportWithBuilds(aiSiteImportWaveStarted(state, wave.index, nowIso, aiSiteImportReadsWithin({ ...job, items: ledger }, state, reads))),
+        wave.index,
+      )
       const running = started.waves.find((entry) => entry.index === wave.index) as AiSiteImportWave
       return closing(started, ledger, running, unspent({ items: ledger }))
     }
@@ -1138,6 +1157,8 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
           domain,
           home: state.home,
           at: nowIso,
+          // The first wave's finish (AGL-4152): Keep my site keeps more of the source's look.
+          finish: aiSiteImportWaveChoice(state, wave).finish,
           ...(signal ? { signal } : {}),
         },
         {
@@ -1414,6 +1435,12 @@ export function createAiSiteImportAdmission(deps: AiSiteImportAdmissionDeps = {}
     }
     const { domain, error } = normalizeOwnershipDomain(String(context.inputs[AI_SITE_IMPORT_DOMAIN_INPUT] ?? ''))
     if (!domain) return { status: 400, error: error ?? AI_SITE_IMPORT_COPY.badDomain }
+    // Keep my site or Improve it (AGL-4152): absent is Keep my site, and anything else is no choice.
+    const finish = context.inputs[AI_SITE_IMPORT_FINISH_INPUT]
+    const wording = context.inputs[AI_SITE_IMPORT_WORDING_INPUT]
+    if ((finish !== undefined && finish !== 'keep' && finish !== 'improve') || (wording !== undefined && typeof wording !== 'boolean')) {
+      return { status: 400, error: AI_SITE_IMPORT_COPY.finish }
+    }
     const ownership = await ownershipOf(context.orgId, domain)
     if (!ownership?.current) return { status: 403, error: AI_SITE_IMPORT_COPY.ownership(domain) }
     return null

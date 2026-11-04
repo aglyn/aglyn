@@ -53,7 +53,7 @@ import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { videoEmbedOf } from '@aglyn/aglyn/plugin-manager/video-embed-provider'
 import type { SiteImportBlock, SiteImportForm, SiteImportVideo } from '../site-import/site-import-html'
 import { aiCreditRangeOrdered, aiCreditRangeText, AI_MEASURED_IMPORT_CREDITS, type AiCreditRange } from './ai-credit-estimate'
-import type { AiJobItemLedger } from './ai-jobs.types'
+import type { AiJob, AiJobItemLedger } from './ai-jobs.types'
 
 /** The job kind. */
 export const AI_SITE_IMPORT_KIND = 'import' as const
@@ -941,6 +941,36 @@ export const AI_SITE_IMPORT_WORDING_INPUT = 'wording'
 
 /** Whether a page's words were kept as written or improved (AGL-4152). */
 export type AiSiteImportWords = 'kept' | 'improved'
+
+/** How the owner asked the site to be finished, as one choice: the finish, and under `improve` whether its wording is improved too (AGL-4152). */
+export interface AiSiteImportChoice {
+  finish: AiSiteImportFinish
+  /** Always `false` under `keep`: Keep my site never rewrites a word. */
+  wording: boolean
+}
+
+/** What Bring my site preselects (AGL-4152): Improve it, with Also improve my wording on. */
+export const AI_SITE_IMPORT_DEFAULT_CHOICE: Readonly<AiSiteImportChoice> = { finish: 'improve', wording: true }
+
+/**
+ * The words a policy page's address or title carries (AGL-4152), each matched
+ * as whole words, its plural too: a main page that names one keeps every word
+ * even when its wave improves the wording of the rest.
+ */
+export const AI_SITE_IMPORT_LEGAL_SLUGS: readonly string[] = [
+  'privacy',
+  'terms',
+  'cookie',
+  'legal',
+  'refund',
+  'return',
+  'shipping-policy',
+  'disclaimer',
+  'accessibility',
+  'gdpr',
+  'imprint',
+  'impressum',
+]
 
 export interface AiSiteImportPage {
   /** The item ledger slot: `p0`, `p1`, … */
@@ -1886,6 +1916,133 @@ export function aiSiteImportWire(state: AiSiteImportState | null | undefined): A
       page.read ? { ...page, read: { ...page.read, text: '', images: [], blocks: [], forms: [], layout: null, ...(page.read.videos ? { videos: [] } : {}) } } : page,
     ),
   }
+}
+
+/*------------------------------------------
+ * Keep my site, or Improve it (AGL-4152)
+ *-----------------------------------------*/
+
+/** A finish read defensively: only `improve` is improve, so an import that never said reads as `keep`. */
+export function aiSiteImportFinishOf(value: unknown): AiSiteImportFinish {
+  return value === 'improve' ? 'improve' : 'keep'
+}
+
+/** Whether the wording is improved: only under `improve`, and on unless the owner switched it off. */
+export function aiSiteImportWordingOf(finish: AiSiteImportFinish, value: unknown): boolean {
+  return finish === 'improve' && value !== false && value !== 'false'
+}
+
+/** The choice an import holds now, read defensively: an older import with none is `keep`, never silently improved. */
+export function aiSiteImportChoiceOf(state: Pick<AiSiteImportState, 'finish' | 'wording'> | null | undefined): AiSiteImportChoice {
+  const finish = aiSiteImportFinishOf(state?.finish)
+  return { finish, wording: aiSiteImportWordingOf(finish, state?.wording) }
+}
+
+/** The choice Bring my site carried in the job's inputs (`AI_SITE_IMPORT_FINISH_INPUT`, `AI_SITE_IMPORT_WORDING_INPUT`); none is `keep`. */
+export function aiSiteImportChoiceFromInputs(inputs: Readonly<Record<string, unknown>> | null | undefined): AiSiteImportChoice {
+  const finish = aiSiteImportFinishOf(inputs?.[AI_SITE_IMPORT_FINISH_INPUT])
+  return { finish, wording: aiSiteImportWordingOf(finish, inputs?.[AI_SITE_IMPORT_WORDING_INPUT]) }
+}
+
+/** Whether a word names a legal entry's part: the word itself, or its plural. */
+const namesPart = (word: string, part: string) =>
+  word === part || word === `${part}s` || (part.endsWith('y') && word === `${part.slice(0, -1)}ies`)
+
+/** Whether a page is a policy (`AI_SITE_IMPORT_LEGAL_SLUGS`) by its address on either site or its title (AGL-4152). */
+export function aiSiteImportPageIsLegal(page: Pick<AiSiteImportPage, 'slug' | 'title'> & Partial<Pick<AiSiteImportPage, 'path'>>): boolean {
+  const wordsOf = (text: string | undefined) => String(text ?? '').toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean)
+  const said = [wordsOf(page.slug), wordsOf(page.path), wordsOf(page.title)]
+  return AI_SITE_IMPORT_LEGAL_SLUGS.some((entry) => {
+    const parts = entry.split('-')
+    return said.some((words) => words.some((_, at) => parts.every((part, offset) => namesPart(words[at + offset] ?? '', part))))
+  })
+}
+
+/**
+ * Whether a page's words are improved under a choice (AGL-4152): only a main
+ * page Aglyn AI arranges, under Improve it with its wording on, and never a
+ * policy page. Every other page keeps every word as written.
+ */
+export function aiSiteImportPageWording(
+  page: Pick<AiSiteImportPage, 'group' | 'words' | 'slug' | 'title' | 'build'> & Partial<Pick<AiSiteImportPage, 'path'>>,
+  choice: AiSiteImportChoice,
+): AiSiteImportWords {
+  const build = page.build ?? aiSiteImportPageBuild(page)
+  return choice.finish === 'improve' && choice.wording && build === 'arranged' && page.group === 'main' && !aiSiteImportPageIsLegal(page) ? 'improved' : 'kept'
+}
+
+/**
+ * How a wave is built (AGL-4152): as it was stamped when it started, which a
+ * later change never redraws; a wave not yet started is the import's choice
+ * now. A wave that started before the choice existed reads as `keep`.
+ */
+export function aiSiteImportWaveChoice(state: Pick<AiSiteImportState, 'finish' | 'wording'> | null | undefined, wave: AiSiteImportWave): AiSiteImportChoice {
+  if (!wave.startedAt && (wave.status === 'waiting' || wave.status === 'stopped')) return aiSiteImportChoiceOf(state)
+  const finish = aiSiteImportFinishOf(wave.finish)
+  return { finish, wording: finish === 'improve' && wave.wording === true }
+}
+
+/**
+ * A wave starting (AGL-4152): stamped with the import's choice now, and each
+ * of its pages with whether its words are kept or improved. The step stamps a
+ * wave once, when it starts, so a change made before a later wave reaches only
+ * the waves that have not started.
+ */
+export function aiSiteImportWaveStamped(state: AiSiteImportState, index: number): AiSiteImportState {
+  const wave = state.waves.find((entry) => entry.index === index)
+  if (!wave) return state
+  const choice = aiSiteImportChoiceOf(state)
+  const slots = new Set(wave.slots)
+  return {
+    ...state,
+    waves: state.waves.map((entry) => (entry.index === index ? { ...entry, finish: choice.finish, wording: choice.wording } : entry)),
+    pages: state.pages.map((page) => (slots.has(page.slot) ? { ...page, wording: aiSiteImportPageWording(page, choice) } : page)),
+  }
+}
+
+/**
+ * The owner's change between waves (AGL-4152), as the resume door writes it
+ * onto an import waiting for a wave: the finish, and the wording switch,
+ * always off under `keep`. What is not given keeps the import's choice now.
+ * `null` when the job is not an import waiting for a wave that has not started.
+ */
+export function aiSiteImportFinishUpdate(
+  job: Pick<AiJob, 'kind' | 'status' | 'review' | 'siteImport'>,
+  change: { finish?: AiSiteImportFinish | null; wording?: boolean | null },
+): { 'siteImport.finish': AiSiteImportFinish; 'siteImport.wording': boolean } | null {
+  const state = job.siteImport ?? null
+  if (job.kind !== AI_SITE_IMPORT_KIND || job.status !== 'needs_review' || job.review?.reason !== 'wave' || !state) return null
+  if (aiSiteImportReadStops(state.verdict) || !state.waves.some((wave) => wave.status === 'waiting')) return null
+  const now = aiSiteImportChoiceOf(state)
+  const finish = change.finish ? aiSiteImportFinishOf(change.finish) : now.finish
+  // Under Improve, the switch as given, else as it stands, else on (its default).
+  const asked = typeof change.wording === 'boolean' ? change.wording : now.finish === 'improve' ? now.wording : AI_SITE_IMPORT_DEFAULT_CHOICE.wording
+  return { 'siteImport.finish': finish, 'siteImport.wording': aiSiteImportWordingOf(finish, asked) }
+}
+
+/** The pages of a wave whose words a choice improves, of those it still owes (AGL-4152). */
+export function aiSiteImportWordingPages(
+  state: AiSiteImportState,
+  wave: AiSiteImportWave,
+  choice: AiSiteImportChoice,
+  items?: readonly AiJobItemLedger[] | null,
+): number {
+  if (choice.finish !== 'improve' || !choice.wording) return 0
+  return wave.slots.filter((slot) => {
+    const page = state.pages.find((entry) => entry.slot === slot)
+    return !!page && !page.refused && (!items || aiSiteImportItemOpen(items, slot)) && aiSiteImportPageWording(page, choice) === 'improved'
+  }).length
+}
+
+/**
+ * What improving this many pages' wording adds (AGL-4152): each page's
+ * rewrite an AI page as measured (`AI_MEASURED_IMPORT_CREDITS.page`), in the
+ * second pass the page's ceiling already holds, so the most a page can spend
+ * does not move.
+ */
+export function aiSiteImportWordingCredits(pages: number): { likely: number; p90: number } {
+  const count = whole(pages)
+  return { likely: count * AI_MEASURED_IMPORT_CREDITS.page.median, p90: count * AI_MEASURED_IMPORT_CREDITS.page.p90 }
 }
 
 /*------------------------------------------
