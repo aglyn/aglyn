@@ -807,7 +807,9 @@ struct ActionInputSheet: View {
   var body: some View {
     NavigationStack {
       Form {
-        if let confirm = pending.action.confirmText(in: pending.scope) {
+        // An action with a `check` confirms over the check's answer (`preview`), which it has not got yet: its confirm is
+        // asked after the inputs, never drawn here half-filled.
+        if pending.action.check == nil, let confirm = pending.action.confirmText(in: pending.scope) {
           Section { Text(confirm).font(AglynFont.subheadline) }
         }
         Section {
