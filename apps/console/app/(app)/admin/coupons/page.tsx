@@ -76,6 +76,7 @@ import {
   COUPON_FILTER_HEADERS,
   COUPON_FILTER_OPTIONS,
   COUPON_COLUMN_SORTS,
+  COUPON_NAME_MAX,
   type CouponListRow,
   type CouponRow,
   couponFullUse,
@@ -549,6 +550,8 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
                   label="Name (shown on the invoice)"
                   value={form.name}
                   onChange={(event) => update({ name: event.target.value })}
+                  helperText={`${form.name.length}/${COUPON_NAME_MAX}`}
+                  slotProps={{ htmlInput: { maxLength: COUPON_NAME_MAX } }}
                 />
                 <Stack direction="row" spacing={2}>
                   <TextField

@@ -52,6 +52,13 @@ export const COUPON_READ_BOUND = 1_000
 /** The most promotion codes the list reads before it refuses. */
 export const PROMOTION_CODE_READ_BOUND = 2_000
 
+/**
+ * The longest coupon name Stripe accepts. A longer one is refused outright
+ * ("must be at most 40 characters"), so the form stops there and the route
+ * answers 400 before asking Stripe.
+ */
+export const COUPON_NAME_MAX = 40
+
 /** A Stripe coupon's durations, as the create form and the filter offer them. */
 export const COUPON_DURATIONS = [
   { value: 'once', label: 'Once' },
