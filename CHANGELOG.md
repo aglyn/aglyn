@@ -9,6 +9,15 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.9.1 — 2026-11-04
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.9.0...v1.9.1)
+
+### Fixed
+
+- **firestore:** a tab whose Firestore queue fails reloads onto the memory cache ([AGL-4156](https://linear.app/aglyn/issue/AGL-4156), [AGL-3428](https://linear.app/aglyn/issue/AGL-3428))
+- **console:** cap coupon names at Stripe's 40 characters
+
 ## v1.9.0 — 2026-11-04
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.8.0...v1.9.0)
