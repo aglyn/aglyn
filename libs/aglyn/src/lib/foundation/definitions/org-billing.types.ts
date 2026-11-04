@@ -970,6 +970,20 @@ export interface OrgDiscount {
   /** Free-text why (the enterprise deal, the promotion) — staff-only. */
   reason?: string
   appliedAt: ITimestamp
+  /**
+   * The coupon takes its discount off the plan's BASE PRICE only (AGL-4161):
+   * Stripe `applies_to.products` names plan products (AGL-4159), so add-ons
+   * and usage past the plan's limits bill in full. Absent or false is a
+   * whole-subscription discount — every mirror written before this field
+   * reads that way, which is what those coupons were.
+   */
+  basePriceOnly?: boolean
+  /**
+   * The plans whose base price a `basePriceOnly` coupon reaches, read from
+   * the deployment's plan prices when the mirror was written. Absent when
+   * they could not be read; empty when the coupon names no plan sold now.
+   */
+  appliesToPlans?: OrgPlan[]
 }
 
 export interface OrgSubscription {

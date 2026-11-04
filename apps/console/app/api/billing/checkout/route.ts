@@ -213,14 +213,15 @@ function promotionCodeFullUseMetadata(
       {
         plan,
         subscription: { status: 'active', interval },
-        // A code limited to the plan's base price (AGL-4159) discounts that
-        // line alone; the add-ons bill in full and pay their own way, so the
-        // discount is judged on the plan by itself.
-        seatAddons: promo.limitedToProducts ? {} : { ...addons },
+        seatAddons: { ...addons },
       } as never,
       {
         percentOff: promo.percentOff ?? undefined,
         amountOffUsd: promo.amountOffUsd ?? undefined,
+        // A code limited to the plan's base price (AGL-4159) reaches that
+        // line alone (AGL-4161); the add-ons are judged at the price they
+        // bill. It resolved for this plan, so the plan is one it reaches.
+        ...(promo.limitedToProducts ? { basePriceOnly: true } : {}),
       },
       { duration: promo.duration ?? null, durationInMonths: promo.durationInMonths ?? null },
     )

@@ -244,12 +244,15 @@ async function handler(request: Request): Promise<Response> {
         { status: 400 },
       )
     }
+    // A base-price coupon (AGL-4159) reaches the plan's base line alone, so
+    // the add-ons are judged — and mirrored for net MRR (AGL-4161) — at the
+    // price they bill.
+    const reachTerms = limitedProducts
+      ? { basePriceOnly: true, appliesToPlans: appliesToPlans ?? undefined }
+      : {}
     const fullUseAssessment = orgDiscountFullUse(
-      // A base-price coupon (AGL-4159) discounts the plan's line alone; the
-      // add-ons bill in full and pay their own way, so it is judged on the
-      // plan by itself.
-      (limitedProducts ? { ...billedOrg, seatAddons: {} } : billedOrg) as never,
-      { percentOff, amountOffUsd },
+      billedOrg as never,
+      { percentOff, amountOffUsd, ...reachTerms },
       {
         duration: typeof coupon.duration === 'string' ? coupon.duration : null,
         durationInMonths:
@@ -273,7 +276,7 @@ async function handler(request: Request): Promise<Response> {
     const measuredCogsUsd = await latestMeasuredCogsUsd(orgId)
     const rating = checkDiscountMargin(
       billedOrg,
-      { percentOff, amountOffUsd },
+      { percentOff, amountOffUsd, ...reachTerms },
       { measuredCogsUsd },
     )
     if (rating.rating === 'block' && body?.confirmBelowFloor !== true) {
@@ -322,6 +325,10 @@ async function handler(request: Request): Promise<Response> {
     if (percentOff != null) discount.percentOff = percentOff
     if (amountOffUsd != null) discount.amountOffUsd = amountOffUsd
     if (coupon.name) discount.code = String(coupon.name)
+    // What it reaches (AGL-4161), as the webhook mirrors it: net MRR takes a
+    // base-price coupon off the base plan line only.
+    discount.basePriceOnly = Boolean(limitedProducts)
+    if (appliesToPlans) discount.appliesToPlans = appliesToPlans
     const reason = String(body?.reason ?? '').trim()
     if (reason) discount.reason = reason.slice(0, 500)
 
