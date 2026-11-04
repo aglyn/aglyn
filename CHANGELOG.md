@@ -15,6 +15,7 @@ content on the marketing site and is written separately.
 
 ### Added
 
+- **native:** Aglyn AI credits are a 0–30 block stepper on Apple and Android, in the console's words ([AGL-4155](https://linear.app/aglyn/issue/AGL-4155))
 - **ai:** Also improve my wording rewrites as a copywriter would, every fact still held ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
 - **ai:** a reworded page is quoted on the AI page row, and named in its wave's quote ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
 - **ai:** a main page's lines are reworded under Also improve my wording, every fact held ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
@@ -31,6 +32,8 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **native:** a prompt with a preview check confirms after the check answers, never half-filled in the sheet ([AGL-4155](https://linear.app/aglyn/issue/AGL-4155))
+- **android:** NavShellUiTest reads the shell's writes from a copy-on-write list, so the kotlin check no longer flakes ([AGL-4155](https://linear.app/aglyn/issue/AGL-4155))
 - **billing:** a never-billed workspace keeps its link's promotion code ([AGL-4157](https://linear.app/aglyn/issue/AGL-4157))
 - **pricing:** retired plan names are out of customer and operator strings; the staff base-plan pickers offer Custom, Pro and Starter; Custom's saved forms are unlimited ([AGL-4158](https://linear.app/aglyn/issue/AGL-4158))
 - **ai:** an improved page keeps its questions and plans; a reworded line takes no other's words ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
@@ -38,7 +41,7 @@ content on the marketing site and is written separately.
 
 ### Documentation
 
-- **docs:** the Figma pricing frames and the pricing-tables reconciler follow the live page: Hobby and Enterprise labels, the Pro card's copy and the Enterprise strip ([AGL-4126](https://linear.app/aglyn/issue/AGL-4126))
+- **docs:** the Figma pricing frames and the pricing-tables reconciler follow the live page: Hobby and Enterprise labels, the Pro card's copy, the Enterprise strip, the FAQ, the calculator and the usage-pricing section ([AGL-4126](https://linear.app/aglyn/issue/AGL-4126))
 - **ai:** the Bring my site guide says which words Also improve my wording keeps ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
 - **ai:** the Bring my site guide says Keep my site or improve it ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
 
