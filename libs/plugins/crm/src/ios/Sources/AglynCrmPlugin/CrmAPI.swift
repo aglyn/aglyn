@@ -243,7 +243,7 @@ struct CrmAPI {
     var fields: [String: Any] = [
       "kind": kind, "body": text.trimmingCharacters(in: .whitespacesAndNewlines),
       "atMs": Int64(Date().timeIntervalSince1970 * 1000), "visibleTo": scope.createTokens, "hostId": stampedHost,
-      "byUid": scope.uid, "createdAt": FirestoreSentinel.serverTimestamp,
+      "byUid": scope.uid, "createdAt": FirestoreSentinel.serverTimestamp, "updatedAt": FirestoreSentinel.serverTimestamp,
     ]
     for (key, value) in links { fields[key] = value }
     if let company = await activityCompany(links) { fields["companyId"] = company }
@@ -267,6 +267,48 @@ struct CrmAPI {
     if let dealCompany { return dealCompany }
     let contact = await read("contacts", "contactId")
     return crmActivityCompanyID(named: nil, deal: nil, contact: contact, groupID: scope.groupID, org: scope.org)
+  }
+
+  /// A deal's contact roles, as the console's card writes them (`dealContactRolesSave`): the whole list, its Primary as
+  /// `contactId` with the name copied beside it, and the ids and keys a merge, an erasure and a rename find the deal by.
+  func saveDealContactRoles(
+    _ id: String, deal: [String: Any], _ next: [CrmContactRole], values: [(label: String, active: Bool)],
+    primaryName: (String) -> String?
+  ) async throws {
+    let write: CrmDealRolesWrite
+    switch dealContactRolesSave(deal, next, values) {
+    case .failure(let refusal): throw ConsoleAPIError(status: 400, message: refusal.message)
+    case .success(let judged): write = judged
+    }
+    let list = contactRoleListFields(write.contactRoles, visibleTo: deal["visibleTo"])
+    var fields: [String: Any] = [
+      "contactRoles": write.contactRoles.map(\.stored), "contactId": write.contactID ?? FirestoreSentinel.delete,
+      "contactRoleContactIds": list.ids, "scopedContactRoleContactIds": list.scoped, "contactRoleKeys": list.keys,
+      "updatedAt": FirestoreSentinel.serverTimestamp,
+    ]
+    if write.primaryChanged {
+      fields["contactName"] = write.contactID.flatMap(primaryName).flatMap { $0.isEmpty ? nil : $0 } ?? FirestoreSentinel.delete
+    }
+    try await reader.setDocument(path(.deal, id), fields, merge: true)
+  }
+
+  /// A company's contact roles (`companyContactRolesSave`): the whole list, and the ids and keys a merge, an erasure
+  /// and a rename find the company by.
+  func saveCompanyContactRoles(
+    _ id: String, company: [String: Any], _ next: [CrmContactRole], values: [(label: String, active: Bool)]
+  ) async throws {
+    let roles: [CrmContactRole]
+    switch companyContactRolesSave(company, next, values) {
+    case .failure(let refusal): throw ConsoleAPIError(status: 400, message: refusal.message)
+    case .success(let judged): roles = judged
+    }
+    let list = contactRoleListFields(roles, visibleTo: nil)
+    try await reader.setDocument(
+      path(.company, id),
+      [
+        "contactRoles": roles.map(\.stored), "contactRoleContactIds": list.ids, "contactRoleKeys": list.keys,
+        "updatedAt": FirestoreSentinel.serverTimestamp,
+      ], merge: true)
   }
 
   func deleteActivity(_ id: String) async throws {

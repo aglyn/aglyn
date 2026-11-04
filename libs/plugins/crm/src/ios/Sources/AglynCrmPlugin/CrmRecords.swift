@@ -198,6 +198,12 @@ struct Picklists {
 
   func options(_ id: String) -> [FieldOption] { labels(id).map { FieldOption($0, $0) } }
 
+  /// Every value of a list with whether it is active, which a save judges a pick against; the standard values, all
+  /// active, for an org that has not stored the list.
+  func values(_ id: String) -> [(label: String, active: Bool)] {
+    stored[id] ?? (ContractValues.shared.nativeCrmPicklists.first { $0.id == id }?.standardLabels ?? []).map { ($0, true) }
+  }
+
   init(stored: [String: [(label: String, active: Bool)]] = [:]) { self.stored = stored }
 
   init(_ docs: [FirestoreDocument]) {

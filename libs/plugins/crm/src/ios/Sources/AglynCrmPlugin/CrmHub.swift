@@ -51,6 +51,8 @@ final class CrmReference {
   @ObservationIgnored let contactDocs = LiveQueryList(pageSize: 200) { doc in
     FieldOption(doc.id, crmContactLabel(contactView(doc.data, groupID: crmContactPrimaryHolder(doc.data, org: nil))))
   }
+  /// The most recently updated deals, which **Related To** offers below the open deals of the people on an entry.
+  @ObservationIgnored let dealDocs = LiveQueryList(pageSize: 200) { $0 }
 
   func start(_ context: NativePluginContext, _ scope: CrmScope, _ api: CrmAPI) {
     let reader = context.firestore
@@ -59,6 +61,7 @@ final class CrmReference {
     pipelineDocs.show(reader) { _ in scopedQuery(scope, "pipelines", limit: 20) }
     companyDocs.show(reader) { _ in scopedQuery(scope, "companies", order: [.init("nameLower")], limit: 200) }
     contactDocs.show(reader) { _ in scopedQuery(scope, "contacts", order: [.init("updatedAt", descending: true)], limit: 200) }
+    dealDocs.show(reader) { _ in scopedQuery(scope, "deals", order: [.init("updatedAt", descending: true)], limit: 200) }
     // The roster names every owner; a read that comes back empty (a slow first request on a cold server) is asked again.
     Task {
       for attempt in 0..<3 {
@@ -73,13 +76,17 @@ final class CrmReference {
   }
 
   func stop() {
-    for list in [picklistDocs.stop, fieldDocs.stop, pipelineDocs.stop, companyDocs.stop, contactDocs.stop] { list() }
+    for list in [picklistDocs.stop, fieldDocs.stop, pipelineDocs.stop, companyDocs.stop, contactDocs.stop, dealDocs.stop] { list() }
   }
 
   var picklists: Picklists { Picklists(picklistDocs.rows) }
   var customFields: [CustomFieldDefinition] { fieldDocs.rows }
   var companies: [FieldOption] { companyDocs.rows }
   var contacts: [FieldOption] { contactDocs.rows }
+  var deals: [FirestoreDocument] { dealDocs.rows }
+
+  /// A contact's name as the windows hold it; nil for one outside them.
+  func contactLabel(_ id: String) -> String? { contacts.first { $0.value == id }?.label }
 
   func fields(_ kind: CrmKind) -> [CrmField] {
     standardFields(kind, picklists: picklists, members: members, companies: companies, contacts: contacts)
