@@ -1021,10 +1021,18 @@ export const middleware: NextMiddleware = async (req, event) => {
       req.nextUrl.pathname,
     )
     if (redirect) {
+      // Absolute against the request (AGL-4153): Next's middleware adapter
+      // parses `Location` with no base, so an on-site destination such as
+      // `/pricing?plan=pro` threw there and the request failed as a 500. An
+      // absolute destination comes out as it went in, and the adapter turns a
+      // same-host one back into a relative `Location` itself.
       return new NextResponse(null, {
         status: redirect.statusCode,
         headers: {
-          Location: withVisitorQuery(redirect.destination, req.nextUrl.search),
+          Location: new URL(
+            withVisitorQuery(redirect.destination, req.nextUrl.search),
+            req.url,
+          ).toString(),
         },
       })
     }
