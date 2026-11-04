@@ -316,7 +316,7 @@ private fun WorkspaceHeaderRow(services: ShellServices, workspace: WorkspaceStat
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
       )
-      workspace.orgLogo?.plan?.let { PlanChip(it) }
+      workspace.orgLogo?.planLabel?.let { PlanChip(it) }
     }
     androidx.compose.material3.IconButton(onClick = { chrome.workspaceMenu = true }, modifier = Modifier.size(m.barButton).testTag("workspace-menu-chevron")) {
       Icon(AglynIcons.named("expand_more"), "${org.name} menu", Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -464,9 +464,9 @@ private fun SwitcherAction(label: String, icon: String, tag: String, onClick: ()
 }
 
 @Composable
-internal fun PlanChip(plan: String) {
+internal fun PlanChip(label: String) {
   Text(
-    plan.replaceFirstChar { it.uppercase() },
+    label,
     style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold),
     color = MaterialTheme.colorScheme.onPrimaryContainer,
     modifier = Modifier.clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer).padding(horizontal = 7.dp, vertical = 1.dp),

@@ -26,7 +26,7 @@ data class OnboardingPlanIntent(
   val interval: String,
   /** Whether the link said an interval, rather than [interval] being the default. */
   val intervalStated: Boolean,
-  /** Enterprise is quoted, not bought: it goes to contact sales. */
+  /** Custom (code id `enterprise`) is quoted, not bought: it goes to contact sales. */
   val contactSales: Boolean,
   /** The AI add-on, asked for alongside the plan (`ai=1`). */
   val ai: Boolean = false,
@@ -35,7 +35,7 @@ data class OnboardingPlanIntent(
   val query: String
     get() = "plan=${plan.encodeURLParameter()}" + (if (intervalStated) "&interval=$interval" else "") + (if (ai) "&ai=1" else "")
 
-  val label: String get() = PLAN_LABELS[plan] ?: plan.replaceFirstChar { it.uppercase() }
+  val label: String get() = labelOf(plan)
 
   /** Where a new workspace lands with this intent (`onboardingDestination`). */
   fun destination(orgSlug: String): String =
@@ -50,14 +50,31 @@ data class OnboardingPlanIntent(
     }
 
   companion object {
-    /** The plans a checkout can sell (`SELF_SERVE_PLANS`). */
-    val SELF_SERVE_PLANS = listOf("starter", "pro", "business", "scale", "advanced", "agency")
+    /**
+     * The plans a checkout can sell: `SELF_SERVE_PLANS` without Free, which is a plan but not a purchase (the console's
+     * `parseOnboardingPlanIntent` and `UPGRADE_PROPOSAL_PLANS`). Business, Scale, Advanced and Agency are retired (pricing
+     * v4), so a link that still names one carries no plan.
+     */
+    val SELF_SERVE_PLANS = listOf("starter", "pro")
 
-    /** `PLAN_LABELS` (libs/aglyn/src/lib/app-utils/plan-entitlements.ts). */
+    /**
+     * The plans a workspace can still move up from by itself, so the workspace menu offers "Upgrade plan" on them (the
+     * console's `TOP_PLANS` are the rest): Pro tops the self-serve ladder, the retired plans sat above it, and Custom is
+     * quoted.
+     */
+    val UPGRADABLE_PLANS = listOf("free", "starter")
+
+    /**
+     * `PLAN_LABELS` (libs/aglyn/src/lib/app-utils/plan-entitlements.ts). The retired plans keep their names for a workspace
+     * still on one; the top plan's code id stays `enterprise` and reads "Custom".
+     */
     val PLAN_LABELS = mapOf(
       "free" to "Free", "starter" to "Starter", "pro" to "Pro", "business" to "Business", "scale" to "Scale",
-      "advanced" to "Advanced", "agency" to "Agency", "enterprise" to "Enterprise",
+      "advanced" to "Advanced", "agency" to "Agency", "enterprise" to "Custom",
     )
+
+    /** A plan id as the console names it ("Pro"; `enterprise` reads "Custom"). */
+    fun labelOf(plan: String): String = PLAN_LABELS[plan] ?: plan.replaceFirstChar { it.uppercase() }
 
     /** The intent a link's query carries, or null when it names no plan this console sells. */
     fun parse(params: Map<String, String>): OnboardingPlanIntent? {

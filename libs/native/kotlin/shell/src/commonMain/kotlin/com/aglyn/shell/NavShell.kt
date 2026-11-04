@@ -531,7 +531,7 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
     val planFoot: @Composable () -> Unit = {
       val loaded = planReadings
       val logo = workspace.orgLogo
-      val offersUpgrade = logo?.plan != null && logo.plan !in setOf("agency", "enterprise") && !logo.enterprise &&
+      val offersUpgrade = logo?.plan != null && logo.plan in com.aglyn.core.OnboardingPlanIntent.UPGRADABLE_PLANS && !logo.enterprise &&
         workspace.org?.role in setOf("owner", "admin")
       if (loaded != null && planOrgId != null && planHides >= 0 && services.prefs.get(planCardHiddenKey(planOrgId, loaded.plan)) == null &&
         com.aglyn.contracts.planCardShows(loaded.readings, offersUpgrade)
