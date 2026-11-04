@@ -26,16 +26,27 @@
  * answers.
  */
 
+import { DEFAULT_SITE_THEME } from '@aglyn/aglyn/app-utils/default-site'
 import { aiImportedPageCheck } from '../../jobs/ai-job-page-language'
 import { aiSiteImportFrameJob, aiSiteImportHomeOf } from '../../jobs/ai-job-import-step'
 import { aiLayoutSiteBrandOf, aiLayoutSiteFrameOf, aiLayoutSourceFrameBuild } from '../../jobs/ai-job-layout-language'
 import { aiLayoutChecks } from '../../jobs/ai-job-layout-step'
 import { aiSiteImportSectionNames } from '../../jobs/ai-site-import-compile'
 import { AI_LAYOUT_IMPORTED_SECTIONS_INPUT, aiSiteImportDocumentOf, type AiSiteImportDocument } from '../../jobs/ai-site-import-document'
+import { aiSiteImportStyle } from '../../jobs/ai-site-import-look'
 import type { AiLayoutFrameSource } from '../../layout-language/ai-layout-frame-source'
 import type { AiJob } from '../../model/ai-jobs.types'
-import { aiSiteImportLedger, type AiSiteImportPage, type AiSiteImportState, type SiteImportFooter, type SiteImportNavTree } from '../../model/ai-site-import'
-import type { SiteImportFidelitySource, SiteImportFidelityTree } from '../../model/ai-site-import-fidelity'
+import {
+  aiSiteImportLedger,
+  type AiSiteImportFinish,
+  type AiSiteImportPage,
+  type AiSiteImportState,
+  type AiSiteImportWords,
+  type SiteImportFooter,
+  type SiteImportNavTree,
+} from '../../model/ai-site-import'
+import { siteImportFidelityThemeOf, type SiteImportFidelitySource, type SiteImportFidelityTheme, type SiteImportFidelityTree } from '../../model/ai-site-import-fidelity'
+import { aiSiteTheme } from '../../model/ai-site-look'
 import { emptyAiSiteInventory } from '../../model/ai-site-inventory'
 import type { SiteImportInventory } from '../site-import-crawl'
 import { extractSiteImportPage, type SiteImportBlock } from '../site-import-html'
@@ -91,21 +102,50 @@ export interface SiteImportReplayPage {
   violations: unknown[]
 }
 
+/** A recorded rewrite of one line of a page (AGL-4152, lane G), in the shape `submit_wording` answers: the line's index in the page's blocks, and its new words. */
+export interface SiteImportReplayRewrite {
+  line: number
+  text: string
+}
+
+/** How a recorded page is built: its design answer, the site's forms, and how it is finished. */
+export interface SiteImportReplayOptions {
+  answer?: Record<string, unknown> | null
+  forms?: Array<{ id: string; name: string }>
+  layout?: boolean
+  /** Keep my site or Improve it (AGL-4152), on the page's document as its wave stamps it; absent, the document names none. */
+  finish?: AiSiteImportFinish
+  /** Whether its words are kept or improved (AGL-4152), on its document. */
+  words?: AiSiteImportWords
+  /** Recorded rewrites of its lines (lane G): the page is built in them, and scored against the words as its source wrote them. */
+  wording?: readonly SiteImportReplayRewrite[]
+}
+
 /**
  * A recorded page built and checked as the page step stores it (AGL-4109):
  * with a recorded design `answer`, as a main page is arranged, or with none,
  * as a page is drawn from its layout alone; `forms` are the site's saved
  * forms. `layout: false` builds it as a read with no layout was built, one
  * section at each second-level heading, as the 10/29 import did.
+ *
+ * `finish` and `words` (AGL-4152) ride the page's document as a wave stamps
+ * them, so the compile builds it as that finish asks wherever it reads them;
+ * `wording` builds it in recorded rewrites of its lines, while its source
+ * keeps the words as written.
  */
-export function siteImportReplayPage(
-  name: SiteLayoutPageName,
-  options: { answer?: Record<string, unknown> | null; forms?: Array<{ id: string; name: string }>; layout?: boolean } = {},
-): SiteImportReplayPage {
+export function siteImportReplayPage(name: SiteLayoutPageName, options: SiteImportReplayOptions = {}): SiteImportReplayPage {
   const read = siteImportReplayDocument(name)
   const { layout, ...rest } = read
+  const rewrites = new Map((options.wording ?? []).map((rewrite) => [rewrite.line, rewrite.text]))
+  const finished = { ...(options.finish ? { finish: options.finish } : {}), ...(options.words ? { wording: options.words } : {}) }
+  const given = {
+    ...(options.layout === false ? rest : read),
+    ...finished,
+    blocks: read.blocks.map((block, index) => (rewrites.has(index) && block.kind !== 'image' ? { ...block, text: rewrites.get(index) as string } : block)),
+  }
   // As the page step reads it: through the job's input, so a fact the reader drops is dropped here too (AGL-4138).
-  const doc = aiSiteImportDocumentOf({ [AI_LAYOUT_IMPORTED_SECTIONS_INPUT]: JSON.parse(JSON.stringify(options.layout === false ? rest : read)) }) as AiSiteImportDocument
+  const parsed = aiSiteImportDocumentOf({ [AI_LAYOUT_IMPORTED_SECTIONS_INPUT]: JSON.parse(JSON.stringify(given)) }) as AiSiteImportDocument
+  const doc: AiSiteImportDocument = { ...parsed, ...finished }
   const names = aiSiteImportSectionNames(doc)
   const sectionIds = names.map((_, index) => `sec-${index}`)
   const screen = { title: doc.title, slug: name === 'home' ? '/' : `/${name}`, sections: names.map((section) => ({ name: section, uses: [] as string[], items: 0 })) }
@@ -127,6 +167,20 @@ export function siteImportReplayPage(
     tree: { rootId: '_@_', nodes },
     violations: result.violations,
   }
+}
+
+/**
+ * The theme a recorded page is drawn in (AGL-4152): no site stores one, so
+ * it is computed as the look pass draws it, from the page's own look facts
+ * with the import's seed and no inspiration site, over the platform's
+ * default theme, and is marked as computed from the site style. `finish` is handed to the
+ * look's style as the pass hands it, for the pass that reads it.
+ */
+export function siteImportReplayTheme(name: SiteLayoutPageName, finish?: AiSiteImportFinish): SiteImportFidelityTheme | null {
+  const read = siteImportReplayDocument(name)
+  const input = { seed: 7, description: read.title, facts: read.layout?.look ?? null, ...(finish ? { finish } : {}) }
+  const style = aiSiteImportStyle(null, input as Parameters<typeof aiSiteImportStyle>[1])
+  return style ? siteImportFidelityThemeOf(aiSiteTheme(style, DEFAULT_SITE_THEME), 'style') : null
 }
 
 /**
