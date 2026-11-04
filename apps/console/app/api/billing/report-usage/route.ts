@@ -47,6 +47,7 @@ import {
   billsEmailSendOverage,
   billsOrgLibraryStorage,
   estimateMonthlyUsageCost,
+  estimateRunOverage,
   hostMeterReadings,
   type HostUsageSnapshot,
   meteredBands,
@@ -1037,6 +1038,28 @@ async function handler(request: Request): Promise<Response> {
         ? emailOveragePrice.overageMonthlyUsd
         : 0
       /*==========================================
+       * RUNS PAST THE BANDS (pricing v4, 2026-11-03, AGL-4126).
+       *
+       * A plan with `extraRunsUsdPer1k` lets workflows and automations run
+       * past their bands (`runOverageSold` at each gate) and bills the excess
+       * here, each band's excess on its own, at the plan's rate. A plan
+       * without one stopped at the band, so its excess is 0 by construction
+       * and nothing is priced. The counts are the site counters summed, which
+       * move in the same write as the org counter each band is held to.
+       *
+       * No start-month gate like email's: before v4 every run band was a
+       * wall, so there is no counted-and-never-charged volume to backdate.
+       *=========================================*/
+      const workflowRunsBand = counterBands.find(
+        (band) => band.entitlement === 'workflowRunsPerMonth',
+      )
+      const runOverage = estimateRunOverage(orgData, {
+        workflowRuns: workflowRunsBand
+          ? (counterTotals.counters[workflowRunsBand.hostCounter] ?? 0)
+          : 0,
+        actionRuns: counterTotals.actionRuns,
+      })
+      /*==========================================
        * THE POS FEE THAT STRIPE CANNOT COLLECT (AGL-2111).
        *
        * Already cents, already the plan's own rate, already floored — the
@@ -1061,6 +1084,7 @@ async function handler(request: Request): Promise<Response> {
         billedEstimate.billedCents +
         Math.round(apiQuota.overageMonthlyUsd * 100) +
         Math.round(emailOverageUsd * 100) +
+        runOverage.billedCents +
         // Each plugin meter's line, rounded to cents on its own like every
         // plan-priced line above.
         meterReadings.reduce(
@@ -1324,9 +1348,9 @@ async function handler(request: Request): Promise<Response> {
           // provider charged for, campaigns and transactional alike — and its
           // OVERAGE is priced onto the invoice at the plan's retail
           // per-1,000 rate. Runs are PRICED INTO COGS at
-          // `ORG_COGS_UNIT_RATES_USD.perRun` (2026-09-07) and never reach the
-          // invoice: no plan sells runs past its band, so there is no overage
-          // line for them to become.
+          // `ORG_COGS_UNIT_RATES_USD.perRun` (2026-09-07), and since pricing
+          // v4 their EXCESS reaches the invoice on a plan that sells runs past
+          // its bands — `runsOverage*` below.
           emailSends: counterTotals.emailSends,
           // Volume above the plan's included band, in emails (AGL-1438).
           // Mostly transactional, because that is the mail no cap may refuse
@@ -1343,6 +1367,11 @@ async function handler(request: Request): Promise<Response> {
             ? 0
             : emailOveragePrice.overageMonthlyUsd,
           actionRuns: counterTotals.actionRuns,
+          // Runs past the bands (pricing v4), and what entered `billedCents`
+          // for them: zero on a plan whose bands are walls.
+          runsOverage: runOverage.overageRuns,
+          runsOverageRateUsdPer1k: runOverage.overageRateUsd,
+          runsOverageUsd: runOverage.overageMonthlyUsd,
           // Each plugin band measured by a host counter, recorded under the
           // band's own field so its cost axis and utilization read it.
           ...Object.fromEntries(

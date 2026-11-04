@@ -27,7 +27,9 @@ import {
   bandwidthGbFromPageViews,
   pageViewsFromBandwidthGb,
   planMetersInfraOverage,
+  priceRunOverage,
   resolveOrgEntitlements,
+  type RunOveragePrice,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { planQuotaOf } from '@aglyn/aglyn/plugin-manager/plugin-plan-entitlements'
 import {
@@ -195,6 +197,57 @@ export const METERED_BILLED_RATES_USD = {
   perPageView: publishedMeteredPrice(METERED_OVERAGE_COST_USD.perPageView * 1000, 2) / 1000,
   perFormSubmission:
     publishedMeteredPrice(METERED_OVERAGE_COST_USD.perFormSubmission * 1000, 3) / 1000,
+}
+
+/**
+ * The run overage rate, per 1,000 workflow or action runs past the bands
+ * (pricing v4, 2026-11-03, AGL-4126) — RE-EXPORTED from the plan table, where
+ * `PLAN_PRICING` carries it as `extraRunsUsdPer1k` on every plan that sells
+ * runs past its bands. Derived like the three meters above (our `perRun` cost
+ * at cost + 30% kept after card fees, rounded up to the cent), but billed on
+ * its own line beside the API and email overages rather than inside
+ * {@link METERED_BILLED_RATES_USD}: it is a per-plan rate — Starter's bands
+ * are walls — and the pass-through is platform-wide.
+ */
+export { RUN_OVERAGE_USD_PER_1K } from '@aglyn/aglyn/app-utils/plan-entitlements'
+
+/** A month of runs, priced: what the sweep bills and the usage page shows. */
+export interface RunOverageEstimate extends RunOveragePrice {
+  /** The workspace's workflow runs this month (its org counter). */
+  workflowRuns: number
+  /** The workspace's action runs this month (its org counter). */
+  actionRuns: number
+  /** `overageMonthlyUsd` in whole cents, the unit the invoice line is in. */
+  billedCents: number
+}
+
+/**
+ * The month's run overage for an org (pricing v4): runs past each band at the
+ * plan's `extraRunsUsdPer1k`, zero on a plan without one. `report-usage` adds
+ * `billedCents` to the month's metered charge, and the Billing usage page
+ * prints the rate and the running figure from the same call, so the page and
+ * the invoice cannot name different numbers.
+ *
+ * `org` omitted resolves as free, which sells no runs past its bands — the
+ * same safe default `estimateMonthlyUsageCost` takes.
+ */
+export function estimateRunOverage(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  used: { workflowRuns?: number | null; actionRuns?: number | null },
+): RunOverageEstimate {
+  const count = (value: number | null | undefined): number => {
+    const parsed = Number(value ?? 0)
+    return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 0
+  }
+  const workflowRuns = count(used.workflowRuns)
+  const actionRuns = count(used.actionRuns)
+  const price = priceRunOverage(org, { workflowRuns, actionRuns })
+  return {
+    ...price,
+    workflowRuns,
+    actionRuns,
+    billedCents: Math.round(price.overageMonthlyUsd * 100),
+  }
 }
 
 /**

@@ -24,6 +24,9 @@ import {
   resolveOrgEntitlements,
 } from '@aglyn/aglyn/server'
 import { activitySearchTokens } from '@aglyn/aglyn/app-utils/activity-search'
+// By its own module, not the server barrel: specs stub the barrel with a
+// partial object, and the run overage question is the plan table's to answer.
+import { runOverageSold } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { triggerFilterProblem } from '@aglyn/aglyn/app-utils/site-interactions'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import type { HostEventPayload } from '@aglyn/tenant-runtime/host-event-listeners'
@@ -223,7 +226,12 @@ export async function runEventWorkflows(
         org as any,
       ).workflowRunsPerMonth
       const used = await runsUsedThisMonth(meter)
-      if (used + workflows.length > limit) return alerts
+      // Past the band is a wall only where the plan sells no runs past it
+      // (pricing v4): on a plan with a run rate the workflows run, and the
+      // excess bills on the month's invoice (`priceRunOverage`).
+      if (used + workflows.length > limit && !runOverageSold(org as any)) {
+        return alerts
+      }
     }
 
     const [functionDocs, variableDocs] = await Promise.all([
