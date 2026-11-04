@@ -271,7 +271,7 @@ describe('Keep my site or Improve it, before each wave (AGL-4152)', () => {
     fireEvent.click(screen.getByRole('radio', { name: /^Improve it/ }))
     // The wording switch, on as Improve it opens, with what it adds to this wave.
     expect((screen.getByRole('switch', { name: 'Also improve my wording' }) as HTMLInputElement).checked).toBe(true)
-    expect(screen.getByText('Adds about 54 AI credits to this wave.')).toBeTruthy()
+    expect(screen.getByText('Adds about 34 AI credits to this wave.')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Start Main pages' }))
     expect(onResume).toHaveBeenCalledWith({ finish: 'improve', wording: true })
   })

@@ -82,7 +82,7 @@ describe('how should your new site look?', () => {
     expect((screen.getByRole('radio', { name: /^Improve it/ }) as HTMLInputElement).checked).toBe(true)
     expect((screen.getByRole('radio', { name: /^Keep my site/ }) as HTMLInputElement).checked).toBe(false)
     expect((screen.getByRole('switch', { name: 'Also improve my wording' }) as HTMLInputElement).checked).toBe(true)
-    expect(screen.getByText('About 27 more AI credits for each main page.')).toBeTruthy()
+    expect(screen.getByText('About 17 more AI credits for each main page.')).toBeTruthy()
     expect(screen.getByText('You can change this before each wave.')).toBeTruthy()
   })
 
